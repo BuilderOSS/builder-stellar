@@ -1,7 +1,7 @@
 'use client';
 
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
-import { Client as AuctionClient } from '@nouns-builder-stellar/auction-bindings';
+import { Client as AuctionClient } from '@builder-stellar/auction-bindings';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';

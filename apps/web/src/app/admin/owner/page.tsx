@@ -1,8 +1,8 @@
 'use client';
 
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
-import { Client as GovernorClient } from '@nouns-builder-stellar/governor-bindings';
-import { Client as TokenClient } from '@nouns-builder-stellar/token-bindings';
+import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
+import { Client as TokenClient } from '@builder-stellar/token-bindings';
 import { useState } from 'react';
 import { Grid, Stack } from 'styled-system/jsx';
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
-import { Client as TokenClient } from '@nouns-builder-stellar/token-bindings';
+import { Client as TokenClient } from '@builder-stellar/token-bindings';
 import { useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 

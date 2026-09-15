@@ -1,7 +1,7 @@
 'use client';
 
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
-import { Client as GovernorClient } from '@nouns-builder-stellar/governor-bindings';
+import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';

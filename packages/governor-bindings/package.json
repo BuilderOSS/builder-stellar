@@ -1,5 +1,5 @@
 {
-  "name": "@nouns-builder-stellar/governor-bindings",
+  "name": "@builder-stellar/governor-bindings",
   "version": "0.0.1",
   "description": "Generated TypeScript bindings for governor Stellar contract",
   "type": "module",

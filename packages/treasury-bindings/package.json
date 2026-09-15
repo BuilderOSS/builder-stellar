@@ -1,5 +1,5 @@
 {
-  "name": "@nouns-builder-stellar/treasury-bindings",
+  "name": "@builder-stellar/treasury-bindings",
   "version": "0.0.1",
   "description": "Generated TypeScript bindings for treasury Stellar contract",
   "type": "module",

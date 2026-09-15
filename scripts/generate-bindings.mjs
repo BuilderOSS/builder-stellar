@@ -7,25 +7,25 @@ const contracts = [
     packageName: 'token',
     wasmPath: `${buildDir}/token.wasm`,
     outputDir: 'packages/token-bindings',
-    packageJsonName: '@nouns-builder-stellar/token-bindings'
+    packageJsonName: '@builder-stellar/token-bindings'
   },
   {
     packageName: 'governor',
     wasmPath: `${buildDir}/governor.wasm`,
     outputDir: 'packages/governor-bindings',
-    packageJsonName: '@nouns-builder-stellar/governor-bindings'
+    packageJsonName: '@builder-stellar/governor-bindings'
   },
   {
     packageName: 'treasury',
     wasmPath: `${buildDir}/treasury.wasm`,
     outputDir: 'packages/treasury-bindings',
-    packageJsonName: '@nouns-builder-stellar/treasury-bindings'
+    packageJsonName: '@builder-stellar/treasury-bindings'
   },
   {
     packageName: 'auction',
     wasmPath: `${buildDir}/auction.wasm`,
     outputDir: 'packages/auction-bindings',
-    packageJsonName: '@nouns-builder-stellar/auction-bindings'
+    packageJsonName: '@builder-stellar/auction-bindings'
   }
 ];
 
