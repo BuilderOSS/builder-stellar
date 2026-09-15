@@ -1,4 +1,4 @@
-import { Client as GovernorClient } from '@nouns-builder-stellar/governor-bindings';
+import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { NextResponse } from 'next/server';
 
 import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';

@@ -1,5 +1,5 @@
 {
-  "name": "@nouns-builder-stellar/auction-bindings",
+  "name": "@builder-stellar/auction-bindings",
   "version": "0.0.1",
   "description": "Generated TypeScript bindings for auction Stellar contract",
   "type": "module",

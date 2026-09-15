@@ -1,4 +1,4 @@
-import { Client as AuctionClient } from '@nouns-builder-stellar/auction-bindings';
+import { Client as AuctionClient } from '@builder-stellar/auction-bindings';
 import { NextResponse } from 'next/server';
 
 import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';

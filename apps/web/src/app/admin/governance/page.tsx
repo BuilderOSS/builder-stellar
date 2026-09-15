@@ -2,7 +2,7 @@
 
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { type SignTransaction } from '@stellar/stellar-sdk/contract';
-import { Client as GovernorClient } from '@nouns-builder-stellar/governor-bindings';
+import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { useState } from 'react';
 import { Grid, Stack } from 'styled-system/jsx';
 

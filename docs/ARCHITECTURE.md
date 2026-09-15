@@ -4,7 +4,7 @@
 
 ### Overview
 
-Single-DAO deployment with 4 working Soroban contracts providing governance, token management, treasury control, and continuous auctions. All contracts are proven, tested, and production-ready.
+Single-DAO deployment with 4 modular Soroban contracts providing governance, token management, treasury control, and flexible membership mechanisms. All contracts are proven, tested, and production-ready. The auction contract provides one membership option; other mechanisms (allowlists, direct minting) can be added as alternatives.
 
 ### Contracts
 
@@ -20,7 +20,7 @@ Single-DAO deployment with 4 working Soroban contracts providing governance, tok
 │       │                                                      │
 │       │                                                      │
 │  ┌────▼─────┐                                               │
-│  │ Auction  │                                               │
+│  │ Auction  │  (Optional membership module)                │
 │  │(Continuous)│                                             │
 │  └──────────┘                                               │
 │                                                              │

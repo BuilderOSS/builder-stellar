@@ -1,21 +1,22 @@
-# Nouns Builder on Stellar
+# Builder for Stellar
 
-A Nouns-style DAO framework built on Soroban, enabling communities to create and govern DAOs with continuous token auctions, on-chain voting, and treasury management.
+A flexible DAO builder framework on Soroban, enabling communities to create and govern DAOs with modular membership mechanisms, on-chain voting, and treasury management.
 
 ## Current Status
 
-✅ **Phase 1: Working DAO Modules** (Complete)
+✅ **Phase 1: Core DAO Infrastructure** (Complete)
 - Token: NFT with delegation and voting power
 - Governor: Proposal creation, voting, and execution
 - Treasury: Governance-controlled asset management
-- Auction: Continuous auction mechanics
+- Auction: Continuous auction-based membership (optional)
 - Goldsky indexing and PostgreSQL database
 - Next.js web application
 
-🚧 **Phase 2: Platform Contracts** (Planned)
+🚧 **Phase 2: Platform Layer** (Planned)
 - Factory: Atomic DAO deployment
 - Registry: DAO discovery and directory
-- MetadataRenderer: Nouns artwork generation
+- MetadataRenderer: Generative artwork (optional)
+- Membership modules: Auctions, allowlists, direct minting, and more
 
 See [docs/PHASE_2_PLAN.md](docs/PHASE_2_PLAN.md) for roadmap.
 
@@ -34,8 +35,8 @@ See [docs/PHASE_2_PLAN.md](docs/PHASE_2_PLAN.md) for roadmap.
 
 ```bash
 # Clone repository
-git clone https://github.com/your-org/nouns-builder-stellar.git
-cd nouns-builder-stellar
+git clone https://github.com/your-org/builder-stellar.git
+cd builder-stellar
 
 # Install dependencies
 pnpm install
@@ -79,12 +80,12 @@ pnpm indexer:test
 ## Project Structure
 
 ```
-nouns-builder-stellar/
+builder-stellar/
 ├── contracts/          # Soroban smart contracts (Rust)
 │   ├── token/         # NFT voting token
 │   ├── governor/      # Proposal and voting logic
 │   ├── treasury/      # Treasury management
-│   ├── auction/       # Continuous auction
+│   ├── auction/       # Continuous auction (optional membership)
 │   └── e2e/           # Integration tests
 ├── apps/
 │   └── web/           # Next.js governance UI

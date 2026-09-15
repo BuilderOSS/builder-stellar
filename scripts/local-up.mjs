@@ -1,7 +1,7 @@
 import { run, runQuiet } from './lib.mjs';
 
-const containerName = 'stellar-nouns-builder-local';
-const requestedContainerName = 'nouns-builder-local';
+const containerName = 'stellar-builder-local';
+const requestedContainerName = 'builder-local';
 const configPath = 'configs/local.json';
 
 function ensureContainer() {
