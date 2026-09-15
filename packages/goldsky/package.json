@@ -1,0 +1,22 @@
+{
+  "version": "0.0.0",
+  "name": "@nouns-builder-stellar/goldsky",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "node scripts/generate-pipeline.mjs",
+    "test": "node --test test/*.test.mjs",
+    "goldsky": "goldsky",
+    "validate": "node scripts/validate-events.mjs"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.1"
+  },
+  "devDependencies": {
+    "@goldskycom/cli": "^13.10.2",
+    "@nouns-builder-stellar/auction-bindings": "workspace:*",
+    "@nouns-builder-stellar/governor-bindings": "workspace:*",
+    "@nouns-builder-stellar/token-bindings": "workspace:*",
+    "@nouns-builder-stellar/treasury-bindings": "workspace:*"
+  }
+}

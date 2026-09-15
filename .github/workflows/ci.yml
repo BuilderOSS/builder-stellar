@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - dev
+      - main
+      - 'feat/**'
+  pull_request:
+    branches:
+      - dev
+      - main
+
+env:
+  SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2: '0'
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  rust-checks:
+    name: Rust Checks and Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add wasm32v1-none target
+        run: rustup target add wasm32v1-none
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Check Rust formatting
+        run: cargo fmt --all --check
+
+      - name: Run Clippy linting
+        run: cargo clippy --all-targets --all-features -- -D warnings -A clippy::too_many_arguments -A clippy::upper_case_acronyms
+
+      - name: Run unit tests
+        run: cargo test -p token -p governor -p treasury -p auction
+
+      - name: Run E2E tests
+        run: cargo test -p dao-e2e
+
+  typescript-checks:
+    name: TypeScript Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '23'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run ESLint
+        run: pnpm --dir apps/web lint
+
+      - name: Run TypeScript type checking
+        run: pnpm --dir apps/web typecheck
+
+      - name: Run Goldsky tests
+        run: pnpm --dir packages/goldsky test
+
+  build:
+    name: Build All
+    runs-on: ubuntu-latest
+    needs: [rust-checks, typescript-checks]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add wasm32v1-none target
+        run: rustup target add wasm32v1-none
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.12.4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '23'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Rust contracts
+        run: pnpm dao:build
+
+      - name: Generate TypeScript bindings
+        run: pnpm dao:bindings
+
+      - name: Build Next.js app
+        run: pnpm build

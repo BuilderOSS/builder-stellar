@@ -1,0 +1,17 @@
+# Lefthook configuration for stellar-dao
+# Fast Git hooks manager for mixed Rust + JavaScript monorepo
+
+pre-commit:
+  parallel: true
+  commands:
+    # Lint and fix JavaScript/TypeScript files in web app
+    lint-web:
+      glob: "apps/web/**/*.{js,jsx,ts,tsx}"
+      run: pnpm --filter @stellar-dao/web lint:fix
+      stage_fixed: true
+
+    # Format Rust contract files
+    format-rust:
+      glob: "contracts/**/*.rs"
+      run: cargo fmt
+      stage_fixed: true

@@ -1,0 +1,27 @@
+{
+  "network": "testnet",
+  "label": "builder",
+  "adminAddress": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+  "webBaseUrl": "https://test-dao-stellar-web.vercel.app",
+  "rpcUrl": "https://soroban-testnet.stellar.org",
+  "networkPassphrase": "Test SDF Network ; September 2015",
+  "token": {
+    "name": "Builder Test",
+    "symbol": "BUILD",
+    "description": "Unlock the possibilities of collective creation"
+  },
+  "governor": {
+    "votingDelay": 300,
+    "votingPeriod": 300,
+    "queueDelay": 300,
+    "proposalThreshold": 1,
+    "quorumBps": 1000
+  },
+  "auction": {
+    "duration": 300,
+    "reservePrice": 1000000000,
+    "minBidIncrementPercent": 10,
+    "timeBuffer": 900,
+    "paymentToken": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+  }
+}
