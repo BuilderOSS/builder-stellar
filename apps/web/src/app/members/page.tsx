@@ -4,7 +4,7 @@ import { Grid, Stack } from 'styled-system/jsx';
 
 import { DaoShell } from '@/components/dao-shell';
 import { PageSection } from '@/components/page-section';
-import { Badge, Button, Card, ShortId, Text } from '@/components/ui';
+import { Badge, Button, Callout, Card, ShortId, Text } from '@/components/ui';
 import { getDaoAccountRole } from '@/lib/account-role';
 import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
 import { useGoldskyMemberList } from '@/lib/goldsky-queries';
@@ -16,14 +16,10 @@ export default function MembersPage() {
 
   return (
     <DaoShell>
-      <PageSection
-        eyebrow="Members"
-        title="Voting power directory"
-        description="A Goldsky-backed view of token holders with non-zero balances."
-      >
+      <PageSection title="Members" description="A Goldsky-backed view of token holders with non-zero balances.">
         <Card p="5">
           <Stack gap="3">
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+            <div className="section-toolbar">
               <Text className="label">Goldsky members</Text>
               <Button type="button" variant="outline" size="sm" onClick={() => void mutate()} disabled={isLoading}>
                 {isLoading ? 'Refreshing...' : 'Refresh'}
@@ -31,33 +27,53 @@ export default function MembersPage() {
             </div>
 
             {error ? (
-              <Text className="lede" style={{ margin: 0 }}>
-                {error.message}
-              </Text>
+              <Callout variant="error" title="Member directory unavailable" description={error.message} />
             ) : null}
-            {isLoading ? (
-              <Text className="lede" style={{ margin: 0 }}>
-                Loading balances...
-              </Text>
-            ) : null}
+            {isLoading ? <Callout variant="info" title="Loading member balances…" /> : null}
             {!isLoading && !rows.length ? (
-              <Text className="lede" style={{ margin: 0 }}>
-                No token holders indexed yet.
-              </Text>
+              <div className="empty-state" role="status">
+                <Text className="lede" style={{ margin: '0 auto' }}>
+                  No token holders are indexed yet.
+                </Text>
+              </div>
             ) : (
-              <Grid columns={{ base: 1, lg: 2 }} gap="4">
-                {rows.map((row, index) => (
-                  <Card key={row.address} p="4">
-                    <Stack gap="2">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
-                        <Badge>#{index + 1}</Badge>
-                        <Badge>Tokens {row.owned_token_count}</Badge>
-                      </div>
-                      <ShortId value={row.address} label={getDaoAccountRole(config, row.address) ?? 'Address'} />
-                    </Stack>
-                  </Card>
-                ))}
-              </Grid>
+              <>
+                <div className="members-table-wrap">
+                  <table className="members-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Address</th>
+                        <th scope="col">Voting power</th>
+                        <th scope="col">Rank</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row, index) => (
+                        <tr key={row.address}>
+                          <td>
+                            <ShortId value={row.address} />
+                          </td>
+                          <td className="members-table-number">{row.voting_power}</td>
+                          <td className="members-table-number">#{index + 1}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <Grid className="members-card-list" columns={{ base: 1 }} gap="3">
+                  {rows.map((row, index) => (
+                    <Card className="interactive-card" key={row.address} p="4">
+                      <Stack gap="2">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                          <Badge>#{index + 1}</Badge>
+                          <Badge>Tokens {row.owned_token_count}</Badge>
+                        </div>
+                        <ShortId value={row.address} label={getDaoAccountRole(config, row.address) ?? 'Address'} />
+                      </Stack>
+                    </Card>
+                  ))}
+                </Grid>
+              </>
             )}
           </Stack>
         </Card>

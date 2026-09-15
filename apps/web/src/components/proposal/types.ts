@@ -44,6 +44,11 @@ export type ProposalListItem = {
   timestamp: number;
   txHash: string;
   contractId: string;
+  voteTotals: {
+    forVotes: string;
+    againstVotes: string;
+    abstainVotes: string;
+  } | null;
 };
 
 export type ProposalListResponse = {

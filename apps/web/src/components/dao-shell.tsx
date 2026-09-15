@@ -3,44 +3,63 @@
 import { defaultModules } from '@creit.tech/stellar-wallets-kit/modules/utils';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { KitEventType } from '@creit.tech/stellar-wallets-kit/types';
+import type { LucideIcon } from 'lucide-react';
+import {
+  ChevronDown,
+  Gavel,
+  Landmark,
+  LayoutDashboard,
+  LogOut,
+  Settings,
+  ShieldAlert,
+  Users,
+  Vote,
+  Wallet
+} from 'lucide-react';
 import type { Route } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { type ReactNode, useEffect } from 'react';
-import { Grid, Stack } from 'styled-system/jsx';
 
-import { Badge, Button, Callout, Card, Heading, ShortId, Text } from '@/components/ui';
+import { Button, Callout } from '@/components/ui';
 import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
-const BASE_NAV_ITEMS: Array<{ href: Route; label: string }> = [
-  { href: '/', label: 'Dashboard' },
-  { href: '/proposals', label: 'Proposals' },
-  { href: '/auctions', label: 'Auctions' },
-  { href: '/treasury', label: 'Treasury' },
-  { href: '/members', label: 'Members' }
+const BASE_NAV_ITEMS: Array<{ href: Route; label: string; icon: LucideIcon }> = [
+  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/proposals', label: 'Proposals', icon: Vote },
+  { href: '/auctions', label: 'Auctions', icon: Gavel },
+  { href: '/treasury', label: 'Treasury', icon: Landmark },
+  { href: '/members', label: 'Members', icon: Users }
 ];
 
-function NavLink({ href, label, active }: { href: Route; label: string; active: boolean }) {
+function NavLink({
+  href,
+  label,
+  icon: Icon,
+  active
+}: {
+  href: Route;
+  label: string;
+  icon: LucideIcon;
+  active: boolean;
+}) {
   return (
-    <Link
-      href={href}
-      style={{
-        padding: '10px 14px',
-        borderRadius: '999px',
-        border: active ? '1px solid rgba(0,133,255,0.42)' : '1px solid rgba(148,163,184,0.2)',
-        background: active ? 'rgba(0,133,255,0.12)' : 'rgba(255,255,255,0.03)',
-        color: active ? 'white' : 'rgba(177,198,220,0.88)',
-        textDecoration: 'none',
-        fontSize: '0.92rem',
-        fontWeight: 600,
-        whiteSpace: 'nowrap'
-      }}
-    >
+    <Link href={href} className="nav-link" aria-current={active ? 'page' : undefined}>
+      <Icon aria-hidden="true" size={16} strokeWidth={2} />
       {label}
     </Link>
   );
+}
+
+function isRouteActive(pathname: string, href: Route) {
+  return pathname === href || (href !== '/' && pathname.startsWith(`${href}/`));
+}
+
+function shortenAddress(value: string) {
+  if (value.length <= 12) return value;
+  return `${value.slice(0, 5)}…${value.slice(-4)}`;
 }
 
 async function validateWalletNetwork(
@@ -81,11 +100,12 @@ export function DaoShell({ children }: { children: ReactNode }) {
   const network = getDefaultDaoNetwork();
   const currentNetwork = getDaoNetworkConfig(network);
   const walletDisabled = Boolean(session.address && session.walletNetworkIssue);
-  const adminNavItem: { href: Route; label: string } = { href: '/admin', label: 'Admin' };
-  const _isAdmin = session.address && session.address === currentNetwork.adminAddress;
-  const navItems: Array<{ href: Route; label: string }> = session.address
-    ? [...BASE_NAV_ITEMS, adminNavItem]
-    : BASE_NAV_ITEMS;
+  const adminNavItem: { href: Route; label: string; icon: LucideIcon } = {
+    href: '/admin',
+    label: 'Admin',
+    icon: Settings
+  };
+  const navItems = session.address ? [...BASE_NAV_ITEMS, adminNavItem] : BASE_NAV_ITEMS;
 
   useEffect(() => {
     StellarWalletsKit.init({ modules: defaultModules() });
@@ -144,126 +164,111 @@ export function DaoShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <main className="page-shell">
-      <Card p="6">
-        <Stack gap="5">
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '16px',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}
-          >
-            <Stack gap="3" style={{ minWidth: 0 }}>
-              <Text className="eyebrow" style={{ margin: 0 }}>
-                DAO governance
-              </Text>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'flex-start', minWidth: 0 }}>
-                <Image
-                  src="/icon.svg"
-                  alt=""
-                  aria-hidden="true"
-                  width="76"
-                  height="76"
-                  style={{
-                    border: '1px solid rgba(91, 181, 255, 0.28)',
-                    borderRadius: '24px',
-                    boxShadow: '0 22px 54px rgba(0, 133, 255, 0.22)',
-                    flex: '0 0 auto'
-                  }}
-                />
-                <Stack gap="1" style={{ minWidth: 0 }}>
-                  <Heading style={{ fontSize: 'clamp(2.2rem, 4vw, 4rem)', lineHeight: 1.02, margin: 0 }}>
-                    {currentNetwork.tokenName}
-                  </Heading>
-                  <Text className="lede" style={{ margin: 0, maxWidth: '72ch' }}>
-                    {currentNetwork.tokenDescription}
-                  </Text>
-                </Stack>
-              </div>
-            </Stack>
+    <div className="page-shell">
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
+      <div className="app-frame">
+        <header className="app-header">
+          <Link className="brand-lockup" href="/" aria-label={`${currentNetwork.tokenName} dashboard`}>
+            <Image className="brand-mark" src="/icon.svg" alt="" aria-hidden="true" width={44} height={44} priority />
+            <div className="brand-copy">
+              <p className="brand-name">{currentNetwork.tokenName}</p>
+              <p className="brand-kicker">Stellar governance</p>
+            </div>
+          </Link>
 
-            <Grid columns={1} gap="3">
-              <Badge>
-                {session.walletNetworkIssue ? 'Wallet invalid' : session.address ? 'Wallet connected' : 'Wallet idle'}
-              </Badge>
-              <Badge>{session.status}</Badge>
-              {session.address ? <ShortId value={session.address} /> : null}
-            </Grid>
-          </div>
-
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+          <nav className="primary-nav" aria-label="Primary navigation">
             {navItems.map((item) => (
-              <NavLink
-                key={item.href}
-                href={item.href}
-                label={item.label}
-                active={pathname === item.href || pathname.startsWith(`${item.href}/`)}
-              />
+              <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href)} />
             ))}
-          </div>
+          </nav>
 
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '10px',
-              alignItems: 'center',
-              justifyContent: 'space-between'
-            }}
-          >
-            <Text className="lede" style={{ margin: 0, fontSize: '0.92rem' }}>
-              RPC: {currentNetwork.rpcUrl}
-            </Text>
-            <Button type="button" size="lg" onClick={session.address ? disconnectWallet : connectWallet}>
-              {session.address ? 'Disconnect wallet' : 'Connect wallet'}
-            </Button>
-          </div>
-        </Stack>
-      </Card>
-
-      <div
-        style={{
-          position: 'relative',
-          pointerEvents: walletDisabled ? 'none' : undefined
-        }}
-      >
-        <div
-          style={{
-            filter: walletDisabled ? 'saturate(0.7) brightness(0.55)' : undefined,
-            opacity: walletDisabled ? 0.55 : 1
-          }}
-        >
-          {children}
-        </div>
-
-        {walletDisabled ? (
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              display: 'flex',
-              alignItems: 'flex-start',
-              justifyContent: 'center',
-              padding: '24px',
-              background: 'rgba(2, 6, 23, 0.72)',
-              backdropFilter: 'blur(2px)',
-              zIndex: 20
-            }}
-          >
-            <div style={{ maxWidth: '760px', width: '100%' }}>
-              <Callout
-                variant="error"
-                badge="Network mismatch"
-                title={session.walletNetworkIssue}
-                description={`Switch the connected wallet to ${currentNetwork.label} to continue using the app.`}
-              />
+          <div className="header-actions">
+            <div className="network-chip" title={`Configured for ${currentNetwork.label}`}>
+              <span className="network-dot" aria-hidden="true" />
+              {currentNetwork.label}
+            </div>
+            <div className="wallet-summary">
+              {session.address ? (
+                <details className="wallet-menu">
+                  <summary
+                    className="wallet-menu__trigger"
+                    title={session.address}
+                    aria-label={`Wallet menu for ${session.address}`}
+                  >
+                    <Wallet aria-hidden="true" size={16} />
+                    {shortenAddress(session.address)}
+                    <ChevronDown aria-hidden="true" size={14} />
+                  </summary>
+                  <button className="wallet-menu__disconnect" type="button" onClick={disconnectWallet}>
+                    <LogOut aria-hidden="true" size={15} />
+                    Disconnect
+                  </button>
+                </details>
+              ) : (
+                <Button type="button" variant="solid" size="sm" onClick={connectWallet} aria-label="Connect wallet">
+                  <Wallet aria-hidden="true" size={16} />
+                  Connect
+                </Button>
+              )}
             </div>
           </div>
-        ) : null}
+        </header>
+
+        <nav className="mobile-nav" aria-label="Mobile navigation">
+          {navItems.map((item) => (
+            <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href)} />
+          ))}
+        </nav>
+
+        <main id="main-content" className="content-shell" tabIndex={-1} aria-busy={walletDisabled || undefined}>
+          <div
+            style={{
+              pointerEvents: walletDisabled ? 'none' : undefined,
+              filter: walletDisabled ? 'saturate(0.6) brightness(0.5)' : undefined,
+              opacity: walletDisabled ? 0.55 : 1
+            }}
+          >
+            {children}
+          </div>
+
+          {walletDisabled ? (
+            <div
+              role="alert"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'center',
+                padding: '24px 0',
+                background: 'rgba(8, 9, 11, 0.78)',
+                backdropFilter: 'blur(3px)',
+                zIndex: 20
+              }}
+            >
+              <div style={{ maxWidth: '720px', width: '100%' }}>
+                <Callout
+                  variant="error"
+                  badge={
+                    <>
+                      <ShieldAlert aria-hidden="true" size={14} /> Network mismatch
+                    </>
+                  }
+                  title={session.walletNetworkIssue}
+                  description={`Switch the connected wallet to ${currentNetwork.label} to continue. No transaction can be submitted until the network matches.`}
+                />
+              </div>
+            </div>
+          ) : null}
+        </main>
+
+        <footer className="app-footer">
+          <span>{currentNetwork.tokenDescription}</span>
+          <span title={currentNetwork.rpcUrl}>Network status: {session.status || 'Ready'}</span>
+        </footer>
       </div>
-    </main>
+    </div>
   );
 }

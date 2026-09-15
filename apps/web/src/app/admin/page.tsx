@@ -62,7 +62,6 @@ export default function AdminPage() {
   return (
     <DaoShell>
       <PageSection
-        eyebrow="Admin"
         title="Admin dashboard"
         description="Role-aware entry point for owner, token, and governance operations."
       >

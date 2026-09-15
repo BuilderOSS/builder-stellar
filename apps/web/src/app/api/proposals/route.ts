@@ -13,7 +13,7 @@ import {
 
 type ProposalListItem = {
   proposalId: string;
-  proposalNumber: string;
+  proposalNumber: number;
   metadata: ProposalMetadata;
   state: ProposalStateValue | null;
   stateLabel: string;
@@ -21,6 +21,11 @@ type ProposalListItem = {
   timestamp: number;
   txHash: string;
   contractId: string;
+  voteTotals: {
+    forVotes: string;
+    againstVotes: string;
+    abstainVotes: string;
+  } | null;
 };
 
 async function fetchProposalState(client: InstanceType<typeof GovernorClient>, proposalId: string) {
@@ -63,14 +68,19 @@ export async function GET(request: Request) {
         }
         return {
           proposalId: proposal.proposal_id,
-          proposalNumber: proposal.proposal_number,
+          proposalNumber: Number(proposal.proposal_number),
           metadata,
           state,
           stateLabel: state === null ? (proposal.state ?? 'Unknown') : proposalStateLabel(state),
           ledger: Number(proposal.created_ledger ?? 0),
           timestamp: Number(proposal.created_timestamp ?? 0),
           txHash: '',
-          contractId: config.governorContractId
+          contractId: config.governorContractId,
+          voteTotals: {
+            forVotes: String(proposal.for_votes ?? 0),
+            againstVotes: String(proposal.against_votes ?? 0),
+            abstainVotes: String(proposal.abstain_votes ?? 0)
+          }
         };
       })
     );

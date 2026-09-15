@@ -11,28 +11,28 @@ const ITEMS: Array<{ href: Route; label: string }> = [
 
 export function AdminSectionNav({ active }: { active: Route }) {
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+    <nav
+      aria-label="Administration sections"
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '6px',
+        padding: '6px',
+        border: '1px solid var(--border-default)',
+        borderRadius: '14px',
+        background: 'var(--surface-1)'
+      }}
+    >
       {ITEMS.map((item) => (
         <Link
           key={item.href}
           href={item.href}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '10px 14px',
-            borderRadius: '999px',
-            border: active === item.href ? '1px solid rgba(0,133,255,0.42)' : '1px solid rgba(148,163,184,0.2)',
-            background: active === item.href ? 'rgba(0,133,255,0.12)' : 'rgba(255,255,255,0.03)',
-            color: active === item.href ? 'white' : 'rgba(177,198,220,0.88)',
-            textDecoration: 'none',
-            fontSize: '0.92rem',
-            fontWeight: 600
-          }}
+          className="nav-link"
+          aria-current={active === item.href ? 'page' : undefined}
         >
           {item.label}
         </Link>
       ))}
-    </div>
+    </nav>
   );
 }

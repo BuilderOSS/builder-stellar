@@ -3,6 +3,7 @@
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { Client as AuctionClient } from '@nouns-builder-stellar/auction-bindings';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Grid, Stack } from 'styled-system/jsx';
 import useSWR from 'swr';
@@ -69,6 +70,14 @@ function formatDate(value: string | number | undefined) {
 function formatPaymentToken(network: ReturnType<typeof getDefaultDaoNetwork>, contractId: string | null | undefined) {
   const asset = getTreasuryAssets(network).find((item) => item.contractId === contractId);
   return asset?.code ?? 'SAC';
+}
+
+function formatRemaining(endTime: string, now: number) {
+  const remaining = Math.max(0, Number(endTime) - now);
+  const days = Math.floor(remaining / 86_400);
+  const hours = Math.floor((remaining % 86_400) / 3_600);
+  const minutes = Math.floor((remaining % 3_600) / 60);
+  return `${days}d ${hours}hr ${minutes}m remaining`;
 }
 
 export default function AuctionsPage() {
@@ -167,11 +176,7 @@ export default function AuctionsPage() {
 
   return (
     <DaoShell>
-      <PageSection
-        eyebrow="Marketplace"
-        title="Auctions"
-        description="Bid on the current DAO collectible and browse settled auctions."
-      >
+      <PageSection title="Auctions" description="Bid on the current DAO collectible and browse settled auctions.">
         <Stack gap="6">
           {error ? <Callout variant="error" title={error.message} /> : null}
           {isLoading && !data ? <Text className="lede">Loading auction...</Text> : null}
@@ -199,24 +204,49 @@ export default function AuctionsPage() {
                       alt={`Token #${data.auction.token_id}`}
                       width={560}
                       height={560}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover'
+                      }}
                       unoptimized
                     />
                   </div>
+
                   <Stack gap="4">
-                    <Text className="label">Current auction</Text>
-                    <Text className="mono" style={{ fontSize: '0.9rem', fontWeight: 600 }}>
-                      Token #{data.auction.token_id}
-                    </Text>
+                    <div>
+                      <Text className="label">Current auction</Text>
+                      <Heading className="auction-current__token" style={{ marginTop: '4px' }}>
+                        Token #{data.auction.token_id}
+                      </Heading>
+                    </div>
+
+                    <div className="auction-current__status" role="status">
+                      {auctionEnded
+                        ? 'Auction ended'
+                        : now
+                          ? formatRemaining(data.auction.end_time, now)
+                          : 'Checking auction status…'}
+                    </div>
+
                     <Text className="lede">
                       {data.auction.highest_bid === '0'
                         ? `Reserve ${formatAmount(data.config.reserve_price)} ${paymentToken}`
                         : `Highest bid ${formatAmount(data.auction.highest_bid)} ${paymentToken}`}
                     </Text>
-                    <Text>{auctionEnded ? 'Ended' : `Ends ${formatDate(data.auction.end_time)}`}</Text>
-                    {data.auction.highest_bidder ? (
-                      <ShortId value={data.auction.highest_bidder} label="Highest bidder" />
+
+                    {!auctionEnded ? (
+                      <Text className="lede" style={{ margin: 0, fontSize: '0.85rem' }}>
+                        Ends {formatDate(data.auction.end_time)}
+                      </Text>
                     ) : null}
+
+                    {data.auction.highest_bidder ? (
+                      <Link className="auction-bidder mono" href={`/members/${data.auction.highest_bidder}`}>
+                        {data.auction.highest_bidder}
+                      </Link>
+                    ) : null}
+
                     {auctionEnded ? (
                       <Callout
                         variant="warning"
@@ -230,18 +260,27 @@ export default function AuctionsPage() {
                         <Input
                           value={amount}
                           onChange={(event) => setAmount(event.target.value)}
-                          placeholder={`Minimum ${formatAmount(BigInt(data.auction.highest_bid) > 0n ? BigInt(data.auction.highest_bid) + (BigInt(data.auction.highest_bid) * BigInt(data.config.min_bid_increment_percent)) / 100n : BigInt(data.config.reserve_price))} ${paymentToken}`}
+                          placeholder={`Minimum ${formatAmount(
+                            BigInt(data.auction.highest_bid) > 0n
+                              ? BigInt(data.auction.highest_bid) +
+                                  (BigInt(data.auction.highest_bid) * BigInt(data.config.min_bid_increment_percent)) /
+                                    100n
+                              : BigInt(data.config.reserve_price)
+                          )} ${paymentToken}`}
                           inputMode="decimal"
                           disabled={busy}
                         />
+
                         <Text className="lede" style={{ margin: 0, fontSize: '0.85rem' }}>
                           Enter an amount in {paymentToken}. SAC amounts support up to 7 decimal places.
                         </Text>
+
                         <Button onClick={() => void submit('bid')} disabled={busy}>
                           {busy ? 'Submitting...' : 'Place bid'}
                         </Button>
                       </Stack>
                     )}
+
                     {auctionEnded && !data.paused ? (
                       <Button variant="outline" onClick={() => void submit('settle')} disabled={busy}>
                         {busy ? 'Settling...' : 'Settle and start next auction'}
@@ -250,6 +289,7 @@ export default function AuctionsPage() {
                   </Stack>
                 </div>
               </Card>
+
               <Grid columns={{ base: 1, md: 2 }} gap="4">
                 <Card p="5">
                   <Stack gap="4">
@@ -257,6 +297,7 @@ export default function AuctionsPage() {
                       <Text className="label">Activity</Text>
                       <Heading style={{ fontSize: '1.2rem', marginTop: '4px' }}>Recent bids</Heading>
                     </div>
+
                     {data.bids.length ? (
                       <Stack gap="2">
                         {data.bids.map((bid, index) => (
@@ -272,14 +313,29 @@ export default function AuctionsPage() {
                             }}
                           >
                             <div style={{ minWidth: 0 }}>
-                              <ShortId value={bid.bidder} label="Bidder" />
-                              <Text className="lede" style={{ margin: '4px 0 0', fontSize: '0.78rem' }}>
+                              <Link href={`/members/${bid.bidder}`}>
+                                <ShortId value={bid.bidder} label="Bidder" />
+                              </Link>
+
+                              <Text
+                                className="lede"
+                                style={{
+                                  margin: '4px 0 0',
+                                  fontSize: '0.78rem'
+                                }}
+                              >
                                 {bid.timestamp ? formatDate(bid.timestamp) : 'Recently'}
                               </Text>
                             </div>
+
                             <Text
                               className="mono"
-                              style={{ margin: 0, fontSize: '1rem', fontWeight: 700, whiteSpace: 'nowrap' }}
+                              style={{
+                                margin: 0,
+                                fontSize: '1rem',
+                                fontWeight: 700,
+                                whiteSpace: 'nowrap'
+                              }}
                             >
                               {formatAmount(bid.amount)} {paymentToken}
                             </Text>
@@ -291,12 +347,14 @@ export default function AuctionsPage() {
                     )}
                   </Stack>
                 </Card>
+
                 <Card p="5">
                   <Stack gap="4">
                     <div>
                       <Text className="label">Archive</Text>
                       <Heading style={{ fontSize: '1.2rem', marginTop: '4px' }}>Past auctions</Heading>
                     </div>
+
                     {data.history.length ? (
                       <Stack gap="2">
                         {data.history.map((auction, index) => (
@@ -313,15 +371,32 @@ export default function AuctionsPage() {
                           >
                             <div>
                               <Text style={{ margin: 0, fontWeight: 600 }}>Token #{auction.token_id}</Text>
-                              <Text className="lede" style={{ margin: '4px 0 0', fontSize: '0.78rem' }}>
+
+                              <div
+                                className="lede"
+                                style={{
+                                  margin: '4px 0 0',
+                                  fontSize: '0.78rem'
+                                }}
+                              >
                                 {auction.highest_bidder ? (
-                                  <ShortId value={auction.highest_bidder} label="Winner" />
+                                  <Link href={`/members/${auction.highest_bidder}`}>
+                                    <ShortId value={auction.highest_bidder} label="Winner" />
+                                  </Link>
                                 ) : (
                                   'No winning bidder'
                                 )}
-                              </Text>
+                              </div>
                             </div>
-                            <Text className="mono" style={{ margin: 0, fontWeight: 700, whiteSpace: 'nowrap' }}>
+
+                            <Text
+                              className="mono"
+                              style={{
+                                margin: 0,
+                                fontWeight: 700,
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
                               {formatAmount(auction.highest_bid_amount)} {paymentToken}
                             </Text>
                           </div>

@@ -1,28 +1,71 @@
 'use client';
 
-import { useState } from 'react';
-import { Grid, Stack } from 'styled-system/jsx';
+import { Activity, ChevronDown, MoreHorizontal, RefreshCw } from 'lucide-react';
+import Image from 'next/image';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { Stack } from 'styled-system/jsx';
+import useSWR from 'swr';
 
 import { DaoShell } from '@/components/dao-shell';
 import { PageSection } from '@/components/page-section';
+import { ProposalStateBadge } from '@/components/proposal/proposal-state-badge';
+import type { ProposalListResponse } from '@/components/proposal/types';
 import { TokenCard } from '@/components/token/token-card';
-import { Badge, Button, Card, Heading, ShortId, Text } from '@/components/ui';
+import { Button, Callout, Card, Heading, ShortId, Text } from '@/components/ui';
 import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
 import { useGoldskyActivityFeed, useGoldskyHealth } from '@/lib/goldsky-queries';
 import { useTokenInventory } from '@/lib/token-queries';
 
-function formatTimestamp(timestamp: number) {
-  if (!timestamp) return '—';
+function formatTimestamp(timestamp: string | number | null) {
+  const numericTimestamp = Number(timestamp ?? 0);
+  if (!numericTimestamp) return '—';
   try {
     return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
-      new Date(timestamp * 1000)
+      new Date(numericTimestamp * 1000)
     );
   } catch {
     return String(timestamp);
   }
 }
 
-const ACTIVITY_PAGE_SIZE = 12;
+type AuctionData = {
+  auction: {
+    token_id: string;
+    start_time: string;
+    end_time: string;
+    highest_bid: string;
+    highest_bidder: string | null;
+    settled: boolean;
+  };
+  config: { reserve_price: string; min_bid_increment_percent: number; payment_token: string | null };
+  paused: boolean;
+};
+
+async function fetchJson<T>(url: string) {
+  const response = await fetch(url, { cache: 'no-store' });
+  const json = (await response.json()) as T & { message?: string };
+  if (!response.ok) throw new Error(json.message || 'Dashboard data unavailable');
+  return json;
+}
+
+function formatVoteTotal(value: string) {
+  try {
+    return new Intl.NumberFormat().format(BigInt(value));
+  } catch {
+    return '—';
+  }
+}
+
+function formatAuctionAmount(value: string | undefined) {
+  if (!value) return '0';
+  const raw = BigInt(value);
+  const whole = raw / 10_000_000n;
+  const fraction = (raw % 10_000_000n).toString().padStart(7, '0').replace(/0+$/, '');
+  return fraction ? `${whole}.${fraction}` : whole.toString();
+}
+
+const ACTIVITY_PAGE_SIZE = 10;
 const TOKEN_PAGE_SIZE = 8;
 
 export default function Page() {
@@ -30,237 +73,340 @@ export default function Page() {
   const config = getDaoNetworkConfig(network);
   const [activityLimit, setActivityLimit] = useState(ACTIVITY_PAGE_SIZE);
   const [tokenLimit, setTokenLimit] = useState(TOKEN_PAGE_SIZE);
+  const [refreshingDashboard, setRefreshingDashboard] = useState(false);
+  const [currentTime, setCurrentTime] = useState<number | null>(null);
   const {
     data: goldskyHealth,
     error: goldskyHealthError,
     isLoading: goldskyHealthLoading,
+    isValidating: goldskyHealthRefreshing,
     mutate: refreshHealth
   } = useGoldskyHealth();
   const {
     data: activityFeed,
     error: activityError,
     isLoading: activityLoading,
+    isValidating: activityRefreshing,
     mutate: refreshFeed
   } = useGoldskyActivityFeed(activityLimit);
-  const { data: tokens, error: tokenError, isLoading: tokenLoading, mutate: refreshTokens } = useTokenInventory();
+  const {
+    data: tokens,
+    error: tokenError,
+    isLoading: tokenLoading,
+    isValidating: tokenRefreshing,
+    mutate: refreshTokens
+  } = useTokenInventory();
+  const {
+    data: proposals,
+    error: proposalsError,
+    isLoading: proposalsLoading,
+    mutate: refreshProposals
+  } = useSWR<ProposalListResponse>('/api/proposals?limit=24', fetchJson, { keepPreviousData: true });
+  const {
+    data: auctionData,
+    error: auctionError,
+    isLoading: auctionLoading,
+    mutate: refreshAuction
+  } = useSWR<AuctionData>('/api/auctions', fetchJson, { refreshInterval: 15_000 });
   const tokenItems = tokens?.items.slice(0, tokenLimit) ?? [];
   const canLoadMoreTokens = Boolean(tokens && tokens.items.length > tokenLimit);
   const activityItems = activityFeed?.items ?? [];
+  const proposalItems = proposals?.items ?? [];
   const canLoadMoreActivity = Boolean(activityFeed?.hasMore);
+  const indexerIsHealthy = goldskyHealth?.status === 'healthy';
+  const indexerHealthLabel = goldskyHealthLoading
+    ? 'Checking indexer health'
+    : goldskyHealthError
+      ? 'Indexer health unavailable'
+      : indexerIsHealthy
+        ? 'Indexer healthy'
+        : 'Indexer needs attention';
+  const isDashboardRefreshing =
+    refreshingDashboard ||
+    goldskyHealthLoading ||
+    goldskyHealthRefreshing ||
+    activityLoading ||
+    activityRefreshing ||
+    tokenLoading ||
+    tokenRefreshing ||
+    proposalsLoading ||
+    auctionLoading;
+  const auctionEndTime = auctionData?.auction ? Number(auctionData.auction.end_time) : null;
+  const isAuctionEnded = currentTime !== null && auctionEndTime !== null && auctionEndTime <= currentTime;
+
+  useEffect(() => {
+    const updateCurrentTime = () => setCurrentTime(Date.now() / 1000);
+    updateCurrentTime();
+    const timer = window.setInterval(updateCurrentTime, 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  async function refreshDashboard() {
+    if (isDashboardRefreshing) return;
+    setRefreshingDashboard(true);
+    try {
+      await Promise.all([refreshHealth(), refreshFeed(), refreshTokens(), refreshProposals(), refreshAuction()]);
+    } finally {
+      setRefreshingDashboard(false);
+    }
+  }
 
   return (
     <DaoShell>
-      <PageSection
-        eyebrow="Dashboard"
-        title="Governance at a glance"
-        description="Track DAO contracts, token supply, Goldsky indexing, and recent governance activity from one clean home screen."
-      >
-        <Grid columns={{ base: 1, md: 2, xl: 5 }} gap="4">
-          <Card p="5">
-            <Stack gap="2">
-              <Text className="label">Token</Text>
-              {config.tokenContractId ? <ShortId value={config.tokenContractId} /> : <Text>Missing</Text>}
-            </Stack>
-          </Card>
-          <Card p="5">
-            <Stack gap="2">
-              <Text className="label">Governor</Text>
-              {config.governorContractId ? <ShortId value={config.governorContractId} /> : <Text>Missing</Text>}
-            </Stack>
-          </Card>
-          <Card p="5">
-            <Stack gap="2">
-              <Text className="label">Treasury</Text>
-              {config.treasuryContractId ? <ShortId value={config.treasuryContractId} /> : <Text>Missing</Text>}
-            </Stack>
-          </Card>
-          <Card p="5">
-            <Stack gap="2">
-              <Text className="label">Auction</Text>
-              {config.auctionContractId ? <ShortId value={config.auctionContractId} /> : <Text>Missing</Text>}
-            </Stack>
-          </Card>
-          <Card p="5">
-            <Stack gap="2">
-              <Text className="label">Admin</Text>
-              <ShortId value={config.adminAddress} />
-            </Stack>
-          </Card>
-        </Grid>
-
-        <Card p="5">
-          <Stack gap="3">
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-              <div>
-                <Text className="label">Tokens</Text>
-                <Heading style={{ fontSize: '1.35rem' }}>Current live supply</Heading>
-              </div>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <Badge>{tokenLoading ? 'Syncing' : `${tokens?.totalSupply ?? 0} live`}</Badge>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void refreshTokens()}
-                  disabled={tokenLoading}
-                >
-                  {tokenLoading ? 'Refreshing...' : 'Refresh tokens'}
-                </Button>
+      <PageSection title="Dashboard" description="Your DAO activity at a glance.">
+        <div className="dashboard-controls">
+          {isDashboardRefreshing ? (
+            <Text className="dashboard-sync-status" role="status" aria-live="polite">
+              Syncing…
+            </Text>
+          ) : null}
+          <details className="dashboard-menu">
+            <summary className="dashboard-menu__trigger">
+              Contracts <ChevronDown aria-hidden="true" size={14} />
+            </summary>
+            <div className="dashboard-menu__panel dashboard-contract-menu">
+              <Text className="label">Contracts</Text>
+              <div className="dashboard-contract-menu__items">
+                {config.tokenContractId ? (
+                  <ShortId label="Token" value={config.tokenContractId} />
+                ) : (
+                  <Text>Token: Missing</Text>
+                )}
+                {config.governorContractId ? (
+                  <ShortId label="Governor" value={config.governorContractId} />
+                ) : (
+                  <Text>Governor: Missing</Text>
+                )}
+                {config.treasuryContractId ? (
+                  <ShortId label="Treasury" value={config.treasuryContractId} />
+                ) : (
+                  <Text>Treasury: Missing</Text>
+                )}
+                {config.auctionContractId ? (
+                  <ShortId label="Auction" value={config.auctionContractId} />
+                ) : (
+                  <Text>Auction: Missing</Text>
+                )}
+                <ShortId label="Admin" value={config.adminAddress} />
               </div>
             </div>
-
-            {tokenError ? (
-              <Text className="lede" style={{ margin: 0 }}>
-                {tokenError.message}
-              </Text>
-            ) : null}
-            {!tokenLoading && !tokens?.items.length ? (
-              <Text className="lede" style={{ margin: 0 }}>
-                No tokens indexed yet.
-              </Text>
-            ) : (
-              <>
-                <div className="token-inventory-grid">
-                  {tokenItems.map((token) => (
-                    <TokenCard key={token.tokenId} tokenId={token.tokenId} owner={token.owner} />
-                  ))}
-                </div>
-                {canLoadMoreTokens ? (
-                  <div style={{ display: 'flex', justifyContent: 'center', paddingTop: '8px' }}>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setTokenLimit((current) => current + TOKEN_PAGE_SIZE)}
-                      disabled={tokenLoading}
-                    >
-                      {tokenLoading ? 'Loading...' : 'Show more tokens'}
-                    </Button>
-                  </div>
-                ) : null}
-              </>
-            )}
-          </Stack>
-          <style jsx>{`
-            .token-inventory-grid {
-              display: grid;
-              gap: 18px;
-              grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-            }
-
-            @media (min-width: 768px) {
-              .token-inventory-grid {
-                gap: 20px;
-                grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-              }
-            }
-          `}</style>
-        </Card>
-
-        <Card p="5">
-          <Stack gap="3">
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-              <div>
-                <Text className="label">Goldsky index</Text>
-                <Heading style={{ fontSize: '1.35rem' }}>Indexer health</Heading>
-              </div>
+          </details>
+          <details className="dashboard-menu dashboard-menu--options">
+            <summary
+              className="dashboard-menu__trigger dashboard-menu__trigger--icon"
+              aria-label="Dashboard options"
+              title="Dashboard options"
+            >
+              <MoreHorizontal aria-hidden="true" size={18} />
+            </summary>
+            <div className="dashboard-menu__panel dashboard-options-menu">
+              <Text className="label">Dashboard options</Text>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => void refreshHealth()}
-                disabled={goldskyHealthLoading}
+                onClick={() => void refreshDashboard()}
+                disabled={isDashboardRefreshing}
               >
-                {goldskyHealthLoading ? 'Refreshing...' : 'Refresh status'}
+                <RefreshCw aria-hidden="true" className={isDashboardRefreshing ? 'is-spinning' : undefined} size={15} />
+                {isDashboardRefreshing ? 'Refreshing…' : 'Refresh dashboard'}
               </Button>
             </div>
+          </details>
+        </div>
 
-            <Grid columns={{ base: 1, xl: 3 }} gap="4">
-              {goldskyHealth ? (
-                <Card p="5">
-                  <Stack gap="2">
-                    <Text className="label">Goldsky PostgreSQL index</Text>
-                    <Heading style={{ fontSize: '1.2rem' }}>
-                      {goldskyHealth.status === 'healthy' ? 'Healthy' : 'Unavailable'}
-                    </Heading>
-                    <div>
-                      <Badge>
-                        {goldskyHealth.latestLedger ? `Ledger ${goldskyHealth.latestLedger}` : 'No ledger data'}
-                      </Badge>
+        <div className="dashboard-secondary-grid">
+          <Card className="dashboard-secondary-card" p="5">
+            <div className="dashboard-secondary-card__content">
+              <Heading style={{ fontSize: '1.35rem', margin: 0 }}>Auction</Heading>
+              <div className="dashboard-secondary-card__scroll">
+                {auctionError ? (
+                  <Callout variant="error" title="Auction unavailable" description={auctionError.message} />
+                ) : null}
+                {auctionLoading && !auctionData ? (
+                  <Text className="lede" style={{ margin: 0 }}>
+                    Loading auction...
+                  </Text>
+                ) : null}
+                {auctionData?.auction ? (
+                  <div className="dashboard-auction">
+                    <Link href="/auctions">
+                      <Image
+                        src={`/api/token/${auctionData.auction.token_id}/image.svg`}
+                        alt={`Token #${auctionData.auction.token_id}`}
+                        width={240}
+                        height={240}
+                        unoptimized
+                      />
+                    </Link>
+                    <div className="dashboard-auction__details">
+                      <div>
+                        <Text className="label" style={{ margin: 0 }}>
+                          Current auction
+                        </Text>
+                        <Heading style={{ fontSize: '1.1rem', margin: '4px 0 0' }}>
+                          Token #{auctionData.auction.token_id}
+                        </Heading>
+                        <Text className="lede" style={{ margin: '8px 0 0' }}>
+                          {auctionData.auction.highest_bid === '0'
+                            ? `Reserve ${formatAuctionAmount(auctionData.config.reserve_price)}`
+                            : `Highest bid ${formatAuctionAmount(auctionData.auction.highest_bid)}`}
+                        </Text>
+                        <Text className="lede" style={{ margin: '4px 0 0', fontSize: '0.84rem' }}>
+                          Ends {formatTimestamp(auctionData.auction.end_time)}
+                        </Text>
+                      </div>
+                      {!auctionData.paused ? (
+                        <Link className="dashboard-auction__action" href="/auctions">
+                          {isAuctionEnded ? 'Settle auction' : 'Place bid'}
+                        </Link>
+                      ) : null}
                     </div>
-                    <Text className="lede" style={{ margin: 0, fontSize: '0.86rem' }}>
-                      {goldskyHealth.totalEvents ?? 0} indexed events
+                  </div>
+                ) : null}
+                {!auctionLoading && auctionData && !auctionData.auction ? (
+                  <div className="empty-state" role="status">
+                    <Text className="lede" style={{ margin: '0 auto' }}>
+                      Current auction data is unavailable.
                     </Text>
-                  </Stack>
-                </Card>
-              ) : null}
-              {goldskyHealthLoading ? (
-                <Card p="5">
-                  <Text>Loading Goldsky status...</Text>
-                </Card>
-              ) : null}
-              {goldskyHealthError ? (
-                <Card p="5">
-                  <Text>{goldskyHealthError.message}</Text>
-                </Card>
-              ) : null}
-            </Grid>
-          </Stack>
-        </Card>
-
-        <Card p="5">
-          <Stack gap="3">
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-              <div>
-                <Text className="label">Goldsky feed</Text>
-                <Heading style={{ fontSize: '1.35rem' }}>Latest indexed DAO activity</Heading>
+                  </div>
+                ) : null}
               </div>
+            </div>
+          </Card>
+          <Card className="dashboard-secondary-card" p="5">
+            <div className="dashboard-secondary-card__content">
+              <Heading style={{ fontSize: '1.35rem', margin: 0 }}>Proposal activity</Heading>
+              <div className="dashboard-secondary-card__scroll">
+                {proposalsError ? (
+                  <Callout variant="error" title="Proposal activity unavailable" description={proposalsError.message} />
+                ) : null}
+                {proposalsLoading && !proposals ? <Callout variant="info" title="Loading proposal activity…" /> : null}
+                {!proposalsLoading && !proposalItems.length ? (
+                  <div className="empty-state" role="status">
+                    <Text className="lede" style={{ margin: '0 auto' }}>
+                      Proposal activity will appear here once proposals are indexed.
+                    </Text>
+                  </div>
+                ) : null}
+                {proposalItems.length ? (
+                  <div className="dashboard-proposal-list proposal-list" role="list" aria-label="Recent proposals">
+                    {proposalItems.map((item) => (
+                      <div key={item.proposalId} role="listitem">
+                        <Link className="proposal-row" href={`/proposals/${item.proposalNumber}`}>
+                          <div className="proposal-row__identity">
+                            <Text className="proposal-row__id mono">#{item.proposalNumber}</Text>
+                            <div className="proposal-row__content">
+                              <Heading className="proposal-row__title">{item.metadata.title}</Heading>
+                              <Text className="proposal-row__date">{formatTimestamp(item.timestamp)}</Text>
+                            </div>
+                          </div>
+                          <div className="proposal-row__outcome">
+                            {item.voteTotals ? (
+                              <div
+                                className="dashboard-vote-totals mono"
+                                aria-label={`For ${formatVoteTotal(item.voteTotals.forVotes)}, against ${formatVoteTotal(item.voteTotals.againstVotes)}, abstain ${formatVoteTotal(item.voteTotals.abstainVotes)}`}
+                              >
+                                <span className="dashboard-vote-totals__for">
+                                  {formatVoteTotal(item.voteTotals.forVotes)}
+                                </span>
+                                <span>/</span>
+                                <span className="dashboard-vote-totals__against">
+                                  {formatVoteTotal(item.voteTotals.againstVotes)}
+                                </span>
+                                <span>/</span>
+                                <span className="dashboard-vote-totals__abstain">
+                                  {formatVoteTotal(item.voteTotals.abstainVotes)}
+                                </span>
+                              </div>
+                            ) : null}
+                            <ProposalStateBadge label={item.stateLabel} />
+                          </div>
+                        </Link>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        <Card className="dashboard-feed-card" p="5">
+          <Stack gap="3">
+            <div className="section-toolbar">
+              <Heading style={{ fontSize: '1.35rem', margin: 0 }}>Activity feed</Heading>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <Badge>{activityLoading ? 'Syncing' : 'Live'}</Badge>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void refreshFeed()}
-                  disabled={activityLoading}
-                >
-                  {activityLoading ? 'Refreshing...' : 'Refresh feed'}
-                </Button>
+                <details className="dashboard-health-menu">
+                  <summary
+                    className="dashboard-health-trigger"
+                    aria-label={`${indexerHealthLabel}. View indexer health`}
+                    title={indexerHealthLabel}
+                  >
+                    <Activity aria-hidden="true" size={16} />
+                    <span
+                      className={`dashboard-health-dot${indexerIsHealthy ? ' dashboard-health-dot--healthy' : ''}`}
+                      aria-hidden="true"
+                    />
+                  </summary>
+                  <div className="dashboard-health-panel">
+                    <div className="dashboard-health-panel__heading">
+                      <Text className="label">Indexer health</Text>
+                    </div>
+                    <Text className="lede" style={{ margin: 0, fontSize: '0.84rem' }}>
+                      {indexerHealthLabel}
+                    </Text>
+                    {goldskyHealthError ? (
+                      <Text className="lede" style={{ margin: 0, fontSize: '0.8rem' }}>
+                        {goldskyHealthError.message}
+                      </Text>
+                    ) : null}
+                    {goldskyHealth ? (
+                      <div className="dashboard-health-program">
+                        <Text style={{ margin: 0, fontWeight: 700 }}>Goldsky index</Text>
+                        <Text className="lede" style={{ margin: 0, fontSize: '0.78rem' }}>
+                          {goldskyHealth.latestLedger ? `Ledger ${goldskyHealth.latestLedger}` : 'No ledger data'} |{' '}
+                          {goldskyHealth.totalEvents ?? 0} indexed events
+                        </Text>
+                      </div>
+                    ) : null}
+                  </div>
+                </details>
               </div>
             </div>
             {activityError ? (
-              <Text className="lede" style={{ margin: 0 }}>
-                {activityError.message}
-              </Text>
+              <Callout variant="error" title="Activity feed unavailable" description={activityError.message} />
             ) : null}
             {!activityItems.length ? (
-              <Text className="lede" style={{ margin: 0 }}>
-                No indexed activity yet.
-              </Text>
-            ) : (
+              <div className="empty-state" role="status">
+                <Text className="lede" style={{ margin: '0 auto' }}>
+                  No indexed activity yet. Governance and token events will appear here.
+                </Text>
+              </div>
+            ) : null}
+            {activityItems.length ? (
               <>
-                <Stack gap="0">
-                  {activityItems.map((item, index) => (
-                    <div
-                      key={item.activity_id}
-                      style={{
-                        borderTop: index === 0 ? 'none' : '1px solid rgba(148, 163, 184, 0.18)',
-                        padding: '14px 0'
-                      }}
-                    >
-                      <Stack gap="1">
-                        <Text style={{ margin: 0, fontWeight: 700 }}>{item.title}</Text>
-                        <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                          {item.summary}
+                <div className="dashboard-activity-scroll">
+                  <div className="dashboard-activity-list">
+                    {activityItems.map((item, index) => (
+                      <div
+                        className="dashboard-activity-row"
+                        data-first={index === 0 ? 'true' : undefined}
+                        key={item.activity_id}
+                      >
+                        <div>
+                          <Text style={{ margin: 0, fontWeight: 700 }}>{item.title}</Text>
+                          <Text className="lede" style={{ margin: '4px 0 0', fontSize: '0.9rem' }}>
+                            {item.summary}
+                          </Text>
+                        </div>
+                        <Text className="lede dashboard-activity-meta">
+                          {formatTimestamp(item.timestamp)} | Ledger {item.ledger_sequence} | {item.contract_role}
                         </Text>
-                        <Text className="lede" style={{ margin: 0, fontSize: '0.8rem' }}>
-                          {formatTimestamp(Number(item.timestamp ?? 0))} | Ledger {item.ledger_sequence} |{' '}
-                          {item.contract_role}
-                        </Text>
-                      </Stack>
-                    </div>
-                  ))}
-                </Stack>
+                      </div>
+                    ))}
+                  </div>
+                </div>
                 {canLoadMoreActivity ? (
                   <div style={{ display: 'flex', justifyContent: 'center', paddingTop: '8px' }}>
                     <Button
@@ -275,8 +421,61 @@ export default function Page() {
                   </div>
                 ) : null}
               </>
-            )}
+            ) : null}
           </Stack>
+        </Card>
+
+        <Card className="dashboard-membership-card" p="5">
+          <div className="dashboard-membership-card__content">
+            <Heading style={{ fontSize: '1.35rem', margin: 0 }}>Membership</Heading>
+            <div className="dashboard-membership-card__scroll">
+              {tokenError ? (
+                <Callout variant="error" title="Token inventory unavailable" description={tokenError.message} />
+              ) : null}
+              {!tokenLoading && !tokens?.items.length ? (
+                <div className="empty-state" role="status">
+                  <Text className="lede" style={{ margin: '0 auto' }}>
+                    No tokens have been indexed yet. Refresh after the first mint is confirmed.
+                  </Text>
+                </div>
+              ) : null}
+              {tokens?.items.length ? (
+                <>
+                  <div className="token-inventory-grid">
+                    {tokenItems.map((token) => (
+                      <TokenCard key={token.tokenId} tokenId={token.tokenId} owner={token.owner} />
+                    ))}
+                  </div>
+                  {canLoadMoreTokens ? (
+                    <div style={{ display: 'flex', justifyContent: 'center', paddingTop: '8px' }}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setTokenLimit((current) => current + TOKEN_PAGE_SIZE)}
+                        disabled={tokenLoading}
+                      >
+                        {tokenLoading ? 'Loading...' : 'Show more tokens'}
+                      </Button>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+          </div>
+          <style jsx>{`
+            .token-inventory-grid {
+              display: grid;
+              gap: 18px;
+              grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            }
+            @media (min-width: 768px) {
+              .token-inventory-grid {
+                gap: 20px;
+                grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+              }
+            }
+          `}</style>
         </Card>
       </PageSection>
     </DaoShell>

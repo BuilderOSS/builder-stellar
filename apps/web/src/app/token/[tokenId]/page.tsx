@@ -16,7 +16,6 @@ export default async function TokenPage({ params }: { params: Promise<{ tokenId:
   return (
     <DaoShell>
       <PageSection
-        eyebrow="Token"
         title={metadata.name}
         description="Readable token detail page backed by the same deterministic metadata used by the token contract base URI."
       >

@@ -8,5 +8,5 @@ import { button } from 'styled-system/recipes';
 const ButtonBase = styled(ark.button, button);
 
 export function Button({ style, ...props }: ComponentProps<typeof ButtonBase>) {
-  return <ButtonBase {...props} style={{ borderRadius: '8px', ...style }} />;
+  return <ButtonBase {...props} style={style} />;
 }

@@ -21,12 +21,12 @@ const CALLOUT_STYLES: Record<
 > = {
   info: {
     badge: 'Info',
-    accent: 'rgba(96, 165, 250, 0.7)',
-    border: 'rgba(96, 165, 250, 0.42)',
-    background: 'rgba(15, 23, 42, 0.72)',
+    accent: 'var(--focus)',
+    border: 'rgba(73, 166, 255, 0.4)',
+    background: 'rgba(8, 124, 240, 0.08)',
     badgeBorder: 'rgba(96, 165, 250, 0.32)',
     badgeBackground: 'rgba(37, 99, 235, 0.22)',
-    badgeColor: '#bfdbfe'
+    badgeColor: '#b9ddff'
   },
   warning: {
     badge: 'Warning',
@@ -78,7 +78,7 @@ export function Callout({
       style={{
         borderColor: style.border,
         background: style.background,
-        boxShadow: `inset 3px 0 0 ${style.accent}, 0 24px 72px rgba(2, 6, 23, 0.42)`
+        boxShadow: `inset 3px 0 0 ${style.accent}`
       }}
     >
       <Stack gap="2">
@@ -93,9 +93,7 @@ export function Callout({
             {badge ?? style.badge}
           </Badge>
         </div>
-        <Text className="lede" style={{ margin: 0, color: '#f8fafc', fontWeight: 700 }}>
-          {title}
-        </Text>
+        <Text style={{ margin: 0, color: 'var(--text-primary)', fontWeight: 700 }}>{title}</Text>
         {description ? (
           <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
             {description}

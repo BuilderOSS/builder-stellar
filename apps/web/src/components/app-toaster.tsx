@@ -29,11 +29,11 @@ export function AppToaster() {
           <Toast.Root
             key={toast.id}
             style={{
-              background: 'rgba(8, 18, 32, 0.96)',
-              border: '1px solid rgba(160, 194, 225, 0.24)',
-              borderRadius: '16px',
-              boxShadow: '0 24px 70px rgba(0, 0, 0, 0.38)',
-              color: '#e5edf7',
+              background: 'var(--surface-1)',
+              border: '1px solid var(--border-strong)',
+              borderRadius: '14px',
+              boxShadow: '0 24px 70px rgba(0, 0, 0, 0.48)',
+              color: 'var(--text-primary)',
               display: 'grid',
               gap: '8px',
               maxWidth: 'min(420px, calc(100vw - 32px))',
@@ -46,7 +46,7 @@ export function AppToaster() {
               height: 'var(--height)',
               opacity: 'var(--opacity)',
               willChange: 'translate, opacity, scale',
-              transition: 'translate 400ms, scale 400ms, opacity 400ms, height 400ms, box-shadow 200ms',
+              transition: 'translate 180ms, scale 180ms, opacity 180ms, height 180ms, box-shadow 180ms',
               transitionTimingFunction: 'cubic-bezier(0.21, 1.02, 0.73, 1)'
             }}
           >
@@ -64,7 +64,7 @@ export function AppToaster() {
               {toast.title}
             </Toast.Title>
             {toast.description ? (
-              <Toast.Description style={{ color: 'rgba(176,201,229,0.88)', fontSize: '0.88rem', lineHeight: 1.45 }}>
+              <Toast.Description style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', lineHeight: 1.45 }}>
                 {toast.description}
               </Toast.Description>
             ) : null}
@@ -72,9 +72,9 @@ export function AppToaster() {
               <Toast.ActionTrigger
                 style={{
                   alignItems: 'center',
-                  background: 'rgba(37, 99, 235, 0.92)',
-                  border: '1px solid rgba(147, 197, 253, 0.6)',
-                  borderRadius: '10px',
+                  background: 'var(--action)',
+                  border: '1px solid var(--action)',
+                  borderRadius: '8px',
                   color: '#eff6ff',
                   cursor: 'pointer',
                   display: 'inline-flex',
@@ -96,13 +96,16 @@ export function AppToaster() {
                 alignItems: 'center',
                 background: 'transparent',
                 border: 0,
-                color: 'rgba(176,201,229,0.88)',
+                color: 'var(--text-secondary)',
                 cursor: 'pointer',
                 display: 'inline-flex',
+                minWidth: '44px',
+                minHeight: '44px',
+                justifyContent: 'center',
                 padding: '4px',
                 position: 'absolute',
-                right: '10px',
-                top: '10px'
+                right: '2px',
+                top: '2px'
               }}
             >
               <X aria-hidden="true" size={16} />

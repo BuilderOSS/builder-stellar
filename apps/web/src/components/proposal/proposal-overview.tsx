@@ -12,8 +12,12 @@ import type { ProposalDetail } from './types';
 
 type ProposalOverviewProps = {
   detail: ProposalDetail;
-  now: number;
   network: DaoNetworkName;
+};
+
+type ProposalLifecyclePanelProps = {
+  detail: ProposalDetail;
+  now: number;
   actionSlot?: ReactNode;
 };
 
@@ -123,42 +127,19 @@ function getLifecycleSummary(detail: ProposalDetail, now: number) {
   }
 }
 
-export function ProposalOverview({ detail, now, network, actionSlot }: ProposalOverviewProps) {
-  const lifecycle = getLifecycleSummary(detail, now);
-
+export function ProposalOverview({ detail, network }: ProposalOverviewProps) {
   return (
     <Stack gap="3">
-      <Card p="4" style={{ background: 'rgba(157, 179, 203, 0.08)', border: '1px solid rgba(157, 179, 203, 0.18)' }}>
-        <Grid columns={{ base: 1, lg: actionSlot ? 2 : 1 }} gap="4" alignItems="start">
-          <Stack gap="3">
-            <div>
-              <ProposalStateBadge label={detail.label} />
-            </div>
-            <Stack gap="1">
-              <Text className="label">{lifecycle.eyebrow}</Text>
-              <Heading style={{ fontSize: '1.5rem' }}>{lifecycle.headline}</Heading>
-              <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                {lifecycle.subline}
-              </Text>
-            </Stack>
+      <Card p="5">
+        <Stack gap="3">
+          <div>
+            <ProposalStateBadge label={detail.label} />
+          </div>
+          <Stack gap="1">
+            <Text className="label">Proposed by</Text>
+            <ShortId value={detail.proposer} />
           </Stack>
-          {actionSlot ? <div className="proposal-overview-action">{actionSlot}</div> : null}
-        </Grid>
-        <style jsx>{`
-          .proposal-overview-action {
-            border-top: 1px solid rgba(160, 194, 225, 0.18);
-            padding-top: 16px;
-          }
-
-          @media (min-width: 1024px) {
-            .proposal-overview-action {
-              border-inline-start: 1px solid rgba(160, 194, 225, 0.18);
-              border-top: 0;
-              padding-inline-start: 16px;
-              padding-top: 0;
-            }
-          }
-        `}</style>
+        </Stack>
       </Card>
 
       <Grid columns={{ base: 1, lg: 3 }} gap="3">
@@ -218,5 +199,26 @@ export function ProposalOverview({ detail, now, network, actionSlot }: ProposalO
         </Stack>
       </Card>
     </Stack>
+  );
+}
+
+export function ProposalLifecyclePanel({ detail, now, actionSlot }: ProposalLifecyclePanelProps) {
+  const lifecycle = getLifecycleSummary(detail, now);
+
+  return (
+    <Card p="5" style={{ background: 'rgba(157, 179, 203, 0.08)', border: '1px solid rgba(157, 179, 203, 0.18)' }}>
+      <Stack gap="4">
+        <Stack gap="1">
+          <Text className="label">{lifecycle.eyebrow}</Text>
+          <Heading style={{ fontSize: '1.35rem' }}>{lifecycle.headline}</Heading>
+          <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+            {lifecycle.subline}
+          </Text>
+        </Stack>
+        {actionSlot ? (
+          <div style={{ borderTop: '1px solid rgba(160, 194, 225, 0.18)', paddingTop: '16px' }}>{actionSlot}</div>
+        ) : null}
+      </Stack>
+    </Card>
   );
 }

@@ -10,9 +10,9 @@ export function FieldLabel(props: ComponentProps<'label'>) {
       {...props}
       style={{
         display: 'block',
-        color: 'rgba(176,201,229,0.88)',
-        fontSize: '0.9rem',
-        fontWeight: 500,
+        color: 'var(--text-secondary)',
+        fontSize: '0.88rem',
+        fontWeight: 650,
         ...(props.style ?? {})
       }}
     />
@@ -23,7 +23,13 @@ export function FieldHelperText(props: ComponentProps<'p'>) {
   return (
     <p
       {...props}
-      style={{ color: 'rgba(132,156,186,0.92)', fontSize: '0.85rem', marginTop: '2px', ...(props.style ?? {}) }}
+      style={{
+        color: 'var(--text-tertiary)',
+        fontSize: '0.82rem',
+        lineHeight: 1.5,
+        marginTop: '4px',
+        ...(props.style ?? {})
+      }}
     />
   );
 }

@@ -143,7 +143,7 @@ export default function AuctionAdminPage() {
   if (!isOwner) {
     return (
       <DaoShell>
-        <PageSection eyebrow="Admin" title="Auction controls" description="Owner-only auction operations.">
+        <PageSection title="Auction controls" description="Owner-only auction operations.">
           <Callout variant="warning" badge="Access restricted" title="Connect the configured owner wallet to continue">
             <ShortId value={config.adminAddress} label="Owner address" />
           </Callout>
@@ -155,7 +155,6 @@ export default function AuctionAdminPage() {
   return (
     <DaoShell>
       <PageSection
-        eyebrow="Admin"
         title="Auction controls"
         description="Pause or resume auction activity for maintenance and emergency operations."
       >

@@ -16,9 +16,11 @@ export function TxExplorerLink({ network, txHash }: { network: DaoNetworkName; t
       rel="noreferrer"
       style={{
         alignItems: 'center',
-        border: '1px solid rgba(160, 194, 225, 0.28)',
+        minHeight: '44px',
+        border: '1px solid var(--border-strong)',
         borderRadius: '10px',
-        color: 'inherit',
+        background: 'var(--surface-2)',
+        color: 'var(--text-primary)',
         display: 'inline-flex',
         fontFamily: 'var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace)',
         fontSize: '0.85rem',

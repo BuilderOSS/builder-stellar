@@ -69,7 +69,7 @@ export function ProposalVoteSummary({ votes, quorumVotes }: ProposalVoteSummaryP
             No votes yet.
           </Text>
         ) : (
-          <Grid columns={{ base: 1, md: 3 }} gap="3">
+          <Grid columns={{ base: 1 }} gap="3">
             <Card p="4">
               <Stack gap="1">
                 <Text className="label">For</Text>

@@ -87,11 +87,7 @@ export default function TokenAdminPage() {
 
   return (
     <DaoShell>
-      <PageSection
-        eyebrow="Admin"
-        title="Token Admin"
-        description="Mint tokens and review the current mint-authority set."
-      >
+      <PageSection title="Token Admin" description="Mint tokens and review the current mint-authority set.">
         <Stack gap="4">
           <AdminSectionNav active="/admin/token" />
 

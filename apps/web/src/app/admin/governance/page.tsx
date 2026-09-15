@@ -231,11 +231,7 @@ export default function GovernanceAdminPage() {
   if (!hasGovernanceAccess) {
     return (
       <DaoShell>
-        <PageSection
-          eyebrow="Admin"
-          title="Governance Admin"
-          description="Governance settings and authority management."
-        >
+        <PageSection title="Governance Admin" description="Governance settings and authority management.">
           <Callout
             variant="warning"
             badge="Access restricted"
@@ -266,11 +262,7 @@ export default function GovernanceAdminPage() {
 
   return (
     <DaoShell>
-      <PageSection
-        eyebrow="Admin"
-        title="Governance Admin"
-        description="Edit governor parameters and apply them one at a time."
-      >
+      <PageSection title="Governance Admin" description="Edit governor parameters and apply them one at a time.">
         <Stack gap="4">
           <AdminSectionNav active="/admin/governance" />
 

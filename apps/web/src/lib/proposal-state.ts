@@ -43,7 +43,7 @@ export function proposalActionMode(state: ProposalState | null | undefined): Pro
 export function proposalStateBadgeStyle(label: string) {
   switch (label) {
     case 'Pending':
-      return { background: '#e5e7eb', color: '#111827' };
+      return { background: '#dbeafe', color: '#1d4ed8' };
     case 'Active':
       return { background: '#dbeafe', color: '#1d4ed8' };
     case 'Defeated':
@@ -55,9 +55,9 @@ export function proposalStateBadgeStyle(label: string) {
     case 'Expired':
       return { background: '#f3f4f6', color: '#4b5563' };
     case 'Executed':
-      return { background: '#ede9fe', color: '#6d28d9' };
+      return { background: '#dcfce7', color: '#166534' };
     case 'Canceled':
-      return { background: '#fce7f3', color: '#9d174d' };
+      return { background: '#f3f4f6', color: '#4b5563' };
     default:
       return { background: '#f3f4f6', color: '#374151' };
   }

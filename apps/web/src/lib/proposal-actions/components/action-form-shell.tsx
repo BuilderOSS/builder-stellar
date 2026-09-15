@@ -25,7 +25,6 @@ export interface ActionFormShellProps {
 export function ActionFormShell({
   mode,
   actionType,
-  actionLabel: _actionLabel,
   disabled,
   preconditionResult,
   onActionTypeChange,

@@ -8,30 +8,28 @@ const button = defineRecipe({
     alignItems: 'center',
     appearance: 'none',
     borderWidth: '1px',
-    borderColor: 'rgba(0,133,255,0.34)',
-    borderRadius: '8px',
+    borderColor: 'var(--border-strong)',
+    borderRadius: '10px',
     cursor: 'pointer',
     display: 'inline-flex',
     flexShrink: '0',
     fontWeight: 'semibold',
-    gap: '2.5',
+    gap: '2',
     justifyContent: 'center',
     minH: '11',
     outline: '0',
     position: 'relative',
     px: '5',
-    fontSize: '0.95rem',
-    letterSpacing: '0.01em',
-    transitionDuration: '150ms',
+    fontSize: '0.9rem',
+    letterSpacing: '-0.01em',
+    transitionDuration: '160ms',
     transitionProperty: 'background-color, border-color, color, box-shadow, transform',
     userSelect: 'none',
     verticalAlign: 'middle',
     whiteSpace: 'nowrap',
-    shadow: '0 16px 40px rgba(2,6,23,0.26)',
-    backdropFilter: 'blur(12px)',
+    shadow: 'none',
     _hover: {
-      transform: 'translateY(-1px)',
-      shadow: '0 20px 50px rgba(2,6,23,0.32)'
+      transform: 'translateY(-1px)'
     },
     _active: {
       transform: 'translateY(0px) scale(0.99)'
@@ -47,31 +45,31 @@ const button = defineRecipe({
   variants: {
     variant: {
       solid: {
-        bg: 'linear-gradient(135deg, #0057b3 0%, #0085ff 46%, #53b1ff 100%)',
+        bg: 'var(--action)',
         color: 'white',
-        borderColor: 'rgba(214,235,255,0.32)',
-        shadow: '0 18px 45px rgba(0,133,255,0.34)'
+        borderColor: 'var(--action)',
+        _hover: { bg: 'var(--action-hover)', borderColor: 'var(--action-hover)' }
       },
       surface: {
-        bg: 'rgba(15,15,14,0.82)',
-        borderColor: 'rgba(0,133,255,0.18)',
-        color: 'white',
+        bg: 'var(--surface-2)',
+        borderColor: 'var(--border-default)',
+        color: 'var(--text-primary)',
         shadow: 'none',
-        _hover: { bg: 'rgba(12,24,40,0.94)', borderColor: 'rgba(0,133,255,0.32)' }
+        _hover: { bg: 'var(--surface-3)', borderColor: 'var(--border-strong)' }
       },
       outline: {
-        borderColor: 'rgba(0,133,255,0.22)',
-        color: 'white',
+        borderColor: 'var(--border-strong)',
+        color: 'var(--text-primary)',
         bg: 'transparent',
         shadow: 'none',
-        _hover: { bg: 'rgba(0,133,255,0.12)', borderColor: 'rgba(165,217,255,0.34)' }
+        _hover: { bg: 'var(--surface-2)', borderColor: 'var(--text-tertiary)' }
       },
       plain: {
-        color: 'white',
+        color: 'var(--text-secondary)',
         bg: 'transparent',
         shadow: 'none',
         borderColor: 'transparent',
-        _hover: { bg: 'rgba(255,255,255,0.1)' }
+        _hover: { bg: 'var(--surface-2)', color: 'var(--text-primary)' }
       }
     },
     size: {
@@ -91,13 +89,12 @@ const card = defineRecipe({
   jsx: ['Card'],
   base: {
     p: '6',
-    borderRadius: '2xl',
+    borderRadius: '20px',
     borderWidth: '1px',
-    borderColor: 'rgba(0,133,255,0.12)',
-    bg: 'linear-gradient(180deg, rgba(18,16,13,0.92) 0%, rgba(9,9,10,0.96) 100%)',
-    backdropFilter: 'blur(20px)',
-    boxShadow: '0 28px 88px rgba(2,6,23,0.5)',
-    color: 'white'
+    borderColor: 'var(--border-default)',
+    bg: 'var(--surface-1)',
+    boxShadow: '0 1px 0 rgba(255, 255, 255, 0.025)',
+    color: 'var(--text-primary)'
   }
 });
 
@@ -116,18 +113,19 @@ const input = defineRecipe({
   base: {
     width: '100%',
     borderWidth: '1px',
-    borderColor: 'rgba(0,133,255,0.16)',
-    borderRadius: '14px',
-    bg: 'rgba(15,23,42,0.98)',
-    color: 'white',
+    borderColor: 'var(--border-strong)',
+    borderRadius: '10px',
+    bg: 'var(--surface-0)',
+    color: 'var(--text-primary)',
     px: '4',
     py: '3',
     outline: 'none',
-    shadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
+    minH: '11',
+    shadow: 'none',
     transitionProperty: 'border-color, box-shadow, background-color',
     _focusVisible: {
-      borderColor: 'accent.500',
-      boxShadow: '0 0 0 4px rgba(0,133,255,0.2)'
+      borderColor: 'var(--focus)',
+      boxShadow: '0 0 0 3px var(--focus-soft)'
     }
   }
 });
@@ -138,18 +136,19 @@ const select = defineRecipe({
   base: {
     width: '100%',
     borderWidth: '1px',
-    borderColor: 'rgba(0,133,255,0.16)',
-    borderRadius: '14px',
-    bg: 'rgba(15,23,42,0.98)',
-    color: 'white',
+    borderColor: 'var(--border-strong)',
+    borderRadius: '10px',
+    bg: 'var(--surface-0)',
+    color: 'var(--text-primary)',
     px: '4',
     py: '3',
     outline: 'none',
-    shadow: 'inset 0 1px 0 rgba(255,255,255,0.03)',
+    minH: '11',
+    shadow: 'none',
     transitionProperty: 'border-color, box-shadow, background-color',
     _focusVisible: {
-      borderColor: 'accent.500',
-      boxShadow: '0 0 0 4px rgba(0,133,255,0.2)'
+      borderColor: 'var(--focus)',
+      boxShadow: '0 0 0 3px var(--focus-soft)'
     }
   }
 });
@@ -160,15 +159,16 @@ const badge = defineRecipe({
   base: {
     display: 'inline-flex',
     alignItems: 'center',
-    borderRadius: 'full',
+    borderRadius: '8px',
     borderWidth: '1px',
-    borderColor: 'rgba(0,133,255,0.18)',
+    borderColor: 'var(--border-default)',
     px: '3',
     py: '1.5',
     textStyle: 'xs',
     fontWeight: 'semibold',
-    bg: 'rgba(0,133,255,0.16)',
-    color: '#e3f1ff'
+    bg: 'var(--surface-2)',
+    color: 'var(--text-secondary)',
+    letterSpacing: '0.01em'
   }
 });
 
@@ -176,7 +176,8 @@ const text = defineRecipe({
   className: 'text',
   jsx: ['Text'],
   base: {
-    color: 'rgba(226,232,240,0.92)'
+    color: 'var(--text-secondary)',
+    lineHeight: '1.55'
   }
 });
 
@@ -184,9 +185,10 @@ const heading = defineRecipe({
   className: 'heading',
   jsx: ['Heading'],
   base: {
-    color: 'white',
+    color: 'var(--text-primary)',
     fontWeight: 'bold',
-    lineHeight: '1'
+    lineHeight: '1.1',
+    letterSpacing: '-0.035em'
   }
 });
 

@@ -32,7 +32,7 @@ export const Select = forwardRef<HTMLSelectElement, ComponentPropsWithoutRef<typ
           top: '50%',
           transform: 'translateY(-50%)',
           pointerEvents: 'none',
-          color: 'rgba(160,194,225,0.92)'
+          color: 'var(--text-tertiary)'
         }}
       />
     </div>

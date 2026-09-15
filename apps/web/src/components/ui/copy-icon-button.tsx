@@ -22,19 +22,19 @@ export function CopyIconButton({ copied, onClick, label }: CopyIconButtonProps) 
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        width: '1.5rem',
-        height: '1.5rem',
-        minWidth: '1.5rem',
-        minHeight: '1.5rem',
+        width: '2.75rem',
+        height: '2.75rem',
+        minWidth: '2.75rem',
+        minHeight: '2.75rem',
         padding: 0,
-        borderRadius: '999px',
-        border: '1px solid rgba(255,255,255,0.12)',
-        background: 'rgba(255,255,255,0.04)',
-        color: 'white',
+        borderRadius: '10px',
+        border: '1px solid var(--border-default)',
+        background: 'var(--surface-2)',
+        color: 'var(--text-secondary)',
         cursor: 'pointer'
       }}
     >
-      {copied ? <Check size={12} /> : <Copy size={12} />}
+      {copied ? <Check size={16} /> : <Copy size={16} />}
     </button>
   );
 }
