@@ -147,6 +147,6 @@ MIT
 
 ## Acknowledgments
 
-- Inspired by [Nouns Builder](https://nouns.build/) by Zora
+- Inspired by [Nouns Builder](https://nouns.build/)
 - Built with [OpenZeppelin Contracts for Stellar](https://github.com/OpenZeppelin/stellar-contracts)
 - Powered by [Stellar](https://stellar.org/) and [Soroban](https://soroban.stellar.org/)
