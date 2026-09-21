@@ -13,6 +13,8 @@ soroban-sdk = { workspace = true }
 stellar-access = { workspace = true }
 token = { path = "../token" }
 metadata = { path = "../metadata" }
+auction = { path = "../auction" }
+governor = { path = "../governor" }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }

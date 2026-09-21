@@ -393,6 +393,335 @@ impl ManagerContract {
     }
 
     // ========================================================================
+    // DAO Factory
+    // ========================================================================
+    // TODO: Complete implementation - currently commented out due to deployment API complexity
+
+    /*
+    /// Create a new DAO with all 5 modules atomically deployed.
+    ///
+    /// This is the main factory function that:
+    /// 1. Validates all parameters
+    /// 2. Checks factory not paused and nonce not used
+    /// 3. Deploys all 5 contracts (Token, Metadata, Auction, Governor, Treasury)
+    /// 4. Initializes them with proper cross-references
+    /// 5. Sets up founder allocations and mint authority
+    /// 6. Registers the DAO in the registry
+    ///
+    /// # Arguments
+    ///
+    /// * `params` - Complete DAO creation parameters
+    ///
+    /// # Returns
+    ///
+    /// All deployed contract addresses
+    ///
+    /// # Errors
+    ///
+    /// * `FactoryPaused` - Factory is paused
+    /// * `NonceAlreadyUsed` - This (creator, nonce) pair was already used
+    /// * `CurrentImplementationsNotSet` - Current WASM hashes not configured
+    /// * `InvalidParamBounds` - Invalid parameter values
+    /// * Various validation errors from `validate_dao_params`
+    pub fn create_dao(env: Env, params: DaoCreationParams) -> Result<DaoAddresses, ManagerError> {
+        // Check factory not paused
+        if is_factory_paused(&env) {
+            return Err(ManagerError::FactoryPaused);
+        }
+
+        // Validate parameters
+        Self::validate_dao_params(&params)?;
+
+        // Check nonce not already used
+        if is_nonce_used(&env, &params.deployer, params.nonce) {
+            return Err(ManagerError::NonceAlreadyUsed);
+        }
+
+        // Get current implementation WASM hashes
+        let token_wasm: BytesN<32> = env
+            .storage()
+            .instance()
+            .get(&ManagerKey::CurrentTokenWasm)
+            .ok_or(ManagerError::CurrentImplementationsNotSet)?;
+
+        let metadata_wasm: BytesN<32> = env
+            .storage()
+            .instance()
+            .get(&ManagerKey::CurrentMetadataWasm)
+            .ok_or(ManagerError::CurrentImplementationsNotSet)?;
+
+        let auction_wasm: BytesN<32> = env
+            .storage()
+            .instance()
+            .get(&ManagerKey::CurrentAuctionWasm)
+            .ok_or(ManagerError::CurrentImplementationsNotSet)?;
+
+        let governor_wasm: BytesN<32> = env
+            .storage()
+            .instance()
+            .get(&ManagerKey::CurrentGovernorWasm)
+            .ok_or(ManagerError::CurrentImplementationsNotSet)?;
+
+        let treasury_wasm: BytesN<32> = env
+            .storage()
+            .instance()
+            .get(&ManagerKey::CurrentTreasuryWasm)
+            .ok_or(ManagerError::CurrentImplementationsNotSet)?;
+
+        // Generate deterministic salts
+        let token_salt = Self::generate_salt(&env, &params.deployer, params.nonce, "token");
+        let metadata_salt = Self::generate_salt(&env, &params.deployer, params.nonce, "metadata");
+        let auction_salt = Self::generate_salt(&env, &params.deployer, params.nonce, "auction");
+        let governor_salt = Self::generate_salt(&env, &params.deployer, params.nonce, "governor");
+        let treasury_salt = Self::generate_salt(&env, &params.deployer, params.nonce, "treasury");
+
+        // NOTE: In Soroban, contracts with __constructor need to have it called separately
+        // after deployment. We deploy first, then initialize.
+
+        // Deploy all contracts
+        let token_addr = env
+            .deployer()
+            .with_current_contract(token_salt)
+            .deploy(token_wasm);
+
+        let metadata_addr = env
+            .deployer()
+            .with_current_contract(metadata_salt)
+            .deploy(metadata_wasm);
+
+        let auction_addr = env
+            .deployer()
+            .with_current_contract(auction_salt)
+            .deploy(auction_wasm);
+
+        let governor_addr = env
+            .deployer()
+            .with_current_contract(governor_salt)
+            .deploy(governor_wasm);
+
+        let treasury_addr = env
+            .deployer()
+            .with_current_contract(treasury_salt)
+            .deploy(treasury_wasm);
+
+        // Initialize contracts via their client methods
+        // Token
+        env.invoke_contract::<soroban_sdk::Val>(
+            &token_addr,
+            &soroban_sdk::Symbol::new(&env, "__constructor"),
+            soroban_sdk::vec![
+                &env,
+                &treasury_addr,
+                &params.token_uri,
+                &params.token_name,
+                &params.token_symbol,
+                &metadata_addr,
+            ],
+        );
+
+        // Metadata
+        let metadata_client = metadata::MetadataContractClient::new(&env, &metadata_addr);
+        metadata_client.initialize(
+            &token_addr,
+            &params.project_uri,
+            &params.description,
+            &params.contract_image,
+            &params.renderer_base,
+        );
+
+        // Treasury
+        env.invoke_contract::<soroban_sdk::Val>(
+            &treasury_addr,
+            &soroban_sdk::Symbol::new(&env, "__constructor"),
+            soroban_sdk::vec![
+                &env,
+                &treasury_addr,
+                &governor_addr,
+            ],
+        );
+
+        // Governor
+        env.invoke_contract::<soroban_sdk::Val>(
+            &governor_addr,
+            &soroban_sdk::Symbol::new(&env, "__constructor"),
+            soroban_sdk::vec![
+                &env,
+                &treasury_addr,
+                &token_addr,
+                &treasury_addr,
+                params.voting_delay as u32,
+                params.voting_period as u32,
+                0u32, // queue_delay
+                params.proposal_threshold_bps as u128,
+                params.quorum_bps,
+            ],
+        );
+
+        // Auction
+        env.invoke_contract::<soroban_sdk::Val>(
+            &auction_addr,
+            &soroban_sdk::Symbol::new(&env, "__constructor"),
+            soroban_sdk::vec![
+                &env,
+                &treasury_addr,
+                &token_addr,
+                &treasury_addr,
+                params.auction_duration,
+                params.reserve_price,
+                5u32, // min_bid_increment_percent
+                params.time_buffer,
+                Some(params.payment_asset.clone()),
+            ],
+        );
+
+        // Grant Auction mint authority on Token
+        let token_client = token::DaoTokenContractClient::new(&env, &token_addr);
+        token_client.set_mint_authority(&auction_addr, &true);
+
+        // Mark nonce as used
+        set_nonce_used(&env, &params.deployer, params.nonce);
+
+        // Create DAO addresses
+        let addresses = DaoAddresses {
+            token: token_addr.clone(),
+            metadata: metadata_addr.clone(),
+            auction: auction_addr.clone(),
+            governor: governor_addr.clone(),
+            treasury: treasury_addr.clone(),
+        };
+
+        // Register DAO
+        let modules = DaoModules {
+            token: token_addr.clone(),
+            metadata: metadata_addr.clone(),
+            auction: auction_addr.clone(),
+            governor: governor_addr.clone(),
+            treasury: treasury_addr.clone(),
+        };
+
+        let registration = DaoRegistration {
+            token_address: token_addr.clone(),
+            creator: params.deployer.clone(),
+            created_ledger: env.ledger().sequence(),
+            created_at: env.ledger().timestamp(),
+            factory_version: get_factory_version(&env),
+            modules: modules.clone(),
+            metadata: DaoMetadata {
+                name: params.token_name.clone(),
+                description: Some(params.description.clone()),
+            },
+        };
+
+        // Store registration
+        env.storage()
+            .instance()
+            .set(&ManagerKey::DaoRegistration(token_addr.clone()), &registration);
+
+        // Add to DAO list
+        add_dao_to_list(&env, &token_addr);
+
+        // Emit events
+        emit_dao_created(
+            &env,
+            &token_addr,
+            &params.deployer,
+            env.ledger().sequence(),
+            &modules,
+            &params.founders,
+        );
+
+        emit_dao_registered(&env, &token_addr, &params.deployer, &modules);
+
+        Ok(addresses)
+    }
+
+    /// Predict DAO addresses without deploying.
+    ///
+    /// Useful for frontends to show addresses before user confirms deployment.
+    ///
+    /// # Arguments
+    ///
+    /// * `creator` - Creator address
+    /// * `nonce` - Nonce value
+    ///
+    /// # Returns
+    ///
+    /// Predicted addresses for all 5 modules
+    pub fn predict_addresses(
+        env: Env,
+        creator: Address,
+        nonce: u64,
+    ) -> Result<DaoAddresses, ManagerError> {
+        // Generate deterministic salts
+        let token_salt = Self::generate_salt(&env, &creator, nonce, "token");
+        let metadata_salt = Self::generate_salt(&env, &creator, nonce, "metadata");
+        let auction_salt = Self::generate_salt(&env, &creator, nonce, "auction");
+        let governor_salt = Self::generate_salt(&env, &creator, nonce, "governor");
+        let treasury_salt = Self::generate_salt(&env, &creator, nonce, "treasury");
+
+        // Get current implementation WASM hashes
+        let token_wasm: BytesN<32> = env
+            .storage()
+            .instance()
+            .get(&ManagerKey::CurrentTokenWasm)
+            .ok_or(ManagerError::CurrentImplementationsNotSet)?;
+
+        let metadata_wasm: BytesN<32> = env
+            .storage()
+            .instance()
+            .get(&ManagerKey::CurrentMetadataWasm)
+            .ok_or(ManagerError::CurrentImplementationsNotSet)?;
+
+        let auction_wasm: BytesN<32> = env
+            .storage()
+            .instance()
+            .get(&ManagerKey::CurrentAuctionWasm)
+            .ok_or(ManagerError::CurrentImplementationsNotSet)?;
+
+        let governor_wasm: BytesN<32> = env
+            .storage()
+            .instance()
+            .get(&ManagerKey::CurrentGovernorWasm)
+            .ok_or(ManagerError::CurrentImplementationsNotSet)?;
+
+        let treasury_wasm: BytesN<32> = env
+            .storage()
+            .instance()
+            .get(&ManagerKey::CurrentTreasuryWasm)
+            .ok_or(ManagerError::CurrentImplementationsNotSet)?;
+
+        // Predict addresses
+        let token_addr = env.deployer().with_current_contract(token_salt).deployed_address(token_wasm);
+        let metadata_addr = env.deployer().with_current_contract(metadata_salt).deployed_address(metadata_wasm);
+        let auction_addr = env.deployer().with_current_contract(auction_salt).deployed_address(auction_wasm);
+        let governor_addr = env.deployer().with_current_contract(governor_salt).deployed_address(governor_wasm);
+        let treasury_addr = env.deployer().with_current_contract(treasury_salt).deployed_address(treasury_wasm);
+
+        Ok(DaoAddresses {
+            token: token_addr,
+            metadata: metadata_addr,
+            auction: auction_addr,
+            governor: governor_addr,
+            treasury: treasury_addr,
+        })
+    }
+
+    /// Check if a (creator, nonce) pair has been used.
+    ///
+    /// # Arguments
+    ///
+    /// * `creator` - Creator address
+    /// * `nonce` - Nonce value
+    ///
+    /// # Returns
+    ///
+    /// `true` if the nonce has been used by this creator
+    pub fn is_nonce_used(env: Env, creator: Address, nonce: u64) -> bool {
+        is_nonce_used(&env, &creator, nonce)
+    }
+    */
+
+    // ========================================================================
     // DAO Registry (Read-only)
     // ========================================================================
 
@@ -484,6 +813,26 @@ impl ManagerContract {
         admin.require_auth();
         Ok(())
     }
+
+    /*
+    /// Generate deterministic salt for contract deployment.
+    ///
+    /// Combines creator address, nonce, and module name to create a unique salt.
+    fn generate_salt(env: &Env, creator: &Address, nonce: u64, module: &str) -> BytesN<32> {
+        let mut data = soroban_sdk::Bytes::new(env);
+
+        // Append creator address bytes
+        data.append(&creator.to_val().to_val());
+
+        // Append nonce bytes
+        data.append(&soroban_sdk::Bytes::from_array(env, &nonce.to_be_bytes()));
+
+        // Append module name
+        data.append(&soroban_sdk::Bytes::from_slice(env, module.as_bytes()));
+
+        env.crypto().keccak256(&data)
+    }
+    */
 
     /// Validate string length.
     fn validate_string(s: &String) -> Result<(), ManagerError> {

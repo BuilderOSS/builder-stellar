@@ -981,6 +981,8 @@ dependencies = [
 name = "manager"
 version = "0.0.0"
 dependencies = [
+ "auction",
+ "governor",
  "metadata",
  "soroban-sdk",
  "stellar-access",
