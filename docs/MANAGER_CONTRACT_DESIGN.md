@@ -143,14 +143,6 @@ pub struct FounderAllocation {
     pub vesting_schedule: Option<u64>, // Future: cliff timestamp
 }
 
-pub struct TraitCounts {
-    pub background: u8,
-    pub body: u8,
-    pub accessory: u8,
-    pub head: u8,
-    pub glasses: u8,
-}
-
 pub struct DaoCreationParams {
     pub deployer: Address,           // Who's creating this DAO
     pub nonce: u64,                  // Uniqueness key (user increments)
@@ -158,10 +150,13 @@ pub struct DaoCreationParams {
     // Token
     pub token_name: String,
     pub token_symbol: String,
+    pub token_uri: String,           // Base URI for token metadata
 
     // Metadata
-    pub ipfs_base_cid: String,       // IPFS directory with trait images
-    pub trait_counts: TraitCounts,
+    pub project_uri: String,         // DAO website/project URL
+    pub description: String,         // Collection description
+    pub contract_image: String,      // Collection image URL
+    pub renderer_base: String,       // Base URL for image rendering service
 
     // Auction
     pub auction_duration: u64,       // Seconds
@@ -184,7 +179,7 @@ pub struct DaoCreationParams {
 
 pub struct DaoAddresses {
     pub token: Address,
-    pub metadata_renderer: Address,
+    pub metadata: Address,
     pub auction: Address,
     pub governor: Address,
     pub treasury: Address,
@@ -281,12 +276,20 @@ pub fn is_nonce_used(
    ... (repeat for all 5)
 
 6. Initialize contracts (cross-references must be accurate)
-   Token.initialize(
-       name, symbol, metadata_addr, auction_addr, governor_addr
+   Token.__constructor(
+       treasury_addr,    // owner (will own token from start)
+       token_uri,
+       token_name,
+       token_symbol,
+       metadata_addr
    )
 
-   MetadataRenderer.initialize(
-       ipfs_base_cid, trait_counts, token_addr
+   Metadata.initialize(
+       token_addr,
+       project_uri,
+       description,
+       contract_image,
+       renderer_base
    )
 
    Auction.initialize(
@@ -301,13 +304,14 @@ pub fn is_nonce_used(
 
    Treasury.initialize(governor_addr)
 
-7. Initialize founder allocations on Token
-   Token.initialize_founders(founders)
-   - Calculates distribution based on modulo-100
+7. Grant Auction contract mint authority on Token
+   Token.set_mint_authority(auction_addr, true)
+   - Called by treasury (the owner)
+   - Allows Auction to mint NFTs during auctions
 
-8. Transfer ownership to Treasury (governance-owned)
-   Token.transfer_ownership(treasury_addr)
-   Auction.transfer_ownership(treasury_addr)
+8. Initialize founder allocations on Auction
+   Auction.set_founder_params(founders)
+   - Configures modulo-100 distribution for founders
 
 9. Register in DAO registry
    (see below)
@@ -321,24 +325,25 @@ Each module is initialized by the Manager contract immediately after deployment:
 
 **Token**
 ```rust
-pub fn initialize(
-    env: Env,
-    name: String,
-    symbol: String,
-    metadata_renderer: Address,
-    auction: Address,
-    governor: Address,
-    owner: Address,  // Set to treasury later
-) -> Result<(), Error>;
+pub fn __constructor(
+    env: &Env,
+    owner: Address,        // Treasury address (governance-owned from start)
+    uri: String,           // Base URI for token metadata
+    name: String,          // Human-readable collection name
+    symbol: String,        // Short symbol/ticker
+    metadata: Address,     // Metadata contract address
+);
 ```
 
-**MetadataRenderer**
+**Metadata**
 ```rust
 pub fn initialize(
     env: Env,
-    ipfs_base_cid: String,
-    trait_counts: TraitCounts,
-    token_address: Address,
+    token: Address,           // Associated token contract
+    project_uri: String,      // DAO website/project URL
+    description: String,      // Collection description
+    contract_image: String,   // Collection image URL
+    renderer_base: String,    // Base URL for image rendering service
 ) -> Result<(), Error>;
 ```
 
@@ -389,7 +394,7 @@ Enable DAO discovery, enumeration, and module lookup.
 ```rust
 pub struct DaoModules {
     pub token: Address,
-    pub metadata_renderer: Address,
+    pub metadata: Address,
     pub auction: Address,
     pub governor: Address,
     pub treasury: Address,
