@@ -377,11 +377,11 @@ impl DaoGovernorContract {
         let start = proposal.vote_start; // Already u64
         let end = proposal.vote_end; // Already u64
 
-        if now <= start {
+        if now < start {
             return ProposalState::Pending;
         }
 
-        if now <= end {
+        if now < end {
             return ProposalState::Active;
         }
 

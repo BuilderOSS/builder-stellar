@@ -196,6 +196,31 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
             panic_with_error!(e, AuctionError::AuctionOver);
         }
 
+        if amount <= 0 {
+            panic_with_error!(e, AuctionError::InvalidBid);
+        }
+
+        // Validate all bid economics before making the external payment call.
+        // This avoids relying on transaction rollback to protect the bidder.
+        if auction.highest_bidder.is_none() {
+            if amount < config.reserve_price {
+                panic_with_error!(e, AuctionError::ReservePriceNotMet);
+            }
+        } else {
+            let increment = auction
+                .highest_bid
+                .checked_mul(config.min_bid_increment_percent as i128)
+                .and_then(|value| value.checked_div(100))
+                .unwrap_or_else(|| panic_with_error!(e, AuctionError::ArithmeticOverflow));
+            let min_bid = auction
+                .highest_bid
+                .checked_add(increment)
+                .unwrap_or_else(|| panic_with_error!(e, AuctionError::ArithmeticOverflow));
+            if amount < min_bid {
+                panic_with_error!(e, AuctionError::MinBidNotMet);
+            }
+        }
+
         // Transfer payment tokens from bidder to contract
         // Bidder authorizes this via bidder.require_auth() at function entry
         let transfer_symbol = Symbol::new(e, "transfer");

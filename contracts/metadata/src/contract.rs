@@ -145,18 +145,17 @@ impl MetadataContract {
         attr_vec.push_back(num_properties); // First element stores number of properties
 
         // Select item for each property using seed
-        let mut seed_value = Self::bytes_to_u64(&seed);
-
         for i in 0..num_properties {
             let property = properties.get(i).unwrap();
             let num_items = property.items.len();
 
-            // Use lower 16 bits of seed to select item index
-            let item_index = (seed_value % (num_items as u64)) as u32;
+            // Use a distinct two-byte chunk for each property. The 32-byte
+            // hash supports the contract's maximum of 16 properties.
+            let offset = (i * 2) as u32;
+            let low = seed.get(offset).unwrap_or(0) as u64;
+            let high = seed.get(offset + 1).unwrap_or(0) as u64;
+            let item_index = ((low | (high << 8)) % (num_items as u64)) as u32;
             attr_vec.push_back(item_index);
-
-            // Shift seed right by 16 bits for next property
-            seed_value >>= 16;
         }
 
         // Store attributes
@@ -399,15 +398,6 @@ impl MetadataContract {
         let hash = env.crypto().keccak256(&data);
         // Convert BytesN to Bytes
         Bytes::from_array(env, &hash.to_array())
-    }
-
-    fn bytes_to_u64(bytes: &Bytes) -> u64 {
-        // Extract first 8 bytes as u64
-        let mut arr = [0u8; 8];
-        for i in 0..8.min(bytes.len() as usize) {
-            arr[i] = bytes.get(i as u32).unwrap();
-        }
-        u64::from_le_bytes(arr)
     }
 
     fn require_owner(env: &Env) -> Result<(), Error> {

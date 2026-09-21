@@ -1415,6 +1415,18 @@ fn test_auction_payment_token_setter_rejects_none() {
 // ============================================================================
 
 #[test]
+#[should_panic(expected = "Error(Contract, #1216)")] // InvalidBid
+fn test_auction_rejects_non_positive_bid_before_transfer() {
+    let (e, _token, _treasury, auction, owner, _payment_token, payment_client) = setup_auction();
+    let bidder = Address::generate(&e);
+    payment_client.mint(&bidder, &1_000_0000000);
+    auction.unpause(&owner);
+
+    let token_id = auction.get_auction().token_id;
+    auction.create_bid(&bidder, &token_id, &0);
+}
+
+#[test]
 #[should_panic]
 fn test_auction_extension_dos_protection() {
     let (e, _token, _treasury, auction, owner, _payment_token, payment_client) = setup_auction();

@@ -29,6 +29,7 @@ const MAX_FOUNDERS: u32 = 10;
 
 /// Maximum basis points (100%)
 const MAX_BPS: u32 = 10000;
+const MAX_FOUNDER_ALLOCATION: u32 = 10_000;
 
 #[contractimpl]
 impl ManagerContract {
@@ -530,7 +531,20 @@ impl ManagerContract {
         // Governor constructor needs: owner, token, treasury, voting_delay, voting_period,
         // queue_delay (not in params - using voting_delay), proposal_threshold (needs conversion), quorum_bps
         let queue_delay = params.voting_delay; // Using same as voting_delay for now
-        let proposal_threshold = 0u128; // Will be set via governance later
+        let founder_supply: u32 = params
+            .founders
+            .iter()
+            .try_fold(0u32, |total, founder| total.checked_add(founder.amount))
+            .ok_or(ManagerError::FounderAllocationTooLarge)?;
+        let proposal_threshold = (founder_supply as u128)
+            .checked_mul(params.proposal_threshold_bps as u128)
+            .and_then(|value| value.checked_div(MAX_BPS as u128))
+            .ok_or(ManagerError::FounderAllocationTooLarge)?;
+        let proposal_threshold = if params.proposal_threshold_bps > 0 && proposal_threshold == 0 {
+            1
+        } else {
+            proposal_threshold
+        };
 
         governor_deployer.deploy_v2(
             governor_wasm,
@@ -905,6 +919,18 @@ impl ManagerContract {
 
         if params.proposal_threshold_bps > MAX_BPS {
             return Err(ManagerError::InvalidProposalThresholdBps);
+        }
+
+        if params.voting_delay > u32::MAX as u64 || params.voting_period > u32::MAX as u64 {
+            return Err(ManagerError::InvalidGovernanceTiming);
+        }
+
+        let founder_total = params
+            .founders
+            .iter()
+            .try_fold(0u32, |total, founder| total.checked_add(founder.amount));
+        if founder_total.is_none() || founder_total.unwrap() > MAX_FOUNDER_ALLOCATION {
+            return Err(ManagerError::FounderAllocationTooLarge);
         }
 
         // Validate auction params

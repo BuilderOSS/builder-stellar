@@ -80,6 +80,10 @@ pub enum ManagerError {
 
     /// Invalid founder percentage
     InvalidFounderPercentage = 1115,
+    /// Governance timing does not fit the Governor contract's u32 fields
+    InvalidGovernanceTiming = 1117,
+    /// Founder allocations exceed the factory resource limit
+    FounderAllocationTooLarge = 1118,
 
     /// Current implementations not set
     CurrentImplementationsNotSet = 1116,
