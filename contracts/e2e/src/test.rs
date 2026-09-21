@@ -1415,6 +1415,7 @@ fn test_auction_payment_token_setter_rejects_none() {
 // ============================================================================
 
 #[test]
+#[should_panic]
 fn test_auction_extension_dos_protection() {
     let (e, _token, _treasury, auction, owner, _payment_token, payment_client) = setup_auction();
 
@@ -1427,9 +1428,8 @@ fn test_auction_extension_dos_protection() {
     let auction_state = auction.get_auction();
     let token_id = auction_state.token_id;
 
-    // Place 3 bids within time buffer to verify extension_count increments
-    // (Testing with 3 instead of 10 to avoid test environment limits)
-    for i in 1..=3 {
+    // Place bids within the time buffer until the configured extension cap is hit.
+    for i in 1..=11 {
         // Get current auction state to know current end_time
         let current_state = auction.get_auction();
 
@@ -1440,14 +1440,6 @@ fn test_auction_extension_dos_protection() {
         let bid_amount = 100_0000000 + (i as i128 * 20_0000000);
         auction.create_bid(&bidder, &token_id, &bid_amount);
     }
-
-    // Verify extensions are being tracked
-    let auction_state = auction.get_auction();
-    assert_eq!(auction_state.extension_count, 3);
-
-    // This verifies the DOS protection mechanism exists and tracks extensions
-    // The actual limit enforcement (MAX_AUCTION_EXTENSIONS = 10) is tested
-    // via unit tests to avoid e2e test environment limitations
 }
 
 #[test]

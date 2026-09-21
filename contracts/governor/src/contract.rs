@@ -279,10 +279,14 @@ impl DaoGovernorContract {
     /// `true` if the address has governor authority, `false` otherwise.
     /// The owner always has implicit authority even if not explicitly set.
     pub fn governor_authority(e: &Env, authority: Address) -> bool {
-        e.storage()
-            .instance()
-            .get(&GovernorKey::GovernorAuthority(authority))
-            .unwrap_or(false)
+        let is_owner = stellar_access::ownable::get_owner(e)
+            .map(|owner| owner == authority)
+            .unwrap_or(false);
+        is_owner
+            || e.storage()
+                .instance()
+                .get(&GovernorKey::GovernorAuthority(authority))
+                .unwrap_or(false)
     }
 
     /// Validates that an address has governor authority.

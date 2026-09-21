@@ -433,6 +433,10 @@ impl ManagerContract {
     /// * `InvalidParamBounds` - Invalid parameter values
     /// * Various validation errors from `validate_dao_params`
     pub fn create_dao(env: Env, params: DaoCreationParams) -> Result<DaoAddresses, ManagerError> {
+        // The deployer owns the newly-created modules and must authorize the
+        // factory operation and subsequent owner-gated setup calls.
+        params.deployer.require_auth();
+
         // Check factory not paused
         if is_factory_paused(&env) {
             return Err(ManagerError::FactoryPaused);
@@ -514,7 +518,7 @@ impl ManagerContract {
         token_deployer.deploy_v2(
             token_wasm,
             (
-                treasury_addr.clone(),
+                params.deployer.clone(),
                 params.token_uri.clone(),
                 params.token_name.clone(),
                 params.token_symbol.clone(),
@@ -534,7 +538,7 @@ impl ManagerContract {
         governor_deployer.deploy_v2(
             governor_wasm,
             (
-                treasury_addr.clone(),
+                params.deployer.clone(),
                 token_addr.clone(),
                 treasury_addr.clone(),
                 params.voting_delay as u32,
@@ -553,7 +557,7 @@ impl ManagerContract {
         auction_deployer.deploy_v2(
             auction_wasm,
             (
-                treasury_addr.clone(),
+                params.deployer.clone(),
                 token_addr.clone(),
                 treasury_addr.clone(),
                 params.auction_duration,

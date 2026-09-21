@@ -331,7 +331,7 @@ impl MetadataContract {
                 name: name.clone(),
                 items: Vec::new(env),
             };
-            properties.push_front(property);
+            properties.push_back(property);
 
             let property_id = num_stored_properties + i;
             emit_property_added(env, property_id, &name);
@@ -362,7 +362,7 @@ impl MetadataContract {
 
             // Create new items vec with the new item
             let mut new_items = property.items.clone();
-            new_items.push_front(item);
+            new_items.push_back(item);
             property.items = new_items;
             properties.set(property_id, property);
         }
