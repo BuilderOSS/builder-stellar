@@ -2,6 +2,10 @@
 
 This guide covers deploying Nouns Builder Stellar contracts to different networks.
 
+> **📖 New: Manager Factory Deployment**
+> For deploying multiple DAOs through a factory contract, see the [Manager Deployment Guide](./MANAGER_DEPLOYMENT.md).
+> This guide covers direct deployment of individual DAO contracts.
+
 ## Prerequisites
 
 - Rust and Cargo with `wasm32v1-none` target

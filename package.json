@@ -8,7 +8,7 @@
     "build": "pnpm --dir apps/web build",
     "lint": "pnpm --dir apps/web lint",
     "typecheck": "pnpm --dir apps/web typecheck",
-    "contracts:build": "SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=0 cargo build -p token -p governor -p treasury -p auction --release --target wasm32v1-none",
+    "contracts:build": "SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=0 cargo build -p token -p governor -p treasury -p auction -p manager -p metadata --release --target wasm32v1-none",
     "contracts:bindings": "node scripts/generate-bindings.mjs",
     "contracts:generate-config": "node scripts/generate-deployment-config.mjs",
     "contracts:clean": "cargo clean",

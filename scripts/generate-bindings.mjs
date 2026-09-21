@@ -26,6 +26,18 @@ const contracts = [
     wasmPath: `${buildDir}/auction.wasm`,
     outputDir: 'packages/auction-bindings',
     packageJsonName: '@builder-stellar/auction-bindings'
+  },
+  {
+    packageName: 'manager',
+    wasmPath: `${buildDir}/manager.wasm`,
+    outputDir: 'packages/manager-bindings',
+    packageJsonName: '@builder-stellar/manager-bindings'
+  },
+  {
+    packageName: 'metadata',
+    wasmPath: `${buildDir}/metadata.wasm`,
+    outputDir: 'packages/metadata-bindings',
+    packageJsonName: '@builder-stellar/metadata-bindings'
   }
 ];
 
@@ -87,7 +99,7 @@ function patchGeneratedBindings(packageName, outputDir) {
   }
 }
 
-run('cargo', ['build', '-p', 'token', '-p', 'governor', '-p', 'treasury', '-p', 'auction', '--release', '--target', 'wasm32v1-none'], {
+run('cargo', ['build', '-p', 'token', '-p', 'governor', '-p', 'treasury', '-p', 'auction', '-p', 'manager', '-p', 'metadata', '--release', '--target', 'wasm32v1-none'], {
   env: {
     ...process.env,
     SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2: '0'
