@@ -31,7 +31,8 @@ Create a network configuration under `configs/`, then run:
 
 ```bash
 pnpm contracts:build
-node scripts/deploy-contracts.mjs configs/testnet.json
+pnpm deploy:manager configs/testnet-manager.json --force
+pnpm deploy:dao configs/testnet-builder-dao.json configs/testnet-manager.json
 pnpm contracts:bindings
 ```
 

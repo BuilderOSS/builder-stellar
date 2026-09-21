@@ -1,0 +1,34 @@
+{
+  "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+  "nonce": 0,
+  "token": {
+    "name": "Builder Test",
+    "symbol": "BUILD",
+    "uri": "https://test-dao-stellar-web.vercel.app/api/token/"
+  },
+  "metadata": {
+    "projectUri": "https://test-dao-stellar-web.vercel.app",
+    "description": "Unlock the possibilities of collective creation",
+    "contractImage": "https://test-dao-stellar-web.vercel.app/images/dao-logo.png",
+    "rendererBase": "https://test-dao-stellar-web.vercel.app/api/render/"
+  },
+  "auction": {
+    "duration": 300,
+    "reservePrice": "1000000000",
+    "timeBuffer": 300,
+    "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+  },
+  "governance": {
+    "votingDelay": 300,
+    "votingPeriod": 300,
+    "quorumBps": 1000,
+    "proposalThresholdBps": 100
+  },
+  "founders": [
+    {
+      "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+      "amount": 10
+    }
+  ],
+  "launchAdmin": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO"
+}

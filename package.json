@@ -15,10 +15,8 @@
     "contracts:test": "cargo test",
     "indexer:generate": "pnpm --dir packages/goldsky generate",
     "indexer:test": "pnpm --dir packages/goldsky test",
-    "deploy:local": "node scripts/deploy-contracts.mjs configs/local.json",
-    "deploy:testnet": "node scripts/deploy-contracts.mjs configs/testnet.json",
-    "local:up": "node scripts/local-up.mjs",
-    "local:down": "node scripts/local-down.mjs"
+    "deploy:manager": "node scripts/deploy-manager.mjs",
+    "deploy:dao": "node scripts/create-dao.mjs"
   },
   "workspaces": [
     "apps/*",

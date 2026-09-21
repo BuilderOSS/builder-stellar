@@ -8,10 +8,32 @@ const force = args.includes('--force');
 const configPath = args.find((arg) => arg !== '--force');
 
 if (!configPath) {
-  throw new Error('Usage: node scripts/deploy-manager.mjs <config.json> [--force]');
+  throw new Error(
+    'Usage: node scripts/deploy-manager.mjs <config.json> [--force]'
+  );
 }
 
 const config = JSON.parse(readFileSync(configPath, 'utf8'));
+const requiredConfig = [
+  ['network', config.network],
+  ['label', config.label],
+  ['adminAddress', config.adminAddress],
+  ['rpcUrl', config.rpcUrl],
+  ['networkPassphrase', config.networkPassphrase]
+];
+const missingConfig = requiredConfig.find(
+  ([, value]) => value === undefined || value === null || value === ''
+);
+if (missingConfig) {
+  throw new Error(
+    `Manager config ${configPath} must define ${missingConfig[0]}`
+  );
+}
+if (!['local', 'testnet', 'mainnet'].includes(config.network)) {
+  throw new Error(
+    `Manager config ${configPath} must define network as local, testnet, or mainnet`
+  );
+}
 const networkName = config.network;
 const identityName = `${networkName}-dev`;
 const adminAddress = config.adminAddress;
@@ -27,10 +49,15 @@ async function confirmOverwrite(filePath) {
   }
 
   if (!process.stdin.isTTY) {
-    throw new Error(`Refusing to overwrite ${filePath} without --force in non-interactive mode`);
+    throw new Error(
+      `Refusing to overwrite ${filePath} without --force in non-interactive mode`
+    );
   }
 
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
   const answer = await rl.question(`Overwrite ${filePath}? [y/N] `);
   rl.close();
 
@@ -38,7 +65,15 @@ async function confirmOverwrite(filePath) {
 }
 
 function ensureNetwork() {
-  runQuiet('stellar', ['network', 'add', networkName, '--rpc-url', rpcUrl, '--network-passphrase', networkPassphrase]);
+  runQuiet('stellar', [
+    'network',
+    'add',
+    networkName,
+    '--rpc-url',
+    rpcUrl,
+    '--network-passphrase',
+    networkPassphrase
+  ]);
   run('stellar', ['network', 'use', networkName]);
 }
 
@@ -52,7 +87,9 @@ function wasmPath(packageName) {
 }
 
 function wasmHash(packageName) {
-  return createHash('sha256').update(readFileSync(wasmPath(packageName))).digest('hex');
+  return createHash('sha256')
+    .update(readFileSync(wasmPath(packageName)))
+    .digest('hex');
 }
 
 function saltFor(packageName) {
@@ -79,7 +116,14 @@ function contractId(packageName) {
 
 function deployIfMissing(packageName, alias, initArgs) {
   const id = contractId(packageName);
-  const exists = runQuiet('stellar', ['contract', 'fetch', '--id', id, '--network', networkName]);
+  const exists = runQuiet('stellar', [
+    'contract',
+    'fetch',
+    '--id',
+    id,
+    '--network',
+    networkName
+  ]);
 
   let txMetadata = null;
   if (!exists.ok) {
@@ -143,7 +187,10 @@ function installWasm(packageName) {
 
   if (!result.ok) {
     // Check if already installed
-    if (result.stderr.includes('already exists') || result.stdout.includes(hash)) {
+    if (
+      result.stderr.includes('already exists') ||
+      result.stdout.includes(hash)
+    ) {
       console.log(`WASM already installed: ${hash}`);
       return hash;
     }
@@ -220,7 +267,11 @@ function setCurrentImplementations(managerAddress, implementations) {
   console.log('Current implementations set successfully');
 }
 
-async function writeDeployArtifact(managerAddress, implementations, txMetadata) {
+async function writeDeployArtifact(
+  managerAddress,
+  implementations,
+  txMetadata
+) {
   if (!(await confirmOverwrite(deployArtifactPath))) {
     console.log(`Skipped writing ${deployArtifactPath}.`);
     return;
@@ -253,22 +304,44 @@ async function writeDeployArtifact(managerAddress, implementations, txMetadata) 
 
 async function main() {
   // Build all contracts including manager and metadata
-  run('cargo', ['build', '-p', 'token', '-p', 'governor', '-p', 'treasury', '-p', 'auction', '-p', 'manager', '-p', 'metadata', '--release', '--target', 'wasm32v1-none'], {
-    env: {
-      ...process.env,
-      SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2: '0'
+  run(
+    'cargo',
+    [
+      'build',
+      '-p',
+      'token',
+      '-p',
+      'governor',
+      '-p',
+      'treasury',
+      '-p',
+      'auction',
+      '-p',
+      'manager',
+      '-p',
+      'metadata',
+      '--release',
+      '--target',
+      'wasm32v1-none'
+    ],
+    {
+      env: {
+        ...process.env,
+        SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2: '0'
+      }
     }
-  });
+  );
 
   ensureNetwork();
   ensureIdentity();
 
   // Deploy Manager contract
   console.log('\n=== Deploying Manager Contract ===\n');
-  const managerDeploy = deployIfMissing('manager', `dao-manager-${networkName}`, [
-    '--admin',
-    adminAddress
-  ]);
+  const managerDeploy = deployIfMissing(
+    'manager',
+    `dao-manager-${networkName}`,
+    ['--admin', adminAddress]
+  );
 
   console.log(`Manager deployed: ${managerDeploy.id}`);
 
@@ -285,17 +358,33 @@ async function main() {
   // Register implementations with Manager
   console.log('\n=== Registering Implementations ===\n');
   registerImplementation(managerDeploy.id, implementations.token, 'Token');
-  registerImplementation(managerDeploy.id, implementations.metadata, 'Metadata');
+  registerImplementation(
+    managerDeploy.id,
+    implementations.metadata,
+    'Metadata'
+  );
   registerImplementation(managerDeploy.id, implementations.auction, 'Auction');
-  registerImplementation(managerDeploy.id, implementations.governor, 'Governor');
-  registerImplementation(managerDeploy.id, implementations.treasury, 'Treasury');
+  registerImplementation(
+    managerDeploy.id,
+    implementations.governor,
+    'Governor'
+  );
+  registerImplementation(
+    managerDeploy.id,
+    implementations.treasury,
+    'Treasury'
+  );
 
   // Set current implementations
   console.log('\n=== Setting Current Implementations ===\n');
   setCurrentImplementations(managerDeploy.id, implementations);
 
   // Write deployment artifact
-  await writeDeployArtifact(managerDeploy.id, implementations, managerDeploy.txMetadata);
+  await writeDeployArtifact(
+    managerDeploy.id,
+    implementations,
+    managerDeploy.txMetadata
+  );
 
   console.log(`\n=== Manager Deployment Complete ===`);
   console.log(`MANAGER=${managerDeploy.id}`);

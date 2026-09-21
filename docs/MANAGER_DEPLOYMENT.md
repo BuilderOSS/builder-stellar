@@ -15,8 +15,7 @@ Manager is the current platform contract. It combines the implementation registr
 ## Deploy Manager
 
 ```bash
-node scripts/deploy-manager.mjs configs/local.json
-node scripts/deploy-manager.mjs configs/testnet.json --force
+pnpm deploy:manager configs/testnet-manager.json --force
 ```
 
 The deployment script builds Manager and the five module crates, installs the five implementation WASMs, registers their hashes, selects current implementations, and writes a Manager artifact under `deploys/`.
@@ -26,7 +25,7 @@ The deployment script builds Manager and the five module crates, installs the fi
 Use the repository's DAO template and creation script:
 
 ```bash
-node scripts/create-dao.mjs configs/dao-template.json configs/local.json
+pnpm deploy:dao configs/testnet-builder-dao.json configs/testnet-manager.json
 ```
 
 The configuration contains token, metadata, auction, governance, founder, deployer, and nonce fields. Founder entries are fixed token amounts, not percentages; the sum of all founder amounts must not exceed 10,000. The nonce must be unique for the creator.
