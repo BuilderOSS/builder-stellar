@@ -30,9 +30,6 @@ const MAX_FOUNDERS: u32 = 10;
 /// Maximum basis points (100%)
 const MAX_BPS: u32 = 10000;
 
-/// Maximum founder allocation total (99%)
-const MAX_FOUNDER_PERCENT: u32 = 99;
-
 #[contractimpl]
 impl ManagerContract {
     // ========================================================================
@@ -554,10 +551,11 @@ impl ManagerContract {
         // min_bid_increment_percent (using quorum_bps for now), time_buffer, payment_token
         let min_bid_increment = 10u32; // 10% default
 
+        let launch_admin = params.launch_admin.clone();
         auction_deployer.deploy_v2(
             auction_wasm,
             (
-                params.deployer.clone(),
+                launch_admin,
                 token_addr.clone(),
                 treasury_addr.clone(),
                 params.auction_duration,
@@ -582,6 +580,27 @@ impl ManagerContract {
                 params.renderer_base.clone().into_val(&env),
             ],
         );
+
+        // Mint founder allocations while the deployer still owns the token.
+        // Batch minting keeps creation bounded while supporting allocations
+        // larger than the token contract's per-call limit.
+        for founder in params.founders.iter() {
+            let mut remaining = founder.amount;
+            while remaining > 0 {
+                let batch = if remaining > 100 { 100 } else { remaining };
+                let _: u32 = env.invoke_contract(
+                    &token_addr,
+                    &Symbol::new(&env, "batch_mint"),
+                    vec![
+                        &env,
+                        params.deployer.clone().into_val(&env),
+                        founder.address.clone().into_val(&env),
+                        batch.into_val(&env),
+                    ],
+                );
+                remaining -= batch;
+            }
+        }
 
         // Step 7: Set auction as mint authority on token
         // Using invoke_contract directly
@@ -869,24 +888,14 @@ impl ManagerContract {
         Self::validate_string(&params.renderer_base)?;
 
         // Validate founders
-        if params.founders.is_empty() {
-            return Err(ManagerError::NoFoundersSpecified);
-        }
-
         if params.founders.len() > MAX_FOUNDERS {
             return Err(ManagerError::InvalidParamBounds);
         }
 
-        let mut total_percentage: u32 = 0;
         for founder in params.founders.iter() {
-            if founder.percentage == 0 || founder.percentage > MAX_FOUNDER_PERCENT {
+            if founder.amount == 0 {
                 return Err(ManagerError::InvalidFounderPercentage);
             }
-            total_percentage += founder.percentage;
-        }
-
-        if total_percentage > MAX_FOUNDER_PERCENT {
-            return Err(ManagerError::FoundersExceed99Percent);
         }
 
         // Validate governance params

@@ -289,7 +289,7 @@ fn test_create_dao_when_paused_fails() {
         quorum_bps: 1000,
         proposal_threshold_bps: 100,
         founders: Vec::new(&env),
-        launch_admin: None,
+        launch_admin: deployer,
     };
 
     client.create_dao(&params);

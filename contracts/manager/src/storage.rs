@@ -43,14 +43,14 @@ pub struct UpgradeApproval {
 // DAO Factory
 // ============================================================================
 
-/// Founder allocation for modulo-100 distribution.
+/// Fixed founder allocation minted before the DAO is launched.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FounderAllocation {
     /// Founder address receiving tokens
     pub address: Address,
-    /// Percentage of tokens (0-99)
-    pub percentage: u32,
+    /// Number of NFTs to mint
+    pub amount: u32,
 }
 
 /// Complete parameters for creating a new DAO.
@@ -89,7 +89,7 @@ pub struct DaoCreationParams {
     pub founders: Vec<FounderAllocation>,
 
     // Launch configuration
-    pub launch_admin: Option<Address>,
+    pub launch_admin: Address,
 }
 
 /// Addresses of all deployed DAO modules.

@@ -75,7 +75,7 @@ pub enum ManagerError {
     /// String empty
     StringEmpty = 1113,
 
-    /// No founders specified
+    /// Invalid founder allocation
     NoFoundersSpecified = 1114,
 
     /// Invalid founder percentage
