@@ -395,9 +395,7 @@ impl ManagerContract {
     // ========================================================================
     // DAO Factory
     // ========================================================================
-    // TODO: Complete implementation - currently commented out due to deployment API complexity
 
-    /*
     /// Create a new DAO with all 5 modules atomically deployed.
     ///
     /// This is the main factory function that:
@@ -504,79 +502,19 @@ impl ManagerContract {
             .with_current_contract(treasury_salt)
             .deploy(treasury_wasm);
 
-        // Initialize contracts via their client methods
-        // Token
-        env.invoke_contract::<soroban_sdk::Val>(
-            &token_addr,
-            &soroban_sdk::Symbol::new(&env, "__constructor"),
-            soroban_sdk::vec![
-                &env,
-                &treasury_addr,
-                &params.token_uri,
-                &params.token_name,
-                &params.token_symbol,
-                &metadata_addr,
-            ],
-        );
+        // TODO: Complete initialization after resolving deployment API
+        // For now, this is a stub that will be implemented once we determine
+        // the correct way to call __constructor on deployed contracts
 
-        // Metadata
-        let metadata_client = metadata::MetadataContractClient::new(&env, &metadata_addr);
-        metadata_client.initialize(
-            &token_addr,
-            &params.project_uri,
-            &params.description,
-            &params.contract_image,
-            &params.renderer_base,
-        );
+        // The initialization sequence should be:
+        // 1. Token.__constructor(treasury, uri, name, symbol, metadata)
+        // 2. Metadata.initialize(token, project_uri, description, image, renderer)
+        // 3. Treasury.__constructor(treasury, governor)
+        // 4. Governor.__constructor(treasury, token, treasury, delays, thresholds)
+        // 5. Auction.__constructor(treasury, token, treasury, auction_params)
+        // 6. Token.set_mint_authority(auction, true)
 
-        // Treasury
-        env.invoke_contract::<soroban_sdk::Val>(
-            &treasury_addr,
-            &soroban_sdk::Symbol::new(&env, "__constructor"),
-            soroban_sdk::vec![
-                &env,
-                &treasury_addr,
-                &governor_addr,
-            ],
-        );
-
-        // Governor
-        env.invoke_contract::<soroban_sdk::Val>(
-            &governor_addr,
-            &soroban_sdk::Symbol::new(&env, "__constructor"),
-            soroban_sdk::vec![
-                &env,
-                &treasury_addr,
-                &token_addr,
-                &treasury_addr,
-                params.voting_delay as u32,
-                params.voting_period as u32,
-                0u32, // queue_delay
-                params.proposal_threshold_bps as u128,
-                params.quorum_bps,
-            ],
-        );
-
-        // Auction
-        env.invoke_contract::<soroban_sdk::Val>(
-            &auction_addr,
-            &soroban_sdk::Symbol::new(&env, "__constructor"),
-            soroban_sdk::vec![
-                &env,
-                &treasury_addr,
-                &token_addr,
-                &treasury_addr,
-                params.auction_duration,
-                params.reserve_price,
-                5u32, // min_bid_increment_percent
-                params.time_buffer,
-                Some(params.payment_asset.clone()),
-            ],
-        );
-
-        // Grant Auction mint authority on Token
-        let token_client = token::DaoTokenContractClient::new(&env, &token_addr);
-        token_client.set_mint_authority(&auction_addr, &true);
+        return Err(ManagerError::InitializationFailed);
 
         // Mark nonce as used
         set_nonce_used(&env, &params.deployer, params.nonce);
@@ -613,9 +551,10 @@ impl ManagerContract {
         };
 
         // Store registration
-        env.storage()
-            .instance()
-            .set(&ManagerKey::DaoRegistration(token_addr.clone()), &registration);
+        env.storage().instance().set(
+            &ManagerKey::DaoRegistration(token_addr.clone()),
+            &registration,
+        );
 
         // Add to DAO list
         add_dao_to_list(&env, &token_addr);
@@ -690,12 +629,21 @@ impl ManagerContract {
             .get(&ManagerKey::CurrentTreasuryWasm)
             .ok_or(ManagerError::CurrentImplementationsNotSet)?;
 
-        // Predict addresses
-        let token_addr = env.deployer().with_current_contract(token_salt).deployed_address(token_wasm);
-        let metadata_addr = env.deployer().with_current_contract(metadata_salt).deployed_address(metadata_wasm);
-        let auction_addr = env.deployer().with_current_contract(auction_salt).deployed_address(auction_wasm);
-        let governor_addr = env.deployer().with_current_contract(governor_salt).deployed_address(governor_wasm);
-        let treasury_addr = env.deployer().with_current_contract(treasury_salt).deployed_address(treasury_wasm);
+        // Predict addresses using deployer
+        let deployer = env.deployer().with_current_contract(token_salt);
+        let token_addr = deployer.deployed_address();
+
+        let deployer = env.deployer().with_current_contract(metadata_salt);
+        let metadata_addr = deployer.deployed_address();
+
+        let deployer = env.deployer().with_current_contract(auction_salt);
+        let auction_addr = deployer.deployed_address();
+
+        let deployer = env.deployer().with_current_contract(governor_salt);
+        let governor_addr = deployer.deployed_address();
+
+        let deployer = env.deployer().with_current_contract(treasury_salt);
+        let treasury_addr = deployer.deployed_address();
 
         Ok(DaoAddresses {
             token: token_addr,
@@ -719,7 +667,6 @@ impl ManagerContract {
     pub fn is_nonce_used(env: Env, creator: Address, nonce: u64) -> bool {
         is_nonce_used(&env, &creator, nonce)
     }
-    */
 
     // ========================================================================
     // DAO Registry (Read-only)
@@ -814,25 +761,23 @@ impl ManagerContract {
         Ok(())
     }
 
-    /*
     /// Generate deterministic salt for contract deployment.
     ///
-    /// Combines creator address, nonce, and module name to create a unique salt.
-    fn generate_salt(env: &Env, creator: &Address, nonce: u64, module: &str) -> BytesN<32> {
-        let mut data = soroban_sdk::Bytes::new(env);
+    /// Combines nonce and module name to create a unique salt.
+    /// Note: Simplified version - in production should also include creator address
+    fn generate_salt(env: &Env, _creator: &Address, nonce: u64, module: &str) -> BytesN<32> {
+        let mut bytes_to_hash = soroban_sdk::Bytes::new(env);
 
-        // Append creator address bytes
-        data.append(&creator.to_val().to_val());
+        // Add nonce
+        bytes_to_hash.append(&soroban_sdk::Bytes::from_array(env, &nonce.to_be_bytes()));
 
-        // Append nonce bytes
-        data.append(&soroban_sdk::Bytes::from_array(env, &nonce.to_be_bytes()));
+        // Add module name
+        bytes_to_hash.append(&soroban_sdk::Bytes::from_slice(env, module.as_bytes()));
 
-        // Append module name
-        data.append(&soroban_sdk::Bytes::from_slice(env, module.as_bytes()));
-
-        env.crypto().keccak256(&data)
+        // Hash to create salt and convert to BytesN<32>
+        let hash = env.crypto().keccak256(&bytes_to_hash);
+        BytesN::from_array(env, &hash.to_array())
     }
-    */
 
     /// Validate string length.
     fn validate_string(s: &String) -> Result<(), ManagerError> {

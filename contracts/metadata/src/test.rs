@@ -42,7 +42,7 @@ fn test_initialize_twice_fails() {
     let token = Address::generate(&env);
 
     initialize_metadata(&env, &client, &token);
-    initialize_metadata_renderer(&env, &client, &token);
+    initialize_metadata(&env, &client, &token);
 }
 
 #[test]
