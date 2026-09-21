@@ -8,23 +8,29 @@ use crate::storage::{DaoModules, FounderAllocation};
 pub struct ImplementationRegistered {
     pub name: String,
     pub version: u32,
+    #[topic]
     pub wasm_hash: BytesN<32>,
     pub published_at: u64,
 }
 #[contractevent]
 pub struct UpgradeApproved {
+    #[topic]
     pub from_hash: BytesN<32>,
+    #[topic]
     pub to_hash: BytesN<32>,
     pub approved_at: u64,
 }
 #[contractevent]
 pub struct ImplementationRevoked {
+    #[topic]
     pub wasm_hash: BytesN<32>,
     pub revoked_at: u64,
 }
 #[contractevent]
 pub struct DaoCreated {
+    #[topic]
     pub token_address: Address,
+    #[topic]
     pub creator: Address,
     pub created_ledger: u32,
     pub modules: DaoModules,
@@ -36,7 +42,9 @@ pub struct FactoryPaused {}
 pub struct FactoryUnpaused {}
 #[contractevent]
 pub struct DaoRegistered {
+    #[topic]
     pub token_address: Address,
+    #[topic]
     pub creator: Address,
     pub modules: DaoModules,
 }

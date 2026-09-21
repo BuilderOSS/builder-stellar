@@ -3,6 +3,7 @@ use soroban_sdk::{contractevent, Address, Env, String, Vec};
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MetadataInitialized {
+    #[topic]
     pub token: Address,
     pub renderer_base: String,
 }
@@ -18,6 +19,7 @@ pub fn emit_metadata_initialized(env: &Env, token: &Address, renderer_base: &Str
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PropertyAdded {
+    #[topic]
     pub property_id: u32,
     pub name: String,
 }
@@ -33,6 +35,7 @@ pub fn emit_property_added(env: &Env, property_id: u32, name: &String) {
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SeedGenerated {
+    #[topic]
     pub token_id: u32,
     pub num_properties: u32,
     pub selections: Vec<u32>,

@@ -69,10 +69,6 @@ export const AuctionError = {
    */
   1216 : { message: "InvalidBid" },
   /**
-   * Inconsistent payment type between bids
-   */
-  1217 : { message: "InconsistentPaymentType" },
-  /**
    * Maximum auction extensions exceeded
    */
   1218 : { message: "MaxExtensionsExceeded" },
@@ -99,7 +95,6 @@ export interface BidPlacedEvent {
     token_id: bigint;
     bidder: string;
     amount?: bigint;
-    payment_type?: PaymentType;
     extended?: boolean;
     new_end_time?: bigint;
   };
@@ -111,9 +106,9 @@ export interface BidPlacedEvent {
 export interface BidRefundedEvent {
   name: "BidRefunded";
   data: {
+    token_id: bigint;
     bidder: string;
     amount?: bigint;
-    payment_type?: PaymentType;
   };
 }
 
@@ -126,6 +121,8 @@ export interface AuctionCreatedEvent {
     token_id: bigint;
     start_time?: bigint;
     end_time?: bigint;
+    reserve_price?: bigint;
+    payment_token?: string;
   };
 }
 
@@ -138,7 +135,6 @@ export interface AuctionSettledEvent {
     token_id: bigint;
     winner?: string | null;
     amount?: bigint;
-    payment_type?: PaymentType;
   };
 }
 
@@ -200,7 +196,7 @@ export interface AuctionInitializedEvent {
     reserve_price?: bigint;
     min_bid_increment_percent?: number;
     time_buffer?: bigint;
-    payment_token?: string | null;
+    payment_token?: string;
   };
 }
 
@@ -210,7 +206,7 @@ export interface AuctionInitializedEvent {
 export interface PaymentTokenUpdatedEvent {
   name: "PaymentTokenUpdated";
   data: {
-    payment_token?: string | null;
+    payment_token?: string;
     changed_by?: string;
   };
 }
@@ -257,24 +253,6 @@ export interface MinBidIncrementUpdatedEvent {
   { tag: "CurrentHash"; values: void };
 
 /**
- * Payment currency type for an auction.
- *
- * The first bidder determines which payment type (XLM or SAC token) will be
- * used for the entire auction. All subsequent bids must use the same type.
- */
- export type PaymentType =
-  /**
-   * Native XLM (Stellar lumens) payment.
-   */
-  { tag: "Native"; values: void } |
-  /**
-   * SAC (Stellar Asset Contract) token payment.
-   *
-   * The address identifies which specific SAC token contract.
-   */
-  { tag: "SAC"; values: readonly [string] };
-
-/**
  * Current state of an active auction.
  *
  * Tracks all dynamic auction data including bids, timing, and payment type.
@@ -306,13 +284,6 @@ export interface AuctionState {
    * `None` if no bids yet. The winner receives the minted token upon settlement.
    */
   highest_bidder: string | null;
-  /**
-   * Payment type for this auction.
-   *
-   * Locked on the first bid. All subsequent bids must use the same currency.
-   * Resets to undetermined on next auction.
-   */
-  payment_currency: PaymentType;
   /**
    * Whether auction has been settled.
    *
@@ -357,12 +328,12 @@ export interface AuctionConfig {
    */
   min_bid_increment_percent: number;
   /**
-   * Configured SAC token address for payments.
+   * SAC token address for payments.
    *
-   * The constructor requires this value to be `Some`; native XLM payments are
-   * not supported. Payment type locks on the first bid of each auction.
+   * All auctions use this SAC token for bids and payments.
+   * Native XLM payments are not supported.
    */
-  payment_token: string | null;
+  payment_token: string;
   /**
    * Minimum first bid amount.
    *

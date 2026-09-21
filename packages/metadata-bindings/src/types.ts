@@ -23,7 +23,7 @@ export const Error = {
 export interface PropertyAddedEvent {
   name: "PropertyAdded";
   data: {
-    property_id?: number;
+    property_id: number;
     name?: string;
   };
 }
@@ -34,7 +34,7 @@ export interface PropertyAddedEvent {
 export interface SeedGeneratedEvent {
   name: "SeedGenerated";
   data: {
-    token_id?: number;
+    token_id: number;
     num_properties?: number;
     selections?: Array<number>;
   };
@@ -78,7 +78,7 @@ export interface DescriptionUpdatedEvent {
 export interface MetadataInitializedEvent {
   name: "MetadataInitialized";
   data: {
-    token?: string;
+    token: string;
     renderer_base?: string;
   };
 }

@@ -128,8 +128,8 @@ export const ManagerError = {
 export interface DaoCreatedEvent {
   name: "DaoCreated";
   data: {
-    token_address?: string;
-    creator?: string;
+    token_address: string;
+    creator: string;
     created_ledger?: number;
     modules?: DaoModules;
     founders?: Array<FounderAllocation>;
@@ -142,8 +142,8 @@ export interface DaoCreatedEvent {
 export interface DaoRegisteredEvent {
   name: "DaoRegistered";
   data: {
-    token_address?: string;
-    creator?: string;
+    token_address: string;
+    creator: string;
     modules?: DaoModules;
   };
 }
@@ -174,8 +174,8 @@ export interface FactoryUnpausedEvent {
 export interface UpgradeApprovedEvent {
   name: "UpgradeApproved";
   data: {
-    from_hash?: Uint8Array;
-    to_hash?: Uint8Array;
+    from_hash: Uint8Array;
+    to_hash: Uint8Array;
     approved_at?: bigint;
   };
 }
@@ -186,7 +186,7 @@ export interface UpgradeApprovedEvent {
 export interface ImplementationRevokedEvent {
   name: "ImplementationRevoked";
   data: {
-    wasm_hash?: Uint8Array;
+    wasm_hash: Uint8Array;
     revoked_at?: bigint;
   };
 }
@@ -199,7 +199,7 @@ export interface ImplementationRegisteredEvent {
   data: {
     name?: string;
     version?: number;
-    wasm_hash?: Uint8Array;
+    wasm_hash: Uint8Array;
     published_at?: bigint;
   };
 }
