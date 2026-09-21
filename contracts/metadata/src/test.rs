@@ -39,6 +39,12 @@ fn initialize_metadata<'a>(
         &Address::generate(env),
         &soroban_sdk::BytesN::from_array(env, &[0; 32]),
         owner,
+        &Vec::new(env),
+        &Vec::new(env),
+        &IpfsGroup {
+            base_uri: String::from_str(env, "ipfs://"),
+            extension: String::from_str(env, ".png"),
+        },
     );
 }
 

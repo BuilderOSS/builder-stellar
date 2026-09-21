@@ -53,6 +53,21 @@ pub struct FounderAllocation {
     pub amount: u32,
 }
 
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ArtworkItem {
+    pub property_id: u32,
+    pub name: String,
+    pub is_new_property: bool,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ArtworkIpfsGroup {
+    pub base_uri: String,
+    pub extension: String,
+}
+
 /// Complete parameters for creating a new DAO.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -72,6 +87,9 @@ pub struct DaoCreationParams {
     pub description: String,
     pub contract_image: String,
     pub renderer_base: String,
+    pub artwork_property_names: Vec<String>,
+    pub artwork_items: Vec<ArtworkItem>,
+    pub artwork_ipfs: ArtworkIpfsGroup,
 
     // Auction configuration
     pub auction_duration: u64,

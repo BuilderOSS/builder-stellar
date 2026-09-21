@@ -605,6 +605,9 @@ impl ManagerContract {
                 env.current_contract_address().into_val(&env),
                 metadata_wasm.clone().into_val(&env),
                 treasury_addr.clone().into_val(&env),
+                params.artwork_property_names.clone().into_val(&env),
+                params.artwork_items.clone().into_val(&env),
+                params.artwork_ipfs.clone().into_val(&env),
             ],
         );
 

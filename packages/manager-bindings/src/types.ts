@@ -251,6 +251,15 @@ export interface DaoModules {
   { tag: "DaoCount"; values: void };
 
 /**
+ * Struct: ArtworkItem
+ */
+export interface ArtworkItem {
+  is_new_property: boolean;
+  name: string;
+  property_id: number;
+}
+
+/**
  * Complete record of a DAO creation.
  */
 export interface DaoCreation {
@@ -354,9 +363,20 @@ export interface UpgradeApproval {
 }
 
 /**
+ * Struct: ArtworkIpfsGroup
+ */
+export interface ArtworkIpfsGroup {
+  base_uri: string;
+  extension: string;
+}
+
+/**
  * Complete parameters for creating a new DAO.
  */
 export interface DaoCreationParams {
+  artwork_ipfs: ArtworkIpfsGroup;
+  artwork_items: Array<ArtworkItem>;
+  artwork_property_names: Array<string>;
   auction_duration: bigint;
   contract_image: string;
   /**

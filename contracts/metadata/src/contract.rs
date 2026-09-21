@@ -39,6 +39,9 @@ impl MetadataContract {
         manager: Address,
         current_hash: BytesN<32>,
         owner: Address,
+        property_names: Vec<String>,
+        items: Vec<ItemParam>,
+        ipfs_group: IpfsGroup,
     ) -> Result<(), Error> {
         if is_initialized(&env) {
             return Err(Error::AlreadyInitialized);
@@ -53,6 +56,9 @@ impl MetadataContract {
         };
 
         set_settings(&env, &settings);
+        if property_names.len() > 0 || items.len() > 0 {
+            Self::_add_properties(&env, property_names, items, ipfs_group)?;
+        }
         env.storage().instance().set(&DataKey::Manager, &manager);
         env.storage().instance().set(&DataKey::Owner, &owner);
         env.storage()

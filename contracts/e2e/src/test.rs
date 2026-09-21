@@ -109,6 +109,12 @@ fn setup() -> (
         &Address::generate(&e),
         &BytesN::from_array(&e, &[0u8; 32]),
         &owner,
+        &Vec::new(&e),
+        &Vec::new(&e),
+        &IpfsGroup {
+            base_uri: String::from_str(&e, "ipfs://"),
+            extension: String::from_str(&e, ".png"),
+        },
     );
 
     let treasury_id = e.register(
@@ -847,6 +853,12 @@ fn treasury_batch_mint_with_explicit_auth() {
         &Address::generate(&e),
         &BytesN::from_array(&e, &[0u8; 32]),
         &owner,
+        &Vec::new(&e),
+        &Vec::new(&e),
+        &IpfsGroup {
+            base_uri: String::from_str(&e, "ipfs://"),
+            extension: String::from_str(&e, ".png"),
+        },
     );
 
     let treasury_id = e.register(
@@ -963,6 +975,12 @@ fn setup_auction() -> (
         &Address::generate(&e),
         &BytesN::from_array(&e, &[0u8; 32]),
         &owner,
+        &Vec::new(&e),
+        &Vec::new(&e),
+        &IpfsGroup {
+            base_uri: String::from_str(&e, "ipfs://"),
+            extension: String::from_str(&e, ".png"),
+        },
     );
 
     // Deploy treasury
@@ -1617,6 +1635,12 @@ fn test_governor_treasury_bidirectional_verification() {
         &Address::generate(&e),
         &BytesN::from_array(&e, &[0u8; 32]),
         &owner,
+        &Vec::new(&e),
+        &Vec::new(&e),
+        &IpfsGroup {
+            base_uri: String::from_str(&e, "ipfs://"),
+            extension: String::from_str(&e, ".png"),
+        },
     );
 
     // Register treasury with a placeholder governor

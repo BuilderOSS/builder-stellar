@@ -258,7 +258,7 @@ fn test_nonce_tracking() {
 #[test]
 #[should_panic]
 fn test_create_dao_when_paused_fails() {
-    use crate::storage::DaoCreationParams;
+    use crate::storage::{ArtworkIpfsGroup, DaoCreationParams};
     use soroban_sdk::Vec;
 
     let (env, client, _admin) = setup();
@@ -280,6 +280,12 @@ fn test_create_dao_when_paused_fails() {
         description: String::from_str(&env, "Test description"),
         contract_image: String::from_str(&env, "https://test.com/image.png"),
         renderer_base: String::from_str(&env, "https://renderer.test"),
+        artwork_property_names: Vec::new(&env),
+        artwork_items: Vec::new(&env),
+        artwork_ipfs: ArtworkIpfsGroup {
+            base_uri: String::from_str(&env, "ipfs://"),
+            extension: String::from_str(&env, ".png"),
+        },
         auction_duration: 86400,
         reserve_price: 1000,
         time_buffer: 300,
