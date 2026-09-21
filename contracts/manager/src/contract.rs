@@ -5,7 +5,9 @@
 //! 2. DAO Factory - Atomic deployment of new DAOs
 //! 3. DAO Registry - Discovery and enumeration of deployed DAOs
 
-use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, String, Vec};
+use soroban_sdk::{
+    contract, contractimpl, symbol_short, vec, Address, BytesN, Env, IntoVal, String, Vec,
+};
 
 use crate::error::ManagerError;
 use crate::events::*;
@@ -473,48 +475,112 @@ impl ManagerContract {
         let governor_salt = Self::generate_salt(&env, &params.deployer, params.nonce, "governor");
         let treasury_salt = Self::generate_salt(&env, &params.deployer, params.nonce, "treasury");
 
-        // NOTE: In Soroban, contracts with __constructor need to have it called separately
-        // after deployment. We deploy first, then initialize.
+        // Deploy contracts using deploy_v2 which handles constructor initialization atomically.
+        // Deployment order matters due to circular dependencies between contracts.
+        // We use predict_addresses internally to pass addresses before deployment.
 
-        // Deploy all contracts
-        let token_addr = env
-            .deployer()
-            .with_current_contract(token_salt)
-            .deploy(token_wasm);
+        // First, predict all addresses so we can pass them to constructors
+        let token_deployer = env.deployer().with_current_contract(token_salt);
+        let token_addr = token_deployer.deployed_address();
 
-        let metadata_addr = env
-            .deployer()
-            .with_current_contract(metadata_salt)
-            .deploy(metadata_wasm);
+        let metadata_deployer = env.deployer().with_current_contract(metadata_salt);
+        let metadata_addr = metadata_deployer.deployed_address();
 
-        let auction_addr = env
-            .deployer()
-            .with_current_contract(auction_salt)
-            .deploy(auction_wasm);
+        let treasury_deployer = env.deployer().with_current_contract(treasury_salt);
+        let treasury_addr = treasury_deployer.deployed_address();
 
-        let governor_addr = env
-            .deployer()
-            .with_current_contract(governor_salt)
-            .deploy(governor_wasm);
+        let governor_deployer = env.deployer().with_current_contract(governor_salt);
+        let governor_addr = governor_deployer.deployed_address();
 
-        let treasury_addr = env
-            .deployer()
-            .with_current_contract(treasury_salt)
-            .deploy(treasury_wasm);
+        let auction_deployer = env.deployer().with_current_contract(auction_salt);
+        let auction_addr = auction_deployer.deployed_address();
 
-        // TODO: Complete initialization after resolving deployment API
-        // For now, this is a stub that will be implemented once we determine
-        // the correct way to call __constructor on deployed contracts
+        // Step 1: Deploy and initialize Treasury (needs owner and governor)
+        treasury_deployer.deploy_v2(
+            treasury_wasm,
+            (params.deployer.clone(), governor_addr.clone()),
+        );
 
-        // The initialization sequence should be:
-        // 1. Token.__constructor(treasury, uri, name, symbol, metadata)
-        // 2. Metadata.initialize(token, project_uri, description, image, renderer)
-        // 3. Treasury.__constructor(treasury, governor)
-        // 4. Governor.__constructor(treasury, token, treasury, delays, thresholds)
-        // 5. Auction.__constructor(treasury, token, treasury, auction_params)
-        // 6. Token.set_mint_authority(auction, true)
+        // Step 2: Deploy and initialize Token (needs owner, uri, name, symbol, metadata)
+        token_deployer.deploy_v2(
+            token_wasm,
+            (
+                treasury_addr.clone(),
+                params.token_uri.clone(),
+                params.token_name.clone(),
+                params.token_symbol.clone(),
+                metadata_addr.clone(),
+            ),
+        );
 
-        return Err(ManagerError::InitializationFailed);
+        // Step 3: Deploy Metadata (no constructor - we'll call initialize separately)
+        metadata_deployer.deploy_v2(metadata_wasm, ());
+
+        // Step 4: Deploy and initialize Governor
+        // Governor constructor needs: owner, token, treasury, voting_delay, voting_period,
+        // queue_delay (not in params - using voting_delay), proposal_threshold (needs conversion), quorum_bps
+        let queue_delay = params.voting_delay; // Using same as voting_delay for now
+        let proposal_threshold = 0u128; // Will be set via governance later
+
+        governor_deployer.deploy_v2(
+            governor_wasm,
+            (
+                treasury_addr.clone(),
+                token_addr.clone(),
+                treasury_addr.clone(),
+                params.voting_delay as u32,
+                params.voting_period as u32,
+                queue_delay as u32,
+                proposal_threshold,
+                params.quorum_bps,
+            ),
+        );
+
+        // Step 5: Deploy and initialize Auction
+        // Auction constructor needs: owner, token, treasury, duration, reserve_price,
+        // min_bid_increment_percent (using quorum_bps for now), time_buffer, payment_token
+        let min_bid_increment = 10u32; // 10% default
+
+        auction_deployer.deploy_v2(
+            auction_wasm,
+            (
+                treasury_addr.clone(),
+                token_addr.clone(),
+                treasury_addr.clone(),
+                params.auction_duration,
+                params.reserve_price,
+                min_bid_increment,
+                params.time_buffer,
+                Some(params.payment_asset.clone()),
+            ),
+        );
+
+        // Step 6: Initialize Metadata contract (regular function call, not constructor)
+        // Using invoke_contract directly since we don't have a Client import
+        let _: () = env.invoke_contract(
+            &metadata_addr,
+            &symbol_short!("init"),
+            vec![
+                &env,
+                token_addr.clone().into_val(&env),
+                params.project_uri.clone().into_val(&env),
+                params.description.clone().into_val(&env),
+                params.contract_image.clone().into_val(&env),
+                params.renderer_base.clone().into_val(&env),
+            ],
+        );
+
+        // Step 7: Set auction as mint authority on token
+        // Using invoke_contract directly
+        let _: () = env.invoke_contract(
+            &token_addr,
+            &symbol_short!("set_mint"),
+            vec![
+                &env,
+                auction_addr.clone().into_val(&env),
+                true.into_val(&env),
+            ],
+        );
 
         // Mark nonce as used
         set_nonce_used(&env, &params.deployer, params.nonce);
