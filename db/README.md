@@ -8,3 +8,12 @@ Order:
 
 The base migration creates the raw Goldsky landing tables. The second migration
 creates the domain and app-facing views over those tables.
+
+View naming conventions:
+- Ledger positions end in `_ledger`.
+- Unix timestamps and durations end in `_seconds`; source millisecond values
+  retain a `_milliseconds` suffix.
+- `timestamptz` presentation fields end in `_at`; event projections expose
+  `event_timestamp_seconds` and `event_at`.
+- `manager.founder_allocations.end_date` is preserved, but its unit remains
+  unresolved because the founder payload does not define it.
