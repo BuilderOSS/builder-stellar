@@ -45,4 +45,8 @@ pub enum TokenKey {
     /// Maps `Address -> bool` where `true` means the address can mint tokens.
     /// The owner has implicit minting authority without needing an entry here.
     MintAuthority(Address),
+    /// The metadata contract address for artwork generation.
+    ///
+    /// This contract is called during minting to generate artwork seeds.
+    Metadata,
 }

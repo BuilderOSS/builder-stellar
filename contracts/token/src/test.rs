@@ -13,6 +13,7 @@ fn setup() -> (Env, DaoTokenContractClient<'static>, Address) {
     e.mock_all_auths();
 
     let owner = Address::generate(&e);
+    let metadata = Address::generate(&e); // Dummy metadata address for tests
     let contract_id = e.register(
         DaoTokenContract,
         (
@@ -20,6 +21,7 @@ fn setup() -> (Env, DaoTokenContractClient<'static>, Address) {
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
+            metadata,
         ),
     );
     let client = DaoTokenContractClient::new(&e, &contract_id);
@@ -29,6 +31,7 @@ fn setup() -> (Env, DaoTokenContractClient<'static>, Address) {
 fn setup_no_auth() -> (Env, DaoTokenContractClient<'static>, Address) {
     let e = Env::default();
     let owner = Address::generate(&e);
+    let metadata = Address::generate(&e); // Dummy metadata address for tests
     let contract_id = e.register(
         DaoTokenContract,
         (
@@ -36,6 +39,7 @@ fn setup_no_auth() -> (Env, DaoTokenContractClient<'static>, Address) {
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
+            metadata,
         ),
     );
     let client = DaoTokenContractClient::new(&e, &contract_id);

@@ -30,13 +30,22 @@ impl DaoTokenContract {
     /// * `uri` - The base URI for token metadata (typically an IPFS or HTTP link)
     /// * `name` - The human-readable name of the token collection
     /// * `symbol` - The short symbol/ticker for the token
+    /// * `metadata` - The metadata contract address for artwork generation
     ///
     /// # Events
     ///
     /// Emits a `TokenInitialized` event with the initialization parameters.
-    pub fn __constructor(e: &Env, owner: Address, uri: String, name: String, symbol: String) {
+    pub fn __constructor(
+        e: &Env,
+        owner: Address,
+        uri: String,
+        name: String,
+        symbol: String,
+        metadata: Address,
+    ) {
         Base::set_metadata(e, uri.clone(), name.clone(), symbol.clone());
         set_owner(e, &owner);
+        e.storage().instance().set(&TokenKey::Metadata, &metadata);
         emit_token_initialized(e, &owner, &uri, &name, &symbol);
     }
 
@@ -121,6 +130,9 @@ impl DaoTokenContract {
         let token_id = NonFungibleVotes::sequential_mint(e, to);
         // Note: OpenZeppelin's NonFungibleVotes::sequential_mint() automatically emits standard Mint event
 
+        // Generate artwork seed via metadata contract
+        Self::call_metadata_hook(e, token_id);
+
         emit_token_mint(e, minter, to, token_id);
         token_id
     }
@@ -167,6 +179,10 @@ impl DaoTokenContract {
 
         for _ in 0..amount {
             let token_id = NonFungibleVotes::sequential_mint(e, to);
+
+            // Generate artwork seed via metadata contract
+            Self::call_metadata_hook(e, token_id);
+
             last_token_id = token_id;
         }
 
@@ -316,6 +332,19 @@ impl DaoTokenContract {
     /// - Storage write happens before vote transfer
     /// - `transfer_voting_units()` properly updates voting power checkpoints
     /// - Events are emitted for transparency
+    fn call_metadata_hook(e: &Env, token_id: u32) {
+        if let Some(metadata_addr) = e
+            .storage()
+            .instance()
+            .get::<TokenKey, Address>(&TokenKey::Metadata)
+        {
+            // Import metadata client
+            let metadata = metadata::MetadataContractClient::new(e, &metadata_addr);
+            // Call on_minted hook (ignore result - non-critical)
+            let _ = metadata.try_on_minted(&token_id);
+        }
+    }
+
     fn ensure_self_delegate(e: &Env, account: &Address) {
         if get_delegate(e, account).is_none() {
             // Set delegatee storage (same as library's delegate() function)

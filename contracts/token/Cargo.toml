@@ -14,6 +14,7 @@ stellar-access = { workspace = true }
 stellar-governance = { workspace = true }
 stellar-macros = { workspace = true }
 stellar-tokens = { workspace = true }
+metadata = { path = "../metadata" }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
