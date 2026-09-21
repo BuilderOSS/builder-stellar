@@ -82,45 +82,12 @@ transforms:
       contract_id: string
       contract_role: string
       event_name: string
-      event_type: string
-      payload: string
-      proposal_id: string
-      proposal_number: string
-      actor: string
-      amount: string
-      token_id: string
-      bidder: string
-      minter: string
-      owner: string
-      from_address: string
-      to_address: string
-      changed_by: string
-      cancelled_by: string
-      executor: string
-      governor: string
-      treasury: string
-      new_treasury: string
-      new_governor: string
-      old_treasury: string
-      old_governor: string
-      token_contract: string
-      token_contract_id: string
-      old_token_contract: string
-      new_token_contract: string
-      authority: string
-      caller: string
-      spender: string
-      target: string
-      function: string
-      support: string
-      reason: string
-      state: string
-      eta: string
-      description: string
-      snapshot_ledger: string
-      vote_start_timestamp: string
-      deadline_ledger: string
-      action_count: string
+      topic_0: string
+      topic_1: string
+      topic_2: string
+      topic_3: string
+      topics: string
+      args: string
       transaction_hash: string
       transaction_successful: boolean
       ledger_sequence: int64
@@ -131,6 +98,7 @@ transforms:
       event_index: int64
       operation_type: string
       _gs_op: string
+      decoder_version: string
     script: |
 {{DECODED_EVENTS_SCRIPT}}
 
@@ -144,15 +112,23 @@ transforms:
       deployment_id: string
       contract_id: string
       contract_role: string
+      event_name: string
+      topics: string
+      args: string
       kind: string
       title: string
       summary: string
+      visibility: string
       proposal_id: string
-      proposal_number: string
+      token_id: string
+      amount: string
       actor: string
       addresses: string
       ledger_sequence: int64
-      timestamp: string
+      transaction_index: int64
+      operation_index: int64
+      event_index: int64
+      ledger_closed_at: string
       transaction_hash: string
     script: |
 {{ACTIVITY_SCRIPT}}
@@ -178,6 +154,6 @@ sinks:
     type: postgres
     from: activity_feed
     schema: app
-    table: activity_feed
+     table: activity_feed_events
     secret_name: {{POSTGRES_SECRET_NAME}}
     primary_key: activity_id

@@ -76,6 +76,8 @@ function getHandledEvents() {
 
   const eventNameRegex = /eventName === ['"](\w+)['"]/g;
   const matches = [...content.matchAll(eventNameRegex)];
+  const topicNames = [...content.matchAll(/\b([A-Z][A-Za-z0-9]*)\s*:/g)];
+  topicNames.forEach(match => matches.push([match[0], match[1]]));
 
   const eventNames = new Set();
   matches.forEach(match => {

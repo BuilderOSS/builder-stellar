@@ -19,7 +19,7 @@ function invoke(data) {
   }
 
   function pick(row, keys) {
-    var payload = parsePayload(row.payload) || parsePayload(row.data);
+    var payload = parsePayload(row.args) || parsePayload(row.topics) || parsePayload(row.payload) || parsePayload(row.data);
     for (var i = 0; i < keys.length; i += 1) {
       var key = keys[i];
       if (row[key] !== undefined && row[key] !== null && row[key] !== '') {
@@ -59,6 +59,16 @@ function invoke(data) {
   }
 
   var normalizedEventName = normalizeEventName(eventName);
+
+  var userFacing = {
+    TokenInitialized: true, Mint: true, MintWithMinter: true, BatchMint: true,
+    Transfer: true, DelegateChanged: true, DelegateVotesChanged: true,
+    ProposalCreated: true, ProposalQueued: true, VoteCast: true,
+    ProposalCancelled: true, ProposalCanceled: true, ProposalExecuted: true,
+    ProposalExpired: true, AuctionCreated: true, BidPlaced: true,
+    AuctionSettled: true, BidRefunded: true, AuctionCancelled: true,
+    DaoCreated: true, DaoRegistered: true
+  };
 
   var kindMap = {
     TokenInitialized: 'token.initialized',
@@ -239,12 +249,20 @@ function invoke(data) {
     kind: kindMap[normalizedEventName] || ('contract.' + String(eventName).toLowerCase()),
     title: titleMap[normalizedEventName] || normalizedEventName,
     summary: summary,
+    event_name: eventName,
+    topics: typeof data.topics === 'string' ? data.topics : JSON.stringify(data.topics || {}),
+    args: typeof data.args === 'string' ? data.args : JSON.stringify(data.args || {}),
+    visibility: userFacing[normalizedEventName] ? (normalizedEventName.indexOf('Proposal') === 0 || normalizedEventName === 'VoteCast' ? 'governance' : 'public') : (kindMap[normalizedEventName] ? 'admin' : 'system'),
     proposal_id: pick(data, ['proposal_id']) || null,
-    proposal_number: pick(data, ['proposal_number']) || null,
+    token_id: pick(data, ['token_id']) || null,
+    amount: pick(data, ['amount', 'weight']) || null,
     actor: pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator']) || null,
     addresses: JSON.stringify(addresses),
     ledger_sequence: data.ledger_sequence,
-    timestamp: data.timestamp || data.ledger_closed_at || null,
+    transaction_index: data.transaction_index,
+    operation_index: data.operation_index,
+    event_index: data.event_index,
+    ledger_closed_at: data.ledger_closed_at || null,
     transaction_hash: data.transaction_hash
   };
 }

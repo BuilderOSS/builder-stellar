@@ -41,68 +41,12 @@ CREATE TABLE IF NOT EXISTS chain.decoded_events (
   contract_id text NOT NULL,
   contract_role text NOT NULL,
   event_name text NOT NULL,
-  event_type text,
-  payload text,
-  proposal_id text,
-  proposal_number text,
-  proposer text,
-  actor text,
-  amount text,
-  token_id text,
-  bidder text,
-  minter text,
-  owner text,
-  from_address text,
-  to_address text,
-  changed_by text,
-  cancelled_by text,
-  executor text,
-  governor text,
-  treasury text,
-  new_treasury text,
-  new_governor text,
-  old_treasury text,
-  old_governor text,
-  token_contract text,
-  token_contract_id text,
-  old_token_contract text,
-  new_token_contract text,
-  authority text,
-  caller text,
-  spender text,
-  target text,
-  function text,
-  support text,
-  reason text,
-  state text,
-  eta text,
-  description text,
-  snapshot_ledger text,
-  vote_start_timestamp text,
-  deadline_ledger text,
-  action_count text,
-  creator text,
-  token_address text,
-  implementation_name text,
-  implementation_version integer,
-  wasm_hash text,
-  from_hash text,
-  to_hash text,
-  property_id integer,
-  property_name text,
-  num_properties integer,
-  selections text,
-  renderer_base text,
-  contract_image text,
-  project_uri text,
-  old_uri text,
-  new_uri text,
-  old_base text,
-  new_base text,
-  old_description text,
-  new_description text,
-  old_image text,
-  new_image text,
+  topic_0 text,
+  topic_1 text,
+  topic_2 text,
+  topic_3 text,
+  topics jsonb NOT NULL DEFAULT '{}'::jsonb,
+  args jsonb NOT NULL DEFAULT '{}'::jsonb,
   transaction_hash text NOT NULL,
   transaction_successful boolean,
   ledger_sequence bigint NOT NULL,
@@ -113,6 +57,7 @@ CREATE TABLE IF NOT EXISTS chain.decoded_events (
   event_index bigint,
   operation_type text,
   _gs_op text,
+  decoder_version text NOT NULL,
   ingested_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -122,45 +67,69 @@ CREATE INDEX IF NOT EXISTS decoded_events_deployment_event_idx
 CREATE INDEX IF NOT EXISTS decoded_events_deployment_contract_idx
   ON chain.decoded_events (deployment_id, contract_id, ledger_sequence DESC, event_id DESC);
 
-CREATE INDEX IF NOT EXISTS decoded_events_creator_idx
-  ON chain.decoded_events (creator, ledger_sequence DESC)
-  WHERE creator IS NOT NULL;
+CREATE INDEX IF NOT EXISTS decoded_events_topic_0_idx
+  ON chain.decoded_events (deployment_id, event_name, topic_0, ledger_sequence DESC);
 
-CREATE INDEX IF NOT EXISTS decoded_events_token_address_idx
-  ON chain.decoded_events (token_address, ledger_sequence DESC)
-  WHERE token_address IS NOT NULL;
+CREATE INDEX IF NOT EXISTS decoded_events_topics_gin_idx
+  ON chain.decoded_events USING gin (topics);
+
+CREATE INDEX IF NOT EXISTS decoded_events_args_gin_idx
+  ON chain.decoded_events USING gin (args);
 
 CREATE INDEX IF NOT EXISTS decoded_events_manager_events_idx
   ON chain.decoded_events (deployment_id, event_name, ledger_sequence DESC)
   WHERE LOWER(event_name) IN ('dao_created', 'daocreated', 'dao_registered', 'daoregistered');
 
-CREATE INDEX IF NOT EXISTS decoded_events_metadata_property_idx
-  ON chain.decoded_events (deployment_id, contract_role, property_id, ledger_sequence DESC)
-  WHERE contract_role = 'metadata' AND property_id IS NOT NULL;
+CREATE OR REPLACE FUNCTION chain.reject_event_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF TG_OP = 'UPDATE' AND NEW IS NOT DISTINCT FROM OLD THEN
+    RETURN NEW;
+  END IF;
 
-CREATE INDEX IF NOT EXISTS decoded_events_metadata_token_idx
-  ON chain.decoded_events (deployment_id, contract_role, token_id, ledger_sequence DESC)
-  WHERE contract_role = 'metadata' AND token_id IS NOT NULL;
+  RAISE EXCEPTION '% rows are immutable', TG_TABLE_NAME;
+END;
+$$;
 
-CREATE TABLE IF NOT EXISTS app.activity_feed (
+DROP TRIGGER IF EXISTS raw_events_immutable ON chain.raw_events;
+CREATE TRIGGER raw_events_immutable
+BEFORE UPDATE OR DELETE ON chain.raw_events
+FOR EACH ROW EXECUTE FUNCTION chain.reject_event_mutation();
+
+DROP TRIGGER IF EXISTS decoded_events_immutable ON chain.decoded_events;
+CREATE TRIGGER decoded_events_immutable
+BEFORE UPDATE OR DELETE ON chain.decoded_events
+FOR EACH ROW EXECUTE FUNCTION chain.reject_event_mutation();
+
+CREATE TABLE IF NOT EXISTS app.activity_feed_events (
   activity_id text PRIMARY KEY,
   deployment_id text NOT NULL,
   contract_id text NOT NULL,
   contract_role text NOT NULL,
+  event_name text NOT NULL,
+  topics jsonb NOT NULL DEFAULT '{}'::jsonb,
+  args jsonb NOT NULL DEFAULT '{}'::jsonb,
   kind text NOT NULL,
   title text NOT NULL,
   summary text NOT NULL,
+  visibility text NOT NULL,
   proposal_id text,
-  proposal_number text,
+  token_id text,
+  amount text,
   actor text,
-  addresses text,
+  addresses jsonb NOT NULL DEFAULT '[]'::jsonb,
   ledger_sequence bigint NOT NULL,
-  timestamp text,
+  transaction_index bigint,
+  operation_index bigint,
+  event_index bigint,
+  ledger_closed_at text,
   transaction_hash text NOT NULL,
   ingested_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS activity_feed_deployment_idx
-  ON app.activity_feed (deployment_id, ledger_sequence DESC, activity_id DESC);
+CREATE INDEX IF NOT EXISTS activity_feed_events_order_idx
+  ON app.activity_feed_events (deployment_id, ledger_sequence DESC, transaction_index DESC, operation_index DESC, event_index DESC, activity_id DESC);
 
 COMMIT;
