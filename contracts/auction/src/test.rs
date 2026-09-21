@@ -4,7 +4,7 @@ extern crate std;
 
 use soroban_sdk::{
     testutils::{Address as _, Ledger},
-    Address, Env,
+    Address, BytesN, Env,
 };
 
 use crate::contract::{DaoAuctionContract, DaoAuctionContractClient};
@@ -35,6 +35,8 @@ fn setup_auction_contract(
             10_u32,
             50_u64,                      // time_buffer: 50 seconds
             Some(payment_token.clone()), // SECURITY FIX: SAC-only
+            Address::generate(e),
+            BytesN::from_array(e, &[0u8; 32]),
         ),
     );
     let auction = DaoAuctionContractClient::new(e, &auction_address);
@@ -75,6 +77,8 @@ fn setup_with_payment_token(
             10_u32,
             50_u64, // time_buffer: 50 seconds
             Some(payment_token.clone()),
+            Address::generate(e),
+            BytesN::from_array(e, &[0u8; 32]),
         ),
     );
     let auction = DaoAuctionContractClient::new(e, &auction_address);
@@ -139,6 +143,8 @@ fn test_constructor_rejects_zero_duration() {
             10_u32,
             10_u64,
             None::<Address>,
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
         ),
     );
 }
@@ -162,6 +168,8 @@ fn test_constructor_rejects_zero_min_bid_increment() {
             0_u32, // Invalid
             10_u64,
             None::<Address>,
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
         ),
     );
 }
@@ -422,6 +430,8 @@ fn test_constructor_requires_payment_token() {
             10_u32,
             10_u64,
             None::<Address>,
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
         ),
     );
 }
@@ -447,6 +457,8 @@ fn test_constructor_rejects_low_reserve_price() {
             10_u32,
             10_u64,
             Some(payment_token),
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
         ),
     );
 }
@@ -472,6 +484,8 @@ fn test_constructor_rejects_high_min_increment() {
             101_u32, // Too high
             10_u64,
             Some(payment_token),
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
         ),
     );
 }

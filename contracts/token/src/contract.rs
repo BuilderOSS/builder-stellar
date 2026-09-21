@@ -1,4 +1,7 @@
-use soroban_sdk::{contract, contractimpl, panic_with_error, Address, Env, String};
+use soroban_sdk::{
+    contract, contractimpl, panic_with_error, symbol_short, vec, Address, BytesN, Env, Error,
+    IntoVal, String,
+};
 use stellar_access::ownable::{set_owner, Ownable};
 use stellar_governance::votes::{
     emit_delegate_changed as emit_library_delegate_changed, get_delegate, Votes, VotesStorageKey,
@@ -42,11 +45,45 @@ impl DaoTokenContract {
         name: String,
         symbol: String,
         metadata: Address,
+        manager: Address,
+        current_hash: BytesN<32>,
     ) {
         Base::set_metadata(e, uri.clone(), name.clone(), symbol.clone());
         set_owner(e, &owner);
         e.storage().instance().set(&TokenKey::Metadata, &metadata);
+        e.storage().instance().set(&TokenKey::Manager, &manager);
+        e.storage()
+            .instance()
+            .set(&TokenKey::CurrentHash, &current_hash);
         emit_token_initialized(e, &owner, &uri, &name, &symbol);
+    }
+
+    pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
+        let owner = stellar_access::ownable::get_owner(e).expect("owner not set");
+        owner.require_auth();
+        let manager: Address = e
+            .storage()
+            .instance()
+            .get(&TokenKey::Manager)
+            .expect("manager not set");
+        let current: BytesN<32> = e
+            .storage()
+            .instance()
+            .get(&TokenKey::CurrentHash)
+            .expect("current hash not set");
+        if from_hash != current {
+            panic!("from hash does not match current hash");
+        }
+        let approved: bool = e.invoke_contract(
+            &manager,
+            &soroban_sdk::Symbol::new(e, "is_upgrade_approved"),
+            soroban_sdk::vec![e, from_hash.into_val(e), to_hash.clone().into_val(e)],
+        );
+        if !approved {
+            panic!("upgrade not approved");
+        }
+        e.storage().instance().set(&TokenKey::CurrentHash, &to_hash);
+        e.deployer().update_current_contract_wasm(to_hash);
     }
 
     /// Grants or revokes minting authority for an address.
@@ -343,10 +380,12 @@ impl DaoTokenContract {
             .instance()
             .get::<TokenKey, Address>(&TokenKey::Metadata)
         {
-            // Import metadata client
-            let metadata = metadata::MetadataContractClient::new(e, &metadata_addr);
-            // Call on_minted hook (ignore result - non-critical)
-            let _ = metadata.try_on_minted(&token_id);
+            // Call on_minted hook via cross-contract invocation (ignore result - non-critical)
+            let _ = e.try_invoke_contract::<(), Error>(
+                &metadata_addr,
+                &symbol_short!("on_minted"),
+                vec![e, token_id.into_val(e)],
+            );
         }
     }
 

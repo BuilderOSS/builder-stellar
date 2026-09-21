@@ -508,24 +508,31 @@ impl ManagerContract {
 
         // Step 1: Deploy and initialize Treasury (needs owner and governor)
         treasury_deployer.deploy_v2(
-            treasury_wasm,
-            (params.deployer.clone(), governor_addr.clone()),
+            treasury_wasm.clone(),
+            (
+                treasury_addr.clone(),
+                governor_addr.clone(),
+                env.current_contract_address(),
+                treasury_wasm.clone(),
+            ),
         );
 
         // Step 2: Deploy and initialize Token (needs owner, uri, name, symbol, metadata)
         token_deployer.deploy_v2(
-            token_wasm,
+            token_wasm.clone(),
             (
-                params.deployer.clone(),
+                treasury_addr.clone(),
                 params.token_uri.clone(),
                 params.token_name.clone(),
                 params.token_symbol.clone(),
                 metadata_addr.clone(),
+                env.current_contract_address(),
+                token_wasm.clone(),
             ),
         );
 
         // Step 3: Deploy Metadata (no constructor - we'll call initialize separately)
-        metadata_deployer.deploy_v2(metadata_wasm, ());
+        metadata_deployer.deploy_v2(metadata_wasm.clone(), ());
 
         // Step 4: Deploy and initialize Governor
         // Governor constructor needs: owner, token, treasury, voting_delay, voting_period,
@@ -547,9 +554,9 @@ impl ManagerContract {
         };
 
         governor_deployer.deploy_v2(
-            governor_wasm,
+            governor_wasm.clone(),
             (
-                params.deployer.clone(),
+                treasury_addr.clone(),
                 token_addr.clone(),
                 treasury_addr.clone(),
                 params.voting_delay as u32,
@@ -557,6 +564,8 @@ impl ManagerContract {
                 queue_delay as u32,
                 proposal_threshold,
                 params.quorum_bps,
+                env.current_contract_address(),
+                governor_wasm.clone(),
             ),
         );
 
@@ -565,11 +574,10 @@ impl ManagerContract {
         // min_bid_increment_percent (using quorum_bps for now), time_buffer, payment_token
         let min_bid_increment = 10u32; // 10% default
 
-        let launch_admin = params.launch_admin.clone();
         auction_deployer.deploy_v2(
-            auction_wasm,
+            auction_wasm.clone(),
             (
-                launch_admin,
+                treasury_addr.clone(),
                 token_addr.clone(),
                 treasury_addr.clone(),
                 params.auction_duration,
@@ -577,6 +585,8 @@ impl ManagerContract {
                 min_bid_increment,
                 params.time_buffer,
                 Some(params.payment_asset.clone()),
+                env.current_contract_address(),
+                auction_wasm.clone(),
             ),
         );
 
@@ -592,6 +602,9 @@ impl ManagerContract {
                 params.description.clone().into_val(&env),
                 params.contract_image.clone().into_val(&env),
                 params.renderer_base.clone().into_val(&env),
+                env.current_contract_address().into_val(&env),
+                metadata_wasm.clone().into_val(&env),
+                treasury_addr.clone().into_val(&env),
             ],
         );
 

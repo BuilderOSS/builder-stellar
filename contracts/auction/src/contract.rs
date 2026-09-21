@@ -1,5 +1,5 @@
 use soroban_sdk::{
-    contract, contractimpl, contracttrait, panic_with_error, Address, Env, IntoVal, Symbol,
+    contract, contractimpl, contracttrait, panic_with_error, Address, BytesN, Env, IntoVal, Symbol,
 };
 use stellar_access::ownable::{self, Ownable};
 use stellar_contract_utils::pausable::{self, Pausable};
@@ -15,7 +15,7 @@ use crate::{
     helpers::{create_auction, process_bid, refund_bid, settle_auction_internal},
     storage::{
         get_auction, get_config, is_launched, set_auction, set_config, set_launched, AuctionConfig,
-        AuctionState, PaymentType, MAX_BID_INCREMENT_PERCENT, MIN_AUCTION_DURATION,
+        AuctionState, DataKey, PaymentType, MAX_BID_INCREMENT_PERCENT, MIN_AUCTION_DURATION,
         MIN_RESERVE_PRICE,
     },
 };
@@ -36,6 +36,8 @@ pub trait DaoAuctionContractTrait {
         min_bid_increment_percent: u32,
         time_buffer: u64,
         payment_token: Option<Address>,
+        manager: Address,
+        current_hash: BytesN<32>,
     );
 
     /// Create a bid with SAC token
@@ -63,6 +65,7 @@ pub trait DaoAuctionContractTrait {
     fn set_time_buffer(e: &Env, time_buffer: u64);
     fn set_payment_token(e: &Env, payment_token: Option<Address>);
     fn set_treasury(e: &Env, treasury: Address);
+    fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>);
 }
 
 #[contractimpl(contracttrait)]
@@ -115,6 +118,8 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         min_bid_increment_percent: u32,
         time_buffer: u64,
         payment_token: Option<Address>,
+        manager: Address,
+        current_hash: BytesN<32>,
     ) {
         // Validate config
         if duration < MIN_AUCTION_DURATION || min_bid_increment_percent == 0 {
@@ -154,6 +159,10 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
             payment_token: payment_token.clone(),
         };
         set_config(e, &config);
+        e.storage().instance().set(&DataKey::Manager, &manager);
+        e.storage()
+            .instance()
+            .set(&DataKey::CurrentHash, &current_hash);
 
         // Not launched yet
         set_launched(e, false);
@@ -169,6 +178,34 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
             time_buffer,
             &payment_token,
         );
+    }
+
+    fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
+        let owner = ownable::get_owner(e).unwrap();
+        owner.require_auth();
+        let manager: Address = e
+            .storage()
+            .instance()
+            .get(&DataKey::Manager)
+            .expect("manager not set");
+        let current: BytesN<32> = e
+            .storage()
+            .instance()
+            .get(&DataKey::CurrentHash)
+            .expect("current hash not set");
+        if from_hash != current {
+            panic!("from hash does not match current hash");
+        }
+        let approved: bool = e.invoke_contract(
+            &manager,
+            &Symbol::new(e, "is_upgrade_approved"),
+            soroban_sdk::vec![e, from_hash.into_val(e), to_hash.clone().into_val(e)],
+        );
+        if !approved {
+            panic!("upgrade not approved");
+        }
+        e.storage().instance().set(&DataKey::CurrentHash, &to_hash);
+        e.deployer().update_current_contract_wasm(to_hash);
     }
 
     #[when_not_paused]

@@ -1,39 +1,44 @@
 #![cfg(test)]
 
-use soroban_sdk::{testutils::Address as _, Address, Env, String, Vec};
+use soroban_sdk::{testutils::Address as _, Address, BytesN, Env, String, Vec};
+use token::DaoTokenContract;
 
 use crate::{IpfsGroup, ItemParam, MetadataContract, MetadataContractClient};
-
-// Mock Token contract for testing
-mod mock_token {
-    soroban_sdk::contractimport!(file = "../../target/wasm32v1-none/release/token.wasm");
-}
 
 fn create_contract<'a>(env: &Env) -> MetadataContractClient<'a> {
     MetadataContractClient::new(env, &env.register(MetadataContract, ()))
 }
 
 fn create_token_contract<'a>(env: &Env, owner: &Address) -> Address {
-    let token_id = env.register(
-        mock_token::WASM,
+    env.register(
+        DaoTokenContract,
         (
             owner.clone(),
             String::from_str(env, "https://test.com"),
             String::from_str(env, "Test Token"),
             String::from_str(env, "TEST"),
             Address::generate(env), // metadata address (placeholder)
+            Address::generate(env), // manager address (placeholder)
+            BytesN::from_array(env, &[0u8; 32]),
         ),
-    );
-    token_id
+    )
 }
 
-fn initialize_metadata<'a>(env: &Env, client: &MetadataContractClient<'a>, token: &Address) {
+fn initialize_metadata<'a>(
+    env: &Env,
+    client: &MetadataContractClient<'a>,
+    token: &Address,
+    owner: &Address,
+) {
     client.initialize(
         token,
         &String::from_str(env, "https://example.com"),
         &String::from_str(env, "Test DAO"),
         &String::from_str(env, "https://example.com/image.png"),
         &String::from_str(env, "https://renderer.example.com/render"),
+        &Address::generate(env),
+        &soroban_sdk::BytesN::from_array(env, &[0; 32]),
+        owner,
     );
 }
 
@@ -42,8 +47,9 @@ fn test_initialize() {
     let env = Env::default();
     let client = create_contract(&env);
     let token = Address::generate(&env);
+    let owner = Address::generate(&env);
 
-    initialize_metadata(&env, &client, &token);
+    initialize_metadata(&env, &client, &token, &owner);
 
     let settings = client.get_settings();
     assert_eq!(settings.token, token);
@@ -59,9 +65,10 @@ fn test_initialize_twice_fails() {
     let env = Env::default();
     let client = create_contract(&env);
     let token = Address::generate(&env);
+    let owner = Address::generate(&env);
 
-    initialize_metadata(&env, &client, &token);
-    initialize_metadata(&env, &client, &token);
+    initialize_metadata(&env, &client, &token, &owner);
+    initialize_metadata(&env, &client, &token, &owner);
 }
 
 #[test]
@@ -73,7 +80,7 @@ fn test_add_properties() {
     let owner = Address::generate(&env);
     let token = create_token_contract(&env, &owner);
 
-    initialize_metadata(&env, &client, &token);
+    initialize_metadata(&env, &client, &token, &owner);
 
     // Add first property with items
     let mut names = Vec::new(&env);
@@ -115,7 +122,7 @@ fn test_add_multiple_properties() {
     let owner = Address::generate(&env);
     let token = create_token_contract(&env, &owner);
 
-    initialize_metadata(&env, &client, &token);
+    initialize_metadata(&env, &client, &token, &owner);
 
     // Add two properties at once
     let mut names = Vec::new(&env);
@@ -168,7 +175,7 @@ fn test_add_properties_first_time_needs_property_and_item() {
     let owner = Address::generate(&env);
     let token = create_token_contract(&env, &owner);
 
-    initialize_metadata(&env, &client, &token);
+    initialize_metadata(&env, &client, &token, &owner);
 
     let names = Vec::new(&env);
     let items = Vec::new(&env);
@@ -190,7 +197,7 @@ fn test_add_properties_max_16() {
     let owner = Address::generate(&env);
     let token = create_token_contract(&env, &owner);
 
-    initialize_metadata(&env, &client, &token);
+    initialize_metadata(&env, &client, &token, &owner);
 
     // Try to add 17 properties
     let mut names = Vec::new(&env);
@@ -222,7 +229,7 @@ fn test_on_minted() {
     let owner = Address::generate(&env);
     let token = create_token_contract(&env, &owner);
 
-    initialize_metadata(&env, &client, &token);
+    initialize_metadata(&env, &client, &token, &owner);
 
     // Add properties
     let mut names = Vec::new(&env);
@@ -261,8 +268,9 @@ fn test_on_minted_no_properties_returns_false() {
 
     let client = create_contract(&env);
     let token = Address::generate(&env);
+    let owner = Address::generate(&env);
 
-    initialize_metadata(&env, &client, &token);
+    initialize_metadata(&env, &client, &token, &owner);
 
     let token_id = 1u32;
     let result = client.on_minted(&token_id);
@@ -279,7 +287,7 @@ fn test_update_settings() {
     let owner = Address::generate(&env);
     let token = create_token_contract(&env, &owner);
 
-    initialize_metadata(&env, &client, &token);
+    initialize_metadata(&env, &client, &token, &owner);
 
     // Update description
     let new_description = String::from_str(&env, "Updated description");
@@ -298,7 +306,7 @@ fn test_delete_and_recreate_properties() {
     let owner = Address::generate(&env);
     let token = create_token_contract(&env, &owner);
 
-    initialize_metadata(&env, &client, &token);
+    initialize_metadata(&env, &client, &token, &owner);
 
     // Add initial properties
     let mut names = Vec::new(&env);

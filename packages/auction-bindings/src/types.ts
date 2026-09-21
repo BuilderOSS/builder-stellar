@@ -252,7 +252,9 @@ export interface MinBidIncrementUpdatedEvent {
   /**
    * Whether the first auction has been launched (prevents re-initialization)
    */
-  { tag: "Launched"; values: void };
+  { tag: "Launched"; values: void } |
+  { tag: "Manager"; values: void } |
+  { tag: "CurrentHash"; values: void };
 
 /**
  * Payment currency type for an auction.

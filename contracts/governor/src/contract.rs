@@ -68,6 +68,8 @@ impl DaoGovernorContract {
         queue_delay: u32,
         proposal_threshold: u128,
         quorum_bps: u32,
+        manager: Address,
+        current_hash: BytesN<32>,
     ) {
         assert!(quorum_bps <= BPS_DENOMINATOR as u32);
 
@@ -83,6 +85,10 @@ impl DaoGovernorContract {
         }
 
         set_owner(e, &owner);
+        e.storage().instance().set(&GovernorKey::Manager, &manager);
+        e.storage()
+            .instance()
+            .set(&GovernorKey::CurrentHash, &current_hash);
 
         let name = String::from_str(e, "MvpDaoGovernor");
         let version = String::from_str(e, "1.0.0");
@@ -114,6 +120,36 @@ impl DaoGovernorContract {
             proposal_threshold,
             quorum_bps,
         );
+    }
+
+    pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
+        let owner = stellar_access::ownable::get_owner(e).expect("owner not set");
+        owner.require_auth();
+        let manager: Address = e
+            .storage()
+            .instance()
+            .get(&GovernorKey::Manager)
+            .expect("manager not set");
+        let current: BytesN<32> = e
+            .storage()
+            .instance()
+            .get(&GovernorKey::CurrentHash)
+            .expect("current hash not set");
+        if from_hash != current {
+            panic!("from hash does not match current hash");
+        }
+        let approved: bool = e.invoke_contract(
+            &manager,
+            &Symbol::new(e, "is_upgrade_approved"),
+            vec![e, from_hash.into_val(e), to_hash.clone().into_val(e)],
+        );
+        if !approved {
+            panic!("upgrade not approved");
+        }
+        e.storage()
+            .instance()
+            .set(&GovernorKey::CurrentHash, &to_hash);
+        e.deployer().update_current_contract_wasm(to_hash);
     }
 
     #[only_owner]

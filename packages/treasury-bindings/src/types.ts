@@ -47,7 +47,9 @@ export interface TreasuryInitializedEvent {
    * Only this contract can invoke the `execute()` function. The owner
    * can update this address if needed.
    */
-  { tag: "Governor"; values: void };
+  { tag: "Governor"; values: void } |
+  { tag: "Manager"; values: void } |
+  { tag: "CurrentHash"; values: void };
 
 /**
  * Error Enum: RoleTransferError

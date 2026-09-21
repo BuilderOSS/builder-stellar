@@ -11,6 +11,9 @@ pub enum DataKey {
     Properties,
     IpfsData,
     Attributes(u32), // token_id -> [u16; 16]
+    Manager,
+    Owner,
+    CurrentHash,
 }
 
 // Data structures

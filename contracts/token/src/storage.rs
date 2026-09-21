@@ -49,4 +49,6 @@ pub enum TokenKey {
     ///
     /// This contract is called during minting to generate artwork seeds.
     Metadata,
+    Manager,
+    CurrentHash,
 }

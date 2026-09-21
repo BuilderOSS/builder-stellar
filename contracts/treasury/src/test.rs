@@ -33,7 +33,15 @@ fn treasury_executes_arbitrary_call_for_governor() {
 
     let owner = Address::generate(&e);
     let governor = Address::generate(&e);
-    let treasury_id = e.register(DaoTreasuryContract, (owner.clone(), governor.clone()));
+    let treasury_id = e.register(
+        DaoTreasuryContract,
+        (
+            owner.clone(),
+            governor.clone(),
+            Address::generate(&e),
+            soroban_sdk::BytesN::from_array(&e, &[0u8; 32]),
+        ),
+    );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
     let target_id = e.register(TargetContract, ());
     let target = TargetContractClient::new(&e, &target_id);
@@ -51,7 +59,15 @@ fn treasury_rejects_non_governor() {
     let owner = Address::generate(&e);
     let governor = Address::generate(&e);
     let attacker = Address::generate(&e);
-    let treasury_id = e.register(DaoTreasuryContract, (owner.clone(), governor.clone()));
+    let treasury_id = e.register(
+        DaoTreasuryContract,
+        (
+            owner.clone(),
+            governor.clone(),
+            Address::generate(&e),
+            soroban_sdk::BytesN::from_array(&e, &[0u8; 32]),
+        ),
+    );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
     let target_id = e.register(TargetContract, ());
     let target = TargetContractClient::new(&e, &target_id);
@@ -77,7 +93,15 @@ fn set_governor_requires_owner() {
     let owner = Address::generate(&e);
     let attacker = Address::generate(&e);
     let new_governor = Address::generate(&e);
-    let treasury_id = e.register(DaoTreasuryContract, (owner.clone(), Address::generate(&e)));
+    let treasury_id = e.register(
+        DaoTreasuryContract,
+        (
+            owner.clone(),
+            Address::generate(&e),
+            Address::generate(&e),
+            soroban_sdk::BytesN::from_array(&e, &[0u8; 32]),
+        ),
+    );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
 
     e.mock_auths(&[MockAuth {

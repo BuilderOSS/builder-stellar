@@ -164,6 +164,7 @@ export interface ProposalThresholdChangedEvent {
  * contract-specific keys for custom functionality.
  */
  export type GovernorKey =
+  { tag: "CurrentHash"; values: void } |
   /**
    * Address of the Treasury contract that executes approved proposals.
    */
@@ -179,7 +180,8 @@ export interface ProposalThresholdChangedEvent {
   /**
    * Tracks whether an address has authority to create proposals.
    */
-  { tag: "GovernorAuthority"; values: readonly [string] };
+  { tag: "GovernorAuthority"; values: readonly [string] } |
+  { tag: "Manager"; values: void };
 
 /**
  * Core proposal data using timestamps instead of ledger sequences.

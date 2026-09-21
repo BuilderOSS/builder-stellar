@@ -1,4 +1,6 @@
-use soroban_sdk::{contract, contractimpl, Address, Bytes, Env, String, Vec};
+use soroban_sdk::{
+    contract, contractimpl, vec, Address, Bytes, BytesN, Env, IntoVal, String, Symbol, Vec,
+};
 
 use crate::error::Error;
 use crate::events::*;
@@ -22,6 +24,7 @@ impl MetadataContract {
     /// * `description` - Collection description
     /// * `contract_image` - Collection image URL
     /// * `renderer_base` - Base URL for image rendering service
+    /// * `owner` - Metadata contract owner
     ///
     /// # Errors
     ///
@@ -33,6 +36,9 @@ impl MetadataContract {
         description: String,
         contract_image: String,
         renderer_base: String,
+        manager: Address,
+        current_hash: BytesN<32>,
+        owner: Address,
     ) -> Result<(), Error> {
         if is_initialized(&env) {
             return Err(Error::AlreadyInitialized);
@@ -47,11 +53,54 @@ impl MetadataContract {
         };
 
         set_settings(&env, &settings);
+        env.storage().instance().set(&DataKey::Manager, &manager);
+        env.storage().instance().set(&DataKey::Owner, &owner);
+        env.storage()
+            .instance()
+            .set(&DataKey::CurrentHash, &current_hash);
         set_initialized(&env);
 
         emit_metadata_initialized(&env, &token, &renderer_base);
 
         Ok(())
+    }
+
+    pub fn upgrade(env: Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
+        let owner: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Owner)
+            .expect("owner not set");
+        owner.require_auth();
+        let manager: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Manager)
+            .expect("manager not set");
+        let current: BytesN<32> = env
+            .storage()
+            .instance()
+            .get(&DataKey::CurrentHash)
+            .expect("current hash not set");
+        if from_hash != current {
+            panic!("from hash does not match current hash");
+        }
+        let approved: bool = env.invoke_contract(
+            &manager,
+            &Symbol::new(&env, "is_upgrade_approved"),
+            vec![
+                &env,
+                from_hash.into_val(&env),
+                to_hash.clone().into_val(&env),
+            ],
+        );
+        if !approved {
+            panic!("upgrade not approved");
+        }
+        env.storage()
+            .instance()
+            .set(&DataKey::CurrentHash, &to_hash);
+        env.deployer().update_current_contract_wasm(to_hash);
     }
 
     /// Add new properties and items
