@@ -17,3 +17,9 @@ View naming conventions:
   `event_timestamp_seconds` and `event_at`.
 - `manager.founder_allocations.end_date` is preserved, but its unit remains
   unresolved because the founder payload does not define it.
+
+DAO-owned projections are always identified by the composite key
+`(deployment_id, dao_id, ...)`. `dao_id` is the token contract address from
+the manager's DAO registry, and `contract_id` identifies the originating DAO
+module. Manager-wide views intentionally remain deployment-scoped and may
+have a null `dao_id` for manager events.
