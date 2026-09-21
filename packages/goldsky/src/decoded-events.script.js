@@ -304,9 +304,35 @@ function invoke(data) {
 
   var eventName = decoded.event_name;
   var proposalId = pick(decoded, ['proposal_id', 'proposalId']);
-  var actor = pick(decoded, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'to', 'from']);
+  var actor = pick(decoded, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'to', 'from', 'creator']);
   var tokenId = pick(decoded, ['token_id', 'tokenId']);
   var amount = pick(decoded, ['amount', 'weight']);
+
+  // Manager-specific fields
+  var creator = pick(decoded, ['creator']);
+  var tokenAddress = pick(decoded, ['token_address']);
+  var implementationName = pick(decoded, ['name']);
+  var implementationVersion = pick(decoded, ['version']);
+  var wasmHash = pick(decoded, ['wasm_hash']);
+  var fromHash = pick(decoded, ['from_hash']);
+  var toHash = pick(decoded, ['to_hash']);
+
+  // Metadata-specific fields
+  var propertyId = pick(decoded, ['property_id']);
+  var propertyName = pick(decoded, ['name']);
+  var numProperties = pick(decoded, ['num_properties']);
+  var selections = pick(decoded, ['selections']);
+  var rendererBase = pick(decoded, ['renderer_base']);
+  var contractImage = pick(decoded, ['contract_image', 'new_image']);
+  var projectUri = pick(decoded, ['project_uri', 'new_uri']);
+  var oldUri = pick(decoded, ['old_uri']);
+  var newUri = pick(decoded, ['new_uri']);
+  var oldBase = pick(decoded, ['old_base']);
+  var newBase = pick(decoded, ['new_base']);
+  var oldDescription = pick(decoded, ['old_description']);
+  var newDescription = pick(decoded, ['new_description']);
+  var oldImage = pick(decoded, ['old_image']);
+  var newImage = pick(decoded, ['new_image']);
 
   return {
     event_id: data.event_id || data.id || null,
@@ -353,6 +379,28 @@ function invoke(data) {
     vote_start_timestamp: pick(decoded, ['vote_start']) || null,
     deadline_ledger: pick(decoded, ['deadline', 'vote_end']) || null,
     action_count: pick(decoded, ['action_count']) || null,
+    creator: creator || null,
+    token_address: tokenAddress || null,
+    implementation_name: implementationName || null,
+    implementation_version: implementationVersion !== null ? implementationVersion : null,
+    wasm_hash: wasmHash !== null ? String(wasmHash) : null,
+    from_hash: fromHash !== null ? String(fromHash) : null,
+    to_hash: toHash !== null ? String(toHash) : null,
+    property_id: propertyId !== null ? propertyId : null,
+    property_name: propertyName || null,
+    num_properties: numProperties !== null ? numProperties : null,
+    selections: selections !== null ? stringify(selections) : null,
+    renderer_base: rendererBase || null,
+    contract_image: contractImage || null,
+    project_uri: projectUri || null,
+    old_uri: oldUri || null,
+    new_uri: newUri || null,
+    old_base: oldBase || null,
+    new_base: newBase || null,
+    old_description: oldDescription || null,
+    new_description: newDescription || null,
+    old_image: oldImage || null,
+    new_image: newImage || null,
     transaction_hash: data.transaction_hash || null,
     transaction_successful: data.transaction_successful !== null && data.transaction_successful !== undefined ? data.transaction_successful : null,
     ledger_sequence: data.ledger_sequence !== null && data.ledger_sequence !== undefined ? data.ledger_sequence : null,

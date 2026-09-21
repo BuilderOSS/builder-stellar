@@ -1,5 +1,7 @@
 # Stellar Blockchain Indexing Options for DAO Factory
 
+> **Future-facing planning document:** This comparison informs the incomplete multi-DAO indexer architecture; it does not describe a fully shipped multi-DAO pipeline.
+
 **Date:** August 2026
 **Project:** Stellar DAO - Multi-DAO Factory Platform
 **Purpose:** Comprehensive evaluation of blockchain indexing solutions for production deployment

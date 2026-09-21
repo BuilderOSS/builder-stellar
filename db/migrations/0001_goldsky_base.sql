@@ -5,6 +5,8 @@ CREATE SCHEMA IF NOT EXISTS governance;
 CREATE SCHEMA IF NOT EXISTS token;
 CREATE SCHEMA IF NOT EXISTS auction;
 CREATE SCHEMA IF NOT EXISTS treasury;
+CREATE SCHEMA IF NOT EXISTS manager;
+CREATE SCHEMA IF NOT EXISTS metadata;
 CREATE SCHEMA IF NOT EXISTS app;
 
 CREATE TABLE IF NOT EXISTS chain.raw_events (
@@ -79,6 +81,28 @@ CREATE TABLE IF NOT EXISTS chain.decoded_events (
   vote_start_timestamp text,
   deadline_ledger text,
   action_count text,
+  creator text,
+  token_address text,
+  implementation_name text,
+  implementation_version integer,
+  wasm_hash text,
+  from_hash text,
+  to_hash text,
+  property_id integer,
+  property_name text,
+  num_properties integer,
+  selections text,
+  renderer_base text,
+  contract_image text,
+  project_uri text,
+  old_uri text,
+  new_uri text,
+  old_base text,
+  new_base text,
+  old_description text,
+  new_description text,
+  old_image text,
+  new_image text,
   transaction_hash text NOT NULL,
   transaction_successful boolean,
   ledger_sequence bigint NOT NULL,
@@ -97,6 +121,26 @@ CREATE INDEX IF NOT EXISTS decoded_events_deployment_event_idx
 
 CREATE INDEX IF NOT EXISTS decoded_events_deployment_contract_idx
   ON chain.decoded_events (deployment_id, contract_id, ledger_sequence DESC, event_id DESC);
+
+CREATE INDEX IF NOT EXISTS decoded_events_creator_idx
+  ON chain.decoded_events (creator, ledger_sequence DESC)
+  WHERE creator IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS decoded_events_token_address_idx
+  ON chain.decoded_events (token_address, ledger_sequence DESC)
+  WHERE token_address IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS decoded_events_manager_events_idx
+  ON chain.decoded_events (deployment_id, event_name, ledger_sequence DESC)
+  WHERE LOWER(event_name) IN ('dao_created', 'daocreated', 'dao_registered', 'daoregistered');
+
+CREATE INDEX IF NOT EXISTS decoded_events_metadata_property_idx
+  ON chain.decoded_events (deployment_id, contract_role, property_id, ledger_sequence DESC)
+  WHERE contract_role = 'metadata' AND property_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS decoded_events_metadata_token_idx
+  ON chain.decoded_events (deployment_id, contract_role, token_id, ledger_sequence DESC)
+  WHERE contract_role = 'metadata' AND token_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS app.activity_feed (
   activity_id text PRIMARY KEY,

@@ -620,4 +620,340 @@ SELECT
   last_activity_ledger
 FROM token.members;
 
+-- Manager Views
+
+CREATE OR REPLACE VIEW manager.daos AS
+WITH created AS (
+  SELECT
+    event_id,
+    deployment_id,
+    contract_id AS manager_contract,
+    COALESCE(NULLIF(payload, '')::jsonb ->> 'token_address', token_address) AS token_address,
+    COALESCE(NULLIF(payload, '')::jsonb ->> 'creator', creator, actor) AS creator,
+    NULLIF(payload, '')::jsonb -> 'modules' AS modules,
+    NULLIF(payload, '')::jsonb -> 'founders' AS founders,
+    COALESCE(NULLIF(payload, '')::jsonb ->> 'created_ledger', ledger_sequence::text)::bigint AS created_ledger,
+    ledger_sequence,
+    to_timestamp(NULLIF(ledger_closed_at, '')::numeric / 1000.0) AS created_timestamp,
+    transaction_hash
+  FROM chain.decoded_events
+  WHERE LOWER(event_name) IN ('dao_created', 'daocreated')
+), registered AS (
+  SELECT DISTINCT ON (deployment_id, token_address)
+    event_id,
+    deployment_id,
+    COALESCE(NULLIF(payload, '')::jsonb ->> 'token_address', token_address) AS token_address,
+    COALESCE(NULLIF(payload, '')::jsonb ->> 'creator', creator, actor) AS creator,
+    NULLIF(payload, '')::jsonb -> 'modules' AS modules,
+    ledger_sequence,
+    to_timestamp(NULLIF(ledger_closed_at, '')::numeric / 1000.0) AS registered_timestamp,
+    transaction_hash
+  FROM chain.decoded_events
+  WHERE LOWER(event_name) IN ('dao_registered', 'daoregistered')
+  ORDER BY deployment_id, token_address, ledger_sequence DESC, event_id DESC
+)
+SELECT
+  c.deployment_id,
+  c.token_address,
+  c.creator,
+  c.manager_contract,
+  COALESCE(r.modules, c.modules) ->> 'auction' AS auction_contract,
+  COALESCE(r.modules, c.modules) ->> 'metadata' AS metadata_contract,
+  COALESCE(r.modules, c.modules) ->> 'governor' AS governor_contract,
+  COALESCE(r.modules, c.modules) ->> 'treasury' AS treasury_contract,
+  c.founders,
+  c.created_ledger,
+  c.created_timestamp,
+  r.registered_timestamp,
+  c.transaction_hash AS created_transaction_hash,
+  r.transaction_hash AS registered_transaction_hash
+FROM created c
+LEFT JOIN registered r
+  ON r.deployment_id = c.deployment_id
+ AND r.token_address = c.token_address;
+
+CREATE OR REPLACE VIEW manager.dao_modules AS
+SELECT
+  deployment_id,
+  token_address,
+  'auction' AS module_role,
+  auction_contract AS module_contract
+FROM manager.daos
+WHERE auction_contract IS NOT NULL
+UNION ALL
+SELECT
+  deployment_id,
+  token_address,
+  'metadata' AS module_role,
+  metadata_contract AS module_contract
+FROM manager.daos
+WHERE metadata_contract IS NOT NULL
+UNION ALL
+SELECT
+  deployment_id,
+  token_address,
+  'governor' AS module_role,
+  governor_contract AS module_contract
+FROM manager.daos
+WHERE governor_contract IS NOT NULL
+UNION ALL
+SELECT
+  deployment_id,
+  token_address,
+  'treasury' AS module_role,
+  treasury_contract AS module_contract
+FROM manager.daos
+WHERE treasury_contract IS NOT NULL;
+
+CREATE OR REPLACE VIEW manager.founder_allocations AS
+WITH created AS (
+  SELECT
+    deployment_id,
+    COALESCE(NULLIF(payload, '')::jsonb ->> 'token_address', token_address) AS token_address,
+    NULLIF(payload, '')::jsonb -> 'founders' AS founders,
+    ledger_sequence,
+    transaction_hash
+  FROM chain.decoded_events
+  WHERE LOWER(event_name) IN ('dao_created', 'daocreated')
+), founders_expanded AS (
+  SELECT
+    c.deployment_id,
+    c.token_address,
+    f.ordinality - 1 AS founder_index,
+    f.value ->> 'wallet' AS wallet,
+    (f.value ->> 'allocation')::integer AS allocation,
+    (f.value ->> 'end_date')::bigint AS end_date,
+    c.ledger_sequence,
+    c.transaction_hash
+  FROM created c
+  JOIN LATERAL jsonb_array_elements(COALESCE(c.founders, '[]'::jsonb)) WITH ORDINALITY AS f(value, ordinality) ON true
+  WHERE c.founders IS NOT NULL AND jsonb_array_length(c.founders) > 0
+)
+SELECT
+  deployment_id,
+  token_address,
+  founder_index,
+  wallet,
+  allocation,
+  end_date,
+  ledger_sequence,
+  transaction_hash
+FROM founders_expanded;
+
+CREATE OR REPLACE VIEW manager.implementations AS
+WITH registered AS (
+  SELECT
+    event_id,
+    deployment_id,
+    contract_id AS manager_contract,
+    COALESCE(NULLIF(payload, '')::jsonb ->> 'name', implementation_name) AS name,
+    COALESCE(NULLIF(payload, '')::jsonb ->> 'version', implementation_version::text)::integer AS version,
+    COALESCE(NULLIF(payload, '')::jsonb ->> 'wasm_hash', wasm_hash) AS wasm_hash,
+    COALESCE(NULLIF(payload, '')::jsonb ->> 'published_at', ledger_sequence::text)::bigint AS published_at,
+    ledger_sequence,
+    to_timestamp(NULLIF(ledger_closed_at, '')::numeric / 1000.0) AS timestamp,
+    transaction_hash,
+    false AS revoked,
+    NULL::bigint AS revoked_at
+  FROM chain.decoded_events
+  WHERE LOWER(event_name) IN ('implementation_registered', 'implementationregistered')
+
+  UNION ALL
+
+  SELECT
+    event_id,
+    deployment_id,
+    contract_id AS manager_contract,
+    NULL AS name,
+    NULL AS version,
+    COALESCE(NULLIF(payload, '')::jsonb ->> 'wasm_hash', wasm_hash) AS wasm_hash,
+    NULL AS published_at,
+    ledger_sequence,
+    to_timestamp(NULLIF(ledger_closed_at, '')::numeric / 1000.0) AS timestamp,
+    transaction_hash,
+    true AS revoked,
+    COALESCE(NULLIF(payload, '')::jsonb ->> 'revoked_at', ledger_sequence::text)::bigint AS revoked_at
+  FROM chain.decoded_events
+  WHERE LOWER(event_name) IN ('implementation_revoked', 'implementationrevoked')
+), latest_status AS (
+  SELECT DISTINCT ON (deployment_id, wasm_hash)
+    deployment_id,
+    wasm_hash,
+    revoked,
+    revoked_at,
+    ledger_sequence
+  FROM registered
+  ORDER BY deployment_id, wasm_hash, ledger_sequence DESC, event_id DESC
+)
+SELECT
+  r.deployment_id,
+  r.manager_contract,
+  r.name,
+  r.version,
+  r.wasm_hash,
+  r.published_at,
+  COALESCE(s.revoked, false) AS revoked,
+  s.revoked_at,
+  r.ledger_sequence AS registered_ledger,
+  r.timestamp AS registered_timestamp,
+  r.transaction_hash
+FROM registered r
+LEFT JOIN latest_status s
+  ON s.deployment_id = r.deployment_id
+ AND s.wasm_hash = r.wasm_hash
+WHERE r.name IS NOT NULL
+  AND r.version IS NOT NULL;
+
+CREATE OR REPLACE VIEW manager.current_implementations AS
+WITH latest AS (
+  SELECT DISTINCT ON (deployment_id)
+    event_id,
+    deployment_id,
+    NULLIF(payload, '')::jsonb ->> 'token' AS token_impl,
+    NULLIF(payload, '')::jsonb ->> 'metadata' AS metadata_impl,
+    NULLIF(payload, '')::jsonb ->> 'auction' AS auction_impl,
+    NULLIF(payload, '')::jsonb ->> 'governor' AS governor_impl,
+    NULLIF(payload, '')::jsonb ->> 'treasury' AS treasury_impl,
+    ledger_sequence,
+    to_timestamp(NULLIF(ledger_closed_at, '')::numeric / 1000.0) AS updated_timestamp,
+    transaction_hash
+  FROM chain.decoded_events
+  WHERE LOWER(event_name) IN ('current_implementations_updated', 'currentimplementationsupdated')
+  ORDER BY deployment_id, ledger_sequence DESC, event_id DESC
+)
+SELECT
+  deployment_id,
+  token_impl,
+  metadata_impl,
+  auction_impl,
+  governor_impl,
+  treasury_impl,
+  ledger_sequence,
+  updated_timestamp,
+  transaction_hash
+FROM latest;
+
+-- Metadata Views
+
+CREATE OR REPLACE VIEW metadata.properties AS
+SELECT
+  event_id,
+  deployment_id,
+  contract_id AS metadata_contract,
+  COALESCE(NULLIF(payload, '')::jsonb ->> 'property_id', property_id::text)::integer AS property_id,
+  COALESCE(NULLIF(payload, '')::jsonb ->> 'name', property_name) AS name,
+  ledger_sequence,
+  to_timestamp(NULLIF(ledger_closed_at, '')::numeric / 1000.0) AS timestamp,
+  transaction_hash
+FROM chain.decoded_events
+WHERE LOWER(event_name) IN ('property_added', 'propertyadded')
+  AND (property_id IS NOT NULL OR (NULLIF(payload, '')::jsonb ->> 'property_id') IS NOT NULL)
+ORDER BY deployment_id, property_id;
+
+CREATE OR REPLACE VIEW metadata.token_seeds AS
+WITH seeds AS (
+  SELECT
+    event_id,
+    deployment_id,
+    contract_id AS metadata_contract,
+    COALESCE(NULLIF(payload, '')::jsonb ->> 'token_id', token_id)::bigint AS token_id,
+    COALESCE(NULLIF(payload, '')::jsonb ->> 'num_properties', num_properties::text)::integer AS num_properties,
+    CASE
+      WHEN NULLIF(payload, '')::jsonb -> 'selections' IS NOT NULL
+        THEN NULLIF(payload, '')::jsonb -> 'selections'
+      WHEN selections IS NOT NULL
+        THEN selections::jsonb
+      ELSE NULL
+    END AS selections,
+    ledger_sequence,
+    to_timestamp(NULLIF(ledger_closed_at, '')::numeric / 1000.0) AS timestamp,
+    transaction_hash
+  FROM chain.decoded_events
+  WHERE LOWER(event_name) IN ('seed_generated', 'seedgenerated')
+    AND (token_id IS NOT NULL OR (NULLIF(payload, '')::jsonb ->> 'token_id') IS NOT NULL)
+)
+SELECT
+  event_id,
+  deployment_id,
+  metadata_contract,
+  token_id,
+  num_properties,
+  selections,
+  ledger_sequence,
+  timestamp,
+  transaction_hash
+FROM seeds;
+
+CREATE OR REPLACE VIEW metadata.configuration AS
+WITH init AS (
+  SELECT DISTINCT ON (deployment_id, contract_id)
+    deployment_id,
+    contract_id AS metadata_contract,
+    COALESCE(NULLIF(payload, '')::jsonb ->> 'token', token_contract) AS token_contract,
+    COALESCE(NULLIF(payload, '')::jsonb ->> 'renderer_base', renderer_base) AS renderer_base,
+    ledger_sequence AS init_ledger,
+    to_timestamp(NULLIF(ledger_closed_at, '')::numeric / 1000.0) AS init_timestamp,
+    transaction_hash AS init_transaction_hash
+  FROM chain.decoded_events
+  WHERE LOWER(event_name) IN ('metadata_initialized', 'metadatainitialized')
+  ORDER BY deployment_id, contract_id, ledger_sequence, event_id
+), latest_uri AS (
+  SELECT DISTINCT ON (deployment_id, contract_id)
+    deployment_id,
+    contract_id,
+    COALESCE(NULLIF(payload, '')::jsonb ->> 'new_uri', new_uri, project_uri) AS project_uri
+  FROM chain.decoded_events
+  WHERE LOWER(event_name) IN ('project_uri_updated', 'projecturiupdated', 'projecturiupdated')
+    OR project_uri IS NOT NULL
+  ORDER BY deployment_id, contract_id, ledger_sequence DESC, event_id DESC
+), latest_desc AS (
+  SELECT DISTINCT ON (deployment_id, contract_id)
+    deployment_id,
+    contract_id,
+    COALESCE(NULLIF(payload, '')::jsonb ->> 'new_description', new_description) AS description
+  FROM chain.decoded_events
+  WHERE LOWER(event_name) IN ('description_updated', 'descriptionupdated')
+  ORDER BY deployment_id, contract_id, ledger_sequence DESC, event_id DESC
+), latest_base AS (
+  SELECT DISTINCT ON (deployment_id, contract_id)
+    deployment_id,
+    contract_id,
+    COALESCE(NULLIF(payload, '')::jsonb ->> 'new_base', new_base, renderer_base) AS renderer_base
+  FROM chain.decoded_events
+  WHERE LOWER(event_name) IN ('renderer_base_updated', 'rendererbaseupdated', 'metadata_initialized', 'metadatainitialized')
+  ORDER BY deployment_id, contract_id, ledger_sequence DESC, event_id DESC
+), latest_image AS (
+  SELECT DISTINCT ON (deployment_id, contract_id)
+    deployment_id,
+    contract_id,
+    COALESCE(NULLIF(payload, '')::jsonb ->> 'new_image', new_image, contract_image) AS contract_image
+  FROM chain.decoded_events
+  WHERE LOWER(event_name) IN ('contract_image_updated', 'contractimageupdated')
+  ORDER BY deployment_id, contract_id, ledger_sequence DESC, event_id DESC
+)
+SELECT
+  i.deployment_id,
+  i.metadata_contract,
+  i.token_contract,
+  COALESCE(b.renderer_base, i.renderer_base) AS renderer_base,
+  u.project_uri,
+  d.description,
+  img.contract_image,
+  i.init_ledger,
+  i.init_timestamp,
+  i.init_transaction_hash
+FROM init i
+LEFT JOIN latest_uri u
+  ON u.deployment_id = i.deployment_id
+ AND u.contract_id = i.metadata_contract
+LEFT JOIN latest_desc d
+  ON d.deployment_id = i.deployment_id
+ AND d.contract_id = i.metadata_contract
+LEFT JOIN latest_base b
+  ON b.deployment_id = i.deployment_id
+ AND b.contract_id = i.metadata_contract
+LEFT JOIN latest_image img
+  ON img.deployment_id = i.deployment_id
+ AND img.contract_id = i.metadata_contract;
+
 COMMIT;
