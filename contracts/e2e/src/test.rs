@@ -2,6 +2,9 @@ extern crate std;
 
 use auction::{DaoAuctionContract, DaoAuctionContractClient};
 use governor::{DaoGovernorContract, DaoGovernorContractClient};
+use manager::{ManagerContract, ManagerContractClient};
+use metadata::{IpfsGroup, ItemParam};
+use metadata::{MetadataContract, MetadataContractClient};
 use soroban_sdk::{
     contract, contractimpl, symbol_short,
     testutils::{Address as _, Ledger},
@@ -82,6 +85,8 @@ fn setup() -> (
     e.ledger().set_timestamp(1_000);
 
     let owner = Address::generate(&e);
+    let metadata_id = e.register(MetadataContract, ());
+    let metadata = MetadataContractClient::new(&e, &metadata_id);
     let token_id = e.register(
         DaoTokenContract,
         (
@@ -89,9 +94,17 @@ fn setup() -> (
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
+            metadata_id.clone(),
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
+    metadata.initialize(
+        &token_id,
+        &String::from_str(&e, "https://example.com/project"),
+        &String::from_str(&e, "DAO description"),
+        &String::from_str(&e, "https://example.com/image.png"),
+        &String::from_str(&e, "https://example.com/render/"),
+    );
 
     let treasury_id = e.register(DaoTreasuryContract, (owner.clone(), Address::generate(&e)));
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
@@ -191,6 +204,96 @@ fn transfer_proposal_args_u32(
 
 fn description_hash(e: &Env, description: &String) -> BytesN<32> {
     e.crypto().keccak256(&description.to_bytes()).to_bytes()
+}
+
+#[test]
+fn token_mint_generates_metadata_seed_through_real_hook() {
+    let (e, token, _treasury, _governor, _target, owner) = setup();
+    let names = vec![&e, String::from_str(&e, "Background")];
+    let items = vec![
+        &e,
+        ItemParam {
+            property_id: 0,
+            name: String::from_str(&e, "Blue"),
+            is_new_property: true,
+        },
+        ItemParam {
+            property_id: 0,
+            name: String::from_str(&e, "Red"),
+            is_new_property: true,
+        },
+    ];
+    let metadata_address = token.metadata().unwrap();
+    let metadata = MetadataContractClient::new(&e, &metadata_address);
+    metadata.add_properties(
+        &names,
+        &items,
+        &IpfsGroup {
+            base_uri: String::from_str(&e, "ipfs://art"),
+            extension: String::from_str(&e, ".png"),
+        },
+    );
+
+    let recipient = Address::generate(&e);
+    let token_id = token.mint(&owner, &recipient);
+
+    assert_eq!(token_id, 0);
+    assert_eq!(metadata.properties_count(), 1);
+    assert_eq!(metadata.items_count(&0), 2);
+    assert_eq!(metadata.token(), token.address.clone());
+}
+
+#[test]
+fn manager_registry_and_predictions_are_creator_scoped() {
+    let e = Env::default();
+    e.mock_all_auths();
+    e.ledger().set_sequence_number(7);
+    let admin = Address::generate(&e);
+    let creator_a = Address::generate(&e);
+    let creator_b = Address::generate(&e);
+    let manager_id = e.register(ManagerContract, (admin.clone(),));
+    let manager = ManagerContractClient::new(&e, &manager_id);
+    let hashes = [
+        BytesN::from_array(&e, &[1; 32]),
+        BytesN::from_array(&e, &[2; 32]),
+        BytesN::from_array(&e, &[3; 32]),
+        BytesN::from_array(&e, &[4; 32]),
+        BytesN::from_array(&e, &[5; 32]),
+    ];
+    for (index, hash) in hashes.iter().enumerate() {
+        manager.register_implementation(
+            &String::from_str(
+                &e,
+                ["Token", "Metadata", "Auction", "Governor", "Treasury"][index],
+            ),
+            &1,
+            hash,
+        );
+    }
+    manager.set_current_implementations(&hashes[0], &hashes[1], &hashes[2], &hashes[3], &hashes[4]);
+    assert_eq!(
+        manager
+            .get_latest_implementation(&String::from_str(&e, "Token"))
+            .unwrap()
+            .wasm_hash,
+        hashes[0]
+    );
+
+    let prediction_a = manager.predict_addresses(&creator_a, &42);
+    assert_eq!(prediction_a, manager.predict_addresses(&creator_a, &42));
+    assert_ne!(
+        prediction_a.token,
+        manager.predict_addresses(&creator_b, &42).token
+    );
+    assert_ne!(
+        prediction_a.token,
+        manager.predict_addresses(&creator_a, &43).token
+    );
+
+    manager.revoke_implementation(&hashes[0]);
+    assert!(manager
+        .get_latest_implementation(&String::from_str(&e, "Token"))
+        .is_none());
 }
 
 #[test]
@@ -705,6 +808,8 @@ fn treasury_batch_mint_with_explicit_auth() {
     e.ledger().set_timestamp(1_000);
 
     let owner = Address::generate(&e);
+    let metadata_id = e.register(MetadataContract, ());
+    let metadata = MetadataContractClient::new(&e, &metadata_id);
     let token_id = e.register(
         DaoTokenContract,
         (
@@ -712,9 +817,17 @@ fn treasury_batch_mint_with_explicit_auth() {
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
+            metadata_id.clone(),
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
+    metadata.initialize(
+        &token_id,
+        &String::from_str(&e, "https://example.com/project"),
+        &String::from_str(&e, "DAO description"),
+        &String::from_str(&e, "https://example.com/image.png"),
+        &String::from_str(&e, "https://example.com/render/"),
+    );
 
     let treasury_id = e.register(DaoTreasuryContract, (owner.clone(), Address::generate(&e)));
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
@@ -794,6 +907,8 @@ fn setup_auction() -> (
     e.ledger().set_timestamp(1_000);
 
     let owner = Address::generate(&e);
+    let metadata_id = e.register(MetadataContract, ());
+    let metadata = MetadataContractClient::new(&e, &metadata_id);
 
     // Deploy DAO token (NFT)
     let token_id = e.register(
@@ -803,9 +918,17 @@ fn setup_auction() -> (
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
+            metadata_id.clone(),
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
+    metadata.initialize(
+        &token_id,
+        &String::from_str(&e, "https://example.com/project"),
+        &String::from_str(&e, "DAO description"),
+        &String::from_str(&e, "https://example.com/image.png"),
+        &String::from_str(&e, "https://example.com/render/"),
+    );
 
     // Deploy treasury
     let treasury_id = e.register(DaoTreasuryContract, (owner.clone(), Address::generate(&e)));
@@ -1430,6 +1553,8 @@ fn test_governor_treasury_bidirectional_verification() {
     e.ledger().set_timestamp(1_000);
 
     let owner = Address::generate(&e);
+    let metadata_id = e.register(MetadataContract, ());
+    let metadata = MetadataContractClient::new(&e, &metadata_id);
 
     // Register token
     let token_id = e.register(
@@ -1439,7 +1564,15 @@ fn test_governor_treasury_bidirectional_verification() {
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
+            metadata_id.clone(),
         ),
+    );
+    metadata.initialize(
+        &token_id,
+        &String::from_str(&e, "https://example.com/project"),
+        &String::from_str(&e, "DAO description"),
+        &String::from_str(&e, "https://example.com/image.png"),
+        &String::from_str(&e, "https://example.com/render/"),
     );
 
     // Register treasury with a placeholder governor

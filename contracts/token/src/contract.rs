@@ -96,6 +96,11 @@ impl DaoTokenContract {
             .unwrap_or(false)
     }
 
+    /// Returns the metadata contract used for mint hooks.
+    pub fn metadata(e: &Env) -> Option<Address> {
+        e.storage().instance().get(&TokenKey::Metadata)
+    }
+
     /// Mints a single NFT to the specified address.
     ///
     /// The token is assigned a sequential ID (starting from 0) and the recipient

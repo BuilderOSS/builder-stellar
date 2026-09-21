@@ -409,6 +409,8 @@ version = "0.0.0"
 dependencies = [
  "auction",
  "governor",
+ "manager",
+ "metadata",
  "soroban-sdk",
  "stellar-governance",
  "token",
