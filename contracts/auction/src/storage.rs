@@ -103,11 +103,11 @@ pub struct AuctionConfig {
     /// If a bid arrives within this window of the auction end, the end time extends
     /// by the buffer amount (up to [`MAX_AUCTION_EXTENSIONS`] times).
     pub time_buffer: u64,
-    /// Configured SAC token address for payments.
+    /// SAC token address for payments.
     ///
-    /// The constructor requires this value to be `Some`; native XLM payments are
-    /// not supported. Payment type locks on the first bid of each auction.
-    pub payment_token: Option<Address>,
+    /// All auctions use this SAC token for bids and payments.
+    /// Native XLM payments are not supported.
+    pub payment_token: Address,
 }
 
 /// Current state of an active auction.
@@ -143,31 +143,11 @@ pub struct AuctionState {
     /// `true` after `settle_auction()` or `settle_and_create_new()` completes.
     /// Prevents double-settlement.
     pub settled: bool,
-    /// Payment type for this auction.
-    ///
-    /// Locked on the first bid. All subsequent bids must use the same currency.
-    /// Resets to undetermined on next auction.
-    pub payment_currency: PaymentType,
     /// Number of time extensions applied to this auction.
     ///
     /// Increments when bids extend the end time. Capped at [`MAX_AUCTION_EXTENSIONS`]
     /// to prevent DoS attacks.
     pub extension_count: u32,
-}
-
-/// Payment currency type for an auction.
-///
-/// The first bidder determines which payment type (XLM or SAC token) will be
-/// used for the entire auction. All subsequent bids must use the same type.
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[contracttype]
-pub enum PaymentType {
-    /// Native XLM (Stellar lumens) payment.
-    Native,
-    /// SAC (Stellar Asset Contract) token payment.
-    ///
-    /// The address identifies which specific SAC token contract.
-    SAC(Address),
 }
 
 // Storage helpers with TTL management

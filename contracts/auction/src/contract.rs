@@ -15,8 +15,7 @@ use crate::{
     helpers::{create_auction, process_bid, refund_bid, settle_auction_internal},
     storage::{
         get_auction, get_config, is_launched, set_auction, set_config, set_launched, AuctionConfig,
-        AuctionState, DataKey, PaymentType, MAX_BID_INCREMENT_PERCENT, MIN_AUCTION_DURATION,
-        MIN_RESERVE_PRICE,
+        AuctionState, DataKey, MAX_BID_INCREMENT_PERCENT, MIN_AUCTION_DURATION, MIN_RESERVE_PRICE,
     },
 };
 
@@ -35,7 +34,7 @@ pub trait DaoAuctionContractTrait {
         reserve_price: i128,
         min_bid_increment_percent: u32,
         time_buffer: u64,
-        payment_token: Option<Address>,
+        payment_token: Address,
         manager: Address,
         current_hash: BytesN<32>,
     );
@@ -63,7 +62,7 @@ pub trait DaoAuctionContractTrait {
     fn set_reserve_price(e: &Env, reserve_price: i128);
     fn set_min_bid_increment(e: &Env, min_bid_increment_percent: u32);
     fn set_time_buffer(e: &Env, time_buffer: u64);
-    fn set_payment_token(e: &Env, payment_token: Option<Address>);
+    fn set_payment_token(e: &Env, payment_token: Address);
     fn set_treasury(e: &Env, treasury: Address);
     fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>);
 }
@@ -117,19 +116,13 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         reserve_price: i128,
         min_bid_increment_percent: u32,
         time_buffer: u64,
-        payment_token: Option<Address>,
+        payment_token: Address,
         manager: Address,
         current_hash: BytesN<32>,
     ) {
         // Validate config
         if duration < MIN_AUCTION_DURATION || min_bid_increment_percent == 0 {
             panic_with_error!(e, AuctionError::InvalidConfig);
-        }
-
-        // SECURITY: Enforce payment token is set (SAC-only, no native XLM)
-        // This prevents incomplete native payment code paths from being reached
-        if payment_token.is_none() {
-            panic_with_error!(e, AuctionError::NoPaymentTokenSet);
         }
 
         // SECURITY: Validate reserve price is reasonable (prevent 1-stroop auctions)
@@ -215,13 +208,6 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         let mut auction = get_auction(e);
         let config = get_config(e);
 
-        // Ensure payment token is configured
-        let payment_token = config
-            .payment_token
-            .as_ref()
-            .ok_or(AuctionError::NoPaymentTokenSet)
-            .unwrap();
-
         // Validate token ID
         if auction.token_id != token_id {
             panic_with_error!(e, AuctionError::InvalidTokenId);
@@ -268,16 +254,9 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
             amount.into_val(e)
         ];
 
-        e.invoke_contract::<()>(payment_token, &transfer_symbol, transfer_args);
+        e.invoke_contract::<()>(&config.payment_token, &transfer_symbol, transfer_args);
 
-        process_bid(
-            e,
-            &mut auction,
-            &config,
-            &bidder,
-            amount,
-            &PaymentType::SAC(payment_token.clone()),
-        );
+        process_bid(e, &mut auction, &config, &bidder, amount);
     }
 
     /// DESIGN NOTE: settle_and_create_new is intentionally permissionless.
@@ -317,6 +296,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     #[when_paused]
     fn cancel_auction(e: &Env) {
         let auction = get_auction(e);
+        let config = get_config(e);
 
         // Cannot cancel already settled auction
         if auction.settled {
@@ -331,7 +311,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
                     auction.token_id,
                     bidder,
                     auction.highest_bid,
-                    &auction.payment_currency,
+                    &config.payment_token,
                 );
             }
         }
@@ -409,13 +389,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
 
     #[only_owner]
     #[when_paused]
-    fn set_payment_token(e: &Env, payment_token: Option<Address>) {
-        // SECURITY: Require payment token to be set (matching constructor behavior)
-        // This prevents configuration errors that would break bidding functionality
-        if payment_token.is_none() {
-            panic_with_error!(e, AuctionError::NoPaymentTokenSet);
-        }
-
+    fn set_payment_token(e: &Env, payment_token: Address) {
         let owner = ownable::get_owner(e).unwrap();
 
         let mut config = get_config(e);

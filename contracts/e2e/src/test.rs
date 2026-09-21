@@ -1435,24 +1435,14 @@ fn test_auction_payment_token_setter() {
 
     // SECURITY FIX: Payment token is always required now
     let config = auction.get_config();
-    assert_eq!(config.payment_token, Some(payment_token_addr.clone()));
+    assert_eq!(config.payment_token, payment_token_addr.clone());
 
     // Can change to a different SAC token
     let new_payment_token = Address::generate(&e);
-    auction.set_payment_token(&Some(new_payment_token.clone()));
+    auction.set_payment_token(&new_payment_token);
 
     let config = auction.get_config();
-    assert_eq!(config.payment_token, Some(new_payment_token));
-}
-
-#[test]
-#[should_panic(expected = "Error(Contract, #1211)")] // NoPaymentTokenSet
-fn test_auction_payment_token_setter_rejects_none() {
-    let (_e, _token, _treasury, auction, _owner, _payment_token_addr, _payment_token) =
-        setup_auction();
-
-    // SECURITY FIX: Cannot set payment token to None
-    auction.set_payment_token(&None);
+    assert_eq!(config.payment_token, new_payment_token);
 }
 
 // ============================================================================

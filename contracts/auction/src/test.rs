@@ -33,8 +33,8 @@ fn setup_auction_contract(
             300_u64, // duration: 5 minutes (MIN_AUCTION_DURATION)
             10_000_000_i128,
             10_u32,
-            50_u64,                      // time_buffer: 50 seconds
-            Some(payment_token.clone()), // SECURITY FIX: SAC-only
+            50_u64,                // time_buffer: 50 seconds
+            payment_token.clone(), // SECURITY FIX: SAC-only
             Address::generate(e),
             BytesN::from_array(e, &[0u8; 32]),
         ),
@@ -76,7 +76,7 @@ fn setup_with_payment_token(
             10_000_000_i128,
             10_u32,
             50_u64, // time_buffer: 50 seconds
-            Some(payment_token.clone()),
+            payment_token.clone(),
             Address::generate(e),
             BytesN::from_array(e, &[0u8; 32]),
         ),
@@ -112,7 +112,7 @@ fn test_constructor_initializes_correctly() {
     assert_eq!(config.reserve_price, 10_000_000);
     assert_eq!(config.min_bid_increment_percent, 10);
     assert_eq!(config.time_buffer, 50);
-    assert_eq!(config.payment_token, Some(payment_token));
+    assert_eq!(config.payment_token, payment_token);
 }
 
 #[test]
@@ -121,7 +121,7 @@ fn test_constructor_with_payment_token() {
     let (auction, _, _, _, _, payment_token) = setup_with_payment_token(&e);
 
     let config = auction.get_config();
-    assert_eq!(config.payment_token, Some(payment_token));
+    assert_eq!(config.payment_token, payment_token);
 }
 
 #[test]
@@ -142,7 +142,7 @@ fn test_constructor_rejects_zero_duration() {
             10_000_000_i128,
             10_u32,
             10_u64,
-            None::<Address>,
+            Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
         ),
@@ -167,7 +167,7 @@ fn test_constructor_rejects_zero_min_bid_increment() {
             10_000_000_i128,
             0_u32, // Invalid
             10_u64,
-            None::<Address>,
+            Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
         ),
@@ -272,20 +272,8 @@ fn test_set_payment_token_when_paused() {
     let (auction, _, _, _, _, _) = setup_with_payment_token(&e);
     let new_payment_token = Address::generate(&e);
 
-    auction.set_payment_token(&Some(new_payment_token.clone()));
-    assert_eq!(auction.get_config().payment_token, Some(new_payment_token));
-}
-
-#[test]
-#[should_panic(expected = "#1211")] // NoPaymentTokenSet
-fn test_set_payment_token_rejects_none() {
-    let e = Env::default();
-    e.mock_all_auths();
-
-    let (auction, _, _, _, _, _) = setup_with_payment_token(&e);
-
-    // SECURITY: Cannot set payment token to None
-    auction.set_payment_token(&None);
+    auction.set_payment_token(&new_payment_token);
+    assert_eq!(auction.get_config().payment_token, new_payment_token);
 }
 
 #[test]
@@ -333,7 +321,7 @@ fn test_get_config() {
     assert_eq!(config.reserve_price, 10_000_000);
     assert_eq!(config.min_bid_increment_percent, 10);
     assert_eq!(config.time_buffer, 50);
-    assert_eq!(config.payment_token, Some(payment_token));
+    assert_eq!(config.payment_token, payment_token);
 }
 
 #[test]
@@ -409,32 +397,6 @@ fn test_config_setters_work_when_paused() {
 // ============================================================================
 // Security Tests - Added from audit
 // ============================================================================
-
-#[test]
-#[should_panic(expected = "#1211")]
-fn test_constructor_requires_payment_token() {
-    let e = Env::default();
-    let owner = Address::generate(&e);
-    let treasury = Address::generate(&e);
-    let token_contract = Address::generate(&e);
-
-    // SECURITY: Constructor should reject None payment token
-    e.register(
-        DaoAuctionContract,
-        (
-            owner,
-            token_contract,
-            treasury,
-            300_u64, // Must meet MIN_AUCTION_DURATION
-            10_000_000_i128,
-            10_u32,
-            10_u64,
-            None::<Address>,
-            Address::generate(&e),
-            BytesN::from_array(&e, &[0u8; 32]),
-        ),
-    );
-}
 
 #[test]
 #[should_panic(expected = "#1216")]
