@@ -6,7 +6,7 @@
 //! 3. DAO Registry - Discovery and enumeration of deployed DAOs
 
 use soroban_sdk::{
-    contract, contractimpl, symbol_short, vec, Address, BytesN, Env, IntoVal, String, Vec,
+    contract, contractimpl, vec, Address, BytesN, Env, IntoVal, String, Symbol, Vec,
 };
 
 use crate::error::ManagerError;
@@ -284,7 +284,8 @@ impl ManagerContract {
         wasm_hash.and_then(|hash| {
             env.storage()
                 .instance()
-                .get(&ManagerKey::Implementation(hash))
+                .get::<ManagerKey, ImplementationVersion>(&ManagerKey::Implementation(hash))
+                .filter(|implementation| !implementation.revoked)
         })
     }
 
@@ -332,8 +333,16 @@ impl ManagerContract {
         // Check authorization
         Self::require_admin(&env)?;
 
-        // Validate all implementations exist (optional: could also check not revoked)
-        // For now, just set them
+        for hash in [&token, &metadata, &auction, &governor, &treasury] {
+            let implementation: ImplementationVersion = env
+                .storage()
+                .instance()
+                .get(&ManagerKey::Implementation(hash.clone()))
+                .ok_or(ManagerError::ImplementationNotFound)?;
+            if implementation.revoked {
+                return Err(ManagerError::ImplementationNotFound);
+            }
+        }
 
         env.storage()
             .instance()
@@ -559,7 +568,7 @@ impl ManagerContract {
         // Using invoke_contract directly since we don't have a Client import
         let _: () = env.invoke_contract(
             &metadata_addr,
-            &symbol_short!("init"),
+            &Symbol::new(&env, "initialize"),
             vec![
                 &env,
                 token_addr.clone().into_val(&env),
@@ -574,7 +583,7 @@ impl ManagerContract {
         // Using invoke_contract directly
         let _: () = env.invoke_contract(
             &token_addr,
-            &symbol_short!("set_mint"),
+            &Symbol::new(&env, "set_mint_authority"),
             vec![
                 &env,
                 auction_addr.clone().into_val(&env),
@@ -593,6 +602,20 @@ impl ManagerContract {
             governor: governor_addr.clone(),
             treasury: treasury_addr.clone(),
         };
+
+        // Preserve the complete launch configuration, including founder
+        // allocations and the optional launch administrator, in the factory
+        // record. Distribution itself must be performed by the token owner.
+        let creation = DaoCreation {
+            addresses: addresses.clone(),
+            creator: params.deployer.clone(),
+            created_ledger: env.ledger().sequence(),
+            created_at: env.ledger().timestamp(),
+            params: params.clone(),
+        };
+        env.storage()
+            .instance()
+            .set(&ManagerKey::DaoCreation(token_addr.clone()), &creation);
 
         // Register DAO
         let modules = DaoModules {
@@ -663,37 +686,6 @@ impl ManagerContract {
         let auction_salt = Self::generate_salt(&env, &creator, nonce, "auction");
         let governor_salt = Self::generate_salt(&env, &creator, nonce, "governor");
         let treasury_salt = Self::generate_salt(&env, &creator, nonce, "treasury");
-
-        // Get current implementation WASM hashes
-        let token_wasm: BytesN<32> = env
-            .storage()
-            .instance()
-            .get(&ManagerKey::CurrentTokenWasm)
-            .ok_or(ManagerError::CurrentImplementationsNotSet)?;
-
-        let metadata_wasm: BytesN<32> = env
-            .storage()
-            .instance()
-            .get(&ManagerKey::CurrentMetadataWasm)
-            .ok_or(ManagerError::CurrentImplementationsNotSet)?;
-
-        let auction_wasm: BytesN<32> = env
-            .storage()
-            .instance()
-            .get(&ManagerKey::CurrentAuctionWasm)
-            .ok_or(ManagerError::CurrentImplementationsNotSet)?;
-
-        let governor_wasm: BytesN<32> = env
-            .storage()
-            .instance()
-            .get(&ManagerKey::CurrentGovernorWasm)
-            .ok_or(ManagerError::CurrentImplementationsNotSet)?;
-
-        let treasury_wasm: BytesN<32> = env
-            .storage()
-            .instance()
-            .get(&ManagerKey::CurrentTreasuryWasm)
-            .ok_or(ManagerError::CurrentImplementationsNotSet)?;
 
         // Predict addresses using deployer
         let deployer = env.deployer().with_current_contract(token_salt);
@@ -831,8 +823,12 @@ impl ManagerContract {
     ///
     /// Combines nonce and module name to create a unique salt.
     /// Note: Simplified version - in production should also include creator address
-    fn generate_salt(env: &Env, _creator: &Address, nonce: u64, module: &str) -> BytesN<32> {
+    fn generate_salt(env: &Env, creator: &Address, nonce: u64, module: &str) -> BytesN<32> {
         let mut bytes_to_hash = soroban_sdk::Bytes::new(env);
+
+        // Include the creator so the same nonce can be used independently by
+        // different deployers.
+        bytes_to_hash.append(&creator.to_string().to_bytes());
 
         // Add nonce
         bytes_to_hash.append(&soroban_sdk::Bytes::from_array(env, &nonce.to_be_bytes()));

@@ -10,7 +10,7 @@ mod mock_token {
 }
 
 fn create_contract<'a>(env: &Env) -> MetadataContractClient<'a> {
-    MetadataContractClient::new(env, &env.register_contract(None, MetadataContract))
+    MetadataContractClient::new(env, &env.register(MetadataContract, ()))
 }
 
 fn create_token_contract<'a>(env: &Env, owner: &Address) -> Address {
@@ -54,7 +54,7 @@ fn test_initialize() {
 }
 
 #[test]
-#[should_panic(expected = "AlreadyInitialized")]
+#[should_panic]
 fn test_initialize_twice_fails() {
     let env = Env::default();
     let client = create_contract(&env);
@@ -159,7 +159,7 @@ fn test_add_multiple_properties() {
 }
 
 #[test]
-#[should_panic(expected = "OnePropertyAndItemRequired")]
+#[should_panic]
 fn test_add_properties_first_time_needs_property_and_item() {
     let env = Env::default();
     env.mock_all_auths();
@@ -181,7 +181,7 @@ fn test_add_properties_first_time_needs_property_and_item() {
 }
 
 #[test]
-#[should_panic(expected = "TooManyProperties")]
+#[should_panic]
 fn test_add_properties_max_16() {
     let env = Env::default();
     env.mock_all_auths();

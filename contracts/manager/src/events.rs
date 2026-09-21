@@ -1,8 +1,53 @@
 //! Event emission functions for the Manager contract.
 
-use soroban_sdk::{Address, BytesN, Env, String, Symbol, Vec};
+use soroban_sdk::{contractevent, Address, BytesN, Env, String, Vec};
 
 use crate::storage::{DaoModules, FounderAllocation};
+
+#[contractevent]
+pub struct ImplementationRegistered {
+    pub name: String,
+    pub version: u32,
+    pub wasm_hash: BytesN<32>,
+    pub published_at: u64,
+}
+#[contractevent]
+pub struct UpgradeApproved {
+    pub from_hash: BytesN<32>,
+    pub to_hash: BytesN<32>,
+    pub approved_at: u64,
+}
+#[contractevent]
+pub struct ImplementationRevoked {
+    pub wasm_hash: BytesN<32>,
+    pub revoked_at: u64,
+}
+#[contractevent]
+pub struct DaoCreated {
+    pub token_address: Address,
+    pub creator: Address,
+    pub created_ledger: u32,
+    pub modules: DaoModules,
+    pub founders: Vec<FounderAllocation>,
+}
+#[contractevent]
+pub struct FactoryPaused {}
+#[contractevent]
+pub struct FactoryUnpaused {}
+#[contractevent]
+pub struct DaoRegistered {
+    pub token_address: Address,
+    pub creator: Address,
+    pub modules: DaoModules,
+}
+#[contractevent]
+pub struct CurrentImplementationsUpdated {
+    pub token: BytesN<32>,
+    pub metadata: BytesN<32>,
+    pub auction: BytesN<32>,
+    pub governor: BytesN<32>,
+    pub treasury: BytesN<32>,
+}
 
 // ============================================================================
 // Implementation Management Events
@@ -16,10 +61,13 @@ pub fn emit_implementation_registered(
     wasm_hash: &BytesN<32>,
     published_at: u64,
 ) {
-    env.events().publish(
-        (Symbol::new(env, "implementation_registered"),),
-        (name, version, wasm_hash, published_at),
-    );
+    ImplementationRegistered {
+        name: name.clone(),
+        version,
+        wasm_hash: wasm_hash.clone(),
+        published_at,
+    }
+    .publish(env);
 }
 
 /// Emitted when an upgrade path is approved.
@@ -29,18 +77,21 @@ pub fn emit_upgrade_approved(
     to_hash: &BytesN<32>,
     approved_at: u64,
 ) {
-    env.events().publish(
-        (Symbol::new(env, "upgrade_approved"),),
-        (from_hash, to_hash, approved_at),
-    );
+    UpgradeApproved {
+        from_hash: from_hash.clone(),
+        to_hash: to_hash.clone(),
+        approved_at,
+    }
+    .publish(env);
 }
 
 /// Emitted when an implementation is revoked.
 pub fn emit_implementation_revoked(env: &Env, wasm_hash: &BytesN<32>, revoked_at: u64) {
-    env.events().publish(
-        (Symbol::new(env, "implementation_revoked"),),
-        (wasm_hash, revoked_at),
-    );
+    ImplementationRevoked {
+        wasm_hash: wasm_hash.clone(),
+        revoked_at,
+    }
+    .publish(env);
 }
 
 // ============================================================================
@@ -56,22 +107,24 @@ pub fn emit_dao_created(
     modules: &DaoModules,
     founders: &Vec<FounderAllocation>,
 ) {
-    env.events().publish(
-        (Symbol::new(env, "dao_created"),),
-        (token_address, creator, created_ledger, modules, founders),
-    );
+    DaoCreated {
+        token_address: token_address.clone(),
+        creator: creator.clone(),
+        created_ledger,
+        modules: modules.clone(),
+        founders: founders.clone(),
+    }
+    .publish(env);
 }
 
 /// Emitted when factory is paused.
 pub fn emit_factory_paused(env: &Env) {
-    env.events()
-        .publish((Symbol::new(env, "factory_paused"),), ());
+    FactoryPaused {}.publish(env);
 }
 
 /// Emitted when factory is unpaused.
 pub fn emit_factory_unpaused(env: &Env) {
-    env.events()
-        .publish((Symbol::new(env, "factory_unpaused"),), ());
+    FactoryUnpaused {}.publish(env);
 }
 
 // ============================================================================
@@ -85,21 +138,17 @@ pub fn emit_dao_registered(
     creator: &Address,
     modules: &DaoModules,
 ) {
-    env.events().publish(
-        (Symbol::new(env, "dao_registered"),),
-        (token_address, creator, modules),
-    );
+    DaoRegistered {
+        token_address: token_address.clone(),
+        creator: creator.clone(),
+        modules: modules.clone(),
+    }
+    .publish(env);
 }
 
 // ============================================================================
 // Admin Events
 // ============================================================================
-
-/// Emitted when admin changes.
-pub fn emit_admin_changed(env: &Env, old_admin: &Option<Address>, new_admin: &Address) {
-    env.events()
-        .publish((Symbol::new(env, "admin_changed"),), (old_admin, new_admin));
-}
 
 /// Emitted when current implementation WASMs are updated.
 pub fn emit_current_implementations_updated(
@@ -110,8 +159,12 @@ pub fn emit_current_implementations_updated(
     governor: &BytesN<32>,
     treasury: &BytesN<32>,
 ) {
-    env.events().publish(
-        (Symbol::new(env, "current_implementations_updated"),),
-        (token, metadata, auction, governor, treasury),
-    );
+    CurrentImplementationsUpdated {
+        token: token.clone(),
+        metadata: metadata.clone(),
+        auction: auction.clone(),
+        governor: governor.clone(),
+        treasury: treasury.clone(),
+    }
+    .publish(env);
 }

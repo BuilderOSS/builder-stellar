@@ -161,18 +161,17 @@ fn test_set_current_implementations() {
 }
 
 #[test]
-fn test_set_current_implementations_allows_any_hash() {
+#[should_panic]
+fn test_set_current_implementations_rejects_unknown_hash() {
     let (env, client, admin) = setup();
 
-    // Currently set_current_implementations doesn't validate existence or revoked status
-    // This test verifies it allows any hash to be set
+    // Unknown implementation hashes must not become deployable defaults.
     let token_wasm = BytesN::from_array(&env, &[1u8; 32]);
     let metadata_wasm = BytesN::from_array(&env, &[2u8; 32]);
     let auction_wasm = BytesN::from_array(&env, &[3u8; 32]);
     let governor_wasm = BytesN::from_array(&env, &[4u8; 32]);
     let treasury_wasm = BytesN::from_array(&env, &[5u8; 32]);
 
-    // Can set implementations even without registering them
     client.set_current_implementations(
         &token_wasm,
         &metadata_wasm,
@@ -259,7 +258,7 @@ fn test_nonce_tracking() {
 #[test]
 #[should_panic]
 fn test_create_dao_when_paused_fails() {
-    use crate::storage::{DaoCreationParams, FounderAllocation};
+    use crate::storage::DaoCreationParams;
     use soroban_sdk::Vec;
 
     let (env, client, _admin) = setup();
@@ -483,10 +482,8 @@ fn test_get_latest_implementation_with_revoked() {
     // Revoke v2 (latest)
     client.revoke_implementation(&v2_wasm);
 
-    // get_latest_implementation should still return v2 (it doesn't filter by revoked status)
-    let latest = client.get_latest_implementation(&name).unwrap();
-    assert_eq!(latest.version, 2);
-    assert_eq!(latest.revoked, true);
+    // Revoked implementations must never be returned as deployable latest versions.
+    assert!(client.get_latest_implementation(&name).is_none());
 
     let _ = env;
 }

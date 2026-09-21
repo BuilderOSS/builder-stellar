@@ -104,16 +104,9 @@ pub fn set_ipfs_data(env: &Env, ipfs_data: &Vec<IpfsGroup>) {
         .set(&DataKey::IpfsData, ipfs_data);
 }
 
-pub fn get_attributes(env: &Env, token_id: u32) -> Result<Vec<u32>, Error> {
-    env.storage()
-        .temporary()
-        .get(&DataKey::Attributes(token_id))
-        .ok_or(Error::TokenNotMinted)
-}
-
 pub fn set_attributes(env: &Env, token_id: u32, attributes: &Vec<u32>) {
-    // Store for 1 year (approx 31536000 ledgers at 1 ledger/second)
-    let ledgers_to_live = 31536000;
+    // Keep the temporary entry below the network's maximum TTL.
+    let ledgers_to_live = 5_000_000;
     env.storage()
         .temporary()
         .set(&DataKey::Attributes(token_id), attributes);

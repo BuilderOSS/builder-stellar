@@ -142,7 +142,7 @@ impl MetadataContract {
 
         // Build attributes array
         let mut attr_vec = Vec::new(&env);
-        attr_vec.push_front(num_properties); // First element stores number of properties
+        attr_vec.push_back(num_properties); // First element stores number of properties
 
         // Select item for each property using seed
         let mut seed_value = Self::bytes_to_u64(&seed);
@@ -153,22 +153,16 @@ impl MetadataContract {
 
             // Use lower 16 bits of seed to select item index
             let item_index = (seed_value % (num_items as u64)) as u32;
-            attr_vec.push_front(item_index);
+            attr_vec.push_back(item_index);
 
             // Shift seed right by 16 bits for next property
             seed_value >>= 16;
         }
 
-        // Reverse to get correct order (we used push_front)
-        let mut attributes = Vec::new(&env);
-        for i in (0..attr_vec.len()).rev() {
-            attributes.push_front(attr_vec.get(i).unwrap());
-        }
-
         // Store attributes
-        set_attributes(&env, token_id, &attributes);
+        set_attributes(&env, token_id, &attr_vec);
 
-        emit_seed_generated(&env, token_id, num_properties, &attributes);
+        emit_seed_generated(&env, token_id, num_properties, &attr_vec);
 
         Ok(true)
     }
