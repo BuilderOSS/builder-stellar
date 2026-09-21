@@ -367,3 +367,126 @@ fn test_upgrade_approval_workflow() {
 
     let _ = admin;
 }
+
+#[test]
+fn test_dao_count_starts_at_zero() {
+    let (env, client, _admin) = setup();
+    assert_eq!(client.get_dao_count(), 0);
+    let _ = env;
+}
+
+#[test]
+fn test_enumerate_daos_with_pagination() {
+    let (env, client, _admin) = setup();
+
+    // Test empty enumeration with different limits
+    let daos_10 = client.enumerate_daos(&0, &10);
+    assert_eq!(daos_10.len(), 0);
+
+    let daos_5 = client.enumerate_daos(&0, &5);
+    assert_eq!(daos_5.len(), 0);
+
+    let daos_1 = client.enumerate_daos(&0, &1);
+    assert_eq!(daos_1.len(), 0);
+
+    // Test with offset
+    let daos_offset = client.enumerate_daos(&5, &10);
+    assert_eq!(daos_offset.len(), 0);
+
+    let _ = env;
+}
+
+#[test]
+fn test_factory_pause_unpause_idempotent() {
+    let (env, client, _admin) = setup();
+
+    // Pause twice - should not panic
+    client.pause_factory();
+    client.pause_factory();
+
+    // Unpause twice - should not panic
+    client.unpause_factory();
+    client.unpause_factory();
+
+    let _ = env;
+}
+
+#[test]
+fn test_register_same_implementation_twice() {
+    let (env, client, _admin) = setup();
+
+    let name = String::from_str(&env, "Token");
+    let wasm_hash = BytesN::from_array(&env, &[1u8; 32]);
+
+    // Register once
+    client.register_implementation(&name, &1u32, &wasm_hash);
+
+    // Register again with same version - should succeed (overwrites)
+    client.register_implementation(&name, &1u32, &wasm_hash);
+
+    let implementation = client.get_implementation(&wasm_hash).unwrap();
+    assert_eq!(implementation.version, 1);
+
+    let _ = env;
+}
+
+#[test]
+#[should_panic]
+fn test_revoke_already_revoked_implementation_fails() {
+    let (env, client, _admin) = setup();
+
+    let name = String::from_str(&env, "Token");
+    let wasm_hash = BytesN::from_array(&env, &[1u8; 32]);
+
+    client.register_implementation(&name, &1u32, &wasm_hash);
+    client.revoke_implementation(&wasm_hash);
+
+    // Revoke again - should panic with ImplementationAlreadyRevoked
+    client.revoke_implementation(&wasm_hash);
+
+    let _ = env;
+}
+
+#[test]
+fn test_approve_same_upgrade_twice() {
+    let (env, client, _admin) = setup();
+
+    let name = String::from_str(&env, "Token");
+    let from_hash = BytesN::from_array(&env, &[1u8; 32]);
+    let to_hash = BytesN::from_array(&env, &[2u8; 32]);
+
+    client.register_implementation(&name, &1u32, &from_hash);
+    client.register_implementation(&name, &2u32, &to_hash);
+
+    // Approve once
+    client.approve_upgrade(&from_hash, &to_hash);
+
+    // Approve again - should not panic
+    client.approve_upgrade(&from_hash, &to_hash);
+
+    assert!(client.is_upgrade_approved(&from_hash, &to_hash));
+
+    let _ = env;
+}
+
+#[test]
+fn test_get_latest_implementation_with_revoked() {
+    let (env, client, _admin) = setup();
+
+    let name = String::from_str(&env, "Token");
+    let v1_wasm = BytesN::from_array(&env, &[1u8; 32]);
+    let v2_wasm = BytesN::from_array(&env, &[2u8; 32]);
+
+    client.register_implementation(&name, &1u32, &v1_wasm);
+    client.register_implementation(&name, &2u32, &v2_wasm);
+
+    // Revoke v2 (latest)
+    client.revoke_implementation(&v2_wasm);
+
+    // get_latest_implementation should still return v2 (it doesn't filter by revoked status)
+    let latest = client.get_latest_implementation(&name).unwrap();
+    assert_eq!(latest.version, 2);
+    assert_eq!(latest.revoked, true);
+
+    let _ = env;
+}

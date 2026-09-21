@@ -4,8 +4,27 @@ use soroban_sdk::{testutils::Address as _, Address, Env, String, Vec};
 
 use crate::{IpfsGroup, ItemParam, MetadataContract, MetadataContractClient};
 
+// Mock Token contract for testing
+mod mock_token {
+    soroban_sdk::contractimport!(file = "../../target/wasm32v1-none/release/token.wasm");
+}
+
 fn create_contract<'a>(env: &Env) -> MetadataContractClient<'a> {
     MetadataContractClient::new(env, &env.register_contract(None, MetadataContract))
+}
+
+fn create_token_contract<'a>(env: &Env, owner: &Address) -> Address {
+    let token_id = env.register(
+        mock_token::WASM,
+        (
+            owner.clone(),
+            String::from_str(env, "https://test.com"),
+            String::from_str(env, "Test Token"),
+            String::from_str(env, "TEST"),
+            Address::generate(env), // metadata address (placeholder)
+        ),
+    );
+    token_id
 }
 
 fn initialize_metadata<'a>(env: &Env, client: &MetadataContractClient<'a>, token: &Address) {
@@ -51,7 +70,8 @@ fn test_add_properties() {
     env.mock_all_auths();
 
     let client = create_contract(&env);
-    let token = Address::generate(&env);
+    let owner = Address::generate(&env);
+    let token = create_token_contract(&env, &owner);
 
     initialize_metadata(&env, &client, &token);
 
@@ -92,7 +112,8 @@ fn test_add_multiple_properties() {
     env.mock_all_auths();
 
     let client = create_contract(&env);
-    let token = Address::generate(&env);
+    let owner = Address::generate(&env);
+    let token = create_token_contract(&env, &owner);
 
     initialize_metadata(&env, &client, &token);
 
@@ -144,7 +165,8 @@ fn test_add_properties_first_time_needs_property_and_item() {
     env.mock_all_auths();
 
     let client = create_contract(&env);
-    let token = Address::generate(&env);
+    let owner = Address::generate(&env);
+    let token = create_token_contract(&env, &owner);
 
     initialize_metadata(&env, &client, &token);
 
@@ -165,7 +187,8 @@ fn test_add_properties_max_16() {
     env.mock_all_auths();
 
     let client = create_contract(&env);
-    let token = Address::generate(&env);
+    let owner = Address::generate(&env);
+    let token = create_token_contract(&env, &owner);
 
     initialize_metadata(&env, &client, &token);
 
@@ -196,7 +219,8 @@ fn test_on_minted() {
     env.mock_all_auths();
 
     let client = create_contract(&env);
-    let token = Address::generate(&env);
+    let owner = Address::generate(&env);
+    let token = create_token_contract(&env, &owner);
 
     initialize_metadata(&env, &client, &token);
 
@@ -252,7 +276,8 @@ fn test_update_settings() {
     env.mock_all_auths();
 
     let client = create_contract(&env);
-    let token = Address::generate(&env);
+    let owner = Address::generate(&env);
+    let token = create_token_contract(&env, &owner);
 
     initialize_metadata(&env, &client, &token);
 
@@ -270,7 +295,8 @@ fn test_delete_and_recreate_properties() {
     env.mock_all_auths();
 
     let client = create_contract(&env);
-    let token = Address::generate(&env);
+    let owner = Address::generate(&env);
+    let token = create_token_contract(&env, &owner);
 
     initialize_metadata(&env, &client, &token);
 
