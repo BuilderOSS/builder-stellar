@@ -15,12 +15,6 @@ import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Import all binding types to get event names
-import * as TokenTypes from '@stellar-dao/token-bindings';
-import * as GovernorTypes from '@stellar-dao/governor-bindings';
-import * as TreasuryTypes from '@stellar-dao/treasury-bindings';
-import * as AuctionTypes from '@stellar-dao/auction-bindings';
-
 /**
  * Extract event names from binding type files
  */
@@ -29,7 +23,9 @@ function getEventsFromBindings() {
     token: extractEventNames('../../token-bindings/src/types.ts'),
     governor: extractEventNames('../../governor-bindings/src/types.ts'),
     treasury: extractEventNames('../../treasury-bindings/src/types.ts'),
-    auction: extractEventNames('../../auction-bindings/src/types.ts')
+    auction: extractEventNames('../../auction-bindings/src/types.ts'),
+    manager: extractEventNames('../../manager-bindings/src/types.ts'),
+    metadata: extractEventNames('../../metadata-bindings/src/types.ts')
   };
 
   return events;

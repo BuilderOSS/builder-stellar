@@ -151,11 +151,9 @@ function invoke(data) {
       result.proposal_id = topicArgs[1] || null;
     } else if (eventName === 'proposal_queued' || eventName === 'ProposalQueued') {
       result.proposal_id = topicArgs[0] || null;
-    } else if (eventName === 'proposal_canceled' || eventName === 'ProposalCanceled' || eventName === 'proposal_cancelled' || eventName === 'ProposalCancelled') {
+    } else if (eventName === 'proposal_cancelled' || eventName === 'ProposalCancelled') {
       result.proposal_id = topicArgs[0] || null;
     } else if (eventName === 'proposal_executed' || eventName === 'ProposalExecuted') {
-      result.proposal_id = topicArgs[0] || null;
-    } else if (eventName === 'proposal_expired' || eventName === 'ProposalExpired') {
       result.proposal_id = topicArgs[0] || null;
     } else if (eventName === 'mint_with_minter' || eventName === 'MintWithMinter') {
       result.minter = topicArgs[0] || null;
@@ -226,6 +224,40 @@ function invoke(data) {
     } else if (eventName === 'governor_changed' || eventName === 'GovernorChanged') {
       result.old_governor = topicArgs[0] || null;
       result.new_governor = topicArgs[1] || null;
+    } else if (eventName === 'dao_created' || eventName === 'DaoCreated') {
+      result.creator = topicArgs[0] || null;
+      result.token_address = topicArgs[1] || null;
+    } else if (eventName === 'dao_registered' || eventName === 'DaoRegistered') {
+      result.creator = topicArgs[0] || null;
+      result.token_address = topicArgs[1] || null;
+    } else if (eventName === 'factory_paused' || eventName === 'FactoryPaused') {
+      // No topics - pure data event
+    } else if (eventName === 'factory_unpaused' || eventName === 'FactoryUnpaused') {
+      // No topics - pure data event
+    } else if (eventName === 'upgrade_approved' || eventName === 'UpgradeApproved') {
+      // from_hash, to_hash, approved_at in data
+    } else if (eventName === 'implementation_revoked' || eventName === 'ImplementationRevoked') {
+      // wasm_hash, revoked_at in data
+    } else if (eventName === 'implementation_registered' || eventName === 'ImplementationRegistered') {
+      // name, version, wasm_hash in data
+    } else if (eventName === 'current_implementations_updated' || eventName === 'CurrentImplementationsUpdated') {
+      // token, metadata, auction, governor, treasury in data
+    } else if (eventName === 'metadata_initialized' || eventName === 'MetadataInitialized') {
+      // token, renderer_base in data
+    } else if (eventName === 'property_added' || eventName === 'PropertyAdded') {
+      // property_id, name in data
+    } else if (eventName === 'seed_generated' || eventName === 'SeedGenerated') {
+      result.token_id = topicArgs[0] || null;
+    } else if (eventName === 'properties_reset' || eventName === 'PropertiesReset') {
+      // num_properties in data
+    } else if (eventName === 'project_uri_updated' || eventName === 'ProjectURIUpdated') {
+      // old_uri, new_uri in data
+    } else if (eventName === 'description_updated' || eventName === 'DescriptionUpdated') {
+      // old_description, new_description in data
+    } else if (eventName === 'renderer_base_updated' || eventName === 'RendererBaseUpdated') {
+      // old_base, new_base in data
+    } else if (eventName === 'contract_image_updated' || eventName === 'ContractImageUpdated') {
+      // old_image, new_image in data
     }
 
     return result;

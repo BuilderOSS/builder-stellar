@@ -16,6 +16,8 @@
     "@goldskycom/cli": "^13.10.2",
     "@builder-stellar/auction-bindings": "workspace:*",
     "@builder-stellar/governor-bindings": "workspace:*",
+    "@builder-stellar/manager-bindings": "workspace:*",
+    "@builder-stellar/metadata-bindings": "workspace:*",
     "@builder-stellar/token-bindings": "workspace:*",
     "@builder-stellar/treasury-bindings": "workspace:*"
   }

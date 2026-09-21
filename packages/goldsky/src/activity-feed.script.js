@@ -74,10 +74,8 @@ function invoke(data) {
     ProposalCreated: 'governance.proposal_created',
     ProposalQueued: 'governance.proposal_queued',
     VoteCast: 'governance.vote_cast',
-    ProposalCanceled: 'governance.proposal_canceled',
     ProposalCancelled: 'governance.proposal_cancelled',
     ProposalExecuted: 'governance.proposal_executed',
-    ProposalExpired: 'governance.proposal_expired',
     TreasuryChanged: 'governance.treasury_changed',
     TokenContractChanged: 'governance.token_contract_changed',
     QueueDelayChanged: 'governance.queue_delay_changed',
@@ -100,7 +98,23 @@ function invoke(data) {
     PaymentTokenUpdated: 'auction.payment_token_updated',
     TreasuryUpdated: 'auction.treasury_updated',
     BidRefunded: 'auction.bid_refunded',
-    AuctionCancelled: 'auction.cancelled'
+    AuctionCancelled: 'auction.cancelled',
+    DaoCreated: 'manager.dao_created',
+    DaoRegistered: 'manager.dao_registered',
+    FactoryPaused: 'manager.factory_paused',
+    FactoryUnpaused: 'manager.factory_unpaused',
+    UpgradeApproved: 'manager.upgrade_approved',
+    ImplementationRevoked: 'manager.implementation_revoked',
+    ImplementationRegistered: 'manager.implementation_registered',
+    CurrentImplementationsUpdated: 'manager.implementations_updated',
+    MetadataInitialized: 'metadata.initialized',
+    PropertyAdded: 'metadata.property_added',
+    SeedGenerated: 'metadata.seed_generated',
+    PropertiesReset: 'metadata.properties_reset',
+    ProjectURIUpdated: 'metadata.project_uri_updated',
+    DescriptionUpdated: 'metadata.description_updated',
+    RendererBaseUpdated: 'metadata.renderer_base_updated',
+    ContractImageUpdated: 'metadata.contract_image_updated'
   };
 
   var titleMap = {
@@ -117,10 +131,8 @@ function invoke(data) {
     ProposalCreated: 'Proposal created',
     ProposalQueued: 'Proposal queued',
     VoteCast: 'Vote cast',
-    ProposalCanceled: 'Proposal canceled',
     ProposalCancelled: 'Proposal cancelled',
     ProposalExecuted: 'Proposal executed',
-    ProposalExpired: 'Proposal expired',
     TreasuryChanged: 'Treasury changed',
     TokenContractChanged: 'Token contract changed',
     QueueDelayChanged: 'Queue delay updated',
@@ -143,7 +155,23 @@ function invoke(data) {
     PaymentTokenUpdated: 'Payment token updated',
     TreasuryUpdated: 'Treasury updated',
     BidRefunded: 'Bid refunded',
-    AuctionCancelled: 'Auction cancelled'
+    AuctionCancelled: 'Auction cancelled',
+    DaoCreated: 'DAO created',
+    DaoRegistered: 'DAO registered',
+    FactoryPaused: 'Factory paused',
+    FactoryUnpaused: 'Factory unpaused',
+    UpgradeApproved: 'Upgrade approved',
+    ImplementationRevoked: 'Implementation revoked',
+    ImplementationRegistered: 'Implementation registered',
+    CurrentImplementationsUpdated: 'Implementations updated',
+    MetadataInitialized: 'Metadata initialized',
+    PropertyAdded: 'Property added',
+    SeedGenerated: 'Seed generated',
+    PropertiesReset: 'Properties reset',
+    ProjectURIUpdated: 'Project URI updated',
+    DescriptionUpdated: 'Description updated',
+    RendererBaseUpdated: 'Renderer base updated',
+    ContractImageUpdated: 'Contract image updated'
   };
 
   var addresses = unique([
@@ -161,7 +189,9 @@ function invoke(data) {
     pick(data, ['new_governor']),
     pick(data, ['token_contract']),
     pick(data, ['token_contract_id']),
-    pick(data, ['contract_id'])
+    pick(data, ['contract_id']),
+    pick(data, ['creator']),
+    pick(data, ['token_address'])
   ]);
 
   var summary;
@@ -185,6 +215,16 @@ function invoke(data) {
     summary = 'Minted ' + (pick(data, ['amount']) || 'batch') + ' tokens';
   } else if (normalizedEventName === 'DelegateChanged') {
     summary = 'Delegation changed';
+  } else if (normalizedEventName === 'DaoCreated') {
+    summary = 'DAO created by ' + (pick(data, ['creator']) || 'unknown');
+  } else if (normalizedEventName === 'DaoRegistered') {
+    summary = 'DAO registered for token ' + (pick(data, ['token_address']) || 'unknown');
+  } else if (normalizedEventName === 'ImplementationRegistered') {
+    summary = 'Implementation "' + (pick(data, ['name']) || 'unknown') + '" registered';
+  } else if (normalizedEventName === 'SeedGenerated') {
+    summary = 'Seed generated for token ' + (pick(data, ['token_id']) || 'unknown');
+  } else if (normalizedEventName === 'PropertyAdded') {
+    summary = 'Property "' + (pick(data, ['name']) || 'unknown') + '" added';
   } else if (titleMap[normalizedEventName]) {
     summary = titleMap[normalizedEventName];
   } else {
@@ -201,7 +241,7 @@ function invoke(data) {
     summary: summary,
     proposal_id: pick(data, ['proposal_id']) || null,
     proposal_number: pick(data, ['proposal_number']) || null,
-    actor: pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate']) || null,
+    actor: pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator']) || null,
     addresses: JSON.stringify(addresses),
     ledger_sequence: data.ledger_sequence,
     timestamp: data.timestamp || data.ledger_closed_at || null,
