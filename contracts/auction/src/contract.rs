@@ -326,7 +326,13 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         // Refund highest bidder if there is one
         if let Some(bidder) = &auction.highest_bidder {
             if auction.highest_bid > 0 {
-                refund_bid(e, bidder, auction.highest_bid, &auction.payment_currency);
+                refund_bid(
+                    e,
+                    auction.token_id,
+                    bidder,
+                    auction.highest_bid,
+                    &auction.payment_currency,
+                );
             }
         }
 

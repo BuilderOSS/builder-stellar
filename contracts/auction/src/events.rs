@@ -32,6 +32,8 @@ pub struct AuctionCreated {
     pub token_id: u128,
     pub start_time: u64,
     pub end_time: u64,
+    pub reserve_price: i128,
+    pub payment_token: Option<Address>,
 }
 
 #[contractevent]
@@ -54,7 +56,7 @@ pub struct AuctionSettled {
     pub token_id: u128,
     pub winner: Option<Address>,
     pub amount: i128,
-    pub payment_type: PaymentType,
+    pub payment_type: Option<PaymentType>,
 }
 
 #[contractevent]
@@ -103,6 +105,8 @@ pub struct TreasuryUpdated {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BidRefunded {
     #[topic]
+    pub token_id: u128,
+    #[topic]
     pub bidder: Address,
     pub amount: i128,
     pub payment_type: PaymentType,
@@ -142,11 +146,20 @@ pub fn emit_auction_initialized(
     .publish(e);
 }
 
-pub fn emit_auction_created(e: &Env, token_id: u128, start_time: u64, end_time: u64) {
+pub fn emit_auction_created(
+    e: &Env,
+    token_id: u128,
+    start_time: u64,
+    end_time: u64,
+    reserve_price: i128,
+    payment_token: &Option<Address>,
+) {
     AuctionCreated {
         token_id,
         start_time,
         end_time,
+        reserve_price,
+        payment_token: payment_token.clone(),
     }
     .publish(e);
 }
@@ -176,7 +189,7 @@ pub fn emit_auction_settled(
     token_id: u128,
     winner: &Option<Address>,
     amount: i128,
-    payment_type: &PaymentType,
+    payment_type: &Option<PaymentType>,
 ) {
     AuctionSettled {
         token_id,
@@ -239,8 +252,15 @@ pub fn emit_treasury_updated(e: &Env, treasury: &Address, changed_by: &Address) 
     .publish(e);
 }
 
-pub fn emit_bid_refunded(e: &Env, bidder: &Address, amount: i128, payment_type: &PaymentType) {
+pub fn emit_bid_refunded(
+    e: &Env,
+    token_id: u128,
+    bidder: &Address,
+    amount: i128,
+    payment_type: &PaymentType,
+) {
     BidRefunded {
+        token_id,
         bidder: bidder.clone(),
         amount,
         payment_type: payment_type.clone(),

@@ -59,7 +59,14 @@ pub(crate) fn create_auction(e: &Env) {
     };
 
     set_auction(e, &auction);
-    emit_auction_created(e, token_id, now, end_time);
+    emit_auction_created(
+        e,
+        token_id,
+        now,
+        end_time,
+        config.reserve_price,
+        &config.payment_token,
+    );
 }
 
 pub(crate) fn process_bid(
@@ -132,7 +139,13 @@ pub(crate) fn process_bid(
 
     // Refund previous bidder AFTER state update (CEI pattern)
     if let Some(prev_bidder) = last_bidder {
-        refund_bid(e, &prev_bidder, last_bid, &auction.payment_currency);
+        refund_bid(
+            e,
+            auction.token_id,
+            &prev_bidder,
+            last_bid,
+            &auction.payment_currency,
+        );
     }
 
     emit_bid_placed(
@@ -228,7 +241,7 @@ pub(crate) fn settle_auction_internal(e: &Env) {
             auction.token_id,
             &Some(winner.clone()),
             auction.highest_bid,
-            &auction.payment_currency,
+            &Some(auction.payment_currency.clone()),
         );
     } else {
         // No bids - transfer token to treasury for DAO governance use
@@ -255,11 +268,17 @@ pub(crate) fn settle_auction_internal(e: &Env) {
 
         e.invoke_contract::<()>(&config.token_contract, &transfer_symbol, nft_transfer_args);
 
-        emit_auction_settled(e, auction.token_id, &None, 0, &auction.payment_currency);
+        emit_auction_settled(e, auction.token_id, &None, 0, &None);
     }
 }
 
-pub(crate) fn refund_bid(e: &Env, bidder: &Address, amount: i128, payment_type: &PaymentType) {
+pub(crate) fn refund_bid(
+    e: &Env,
+    token_id: u128,
+    bidder: &Address,
+    amount: i128,
+    payment_type: &PaymentType,
+) {
     if amount == 0 {
         return;
     }
@@ -295,7 +314,7 @@ pub(crate) fn refund_bid(e: &Env, bidder: &Address, amount: i128, payment_type: 
             e.invoke_contract::<()>(token_addr, &transfer_symbol, refund_args);
 
             // IMPROVEMENT: Emit refund event for observability
-            emit_bid_refunded(e, bidder, amount, payment_type);
+            emit_bid_refunded(e, token_id, bidder, amount, payment_type);
         }
     }
 }

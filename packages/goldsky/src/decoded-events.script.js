@@ -177,7 +177,8 @@ function invoke(data) {
     } else if (eventName === 'auction_settled' || eventName === 'AuctionSettled') {
       result.token_id = topicArgs[0] || null;
     } else if (eventName === 'bid_refunded' || eventName === 'BidRefunded') {
-      result.bidder = topicArgs[0] || null;
+      result.token_id = topicArgs[0] || null;
+      result.bidder = topicArgs[1] || null;
     } else if (eventName === 'auction_cancelled' || eventName === 'AuctionCancelled') {
       result.token_id = topicArgs[0] || null;
     } else if (eventName === 'execute' || eventName === 'Execute') {

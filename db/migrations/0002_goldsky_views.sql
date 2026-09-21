@@ -465,7 +465,17 @@ WITH created AS (
     winner,
     ledger_sequence AS settled_ledger
   FROM auction.settlements
-  ORDER BY deployment_id, token_id, ledger_sequence DESC, timestamp DESC, event_id DESC
+    ORDER BY deployment_id, token_id, ledger_sequence DESC, timestamp DESC, event_id DESC
+), latest_cancellation AS (
+  SELECT DISTINCT ON (deployment_id, token_id)
+    deployment_id,
+    token_id,
+    cancelled_by,
+    reason,
+    ledger_sequence AS cancelled_ledger
+  FROM chain.decoded_events
+  WHERE LOWER(event_name) IN ('auction_cancelled', 'auction_canceled', 'auction_cancelled_indexed')
+  ORDER BY deployment_id, token_id, ledger_sequence DESC, event_id DESC
 )
 SELECT
   c.deployment_id,
@@ -479,8 +489,8 @@ SELECT
   c.payment_token,
   s.winner,
   (s.winner IS NOT NULL) AS settled,
-  false AS cancelled,
-  NULL::text AS cancel_reason,
+  (x.token_id IS NOT NULL) AS cancelled,
+  x.reason::text AS cancel_reason,
   c.created_ledger,
   b.updated_ledger,
   s.settled_ledger
@@ -488,9 +498,12 @@ FROM created c
 LEFT JOIN latest_bid b
   ON b.deployment_id = c.deployment_id
  AND b.token_id = c.token_id
-LEFT JOIN latest_settlement s
-  ON s.deployment_id = c.deployment_id
- AND s.token_id = c.token_id;
+ LEFT JOIN latest_settlement s
+   ON s.deployment_id = c.deployment_id
+  AND s.token_id = c.token_id
+ LEFT JOIN latest_cancellation x
+   ON x.deployment_id = c.deployment_id
+  AND x.token_id = c.token_id;
 
 CREATE OR REPLACE VIEW treasury.calls AS
 SELECT
@@ -621,6 +634,10 @@ SELECT
 FROM token.members;
 
 -- Manager Views
+--
+-- DAO Identity: The canonical DAO ID is the token contract address.
+-- The token is the core of the DAO - it represents membership, voting power, and governance.
+-- All DAO-related views use token_address as the dao_id for joins and lookups.
 
 CREATE OR REPLACE VIEW manager.daos AS
 WITH created AS (
@@ -654,6 +671,7 @@ WITH created AS (
 )
 SELECT
   c.deployment_id,
+  c.token_address AS dao_id,
   c.token_address,
   c.creator,
   c.manager_contract,
@@ -675,7 +693,14 @@ LEFT JOIN registered r
 CREATE OR REPLACE VIEW manager.dao_modules AS
 SELECT
   deployment_id,
-  token_address,
+  dao_id,
+  'token' AS module_role,
+  token_address AS module_contract
+FROM manager.daos
+UNION ALL
+SELECT
+  deployment_id,
+  dao_id,
   'auction' AS module_role,
   auction_contract AS module_contract
 FROM manager.daos
@@ -683,7 +708,7 @@ WHERE auction_contract IS NOT NULL
 UNION ALL
 SELECT
   deployment_id,
-  token_address,
+  dao_id,
   'metadata' AS module_role,
   metadata_contract AS module_contract
 FROM manager.daos
@@ -691,7 +716,7 @@ WHERE metadata_contract IS NOT NULL
 UNION ALL
 SELECT
   deployment_id,
-  token_address,
+  dao_id,
   'governor' AS module_role,
   governor_contract AS module_contract
 FROM manager.daos
@@ -699,11 +724,29 @@ WHERE governor_contract IS NOT NULL
 UNION ALL
 SELECT
   deployment_id,
-  token_address,
+  dao_id,
   'treasury' AS module_role,
   treasury_contract AS module_contract
 FROM manager.daos
 WHERE treasury_contract IS NOT NULL;
+
+-- Resolve every module event to the token contract that defines the DAO.
+-- Treasury is one module, not the DAO identity.
+CREATE OR REPLACE VIEW manager.event_identity AS
+SELECT
+  e.deployment_id,
+  e.contract_id,
+  COALESCE(d.token_address, e.token_address) AS dao_id,
+  d.treasury_contract
+FROM chain.decoded_events e
+LEFT JOIN manager.daos d
+  ON d.deployment_id = e.deployment_id
+ AND e.contract_id IN (
+   d.auction_contract,
+   d.metadata_contract,
+   d.governor_contract,
+   d.treasury_contract
+ );
 
 CREATE OR REPLACE VIEW manager.founder_allocations AS
 WITH created AS (
@@ -718,10 +761,11 @@ WITH created AS (
 ), founders_expanded AS (
   SELECT
     c.deployment_id,
+    c.token_address AS dao_id,
     c.token_address,
     f.ordinality - 1 AS founder_index,
-    f.value ->> 'wallet' AS wallet,
-    (f.value ->> 'allocation')::integer AS allocation,
+    COALESCE(f.value ->> 'address', f.value ->> 'wallet') AS wallet,
+    COALESCE((f.value ->> 'amount')::integer, (f.value ->> 'allocation')::integer) AS allocation,
     (f.value ->> 'end_date')::bigint AS end_date,
     c.ledger_sequence,
     c.transaction_hash
@@ -731,6 +775,7 @@ WITH created AS (
 )
 SELECT
   deployment_id,
+  dao_id,
   token_address,
   founder_index,
   wallet,
