@@ -8,8 +8,8 @@ import { Client as TokenClient } from '@builder-stellar/token-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { useCallback, useState } from 'react';
 
-import type { CreateDaoFormData } from './dao-creation-params';
 import type { DaoNetworkName } from './dao-config';
+import type { CreateDaoFormData } from './dao-creation-params';
 import { formDataToCreationParams, generateNonce } from './dao-creation-params';
 import { getDeploymentConfig } from './deployment-config';
 import { waitForConfirmation } from './transaction-confirmation';
@@ -456,20 +456,30 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         let indexed = false;
         let attempts = 0;
         const maxAttempts = 30; // 1 minute max (2s intervals)
+        const requestTimeout = 5000;
 
         while (!indexed && attempts < maxAttempts) {
+          const controller = new AbortController();
+          const timeoutId = window.setTimeout(() => controller.abort(), requestTimeout);
+
           try {
-            const response = await fetch(`/api/dao/${tokenAddress}`);
+            const response = await fetch(`/api/dao/${tokenAddress}`, {
+              signal: controller.signal,
+              cache: 'no-store'
+            });
             if (response.ok) {
               indexed = true;
-              break;
             }
           } catch {
             // Not indexed yet
+          } finally {
+            window.clearTimeout(timeoutId);
           }
 
-          await new Promise((resolve) => setTimeout(resolve, 2000));
           attempts++;
+          if (!indexed && attempts < maxAttempts) {
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+          }
         }
 
         if (!indexed) {

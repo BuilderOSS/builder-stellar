@@ -342,7 +342,8 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
         launchAdmin: state.launchAdmin
       }),
       merge: (persistedState, currentState) => {
-        const merged = { ...currentState, ...persistedState } as CreateDaoStore;
+        const persisted = (persistedState ?? {}) as Partial<CreateDaoState>;
+        const merged = { ...currentState, ...persisted } as CreateDaoStore;
 
         // If persisted artwork has no properties, use the default ones
         if (merged.artwork?.properties?.length === 0) {
