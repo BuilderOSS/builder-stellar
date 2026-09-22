@@ -2,7 +2,7 @@
 
 'use client';
 
-import { ArrowLeft, Check } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -18,7 +18,8 @@ import {
   GovernanceStep,
   ReviewStep
 } from '@/components/create-dao';
-import { Badge, Button, Callout, Card, Heading, Text } from '@/components/ui';
+import { Badge, Button, Callout, Heading, Text } from '@/components/ui';
+import { WalletControls } from '@/components/wallet-controls';
 import type { CreateDaoFormData } from '@/lib/dao-creation-params';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { useDaoDeployment } from '@/lib/use-dao-deployment';
@@ -50,26 +51,34 @@ function StepCard({
   onClick: () => void;
 }) {
   return (
-    <Card
-      p="4"
-      style={{
-        cursor: 'pointer',
-        background: isActive ? 'var(--accent-3)' : isCompleted ? 'var(--green-3)' : 'var(--gray-2)',
-        border: `2px solid ${isActive ? 'var(--accent-7)' : isCompleted ? 'var(--green-7)' : 'var(--gray-6)'}`,
-        transition: 'all 0.2s',
-        position: 'relative',
-        opacity: isActive || isCompleted ? 1 : 0.7
-      }}
+    <button
+      type="button"
       onClick={onClick}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onClick();
+      aria-current={isActive ? 'step' : undefined}
+      style={{
+        all: 'unset',
+        display: 'block',
+        width: '100%',
+        cursor: 'pointer',
+        padding: '1rem',
+        background: isActive ? 'var(--gray-3)' : 'var(--gray-2)',
+        border: `1px solid ${isActive ? 'var(--gray-7)' : 'var(--gray-6)'}`,
+        borderRadius: '8px',
+        transition: 'all 0.15s ease',
+        boxSizing: 'border-box'
+      }}
+      onMouseEnter={(e) => {
+        if (!isActive) {
+          e.currentTarget.style.background = 'var(--gray-3)';
+          e.currentTarget.style.borderColor = 'var(--gray-7)';
         }
       }}
-      aria-current={isActive ? 'step' : undefined}
+      onMouseLeave={(e) => {
+        if (!isActive) {
+          e.currentTarget.style.background = 'var(--gray-2)';
+          e.currentTarget.style.borderColor = 'var(--gray-6)';
+        }
+      }}
     >
       <Stack gap="2">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -77,25 +86,34 @@ function StepCard({
             style={{
               background: isActive ? 'var(--accent-9)' : isCompleted ? 'var(--green-9)' : 'var(--gray-8)',
               color: 'white',
-              padding: '4px 12px'
+              padding: '4px 12px',
+              pointerEvents: 'none'
             }}
           >
-            {isCompleted ? <Check size={14} /> : number}
+            {number}
           </Badge>
           {!canProceed && !isCompleted && !isActive && (
-            <Badge style={{ background: 'var(--red-9)', color: 'white', fontSize: '0.75rem', padding: '2px 6px' }}>
+            <Badge
+              style={{
+                background: 'var(--red-9)',
+                color: 'white',
+                fontSize: '0.75rem',
+                padding: '2px 6px',
+                pointerEvents: 'none'
+              }}
+            >
               Required
             </Badge>
           )}
         </div>
-        <div>
-          <Heading as="h3" style={{ fontSize: '1rem', marginBottom: '4px' }}>
+        <div style={{ textAlign: 'left' }}>
+          <Heading as="h3" style={{ fontSize: '1rem', marginBottom: '4px', pointerEvents: 'none' }}>
             {title}
           </Heading>
-          <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)' }}>{description}</Text>
+          <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)', pointerEvents: 'none' }}>{description}</Text>
         </div>
       </Stack>
-    </Card>
+    </button>
   );
 }
 
@@ -230,6 +248,7 @@ export default function CreateDaoPage() {
               <span className="network-dot" aria-hidden="true" />
               <span>{getDeploymentConfig().name}</span>
             </div>
+            <WalletControls />
           </div>
         </header>
 

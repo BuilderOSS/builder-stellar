@@ -5,6 +5,7 @@ import Link from 'next/link';
 
 import { DaoDirectory } from '@/components/dao-directory';
 import { Callout, Heading, Text } from '@/components/ui';
+import { WalletControls } from '@/components/wallet-controls';
 import { type DaoConfig, getAllDaosFromDatabase } from '@/lib/dao-db';
 
 export const metadata: Metadata = {
@@ -52,6 +53,7 @@ export default async function Page() {
               <span className="network-dot" aria-hidden="true" />
               <span>Onchain communities</span>
             </div>
+            <WalletControls />
           </div>
         </header>
 
