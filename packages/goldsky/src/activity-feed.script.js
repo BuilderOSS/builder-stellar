@@ -4,24 +4,20 @@ function invoke(data) {
 
     // Normalize all incoming fields to ensure consistent types across all rows
     // This is critical for Arrow table serialization - all rows must have identical types
-    if (!data.topics || data.topics === null || data.topics === undefined || typeof data.topics !== 'string') {
-      data.topics = '{}';
+    function ensureString(val, def) {
+      return (typeof val === 'string' && val) ? val : def;
     }
-    if (!data.args || data.args === null || data.args === undefined || typeof data.args !== 'string') {
-      data.args = '{}';
+    function ensureNumber(val, def) {
+      var n = Number(val);
+      return isFinite(n) ? n : def;
     }
-    if (data.ledger_sequence === null || data.ledger_sequence === undefined || typeof data.ledger_sequence !== 'number') {
-      data.ledger_sequence = 0;
-    }
-    if (data.transaction_index === null || data.transaction_index === undefined || typeof data.transaction_index !== 'number') {
-      data.transaction_index = 0;
-    }
-    if (data.operation_index === null || data.operation_index === undefined || typeof data.operation_index !== 'number') {
-      data.operation_index = 0;
-    }
-    if (data.event_index === null || data.event_index === undefined || typeof data.event_index !== 'number') {
-      data.event_index = 0;
-    }
+
+    var topics = ensureString(data.topics, '{}');
+    var args = ensureString(data.args, '{}');
+    var ledger_sequence = ensureNumber(data.ledger_sequence, 0);
+    var transaction_index = ensureNumber(data.transaction_index, 0);
+    var operation_index = ensureNumber(data.operation_index, 0);
+    var event_index = ensureNumber(data.event_index, 0);
 
     function parsePayload(value) {
       try {
@@ -44,7 +40,7 @@ function invoke(data) {
     }
 
   function pick(row, keys) {
-    var payload = parsePayload(row.args) || parsePayload(row.topics) || parsePayload(row.payload) || parsePayload(row.data);
+    var payload = parsePayload(args) || parsePayload(topics) || parsePayload(row.payload) || parsePayload(row.data);
     for (var i = 0; i < keys.length; i += 1) {
       var key = keys[i];
       if (row[key] !== undefined && row[key] !== null && row[key] !== '') {
@@ -264,7 +260,7 @@ function invoke(data) {
   var summary = summaryFunctions[normalizedEventName] ? summaryFunctions[normalizedEventName]() : (titleMap[normalizedEventName] || String(eventName).replace(/_/g, ' '));
 
   // Ensure consistent string representation for JSON fields to avoid Arrow type inference issues
-  var topicsValue = data.topics;
+  var topicsValue = topics;
   if (typeof topicsValue === 'string') {
     // Validate it's valid JSON
     try {
@@ -276,7 +272,7 @@ function invoke(data) {
     topicsValue = JSON.stringify(topicsValue || {});
   }
 
-  var argsValue = data.args;
+  var argsValue = args;
   if (typeof argsValue === 'string') {
     // Validate it's valid JSON
     try {
@@ -321,10 +317,10 @@ function invoke(data) {
     amount: toString(amount),
     actor: toString(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator'])),
     addresses: toString(JSON.stringify(addresses || [])),
-    ledger_sequence: toNumber(data.ledger_sequence),
-    transaction_index: toNumber(data.transaction_index),
-    operation_index: toNumber(data.operation_index),
-    event_index: toNumber(data.event_index),
+    ledger_sequence: ledger_sequence,
+    transaction_index: transaction_index,
+    operation_index: operation_index,
+    event_index: event_index,
     ledger_closed_at: toString(data.ledger_closed_at),
     transaction_hash: toString(data.transaction_hash)
   };
