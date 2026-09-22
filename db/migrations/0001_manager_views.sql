@@ -111,7 +111,7 @@ UNION ALL SELECT deployment_id, dao_id, 'governor', governor_contract FROM manag
 UNION ALL SELECT deployment_id, dao_id, 'treasury', treasury_contract FROM manager.daos WHERE treasury_contract IS NOT NULL;
 
 CREATE OR REPLACE VIEW manager.event_identity AS
-SELECT e.deployment_id, e.contract_id,
+SELECT DISTINCT e.deployment_id, e.contract_id,
   CASE WHEN e.contract_role = 'manager' THEN NULL ELSE m.dao_id END AS dao_id,
   m.module_role, m.module_contract
 FROM chain.decoded_events e
