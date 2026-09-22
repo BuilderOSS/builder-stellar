@@ -1,0 +1,120 @@
+{
+  "status": "partial",
+  "network": "testnet",
+  "label": "builder",
+  "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+  "nonce": 1,
+  "manager": "CB6IR6UXIPKB67K2NGG77ZAMIHE56F7X2XJ5VWSL6OEZC35SLVH5BHFK",
+  "predictedAddresses": {
+    "token": "CDVI3ZTX5UUTPNWEXQFMWUZCNEIWIYON6L7ATFM7VKSTY7UX6EJSBMHR",
+    "metadata": "CA2SQK4C7GF2CZDW33QWLJI4BQOS476IQSU6A4UNSNBMZ5LOEHSZCJER",
+    "auction": "CCMA2UCRH6PLZPTPJEQRYZGLW2K22LQLVTFZZJ56MI5F4SNLR2FHR7R5",
+    "governor": "CCZUDZJ5PMTX2UFLXLM2TUFMPQX7HF77IUHG7AUIXR5PPVUBVVNRJ2E6",
+    "treasury": "CBADRJV5YVKQ4HCFEJKOTPCR5QAHVU3ANDIWRIACFCX5C23NH4DQ5YLD"
+  },
+  "addresses": {
+    "token": "CDVI3ZTX5UUTPNWEXQFMWUZCNEIWIYON6L7ATFM7VKSTY7UX6EJSBMHR",
+    "metadata": "CA2SQK4C7GF2CZDW33QWLJI4BQOS476IQSU6A4UNSNBMZ5LOEHSZCJER",
+    "auction": "CCMA2UCRH6PLZPTPJEQRYZGLW2K22LQLVTFZZJ56MI5F4SNLR2FHR7R5",
+    "governor": "CCZUDZJ5PMTX2UFLXLM2TUFMPQX7HF77IUHG7AUIXR5PPVUBVVNRJ2E6",
+    "treasury": "CBADRJV5YVKQ4HCFEJKOTPCR5QAHVU3ANDIWRIACFCX5C23NH4DQ5YLD"
+  },
+  "config": {
+    "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+    "nonce": 1,
+    "token": {
+      "name": "Builder Test",
+      "symbol": "BUILD",
+      "uri": "https://test-dao-stellar-web.vercel.app/api/token/"
+    },
+    "metadata": {
+      "projectUri": "https://test-dao-stellar-web.vercel.app",
+      "description": "Unlock the possibilities of collective creation",
+      "contractImage": "https://test-dao-stellar-web.vercel.app/images/dao-logo.png",
+      "rendererBase": "https://test-dao-stellar-web.vercel.app/api/render/",
+      "artwork": {
+        "ipfs": {
+          "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+          "extension": ".png"
+        },
+        "properties": [
+          {
+            "name": "0-backgrounds",
+            "items": [
+              "bg-cool",
+              "bg-warm"
+            ]
+          },
+          {
+            "name": "1-bodies",
+            "items": [
+              "body-rust",
+              "body-blue-sky",
+              "body-darkbrown"
+            ]
+          },
+          {
+            "name": "2-accessories",
+            "items": [
+              "accessory-txt-cc2",
+              "accessory-txt-ico",
+              "accessory-flash"
+            ]
+          },
+          {
+            "name": "3-heads",
+            "items": [
+              "head-hotdog",
+              "head-ufo",
+              "head-goldcoin"
+            ]
+          },
+          {
+            "name": "4-glasses",
+            "items": [
+              "glasses-square-teal",
+              "glasses-square-guava",
+              "glasses-square-black-rgb"
+            ]
+          }
+        ]
+      }
+    },
+    "auction": {
+      "duration": 300,
+      "reservePrice": "1000000000",
+      "timeBuffer": 300,
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+    },
+    "governance": {
+      "votingDelay": 300,
+      "votingPeriod": 300,
+      "quorumBps": 1000,
+      "proposalThresholdBps": 100
+    },
+    "founders": [
+      {
+        "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+        "amount": 10
+      },
+      {
+        "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
+        "amount": 10
+      },
+      {
+        "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
+        "amount": 10
+      }
+    ],
+    "launchAdmin": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO"
+  },
+  "createdAt": "2026-09-22T04:48:01.627Z",
+  "transactions": {
+    "createDao": {
+      "txHash": "1112a43f50a8229103e0d7db5287a8c6dc152da72bec603969ce9d7425f06b07",
+      "ledger": 4805777
+    }
+  },
+  "deploymentLedger": 4805777,
+  "error": "ℹ️ Simulating transaction…\n❌ error: Missing signing key for account CB6IR6UXIPKB67K2NGG77ZAMIHE56F7X2XJ5VWSL6OEZC35SLVH5BHFK\n"
+}

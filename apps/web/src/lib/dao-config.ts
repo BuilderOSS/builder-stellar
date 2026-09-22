@@ -1,9 +1,15 @@
-import { DEPLOYMENTS, type DeploymentNetwork, getDeployment } from '@/config/deployments.generated';
+/**
+ * DAO Configuration Lookup
+ *
+ * Maps URL daoId parameters to DAO contract addresses and network configuration.
+ * Uses database queries for actual DAO state and static network config for infrastructure.
+ */
 
-export type DaoNetworkName = DeploymentNetwork;
+import { getNetworkConfig } from '@/config/networks';
+import { getDaoConfigFromDatabase } from './dao-db';
 
 export type DaoNetworkConfig = {
-  name: DaoNetworkName;
+  name: string;
   label: string;
   rpcUrl: string;
   passphrase: string;
@@ -18,59 +24,37 @@ export type DaoNetworkConfig = {
   auctionContractId: string;
 };
 
-export function getDefaultDaoNetwork(): DaoNetworkName {
-  const network = process.env.NEXT_PUBLIC_DAO_NETWORK || 'local';
-  const label = process.env.NEXT_PUBLIC_DAO_LABEL || 'local';
+/**
+ * Get DAO configuration by ID (token contract address)
+ *
+ * Combines DAO configuration from database with network configuration.
+ * This is the primary way to look up DAO metadata for rendering pages.
+ *
+ * @param daoId - Token contract address (dao_id from database)
+ * @returns DAO configuration with all contract addresses and network info
+ * @throws Error if DAO not found or database query fails
+ */
+export async function getDaoNetworkConfigById(daoId: string): Promise<DaoNetworkConfig> {
+  // Query database for complete DAO configuration
+  const daoConfig = await getDaoConfigFromDatabase(daoId);
 
-  // This will throw if deployment not found - fail fast
-  const deployment = getDeployment(network, label);
-  return deployment.network as DaoNetworkName;
-}
-
-export function getDaoNetworkConfig(_name: DaoNetworkName): DaoNetworkConfig {
-  const network = process.env.NEXT_PUBLIC_DAO_NETWORK || 'local';
-  const label = process.env.NEXT_PUBLIC_DAO_LABEL || 'local';
-  const deployment = getDeployment(network, label);
-
-  return {
-    name: deployment.network as DaoNetworkName,
-    label: deployment.label,
-    rpcUrl: deployment.config.rpcUrl,
-    passphrase: deployment.config.networkPassphrase,
-    tokenName: deployment.config.token.name,
-    tokenSymbol: deployment.config.token.symbol,
-    tokenDescription: deployment.config.token.description,
-    adminAddress: deployment.config.adminAddress,
-    tokenContractId: deployment.contracts.token,
-    metadataContractId: deployment.contracts.metadata ?? '',
-    governorContractId: deployment.contracts.governor,
-    treasuryContractId: deployment.contracts.treasury,
-    auctionContractId: deployment.contracts.auction
-  };
-}
-
-export function getDaoNetworkConfigById(daoId: string): DaoNetworkConfig {
-  const [network, label] = daoId.includes('/') ? daoId.split('/', 2) : [undefined, daoId];
-  const deployment = DEPLOYMENTS.find(
-    (candidate) => candidate.label === label && (!network || candidate.network === network)
-  );
-  if (!deployment) {
-    throw new Error(`No deployment found for daoId="${daoId}"`);
-  }
+  // Get network configuration from static config
+  const networkConfig = getNetworkConfig(daoConfig.network);
 
   return {
-    name: deployment.network as DaoNetworkName,
-    label: deployment.label,
-    rpcUrl: deployment.config.rpcUrl,
-    passphrase: deployment.config.networkPassphrase,
-    tokenName: deployment.config.token.name,
-    tokenSymbol: deployment.config.token.symbol,
-    tokenDescription: deployment.config.token.description,
-    adminAddress: deployment.config.adminAddress,
-    tokenContractId: deployment.contracts.token,
-    metadataContractId: deployment.contracts.metadata ?? '',
-    governorContractId: deployment.contracts.governor,
-    treasuryContractId: deployment.contracts.treasury,
-    auctionContractId: deployment.contracts.auction
+    name: daoConfig.network,
+    label: daoConfig.label || '',
+    rpcUrl: networkConfig.rpcUrl,
+    passphrase: networkConfig.networkPassphrase,
+    // Token metadata now comes from database (populated by Goldsky)
+    tokenName: daoConfig.token_name || '',
+    tokenSymbol: daoConfig.token_symbol || '',
+    tokenDescription: daoConfig.token_description || '',
+    adminAddress: daoConfig.admin_address || '',
+    tokenContractId: daoConfig.token_address,
+    metadataContractId: daoConfig.metadata_contract ?? '',
+    governorContractId: daoConfig.governor_contract,
+    treasuryContractId: daoConfig.treasury_contract ?? '',
+    auctionContractId: daoConfig.auction_contract ?? ''
   };
 }

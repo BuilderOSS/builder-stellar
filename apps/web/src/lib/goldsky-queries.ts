@@ -92,30 +92,30 @@ async function fetchJson<T>(url: string) {
   return json;
 }
 
-export function useGoldskyActivityFeed(limit = 12) {
-  return useSWR<GoldskyActivityResponse>(`/api/activity-feed?limit=${limit}`, fetchJson, { keepPreviousData: true });
+export function useGoldskyActivityFeed(daoId: string, limit = 12) {
+  return useSWR<GoldskyActivityResponse>(`/api/dao/${daoId}/activity-feed?limit=${limit}`, fetchJson, { keepPreviousData: true });
 }
 
-export function useGoldskyTokenInventory(limit = 100, offset = 0) {
-  return useSWR<GoldskyTokenResponse>(`/api/tokens?limit=${limit}&offset=${offset}`, fetchJson, {
+export function useGoldskyTokenInventory(daoId: string, limit = 100, offset = 0) {
+  return useSWR<GoldskyTokenResponse>(`/api/dao/${daoId}/tokens?limit=${limit}&offset=${offset}`, fetchJson, {
     keepPreviousData: true
   });
 }
 
-export function useGoldskyMemberList(limit = 100, offset = 0) {
-  return useSWR<GoldskyMemberResponse>(`/api/members?limit=${limit}&offset=${offset}`, fetchJson, {
+export function useGoldskyMemberList(daoId: string, limit = 100, offset = 0) {
+  return useSWR<GoldskyMemberResponse>(`/api/dao/${daoId}/members?limit=${limit}&offset=${offset}`, fetchJson, {
     keepPreviousData: true
   });
 }
 
-export function useGoldskyMintAuthorities() {
-  return useSWR<GoldskyAuthorityResponse>('/api/authorities/mint', fetchJson, { keepPreviousData: true });
+export function useGoldskyMintAuthorities(daoId: string) {
+  return useSWR<GoldskyAuthorityResponse>(`/api/dao/${daoId}/authorities/mint`, fetchJson, { keepPreviousData: true });
 }
 
-export function useGoldskyGovernorAuthorities() {
-  return useSWR<GoldskyAuthorityResponse>('/api/authorities/governor', fetchJson, { keepPreviousData: true });
+export function useGoldskyGovernorAuthorities(daoId: string) {
+  return useSWR<GoldskyAuthorityResponse>(`/api/dao/${daoId}/authorities/governor`, fetchJson, { keepPreviousData: true });
 }
 
-export function useGoldskyHealth() {
-  return useSWR<GoldskyHealthResponse>('/api/goldsky/health', fetchJson, { keepPreviousData: true });
+export function useGoldskyHealth(daoId: string) {
+  return useSWR<GoldskyHealthResponse>(`/api/dao/${daoId}/goldsky/health`, fetchJson, { keepPreviousData: true });
 }

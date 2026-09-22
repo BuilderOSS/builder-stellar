@@ -11,11 +11,11 @@ async function fetchJson<T>(url: string) {
   return json;
 }
 
-export function useTokenInventory() {
-  return useSWR<TokenInventoryResponse>('/api/tokens', fetchJson, { keepPreviousData: true });
+export function useTokenInventory(daoId: string) {
+  return useSWR<TokenInventoryResponse>(`/api/dao/${daoId}/tokens`, fetchJson, { keepPreviousData: true });
 }
 
-export function useTokenMetadata(tokenId: number | null) {
-  const key = typeof tokenId === 'number' ? `/api/token/${tokenId}` : null;
+export function useTokenMetadata(daoId: string, tokenId: number | null) {
+  const key = typeof tokenId === 'number' ? `/api/dao/${daoId}/token/${tokenId}` : null;
   return useSWR<TokenMetadataResponse>(key, fetchJson, { keepPreviousData: true });
 }

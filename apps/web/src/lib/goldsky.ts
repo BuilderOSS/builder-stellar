@@ -3,43 +3,90 @@
  *
  * PostgreSQL-backed data queries for Stellar DAO using Goldsky indexer.
  * Direct database access for indexed DAO data.
+ *
+ * All queries filter by:
+ * - deployment_id: Manager contract (constant per app instance)
+ * - dao_id: Token contract address (primary multi-tenant key)
  */
 
 import { Pool } from '@neondatabase/serverless';
+import { getNetworkConfig } from '@/config/networks';
 
 // Initialize connection pool with read-only app_server role
 const pool = new Pool({
   connectionString: process.env.APP_DATABASE_URL
 });
 
-function getDeploymentId() {
-  return `${process.env.NEXT_PUBLIC_DAO_LABEL || 'local'}-${process.env.NEXT_PUBLIC_DAO_NETWORK || 'local'}`;
+/**
+ * Get the deployment_id for this app instance.
+ *
+ * deployment_id is CONSTANT per app instance and represents the manager contract
+ * that manages multiple DAOs. Format: "manager:CONTRACT_ADDRESS"
+ *
+ * Example: "manager:CBSKIHNNVKEJWV3A2OI63BWUC637LR4P2GBV4MPJB5PDOMVUMS6KOMAH"
+ *
+ * This is set by the Goldsky pipeline and must match what's in the database.
+ * All DAOs under this manager share the same deployment_id.
+ */
+function getDeploymentId(): string {
+  const deploymentId = process.env.NEXT_PUBLIC_DEPLOYMENT_ID;
+
+  if (!deploymentId) {
+    throw new Error(
+      'NEXT_PUBLIC_DEPLOYMENT_ID environment variable is required. ' +
+      'Format: "manager:CONTRACT_ADDRESS" (e.g., "manager:CBSKIHNNVKEJWV3A2OI63BWUC637LR4P2GBV4MPJB5PDOMVUMS6KOMAH")'
+    );
+  }
+
+  return deploymentId;
 }
 
-export async function getGoldskyAuctionHistory(limit = 24, offset = 0) {
+/**
+ * Get the dao_id (token contract address) for a given daoId URL parameter.
+ *
+ * dao_id is the PRIMARY KEY for multi-tenancy - it's the token contract address
+ * that uniquely identifies each DAO within this manager deployment.
+ *
+ * @param daoId - URL format like "testnet/builder" or "builder"
+ * @returns Token contract address (e.g., "CBGLIC3VDPNSXRQTHIHADJVL3WVM54ZIO7FV23SDC3DQTTDLO2NMYUK7")
+ */
+function getDaoIdFromUrl(daoId: string): string {
+  // Import here to avoid circular dependency
+  const { getDaoNetworkConfigById } = require('@/lib/dao-config');
+
+  const config = getDaoNetworkConfigById(daoId);
+
+  // dao_id in the database is the token contract address
+  return config.tokenContractId;
+}
+
+export async function getGoldskyAuctionHistory(daoId: string, limit = 24, offset = 0) {
   const deploymentId = getDeploymentId();
+  const dao_id = getDaoIdFromUrl(daoId);
   const result = await pool.query(
     `
     SELECT * FROM auction.auctions
-    WHERE deployment_id = $1 AND settled = true
+    WHERE deployment_id = $1 AND dao_id = $2 AND settled = true
     ORDER BY token_id DESC
-    LIMIT $2 OFFSET $3
+    LIMIT $3 OFFSET $4
   `,
-    [deploymentId, limit, offset]
+    [deploymentId, dao_id, limit, offset]
   );
   return result.rows;
 }
 
-export async function getGoldskyAuctionBids(tokenId: string, limit = 20) {
+export async function getGoldskyAuctionBids(daoId: string, tokenId: string, limit = 20) {
+  const deploymentId = getDeploymentId();
+  const dao_id = getDaoIdFromUrl(daoId);
   const result = await pool.query(
     `
     SELECT event_id, bidder, amount, payment_type, ledger_sequence, timestamp, transaction_hash
     FROM auction.bids
-    WHERE deployment_id = $1 AND token_id = $2
+    WHERE deployment_id = $1 AND dao_id = $2 AND token_id = $3
     ORDER BY ledger_sequence DESC, event_id DESC
-    LIMIT $3
+    LIMIT $4
   `,
-    [getDeploymentId(), tokenId, limit]
+    [deploymentId, dao_id, tokenId, limit]
   );
   return result.rows;
 }
@@ -50,6 +97,7 @@ export async function getGoldskyAuctionBids(tokenId: string, limit = 20) {
  * Returns recent activity across all contracts (governance, token, auction, treasury)
  */
 export async function getGoldskyActivityFeed(
+  daoId: string,
   params: {
     limit?: number;
     offset?: number;
@@ -58,10 +106,12 @@ export async function getGoldskyActivityFeed(
   } = {}
 ) {
   const { limit = 25, offset = 0, contractId, kind } = params;
+  const deploymentId = getDeploymentId();
+  const dao_id = getDaoIdFromUrl(daoId);
 
-  const conditions: string[] = [];
-  const values: any[] = [];
-  let paramIndex = 1;
+  const conditions: string[] = ['deployment_id = $1', 'dao_id = $2'];
+  const values: any[] = [deploymentId, dao_id];
+  let paramIndex = 3;
 
   if (contractId) {
     conditions.push(`contract_id = $${paramIndex++}`);
@@ -73,7 +123,7 @@ export async function getGoldskyActivityFeed(
     values.push(kind);
   }
 
-  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
   const query = `
     SELECT
@@ -123,6 +173,7 @@ export async function getGoldskyActivityFeed(
  * Returns all proposals with their current status and vote tallies
  */
 export async function getGoldskyProposalList(
+  daoId: string,
   params: {
     limit?: number;
     offset?: number;
@@ -130,17 +181,19 @@ export async function getGoldskyProposalList(
   } = {}
 ) {
   const { limit = 50, offset = 0, status } = params;
+  const deploymentId = getDeploymentId();
+  const dao_id = getDaoIdFromUrl(daoId);
 
-  const conditions: string[] = [];
-  const values: any[] = [];
-  let paramIndex = 1;
+  const conditions: string[] = ['deployment_id = $1', 'dao_id = $2'];
+  const values: any[] = [deploymentId, dao_id];
+  let paramIndex = 3;
 
   if (status) {
     conditions.push(`state = $${paramIndex++}`);
     values.push(status);
   }
 
-  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
   const query = `
     SELECT
@@ -191,7 +244,9 @@ export async function getGoldskyProposalList(
  *
  * Returns detailed information about a specific proposal
  */
-export async function getGoldskyProposalDetail(proposalId: string) {
+export async function getGoldskyProposalDetail(daoId: string, proposalId: string) {
+  const deploymentId = getDeploymentId();
+  const dao_id = getDaoIdFromUrl(daoId);
   const query = `
     SELECT
       proposal_id,
@@ -211,10 +266,10 @@ export async function getGoldskyProposalDetail(proposalId: string) {
        updated_ledger,
        updated_timestamp
     FROM app.proposal_detail
-    WHERE proposal_id = $1 OR proposal_number::text = $1
+    WHERE deployment_id = $1 AND dao_id = $2 AND (proposal_id = $3 OR proposal_number::text = $3)
   `;
 
-  const result = await pool.query(query, [proposalId]);
+  const result = await pool.query(query, [deploymentId, dao_id, proposalId]);
 
   if (result.rows.length === 0) {
     throw new Error(`Proposal not found: ${proposalId}`);
@@ -231,17 +286,22 @@ export async function getGoldskyProposalDetail(proposalId: string) {
  *
  * Returns all votes cast on a specific proposal
  */
-export async function getGoldskyProposalVotes(params: {
-  proposalId: string;
-  limit?: number;
-  offset?: number;
-  support?: number;
-}) {
+export async function getGoldskyProposalVotes(
+  daoId: string,
+  params: {
+    proposalId: string;
+    limit?: number;
+    offset?: number;
+    support?: number;
+  }
+) {
   const { proposalId, limit = 100, offset = 0, support } = params;
+  const deploymentId = getDeploymentId();
+  const dao_id = getDaoIdFromUrl(daoId);
 
-  const conditions = ['proposal_id = $1'];
-  const values: any[] = [proposalId];
-  let paramIndex = 2;
+  const conditions = ['deployment_id = $1', 'dao_id = $2', 'proposal_id = $3'];
+  const values: any[] = [deploymentId, dao_id, proposalId];
+  let paramIndex = 4;
 
   if (support !== undefined) {
     conditions.push(`support = $${paramIndex++}`);
@@ -280,11 +340,11 @@ export async function getGoldskyProposalVotes(params: {
       COUNT(*) as vote_count,
       SUM(weight::numeric) as total_weight
     FROM governance.proposal_votes
-    WHERE proposal_id = $1
+    WHERE deployment_id = $1 AND dao_id = $2 AND proposal_id = $3
     GROUP BY support
   `;
 
-  const tallyResult = await pool.query(tallyQuery, [proposalId]);
+  const tallyResult = await pool.query(tallyQuery, [deploymentId, dao_id, proposalId]);
 
   const tally = {
     for: '0',
@@ -315,12 +375,15 @@ export async function getGoldskyProposalVotes(params: {
  * Returns all token holders and their delegations
  */
 export async function getGoldskyTokenInventory(
+  daoId: string,
   params: {
     limit?: number;
     offset?: number;
   } = {}
 ) {
   const { limit = 100, offset = 0 } = params;
+  const deploymentId = getDeploymentId();
+  const dao_id = getDaoIdFromUrl(daoId);
 
   const query = `
     SELECT
@@ -330,16 +393,20 @@ export async function getGoldskyTokenInventory(
       timestamp,
       transaction_hash
     FROM token.inventory
-    WHERE deployment_id = $3
+    WHERE deployment_id = $1 AND dao_id = $2
     ORDER BY token_id DESC
-    LIMIT $1 OFFSET $2
+    LIMIT $3 OFFSET $4
   `;
 
   const [result, countResult, supplyResult] = await Promise.all([
-    pool.query(query, [limit, offset, getDeploymentId()]),
-    pool.query('SELECT COUNT(*)::int AS total FROM token.inventory WHERE deployment_id = $1', [getDeploymentId()]),
-    pool.query('SELECT COUNT(*)::bigint as total_supply FROM token.inventory WHERE deployment_id = $1', [
-      getDeploymentId()
+    pool.query(query, [deploymentId, dao_id, limit, offset]),
+    pool.query('SELECT COUNT(*)::int AS total FROM token.inventory WHERE deployment_id = $1 AND dao_id = $2', [
+      deploymentId,
+      dao_id
+    ]),
+    pool.query('SELECT COUNT(*)::bigint as total_supply FROM token.inventory WHERE deployment_id = $1 AND dao_id = $2', [
+      deploymentId,
+      dao_id
     ])
   ]);
 
@@ -365,20 +432,25 @@ export async function getGoldskyTokenInventory(
   };
 }
 
-export async function getGoldskyMemberList(params: { limit?: number; offset?: number } = {}) {
+export async function getGoldskyMemberList(daoId: string, params: { limit?: number; offset?: number } = {}) {
   const { limit = 100, offset = 0 } = params;
+  const deploymentId = getDeploymentId();
+  const dao_id = getDaoIdFromUrl(daoId);
   const [result, countResult] = await Promise.all([
     pool.query(
       `
       SELECT address, owned_token_count, delegated_to, voting_power, last_activity_ledger
       FROM token.members
-      WHERE deployment_id = $1
+      WHERE deployment_id = $1 AND dao_id = $2
       ORDER BY voting_power DESC, address
-      LIMIT $2 OFFSET $3
+      LIMIT $3 OFFSET $4
     `,
-      [getDeploymentId(), limit, offset]
+      [deploymentId, dao_id, limit, offset]
     ),
-    pool.query('SELECT COUNT(*)::int AS total FROM token.members WHERE deployment_id = $1', [getDeploymentId()])
+    pool.query('SELECT COUNT(*)::int AS total FROM token.members WHERE deployment_id = $1 AND dao_id = $2', [
+      deploymentId,
+      dao_id
+    ])
   ]);
   const total = countResult.rows[0]?.total ?? 0;
 
@@ -397,18 +469,20 @@ export async function getGoldskyMemberList(params: { limit?: number; offset?: nu
  *
  * Returns all addresses with mint authority
  */
-export async function getGoldskyMintAuthorities() {
+export async function getGoldskyMintAuthorities(daoId: string) {
+  const deploymentId = getDeploymentId();
+  const dao_id = getDaoIdFromUrl(daoId);
   const query = `
     SELECT
       authority,
       enabled,
       ledger_sequence AS last_updated_ledger
     FROM token.mint_authorities
-    WHERE enabled = true
+    WHERE deployment_id = $1 AND dao_id = $2 AND enabled = true
     ORDER BY authority
   `;
 
-  const result = await pool.query(query);
+  const result = await pool.query(query, [deploymentId, dao_id]);
 
   return {
     items: result.rows,
@@ -422,18 +496,20 @@ export async function getGoldskyMintAuthorities() {
  *
  * Returns all addresses with governor authority
  */
-export async function getGoldskyGovernorAuthorities() {
+export async function getGoldskyGovernorAuthorities(daoId: string) {
+  const deploymentId = getDeploymentId();
+  const dao_id = getDaoIdFromUrl(daoId);
   const query = `
     SELECT
       authority,
       enabled,
       ledger_sequence AS last_updated_ledger
     FROM governance.governor_authorities
-    WHERE enabled = true
+    WHERE deployment_id = $1 AND dao_id = $2 AND enabled = true
     ORDER BY authority
   `;
 
-  const result = await pool.query(query);
+  const result = await pool.query(query, [deploymentId, dao_id]);
 
   return {
     items: result.rows,
@@ -447,7 +523,9 @@ export async function getGoldskyGovernorAuthorities() {
  *
  * Returns the complete event history for a proposal
  */
-export async function getGoldskyProposalLifecycle(proposalId: string) {
+export async function getGoldskyProposalLifecycle(daoId: string, proposalId: string) {
+  const deploymentId = getDeploymentId();
+  const dao_id = getDaoIdFromUrl(daoId);
   const query = `
     SELECT
       event_type,
@@ -456,11 +534,46 @@ export async function getGoldskyProposalLifecycle(proposalId: string) {
       transaction_hash,
       ledger_sequence
     FROM governance.proposal_lifecycle
-    WHERE proposal_id = $1
+    WHERE deployment_id = $1 AND dao_id = $2 AND proposal_id = $3
     ORDER BY ledger_sequence ASC
   `;
 
-  const result = await pool.query(query, [proposalId]);
+  const result = await pool.query(query, [deploymentId, dao_id, proposalId]);
+
+  return {
+    items: result.rows,
+    total: result.rowCount,
+    generatedAt: new Date().toISOString()
+  };
+}
+
+/**
+ * Get All DAOs
+ *
+ * Returns all DAOs managed by this deployment (manager contract)
+ * Used for the DAO directory/landing page
+ */
+export async function getGoldskyDaoList() {
+  const deploymentId = getDeploymentId();
+
+  const query = `
+    SELECT
+      dao_id,
+      token_address,
+      creator,
+      manager_contract,
+      governor_contract,
+      auction_contract,
+      treasury_contract,
+      metadata_contract,
+      created_timestamp,
+      created_ledger
+    FROM manager.daos
+    WHERE deployment_id = $1
+    ORDER BY created_ledger DESC
+  `;
+
+  const result = await pool.query(query, [deploymentId]);
 
   return {
     items: result.rows,

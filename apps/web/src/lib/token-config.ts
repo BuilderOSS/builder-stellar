@@ -1,23 +1,15 @@
-import { getDeployment } from '@/config/deployments.generated';
+/**
+ * Token Configuration
+ *
+ * Note: In multi-tenant architecture, token metadata comes from the DAO context.
+ * These defaults are used only as fallbacks during initial page load.
+ * Always use daoConfig from DaoContext for actual token information.
+ */
 
-function getTokenConfig() {
-  const network = process.env.NEXT_PUBLIC_DAO_NETWORK || 'local';
-  const label = process.env.NEXT_PUBLIC_DAO_LABEL || 'local';
-  const deployment = getDeployment(network, label);
-
-  return {
-    name: deployment.config.token.name,
-    symbol: deployment.config.token.symbol,
-    description: deployment.config.token.description
-  };
-}
-
-const config = getTokenConfig();
-
-export const TOKEN_NAME = config.name;
-export const TOKEN_SYMBOL = config.symbol;
-export const TOKEN_DESCRIPTION = config.description;
+export const TOKEN_NAME = 'Token';
+export const TOKEN_SYMBOL = 'TKN';
+export const TOKEN_DESCRIPTION = 'Decentralized Autonomous Organization Token';
 
 export function getTokenDisplayName(tokenId: number) {
-  return `${TOKEN_NAME} #${tokenId}`;
+  return `Token #${tokenId}`;
 }

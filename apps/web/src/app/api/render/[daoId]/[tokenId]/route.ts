@@ -61,7 +61,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
   const { daoId, tokenId } = await params;
   try {
     const resolvedTokenId = parseTokenId(tokenId);
-    const config = getDaoNetworkConfigById(daoId);
+    const config = await getDaoNetworkConfigById(daoId);
     const origin = new URL(request.url).origin;
     const metadata = await resolveOnchainTokenMetadata(
       config,

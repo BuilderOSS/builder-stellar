@@ -23,16 +23,19 @@ import { usePathname } from 'next/navigation';
 import { type ReactNode, useEffect } from 'react';
 
 import { Button, Callout } from '@/components/ui';
-import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
+import { useDaoContext } from '@/contexts/dao-context';
+import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
-const BASE_NAV_ITEMS: Array<{ href: Route; label: string; icon: LucideIcon }> = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/proposals', label: 'Proposals', icon: Vote },
-  { href: '/auctions', label: 'Auctions', icon: Gavel },
-  { href: '/treasury', label: 'Treasury', icon: Landmark },
-  { href: '/members', label: 'Members', icon: Users }
-];
+function getNavItems(daoId: string): Array<{ href: Route; label: string; icon: LucideIcon }> {
+  return [
+    { href: `/dao/${daoId}` as Route, label: 'Dashboard', icon: LayoutDashboard },
+    { href: `/dao/${daoId}/proposals` as Route, label: 'Proposals', icon: Vote },
+    { href: `/dao/${daoId}/auctions` as Route, label: 'Auctions', icon: Gavel },
+    { href: `/dao/${daoId}/treasury` as Route, label: 'Treasury', icon: Landmark },
+    { href: `/dao/${daoId}/members` as Route, label: 'Members', icon: Users }
+  ];
+}
 
 function NavLink({
   href,
@@ -64,7 +67,7 @@ function shortenAddress(value: string) {
 
 async function validateWalletNetwork(
   address: string,
-  currentNetwork: ReturnType<typeof getDaoNetworkConfig>,
+  currentNetwork: DaoNetworkConfig,
   updateSession: ReturnType<typeof useDaoSessionStore.getState>['updateSession']
 ) {
   try {
@@ -95,17 +98,18 @@ async function validateWalletNetwork(
 
 export function DaoShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const { daoId, daoConfig: currentNetwork } = useDaoContext();
   const session = useDaoSessionStore();
   const updateSession = useDaoSessionStore((state) => state.updateSession);
-  const network = getDefaultDaoNetwork();
-  const currentNetwork = getDaoNetworkConfig(network);
   const walletDisabled = Boolean(session.address && session.walletNetworkIssue);
+
+  const baseNavItems = getNavItems(daoId);
   const adminNavItem: { href: Route; label: string; icon: LucideIcon } = {
-    href: '/admin',
+    href: `/dao/${daoId}/admin` as Route,
     label: 'Admin',
     icon: Settings
   };
-  const navItems = session.address ? [...BASE_NAV_ITEMS, adminNavItem] : BASE_NAV_ITEMS;
+  const navItems = session.address ? [...baseNavItems, adminNavItem] : baseNavItems;
 
   useEffect(() => {
     StellarWalletsKit.init({ modules: defaultModules() });
@@ -170,7 +174,7 @@ export function DaoShell({ children }: { children: ReactNode }) {
       </a>
       <div className="app-frame">
         <header className="app-header">
-          <Link className="brand-lockup" href="/" aria-label={`${currentNetwork.tokenName} dashboard`}>
+          <Link className="brand-lockup" href={`/dao/${daoId}`} aria-label={`${currentNetwork.tokenName} dashboard`}>
             <Image className="brand-mark" src="/icon.svg" alt="" aria-hidden="true" width={44} height={44} priority />
             <div className="brand-copy">
               <p className="brand-name">{currentNetwork.tokenName}</p>

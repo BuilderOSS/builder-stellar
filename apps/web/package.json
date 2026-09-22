@@ -3,9 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "node ../../scripts/generate-deployment-config.mjs && panda codegen && panda cssgen",
+    "predev": "panda codegen && panda cssgen",
     "dev": "next dev",
-    "prebuild": "pnpm --filter @builder-stellar/token-bindings --filter @builder-stellar/metadata-bindings --filter @builder-stellar/governor-bindings --filter @builder-stellar/treasury-bindings --filter @builder-stellar/auction-bindings build && node ../../scripts/generate-deployment-config.mjs && panda codegen && panda cssgen",
+    "prebuild": "pnpm --filter @builder-stellar/token-bindings --filter @builder-stellar/metadata-bindings --filter @builder-stellar/governor-bindings --filter @builder-stellar/treasury-bindings --filter @builder-stellar/auction-bindings build && panda codegen && panda cssgen",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
