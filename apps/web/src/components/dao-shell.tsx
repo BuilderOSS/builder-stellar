@@ -12,12 +12,12 @@ import {
   LayoutDashboard,
   LogOut,
   MoreHorizontal,
+  Plus,
   Settings,
   ShieldAlert,
   Users,
   Vote,
-  Wallet,
-  Plus
+  Wallet
 } from 'lucide-react';
 import type { Route } from 'next';
 import Image from 'next/image';
@@ -31,11 +31,13 @@ import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { useGoldskyMember } from '@/lib/goldsky-queries';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
-function getNavItems(daoId: string): Array<{ href: Route; label: string; icon: LucideIcon }> {
+type NavItem = { href: Route; label: string; icon: LucideIcon; exact?: boolean };
+
+function getNavItems(daoId: string): NavItem[] {
   return [
     { href: '/', label: 'Explore DAOs', icon: Compass },
     { href: '/create', label: 'Create DAO', icon: Plus },
-    { href: `/dao/${daoId}` as Route, label: 'Dashboard', icon: LayoutDashboard },
+    { href: `/dao/${daoId}` as Route, label: 'Dashboard', icon: LayoutDashboard, exact: true },
     { href: `/dao/${daoId}/proposals` as Route, label: 'Proposals', icon: Vote },
     { href: `/dao/${daoId}/auctions` as Route, label: 'Auctions', icon: Gavel },
     { href: `/dao/${daoId}/treasury` as Route, label: 'Treasury', icon: Landmark },
@@ -62,8 +64,8 @@ function NavLink({
   );
 }
 
-function isRouteActive(pathname: string, href: Route) {
-  return pathname === href || (href !== '/' && pathname.startsWith(`${href}/`));
+function isRouteActive(pathname: string, href: Route, exact = false) {
+  return pathname === href || (!exact && href !== '/' && pathname.startsWith(`${href}/`));
 }
 
 function shortenAddress(value: string) {
@@ -121,7 +123,7 @@ export function DaoShell({ children }: { children: ReactNode }) {
   const walletDisabled = Boolean(session.address && session.walletNetworkIssue);
 
   const baseNavItems = getNavItems(daoId);
-  const adminNavItem: { href: Route; label: string; icon: LucideIcon } = {
+  const adminNavItem: NavItem = {
     href: `/dao/${daoId}/admin` as Route,
     label: 'Admin',
     icon: Settings
@@ -206,12 +208,12 @@ export function DaoShell({ children }: { children: ReactNode }) {
           <div className="nav-groups">
             <nav className="primary-nav" aria-label="Primary navigation">
               {desktopPrimaryNavItems.map((item) => (
-                <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href)} />
+                <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href, item.exact)} />
               ))}
             </nav>
             <nav className="secondary-nav" aria-label="DAO sections">
               {desktopSecondaryNavItems.map((item) => (
-                <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href)} />
+                <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href, item.exact)} />
               ))}
             </nav>
           </div>
@@ -250,7 +252,7 @@ export function DaoShell({ children }: { children: ReactNode }) {
 
         <nav className="mobile-nav" aria-label="Mobile navigation">
           {mobilePrimaryNavItems.map((item) => (
-            <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href)} />
+            <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href, item.exact)} />
           ))}
           {mobileOverflowNavItems.length ? (
             <details className="dashboard-menu mobile-nav__more">
@@ -264,7 +266,7 @@ export function DaoShell({ children }: { children: ReactNode }) {
               <div className="dashboard-menu__panel dashboard-options-menu">
                 <p className="label">More sections</p>
                 {mobileOverflowNavItems.map((item) => (
-                  <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href)} />
+                  <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href, item.exact)} />
                 ))}
               </div>
             </details>
