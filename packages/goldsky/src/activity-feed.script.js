@@ -2,6 +2,26 @@ function invoke(data) {
   try {
     if (!data) return null;
 
+    // Normalize all incoming fields to ensure consistent types across all rows
+    if (data.topics === null || data.topics === undefined) {
+      data.topics = '{}';
+    }
+    if (data.args === null || data.args === undefined) {
+      data.args = '{}';
+    }
+    if (data.ledger_sequence === null || data.ledger_sequence === undefined) {
+      data.ledger_sequence = 0;
+    }
+    if (data.transaction_index === null || data.transaction_index === undefined) {
+      data.transaction_index = 0;
+    }
+    if (data.operation_index === null || data.operation_index === undefined) {
+      data.operation_index = 0;
+    }
+    if (data.event_index === null || data.event_index === undefined) {
+      data.event_index = 0;
+    }
+
     function parsePayload(value) {
       try {
         if (typeof value === 'string') {
@@ -27,13 +47,13 @@ function invoke(data) {
     for (var i = 0; i < keys.length; i += 1) {
       var key = keys[i];
       if (row[key] !== undefined && row[key] !== null && row[key] !== '') {
-        return row[key];
+        return String(row[key]);
       }
       if (payload && payload[key] !== undefined && payload[key] !== null && payload[key] !== '') {
-        return payload[key];
+        return String(payload[key]);
       }
     }
-    return undefined;
+    return '';
   }
 
   function unique(values) {
@@ -211,38 +231,48 @@ function invoke(data) {
   ]);
 
   var summary;
+  var proposalId = pick(data, ['proposal_id']);
+  var amount = pick(data, ['amount']);
+  var tokenId = pick(data, ['token_id']);
+  var func = pick(data, ['function']);
+  var target = pick(data, ['target']);
+  var owner = pick(data, ['to', 'owner']);
+  var creator = pick(data, ['creator']);
+  var tokenAddress = pick(data, ['token_address']);
+  var name = pick(data, ['name']);
+
   if (normalizedEventName === 'ProposalQueued') {
-    summary = 'Proposal ' + (pick(data, ['proposal_id']) || '') + ' queued';
+    summary = 'Proposal ' + (proposalId || '') + ' queued';
   } else if (normalizedEventName === 'ProposalCreated') {
     summary = 'Proposal created';
   } else if (normalizedEventName === 'VoteCast') {
     summary = 'Vote cast on proposal';
   } else if (normalizedEventName === 'BidPlaced') {
-    summary = 'Bid of ' + (pick(data, ['amount']) || 'unknown') + ' placed on token ' + (pick(data, ['token_id']) || 'unknown');
+    summary = 'Bid of ' + (amount || 'unknown') + ' placed on token ' + (tokenId || 'unknown');
   } else if (normalizedEventName === 'AuctionSettled') {
-    summary = 'Auction settled for token ' + (pick(data, ['token_id']) || 'unknown');
+    summary = 'Auction settled for token ' + (tokenId || 'unknown');
   } else if (normalizedEventName === 'AuctionCreated') {
-    summary = 'Auction created for token ' + (pick(data, ['token_id']) || 'unknown');
+    summary = 'Auction created for token ' + (tokenId || 'unknown');
   } else if (normalizedEventName === 'Execute') {
-    summary = 'Executed ' + (pick(data, ['function']) || 'call') + ' on ' + (pick(data, ['target']) || 'target');
+    summary = 'Executed ' + (func || 'call') + ' on ' + (target || 'target');
   } else if (normalizedEventName === 'Mint' || normalizedEventName === 'MintWithMinter') {
-    summary = 'Minted token ' + (pick(data, ['token_id']) || '') + ' to ' + (pick(data, ['to', 'owner']) || 'recipient');
+    summary = 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient');
   } else if (normalizedEventName === 'BatchMint') {
-    summary = 'Minted ' + (pick(data, ['amount']) || 'batch') + ' tokens';
+    summary = 'Minted ' + (amount || 'batch') + ' tokens';
   } else if (normalizedEventName === 'DelegateChanged') {
     summary = 'Delegation changed';
   } else if (normalizedEventName === 'DaoCreated') {
-    summary = 'DAO created by ' + (pick(data, ['creator']) || 'unknown');
+    summary = 'DAO created by ' + (creator || 'unknown');
   } else if (normalizedEventName === 'DaoRegistered') {
-    summary = 'DAO registered for token ' + (pick(data, ['token_address']) || 'unknown');
+    summary = 'DAO registered for token ' + (tokenAddress || 'unknown');
   } else if (normalizedEventName === 'DaoFinalized') {
-    summary = 'DAO finalized for token ' + (pick(data, ['token_address']) || 'unknown');
+    summary = 'DAO finalized for token ' + (tokenAddress || 'unknown');
   } else if (normalizedEventName === 'ImplementationRegistered') {
-    summary = 'Implementation "' + (pick(data, ['name']) || 'unknown') + '" registered';
+    summary = 'Implementation "' + (name || 'unknown') + '" registered';
   } else if (normalizedEventName === 'SeedGenerated') {
-    summary = 'Seed generated for token ' + (pick(data, ['token_id']) || 'unknown');
+    summary = 'Seed generated for token ' + (tokenId || 'unknown');
   } else if (normalizedEventName === 'PropertyAdded') {
-    summary = 'Property "' + (pick(data, ['name']) || 'unknown') + '" added';
+    summary = 'Property "' + (name || 'unknown') + '" added';
   } else if (titleMap[normalizedEventName]) {
     summary = titleMap[normalizedEventName];
   } else {
