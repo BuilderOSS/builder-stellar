@@ -1,8 +1,8 @@
 {
   "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
-  "nonce": 3,
+  "nonce": 0,
   "token": {
-    "name": "Builder Test",
+    "name": "Builder DAO",
     "symbol": "BUILD",
     "uri": "https://test-dao-stellar-web.vercel.app/api/token/"
   },

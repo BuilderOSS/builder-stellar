@@ -36,11 +36,11 @@ if (!['local', 'testnet', 'mainnet'].includes(config.network)) {
 }
 const networkName = config.network;
 const identityName =
-  process.env.DAO_DEPLOY_IDENTITY?.trim() || `${networkName}-dev`;
+  process.env.DEPLOY_IDENTITY?.trim() || `${networkName}-admin`;
 const adminAddress = config.adminAddress;
 const rpcUrl = config.rpcUrl;
 const networkPassphrase = config.networkPassphrase;
-const saltSuffix = process.env.DAO_DEPLOY_SALT_SUFFIX?.trim() ?? '';
+const saltSuffix = process.env.DEPLOY_SALT_SUFFIX?.trim() ?? '';
 const contractBuildDir = 'target/wasm32v1-none/release';
 const deployArtifactPath = `deploys/${config.label}-${networkName}-manager.json`;
 

@@ -25,7 +25,7 @@ const networkConfig = JSON.parse(readFileSync(networkConfigPath, 'utf8'));
 
 const networkName = networkConfig.network;
 const identityName =
-  process.env.DAO_DEPLOY_IDENTITY?.trim() || `${networkName}-dev`;
+  process.env.DEPLOY_IDENTITY?.trim() || `${networkName}-admin`;
 const managerArtifactPath = `deploys/${networkConfig.label}-${networkName}-manager.json`;
 const daoArtifactPath = `deploys/${networkConfig.label}-${networkName}-dao-${daoConfig.nonce}.json`;
 
@@ -33,7 +33,7 @@ const daoArtifactPath = `deploys/${networkConfig.label}-${networkName}-dao-${dao
 if (!existsSync(managerArtifactPath)) {
   throw new Error(
     `Manager deployment artifact not found: ${managerArtifactPath}\n` +
-      `Please run: node scripts/deploy-manager.mjs ${networkConfigPath}`
+    `Please run: node scripts/deploy-manager.mjs ${networkConfigPath}`
   );
 }
 const managerArtifact = JSON.parse(readFileSync(managerArtifactPath, 'utf8'));
