@@ -69,6 +69,17 @@ function patchGeneratedBindings(packageName, outputDir) {
   const typesPath = `${outputDir}/src/types.ts`;
   const clientPath = `${outputDir}/src/client.ts`;
 
+  // The SDK generator emits error enums as value-only objects, while clients
+  // use them as the error type in Result return values.
+  if (packageName === 'manager') {
+    let typesContent = readFileSync(typesPath, 'utf8');
+    typesContent = typesContent.replace(
+      '/**\n * Event: DaoCreated',
+      'export type ManagerError = keyof typeof ManagerError;\n\n/**\n * Event: DaoCreated'
+    );
+    writeFileSync(typesPath, typesContent);
+  }
+
   // Patch types.ts for Point and ComplianceError issues
   if (packageName === 'token') {
     let typesContent = readFileSync(typesPath, 'utf8');

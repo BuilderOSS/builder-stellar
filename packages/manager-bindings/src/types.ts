@@ -122,6 +122,8 @@ export const ManagerError = {
   1202 : { message: "InvalidPaginationParams" }
 }
 
+export type ManagerError = keyof typeof ManagerError;
+
 /**
  * Event: DaoCreated
  */
