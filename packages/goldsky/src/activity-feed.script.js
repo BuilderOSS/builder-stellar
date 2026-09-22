@@ -230,7 +230,6 @@ function invoke(data) {
     pick(data, ['token_address'])
   ]);
 
-  var summary;
   var proposalId = pick(data, ['proposal_id']);
   var amount = pick(data, ['amount']);
   var tokenId = pick(data, ['token_id']);
@@ -240,6 +239,8 @@ function invoke(data) {
   var creator = pick(data, ['creator']);
   var tokenAddress = pick(data, ['token_address']);
   var name = pick(data, ['name']);
+
+  var summary = titleMap[normalizedEventName] || String(eventName).replace(/_/g, ' ');
 
   if (normalizedEventName === 'ProposalQueued') {
     summary = 'Proposal ' + (proposalId || '') + ' queued';
@@ -273,10 +274,6 @@ function invoke(data) {
     summary = 'Seed generated for token ' + (tokenId || 'unknown');
   } else if (normalizedEventName === 'PropertyAdded') {
     summary = 'Property "' + (name || 'unknown') + '" added';
-  } else if (titleMap[normalizedEventName]) {
-    summary = titleMap[normalizedEventName];
-  } else {
-    summary = String(eventName).replace(/_/g, ' ');
   }
 
   // Ensure consistent string representation for JSON fields to avoid Arrow type inference issues
@@ -304,6 +301,9 @@ function invoke(data) {
     argsValue = JSON.stringify(argsValue || {});
   }
 
+  // Strictly type all fields to ensure no mixed types in Arrow table
+  var visibility = userFacing[normalizedEventName] ? (normalizedEventName.indexOf('Proposal') === 0 || normalizedEventName === 'VoteCast' ? 'governance' : 'public') : (kindMap[normalizedEventName] ? 'admin' : 'system');
+
   return {
     activity_id: String(data.event_id || data.id || ''),
     deployment_id: String(data.deployment_id || ''),
@@ -311,20 +311,20 @@ function invoke(data) {
     contract_role: String(data.contract_role || ''),
     kind: String(kindMap[normalizedEventName] || ('contract.' + String(eventName).toLowerCase())),
     title: String(titleMap[normalizedEventName] || normalizedEventName),
-    summary: String(summary),
-    event_name: String(eventName),
-    topics: String(topicsValue),
-    args: String(argsValue),
-    visibility: String(userFacing[normalizedEventName] ? (normalizedEventName.indexOf('Proposal') === 0 || normalizedEventName === 'VoteCast' ? 'governance' : 'public') : (kindMap[normalizedEventName] ? 'admin' : 'system')),
-    proposal_id: String(pick(data, ['proposal_id']) || ''),
-    token_id: String(pick(data, ['token_id']) || ''),
-    amount: String(pick(data, ['amount', 'weight']) || ''),
+    summary: String(summary || ''),
+    event_name: String(eventName || ''),
+    topics: String(topicsValue || '{}'),
+    args: String(argsValue || '{}'),
+    visibility: String(visibility || 'system'),
+    proposal_id: String(proposalId || ''),
+    token_id: String(tokenId || ''),
+    amount: String(amount || ''),
     actor: String(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator']) || ''),
-    addresses: String(JSON.stringify(addresses)),
-    ledger_sequence: data.ledger_sequence || 0,
-    transaction_index: data.transaction_index || 0,
-    operation_index: data.operation_index || 0,
-    event_index: data.event_index || 0,
+    addresses: String(JSON.stringify(addresses || []) || '[]'),
+    ledger_sequence: Number(data.ledger_sequence) || 0,
+    transaction_index: Number(data.transaction_index) || 0,
+    operation_index: Number(data.operation_index) || 0,
+    event_index: Number(data.event_index) || 0,
     ledger_closed_at: String(data.ledger_closed_at || ''),
     transaction_hash: String(data.transaction_hash || '')
   };
