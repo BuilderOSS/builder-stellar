@@ -129,7 +129,6 @@ export default function CreateDaoPage() {
   const auction = useCreateDaoStore((s) => s.auction);
   const governance = useCreateDaoStore((s) => s.governance);
   const founders = useCreateDaoStore((s) => s.founders);
-  const launchAdmin = useCreateDaoStore((s) => s.launchAdmin);
 
   const setStep = useCreateDaoStore((s) => s.setStep);
   const nextStep = useCreateDaoStore((s) => s.nextStep);
@@ -143,7 +142,7 @@ export default function CreateDaoPage() {
   const canProceedToStep5 = useCreateDaoStore(selectCanProceedToStep5);
   const canProceedToStep6 = useCreateDaoStore(selectCanProceedToStep6);
 
-  const canSubmit = canProceedToStep6 && launchAdmin.trim().length > 0;
+  const canSubmit = canProceedToStep6;
 
   // Deployment state
   const [isDeploying, setIsDeploying] = useState(false);
@@ -195,7 +194,7 @@ export default function CreateDaoPage() {
         auction,
         governance,
         founders,
-        launchAdmin
+        launchAdmin: session.address
       };
 
       // Deploy DAO
@@ -260,29 +259,19 @@ export default function CreateDaoPage() {
             <div className="discovery-hero__copy">
               <p className="eyebrow">DAO creation wizard</p>
               <h1 className="page-title" id="discovery-title">
-                {!session.address ? 'Connect your wallet to get started' : 'Create a new DAO'}
+                Create a new DAO
               </h1>
               <p className="lede">
-                {!session.address
-                  ? 'Please connect your wallet to create a DAO. You will be the deployer and need to sign transactions.'
-                  : 'Configure and deploy a new DAO on Stellar with governance tokens, auctions, and on-chain voting.'}
+                Configure and deploy a new DAO on Stellar with governance tokens, auctions, and on-chain voting.
               </p>
             </div>
             <div className="discovery-hero__signal" aria-label="Creation progress">
               <span className="label">{isDeploying ? 'Deployment status' : 'Wizard progress'}</span>
-              <strong>
-                {isDeploying
-                  ? deploymentState.progress.currentStepLabel
-                  : !session.address
-                    ? 'Wallet required'
-                    : `Step ${step} of 6`}
-              </strong>
+              <strong>{isDeploying ? deploymentState.progress.currentStepLabel : `Step ${step} of 6`}</strong>
               <span>
                 {isDeploying
                   ? `${deploymentState.progress.currentStepIndex} of ${deploymentState.progress.totalSteps} steps`
-                  : !session.address
-                    ? 'Connect to proceed'
-                    : 'Multi-step wizard'}
+                  : 'Multi-step wizard'}
               </span>
             </div>
           </section>
@@ -446,7 +435,7 @@ export default function CreateDaoPage() {
                     description="Your wallet will prompt you to sign several transactions. This process may take a few minutes to complete. Make sure you have enough XLM for transaction fees."
                   />
 
-                  <ReviewStep />
+                  <ReviewStep connectedAddress={session.address} />
 
                   <div className="form-actions form-actions--split">
                     <Button variant="outline" onClick={prevStep}>

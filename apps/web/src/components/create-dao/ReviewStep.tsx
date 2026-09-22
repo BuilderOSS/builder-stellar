@@ -4,28 +4,11 @@
 
 import { Stack } from 'styled-system/jsx';
 
-import { Badge, Card, Heading, Input, Text } from '@/components/ui';
-import { getStellarAddressError, isValidStellarAddress } from '@/lib/validation';
+import { Badge, Card, Heading, Text } from '@/components/ui';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
-export function ReviewStep() {
-  const { basicInfo, artwork, auction, governance, founders, launchAdmin } = useCreateDaoStore();
-  const updateLaunchAdmin = useCreateDaoStore((s) => s.updateLaunchAdmin);
-  const validationErrors = useCreateDaoStore((s) => s.validationErrors);
-  const setValidationError = useCreateDaoStore((s) => s.setValidationError);
-  const clearValidationError = useCreateDaoStore((s) => s.clearValidationError);
-
-  const handleLaunchAdminChange = (value: string) => {
-    updateLaunchAdmin(value);
-    if (!value || value.trim().length === 0) {
-      setValidationError('launchAdmin', 'Launch admin address is required');
-    } else if (!isValidStellarAddress(value)) {
-      const error = getStellarAddressError(value);
-      setValidationError('launchAdmin', error || 'Invalid launch admin address');
-    } else {
-      clearValidationError('launchAdmin');
-    }
-  };
+export function ReviewStep({ connectedAddress }: { connectedAddress: string }) {
+  const { basicInfo, artwork, auction, governance, founders } = useCreateDaoStore();
 
   return (
     <Stack gap="4">
@@ -159,27 +142,11 @@ export function ReviewStep() {
               Launch Configuration
             </Heading>
             <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-              Specify the admin address that will have control during launch
+              Your connected wallet will be the admin during DAO launch
             </Text>
           </div>
 
-          <Stack gap="2">
-            <label htmlFor="launchAdmin">
-              <Text style={{ fontWeight: 600 }}>Launch Admin Address *</Text>
-            </label>
-            <Input
-              id="launchAdmin"
-              value={launchAdmin}
-              onChange={(e) => handleLaunchAdminChange(e.target.value)}
-              placeholder="G..."
-            />
-            {validationErrors.launchAdmin && (
-              <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>{validationErrors.launchAdmin}</Text>
-            )}
-            <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-              Stellar address that will be the admin during DAO launch process
-            </Text>
-          </Stack>
+          <DetailRow label="Launch Admin Address" value={connectedAddress} mono />
         </Stack>
       </Card>
     </Stack>
