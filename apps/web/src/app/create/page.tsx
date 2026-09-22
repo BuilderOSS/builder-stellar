@@ -49,34 +49,42 @@ function StepCard({
   canProceed: boolean;
   onClick: () => void;
 }) {
+  const bgColor = isActive ? 'var(--accent-2)' : 'var(--gray-2)';
+  const borderCol = isActive ? 'var(--accent-9)' : 'var(--gray-7)';
+
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       aria-current={isActive ? 'step' : undefined}
       style={{
         display: 'block',
         width: '100%',
         cursor: 'pointer',
         padding: '1rem',
-        background: isActive ? 'var(--gray-3)' : 'var(--gray-2)',
-        border: `2px solid ${isActive ? 'var(--accent-7)' : 'var(--gray-6)'}`,
+        background: bgColor,
+        borderWidth: '2px',
+        borderStyle: 'solid',
+        borderColor: borderCol,
         borderRadius: '8px',
         transition: 'all 0.15s ease',
         boxSizing: 'border-box',
-        textAlign: 'left',
-        fontFamily: 'inherit',
-        fontSize: 'inherit',
-        lineHeight: 'inherit',
-        color: 'inherit'
+        textAlign: 'left'
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = 'var(--accent-7)';
+        e.currentTarget.style.borderColor = 'var(--accent-9)';
         e.currentTarget.style.transform = 'translateY(-2px)';
-        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = isActive ? 'var(--accent-7)' : 'var(--gray-6)';
+        e.currentTarget.style.borderColor = borderCol;
         e.currentTarget.style.transform = 'translateY(0)';
         e.currentTarget.style.boxShadow = 'none';
       }}
@@ -114,7 +122,7 @@ function StepCard({
           <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)', pointerEvents: 'none' }}>{description}</Text>
         </div>
       </Stack>
-    </button>
+    </div>
   );
 }
 
