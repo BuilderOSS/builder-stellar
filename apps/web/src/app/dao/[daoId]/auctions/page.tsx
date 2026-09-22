@@ -8,7 +8,6 @@ import { useEffect, useState } from 'react';
 import { Grid, Stack } from 'styled-system/jsx';
 import useSWR from 'swr';
 
-import { DaoShell } from '@/components/dao-shell';
 import { PageSection } from '@/components/page-section';
 import { Button, Callout, Card, Heading, Input, ShortId, Text } from '@/components/ui';
 import { getTreasuryAssets } from '@/lib/assets-config';
@@ -16,6 +15,7 @@ import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
+import { useDaoContext } from '@/contexts/dao-context';
 
 type AuctionData = {
   auction: {
@@ -81,6 +81,7 @@ function formatRemaining(endTime: string, now: number) {
 }
 
 export default function AuctionsPage() {
+  const { daoId } = useDaoContext();
   const config = getDaoNetworkConfig(getDefaultDaoNetwork());
   const session = useDaoSessionStore();
   const tx = useTransactionFeedback(config.name);
@@ -175,7 +176,6 @@ export default function AuctionsPage() {
   };
 
   return (
-    <DaoShell>
       <PageSection title="Auctions" description="Bid on the current DAO collectible and browse settled auctions.">
         <Stack gap="6">
           {error ? <Callout variant="error" title={error.message} /> : null}
@@ -242,7 +242,7 @@ export default function AuctionsPage() {
                     ) : null}
 
                     {data.auction.highest_bidder ? (
-                      <Link className="auction-bidder mono" href={`/members/${data.auction.highest_bidder}`}>
+                      <Link className="auction-bidder mono" href={`/dao/${daoId}/members/${data.auction.highest_bidder}`}>
                         {data.auction.highest_bidder}
                       </Link>
                     ) : null}
@@ -313,7 +313,7 @@ export default function AuctionsPage() {
                             }}
                           >
                             <div style={{ minWidth: 0 }}>
-                              <Link href={`/members/${bid.bidder}`}>
+                              <Link href={`/dao/${daoId}/members/${bid.bidder}`}>
                                 <ShortId value={bid.bidder} label="Bidder" />
                               </Link>
 
@@ -380,7 +380,7 @@ export default function AuctionsPage() {
                                 }}
                               >
                                 {auction.highest_bidder ? (
-                                  <Link href={`/members/${auction.highest_bidder}`}>
+                                  <Link href={`/dao/${daoId}/members/${auction.highest_bidder}`}>
                                     <ShortId value={auction.highest_bidder} label="Winner" />
                                   </Link>
                                 ) : (
@@ -415,6 +415,5 @@ export default function AuctionsPage() {
           {message ? <Callout variant="warning" title={message} /> : null}
         </Stack>
       </PageSection>
-    </DaoShell>
   );
 }

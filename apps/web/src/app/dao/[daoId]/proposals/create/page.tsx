@@ -8,7 +8,6 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Grid, Stack } from 'styled-system/jsx';
 
-import { DaoShell } from '@/components/dao-shell';
 import { PageSection } from '@/components/page-section';
 import { ProposalActionConfirmDialog } from '@/components/proposal/proposal-action-confirm-dialog';
 import { Badge, Button, Callout, Card, Heading, Input, Text, Textarea } from '@/components/ui';
@@ -158,7 +157,7 @@ export default function ProposalCreatePage() {
   };
 
   return (
-    <DaoShell>
+    <>
       <PageSection
         title="Create proposal"
         description="Draft the decision, assemble its on-chain actions, then verify every detail before asking the wallet to sign."
@@ -385,6 +384,6 @@ export default function ProposalCreatePage() {
         confirmLabel="Create Proposal"
         busy={transactionBusy}
       />
-    </DaoShell>
+    </>
   );
 }

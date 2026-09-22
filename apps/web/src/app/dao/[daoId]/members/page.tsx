@@ -2,7 +2,6 @@
 
 import { Grid, Stack } from 'styled-system/jsx';
 
-import { DaoShell } from '@/components/dao-shell';
 import { PageSection } from '@/components/page-section';
 import { Badge, Button, Callout, Card, ShortId, Text } from '@/components/ui';
 import { getDaoAccountRole } from '@/lib/account-role';
@@ -15,7 +14,6 @@ export default function MembersPage() {
   const config = getDaoNetworkConfig(getDefaultDaoNetwork());
 
   return (
-    <DaoShell>
       <PageSection title="Members" description="A Goldsky-backed view of token holders with non-zero balances.">
         <Card p="5">
           <Stack gap="3">
@@ -78,6 +76,5 @@ export default function MembersPage() {
           </Stack>
         </Card>
       </PageSection>
-    </DaoShell>
   );
 }

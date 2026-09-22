@@ -272,6 +272,31 @@ transforms:
       WHERE e.contract_role = 'manager'
       AND LOWER(e.event_name) IN ('dao_finalized', 'daofinalized')
 
+  manager_daos_enriched:
+    type: sql
+    from: decoded_events
+    primary_key: event_id
+    sql: |
+      SELECT
+        e.event_id,
+        e.deployment_id,
+        -- Extract manager.daos enrichment from TokenInitialized events
+        CASE
+          WHEN e.args::jsonb @> '{"owner":""}'
+          THEN (e.args::jsonb ->> 'owner')::text
+          ELSE NULL
+        END AS dao_id,
+        e.contract_id AS token_contract,
+        e.args ->> 'name' AS token_name,
+        e.args ->> 'symbol' AS token_symbol,
+        e.args ->> 'uri' AS token_uri,
+        NULL::text AS token_description,
+        NULL::varchar(56) AS admin_address
+      FROM decoded_events e
+      WHERE e.contract_role = 'token'
+      AND LOWER(e.event_name) IN ('tokeninitialized', 'token_initialized')
+      AND e.args IS NOT NULL
+
 sinks:
   raw_events_output:
     type: postgres
@@ -314,6 +339,20 @@ sinks:
   manager_daos_finalized_output:
     type: postgres
     from: manager_daos_finalized
+    schema: manager
+    table: daos
+    secret_name: {{POSTGRES_SECRET_NAME}}
+    primary_key:
+      - deployment_id
+      - dao_id
+    upsert: true
+    upsert_keys:
+      - deployment_id
+      - dao_id
+
+  manager_daos_enriched_output:
+    type: postgres
+    from: manager_daos_enriched
     schema: manager
     table: daos
     secret_name: {{POSTGRES_SECRET_NAME}}

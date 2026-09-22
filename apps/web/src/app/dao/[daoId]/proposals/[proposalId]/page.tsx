@@ -4,11 +4,11 @@ import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { useDaoContext } from '@/contexts/dao-context';
 import { useEffect, useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 import useSWR from 'swr';
 
-import { DaoShell } from '@/components/dao-shell';
 import { PageSection } from '@/components/page-section';
 import { ProposalActionPreview } from '@/components/proposal/proposal-action-preview';
 import { ProposalExecutePanel } from '@/components/proposal/proposal-execute-panel';
@@ -79,6 +79,7 @@ async function fetchProposalPageData([, proposalId]: readonly ['proposal-detail'
 }
 
 export default function ProposalDetailPage() {
+  const { daoId } = useDaoContext();
   const params = useParams<{ proposalId: string }>();
   const proposalId = params.proposalId;
   const session = useDaoSessionStore();
@@ -317,7 +318,6 @@ export default function ProposalDetailPage() {
     ) : null;
 
   return (
-    <DaoShell>
       <PageSection
         title={
           detail
@@ -357,11 +357,10 @@ export default function ProposalDetailPage() {
             </div>
           ) : null}
 
-          <Link href="/proposals" style={{ color: 'inherit' }}>
+          <Link href={`/dao/${daoId}/proposals`} style={{ color: 'inherit' }}>
             Back to proposals
           </Link>
         </Stack>
       </PageSection>
-    </DaoShell>
   );
 }

@@ -6,8 +6,8 @@ import { useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 
 import { AdminSectionNav } from '@/components/admin/admin-section-nav';
+import { useDaoContext } from '@/contexts/dao-context';
 import { AuthorityPanel } from '@/components/admin/authority-panel';
-import { DaoShell } from '@/components/dao-shell';
 import { PageSection } from '@/components/page-section';
 import { Badge, Button, Callout, Card, Heading, Input, Text } from '@/components/ui';
 import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
@@ -17,6 +17,7 @@ import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
 export default function TokenAdminPage() {
+  const { daoId } = useDaoContext();
   const session = useDaoSessionStore();
   const config = getDaoNetworkConfig(getDefaultDaoNetwork());
   const [recipient, setRecipient] = useState('');
@@ -86,10 +87,9 @@ export default function TokenAdminPage() {
   }
 
   return (
-    <DaoShell>
       <PageSection title="Token Admin" description="Mint tokens and review the current mint-authority set.">
         <Stack gap="4">
-          <AdminSectionNav active="/admin/token" />
+          <AdminSectionNav daoId={daoId} active="/token" />
 
           <Card p="5">
             <Stack gap="3">
@@ -144,6 +144,5 @@ export default function TokenAdminPage() {
           />
         </Stack>
       </PageSection>
-    </DaoShell>
   );
 }

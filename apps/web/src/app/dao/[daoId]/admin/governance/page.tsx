@@ -7,9 +7,9 @@ import { useState } from 'react';
 import { Grid, Stack } from 'styled-system/jsx';
 
 import { AdminSectionNav } from '@/components/admin/admin-section-nav';
+import { useDaoContext } from '@/contexts/dao-context';
 import { AuthorityPanel } from '@/components/admin/authority-panel';
 import { DurationInput } from '@/components/admin/duration-input';
-import { DaoShell } from '@/components/dao-shell';
 import { PageSection } from '@/components/page-section';
 import { Badge, Button, Callout, Card, Heading, Input, Text } from '@/components/ui';
 import { useGovernorSettings } from '@/lib/admin-queries';
@@ -58,6 +58,7 @@ function formatSecondsValue(value: number | null | undefined) {
 }
 
 export default function GovernanceAdminPage() {
+  const { daoId } = useDaoContext();
   const session = useDaoSessionStore();
   const config = getDaoNetworkConfig(getDefaultDaoNetwork());
   const [drafts, setDrafts] = useState<Drafts>(EMPTY_DRAFTS);
@@ -230,7 +231,6 @@ export default function GovernanceAdminPage() {
 
   if (!hasGovernanceAccess) {
     return (
-      <DaoShell>
         <PageSection title="Governance Admin" description="Governance settings and authority management.">
           <Callout
             variant="warning"
@@ -256,15 +256,13 @@ export default function GovernanceAdminPage() {
             ) : null}
           </Callout>
         </PageSection>
-      </DaoShell>
     );
   }
 
   return (
-    <DaoShell>
       <PageSection title="Governance Admin" description="Edit governor parameters and apply them one at a time.">
         <Stack gap="4">
-          <AdminSectionNav active="/admin/governance" />
+          <AdminSectionNav daoId={daoId} active="/governance" />
 
           <Card p="5">
             <Stack gap="3">
@@ -444,6 +442,5 @@ export default function GovernanceAdminPage() {
           />
         </Stack>
       </PageSection>
-    </DaoShell>
   );
 }

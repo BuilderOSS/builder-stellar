@@ -7,7 +7,6 @@ import { useMemo, useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 import useSWR from 'swr';
 
-import { DaoShell } from '@/components/dao-shell';
 import { PageSection } from '@/components/page-section';
 import { ProposalStateBadge } from '@/components/proposal/proposal-state-badge';
 import type { ProposalListResponse } from '@/components/proposal/types';
@@ -17,6 +16,7 @@ import { useGovernorSettings } from '@/lib/admin-queries';
 import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
 import { useVotingPower, type VotingPowerSnapshot } from '@/lib/voting-power';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
+import { useDaoContext } from '@/contexts/dao-context';
 
 function formatTimestamp(timestamp: number) {
   if (!timestamp) return '—';
@@ -52,6 +52,7 @@ function formatProposalCreationDisabledMessage(
 }
 
 export default function ProposalsPage() {
+  const { daoId } = useDaoContext();
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
   const router = useRouter();
@@ -107,7 +108,6 @@ export default function ProposalsPage() {
     : undefined;
 
   return (
-    <DaoShell>
       <PageSection title="Proposals" description="Browse proposal history and review on-chain proposal state.">
         <Stack gap="4">
           <div className="section-toolbar">
@@ -186,7 +186,7 @@ export default function ProposalsPage() {
               <div className="proposal-list" role="list" aria-label="Proposals in reverse chronological order">
                 {visibleItems.map((item) => (
                   <div key={item.proposalId} role="listitem">
-                    <Link className="proposal-row" href={`/proposals/${item.proposalNumber}`}>
+                    <Link className="proposal-row" href={`/dao/${daoId}/proposals/${item.proposalNumber}`}>
                       <div className="proposal-row__identity">
                         <Text className="proposal-row__id mono">#{item.proposalNumber}</Text>
                         <div className="proposal-row__content">
@@ -223,6 +223,5 @@ export default function ProposalsPage() {
           )}
         </Stack>
       </PageSection>
-    </DaoShell>
   );
 }

@@ -4,7 +4,6 @@ import { RefreshCw } from 'lucide-react';
 import Image from 'next/image';
 import { Stack } from 'styled-system/jsx';
 
-import { DaoShell } from '@/components/dao-shell';
 import { PageSection } from '@/components/page-section';
 import { Button, Callout, Card, Heading, ShortId, Text } from '@/components/ui';
 import { findAsset } from '@/lib/assets-config';
@@ -71,7 +70,6 @@ export default function TreasuryPage() {
   const refreshing = balanceLoading || isLoading;
 
   return (
-    <DaoShell>
       <PageSection title="Treasury" description="Contract-held assets governed by approved proposals.">
         <div className="treasury-layout">
           <Stack gap="4">
@@ -193,6 +191,5 @@ export default function TreasuryPage() {
           </Card>
         </div>
       </PageSection>
-    </DaoShell>
   );
 }

@@ -7,7 +7,7 @@ import { Stack } from 'styled-system/jsx';
 import useSWR from 'swr';
 
 import { AdminSectionNav } from '@/components/admin/admin-section-nav';
-import { DaoShell } from '@/components/dao-shell';
+import { useDaoContext } from '@/contexts/dao-context';
 import { PageSection } from '@/components/page-section';
 import { Badge, Button, Callout, Card, Heading, Input, ShortId, Text } from '@/components/ui';
 import { getTreasuryAssets } from '@/lib/assets-config';
@@ -27,6 +27,7 @@ const fetcher = async (url: string): Promise<AuctionStatus> => {
 };
 
 export default function AuctionAdminPage() {
+  const { daoId } = useDaoContext();
   const session = useDaoSessionStore();
   const config = getDaoNetworkConfig(getDefaultDaoNetwork());
   const tx = useTransactionFeedback(config.name);
@@ -142,24 +143,21 @@ export default function AuctionAdminPage() {
 
   if (!isOwner) {
     return (
-      <DaoShell>
         <PageSection title="Auction controls" description="Owner-only auction operations.">
           <Callout variant="warning" badge="Access restricted" title="Connect the configured owner wallet to continue">
             <ShortId value={config.adminAddress} label="Owner address" />
           </Callout>
         </PageSection>
-      </DaoShell>
     );
   }
 
   return (
-    <DaoShell>
       <PageSection
         title="Auction controls"
         description="Pause or resume auction activity for maintenance and emergency operations."
       >
         <Stack gap="4">
-          <AdminSectionNav active="/admin/auction" />
+          <AdminSectionNav daoId={daoId} active="/auction" />
           {error ? <Callout variant="error" title={error.message} /> : null}
           <Card p="5">
             <Stack gap="4">
@@ -245,6 +243,5 @@ export default function AuctionAdminPage() {
           </Card>
         </Stack>
       </PageSection>
-    </DaoShell>
   );
 }

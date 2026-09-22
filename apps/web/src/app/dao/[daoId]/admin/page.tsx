@@ -1,11 +1,11 @@
 'use client';
 
-import type { Route } from 'next';
 import Link from 'next/link';
+import type { Route } from 'next';
 import { Grid, Stack } from 'styled-system/jsx';
 
 import { AdminSectionNav } from '@/components/admin/admin-section-nav';
-import { DaoShell } from '@/components/dao-shell';
+import { useDaoContext } from '@/contexts/dao-context';
 import { PageSection } from '@/components/page-section';
 import { Badge, Card, Heading, ShortId, Text } from '@/components/ui';
 import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
@@ -36,7 +36,7 @@ function SectionCard({
           {description}
         </Text>
         <Link
-          href={allowed ? href : '/admin'}
+          href={allowed ? href : '/'}
           style={{ color: 'inherit', pointerEvents: allowed ? 'auto' : 'none', textDecoration: 'none' }}
         >
           <Badge>{allowed ? 'Open section' : 'Locked'}</Badge>
@@ -47,6 +47,7 @@ function SectionCard({
 }
 
 export default function AdminPage() {
+  const { daoId } = useDaoContext();
   const session = useDaoSessionStore();
   const config = getDaoNetworkConfig(getDefaultDaoNetwork());
   const { data: mintAuthorities } = useGoldskyMintAuthorities();
@@ -60,7 +61,6 @@ export default function AdminPage() {
   const hasAnyAccess = Boolean(isOwner || hasMintAccess || hasGovernanceAccess);
 
   return (
-    <DaoShell>
       <PageSection
         title="Admin dashboard"
         description="Role-aware entry point for owner, token, and governance operations."
@@ -98,40 +98,39 @@ export default function AdminPage() {
             </Stack>
           </Card>
 
-          <AdminSectionNav active="/admin" />
+          <AdminSectionNav daoId={daoId} active="" />
 
           <Grid columns={{ base: 1, lg: 3 }} gap="4">
             <SectionCard
               label="Owner"
               title="Authority management"
               description="Add or remove mint and governance authorities from a single place."
-              href="/admin/owner"
+              href={`/dao/${daoId}/admin/owner` as Route}
               allowed={isOwner}
             />
             <SectionCard
               label="Token Admin"
               title="Mint tokens"
               description="Mint voting tokens and review the current mint authority set."
-              href="/admin/token"
+              href={`/dao/${daoId}/admin/token` as Route}
               allowed={hasMintAccess}
             />
             <SectionCard
               label="Governance Admin"
               title="Update governor settings"
               description="Edit voting delay, voting period, proposal threshold, and quorum in one atomic batch."
-              href="/admin/governance"
+              href={`/dao/${daoId}/admin/governance` as Route}
               allowed={hasGovernanceAccess}
             />
             <SectionCard
               label="Owner"
               title="Auction controls"
               description="Pause or resume auction activity for emergency and maintenance operations."
-              href="/admin/auction"
+              href={`/dao/${daoId}/admin/auction` as Route}
               allowed={isOwner}
             />
           </Grid>
         </Stack>
       </PageSection>
-    </DaoShell>
   );
 }

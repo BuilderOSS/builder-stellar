@@ -7,8 +7,8 @@ import { useState } from 'react';
 import { Grid, Stack } from 'styled-system/jsx';
 
 import { AdminSectionNav } from '@/components/admin/admin-section-nav';
+import { useDaoContext } from '@/contexts/dao-context';
 import { AuthorityPanel } from '@/components/admin/authority-panel';
-import { DaoShell } from '@/components/dao-shell';
 import { PageSection } from '@/components/page-section';
 import { Badge, Callout, Card, Heading, ShortId, Text } from '@/components/ui';
 import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
@@ -56,6 +56,7 @@ async function submitAuthorityUpdate(
 }
 
 export default function OwnerPage() {
+  const { daoId } = useDaoContext();
   const session = useDaoSessionStore();
   const config = getDaoNetworkConfig(getDefaultDaoNetwork());
   const [mintAuthority, setMintAuthority] = useState('');
@@ -79,7 +80,6 @@ export default function OwnerPage() {
 
   if (!isOwner) {
     return (
-      <DaoShell>
         <PageSection title="Owner" description="Owner-only authority management.">
           <Callout
             variant="warning"
@@ -90,7 +90,6 @@ export default function OwnerPage() {
             <ShortId value={config.adminAddress} label="Owner address" />
           </Callout>
         </PageSection>
-      </DaoShell>
     );
   }
 
@@ -140,10 +139,9 @@ export default function OwnerPage() {
   }
 
   return (
-    <DaoShell>
       <PageSection title="Owner" description="Manage mint and governance authorities from one control center.">
         <Stack gap="4">
-          <AdminSectionNav active="/admin/owner" />
+          <AdminSectionNav daoId={daoId} active="/owner" />
 
           <Card p="5">
             <Stack gap="3">
@@ -191,6 +189,5 @@ export default function OwnerPage() {
           </Grid>
         </Stack>
       </PageSection>
-    </DaoShell>
   );
 }

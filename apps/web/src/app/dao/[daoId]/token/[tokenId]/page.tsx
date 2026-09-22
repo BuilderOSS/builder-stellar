@@ -2,7 +2,6 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Grid, Stack } from 'styled-system/jsx';
 
-import { DaoShell } from '@/components/dao-shell';
 import { PageSection } from '@/components/page-section';
 import { Badge, Card, ShortId, Text } from '@/components/ui';
 import { TOKEN_NAME } from '@/lib/token-config';
@@ -14,7 +13,6 @@ export default async function TokenPage({ params }: { params: Promise<{ tokenId:
   const metadata = buildTokenMetadata(Number.isFinite(resolvedTokenId) ? resolvedTokenId : 0, '');
 
   return (
-    <DaoShell>
       <PageSection
         title={metadata.name}
         description="Readable token detail page backed by the same deterministic metadata used by the token contract base URI."
@@ -47,6 +45,5 @@ export default async function TokenPage({ params }: { params: Promise<{ tokenId:
           </Card>
         </Grid>
       </PageSection>
-    </DaoShell>
   );
 }

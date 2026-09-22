@@ -3,19 +3,19 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
-import { DaoShell } from '@/components/dao-shell';
 import { PageSection } from '@/components/page-section';
+import { useDaoContext } from '@/contexts/dao-context';
 import { Callout, Card, Heading, ShortId, Text } from '@/components/ui';
 import { useGoldskyMemberList } from '@/lib/goldsky-queries';
 
 export default function MemberProfilePage() {
+  const { daoId } = useDaoContext();
   const params = useParams<{ address: string }>();
   const address = decodeURIComponent(String(params.address ?? ''));
   const { data, error, isLoading } = useGoldskyMemberList(1000);
   const member = data?.items.find((item) => item.address === address);
 
   return (
-    <DaoShell>
       <PageSection title="Member profile" description="Membership and voting data indexed for this address.">
         <Card p="5">
           {isLoading ? <Callout variant="info" title="Loading member profile…" /> : null}
@@ -53,7 +53,7 @@ export default function MemberProfilePage() {
             </div>
           ) : null}
           <Link
-            href="/members"
+            href={`/dao/${daoId}/members`}
             className="dashboard-auction__action"
             style={{ width: 'fit-content', marginTop: '18px' }}
           >
@@ -61,6 +61,5 @@ export default function MemberProfilePage() {
           </Link>
         </Card>
       </PageSection>
-    </DaoShell>
   );
 }
