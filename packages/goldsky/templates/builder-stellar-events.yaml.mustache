@@ -81,9 +81,9 @@ transforms:
       topic_1: string
       topic_2: string
       topic_3: string
-      topics: json
-      args: json
-      payload: json
+      topics: string
+      args: string
+      payload: string
       transaction_hash: string
       transaction_successful: boolean
       ledger_sequence: int64
@@ -109,8 +109,8 @@ transforms:
       contract_id: string
       contract_role: string
       event_name: string
-      topics: json
-      args: json
+      topics: string
+      args: string
       kind: string
       title: string
       summary: string
@@ -119,7 +119,7 @@ transforms:
       token_id: string
       amount: string
       actor: string
-      addresses: json
+      addresses: string
       ledger_sequence: int64
       transaction_index: int64
       operation_index: int64
@@ -138,9 +138,68 @@ sinks:
     secret_name: {{POSTGRES_SECRET_NAME}}
     primary_key: event_id
 
+  decoded_events_sql:
+    type: sql
+    from: decoded_events
+    sql: |
+      SELECT
+        event_id,
+        deployment_id,
+        contract_id,
+        contract_role,
+        event_name,
+        topic_0,
+        topic_1,
+        topic_2,
+        topic_3,
+        topics::jsonb as topics,
+        args::jsonb as args,
+        payload::jsonb as payload,
+        transaction_hash,
+        transaction_successful,
+        ledger_sequence,
+        ledger_hash,
+        ledger_closed_at,
+        transaction_index,
+        operation_index,
+        event_index,
+        operation_type,
+        _gs_op,
+        decoder_version
+      FROM decoded_events
+
+  activity_feed_sql:
+    type: sql
+    from: activity_feed
+    sql: |
+      SELECT
+        activity_id,
+        deployment_id,
+        contract_id,
+        contract_role,
+        event_name,
+        topics::jsonb as topics,
+        args::jsonb as args,
+        kind,
+        title,
+        summary,
+        visibility,
+        proposal_id,
+        token_id,
+        amount,
+        actor,
+        addresses::jsonb as addresses,
+        ledger_sequence,
+        transaction_index,
+        operation_index,
+        event_index,
+        ledger_closed_at,
+        transaction_hash
+      FROM activity_feed
+
   decoded_events_output:
     type: postgres
-    from: decoded_events
+    from: decoded_events_sql
     schema: chain
     table: decoded_events
     secret_name: {{POSTGRES_SECRET_NAME}}
@@ -148,7 +207,7 @@ sinks:
 
   activity_feed_output:
     type: postgres
-    from: activity_feed
+    from: activity_feed_sql
     schema: app
     table: activity_feed_events
     secret_name: {{POSTGRES_SECRET_NAME}}
