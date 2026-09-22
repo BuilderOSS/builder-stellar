@@ -1,0 +1,127 @@
+{
+  "status": "pending",
+  "network": "testnet",
+  "label": "builder",
+  "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+  "nonce": 0,
+  "manager": "CA43TBFYUYUZWOKZ7JA2Y4XLRTKY3UBJ4KTLMWTFBAAUHUKMZBGA6KSN",
+  "predictedAddresses": {
+    "token": "CDYIMAIVUPYBWKG2BVFB5AIHWNSGTUEP6F77GFQIN7SQ4BRRNY7NGNSE",
+    "metadata": "CCD6YUY2A5WR27VBMT3UZFQWHSXFGMPEKKI5JYDXNWRB7OBW24YLLRMM",
+    "auction": "CCSYCYCTDRC3PNZU7KHGAGZTMK5MCLWBJUN3SWCNK6EBMXDEU4PBL2KL",
+    "governor": "CDA24KNTCFJ6TGJIBPBRZAI27COD2RH7Y5RRBR5UBFD2LTK3WDDMW5DS",
+    "treasury": "CAGZ72JQ5N6BM3FTN73QYWPFUMCAZA5TG2GZJCS6IWENWX5NMCEB3BIH"
+  },
+  "addresses": {
+    "token": "CDYIMAIVUPYBWKG2BVFB5AIHWNSGTUEP6F77GFQIN7SQ4BRRNY7NGNSE",
+    "metadata": "CCD6YUY2A5WR27VBMT3UZFQWHSXFGMPEKKI5JYDXNWRB7OBW24YLLRMM",
+    "auction": "CCSYCYCTDRC3PNZU7KHGAGZTMK5MCLWBJUN3SWCNK6EBMXDEU4PBL2KL",
+    "governor": "CDA24KNTCFJ6TGJIBPBRZAI27COD2RH7Y5RRBR5UBFD2LTK3WDDMW5DS",
+    "treasury": "CAGZ72JQ5N6BM3FTN73QYWPFUMCAZA5TG2GZJCS6IWENWX5NMCEB3BIH"
+  },
+  "config": {
+    "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+    "nonce": 0,
+    "token": {
+      "name": "Builder DAO",
+      "symbol": "BUILD",
+      "uri": "https://test-dao-stellar-web.vercel.app/api/token/"
+    },
+    "metadata": {
+      "projectUri": "https://test-dao-stellar-web.vercel.app",
+      "description": "Unlock the possibilities of collective creation",
+      "contractImage": "https://test-dao-stellar-web.vercel.app/images/dao-logo.png",
+      "rendererBase": "https://test-dao-stellar-web.vercel.app/api/render/",
+      "artwork": {
+        "ipfs": {
+          "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+          "extension": ".png"
+        },
+        "properties": [
+          {
+            "name": "0-backgrounds",
+            "items": [
+              "bg-cool",
+              "bg-warm"
+            ]
+          },
+          {
+            "name": "1-bodies",
+            "items": [
+              "body-rust",
+              "body-blue-sky",
+              "body-darkbrown"
+            ]
+          },
+          {
+            "name": "2-accessories",
+            "items": [
+              "accessory-txt-cc2",
+              "accessory-txt-ico",
+              "accessory-flash"
+            ]
+          },
+          {
+            "name": "3-heads",
+            "items": [
+              "head-hotdog",
+              "head-ufo",
+              "head-goldcoin"
+            ]
+          },
+          {
+            "name": "4-glasses",
+            "items": [
+              "glasses-square-teal",
+              "glasses-square-guava",
+              "glasses-square-black-rgb"
+            ]
+          }
+        ]
+      }
+    },
+    "auction": {
+      "duration": 300,
+      "reservePrice": "1000000000",
+      "timeBuffer": 300,
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+    },
+    "governance": {
+      "votingDelay": 300,
+      "votingPeriod": 300,
+      "quorumBps": 1000,
+      "proposalThresholdBps": 100
+    },
+    "founders": [
+      {
+        "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+        "amount": 10
+      },
+      {
+        "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
+        "amount": 10
+      },
+      {
+        "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
+        "amount": 10
+      }
+    ],
+    "launchAdmin": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO"
+  },
+  "createdAt": "2026-09-22T06:53:36.428Z",
+  "transactions": {
+    "createDao": {
+      "txHash": "76c73fcdd51a310df61fc6d75346d6758c595fc3b9008a6fad434185872b0893",
+      "ledger": 4807281
+    },
+    "acceptOwnership": {
+      "txHash": "7abd6ae72d3cef8ef3109b1a460c9662db5349ab6819e215629e14d12c61f4f9",
+      "ledger": 4807283
+    },
+    "addProperties": {
+      "txHash": "0e864b1966003a1b6bd365dda5900b7bf0ca32961209612e21216c3ea7313c16",
+      "ledger": 4807285
+    }
+  },
+  "deploymentLedger": 4807281
+}

@@ -1,5 +1,5 @@
 name: dao-stellar-events
-description: Index Manager CCYLIPRCMZQOECPEKFPKOMYZOW47ABQPIJNJ2NYVHUDRYQPIYG3TFXQI on testnet with Goldsky Turbo
+description: Index Manager CA43TBFYUYUZWOKZ7JA2Y4XLRTKY3UBJ4KTLMWTFBAAUHUKMZBGA6KSN on testnet with Goldsky Turbo
 resource_size: s
 use_dedicated_ip: false
 job: false
@@ -8,7 +8,7 @@ sources:
     type: dataset
     dataset_name: stellar_testnet.events
     version: 1.2.0
-    start_at: 4805858
+    start_at: 4807257
 
 transforms:
   dao_events:
@@ -17,9 +17,9 @@ transforms:
     sql: |
       SELECT
         id AS event_id,
-        'manager:CCYLIPRCMZQOECPEKFPKOMYZOW47ABQPIJNJ2NYVHUDRYQPIYG3TFXQI' AS deployment_id,
+        'manager:CA43TBFYUYUZWOKZ7JA2Y4XLRTKY3UBJ4KTLMWTFBAAUHUKMZBGA6KSN' AS deployment_id,
         contract_id,
-        CASE WHEN contract_id = 'CCYLIPRCMZQOECPEKFPKOMYZOW47ABQPIJNJ2NYVHUDRYQPIYG3TFXQI' THEN 'manager' ELSE 'unknown' END AS contract_role,
+        CASE WHEN contract_id = 'CA43TBFYUYUZWOKZ7JA2Y4XLRTKY3UBJ4KTLMWTFBAAUHUKMZBGA6KSN' THEN 'manager' ELSE 'unknown' END AS contract_role,
         type,
         topics,
         data,
@@ -39,7 +39,7 @@ transforms:
         ledger_closed_at,
         _gs_op
       FROM stellar_events
-       WHERE ledger_sequence >= 4805858
+       WHERE ledger_sequence >= 4807257
 
   raw_events:
     type: script
@@ -172,7 +172,7 @@ transforms:
           AuctionSettled: ['token_id'], BidRefunded: ['token_id', 'bidder'], AuctionCancelled: ['token_id'], Execute: ['governor', 'target'],
           TokenInitialized: ['owner'], MintAuthorityChanged: ['authority'], GovernorInitialized: ['owner'], TreasuryChanged: ['old_treasury', 'new_treasury'],
           TokenContractChanged: ['old_token_contract', 'new_token_contract'], GovernorAuthorityChanged: ['authority'], AuctionInitialized: ['owner'],
-          TreasuryInitialized: ['owner'], GovernorChanged: ['old_governor', 'new_governor'], DaoCreated: ['token_address', 'creator'], DaoRegistered: ['token_address', 'creator'],
+          TreasuryInitialized: ['owner'], GovernorChanged: ['old_governor', 'new_governor'], DaoCreated: ['token_address', 'creator'], DaoRegistered: ['token_address', 'creator'], DaoFinalized: ['token_address'],
            SeedGenerated: ['token_id'], MetadataInitialized: ['token'], ProposalExpired: [],
           ProposalThresholdChanged: ['caller'], QuorumBpsChanged: ['caller'], QueueDelayChanged: ['caller'], VotingDelayChanged: ['caller'], VotingPeriodChanged: ['caller'], DurationUpdated: [], ReservePriceUpdated: [], MinBidIncrementUpdated: [],
           TimeBufferUpdated: [], PaymentTokenUpdated: [], TreasuryUpdated: [], FactoryPaused: [], FactoryUnpaused: [], UpgradeApproved: [],
@@ -314,7 +314,7 @@ transforms:
           ProposalCancelled: true, ProposalCanceled: true, ProposalExecuted: true,
           ProposalExpired: true, AuctionCreated: true, BidPlaced: true,
           AuctionSettled: true, BidRefunded: true, AuctionCancelled: true,
-          DaoCreated: true, DaoRegistered: true
+          DaoCreated: true, DaoRegistered: true, DaoFinalized: true
         };
 
         var kindMap = {
@@ -358,6 +358,7 @@ transforms:
           AuctionCancelled: 'auction.cancelled',
           DaoCreated: 'manager.dao_created',
           DaoRegistered: 'manager.dao_registered',
+          DaoFinalized: 'manager.dao_finalized',
           FactoryPaused: 'manager.factory_paused',
           FactoryUnpaused: 'manager.factory_unpaused',
           UpgradeApproved: 'manager.upgrade_approved',
@@ -415,6 +416,7 @@ transforms:
           AuctionCancelled: 'Auction cancelled',
           DaoCreated: 'DAO created',
           DaoRegistered: 'DAO registered',
+          DaoFinalized: 'DAO finalized',
           FactoryPaused: 'Factory paused',
           FactoryUnpaused: 'Factory unpaused',
           UpgradeApproved: 'Upgrade approved',
@@ -476,6 +478,8 @@ transforms:
           summary = 'DAO created by ' + (pick(data, ['creator']) || 'unknown');
         } else if (normalizedEventName === 'DaoRegistered') {
           summary = 'DAO registered for token ' + (pick(data, ['token_address']) || 'unknown');
+        } else if (normalizedEventName === 'DaoFinalized') {
+          summary = 'DAO finalized for token ' + (pick(data, ['token_address']) || 'unknown');
         } else if (normalizedEventName === 'ImplementationRegistered') {
           summary = 'Implementation "' + (pick(data, ['name']) || 'unknown') + '" registered';
         } else if (normalizedEventName === 'SeedGenerated') {
@@ -548,35 +552,37 @@ transforms:
         e.topic_1 AS creator,
         e.contract_id AS manager_contract,
         CASE
-          WHEN e.args::jsonb @> '{"params":{"modules":{}}}'
-          THEN (e.args::jsonb -> 'params' -> 'modules' ->> 'token')::text
+          WHEN e.args::jsonb @> '{"modules":{}}'
+          THEN (e.args::jsonb -> 'modules' ->> 'token')::text
           ELSE NULL
         END AS token_contract,
         CASE
-          WHEN e.args::jsonb @> '{"params":{"modules":{}}}'
-          THEN (e.args::jsonb -> 'params' -> 'modules' ->> 'governor')::text
+          WHEN e.args::jsonb @> '{"modules":{}}'
+          THEN (e.args::jsonb -> 'modules' ->> 'governor')::text
           ELSE NULL
         END AS governor_contract,
         CASE
-          WHEN e.args::jsonb @> '{"params":{"modules":{}}}'
-          THEN (e.args::jsonb -> 'params' -> 'modules' ->> 'auction')::text
+          WHEN e.args::jsonb @> '{"modules":{}}'
+          THEN (e.args::jsonb -> 'modules' ->> 'auction')::text
           ELSE NULL
         END AS auction_contract,
         CASE
-          WHEN e.args::jsonb @> '{"params":{"modules":{}}}'
-          THEN (e.args::jsonb -> 'params' -> 'modules' ->> 'treasury')::text
+          WHEN e.args::jsonb @> '{"modules":{}}'
+          THEN (e.args::jsonb -> 'modules' ->> 'treasury')::text
           ELSE NULL
         END AS treasury_contract,
         CASE
-          WHEN e.args::jsonb @> '{"params":{"modules":{}}}'
-          THEN (e.args::jsonb -> 'params' -> 'modules' ->> 'metadata')::text
+          WHEN e.args::jsonb @> '{"modules":{}}'
+          THEN (e.args::jsonb -> 'modules' ->> 'metadata')::text
           ELSE NULL
         END AS metadata_contract,
-        (e.args::jsonb -> 'params' ->> 'token_name')::varchar(255) AS token_name,
-        (e.args::jsonb -> 'params' ->> 'token_symbol')::varchar(16) AS token_symbol,
-        (e.args::jsonb -> 'params' ->> 'description')::text AS token_description,
-        (e.args::jsonb -> 'params' ->> 'token_uri')::text AS token_uri,
-        (e.args::jsonb -> 'params' ->> 'launch_admin')::varchar(56) AS admin_address,
+        -- Token metadata fields are not emitted in DaoCreated event
+        -- These can be populated by querying the deployed token contract separately
+        NULL::varchar(255) AS token_name,
+        NULL::varchar(16) AS token_symbol,
+        NULL::text AS token_description,
+        NULL::text AS token_uri,
+        NULL::varchar(56) AS admin_address,
         'pending'::text AS status,
         e.ledger_sequence AS created_ledger,
         to_timestamp(
@@ -622,24 +628,24 @@ transforms:
         e.operation_type,
         e._gs_op,
         e.decoder_version,
-        e.topic_0 AS dao_id,
-        e.topic_0 AS token_address,
-        e.topic_1 AS creator,
-        e.contract_id AS manager_contract,
-        NULL::text AS token_contract,
-        NULL::text AS governor_contract,
-        NULL::text AS auction_contract,
-        NULL::text AS treasury_contract,
-        NULL::text AS metadata_contract,
-        NULL::varchar(255) AS token_name,
-        NULL::varchar(16) AS token_symbol,
-        NULL::text AS token_description,
-        NULL::text AS token_uri,
-        e.topic_1 AS admin_address,
+        d.dao_id,
+        d.token_address,
+        d.creator,
+        d.manager_contract,
+        d.token_contract,
+        d.governor_contract,
+        d.auction_contract,
+        d.treasury_contract,
+        d.metadata_contract,
+        d.token_name,
+        d.token_symbol,
+        d.token_description,
+        d.token_uri,
+        d.admin_address,
         'operational'::text AS status,
-        NULL::bigint AS created_ledger,
-        NULL::timestamptz AS created_at,
-        NULL::text AS created_tx_hash,
+        d.created_ledger,
+        d.created_at,
+        d.created_tx_hash,
         e.ledger_sequence AS finalized_ledger,
         to_timestamp(
           CASE
@@ -650,8 +656,36 @@ transforms:
         ) AS finalized_at,
         e.transaction_hash AS finalized_tx_hash
       FROM decoded_events e
+      JOIN manager_daos d
+        ON d.deployment_id = e.deployment_id
+       AND d.dao_id = e.topic_0
       WHERE e.contract_role = 'manager'
       AND LOWER(e.event_name) IN ('dao_finalized', 'daofinalized')
+
+  manager_daos_enriched:
+    type: sql
+    from: decoded_events
+    primary_key: event_id
+    sql: |
+      SELECT
+        e.event_id,
+        e.deployment_id,
+        -- Extract manager.daos enrichment from TokenInitialized events
+        CASE
+          WHEN e.args::jsonb @> '{"owner":""}'
+          THEN (e.args::jsonb ->> 'owner')::text
+          ELSE NULL
+        END AS dao_id,
+        e.contract_id AS token_contract,
+        e.args ->> 'name' AS token_name,
+        e.args ->> 'symbol' AS token_symbol,
+        e.args ->> 'uri' AS token_uri,
+        NULL::text AS token_description,
+        NULL::varchar(56) AS admin_address
+      FROM decoded_events e
+      WHERE e.contract_role = 'token'
+      AND LOWER(e.event_name) IN ('tokeninitialized', 'token_initialized')
+      AND e.args IS NOT NULL
 
 sinks:
   raw_events_output:
@@ -659,7 +693,7 @@ sinks:
     from: raw_events
     schema: chain
     table: raw_events
-    secret_name: DAO_POSTGRES
+    secret_name: STELLAR_BUILDER_POSTGRES
     primary_key: event_id
 
   decoded_events_output:
@@ -667,7 +701,7 @@ sinks:
     from: decoded_events
     schema: chain
     table: decoded_events
-    secret_name: DAO_POSTGRES
+    secret_name: STELLAR_BUILDER_POSTGRES
     primary_key: event_id
 
   activity_feed_output:
@@ -675,7 +709,7 @@ sinks:
     from: activity_feed
     schema: app
     table: activity_feed_events
-    secret_name: DAO_POSTGRES
+    secret_name: STELLAR_BUILDER_POSTGRES
     primary_key: activity_id
 
   manager_daos_output:
@@ -683,7 +717,7 @@ sinks:
     from: manager_daos
     schema: manager
     table: daos
-    secret_name: DAO_POSTGRES
+    secret_name: STELLAR_BUILDER_POSTGRES
     primary_key:
       - deployment_id
       - dao_id
@@ -697,7 +731,21 @@ sinks:
     from: manager_daos_finalized
     schema: manager
     table: daos
-    secret_name: DAO_POSTGRES
+    secret_name: STELLAR_BUILDER_POSTGRES
+    primary_key:
+      - deployment_id
+      - dao_id
+    upsert: true
+    upsert_keys:
+      - deployment_id
+      - dao_id
+
+  manager_daos_enriched_output:
+    type: postgres
+    from: manager_daos_enriched
+    schema: manager
+    table: daos
+    secret_name: STELLAR_BUILDER_POSTGRES
     primary_key:
       - deployment_id
       - dao_id
