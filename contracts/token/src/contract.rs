@@ -2,7 +2,7 @@ use soroban_sdk::{
     contract, contractimpl, panic_with_error, symbol_short, vec, Address, BytesN, Env, Error,
     IntoVal, String,
 };
-use stellar_access::ownable::{set_owner, Ownable};
+use stellar_access::ownable::{set_owner, Ownable, OwnableStorageKey};
 use stellar_governance::votes::{
     emit_delegate_changed as emit_library_delegate_changed, get_delegate, Votes, VotesStorageKey,
 };
@@ -131,6 +131,20 @@ impl DaoTokenContract {
             .instance()
             .get(&TokenKey::MintAuthority(authority))
             .unwrap_or(false)
+    }
+
+    /// Finalizes DAO setup by moving ownership from the launch administrator
+    /// to the Treasury. This one-time handoff is authorized by the Manager.
+    pub fn finalize_ownership(e: &Env, new_owner: Address) {
+        let manager: Address = e
+            .storage()
+            .instance()
+            .get(&TokenKey::Manager)
+            .expect("manager not set");
+        manager.require_auth();
+        e.storage()
+            .instance()
+            .set(&OwnableStorageKey::Owner, &new_owner);
     }
 
     /// Returns the metadata contract used for mint hooks.

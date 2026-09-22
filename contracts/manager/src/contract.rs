@@ -6,7 +6,7 @@
 //! 3. DAO Registry - Discovery and enumeration of deployed DAOs
 
 use soroban_sdk::{
-    contract, contractimpl, vec, Address, BytesN, Env, IntoVal, String, Symbol, Vec,
+    contract, contractimpl, vec, Address, BytesN, Env, IntoVal, String, Symbol, Val, Vec,
 };
 
 use crate::error::ManagerError;
@@ -510,18 +510,20 @@ impl ManagerContract {
         treasury_deployer.deploy_v2(
             treasury_wasm.clone(),
             (
-                treasury_addr.clone(),
+                params.launch_admin.clone(),
                 governor_addr.clone(),
                 env.current_contract_address(),
                 treasury_wasm.clone(),
             ),
         );
 
-        // Step 2: Deploy and initialize Token (needs owner, uri, name, symbol, metadata)
+        // Step 2: Deploy and initialize Token. The manager owns the token during
+        // creation so it can distribute founder allocations before handing
+        // ownership to the treasury.
         token_deployer.deploy_v2(
             token_wasm.clone(),
             (
-                treasury_addr.clone(),
+                env.current_contract_address(),
                 params.token_uri.clone(),
                 params.token_name.clone(),
                 params.token_symbol.clone(),
@@ -556,7 +558,7 @@ impl ManagerContract {
         governor_deployer.deploy_v2(
             governor_wasm.clone(),
             (
-                treasury_addr.clone(),
+                params.launch_admin.clone(),
                 token_addr.clone(),
                 treasury_addr.clone(),
                 params.voting_delay as u32,
@@ -577,7 +579,7 @@ impl ManagerContract {
         auction_deployer.deploy_v2(
             auction_wasm.clone(),
             (
-                treasury_addr.clone(),
+                params.launch_admin.clone(),
                 token_addr.clone(),
                 treasury_addr.clone(),
                 params.auction_duration,
@@ -590,7 +592,11 @@ impl ManagerContract {
             ),
         );
 
-        // Step 6: Initialize Metadata contract (regular function call, not constructor)
+        // Step 6: Initialize Metadata contract without artwork properties.
+        // launch_admin adds them after creation to keep this transaction within
+        // Soroban resource limits.
+        let empty_property_names: Vec<String> = Vec::new(&env);
+        let empty_items: Vec<Val> = Vec::new(&env);
         // Using invoke_contract directly since we don't have a Client import
         let _: () = env.invoke_contract(
             &metadata_addr,
@@ -604,9 +610,9 @@ impl ManagerContract {
                 params.renderer_base.clone().into_val(&env),
                 env.current_contract_address().into_val(&env),
                 metadata_wasm.clone().into_val(&env),
-                treasury_addr.clone().into_val(&env),
-                params.artwork_property_names.clone().into_val(&env),
-                params.artwork_items.clone().into_val(&env),
+                params.launch_admin.clone().into_val(&env),
+                empty_property_names.into_val(&env),
+                empty_items.into_val(&env),
                 params.artwork_ipfs.clone().into_val(&env),
             ],
         );
@@ -623,7 +629,7 @@ impl ManagerContract {
                     &Symbol::new(&env, "batch_mint"),
                     vec![
                         &env,
-                        params.deployer.clone().into_val(&env),
+                        env.current_contract_address().into_val(&env),
                         founder.address.clone().into_val(&env),
                         batch.into_val(&env),
                     ],
@@ -631,6 +637,18 @@ impl ManagerContract {
                 remaining -= batch;
             }
         }
+
+        // The manager owns the token during creation. Leave a pending transfer
+        // for launch_admin to accept after metadata properties are configured.
+        let _: () = env.invoke_contract(
+            &token_addr,
+            &Symbol::new(&env, "transfer_ownership"),
+            vec![
+                &env,
+                params.launch_admin.clone().into_val(&env),
+                (env.ledger().sequence() + 100_000).into_val(&env),
+            ],
+        );
 
         // Step 7: Set auction as mint authority on token
         // Using invoke_contract directly
@@ -665,6 +683,7 @@ impl ManagerContract {
             created_ledger: env.ledger().sequence(),
             created_at: env.ledger().timestamp(),
             params: params.clone(),
+            status: DaoStatus::Pending,
         };
         env.storage()
             .instance()
@@ -714,6 +733,50 @@ impl ManagerContract {
         emit_dao_registered(&env, &token_addr, &params.deployer, &modules);
 
         Ok(addresses)
+    }
+
+    /// Closes the launch-admin setup window and hands module ownership to the
+    /// Treasury. All configuration remains editable by launch_admin until this
+    /// one-way transition is executed.
+    pub fn finalize_dao(env: Env, token_address: Address) -> Result<(), ManagerError> {
+        let mut creation: DaoCreation = env
+            .storage()
+            .instance()
+            .get(&ManagerKey::DaoCreation(token_address.clone()))
+            .ok_or(ManagerError::DaoNotFound)?;
+        creation.params.launch_admin.require_auth();
+        if creation.status != DaoStatus::Pending {
+            return Err(ManagerError::InvalidParamBounds);
+        }
+
+        let treasury = creation.addresses.treasury.clone();
+        for (module, method) in [
+            (creation.addresses.token.clone(), "finalize_ownership"),
+            (creation.addresses.governor.clone(), "finalize_ownership"),
+            (creation.addresses.treasury.clone(), "finalize_ownership"),
+        ] {
+            let _: () = env.invoke_contract(
+                &module,
+                &Symbol::new(&env, method),
+                vec![&env, treasury.clone().into_val(&env)],
+            );
+        }
+        let _: () = env.invoke_contract(
+            &creation.addresses.auction,
+            &Symbol::new(&env, "finalize_ownership"),
+            vec![&env, treasury.into_val(&env)],
+        );
+        creation.status = DaoStatus::Operational;
+        env.storage()
+            .instance()
+            .set(&ManagerKey::DaoCreation(token_address), &creation);
+        Ok(())
+    }
+
+    pub fn get_dao_creation(env: Env, token_address: Address) -> Option<DaoCreation> {
+        env.storage()
+            .instance()
+            .get(&ManagerKey::DaoCreation(token_address))
     }
 
     /// Predict DAO addresses without deploying.

@@ -2,7 +2,7 @@ use soroban_sdk::{
     auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation},
     contract, contractimpl, vec, Address, BytesN, Env, IntoVal, Symbol, Val, Vec,
 };
-use stellar_access::ownable::{set_owner, Ownable};
+use stellar_access::ownable::{set_owner, Ownable, OwnableStorageKey};
 use stellar_macros::only_owner;
 
 use crate::events::{emit_execute, emit_governor_changed, emit_treasury_initialized};
@@ -18,6 +18,18 @@ pub struct DaoTreasuryContract;
 
 #[contractimpl]
 impl DaoTreasuryContract {
+    pub fn finalize_ownership(e: &Env, new_owner: Address) {
+        let manager: Address = e
+            .storage()
+            .instance()
+            .get(&TreasuryKey::Manager)
+            .expect("manager not set");
+        manager.require_auth();
+        e.storage()
+            .instance()
+            .set(&OwnableStorageKey::Owner, &new_owner);
+    }
+
     /// Initializes the treasury contract with an owner and governor.
     ///
     /// # Arguments

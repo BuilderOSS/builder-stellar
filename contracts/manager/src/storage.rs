@@ -135,6 +135,14 @@ pub struct DaoCreation {
     pub created_at: u64,
     /// Creation parameters
     pub params: DaoCreationParams,
+    pub status: DaoStatus,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DaoStatus {
+    Pending,
+    Operational,
 }
 
 // ============================================================================

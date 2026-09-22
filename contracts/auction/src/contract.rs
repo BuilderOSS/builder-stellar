@@ -1,7 +1,7 @@
 use soroban_sdk::{
     contract, contractimpl, contracttrait, panic_with_error, Address, BytesN, Env, IntoVal, Symbol,
 };
-use stellar_access::ownable::{self, Ownable};
+use stellar_access::ownable::{self, Ownable, OwnableStorageKey};
 use stellar_contract_utils::pausable::{self, Pausable};
 use stellar_macros::{only_owner, when_not_paused, when_paused};
 
@@ -64,6 +64,7 @@ pub trait DaoAuctionContractTrait {
     fn set_time_buffer(e: &Env, time_buffer: u64);
     fn set_payment_token(e: &Env, payment_token: Address);
     fn set_treasury(e: &Env, treasury: Address);
+    fn finalize_ownership(e: &Env, new_owner: Address);
     fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>);
 }
 
@@ -107,6 +108,25 @@ impl Ownable for DaoAuctionContract {}
 
 #[contractimpl]
 impl DaoAuctionContractTrait for DaoAuctionContract {
+    fn finalize_ownership(e: &Env, new_owner: Address) {
+        let manager: Address = e
+            .storage()
+            .instance()
+            .get(&DataKey::Manager)
+            .expect("manager not set");
+        manager.require_auth();
+        if pausable::paused(e) {
+            pausable::unpause(e);
+            if !is_launched(e) {
+                set_launched(e, true);
+                create_auction(e);
+            }
+        }
+        e.storage()
+            .instance()
+            .set(&OwnableStorageKey::Owner, &new_owner);
+    }
+
     fn __constructor(
         e: &Env,
         owner: Address,

@@ -5,7 +5,7 @@ use soroban_sdk::{
     contract, contractimpl, panic_with_error, vec, Address, BytesN, Env, IntoVal, String, Symbol,
     Val, Vec,
 };
-use stellar_access::ownable::{set_owner, Ownable};
+use stellar_access::ownable::{set_owner, Ownable, OwnableStorageKey};
 use stellar_governance::{
     governor::{
         self as governor, emit_proposal_cancelled, emit_proposal_created, emit_proposal_executed,
@@ -34,6 +34,17 @@ pub struct DaoGovernorContract;
 
 #[contractimpl]
 impl DaoGovernorContract {
+    pub fn finalize_ownership(e: &Env, new_owner: Address) {
+        let manager: Address = e
+            .storage()
+            .instance()
+            .get(&GovernorKey::Manager)
+            .expect("manager not set");
+        manager.require_auth();
+        e.storage()
+            .instance()
+            .set(&OwnableStorageKey::Owner, &new_owner);
+    }
     /// Initializes the governor contract with governance parameters.
     ///
     /// Sets up all governance parameters including voting periods, quorum requirements,

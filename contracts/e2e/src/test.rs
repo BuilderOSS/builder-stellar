@@ -1094,6 +1094,19 @@ fn test_auction_full_lifecycle() {
 }
 
 #[test]
+fn test_pending_auction_finalization_launches_and_hands_off_to_treasury() {
+    let (e, _token, treasury, auction, _owner, _payment_token, _payment_client) = setup_auction();
+
+    assert_eq!(auction.get_owner(), Some(_owner.clone()));
+    auction.finalize_ownership(&treasury.address);
+
+    assert_eq!(auction.get_owner(), Some(treasury.address.clone()));
+    assert!(!auction.paused());
+    assert_eq!(auction.get_auction().token_id, 0);
+    let _ = e;
+}
+
+#[test]
 fn test_auction_time_extension() {
     let (e, _token, _treasury, auction, owner, _payment_token, payment_client) = setup_auction();
 

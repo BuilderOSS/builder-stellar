@@ -109,7 +109,7 @@ pub fn set_ipfs_data(env: &Env, ipfs_data: &Vec<IpfsGroup>) {
 
 pub fn set_attributes(env: &Env, token_id: u32, attributes: &Vec<u32>) {
     // Keep the temporary entry below the network's maximum TTL.
-    let ledgers_to_live = 5_000_000;
+    let ledgers_to_live = 3_000_000;
     env.storage()
         .temporary()
         .set(&DataKey::Attributes(token_id), attributes);

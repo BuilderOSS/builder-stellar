@@ -93,6 +93,16 @@ fn transfer_to_new_holder_defaults_self_delegate() {
 }
 
 #[test]
+fn manager_can_finalize_ownership_to_treasury() {
+    let (e, client, _owner) = setup();
+    let treasury = Address::generate(&e);
+
+    client.finalize_ownership(&treasury);
+
+    assert_eq!(client.get_owner(), Some(treasury));
+}
+
+#[test]
 #[should_panic(expected = "HostError: Error(Auth, InvalidAction)")]
 fn mint_requires_minter_auth() {
     let (e, client, owner) = setup_no_auth();
