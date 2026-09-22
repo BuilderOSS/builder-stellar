@@ -21,8 +21,10 @@ function invoke(data) {
   }
 
   // Type-safe helpers for Arrow table serialization
-  function toStringOrNull(value) {
-    if (value === null || value === undefined || value === '') return null;
+  // CRITICAL: For Arrow serialization, all rows must have same type in each column
+  // Never mix null with values for string columns - use empty string for missing values
+  function toStringOrEmpty(value) {
+    if (value === null || value === undefined || value === '') return '';
     return String(value);
   }
   function toNumber(value) {
@@ -36,21 +38,21 @@ function invoke(data) {
   }
 
   return {
-    event_id: toStringOrNull(data.event_id || data.id),
-    deployment_id: toStringOrNull(data.deployment_id),
-    contract_id: toStringOrNull(data.contract_id),
-    contract_role: String(data.contract_role || 'unknown'),
+    event_id: toStringOrEmpty(data.event_id || data.id),
+    deployment_id: toStringOrEmpty(data.deployment_id),
+    contract_id: toStringOrEmpty(data.contract_id),
+    contract_role: toStringOrEmpty(data.contract_role) || 'unknown',
     topics: stringify(data.topics),
     data: stringify(data.data ?? data.payload ?? data),
-    transaction_hash: toStringOrNull(data.transaction_hash),
+    transaction_hash: toStringOrEmpty(data.transaction_hash),
     transaction_successful: toBoolean(data.transaction_successful),
     ledger_sequence: toNumber(data.ledger_sequence),
-    ledger_hash: toStringOrNull(data.ledger_hash),
-    ledger_closed_at: toStringOrNull(data.ledger_closed_at),
+    ledger_hash: toStringOrEmpty(data.ledger_hash),
+    ledger_closed_at: toStringOrEmpty(data.ledger_closed_at),
     transaction_index: toNumber(data.transaction_index),
     operation_index: toNumber(data.operation_index),
     event_index: toNumber(data.event_index),
-    operation_type: toStringOrNull(data.operation_type),
-    _gs_op: toStringOrNull(data._gs_op)
+    operation_type: toStringOrEmpty(data.operation_type),
+    _gs_op: toStringOrEmpty(data._gs_op)
   };
 }
