@@ -1,3 +1,4 @@
+import { Plus } from 'lucide-react';
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -43,20 +44,8 @@ export default async function Page() {
             </div>
           </Link>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <Link
-              href="/create"
-              style={{
-                padding: '0.5rem 1rem',
-                background: 'var(--accent-9)',
-                color: 'white',
-                borderRadius: '8px',
-                textDecoration: 'none',
-                fontSize: '0.875rem',
-                fontWeight: 600,
-                transition: 'background 0.2s',
-                display: 'inline-block'
-              }}
-            >
+            <Link href="/create" className="nav-link">
+              <Plus aria-hidden="true" size={16} strokeWidth={2} />
               Create DAO
             </Link>
             <div className="discovery-header__context">
