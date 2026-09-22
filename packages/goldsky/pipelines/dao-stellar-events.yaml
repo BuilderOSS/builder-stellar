@@ -520,7 +520,6 @@ transforms:
 
   manager_daos:
     type: sql
-    from: decoded_events
     primary_key: event_id
     sql: |
       SELECT
@@ -602,7 +601,6 @@ transforms:
 
   manager_daos_finalized:
     type: sql
-    from: decoded_events
     primary_key: event_id
     sql: |
       SELECT
@@ -664,7 +662,6 @@ transforms:
 
   manager_daos_enriched:
     type: sql
-    from: decoded_events
     primary_key: event_id
     sql: |
       SELECT
