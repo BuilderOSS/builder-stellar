@@ -499,8 +499,18 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         // Step 1: Predict addresses
         const predictedAddresses = await predictAddresses(nonce);
 
+        // Substitute {daoId} placeholder with predicted token address
+        const updatedFormData: CreateDaoFormData = {
+          ...formData,
+          basicInfo: {
+            ...formData.basicInfo,
+            tokenUri: formData.basicInfo.tokenUri.replace('{daoId}', predictedAddresses.token),
+            rendererBase: formData.basicInfo.rendererBase.replace('{daoId}', predictedAddresses.token)
+          }
+        };
+
         // Step 2: Create DAO
-        const createdAddresses = await createDao(formData, nonce);
+        const createdAddresses = await createDao(updatedFormData, nonce);
 
         // Validate addresses match prediction
         if (predictedAddresses.token !== createdAddresses.token) {
@@ -511,13 +521,13 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         await acceptOwnership(createdAddresses.token);
 
         // Step 4: Add properties
-        await addProperties(createdAddresses.metadata, formData);
+        await addProperties(createdAddresses.metadata, updatedFormData);
 
         // Step 5: Mint founders
-        await mintFounders(createdAddresses.token, formData);
+        await mintFounders(createdAddresses.token, updatedFormData);
 
         // Step 6: Finalize
-        await finalizeDao(createdAddresses.token, formData.auction.enabled);
+        await finalizeDao(createdAddresses.token, updatedFormData.auction.enabled);
 
         // Step 7: Wait for indexing
         await waitForIndexing(createdAddresses.token);

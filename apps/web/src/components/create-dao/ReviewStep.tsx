@@ -27,11 +27,11 @@ export function ReviewStep({ connectedAddress }: { connectedAddress: string }) {
               <DetailRow label="Name" value={basicInfo.tokenName} />
               <DetailRow label="Symbol" value={basicInfo.tokenSymbol} />
               <DetailRow label="Description" value={basicInfo.description} />
-              {basicInfo.projectUri && <DetailRow label="Project URI" value={basicInfo.projectUri} />}
-              {basicInfo.tokenUri && <DetailRow label="Token URI" value={basicInfo.tokenUri} />}
-              {basicInfo.contractImage && <DetailRow label="Contract Image" value={basicInfo.contractImage} />}
-              {basicInfo.rendererBase && <DetailRow label="Renderer Base" value={basicInfo.rendererBase} />}
             </Stack>
+            <Text style={{ fontSize: '0.75rem', color: 'var(--gray-11)', marginTop: '8px', fontStyle: 'italic' }}>
+              Note: Token URI and metadata endpoints will be configured automatically using your DAO&apos;s contract
+              address after deployment.
+            </Text>
           </div>
 
           {/* Artwork */}
