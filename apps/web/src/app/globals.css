@@ -1306,7 +1306,7 @@ textarea {
     bottom: max(10px, env(safe-area-inset-bottom));
     left: 10px;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr)) min-content;
     overflow: visible;
     padding: 7px;
     border: 1px solid var(--border-strong);
