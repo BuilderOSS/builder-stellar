@@ -85,10 +85,10 @@ updates AS (
   SELECT
     deployment_id,
     contract_id,
-    max(args ->> 'new_uri') FILTER (WHERE event_name = 'project_uri_updated') AS project_uri,
-    max(args ->> 'new_description') FILTER (WHERE event_name = 'description_updated') AS description,
-    max(args ->> 'new_image') FILTER (WHERE event_name = 'contract_image_updated') AS contract_image,
-    max(args ->> 'new_base') FILTER (WHERE event_name = 'renderer_base_updated') AS updated_renderer_base
+    max(args::jsonb ->> 'new_uri') FILTER (WHERE event_name = 'project_uri_updated') AS project_uri,
+    max(args::jsonb ->> 'new_description') FILTER (WHERE event_name = 'description_updated') AS description,
+    max(args::jsonb ->> 'new_image') FILTER (WHERE event_name = 'contract_image_updated') AS contract_image,
+    max(args::jsonb ->> 'new_base') FILTER (WHERE event_name = 'renderer_base_updated') AS updated_renderer_base
   FROM latest_updates
   GROUP BY deployment_id, contract_id
 )
@@ -106,4 +106,3 @@ SELECT
   i.init_transaction_hash
 FROM initialized i
 LEFT JOIN updates u ON u.deployment_id = i.deployment_id AND u.contract_id = i.metadata_contract;
-

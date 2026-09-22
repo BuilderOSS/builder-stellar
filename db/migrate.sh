@@ -95,7 +95,7 @@ run_migration() {
     echo -e "${BLUE}  ↳ Detected CONCURRENTLY - running outside transaction${NC}"
 
     # Run migration outside transaction, then record it
-    psql "$DATABASE_URL" -f "$file"
+    psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f "$file"
 
     if [ $? -eq 0 ]; then
       # Record migration after successful execution
@@ -112,7 +112,7 @@ run_migration() {
     fi
   else
     # Run migration in a transaction for safety
-    psql "$DATABASE_URL" << EOF
+    psql -v ON_ERROR_STOP=1 "$DATABASE_URL" << EOF
 BEGIN;
 
 -- Run the migration

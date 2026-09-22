@@ -14,11 +14,11 @@ WITH created AS (
     e.topic_0 AS token_address,
     e.topic_1 AS creator,
     e.contract_id AS manager_contract,
-    e.args #>> '{modules,token}' AS token_contract,
-    e.args #>> '{modules,governor}' AS governor_contract,
-    e.args #>> '{modules,auction}' AS auction_contract,
-    e.args #>> '{modules,treasury}' AS treasury_contract,
-    e.args #>> '{modules,metadata}' AS metadata_contract,
+    e.args::jsonb #>> '{modules,token}' AS token_contract,
+    e.args::jsonb #>> '{modules,governor}' AS governor_contract,
+    e.args::jsonb #>> '{modules,auction}' AS auction_contract,
+    e.args::jsonb #>> '{modules,treasury}' AS treasury_contract,
+    e.args::jsonb #>> '{modules,metadata}' AS metadata_contract,
     e.ledger_sequence AS created_ledger,
     to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS created_at,
     e.transaction_hash AS created_tx_hash
@@ -41,11 +41,11 @@ WITH created AS (
   SELECT DISTINCT ON (e.deployment_id, e.contract_id)
     e.deployment_id,
     e.contract_id AS token_contract,
-    e.args ->> 'name' AS token_name,
-    e.args ->> 'symbol' AS token_symbol,
-    e.args ->> 'uri' AS token_uri,
-    e.args ->> 'description' AS token_description,
-    e.args ->> 'owner' AS admin_address
+    e.args::jsonb ->> 'name' AS token_name,
+    e.args::jsonb ->> 'symbol' AS token_symbol,
+    e.args::jsonb ->> 'uri' AS token_uri,
+    e.args::jsonb ->> 'description' AS token_description,
+    e.args::jsonb ->> 'owner' AS admin_address
   FROM chain.decoded_events e
   WHERE e.contract_role = 'token'
     AND e.event_name = 'token_initialized'
@@ -92,4 +92,3 @@ SELECT e.deployment_id, e.contract_id,
   m.module_role, m.module_contract
 FROM chain.decoded_events e
 LEFT JOIN manager.dao_modules m ON m.deployment_id = e.deployment_id AND m.module_contract = e.contract_id;
-

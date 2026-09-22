@@ -106,7 +106,7 @@ SELECT
     WHERE x.deployment_id = e.deployment_id
       AND x.contract_role = 'auction'
       AND x.contract_id = e.contract_id
-      AND x.topics ->> 'token_id' = e.topics::jsonb ->> 'token_id'
+      AND x.topics::jsonb ->> 'token_id' = e.topics::jsonb ->> 'token_id'
       AND x.event_name = 'auction_cancelled'
       AND x.ledger_sequence >= e.ledger_sequence
   ) AS cancelled,
@@ -117,4 +117,3 @@ JOIN manager.event_identity i USING (deployment_id, contract_id)
 LEFT JOIN config c ON c.deployment_id = e.deployment_id AND c.contract_id = e.contract_id
 WHERE e.contract_role = 'auction'
   AND e.event_name = 'auction_created';
-
