@@ -48,6 +48,14 @@ pub struct DaoRegistered {
     pub creator: Address,
     pub modules: DaoModules,
 }
+
+#[contractevent]
+pub struct DaoFinalized {
+    #[topic]
+    pub token_address: Address,
+    pub finalized_ledger: u32,
+    pub modules: DaoModules,
+}
 #[contractevent]
 pub struct CurrentImplementationsUpdated {
     pub token: BytesN<32>,
@@ -149,6 +157,20 @@ pub fn emit_dao_registered(
     DaoRegistered {
         token_address: token_address.clone(),
         creator: creator.clone(),
+        modules: modules.clone(),
+    }
+    .publish(env);
+}
+
+pub fn emit_dao_finalized(
+    env: &Env,
+    token_address: &Address,
+    finalized_ledger: u32,
+    modules: &DaoModules,
+) {
+    DaoFinalized {
+        token_address: token_address.clone(),
+        finalized_ledger,
         modules: modules.clone(),
     }
     .publish(env);

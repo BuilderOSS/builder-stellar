@@ -137,6 +137,18 @@ export interface DaoCreatedEvent {
 }
 
 /**
+ * Event: DaoFinalized
+ */
+export interface DaoFinalizedEvent {
+  name: "DaoFinalized";
+  data: {
+    token_address: string;
+    finalized_ledger?: number;
+    modules?: DaoModules;
+  };
+}
+
+/**
  * Event: DaoRegistered
  */
 export interface DaoRegisteredEvent {
@@ -219,6 +231,13 @@ export interface CurrentImplementationsUpdatedEvent {
 }
 
 /**
+ * Union: DaoStatus
+ */
+ export type DaoStatus =
+  { tag: "Pending"; values: void } |
+  { tag: "Operational"; values: void };
+
+/**
  * Module addresses for a DAO (same as DaoAddresses but for registry context).
  */
 export interface DaoModules {
@@ -283,6 +302,7 @@ export interface DaoCreation {
    * Creation parameters
    */
   params: DaoCreationParams;
+  status: DaoStatus;
 }
 
 /**
@@ -543,5 +563,5 @@ export interface CreateContractWithConstructorHostFnContext {
   { tag: "Wasm"; values: readonly [Uint8Array] } |
   { tag: "StellarAsset"; values: void } |
   { tag: "Account"; values: void };
-    export type ContractEvent = DaoCreatedEvent | DaoRegisteredEvent | FactoryPausedEvent | FactoryUnpausedEvent | UpgradeApprovedEvent | ImplementationRevokedEvent | ImplementationRegisteredEvent | CurrentImplementationsUpdatedEvent;
+    export type ContractEvent = DaoCreatedEvent | DaoFinalizedEvent | DaoRegisteredEvent | FactoryPausedEvent | FactoryUnpausedEvent | UpgradeApprovedEvent | ImplementationRevokedEvent | ImplementationRegisteredEvent | CurrentImplementationsUpdatedEvent;
     

@@ -42,6 +42,24 @@ test('manager topics preserve token address then creator order for both event na
   }
 });
 
+test('DaoFinalized uses the token address as the DAO identity topic', () => {
+  const decoded = decodeEvent({
+    topics: JSON.stringify([
+      { symbol: 'DaoFinalized' },
+      { address: 'TOKEN_ADDR' }
+    ]),
+    data: JSON.stringify({
+      map: [
+        { key: { symbol: 'finalized_ledger' }, val: { u32: 42 } },
+        { key: { symbol: 'modules' }, val: { map: [] } }
+      ]
+    })
+  });
+
+  assert.deepEqual(topicsOf(decoded), { token_address: 'TOKEN_ADDR' });
+  assert.deepEqual(argsOf(decoded), { finalized_ledger: 42, modules: {} });
+});
+
 // XDR-JSON Flattening Tests
 
 test('scValToNative handles all scalar types', () => {

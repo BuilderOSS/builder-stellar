@@ -769,7 +769,15 @@ impl ManagerContract {
         creation.status = DaoStatus::Operational;
         env.storage()
             .instance()
-            .set(&ManagerKey::DaoCreation(token_address), &creation);
+            .set(&ManagerKey::DaoCreation(token_address.clone()), &creation);
+        let modules = DaoModules {
+            token: creation.addresses.token.clone(),
+            metadata: creation.addresses.metadata.clone(),
+            auction: creation.addresses.auction.clone(),
+            governor: creation.addresses.governor.clone(),
+            treasury: creation.addresses.treasury.clone(),
+        };
+        emit_dao_finalized(&env, &token_address, env.ledger().sequence(), &modules);
         Ok(())
     }
 

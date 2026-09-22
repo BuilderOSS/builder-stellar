@@ -162,35 +162,35 @@ transforms:
         e.topic_1 AS creator,
         e.contract_id AS manager_contract,
         CASE
-          WHEN e.args::jsonb @> '{"params":{"modules":{}}}'
-          THEN (e.args::jsonb -> 'params' -> 'modules' ->> 'token')::text
+          WHEN e.args::jsonb @> '{"modules":{}}'
+          THEN (e.args::jsonb -> 'modules' ->> 'token')::text
           ELSE NULL
         END AS token_contract,
         CASE
-          WHEN e.args::jsonb @> '{"params":{"modules":{}}}'
-          THEN (e.args::jsonb -> 'params' -> 'modules' ->> 'governor')::text
+          WHEN e.args::jsonb @> '{"modules":{}}'
+          THEN (e.args::jsonb -> 'modules' ->> 'governor')::text
           ELSE NULL
         END AS governor_contract,
         CASE
-          WHEN e.args::jsonb @> '{"params":{"modules":{}}}'
-          THEN (e.args::jsonb -> 'params' -> 'modules' ->> 'auction')::text
+          WHEN e.args::jsonb @> '{"modules":{}}'
+          THEN (e.args::jsonb -> 'modules' ->> 'auction')::text
           ELSE NULL
         END AS auction_contract,
         CASE
-          WHEN e.args::jsonb @> '{"params":{"modules":{}}}'
-          THEN (e.args::jsonb -> 'params' -> 'modules' ->> 'treasury')::text
+          WHEN e.args::jsonb @> '{"modules":{}}'
+          THEN (e.args::jsonb -> 'modules' ->> 'treasury')::text
           ELSE NULL
         END AS treasury_contract,
         CASE
-          WHEN e.args::jsonb @> '{"params":{"modules":{}}}'
-          THEN (e.args::jsonb -> 'params' -> 'modules' ->> 'metadata')::text
+          WHEN e.args::jsonb @> '{"modules":{}}'
+          THEN (e.args::jsonb -> 'modules' ->> 'metadata')::text
           ELSE NULL
         END AS metadata_contract,
-        (e.args::jsonb -> 'params' ->> 'token_name')::varchar(255) AS token_name,
-        (e.args::jsonb -> 'params' ->> 'token_symbol')::varchar(16) AS token_symbol,
-        (e.args::jsonb -> 'params' ->> 'description')::text AS token_description,
-        (e.args::jsonb -> 'params' ->> 'token_uri')::text AS token_uri,
-        (e.args::jsonb -> 'params' ->> 'launch_admin')::varchar(56) AS admin_address,
+        NULL::varchar(255) AS token_name,
+        NULL::varchar(16) AS token_symbol,
+        NULL::text AS token_description,
+        NULL::text AS token_uri,
+        NULL::varchar(56) AS admin_address,
         'pending'::text AS status,
         e.ledger_sequence AS created_ledger,
         to_timestamp(
@@ -236,24 +236,24 @@ transforms:
         e.operation_type,
         e._gs_op,
         e.decoder_version,
-        e.topic_0 AS dao_id,
-        e.topic_0 AS token_address,
-        e.topic_1 AS creator,
-        e.contract_id AS manager_contract,
-        NULL::text AS token_contract,
-        NULL::text AS governor_contract,
-        NULL::text AS auction_contract,
-        NULL::text AS treasury_contract,
-        NULL::text AS metadata_contract,
-        NULL::varchar(255) AS token_name,
-        NULL::varchar(16) AS token_symbol,
-        NULL::text AS token_description,
-        NULL::text AS token_uri,
-        e.topic_1 AS admin_address,
+        d.dao_id,
+        d.token_address,
+        d.creator,
+        d.manager_contract,
+        d.token_contract,
+        d.governor_contract,
+        d.auction_contract,
+        d.treasury_contract,
+        d.metadata_contract,
+        d.token_name,
+        d.token_symbol,
+        d.token_description,
+        d.token_uri,
+        d.admin_address,
         'operational'::text AS status,
-        NULL::bigint AS created_ledger,
-        NULL::timestamptz AS created_at,
-        NULL::text AS created_tx_hash,
+        d.created_ledger,
+        d.created_at,
+        d.created_tx_hash,
         e.ledger_sequence AS finalized_ledger,
         to_timestamp(
           CASE
@@ -264,6 +264,9 @@ transforms:
         ) AS finalized_at,
         e.transaction_hash AS finalized_tx_hash
       FROM decoded_events e
+      JOIN manager_daos d
+        ON d.deployment_id = e.deployment_id
+       AND d.dao_id = e.topic_0
       WHERE e.contract_role = 'manager'
       AND LOWER(e.event_name) IN ('dao_finalized', 'daofinalized')
 
