@@ -115,7 +115,7 @@ SELECT
   schema_name,
   schema_owner
 FROM information_schema.schemata
-WHERE schema_name IN ('public', 'chain', 'governance', 'token', 'auction', 'treasury', 'app')
+WHERE schema_name IN ('public', 'chain', 'governance', 'token', 'auction', 'treasury', 'manager', 'metadata', 'app')
 ORDER BY
   CASE schema_name
     WHEN 'public' THEN 0
@@ -124,7 +124,9 @@ ORDER BY
     WHEN 'token' THEN 3
     WHEN 'auction' THEN 4
     WHEN 'treasury' THEN 5
-    WHEN 'app' THEN 6
+    WHEN 'manager' THEN 6
+    WHEN 'metadata' THEN 7
+    WHEN 'app' THEN 8
   END;
 EOF
 
@@ -142,7 +144,7 @@ SELECT
   COUNT(*) as table_count,
   STRING_AGG(tablename, ', ' ORDER BY tablename) as tables
 FROM pg_tables
-WHERE schemaname IN ('public', 'chain', 'governance', 'token', 'auction', 'treasury', 'app')
+WHERE schemaname IN ('public', 'chain', 'governance', 'token', 'auction', 'treasury', 'manager', 'metadata', 'app')
 GROUP BY schemaname
 ORDER BY
   CASE schemaname
@@ -152,7 +154,9 @@ ORDER BY
     WHEN 'token' THEN 3
     WHEN 'auction' THEN 4
     WHEN 'treasury' THEN 5
-    WHEN 'app' THEN 6
+    WHEN 'manager' THEN 6
+    WHEN 'metadata' THEN 7
+    WHEN 'app' THEN 8
   END;
 EOF
 
@@ -196,7 +200,7 @@ SELECT
   STRING_AGG(DISTINCT privilege_type, ', ' ORDER BY privilege_type) as privileges
 FROM information_schema.table_privileges
 WHERE grantee IN ('goldsky_writer', 'app_server')
-  AND table_schema IN ('chain', 'governance', 'token', 'auction', 'treasury', 'app')
+  AND table_schema IN ('chain', 'governance', 'token', 'auction', 'treasury', 'manager', 'metadata', 'app')
 GROUP BY grantee, table_schema
 ORDER BY grantee, table_schema;
 EOF
@@ -226,7 +230,7 @@ echo -e "${CYAN}Summary and Next Steps${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-SCHEMAS_COUNT=$(psql "$DATABASE_URL" -t -c "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name IN ('chain', 'governance', 'token', 'auction', 'treasury', 'app')" | tr -d ' ')
+SCHEMAS_COUNT=$(psql "$DATABASE_URL" -t -c "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name IN ('chain', 'governance', 'token', 'auction', 'treasury', 'manager', 'metadata', 'app')" | tr -d ' ')
 
 # Determine what needs to be done
 NEEDS_ROLES=false

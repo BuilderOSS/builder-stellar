@@ -39,7 +39,7 @@ echo ""
 echo -e "${RED}⚠️  WARNING: This will delete ALL Goldsky data!${NC}"
 echo ""
 echo "This will drop:"
-echo "  - All schemas: chain, governance, token, auction, treasury, app"
+echo "  - All schemas: chain, governance, token, auction, treasury, manager, metadata, app"
 echo "  - All tables and views in those schemas"
 echo "  - Migration tracking table (schema_migrations)"
 echo ""
@@ -75,6 +75,8 @@ echo -e "${YELLOW}→ Dropping Goldsky schemas...${NC}"
 psql "$DATABASE_URL" << 'EOF'
 -- Drop schemas in reverse dependency order
 DROP SCHEMA IF EXISTS app CASCADE;
+DROP SCHEMA IF EXISTS metadata CASCADE;
+DROP SCHEMA IF EXISTS manager CASCADE;
 DROP SCHEMA IF EXISTS treasury CASCADE;
 DROP SCHEMA IF EXISTS auction CASCADE;
 DROP SCHEMA IF EXISTS token CASCADE;
@@ -98,7 +100,7 @@ echo ""
 # Verify clean state
 echo -e "${YELLOW}→ Verifying clean state...${NC}"
 
-REMAINING_SCHEMAS=$(psql "$DATABASE_URL" -t -c "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name IN ('chain', 'governance', 'token', 'auction', 'treasury', 'app')" | tr -d ' ')
+REMAINING_SCHEMAS=$(psql "$DATABASE_URL" -t -c "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name IN ('chain', 'governance', 'token', 'auction', 'treasury', 'manager', 'metadata', 'app')" | tr -d ' ')
 
 MIGRATION_TABLE=$(psql "$DATABASE_URL" -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'schema_migrations'" | tr -d ' ')
 
