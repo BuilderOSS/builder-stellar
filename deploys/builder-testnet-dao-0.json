@@ -1,5 +1,5 @@
 {
-  "status": "pending",
+  "status": "operational",
   "network": "testnet",
   "label": "builder",
   "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
@@ -108,7 +108,7 @@
     ],
     "launchAdmin": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO"
   },
-  "createdAt": "2026-09-22T06:53:36.428Z",
+  "createdAt": "2026-09-22T06:53:51.178Z",
   "transactions": {
     "createDao": {
       "txHash": "76c73fcdd51a310df61fc6d75346d6758c595fc3b9008a6fad434185872b0893",
@@ -121,6 +121,10 @@
     "addProperties": {
       "txHash": "0e864b1966003a1b6bd365dda5900b7bf0ca32961209612e21216c3ea7313c16",
       "ledger": 4807285
+    },
+    "finalizeDao": {
+      "txHash": "60ea6012f0d3f366beede36b75af1e9dbcd7ce2ebec8e8676cf9321e7048093c",
+      "ledger": 4807288
     }
   },
   "deploymentLedger": 4807281
