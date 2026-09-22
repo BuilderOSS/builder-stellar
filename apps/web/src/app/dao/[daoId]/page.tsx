@@ -186,7 +186,11 @@ export default function Page() {
               ) : (
                 <Text>Auction: Missing</Text>
               )}
-              <ShortId label="Admin" value={config.adminAddress} />
+              {config.metadataContractId ? (
+                <ShortId label="Metadata" value={config.metadataContractId} />
+              ) : (
+                <Text>Metadata: Missing</Text>
+              )}
             </div>
           </div>
         </details>
@@ -362,7 +366,7 @@ export default function Page() {
                   ) : null}
                   {goldskyHealth ? (
                     <div className="dashboard-health-program">
-                      <Text style={{ margin: 0, fontWeight: 700 }}>Goldsky index</Text>
+                      <Text style={{ margin: 0, fontWeight: 700 }}>Indexer status</Text>
                       <Text className="lede" style={{ margin: 0, fontSize: '0.78rem' }}>
                         {goldskyHealth.latestLedger ? `Ledger ${goldskyHealth.latestLedger}` : 'No ledger data'} |{' '}
                         {goldskyHealth.totalEvents ?? 0} indexed events

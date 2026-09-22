@@ -171,10 +171,21 @@ textarea {
 }
 
 .primary-nav,
+.secondary-nav,
 .mobile-nav {
   display: flex;
   align-items: center;
   gap: 3px;
+}
+.nav-groups {
+  display: grid;
+  min-width: 0;
+  justify-items: center;
+  gap: 4px;
+}
+.secondary-nav {
+  padding-top: 4px;
+  border-top: 1px solid var(--border-default);
 }
 
 .nav-link {
@@ -1279,11 +1290,61 @@ textarea {
 }
 
 @media (max-width: 1020px) {
+  .page-shell {
+    padding-bottom: 104px;
+  }
   .app-header {
     grid-template-columns: minmax(0, 1fr) auto;
   }
-  .primary-nav {
+  .nav-groups {
     display: none;
+  }
+  .mobile-nav {
+    position: fixed;
+    z-index: 60;
+    right: 10px;
+    bottom: max(10px, env(safe-area-inset-bottom));
+    left: 10px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
+    overflow: visible;
+    padding: 7px;
+    border: 1px solid var(--border-strong);
+    border-radius: 16px;
+    background: rgba(12, 14, 17, 0.94);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(18px);
+  }
+  .mobile-nav .nav-link {
+    min-width: 0;
+    min-height: 48px;
+    flex-direction: column;
+    padding: 5px 2px;
+    font-size: 0.65rem;
+    gap: 3px;
+  }
+  .mobile-nav__more {
+    position: relative;
+  }
+  .mobile-nav__more > summary {
+    width: 40px;
+    min-height: 48px;
+    padding: 0;
+  }
+  .mobile-nav__more .dashboard-menu__panel {
+    top: auto;
+    right: 0;
+    bottom: calc(100% + 8px);
+  }
+  .mobile-nav__more .nav-link {
+    width: 100%;
+    flex: initial;
+    min-height: 40px;
+    flex-direction: row;
+    padding: 0 12px;
+    font-size: 0.84rem;
+    gap: 7px;
+    justify-content: flex-start;
   }
   .treasury-layout,
   .proposal-detail-layout {
@@ -1489,30 +1550,6 @@ textarea {
     align-items: flex-start;
   }
 
-  .mobile-nav {
-    position: fixed;
-    z-index: 60;
-    right: 10px;
-    bottom: max(10px, env(safe-area-inset-bottom));
-    left: 10px;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
-    padding: 7px;
-    border: 1px solid var(--border-strong);
-    border-radius: 16px;
-    background: rgba(12, 14, 17, 0.94);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-    backdrop-filter: blur(18px);
-  }
-
-  .mobile-nav .nav-link {
-    min-width: 0;
-    min-height: 48px;
-    flex-direction: column;
-    padding: 5px 2px;
-    font-size: 0.65rem;
-    gap: 3px;
-  }
   .app-footer {
     align-items: flex-start;
     flex-direction: column;

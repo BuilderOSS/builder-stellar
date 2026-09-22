@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { getGoldskyMemberList } from '@/lib/goldsky';
+import { getGoldskyMember, getGoldskyMemberList } from '@/lib/goldsky';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +9,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
   const { daoId } = await params;
   const limit = Number(url.searchParams.get('limit') ?? '100');
   const offset = Number(url.searchParams.get('offset') ?? '0');
+  const address = url.searchParams.get('address')?.trim();
+  if (address) {
+    try {
+      return NextResponse.json(
+        { item: await getGoldskyMember(daoId, address) },
+        { headers: { 'Cache-Control': 'no-store' } }
+      );
+    } catch {
+      return NextResponse.json({ item: null, message: 'Member lookup unavailable' }, { status: 503 });
+    }
+  }
   if (!Number.isInteger(limit) || !Number.isInteger(offset) || limit < 1 || offset < 0) {
     return NextResponse.json({ message: 'limit and offset must be valid non-negative integers' }, { status: 400 });
   }

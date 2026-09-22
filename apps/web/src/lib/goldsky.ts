@@ -473,6 +473,22 @@ export async function getGoldskyMemberList(daoId: string, params: { limit?: numb
   };
 }
 
+export async function getGoldskyMember(daoId: string, address: string) {
+  const deploymentId = getDeploymentId();
+  const dao_id = await getDaoIdFromUrl(daoId);
+  const result = await pool.query(
+    `
+    SELECT address, owned_token_count, delegated_to, voting_power, last_activity_ledger
+    FROM token.members
+    WHERE deployment_id = $1 AND dao_id = $2 AND address = $3
+    LIMIT 1
+  `,
+    [deploymentId, dao_id, address]
+  );
+
+  return result.rows[0] ?? null;
+}
+
 /**
  * Mint Authorities
  *

@@ -6,10 +6,12 @@ import { KitEventType } from '@creit.tech/stellar-wallets-kit/types';
 import type { LucideIcon } from 'lucide-react';
 import {
   ChevronDown,
+  Compass,
   Gavel,
   Landmark,
   LayoutDashboard,
   LogOut,
+  MoreHorizontal,
   Settings,
   ShieldAlert,
   Users,
@@ -25,10 +27,12 @@ import { type ReactNode, useEffect } from 'react';
 import { Button, Callout } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
+import { useGoldskyMember } from '@/lib/goldsky-queries';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
 function getNavItems(daoId: string): Array<{ href: Route; label: string; icon: LucideIcon }> {
   return [
+    { href: '/', label: 'Explore', icon: Compass },
     { href: `/dao/${daoId}` as Route, label: 'Dashboard', icon: LayoutDashboard },
     { href: `/dao/${daoId}/proposals` as Route, label: 'Proposals', icon: Vote },
     { href: `/dao/${daoId}/auctions` as Route, label: 'Auctions', icon: Gavel },
@@ -63,6 +67,16 @@ function isRouteActive(pathname: string, href: Route) {
 function shortenAddress(value: string) {
   if (value.length <= 12) return value;
   return `${value.slice(0, 5)}…${value.slice(-4)}`;
+}
+
+function hasDaoMembership(member: ReturnType<typeof useGoldskyMember>['data']) {
+  if (!member?.item) return false;
+
+  try {
+    return BigInt(member.item.voting_power) > 0n || BigInt(member.item.owned_token_count) > 0n;
+  } catch {
+    return false;
+  }
 }
 
 async function validateWalletNetwork(
@@ -101,6 +115,7 @@ export function DaoShell({ children }: { children: ReactNode }) {
   const { daoId, daoConfig: currentNetwork } = useDaoContext();
   const session = useDaoSessionStore();
   const updateSession = useDaoSessionStore((state) => state.updateSession);
+  const { data: memberLookup } = useGoldskyMember(currentNetwork.tokenContractId, session.address);
   const walletDisabled = Boolean(session.address && session.walletNetworkIssue);
 
   const baseNavItems = getNavItems(daoId);
@@ -109,7 +124,11 @@ export function DaoShell({ children }: { children: ReactNode }) {
     label: 'Admin',
     icon: Settings
   };
-  const navItems = session.address ? [...baseNavItems, adminNavItem] : baseNavItems;
+  const navItems = hasDaoMembership(memberLookup) ? [...baseNavItems, adminNavItem] : baseNavItems;
+  const desktopPrimaryNavItems = navItems.slice(0, 2);
+  const desktopSecondaryNavItems = navItems.slice(2);
+  const mobilePrimaryNavItems = navItems.slice(0, 3);
+  const mobileOverflowNavItems = navItems.slice(3);
 
   useEffect(() => {
     StellarWalletsKit.init({ modules: defaultModules() });
@@ -182,11 +201,18 @@ export function DaoShell({ children }: { children: ReactNode }) {
             </div>
           </Link>
 
-          <nav className="primary-nav" aria-label="Primary navigation">
-            {navItems.map((item) => (
-              <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href)} />
-            ))}
-          </nav>
+          <div className="nav-groups">
+            <nav className="primary-nav" aria-label="Primary navigation">
+              {desktopPrimaryNavItems.map((item) => (
+                <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href)} />
+              ))}
+            </nav>
+            <nav className="secondary-nav" aria-label="DAO sections">
+              {desktopSecondaryNavItems.map((item) => (
+                <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href)} />
+              ))}
+            </nav>
+          </div>
 
           <div className="header-actions">
             <div className="network-chip" title={`Configured for ${currentNetwork.label}`}>
@@ -221,9 +247,26 @@ export function DaoShell({ children }: { children: ReactNode }) {
         </header>
 
         <nav className="mobile-nav" aria-label="Mobile navigation">
-          {navItems.map((item) => (
+          {mobilePrimaryNavItems.map((item) => (
             <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href)} />
           ))}
+          {mobileOverflowNavItems.length ? (
+            <details className="dashboard-menu mobile-nav__more">
+              <summary
+                className="dashboard-menu__trigger dashboard-menu__trigger--icon"
+                aria-label="More DAO navigation"
+                title="More DAO navigation"
+              >
+                <MoreHorizontal aria-hidden="true" size={18} />
+              </summary>
+              <div className="dashboard-menu__panel dashboard-options-menu">
+                <p className="label">More sections</p>
+                {mobileOverflowNavItems.map((item) => (
+                  <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href)} />
+                ))}
+              </div>
+            </details>
+          ) : null}
         </nav>
 
         <main id="main-content" className="content-shell" tabIndex={-1} aria-busy={walletDisabled || undefined}>
