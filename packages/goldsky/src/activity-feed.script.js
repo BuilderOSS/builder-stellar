@@ -241,41 +241,27 @@ function invoke(data) {
   var tokenAddress = pick(data, ['token_address']);
   var name = pick(data, ['name']);
 
-  var summary = titleMap[normalizedEventName] || String(eventName).replace(/_/g, ' ');
+  var summaryFunctions = {
+    ProposalQueued: function() { return 'Proposal ' + (proposalId || '') + ' queued'; },
+    ProposalCreated: function() { return 'Proposal created'; },
+    VoteCast: function() { return 'Vote cast on proposal'; },
+    BidPlaced: function() { return 'Bid of ' + (amount || 'unknown') + ' placed on token ' + (tokenId || 'unknown'); },
+    AuctionSettled: function() { return 'Auction settled for token ' + (tokenId || 'unknown'); },
+    AuctionCreated: function() { return 'Auction created for token ' + (tokenId || 'unknown'); },
+    Execute: function() { return 'Executed ' + (func || 'call') + ' on ' + (target || 'target'); },
+    Mint: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
+    MintWithMinter: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
+    BatchMint: function() { return 'Minted ' + (amount || 'batch') + ' tokens'; },
+    DelegateChanged: function() { return 'Delegation changed'; },
+    DaoCreated: function() { return 'DAO created by ' + (creator || 'unknown'); },
+    DaoRegistered: function() { return 'DAO registered for token ' + (tokenAddress || 'unknown'); },
+    DaoFinalized: function() { return 'DAO finalized for token ' + (tokenAddress || 'unknown'); },
+    ImplementationRegistered: function() { return 'Implementation "' + (name || 'unknown') + '" registered'; },
+    SeedGenerated: function() { return 'Seed generated for token ' + (tokenId || 'unknown'); },
+    PropertyAdded: function() { return 'Property "' + (name || 'unknown') + '" added'; }
+  };
 
-  if (normalizedEventName === 'ProposalQueued') {
-    summary = 'Proposal ' + (proposalId || '') + ' queued';
-  } else if (normalizedEventName === 'ProposalCreated') {
-    summary = 'Proposal created';
-  } else if (normalizedEventName === 'VoteCast') {
-    summary = 'Vote cast on proposal';
-  } else if (normalizedEventName === 'BidPlaced') {
-    summary = 'Bid of ' + (amount || 'unknown') + ' placed on token ' + (tokenId || 'unknown');
-  } else if (normalizedEventName === 'AuctionSettled') {
-    summary = 'Auction settled for token ' + (tokenId || 'unknown');
-  } else if (normalizedEventName === 'AuctionCreated') {
-    summary = 'Auction created for token ' + (tokenId || 'unknown');
-  } else if (normalizedEventName === 'Execute') {
-    summary = 'Executed ' + (func || 'call') + ' on ' + (target || 'target');
-  } else if (normalizedEventName === 'Mint' || normalizedEventName === 'MintWithMinter') {
-    summary = 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient');
-  } else if (normalizedEventName === 'BatchMint') {
-    summary = 'Minted ' + (amount || 'batch') + ' tokens';
-  } else if (normalizedEventName === 'DelegateChanged') {
-    summary = 'Delegation changed';
-  } else if (normalizedEventName === 'DaoCreated') {
-    summary = 'DAO created by ' + (creator || 'unknown');
-  } else if (normalizedEventName === 'DaoRegistered') {
-    summary = 'DAO registered for token ' + (tokenAddress || 'unknown');
-  } else if (normalizedEventName === 'DaoFinalized') {
-    summary = 'DAO finalized for token ' + (tokenAddress || 'unknown');
-  } else if (normalizedEventName === 'ImplementationRegistered') {
-    summary = 'Implementation "' + (name || 'unknown') + '" registered';
-  } else if (normalizedEventName === 'SeedGenerated') {
-    summary = 'Seed generated for token ' + (tokenId || 'unknown');
-  } else if (normalizedEventName === 'PropertyAdded') {
-    summary = 'Property "' + (name || 'unknown') + '" added';
-  }
+  var summary = summaryFunctions[normalizedEventName] ? summaryFunctions[normalizedEventName]() : (titleMap[normalizedEventName] || String(eventName).replace(/_/g, ' '));
 
   // Ensure consistent string representation for JSON fields to avoid Arrow type inference issues
   var topicsValue = data.topics;
