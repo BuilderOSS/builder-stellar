@@ -134,12 +134,11 @@ export async function getGoldskyActivityFeed(
       title,
       summary,
       proposal_id,
-      proposal_number,
       actor,
       addresses,
       ledger_sequence,
-      timestamp,
-      transaction_hash
+      transaction_hash,
+      ledger_closed_at
     FROM app.activity_feed
     ${whereClause}
     ORDER BY ledger_sequence DESC, activity_id DESC
