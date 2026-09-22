@@ -1,5 +1,5 @@
 name: dao-stellar-events
-description: Index Manager CC7URLJJQQPPS4HCSNYWJ7YNK3CZMDUVELNOFA3NNDFMDM5YCHWYXV4L on testnet with Goldsky Turbo
+description: Index Manager CCYLIPRCMZQOECPEKFPKOMYZOW47ABQPIJNJ2NYVHUDRYQPIYG3TFXQI on testnet with Goldsky Turbo
 resource_size: s
 use_dedicated_ip: false
 job: false
@@ -8,7 +8,7 @@ sources:
     type: dataset
     dataset_name: stellar_testnet.events
     version: 1.2.0
-    start_at: 4804554
+    start_at: 4805858
 
 transforms:
   dao_events:
@@ -17,9 +17,9 @@ transforms:
     sql: |
       SELECT
         id AS event_id,
-        'manager:CC7URLJJQQPPS4HCSNYWJ7YNK3CZMDUVELNOFA3NNDFMDM5YCHWYXV4L' AS deployment_id,
+        'manager:CCYLIPRCMZQOECPEKFPKOMYZOW47ABQPIJNJ2NYVHUDRYQPIYG3TFXQI' AS deployment_id,
         contract_id,
-        CASE WHEN contract_id = 'CC7URLJJQQPPS4HCSNYWJ7YNK3CZMDUVELNOFA3NNDFMDM5YCHWYXV4L' THEN 'manager' ELSE 'unknown' END AS contract_role,
+        CASE WHEN contract_id = 'CCYLIPRCMZQOECPEKFPKOMYZOW47ABQPIJNJ2NYVHUDRYQPIYG3TFXQI' THEN 'manager' ELSE 'unknown' END AS contract_role,
         type,
         topics,
         data,
@@ -39,7 +39,7 @@ transforms:
         ledger_closed_at,
         _gs_op
       FROM stellar_events
-       WHERE ledger_sequence >= 4804554
+       WHERE ledger_sequence >= 4805858
 
   raw_events:
     type: script
@@ -514,6 +514,145 @@ transforms:
         };
       }
 
+  manager_daos:
+    type: sql
+    from: decoded_events
+    primary_key: event_id
+    sql: |
+      SELECT
+        e.event_id,
+        e.deployment_id,
+        e.contract_id,
+        e.contract_role,
+        e.event_name,
+        e.topic_0,
+        e.topic_1,
+        e.topic_2,
+        e.topic_3,
+        e.topics,
+        e.args,
+        e.transaction_hash,
+        e.transaction_successful,
+        e.ledger_sequence,
+        e.ledger_hash,
+        e.ledger_closed_at,
+        e.transaction_index,
+        e.operation_index,
+        e.event_index,
+        e.operation_type,
+        e._gs_op,
+        e.decoder_version,
+        -- Extract manager.daos fields from DaoCreated/DaoRegistered events
+        e.topic_0 AS dao_id,
+        e.topic_0 AS token_address,
+        e.topic_1 AS creator,
+        e.contract_id AS manager_contract,
+        CASE
+          WHEN e.args::jsonb @> '{"params":{"modules":{}}}'
+          THEN (e.args::jsonb -> 'params' -> 'modules' ->> 'token')::text
+          ELSE NULL
+        END AS token_contract,
+        CASE
+          WHEN e.args::jsonb @> '{"params":{"modules":{}}}'
+          THEN (e.args::jsonb -> 'params' -> 'modules' ->> 'governor')::text
+          ELSE NULL
+        END AS governor_contract,
+        CASE
+          WHEN e.args::jsonb @> '{"params":{"modules":{}}}'
+          THEN (e.args::jsonb -> 'params' -> 'modules' ->> 'auction')::text
+          ELSE NULL
+        END AS auction_contract,
+        CASE
+          WHEN e.args::jsonb @> '{"params":{"modules":{}}}'
+          THEN (e.args::jsonb -> 'params' -> 'modules' ->> 'treasury')::text
+          ELSE NULL
+        END AS treasury_contract,
+        CASE
+          WHEN e.args::jsonb @> '{"params":{"modules":{}}}'
+          THEN (e.args::jsonb -> 'params' -> 'modules' ->> 'metadata')::text
+          ELSE NULL
+        END AS metadata_contract,
+        (e.args::jsonb -> 'params' ->> 'token_name')::varchar(255) AS token_name,
+        (e.args::jsonb -> 'params' ->> 'token_symbol')::varchar(16) AS token_symbol,
+        (e.args::jsonb -> 'params' ->> 'description')::text AS token_description,
+        (e.args::jsonb -> 'params' ->> 'token_uri')::text AS token_uri,
+        (e.args::jsonb -> 'params' ->> 'launch_admin')::varchar(56) AS admin_address,
+        'pending'::text AS status,
+        e.ledger_sequence AS created_ledger,
+        to_timestamp(
+          CASE
+            WHEN e.ledger_closed_at IS NOT NULL AND e.ledger_closed_at != ''
+            THEN NULLIF(e.ledger_closed_at, '')::numeric / 1000
+            ELSE NULL
+          END
+        ) AS created_at,
+        e.transaction_hash AS created_tx_hash,
+        NULL::bigint AS finalized_ledger,
+        NULL::timestamptz AS finalized_at,
+        NULL::text AS finalized_tx_hash
+      FROM decoded_events e
+      WHERE e.contract_role = 'manager'
+      AND LOWER(e.event_name) IN ('dao_created', 'daocreated', 'dao_registered', 'daoregistered')
+
+  manager_daos_finalized:
+    type: sql
+    from: decoded_events
+    primary_key: event_id
+    sql: |
+      SELECT
+        e.event_id,
+        e.deployment_id,
+        e.contract_id,
+        e.contract_role,
+        e.event_name,
+        e.topic_0,
+        e.topic_1,
+        e.topic_2,
+        e.topic_3,
+        e.topics,
+        e.args,
+        e.transaction_hash,
+        e.transaction_successful,
+        e.ledger_sequence,
+        e.ledger_hash,
+        e.ledger_closed_at,
+        e.transaction_index,
+        e.operation_index,
+        e.event_index,
+        e.operation_type,
+        e._gs_op,
+        e.decoder_version,
+        e.topic_0 AS dao_id,
+        e.topic_0 AS token_address,
+        e.topic_1 AS creator,
+        e.contract_id AS manager_contract,
+        NULL::text AS token_contract,
+        NULL::text AS governor_contract,
+        NULL::text AS auction_contract,
+        NULL::text AS treasury_contract,
+        NULL::text AS metadata_contract,
+        NULL::varchar(255) AS token_name,
+        NULL::varchar(16) AS token_symbol,
+        NULL::text AS token_description,
+        NULL::text AS token_uri,
+        e.topic_1 AS admin_address,
+        'operational'::text AS status,
+        NULL::bigint AS created_ledger,
+        NULL::timestamptz AS created_at,
+        NULL::text AS created_tx_hash,
+        e.ledger_sequence AS finalized_ledger,
+        to_timestamp(
+          CASE
+            WHEN e.ledger_closed_at IS NOT NULL AND e.ledger_closed_at != ''
+            THEN NULLIF(e.ledger_closed_at, '')::numeric / 1000
+            ELSE NULL
+          END
+        ) AS finalized_at,
+        e.transaction_hash AS finalized_tx_hash
+      FROM decoded_events e
+      WHERE e.contract_role = 'manager'
+      AND LOWER(e.event_name) IN ('dao_finalized', 'daofinalized')
+
 sinks:
   raw_events_output:
     type: postgres
@@ -538,3 +677,31 @@ sinks:
     table: activity_feed_events
     secret_name: DAO_POSTGRES
     primary_key: activity_id
+
+  manager_daos_output:
+    type: postgres
+    from: manager_daos
+    schema: manager
+    table: daos
+    secret_name: DAO_POSTGRES
+    primary_key:
+      - deployment_id
+      - dao_id
+    upsert: true
+    upsert_keys:
+      - deployment_id
+      - dao_id
+
+  manager_daos_finalized_output:
+    type: postgres
+    from: manager_daos_finalized
+    schema: manager
+    table: daos
+    secret_name: DAO_POSTGRES
+    primary_key:
+      - deployment_id
+      - dao_id
+    upsert: true
+    upsert_keys:
+      - deployment_id
+      - dao_id
