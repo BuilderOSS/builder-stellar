@@ -120,10 +120,12 @@ export function DaoShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="header-actions">
+            {/*
             <div className="network-chip" title={`Configured for ${currentNetwork.label}`}>
               <span className="network-dot" aria-hidden="true" />
               {currentNetwork.label}
             </div>
+*/}
             <WalletControls network={currentNetwork} />
           </div>
         </header>
