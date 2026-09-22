@@ -41,6 +41,7 @@
     }
   },
   "auction": {
+    "enabled": true,
     "duration": 300,
     "reservePrice": "1000000000",
     "timeBuffer": 300,

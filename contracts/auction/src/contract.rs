@@ -64,7 +64,7 @@ pub trait DaoAuctionContractTrait {
     fn set_time_buffer(e: &Env, time_buffer: u64);
     fn set_payment_token(e: &Env, payment_token: Address);
     fn set_treasury(e: &Env, treasury: Address);
-    fn finalize_ownership(e: &Env, new_owner: Address);
+    fn finalize_ownership(e: &Env, new_owner: Address, launch_auction: bool);
     fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>);
 }
 
@@ -108,14 +108,14 @@ impl Ownable for DaoAuctionContract {}
 
 #[contractimpl]
 impl DaoAuctionContractTrait for DaoAuctionContract {
-    fn finalize_ownership(e: &Env, new_owner: Address) {
+    fn finalize_ownership(e: &Env, new_owner: Address, launch_auction: bool) {
         let manager: Address = e
             .storage()
             .instance()
             .get(&DataKey::Manager)
             .expect("manager not set");
         manager.require_auth();
-        if pausable::paused(e) {
+        if launch_auction && pausable::paused(e) {
             pausable::unpause(e);
             if !is_launched(e) {
                 set_launched(e, true);

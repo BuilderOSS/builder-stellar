@@ -55,6 +55,7 @@ pub struct DaoFinalized {
     pub token_address: Address,
     pub finalized_ledger: u32,
     pub modules: DaoModules,
+    pub launch_auction: bool,
 }
 #[contractevent]
 pub struct CurrentImplementationsUpdated {
@@ -167,11 +168,13 @@ pub fn emit_dao_finalized(
     token_address: &Address,
     finalized_ledger: u32,
     modules: &DaoModules,
+    launch_auction: bool,
 ) {
     DaoFinalized {
         token_address: token_address.clone(),
         finalized_ledger,
         modules: modules.clone(),
+        launch_auction,
     }
     .publish(env);
 }

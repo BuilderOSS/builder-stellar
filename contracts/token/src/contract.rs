@@ -147,6 +147,25 @@ impl DaoTokenContract {
             .set(&OwnableStorageKey::Owner, &new_owner);
     }
 
+    /// Enables a module's mint authority during manager-controlled finalization.
+    ///
+    /// The Manager uses this for the Auction contract only when auctions are
+    /// enabled. Keeping this separate from owner authorization allows founder
+    /// minting to happen before the Treasury owns the token.
+    pub fn enable_mint_authority_by_manager(e: &Env, authority: Address) {
+        let manager: Address = e
+            .storage()
+            .instance()
+            .get(&TokenKey::Manager)
+            .expect("manager not set");
+        manager.require_auth();
+        let old_enabled = Self::mint_authority(e, authority.clone());
+        e.storage()
+            .instance()
+            .set(&TokenKey::MintAuthority(authority.clone()), &true);
+        emit_mint_authority_changed(e, &authority, old_enabled, true, &manager);
+    }
+
     /// Returns the metadata contract used for mint hooks.
     pub fn metadata(e: &Env) -> Option<Address> {
         e.storage().instance().get(&TokenKey::Metadata)

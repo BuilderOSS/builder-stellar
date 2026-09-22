@@ -147,6 +147,7 @@ export interface DaoFinalizedEvent {
     token_address: string;
     finalized_ledger?: number;
     modules?: DaoModules;
+    launch_auction?: boolean;
   };
 }
 
