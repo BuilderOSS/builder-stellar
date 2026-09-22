@@ -101,19 +101,50 @@ WHERE e.contract_role = 'governor'
 
 -- Governance: Current enabled governor authorities
 CREATE OR REPLACE VIEW governance.governor_authorities AS
-SELECT DISTINCT ON (deployment_id, dao_id, authority)
-  deployment_id,
-  dao_id,
-  contract_id,
-  authority,
-  enabled,
-  event_ledger,
-  event_at,
-  transaction_hash,
-  'event'::text AS source
-FROM governance.governor_authority_history
-WHERE enabled
-ORDER BY deployment_id, dao_id, authority, event_ledger DESC;
+WITH latest_events AS (
+  SELECT DISTINCT ON (deployment_id, dao_id, authority)
+    deployment_id,
+    dao_id,
+    contract_id,
+    authority,
+    enabled,
+    event_ledger,
+    event_at,
+    transaction_hash
+  FROM governance.governor_authority_history
+  ORDER BY deployment_id, dao_id, authority, event_ledger DESC, event_id DESC
+), explicit_authorities AS (
+  SELECT
+    e.deployment_id,
+    e.dao_id,
+    e.contract_id,
+    e.authority,
+    e.enabled,
+    e.event_ledger,
+    e.event_at,
+    e.transaction_hash,
+    'event'::text AS source
+  FROM latest_events e
+  LEFT JOIN manager.daos d USING (deployment_id, dao_id)
+  WHERE e.enabled
+    AND e.authority IS DISTINCT FROM d.treasury_contract
+), owner_authorities AS (
+  SELECT
+    d.deployment_id,
+    d.dao_id,
+    d.governor_contract AS contract_id,
+    d.treasury_contract AS authority,
+    true AS enabled,
+    d.finalized_ledger AS event_ledger,
+    d.finalized_at AS event_at,
+    d.finalized_tx_hash AS transaction_hash,
+    'owner'::text AS source
+  FROM manager.daos d
+  WHERE d.finalized_ledger IS NOT NULL
+)
+SELECT * FROM explicit_authorities
+UNION ALL
+SELECT * FROM owner_authorities;
 
 -- Governance: Complete proposals with lifecycle state and vote counts
 CREATE OR REPLACE VIEW governance.proposals AS
@@ -158,4 +189,3 @@ SELECT
   l.updated_at
 FROM created c
 LEFT JOIN lifecycle l USING (deployment_id, dao_id, proposal_id);
-

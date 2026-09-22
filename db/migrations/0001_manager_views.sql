@@ -32,7 +32,8 @@ WITH created AS (
     e.topic_0 AS dao_id,
     e.ledger_sequence AS finalized_ledger,
     to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS finalized_at,
-    e.transaction_hash AS finalized_tx_hash
+    e.transaction_hash AS finalized_tx_hash,
+    (e.args::jsonb ->> 'launch_auction')::boolean AS auction_enabled
   FROM chain.decoded_events e
   WHERE e.contract_role = 'manager'
     AND e.event_name = 'dao_finalized'
@@ -68,6 +69,10 @@ SELECT
   tm.token_uri,
   tm.admin_address,
   CASE WHEN f.dao_id IS NULL THEN 'pending' ELSE 'operational' END AS status,
+  CASE
+    WHEN f.dao_id IS NULL THEN NULL::boolean
+    ELSE COALESCE(f.auction_enabled, true)
+  END AS auction_enabled,
   c.created_ledger,
   c.created_at,
   c.created_tx_hash,
@@ -78,6 +83,25 @@ SELECT
 FROM created c
 LEFT JOIN finalized f USING (deployment_id, dao_id)
 LEFT JOIN token_metadata tm USING (deployment_id, token_contract);
+
+CREATE OR REPLACE VIEW manager.founder_allocations AS
+SELECT
+  e.event_id,
+  e.deployment_id,
+  e.topic_0 AS dao_id,
+  e.contract_id AS manager_contract,
+  f.ordinality - 1 AS allocation_index,
+  f.value ->> 'address' AS founder_address,
+  (f.value ->> 'amount')::numeric(78,0) AS token_amount,
+  e.ledger_sequence AS event_ledger,
+  to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS event_at,
+  e.transaction_hash
+FROM chain.decoded_events e
+CROSS JOIN LATERAL jsonb_array_elements(
+  COALESCE(e.args::jsonb -> 'founders', '[]'::jsonb)
+) WITH ORDINALITY AS f(value, ordinality)
+WHERE e.contract_role = 'manager'
+  AND e.event_name = 'dao_created';
 
 CREATE OR REPLACE VIEW manager.dao_modules AS
 SELECT deployment_id, dao_id, 'token'::text AS module_role, token_address AS module_contract FROM manager.daos

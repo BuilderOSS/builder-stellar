@@ -89,7 +89,20 @@ WHERE e.contract_role = 'token'
 
 -- Token: Current enabled mint authorities
 CREATE OR REPLACE VIEW token.mint_authorities AS
-SELECT DISTINCT ON (deployment_id, dao_id, authority)
+WITH latest_events AS (
+  SELECT DISTINCT ON (deployment_id, dao_id, authority)
+    deployment_id,
+    dao_id,
+    contract_id,
+    authority,
+    enabled,
+    event_ledger,
+    event_at,
+    transaction_hash
+  FROM token.mint_authority_history
+  ORDER BY deployment_id, dao_id, authority, event_ledger DESC, event_id DESC
+)
+SELECT
   deployment_id,
   dao_id,
   contract_id,
@@ -99,9 +112,8 @@ SELECT DISTINCT ON (deployment_id, dao_id, authority)
   event_at,
   transaction_hash,
   'event'::text AS source
-FROM token.mint_authority_history
-WHERE enabled
-ORDER BY deployment_id, dao_id, authority, event_ledger DESC;
+FROM latest_events
+WHERE enabled;
 
 -- Token: Members with ownership counts, delegation, and voting power
 CREATE OR REPLACE VIEW token.members AS
