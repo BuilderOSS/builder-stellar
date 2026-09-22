@@ -1,5 +1,5 @@
-name: dao-stellar-events
-description: Index Manager CA43TBFYUYUZWOKZ7JA2Y4XLRTKY3UBJ4KTLMWTFBAAUHUKMZBGA6KSN on testnet with Goldsky Turbo
+name: builder-stellar-events
+description: Index Manager CD5ARHFOXUWDVD6XG3ZFYQPQDUTDCFMWRG5GTKFTFGHDYWQJRV4G46BF on testnet with Goldsky Turbo
 resource_size: s
 use_dedicated_ip: false
 job: false
@@ -8,7 +8,7 @@ sources:
     type: dataset
     dataset_name: stellar_testnet.events
     version: 1.2.0
-    start_at: 4807257
+    start_at: 4809830
 
 transforms:
   dao_events:
@@ -17,9 +17,9 @@ transforms:
     sql: |
       SELECT
         id AS event_id,
-        'manager:CA43TBFYUYUZWOKZ7JA2Y4XLRTKY3UBJ4KTLMWTFBAAUHUKMZBGA6KSN' AS deployment_id,
+        'manager:CD5ARHFOXUWDVD6XG3ZFYQPQDUTDCFMWRG5GTKFTFGHDYWQJRV4G46BF' AS deployment_id,
         contract_id,
-        CASE WHEN contract_id = 'CA43TBFYUYUZWOKZ7JA2Y4XLRTKY3UBJ4KTLMWTFBAAUHUKMZBGA6KSN' THEN 'manager' ELSE 'unknown' END AS contract_role,
+        CASE WHEN contract_id = 'CD5ARHFOXUWDVD6XG3ZFYQPQDUTDCFMWRG5GTKFTFGHDYWQJRV4G46BF' THEN 'manager' ELSE 'unknown' END AS contract_role,
         type,
         topics,
         data,
@@ -39,7 +39,7 @@ transforms:
         ledger_closed_at,
         _gs_op
       FROM stellar_events
-       WHERE ledger_sequence >= 4807257
+       WHERE ledger_sequence >= 4809830
 
   raw_events:
     type: script
@@ -134,32 +134,41 @@ transforms:
       decoder_version: string
     script: |
       function invoke(data) {
-        function native(value) {
-          if (value === null || value === undefined || value === 'void') return null;
-          if (typeof value !== 'object') return value;
-          if (value.symbol !== undefined) return String(value.symbol);
-          if (value.address !== undefined) return String(value.address);
-          var scalar = ['u32', 'i32', 'u64', 'i64', 'u128', 'i128', 'u256', 'i256', 'bytes', 'string', 'bool'];
-          for (var i = 0; i < scalar.length; i += 1) {
-            if (value[scalar[i]] !== undefined) return scalar[i].match(/^[ui](64|128|256)$/) ? String(value[scalar[i]]) : value[scalar[i]];
-          }
-          if (Array.isArray(value.vec)) return value.vec.map(native);
-          if (Array.isArray(value.map)) {
-            var out = {};
-            value.map.forEach(function (entry) { if (entry && entry.key !== undefined) out[String(native(entry.key))] = native(entry.val); });
-            return out;
-          }
-          return value;
-        }
+        try {
+          if (!data) return null;
 
-        function json(value) {
-          if (typeof value !== 'string') return value;
-          try { return JSON.parse(value); } catch (_) { return null; }
-        }
+          function native(value) {
+            if (value === null || value === undefined || value === 'void') return null;
+            if (typeof value !== 'object') return value;
+            if (value.symbol !== undefined) return String(value.symbol);
+            if (value.address !== undefined) return String(value.address);
+            var scalar = ['u32', 'i32', 'u64', 'i64', 'u128', 'i128', 'u256', 'i256', 'bytes', 'string', 'bool'];
+            for (var i = 0; i < scalar.length; i += 1) {
+              if (value[scalar[i]] !== undefined) return scalar[i].match(/^[ui](64|128|256)$/) ? String(value[scalar[i]]) : value[scalar[i]];
+            }
+            if (Array.isArray(value.vec)) return value.vec.map(native);
+            if (Array.isArray(value.map)) {
+              var out = {};
+              value.map.forEach(function (entry) { if (entry && entry.key !== undefined) out[String(native(entry.key))] = native(entry.val); });
+              return out;
+            }
+            return value;
+          }
 
-        var rawTopics = json(data.topics);
-        var rawData = json(data.data);
-        if (!Array.isArray(rawTopics) || rawTopics.length === 0) return null;
+          function json(value) {
+            if (typeof value !== 'string') return value;
+            try { return JSON.parse(value); } catch (e) {
+              console.error('JSON parse error:', e.message, 'value:', String(value).substring(0, 100));
+              return null;
+            }
+          }
+
+          var rawTopics = json(data.topics);
+          var rawData = json(data.data);
+          if (!Array.isArray(rawTopics) || rawTopics.length === 0) {
+            console.error('Invalid topics for event:', data.event_id);
+            return null;
+          }
 
         var values = rawTopics.map(native);
         var eventName = String(values[0]);
@@ -188,7 +197,7 @@ transforms:
         function stringify(value) { return value === null || value === undefined ? null : String(value); }
         var result = {
           event_id: data.event_id || data.id || null, deployment_id: data.deployment_id || null, contract_id: data.contract_id || null,
-          contract_role: data.contract_role === 'manager' ? 'manager' : roleForEvent(eventName), event_name: eventName,
+          contract_role: data.contract_role === 'manager' ? 'manager' : roleForEvent(eventName), event_name: eventName.toLowerCase(),
           topic_0: stringify(topicValues[0]), topic_1: stringify(topicValues[1]), topic_2: stringify(topicValues[2]), topic_3: stringify(topicValues[3]),
           topics: JSON.stringify(topics), args: JSON.stringify(args), payload: JSON.stringify(Object.assign({}, topics, args)),
           transaction_hash: data.transaction_hash || null, transaction_successful: data.transaction_successful ?? null,
@@ -202,17 +211,21 @@ transforms:
         Object.keys(args).forEach(function (key) {
           if (key !== 'args' && key !== 'topics' && key !== 'payload') result[key] = args[key];
         });
-        return result;
+          return result;
 
-        function roleForEvent(name) {
-          var canonical = name.charAt(0).toUpperCase() + name.slice(1).replace(/_([a-z])/g, function (_, c) { return c.toUpperCase(); });
-          if (/^(Dao|Factory|Upgrade|Implementation|CurrentImplementations)/.test(canonical)) return 'manager';
-          if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue|Veto)/.test(canonical)) return 'governor';
-          if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken)/.test(canonical)) return 'auction';
-          if (/^(Execute|Treasury|GovernorChanged)/.test(canonical)) return 'treasury';
-          if (/^(Metadata|Property|Properties|Seed|ProjectURI|Description|RendererBase|ContractImage)/.test(canonical)) return 'metadata';
-          if (/^(Transfer|Mint|BatchMint|Delegate|Approve|MintAuthority|Token|Burn)/.test(canonical)) return 'token';
-          return 'unknown';
+          function roleForEvent(name) {
+            var canonical = name.charAt(0).toUpperCase() + name.slice(1).replace(/_([a-z])/g, function (_, c) { return c.toUpperCase(); });
+            if (/^(Dao|Factory|Upgrade|Implementation|CurrentImplementations)/.test(canonical)) return 'manager';
+            if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue|Veto)/.test(canonical)) return 'governor';
+            if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken)/.test(canonical)) return 'auction';
+            if (/^(Execute|Treasury|GovernorChanged)/.test(canonical)) return 'treasury';
+            if (/^(Metadata|Property|Properties|Seed|ProjectURI|Description|RendererBase|ContractImage)/.test(canonical)) return 'metadata';
+            if (/^(Transfer|Mint|BatchMint|Delegate|Approve|MintAuthority|Token|Burn)/.test(canonical)) return 'token';
+            return 'unknown';
+          }
+        } catch (e) {
+          console.error('Decoder error:', e.message, 'event_id:', data?.event_id);
+          return null;
         }
       }
 
@@ -246,24 +259,28 @@ transforms:
       transaction_hash: string
     script: |
       function invoke(data) {
-        function parsePayload(value) {
-          if (typeof value === 'string') {
-            var trimmed = value.trim();
-            if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
-              try {
-                return parsePayload(JSON.parse(trimmed));
-              } catch {
-                return null;
+        try {
+          if (!data) return null;
+
+          function parsePayload(value) {
+            try {
+              if (typeof value === 'string') {
+                var trimmed = value.trim();
+                if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+                  return parsePayload(JSON.parse(trimmed));
+                }
               }
+
+              if (value && typeof value === 'object') {
+                return value;
+              }
+
+              return null;
+            } catch (e) {
+              console.error('Payload parse error:', e.message, 'value:', String(value).substring(0, 100));
+              return null;
             }
           }
-
-          if (value && typeof value === 'object') {
-            return value;
-          }
-
-          return null;
-        }
 
         function pick(row, keys) {
           var payload = parsePayload(row.args) || parsePayload(row.topics) || parsePayload(row.payload) || parsePayload(row.data);
@@ -312,7 +329,7 @@ transforms:
           Transfer: true, DelegateChanged: true, DelegateVotesChanged: true,
           ProposalCreated: true, ProposalQueued: true, VoteCast: true,
           ProposalCancelled: true, ProposalCanceled: true, ProposalExecuted: true,
-          ProposalExpired: true, AuctionCreated: true, BidPlaced: true,
+          AuctionCreated: true, BidPlaced: true,
           AuctionSettled: true, BidRefunded: true, AuctionCancelled: true,
           DaoCreated: true, DaoRegistered: true, DaoFinalized: true
         };
@@ -516,6 +533,10 @@ transforms:
           ledger_closed_at: data.ledger_closed_at || null,
           transaction_hash: data.transaction_hash
         };
+        } catch (e) {
+          console.error('Activity feed transform error:', e.message, 'event_id:', data?.event_id);
+          return null;
+        }
       }
 
 sinks:

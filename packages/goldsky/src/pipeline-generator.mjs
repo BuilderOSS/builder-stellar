@@ -6,11 +6,11 @@ import { parse as parseDotEnv } from 'dotenv';
 const moduleDir = dirname(fileURLToPath(import.meta.url));
 export const packageRoot = resolve(moduleDir, '..');
 export const repoRoot = resolve(packageRoot, '..', '..');
-export const defaultTemplatePath = join(packageRoot, 'templates', 'dao-stellar-events.yaml.mustache');
+export const defaultTemplatePath = join(packageRoot, 'templates', 'builder-stellar-events.yaml.mustache');
 export const defaultRawScriptPath = join(packageRoot, 'src', 'raw-events.script.js');
 export const defaultDecodedScriptPath = join(packageRoot, 'src', 'decoded-events.script.js');
 export const defaultScriptPath = join(packageRoot, 'src', 'activity-feed.script.js');
-export const defaultOutputPath = join(packageRoot, 'pipelines', 'dao-stellar-events.yaml');
+export const defaultOutputPath = join(packageRoot, 'pipelines', 'builder-stellar-events.yaml');
 export const defaultEnvPaths = [join(packageRoot, '.env'), join(packageRoot, '.env.local')];
 
 export function loadPackageEnv(env = process.env, envPaths = defaultEnvPaths) {
@@ -88,7 +88,7 @@ export function buildGoldskyPipelineYaml({ deployment, secretName, templateSourc
   const startAt = resolveStartAt(deployment);
 
   return renderTemplate(template, {
-    PIPELINE_NAME: 'dao-stellar-events',
+    PIPELINE_NAME: 'builder-stellar-events',
     RESOURCE_SIZE: 's',
     DESCRIPTION: `Index Manager ${managerContract} on ${deployment.network} with Goldsky Turbo`,
     DEPLOYMENT_ID: `manager:${managerContract}`,

@@ -403,12 +403,12 @@ test('deployment selection uses an explicit Manager artifact', () => {
 
 test('pipeline generator renders the current deployment and scripts', { skip: !existsSync(deploymentFixture) }, () => {
   const deployment = JSON.parse(readFileSync(deploymentFixture, 'utf8'));
-  const template = readFileSync(new URL('../templates/dao-stellar-events.yaml.mustache', import.meta.url), 'utf8');
+  const template = readFileSync(new URL('../templates/builder-stellar-events.yaml.mustache', import.meta.url), 'utf8');
   const activityScript = readFileSync(new URL('../src/activity-feed.script.js', import.meta.url), 'utf8');
 
   const yaml = buildGoldskyPipelineYaml({ deployment, secretName: 'MY_SECRET', templateSource: template, scriptSource: activityScript });
 
-  assert.match(yaml, /name: dao-stellar-events/);
+  assert.match(yaml, /name: builder-stellar-events/);
   assert.match(yaml, /dataset_name: stellar_testnet\.events/);
   assert.match(yaml, new RegExp(`start_at: ${JSON.parse(readFileSync(deploymentFixture, 'utf8')).deploymentLedger}`));
   assert.match(yaml, new RegExp(`'manager:${deployment.manager}' AS deployment_id`));
@@ -425,7 +425,7 @@ test('pipeline generator renders the current deployment and scripts', { skip: !e
 });
 
 test('writeGoldskyPipeline writes a file from env selection', { skip: !existsSync(deploymentFixture) }, () => {
-  const outputPath = join(mkdtempSync(join(tmpdir(), 'goldsky-pipeline-')), 'dao-stellar-events.yaml');
+  const outputPath = join(mkdtempSync(join(tmpdir(), 'goldsky-pipeline-')), 'builder-stellar-events.yaml');
   const result = writeGoldskyPipeline({
     env: {
       MANAGER_DEPLOYMENT_FILE: 'deploys/builder-testnet-manager.json',
@@ -437,7 +437,7 @@ test('writeGoldskyPipeline writes a file from env selection', { skip: !existsSyn
   assert.match(result.selection.artifactPath, /deploys\/builder-testnet-manager\.json$/);
   assert.equal(result.secretName, 'MY_SECRET');
   assert.equal(result.outputPath, outputPath);
-  assert.match(readFileSync(outputPath, 'utf8'), /name: dao-stellar-events/);
+  assert.match(readFileSync(outputPath, 'utf8'), /name: builder-stellar-events/);
 });
 
 // End-to-end Integration Tests
