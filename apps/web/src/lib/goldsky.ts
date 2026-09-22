@@ -49,11 +49,11 @@ function getDeploymentId(): string {
  * @param daoId - URL format like "testnet/builder" or "builder"
  * @returns Token contract address (e.g., "CBGLIC3VDPNSXRQTHIHADJVL3WVM54ZIO7FV23SDC3DQTTDLO2NMYUK7")
  */
-function getDaoIdFromUrl(daoId: string): string {
+async function getDaoIdFromUrl(daoId: string): Promise<string> {
   // Import here to avoid circular dependency
   const { getDaoNetworkConfigById } = require('@/lib/dao-config');
 
-  const config = getDaoNetworkConfigById(daoId);
+  const config = await getDaoNetworkConfigById(daoId);
 
   // dao_id in the database is the token contract address
   return config.tokenContractId;
@@ -61,7 +61,7 @@ function getDaoIdFromUrl(daoId: string): string {
 
 export async function getGoldskyAuctionHistory(daoId: string, limit = 24, offset = 0) {
   const deploymentId = getDeploymentId();
-  const dao_id = getDaoIdFromUrl(daoId);
+  const dao_id = await getDaoIdFromUrl(daoId);
   const result = await pool.query(
     `
     SELECT * FROM auction.auctions
@@ -76,7 +76,7 @@ export async function getGoldskyAuctionHistory(daoId: string, limit = 24, offset
 
 export async function getGoldskyAuctionBids(daoId: string, tokenId: string, limit = 20) {
   const deploymentId = getDeploymentId();
-  const dao_id = getDaoIdFromUrl(daoId);
+  const dao_id = await getDaoIdFromUrl(daoId);
   const result = await pool.query(
     `
      SELECT
@@ -113,7 +113,7 @@ export async function getGoldskyActivityFeed(
 ) {
   const { limit = 25, offset = 0, contractId, kind } = params;
   const deploymentId = getDeploymentId();
-  const dao_id = getDaoIdFromUrl(daoId);
+  const dao_id = await getDaoIdFromUrl(daoId);
 
   const conditions: string[] = ['deployment_id = $1', 'dao_id = $2'];
   const values: any[] = [deploymentId, dao_id];
@@ -187,7 +187,7 @@ export async function getGoldskyProposalList(
 ) {
   const { limit = 50, offset = 0, status } = params;
   const deploymentId = getDeploymentId();
-  const dao_id = getDaoIdFromUrl(daoId);
+  const dao_id = await getDaoIdFromUrl(daoId);
 
   const conditions: string[] = ['deployment_id = $1', 'dao_id = $2'];
   const values: any[] = [deploymentId, dao_id];
@@ -251,7 +251,7 @@ export async function getGoldskyProposalList(
  */
 export async function getGoldskyProposalDetail(daoId: string, proposalId: string) {
   const deploymentId = getDeploymentId();
-  const dao_id = getDaoIdFromUrl(daoId);
+  const dao_id = await getDaoIdFromUrl(daoId);
   const query = `
     SELECT
       proposal_id,
@@ -306,7 +306,7 @@ export async function getGoldskyProposalVotes(
 ) {
   const { proposalId, limit = 100, offset = 0, support } = params;
   const deploymentId = getDeploymentId();
-  const dao_id = getDaoIdFromUrl(daoId);
+  const dao_id = await getDaoIdFromUrl(daoId);
 
   const conditions = ['deployment_id = $1', 'dao_id = $2', 'proposal_id = $3'];
   const values: any[] = [deploymentId, dao_id, proposalId];
@@ -392,7 +392,7 @@ export async function getGoldskyTokenInventory(
 ) {
   const { limit = 100, offset = 0 } = params;
   const deploymentId = getDeploymentId();
-  const dao_id = getDaoIdFromUrl(daoId);
+  const dao_id = await getDaoIdFromUrl(daoId);
 
   const query = `
     SELECT
@@ -444,7 +444,7 @@ export async function getGoldskyTokenInventory(
 export async function getGoldskyMemberList(daoId: string, params: { limit?: number; offset?: number } = {}) {
   const { limit = 100, offset = 0 } = params;
   const deploymentId = getDeploymentId();
-  const dao_id = getDaoIdFromUrl(daoId);
+  const dao_id = await getDaoIdFromUrl(daoId);
   const [result, countResult] = await Promise.all([
     pool.query(
       `
@@ -480,7 +480,7 @@ export async function getGoldskyMemberList(daoId: string, params: { limit?: numb
  */
 export async function getGoldskyMintAuthorities(daoId: string) {
   const deploymentId = getDeploymentId();
-  const dao_id = getDaoIdFromUrl(daoId);
+  const dao_id = await getDaoIdFromUrl(daoId);
   const query = `
     SELECT
       authority,
@@ -507,7 +507,7 @@ export async function getGoldskyMintAuthorities(daoId: string) {
  */
 export async function getGoldskyGovernorAuthorities(daoId: string) {
   const deploymentId = getDeploymentId();
-  const dao_id = getDaoIdFromUrl(daoId);
+  const dao_id = await getDaoIdFromUrl(daoId);
   const query = `
     SELECT
       authority,
@@ -534,7 +534,7 @@ export async function getGoldskyGovernorAuthorities(daoId: string) {
  */
 export async function getGoldskyProposalLifecycle(daoId: string, proposalId: string) {
   const deploymentId = getDeploymentId();
-  const dao_id = getDaoIdFromUrl(daoId);
+  const dao_id = await getDaoIdFromUrl(daoId);
   const query = `
     SELECT
       event_type,
