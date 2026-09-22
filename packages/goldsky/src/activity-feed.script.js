@@ -40,14 +40,22 @@ function invoke(data) {
     }
 
   function pick(row, keys) {
-    var payload = parsePayload(args) || parsePayload(topics) || parsePayload(row.payload) || parsePayload(row.data);
+    var payloads = [
+      parsePayload(args),
+      parsePayload(topics),
+      parsePayload(row.payload),
+      parsePayload(row.data)
+    ];
     for (var i = 0; i < keys.length; i += 1) {
       var key = keys[i];
       if (row[key] !== undefined && row[key] !== null && row[key] !== '') {
         return String(row[key]);
       }
-      if (payload && payload[key] !== undefined && payload[key] !== null && payload[key] !== '') {
-        return String(payload[key]);
+      for (var j = 0; j < payloads.length; j += 1) {
+        var payload = payloads[j];
+        if (payload && payload[key] !== undefined && payload[key] !== null && payload[key] !== '') {
+          return String(payload[key]);
+        }
       }
     }
     return '';
