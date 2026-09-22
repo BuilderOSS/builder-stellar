@@ -1,0 +1,21 @@
+[package]
+name = "dao-e2e"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+token = { path = "../token", features = ["testutils"] }
+metadata = { path = "../metadata", features = ["testutils"] }
+manager = { path = "../manager", features = ["testutils"] }
+governor = { path = "../governor", features = ["testutils"] }
+treasury = { path = "../treasury", features = ["testutils"] }
+auction = { path = "../auction", features = ["testutils"] }
+stellar-governance = { workspace = true }

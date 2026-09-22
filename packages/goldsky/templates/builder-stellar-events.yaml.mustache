@@ -1,0 +1,242 @@
+name: {{PIPELINE_NAME}}
+description: {{DESCRIPTION}}
+resource_size: {{RESOURCE_SIZE}}
+use_dedicated_ip: false
+job: false
+sources:
+  stellar_events:
+    type: dataset
+    dataset_name: {{DATASET_NAME}}
+    version: 1.2.0
+    start_at: {{START_AT}}
+
+transforms:
+  # Each DAO-created event contains the five newly deployed module addresses.
+  # Dynamic tables keep these allowlists live while the pipeline is running.
+  dao_tokens:
+    type: dynamic_table
+    backend_type: Postgres
+    backend_entity_name: dao_tokens
+    secret_name: {{POSTGRES_SECRET_NAME}}
+    schema: streamling
+    column: contract_id
+    sql: |
+      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"token"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      FROM stellar_events
+      WHERE contract_id = '{{MANAGER_CONTRACT_ID}}'
+        AND type = 'contract'
+        AND topics LIKE '%dao_created%'
+
+  dao_metadata:
+    type: dynamic_table
+    backend_type: Postgres
+    backend_entity_name: dao_metadata
+    secret_name: {{POSTGRES_SECRET_NAME}}
+    schema: streamling
+    column: contract_id
+    sql: |
+      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"metadata"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      FROM stellar_events
+      WHERE contract_id = '{{MANAGER_CONTRACT_ID}}'
+        AND type = 'contract'
+        AND topics LIKE '%dao_created%'
+
+  dao_auctions:
+    type: dynamic_table
+    backend_type: Postgres
+    backend_entity_name: dao_auctions
+    secret_name: {{POSTGRES_SECRET_NAME}}
+    schema: streamling
+    column: contract_id
+    sql: |
+      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"auction"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      FROM stellar_events
+      WHERE contract_id = '{{MANAGER_CONTRACT_ID}}'
+        AND type = 'contract'
+        AND topics LIKE '%dao_created%'
+
+  dao_governors:
+    type: dynamic_table
+    backend_type: Postgres
+    backend_entity_name: dao_governors
+    secret_name: {{POSTGRES_SECRET_NAME}}
+    schema: streamling
+    column: contract_id
+    sql: |
+      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"governor"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      FROM stellar_events
+      WHERE contract_id = '{{MANAGER_CONTRACT_ID}}'
+        AND type = 'contract'
+        AND topics LIKE '%dao_created%'
+
+  dao_treasuries:
+    type: dynamic_table
+    backend_type: Postgres
+    backend_entity_name: dao_treasuries
+    secret_name: {{POSTGRES_SECRET_NAME}}
+    schema: streamling
+    column: contract_id
+    sql: |
+      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"treasury"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      FROM stellar_events
+      WHERE contract_id = '{{MANAGER_CONTRACT_ID}}'
+        AND type = 'contract'
+        AND topics LIKE '%dao_created%'
+
+  dao_events:
+    type: sql
+    primary_key: event_id
+    sql: |
+      SELECT
+        id AS event_id,
+        '{{DEPLOYMENT_ID}}' AS deployment_id,
+        contract_id,
+        CASE
+          WHEN contract_id = '{{MANAGER_CONTRACT_ID}}' THEN 'manager'
+          WHEN dynamic_table_check('dao_tokens', contract_id) THEN 'token'
+          WHEN dynamic_table_check('dao_metadata', contract_id) THEN 'metadata'
+          WHEN dynamic_table_check('dao_auctions', contract_id) THEN 'auction'
+          WHEN dynamic_table_check('dao_governors', contract_id) THEN 'governor'
+          WHEN dynamic_table_check('dao_treasuries', contract_id) THEN 'treasury'
+          ELSE 'unknown'
+        END AS contract_role,
+        type,
+        topics,
+        data,
+        in_successful_contract_call,
+        transaction_hash,
+        transaction_account,
+        transaction_account_muxed,
+        transaction_fee_account,
+        transaction_fee_account_muxed,
+        transaction_successful,
+        transaction_index,
+        operation_body,
+        operation_result_code,
+        operation_type,
+        ledger_sequence,
+        ledger_hash,
+        ledger_closed_at,
+        _gs_op
+      FROM stellar_events
+       WHERE ledger_sequence >= {{START_AT}}
+         AND (
+           contract_id = '{{MANAGER_CONTRACT_ID}}'
+           OR dynamic_table_check('dao_tokens', contract_id)
+           OR dynamic_table_check('dao_metadata', contract_id)
+           OR dynamic_table_check('dao_auctions', contract_id)
+           OR dynamic_table_check('dao_governors', contract_id)
+           OR dynamic_table_check('dao_treasuries', contract_id)
+         )
+
+  raw_events:
+    type: script
+    from: dao_events
+    language: typescript
+    primary_key: event_id
+    schema:
+      event_id: string
+      deployment_id: string
+      contract_id: string
+      contract_role: string
+      topics: string
+      data: string
+      transaction_hash: string
+      transaction_successful: boolean
+      ledger_sequence: int64
+      ledger_hash: string
+      ledger_closed_at: string
+      transaction_index: int64
+      operation_index: int64
+      event_index: int64
+      operation_type: string
+      _gs_op: string
+    script: |
+{{RAW_EVENTS_SCRIPT}}
+
+  decoded_events:
+    type: script
+    from: raw_events
+    language: typescript
+    primary_key: event_id
+    schema:
+      event_id: string
+      deployment_id: string
+      contract_id: string
+      contract_role: string
+      event_name: string
+      topic_0: string
+      topic_1: string
+      topic_2: string
+      topic_3: string
+      topics: string
+      args: string
+      transaction_hash: string
+      transaction_successful: boolean
+      ledger_sequence: int64
+      ledger_hash: string
+      ledger_closed_at: string
+      transaction_index: int64
+      operation_index: int64
+      event_index: int64
+      operation_type: string
+      _gs_op: string
+      decoder_version: string
+    script: |
+{{DECODED_EVENTS_SCRIPT}}
+
+  activity_feed:
+    type: script
+    from: decoded_events
+    language: typescript
+    primary_key: activity_id
+    schema:
+      activity_id: string
+      deployment_id: string
+      contract_id: string
+      contract_role: string
+      event_name: string
+      topics: string
+      args: string
+      kind: string
+      title: string
+      summary: string
+      visibility: string
+      proposal_id: string
+      token_id: string
+      amount: string
+      actor: string
+      addresses: string
+      ledger_sequence: int64
+      transaction_index: int64
+      operation_index: int64
+      event_index: int64
+      ledger_closed_at: string
+      transaction_hash: string
+    script: |
+{{ACTIVITY_SCRIPT}}
+
+sinks:
+  raw_events_output:
+    type: postgres
+    from: raw_events
+    schema: chain
+    table: raw_events
+    secret_name: {{POSTGRES_SECRET_NAME}}
+    primary_key: event_id
+
+  decoded_events_output:
+    type: postgres
+    from: decoded_events
+    schema: chain
+    table: decoded_events
+    secret_name: {{POSTGRES_SECRET_NAME}}
+    primary_key: event_id
+
+  activity_feed_output:
+    type: postgres
+    from: activity_feed
+    schema: app
+    table: activity_feed_events
+    secret_name: {{POSTGRES_SECRET_NAME}}
+    primary_key: activity_id

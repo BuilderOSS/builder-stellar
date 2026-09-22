@@ -1,0 +1,28 @@
+[workspace]
+resolver = "2"
+members = [
+  "contracts/*",
+]
+
+[workspace.dependencies]
+soroban-sdk = { version = "27.0.6", features = ["experimental_spec_shaking_v2"] }
+stellar-access = { git = "https://github.com/OpenZeppelin/stellar-contracts", rev = "fbfde38" }
+stellar-contract-utils = { git = "https://github.com/OpenZeppelin/stellar-contracts", rev = "fbfde38" }
+stellar-governance = { git = "https://github.com/OpenZeppelin/stellar-contracts", rev = "fbfde38" }
+stellar-macros = { git = "https://github.com/OpenZeppelin/stellar-contracts", rev = "fbfde38" }
+stellar-tokens = { git = "https://github.com/OpenZeppelin/stellar-contracts", rev = "fbfde38" }
+
+[profile.release]
+opt-level = "z"
+overflow-checks = true
+debug = 0
+strip = "symbols"
+debug-assertions = false
+panic = "abort"
+codegen-units = 1
+lto = true
+
+# For more information about this profile see https://soroban.stellar.org/docs/basic-tutorials/logging#cargotoml-profile
+[profile.release-with-logs]
+inherits = "release"
+debug-assertions = true

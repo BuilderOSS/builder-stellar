@@ -1,0 +1,23 @@
+{
+  "version": "0.0.0",
+  "name": "@builder-stellar/goldsky",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "node scripts/generate-pipeline.mjs",
+    "test": "node --test test/*.test.mjs",
+    "turbo:validate": "goldsky turbo validate pipelines/builder-stellar-events.yaml",
+    "validate": "node scripts/validate-events.mjs"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.1"
+  },
+  "devDependencies": {
+    "@builder-stellar/auction-bindings": "workspace:*",
+    "@builder-stellar/governor-bindings": "workspace:*",
+    "@builder-stellar/manager-bindings": "workspace:*",
+    "@builder-stellar/metadata-bindings": "workspace:*",
+    "@builder-stellar/token-bindings": "workspace:*",
+    "@builder-stellar/treasury-bindings": "workspace:*"
+  }
+}

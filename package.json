@@ -1,0 +1,28 @@
+{
+  "name": "builder-stellar",
+  "private": true,
+  "packageManager": "pnpm@10.12.4",
+  "scripts": {
+    "prepare": "lefthook install",
+    "dev": "pnpm --dir apps/web dev",
+    "build": "pnpm --dir apps/web build",
+    "lint": "pnpm --dir apps/web lint",
+    "typecheck": "pnpm --dir apps/web typecheck",
+    "contracts:build": "SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=0 cargo build -p token -p governor -p treasury -p auction -p manager -p metadata --release --target wasm32v1-none",
+    "contracts:bindings": "node scripts/generate-bindings.mjs",
+    "contracts:clean": "cargo clean",
+    "contracts:test": "cargo test",
+    "indexer:generate": "pnpm --dir packages/goldsky generate",
+    "indexer:test": "pnpm --dir packages/goldsky test",
+    "deploy:manager": "node scripts/deploy-manager.mjs",
+    "deploy:dao": "node scripts/deploy-dao.mjs"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "packages/*/*"
+  ],
+  "devDependencies": {
+    "lefthook": "^2.1.12"
+  }
+}

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" role="img" aria-label="DAO governance app icon">
+  <rect width="256" height="256" rx="56" fill="#07111f"/>
+  <rect x="11" y="11" width="234" height="234" rx="48" stroke="#5bb5ff" stroke-opacity="0.34" stroke-width="2"/>
+  <circle cx="128" cy="128" r="88" fill="#0085ff" fill-opacity="0.18"/>
+  <circle cx="128" cy="128" r="68" stroke="#8ac4ff" stroke-opacity="0.72" stroke-width="10"/>
+  <path d="M72 136c25-48 87-63 125-21" stroke="#f4f7fb" stroke-opacity="0.92" stroke-width="16" stroke-linecap="round"/>
+  <path d="M80 165c31 28 82 30 116-5" stroke="#53b1ff" stroke-opacity="0.94" stroke-width="16" stroke-linecap="round"/>
+  <circle cx="128" cy="128" r="24" fill="#f4f7fb"/>
+  <circle cx="128" cy="128" r="11" fill="#0085ff"/>
+  <path d="M128 58v24M128 174v24M58 128h24M174 128h24" stroke="#8ac4ff" stroke-opacity="0.78" stroke-width="10" stroke-linecap="round"/>
+</svg>
