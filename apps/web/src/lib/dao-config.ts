@@ -1,4 +1,4 @@
-import { type DeploymentNetwork, getDeployment } from '@/config/deployments.generated';
+import { DEPLOYMENTS, type DeploymentNetwork, getDeployment } from '@/config/deployments.generated';
 
 export type DaoNetworkName = DeploymentNetwork;
 
@@ -8,9 +8,11 @@ export type DaoNetworkConfig = {
   rpcUrl: string;
   passphrase: string;
   tokenName: string;
+  tokenSymbol: string;
   tokenDescription: string;
   adminAddress: string;
   tokenContractId: string;
+  metadataContractId: string;
   governorContractId: string;
   treasuryContractId: string;
   auctionContractId: string;
@@ -36,9 +38,37 @@ export function getDaoNetworkConfig(_name: DaoNetworkName): DaoNetworkConfig {
     rpcUrl: deployment.config.rpcUrl,
     passphrase: deployment.config.networkPassphrase,
     tokenName: deployment.config.token.name,
+    tokenSymbol: deployment.config.token.symbol,
     tokenDescription: deployment.config.token.description,
     adminAddress: deployment.config.adminAddress,
     tokenContractId: deployment.contracts.token,
+    metadataContractId: deployment.contracts.metadata ?? '',
+    governorContractId: deployment.contracts.governor,
+    treasuryContractId: deployment.contracts.treasury,
+    auctionContractId: deployment.contracts.auction
+  };
+}
+
+export function getDaoNetworkConfigById(daoId: string): DaoNetworkConfig {
+  const [network, label] = daoId.includes('/') ? daoId.split('/', 2) : [undefined, daoId];
+  const deployment = DEPLOYMENTS.find(
+    (candidate) => candidate.label === label && (!network || candidate.network === network)
+  );
+  if (!deployment) {
+    throw new Error(`No deployment found for daoId="${daoId}"`);
+  }
+
+  return {
+    name: deployment.network as DaoNetworkName,
+    label: deployment.label,
+    rpcUrl: deployment.config.rpcUrl,
+    passphrase: deployment.config.networkPassphrase,
+    tokenName: deployment.config.token.name,
+    tokenSymbol: deployment.config.token.symbol,
+    tokenDescription: deployment.config.token.description,
+    adminAddress: deployment.config.adminAddress,
+    tokenContractId: deployment.contracts.token,
+    metadataContractId: deployment.contracts.metadata ?? '',
     governorContractId: deployment.contracts.governor,
     treasuryContractId: deployment.contracts.treasury,
     auctionContractId: deployment.contracts.auction

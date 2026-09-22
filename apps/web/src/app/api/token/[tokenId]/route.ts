@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
-import { TOKEN_DESCRIPTION, TOKEN_NAME, TOKEN_SYMBOL } from '@/lib/token-config';
-import { buildTokenMetadata } from '@/lib/token-metadata';
+import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
+import { resolveOnchainTokenMetadata } from '@/lib/onchain-token-metadata';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,17 +14,20 @@ function parseTokenId(value: string) {
   return parsed;
 }
 
-export async function GET(_request: Request, { params }: { params: Promise<{ tokenId: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ tokenId: string }> }) {
   try {
     const { tokenId } = await params;
     const resolvedTokenId = parseTokenId(tokenId);
-    const baseUrl = new URL(_request.url).origin;
-    return NextResponse.json(buildTokenMetadata(resolvedTokenId, baseUrl), {
+    const config = getDaoNetworkConfig(getDefaultDaoNetwork());
+    const baseUrl = new URL(request.url).origin;
+    const metadata = await resolveOnchainTokenMetadata(
+      config,
+      resolvedTokenId,
+      `${baseUrl}/api/render/${config.label}/${resolvedTokenId}`
+    );
+    return NextResponse.json(metadata, {
       headers: {
-        'Cache-Control': 'no-store',
-        'X-Token-Name': TOKEN_NAME,
-        'X-Token-Symbol': TOKEN_SYMBOL,
-        'X-Token-Description': TOKEN_DESCRIPTION
+        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600'
       }
     });
   } catch (error) {

@@ -1,13 +1,22 @@
-import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+} from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 // Get the project root directory (where package.json is)
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const projectRoot = join(scriptDir, '..');
+const projectRoot = join(scriptDir, "..");
 
-const deploysDir = join(projectRoot, 'deploys');
-const outputFile = join(projectRoot, 'apps/web/src/config/deployments.generated.ts');
+const deploysDir = join(projectRoot, "deploys");
+const outputFile = join(
+  projectRoot,
+  "apps/web/src/config/deployments.generated.ts",
+);
 
 function generateDeploymentConfig() {
   if (!existsSync(deploysDir)) {
@@ -16,14 +25,14 @@ function generateDeploymentConfig() {
   }
 
   const deployFiles = readdirSync(deploysDir)
-    .filter((f) => f.endsWith('.json'))
+    .filter((f) => f.endsWith(".json"))
     .map((f) => {
-      const content = JSON.parse(readFileSync(join(deploysDir, f), 'utf8'));
+      const content = JSON.parse(readFileSync(join(deploysDir, f), "utf8"));
       return {
         fileName: f,
         deployment: {
-          ...content
-        }
+          ...content,
+        },
       };
     });
 
@@ -74,6 +83,7 @@ export const DEPLOYMENTS = DEPLOYMENTS_DATA as Array<{
   };
   contracts: {
     token: string;
+    metadata?: string;
     governor: string;
     treasury: string;
     auction: string;
@@ -110,17 +120,19 @@ export function getDeployment(network: string, label: string) {
   return deployment;
 }
 
-export type DeploymentNetwork = ${networks.map((n) => `'${n}'`).join(' | ')};
-export type DeploymentLabel = ${labels.map((l) => `'${l}'`).join(' | ')};
+export type DeploymentNetwork = ${networks.map((n) => `'${n}'`).join(" | ")};
+export type DeploymentLabel = ${labels.map((l) => `'${l}'`).join(" | ")};
 `;
 
   // Ensure output directory exists
-  const outputDir = join(projectRoot, 'apps', 'web', 'src', 'config');
+  const outputDir = join(projectRoot, "apps", "web", "src", "config");
   mkdirSync(outputDir, { recursive: true });
 
   writeFileSync(outputFile, tsContent);
 
-  console.log(`✅ Generated ${outputFile} from ${deployFiles.length} deployment(s):`);
+  console.log(
+    `✅ Generated ${outputFile} from ${deployFiles.length} deployment(s):`,
+  );
   for (const { fileName, deployment } of deployFiles) {
     console.log(`   - ${fileName} → ${deployment.network}/${deployment.label}`);
   }

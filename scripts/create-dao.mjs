@@ -77,6 +77,8 @@ const required = [
   ['metadata.description', daoConfig.metadata?.description],
   ['metadata.contractImage', daoConfig.metadata?.contractImage],
   ['metadata.rendererBase', daoConfig.metadata?.rendererBase],
+  ['metadata.artwork.ipfs.baseUri', daoConfig.metadata?.artwork?.ipfs?.baseUri],
+  ['metadata.artwork.ipfs.extension', daoConfig.metadata?.artwork?.ipfs?.extension],
   ['auction.duration', daoConfig.auction?.duration],
   ['auction.reservePrice', daoConfig.auction?.reservePrice],
   ['auction.timeBuffer', daoConfig.auction?.timeBuffer],
@@ -96,6 +98,19 @@ const missing = required.find(
 );
 if (missing) {
   throw new Error(`DAO config ${daoConfigPath} must define ${missing[0]}`);
+}
+
+const artworkProperties = daoConfig.metadata.artwork?.properties;
+if (!Array.isArray(artworkProperties) || artworkProperties.length === 0) {
+  throw new Error(`DAO config ${daoConfigPath} must define metadata.artwork.properties`);
+}
+if (artworkProperties.length > 16) {
+  throw new Error('DAO artwork cannot contain more than 16 properties');
+}
+for (const [index, property] of artworkProperties.entries()) {
+  if (!property.name || !Array.isArray(property.items) || property.items.length === 0) {
+    throw new Error(`DAO artwork property ${index} must define a name and at least one item`);
+  }
 }
 
 // Predict DAO addresses before creation
@@ -141,6 +156,15 @@ const foundersParam =
     ? `[${daoConfig.founders.map((f) => `{"address":"${f.address}","amount":${f.amount}}`).join(',')}]`
     : '[]';
 
+const artworkNamesParam = `[${artworkProperties.map((property) => JSON.stringify(property.name)).join(',')}]`;
+const artworkItemsParam = `[${artworkProperties
+  .flatMap((property, propertyId) => property.items.map((name) => `{"property_id":${propertyId},"name":${JSON.stringify(name)},"is_new_property":true}`))
+  .join(',')}]`;
+const artworkIpfsParam = JSON.stringify({
+  base_uri: daoConfig.metadata.artwork.ipfs.baseUri,
+  extension: daoConfig.metadata.artwork.ipfs.extension
+});
+
 // Create the DAO
 console.log('\n=== Creating DAO ===\n');
 const createResult = runQuiet('stellar', [
@@ -172,6 +196,12 @@ const createResult = runQuiet('stellar', [
   daoConfig.metadata.contractImage,
   '--renderer_base',
   daoConfig.metadata.rendererBase,
+  '--artwork_property_names',
+  artworkNamesParam,
+  '--artwork_items',
+  artworkItemsParam,
+  '--artwork_ipfs',
+  artworkIpfsParam,
   '--auction_duration',
   String(daoConfig.auction.duration),
   '--reserve_price',

@@ -251,6 +251,20 @@ impl MetadataContract {
         get_properties(&env)
     }
 
+    /// Get the generated item selections for a minted token.
+    pub fn get_attributes(env: Env, token_id: u32) -> Result<Vec<u32>, Error> {
+        let attributes = get_attributes(&env, token_id);
+        if attributes.len() == 0 {
+            return Err(Error::TokenNotMinted);
+        }
+        Ok(attributes)
+    }
+
+    /// Get IPFS groups used by artwork items.
+    pub fn get_ipfs_data(env: Env) -> Vec<IpfsGroup> {
+        get_ipfs_data(&env)
+    }
+
     /// Get settings
     pub fn get_settings(env: Env) -> Result<Settings, Error> {
         get_settings(&env)

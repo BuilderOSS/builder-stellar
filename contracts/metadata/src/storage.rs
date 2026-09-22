@@ -119,3 +119,10 @@ pub fn set_attributes(env: &Env, token_id: u32, attributes: &Vec<u32>) {
         ledgers_to_live,
     );
 }
+
+pub fn get_attributes(env: &Env, token_id: u32) -> Vec<u32> {
+    env.storage()
+        .temporary()
+        .get(&DataKey::Attributes(token_id))
+        .unwrap_or(Vec::new(env))
+}
