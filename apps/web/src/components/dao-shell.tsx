@@ -264,7 +264,6 @@ export function DaoShell({ children }: { children: ReactNode }) {
                 <MoreHorizontal aria-hidden="true" size={18} />
               </summary>
               <div className="dashboard-menu__panel dashboard-options-menu">
-                <p className="label">More sections</p>
                 {mobileOverflowNavItems.map((item) => (
                   <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href, item.exact)} />
                 ))}
