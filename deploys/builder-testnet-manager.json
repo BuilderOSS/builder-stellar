@@ -1,0 +1,27 @@
+{
+  "network": "testnet",
+  "label": "builder",
+  "deploymentLedger": 4804396,
+  "config": {
+    "label": "builder",
+    "adminAddress": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+    "rpcUrl": "https://soroban-testnet.stellar.org",
+    "networkPassphrase": "Test SDF Network ; September 2015"
+  },
+  "manager": "CAWOHVXGQEVL34ECN6UCBBXSW5QEUHWH2COJ5RKLURJBM4JI2ZWDQDB6",
+  "implementations": {
+    "token": "0683c7a6750e82536178f3eb4ac50bf30b936bec07c338830f095e770d6546d3",
+    "metadata": "aef8a259c892e5fcc8230068d8f0019989f719abaf3184e04db278815a793f17",
+    "auction": "90f495e73c6ac45cb232196bb5a9668547d863320598ea3a8d0950e2531c99b8",
+    "governor": "81d6c7cb11026cb11f12a5cd37b3459f2f8c2801b3904cd6b68da274f18024cf",
+    "treasury": "9b734021d2a2bb1e977ea6cd6ffb19750c9460f6d83e2e8db4bc9b12e73bf4f0"
+  },
+  "deployedAt": "2026-09-22T02:55:27.671Z",
+  "transactions": {
+    "manager": {
+      "deployedAt": "2026-09-22T02:52:49.786Z",
+      "txHash": "ed7df2f6d9a7240b4cb221e480870ab09db699bf18f32d31245c7a02add4c588",
+      "ledger": 4804396
+    }
+  }
+}

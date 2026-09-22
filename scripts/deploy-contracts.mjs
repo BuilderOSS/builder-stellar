@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import readline from 'node:readline/promises';
-import { run, runQuiet } from './lib.mjs';
+import { enrichTransactionMetadata, run, runQuiet } from './lib.mjs';
 
 const args = process.argv.slice(2);
 const force = args.includes('--force');
@@ -167,40 +167,6 @@ function contractId(packageName) {
   ]).stdout.trim();
 }
 
-function fetchTransactionLedger(txHash) {
-  const result = runQuiet('stellar', [
-    'tx',
-    'fetch',
-    'result',
-    '--hash',
-    txHash,
-    '--network',
-    networkName,
-    '--output',
-    'json-formatted'
-  ]);
-
-  if (!result.ok) {
-    throw new Error(`Failed to fetch ledger for transaction ${txHash}: ${result.stderr || result.stdout}`);
-  }
-
-  const match = result.stdout.match(/Transaction Ledger:\s*(\d+)/i);
-  if (!match) {
-    throw new Error(`Could not parse ledger for transaction ${txHash}`);
-  }
-
-  return Number.parseInt(match[1], 10);
-}
-
-function enrichTransactionMetadata(metadata) {
-  if (!metadata?.txHash) {
-    return metadata ?? null;
-  }
-
-  const ledger = metadata.ledger ?? fetchTransactionLedger(metadata.txHash);
-  return { ...metadata, ledger };
-}
-
 function deployIfMissing(packageName, alias, initArgs) {
   const id = contractId(packageName);
   const exists = runQuiet('stellar', ['contract', 'fetch', '--id', id, '--network', networkName]);
@@ -267,7 +233,7 @@ async function writeDeployArtifact(contracts, transactions) {
   const enrichedTransactions = Object.fromEntries(
     Object.entries(mergedTransactions)
       .filter(([, metadata]) => metadata)
-      .map(([key, metadata]) => [key, enrichTransactionMetadata(metadata)])
+      .map(([key, metadata]) => [key, enrichTransactionMetadata(metadata, networkName)])
   );
 
   const deploymentLedger = Math.min(

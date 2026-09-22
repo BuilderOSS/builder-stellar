@@ -33,3 +33,39 @@ export function runQuiet(command, args, options = {}) {
     stderr: result.stderr ?? ''
   };
 }
+
+export function fetchTransactionLedger(txHash, networkName) {
+  const result = runQuiet('stellar', [
+    'tx',
+    'fetch',
+    'result',
+    '--hash',
+    txHash,
+    '--network',
+    networkName,
+    '--output',
+    'json-formatted'
+  ]);
+
+  if (!result.ok) {
+    throw new Error(
+      `Failed to fetch ledger for transaction ${txHash}: ${result.stderr || result.stdout}`
+    );
+  }
+
+  const match = result.stdout.match(/Transaction Ledger:\s*(\d+)/i);
+  if (!match) {
+    throw new Error(`Could not parse ledger for transaction ${txHash}`);
+  }
+
+  return Number.parseInt(match[1], 10);
+}
+
+export function enrichTransactionMetadata(metadata, networkName) {
+  if (!metadata?.txHash) {
+    return metadata ?? null;
+  }
+
+  const ledger = metadata.ledger ?? fetchTransactionLedger(metadata.txHash, networkName);
+  return { ...metadata, ledger };
+}

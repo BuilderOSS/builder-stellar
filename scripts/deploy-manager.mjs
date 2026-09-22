@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import readline from 'node:readline/promises';
-import { run, runQuiet } from './lib.mjs';
+import { enrichTransactionMetadata, run, runQuiet } from './lib.mjs';
 
 const args = process.argv.slice(2);
 const force = args.includes('--force');
@@ -35,7 +35,8 @@ if (!['local', 'testnet', 'mainnet'].includes(config.network)) {
   );
 }
 const networkName = config.network;
-const identityName = `${networkName}-dev`;
+const identityName =
+  process.env.DAO_DEPLOY_IDENTITY?.trim() || `${networkName}-dev`;
 const adminAddress = config.adminAddress;
 const rpcUrl = config.rpcUrl;
 const networkPassphrase = config.networkPassphrase;
@@ -216,11 +217,13 @@ function registerImplementation(managerAddress, wasmHash, name) {
     '--network',
     networkName,
     '--',
-    'reg_impl',
+    'register_implementation',
     '--wasm_hash',
     wasmHash,
     '--name',
-    name
+    name,
+    '--version',
+    '1'
   ]);
 
   if (!result.ok) {
@@ -245,16 +248,16 @@ function setCurrentImplementations(managerAddress, implementations) {
     '--network',
     networkName,
     '--',
-    'set_cur',
-    '--token_wasm',
+    'set_current_implementations',
+    '--token',
     implementations.token,
-    '--metadata_wasm',
+    '--metadata',
     implementations.metadata,
-    '--auction_wasm',
+    '--auction',
     implementations.auction,
-    '--governor_wasm',
+    '--governor',
     implementations.governor,
-    '--treasury_wasm',
+    '--treasury',
     implementations.treasury
   ]);
 
@@ -277,9 +280,26 @@ async function writeDeployArtifact(
     return;
   }
 
+  const existingArtifact = existsSync(deployArtifactPath)
+    ? JSON.parse(readFileSync(deployArtifactPath, 'utf8'))
+    : null;
+  const managerTransaction = enrichTransactionMetadata(
+    txMetadata ?? existingArtifact?.transactions?.manager,
+    networkName
+  );
+  const transactions = managerTransaction ? { manager: managerTransaction } : {};
+  const deploymentLedger = Math.min(
+    ...Object.values(transactions)
+      .map((metadata) => metadata?.ledger)
+      .filter((ledger) => Number.isFinite(ledger))
+  );
+
   const artifact = {
     network: networkName,
     label: config.label,
+    deploymentLedger: Number.isFinite(deploymentLedger)
+      ? deploymentLedger
+      : existingArtifact?.deploymentLedger ?? null,
     config: {
       label: config.label,
       adminAddress,
@@ -291,10 +311,8 @@ async function writeDeployArtifact(
     deployedAt: new Date().toISOString()
   };
 
-  if (txMetadata) {
-    artifact.transactions = {
-      manager: txMetadata
-    };
+  if (Object.keys(transactions).length > 0) {
+    artifact.transactions = transactions;
   }
 
   mkdirSync('deploys', { recursive: true });
