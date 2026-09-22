@@ -328,10 +328,7 @@ sinks:
     primary_key:
       - deployment_id
       - dao_id
-    upsert: true
-    upsert_keys:
-      - deployment_id
-      - dao_id
+    on_conflict: update
 
   manager_daos_finalized_output:
     type: postgres
@@ -342,10 +339,7 @@ sinks:
     primary_key:
       - deployment_id
       - dao_id
-    upsert: true
-    upsert_keys:
-      - deployment_id
-      - dao_id
+    on_conflict: update
 
   manager_daos_enriched_output:
     type: postgres
@@ -356,7 +350,4 @@ sinks:
     primary_key:
       - deployment_id
       - dao_id
-    upsert: true
-    upsert_keys:
-      - deployment_id
-      - dao_id
+    on_conflict: update
