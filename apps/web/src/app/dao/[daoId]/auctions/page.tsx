@@ -84,7 +84,11 @@ export default function AuctionsPage() {
   const { daoId, daoConfig: config } = useDaoContext();
   const session = useDaoSessionStore();
   const tx = useTransactionFeedback(config.name);
-  const { data, error, isLoading, mutate } = useSWR<AuctionData>('/api/auctions', fetcher, { refreshInterval: 15_000 });
+  const { data, error, isLoading, mutate } = useSWR<AuctionData>(
+    `/api/dao/${encodeURIComponent(daoId)}/auctions`,
+    fetcher,
+    { refreshInterval: 15_000 }
+  );
   const [amount, setAmount] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);

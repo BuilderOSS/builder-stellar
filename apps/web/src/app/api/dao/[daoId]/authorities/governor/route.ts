@@ -4,10 +4,9 @@ import { getGoldskyGovernorAuthorities } from '@/lib/goldsky';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: Request) {
+export async function GET(_request: Request, { params }: { params: Promise<{ daoId: string }> }) {
   try {
-    const daoId = new URL(request.url).searchParams.get('daoId');
-    if (!daoId) return NextResponse.json({ message: 'daoId is required' }, { status: 400 });
+    const { daoId } = await params;
     return NextResponse.json(await getGoldskyGovernorAuthorities(daoId), { headers: { 'Cache-Control': 'no-store' } });
   } catch {
     return NextResponse.json(

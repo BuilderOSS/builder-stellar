@@ -68,7 +68,7 @@ export default function ProposalsPage() {
     isLoading: governorSettingsLoading
   } = useGovernorSettings(config, session.address || config.adminAddress);
   const { data, error, isLoading, mutate } = useSWR<ProposalListResponse>(
-    '/api/proposals?limit=24',
+    `/api/dao/${encodeURIComponent(daoId)}/proposals?limit=24`,
     async (url: string) => {
       const response = await fetch(url, { cache: 'no-store' });
       const json = (await response.json()) as ProposalListResponse;

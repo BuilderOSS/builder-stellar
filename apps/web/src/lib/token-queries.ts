@@ -12,10 +12,12 @@ async function fetchJson<T>(url: string) {
 }
 
 export function useTokenInventory(daoId: string) {
-  return useSWR<TokenInventoryResponse>(`/api/dao/${daoId}/tokens`, fetchJson, { keepPreviousData: true });
+  return useSWR<TokenInventoryResponse>(`/api/dao/${encodeURIComponent(daoId)}/tokens`, fetchJson, {
+    keepPreviousData: true
+  });
 }
 
 export function useTokenMetadata(daoId: string, tokenId: number | null) {
-  const key = typeof tokenId === 'number' ? `/api/dao/${daoId}/token/${tokenId}` : null;
+  const key = typeof tokenId === 'number' ? `/api/dao/${encodeURIComponent(daoId)}/token/${tokenId}` : null;
   return useSWR<TokenMetadataResponse>(key, fetchJson, { keepPreviousData: true });
 }

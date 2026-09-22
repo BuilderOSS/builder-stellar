@@ -7,10 +7,8 @@ import { proposalIdToBuffer } from '@/lib/proposal-id';
 import { parseProposalMetadata } from '@/lib/proposal-metadata';
 import { ProposalState, proposalStateFromLabel, proposalStateLabel } from '@/lib/proposal-state';
 
-export async function GET(_request: Request, context: { params: Promise<{ proposalId: string }> }) {
-  const { proposalId } = await context.params;
-  const daoId = new URL(_request.url).searchParams.get('daoId');
-  if (!daoId) return NextResponse.json({ message: 'daoId is required' }, { status: 400 });
+export async function GET(_request: Request, context: { params: Promise<{ daoId: string; proposalId: string }> }) {
+  const { daoId, proposalId } = await context.params;
   const config = await getDaoNetworkConfigById(daoId);
 
   if (!config.governorContractId) {

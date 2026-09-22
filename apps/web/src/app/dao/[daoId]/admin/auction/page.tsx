@@ -32,7 +32,7 @@ export default function AuctionAdminPage() {
   const [busy, setBusy] = useState(false);
   const [reservePrice, setReservePrice] = useState('');
   const [paymentToken, setPaymentToken] = useState('');
-  const { data, error, mutate } = useSWR<AuctionStatus>('/api/auctions', fetcher);
+  const { data, error, mutate } = useSWR<AuctionStatus>(`/api/dao/${encodeURIComponent(daoId)}/auctions`, fetcher);
   const { data: mintAuthorities, error: mintAuthorityError } = useGoldskyMintAuthorities(config.tokenContractId);
   const isOwner = Boolean(session.address && session.address === config.adminAddress);
   const auctionCanMint = Boolean(

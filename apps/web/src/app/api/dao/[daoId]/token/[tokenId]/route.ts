@@ -14,12 +14,10 @@ function parseTokenId(value: string) {
   return parsed;
 }
 
-export async function GET(request: Request, { params }: { params: Promise<{ tokenId: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ daoId: string; tokenId: string }> }) {
   try {
-    const { tokenId } = await params;
+    const { daoId, tokenId } = await params;
     const resolvedTokenId = parseTokenId(tokenId);
-    const daoId = new URL(request.url).searchParams.get('daoId');
-    if (!daoId) return NextResponse.json({ message: 'daoId is required' }, { status: 400 });
     const config = await getDaoNetworkConfigById(daoId);
     const baseUrl = new URL(request.url).origin;
     const metadata = await resolveOnchainTokenMetadata(

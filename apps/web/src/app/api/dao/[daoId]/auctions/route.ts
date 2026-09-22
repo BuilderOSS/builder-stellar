@@ -12,10 +12,9 @@ function jsonValue(value: unknown): unknown {
   return value;
 }
 
-export async function GET(request: Request) {
+export async function GET(_request: Request, { params }: { params: Promise<{ daoId: string }> }) {
   try {
-    const daoId = new URL(request.url).searchParams.get('daoId');
-    if (!daoId) return NextResponse.json({ message: 'daoId is required' }, { status: 400 });
+    const { daoId } = await params;
     const config = await getDaoNetworkConfigById(daoId);
     const client = new AuctionClient({
       contractId: config.auctionContractId,

@@ -4,9 +4,9 @@ import { getGoldskyTokenInventory } from '@/lib/goldsky';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: Request) {
+export async function GET(request: Request, { params }: { params: Promise<{ daoId: string }> }) {
   const url = new URL(request.url);
-  const daoId = url.searchParams.get('daoId');
+  const { daoId } = await params;
   const limitValue = Number(url.searchParams.get('limit') ?? '100');
   const offsetValue = Number(url.searchParams.get('offset') ?? '0');
   if (!Number.isInteger(limitValue) || !Number.isInteger(offsetValue) || limitValue < 1 || offsetValue < 0) {
@@ -16,7 +16,6 @@ export async function GET(request: Request) {
   const offset = offsetValue;
 
   try {
-    if (!daoId) return NextResponse.json({ message: 'daoId is required' }, { status: 400 });
     const payload = await getGoldskyTokenInventory(daoId, { limit, offset });
     return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {

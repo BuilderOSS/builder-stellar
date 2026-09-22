@@ -4,11 +4,9 @@ import { getGoldskyProposalVotes } from '@/lib/goldsky';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(request: Request, context: { params: Promise<{ proposalId: string }> }) {
-  const { proposalId } = await context.params;
+export async function GET(request: Request, context: { params: Promise<{ daoId: string; proposalId: string }> }) {
+  const { daoId, proposalId } = await context.params;
   const url = new URL(request.url);
-  const daoId = url.searchParams.get('daoId');
-  if (!daoId) return NextResponse.json({ message: 'daoId is required' }, { status: 400 });
   const limit = Number(url.searchParams.get('limit') ?? '100');
   const offset = Number(url.searchParams.get('offset') ?? '0');
   const supportValue = url.searchParams.get('support');

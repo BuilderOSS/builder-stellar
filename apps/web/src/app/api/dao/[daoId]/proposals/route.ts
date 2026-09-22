@@ -34,12 +34,11 @@ async function fetchProposalState(client: InstanceType<typeof GovernorClient>, p
   return stateTx.result;
 }
 
-export async function GET(request: Request) {
+export async function GET(request: Request, { params }: { params: Promise<{ daoId: string }> }) {
   const url = new URL(request.url);
+  const { daoId } = await params;
   const limit = Math.max(1, Math.min(Number(url.searchParams.get('limit') ?? '24'), 100));
   const status = url.searchParams.get('status') ?? undefined;
-  const daoId = url.searchParams.get('daoId');
-  if (!daoId) return NextResponse.json({ message: 'daoId is required' }, { status: 400 });
   const config = await getDaoNetworkConfigById(daoId);
 
   if (!config.governorContractId) {

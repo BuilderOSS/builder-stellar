@@ -99,13 +99,15 @@ export default function Page() {
     error: proposalsError,
     isLoading: proposalsLoading,
     mutate: refreshProposals
-  } = useSWR<ProposalListResponse>(`/api/dao/${daoId}/proposals?limit=24`, fetchJson, { keepPreviousData: true });
+  } = useSWR<ProposalListResponse>(`/api/dao/${encodeURIComponent(daoId)}/proposals?limit=24`, fetchJson, {
+    keepPreviousData: true
+  });
   const {
     data: auctionData,
     error: auctionError,
     isLoading: auctionLoading,
     mutate: refreshAuction
-  } = useSWR<AuctionData>(`/api/dao/${daoId}/auctions`, fetchJson, { refreshInterval: 15_000 });
+  } = useSWR<AuctionData>(`/api/dao/${encodeURIComponent(daoId)}/auctions`, fetchJson, { refreshInterval: 15_000 });
   const tokenItems = tokens?.items.slice(0, tokenLimit) ?? [];
   const canLoadMoreTokens = Boolean(tokens && tokens.items.length > tokenLimit);
   const activityItems = activityFeed?.items ?? [];

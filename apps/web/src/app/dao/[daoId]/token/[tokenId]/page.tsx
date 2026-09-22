@@ -1,3 +1,4 @@
+import type { Route } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Grid, Stack } from 'styled-system/jsx';
@@ -7,8 +8,8 @@ import { Badge, Card, ShortId, Text } from '@/components/ui';
 import { TOKEN_NAME } from '@/lib/token-config';
 import { buildTokenMetadata } from '@/lib/token-metadata';
 
-export default async function TokenPage({ params }: { params: Promise<{ tokenId: string }> }) {
-  const { tokenId } = await params;
+export default async function TokenPage({ params }: { params: Promise<{ daoId: string; tokenId: string }> }) {
+  const { daoId, tokenId } = await params;
   const resolvedTokenId = Number.parseInt(tokenId, 10);
   const metadata = buildTokenMetadata(Number.isFinite(resolvedTokenId) ? resolvedTokenId : 0, '');
 
@@ -38,7 +39,10 @@ export default async function TokenPage({ params }: { params: Promise<{ tokenId:
             <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
               {metadata.description}
             </Text>
-            <Link href={`/api/token/${resolvedTokenId}`} style={{ color: 'inherit' }}>
+            <Link
+              href={`/api/dao/${encodeURIComponent(daoId)}/token/${resolvedTokenId}` as Route}
+              style={{ color: 'inherit' }}
+            >
               View JSON metadata
             </Link>
           </Stack>

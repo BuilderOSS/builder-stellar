@@ -61,7 +61,10 @@ export async function resolveOnchainTokenMetadata(
   ]);
 
   const settings = unwrapResult<Settings>(settingsResponse.result, 'Unable to read metadata settings');
-  const attributes = unwrapResult<number[]>(attributesResponse.result, `Unable to read attributes for token ${tokenId}`);
+  const attributes = unwrapResult<number[]>(
+    attributesResponse.result,
+    `Unable to read attributes for token ${tokenId}`
+  );
   const properties = propertiesResponse.result as Property[];
   const ipfsGroups = ipfsResponse.result as IpfsGroup[];
 

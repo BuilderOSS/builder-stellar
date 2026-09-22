@@ -57,10 +57,14 @@ function shortenProposalId(value: string) {
   return `${value.slice(0, 6)}…${value.slice(-6)}`;
 }
 
-async function fetchProposalPageData([, proposalId]: readonly ['proposal-detail', string]): Promise<ProposalPageData> {
+async function fetchProposalPageData([, daoId, proposalId]: readonly [
+  'proposal-detail',
+  string,
+  string
+]): Promise<ProposalPageData> {
   const [detailResponse, votesResponse] = await Promise.all([
-    fetch(`/api/proposals/${proposalId}`, { cache: 'no-store' }),
-    fetch(`/api/proposals/${proposalId}/votes`, { cache: 'no-store' })
+    fetch(`/api/dao/${encodeURIComponent(daoId)}/proposals/${proposalId}`, { cache: 'no-store' }),
+    fetch(`/api/dao/${encodeURIComponent(daoId)}/proposals/${proposalId}/votes`, { cache: 'no-store' })
   ]);
 
   if (!detailResponse.ok) {
@@ -90,7 +94,7 @@ export default function ProposalDetailPage() {
   const [now, setNow] = useState(() => Date.now());
 
   const { data, error, isLoading, mutate } = useSWR(
-    proposalId ? (['proposal-detail', proposalId] as const) : null,
+    proposalId ? (['proposal-detail', daoId, proposalId] as const) : null,
     fetchProposalPageData,
     { shouldRetryOnError: false, revalidateOnFocus: false }
   );
