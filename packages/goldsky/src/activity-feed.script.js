@@ -67,7 +67,7 @@ function invoke(data) {
     ProposalCancelled: true, ProposalCanceled: true, ProposalExecuted: true,
     ProposalExpired: true, AuctionCreated: true, BidPlaced: true,
     AuctionSettled: true, BidRefunded: true, AuctionCancelled: true,
-    DaoCreated: true, DaoRegistered: true
+    DaoCreated: true, DaoRegistered: true, DaoFinalized: true
   };
 
   var kindMap = {
@@ -111,6 +111,7 @@ function invoke(data) {
     AuctionCancelled: 'auction.cancelled',
     DaoCreated: 'manager.dao_created',
     DaoRegistered: 'manager.dao_registered',
+    DaoFinalized: 'manager.dao_finalized',
     FactoryPaused: 'manager.factory_paused',
     FactoryUnpaused: 'manager.factory_unpaused',
     UpgradeApproved: 'manager.upgrade_approved',
@@ -168,6 +169,7 @@ function invoke(data) {
     AuctionCancelled: 'Auction cancelled',
     DaoCreated: 'DAO created',
     DaoRegistered: 'DAO registered',
+    DaoFinalized: 'DAO finalized',
     FactoryPaused: 'Factory paused',
     FactoryUnpaused: 'Factory unpaused',
     UpgradeApproved: 'Upgrade approved',
@@ -229,6 +231,8 @@ function invoke(data) {
     summary = 'DAO created by ' + (pick(data, ['creator']) || 'unknown');
   } else if (normalizedEventName === 'DaoRegistered') {
     summary = 'DAO registered for token ' + (pick(data, ['token_address']) || 'unknown');
+  } else if (normalizedEventName === 'DaoFinalized') {
+    summary = 'DAO finalized for token ' + (pick(data, ['token_address']) || 'unknown');
   } else if (normalizedEventName === 'ImplementationRegistered') {
     summary = 'Implementation "' + (pick(data, ['name']) || 'unknown') + '" registered';
   } else if (normalizedEventName === 'SeedGenerated') {

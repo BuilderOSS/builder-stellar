@@ -186,6 +186,8 @@ transforms:
           THEN (e.args::jsonb -> 'modules' ->> 'metadata')::text
           ELSE NULL
         END AS metadata_contract,
+        -- Token metadata fields are not emitted in DaoCreated event
+        -- These can be populated by querying the deployed token contract separately
         NULL::varchar(255) AS token_name,
         NULL::varchar(16) AS token_symbol,
         NULL::text AS token_description,
