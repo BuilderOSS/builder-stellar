@@ -648,7 +648,7 @@ transforms:
 
   decoded_events_with_jsonb:
     type: sql
-    from: decoded_events
+    primary_key: event_id
     sql: |
       SELECT
         event_id,
@@ -677,7 +677,7 @@ transforms:
 
   activity_feed_with_jsonb:
     type: sql
-    from: activity_feed
+    primary_key: activity_id
     sql: |
       SELECT
         activity_id,
