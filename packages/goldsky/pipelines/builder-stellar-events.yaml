@@ -646,64 +646,6 @@ transforms:
         }
       }
 
-  decoded_events_with_jsonb:
-    type: sql
-    primary_key: event_id
-    sql: |
-      SELECT
-        event_id,
-        deployment_id,
-        contract_id,
-        contract_role,
-        event_name,
-        topic_0,
-        topic_1,
-        topic_2,
-        topic_3,
-        topics::jsonb as topics,
-        args::jsonb as args,
-        transaction_hash,
-        transaction_successful,
-        ledger_sequence,
-        ledger_hash,
-        ledger_closed_at,
-        transaction_index,
-        operation_index,
-        event_index,
-        operation_type,
-        _gs_op,
-        decoder_version
-      FROM decoded_events
-
-  activity_feed_with_jsonb:
-    type: sql
-    primary_key: activity_id
-    sql: |
-      SELECT
-        activity_id,
-        deployment_id,
-        contract_id,
-        contract_role,
-        event_name,
-        topics::jsonb as topics,
-        args::jsonb as args,
-        kind,
-        title,
-        summary,
-        visibility,
-        proposal_id,
-        token_id,
-        amount,
-        actor,
-        addresses::jsonb as addresses,
-        ledger_sequence,
-        transaction_index,
-        operation_index,
-        event_index,
-        ledger_closed_at,
-        transaction_hash
-      FROM activity_feed
-
 sinks:
   raw_events_output:
     type: postgres
@@ -715,7 +657,7 @@ sinks:
 
   decoded_events_output:
     type: postgres
-    from: decoded_events_with_jsonb
+    from: decoded_events
     schema: chain
     table: decoded_events
     secret_name: STELLAR_BUILDER_POSTGRES
@@ -723,7 +665,7 @@ sinks:
 
   activity_feed_output:
     type: postgres
-    from: activity_feed_with_jsonb
+    from: activity_feed
     schema: app
     table: activity_feed_events
     secret_name: STELLAR_BUILDER_POSTGRES
