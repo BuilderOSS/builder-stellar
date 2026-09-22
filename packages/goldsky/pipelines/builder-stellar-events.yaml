@@ -535,28 +535,28 @@ transforms:
         }
 
         return {
-          activity_id: data.event_id || data.id,
-          deployment_id: data.deployment_id,
-          contract_id: data.contract_id,
-          contract_role: data.contract_role,
-          kind: kindMap[normalizedEventName] || ('contract.' + String(eventName).toLowerCase()),
-          title: titleMap[normalizedEventName] || normalizedEventName,
-          summary: summary,
-          event_name: eventName,
+          activity_id: String(data.event_id || data.id || ''),
+          deployment_id: String(data.deployment_id || ''),
+          contract_id: String(data.contract_id || ''),
+          contract_role: String(data.contract_role || ''),
+          kind: String(kindMap[normalizedEventName] || ('contract.' + String(eventName).toLowerCase())),
+          title: String(titleMap[normalizedEventName] || normalizedEventName),
+          summary: String(summary),
+          event_name: String(eventName),
           topics: String(topicsValue),
           args: String(argsValue),
-          visibility: userFacing[normalizedEventName] ? (normalizedEventName.indexOf('Proposal') === 0 || normalizedEventName === 'VoteCast' ? 'governance' : 'public') : (kindMap[normalizedEventName] ? 'admin' : 'system'),
-          proposal_id: pick(data, ['proposal_id']) || null,
-          token_id: pick(data, ['token_id']) || null,
-          amount: pick(data, ['amount', 'weight']) || null,
-          actor: pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator']) || null,
+          visibility: String(userFacing[normalizedEventName] ? (normalizedEventName.indexOf('Proposal') === 0 || normalizedEventName === 'VoteCast' ? 'governance' : 'public') : (kindMap[normalizedEventName] ? 'admin' : 'system')),
+          proposal_id: String(pick(data, ['proposal_id']) || ''),
+          token_id: String(pick(data, ['token_id']) || ''),
+          amount: String(pick(data, ['amount', 'weight']) || ''),
+          actor: String(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator']) || ''),
           addresses: String(JSON.stringify(addresses)),
-          ledger_sequence: data.ledger_sequence,
-          transaction_index: data.transaction_index,
-          operation_index: data.operation_index,
-          event_index: data.event_index,
-          ledger_closed_at: data.ledger_closed_at || null,
-          transaction_hash: data.transaction_hash
+          ledger_sequence: data.ledger_sequence || 0,
+          transaction_index: data.transaction_index || 0,
+          operation_index: data.operation_index || 0,
+          event_index: data.event_index || 0,
+          ledger_closed_at: String(data.ledger_closed_at || ''),
+          transaction_hash: String(data.transaction_hash || '')
         };
         } catch (e) {
           console.error('Activity feed transform error:', e.message, 'event_id:', data?.event_id);
