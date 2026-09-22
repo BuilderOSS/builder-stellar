@@ -138,8 +138,9 @@ transforms:
       topic_1: string
       topic_2: string
       topic_3: string
-      topics: string
-      args: string
+      topics: json
+      args: json
+      payload: json
       transaction_hash: string
       transaction_successful: boolean
       ledger_sequence: int64
@@ -296,8 +297,8 @@ transforms:
       contract_id: string
       contract_role: string
       event_name: string
-      topics: string
-      args: string
+      topics: json
+      args: json
       kind: string
       title: string
       summary: string
@@ -306,7 +307,7 @@ transforms:
       token_id: string
       amount: string
       actor: string
-      addresses: string
+      addresses: json
       ledger_sequence: int64
       transaction_index: int64
       operation_index: int64
