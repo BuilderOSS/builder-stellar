@@ -18,14 +18,14 @@ SELECT
   e.deployment_id,
   i.dao_id,
   e.contract_id,
-  e.topics ->> 'proposal_id' AS proposal_id,
+  e.topics::jsonb ->> 'proposal_id' AS proposal_id,
   CASE e.event_name
     WHEN 'proposal_queued' THEN 'queued'
     WHEN 'proposal_executed' THEN 'executed'
     WHEN 'proposal_canceled' THEN 'canceled'
     ELSE e.event_name
   END AS state,
-  (e.args ->> 'eta')::bigint AS eta_seconds,
+  (e.args::jsonb ->> 'eta')::bigint AS eta_seconds,
   e.ledger_sequence AS event_ledger,
   extract(epoch FROM to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000))::bigint AS event_timestamp_seconds,
   to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS event_at,
@@ -42,11 +42,11 @@ SELECT
   e.deployment_id,
   i.dao_id,
   e.contract_id,
-  e.topics ->> 'proposal_id' AS proposal_id,
-  e.topics ->> 'voter' AS voter,
-  (e.args ->> 'vote_type')::integer AS support,
-  (e.args ->> 'weight')::numeric(78,0) AS weight,
-  e.args ->> 'reason' AS reason,
+  e.topics::jsonb ->> 'proposal_id' AS proposal_id,
+  e.topics::jsonb ->> 'voter' AS voter,
+  (e.args::jsonb ->> 'vote_type')::integer AS support,
+  (e.args::jsonb ->> 'weight')::numeric(78,0) AS weight,
+  e.args::jsonb ->> 'reason' AS reason,
   e.ledger_sequence AS event_ledger,
   extract(epoch FROM to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000))::bigint AS event_timestamp_seconds,
   to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS event_at,
@@ -62,12 +62,12 @@ SELECT
   e.deployment_id,
   i.dao_id,
   e.contract_id,
-  e.topics ->> 'proposal_id' AS proposal_id,
+  e.topics::jsonb ->> 'proposal_id' AS proposal_id,
   t.ordinality - 1 AS action_index,
   t.value AS target,
   f.value AS function,
   a.value AS args,
-  jsonb_array_length(COALESCE(e.args -> 'targets', '[]'::jsonb)) AS action_count,
+  jsonb_array_length(COALESCE(e.args::jsonb -> 'targets', '[]'::jsonb)) AS action_count,
   NULL::boolean AS executed,
   NULL::text AS executor,
   NULL::bigint AS executed_ledger,
@@ -75,9 +75,9 @@ SELECT
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
-LEFT JOIN LATERAL jsonb_array_elements_text(COALESCE(e.args -> 'targets', '[]'::jsonb)) WITH ORDINALITY t(value, ordinality) ON true
-LEFT JOIN LATERAL jsonb_array_elements_text(COALESCE(e.args -> 'functions', '[]'::jsonb)) WITH ORDINALITY f(value, ordinality) ON f.ordinality = t.ordinality
-LEFT JOIN LATERAL jsonb_array_elements(COALESCE(e.args -> 'args', '[]'::jsonb)) WITH ORDINALITY a(value, ordinality) ON a.ordinality = t.ordinality
+LEFT JOIN LATERAL jsonb_array_elements_text(COALESCE(e.args::jsonb -> 'targets', '[]'::jsonb)) WITH ORDINALITY t(value, ordinality) ON true
+LEFT JOIN LATERAL jsonb_array_elements_text(COALESCE(e.args::jsonb -> 'functions', '[]'::jsonb)) WITH ORDINALITY f(value, ordinality) ON f.ordinality = t.ordinality
+LEFT JOIN LATERAL jsonb_array_elements(COALESCE(e.args::jsonb -> 'args', '[]'::jsonb)) WITH ORDINALITY a(value, ordinality) ON a.ordinality = t.ordinality
 WHERE e.contract_role = 'governor'
   AND e.event_name = 'proposal_created';
 
@@ -88,9 +88,9 @@ SELECT
   e.deployment_id,
   i.dao_id,
   e.contract_id,
-  e.topics ->> 'authority' AS authority,
-  (e.args ->> 'enabled')::boolean AS enabled,
-  e.args ->> 'changed_by' AS changed_by,
+  e.topics::jsonb ->> 'authority' AS authority,
+  (e.args::jsonb ->> 'enabled')::boolean AS enabled,
+  e.args::jsonb ->> 'changed_by' AS changed_by,
   e.ledger_sequence AS event_ledger,
   extract(epoch FROM to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000))::bigint AS event_timestamp_seconds,
   to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS event_at,
@@ -124,13 +124,13 @@ WITH created AS (
     e.deployment_id,
     i.dao_id,
     e.contract_id,
-    e.topics ->> 'proposal_id' AS proposal_id,
-    e.topics ->> 'proposer' AS proposer,
-    e.args ->> 'description' AS description,
-    (e.args ->> 'vote_snapshot')::bigint AS snapshot_ledger,
-    (e.args ->> 'vote_start')::bigint AS vote_start_seconds,
-    (e.args ->> 'vote_end')::bigint AS vote_end_seconds,
-    jsonb_array_length(COALESCE(e.args -> 'targets', '[]'::jsonb)) AS action_count,
+    e.topics::jsonb ->> 'proposal_id' AS proposal_id,
+    e.topics::jsonb ->> 'proposer' AS proposer,
+    e.args::jsonb ->> 'description' AS description,
+    (e.args::jsonb ->> 'vote_snapshot')::bigint AS snapshot_ledger,
+    (e.args::jsonb ->> 'vote_start')::bigint AS vote_start_seconds,
+    (e.args::jsonb ->> 'vote_end')::bigint AS vote_end_seconds,
+    jsonb_array_length(COALESCE(e.args::jsonb -> 'targets', '[]'::jsonb)) AS action_count,
     e.ledger_sequence AS created_ledger,
     to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS created_at,
     e.transaction_hash AS created_transaction_hash

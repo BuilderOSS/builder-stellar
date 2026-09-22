@@ -18,10 +18,10 @@ SELECT
   e.deployment_id,
   i.dao_id,
   e.contract_id,
-  (e.args ->> 'token_id')::bigint AS token_id,
-  e.topics ->> 'operator' AS operator,
-  e.topics ->> 'from' AS from_address,
-  e.topics ->> 'to' AS to_address,
+  (e.args::jsonb ->> 'token_id')::bigint AS token_id,
+  e.topics::jsonb ->> 'operator' AS operator,
+  e.topics::jsonb ->> 'from' AS from_address,
+  e.topics::jsonb ->> 'to' AS to_address,
   e.ledger_sequence AS event_ledger,
   extract(epoch FROM to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000))::bigint AS event_timestamp_seconds,
   to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS event_at,
@@ -33,13 +33,13 @@ WHERE e.contract_role = 'token'
 
 -- Token: Inventory (current owner of each token)
 CREATE OR REPLACE VIEW token.inventory AS
-SELECT DISTINCT ON (e.deployment_id, i.dao_id, e.contract_id, e.args ->> 'token_id')
+SELECT DISTINCT ON (e.deployment_id, i.dao_id, e.contract_id, e.args::jsonb ->> 'token_id')
   e.event_id,
   e.deployment_id,
   i.dao_id,
   e.contract_id,
-  (e.args ->> 'token_id')::bigint AS token_id,
-  e.topics ->> 'to' AS owner,
+  (e.args::jsonb ->> 'token_id')::bigint AS token_id,
+  e.topics::jsonb ->> 'to' AS owner,
   e.ledger_sequence AS event_ledger,
   extract(epoch FROM to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000))::bigint AS event_timestamp_seconds,
   to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS event_at,
@@ -48,7 +48,7 @@ FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
 WHERE e.contract_role = 'token'
   AND e.event_name IN ('transfer', 'mint', 'mint_with_minter')
-ORDER BY e.deployment_id, i.dao_id, e.contract_id, e.args ->> 'token_id', e.ledger_sequence DESC, e.event_id DESC;
+ORDER BY e.deployment_id, i.dao_id, e.contract_id, e.args::jsonb ->> 'token_id', e.ledger_sequence DESC, e.event_id DESC;
 
 -- Token: Delegations
 CREATE OR REPLACE VIEW token.delegations AS
@@ -57,9 +57,9 @@ SELECT
   e.deployment_id,
   i.dao_id,
   e.contract_id,
-  e.topics ->> 'delegator' AS delegator,
-  e.args ->> 'from_delegate' AS from_delegate,
-  e.args ->> 'to_delegate' AS to_delegate,
+  e.topics::jsonb ->> 'delegator' AS delegator,
+  e.args::jsonb ->> 'from_delegate' AS from_delegate,
+  e.args::jsonb ->> 'to_delegate' AS to_delegate,
   e.ledger_sequence AS event_ledger,
   extract(epoch FROM to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000))::bigint AS event_timestamp_seconds,
   to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS event_at,
@@ -76,9 +76,9 @@ SELECT
   e.deployment_id,
   i.dao_id,
   e.contract_id,
-  e.topics ->> 'authority' AS authority,
-  (e.args ->> 'enabled')::boolean AS enabled,
-  e.args ->> 'changed_by' AS changed_by,
+  e.topics::jsonb ->> 'authority' AS authority,
+  (e.args::jsonb ->> 'enabled')::boolean AS enabled,
+  e.args::jsonb ->> 'changed_by' AS changed_by,
   e.ledger_sequence AS event_ledger,
   extract(epoch FROM to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000))::bigint AS event_timestamp_seconds,
   to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS event_at,

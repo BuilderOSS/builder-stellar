@@ -51,8 +51,8 @@ CREATE TABLE chain.decoded_events (
   topic_1 text,
   topic_2 text,
   topic_3 text,
-  topics jsonb NOT NULL DEFAULT '{}'::jsonb,
-  args jsonb NOT NULL DEFAULT '{}'::jsonb,
+  topics text NOT NULL DEFAULT '',
+  args text NOT NULL DEFAULT '',
   transaction_hash text NOT NULL,
   transaction_successful boolean,
   ledger_sequence bigint NOT NULL,
@@ -70,8 +70,6 @@ CREATE TABLE chain.decoded_events (
 CREATE INDEX idx_decoded_events_deployment_event ON chain.decoded_events (deployment_id, event_name, ledger_sequence DESC, event_id DESC);
 CREATE INDEX idx_decoded_events_deployment_contract ON chain.decoded_events (deployment_id, contract_id, ledger_sequence DESC, event_id DESC);
 CREATE INDEX idx_decoded_events_topic_0 ON chain.decoded_events (deployment_id, event_name, topic_0, ledger_sequence DESC);
-CREATE INDEX idx_decoded_events_topics_gin ON chain.decoded_events USING gin (topics);
-CREATE INDEX idx_decoded_events_args_gin ON chain.decoded_events USING gin (args);
 CREATE INDEX idx_decoded_events_manager_events ON chain.decoded_events (deployment_id, event_name, ledger_sequence DESC) WHERE LOWER(event_name) IN ('dao_created', 'daocreated', 'dao_registered', 'daoregistered');
 
 CREATE OR REPLACE FUNCTION chain.reject_event_mutation() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN IF TG_OP = 'UPDATE' AND NEW IS NOT DISTINCT FROM OLD THEN RETURN NEW; END IF; RAISE EXCEPTION '% rows are immutable', TG_TABLE_NAME; END;$$;
@@ -84,8 +82,8 @@ CREATE TABLE app.activity_feed_events (
   contract_id text NOT NULL,
   contract_role text NOT NULL,
   event_name text NOT NULL,
-  topics jsonb NOT NULL DEFAULT '{}'::jsonb,
-  args jsonb NOT NULL DEFAULT '{}'::jsonb,
+  topics text NOT NULL DEFAULT '',
+  args text NOT NULL DEFAULT '',
   kind text NOT NULL,
   title text NOT NULL,
   summary text NOT NULL,
@@ -94,7 +92,7 @@ CREATE TABLE app.activity_feed_events (
   token_id text,
   amount text,
   actor text,
-  addresses jsonb NOT NULL DEFAULT '[]'::jsonb,
+  addresses text NOT NULL DEFAULT '[]',
   ledger_sequence bigint NOT NULL,
   transaction_index bigint,
   operation_index bigint,
