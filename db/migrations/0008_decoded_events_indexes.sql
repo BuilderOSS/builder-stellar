@@ -12,8 +12,8 @@
 -- - event_name for specific event type filtering
 -- - ledger_sequence DESC as trailing for ORDER BY optimization (DISTINCT ON uses max ledger)
 -- - Partial index on relevant contract roles to reduce size
-
-BEGIN;
+-- - CONCURRENTLY clause allows index creation without blocking table writes
+-- - Note: This migration should NOT be wrapped in a transaction block by the migration runner
 
 -- Main composite index for filtered event lookups with ordering
 CREATE INDEX CONCURRENTLY idx_decoded_events_role_event_ledger
@@ -28,5 +28,3 @@ CREATE INDEX CONCURRENTLY idx_decoded_events_deployment_ledger
 CREATE INDEX CONCURRENTLY idx_decoded_events_event_name
   ON chain.decoded_events(event_name, ledger_sequence DESC)
   WHERE contract_role IN ('manager', 'governor', 'token', 'auction', 'treasury', 'metadata');
-
-COMMIT;

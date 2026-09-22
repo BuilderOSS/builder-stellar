@@ -90,8 +90,29 @@ run_migration() {
 
   echo -e "${YELLOW}  ↳ Applying migration...${NC}"
 
-  # Run migration in a transaction
-  psql "$DATABASE_URL" << EOF
+  # Check if migration contains CONCURRENTLY (cannot run in transaction)
+  if grep -q "CONCURRENTLY" "$file"; then
+    echo -e "${BLUE}  ↳ Detected CONCURRENTLY - running outside transaction${NC}"
+
+    # Run migration outside transaction, then record it
+    psql "$DATABASE_URL" -f "$file"
+
+    if [ $? -eq 0 ]; then
+      # Record migration after successful execution
+      psql "$DATABASE_URL" -c "INSERT INTO public.schema_migrations (version) VALUES ('$version');"
+      if [ $? -eq 0 ]; then
+        echo -e "${GREEN}  ✓ Successfully applied $version${NC}"
+      else
+        echo -e "${RED}  ✗ Failed to record migration ${version}${NC}"
+        exit 1
+      fi
+    else
+      echo -e "${RED}  ✗ Failed to apply $version${NC}"
+      exit 1
+    fi
+  else
+    # Run migration in a transaction for safety
+    psql "$DATABASE_URL" << EOF
 BEGIN;
 
 -- Run the migration
@@ -103,12 +124,13 @@ INSERT INTO public.schema_migrations (version) VALUES ('$version');
 COMMIT;
 EOF
 
-  if [ $? -eq 0 ]; then
-    echo -e "${GREEN}  ✓ Successfully applied $version${NC}"
-  else
-    echo -e "${RED}  ✗ Failed to apply $version${NC}"
-    echo -e "${RED}  Migration rolled back${NC}"
-    exit 1
+    if [ $? -eq 0 ]; then
+      echo -e "${GREEN}  ✓ Successfully applied $version${NC}"
+    else
+      echo -e "${RED}  ✗ Failed to apply $version${NC}"
+      echo -e "${RED}  Migration rolled back${NC}"
+      exit 1
+    fi
   fi
 
   echo ""
