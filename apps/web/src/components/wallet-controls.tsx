@@ -51,7 +51,12 @@ async function validateWalletNetwork(
 
 export function WalletControls({ network }: { network?: WalletNetwork }) {
   const configuredNetwork = getNetworkConfig((process.env.NEXT_PUBLIC_NETWORK || 'testnet') as NetworkName);
-  const currentNetwork = network ?? { label: configuredNetwork.label, passphrase: configuredNetwork.networkPassphrase };
+  const currentNetwork: WalletNetwork = network ?? {
+    label: configuredNetwork.label,
+    passphrase: configuredNetwork.networkPassphrase
+  };
+  const networkLabel = currentNetwork.label;
+  const networkPassphrase = currentNetwork.passphrase;
   const session = useDaoSessionStore();
   const updateSession = useDaoSessionStore((state) => state.updateSession);
 
@@ -80,8 +85,8 @@ export function WalletControls({ network }: { network?: WalletNetwork }) {
 
   useEffect(() => {
     if (!session.address) return;
-    void validateWalletNetwork(session.address, currentNetwork, updateSession);
-  }, [currentNetwork, session.address, updateSession]);
+    void validateWalletNetwork(session.address, { label: networkLabel, passphrase: networkPassphrase }, updateSession);
+  }, [networkLabel, networkPassphrase, session.address, updateSession]);
 
   async function connectWallet() {
     try {

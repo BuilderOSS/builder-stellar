@@ -49,10 +49,12 @@ export default async function Page() {
               <Plus aria-hidden="true" size={16} strokeWidth={2} />
               Create DAO
             </Link>
+            {/*
             <div className="discovery-header__context">
               <span className="network-dot" aria-hidden="true" />
               <span>Onchain communities</span>
             </div>
+            */}
             <WalletControls />
           </div>
         </header>

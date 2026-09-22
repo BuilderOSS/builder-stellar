@@ -2,7 +2,6 @@
 
 'use client';
 
-import { ArrowLeft } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -62,22 +61,20 @@ function StepCard({
         cursor: 'pointer',
         padding: '1rem',
         background: isActive ? 'var(--gray-3)' : 'var(--gray-2)',
-        border: `1px solid ${isActive ? 'var(--gray-7)' : 'var(--gray-6)'}`,
+        border: `2px solid ${isActive ? 'var(--accent-7)' : 'var(--gray-6)'}`,
         borderRadius: '8px',
         transition: 'all 0.15s ease',
         boxSizing: 'border-box'
       }}
       onMouseEnter={(e) => {
-        if (!isActive) {
-          e.currentTarget.style.background = 'var(--gray-3)';
-          e.currentTarget.style.borderColor = 'var(--gray-7)';
-        }
+        e.currentTarget.style.borderColor = 'var(--accent-7)';
+        e.currentTarget.style.transform = 'translateY(-2px)';
+        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
       }}
       onMouseLeave={(e) => {
-        if (!isActive) {
-          e.currentTarget.style.background = 'var(--gray-2)';
-          e.currentTarget.style.borderColor = 'var(--gray-6)';
-        }
+        e.currentTarget.style.borderColor = isActive ? 'var(--accent-7)' : 'var(--gray-6)';
+        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.boxShadow = 'none';
       }}
     >
       <Stack gap="2">
@@ -240,14 +237,16 @@ export default function CreateDaoPage() {
             </div>
           </Link>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            {/*
             <Link href="/" className="nav-link">
               <ArrowLeft aria-hidden="true" size={16} strokeWidth={2} />
               Back to Directory
             </Link>
-            <div className="discovery-header__context">
+<div className="discovery-header__context">
               <span className="network-dot" aria-hidden="true" />
               <span>{getDeploymentConfig().name}</span>
             </div>
+            */}
             <WalletControls />
           </div>
         </header>
