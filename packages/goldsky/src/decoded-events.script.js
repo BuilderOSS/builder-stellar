@@ -59,20 +59,49 @@ function invoke(data) {
   var args = native(rawData);
   if (!args || typeof args !== 'object' || Array.isArray(args)) args = { value: args };
 
-  function stringify(value) { return value === null || value === undefined ? null : String(value); }
+  // Type-safe helpers to ensure consistent Arrow table types
+  function toStringOrNull(value) {
+    if (value === null || value === undefined) return null;
+    return String(value);
+  }
+  function toNumber(value) {
+    if (value === null || value === undefined) return null;
+    var n = Number(value);
+    return isFinite(n) ? n : null;
+  }
+  function toBoolean(value) {
+    if (value === null || value === undefined) return null;
+    return Boolean(value);
+  }
+
   var result = {
-    event_id: data.event_id || data.id || null, deployment_id: data.deployment_id || null, contract_id: data.contract_id || null,
-    contract_role: data.contract_role === 'manager' ? 'manager' : roleForEvent(eventName), event_name: eventName.toLowerCase(),
-    topic_0: stringify(topicValues[0]), topic_1: stringify(topicValues[1]), topic_2: stringify(topicValues[2]), topic_3: stringify(topicValues[3]),
-    topics: JSON.stringify(topics), args: JSON.stringify(args), payload: JSON.stringify(Object.assign({}, topics, args)),
-    transaction_hash: data.transaction_hash || null, transaction_successful: data.transaction_successful ?? null,
-    ledger_sequence: data.ledger_sequence ?? null, ledger_hash: data.ledger_hash || null, ledger_closed_at: data.ledger_closed_at || null,
-    transaction_index: data.transaction_index ?? null, operation_index: data.operation_index ?? null, event_index: data.event_index ?? null,
-    operation_type: data.operation_type || null, _gs_op: data._gs_op || null, decoder_version: 'v2'
+    event_id: toStringOrNull(data.event_id || data.id),
+    deployment_id: toStringOrNull(data.deployment_id),
+    contract_id: toStringOrNull(data.contract_id),
+    contract_role: String(data.contract_role === 'manager' ? 'manager' : roleForEvent(eventName)),
+    event_name: String(eventName.toLowerCase()),
+    topic_0: toStringOrNull(topicValues[0]),
+    topic_1: toStringOrNull(topicValues[1]),
+    topic_2: toStringOrNull(topicValues[2]),
+    topic_3: toStringOrNull(topicValues[3]),
+    topics: String(JSON.stringify(topics)),
+    args: String(JSON.stringify(args)),
+    payload: String(JSON.stringify(Object.assign({}, topics, args))),
+    transaction_hash: toStringOrNull(data.transaction_hash),
+    transaction_successful: toBoolean(data.transaction_successful),
+    ledger_sequence: toNumber(data.ledger_sequence),
+    ledger_hash: toStringOrNull(data.ledger_hash),
+    ledger_closed_at: toStringOrNull(data.ledger_closed_at),
+    transaction_index: toNumber(data.transaction_index),
+    operation_index: toNumber(data.operation_index),
+    event_index: toNumber(data.event_index),
+    operation_type: toStringOrNull(data.operation_type),
+    _gs_op: toStringOrNull(data._gs_op),
+    decoder_version: 'v2'
   };
   // These aliases are intentionally not declared in the Goldsky schema. They keep
   // local transform fixtures useful while consumers migrate to topics/args.
-  Object.keys(topics).forEach(function (key) { result[key] = topics[key]; });
+  Object.keys(topics).forEach(function (key) { result[key] = toStringOrNull(topics[key]); });
   Object.keys(args).forEach(function (key) {
     if (key !== 'args' && key !== 'topics' && key !== 'payload') result[key] = args[key];
   });
