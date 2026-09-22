@@ -90,9 +90,9 @@ function invoke(data) {
     topic_1: toStringOrEmpty(topicValues[1]),
     topic_2: toStringOrEmpty(topicValues[2]),
     topic_3: toStringOrEmpty(topicValues[3]),
-    topics: String(JSON.stringify(topics)),
-    args: String(JSON.stringify(args)),
-    payload: String(JSON.stringify(Object.assign({}, topics, args))),
+    topics: topics,
+    args: args,
+    payload: Object.assign({}, topics, args),
     transaction_hash: toStringOrEmpty(data.transaction_hash),
     transaction_successful: toBoolean(data.transaction_successful),
     ledger_sequence: toNumber(data.ledger_sequence),
@@ -107,8 +107,8 @@ function invoke(data) {
   };
   // These aliases are intentionally not declared in the Goldsky schema. They keep
   // local transform fixtures useful while consumers migrate to topics/args.
-  // Note: These dynamic fields are not in the official schema, but must maintain
-  // type consistency for Arrow serialization - convert all to strings or empty.
+  // Note: Schema fields (args, topics, payload) must stay as JSON strings for JSONB columns.
+  // Only convert non-schema field aliases to strings for type safety.
   Object.keys(topics).forEach(function (key) { result[key] = toStringOrEmpty(topics[key]); });
   Object.keys(args).forEach(function (key) {
     if (key !== 'args' && key !== 'topics' && key !== 'payload') result[key] = toStringOrEmpty(args[key]);
