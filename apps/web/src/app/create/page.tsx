@@ -55,7 +55,6 @@ function StepCard({
       onClick={onClick}
       aria-current={isActive ? 'step' : undefined}
       style={{
-        all: 'unset',
         display: 'block',
         width: '100%',
         cursor: 'pointer',
@@ -64,7 +63,12 @@ function StepCard({
         border: `2px solid ${isActive ? 'var(--accent-7)' : 'var(--gray-6)'}`,
         borderRadius: '8px',
         transition: 'all 0.15s ease',
-        boxSizing: 'border-box'
+        boxSizing: 'border-box',
+        textAlign: 'left',
+        fontFamily: 'inherit',
+        fontSize: 'inherit',
+        lineHeight: 'inherit',
+        color: 'inherit'
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.borderColor = 'var(--accent-7)';
