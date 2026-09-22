@@ -75,7 +75,7 @@ echo ""
 # Check if schemas exist
 echo -e "${YELLOW}→ Checking schemas...${NC}"
 
-SCHEMAS=$(psql "$DATABASE_URL" -t -c "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name IN ('chain', 'governance', 'token', 'auction', 'treasury', 'app')" | tr -d ' ')
+SCHEMAS=$(psql "$DATABASE_URL" -t -c "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name IN ('chain', 'governance', 'token', 'auction', 'treasury', 'manager', 'metadata', 'app')" | tr -d ' ')
 
 if [ "$SCHEMAS" -eq 0 ]; then
   echo -e "${RED}✗ Required schemas do not exist${NC}"
@@ -99,6 +99,8 @@ GRANT USAGE ON SCHEMA governance TO goldsky_writer;
 GRANT USAGE ON SCHEMA token TO goldsky_writer;
 GRANT USAGE ON SCHEMA auction TO goldsky_writer;
 GRANT USAGE ON SCHEMA treasury TO goldsky_writer;
+GRANT USAGE ON SCHEMA manager TO goldsky_writer;
+GRANT USAGE ON SCHEMA metadata TO goldsky_writer;
 GRANT USAGE ON SCHEMA app TO goldsky_writer;
 
 -- Grant CREATE permission (needed for Goldsky's CREATE TABLE IF NOT EXISTS)
@@ -107,6 +109,8 @@ GRANT CREATE ON SCHEMA governance TO goldsky_writer;
 GRANT CREATE ON SCHEMA token TO goldsky_writer;
 GRANT CREATE ON SCHEMA auction TO goldsky_writer;
 GRANT CREATE ON SCHEMA treasury TO goldsky_writer;
+GRANT CREATE ON SCHEMA manager TO goldsky_writer;
+GRANT CREATE ON SCHEMA metadata TO goldsky_writer;
 GRANT CREATE ON SCHEMA app TO goldsky_writer;
 
 -- Grant table permissions (INSERT, UPDATE, DELETE for data writes)
@@ -115,6 +119,8 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA governance TO golds
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA token TO goldsky_writer;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA auction TO goldsky_writer;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA treasury TO goldsky_writer;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA manager TO goldsky_writer;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA metadata TO goldsky_writer;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO goldsky_writer;
 
 -- Grant sequence permissions
@@ -126,6 +132,8 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA governance GRANT SELECT, INSERT, UPDATE, DELE
 ALTER DEFAULT PRIVILEGES IN SCHEMA token GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO goldsky_writer;
 ALTER DEFAULT PRIVILEGES IN SCHEMA auction GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO goldsky_writer;
 ALTER DEFAULT PRIVILEGES IN SCHEMA treasury GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO goldsky_writer;
+ALTER DEFAULT PRIVILEGES IN SCHEMA manager GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO goldsky_writer;
+ALTER DEFAULT PRIVILEGES IN SCHEMA metadata GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO goldsky_writer;
 ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO goldsky_writer;
 ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT USAGE, SELECT ON SEQUENCES TO goldsky_writer;
 EOF
@@ -142,6 +150,8 @@ GRANT USAGE ON SCHEMA governance TO app_server;
 GRANT USAGE ON SCHEMA token TO app_server;
 GRANT USAGE ON SCHEMA auction TO app_server;
 GRANT USAGE ON SCHEMA treasury TO app_server;
+GRANT USAGE ON SCHEMA manager TO app_server;
+GRANT USAGE ON SCHEMA metadata TO app_server;
 GRANT USAGE ON SCHEMA app TO app_server;
 
 -- Grant SELECT only (read-only access)
@@ -150,6 +160,8 @@ GRANT SELECT ON ALL TABLES IN SCHEMA governance TO app_server;
 GRANT SELECT ON ALL TABLES IN SCHEMA token TO app_server;
 GRANT SELECT ON ALL TABLES IN SCHEMA auction TO app_server;
 GRANT SELECT ON ALL TABLES IN SCHEMA treasury TO app_server;
+GRANT SELECT ON ALL TABLES IN SCHEMA manager TO app_server;
+GRANT SELECT ON ALL TABLES IN SCHEMA metadata TO app_server;
 GRANT SELECT ON ALL TABLES IN SCHEMA app TO app_server;
 
 -- Grant default privileges for future tables
@@ -158,6 +170,8 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA governance GRANT SELECT ON TABLES TO app_serv
 ALTER DEFAULT PRIVILEGES IN SCHEMA token GRANT SELECT ON TABLES TO app_server;
 ALTER DEFAULT PRIVILEGES IN SCHEMA auction GRANT SELECT ON TABLES TO app_server;
 ALTER DEFAULT PRIVILEGES IN SCHEMA treasury GRANT SELECT ON TABLES TO app_server;
+ALTER DEFAULT PRIVILEGES IN SCHEMA manager GRANT SELECT ON TABLES TO app_server;
+ALTER DEFAULT PRIVILEGES IN SCHEMA metadata GRANT SELECT ON TABLES TO app_server;
 ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT SELECT ON TABLES TO app_server;
 EOF
 
@@ -181,7 +195,7 @@ SELECT
   STRING_AGG(DISTINCT privilege_type, ', ' ORDER BY privilege_type) as privileges
 FROM information_schema.table_privileges
 WHERE grantee IN ('goldsky_writer', 'app_server')
-  AND table_schema IN ('chain', 'governance', 'token', 'auction', 'treasury', 'app')
+  AND table_schema IN ('chain', 'governance', 'token', 'auction', 'treasury', 'manager', 'metadata', 'app')
 GROUP BY grantee, table_schema
 ORDER BY grantee, table_schema;
 EOF

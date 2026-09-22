@@ -142,6 +142,6 @@ SELECT
   schemaname,
   COUNT(*) as table_count
 FROM pg_tables
-WHERE schemaname IN ('chain', 'governance', 'token', 'auction', 'treasury', 'app')
+WHERE schemaname IN ('chain', 'governance', 'token', 'auction', 'treasury', 'manager', 'metadata', 'app')
 GROUP BY schemaname
 ORDER BY schemaname;"
