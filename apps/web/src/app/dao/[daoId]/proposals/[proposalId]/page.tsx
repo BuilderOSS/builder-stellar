@@ -19,7 +19,6 @@ import { ProposalVotePanel } from '@/components/proposal/proposal-vote-panel';
 import { ProposalVoteSummary } from '@/components/proposal/proposal-vote-summary';
 import type { ProposalDetail, ProposalVoteItem } from '@/components/proposal/types';
 import { Button, Callout } from '@/components/ui';
-import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
 import { keccak256Bytes } from '@/lib/keccak';
 import { encodeProposalCallArgs } from '@/lib/proposal-call';
 import { proposalIdToBuffer } from '@/lib/proposal-id';
@@ -79,11 +78,10 @@ async function fetchProposalPageData([, proposalId]: readonly ['proposal-detail'
 }
 
 export default function ProposalDetailPage() {
-  const { daoId } = useDaoContext();
+  const { daoId, daoConfig: config } = useDaoContext();
   const params = useParams<{ proposalId: string }>();
   const proposalId = params.proposalId;
   const session = useDaoSessionStore();
-  const config = getDaoNetworkConfig(getDefaultDaoNetwork());
   const [voteReason, setVoteReason] = useState('');
   const [selectedVoteType, setSelectedVoteType] = useState<number | null>(null);
   const [formMessage, setFormMessage] = useState('');

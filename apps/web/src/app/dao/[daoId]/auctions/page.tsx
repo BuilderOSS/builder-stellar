@@ -11,7 +11,7 @@ import useSWR from 'swr';
 import { PageSection } from '@/components/page-section';
 import { Button, Callout, Card, Heading, Input, ShortId, Text } from '@/components/ui';
 import { getTreasuryAssets } from '@/lib/assets-config';
-import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
+import type { NetworkName } from '@/config/networks';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
@@ -67,7 +67,7 @@ function formatDate(value: string | number | undefined) {
   );
 }
 
-function formatPaymentToken(network: ReturnType<typeof getDefaultDaoNetwork>, contractId: string | null | undefined) {
+function formatPaymentToken(network: NetworkName, contractId: string | null | undefined) {
   const asset = getTreasuryAssets(network).find((item) => item.contractId === contractId);
   return asset?.code ?? 'SAC';
 }
@@ -81,8 +81,7 @@ function formatRemaining(endTime: string, now: number) {
 }
 
 export default function AuctionsPage() {
-  const { daoId } = useDaoContext();
-  const config = getDaoNetworkConfig(getDefaultDaoNetwork());
+  const { daoId, daoConfig: config } = useDaoContext();
   const session = useDaoSessionStore();
   const tx = useTransactionFeedback(config.name);
   const { data, error, isLoading, mutate } = useSWR<AuctionData>('/api/auctions', fetcher, { refreshInterval: 15_000 });

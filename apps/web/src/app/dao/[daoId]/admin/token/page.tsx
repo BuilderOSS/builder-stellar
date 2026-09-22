@@ -10,22 +10,20 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { AuthorityPanel } from '@/components/admin/authority-panel';
 import { PageSection } from '@/components/page-section';
 import { Badge, Button, Callout, Card, Heading, Input, Text } from '@/components/ui';
-import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
 import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
 export default function TokenAdminPage() {
-  const { daoId } = useDaoContext();
+  const { daoId, daoConfig: config } = useDaoContext();
   const session = useDaoSessionStore();
-  const config = getDaoNetworkConfig(getDefaultDaoNetwork());
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('1');
   const [formMessage, setFormMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const tx = useTransactionFeedback(config.name);
-  const { data: mintAuthorities, error, isLoading, mutate } = useGoldskyMintAuthorities();
+  const { data: mintAuthorities, error, isLoading, mutate } = useGoldskyMintAuthorities(config.tokenContractId);
   const isOwner = Boolean(session.address && session.address === config.adminAddress);
   const hasMintAccess = Boolean(isOwner || mintAuthorities?.items.some((item) => item.authority === session.address));
 

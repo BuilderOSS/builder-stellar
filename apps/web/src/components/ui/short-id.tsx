@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { HStack } from 'styled-system/jsx';
 
 import { CopyIconButton, IconLinkButton, Text } from '@/components/ui';
-import { getDefaultDaoNetwork } from '@/lib/dao-config';
+import { useDaoContext } from '@/contexts/dao-context';
 import { getExplorerAccountUrl, getExplorerContractUrl } from '@/lib/explorer-links';
 
 function shorten(value: string) {
@@ -14,7 +14,8 @@ function shorten(value: string) {
 }
 
 function getExplorerUrl(value: string) {
-  const network = getDefaultDaoNetwork();
+  const { daoConfig } = useDaoContext();
+  const network = daoConfig.name;
 
   if (value.startsWith('C')) {
     return getExplorerContractUrl(network, value);

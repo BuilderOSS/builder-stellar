@@ -75,7 +75,7 @@ function patchGeneratedBindings(packageName, outputDir) {
     let typesContent = readFileSync(typesPath, 'utf8');
     typesContent = typesContent.replace(
       '/**\n * Event: DaoCreated',
-      'export type ManagerError = keyof typeof ManagerError;\n\n/**\n * Event: DaoCreated'
+      'export type ManagerError = typeof ManagerError[keyof typeof ManagerError];\n\n/**\n * Event: DaoCreated'
     );
     writeFileSync(typesPath, typesContent);
   }

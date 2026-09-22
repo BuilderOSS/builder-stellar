@@ -9,10 +9,10 @@ import { Callout, Card, Heading, ShortId, Text } from '@/components/ui';
 import { useGoldskyMemberList } from '@/lib/goldsky-queries';
 
 export default function MemberProfilePage() {
-  const { daoId } = useDaoContext();
+  const { daoId, daoTokenAddress } = useDaoContext();
   const params = useParams<{ address: string }>();
   const address = decodeURIComponent(String(params.address ?? ''));
-  const { data, error, isLoading } = useGoldskyMemberList(1000);
+  const { data, error, isLoading } = useGoldskyMemberList(daoTokenAddress, 1000);
   const member = data?.items.find((item) => item.address === address);
 
   return (

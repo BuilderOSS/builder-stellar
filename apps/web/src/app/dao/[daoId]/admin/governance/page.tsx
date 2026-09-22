@@ -13,7 +13,6 @@ import { DurationInput } from '@/components/admin/duration-input';
 import { PageSection } from '@/components/page-section';
 import { Badge, Button, Callout, Card, Heading, Input, Text } from '@/components/ui';
 import { useGovernorSettings } from '@/lib/admin-queries';
-import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
 import { formatDuration } from '@/lib/format-duration';
 import { useGoldskyGovernorAuthorities } from '@/lib/goldsky-queries';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
@@ -58,9 +57,8 @@ function formatSecondsValue(value: number | null | undefined) {
 }
 
 export default function GovernanceAdminPage() {
-  const { daoId } = useDaoContext();
+  const { daoId, daoConfig: config } = useDaoContext();
   const session = useDaoSessionStore();
-  const config = getDaoNetworkConfig(getDefaultDaoNetwork());
   const [drafts, setDrafts] = useState<Drafts>(EMPTY_DRAFTS);
   const [formMessage, setFormMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -77,7 +75,7 @@ export default function GovernanceAdminPage() {
     error: authorityError,
     isLoading: authorityLoading,
     mutate: refreshAuthorities
-  } = useGoldskyGovernorAuthorities();
+  } = useGoldskyGovernorAuthorities(config.tokenContractId);
   const isOwner = Boolean(session.address && session.address === config.adminAddress);
   const hasGovernanceAccess = Boolean(
     isOwner || governorAuthorities?.items.some((item) => item.authority === session.address)

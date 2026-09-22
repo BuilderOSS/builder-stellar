@@ -6,8 +6,8 @@ import { Stack } from 'styled-system/jsx';
 
 import { PageSection } from '@/components/page-section';
 import { Button, Callout, Card, Heading, ShortId, Text } from '@/components/ui';
+import { useDaoContext } from '@/contexts/dao-context';
 import { findAsset } from '@/lib/assets-config';
-import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
 import { useGoldskyActivityFeed } from '@/lib/goldsky-queries';
 import { useTreasuryBalances } from '@/lib/treasury-queries';
 
@@ -57,8 +57,8 @@ function AssetMark({ code, imageSrc }: { code: string; imageSrc?: string }) {
 }
 
 export default function TreasuryPage() {
-  const config = getDaoNetworkConfig(getDefaultDaoNetwork());
-  const { data, error, isLoading, mutate } = useGoldskyActivityFeed(8);
+  const { daoId, daoConfig: config } = useDaoContext();
+  const { data, error, isLoading, mutate } = useGoldskyActivityFeed(daoId, 8);
   const {
     data: balances,
     error: balanceError,

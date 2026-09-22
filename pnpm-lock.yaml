@@ -20,6 +20,9 @@ importers:
       '@builder-stellar/governor-bindings':
         specifier: workspace:*
         version: link:../../packages/governor-bindings
+      '@builder-stellar/manager-bindings':
+        specifier: workspace:*
+        version: link:../../packages/manager-bindings
       '@builder-stellar/metadata-bindings':
         specifier: workspace:*
         version: link:../../packages/metadata-bindings

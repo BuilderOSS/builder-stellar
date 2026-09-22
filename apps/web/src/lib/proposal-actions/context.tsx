@@ -24,7 +24,7 @@ export interface ActionFormProviderProps {
  */
 export function ActionFormProvider({ children, config, session }: ActionFormProviderProps) {
   const { data: balances, isLoading: balancesLoading } = useTreasuryBalances(config);
-  const { data: mintAuthoritiesData, isLoading: mintAuthoritiesLoading } = useGoldskyMintAuthorities();
+  const { data: mintAuthoritiesData, isLoading: mintAuthoritiesLoading } = useGoldskyMintAuthorities(config.tokenContractId);
 
   const contextValue = useMemo<FormContext>(
     () => ({

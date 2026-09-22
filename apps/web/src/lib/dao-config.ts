@@ -5,11 +5,11 @@
  * Uses database queries for actual DAO state and static network config for infrastructure.
  */
 
-import { getNetworkConfig } from '@/config/networks';
+import { getNetworkConfig, type NetworkName } from '@/config/networks';
 import { getDaoConfigFromDatabase } from './dao-db';
 
 export type DaoNetworkConfig = {
-  name: string;
+  name: NetworkName;
   label: string;
   rpcUrl: string;
   passphrase: string;
@@ -23,6 +23,8 @@ export type DaoNetworkConfig = {
   treasuryContractId: string;
   auctionContractId: string;
 };
+
+export type DaoNetworkName = NetworkName;
 
 /**
  * Get DAO configuration by ID (token contract address)

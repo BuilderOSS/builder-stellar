@@ -8,7 +8,6 @@ import { AdminSectionNav } from '@/components/admin/admin-section-nav';
 import { useDaoContext } from '@/contexts/dao-context';
 import { PageSection } from '@/components/page-section';
 import { Badge, Card, Heading, ShortId, Text } from '@/components/ui';
-import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
 import { useGoldskyGovernorAuthorities, useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
@@ -47,11 +46,10 @@ function SectionCard({
 }
 
 export default function AdminPage() {
-  const { daoId } = useDaoContext();
+  const { daoId, daoConfig: config } = useDaoContext();
   const session = useDaoSessionStore();
-  const config = getDaoNetworkConfig(getDefaultDaoNetwork());
-  const { data: mintAuthorities } = useGoldskyMintAuthorities();
-  const { data: governorAuthorities } = useGoldskyGovernorAuthorities();
+  const { data: mintAuthorities } = useGoldskyMintAuthorities(config.tokenContractId);
+  const { data: governorAuthorities } = useGoldskyGovernorAuthorities(config.tokenContractId);
 
   const isOwner = Boolean(session.address && session.address === config.adminAddress);
   const hasMintAccess = Boolean(isOwner || mintAuthorities?.items.some((item) => item.authority === session.address));

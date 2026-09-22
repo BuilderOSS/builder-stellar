@@ -1,7 +1,7 @@
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { NextResponse } from 'next/server';
 
-import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
+import { getDaoNetworkConfigById } from '@/lib/dao-config';
 import { getGoldskyProposalDetail } from '@/lib/goldsky';
 import { proposalIdToBuffer } from '@/lib/proposal-id';
 import { parseProposalMetadata } from '@/lib/proposal-metadata';
@@ -9,14 +9,16 @@ import { ProposalState, proposalStateFromLabel, proposalStateLabel } from '@/lib
 
 export async function GET(_request: Request, context: { params: Promise<{ proposalId: string }> }) {
   const { proposalId } = await context.params;
-  const config = getDaoNetworkConfig(getDefaultDaoNetwork());
+  const daoId = new URL(_request.url).searchParams.get('daoId');
+  if (!daoId) return NextResponse.json({ message: 'daoId is required' }, { status: 400 });
+  const config = await getDaoNetworkConfigById(daoId);
 
   if (!config.governorContractId) {
     return NextResponse.json({ message: 'Missing governor contract id' }, { status: 400 });
   }
 
   try {
-    const { proposal } = await getGoldskyProposalDetail(proposalId);
+    const { proposal } = await getGoldskyProposalDetail(daoId, proposalId);
 
     try {
       const client = new GovernorClient({

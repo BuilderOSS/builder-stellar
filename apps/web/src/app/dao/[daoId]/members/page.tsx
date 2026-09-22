@@ -5,13 +5,13 @@ import { Grid, Stack } from 'styled-system/jsx';
 import { PageSection } from '@/components/page-section';
 import { Badge, Button, Callout, Card, ShortId, Text } from '@/components/ui';
 import { getDaoAccountRole } from '@/lib/account-role';
-import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
+import { useDaoContext } from '@/contexts/dao-context';
 import { useGoldskyMemberList } from '@/lib/goldsky-queries';
 
 export default function MembersPage() {
-  const { data, error, isLoading, mutate } = useGoldskyMemberList(100);
+  const { daoTokenAddress, daoConfig: config } = useDaoContext();
+  const { data, error, isLoading, mutate } = useGoldskyMemberList(daoTokenAddress, 100);
   const rows = data?.items ?? [];
-  const config = getDaoNetworkConfig(getDefaultDaoNetwork());
 
   return (
       <PageSection title="Members" description="A Goldsky-backed view of token holders with non-zero balances.">

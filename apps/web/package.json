@@ -5,7 +5,7 @@
   "scripts": {
     "predev": "panda codegen && panda cssgen",
     "dev": "next dev",
-    "prebuild": "pnpm --filter @builder-stellar/token-bindings --filter @builder-stellar/metadata-bindings --filter @builder-stellar/governor-bindings --filter @builder-stellar/treasury-bindings --filter @builder-stellar/auction-bindings build && panda codegen && panda cssgen",
+    "prebuild": "pnpm --filter @builder-stellar/token-bindings --filter @builder-stellar/manager-bindings  --filter @builder-stellar/metadata-bindings --filter @builder-stellar/governor-bindings --filter @builder-stellar/treasury-bindings --filter @builder-stellar/auction-bindings build && panda codegen && panda cssgen",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
@@ -17,6 +17,7 @@
   "dependencies": {
     "@builder-stellar/auction-bindings": "workspace:*",
     "@builder-stellar/governor-bindings": "workspace:*",
+    "@builder-stellar/manager-bindings": "workspace:*",
     "@builder-stellar/metadata-bindings": "workspace:*",
     "@builder-stellar/token-bindings": "workspace:*",
     "@builder-stellar/treasury-bindings": "workspace:*",

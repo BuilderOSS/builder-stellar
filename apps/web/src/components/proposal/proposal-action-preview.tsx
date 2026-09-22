@@ -2,7 +2,7 @@ import { Stack } from 'styled-system/jsx';
 
 import { Badge, Card, ShortId, Text } from '@/components/ui';
 import { getTreasuryAssets } from '@/lib/assets-config';
-import { getDefaultDaoNetwork } from '@/lib/dao-config';
+import { useDaoContext } from '@/contexts/dao-context';
 import { normalizeProposalCallArgs, type ProposalCallArg, type ProposalCallArgs } from '@/lib/proposal-call';
 
 type ProposalActionPreviewProps = {
@@ -31,9 +31,8 @@ function formatStroopsAmount(stroops: ProposalCallArg): string {
 /**
  * Lookup asset code from contract ID using the treasury assets config
  */
-function getAssetCodeFromContractId(contractId: string): string {
-  const network = getDefaultDaoNetwork();
-  const assets = getTreasuryAssets(network);
+function getAssetCodeFromContractId(contractId: string, network: string): string {
+  const assets = getTreasuryAssets(network === 'public' ? 'public' : network === 'local' ? 'local' : 'testnet');
   const asset = assets.find((a) => a.contractId === contractId);
   return asset?.code || 'tokens';
 }
@@ -51,7 +50,7 @@ function isSacTransfer(
   return target !== tokenContractId && functionName === 'transfer' && args.length === 3;
 }
 
-function getActionTitle(target: string, functionName: string, args: ProposalCallArg[], tokenContractId?: string) {
+function getActionTitle(target: string, functionName: string, args: ProposalCallArg[], tokenContractId: string | undefined, network: string) {
   if (target === tokenContractId && functionName === 'mint') {
     return `Mint Governance Token to ${formatArg(args[1] ?? '')}`;
   }
@@ -63,7 +62,7 @@ function getActionTitle(target: string, functionName: string, args: ProposalCall
   if (isSacTransfer(target, functionName, args, tokenContractId)) {
     const amount = formatStroopsAmount(args[2] ?? '0');
     const recipient = formatArg(args[1] ?? '');
-    const assetCode = getAssetCodeFromContractId(target);
+    const assetCode = getAssetCodeFromContractId(target, network);
     return `Transfer ${amount} ${assetCode} to ${recipient}`;
   }
 
@@ -71,6 +70,7 @@ function getActionTitle(target: string, functionName: string, args: ProposalCall
 }
 
 export function ProposalActionPreview({ targets, functions, args, tokenContractId }: ProposalActionPreviewProps) {
+  const { daoConfig } = useDaoContext();
   const normalizedArgs = normalizeProposalCallArgs(args);
 
   return (
@@ -112,7 +112,7 @@ export function ProposalActionPreview({ targets, functions, args, tokenContractI
                       <Badge>{functionName}</Badge>
                     </div>
                     <Text style={{ margin: 0, fontWeight: 700 }}>
-                      {getActionTitle(target, functionName, actionArgs, tokenContractId)}
+                      {getActionTitle(target, functionName, actionArgs, tokenContractId, daoConfig.name)}
                     </Text>
                     <ShortId value={target} label="Target" />
                     <Text className="lede" style={{ margin: 0, fontSize: '0.84rem' }}>

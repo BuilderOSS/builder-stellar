@@ -13,10 +13,10 @@ import type { ProposalListResponse } from '@/components/proposal/types';
 import { Button, Callout, Heading, Input, Select, Text } from '@/components/ui';
 import type { GovernorSettings } from '@/lib/admin-queries';
 import { useGovernorSettings } from '@/lib/admin-queries';
-import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
 import { useVotingPower, type VotingPowerSnapshot } from '@/lib/voting-power';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 import { useDaoContext } from '@/contexts/dao-context';
+import { daoRoute } from '@/lib/dao-routes';
 
 function formatTimestamp(timestamp: number) {
   if (!timestamp) return '—';
@@ -52,12 +52,11 @@ function formatProposalCreationDisabledMessage(
 }
 
 export default function ProposalsPage() {
-  const { daoId } = useDaoContext();
+  const { daoId, daoConfig: config } = useDaoContext();
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
   const router = useRouter();
   const session = useDaoSessionStore();
-  const config = getDaoNetworkConfig(getDefaultDaoNetwork());
   const {
     data: votingPower,
     error: votingPowerError,
@@ -149,7 +148,7 @@ export default function ProposalsPage() {
                 <Button
                   type="button"
                   size="sm"
-                  onClick={() => router.push('/proposals/create')}
+                  onClick={() => router.push(daoRoute(daoId, 'proposals/create'))}
                   disabled={createDisabled}
                 >
                   {proposalEligibilityLoading ? 'Checking eligibility...' : 'Create proposal'}

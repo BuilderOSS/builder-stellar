@@ -12,7 +12,6 @@ import { PageSection } from '@/components/page-section';
 import { ProposalActionConfirmDialog } from '@/components/proposal/proposal-action-confirm-dialog';
 import { Badge, Button, Callout, Card, Heading, Input, Text, Textarea } from '@/components/ui';
 import { useGovernorSettings } from '@/lib/admin-queries';
-import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
 import { ActionFormProvider, ActionFormWrapper, ProposalActionQueue } from '@/lib/proposal-actions';
 import { buildProposalCallVectors, encodeProposalCallArgs } from '@/lib/proposal-call';
 import { proposalIdToRouteId } from '@/lib/proposal-id';
@@ -21,6 +20,8 @@ import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useVotingPower } from '@/lib/voting-power';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
+import { useDaoContext } from '@/contexts/dao-context';
+import { daoRoute } from '@/lib/dao-routes';
 import { selectCanProceedToStep2, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
 function formatProposalCreationDisabledMessage(votingPower: any, settings: any, errorMessage?: string) {
@@ -36,9 +37,10 @@ function formatProposalCreationDisabledMessage(votingPower: any, settings: any, 
 }
 
 export default function ProposalCreatePage() {
+  const { daoId } = useDaoContext();
   const router = useRouter();
   const session = useDaoSessionStore();
-  const config = getDaoNetworkConfig(getDefaultDaoNetwork());
+  const { daoConfig: config } = useDaoContext();
 
   // Zustand store hooks
   const step = useProposalComposerStore((s) => s.step);
@@ -147,7 +149,7 @@ export default function ProposalCreatePage() {
 
       // Reset store and navigate
       reset();
-      router.push(proposalId ? `/proposals/${proposalId}` : '/proposals');
+      router.push(proposalId ? daoRoute(daoId, `proposals/${proposalId}`) : daoRoute(daoId, 'proposals'));
     } catch (err: any) {
       console.error('Proposal creation error:', err);
       txFeedback.fail(err, 'Proposal failed');

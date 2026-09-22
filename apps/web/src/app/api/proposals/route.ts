@@ -1,7 +1,7 @@
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { NextResponse } from 'next/server';
 
-import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
+import { getDaoNetworkConfigById } from '@/lib/dao-config';
 import { getGoldskyProposalList } from '@/lib/goldsky';
 import { proposalIdToBuffer } from '@/lib/proposal-id';
 import { parseProposalMetadata, type ProposalMetadata } from '@/lib/proposal-metadata';
@@ -38,7 +38,9 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const limit = Math.max(1, Math.min(Number(url.searchParams.get('limit') ?? '24'), 100));
   const status = url.searchParams.get('status') ?? undefined;
-  const config = getDaoNetworkConfig(getDefaultDaoNetwork());
+  const daoId = url.searchParams.get('daoId');
+  if (!daoId) return NextResponse.json({ message: 'daoId is required' }, { status: 400 });
+  const config = await getDaoNetworkConfigById(daoId);
 
   if (!config.governorContractId) {
     return NextResponse.json(
@@ -48,7 +50,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const proposalData = await getGoldskyProposalList({ limit, status });
+    const proposalData = await getGoldskyProposalList(daoId, { limit, status });
 
     const client = new GovernorClient({
       contractId: config.governorContractId,

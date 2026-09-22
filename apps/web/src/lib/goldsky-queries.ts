@@ -96,24 +96,24 @@ export function useGoldskyActivityFeed(daoId: string, limit = 12) {
   return useSWR<GoldskyActivityResponse>(`/api/dao/${daoId}/activity-feed?limit=${limit}`, fetchJson, { keepPreviousData: true });
 }
 
-export function useGoldskyTokenInventory(daoId: string, limit = 100, offset = 0) {
-  return useSWR<GoldskyTokenResponse>(`/api/dao/${daoId}/tokens?limit=${limit}&offset=${offset}`, fetchJson, {
+export function useGoldskyTokenInventory(daoTokenAddress: string, limit = 100, offset = 0) {
+  return useSWR<GoldskyTokenResponse>(`/api/tokens?daoId=${encodeURIComponent(daoTokenAddress)}&limit=${limit}&offset=${offset}`, fetchJson, {
     keepPreviousData: true
   });
 }
 
-export function useGoldskyMemberList(daoId: string, limit = 100, offset = 0) {
-  return useSWR<GoldskyMemberResponse>(`/api/dao/${daoId}/members?limit=${limit}&offset=${offset}`, fetchJson, {
+export function useGoldskyMemberList(daoTokenAddress: string, limit = 100, offset = 0) {
+  return useSWR<GoldskyMemberResponse>(`/api/members?daoId=${encodeURIComponent(daoTokenAddress)}&limit=${limit}&offset=${offset}`, fetchJson, {
     keepPreviousData: true
   });
 }
 
-export function useGoldskyMintAuthorities(daoId: string) {
-  return useSWR<GoldskyAuthorityResponse>(`/api/dao/${daoId}/authorities/mint`, fetchJson, { keepPreviousData: true });
+export function useGoldskyMintAuthorities(daoTokenAddress: string) {
+  return useSWR<GoldskyAuthorityResponse>(`/api/authorities/mint?daoId=${encodeURIComponent(daoTokenAddress)}`, fetchJson, { keepPreviousData: true });
 }
 
-export function useGoldskyGovernorAuthorities(daoId: string) {
-  return useSWR<GoldskyAuthorityResponse>(`/api/dao/${daoId}/authorities/governor`, fetchJson, { keepPreviousData: true });
+export function useGoldskyGovernorAuthorities(daoTokenAddress: string) {
+  return useSWR<GoldskyAuthorityResponse>(`/api/authorities/governor?daoId=${encodeURIComponent(daoTokenAddress)}`, fetchJson, { keepPreviousData: true });
 }
 
 export function useGoldskyHealth(daoId: string) {

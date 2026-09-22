@@ -11,7 +11,6 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { PageSection } from '@/components/page-section';
 import { Badge, Button, Callout, Card, Heading, Input, ShortId, Text } from '@/components/ui';
 import { getTreasuryAssets } from '@/lib/assets-config';
-import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
 import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
@@ -27,15 +26,14 @@ const fetcher = async (url: string): Promise<AuctionStatus> => {
 };
 
 export default function AuctionAdminPage() {
-  const { daoId } = useDaoContext();
+  const { daoId, daoConfig: config } = useDaoContext();
   const session = useDaoSessionStore();
-  const config = getDaoNetworkConfig(getDefaultDaoNetwork());
   const tx = useTransactionFeedback(config.name);
   const [busy, setBusy] = useState(false);
   const [reservePrice, setReservePrice] = useState('');
   const [paymentToken, setPaymentToken] = useState('');
   const { data, error, mutate } = useSWR<AuctionStatus>('/api/auctions', fetcher);
-  const { data: mintAuthorities, error: mintAuthorityError } = useGoldskyMintAuthorities();
+  const { data: mintAuthorities, error: mintAuthorityError } = useGoldskyMintAuthorities(config.tokenContractId);
   const isOwner = Boolean(session.address && session.address === config.adminAddress);
   const auctionCanMint = Boolean(
     mintAuthorities?.items.some((item) => item.authority === config.auctionContractId && item.enabled)

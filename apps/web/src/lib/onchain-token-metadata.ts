@@ -48,8 +48,8 @@ export async function resolveOnchainTokenMetadata(
     metadata.get_ipfs_data()
   ]);
 
-  const settings = settingsResponse.result as Settings;
-  const attributes = attributesResponse.result as number[];
+  const settings = settingsResponse.result as unknown as Settings;
+  const attributes = attributesResponse.result as unknown as number[];
   const properties = propertiesResponse.result as Property[];
   const ipfsGroups = ipfsResponse.result as IpfsGroup[];
 

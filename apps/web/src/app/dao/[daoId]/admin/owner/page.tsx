@@ -11,14 +11,14 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { AuthorityPanel } from '@/components/admin/authority-panel';
 import { PageSection } from '@/components/page-section';
 import { Badge, Callout, Card, Heading, ShortId, Text } from '@/components/ui';
-import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
+import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { useGoldskyGovernorAuthorities, useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
 async function submitAuthorityUpdate(
-  config: ReturnType<typeof getDaoNetworkConfig>,
+  config: DaoNetworkConfig,
   sessionAddress: string,
   method: 'set_mint_authority' | 'set_governor_authority',
   authority: string,
@@ -56,9 +56,8 @@ async function submitAuthorityUpdate(
 }
 
 export default function OwnerPage() {
-  const { daoId } = useDaoContext();
+  const { daoId, daoConfig: config } = useDaoContext();
   const session = useDaoSessionStore();
-  const config = getDaoNetworkConfig(getDefaultDaoNetwork());
   const [mintAuthority, setMintAuthority] = useState('');
   const [governorAuthority, setGovernorAuthority] = useState('');
   const [formMessage, setFormMessage] = useState('');
@@ -69,13 +68,13 @@ export default function OwnerPage() {
     mutate: refreshMintAuthorities,
     error: mintAuthorityError,
     isLoading: mintAuthoritiesLoading
-  } = useGoldskyMintAuthorities();
+  } = useGoldskyMintAuthorities(config.tokenContractId);
   const {
     data: governorAuthorities,
     mutate: refreshGovernorAuthorities,
     error: governorAuthorityError,
     isLoading: governorAuthoritiesLoading
-  } = useGoldskyGovernorAuthorities();
+  } = useGoldskyGovernorAuthorities(config.tokenContractId);
   const isOwner = Boolean(session.address && session.address === config.adminAddress);
 
   if (!isOwner) {

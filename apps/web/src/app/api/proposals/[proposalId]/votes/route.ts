@@ -7,6 +7,8 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request, context: { params: Promise<{ proposalId: string }> }) {
   const { proposalId } = await context.params;
   const url = new URL(request.url);
+  const daoId = url.searchParams.get('daoId');
+  if (!daoId) return NextResponse.json({ message: 'daoId is required' }, { status: 400 });
   const limit = Number(url.searchParams.get('limit') ?? '100');
   const offset = Number(url.searchParams.get('offset') ?? '0');
   const supportValue = url.searchParams.get('support');
@@ -23,7 +25,7 @@ export async function GET(request: Request, context: { params: Promise<{ proposa
 
   try {
     return NextResponse.json(
-      await getGoldskyProposalVotes({ proposalId, limit: Math.min(limit, 1000), offset, support }),
+      await getGoldskyProposalVotes(daoId, { proposalId, limit: Math.min(limit, 1000), offset, support }),
       { headers: { 'Cache-Control': 'no-store' } }
     );
   } catch {
