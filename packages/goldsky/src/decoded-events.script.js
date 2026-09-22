@@ -84,7 +84,11 @@ function invoke(data) {
     event_id: toStringOrEmpty(data.event_id || data.id),
     deployment_id: toStringOrEmpty(data.deployment_id),
     contract_id: toStringOrEmpty(data.contract_id),
-    contract_role: String(data.contract_role === 'manager' ? 'manager' : roleForEvent(eventName)),
+    contract_role: String(
+      data.contract_role && data.contract_role !== 'unknown'
+        ? data.contract_role
+        : roleForEvent(eventName)
+    ),
     event_name: toStringOrEmpty(eventName),
     topic_0: toStringOrEmpty(topicValues[0]),
     topic_1: toStringOrEmpty(topicValues[1]),

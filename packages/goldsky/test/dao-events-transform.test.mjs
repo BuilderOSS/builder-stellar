@@ -42,6 +42,20 @@ test('manager topics preserve token address then creator order for both event na
   }
 });
 
+test('preserves the indexed contract role for lifecycle events', () => {
+  const decoded = decodeEvent({
+    event_id: 'auction-paused',
+    deployment_id: 'test',
+    contract_id: 'AUCTION',
+    contract_role: 'auction',
+    topics: JSON.stringify([{ symbol: 'paused' }]),
+    data: JSON.stringify({ map: [] })
+  });
+
+  assert.equal(decoded.contract_role, 'auction');
+  assert.equal(decoded.event_name, 'paused');
+});
+
 test('DaoFinalized uses the token address as the DAO identity topic', () => {
   const decoded = decodeEvent({
     topics: JSON.stringify([
@@ -421,6 +435,9 @@ test('pipeline generator renders the current deployment and scripts', { skip: !e
   for (const table of ['dao_tokens', 'dao_metadata', 'dao_auctions', 'dao_governors', 'dao_treasuries']) {
     assert.match(yaml, new RegExp(`${table}:`));
     assert.match(yaml, new RegExp(`dynamic_table_check\\('${table}', contract_id\\)`));
+  }
+  for (const role of ['manager', 'token', 'metadata', 'auction', 'governor', 'treasury']) {
+    assert.match(yaml, new RegExp(`'${role}'`));
   }
   assert.match(yaml, /topics LIKE '%dao_created%'/);
   assert.doesNotMatch(yaml, /topics LIKE '%dao_registered%'/);

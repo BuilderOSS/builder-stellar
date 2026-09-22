@@ -91,7 +91,15 @@ transforms:
         id AS event_id,
         'manager:CD5ARHFOXUWDVD6XG3ZFYQPQDUTDCFMWRG5GTKFTFGHDYWQJRV4G46BF' AS deployment_id,
         contract_id,
-        CASE WHEN contract_id = 'CD5ARHFOXUWDVD6XG3ZFYQPQDUTDCFMWRG5GTKFTFGHDYWQJRV4G46BF' THEN 'manager' ELSE 'unknown' END AS contract_role,
+        CASE
+          WHEN contract_id = 'CD5ARHFOXUWDVD6XG3ZFYQPQDUTDCFMWRG5GTKFTFGHDYWQJRV4G46BF' THEN 'manager'
+          WHEN dynamic_table_check('dao_tokens', contract_id) THEN 'token'
+          WHEN dynamic_table_check('dao_metadata', contract_id) THEN 'metadata'
+          WHEN dynamic_table_check('dao_auctions', contract_id) THEN 'auction'
+          WHEN dynamic_table_check('dao_governors', contract_id) THEN 'governor'
+          WHEN dynamic_table_check('dao_treasuries', contract_id) THEN 'treasury'
+          ELSE 'unknown'
+        END AS contract_role,
         type,
         topics,
         data,
@@ -318,7 +326,11 @@ transforms:
           event_id: toStringOrEmpty(data.event_id || data.id),
           deployment_id: toStringOrEmpty(data.deployment_id),
           contract_id: toStringOrEmpty(data.contract_id),
-          contract_role: String(data.contract_role === 'manager' ? 'manager' : roleForEvent(eventName)),
+          contract_role: String(
+            data.contract_role && data.contract_role !== 'unknown'
+              ? data.contract_role
+              : roleForEvent(eventName)
+          ),
           event_name: toStringOrEmpty(eventName),
           topic_0: toStringOrEmpty(topicValues[0]),
           topic_1: toStringOrEmpty(topicValues[1]),

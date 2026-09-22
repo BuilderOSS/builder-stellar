@@ -91,7 +91,15 @@ transforms:
         id AS event_id,
         '{{DEPLOYMENT_ID}}' AS deployment_id,
         contract_id,
-        CASE WHEN contract_id = '{{MANAGER_CONTRACT_ID}}' THEN 'manager' ELSE 'unknown' END AS contract_role,
+        CASE
+          WHEN contract_id = '{{MANAGER_CONTRACT_ID}}' THEN 'manager'
+          WHEN dynamic_table_check('dao_tokens', contract_id) THEN 'token'
+          WHEN dynamic_table_check('dao_metadata', contract_id) THEN 'metadata'
+          WHEN dynamic_table_check('dao_auctions', contract_id) THEN 'auction'
+          WHEN dynamic_table_check('dao_governors', contract_id) THEN 'governor'
+          WHEN dynamic_table_check('dao_treasuries', contract_id) THEN 'treasury'
+          ELSE 'unknown'
+        END AS contract_role,
         type,
         topics,
         data,
