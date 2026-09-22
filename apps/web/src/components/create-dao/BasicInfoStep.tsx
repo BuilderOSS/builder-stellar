@@ -5,7 +5,7 @@
 import { Stack } from 'styled-system/jsx';
 
 import { Card, Heading, Input, Text, Textarea } from '@/components/ui';
-import { isValidHttpUrl, isValidTokenSymbol, isValidUrl } from '@/lib/validation';
+import { isValidTokenSymbol } from '@/lib/validation';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
 export function BasicInfoStep() {
@@ -46,42 +46,6 @@ export function BasicInfoStep() {
       setValidationError('description', 'Description must be 500 characters or less');
     } else {
       clearValidationError('description');
-    }
-  };
-
-  const handleProjectUriChange = (value: string) => {
-    updateBasicInfo({ projectUri: value });
-    if (value && !isValidHttpUrl(value)) {
-      setValidationError('projectUri', 'Project URI must be a valid HTTP/HTTPS URL');
-    } else {
-      clearValidationError('projectUri');
-    }
-  };
-
-  const handleTokenUriChange = (value: string) => {
-    updateBasicInfo({ tokenUri: value });
-    if (value && !isValidUrl(value)) {
-      setValidationError('tokenUri', 'Token URI must be a valid HTTP/HTTPS or IPFS URL');
-    } else {
-      clearValidationError('tokenUri');
-    }
-  };
-
-  const handleContractImageChange = (value: string) => {
-    updateBasicInfo({ contractImage: value });
-    if (value && !isValidUrl(value)) {
-      setValidationError('contractImage', 'Contract image must be a valid HTTP/HTTPS or IPFS URL');
-    } else {
-      clearValidationError('contractImage');
-    }
-  };
-
-  const handleRendererBaseChange = (value: string) => {
-    updateBasicInfo({ rendererBase: value });
-    if (value && !isValidHttpUrl(value)) {
-      setValidationError('rendererBase', 'Renderer base must be a valid HTTP/HTTPS URL');
-    } else {
-      clearValidationError('rendererBase');
     }
   };
 
@@ -149,87 +113,6 @@ export function BasicInfoStep() {
         </Stack>
       </Card>
 
-      <Card p="5">
-        <Stack gap="4">
-          <Heading as="h2" style={{ fontSize: '1.25rem' }}>
-            URLs & Metadata
-          </Heading>
-
-          <Stack gap="2">
-            <label htmlFor="projectUri">
-              <Text style={{ fontWeight: 600 }}>Project Website</Text>
-            </label>
-            <Input
-              id="projectUri"
-              value={basicInfo.projectUri}
-              onChange={(e) => handleProjectUriChange(e.target.value)}
-              placeholder="https://example.com"
-              type="url"
-            />
-            {validationErrors.projectUri && (
-              <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>{validationErrors.projectUri}</Text>
-            )}
-            <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-              Your DAO&apos;s main website or documentation
-            </Text>
-          </Stack>
-
-          <Stack gap="2">
-            <label htmlFor="tokenUri">
-              <Text style={{ fontWeight: 600 }}>Token Metadata URI</Text>
-            </label>
-            <Input
-              id="tokenUri"
-              value={basicInfo.tokenUri}
-              onChange={(e) => handleTokenUriChange(e.target.value)}
-              placeholder="https://example.com/api/dao/{daoId}/token/"
-              type="url"
-            />
-            {validationErrors.tokenUri && (
-              <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>{validationErrors.tokenUri}</Text>
-            )}
-            <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-              API endpoint for token metadata. Use {'{daoId}'} as a placeholder.
-            </Text>
-          </Stack>
-
-          <Stack gap="2">
-            <label htmlFor="contractImage">
-              <Text style={{ fontWeight: 600 }}>DAO Logo Image</Text>
-            </label>
-            <Input
-              id="contractImage"
-              value={basicInfo.contractImage}
-              onChange={(e) => handleContractImageChange(e.target.value)}
-              placeholder="https://example.com/logo.png"
-              type="url"
-            />
-            {validationErrors.contractImage && (
-              <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>{validationErrors.contractImage}</Text>
-            )}
-            <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>URL to your DAO&apos;s logo image</Text>
-          </Stack>
-
-          <Stack gap="2">
-            <label htmlFor="rendererBase">
-              <Text style={{ fontWeight: 600 }}>Renderer Base URL</Text>
-            </label>
-            <Input
-              id="rendererBase"
-              value={basicInfo.rendererBase}
-              onChange={(e) => handleRendererBaseChange(e.target.value)}
-              placeholder="https://example.com/api/render/"
-              type="url"
-            />
-            {validationErrors.rendererBase && (
-              <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>{validationErrors.rendererBase}</Text>
-            )}
-            <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-              Base URL for NFT rendering service (optional)
-            </Text>
-          </Stack>
-        </Stack>
-      </Card>
     </Stack>
   );
 }

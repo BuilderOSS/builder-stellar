@@ -131,11 +131,11 @@ const initialState: CreateDaoState = {
   basicInfo: {
     tokenName: '',
     tokenSymbol: '',
-    tokenUri: '',
-    projectUri: '',
+    tokenUri: 'https://builder-stellar-web.vercel.app/api/dao/{daoId}/token/',
+    projectUri: 'https://test-dao-stellar-web.vercel.app',
     description: '',
-    contractImage: '',
-    rendererBase: ''
+    contractImage: 'https://builder-stellar-web.vercel.app/images/dao-logo.png',
+    rendererBase: 'https://builder-stellar-web.vercel.app/api/render/'
   },
   artwork: {
     ipfs: {
@@ -340,7 +340,51 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
         governance: state.governance,
         founders: state.founders,
         launchAdmin: state.launchAdmin
-      })
+      }),
+      merge: (persistedState, currentState) => {
+        const merged = { ...currentState, ...persistedState } as CreateDaoStore;
+
+        // If persisted artwork has no properties, use the default ones
+        if (merged.artwork?.properties?.length === 0) {
+          merged.artwork = initialState.artwork;
+        }
+
+        // If persisted artwork has no IPFS base URI, use the default one
+        if (!merged.artwork?.ipfs?.baseUri) {
+          merged.artwork = {
+            ...merged.artwork,
+            ipfs: initialState.artwork.ipfs
+          };
+        }
+
+        // Restore default URLs if they're missing
+        if (!merged.basicInfo?.tokenUri) {
+          merged.basicInfo = {
+            ...merged.basicInfo,
+            tokenUri: initialState.basicInfo.tokenUri
+          };
+        }
+        if (!merged.basicInfo?.projectUri) {
+          merged.basicInfo = {
+            ...merged.basicInfo,
+            projectUri: initialState.basicInfo.projectUri
+          };
+        }
+        if (!merged.basicInfo?.contractImage) {
+          merged.basicInfo = {
+            ...merged.basicInfo,
+            contractImage: initialState.basicInfo.contractImage
+          };
+        }
+        if (!merged.basicInfo?.rendererBase) {
+          merged.basicInfo = {
+            ...merged.basicInfo,
+            rendererBase: initialState.basicInfo.rendererBase
+          };
+        }
+
+        return merged;
+      }
     }
   )
 );
