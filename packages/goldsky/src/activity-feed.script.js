@@ -3,22 +3,23 @@ function invoke(data) {
     if (!data) return null;
 
     // Normalize all incoming fields to ensure consistent types across all rows
-    if (data.topics === null || data.topics === undefined) {
+    // This is critical for Arrow table serialization - all rows must have identical types
+    if (!data.topics || data.topics === null || data.topics === undefined || typeof data.topics !== 'string') {
       data.topics = '{}';
     }
-    if (data.args === null || data.args === undefined) {
+    if (!data.args || data.args === null || data.args === undefined || typeof data.args !== 'string') {
       data.args = '{}';
     }
-    if (data.ledger_sequence === null || data.ledger_sequence === undefined) {
+    if (data.ledger_sequence === null || data.ledger_sequence === undefined || typeof data.ledger_sequence !== 'number') {
       data.ledger_sequence = 0;
     }
-    if (data.transaction_index === null || data.transaction_index === undefined) {
+    if (data.transaction_index === null || data.transaction_index === undefined || typeof data.transaction_index !== 'number') {
       data.transaction_index = 0;
     }
-    if (data.operation_index === null || data.operation_index === undefined) {
+    if (data.operation_index === null || data.operation_index === undefined || typeof data.operation_index !== 'number') {
       data.operation_index = 0;
     }
-    if (data.event_index === null || data.event_index === undefined) {
+    if (data.event_index === null || data.event_index === undefined || typeof data.event_index !== 'number') {
       data.event_index = 0;
     }
 
@@ -304,29 +305,42 @@ function invoke(data) {
   // Strictly type all fields to ensure no mixed types in Arrow table
   var visibility = userFacing[normalizedEventName] ? (normalizedEventName.indexOf('Proposal') === 0 || normalizedEventName === 'VoteCast' ? 'governance' : 'public') : (kindMap[normalizedEventName] ? 'admin' : 'system');
 
+  // Helper to safely convert to number
+  function toNumber(val) {
+    if (typeof val === 'number') return isFinite(val) ? val : 0;
+    var n = Number(val);
+    return isFinite(n) ? n : 0;
+  }
+
+  // Helper to safely convert to string
+  function toString(val) {
+    if (val === null || val === undefined || val === '') return '';
+    return String(val);
+  }
+
   return {
-    activity_id: String(data.event_id || data.id || ''),
-    deployment_id: String(data.deployment_id || ''),
-    contract_id: String(data.contract_id || ''),
-    contract_role: String(data.contract_role || ''),
-    kind: String(kindMap[normalizedEventName] || ('contract.' + String(eventName).toLowerCase())),
-    title: String(titleMap[normalizedEventName] || normalizedEventName),
-    summary: String(summary || ''),
-    event_name: String(eventName || ''),
-    topics: String(topicsValue || '{}'),
-    args: String(argsValue || '{}'),
-    visibility: String(visibility || 'system'),
-    proposal_id: String(proposalId || ''),
-    token_id: String(tokenId || ''),
-    amount: String(amount || ''),
-    actor: String(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator']) || ''),
-    addresses: String(JSON.stringify(addresses || []) || '[]'),
-    ledger_sequence: Number(data.ledger_sequence) || 0,
-    transaction_index: Number(data.transaction_index) || 0,
-    operation_index: Number(data.operation_index) || 0,
-    event_index: Number(data.event_index) || 0,
-    ledger_closed_at: String(data.ledger_closed_at || ''),
-    transaction_hash: String(data.transaction_hash || '')
+    activity_id: toString(data.event_id || data.id),
+    deployment_id: toString(data.deployment_id),
+    contract_id: toString(data.contract_id),
+    contract_role: toString(data.contract_role),
+    kind: toString(kindMap[normalizedEventName] || ('contract.' + String(eventName).toLowerCase())),
+    title: toString(titleMap[normalizedEventName] || normalizedEventName),
+    summary: toString(summary),
+    event_name: toString(eventName),
+    topics: toString(topicsValue),
+    args: toString(argsValue),
+    visibility: toString(visibility),
+    proposal_id: toString(proposalId),
+    token_id: toString(tokenId),
+    amount: toString(amount),
+    actor: toString(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator'])),
+    addresses: toString(JSON.stringify(addresses || [])),
+    ledger_sequence: toNumber(data.ledger_sequence),
+    transaction_index: toNumber(data.transaction_index),
+    operation_index: toNumber(data.operation_index),
+    event_index: toNumber(data.event_index),
+    ledger_closed_at: toString(data.ledger_closed_at),
+    transaction_hash: toString(data.transaction_hash)
   };
   } catch (e) {
     console.error('Activity feed transform error:', e.message, 'event_id:', data?.event_id);
