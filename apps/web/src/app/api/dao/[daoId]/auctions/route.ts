@@ -16,24 +16,46 @@ export async function GET(_request: Request, { params }: { params: Promise<{ dao
   try {
     const { daoId } = await params;
     const config = await getDaoNetworkConfigById(daoId);
+    if (!config.auctionContractId || config.auctionEnabled === false) {
+      return NextResponse.json({ message: 'Auctions are disabled for this DAO.' }, { status: 404 });
+    }
+
     const client = new AuctionClient({
       contractId: config.auctionContractId,
       rpcUrl: config.rpcUrl,
       networkPassphrase: config.passphrase,
       publicKey: config.adminAddress
     });
-    const [auctionTx, configTx, pausedTx, history] = await Promise.all([
-      client.get_auction(),
+    const [configTx, pausedTx, history] = await Promise.all([
       client.get_config(),
       client.paused(),
       getGoldskyAuctionHistory(daoId)
     ]);
-    const auction = jsonValue(auctionTx.result) as { token_id: string };
+    const auctionTx = await client.get_auction();
+    const auction = jsonValue(auctionTx.result) as { token_id?: string } | null;
+    const paused = Boolean(pausedTx.result);
     if (!auction || typeof auction.token_id === 'undefined') {
-      throw new Error('Auction contract has no current auction state. Confirm the auction has been launched.');
+      return NextResponse.json({
+        status: paused && history.length > 0 ? 'paused' : 'not-launched',
+        auction: null,
+        auctionEnabled: true,
+        paused,
+        config: jsonValue(configTx.result),
+        history
+      });
     }
     const bids = await getGoldskyAuctionBids(daoId, auction.token_id);
-    return NextResponse.json(jsonValue({ auction, config: configTx.result, paused: pausedTx.result, bids, history }));
+    return NextResponse.json(
+      jsonValue({
+        status: paused ? 'paused' : 'active',
+        auction,
+        auctionEnabled: true,
+        config: configTx.result,
+        paused,
+        bids,
+        history
+      })
+    );
   } catch (error) {
     return NextResponse.json(
       { message: error instanceof Error ? error.message : 'Auction unavailable' },

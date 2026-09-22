@@ -112,7 +112,6 @@ export function BasicInfoStep() {
           </Stack>
         </Stack>
       </Card>
-
     </Stack>
   );
 }

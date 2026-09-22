@@ -2,8 +2,9 @@
 
 import type { ArtworkItem, DaoCreationParams } from '@builder-stellar/manager-bindings';
 
-import { getTreasuryAssets } from './assets-config';
 import type { ArtworkProperty } from '@/stores/create-dao-store';
+
+import { getTreasuryAssets } from './assets-config';
 
 /**
  * Form data structure matching the create DAO store

@@ -308,8 +308,30 @@ export async function getGoldskyProposalVotes(
   const deploymentId = getDeploymentId();
   const dao_id = await getDaoIdFromUrl(daoId);
 
+  const proposalResult = await pool.query(
+    `SELECT proposal_id
+     FROM app.proposal_detail
+     WHERE deployment_id = $1 AND dao_id = $2
+       AND (proposal_id = $3 OR proposal_number::text = $3)
+     LIMIT 1`,
+    [deploymentId, dao_id, proposalId]
+  );
+  const resolvedProposalId = proposalResult.rows[0]?.proposal_id;
+
+  if (!resolvedProposalId) {
+    return {
+      items: [],
+      total: 0,
+      tally: { for: '0', against: '0', abstain: '0' },
+      limit,
+      offset,
+      hasMore: false,
+      generatedAt: new Date().toISOString()
+    };
+  }
+
   const conditions = ['deployment_id = $1', 'dao_id = $2', 'proposal_id = $3'];
-  const values: any[] = [deploymentId, dao_id, proposalId];
+  const values: any[] = [deploymentId, dao_id, resolvedProposalId];
   let paramIndex = 4;
 
   if (support !== undefined) {
@@ -319,16 +341,19 @@ export async function getGoldskyProposalVotes(
 
   const query = `
     SELECT
+      vote_event_id AS id,
+      proposal_id AS "proposalId",
+      contract_id AS "contractId",
       voter,
       support,
       weight,
       reason,
-      event_at AS timestamp,
-      transaction_hash,
-      event_ledger AS ledger_sequence
+      extract(epoch FROM event_at)::bigint AS timestamp,
+      transaction_hash AS "txHash",
+      event_ledger AS ledger
     FROM governance.proposal_votes
     WHERE ${conditions.join(' AND ')}
-    ORDER BY ledger_sequence DESC
+    ORDER BY ledger DESC
     LIMIT $${paramIndex++} OFFSET $${paramIndex++}
   `;
 
@@ -353,7 +378,7 @@ export async function getGoldskyProposalVotes(
     GROUP BY support
   `;
 
-  const tallyResult = await pool.query(tallyQuery, [deploymentId, dao_id, proposalId]);
+  const tallyResult = await pool.query(tallyQuery, [deploymentId, dao_id, resolvedProposalId]);
 
   const tally = {
     for: '0',
