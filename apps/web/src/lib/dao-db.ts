@@ -79,7 +79,7 @@ function getDeploymentNetwork(): NetworkName {
   // Validate it's a real network
   try {
     getNetworkConfig(network);
-  } catch (e) {
+  } catch {
     throw new Error(`Invalid NEXT_PUBLIC_NETWORK: ${network}. Must be one of: testnet, public, local`);
   }
 

@@ -22,6 +22,18 @@ function joinUrl(base: string, property: string, item: string, extension: string
   return `${base.replace(/\/$/, '')}/${property}/${item}${extension}`;
 }
 
+function unwrapResult<T>(result: unknown, label: string): T {
+  if (result && typeof result === 'object') {
+    if ('value' in result) return (result as { value: T }).value;
+    if ('error' in result) {
+      const message = (result as { error?: { message?: string } }).error?.message;
+      throw new Error(`${label}${message ? `: ${message}` : ''}`);
+    }
+  }
+
+  return result as T;
+}
+
 export async function resolveOnchainTokenMetadata(
   config: DaoNetworkConfig,
   tokenId: number,
@@ -48,8 +60,8 @@ export async function resolveOnchainTokenMetadata(
     metadata.get_ipfs_data()
   ]);
 
-  const settings = settingsResponse.result as unknown as Settings;
-  const attributes = attributesResponse.result as unknown as number[];
+  const settings = unwrapResult<Settings>(settingsResponse.result, 'Unable to read metadata settings');
+  const attributes = unwrapResult<number[]>(attributesResponse.result, `Unable to read attributes for token ${tokenId}`);
   const properties = propertiesResponse.result as Property[];
   const ipfsGroups = ipfsResponse.result as IpfsGroup[];
 

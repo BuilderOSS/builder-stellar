@@ -79,7 +79,14 @@ export async function getGoldskyAuctionBids(daoId: string, tokenId: string, limi
   const dao_id = getDaoIdFromUrl(daoId);
   const result = await pool.query(
     `
-    SELECT event_id, bidder, amount, payment_type, ledger_sequence, timestamp, transaction_hash
+     SELECT
+       event_id,
+       bidder,
+       amount,
+       NULL::text AS payment_type,
+       event_ledger AS ledger_sequence,
+       event_at AS timestamp,
+       transaction_hash
     FROM auction.bids
     WHERE deployment_id = $1 AND dao_id = $2 AND token_id = $3
     ORDER BY ledger_sequence DESC, event_id DESC
@@ -200,17 +207,17 @@ export async function getGoldskyProposalList(
       proposer,
       description,
       snapshot_ledger,
-      vote_start_timestamp,
-      deadline_ledger,
-      eta,
+       vote_start_seconds AS vote_start_timestamp,
+       vote_end_seconds AS deadline_ledger,
+       eta_seconds AS eta,
       state,
       for_votes,
       against_votes,
       abstain_votes,
-      created_timestamp,
+       extract(epoch FROM created_at)::bigint AS created_timestamp,
       created_ledger,
       updated_ledger,
-      updated_timestamp
+       extract(epoch FROM updated_at)::bigint AS updated_timestamp
     FROM app.proposal_list
     ${whereClause}
     ORDER BY proposal_number DESC
@@ -252,17 +259,21 @@ export async function getGoldskyProposalDetail(daoId: string, proposalId: string
        proposer,
        description,
        snapshot_ledger,
-       vote_start_timestamp,
-       deadline_ledger,
-       eta,
+       vote_start_seconds AS vote_start_timestamp,
+       vote_end_seconds AS deadline_ledger,
+       eta_seconds AS eta,
        state,
-       vote_summary,
+        jsonb_build_object(
+          'for', for_votes,
+          'against', against_votes,
+          'abstain', abstain_votes
+        ) AS vote_summary,
        votes,
        actions,
-       created_timestamp,
+       extract(epoch FROM created_at)::bigint AS created_timestamp,
        created_ledger,
        updated_ledger,
-       updated_timestamp
+       extract(epoch FROM updated_at)::bigint AS updated_timestamp
     FROM app.proposal_detail
     WHERE deployment_id = $1 AND dao_id = $2 AND (proposal_id = $3 OR proposal_number::text = $3)
   `;
@@ -312,9 +323,9 @@ export async function getGoldskyProposalVotes(
       support,
       weight,
       reason,
-      timestamp,
+      event_at AS timestamp,
       transaction_hash,
-      ledger_sequence
+      event_ledger AS ledger_sequence
     FROM governance.proposal_votes
     WHERE ${conditions.join(' AND ')}
     ORDER BY ledger_sequence DESC
@@ -387,8 +398,8 @@ export async function getGoldskyTokenInventory(
     SELECT
       token_id,
       owner,
-      ledger_sequence,
-      timestamp,
+       event_ledger AS ledger_sequence,
+       event_at AS timestamp,
       transaction_hash
     FROM token.inventory
     WHERE deployment_id = $1 AND dao_id = $2
@@ -474,7 +485,7 @@ export async function getGoldskyMintAuthorities(daoId: string) {
     SELECT
       authority,
       enabled,
-      ledger_sequence AS last_updated_ledger
+       event_ledger AS last_updated_ledger
     FROM token.mint_authorities
     WHERE deployment_id = $1 AND dao_id = $2 AND enabled = true
     ORDER BY authority
@@ -501,7 +512,7 @@ export async function getGoldskyGovernorAuthorities(daoId: string) {
     SELECT
       authority,
       enabled,
-      ledger_sequence AS last_updated_ledger
+       event_ledger AS last_updated_ledger
     FROM governance.governor_authorities
     WHERE deployment_id = $1 AND dao_id = $2 AND enabled = true
     ORDER BY authority

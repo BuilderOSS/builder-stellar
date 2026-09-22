@@ -13,10 +13,7 @@ function shorten(value: string) {
   return `${value.slice(0, 6)}…${value.slice(-6)}`;
 }
 
-function getExplorerUrl(value: string) {
-  const { daoConfig } = useDaoContext();
-  const network = daoConfig.name;
-
+function getExplorerUrl(value: string, network: Parameters<typeof getExplorerContractUrl>[0]) {
   if (value.startsWith('C')) {
     return getExplorerContractUrl(network, value);
   }
@@ -29,9 +26,10 @@ function getExplorerUrl(value: string) {
 }
 
 export function ShortId({ value, label, explorerUrl }: { value: string; label?: string; explorerUrl?: string }) {
+  const { daoConfig } = useDaoContext();
   const [copied, setCopied] = useState(false);
   const displayValue = shorten(value);
-  const resolvedExplorerUrl = explorerUrl ?? getExplorerUrl(value);
+  const resolvedExplorerUrl = explorerUrl ?? getExplorerUrl(value, daoConfig.name);
 
   async function copyValue() {
     try {
