@@ -1,7 +1,8 @@
 import type { Route } from 'next';
 
 export function daoRoute(daoId: string, path = ''): Route {
-  return `/dao/${encodeURIComponent(daoId)}${path}` as Route;
+  const normalizedPath = path ? `/${path.replace(/^\/+/, '')}` : '';
+  return `/dao/${encodeURIComponent(daoId)}${normalizedPath}` as Route;
 }
 
 export function daoAdminRoute(daoId: string, section = ''): Route {
