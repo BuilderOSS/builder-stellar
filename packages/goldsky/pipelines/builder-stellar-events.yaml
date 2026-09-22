@@ -140,7 +140,6 @@ transforms:
       topic_3: string
       topics: string
       args: string
-      payload: string
       transaction_hash: string
       transaction_successful: boolean
       ledger_sequence: int64
@@ -647,16 +646,7 @@ transforms:
         }
       }
 
-sinks:
-  raw_events_output:
-    type: postgres
-    from: raw_events
-    schema: chain
-    table: raw_events
-    secret_name: STELLAR_BUILDER_POSTGRES
-    primary_key: event_id
-
-  decoded_events_sql:
+  decoded_events_with_jsonb:
     type: sql
     from: decoded_events
     sql: |
@@ -672,7 +662,6 @@ sinks:
         topic_3,
         topics::jsonb as topics,
         args::jsonb as args,
-        payload::jsonb as payload,
         transaction_hash,
         transaction_successful,
         ledger_sequence,
@@ -686,7 +675,7 @@ sinks:
         decoder_version
       FROM decoded_events
 
-  activity_feed_sql:
+  activity_feed_with_jsonb:
     type: sql
     from: activity_feed
     sql: |
@@ -715,9 +704,18 @@ sinks:
         transaction_hash
       FROM activity_feed
 
+sinks:
+  raw_events_output:
+    type: postgres
+    from: raw_events
+    schema: chain
+    table: raw_events
+    secret_name: STELLAR_BUILDER_POSTGRES
+    primary_key: event_id
+
   decoded_events_output:
     type: postgres
-    from: decoded_events_sql
+    from: decoded_events_with_jsonb
     schema: chain
     table: decoded_events
     secret_name: STELLAR_BUILDER_POSTGRES
@@ -725,7 +723,7 @@ sinks:
 
   activity_feed_output:
     type: postgres
-    from: activity_feed_sql
+    from: activity_feed_with_jsonb
     schema: app
     table: activity_feed_events
     secret_name: STELLAR_BUILDER_POSTGRES
