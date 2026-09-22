@@ -4,20 +4,20 @@
 
 
 -- SCHEMAS
-CREATE SCHEMA chain;
-CREATE SCHEMA governance;
-CREATE SCHEMA token;
-CREATE SCHEMA auction;
-CREATE SCHEMA treasury;
-CREATE SCHEMA manager;
-CREATE SCHEMA metadata;
-CREATE SCHEMA app;
+CREATE SCHEMA IF NOT EXISTS chain;
+CREATE SCHEMA IF NOT EXISTS governance;
+CREATE SCHEMA IF NOT EXISTS token;
+CREATE SCHEMA IF NOT EXISTS auction;
+CREATE SCHEMA IF NOT EXISTS treasury;
+CREATE SCHEMA IF NOT EXISTS manager;
+CREATE SCHEMA IF NOT EXISTS metadata;
+CREATE SCHEMA IF NOT EXISTS app;
 
 -- =============================================================================
 -- BASE TABLES
 -- =============================================================================
 
-CREATE TABLE chain.raw_events (
+CREATE TABLE IF NOT EXISTS chain.raw_events (
   event_id text PRIMARY KEY,
   deployment_id text NOT NULL,
   contract_id text NOT NULL,
@@ -37,10 +37,10 @@ CREATE TABLE chain.raw_events (
   ingested_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_raw_events_deployment_contract ON chain.raw_events (deployment_id, contract_id, ledger_sequence DESC, event_id DESC);
-CREATE INDEX idx_raw_events_deployment_role ON chain.raw_events (deployment_id, contract_role, ledger_sequence DESC, event_id DESC);
+CREATE INDEX IF NOT EXISTS idx_raw_events_deployment_contract ON chain.raw_events (deployment_id, contract_id, ledger_sequence DESC, event_id DESC);
+CREATE INDEX IF NOT EXISTS idx_raw_events_deployment_role ON chain.raw_events (deployment_id, contract_role, ledger_sequence DESC, event_id DESC);
 
-CREATE TABLE chain.decoded_events (
+CREATE TABLE IF NOT EXISTS chain.decoded_events (
   event_id text PRIMARY KEY,
   deployment_id text NOT NULL,
   contract_id text NOT NULL,
@@ -66,16 +66,43 @@ CREATE TABLE chain.decoded_events (
   ingested_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_decoded_events_deployment_event ON chain.decoded_events (deployment_id, event_name, ledger_sequence DESC, event_id DESC);
-CREATE INDEX idx_decoded_events_deployment_contract ON chain.decoded_events (deployment_id, contract_id, ledger_sequence DESC, event_id DESC);
-CREATE INDEX idx_decoded_events_topic_0 ON chain.decoded_events (deployment_id, event_name, topic_0, ledger_sequence DESC);
-CREATE INDEX idx_decoded_events_manager_events ON chain.decoded_events (deployment_id, event_name, ledger_sequence DESC) WHERE LOWER(event_name) IN ('dao_created', 'daocreated', 'dao_registered', 'daoregistered');
+CREATE INDEX IF NOT EXISTS idx_decoded_events_deployment_event ON chain.decoded_events (deployment_id, event_name, ledger_sequence DESC, event_id DESC);
+CREATE INDEX IF NOT EXISTS idx_decoded_events_deployment_contract ON chain.decoded_events (deployment_id, contract_id, ledger_sequence DESC, event_id DESC);
+CREATE INDEX IF NOT EXISTS idx_decoded_events_topic_0 ON chain.decoded_events (deployment_id, event_name, topic_0, ledger_sequence DESC);
+CREATE INDEX IF NOT EXISTS idx_decoded_events_manager_events ON chain.decoded_events (deployment_id, event_name, ledger_sequence DESC) WHERE LOWER(event_name) IN ('dao_created', 'daocreated', 'dao_registered', 'daoregistered');
 
 CREATE OR REPLACE FUNCTION chain.reject_event_mutation() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN IF TG_OP = 'UPDATE' AND NEW IS NOT DISTINCT FROM OLD THEN RETURN NEW; END IF; RAISE EXCEPTION '% rows are immutable', TG_TABLE_NAME; END;$$;
-CREATE TRIGGER raw_events_immutable BEFORE UPDATE OR DELETE ON chain.raw_events FOR EACH ROW EXECUTE FUNCTION chain.reject_event_mutation();
-CREATE TRIGGER decoded_events_immutable BEFORE UPDATE OR DELETE ON chain.decoded_events FOR EACH ROW EXECUTE FUNCTION chain.reject_event_mutation();
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_trigger
+    WHERE tgname = 'raw_events_immutable'
+      AND tgrelid = 'chain.raw_events'::regclass
+  ) THEN
+    CREATE TRIGGER raw_events_immutable
+      BEFORE UPDATE OR DELETE ON chain.raw_events
+      FOR EACH ROW EXECUTE FUNCTION chain.reject_event_mutation();
+  END IF;
+END;
+$$;
 
-CREATE TABLE app.activity_feed_events (
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_trigger
+    WHERE tgname = 'decoded_events_immutable'
+      AND tgrelid = 'chain.decoded_events'::regclass
+  ) THEN
+    CREATE TRIGGER decoded_events_immutable
+      BEFORE UPDATE OR DELETE ON chain.decoded_events
+      FOR EACH ROW EXECUTE FUNCTION chain.reject_event_mutation();
+  END IF;
+END;
+$$;
+
+CREATE TABLE IF NOT EXISTS app.activity_feed_events (
   activity_id text PRIMARY KEY,
   deployment_id text NOT NULL,
   contract_id text NOT NULL,
@@ -101,5 +128,4 @@ CREATE TABLE app.activity_feed_events (
   ingested_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_activity_feed_order ON app.activity_feed_events (deployment_id, ledger_sequence DESC, transaction_index DESC, operation_index DESC, event_index DESC, activity_id DESC);
-
+CREATE INDEX IF NOT EXISTS idx_activity_feed_order ON app.activity_feed_events (deployment_id, ledger_sequence DESC, transaction_index DESC, operation_index DESC, event_index DESC, activity_id DESC);

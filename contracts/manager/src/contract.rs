@@ -412,7 +412,7 @@ impl ManagerContract {
     /// 2. Checks factory not paused and nonce not used
     /// 3. Deploys all 5 contracts (Token, Metadata, Auction, Governor, Treasury)
     /// 4. Initializes them with proper cross-references
-    /// 5. Sets up founder allocations and mint authority
+    /// 5. Sets up launch configuration and module relationships
     /// 6. Registers the DAO in the registry
     ///
     /// # Arguments
@@ -518,8 +518,8 @@ impl ManagerContract {
         );
 
         // Step 2: Deploy and initialize Token. The manager owns the token during
-        // creation so it can distribute founder allocations before handing
-        // ownership to the treasury.
+        // creation so it can hand ownership to the launch administrator before
+        // the launch configuration is completed.
         token_deployer.deploy_v2(
             token_wasm.clone(),
             (
@@ -617,27 +617,6 @@ impl ManagerContract {
             ],
         );
 
-        // Mint founder allocations while the deployer still owns the token.
-        // Batch minting keeps creation bounded while supporting allocations
-        // larger than the token contract's per-call limit.
-        for founder in params.founders.iter() {
-            let mut remaining = founder.amount;
-            while remaining > 0 {
-                let batch = if remaining > 100 { 100 } else { remaining };
-                let _: u32 = env.invoke_contract(
-                    &token_addr,
-                    &Symbol::new(&env, "batch_mint"),
-                    vec![
-                        &env,
-                        env.current_contract_address().into_val(&env),
-                        founder.address.clone().into_val(&env),
-                        batch.into_val(&env),
-                    ],
-                );
-                remaining -= batch;
-            }
-        }
-
         // The manager owns the token during creation. Leave a pending transfer
         // for launch_admin to accept after metadata properties are configured.
         let _: () = env.invoke_contract(
@@ -647,18 +626,6 @@ impl ManagerContract {
                 &env,
                 params.launch_admin.clone().into_val(&env),
                 (env.ledger().sequence() + 100_000).into_val(&env),
-            ],
-        );
-
-        // Step 7: Set auction as mint authority on token
-        // Using invoke_contract directly
-        let _: () = env.invoke_contract(
-            &token_addr,
-            &Symbol::new(&env, "set_mint_authority"),
-            vec![
-                &env,
-                auction_addr.clone().into_val(&env),
-                true.into_val(&env),
             ],
         );
 
@@ -737,8 +704,13 @@ impl ManagerContract {
 
     /// Closes the launch-admin setup window and hands module ownership to the
     /// Treasury. All configuration remains editable by launch_admin until this
-    /// one-way transition is executed.
-    pub fn finalize_dao(env: Env, token_address: Address) -> Result<(), ManagerError> {
+    /// one-way transition is executed. When `launch_auction` is false, the
+    /// Auction module remains paused and does not receive mint authority.
+    pub fn finalize_dao(
+        env: Env,
+        token_address: Address,
+        launch_auction: bool,
+    ) -> Result<(), ManagerError> {
         let mut creation: DaoCreation = env
             .storage()
             .instance()
@@ -750,6 +722,21 @@ impl ManagerContract {
         }
 
         let treasury = creation.addresses.treasury.clone();
+
+        // The Treasury is the durable authority for governance-controlled mints.
+        // Auction authority is granted only for auction-enabled DAOs.
+        let _: () = env.invoke_contract(
+            &creation.addresses.token,
+            &Symbol::new(&env, "enable_mint_authority_by_manager"),
+            vec![&env, creation.addresses.treasury.clone().into_val(&env)],
+        );
+        if launch_auction {
+            let _: () = env.invoke_contract(
+                &creation.addresses.token,
+                &Symbol::new(&env, "enable_mint_authority_by_manager"),
+                vec![&env, creation.addresses.auction.clone().into_val(&env)],
+            );
+        }
         for (module, method) in [
             (creation.addresses.token.clone(), "finalize_ownership"),
             (creation.addresses.governor.clone(), "finalize_ownership"),
@@ -764,7 +751,7 @@ impl ManagerContract {
         let _: () = env.invoke_contract(
             &creation.addresses.auction,
             &Symbol::new(&env, "finalize_ownership"),
-            vec![&env, treasury.into_val(&env)],
+            vec![&env, treasury.into_val(&env), launch_auction.into_val(&env)],
         );
         creation.status = DaoStatus::Operational;
         env.storage()
@@ -777,7 +764,13 @@ impl ManagerContract {
             governor: creation.addresses.governor.clone(),
             treasury: creation.addresses.treasury.clone(),
         };
-        emit_dao_finalized(&env, &token_address, env.ledger().sequence(), &modules);
+        emit_dao_finalized(
+            &env,
+            &token_address,
+            env.ledger().sequence(),
+            &modules,
+            launch_auction,
+        );
         Ok(())
     }
 

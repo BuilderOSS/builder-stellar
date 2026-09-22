@@ -171,10 +171,21 @@ textarea {
 }
 
 .primary-nav,
+.secondary-nav,
 .mobile-nav {
   display: flex;
   align-items: center;
   gap: 3px;
+}
+.nav-groups {
+  display: grid;
+  min-width: 0;
+  justify-items: center;
+  gap: 4px;
+}
+.secondary-nav {
+  padding-top: 4px;
+  border-top: 1px solid var(--border-default);
 }
 
 .nav-link {
@@ -272,42 +283,68 @@ textarea {
   border-color: var(--border-strong);
   background: var(--surface-3);
 }
-.wallet-menu__disconnect {
+.wallet-menu__panel {
   position: absolute;
   z-index: 70;
   top: calc(100% + 6px);
   right: 0;
-  display: inline-flex;
-  min-width: 126px;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 9px 10px;
+  display: grid;
+  width: max-content;
+  min-width: 210px;
+  gap: 4px;
+  padding: 8px;
   border: 1px solid var(--border-strong);
-  border-radius: 9px;
+  border-radius: 10px;
   background: var(--surface-2);
-  color: var(--text-primary);
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.82rem;
-  font-weight: 700;
-  gap: 7px;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.28);
   opacity: 0;
   pointer-events: none;
   transform: translateY(-4px);
   transition: 140ms ease;
   transition-property: opacity, transform, visibility;
   visibility: hidden;
+}
+.wallet-menu__balance {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 8px 10px 10px;
+  border-bottom: 1px solid var(--border-default);
+  color: var(--text-tertiary);
+  font-size: 0.78rem;
+}
+.wallet-menu__balance strong {
+  color: var(--text-primary);
+  font-size: 0.84rem;
+}
+.wallet-menu__action {
+  display: inline-flex;
+  min-width: 126px;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  gap: 7px;
+  text-decoration: none;
   white-space: nowrap;
 }
-.wallet-menu:hover .wallet-menu__disconnect,
-.wallet-menu:focus-within .wallet-menu__disconnect,
-.wallet-menu[open] .wallet-menu__disconnect {
+.wallet-menu:hover .wallet-menu__panel,
+.wallet-menu:focus-within .wallet-menu__panel,
+.wallet-menu[open] .wallet-menu__panel {
   opacity: 1;
   pointer-events: auto;
   transform: translateY(0);
   visibility: visible;
 }
-.wallet-menu__disconnect:hover {
+.wallet-menu__action:hover {
   background: var(--surface-3);
 }
 .content-shell {
@@ -1279,11 +1316,61 @@ textarea {
 }
 
 @media (max-width: 1020px) {
+  .page-shell {
+    padding-bottom: 104px;
+  }
   .app-header {
     grid-template-columns: minmax(0, 1fr) auto;
   }
-  .primary-nav {
+  .nav-groups {
     display: none;
+  }
+  .mobile-nav {
+    position: fixed;
+    z-index: 60;
+    right: 10px;
+    bottom: max(10px, env(safe-area-inset-bottom));
+    left: 10px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) min-content;
+    overflow: visible;
+    padding: 7px;
+    border: 1px solid var(--border-strong);
+    border-radius: 16px;
+    background: rgba(12, 14, 17, 0.94);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(18px);
+  }
+  .mobile-nav .nav-link {
+    min-width: 0;
+    min-height: 48px;
+    flex-direction: column;
+    padding: 5px 2px;
+    font-size: 0.65rem;
+    gap: 3px;
+  }
+  .mobile-nav__more {
+    position: relative;
+  }
+  .mobile-nav__more > summary {
+    width: 40px;
+    min-height: 48px;
+    padding: 0;
+  }
+  .mobile-nav__more .dashboard-menu__panel {
+    top: auto;
+    right: 0;
+    bottom: calc(100% + 8px);
+  }
+  .mobile-nav__more .nav-link {
+    width: 100%;
+    flex: initial;
+    min-height: 40px;
+    flex-direction: row;
+    padding: 0 12px;
+    font-size: 0.84rem;
+    gap: 7px;
+    justify-content: flex-start;
   }
   .treasury-layout,
   .proposal-detail-layout {
@@ -1489,30 +1576,6 @@ textarea {
     align-items: flex-start;
   }
 
-  .mobile-nav {
-    position: fixed;
-    z-index: 60;
-    right: 10px;
-    bottom: max(10px, env(safe-area-inset-bottom));
-    left: 10px;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
-    padding: 7px;
-    border: 1px solid var(--border-strong);
-    border-radius: 16px;
-    background: rgba(12, 14, 17, 0.94);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-    backdrop-filter: blur(18px);
-  }
-
-  .mobile-nav .nav-link {
-    min-width: 0;
-    min-height: 48px;
-    flex-direction: column;
-    padding: 5px 2px;
-    font-size: 0.65rem;
-    gap: 3px;
-  }
   .app-footer {
     align-items: flex-start;
     flex-direction: column;

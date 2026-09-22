@@ -17,18 +17,24 @@ import { useGoldskyActivityFeed, useGoldskyHealth } from '@/lib/goldsky-queries'
 import { useTokenInventory } from '@/lib/token-queries';
 
 function formatTimestamp(timestamp: string | number | null) {
-  const numericTimestamp = Number(timestamp ?? 0);
-  if (!numericTimestamp) return '—';
+  if (timestamp === null || timestamp === '') return '—';
+
+  const numericTimestamp = Number(timestamp);
+  const date = Number.isFinite(numericTimestamp)
+    ? new Date(numericTimestamp > 1_000_000_000_000 ? numericTimestamp : numericTimestamp * 1000)
+    : new Date(timestamp);
+
+  if (Number.isNaN(date.getTime())) return '—';
+
   try {
-    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
-      new Date(numericTimestamp * 1000)
-    );
+    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
   } catch {
     return String(timestamp);
   }
 }
 
 type AuctionData = {
+  status: 'active' | 'disabled' | 'not-launched' | 'paused';
   auction: {
     token_id: string;
     start_time: string;
@@ -36,7 +42,7 @@ type AuctionData = {
     highest_bid: string;
     highest_bidder: string | null;
     settled: boolean;
-  };
+  } | null;
   config: { reserve_price: string; min_bid_increment_percent: number; payment_token: string | null };
   paused: boolean;
 };
@@ -107,7 +113,13 @@ export default function Page() {
     error: auctionError,
     isLoading: auctionLoading,
     mutate: refreshAuction
-  } = useSWR<AuctionData>(`/api/dao/${encodeURIComponent(daoId)}/auctions`, fetchJson, { refreshInterval: 15_000 });
+  } = useSWR<AuctionData>(
+    config.auctionContractId && config.auctionEnabled !== false
+      ? `/api/dao/${encodeURIComponent(daoId)}/auctions`
+      : null,
+    fetchJson,
+    { refreshInterval: 15_000 }
+  );
   const tokenItems = tokens?.items.slice(0, tokenLimit) ?? [];
   const canLoadMoreTokens = Boolean(tokens && tokens.items.length > tokenLimit);
   const activityItems = activityFeed?.items ?? [];
@@ -186,7 +198,11 @@ export default function Page() {
               ) : (
                 <Text>Auction: Missing</Text>
               )}
-              <ShortId label="Admin" value={config.adminAddress} />
+              {config.metadataContractId ? (
+                <ShortId label="Metadata" value={config.metadataContractId} />
+              ) : (
+                <Text>Metadata: Missing</Text>
+              )}
             </div>
           </div>
         </details>
@@ -215,64 +231,73 @@ export default function Page() {
       </div>
 
       <div className="dashboard-secondary-grid">
-        <Card className="dashboard-secondary-card" p="5">
-          <div className="dashboard-secondary-card__content">
-            <Heading style={{ fontSize: '1.35rem', margin: 0 }}>Auction</Heading>
-            <div className="dashboard-secondary-card__scroll">
-              {auctionError ? (
-                <Callout variant="error" title="Auction unavailable" description={auctionError.message} />
-              ) : null}
-              {auctionLoading && !auctionData ? (
-                <Text className="lede" style={{ margin: 0 }}>
-                  Loading auction...
-                </Text>
-              ) : null}
-              {auctionData?.auction ? (
-                <div className="dashboard-auction">
-                  <Link href={`/dao/${daoId}/auctions`}>
-                    <Image
-                      src={`/api/render/${daoId}/${auctionData.auction.token_id}/image.svg`}
-                      alt={`Token #${auctionData.auction.token_id}`}
-                      width={240}
-                      height={240}
-                      unoptimized
-                    />
-                  </Link>
-                  <div className="dashboard-auction__details">
-                    <div>
-                      <Text className="label" style={{ margin: 0 }}>
-                        Current auction
-                      </Text>
-                      <Heading style={{ fontSize: '1.1rem', margin: '4px 0 0' }}>
-                        Token #{auctionData.auction.token_id}
-                      </Heading>
-                      <Text className="lede" style={{ margin: '8px 0 0' }}>
-                        {auctionData.auction.highest_bid === '0'
-                          ? `Reserve ${formatAuctionAmount(auctionData.config.reserve_price)}`
-                          : `Highest bid ${formatAuctionAmount(auctionData.auction.highest_bid)}`}
-                      </Text>
-                      <Text className="lede" style={{ margin: '4px 0 0', fontSize: '0.84rem' }}>
-                        Ends {formatTimestamp(auctionData.auction.end_time)}
-                      </Text>
-                    </div>
-                    {!auctionData.paused ? (
-                      <Link className="dashboard-auction__action" href={`/dao/${daoId}/auctions`}>
-                        {isAuctionEnded ? 'Settle auction' : 'Place bid'}
-                      </Link>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
-              {!auctionLoading && auctionData && !auctionData.auction ? (
-                <div className="empty-state" role="status">
-                  <Text className="lede" style={{ margin: '0 auto' }}>
-                    Current auction data is unavailable.
+        {config.auctionContractId && config.auctionEnabled !== false ? (
+          <Card className="dashboard-secondary-card" p="5">
+            <div className="dashboard-secondary-card__content">
+              <Heading style={{ fontSize: '1.35rem', margin: 0 }}>Auction</Heading>
+              <div className="dashboard-secondary-card__scroll">
+                {auctionError ? (
+                  <Callout variant="error" title="Auction unavailable" description={auctionError.message} />
+                ) : null}
+                {auctionLoading && !auctionData ? (
+                  <Text className="lede" style={{ margin: 0 }}>
+                    Loading auction...
                   </Text>
-                </div>
-              ) : null}
+                ) : null}
+                {auctionData?.status === 'paused' ? (
+                  <Callout
+                    variant="warning"
+                    title="Auctions are paused"
+                    description="Bidding and automatic settlement are currently unavailable."
+                  />
+                ) : null}
+                {auctionData?.status === 'not-launched' ? (
+                  <Callout
+                    variant="info"
+                    title="The first auction has not launched yet"
+                    description="Auctions are enabled for this DAO, but the first auction will appear after the auction module is resumed and launched."
+                  />
+                ) : null}
+                {auctionData?.auction ? (
+                  <div className="dashboard-auction">
+                    <Link href={`/dao/${daoId}/auctions`}>
+                      <Image
+                        src={`/api/render/${daoId}/${auctionData.auction.token_id}`}
+                        alt={`Token #${auctionData.auction.token_id}`}
+                        width={240}
+                        height={240}
+                        unoptimized
+                      />
+                    </Link>
+                    <div className="dashboard-auction__details">
+                      <div>
+                        <Text className="label" style={{ margin: 0 }}>
+                          Current auction
+                        </Text>
+                        <Heading style={{ fontSize: '1.1rem', margin: '4px 0 0' }}>
+                          Token #{auctionData.auction.token_id}
+                        </Heading>
+                        <Text className="lede" style={{ margin: '8px 0 0' }}>
+                          {auctionData.auction.highest_bid === '0'
+                            ? `Reserve ${formatAuctionAmount(auctionData.config.reserve_price)}`
+                            : `Highest bid ${formatAuctionAmount(auctionData.auction.highest_bid)}`}
+                        </Text>
+                        <Text className="lede" style={{ margin: '4px 0 0', fontSize: '0.84rem' }}>
+                          Ends {formatTimestamp(auctionData.auction.end_time)}
+                        </Text>
+                      </div>
+                      {!auctionData.paused ? (
+                        <Link className="dashboard-auction__action" href={`/dao/${daoId}/auctions`}>
+                          {isAuctionEnded ? 'Settle auction' : 'Place bid'}
+                        </Link>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </div>
-          </div>
-        </Card>
+          </Card>
+        ) : null}
         <Card className="dashboard-secondary-card" p="5">
           <div className="dashboard-secondary-card__content">
             <Heading style={{ fontSize: '1.35rem', margin: 0 }}>Proposal activity</Heading>
@@ -362,7 +387,7 @@ export default function Page() {
                   ) : null}
                   {goldskyHealth ? (
                     <div className="dashboard-health-program">
-                      <Text style={{ margin: 0, fontWeight: 700 }}>Goldsky index</Text>
+                      <Text style={{ margin: 0, fontWeight: 700 }}>Indexer status</Text>
                       <Text className="lede" style={{ margin: 0, fontSize: '0.78rem' }}>
                         {goldskyHealth.latestLedger ? `Ledger ${goldskyHealth.latestLedger}` : 'No ledger data'} |{' '}
                         {goldskyHealth.totalEvents ?? 0} indexed events

@@ -1,9 +1,11 @@
+import { Plus } from 'lucide-react';
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 
 import { DaoDirectory } from '@/components/dao-directory';
 import { Callout, Heading, Text } from '@/components/ui';
+import { WalletControls } from '@/components/wallet-controls';
 import { type DaoConfig, getAllDaosFromDatabase } from '@/lib/dao-db';
 
 export const metadata: Metadata = {
@@ -42,9 +44,18 @@ export default async function Page() {
               <p className="brand-kicker">Governance directory</p>
             </div>
           </Link>
-          <div className="discovery-header__context">
-            <span className="network-dot" aria-hidden="true" />
-            <span>Onchain communities</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <Link href="/create" className="nav-link">
+              <Plus aria-hidden="true" size={16} strokeWidth={2} />
+              Create DAO
+            </Link>
+            {/*
+            <div className="discovery-header__context">
+              <span className="network-dot" aria-hidden="true" />
+              <span>Onchain communities</span>
+            </div>
+            */}
+            <WalletControls />
           </div>
         </header>
 

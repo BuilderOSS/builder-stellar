@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 
 import { getDaoNetworkConfigById } from '@/lib/dao-config';
+import { assertSafeRemoteUrl, getFetchableUrls, IPFS_GATEWAYS } from '@/lib/ipfs-gateway';
 import { resolveOnchainTokenMetadata } from '@/lib/onchain-token-metadata';
 
 export const dynamic = 'force-dynamic';
@@ -8,6 +9,8 @@ export const runtime = 'nodejs';
 
 const REQUEST_TIMEOUT_MS = 20_000;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_REDIRECTS = 3;
+const MAX_INPUT_PIXELS = 16_777_216;
 const SIZE = 1080;
 // MVP supports static raster layers only. SVG and animated formats are rejected
 // so untrusted markup and time-varying output never enter the compositor.
@@ -19,31 +22,61 @@ function parseTokenId(value: string) {
   return parsed;
 }
 
-function ipfsGateways(uri: string) {
-  if (!uri.startsWith('ipfs://')) return [uri];
-  const path = uri.slice('ipfs://'.length);
-  return [`https://ipfs.io/ipfs/${path}`, `https://cloudflare-ipfs.com/ipfs/${path}`];
-}
-
 async function fetchImage(uri: string) {
+  const urls = getFetchableUrls(uri);
+  if (!urls?.length) throw new Error(`Unsupported artwork URL: ${uri}`);
+
   let lastError: Error | undefined;
-  for (const url of ipfsGateways(uri)) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  for (let urlIndex = 0; urlIndex < urls.length; urlIndex += 1) {
+    let url = urls[urlIndex];
     try {
-      const response = await fetch(url, { signal: controller.signal });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const contentType = response.headers.get('content-type')?.split(';')[0].toLowerCase();
-      if (!contentType || !ALLOWED_MIME_TYPES.has(contentType)) {
-        throw new Error(`Unsupported artwork MIME type: ${contentType || 'unknown'}`);
+      for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
+        const isIpfsGateway = IPFS_GATEWAYS.some((gateway) => new URL(gateway).hostname === new URL(url).hostname);
+        await assertSafeRemoteUrl(url, isIpfsGateway);
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+        try {
+          const response = await fetch(url, { redirect: 'manual', signal: controller.signal });
+
+          if (response.status >= 300 && response.status < 400) {
+            if (redirect === MAX_REDIRECTS) throw new Error('Too many artwork redirects');
+            const location = response.headers.get('location');
+            if (!location) throw new Error('Artwork redirect has no location');
+            url = new URL(location, url).toString();
+            continue;
+          }
+
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const contentType = response.headers.get('content-type')?.split(';')[0].toLowerCase();
+          if (!contentType || !ALLOWED_MIME_TYPES.has(contentType)) {
+            throw new Error(`Unsupported artwork MIME type: ${contentType || 'unknown'}`);
+          }
+
+          const contentLength = Number(response.headers.get('content-length'));
+          if (Number.isFinite(contentLength) && contentLength > MAX_IMAGE_BYTES) {
+            throw new Error('Artwork exceeds size limit');
+          }
+
+          if (!response.body) throw new Error('Artwork response has no body');
+          const reader = response.body.getReader();
+          const chunks: Buffer[] = [];
+          let totalBytes = 0;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            totalBytes += value.byteLength;
+            if (totalBytes > MAX_IMAGE_BYTES) throw new Error('Artwork exceeds size limit');
+            chunks.push(Buffer.from(value));
+          }
+          return Buffer.concat(chunks, totalBytes);
+        } finally {
+          clearTimeout(timeout);
+        }
       }
-      const data = Buffer.from(await response.arrayBuffer());
-      if (data.byteLength > MAX_IMAGE_BYTES) throw new Error('Artwork exceeds size limit');
-      return data;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error('Artwork fetch failed');
-    } finally {
-      clearTimeout(timeout);
+      if (urlIndex === urls.length - 1) break;
     }
   }
   throw lastError || new Error('Artwork fetch failed');
@@ -68,10 +101,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
       resolvedTokenId,
       `${origin}/api/render/${daoId}/${resolvedTokenId}`
     );
+    if (metadata.artwork.length === 0) throw new Error(`No artwork found for token ${resolvedTokenId}`);
     const layers = await Promise.all(metadata.artwork.map(({ url }) => fetchImage(url)));
-    const base = await sharp(layers[0]).resize(SIZE, SIZE, { fit: 'contain' }).png().toBuffer();
+    const base = await sharp(layers[0], { limitInputPixels: MAX_INPUT_PIXELS })
+      .resize(SIZE, SIZE, { fit: 'contain' })
+      .png()
+      .toBuffer();
     const overlays = await Promise.all(
-      layers.slice(1).map((layer) => sharp(layer).resize(SIZE, SIZE, { fit: 'contain' }).png().toBuffer())
+      layers
+        .slice(1)
+        .map((layer) =>
+          sharp(layer, { limitInputPixels: MAX_INPUT_PIXELS }).resize(SIZE, SIZE, { fit: 'contain' }).png().toBuffer()
+        )
     );
     const image = await sharp(base)
       .composite(overlays.map((input) => ({ input })))

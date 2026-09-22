@@ -23,6 +23,7 @@ export type DaoNetworkConfig = {
   governorContractId: string;
   treasuryContractId: string;
   auctionContractId: string;
+  auctionEnabled: boolean | null;
 };
 
 export type DaoNetworkName = NetworkName;
@@ -58,6 +59,7 @@ export async function getDaoNetworkConfigById(daoId: string): Promise<DaoNetwork
     metadataContractId: daoConfig.metadata_contract ?? '',
     governorContractId: daoConfig.governor_contract,
     treasuryContractId: daoConfig.treasury_contract ?? '',
-    auctionContractId: daoConfig.auction_contract ?? ''
+    auctionContractId: daoConfig.auction_contract ?? '',
+    auctionEnabled: daoConfig.auction_enabled
   };
 }

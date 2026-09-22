@@ -4,6 +4,7 @@
 
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
+import { LoaderCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Grid, Stack } from 'styled-system/jsx';
@@ -55,8 +56,16 @@ export default function ProposalCreatePage() {
   const reset = useProposalComposerStore((s) => s.reset);
 
   // Queries
-  const { data: votingPower, isLoading: votingPowerLoading } = useVotingPower(config, session.address);
-  const { data: settings, isLoading: settingsLoading } = useGovernorSettings(config, session.address);
+  const {
+    data: votingPower,
+    error: votingPowerError,
+    isLoading: votingPowerLoading
+  } = useVotingPower(config, session.address);
+  const {
+    data: settings,
+    error: settingsError,
+    isLoading: settingsLoading
+  } = useGovernorSettings(config, session.address);
 
   // Transaction feedback
   const txFeedback = useTransactionFeedback(config.name);
@@ -64,10 +73,12 @@ export default function ProposalCreatePage() {
 
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
+  const proposalCreationError = votingPowerError?.message ?? settingsError?.message;
   const proposalCreationLocked =
     !session.address ||
     votingPowerLoading ||
     settingsLoading ||
+    Boolean(votingPowerError || settingsError) ||
     !votingPower ||
     !settings ||
     votingPower.votes < settings.proposalThreshold;
@@ -75,7 +86,7 @@ export default function ProposalCreatePage() {
   const proposalCreationDisabledMessage = formatProposalCreationDisabledMessage(
     votingPower,
     settings,
-    session.address ? undefined : 'Connect wallet to create proposals'
+    proposalCreationError || (session.address ? undefined : 'Connect wallet to create proposals')
   );
 
   // Metadata validation
@@ -165,8 +176,22 @@ export default function ProposalCreatePage() {
         description="Draft the decision, assemble its on-chain actions, then verify every detail before asking the wallet to sign."
       >
         <Stack gap="6">
-          {/* Voting Power Warning - Block entire form */}
-          {proposalCreationLocked ? (
+          {session.address && (votingPowerLoading || settingsLoading) ? (
+            <div role="status" aria-live="polite">
+              <Callout
+                variant="info"
+                title={
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                    <LoaderCircle aria-hidden="true" className="is-spinning" size={16} />
+                    Checking proposal eligibility
+                  </span>
+                }
+                description="Reading your voting power and the current proposal threshold."
+              />
+            </div>
+          ) : proposalCreationError ? (
+            <Callout variant="error" title="Unable to check proposal eligibility" description={proposalCreationError} />
+          ) : proposalCreationLocked ? (
             <Callout variant="warning" title="Cannot Create Proposals" description={proposalCreationDisabledMessage} />
           ) : (
             <>

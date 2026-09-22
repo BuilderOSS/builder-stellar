@@ -125,6 +125,8 @@ for (const [index, property] of artworkProperties.entries()) {
     );
   }
 }
+const launchAuction = daoConfig.auction.enabled !== false;
+const founderMintBatchSize = 20;
 
 // Predict DAO addresses before creation
 console.log("\n=== Predicting DAO Addresses ===\n");
@@ -437,6 +439,68 @@ if (propertiesTxHash) {
   );
 }
 
+console.log("\n=== Minting Founder Allocations ===\n");
+const founderMintTransactions = [];
+for (const founder of daoConfig.founders ?? []) {
+  let remaining = founder.amount;
+  while (remaining > 0) {
+    // Keep batches below the contract maximum to leave room for metadata hooks
+    // and per-token events in Soroban's resource budget.
+    const amount = Math.min(remaining, founderMintBatchSize);
+    const mintResult = runQuiet("stellar", [
+      "contract",
+      "invoke",
+      "--id",
+      daoAddresses.token,
+      "--source-account",
+      identityName,
+      "--network",
+      networkName,
+      "--",
+      "batch_mint",
+      "--minter",
+      daoConfig.launchAdmin,
+      "--to",
+      founder.address,
+      "--amount",
+      String(amount),
+    ]);
+    const mintOutput = mintResult.stdout + mintResult.stderr;
+    if (!mintResult.ok) {
+      writeDaoArtifact({
+        status: "partial",
+        predictedAddresses,
+        addresses: daoAddresses,
+        output: createOutput,
+        transactions: {
+          ...postCreationTransactions,
+          founderMints: founderMintTransactions,
+        },
+        error: mintResult.stderr || mintResult.stdout,
+      });
+      throw new Error(
+        `DAO created but founder mint failed for ${founder.address}`,
+      );
+    }
+
+    const mintTxHash = mintOutput.match(
+      /Signing transaction:\s*([a-f0-9]{64})/i,
+    );
+    if (mintTxHash) {
+      founderMintTransactions.push(
+        enrichTransactionMetadata(
+          { txHash: mintTxHash[1], address: founder.address, amount },
+          networkName,
+        ),
+      );
+    }
+    remaining -= amount;
+  }
+}
+if (founderMintTransactions.length > 0) {
+  postCreationTransactions.founderMints = founderMintTransactions;
+}
+
 writeDaoArtifact({
   status: "pending",
   predictedAddresses,
@@ -459,6 +523,8 @@ const finalizeResult = runQuiet("stellar", [
   "finalize_dao",
   "--token_address",
   daoAddresses.token,
+  "--launch_auction",
+  String(launchAuction),
 ]);
 const finalizeOutput = finalizeResult.stdout + finalizeResult.stderr;
 if (!finalizeResult.ok) {

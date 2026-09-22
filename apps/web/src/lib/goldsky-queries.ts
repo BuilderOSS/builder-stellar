@@ -63,6 +63,11 @@ export type GoldskyMemberResponse = {
   message?: string;
 };
 
+export type GoldskyMemberLookupResponse = {
+  item: GoldskyMemberItem | null;
+  message?: string;
+};
+
 export type GoldskyAuthority = {
   authority: string;
   enabled: boolean;
@@ -119,6 +124,16 @@ export function useGoldskyMemberList(daoTokenAddress: string, limit = 100, offse
     {
       keepPreviousData: true
     }
+  );
+}
+
+export function useGoldskyMember(daoTokenAddress: string, address: string) {
+  return useSWR<GoldskyMemberLookupResponse>(
+    daoTokenAddress && address
+      ? `/api/dao/${encodeURIComponent(daoTokenAddress)}/members?address=${encodeURIComponent(address)}`
+      : null,
+    fetchJson,
+    { keepPreviousData: true }
   );
 }
 

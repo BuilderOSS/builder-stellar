@@ -1,35 +1,37 @@
 'use client';
 
-import { defaultModules } from '@creit.tech/stellar-wallets-kit/modules/utils';
-import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
-import { KitEventType } from '@creit.tech/stellar-wallets-kit/types';
 import type { LucideIcon } from 'lucide-react';
 import {
-  ChevronDown,
+  Compass,
   Gavel,
   Landmark,
   LayoutDashboard,
-  LogOut,
+  MoreHorizontal,
+  Plus,
   Settings,
   ShieldAlert,
   Users,
-  Vote,
-  Wallet
+  Vote
 } from 'lucide-react';
 import type { Route } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { type ReactNode, useEffect } from 'react';
+import { type ReactNode } from 'react';
 
-import { Button, Callout } from '@/components/ui';
+import { Callout } from '@/components/ui';
+import { WalletControls } from '@/components/wallet-controls';
 import { useDaoContext } from '@/contexts/dao-context';
-import type { DaoNetworkConfig } from '@/lib/dao-config';
+import { useGoldskyMember } from '@/lib/goldsky-queries';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
-function getNavItems(daoId: string): Array<{ href: Route; label: string; icon: LucideIcon }> {
+type NavItem = { href: Route; label: string; icon: LucideIcon; exact?: boolean };
+
+function getNavItems(daoId: string): NavItem[] {
   return [
-    { href: `/dao/${daoId}` as Route, label: 'Dashboard', icon: LayoutDashboard },
+    { href: '/', label: 'Explore DAOs', icon: Compass },
+    { href: '/create', label: 'Create DAO', icon: Plus },
+    { href: `/dao/${daoId}` as Route, label: 'Dashboard', icon: LayoutDashboard, exact: true },
     { href: `/dao/${daoId}/proposals` as Route, label: 'Proposals', icon: Vote },
     { href: `/dao/${daoId}/auctions` as Route, label: 'Auctions', icon: Gavel },
     { href: `/dao/${daoId}/treasury` as Route, label: 'Treasury', icon: Landmark },
@@ -56,43 +58,17 @@ function NavLink({
   );
 }
 
-function isRouteActive(pathname: string, href: Route) {
-  return pathname === href || (href !== '/' && pathname.startsWith(`${href}/`));
+function isRouteActive(pathname: string, href: Route, exact = false) {
+  return pathname === href || (!exact && href !== '/' && pathname.startsWith(`${href}/`));
 }
 
-function shortenAddress(value: string) {
-  if (value.length <= 12) return value;
-  return `${value.slice(0, 5)}…${value.slice(-4)}`;
-}
+function hasDaoMembership(member: ReturnType<typeof useGoldskyMember>['data']) {
+  if (!member?.item) return false;
 
-async function validateWalletNetwork(
-  address: string,
-  currentNetwork: DaoNetworkConfig,
-  updateSession: ReturnType<typeof useDaoSessionStore.getState>['updateSession']
-) {
   try {
-    const walletNetwork = await StellarWalletsKit.getNetwork();
-    const matchesConfiguredNetwork = walletNetwork.networkPassphrase === currentNetwork.passphrase;
-    const status = matchesConfiguredNetwork
-      ? `Connected on ${currentNetwork.label}`
-      : `Wallet network mismatch: ${walletNetwork.network ?? 'unknown'} is not ${currentNetwork.label}`;
-
-    updateSession({
-      address,
-      status,
-      walletNetworkPassphrase: walletNetwork.networkPassphrase,
-      walletNetworkIssue: matchesConfiguredNetwork
-        ? ''
-        : `Wallet is on ${walletNetwork.network ?? 'an unknown network'} and must be switched to ${currentNetwork.label}.`
-    });
-  } catch (error) {
-    updateSession({
-      address,
-      status: 'Wallet network validation unavailable',
-      walletNetworkPassphrase: '',
-      walletNetworkIssue:
-        error instanceof Error ? error.message : 'This wallet cannot report its network, so the app cannot validate it.'
-    });
+    return BigInt(member.item.voting_power) > 0n || BigInt(member.item.owned_token_count) > 0n;
+  } catch {
+    return false;
   }
 }
 
@@ -100,72 +76,20 @@ export function DaoShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { daoId, daoConfig: currentNetwork } = useDaoContext();
   const session = useDaoSessionStore();
-  const updateSession = useDaoSessionStore((state) => state.updateSession);
+  const { data: memberLookup } = useGoldskyMember(currentNetwork.tokenContractId, session.address);
   const walletDisabled = Boolean(session.address && session.walletNetworkIssue);
 
   const baseNavItems = getNavItems(daoId);
-  const adminNavItem: { href: Route; label: string; icon: LucideIcon } = {
+  const adminNavItem: NavItem = {
     href: `/dao/${daoId}/admin` as Route,
     label: 'Admin',
     icon: Settings
   };
-  const navItems = session.address ? [...baseNavItems, adminNavItem] : baseNavItems;
-
-  useEffect(() => {
-    StellarWalletsKit.init({ modules: defaultModules() });
-
-    const onStateUpdated = StellarWalletsKit.on(KitEventType.STATE_UPDATED, (event) => {
-      const nextAddress = event.payload.address ?? '';
-      updateSession({ address: nextAddress });
-    });
-
-    const onDisconnect = StellarWalletsKit.on(KitEventType.DISCONNECT, () => {
-      updateSession({
-        address: '',
-        status: 'Disconnected',
-        syncedAt: '',
-        walletNetworkPassphrase: '',
-        walletNetworkIssue: ''
-      });
-    });
-
-    return () => {
-      onStateUpdated();
-      onDisconnect();
-    };
-  }, [currentNetwork.label, updateSession]);
-
-  useEffect(() => {
-    if (!session.address) {
-      return;
-    }
-
-    void validateWalletNetwork(session.address, currentNetwork, updateSession);
-  }, [currentNetwork, session.address, updateSession]);
-
-  async function connectWallet() {
-    try {
-      const result = await StellarWalletsKit.authModal();
-      await validateWalletNetwork(result.address, currentNetwork, updateSession);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Wallet connection failed';
-      updateSession({ status: message });
-    }
-  }
-
-  async function disconnectWallet() {
-    try {
-      await StellarWalletsKit.disconnect();
-    } finally {
-      updateSession({
-        address: '',
-        status: 'Disconnected',
-        syncedAt: '',
-        walletNetworkPassphrase: '',
-        walletNetworkIssue: ''
-      });
-    }
-  }
+  const navItems = hasDaoMembership(memberLookup) ? [...baseNavItems, adminNavItem] : baseNavItems;
+  const desktopPrimaryNavItems = navItems.slice(0, 2);
+  const desktopSecondaryNavItems = navItems.slice(2);
+  const mobilePrimaryNavItems = navItems.slice(0, 3);
+  const mobileOverflowNavItems = navItems.slice(3);
 
   return (
     <div className="page-shell">
@@ -182,48 +106,50 @@ export function DaoShell({ children }: { children: ReactNode }) {
             </div>
           </Link>
 
-          <nav className="primary-nav" aria-label="Primary navigation">
-            {navItems.map((item) => (
-              <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href)} />
-            ))}
-          </nav>
+          <div className="nav-groups">
+            <nav className="primary-nav" aria-label="Primary navigation">
+              {desktopPrimaryNavItems.map((item) => (
+                <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href, item.exact)} />
+              ))}
+            </nav>
+            <nav className="secondary-nav" aria-label="DAO sections">
+              {desktopSecondaryNavItems.map((item) => (
+                <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href, item.exact)} />
+              ))}
+            </nav>
+          </div>
 
           <div className="header-actions">
+            {/*
             <div className="network-chip" title={`Configured for ${currentNetwork.label}`}>
               <span className="network-dot" aria-hidden="true" />
               {currentNetwork.label}
             </div>
-            <div className="wallet-summary">
-              {session.address ? (
-                <details className="wallet-menu">
-                  <summary
-                    className="wallet-menu__trigger"
-                    title={session.address}
-                    aria-label={`Wallet menu for ${session.address}`}
-                  >
-                    <Wallet aria-hidden="true" size={16} />
-                    {shortenAddress(session.address)}
-                    <ChevronDown aria-hidden="true" size={14} />
-                  </summary>
-                  <button className="wallet-menu__disconnect" type="button" onClick={disconnectWallet}>
-                    <LogOut aria-hidden="true" size={15} />
-                    Disconnect
-                  </button>
-                </details>
-              ) : (
-                <Button type="button" variant="solid" size="sm" onClick={connectWallet} aria-label="Connect wallet">
-                  <Wallet aria-hidden="true" size={16} />
-                  Connect
-                </Button>
-              )}
-            </div>
+*/}
+            <WalletControls network={currentNetwork} />
           </div>
         </header>
 
         <nav className="mobile-nav" aria-label="Mobile navigation">
-          {navItems.map((item) => (
-            <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href)} />
+          {mobilePrimaryNavItems.map((item) => (
+            <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href, item.exact)} />
           ))}
+          {mobileOverflowNavItems.length ? (
+            <details className="dashboard-menu mobile-nav__more">
+              <summary
+                className="dashboard-menu__trigger dashboard-menu__trigger--icon"
+                aria-label="More DAO navigation"
+                title="More DAO navigation"
+              >
+                <MoreHorizontal aria-hidden="true" size={18} />
+              </summary>
+              <div className="dashboard-menu__panel dashboard-options-menu">
+                {mobileOverflowNavItems.map((item) => (
+                  <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href, item.exact)} />
+                ))}
+              </div>
+            </details>
+          ) : null}
         </nav>
 
         <main id="main-content" className="content-shell" tabIndex={-1} aria-busy={walletDisabled || undefined}>
