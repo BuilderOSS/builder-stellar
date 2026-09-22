@@ -2,6 +2,10 @@ function invoke(data) {
   try {
     if (!data) return null;
 
+    function toCanonical(name) {
+      return name.charAt(0).toUpperCase() + name.slice(1).replace(/_([a-z])/g, function (_, c) { return c.toUpperCase(); });
+    }
+
     function native(value) {
       if (value === null || value === undefined || value === 'void') return null;
       if (typeof value !== 'object') return value;
@@ -53,7 +57,7 @@ function invoke(data) {
     ImplementationRevoked: [], ImplementationRegistered: [], CurrentImplementationsUpdated: [], PropertyAdded: [],
     PropertiesReset: [], ProjectURIUpdated: [], DescriptionUpdated: [], RendererBaseUpdated: [], ContractImageUpdated: []
   };
-  var names = topicNames[eventName] || topicNames[eventName.charAt(0).toUpperCase() + eventName.slice(1).replace(/_([a-z])/g, function (_, c) { return c.toUpperCase(); })] || [];
+  var names = topicNames[eventName] || topicNames[toCanonical(eventName)] || [];
   var topics = {};
   names.forEach(function (name, index) { if (topicValues[index] !== undefined) topics[name] = topicValues[index]; });
   var args = native(rawData);
@@ -112,7 +116,7 @@ function invoke(data) {
     return result;
 
     function roleForEvent(name) {
-      var canonical = name.charAt(0).toUpperCase() + name.slice(1).replace(/_([a-z])/g, function (_, c) { return c.toUpperCase(); });
+      var canonical = toCanonical(name);
       if (/^(Dao|Factory|Upgrade|Implementation|CurrentImplementations)/.test(canonical)) return 'manager';
       if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue|Veto)/.test(canonical)) return 'governor';
       if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken)/.test(canonical)) return 'auction';
