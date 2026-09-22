@@ -316,7 +316,7 @@ function invoke(data) {
     token_id: toString(tokenId),
     amount: toString(amount),
     actor: toString(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator'])),
-    addresses: addresses || [],
+    addresses: JSON.stringify(addresses || []),
     ledger_sequence: ledger_sequence,
     transaction_index: transaction_index,
     operation_index: operation_index,
