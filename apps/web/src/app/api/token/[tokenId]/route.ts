@@ -25,7 +25,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
     const metadata = await resolveOnchainTokenMetadata(
       config,
       resolvedTokenId,
-      `${baseUrl}/api/render/${config.label}/${resolvedTokenId}`
+      `${baseUrl}/api/render/${daoId}/${resolvedTokenId}`
     );
     return NextResponse.json(metadata, {
       headers: {
