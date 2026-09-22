@@ -133,7 +133,7 @@ SELECT
   NULL::bigint AS revoked_at
 FROM chain.decoded_events e
 WHERE e.contract_role = 'manager'
-  AND lower(e.event_name) IN ('implementation_registered', 'implementationregistered');
+  AND e.event_name = 'implementation_registered';
 
 -- Manager: Current implementations
 CREATE OR REPLACE VIEW manager.current_implementations AS
@@ -149,7 +149,7 @@ SELECT DISTINCT ON (e.deployment_id)
   e.transaction_hash
 FROM chain.decoded_events e
 WHERE e.contract_role = 'manager'
-  AND lower(e.event_name) IN ('current_implementations_updated', 'currentimplementationsupdated')
+  AND e.event_name = 'current_implementations_updated'
 ORDER BY e.deployment_id, e.ledger_sequence DESC, e.event_id DESC;
 
 COMMIT;

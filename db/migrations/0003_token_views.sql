@@ -29,7 +29,7 @@ SELECT
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
 WHERE e.contract_role = 'token'
-  AND lower(e.event_name) IN ('transfer', 'mint', 'mintwithminter');
+  AND e.event_name IN ('transfer', 'mint', 'mint_with_minter');
 
 -- Token: Inventory (current owner of each token)
 CREATE OR REPLACE VIEW token.inventory AS
@@ -47,7 +47,7 @@ SELECT DISTINCT ON (e.deployment_id, i.dao_id, e.contract_id, e.args ->> 'token_
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
 WHERE e.contract_role = 'token'
-  AND lower(e.event_name) IN ('transfer', 'mint', 'mintwithminter')
+  AND e.event_name IN ('transfer', 'mint', 'mint_with_minter')
 ORDER BY e.deployment_id, i.dao_id, e.contract_id, e.args ->> 'token_id', e.ledger_sequence DESC, e.event_id DESC;
 
 -- Token: Delegations
@@ -67,7 +67,7 @@ SELECT
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
 WHERE e.contract_role = 'token'
-  AND lower(e.event_name) IN ('delegate_changed', 'delegatechanged');
+  AND e.event_name = 'delegate_changed';
 
 -- Token: Mint authority history
 CREATE OR REPLACE VIEW token.mint_authority_history AS
@@ -86,7 +86,7 @@ SELECT
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
 WHERE e.contract_role = 'token'
-  AND lower(e.event_name) IN ('mint_authority_changed', 'mintauthoritychanged');
+  AND e.event_name = 'mint_authority_changed';
 
 -- Token: Current enabled mint authorities
 CREATE OR REPLACE VIEW token.mint_authorities AS

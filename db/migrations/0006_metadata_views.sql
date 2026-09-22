@@ -25,7 +25,7 @@ SELECT
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
 WHERE e.contract_role = 'metadata'
-  AND lower(e.event_name) IN ('property_added', 'propertyadded');
+  AND e.event_name = 'property_added';
 
 -- Metadata: Token seeds
 CREATE OR REPLACE VIEW metadata.token_seeds AS
@@ -44,7 +44,7 @@ SELECT
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
 WHERE e.contract_role = 'metadata'
-  AND lower(e.event_name) IN ('seed_generated', 'seedgenerated');
+  AND e.event_name = 'seed_generated';
 
 -- Metadata: Configuration
 CREATE OR REPLACE VIEW metadata.configuration AS
@@ -61,35 +61,35 @@ WITH initialized AS (
   FROM chain.decoded_events e
   JOIN manager.event_identity i USING (deployment_id, contract_id)
   WHERE e.contract_role = 'metadata'
-    AND lower(e.event_name) IN ('metadata_initialized', 'metadatainitialized')
+    AND e.event_name = 'metadata_initialized'
   ORDER BY e.deployment_id, e.contract_id, e.ledger_sequence DESC, e.event_id DESC
 ),
 latest_updates AS (
-  SELECT DISTINCT ON (e.deployment_id, e.contract_id, lower(e.event_name))
+  SELECT DISTINCT ON (e.deployment_id, e.contract_id, e.event_name)
     e.deployment_id,
     e.contract_id,
-    lower(e.event_name) AS event_name,
+    e.event_name,
     e.args,
     e.ledger_sequence,
     e.event_id
   FROM chain.decoded_events e
   WHERE e.contract_role = 'metadata'
-    AND lower(e.event_name) IN (
-      'project_uri_updated', 'projecturiupdated',
-      'description_updated', 'descriptionupdated',
-      'contract_image_updated', 'contractimageupdated',
-      'renderer_base_updated', 'rendererbaseupdated'
+    AND e.event_name IN (
+      'project_uri_updated',
+      'description_updated',
+      'contract_image_updated',
+      'renderer_base_updated'
     )
-  ORDER BY e.deployment_id, e.contract_id, lower(e.event_name), e.ledger_sequence DESC, e.event_id DESC
+  ORDER BY e.deployment_id, e.contract_id, e.event_name, e.ledger_sequence DESC, e.event_id DESC
 ),
 updates AS (
   SELECT
     deployment_id,
     contract_id,
-    max(args ->> 'new_uri') FILTER (WHERE event_name IN ('project_uri_updated', 'projecturiupdated')) AS project_uri,
-    max(args ->> 'new_description') FILTER (WHERE event_name IN ('description_updated', 'descriptionupdated')) AS description,
-    max(args ->> 'new_image') FILTER (WHERE event_name IN ('contract_image_updated', 'contractimageupdated')) AS contract_image,
-    max(args ->> 'new_base') FILTER (WHERE event_name IN ('renderer_base_updated', 'rendererbaseupdated')) AS updated_renderer_base
+    max(args ->> 'new_uri') FILTER (WHERE event_name = 'project_uri_updated') AS project_uri,
+    max(args ->> 'new_description') FILTER (WHERE event_name = 'description_updated') AS description,
+    max(args ->> 'new_image') FILTER (WHERE event_name = 'contract_image_updated') AS contract_image,
+    max(args ->> 'new_base') FILTER (WHERE event_name = 'renderer_base_updated') AS updated_renderer_base
   FROM latest_updates
   GROUP BY deployment_id, contract_id
 )

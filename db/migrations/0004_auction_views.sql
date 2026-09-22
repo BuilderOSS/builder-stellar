@@ -29,7 +29,7 @@ SELECT
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
 WHERE e.contract_role = 'auction'
-  AND lower(e.event_name) IN ('bid_placed', 'bidplaced');
+  AND e.event_name = 'bid_placed';
 
 -- Auction: Bid refunds
 CREATE OR REPLACE VIEW auction.bid_refunds AS
@@ -48,7 +48,7 @@ SELECT
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
 WHERE e.contract_role = 'auction'
-  AND lower(e.event_name) IN ('bid_refunded', 'bidrefunded');
+  AND e.event_name = 'bid_refunded';
 
 -- Auction: Settlements
 CREATE OR REPLACE VIEW auction.settlements AS
@@ -67,7 +67,7 @@ SELECT
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
 WHERE e.contract_role = 'auction'
-  AND lower(e.event_name) IN ('auction_settled', 'auctionsettled');
+  AND e.event_name = 'auction_settled';
 
 -- Auction: Complete auction information
 CREATE OR REPLACE VIEW auction.auctions AS
@@ -79,7 +79,7 @@ WITH config AS (
     (e.args ->> 'time_buffer')::bigint AS time_buffer_seconds
   FROM chain.decoded_events e
   WHERE e.contract_role = 'auction'
-    AND lower(e.event_name) IN ('auction_initialized', 'auctioninitialized')
+    AND e.event_name = 'auction_initialized'
   ORDER BY deployment_id, contract_id, e.ledger_sequence DESC, e.event_id DESC
 )
 SELECT
@@ -108,7 +108,7 @@ SELECT
       AND x.contract_role = 'auction'
       AND x.contract_id = e.contract_id
       AND x.topics ->> 'token_id' = e.topics ->> 'token_id'
-      AND lower(x.event_name) IN ('auction_cancelled', 'auctioncanceled', 'auction_cancelled_indexed')
+      AND x.event_name = 'auction_cancelled'
       AND x.ledger_sequence >= e.ledger_sequence
   ) AS cancelled,
   e.ledger_sequence AS created_ledger,
@@ -117,6 +117,6 @@ FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
 LEFT JOIN config c ON c.deployment_id = e.deployment_id AND c.contract_id = e.contract_id
 WHERE e.contract_role = 'auction'
-  AND lower(e.event_name) IN ('auction_created', 'auctioncreated');
+  AND e.event_name = 'auction_created';
 
 COMMIT;

@@ -28,6 +28,6 @@ SELECT
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
 WHERE e.contract_role = 'treasury'
-  AND lower(e.event_name) IN ('execute', 'treasury_call_indexed', 'proposal_call_indexed');
+  AND e.event_name IN ('execute', 'treasury_call_indexed', 'proposal_call_indexed');
 
 COMMIT;

@@ -62,7 +62,7 @@ function invoke(data) {
   function stringify(value) { return value === null || value === undefined ? null : String(value); }
   var result = {
     event_id: data.event_id || data.id || null, deployment_id: data.deployment_id || null, contract_id: data.contract_id || null,
-    contract_role: data.contract_role === 'manager' ? 'manager' : roleForEvent(eventName), event_name: eventName,
+    contract_role: data.contract_role === 'manager' ? 'manager' : roleForEvent(eventName), event_name: eventName.toLowerCase(),
     topic_0: stringify(topicValues[0]), topic_1: stringify(topicValues[1]), topic_2: stringify(topicValues[2]), topic_3: stringify(topicValues[3]),
     topics: JSON.stringify(topics), args: JSON.stringify(args), payload: JSON.stringify(Object.assign({}, topics, args)),
     transaction_hash: data.transaction_hash || null, transaction_successful: data.transaction_successful ?? null,

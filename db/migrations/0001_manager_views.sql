@@ -25,7 +25,7 @@ WITH created AS (
     e.transaction_hash AS created_tx_hash
   FROM chain.decoded_events e
   WHERE e.contract_role = 'manager'
-    AND lower(e.event_name) IN ('dao_created', 'daocreated', 'dao_registered', 'daoregistered')
+    AND e.event_name IN ('dao_created', 'dao_registered')
   ORDER BY e.deployment_id, e.topic_0, e.ledger_sequence, e.event_id
 ), finalized AS (
   SELECT DISTINCT ON (e.deployment_id, e.topic_0)
@@ -36,7 +36,7 @@ WITH created AS (
     e.transaction_hash AS finalized_tx_hash
   FROM chain.decoded_events e
   WHERE e.contract_role = 'manager'
-    AND lower(e.event_name) IN ('dao_finalized', 'daofinalized')
+    AND e.event_name = 'dao_finalized'
   ORDER BY e.deployment_id, e.topic_0, e.ledger_sequence DESC, e.event_id DESC
 ), token_metadata AS (
   SELECT DISTINCT ON (e.deployment_id, e.contract_id)
@@ -49,7 +49,7 @@ WITH created AS (
     e.args ->> 'owner' AS admin_address
   FROM chain.decoded_events e
   WHERE e.contract_role = 'token'
-    AND lower(e.event_name) IN ('token_initialized', 'tokeninitialized')
+    AND e.event_name = 'token_initialized'
   ORDER BY e.deployment_id, e.contract_id, e.ledger_sequence DESC, e.event_id DESC
 )
 SELECT

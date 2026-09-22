@@ -19,12 +19,11 @@ SELECT
   i.dao_id,
   e.contract_id,
   e.topics ->> 'proposal_id' AS proposal_id,
-  CASE lower(e.event_name)
+  CASE e.event_name
     WHEN 'proposal_queued' THEN 'queued'
     WHEN 'proposal_executed' THEN 'executed'
     WHEN 'proposal_canceled' THEN 'canceled'
-    WHEN 'proposal_cancelled' THEN 'canceled'
-    ELSE lower(e.event_name)
+    ELSE e.event_name
   END AS state,
   (e.args ->> 'eta')::bigint AS eta_seconds,
   e.ledger_sequence AS event_ledger,
@@ -34,7 +33,7 @@ SELECT
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
 WHERE e.contract_role = 'governor'
-  AND lower(e.event_name) IN ('proposal_queued', 'proposal_executed', 'proposal_canceled', 'proposal_cancelled');
+  AND e.event_name IN ('proposal_queued', 'proposal_executed', 'proposal_canceled');
 
 -- Governance: Proposal votes
 CREATE OR REPLACE VIEW governance.proposal_votes AS
@@ -55,7 +54,7 @@ SELECT
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
 WHERE e.contract_role = 'governor'
-  AND lower(e.event_name) IN ('vote_cast', 'votecast');
+  AND e.event_name = 'vote_cast';
 
 -- Governance: Proposal actions
 CREATE OR REPLACE VIEW governance.proposal_actions AS
@@ -80,7 +79,7 @@ LEFT JOIN LATERAL jsonb_array_elements_text(COALESCE(e.args -> 'targets', '[]'::
 LEFT JOIN LATERAL jsonb_array_elements_text(COALESCE(e.args -> 'functions', '[]'::jsonb)) WITH ORDINALITY f(value, ordinality) ON f.ordinality = t.ordinality
 LEFT JOIN LATERAL jsonb_array_elements(COALESCE(e.args -> 'args', '[]'::jsonb)) WITH ORDINALITY a(value, ordinality) ON a.ordinality = t.ordinality
 WHERE e.contract_role = 'governor'
-  AND lower(e.event_name) IN ('proposal_created', 'proposalcreated');
+  AND e.event_name = 'proposal_created';
 
 -- Governance: Governor authority history
 CREATE OR REPLACE VIEW governance.governor_authority_history AS
@@ -99,7 +98,7 @@ SELECT
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
 WHERE e.contract_role = 'governor'
-  AND lower(e.event_name) IN ('governor_authority_changed', 'governorauthoritychanged');
+  AND e.event_name = 'governor_authority_changed';
 
 -- Governance: Current enabled governor authorities
 CREATE OR REPLACE VIEW governance.governor_authorities AS
@@ -138,7 +137,7 @@ WITH created AS (
   FROM chain.decoded_events e
   JOIN manager.event_identity i USING (deployment_id, contract_id)
   WHERE e.contract_role = 'governor'
-    AND lower(e.event_name) IN ('proposal_created', 'proposalcreated')
+    AND e.event_name = 'proposal_created'
 ),
 lifecycle AS (
   SELECT DISTINCT ON (deployment_id, dao_id, proposal_id)
