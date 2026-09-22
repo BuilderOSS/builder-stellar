@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 
 import { getDaoNetworkConfigById } from '@/lib/dao-config';
+import { getFetchableUrls } from '@/lib/ipfs-gateway';
 import { resolveOnchainTokenMetadata } from '@/lib/onchain-token-metadata';
 
 export const dynamic = 'force-dynamic';
@@ -19,15 +20,12 @@ function parseTokenId(value: string) {
   return parsed;
 }
 
-function ipfsGateways(uri: string) {
-  if (!uri.startsWith('ipfs://')) return [uri];
-  const path = uri.slice('ipfs://'.length);
-  return [`https://ipfs.io/ipfs/${path}`, `https://cloudflare-ipfs.com/ipfs/${path}`];
-}
-
 async function fetchImage(uri: string) {
+  const urls = getFetchableUrls(uri);
+  if (!urls?.length) throw new Error(`Unsupported artwork URL: ${uri}`);
+
   let lastError: Error | undefined;
-  for (const url of ipfsGateways(uri)) {
+  for (const url of urls) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
@@ -68,6 +66,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
       resolvedTokenId,
       `${origin}/api/render/${daoId}/${resolvedTokenId}`
     );
+    if (metadata.artwork.length === 0) throw new Error(`No artwork found for token ${resolvedTokenId}`);
     const layers = await Promise.all(metadata.artwork.map(({ url }) => fetchImage(url)));
     const base = await sharp(layers[0]).resize(SIZE, SIZE, { fit: 'contain' }).png().toBuffer();
     const overlays = await Promise.all(
