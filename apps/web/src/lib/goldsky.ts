@@ -144,7 +144,7 @@ export async function getGoldskyActivityFeed(
       addresses,
       ledger_sequence,
       transaction_hash,
-      ledger_closed_at
+      ledger_closed_at AS timestamp
     FROM app.activity_feed
     ${whereClause}
     ORDER BY ledger_sequence DESC, activity_id DESC

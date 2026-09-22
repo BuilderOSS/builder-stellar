@@ -17,12 +17,17 @@ import { useGoldskyActivityFeed, useGoldskyHealth } from '@/lib/goldsky-queries'
 import { useTokenInventory } from '@/lib/token-queries';
 
 function formatTimestamp(timestamp: string | number | null) {
-  const numericTimestamp = Number(timestamp ?? 0);
-  if (!numericTimestamp) return '—';
+  if (timestamp === null || timestamp === '') return '—';
+
+  const numericTimestamp = Number(timestamp);
+  const date = Number.isFinite(numericTimestamp)
+    ? new Date(numericTimestamp > 1_000_000_000_000 ? numericTimestamp : numericTimestamp * 1000)
+    : new Date(timestamp);
+
+  if (Number.isNaN(date.getTime())) return '—';
+
   try {
-    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
-      new Date(numericTimestamp * 1000)
-    );
+    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
   } catch {
     return String(timestamp);
   }
@@ -235,7 +240,7 @@ export default function Page() {
                 <div className="dashboard-auction">
                   <Link href={`/dao/${daoId}/auctions`}>
                     <Image
-                      src={`/api/render/${daoId}/${auctionData.auction.token_id}/image.svg`}
+                      src={`/api/render/${daoId}/${auctionData.auction.token_id}`}
                       alt={`Token #${auctionData.auction.token_id}`}
                       width={240}
                       height={240}

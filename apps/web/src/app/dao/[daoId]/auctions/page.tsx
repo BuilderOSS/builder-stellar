@@ -203,7 +203,7 @@ export default function AuctionsPage() {
                   }}
                 >
                   <Image
-                    src={`/api/token/${data.auction.token_id}/image.svg`}
+                    src={`/api/render/${daoId}/${data.auction.token_id}`}
                     alt={`Token #${data.auction.token_id}`}
                     width={560}
                     height={560}
