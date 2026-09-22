@@ -9,7 +9,6 @@
 -- - Token members with ownership counts
 -- =============================================================================
 
-BEGIN;
 
 -- Token: Transfers
 CREATE OR REPLACE VIEW token.transfers AS
@@ -119,4 +118,3 @@ SELECT
 FROM token.inventory e
 GROUP BY e.deployment_id, e.dao_id, e.contract_id, e.owner;
 
-COMMIT;

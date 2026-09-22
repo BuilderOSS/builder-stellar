@@ -5,7 +5,6 @@
 -- - Treasury calls
 -- =============================================================================
 
-BEGIN;
 
 -- Treasury: Calls
 CREATE OR REPLACE VIEW treasury.calls AS
@@ -30,4 +29,3 @@ JOIN manager.event_identity i USING (deployment_id, contract_id)
 WHERE e.contract_role = 'treasury'
   AND e.event_name IN ('execute', 'treasury_call_indexed', 'proposal_call_indexed');
 
-COMMIT;

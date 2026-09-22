@@ -11,7 +11,6 @@
 -- - Current manager implementations
 -- =============================================================================
 
-BEGIN;
 
 -- App: Activity from decoded events
 CREATE OR REPLACE VIEW app.decoded_event_activity AS
@@ -152,4 +151,3 @@ WHERE e.contract_role = 'manager'
   AND e.event_name = 'current_implementations_updated'
 ORDER BY e.deployment_id, e.ledger_sequence DESC, e.event_id DESC;
 
-COMMIT;

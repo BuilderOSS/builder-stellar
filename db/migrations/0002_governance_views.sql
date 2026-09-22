@@ -9,7 +9,6 @@
 -- - Governor authority history and current state
 -- =============================================================================
 
-BEGIN;
 
 -- Governance: Proposal lifecycle events
 CREATE OR REPLACE VIEW governance.proposal_lifecycle AS
@@ -160,4 +159,3 @@ SELECT
 FROM created c
 LEFT JOIN lifecycle l USING (deployment_id, dao_id, proposal_id);
 
-COMMIT;

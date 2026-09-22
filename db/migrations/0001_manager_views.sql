@@ -5,7 +5,6 @@
 -- ingests chain.raw_events and chain.decoded_events.
 -- =============================================================================
 
-BEGIN;
 
 CREATE OR REPLACE VIEW manager.daos AS
 WITH created AS (
@@ -94,4 +93,3 @@ SELECT e.deployment_id, e.contract_id,
 FROM chain.decoded_events e
 LEFT JOIN manager.dao_modules m ON m.deployment_id = e.deployment_id AND m.module_contract = e.contract_id;
 
-COMMIT;

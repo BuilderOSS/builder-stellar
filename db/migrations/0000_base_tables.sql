@@ -2,7 +2,6 @@
 -- GOLDSKY MULTI-TENANT DAO DATABASE - BASE TABLES AND CORE VIEWS
 -- =============================================================================
 
-BEGIN;
 
 -- SCHEMAS
 CREATE SCHEMA chain;
@@ -104,4 +103,3 @@ CREATE TABLE app.activity_feed_events (
 
 CREATE INDEX idx_activity_feed_order ON app.activity_feed_events (deployment_id, ledger_sequence DESC, transaction_index DESC, operation_index DESC, event_index DESC, activity_id DESC);
 
-COMMIT;

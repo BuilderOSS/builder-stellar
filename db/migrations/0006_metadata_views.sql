@@ -7,7 +7,6 @@
 -- - Metadata configuration
 -- =============================================================================
 
-BEGIN;
 
 -- Metadata: Properties
 CREATE OR REPLACE VIEW metadata.properties AS
@@ -108,4 +107,3 @@ SELECT
 FROM initialized i
 LEFT JOIN updates u ON u.deployment_id = i.deployment_id AND u.contract_id = i.metadata_contract;
 
-COMMIT;

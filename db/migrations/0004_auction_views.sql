@@ -8,7 +8,6 @@
 -- - Complete auction information
 -- =============================================================================
 
-BEGIN;
 
 -- Auction: Bids
 CREATE OR REPLACE VIEW auction.bids AS
@@ -119,4 +118,3 @@ LEFT JOIN config c ON c.deployment_id = e.deployment_id AND c.contract_id = e.co
 WHERE e.contract_role = 'auction'
   AND e.event_name = 'auction_created';
 
-COMMIT;
