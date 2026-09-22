@@ -319,7 +319,7 @@ function invoke(data) {
   }
 
   return {
-    activity_id: toString(data.event_id || data.id),
+    activity_id: toString(data.event_id || data.id),  // Primary key - derived from source event_id
     deployment_id: toString(data.deployment_id),
     contract_id: toString(data.contract_id),
     contract_role: toString(data.contract_role),
