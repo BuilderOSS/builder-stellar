@@ -418,6 +418,12 @@ test('pipeline generator renders the current deployment and scripts', { skip: !e
   assert.match(yaml, /table: activity_feed/);
   assert.match(yaml, /contract_id/);
   assert.match(yaml, /contract_role/);
+  for (const table of ['dao_tokens', 'dao_metadata', 'dao_auctions', 'dao_governors', 'dao_treasuries']) {
+    assert.match(yaml, new RegExp(`${table}:`));
+    assert.match(yaml, new RegExp(`dynamic_table_check\\('${table}', contract_id\\)`));
+  }
+  assert.match(yaml, /topics LIKE '%dao_created%'/);
+  assert.doesNotMatch(yaml, /topics LIKE '%dao_registered%'/);
   assert.match(yaml, /function invoke\(data\)/);
   assert.match(yaml, /event_name: string/);
   assert.match(yaml, new RegExp(deployment.manager));

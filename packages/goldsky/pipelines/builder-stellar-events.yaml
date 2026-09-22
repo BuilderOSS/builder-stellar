@@ -11,6 +11,78 @@ sources:
     start_at: 4809830
 
 transforms:
+  # Each DAO-created event contains the five newly deployed module addresses.
+  # Dynamic tables keep these allowlists live while the pipeline is running.
+  dao_tokens:
+    type: dynamic_table
+    backend_type: Postgres
+    backend_entity_name: dao_tokens
+    secret_name: STELLAR_BUILDER_POSTGRES
+    schema: streamling
+    column: contract_id
+    sql: |
+      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"token"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      FROM stellar_events
+      WHERE contract_id = 'CD5ARHFOXUWDVD6XG3ZFYQPQDUTDCFMWRG5GTKFTFGHDYWQJRV4G46BF'
+        AND type = 'contract'
+        AND topics LIKE '%dao_created%'
+
+  dao_metadata:
+    type: dynamic_table
+    backend_type: Postgres
+    backend_entity_name: dao_metadata
+    secret_name: STELLAR_BUILDER_POSTGRES
+    schema: streamling
+    column: contract_id
+    sql: |
+      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"metadata"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      FROM stellar_events
+      WHERE contract_id = 'CD5ARHFOXUWDVD6XG3ZFYQPQDUTDCFMWRG5GTKFTFGHDYWQJRV4G46BF'
+        AND type = 'contract'
+        AND topics LIKE '%dao_created%'
+
+  dao_auctions:
+    type: dynamic_table
+    backend_type: Postgres
+    backend_entity_name: dao_auctions
+    secret_name: STELLAR_BUILDER_POSTGRES
+    schema: streamling
+    column: contract_id
+    sql: |
+      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"auction"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      FROM stellar_events
+      WHERE contract_id = 'CD5ARHFOXUWDVD6XG3ZFYQPQDUTDCFMWRG5GTKFTFGHDYWQJRV4G46BF'
+        AND type = 'contract'
+        AND topics LIKE '%dao_created%'
+
+  dao_governors:
+    type: dynamic_table
+    backend_type: Postgres
+    backend_entity_name: dao_governors
+    secret_name: STELLAR_BUILDER_POSTGRES
+    schema: streamling
+    column: contract_id
+    sql: |
+      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"governor"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      FROM stellar_events
+      WHERE contract_id = 'CD5ARHFOXUWDVD6XG3ZFYQPQDUTDCFMWRG5GTKFTFGHDYWQJRV4G46BF'
+        AND type = 'contract'
+        AND topics LIKE '%dao_created%'
+
+  dao_treasuries:
+    type: dynamic_table
+    backend_type: Postgres
+    backend_entity_name: dao_treasuries
+    secret_name: STELLAR_BUILDER_POSTGRES
+    schema: streamling
+    column: contract_id
+    sql: |
+      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"treasury"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      FROM stellar_events
+      WHERE contract_id = 'CD5ARHFOXUWDVD6XG3ZFYQPQDUTDCFMWRG5GTKFTFGHDYWQJRV4G46BF'
+        AND type = 'contract'
+        AND topics LIKE '%dao_created%'
+
   dao_events:
     type: sql
     primary_key: event_id
@@ -40,6 +112,14 @@ transforms:
         _gs_op
       FROM stellar_events
        WHERE ledger_sequence >= 4809830
+         AND (
+           contract_id = 'CD5ARHFOXUWDVD6XG3ZFYQPQDUTDCFMWRG5GTKFTFGHDYWQJRV4G46BF'
+           OR dynamic_table_check('dao_tokens', contract_id)
+           OR dynamic_table_check('dao_metadata', contract_id)
+           OR dynamic_table_check('dao_auctions', contract_id)
+           OR dynamic_table_check('dao_governors', contract_id)
+           OR dynamic_table_check('dao_treasuries', contract_id)
+         )
 
   raw_events:
     type: script
