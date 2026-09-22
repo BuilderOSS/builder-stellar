@@ -16,15 +16,15 @@
 -- - Note: This migration should NOT be wrapped in a transaction block by the migration runner
 
 -- Main composite index for filtered event lookups with ordering
-CREATE INDEX CONCURRENTLY idx_decoded_events_role_event_ledger
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_decoded_events_role_event_ledger
   ON chain.decoded_events(deployment_id, contract_role, event_name, ledger_sequence DESC)
   WHERE contract_role IN ('manager', 'governor', 'token', 'auction', 'treasury', 'metadata');
 
 -- Additional index for raw event lookups (used by activity feed)
-CREATE INDEX CONCURRENTLY idx_decoded_events_deployment_ledger
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_decoded_events_deployment_ledger
   ON chain.decoded_events(deployment_id, ledger_sequence DESC);
 
 -- Index for event_name specific queries (useful for filtering all events of a type)
-CREATE INDEX CONCURRENTLY idx_decoded_events_event_name
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_decoded_events_event_name
   ON chain.decoded_events(event_name, ledger_sequence DESC)
   WHERE contract_role IN ('manager', 'governor', 'token', 'auction', 'treasury', 'metadata');

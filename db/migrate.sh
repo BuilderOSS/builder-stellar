@@ -99,7 +99,7 @@ run_migration() {
 
     if [ $? -eq 0 ]; then
       # Record migration after successful execution
-      psql "$DATABASE_URL" -c "INSERT INTO public.schema_migrations (version) VALUES ('$version');"
+      psql "$DATABASE_URL" -c "INSERT INTO public.schema_migrations (version) VALUES ('$version') ON CONFLICT (version) DO NOTHING;"
       if [ $? -eq 0 ]; then
         echo -e "${GREEN}  ✓ Successfully applied $version${NC}"
       else
@@ -119,7 +119,7 @@ BEGIN;
 \i $file
 
 -- Record migration
-INSERT INTO public.schema_migrations (version) VALUES ('$version');
+INSERT INTO public.schema_migrations (version) VALUES ('$version') ON CONFLICT (version) DO NOTHING;
 
 COMMIT;
 EOF

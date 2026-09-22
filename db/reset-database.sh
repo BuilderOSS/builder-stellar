@@ -72,7 +72,7 @@ echo ""
 # Drop schemas
 echo -e "${YELLOW}→ Dropping Goldsky schemas...${NC}"
 
-psql "$DATABASE_URL" << 'EOF'
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" << 'EOF'
 -- Drop schemas in reverse dependency order
 DROP SCHEMA IF EXISTS app CASCADE;
 DROP SCHEMA IF EXISTS metadata CASCADE;
@@ -90,7 +90,7 @@ echo ""
 # Drop migration tracking
 echo -e "${YELLOW}→ Dropping migration tracking...${NC}"
 
-psql "$DATABASE_URL" << 'EOF'
+psql -v ON_ERROR_STOP=1 "$DATABASE_URL" << 'EOF'
 DROP TABLE IF EXISTS public.schema_migrations;
 EOF
 
