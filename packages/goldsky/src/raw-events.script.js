@@ -1,7 +1,9 @@
 function invoke(data) {
+  if (!data) return null;
+
   function stringify(value) {
     if (value === undefined || value === null) {
-      return null;
+      return '{}';  // Default to empty JSON object string
     }
 
     if (typeof value === 'string') {
