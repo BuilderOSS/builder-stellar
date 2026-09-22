@@ -4,13 +4,15 @@ import Image from 'next/image';
 import Link from 'next/link';
 
 import { Card, Heading, Text } from '@/components/ui';
+import { useDaoContext } from '@/contexts/dao-context';
 import { getDaoAccountRole } from '@/lib/account-role';
-import { getDaoNetworkConfig, getDefaultDaoNetwork } from '@/lib/dao-config';
+import { daoRoute } from '@/lib/dao-routes';
 import { useTokenMetadata } from '@/lib/token-queries';
 
 export function TokenCard({ tokenId, owner }: { tokenId: number; owner: string }) {
-  const { data, error, isLoading } = useTokenMetadata(tokenId);
-  const role = getDaoAccountRole(getDaoNetworkConfig(getDefaultDaoNetwork()), owner);
+  const { daoId, daoConfig } = useDaoContext();
+  const { data, error, isLoading } = useTokenMetadata(daoId, tokenId);
+  const role = getDaoAccountRole(daoConfig, owner);
 
   return (
     <Card p="3" className="membership-token-card" style={{ overflow: 'hidden', minWidth: 0 }}>
@@ -24,7 +26,7 @@ export function TokenCard({ tokenId, owner }: { tokenId: number; owner: string }
         </Text>
       ) : data ? (
         <div className="membership-token-card__content">
-          <Link href={`/token/${tokenId}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+          <Link href={daoRoute(daoId, `token/${tokenId}`)} style={{ color: 'inherit', textDecoration: 'none' }}>
             <div style={{ display: 'grid', gap: '12px' }}>
               <Image
                 src={data.image}
@@ -51,7 +53,7 @@ export function TokenCard({ tokenId, owner }: { tokenId: number; owner: string }
             </Text>
             <Link
               className="membership-token-card__owner-link mono"
-              href={`/members/${owner}`}
+              href={daoRoute(daoId, `members/${owner}`)}
               title={`View ${owner}'s profile`}
             >
               {owner.slice(0, 6)}…{owner.slice(-6)}

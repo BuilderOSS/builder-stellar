@@ -100,7 +100,15 @@ export interface MintAuthorityChangedEvent {
    * Maps `Address -> bool` where `true` means the address can mint tokens.
    * The owner has implicit minting authority without needing an entry here.
    */
-  { tag: "MintAuthority"; values: readonly [string] };
+  { tag: "MintAuthority"; values: readonly [string] } |
+  /**
+   * The metadata contract address for artwork generation.
+   *
+   * This contract is called during minting to generate artwork seeds.
+   */
+  { tag: "Metadata"; values: void } |
+  { tag: "Manager"; values: void } |
+  { tag: "CurrentHash"; values: void };
 
 /**
  * Event emitted when an account is frozen.

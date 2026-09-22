@@ -1,5 +1,8 @@
-use soroban_sdk::{contract, contractimpl, panic_with_error, Address, Env, String};
-use stellar_access::ownable::{set_owner, Ownable};
+use soroban_sdk::{
+    contract, contractimpl, panic_with_error, symbol_short, vec, Address, BytesN, Env, Error,
+    IntoVal, String,
+};
+use stellar_access::ownable::{set_owner, Ownable, OwnableStorageKey};
 use stellar_governance::votes::{
     emit_delegate_changed as emit_library_delegate_changed, get_delegate, Votes, VotesStorageKey,
 };
@@ -30,14 +33,57 @@ impl DaoTokenContract {
     /// * `uri` - The base URI for token metadata (typically an IPFS or HTTP link)
     /// * `name` - The human-readable name of the token collection
     /// * `symbol` - The short symbol/ticker for the token
+    /// * `metadata` - The metadata contract address for artwork generation
     ///
     /// # Events
     ///
     /// Emits a `TokenInitialized` event with the initialization parameters.
-    pub fn __constructor(e: &Env, owner: Address, uri: String, name: String, symbol: String) {
+    pub fn __constructor(
+        e: &Env,
+        owner: Address,
+        uri: String,
+        name: String,
+        symbol: String,
+        metadata: Address,
+        manager: Address,
+        current_hash: BytesN<32>,
+    ) {
         Base::set_metadata(e, uri.clone(), name.clone(), symbol.clone());
         set_owner(e, &owner);
+        e.storage().instance().set(&TokenKey::Metadata, &metadata);
+        e.storage().instance().set(&TokenKey::Manager, &manager);
+        e.storage()
+            .instance()
+            .set(&TokenKey::CurrentHash, &current_hash);
         emit_token_initialized(e, &owner, &uri, &name, &symbol);
+    }
+
+    pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
+        let owner = stellar_access::ownable::get_owner(e).expect("owner not set");
+        owner.require_auth();
+        let manager: Address = e
+            .storage()
+            .instance()
+            .get(&TokenKey::Manager)
+            .expect("manager not set");
+        let current: BytesN<32> = e
+            .storage()
+            .instance()
+            .get(&TokenKey::CurrentHash)
+            .expect("current hash not set");
+        if from_hash != current {
+            panic!("from hash does not match current hash");
+        }
+        let approved: bool = e.invoke_contract(
+            &manager,
+            &soroban_sdk::Symbol::new(e, "is_upgrade_approved"),
+            soroban_sdk::vec![e, from_hash.into_val(e), to_hash.clone().into_val(e)],
+        );
+        if !approved {
+            panic!("upgrade not approved");
+        }
+        e.storage().instance().set(&TokenKey::CurrentHash, &to_hash);
+        e.deployer().update_current_contract_wasm(to_hash);
     }
 
     /// Grants or revokes minting authority for an address.
@@ -87,6 +133,25 @@ impl DaoTokenContract {
             .unwrap_or(false)
     }
 
+    /// Finalizes DAO setup by moving ownership from the launch administrator
+    /// to the Treasury. This one-time handoff is authorized by the Manager.
+    pub fn finalize_ownership(e: &Env, new_owner: Address) {
+        let manager: Address = e
+            .storage()
+            .instance()
+            .get(&TokenKey::Manager)
+            .expect("manager not set");
+        manager.require_auth();
+        e.storage()
+            .instance()
+            .set(&OwnableStorageKey::Owner, &new_owner);
+    }
+
+    /// Returns the metadata contract used for mint hooks.
+    pub fn metadata(e: &Env) -> Option<Address> {
+        e.storage().instance().get(&TokenKey::Metadata)
+    }
+
     /// Mints a single NFT to the specified address.
     ///
     /// The token is assigned a sequential ID (starting from 0) and the recipient
@@ -120,6 +185,9 @@ impl DaoTokenContract {
         Self::ensure_self_delegate(e, to);
         let token_id = NonFungibleVotes::sequential_mint(e, to);
         // Note: OpenZeppelin's NonFungibleVotes::sequential_mint() automatically emits standard Mint event
+
+        // Generate artwork seed via metadata contract
+        Self::call_metadata_hook(e, token_id);
 
         emit_token_mint(e, minter, to, token_id);
         token_id
@@ -167,6 +235,10 @@ impl DaoTokenContract {
 
         for _ in 0..amount {
             let token_id = NonFungibleVotes::sequential_mint(e, to);
+
+            // Generate artwork seed via metadata contract
+            Self::call_metadata_hook(e, token_id);
+
             last_token_id = token_id;
         }
 
@@ -316,6 +388,21 @@ impl DaoTokenContract {
     /// - Storage write happens before vote transfer
     /// - `transfer_voting_units()` properly updates voting power checkpoints
     /// - Events are emitted for transparency
+    fn call_metadata_hook(e: &Env, token_id: u32) {
+        if let Some(metadata_addr) = e
+            .storage()
+            .instance()
+            .get::<TokenKey, Address>(&TokenKey::Metadata)
+        {
+            // Call on_minted hook via cross-contract invocation (ignore result - non-critical)
+            let _ = e.try_invoke_contract::<(), Error>(
+                &metadata_addr,
+                &symbol_short!("on_minted"),
+                vec![e, token_id.into_val(e)],
+            );
+        }
+    }
+
     fn ensure_self_delegate(e: &Env, account: &Address) {
         if get_delegate(e, account).is_none() {
             // Set delegatee storage (same as library's delegate() function)

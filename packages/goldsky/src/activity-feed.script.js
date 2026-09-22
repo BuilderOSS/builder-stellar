@@ -1,35 +1,56 @@
 function invoke(data) {
-  function parsePayload(value) {
-    if (typeof value === 'string') {
-      var trimmed = value.trim();
-      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
-        try {
-          return parsePayload(JSON.parse(trimmed));
-        } catch {
-          return null;
+  try {
+    if (!data) return null;
+
+    // Normalize all incoming fields to ensure consistent types across all rows
+    // This is critical for Arrow table serialization - all rows must have identical types
+    function ensureString(val, def) {
+      return (typeof val === 'string' && val) ? val : def;
+    }
+    function ensureNumber(val, def) {
+      var n = Number(val);
+      return isFinite(n) ? n : def;
+    }
+
+    var topics = ensureString(data.topics, '{}');
+    var args = ensureString(data.args, '{}');
+    var ledger_sequence = ensureNumber(data.ledger_sequence, 0);
+    var transaction_index = ensureNumber(data.transaction_index, 0);
+    var operation_index = ensureNumber(data.operation_index, 0);
+    var event_index = ensureNumber(data.event_index, 0);
+
+    function parsePayload(value) {
+      try {
+        if (typeof value === 'string') {
+          var trimmed = value.trim();
+          if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+            return parsePayload(JSON.parse(trimmed));
+          }
         }
+
+        if (value && typeof value === 'object') {
+          return value;
+        }
+
+        return null;
+      } catch (e) {
+        console.error('Payload parse error:', e.message, 'value:', String(value).substring(0, 100));
+        return null;
       }
     }
 
-    if (value && typeof value === 'object') {
-      return value;
-    }
-
-    return null;
-  }
-
   function pick(row, keys) {
-    var payload = parsePayload(row.payload) || parsePayload(row.data);
+    var payload = parsePayload(args) || parsePayload(topics) || parsePayload(row.payload) || parsePayload(row.data);
     for (var i = 0; i < keys.length; i += 1) {
       var key = keys[i];
       if (row[key] !== undefined && row[key] !== null && row[key] !== '') {
-        return row[key];
+        return String(row[key]);
       }
       if (payload && payload[key] !== undefined && payload[key] !== null && payload[key] !== '') {
-        return payload[key];
+        return String(payload[key]);
       }
     }
-    return undefined;
+    return '';
   }
 
   function unique(values) {
@@ -60,6 +81,16 @@ function invoke(data) {
 
   var normalizedEventName = normalizeEventName(eventName);
 
+  var userFacing = {
+    TokenInitialized: true, Mint: true, MintWithMinter: true, BatchMint: true,
+    Transfer: true, DelegateChanged: true, DelegateVotesChanged: true,
+    ProposalCreated: true, ProposalQueued: true, VoteCast: true,
+    ProposalCancelled: true, ProposalCanceled: true, ProposalExecuted: true,
+    AuctionCreated: true, BidPlaced: true,
+    AuctionSettled: true, BidRefunded: true, AuctionCancelled: true,
+    DaoCreated: true, DaoRegistered: true, DaoFinalized: true
+  };
+
   var kindMap = {
     TokenInitialized: 'token.initialized',
     Mint: 'token.mint',
@@ -74,10 +105,8 @@ function invoke(data) {
     ProposalCreated: 'governance.proposal_created',
     ProposalQueued: 'governance.proposal_queued',
     VoteCast: 'governance.vote_cast',
-    ProposalCanceled: 'governance.proposal_canceled',
     ProposalCancelled: 'governance.proposal_cancelled',
     ProposalExecuted: 'governance.proposal_executed',
-    ProposalExpired: 'governance.proposal_expired',
     TreasuryChanged: 'governance.treasury_changed',
     TokenContractChanged: 'governance.token_contract_changed',
     QueueDelayChanged: 'governance.queue_delay_changed',
@@ -100,7 +129,24 @@ function invoke(data) {
     PaymentTokenUpdated: 'auction.payment_token_updated',
     TreasuryUpdated: 'auction.treasury_updated',
     BidRefunded: 'auction.bid_refunded',
-    AuctionCancelled: 'auction.cancelled'
+    AuctionCancelled: 'auction.cancelled',
+    DaoCreated: 'manager.dao_created',
+    DaoRegistered: 'manager.dao_registered',
+    DaoFinalized: 'manager.dao_finalized',
+    FactoryPaused: 'manager.factory_paused',
+    FactoryUnpaused: 'manager.factory_unpaused',
+    UpgradeApproved: 'manager.upgrade_approved',
+    ImplementationRevoked: 'manager.implementation_revoked',
+    ImplementationRegistered: 'manager.implementation_registered',
+    CurrentImplementationsUpdated: 'manager.implementations_updated',
+    MetadataInitialized: 'metadata.initialized',
+    PropertyAdded: 'metadata.property_added',
+    SeedGenerated: 'metadata.seed_generated',
+    PropertiesReset: 'metadata.properties_reset',
+    ProjectURIUpdated: 'metadata.project_uri_updated',
+    DescriptionUpdated: 'metadata.description_updated',
+    RendererBaseUpdated: 'metadata.renderer_base_updated',
+    ContractImageUpdated: 'metadata.contract_image_updated'
   };
 
   var titleMap = {
@@ -117,10 +163,8 @@ function invoke(data) {
     ProposalCreated: 'Proposal created',
     ProposalQueued: 'Proposal queued',
     VoteCast: 'Vote cast',
-    ProposalCanceled: 'Proposal canceled',
     ProposalCancelled: 'Proposal cancelled',
     ProposalExecuted: 'Proposal executed',
-    ProposalExpired: 'Proposal expired',
     TreasuryChanged: 'Treasury changed',
     TokenContractChanged: 'Token contract changed',
     QueueDelayChanged: 'Queue delay updated',
@@ -143,7 +187,24 @@ function invoke(data) {
     PaymentTokenUpdated: 'Payment token updated',
     TreasuryUpdated: 'Treasury updated',
     BidRefunded: 'Bid refunded',
-    AuctionCancelled: 'Auction cancelled'
+    AuctionCancelled: 'Auction cancelled',
+    DaoCreated: 'DAO created',
+    DaoRegistered: 'DAO registered',
+    DaoFinalized: 'DAO finalized',
+    FactoryPaused: 'Factory paused',
+    FactoryUnpaused: 'Factory unpaused',
+    UpgradeApproved: 'Upgrade approved',
+    ImplementationRevoked: 'Implementation revoked',
+    ImplementationRegistered: 'Implementation registered',
+    CurrentImplementationsUpdated: 'Implementations updated',
+    MetadataInitialized: 'Metadata initialized',
+    PropertyAdded: 'Property added',
+    SeedGenerated: 'Seed generated',
+    PropertiesReset: 'Properties reset',
+    ProjectURIUpdated: 'Project URI updated',
+    DescriptionUpdated: 'Description updated',
+    RendererBaseUpdated: 'Renderer base updated',
+    ContractImageUpdated: 'Contract image updated'
   };
 
   var addresses = unique([
@@ -161,50 +222,110 @@ function invoke(data) {
     pick(data, ['new_governor']),
     pick(data, ['token_contract']),
     pick(data, ['token_contract_id']),
-    pick(data, ['contract_id'])
+    pick(data, ['contract_id']),
+    pick(data, ['creator']),
+    pick(data, ['token_address'])
   ]);
 
-  var summary;
-  if (normalizedEventName === 'ProposalQueued') {
-    summary = 'Proposal ' + (pick(data, ['proposal_id']) || '') + ' queued';
-  } else if (normalizedEventName === 'ProposalCreated') {
-    summary = 'Proposal created';
-  } else if (normalizedEventName === 'VoteCast') {
-    summary = 'Vote cast on proposal';
-  } else if (normalizedEventName === 'BidPlaced') {
-    summary = 'Bid of ' + (pick(data, ['amount']) || 'unknown') + ' placed on token ' + (pick(data, ['token_id']) || 'unknown');
-  } else if (normalizedEventName === 'AuctionSettled') {
-    summary = 'Auction settled for token ' + (pick(data, ['token_id']) || 'unknown');
-  } else if (normalizedEventName === 'AuctionCreated') {
-    summary = 'Auction created for token ' + (pick(data, ['token_id']) || 'unknown');
-  } else if (normalizedEventName === 'Execute') {
-    summary = 'Executed ' + (pick(data, ['function']) || 'call') + ' on ' + (pick(data, ['target']) || 'target');
-  } else if (normalizedEventName === 'Mint' || normalizedEventName === 'MintWithMinter') {
-    summary = 'Minted token ' + (pick(data, ['token_id']) || '') + ' to ' + (pick(data, ['to', 'owner']) || 'recipient');
-  } else if (normalizedEventName === 'BatchMint') {
-    summary = 'Minted ' + (pick(data, ['amount']) || 'batch') + ' tokens';
-  } else if (normalizedEventName === 'DelegateChanged') {
-    summary = 'Delegation changed';
-  } else if (titleMap[normalizedEventName]) {
-    summary = titleMap[normalizedEventName];
+  var proposalId = pick(data, ['proposal_id']);
+  var amount = pick(data, ['amount']);
+  var tokenId = pick(data, ['token_id']);
+  var func = pick(data, ['function']);
+  var target = pick(data, ['target']);
+  var owner = pick(data, ['to', 'owner']);
+  var creator = pick(data, ['creator']);
+  var tokenAddress = pick(data, ['token_address']);
+  var name = pick(data, ['name']);
+
+  var summaryFunctions = {
+    ProposalQueued: function() { return 'Proposal ' + (proposalId || '') + ' queued'; },
+    ProposalCreated: function() { return 'Proposal created'; },
+    VoteCast: function() { return 'Vote cast on proposal'; },
+    BidPlaced: function() { return 'Bid of ' + (amount || 'unknown') + ' placed on token ' + (tokenId || 'unknown'); },
+    AuctionSettled: function() { return 'Auction settled for token ' + (tokenId || 'unknown'); },
+    AuctionCreated: function() { return 'Auction created for token ' + (tokenId || 'unknown'); },
+    Execute: function() { return 'Executed ' + (func || 'call') + ' on ' + (target || 'target'); },
+    Mint: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
+    MintWithMinter: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
+    BatchMint: function() { return 'Minted ' + (amount || 'batch') + ' tokens'; },
+    DelegateChanged: function() { return 'Delegation changed'; },
+    DaoCreated: function() { return 'DAO created by ' + (creator || 'unknown'); },
+    DaoRegistered: function() { return 'DAO registered for token ' + (tokenAddress || 'unknown'); },
+    DaoFinalized: function() { return 'DAO finalized for token ' + (tokenAddress || 'unknown'); },
+    ImplementationRegistered: function() { return 'Implementation "' + (name || 'unknown') + '" registered'; },
+    SeedGenerated: function() { return 'Seed generated for token ' + (tokenId || 'unknown'); },
+    PropertyAdded: function() { return 'Property "' + (name || 'unknown') + '" added'; }
+  };
+
+  var summary = summaryFunctions[normalizedEventName] ? summaryFunctions[normalizedEventName]() : (titleMap[normalizedEventName] || String(eventName).replace(/_/g, ' '));
+
+  // Ensure consistent string representation for JSON fields to avoid Arrow type inference issues
+  var topicsValue = topics;
+  if (typeof topicsValue === 'string') {
+    // Validate it's valid JSON
+    try {
+      JSON.parse(topicsValue);
+    } catch (e) {
+      topicsValue = '{}';
+    }
   } else {
-    summary = String(eventName).replace(/_/g, ' ');
+    topicsValue = JSON.stringify(topicsValue || {});
+  }
+
+  var argsValue = args;
+  if (typeof argsValue === 'string') {
+    // Validate it's valid JSON
+    try {
+      JSON.parse(argsValue);
+    } catch (e) {
+      argsValue = '{}';
+    }
+  } else {
+    argsValue = JSON.stringify(argsValue || {});
+  }
+
+  // Strictly type all fields to ensure no mixed types in Arrow table
+  var visibility = userFacing[normalizedEventName] ? (normalizedEventName.indexOf('Proposal') === 0 || normalizedEventName === 'VoteCast' ? 'governance' : 'public') : (kindMap[normalizedEventName] ? 'admin' : 'system');
+
+  // Helper to safely convert to number
+  function toNumber(val) {
+    if (typeof val === 'number') return isFinite(val) ? val : 0;
+    var n = Number(val);
+    return isFinite(n) ? n : 0;
+  }
+
+  // Helper to safely convert to string
+  function toString(val) {
+    if (val === null || val === undefined || val === '') return '';
+    return String(val);
   }
 
   return {
-    activity_id: data.event_id || data.id,
-    deployment_id: data.deployment_id,
-    contract_id: data.contract_id,
-    contract_role: data.contract_role,
-    kind: kindMap[normalizedEventName] || ('contract.' + String(eventName).toLowerCase()),
-    title: titleMap[normalizedEventName] || normalizedEventName,
-    summary: summary,
-    proposal_id: pick(data, ['proposal_id']) || null,
-    proposal_number: pick(data, ['proposal_number']) || null,
-    actor: pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate']) || null,
-    addresses: JSON.stringify(addresses),
-    ledger_sequence: data.ledger_sequence,
-    timestamp: data.timestamp || data.ledger_closed_at || null,
-    transaction_hash: data.transaction_hash
+    activity_id: toString(data.event_id || data.id),  // Primary key - derived from source event_id
+    deployment_id: toString(data.deployment_id),
+    contract_id: toString(data.contract_id),
+    contract_role: toString(data.contract_role),
+    kind: toString(kindMap[normalizedEventName] || ('contract.' + String(eventName).toLowerCase())),
+    title: toString(titleMap[normalizedEventName] || normalizedEventName),
+    summary: toString(summary),
+    event_name: toString(eventName),
+    topics: toString(topicsValue),
+    args: toString(argsValue),
+    visibility: toString(visibility),
+    proposal_id: toString(proposalId),
+    token_id: toString(tokenId),
+    amount: toString(amount),
+    actor: toString(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator'])),
+    addresses: JSON.stringify(addresses || []),
+    ledger_sequence: ledger_sequence,
+    transaction_index: transaction_index,
+    operation_index: operation_index,
+    event_index: event_index,
+    ledger_closed_at: toString(data.ledger_closed_at),
+    transaction_hash: toString(data.transaction_hash)
   };
+  } catch (e) {
+    console.error('Activity feed transform error:', e.message, 'event_id:', data?.event_id);
+    return null;
+  }
 }

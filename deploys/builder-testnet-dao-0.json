@@ -1,0 +1,131 @@
+{
+  "status": "operational",
+  "network": "testnet",
+  "label": "builder",
+  "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+  "nonce": 0,
+  "manager": "CD5ARHFOXUWDVD6XG3ZFYQPQDUTDCFMWRG5GTKFTFGHDYWQJRV4G46BF",
+  "predictedAddresses": {
+    "token": "CDJSI4BBS2U5N5GTOXTFM6PMPDB5CND3HGFITDOWRSHSSCWQSFYL3YTM",
+    "metadata": "CBZP4CZF4QQEMOS3TJMG2GYXZT2QZPJ6ZC56XUU2VQORMLA6NZ3DTOV6",
+    "auction": "CAO65UNAPI5XQBIVWMPR7ZFBKJENR4ASD3WRQWLXDRQOGBABQUQMJVKU",
+    "governor": "CBQRKGVBWVCHTJYH56NCNXC4IEBOP5G44HSY37EWKLBRKM2VRZWJWMAO",
+    "treasury": "CDJHFWEDRYOVCRIRI6EWUTFH3CPK522TMLB2WXK64E4PJJH6TDEWEBOT"
+  },
+  "addresses": {
+    "token": "CDJSI4BBS2U5N5GTOXTFM6PMPDB5CND3HGFITDOWRSHSSCWQSFYL3YTM",
+    "metadata": "CBZP4CZF4QQEMOS3TJMG2GYXZT2QZPJ6ZC56XUU2VQORMLA6NZ3DTOV6",
+    "auction": "CAO65UNAPI5XQBIVWMPR7ZFBKJENR4ASD3WRQWLXDRQOGBABQUQMJVKU",
+    "governor": "CBQRKGVBWVCHTJYH56NCNXC4IEBOP5G44HSY37EWKLBRKM2VRZWJWMAO",
+    "treasury": "CDJHFWEDRYOVCRIRI6EWUTFH3CPK522TMLB2WXK64E4PJJH6TDEWEBOT"
+  },
+  "config": {
+    "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+    "nonce": 0,
+    "token": {
+      "name": "Builder DAO",
+      "symbol": "BUILD",
+      "uri": "https://test-dao-stellar-web.vercel.app/api/token/"
+    },
+    "metadata": {
+      "projectUri": "https://test-dao-stellar-web.vercel.app",
+      "description": "Unlock the possibilities of collective creation",
+      "contractImage": "https://test-dao-stellar-web.vercel.app/images/dao-logo.png",
+      "rendererBase": "https://test-dao-stellar-web.vercel.app/api/render/",
+      "artwork": {
+        "ipfs": {
+          "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+          "extension": ".png"
+        },
+        "properties": [
+          {
+            "name": "0-backgrounds",
+            "items": [
+              "bg-cool",
+              "bg-warm"
+            ]
+          },
+          {
+            "name": "1-bodies",
+            "items": [
+              "body-rust",
+              "body-blue-sky",
+              "body-darkbrown"
+            ]
+          },
+          {
+            "name": "2-accessories",
+            "items": [
+              "accessory-txt-cc2",
+              "accessory-txt-ico",
+              "accessory-flash"
+            ]
+          },
+          {
+            "name": "3-heads",
+            "items": [
+              "head-hotdog",
+              "head-ufo",
+              "head-goldcoin"
+            ]
+          },
+          {
+            "name": "4-glasses",
+            "items": [
+              "glasses-square-teal",
+              "glasses-square-guava",
+              "glasses-square-black-rgb"
+            ]
+          }
+        ]
+      }
+    },
+    "auction": {
+      "duration": 300,
+      "reservePrice": "1000000000",
+      "timeBuffer": 300,
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+    },
+    "governance": {
+      "votingDelay": 300,
+      "votingPeriod": 300,
+      "quorumBps": 1000,
+      "proposalThresholdBps": 100
+    },
+    "founders": [
+      {
+        "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+        "amount": 10
+      },
+      {
+        "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
+        "amount": 10
+      },
+      {
+        "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
+        "amount": 10
+      }
+    ],
+    "launchAdmin": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO"
+  },
+  "createdAt": "2026-09-22T10:27:47.294Z",
+  "transactions": {
+    "createDao": {
+      "txHash": "ad4926c0f24d1e82902f8121ac02917f97f463734966a64d9fe46233fea451e9",
+      "ledger": 4809849
+    },
+    "acceptOwnership": {
+      "txHash": "7412332e31ec21d4d9f547080c0c025ed87a4c11727e9a44c9b05953c81fb42b",
+      "ledger": 4809851
+    },
+    "addProperties": {
+      "txHash": "57305794a55c03dd7e22f5ab905ae004b1d283523d9cb22bc35b1a1ff7516dd6",
+      "ledger": 4809853
+    },
+    "finalizeDao": {
+      "txHash": "6dacdf3ba4d4e0008226c63a5389f794349ecdfb1e958e214449bdd1ffeec038",
+      "ledger": 4809855
+    }
+  },
+  "deploymentLedger": 4809849
+}

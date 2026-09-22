@@ -7,8 +7,8 @@ use crate::{
     error::AuctionError,
     events::{emit_auction_created, emit_auction_settled, emit_bid_placed, emit_bid_refunded},
     storage::{
-        get_auction, get_config, set_auction, AuctionConfig, AuctionState, PaymentType,
-        MAX_AUCTION_EXTENSIONS, PERCENT_DENOMINATOR,
+        get_auction, get_config, set_auction, AuctionConfig, AuctionState, MAX_AUCTION_EXTENSIONS,
+        PERCENT_DENOMINATOR,
     },
 };
 
@@ -53,13 +53,18 @@ pub(crate) fn create_auction(e: &Env) {
         start_time: now,
         end_time,
         settled: false,
-        // SECURITY: Will be locked to SAC token on first bid
-        payment_currency: PaymentType::Native, // Placeholder only
         extension_count: 0,
     };
 
     set_auction(e, &auction);
-    emit_auction_created(e, token_id, now, end_time);
+    emit_auction_created(
+        e,
+        token_id,
+        now,
+        end_time,
+        config.reserve_price,
+        &config.payment_token,
+    );
 }
 
 pub(crate) fn process_bid(
@@ -68,26 +73,17 @@ pub(crate) fn process_bid(
     config: &AuctionConfig,
     bidder: &Address,
     amount: i128,
-    payment_type: &PaymentType,
 ) {
     let last_bidder = auction.highest_bidder.clone();
     let last_bid = auction.highest_bid;
 
     // Validate bid amount
     if last_bidder.is_none() {
-        // SECURITY: First bid - check reserve price and lock payment currency
+        // SECURITY: First bid - check reserve price
         if amount < config.reserve_price {
             panic_with_error!(e, AuctionError::ReservePriceNotMet);
         }
-
-        // SECURITY: Lock payment currency on first bid to prevent switching
-        auction.payment_currency = payment_type.clone();
     } else {
-        // SECURITY: Subsequent bid - verify payment type matches locked currency
-        if &auction.payment_currency != payment_type {
-            panic_with_error!(e, AuctionError::InconsistentPaymentType);
-        }
-
         // SECURITY: Check minimum increment with overflow protection
         // Calculate: min_bid = last_bid + (last_bid * percent / PERCENT_DENOMINATOR)
         let increment = last_bid
@@ -132,7 +128,13 @@ pub(crate) fn process_bid(
 
     // Refund previous bidder AFTER state update (CEI pattern)
     if let Some(prev_bidder) = last_bidder {
-        refund_bid(e, &prev_bidder, last_bid, &auction.payment_currency);
+        refund_bid(
+            e,
+            auction.token_id,
+            &prev_bidder,
+            last_bid,
+            &config.payment_token,
+        );
     }
 
     emit_bid_placed(
@@ -140,7 +142,6 @@ pub(crate) fn process_bid(
         auction.token_id,
         bidder,
         amount,
-        payment_type,
         extended,
         auction.end_time,
     );
@@ -191,36 +192,31 @@ pub(crate) fn settle_auction_internal(e: &Env) {
 
         // Transfer proceeds to treasury
         if auction.highest_bid > 0 {
-            // SECURITY: Native XLM payment removed - only SAC tokens supported
-            // This ensures we never hit incomplete payment code paths
-            match &auction.payment_currency {
-                PaymentType::Native => {
-                    // Should never reach here due to constructor validation
-                    panic_with_error!(e, AuctionError::NoPaymentTokenSet);
-                }
-                PaymentType::SAC(token_addr) => {
-                    let payment_transfer_args = soroban_sdk::vec![
-                        e,
-                        e.current_contract_address().to_val(),
-                        config.treasury.to_val(),
-                        auction.highest_bid.into_val(e)
-                    ];
+            // SECURITY: Only SAC tokens supported for payments
+            let payment_transfer_args = soroban_sdk::vec![
+                e,
+                e.current_contract_address().to_val(),
+                config.treasury.to_val(),
+                auction.highest_bid.into_val(e)
+            ];
 
-                    e.authorize_as_current_contract(soroban_sdk::vec![
-                        e,
-                        InvokerContractAuthEntry::Contract(SubContractInvocation {
-                            context: ContractContext {
-                                contract: token_addr.clone(),
-                                fn_name: transfer_symbol.clone(),
-                                args: payment_transfer_args.clone(),
-                            },
-                            sub_invocations: soroban_sdk::vec![e],
-                        }),
-                    ]);
+            e.authorize_as_current_contract(soroban_sdk::vec![
+                e,
+                InvokerContractAuthEntry::Contract(SubContractInvocation {
+                    context: ContractContext {
+                        contract: config.payment_token.clone(),
+                        fn_name: transfer_symbol.clone(),
+                        args: payment_transfer_args.clone(),
+                    },
+                    sub_invocations: soroban_sdk::vec![e],
+                }),
+            ]);
 
-                    e.invoke_contract::<()>(token_addr, &transfer_symbol, payment_transfer_args);
-                }
-            }
+            e.invoke_contract::<()>(
+                &config.payment_token,
+                &transfer_symbol,
+                payment_transfer_args,
+            );
         }
 
         emit_auction_settled(
@@ -228,7 +224,6 @@ pub(crate) fn settle_auction_internal(e: &Env) {
             auction.token_id,
             &Some(winner.clone()),
             auction.highest_bid,
-            &auction.payment_currency,
         );
     } else {
         // No bids - transfer token to treasury for DAO governance use
@@ -255,47 +250,43 @@ pub(crate) fn settle_auction_internal(e: &Env) {
 
         e.invoke_contract::<()>(&config.token_contract, &transfer_symbol, nft_transfer_args);
 
-        emit_auction_settled(e, auction.token_id, &None, 0, &auction.payment_currency);
+        emit_auction_settled(e, auction.token_id, &None, 0);
     }
 }
 
-pub(crate) fn refund_bid(e: &Env, bidder: &Address, amount: i128, payment_type: &PaymentType) {
+pub(crate) fn refund_bid(
+    e: &Env,
+    token_id: u128,
+    bidder: &Address,
+    amount: i128,
+    payment_token: &Address,
+) {
     if amount == 0 {
         return;
     }
 
-    // SECURITY: Native XLM payment removed - only SAC tokens supported
-    match payment_type {
-        PaymentType::Native => {
-            // Should never reach here due to constructor validation
-            panic_with_error!(e, AuctionError::NoPaymentTokenSet);
-        }
-        PaymentType::SAC(token_addr) => {
-            // Authorize refund transfer
-            let transfer_symbol = Symbol::new(e, "transfer");
-            let refund_args = soroban_sdk::vec![
-                e,
-                e.current_contract_address().to_val(),
-                bidder.to_val(),
-                amount.into_val(e)
-            ];
+    // SECURITY: Only SAC tokens supported for payments
+    let transfer_symbol = Symbol::new(e, "transfer");
+    let refund_args = soroban_sdk::vec![
+        e,
+        e.current_contract_address().to_val(),
+        bidder.to_val(),
+        amount.into_val(e)
+    ];
 
-            e.authorize_as_current_contract(soroban_sdk::vec![
-                e,
-                InvokerContractAuthEntry::Contract(SubContractInvocation {
-                    context: ContractContext {
-                        contract: token_addr.clone(),
-                        fn_name: transfer_symbol.clone(),
-                        args: refund_args.clone(),
-                    },
-                    sub_invocations: soroban_sdk::vec![e],
-                }),
-            ]);
+    e.authorize_as_current_contract(soroban_sdk::vec![
+        e,
+        InvokerContractAuthEntry::Contract(SubContractInvocation {
+            context: ContractContext {
+                contract: payment_token.clone(),
+                fn_name: transfer_symbol.clone(),
+                args: refund_args.clone(),
+            },
+            sub_invocations: soroban_sdk::vec![e],
+        }),
+    ]);
 
-            e.invoke_contract::<()>(token_addr, &transfer_symbol, refund_args);
+    e.invoke_contract::<()>(payment_token, &transfer_symbol, refund_args);
 
-            // IMPROVEMENT: Emit refund event for observability
-            emit_bid_refunded(e, bidder, amount, payment_type);
-        }
-    }
+    emit_bid_refunded(e, token_id, bidder, amount);
 }

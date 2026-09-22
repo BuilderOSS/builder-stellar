@@ -73,14 +73,14 @@ export const TREASURY_ASSETS: AssetsByNetwork = {
 /**
  * Get the list of treasury assets for a specific network
  */
-export function getTreasuryAssets(network: keyof AssetsByNetwork): TreasuryAsset[] {
-  return TREASURY_ASSETS[network] || TREASURY_ASSETS.local;
+export function getTreasuryAssets(network: keyof AssetsByNetwork | 'public'): TreasuryAsset[] {
+  return TREASURY_ASSETS[network === 'public' ? 'mainnet' : network] || TREASURY_ASSETS.local;
 }
 
 /**
  * Find a specific asset by code and network
  */
-export function findAsset(network: keyof AssetsByNetwork, assetCode: string): TreasuryAsset | undefined {
+export function findAsset(network: keyof AssetsByNetwork | 'public', assetCode: string): TreasuryAsset | undefined {
   const assets = getTreasuryAssets(network);
   return assets.find((asset) => asset.code === assetCode);
 }

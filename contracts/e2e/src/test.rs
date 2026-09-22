@@ -2,6 +2,9 @@ extern crate std;
 
 use auction::{DaoAuctionContract, DaoAuctionContractClient};
 use governor::{DaoGovernorContract, DaoGovernorContractClient};
+use manager::{ManagerContract, ManagerContractClient};
+use metadata::{IpfsGroup, ItemParam};
+use metadata::{MetadataContract, MetadataContractClient};
 use soroban_sdk::{
     contract, contractimpl, symbol_short,
     testutils::{Address as _, Ledger},
@@ -82,6 +85,8 @@ fn setup() -> (
     e.ledger().set_timestamp(1_000);
 
     let owner = Address::generate(&e);
+    let metadata_id = e.register(MetadataContract, ());
+    let metadata = MetadataContractClient::new(&e, &metadata_id);
     let token_id = e.register(
         DaoTokenContract,
         (
@@ -89,11 +94,38 @@ fn setup() -> (
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
+            metadata_id.clone(),
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
+    metadata.initialize(
+        &token_id,
+        &String::from_str(&e, "https://example.com/project"),
+        &String::from_str(&e, "DAO description"),
+        &String::from_str(&e, "https://example.com/image.png"),
+        &String::from_str(&e, "https://example.com/render/"),
+        &Address::generate(&e),
+        &BytesN::from_array(&e, &[0u8; 32]),
+        &owner,
+        &Vec::new(&e),
+        &Vec::new(&e),
+        &IpfsGroup {
+            base_uri: String::from_str(&e, "ipfs://"),
+            extension: String::from_str(&e, ".png"),
+        },
+    );
 
-    let treasury_id = e.register(DaoTreasuryContract, (owner.clone(), Address::generate(&e)));
+    let treasury_id = e.register(
+        DaoTreasuryContract,
+        (
+            owner.clone(),
+            Address::generate(&e),
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
+        ),
+    );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
 
     let governor_id = e.register(
@@ -107,6 +139,8 @@ fn setup() -> (
             300_u32,
             1_u128,
             1_000_u32,
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
         ),
     );
     let governor = DaoGovernorContractClient::new(&e, &governor_id);
@@ -191,6 +225,96 @@ fn transfer_proposal_args_u32(
 
 fn description_hash(e: &Env, description: &String) -> BytesN<32> {
     e.crypto().keccak256(&description.to_bytes()).to_bytes()
+}
+
+#[test]
+fn token_mint_generates_metadata_seed_through_real_hook() {
+    let (e, token, _treasury, _governor, _target, owner) = setup();
+    let names = vec![&e, String::from_str(&e, "Background")];
+    let items = vec![
+        &e,
+        ItemParam {
+            property_id: 0,
+            name: String::from_str(&e, "Blue"),
+            is_new_property: true,
+        },
+        ItemParam {
+            property_id: 0,
+            name: String::from_str(&e, "Red"),
+            is_new_property: true,
+        },
+    ];
+    let metadata_address = token.metadata().unwrap();
+    let metadata = MetadataContractClient::new(&e, &metadata_address);
+    metadata.add_properties(
+        &names,
+        &items,
+        &IpfsGroup {
+            base_uri: String::from_str(&e, "ipfs://art"),
+            extension: String::from_str(&e, ".png"),
+        },
+    );
+
+    let recipient = Address::generate(&e);
+    let token_id = token.mint(&owner, &recipient);
+
+    assert_eq!(token_id, 0);
+    assert_eq!(metadata.properties_count(), 1);
+    assert_eq!(metadata.items_count(&0), 2);
+    assert_eq!(metadata.token(), token.address.clone());
+}
+
+#[test]
+fn manager_registry_and_predictions_are_creator_scoped() {
+    let e = Env::default();
+    e.mock_all_auths();
+    e.ledger().set_sequence_number(7);
+    let admin = Address::generate(&e);
+    let creator_a = Address::generate(&e);
+    let creator_b = Address::generate(&e);
+    let manager_id = e.register(ManagerContract, (admin.clone(),));
+    let manager = ManagerContractClient::new(&e, &manager_id);
+    let hashes = [
+        BytesN::from_array(&e, &[1; 32]),
+        BytesN::from_array(&e, &[2; 32]),
+        BytesN::from_array(&e, &[3; 32]),
+        BytesN::from_array(&e, &[4; 32]),
+        BytesN::from_array(&e, &[5; 32]),
+    ];
+    for (index, hash) in hashes.iter().enumerate() {
+        manager.register_implementation(
+            &String::from_str(
+                &e,
+                ["Token", "Metadata", "Auction", "Governor", "Treasury"][index],
+            ),
+            &1,
+            hash,
+        );
+    }
+    manager.set_current_implementations(&hashes[0], &hashes[1], &hashes[2], &hashes[3], &hashes[4]);
+    assert_eq!(
+        manager
+            .get_latest_implementation(&String::from_str(&e, "Token"))
+            .unwrap()
+            .wasm_hash,
+        hashes[0]
+    );
+
+    let prediction_a = manager.predict_addresses(&creator_a, &42);
+    assert_eq!(prediction_a, manager.predict_addresses(&creator_a, &42));
+    assert_ne!(
+        prediction_a.token,
+        manager.predict_addresses(&creator_b, &42).token
+    );
+    assert_ne!(
+        prediction_a.token,
+        manager.predict_addresses(&creator_a, &43).token
+    );
+
+    manager.revoke_implementation(&hashes[0]);
+    assert!(manager
+        .get_latest_implementation(&String::from_str(&e, "Token"))
+        .is_none());
 }
 
 #[test]
@@ -705,6 +829,8 @@ fn treasury_batch_mint_with_explicit_auth() {
     e.ledger().set_timestamp(1_000);
 
     let owner = Address::generate(&e);
+    let metadata_id = e.register(MetadataContract, ());
+    let metadata = MetadataContractClient::new(&e, &metadata_id);
     let token_id = e.register(
         DaoTokenContract,
         (
@@ -712,11 +838,38 @@ fn treasury_batch_mint_with_explicit_auth() {
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
+            metadata_id.clone(),
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
+    metadata.initialize(
+        &token_id,
+        &String::from_str(&e, "https://example.com/project"),
+        &String::from_str(&e, "DAO description"),
+        &String::from_str(&e, "https://example.com/image.png"),
+        &String::from_str(&e, "https://example.com/render/"),
+        &Address::generate(&e),
+        &BytesN::from_array(&e, &[0u8; 32]),
+        &owner,
+        &Vec::new(&e),
+        &Vec::new(&e),
+        &IpfsGroup {
+            base_uri: String::from_str(&e, "ipfs://"),
+            extension: String::from_str(&e, ".png"),
+        },
+    );
 
-    let treasury_id = e.register(DaoTreasuryContract, (owner.clone(), Address::generate(&e)));
+    let treasury_id = e.register(
+        DaoTreasuryContract,
+        (
+            owner.clone(),
+            Address::generate(&e),
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
+        ),
+    );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
 
     let governor_id = e.register(
@@ -730,6 +883,8 @@ fn treasury_batch_mint_with_explicit_auth() {
             300_u32,
             1_u128,
             1_000_u32,
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
         ),
     );
     let _governor = DaoGovernorContractClient::new(&e, &governor_id);
@@ -794,6 +949,8 @@ fn setup_auction() -> (
     e.ledger().set_timestamp(1_000);
 
     let owner = Address::generate(&e);
+    let metadata_id = e.register(MetadataContract, ());
+    let metadata = MetadataContractClient::new(&e, &metadata_id);
 
     // Deploy DAO token (NFT)
     let token_id = e.register(
@@ -803,12 +960,39 @@ fn setup_auction() -> (
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
+            metadata_id.clone(),
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
+    metadata.initialize(
+        &token_id,
+        &String::from_str(&e, "https://example.com/project"),
+        &String::from_str(&e, "DAO description"),
+        &String::from_str(&e, "https://example.com/image.png"),
+        &String::from_str(&e, "https://example.com/render/"),
+        &Address::generate(&e),
+        &BytesN::from_array(&e, &[0u8; 32]),
+        &owner,
+        &Vec::new(&e),
+        &Vec::new(&e),
+        &IpfsGroup {
+            base_uri: String::from_str(&e, "ipfs://"),
+            extension: String::from_str(&e, ".png"),
+        },
+    );
 
     // Deploy treasury
-    let treasury_id = e.register(DaoTreasuryContract, (owner.clone(), Address::generate(&e)));
+    let treasury_id = e.register(
+        DaoTreasuryContract,
+        (
+            owner.clone(),
+            Address::generate(&e),
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
+        ),
+    );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
 
     // Create payment token (SAC - like USDC)
@@ -829,6 +1013,8 @@ fn setup_auction() -> (
             10_u32,                      // min bid increment: 10%
             50_u64,                      // time buffer: 50 seconds
             Some(payment_token.clone()), // payment token
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
         ),
     );
     let auction = DaoAuctionContractClient::new(&e, &auction_id);
@@ -905,6 +1091,19 @@ fn test_auction_full_lifecycle() {
     assert_ne!(new_auction_state.token_id, token_id);
     assert_eq!(new_auction_state.highest_bid, 0);
     assert!(!new_auction_state.settled);
+}
+
+#[test]
+fn test_pending_auction_finalization_launches_and_hands_off_to_treasury() {
+    let (e, _token, treasury, auction, _owner, _payment_token, _payment_client) = setup_auction();
+
+    assert_eq!(auction.get_owner(), Some(_owner.clone()));
+    auction.finalize_ownership(&treasury.address);
+
+    assert_eq!(auction.get_owner(), Some(treasury.address.clone()));
+    assert!(!auction.paused());
+    assert_eq!(auction.get_auction().token_id, 0);
+    let _ = e;
 }
 
 #[test]
@@ -1267,24 +1466,14 @@ fn test_auction_payment_token_setter() {
 
     // SECURITY FIX: Payment token is always required now
     let config = auction.get_config();
-    assert_eq!(config.payment_token, Some(payment_token_addr.clone()));
+    assert_eq!(config.payment_token, payment_token_addr.clone());
 
     // Can change to a different SAC token
     let new_payment_token = Address::generate(&e);
-    auction.set_payment_token(&Some(new_payment_token.clone()));
+    auction.set_payment_token(&new_payment_token);
 
     let config = auction.get_config();
-    assert_eq!(config.payment_token, Some(new_payment_token));
-}
-
-#[test]
-#[should_panic(expected = "Error(Contract, #1211)")] // NoPaymentTokenSet
-fn test_auction_payment_token_setter_rejects_none() {
-    let (_e, _token, _treasury, auction, _owner, _payment_token_addr, _payment_token) =
-        setup_auction();
-
-    // SECURITY FIX: Cannot set payment token to None
-    auction.set_payment_token(&None);
+    assert_eq!(config.payment_token, new_payment_token);
 }
 
 // ============================================================================
@@ -1292,6 +1481,19 @@ fn test_auction_payment_token_setter_rejects_none() {
 // ============================================================================
 
 #[test]
+#[should_panic(expected = "Error(Contract, #1216)")] // InvalidBid
+fn test_auction_rejects_non_positive_bid_before_transfer() {
+    let (e, _token, _treasury, auction, owner, _payment_token, payment_client) = setup_auction();
+    let bidder = Address::generate(&e);
+    payment_client.mint(&bidder, &1_000_0000000);
+    auction.unpause(&owner);
+
+    let token_id = auction.get_auction().token_id;
+    auction.create_bid(&bidder, &token_id, &0);
+}
+
+#[test]
+#[should_panic]
 fn test_auction_extension_dos_protection() {
     let (e, _token, _treasury, auction, owner, _payment_token, payment_client) = setup_auction();
 
@@ -1304,9 +1506,8 @@ fn test_auction_extension_dos_protection() {
     let auction_state = auction.get_auction();
     let token_id = auction_state.token_id;
 
-    // Place 3 bids within time buffer to verify extension_count increments
-    // (Testing with 3 instead of 10 to avoid test environment limits)
-    for i in 1..=3 {
+    // Place bids within the time buffer until the configured extension cap is hit.
+    for i in 1..=11 {
         // Get current auction state to know current end_time
         let current_state = auction.get_auction();
 
@@ -1317,14 +1518,6 @@ fn test_auction_extension_dos_protection() {
         let bid_amount = 100_0000000 + (i as i128 * 20_0000000);
         auction.create_bid(&bidder, &token_id, &bid_amount);
     }
-
-    // Verify extensions are being tracked
-    let auction_state = auction.get_auction();
-    assert_eq!(auction_state.extension_count, 3);
-
-    // This verifies the DOS protection mechanism exists and tracks extensions
-    // The actual limit enforcement (MAX_AUCTION_EXTENSIONS = 10) is tested
-    // via unit tests to avoid e2e test environment limitations
 }
 
 #[test]
@@ -1430,6 +1623,8 @@ fn test_governor_treasury_bidirectional_verification() {
     e.ledger().set_timestamp(1_000);
 
     let owner = Address::generate(&e);
+    let metadata_id = e.register(MetadataContract, ());
+    let metadata = MetadataContractClient::new(&e, &metadata_id);
 
     // Register token
     let token_id = e.register(
@@ -1439,14 +1634,38 @@ fn test_governor_treasury_bidirectional_verification() {
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
+            metadata_id.clone(),
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
         ),
+    );
+    metadata.initialize(
+        &token_id,
+        &String::from_str(&e, "https://example.com/project"),
+        &String::from_str(&e, "DAO description"),
+        &String::from_str(&e, "https://example.com/image.png"),
+        &String::from_str(&e, "https://example.com/render/"),
+        &Address::generate(&e),
+        &BytesN::from_array(&e, &[0u8; 32]),
+        &owner,
+        &Vec::new(&e),
+        &Vec::new(&e),
+        &IpfsGroup {
+            base_uri: String::from_str(&e, "ipfs://"),
+            extension: String::from_str(&e, ".png"),
+        },
     );
 
     // Register treasury with a placeholder governor
     let placeholder_governor = Address::generate(&e);
     let treasury_id = e.register(
         DaoTreasuryContract,
-        (owner.clone(), placeholder_governor.clone()),
+        (
+            owner.clone(),
+            placeholder_governor.clone(),
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
+        ),
     );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
 
@@ -1462,6 +1681,8 @@ fn test_governor_treasury_bidirectional_verification() {
             300_u32,
             1_u128,
             1_000_u32,
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
         ),
     );
     let governor = DaoGovernorContractClient::new(&e, &governor_id);

@@ -36,8 +36,6 @@ pub enum AuctionError {
     ArithmeticOverflow = 1215,
     /// Invalid bid amount (too low or unreasonable)
     InvalidBid = 1216,
-    /// Inconsistent payment type between bids
-    InconsistentPaymentType = 1217,
     /// Maximum auction extensions exceeded
     MaxExtensionsExceeded = 1218,
     /// Contract not initialized properly

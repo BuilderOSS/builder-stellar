@@ -725,7 +725,7 @@ This is the cross-contract activity shape used by application code.
 The first pipeline should be split into clear stages:
 
 ```yaml
-name: dao-stellar-events
+name: builder-stellar-events
 resource_size: s
 
 sources:

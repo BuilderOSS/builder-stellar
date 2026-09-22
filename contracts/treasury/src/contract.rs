@@ -1,8 +1,8 @@
 use soroban_sdk::{
     auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation},
-    contract, contractimpl, vec, Address, Env, Symbol, Val, Vec,
+    contract, contractimpl, vec, Address, BytesN, Env, IntoVal, Symbol, Val, Vec,
 };
-use stellar_access::ownable::{set_owner, Ownable};
+use stellar_access::ownable::{set_owner, Ownable, OwnableStorageKey};
 use stellar_macros::only_owner;
 
 use crate::events::{emit_execute, emit_governor_changed, emit_treasury_initialized};
@@ -18,6 +18,18 @@ pub struct DaoTreasuryContract;
 
 #[contractimpl]
 impl DaoTreasuryContract {
+    pub fn finalize_ownership(e: &Env, new_owner: Address) {
+        let manager: Address = e
+            .storage()
+            .instance()
+            .get(&TreasuryKey::Manager)
+            .expect("manager not set");
+        manager.require_auth();
+        e.storage()
+            .instance()
+            .set(&OwnableStorageKey::Owner, &new_owner);
+    }
+
     /// Initializes the treasury contract with an owner and governor.
     ///
     /// # Arguments
@@ -28,13 +40,53 @@ impl DaoTreasuryContract {
     /// # Events
     ///
     /// Emits a `TreasuryInitialized` event with the initialization parameters.
-    pub fn __constructor(e: &Env, owner: Address, governor: Address) {
+    pub fn __constructor(
+        e: &Env,
+        owner: Address,
+        governor: Address,
+        manager: Address,
+        current_hash: BytesN<32>,
+    ) {
         set_owner(e, &owner);
         e.storage()
             .instance()
             .set(&TreasuryKey::Governor, &governor);
+        e.storage().instance().set(&TreasuryKey::Manager, &manager);
+        e.storage()
+            .instance()
+            .set(&TreasuryKey::CurrentHash, &current_hash);
 
         emit_treasury_initialized(e, &owner, &governor);
+    }
+
+    pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
+        let owner = stellar_access::ownable::get_owner(e).expect("owner not set");
+        owner.require_auth();
+        let manager: Address = e
+            .storage()
+            .instance()
+            .get(&TreasuryKey::Manager)
+            .expect("manager not set");
+        let current: BytesN<32> = e
+            .storage()
+            .instance()
+            .get(&TreasuryKey::CurrentHash)
+            .expect("current hash not set");
+        if from_hash != current {
+            panic!("from hash does not match current hash");
+        }
+        let approved: bool = e.invoke_contract(
+            &manager,
+            &Symbol::new(e, "is_upgrade_approved"),
+            vec![e, from_hash.into_val(e), to_hash.clone().into_val(e)],
+        );
+        if !approved {
+            panic!("upgrade not approved");
+        }
+        e.storage()
+            .instance()
+            .set(&TreasuryKey::CurrentHash, &to_hash);
+        e.deployer().update_current_contract_wasm(to_hash);
     }
 
     /// Updates the authorized governor contract address.

@@ -5,7 +5,7 @@ use soroban_sdk::{
     contract, contractimpl, panic_with_error, vec, Address, BytesN, Env, IntoVal, String, Symbol,
     Val, Vec,
 };
-use stellar_access::ownable::{set_owner, Ownable};
+use stellar_access::ownable::{set_owner, Ownable, OwnableStorageKey};
 use stellar_governance::{
     governor::{
         self as governor, emit_proposal_cancelled, emit_proposal_created, emit_proposal_executed,
@@ -34,6 +34,17 @@ pub struct DaoGovernorContract;
 
 #[contractimpl]
 impl DaoGovernorContract {
+    pub fn finalize_ownership(e: &Env, new_owner: Address) {
+        let manager: Address = e
+            .storage()
+            .instance()
+            .get(&GovernorKey::Manager)
+            .expect("manager not set");
+        manager.require_auth();
+        e.storage()
+            .instance()
+            .set(&OwnableStorageKey::Owner, &new_owner);
+    }
     /// Initializes the governor contract with governance parameters.
     ///
     /// Sets up all governance parameters including voting periods, quorum requirements,
@@ -68,6 +79,8 @@ impl DaoGovernorContract {
         queue_delay: u32,
         proposal_threshold: u128,
         quorum_bps: u32,
+        manager: Address,
+        current_hash: BytesN<32>,
     ) {
         assert!(quorum_bps <= BPS_DENOMINATOR as u32);
 
@@ -83,6 +96,10 @@ impl DaoGovernorContract {
         }
 
         set_owner(e, &owner);
+        e.storage().instance().set(&GovernorKey::Manager, &manager);
+        e.storage()
+            .instance()
+            .set(&GovernorKey::CurrentHash, &current_hash);
 
         let name = String::from_str(e, "MvpDaoGovernor");
         let version = String::from_str(e, "1.0.0");
@@ -114,6 +131,36 @@ impl DaoGovernorContract {
             proposal_threshold,
             quorum_bps,
         );
+    }
+
+    pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
+        let owner = stellar_access::ownable::get_owner(e).expect("owner not set");
+        owner.require_auth();
+        let manager: Address = e
+            .storage()
+            .instance()
+            .get(&GovernorKey::Manager)
+            .expect("manager not set");
+        let current: BytesN<32> = e
+            .storage()
+            .instance()
+            .get(&GovernorKey::CurrentHash)
+            .expect("current hash not set");
+        if from_hash != current {
+            panic!("from hash does not match current hash");
+        }
+        let approved: bool = e.invoke_contract(
+            &manager,
+            &Symbol::new(e, "is_upgrade_approved"),
+            vec![e, from_hash.into_val(e), to_hash.clone().into_val(e)],
+        );
+        if !approved {
+            panic!("upgrade not approved");
+        }
+        e.storage()
+            .instance()
+            .set(&GovernorKey::CurrentHash, &to_hash);
+        e.deployer().update_current_contract_wasm(to_hash);
     }
 
     #[only_owner]
@@ -279,10 +326,14 @@ impl DaoGovernorContract {
     /// `true` if the address has governor authority, `false` otherwise.
     /// The owner always has implicit authority even if not explicitly set.
     pub fn governor_authority(e: &Env, authority: Address) -> bool {
-        e.storage()
-            .instance()
-            .get(&GovernorKey::GovernorAuthority(authority))
-            .unwrap_or(false)
+        let is_owner = stellar_access::ownable::get_owner(e)
+            .map(|owner| owner == authority)
+            .unwrap_or(false);
+        is_owner
+            || e.storage()
+                .instance()
+                .get(&GovernorKey::GovernorAuthority(authority))
+                .unwrap_or(false)
     }
 
     /// Validates that an address has governor authority.
@@ -373,11 +424,11 @@ impl DaoGovernorContract {
         let start = proposal.vote_start; // Already u64
         let end = proposal.vote_end; // Already u64
 
-        if now <= start {
+        if now < start {
             return ProposalState::Pending;
         }
 
-        if now <= end {
+        if now < end {
             return ProposalState::Active;
         }
 

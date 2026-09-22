@@ -92,30 +92,52 @@ async function fetchJson<T>(url: string) {
   return json;
 }
 
-export function useGoldskyActivityFeed(limit = 12) {
-  return useSWR<GoldskyActivityResponse>(`/api/activity-feed?limit=${limit}`, fetchJson, { keepPreviousData: true });
+export function useGoldskyActivityFeed(daoId: string, limit = 12) {
+  return useSWR<GoldskyActivityResponse>(
+    `/api/dao/${encodeURIComponent(daoId)}/activity-feed?limit=${limit}`,
+    fetchJson,
+    {
+      keepPreviousData: true
+    }
+  );
 }
 
-export function useGoldskyTokenInventory(limit = 100, offset = 0) {
-  return useSWR<GoldskyTokenResponse>(`/api/tokens?limit=${limit}&offset=${offset}`, fetchJson, {
-    keepPreviousData: true
-  });
+export function useGoldskyTokenInventory(daoTokenAddress: string, limit = 100, offset = 0) {
+  return useSWR<GoldskyTokenResponse>(
+    `/api/dao/${encodeURIComponent(daoTokenAddress)}/tokens?limit=${limit}&offset=${offset}`,
+    fetchJson,
+    {
+      keepPreviousData: true
+    }
+  );
 }
 
-export function useGoldskyMemberList(limit = 100, offset = 0) {
-  return useSWR<GoldskyMemberResponse>(`/api/members?limit=${limit}&offset=${offset}`, fetchJson, {
-    keepPreviousData: true
-  });
+export function useGoldskyMemberList(daoTokenAddress: string, limit = 100, offset = 0) {
+  return useSWR<GoldskyMemberResponse>(
+    `/api/dao/${encodeURIComponent(daoTokenAddress)}/members?limit=${limit}&offset=${offset}`,
+    fetchJson,
+    {
+      keepPreviousData: true
+    }
+  );
 }
 
-export function useGoldskyMintAuthorities() {
-  return useSWR<GoldskyAuthorityResponse>('/api/authorities/mint', fetchJson, { keepPreviousData: true });
+export function useGoldskyMintAuthorities(daoTokenAddress: string) {
+  return useSWR<GoldskyAuthorityResponse>(
+    `/api/dao/${encodeURIComponent(daoTokenAddress)}/authorities/mint`,
+    fetchJson,
+    { keepPreviousData: true }
+  );
 }
 
-export function useGoldskyGovernorAuthorities() {
-  return useSWR<GoldskyAuthorityResponse>('/api/authorities/governor', fetchJson, { keepPreviousData: true });
+export function useGoldskyGovernorAuthorities(daoTokenAddress: string) {
+  return useSWR<GoldskyAuthorityResponse>(
+    `/api/dao/${encodeURIComponent(daoTokenAddress)}/authorities/governor`,
+    fetchJson,
+    { keepPreviousData: true }
+  );
 }
 
-export function useGoldskyHealth() {
+export function useGoldskyHealth(_daoId: string) {
   return useSWR<GoldskyHealthResponse>('/api/goldsky/health', fetchJson, { keepPreviousData: true });
 }

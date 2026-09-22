@@ -6,16 +6,17 @@
   "scripts": {
     "generate": "node scripts/generate-pipeline.mjs",
     "test": "node --test test/*.test.mjs",
-    "goldsky": "goldsky",
+    "turbo:validate": "goldsky turbo validate pipelines/builder-stellar-events.yaml",
     "validate": "node scripts/validate-events.mjs"
   },
   "dependencies": {
     "dotenv": "^17.2.1"
   },
   "devDependencies": {
-    "@goldskycom/cli": "^13.10.2",
     "@builder-stellar/auction-bindings": "workspace:*",
     "@builder-stellar/governor-bindings": "workspace:*",
+    "@builder-stellar/manager-bindings": "workspace:*",
+    "@builder-stellar/metadata-bindings": "workspace:*",
     "@builder-stellar/token-bindings": "workspace:*",
     "@builder-stellar/treasury-bindings": "workspace:*"
   }

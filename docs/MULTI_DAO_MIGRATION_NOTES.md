@@ -1,5 +1,7 @@
 # Multi-DAO Migration Notes
 
+> **Future-facing:** These notes describe migration and multi-DAO work that is not complete in the current database, indexer, or frontend layers.
+
 This document summarizes key insights from the Phase 1 (single-DAO) MVP to inform Phase 2 (multi-DAO platform) development.
 
 ## Documentation Reference

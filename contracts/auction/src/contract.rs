@@ -1,7 +1,7 @@
 use soroban_sdk::{
-    contract, contractimpl, contracttrait, panic_with_error, Address, Env, IntoVal, Symbol,
+    contract, contractimpl, contracttrait, panic_with_error, Address, BytesN, Env, IntoVal, Symbol,
 };
-use stellar_access::ownable::{self, Ownable};
+use stellar_access::ownable::{self, Ownable, OwnableStorageKey};
 use stellar_contract_utils::pausable::{self, Pausable};
 use stellar_macros::{only_owner, when_not_paused, when_paused};
 
@@ -15,8 +15,7 @@ use crate::{
     helpers::{create_auction, process_bid, refund_bid, settle_auction_internal},
     storage::{
         get_auction, get_config, is_launched, set_auction, set_config, set_launched, AuctionConfig,
-        AuctionState, PaymentType, MAX_BID_INCREMENT_PERCENT, MIN_AUCTION_DURATION,
-        MIN_RESERVE_PRICE,
+        AuctionState, DataKey, MAX_BID_INCREMENT_PERCENT, MIN_AUCTION_DURATION, MIN_RESERVE_PRICE,
     },
 };
 
@@ -35,7 +34,9 @@ pub trait DaoAuctionContractTrait {
         reserve_price: i128,
         min_bid_increment_percent: u32,
         time_buffer: u64,
-        payment_token: Option<Address>,
+        payment_token: Address,
+        manager: Address,
+        current_hash: BytesN<32>,
     );
 
     /// Create a bid with SAC token
@@ -61,8 +62,10 @@ pub trait DaoAuctionContractTrait {
     fn set_reserve_price(e: &Env, reserve_price: i128);
     fn set_min_bid_increment(e: &Env, min_bid_increment_percent: u32);
     fn set_time_buffer(e: &Env, time_buffer: u64);
-    fn set_payment_token(e: &Env, payment_token: Option<Address>);
+    fn set_payment_token(e: &Env, payment_token: Address);
     fn set_treasury(e: &Env, treasury: Address);
+    fn finalize_ownership(e: &Env, new_owner: Address);
+    fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>);
 }
 
 #[contractimpl(contracttrait)]
@@ -105,6 +108,25 @@ impl Ownable for DaoAuctionContract {}
 
 #[contractimpl]
 impl DaoAuctionContractTrait for DaoAuctionContract {
+    fn finalize_ownership(e: &Env, new_owner: Address) {
+        let manager: Address = e
+            .storage()
+            .instance()
+            .get(&DataKey::Manager)
+            .expect("manager not set");
+        manager.require_auth();
+        if pausable::paused(e) {
+            pausable::unpause(e);
+            if !is_launched(e) {
+                set_launched(e, true);
+                create_auction(e);
+            }
+        }
+        e.storage()
+            .instance()
+            .set(&OwnableStorageKey::Owner, &new_owner);
+    }
+
     fn __constructor(
         e: &Env,
         owner: Address,
@@ -114,17 +136,13 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         reserve_price: i128,
         min_bid_increment_percent: u32,
         time_buffer: u64,
-        payment_token: Option<Address>,
+        payment_token: Address,
+        manager: Address,
+        current_hash: BytesN<32>,
     ) {
         // Validate config
         if duration < MIN_AUCTION_DURATION || min_bid_increment_percent == 0 {
             panic_with_error!(e, AuctionError::InvalidConfig);
-        }
-
-        // SECURITY: Enforce payment token is set (SAC-only, no native XLM)
-        // This prevents incomplete native payment code paths from being reached
-        if payment_token.is_none() {
-            panic_with_error!(e, AuctionError::NoPaymentTokenSet);
         }
 
         // SECURITY: Validate reserve price is reasonable (prevent 1-stroop auctions)
@@ -154,6 +172,10 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
             payment_token: payment_token.clone(),
         };
         set_config(e, &config);
+        e.storage().instance().set(&DataKey::Manager, &manager);
+        e.storage()
+            .instance()
+            .set(&DataKey::CurrentHash, &current_hash);
 
         // Not launched yet
         set_launched(e, false);
@@ -171,19 +193,40 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         );
     }
 
+    fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
+        let owner = ownable::get_owner(e).unwrap();
+        owner.require_auth();
+        let manager: Address = e
+            .storage()
+            .instance()
+            .get(&DataKey::Manager)
+            .expect("manager not set");
+        let current: BytesN<32> = e
+            .storage()
+            .instance()
+            .get(&DataKey::CurrentHash)
+            .expect("current hash not set");
+        if from_hash != current {
+            panic!("from hash does not match current hash");
+        }
+        let approved: bool = e.invoke_contract(
+            &manager,
+            &Symbol::new(e, "is_upgrade_approved"),
+            soroban_sdk::vec![e, from_hash.into_val(e), to_hash.clone().into_val(e)],
+        );
+        if !approved {
+            panic!("upgrade not approved");
+        }
+        e.storage().instance().set(&DataKey::CurrentHash, &to_hash);
+        e.deployer().update_current_contract_wasm(to_hash);
+    }
+
     #[when_not_paused]
     fn create_bid(e: &Env, bidder: Address, token_id: u128, amount: i128) {
         bidder.require_auth();
 
         let mut auction = get_auction(e);
         let config = get_config(e);
-
-        // Ensure payment token is configured
-        let payment_token = config
-            .payment_token
-            .as_ref()
-            .ok_or(AuctionError::NoPaymentTokenSet)
-            .unwrap();
 
         // Validate token ID
         if auction.token_id != token_id {
@@ -196,6 +239,31 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
             panic_with_error!(e, AuctionError::AuctionOver);
         }
 
+        if amount <= 0 {
+            panic_with_error!(e, AuctionError::InvalidBid);
+        }
+
+        // Validate all bid economics before making the external payment call.
+        // This avoids relying on transaction rollback to protect the bidder.
+        if auction.highest_bidder.is_none() {
+            if amount < config.reserve_price {
+                panic_with_error!(e, AuctionError::ReservePriceNotMet);
+            }
+        } else {
+            let increment = auction
+                .highest_bid
+                .checked_mul(config.min_bid_increment_percent as i128)
+                .and_then(|value| value.checked_div(100))
+                .unwrap_or_else(|| panic_with_error!(e, AuctionError::ArithmeticOverflow));
+            let min_bid = auction
+                .highest_bid
+                .checked_add(increment)
+                .unwrap_or_else(|| panic_with_error!(e, AuctionError::ArithmeticOverflow));
+            if amount < min_bid {
+                panic_with_error!(e, AuctionError::MinBidNotMet);
+            }
+        }
+
         // Transfer payment tokens from bidder to contract
         // Bidder authorizes this via bidder.require_auth() at function entry
         let transfer_symbol = Symbol::new(e, "transfer");
@@ -206,16 +274,9 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
             amount.into_val(e)
         ];
 
-        e.invoke_contract::<()>(payment_token, &transfer_symbol, transfer_args);
+        e.invoke_contract::<()>(&config.payment_token, &transfer_symbol, transfer_args);
 
-        process_bid(
-            e,
-            &mut auction,
-            &config,
-            &bidder,
-            amount,
-            &PaymentType::SAC(payment_token.clone()),
-        );
+        process_bid(e, &mut auction, &config, &bidder, amount);
     }
 
     /// DESIGN NOTE: settle_and_create_new is intentionally permissionless.
@@ -255,6 +316,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     #[when_paused]
     fn cancel_auction(e: &Env) {
         let auction = get_auction(e);
+        let config = get_config(e);
 
         // Cannot cancel already settled auction
         if auction.settled {
@@ -264,7 +326,13 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         // Refund highest bidder if there is one
         if let Some(bidder) = &auction.highest_bidder {
             if auction.highest_bid > 0 {
-                refund_bid(e, bidder, auction.highest_bid, &auction.payment_currency);
+                refund_bid(
+                    e,
+                    auction.token_id,
+                    bidder,
+                    auction.highest_bid,
+                    &config.payment_token,
+                );
             }
         }
 
@@ -341,13 +409,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
 
     #[only_owner]
     #[when_paused]
-    fn set_payment_token(e: &Env, payment_token: Option<Address>) {
-        // SECURITY: Require payment token to be set (matching constructor behavior)
-        // This prevents configuration errors that would break bidding functionality
-        if payment_token.is_none() {
-            panic_with_error!(e, AuctionError::NoPaymentTokenSet);
-        }
-
+    fn set_payment_token(e: &Env, payment_token: Address) {
         let owner = ownable::get_owner(e).unwrap();
 
         let mut config = get_config(e);

@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { buildGoldskyPipelineYaml, resolveDeploymentSelection, resolvePostgresSecretName, writeGoldskyPipeline } from '../src/pipeline-generator.mjs';
+
+const deploymentFixture = new URL('../../../deploys/builder-testnet-manager.json', import.meta.url);
 
 function loadInvoke(scriptName) {
   const source = readFileSync(new URL(`../src/${scriptName}`, import.meta.url), 'utf8');
@@ -12,6 +14,65 @@ function loadInvoke(scriptName) {
 
 const decodeEvent = loadInvoke('decoded-events.script.js');
 const buildActivityFeed = loadInvoke('activity-feed.script.js');
+const topicsOf = decoded => JSON.parse(decoded.topics);
+const argsOf = decoded => JSON.parse(decoded.args);
+
+test('decoded events use the canonical envelope and preserve unknown fields', () => {
+  const decoded = decodeEvent({
+    event_id: 'envelope-1', deployment_id: 'test', contract_id: 'TOKEN', contract_role: 'token',
+    topics: '[{"symbol":"Transfer"},{"address":"FROM"},{"address":"TO"}]',
+    data: '{"map":[{"key":{"symbol":"custom_field"},"val":{"u128":"99"}}]}',
+    transaction_hash: 'tx', ledger_sequence: 1
+  });
+  assert.equal(decoded.topic_0, 'FROM');
+  assert.equal(decoded.topic_1, 'TO');
+  assert.deepEqual(JSON.parse(decoded.topics), { from: 'FROM', to: 'TO' });
+  assert.deepEqual(JSON.parse(decoded.args), { custom_field: '99' });
+  assert.equal(decoded.decoder_version, 'v2');
+});
+
+test('manager topics preserve token address then creator order for both event name styles', () => {
+  for (const eventName of ['dao_created', 'DaoRegistered']) {
+    const decoded = decodeEvent({
+      topics: JSON.stringify([{ symbol: eventName }, { address: 'TOKEN_ADDR' }, { address: 'CREATOR_ADDR' }]),
+      data: JSON.stringify({ map: [] })
+    });
+    assert.deepEqual(topicsOf(decoded), { token_address: 'TOKEN_ADDR', creator: 'CREATOR_ADDR' });
+    assert.equal(decoded.event_name, eventName);
+  }
+});
+
+test('preserves the indexed contract role for lifecycle events', () => {
+  const decoded = decodeEvent({
+    event_id: 'auction-paused',
+    deployment_id: 'test',
+    contract_id: 'AUCTION',
+    contract_role: 'auction',
+    topics: JSON.stringify([{ symbol: 'paused' }]),
+    data: JSON.stringify({ map: [] })
+  });
+
+  assert.equal(decoded.contract_role, 'auction');
+  assert.equal(decoded.event_name, 'paused');
+});
+
+test('DaoFinalized uses the token address as the DAO identity topic', () => {
+  const decoded = decodeEvent({
+    topics: JSON.stringify([
+      { symbol: 'DaoFinalized' },
+      { address: 'TOKEN_ADDR' }
+    ]),
+    data: JSON.stringify({
+      map: [
+        { key: { symbol: 'finalized_ledger' }, val: { u32: 42 } },
+        { key: { symbol: 'modules' }, val: { map: [] } }
+      ]
+    })
+  });
+
+  assert.deepEqual(topicsOf(decoded), { token_address: 'TOKEN_ADDR' });
+  assert.deepEqual(argsOf(decoded), { finalized_ledger: 42, modules: {} });
+});
 
 // XDR-JSON Flattening Tests
 
@@ -111,8 +172,8 @@ test('scValToNative preserves u128 as string', () => {
   });
 
   assert.ok(decoded);
-  assert.equal(decoded.amount, largeNumber);
-  assert.equal(typeof decoded.amount, 'string');
+  assert.equal(argsOf(decoded).weight, largeNumber);
+  assert.equal(typeof argsOf(decoded).weight, 'string');
 });
 
 // Real Goldsky Event Decoding Tests
@@ -133,9 +194,9 @@ test('decodes delegate_changed event from real Goldsky data', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'delegate_changed');
-  assert.equal(decoded.actor, 'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO');
-  assert.equal(decoded.from_address, null);
-  assert.equal(decoded.to_address, 'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO');
+  assert.deepEqual(topicsOf(decoded), { delegator: 'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO' });
+  assert.equal(argsOf(decoded).from_delegate, null);
+  assert.equal(argsOf(decoded).to_delegate, 'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO');
 });
 
 test('decodes mint event from real Goldsky data', () => {
@@ -154,8 +215,8 @@ test('decodes mint event from real Goldsky data', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'mint');
-  assert.equal(decoded.owner, 'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO');
-  assert.equal(decoded.token_id, '2');
+  assert.equal(topicsOf(decoded).to, 'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO');
+  assert.equal(argsOf(decoded).token_id, 2);
 });
 
 test('decodes delegate_votes_changed event from real Goldsky data', () => {
@@ -174,7 +235,7 @@ test('decodes delegate_votes_changed event from real Goldsky data', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'delegate_votes_changed');
-  assert.equal(decoded.actor, 'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO');
+  assert.equal(topicsOf(decoded).delegate, 'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO');
 
   const payload = JSON.parse(decoded.payload);
   assert.equal(payload.new_votes, '1');
@@ -197,16 +258,16 @@ test('decodes proposal_created event from real Goldsky data', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'proposal_created');
-  assert.equal(decoded.proposal_id, 'c3678ab26edd57c0b5dffe866fac0be8ae0fb5aa827549b01e6252cea6adacff');
-  assert.equal(decoded.actor, 'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO');
+  assert.equal(topicsOf(decoded).proposal_id, 'c3678ab26edd57c0b5dffe866fac0be8ae0fb5aa827549b01e6252cea6adacff');
+  assert.equal(topicsOf(decoded).proposer, 'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO');
 
   const payload = JSON.parse(decoded.payload);
   assert.ok(payload.description.includes('test proposal'));
   assert.deepEqual(payload.targets, ['CC6NMFVKCHMRKFA7M333CVEFAVPLXT3XAZHZX6Q4SGNDNTKZEKWTLXT2']);
   assert.deepEqual(payload.functions, ['mint']);
   assert.equal(payload.vote_snapshot, 4255554);
-  assert.equal(decoded.snapshot_ledger, 4255554);
-  assert.equal(decoded.deadline_ledger, 1787300891);
+  assert.equal(argsOf(decoded).vote_snapshot, 4255554);
+  assert.equal(argsOf(decoded).vote_end, 1787300891);
 });
 
 test('decodes vote_cast event from real Goldsky data', () => {
@@ -225,12 +286,12 @@ test('decodes vote_cast event from real Goldsky data', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'vote_cast');
-  assert.equal(decoded.actor, 'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO');
-  assert.equal(decoded.proposal_id, 'c3678ab26edd57c0b5dffe866fac0be8ae0fb5aa827549b01e6252cea6adacff');
-  assert.equal(decoded.support, 1);
-  assert.equal(decoded.amount, '1');
+  assert.equal(topicsOf(decoded).voter, 'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO');
+  assert.equal(topicsOf(decoded).proposal_id, 'c3678ab26edd57c0b5dffe866fac0be8ae0fb5aa827549b01e6252cea6adacff');
+  assert.equal(argsOf(decoded).vote_type, 1);
+  assert.equal(argsOf(decoded).weight, '1');
   // Empty string is stored as null in the decoder
-  assert.ok(decoded.reason === '' || decoded.reason === null);
+  assert.ok(argsOf(decoded).reason === '' || argsOf(decoded).reason === null);
 });
 
 // Activity Feed Transform Tests
@@ -244,6 +305,8 @@ test('builds activity feed row from decoded delegate_changed event', () => {
     event_name: 'delegate_changed',
     actor: 'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO',
     to_address: 'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO',
+    topics: '{}',
+    args: '{"from_delegate":null,"to_delegate":"GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO"}',
     payload: '{"event_name":"delegate_changed","from_delegate":null,"to_delegate":"GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO"}',
     ledger_sequence: 4254435,
     ledger_closed_at: '2026-08-21 06:44:42',
@@ -257,6 +320,13 @@ test('builds activity feed row from decoded delegate_changed event', () => {
   assert.equal(activity.title, 'Delegation changed');
   assert.equal(activity.summary, 'Delegation changed');
   assert.equal(activity.actor, 'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO');
+  assert.deepEqual(JSON.parse(activity.topics), {});
+  assert.deepEqual(JSON.parse(activity.args), { from_delegate: null, to_delegate: 'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO' });
+  assert.deepEqual(JSON.parse(activity.addresses), [
+    'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO',
+    'CC6NMFVKCHMRKFA7M333CVEFAVPLXT3XAZHZX6Q4SGNDNTKZEKWTLXT2'
+  ]);
+  assert.equal(activity.visibility, 'public');
 });
 
 test('builds activity feed row from decoded mint event', () => {
@@ -305,6 +375,8 @@ test('builds activity feed row from decoded proposal_created event', () => {
   assert.equal(activity.title, 'Proposal created');
   assert.equal(activity.summary, 'Proposal created');
   assert.equal(activity.proposal_id, 'c3678ab26edd57c0b5dffe866fac0be8ae0fb5aa827549b01e6252cea6adacff');
+  assert.equal(activity.visibility, 'governance');
+  assert.equal(activity.event_name, 'proposal_created');
 });
 
 test('builds activity feed row from decoded vote_cast event', () => {
@@ -335,59 +407,60 @@ test('builds activity feed row from decoded vote_cast event', () => {
 
 // Pipeline Generation Tests
 
-test('deployment selection uses shared env names', () => {
+test('deployment selection uses an explicit Manager artifact', () => {
   const selection = resolveDeploymentSelection({
-    NEXT_PUBLIC_DAO_NETWORK: 'testnet',
-    NEXT_PUBLIC_DAO_LABEL: 'builder'
+    MANAGER_DEPLOYMENT_FILE: 'deploys/builder-testnet-manager.json'
   });
 
-  assert.equal(selection.network, 'testnet');
-  assert.equal(selection.label, 'builder');
-  assert.match(selection.artifactPath, /deploys\/builder-testnet\.json$/);
+  assert.match(selection.artifactPath, /deploys\/builder-testnet-manager\.json$/);
 });
 
-test('pipeline generator renders the current deployment and scripts', () => {
-  const deployment = JSON.parse(readFileSync(new URL('../../../deploys/builder-testnet.json', import.meta.url), 'utf8'));
-  const template = readFileSync(new URL('../templates/dao-stellar-events.yaml.mustache', import.meta.url), 'utf8');
+test('pipeline generator renders the current deployment and scripts', { skip: !existsSync(deploymentFixture) }, () => {
+  const deployment = JSON.parse(readFileSync(deploymentFixture, 'utf8'));
+  const template = readFileSync(new URL('../templates/builder-stellar-events.yaml.mustache', import.meta.url), 'utf8');
   const activityScript = readFileSync(new URL('../src/activity-feed.script.js', import.meta.url), 'utf8');
 
   const yaml = buildGoldskyPipelineYaml({ deployment, secretName: 'MY_SECRET', templateSource: template, scriptSource: activityScript });
 
-  assert.match(yaml, /name: dao-stellar-events/);
+  assert.match(yaml, /name: builder-stellar-events/);
   assert.match(yaml, /dataset_name: stellar_testnet\.events/);
-  assert.match(yaml, /start_at: 4551728/);
-  assert.match(yaml, /'builder-testnet' AS deployment_id/);
+  assert.match(yaml, new RegExp(`start_at: ${JSON.parse(readFileSync(deploymentFixture, 'utf8')).deploymentLedger}`));
+  assert.match(yaml, new RegExp(`'manager:${deployment.manager}' AS deployment_id`));
   assert.match(yaml, /schema: chain/);
   assert.match(yaml, /table: raw_events/);
   assert.match(yaml, /table: decoded_events/);
   assert.match(yaml, /table: activity_feed/);
   assert.match(yaml, /contract_id/);
   assert.match(yaml, /contract_role/);
+  for (const table of ['dao_tokens', 'dao_metadata', 'dao_auctions', 'dao_governors', 'dao_treasuries']) {
+    assert.match(yaml, new RegExp(`${table}:`));
+    assert.match(yaml, new RegExp(`dynamic_table_check\\('${table}', contract_id\\)`));
+  }
+  for (const role of ['manager', 'token', 'metadata', 'auction', 'governor', 'treasury']) {
+    assert.match(yaml, new RegExp(`'${role}'`));
+  }
+  assert.match(yaml, /topics LIKE '%dao_created%'/);
+  assert.doesNotMatch(yaml, /topics LIKE '%dao_registered%'/);
   assert.match(yaml, /function invoke\(data\)/);
   assert.match(yaml, /event_name: string/);
-  assert.match(yaml, /CBGLIC3VDPNSXRQTHIHADJVL3WVM54ZIO7FV23SDC3DQTTDLO2NMYUK7/);
-  assert.match(yaml, /CCWTJATDBQN5H2M4RFTCB7Z3SHEMVZUXEB6YA7CHO5QME6AS55IUMEHI/);
-  assert.match(yaml, /CCPNKK3XDYHX57MNAUSWNRHDZKDOIG7DOGV43I4N3LJ74KK7TVZLXVW2/);
-  assert.match(yaml, /CBHISFJ2I27W7LWUYE3MX5ZS732BPVKPJ2BTO3ASSYAPEBSV7YZYD66E/);
+  assert.match(yaml, new RegExp(deployment.manager));
   assert.match(yaml, /secret_name: MY_SECRET/);
 });
 
-test('writeGoldskyPipeline writes a file from env selection', () => {
-  const outputPath = join(mkdtempSync(join(tmpdir(), 'goldsky-pipeline-')), 'dao-stellar-events.yaml');
+test('writeGoldskyPipeline writes a file from env selection', { skip: !existsSync(deploymentFixture) }, () => {
+  const outputPath = join(mkdtempSync(join(tmpdir(), 'goldsky-pipeline-')), 'builder-stellar-events.yaml');
   const result = writeGoldskyPipeline({
     env: {
-      NEXT_PUBLIC_DAO_NETWORK: 'testnet',
-      NEXT_PUBLIC_DAO_LABEL: 'builder',
+      MANAGER_DEPLOYMENT_FILE: 'deploys/builder-testnet-manager.json',
       GOLDSKY_POSTGRES_SECRET: 'MY_SECRET'
     },
     outputPath
   });
 
-  assert.equal(result.selection.network, 'testnet');
-  assert.equal(result.selection.label, 'builder');
+  assert.match(result.selection.artifactPath, /deploys\/builder-testnet-manager\.json$/);
   assert.equal(result.secretName, 'MY_SECRET');
   assert.equal(result.outputPath, outputPath);
-  assert.match(readFileSync(outputPath, 'utf8'), /name: dao-stellar-events/);
+  assert.match(readFileSync(outputPath, 'utf8'), /name: builder-stellar-events/);
 });
 
 // End-to-end Integration Tests
@@ -410,7 +483,7 @@ test('end-to-end: real Goldsky event -> decoded -> activity feed', () => {
   const decoded = decodeEvent(rawEvent);
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'proposal_created');
-  assert.equal(decoded.proposal_id, 'c3678ab26edd57c0b5dffe866fac0be8ae0fb5aa827549b01e6252cea6adacff');
+  assert.equal(topicsOf(decoded).proposal_id, 'c3678ab26edd57c0b5dffe866fac0be8ae0fb5aa827549b01e6252cea6adacff');
 
   // Step 2: Build activity feed from decoded event
   const activity = buildActivityFeed(decoded);
@@ -440,9 +513,9 @@ test('MintWithMinter correctly extracts minter and to from 2 topics', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'MintWithMinter');
-  assert.equal(decoded.minter, 'MINTER_ADDR');
-  assert.equal(decoded.owner, 'TO_ADDR');
-  assert.equal(decoded.token_id, '42');
+  assert.equal(topicsOf(decoded).minter, 'MINTER_ADDR');
+  assert.equal(topicsOf(decoded).to, 'TO_ADDR');
+  assert.equal(argsOf(decoded).token_id, 42);
 });
 
 test('Execute event extracts both governor and target', () => {
@@ -459,8 +532,8 @@ test('Execute event extracts both governor and target', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'Execute');
-  assert.equal(decoded.governor, 'GOVERNOR_ADDR');
-  assert.equal(decoded.target, 'TARGET_ADDR');
+  assert.equal(topicsOf(decoded).governor, 'GOVERNOR_ADDR');
+  assert.equal(topicsOf(decoded).target, 'TARGET_ADDR');
 
   const payload = JSON.parse(decoded.payload);
   assert.equal(payload.function, 'transfer');
@@ -482,7 +555,7 @@ test('decodes TokenInitialized event', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'TokenInitialized');
-  assert.equal(decoded.owner, 'OWNER_ADDR');
+  assert.equal(topicsOf(decoded).owner, 'OWNER_ADDR');
 
   const payload = JSON.parse(decoded.payload);
   assert.equal(payload.name, 'TestToken');
@@ -503,8 +576,8 @@ test('decodes MintAuthorityChanged event', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'MintAuthorityChanged');
-  assert.equal(decoded.authority, 'AUTHORITY_ADDR');
-  assert.equal(decoded.changed_by, 'ADMIN_ADDR');
+  assert.equal(topicsOf(decoded).authority, 'AUTHORITY_ADDR');
+  assert.equal(argsOf(decoded).changed_by, 'ADMIN_ADDR');
 });
 
 test('decodes BatchMint event with correct topic mapping', () => {
@@ -521,8 +594,8 @@ test('decodes BatchMint event with correct topic mapping', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'BatchMint');
-  assert.equal(decoded.minter, 'MINTER_ADDR');
-  assert.equal(decoded.owner, 'TO_ADDR');
+  assert.equal(topicsOf(decoded).minter, 'MINTER_ADDR');
+  assert.equal(topicsOf(decoded).to, 'TO_ADDR');
 
   const payload = JSON.parse(decoded.payload);
   assert.equal(payload.amount, 10);
@@ -543,7 +616,7 @@ test('decodes Approve event', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'Approve');
-  assert.equal(decoded.owner, 'OWNER_ADDR');
+  assert.equal(topicsOf(decoded).owner, 'OWNER_ADDR');
 
   const payload = JSON.parse(decoded.payload);
   assert.equal(payload.token_id, 42);
@@ -587,8 +660,8 @@ test('decodes TreasuryChanged event', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'TreasuryChanged');
-  assert.equal(decoded.old_treasury, 'OLD_TREASURY');
-  assert.equal(decoded.new_treasury, 'NEW_TREASURY');
+  assert.equal(topicsOf(decoded).old_treasury, 'OLD_TREASURY');
+  assert.equal(topicsOf(decoded).new_treasury, 'NEW_TREASURY');
 });
 
 test('decodes TokenContractChanged event', () => {
@@ -605,8 +678,8 @@ test('decodes TokenContractChanged event', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'TokenContractChanged');
-  assert.equal(decoded.old_token_contract, 'OLD_TOKEN');
-  assert.equal(decoded.new_token_contract, 'NEW_TOKEN');
+  assert.equal(topicsOf(decoded).old_token_contract, 'OLD_TOKEN');
+  assert.equal(topicsOf(decoded).new_token_contract, 'NEW_TOKEN');
 });
 
 test('decodes parameter change events (VotingDelayChanged)', () => {
@@ -623,7 +696,7 @@ test('decodes parameter change events (VotingDelayChanged)', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'VotingDelayChanged');
-  assert.equal(decoded.caller, 'CALLER_ADDR');
+  assert.equal(topicsOf(decoded).caller, 'CALLER_ADDR');
 
   const payload = JSON.parse(decoded.payload);
   assert.equal(payload.old_value, 300);
@@ -644,7 +717,7 @@ test('decodes GovernorAuthorityChanged event', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'GovernorAuthorityChanged');
-  assert.equal(decoded.authority, 'AUTHORITY_ADDR');
+  assert.equal(topicsOf(decoded).authority, 'AUTHORITY_ADDR');
 });
 
 // Tests for New Auction Events
@@ -663,7 +736,7 @@ test('decodes AuctionInitialized event', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'AuctionInitialized');
-  assert.equal(decoded.owner, 'OWNER_ADDR');
+  assert.equal(topicsOf(decoded).owner, 'OWNER_ADDR');
 
   const payload = JSON.parse(decoded.payload);
   assert.equal(payload.duration, 86400);
@@ -684,7 +757,7 @@ test('decodes auction parameter update events (DurationUpdated)', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'DurationUpdated');
-  assert.equal(decoded.changed_by, 'ADMIN_ADDR');
+  assert.equal(argsOf(decoded).changed_by, 'ADMIN_ADDR');
 
   const payload = JSON.parse(decoded.payload);
   assert.equal(payload.duration, 172800);
@@ -706,8 +779,8 @@ test('decodes TreasuryInitialized event', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'TreasuryInitialized');
-  assert.equal(decoded.owner, 'OWNER_ADDR');
-  assert.equal(decoded.governor, 'GOVERNOR_ADDR');
+  assert.equal(topicsOf(decoded).owner, 'OWNER_ADDR');
+  assert.equal(argsOf(decoded).governor, 'GOVERNOR_ADDR');
 });
 
 test('decodes GovernorChanged event (in treasury)', () => {

@@ -17,4 +17,6 @@ pub enum TreasuryKey {
     /// Only this contract can invoke the `execute()` function. The owner
     /// can update this address if needed.
     Governor,
+    Manager,
+    CurrentHash,
 }

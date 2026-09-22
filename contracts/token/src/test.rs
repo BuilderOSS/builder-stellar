@@ -1,6 +1,6 @@
 extern crate std;
 
-use soroban_sdk::{testutils::Address as _, Address, Env, String};
+use soroban_sdk::{testutils::Address as _, Address, BytesN, Env, String};
 use soroban_sdk::{
     testutils::{MockAuth, MockAuthInvoke},
     IntoVal,
@@ -13,6 +13,7 @@ fn setup() -> (Env, DaoTokenContractClient<'static>, Address) {
     e.mock_all_auths();
 
     let owner = Address::generate(&e);
+    let metadata = Address::generate(&e); // Dummy metadata address for tests
     let contract_id = e.register(
         DaoTokenContract,
         (
@@ -20,6 +21,9 @@ fn setup() -> (Env, DaoTokenContractClient<'static>, Address) {
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
+            metadata,
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
         ),
     );
     let client = DaoTokenContractClient::new(&e, &contract_id);
@@ -29,6 +33,7 @@ fn setup() -> (Env, DaoTokenContractClient<'static>, Address) {
 fn setup_no_auth() -> (Env, DaoTokenContractClient<'static>, Address) {
     let e = Env::default();
     let owner = Address::generate(&e);
+    let metadata = Address::generate(&e); // Dummy metadata address for tests
     let contract_id = e.register(
         DaoTokenContract,
         (
@@ -36,6 +41,9 @@ fn setup_no_auth() -> (Env, DaoTokenContractClient<'static>, Address) {
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
+            metadata,
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
         ),
     );
     let client = DaoTokenContractClient::new(&e, &contract_id);
@@ -82,6 +90,16 @@ fn transfer_to_new_holder_defaults_self_delegate() {
     assert_eq!(client.balance(&bob), 1);
     assert_eq!(client.get_delegate(&bob), Some(bob.clone()));
     assert_eq!(client.get_votes(&bob), 1);
+}
+
+#[test]
+fn manager_can_finalize_ownership_to_treasury() {
+    let (e, client, _owner) = setup();
+    let treasury = Address::generate(&e);
+
+    client.finalize_ownership(&treasury);
+
+    assert_eq!(client.get_owner(), Some(treasury));
 }
 
 #[test]

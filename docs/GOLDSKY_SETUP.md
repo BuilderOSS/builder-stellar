@@ -54,11 +54,8 @@ GOLDSKY_SECRET_NEON_DATABASE=neondb
 GOLDSKY_SECRET_NEON_USER=goldsky_writer
 GOLDSKY_SECRET_NEON_PASSWORD=writer_password
 
-# Contract Deployment IDs (from deploys/*.json)
-DEPLOYMENT_TOKEN=CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-DEPLOYMENT_GOVERNOR=CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-DEPLOYMENT_TREASURY=CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-DEPLOYMENT_AUCTION=CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+# Manager deployment artifact
+MANAGER_DEPLOYMENT_FILE=deploys/builder-testnet-manager.json
 ```
 
 ### 2. Setup Database
@@ -85,7 +82,7 @@ cd db
 ```
 
 This creates:
-- Schema: `chain`, `governance`, `token`, `auction`, `treasury`, `app`
+- Schema: `chain`, `manager`, `metadata`, `governance`, `token`, `auction`, `treasury`, `app`
 - Tables: `raw_events`, `decoded_events`, `activity_feed`
 - Views: `proposals`, `members`, proposal lifecycle views
 
@@ -93,13 +90,13 @@ This creates:
 
 ```sql
 -- Goldsky writer (read/write)
-GRANT USAGE ON SCHEMA chain, governance, token, auction, treasury, app TO goldsky_writer;
+GRANT USAGE ON SCHEMA chain, manager, metadata, governance, token, auction, treasury, app TO goldsky_writer;
 GRANT INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA chain, governance, token, auction, treasury, app TO goldsky_writer;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA app TO goldsky_writer;
 
 -- App reader (read-only)
-GRANT USAGE ON SCHEMA app, governance, token, auction, treasury TO app_server;
-GRANT SELECT ON ALL TABLES IN SCHEMA app, governance, token, auction, treasury TO app_server;
+GRANT USAGE ON SCHEMA manager, metadata, app, governance, token, auction, treasury TO app_server;
+GRANT SELECT ON ALL TABLES IN SCHEMA manager, metadata, app, governance, token, auction, treasury TO app_server;
 ```
 
 ### 3. Generate Pipeline Configuration
@@ -163,7 +160,8 @@ PostgreSQL (Neon) destination
 
 ## Event Coverage
 
-The pipeline indexes **40 critical DAO events** across 4 contracts:
+The pipeline starts from the Manager deployment and indexes **54 critical DAO
+events** across Manager-discovered DAO modules:
 
 ### Token (9 events)
 - `Initialize`, `Mint`, `Transfer`, `Burn`

@@ -30,7 +30,7 @@ NC='\033[0m' # No Color
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE_DIR="$(dirname "$SCRIPT_DIR")"
-PIPELINE_FILE="$PACKAGE_DIR/pipelines/dao-stellar-events.yaml"
+PIPELINE_FILE="$PACKAGE_DIR/pipelines/builder-stellar-events.yaml"
 
 # Load environment
 if [ -f "$PACKAGE_DIR/.env" ]; then

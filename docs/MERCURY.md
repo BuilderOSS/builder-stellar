@@ -1,5 +1,7 @@
 # Mercury Operations
 
+> **Historical:** Mercury is retained as an operational record of the previous indexing approach. It is not the current multi-DAO data-layer implementation.
+
 This repo uses Mercury Retroshade programs for indexed read surfaces. Contract execution does not depend on Mercury, but the web app uses Mercury for proposal activity, votes, token inventory, member data, authority history, and program status.
 
 Use `scripts/mercury.mjs` for day-to-day Mercury inspection. It calls the current REST endpoints directly because the local `mercury-cli` list/query paths are stale.

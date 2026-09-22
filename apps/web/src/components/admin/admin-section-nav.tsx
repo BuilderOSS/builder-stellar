@@ -1,15 +1,16 @@
-import type { Route } from 'next';
 import Link from 'next/link';
 
-const ITEMS: Array<{ href: Route; label: string }> = [
-  { href: '/admin', label: 'Dashboard' },
-  { href: '/admin/owner', label: 'Owner' },
-  { href: '/admin/token', label: 'Token Admin' },
-  { href: '/admin/governance', label: 'Governance Admin' },
-  { href: '/admin/auction', label: 'Auction Admin' }
+import { daoAdminRoute } from '@/lib/dao-routes';
+
+const ITEMS: Array<{ section: string; label: string }> = [
+  { section: '', label: 'Dashboard' },
+  { section: '/owner', label: 'Owner' },
+  { section: '/token', label: 'Token Admin' },
+  { section: '/governance', label: 'Governance Admin' },
+  { section: '/auction', label: 'Auction Admin' }
 ];
 
-export function AdminSectionNav({ active }: { active: Route }) {
+export function AdminSectionNav({ daoId, active }: { daoId: string; active: string }) {
   return (
     <nav
       aria-label="Administration sections"
@@ -25,10 +26,10 @@ export function AdminSectionNav({ active }: { active: Route }) {
     >
       {ITEMS.map((item) => (
         <Link
-          key={item.href}
-          href={item.href}
+          key={item.section}
+          href={daoAdminRoute(daoId, item.section)}
           className="nav-link"
-          aria-current={active === item.href ? 'page' : undefined}
+          aria-current={active === item.section ? 'page' : undefined}
         >
           {item.label}
         </Link>

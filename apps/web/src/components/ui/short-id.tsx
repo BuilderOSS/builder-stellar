@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { HStack } from 'styled-system/jsx';
 
 import { CopyIconButton, IconLinkButton, Text } from '@/components/ui';
-import { getDefaultDaoNetwork } from '@/lib/dao-config';
+import { useDaoContext } from '@/contexts/dao-context';
 import { getExplorerAccountUrl, getExplorerContractUrl } from '@/lib/explorer-links';
 
 function shorten(value: string) {
@@ -13,9 +13,7 @@ function shorten(value: string) {
   return `${value.slice(0, 6)}…${value.slice(-6)}`;
 }
 
-function getExplorerUrl(value: string) {
-  const network = getDefaultDaoNetwork();
-
+function getExplorerUrl(value: string, network: Parameters<typeof getExplorerContractUrl>[0]) {
   if (value.startsWith('C')) {
     return getExplorerContractUrl(network, value);
   }
@@ -28,9 +26,10 @@ function getExplorerUrl(value: string) {
 }
 
 export function ShortId({ value, label, explorerUrl }: { value: string; label?: string; explorerUrl?: string }) {
+  const { daoConfig } = useDaoContext();
   const [copied, setCopied] = useState(false);
   const displayValue = shorten(value);
-  const resolvedExplorerUrl = explorerUrl ?? getExplorerUrl(value);
+  const resolvedExplorerUrl = explorerUrl ?? getExplorerUrl(value, daoConfig.name);
 
   async function copyValue() {
     try {

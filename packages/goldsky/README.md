@@ -63,12 +63,17 @@ Injected into the pipeline:
 - `GOLDSKY_SECRET_NEON_USER` - Database user (goldsky_writer role)
 - `GOLDSKY_SECRET_NEON_PASSWORD` - Database password
 
-### Contract Deployment IDs
+### Manager Deployment
 
-- `DEPLOYMENT_TOKEN` - Token contract deployment ID
-- `DEPLOYMENT_GOVERNOR` - Governor contract deployment ID
-- `DEPLOYMENT_TREASURY` - Treasury contract deployment ID
-- `DEPLOYMENT_AUCTION` - Auction contract deployment ID
+Set `MANAGER_DEPLOYMENT_FILE` to the Manager deployment artifact, for example:
+
+```env
+MANAGER_DEPLOYMENT_FILE=deploys/builder-testnet-manager.json
+```
+
+The artifact supplies the Manager contract address, network, and starting
+ledger. The Manager is the only configured contract input; `DaoCreated` and
+`DaoRegistered` events discover each DAO's module addresses.
 
 The generator also reads `packages/goldsky/.env` and `packages/goldsky/.env.local` when present.
 

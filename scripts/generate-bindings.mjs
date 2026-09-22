@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { run } from './lib.mjs';
 
 const buildDir = 'target/wasm32v1-none/release';
@@ -26,6 +26,18 @@ const contracts = [
     wasmPath: `${buildDir}/auction.wasm`,
     outputDir: 'packages/auction-bindings',
     packageJsonName: '@builder-stellar/auction-bindings'
+  },
+  {
+    packageName: 'manager',
+    wasmPath: `${buildDir}/manager.wasm`,
+    outputDir: 'packages/manager-bindings',
+    packageJsonName: '@builder-stellar/manager-bindings'
+  },
+  {
+    packageName: 'metadata',
+    wasmPath: `${buildDir}/metadata.wasm`,
+    outputDir: 'packages/metadata-bindings',
+    packageJsonName: '@builder-stellar/metadata-bindings'
   }
 ];
 
@@ -57,6 +69,17 @@ function patchGeneratedBindings(packageName, outputDir) {
   const typesPath = `${outputDir}/src/types.ts`;
   const clientPath = `${outputDir}/src/client.ts`;
 
+  // The SDK generator emits error enums as value-only objects, while clients
+  // use them as the error type in Result return values.
+  if (packageName === 'manager') {
+    let typesContent = readFileSync(typesPath, 'utf8');
+    typesContent = typesContent.replace(
+      '/**\n * Event: DaoCreated',
+      'export type ManagerError = typeof ManagerError[keyof typeof ManagerError];\n\n/**\n * Event: DaoCreated'
+    );
+    writeFileSync(typesPath, typesContent);
+  }
+
   // Patch types.ts for Point and ComplianceError issues
   if (packageName === 'token') {
     let typesContent = readFileSync(typesPath, 'utf8');
@@ -87,7 +110,7 @@ function patchGeneratedBindings(packageName, outputDir) {
   }
 }
 
-run('cargo', ['build', '-p', 'token', '-p', 'governor', '-p', 'treasury', '-p', 'auction', '--release', '--target', 'wasm32v1-none'], {
+run('cargo', ['build', '-p', 'token', '-p', 'governor', '-p', 'treasury', '-p', 'auction', '-p', 'manager', '-p', 'metadata', '--release', '--target', 'wasm32v1-none'], {
   env: {
     ...process.env,
     SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2: '0'

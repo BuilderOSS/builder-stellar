@@ -97,6 +97,7 @@ pub const MIN_QUEUE_DELAY: u32 = 300; // 5 minutes in seconds
 /// contract-specific keys for custom functionality.
 #[contracttype]
 pub enum GovernorKey {
+    CurrentHash,
     /// Address of the Treasury contract that executes approved proposals.
     Treasury,
     /// Delay (in seconds) between queueing and execution eligibility.
@@ -105,6 +106,7 @@ pub enum GovernorKey {
     Proposal(BytesN<32>),
     /// Tracks whether an address has authority to create proposals.
     GovernorAuthority(Address),
+    Manager,
 }
 
 /// Core proposal data using timestamps instead of ledger sequences.

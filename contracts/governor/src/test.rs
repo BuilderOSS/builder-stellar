@@ -85,11 +85,22 @@ fn setup() -> (
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
+            Address::generate(&e),
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
 
-    let treasury_id = e.register(DaoTreasuryContract, (owner.clone(), Address::generate(&e)));
+    let treasury_id = e.register(
+        DaoTreasuryContract,
+        (
+            owner.clone(),
+            Address::generate(&e),
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
+        ),
+    );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
 
     let governor_id = e.register(
@@ -103,6 +114,8 @@ fn setup() -> (
             300_u32, // queue_delay: 5 minutes
             1_u128,
             1_000_u32,
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
         ),
     );
     let governor = DaoGovernorContractClient::new(&e, &governor_id);
@@ -291,11 +304,22 @@ fn quorum_uses_total_supply_bps() {
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
+            Address::generate(&e),
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
 
-    let treasury_id = e.register(DaoTreasuryContract, (owner.clone(), Address::generate(&e)));
+    let treasury_id = e.register(
+        DaoTreasuryContract,
+        (
+            owner.clone(),
+            Address::generate(&e),
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
+        ),
+    );
     let governor_id = e.register(
         DaoGovernorContract,
         (
@@ -307,6 +331,8 @@ fn quorum_uses_total_supply_bps() {
             300_u32,
             1_u128,
             3_000_u32,
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
         ),
     );
     let governor = DaoGovernorContractClient::new(&e, &governor_id);
@@ -335,9 +361,20 @@ fn set_treasury_requires_owner() {
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
+            Address::generate(&e),
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
         ),
     );
-    let treasury_id = e.register(DaoTreasuryContract, (owner.clone(), Address::generate(&e)));
+    let treasury_id = e.register(
+        DaoTreasuryContract,
+        (
+            owner.clone(),
+            Address::generate(&e),
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
+        ),
+    );
     let governor_id = e.register(
         DaoGovernorContract,
         (
@@ -349,6 +386,8 @@ fn set_treasury_requires_owner() {
             300_u32,
             1_u128,
             1_000_u32,
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
         ),
     );
     let governor = DaoGovernorContractClient::new(&e, &governor_id);
@@ -634,7 +673,7 @@ fn owner_has_implicit_governor_authority() {
     let (e, _token, _treasury, governor, _target, owner) = setup();
 
     // Owner doesn't need to be explicitly granted authority
-    assert!(!governor.governor_authority(&owner));
+    assert!(governor.governor_authority(&owner));
 
     // Owner can still modify settings
     e.mock_auths(&[MockAuth {
