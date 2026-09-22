@@ -1,8 +1,8 @@
 import { Stack } from 'styled-system/jsx';
 
 import { Badge, Card, ShortId, Text } from '@/components/ui';
-import { getTreasuryAssets } from '@/lib/assets-config';
 import { useDaoContext } from '@/contexts/dao-context';
+import { getTreasuryAssets } from '@/lib/assets-config';
 import { normalizeProposalCallArgs, type ProposalCallArg, type ProposalCallArgs } from '@/lib/proposal-call';
 
 type ProposalActionPreviewProps = {
@@ -50,7 +50,13 @@ function isSacTransfer(
   return target !== tokenContractId && functionName === 'transfer' && args.length === 3;
 }
 
-function getActionTitle(target: string, functionName: string, args: ProposalCallArg[], tokenContractId: string | undefined, network: string) {
+function getActionTitle(
+  target: string,
+  functionName: string,
+  args: ProposalCallArg[],
+  tokenContractId: string | undefined,
+  network: string
+) {
   if (target === tokenContractId && functionName === 'mint') {
     return `Mint Governance Token to ${formatArg(args[1] ?? '')}`;
   }

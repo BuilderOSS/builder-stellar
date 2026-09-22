@@ -1,6 +1,6 @@
-import { Server } from '@stellar/stellar-sdk/rpc';
-import { Client as MetadataClient } from '@builder-stellar/metadata-bindings';
 import type { IpfsGroup, Property, Settings } from '@builder-stellar/metadata-bindings';
+import { Client as MetadataClient } from '@builder-stellar/metadata-bindings';
+import { Server } from '@stellar/stellar-sdk/rpc';
 
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 

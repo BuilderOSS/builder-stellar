@@ -2,8 +2,8 @@
 
 'use client';
 
-import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
+import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Grid, Stack } from 'styled-system/jsx';
@@ -11,7 +11,9 @@ import { Grid, Stack } from 'styled-system/jsx';
 import { PageSection } from '@/components/page-section';
 import { ProposalActionConfirmDialog } from '@/components/proposal/proposal-action-confirm-dialog';
 import { Badge, Button, Callout, Card, Heading, Input, Text, Textarea } from '@/components/ui';
+import { useDaoContext } from '@/contexts/dao-context';
 import { useGovernorSettings } from '@/lib/admin-queries';
+import { daoRoute } from '@/lib/dao-routes';
 import { ActionFormProvider, ActionFormWrapper, ProposalActionQueue } from '@/lib/proposal-actions';
 import { buildProposalCallVectors, encodeProposalCallArgs } from '@/lib/proposal-call';
 import { proposalIdToRouteId } from '@/lib/proposal-id';
@@ -20,8 +22,6 @@ import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useVotingPower } from '@/lib/voting-power';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
-import { useDaoContext } from '@/contexts/dao-context';
-import { daoRoute } from '@/lib/dao-routes';
 import { selectCanProceedToStep2, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
 function formatProposalCreationDisabledMessage(votingPower: any, settings: any, errorMessage?: string) {

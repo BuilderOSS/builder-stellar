@@ -161,9 +161,6 @@ importers:
       '@builder-stellar/treasury-bindings':
         specifier: workspace:*
         version: link:../treasury-bindings
-      '@goldskycom/cli':
-        specifier: ^13.10.2
-        version: 13.13.0
 
   packages/governor-bindings:
     dependencies:
@@ -595,10 +592,6 @@ packages:
 
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
-
-  '@goldskycom/cli@13.13.0':
-    resolution: {integrity: sha512-qNEB3QTy57JE2uD0EP/CGXiu71xDtQp7OWzxxJOiopuJcG1fWMYisUjCCdu096UBxPGjcjZEAPIPoL+V3VjtYQ==}
-    hasBin: true
 
   '@hono/node-server@2.1.1':
     resolution: {integrity: sha512-ELuehkj5VCBdgEw9zs+ivkKwyzzUCSQuE96YmiPvn1ECBoZCczbFXJLeEGMTYjphP6gydh4pHMqEYPVMYUVgQg==}
@@ -5415,8 +5408,6 @@ snapshots:
       '@floating-ui/utils': 0.2.12
 
   '@floating-ui/utils@0.2.12': {}
-
-  '@goldskycom/cli@13.13.0': {}
 
   '@hono/node-server@2.1.1(hono@4.13.8)':
     dependencies:

@@ -44,9 +44,7 @@ export const NETWORKS: Record<NetworkName, NetworkConfig> = {
 export function getNetworkConfig(network: NetworkName): NetworkConfig {
   const config = NETWORKS[network];
   if (!config) {
-    throw new Error(
-      `Unknown network: ${network}. Available: ${Object.keys(NETWORKS).join(', ')}`
-    );
+    throw new Error(`Unknown network: ${network}. Available: ${Object.keys(NETWORKS).join(', ')}`);
   }
   return config;
 }

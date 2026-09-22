@@ -1,5 +1,5 @@
-import { Server } from '@stellar/stellar-sdk/rpc';
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
+import { Server } from '@stellar/stellar-sdk/rpc';
 import useSWR from 'swr';
 
 import type { DaoNetworkConfig } from '@/lib/dao-config';

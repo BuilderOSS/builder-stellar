@@ -1,10 +1,9 @@
 'use client';
 
-import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
+import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useDaoContext } from '@/contexts/dao-context';
 import { useEffect, useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 import useSWR from 'swr';
@@ -19,6 +18,7 @@ import { ProposalVotePanel } from '@/components/proposal/proposal-vote-panel';
 import { ProposalVoteSummary } from '@/components/proposal/proposal-vote-summary';
 import type { ProposalDetail, ProposalVoteItem } from '@/components/proposal/types';
 import { Button, Callout } from '@/components/ui';
+import { useDaoContext } from '@/contexts/dao-context';
 import { keccak256Bytes } from '@/lib/keccak';
 import { encodeProposalCallArgs } from '@/lib/proposal-call';
 import { proposalIdToBuffer } from '@/lib/proposal-id';
@@ -316,49 +316,49 @@ export default function ProposalDetailPage() {
     ) : null;
 
   return (
-      <PageSection
-        title={
-          detail
-            ? `Proposal #${detail.proposalNumber}: ${detail.metadata.title}`
-            : `Proposal ${shortenProposalId(proposalId)}`
-        }
-        description="Live vote state, indexed votes, and proposal actions for the selected governance item."
-      >
-        <Stack gap="4">
-          {errorMessage ? <Callout variant="error" title={errorMessage} /> : null}
-          {isLoading && !detail ? <Callout variant="info" title="Loading proposal…" /> : null}
+    <PageSection
+      title={
+        detail
+          ? `Proposal #${detail.proposalNumber}: ${detail.metadata.title}`
+          : `Proposal ${shortenProposalId(proposalId)}`
+      }
+      description="Live vote state, indexed votes, and proposal actions for the selected governance item."
+    >
+      <Stack gap="4">
+        {errorMessage ? <Callout variant="error" title={errorMessage} /> : null}
+        {isLoading && !detail ? <Callout variant="info" title="Loading proposal…" /> : null}
 
-          {detail ? (
-            <div className="proposal-detail-layout">
-              <div className="proposal-detail-main">
-                <ProposalOverview detail={detail} network={config.name} />
-                <ProposalActionPreview
-                  targets={detail.targets}
-                  functions={detail.functions}
-                  args={detail.args}
-                  tokenContractId={config.tokenContractId}
-                />
-                <ProposalVoteHistory
-                  votes={votes}
-                  voteLabelForSupport={voteLabelForSupport}
-                  formatTimestamp={formatTimestamp}
-                />
-              </div>
-              <aside className="proposal-detail-sidebar" aria-label="Proposal status and voting">
-                {formMessage ? <Callout variant="warning" title={formMessage} /> : null}
-                <ProposalLifecyclePanel detail={detail} now={now} actionSlot={actionPanel} />
-                <ProposalVoteSummary votes={votes} quorumVotes={detail.quorumVotes} />
-                <Button type="button" variant="outline" size="sm" onClick={() => void mutate()} disabled={isLoading}>
-                  {isLoading ? 'Refreshing...' : 'Refresh proposal'}
-                </Button>
-              </aside>
+        {detail ? (
+          <div className="proposal-detail-layout">
+            <div className="proposal-detail-main">
+              <ProposalOverview detail={detail} network={config.name} />
+              <ProposalActionPreview
+                targets={detail.targets}
+                functions={detail.functions}
+                args={detail.args}
+                tokenContractId={config.tokenContractId}
+              />
+              <ProposalVoteHistory
+                votes={votes}
+                voteLabelForSupport={voteLabelForSupport}
+                formatTimestamp={formatTimestamp}
+              />
             </div>
-          ) : null}
+            <aside className="proposal-detail-sidebar" aria-label="Proposal status and voting">
+              {formMessage ? <Callout variant="warning" title={formMessage} /> : null}
+              <ProposalLifecyclePanel detail={detail} now={now} actionSlot={actionPanel} />
+              <ProposalVoteSummary votes={votes} quorumVotes={detail.quorumVotes} />
+              <Button type="button" variant="outline" size="sm" onClick={() => void mutate()} disabled={isLoading}>
+                {isLoading ? 'Refreshing...' : 'Refresh proposal'}
+              </Button>
+            </aside>
+          </div>
+        ) : null}
 
-          <Link href={`/dao/${daoId}/proposals`} style={{ color: 'inherit' }}>
-            Back to proposals
-          </Link>
-        </Stack>
-      </PageSection>
+        <Link href={`/dao/${daoId}/proposals`} style={{ color: 'inherit' }}>
+          Back to proposals
+        </Link>
+      </Stack>
+    </PageSection>
   );
 }

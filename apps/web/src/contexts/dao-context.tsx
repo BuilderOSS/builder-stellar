@@ -1,6 +1,7 @@
 'use client';
 
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, type ReactNode, useContext } from 'react';
+
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 
 interface DaoContextValue {

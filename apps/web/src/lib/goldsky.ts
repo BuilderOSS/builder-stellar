@@ -10,7 +10,6 @@
  */
 
 import { Pool } from '@neondatabase/serverless';
-import { getNetworkConfig } from '@/config/networks';
 
 // Initialize connection pool with read-only app_server role
 const pool = new Pool({
@@ -34,7 +33,7 @@ function getDeploymentId(): string {
   if (!deploymentId) {
     throw new Error(
       'NEXT_PUBLIC_DEPLOYMENT_ID environment variable is required. ' +
-      'Format: "manager:CONTRACT_ADDRESS" (e.g., "manager:CBSKIHNNVKEJWV3A2OI63BWUC637LR4P2GBV4MPJB5PDOMVUMS6KOMAH")'
+        'Format: "manager:CONTRACT_ADDRESS" (e.g., "manager:CBSKIHNNVKEJWV3A2OI63BWUC637LR4P2GBV4MPJB5PDOMVUMS6KOMAH")'
     );
   }
 
@@ -403,10 +402,10 @@ export async function getGoldskyTokenInventory(
       deploymentId,
       dao_id
     ]),
-    pool.query('SELECT COUNT(*)::bigint as total_supply FROM token.inventory WHERE deployment_id = $1 AND dao_id = $2', [
-      deploymentId,
-      dao_id
-    ])
+    pool.query(
+      'SELECT COUNT(*)::bigint as total_supply FROM token.inventory WHERE deployment_id = $1 AND dao_id = $2',
+      [deploymentId, dao_id]
+    )
   ]);
 
   // Get total supply

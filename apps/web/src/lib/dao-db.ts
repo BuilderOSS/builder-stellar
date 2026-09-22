@@ -10,6 +10,7 @@
  */
 
 import { Pool } from '@neondatabase/serverless';
+
 import { getNetworkConfig, type NetworkName } from '@/config/networks';
 
 const pool = new Pool({
@@ -25,11 +26,11 @@ const pool = new Pool({
 export interface DaoConfig {
   // Multi-tenant keys
   deployment_id: string;
-  dao_id: string;                           // Token contract address (primary DAO ID)
+  dao_id: string; // Token contract address (primary DAO ID)
 
   // Core Identity
-  token_address: string;                    // Same as dao_id
-  creator: string | null;                   // Account that deployed this DAO
+  token_address: string; // Same as dao_id
+  creator: string | null; // Account that deployed this DAO
 
   // Network (derived from environment)
   network: NetworkName;
@@ -49,23 +50,23 @@ export interface DaoConfig {
   token_uri: string | null;
 
   // Admin & Configuration
-  admin_address: string | null;             // launch_admin
-  label: string;                            // Display name (may be empty)
+  admin_address: string | null; // launch_admin
+  label: string; // Display name (may be empty)
 
   // Lifecycle State
-  status: 'pending' | 'operational';        // DAO lifecycle status
+  status: 'pending' | 'operational'; // DAO lifecycle status
 
   // Blockchain Timeline
   created_ledger: number;
-  created_at: string | null;                // ISO timestamp
+  created_at: string | null; // ISO timestamp
   created_tx_hash: string | null;
 
-  finalized_ledger: number | null;          // If operational
-  finalized_at: string | null;              // If operational
-  finalized_tx_hash: string | null;         // If operational
+  finalized_ledger: number | null; // If operational
+  finalized_at: string | null; // If operational
+  finalized_tx_hash: string | null; // If operational
 
   // Indexing
-  indexed_at: string | null;                // When first indexed by Goldsky pipeline
+  indexed_at: string | null; // When first indexed by Goldsky pipeline
 }
 
 /**
@@ -79,9 +80,7 @@ function getDeploymentNetwork(): NetworkName {
   try {
     getNetworkConfig(network);
   } catch (e) {
-    throw new Error(
-      `Invalid NEXT_PUBLIC_NETWORK: ${network}. Must be one of: testnet, public, local`
-    );
+    throw new Error(`Invalid NEXT_PUBLIC_NETWORK: ${network}. Must be one of: testnet, public, local`);
   }
 
   return network;
@@ -101,9 +100,7 @@ export async function getDaoConfigFromDatabase(daoId: string): Promise<DaoConfig
   const deploymentId = process.env.NEXT_PUBLIC_DEPLOYMENT_ID;
 
   if (!deploymentId) {
-    throw new Error(
-      'NEXT_PUBLIC_DEPLOYMENT_ID environment variable is required'
-    );
+    throw new Error('NEXT_PUBLIC_DEPLOYMENT_ID environment variable is required');
   }
 
   // Determine network from environment
@@ -191,9 +188,7 @@ export async function getAllDaosFromDatabase(status?: 'pending' | 'operational')
   const deploymentId = process.env.NEXT_PUBLIC_DEPLOYMENT_ID;
 
   if (!deploymentId) {
-    throw new Error(
-      'NEXT_PUBLIC_DEPLOYMENT_ID environment variable is required'
-    );
+    throw new Error('NEXT_PUBLIC_DEPLOYMENT_ID environment variable is required');
   }
 
   const network = getDeploymentNetwork();

@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
-import { getDaoNetworkConfigById } from '@/lib/dao-config';
-import { DaoProvider } from '@/contexts/dao-context';
+
 import { DaoShell } from '@/components/dao-shell';
+import { DaoProvider } from '@/contexts/dao-context';
+import { getDaoNetworkConfigById } from '@/lib/dao-config';
 
 interface DaoLayoutProps {
   children: ReactNode;

@@ -1,16 +1,16 @@
 'use client';
 
-import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { Client as TokenClient } from '@builder-stellar/token-bindings';
+import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { useState } from 'react';
 import { Grid, Stack } from 'styled-system/jsx';
 
 import { AdminSectionNav } from '@/components/admin/admin-section-nav';
-import { useDaoContext } from '@/contexts/dao-context';
 import { AuthorityPanel } from '@/components/admin/authority-panel';
 import { PageSection } from '@/components/page-section';
 import { Badge, Callout, Card, Heading, ShortId, Text } from '@/components/ui';
+import { useDaoContext } from '@/contexts/dao-context';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { useGoldskyGovernorAuthorities, useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
@@ -79,16 +79,16 @@ export default function OwnerPage() {
 
   if (!isOwner) {
     return (
-        <PageSection title="Owner" description="Owner-only authority management.">
-          <Callout
-            variant="warning"
-            badge="Access restricted"
-            title="Connect the owner wallet to continue"
-            description="Only the configured bootstrap owner can add or remove mint and governance authorities."
-          >
-            <ShortId value={config.adminAddress} label="Owner address" />
-          </Callout>
-        </PageSection>
+      <PageSection title="Owner" description="Owner-only authority management.">
+        <Callout
+          variant="warning"
+          badge="Access restricted"
+          title="Connect the owner wallet to continue"
+          description="Only the configured bootstrap owner can add or remove mint and governance authorities."
+        >
+          <ShortId value={config.adminAddress} label="Owner address" />
+        </Callout>
+      </PageSection>
     );
   }
 
@@ -138,55 +138,55 @@ export default function OwnerPage() {
   }
 
   return (
-      <PageSection title="Owner" description="Manage mint and governance authorities from one control center.">
-        <Stack gap="4">
-          <AdminSectionNav daoId={daoId} active="/owner" />
+    <PageSection title="Owner" description="Manage mint and governance authorities from one control center.">
+      <Stack gap="4">
+        <AdminSectionNav daoId={daoId} active="/owner" />
 
-          <Card p="5">
-            <Stack gap="3">
-              <div>
-                <Badge>Owner</Badge>
-              </div>
-              <Heading style={{ fontSize: '1.2rem' }}>Owner controls</Heading>
-              <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                The owner can add or remove both token and governance authorities. Those authorities can then use the
-                matching admin pages.
-              </Text>
-              {formMessage ? <Callout variant="warning" title={formMessage} /> : null}
-            </Stack>
-          </Card>
+        <Card p="5">
+          <Stack gap="3">
+            <div>
+              <Badge>Owner</Badge>
+            </div>
+            <Heading style={{ fontSize: '1.2rem' }}>Owner controls</Heading>
+            <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+              The owner can add or remove both token and governance authorities. Those authorities can then use the
+              matching admin pages.
+            </Text>
+            {formMessage ? <Callout variant="warning" title={formMessage} /> : null}
+          </Stack>
+        </Card>
 
-          <Grid columns={{ base: 1, xl: 2 }} gap="4">
-            <AuthorityPanel
-              title="Mint authority"
-              badge="Token"
-              description="Grant or revoke who can mint voting tokens."
-              items={mintAuthorities?.items ?? []}
-              value={mintAuthority}
-              onValueChange={setMintAuthority}
-              onAllow={() => void updateAuthority('set_mint_authority', mintAuthority, true)}
-              onRevoke={() => void updateAuthority('set_mint_authority', mintAuthority, false)}
-              allowLabel="Allow minting"
-              revokeLabel="Revoke minting"
-              busy={busy || mintAuthoritiesLoading}
-              emptyLabel={mintAuthorityError?.message || 'No mint authorities indexed yet.'}
-            />
-            <AuthorityPanel
-              title="Governor authority"
-              badge="Governance"
-              description="Grant or revoke who can update governor settings."
-              items={governorAuthorities?.items ?? []}
-              value={governorAuthority}
-              onValueChange={setGovernorAuthority}
-              onAllow={() => void updateAuthority('set_governor_authority', governorAuthority, true)}
-              onRevoke={() => void updateAuthority('set_governor_authority', governorAuthority, false)}
-              allowLabel="Allow governance"
-              revokeLabel="Revoke governance"
-              busy={busy || governorAuthoritiesLoading}
-              emptyLabel={governorAuthorityError?.message || 'No governance authorities indexed yet.'}
-            />
-          </Grid>
-        </Stack>
-      </PageSection>
+        <Grid columns={{ base: 1, xl: 2 }} gap="4">
+          <AuthorityPanel
+            title="Mint authority"
+            badge="Token"
+            description="Grant or revoke who can mint voting tokens."
+            items={mintAuthorities?.items ?? []}
+            value={mintAuthority}
+            onValueChange={setMintAuthority}
+            onAllow={() => void updateAuthority('set_mint_authority', mintAuthority, true)}
+            onRevoke={() => void updateAuthority('set_mint_authority', mintAuthority, false)}
+            allowLabel="Allow minting"
+            revokeLabel="Revoke minting"
+            busy={busy || mintAuthoritiesLoading}
+            emptyLabel={mintAuthorityError?.message || 'No mint authorities indexed yet.'}
+          />
+          <AuthorityPanel
+            title="Governor authority"
+            badge="Governance"
+            description="Grant or revoke who can update governor settings."
+            items={governorAuthorities?.items ?? []}
+            value={governorAuthority}
+            onValueChange={setGovernorAuthority}
+            onAllow={() => void updateAuthority('set_governor_authority', governorAuthority, true)}
+            onRevoke={() => void updateAuthority('set_governor_authority', governorAuthority, false)}
+            allowLabel="Allow governance"
+            revokeLabel="Revoke governance"
+            busy={busy || governorAuthoritiesLoading}
+            emptyLabel={governorAuthorityError?.message || 'No governance authorities indexed yet.'}
+          />
+        </Grid>
+      </Stack>
+    </PageSection>
   );
 }

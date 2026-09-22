@@ -4,10 +4,10 @@ import Image from 'next/image';
 import Link from 'next/link';
 
 import { Card, Heading, Text } from '@/components/ui';
-import { getDaoAccountRole } from '@/lib/account-role';
 import { useDaoContext } from '@/contexts/dao-context';
-import { useTokenMetadata } from '@/lib/token-queries';
+import { getDaoAccountRole } from '@/lib/account-role';
 import { daoRoute } from '@/lib/dao-routes';
+import { useTokenMetadata } from '@/lib/token-queries';
 
 export function TokenCard({ tokenId, owner }: { tokenId: number; owner: string }) {
   const { daoId, daoConfig } = useDaoContext();

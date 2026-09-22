@@ -1,4 +1,5 @@
 import Link from 'next/link';
+
 import { daoAdminRoute } from '@/lib/dao-routes';
 
 const ITEMS: Array<{ section: string; label: string }> = [

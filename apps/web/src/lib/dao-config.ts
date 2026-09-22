@@ -6,6 +6,7 @@
  */
 
 import { getNetworkConfig, type NetworkName } from '@/config/networks';
+
 import { getDaoConfigFromDatabase } from './dao-db';
 
 export type DaoNetworkConfig = {
