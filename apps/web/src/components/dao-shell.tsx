@@ -16,7 +16,8 @@ import {
   ShieldAlert,
   Users,
   Vote,
-  Wallet
+  Wallet,
+  Plus
 } from 'lucide-react';
 import type { Route } from 'next';
 import Image from 'next/image';
@@ -32,7 +33,8 @@ import { useDaoSessionStore } from '@/stores/dao-session-store';
 
 function getNavItems(daoId: string): Array<{ href: Route; label: string; icon: LucideIcon }> {
   return [
-    { href: '/', label: 'Explore', icon: Compass },
+    { href: '/', label: 'Explore DAOs', icon: Compass },
+    { href: '/create', label: 'Create DAO', icon: Plus },
     { href: `/dao/${daoId}` as Route, label: 'Dashboard', icon: LayoutDashboard },
     { href: `/dao/${daoId}/proposals` as Route, label: 'Proposals', icon: Vote },
     { href: `/dao/${daoId}/auctions` as Route, label: 'Auctions', icon: Gavel },

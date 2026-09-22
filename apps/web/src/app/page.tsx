@@ -42,9 +42,27 @@ export default async function Page() {
               <p className="brand-kicker">Governance directory</p>
             </div>
           </Link>
-          <div className="discovery-header__context">
-            <span className="network-dot" aria-hidden="true" />
-            <span>Onchain communities</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <Link
+              href="/create"
+              style={{
+                padding: '0.5rem 1rem',
+                background: 'var(--accent-9)',
+                color: 'white',
+                borderRadius: '8px',
+                textDecoration: 'none',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                transition: 'background 0.2s',
+                display: 'inline-block'
+              }}
+            >
+              Create DAO
+            </Link>
+            <div className="discovery-header__context">
+              <span className="network-dot" aria-hidden="true" />
+              <span>Onchain communities</span>
+            </div>
           </div>
         </header>
 

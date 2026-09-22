@@ -1,0 +1,351 @@
+// src/stores/create-dao-store.ts
+
+'use client';
+
+import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
+
+/**
+ * Artwork property with items
+ */
+export type ArtworkProperty = {
+  name: string;
+  items: string[];
+};
+
+/**
+ * Basic information about the DAO
+ */
+type BasicInfo = {
+  tokenName: string;
+  tokenSymbol: string;
+  tokenUri: string;
+  projectUri: string;
+  description: string;
+  contractImage: string;
+  rendererBase: string;
+};
+
+/**
+ * Artwork and NFT configuration
+ */
+type ArtworkConfig = {
+  ipfs: {
+    baseUri: string;
+    extension: string;
+  };
+  properties: ArtworkProperty[];
+};
+
+/**
+ * Auction settings
+ */
+type AuctionConfig = {
+  enabled: boolean;
+  duration: number; // seconds
+  reservePrice: string; // stroops
+  timeBuffer: number; // seconds
+  paymentAsset: string; // Stellar asset address
+};
+
+/**
+ * Governance parameters
+ */
+type GovernanceConfig = {
+  votingDelay: number; // seconds
+  votingPeriod: number; // seconds
+  quorumBps: number; // basis points (0-10000)
+  proposalThresholdBps: number; // basis points (0-10000)
+};
+
+/**
+ * Founder allocation
+ */
+export type FounderAllocation = {
+  address: string;
+  amount: number;
+};
+
+/**
+ * State
+ */
+type CreateDaoState = {
+  step: 1 | 2 | 3 | 4 | 5 | 6;
+  basicInfo: BasicInfo;
+  artwork: ArtworkConfig;
+  auction: AuctionConfig;
+  governance: GovernanceConfig;
+  founders: FounderAllocation[];
+  launchAdmin: string;
+  busy: boolean;
+  formMessage: string;
+  validationErrors: Record<string, string>;
+};
+
+/**
+ * Actions
+ */
+type CreateDaoActions = {
+  // Wizard navigation
+  setStep: (step: 1 | 2 | 3 | 4 | 5 | 6) => void;
+  nextStep: () => void;
+  prevStep: () => void;
+
+  // Update form sections
+  updateBasicInfo: (patch: Partial<BasicInfo>) => void;
+  updateArtwork: (patch: Partial<ArtworkConfig>) => void;
+  updateAuction: (patch: Partial<AuctionConfig>) => void;
+  updateGovernance: (patch: Partial<GovernanceConfig>) => void;
+  updateLaunchAdmin: (address: string) => void;
+
+  // Artwork property management
+  addArtworkProperty: () => void;
+  removeArtworkProperty: (index: number) => void;
+  updateArtworkProperty: (index: number, property: ArtworkProperty) => void;
+  addArtworkItem: (propertyIndex: number, item: string) => void;
+  removeArtworkItem: (propertyIndex: number, itemIndex: number) => void;
+
+  // Founder management
+  addFounder: (founder: FounderAllocation) => void;
+  removeFounder: (index: number) => void;
+  updateFounder: (index: number, founder: FounderAllocation) => void;
+
+  // Validation
+  setValidationError: (field: string, error: string) => void;
+  clearValidationError: (field: string) => void;
+  clearAllValidationErrors: () => void;
+
+  // UI feedback
+  setFormMessage: (message: string) => void;
+  clearFormMessage: () => void;
+  setBusy: (busy: boolean) => void;
+
+  // Reset
+  reset: () => void;
+};
+
+type CreateDaoStore = CreateDaoState & CreateDaoActions;
+
+const initialState: CreateDaoState = {
+  step: 1,
+  basicInfo: {
+    tokenName: '',
+    tokenSymbol: '',
+    tokenUri: '',
+    projectUri: '',
+    description: '',
+    contractImage: '',
+    rendererBase: ''
+  },
+  artwork: {
+    ipfs: {
+      baseUri: '',
+      extension: '.png'
+    },
+    properties: []
+  },
+  auction: {
+    enabled: true,
+    duration: 86400, // 24 hours
+    reservePrice: '1000000000', // 100 XLM
+    timeBuffer: 300, // 5 minutes
+    paymentAsset: ''
+  },
+  governance: {
+    votingDelay: 86400, // 24 hours
+    votingPeriod: 259200, // 3 days
+    quorumBps: 1000, // 10%
+    proposalThresholdBps: 100 // 1%
+  },
+  founders: [],
+  launchAdmin: '',
+  busy: false,
+  formMessage: '',
+  validationErrors: {}
+};
+
+const memoryStorage = {
+  getItem: (_name: string) => null,
+  setItem: (_name: string, _value: string) => undefined,
+  removeItem: (_name: string) => undefined
+};
+
+const storage = createJSONStorage(() => (typeof window === 'undefined' ? memoryStorage : window.localStorage));
+
+export const useCreateDaoStore = create<CreateDaoStore>()(
+  persist(
+    (set) => ({
+      ...initialState,
+
+      // Wizard navigation
+      setStep: (step) => set({ step }),
+      nextStep: () => set((state) => ({ step: Math.min(6, state.step + 1) as 1 | 2 | 3 | 4 | 5 | 6 })),
+      prevStep: () => set((state) => ({ step: Math.max(1, state.step - 1) as 1 | 2 | 3 | 4 | 5 | 6 })),
+
+      // Update form sections
+      updateBasicInfo: (patch) =>
+        set((state) => ({
+          basicInfo: { ...state.basicInfo, ...patch }
+        })),
+
+      updateArtwork: (patch) =>
+        set((state) => ({
+          artwork: { ...state.artwork, ...patch }
+        })),
+
+      updateAuction: (patch) =>
+        set((state) => ({
+          auction: { ...state.auction, ...patch }
+        })),
+
+      updateGovernance: (patch) =>
+        set((state) => ({
+          governance: { ...state.governance, ...patch }
+        })),
+
+      updateLaunchAdmin: (address) => set({ launchAdmin: address }),
+
+      // Artwork property management
+      addArtworkProperty: () =>
+        set((state) => {
+          if (state.artwork.properties.length >= 16) {
+            return {
+              formMessage: 'Maximum 16 properties allowed',
+              validationErrors: { ...state.validationErrors, properties: 'Maximum 16 properties allowed' }
+            };
+          }
+          return {
+            artwork: {
+              ...state.artwork,
+              properties: [...state.artwork.properties, { name: '', items: [] }]
+            }
+          };
+        }),
+
+      removeArtworkProperty: (index) =>
+        set((state) => {
+          const properties = [...state.artwork.properties];
+          properties.splice(index, 1);
+          return {
+            artwork: { ...state.artwork, properties }
+          };
+        }),
+
+      updateArtworkProperty: (index, property) =>
+        set((state) => {
+          const properties = [...state.artwork.properties];
+          properties[index] = property;
+          return {
+            artwork: { ...state.artwork, properties }
+          };
+        }),
+
+      addArtworkItem: (propertyIndex, item) =>
+        set((state) => {
+          const properties = [...state.artwork.properties];
+          properties[propertyIndex] = {
+            ...properties[propertyIndex],
+            items: [...properties[propertyIndex].items, item]
+          };
+          return {
+            artwork: { ...state.artwork, properties }
+          };
+        }),
+
+      removeArtworkItem: (propertyIndex, itemIndex) =>
+        set((state) => {
+          const properties = [...state.artwork.properties];
+          const items = [...properties[propertyIndex].items];
+          items.splice(itemIndex, 1);
+          properties[propertyIndex] = {
+            ...properties[propertyIndex],
+            items
+          };
+          return {
+            artwork: { ...state.artwork, properties }
+          };
+        }),
+
+      // Founder management
+      addFounder: (founder) =>
+        set((state) => ({
+          founders: [...state.founders, founder]
+        })),
+
+      removeFounder: (index) =>
+        set((state) => {
+          const founders = [...state.founders];
+          founders.splice(index, 1);
+          return { founders };
+        }),
+
+      updateFounder: (index, founder) =>
+        set((state) => {
+          const founders = [...state.founders];
+          founders[index] = founder;
+          return { founders };
+        }),
+
+      // Validation
+      setValidationError: (field, error) =>
+        set((state) => ({
+          validationErrors: { ...state.validationErrors, [field]: error }
+        })),
+
+      clearValidationError: (field) =>
+        set((state) => {
+          const { [field]: _, ...rest } = state.validationErrors;
+          return { validationErrors: rest };
+        }),
+
+      clearAllValidationErrors: () => set({ validationErrors: {} }),
+
+      // UI feedback
+      setFormMessage: (formMessage) => set({ formMessage }),
+      clearFormMessage: () => set({ formMessage: '' }),
+      setBusy: (busy) => set({ busy }),
+
+      // Reset
+      reset: () => set(initialState)
+    }),
+    {
+      name: 'dao.create-dao.v1',
+      storage,
+      partialize: (state) => ({
+        step: state.step,
+        basicInfo: state.basicInfo,
+        artwork: state.artwork,
+        auction: state.auction,
+        governance: state.governance,
+        founders: state.founders,
+        launchAdmin: state.launchAdmin
+      })
+    }
+  )
+);
+
+// Selectors for validation
+export const selectCanProceedToStep2 = (state: CreateDaoStore) =>
+  state.basicInfo.tokenName.trim().length > 0 &&
+  state.basicInfo.tokenSymbol.trim().length > 0 &&
+  state.basicInfo.description.trim().length > 0;
+
+export const selectCanProceedToStep3 = (state: CreateDaoStore) =>
+  state.artwork.ipfs.baseUri.trim().length > 0 && state.artwork.properties.length > 0;
+
+export const selectCanProceedToStep4 = (state: CreateDaoStore) =>
+  !state.auction.enabled || (state.auction.paymentAsset.trim().length > 0 && Number(state.auction.reservePrice) > 0);
+
+export const selectCanProceedToStep5 = (state: CreateDaoStore) =>
+  state.governance.quorumBps >= 0 &&
+  state.governance.quorumBps <= 10000 &&
+  state.governance.proposalThresholdBps >= 0 &&
+  state.governance.proposalThresholdBps <= 10000;
+
+export const selectCanProceedToStep6 = (state: CreateDaoStore) => {
+  const totalAllocation = state.founders.reduce((sum, f) => sum + f.amount, 0);
+  return totalAllocation <= 99;
+};
+
+export const selectTotalFounderAllocation = (state: CreateDaoStore) =>
+  state.founders.reduce((sum, f) => sum + f.amount, 0);
