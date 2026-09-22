@@ -54,10 +54,8 @@ GOLDSKY_SECRET_NEON_DATABASE=neondb
 GOLDSKY_SECRET_NEON_USER=goldsky_writer
 GOLDSKY_SECRET_NEON_PASSWORD=writer_password
 
-# Manager deployment (from deploys/<label>-<network>-manager.json)
-# The artifact supplies the Manager contract ID and starting ledger.
-NEXT_PUBLIC_DAO_NETWORK=testnet
-NEXT_PUBLIC_DAO_LABEL=builder
+# Manager deployment artifact
+MANAGER_DEPLOYMENT_FILE=deploys/builder-testnet-manager.json
 ```
 
 ### 2. Setup Database

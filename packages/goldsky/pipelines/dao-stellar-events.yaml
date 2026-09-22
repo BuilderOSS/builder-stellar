@@ -1,5 +1,5 @@
 name: dao-stellar-events
-description: Index the testnet DAO deployment with Goldsky Turbo
+description: Index Manager CC7URLJJQQPPS4HCSNYWJ7YNK3CZMDUVELNOFA3NNDFMDM5YCHWYXV4L on testnet with Goldsky Turbo
 resource_size: s
 use_dedicated_ip: false
 job: false
@@ -8,7 +8,7 @@ sources:
     type: dataset
     dataset_name: stellar_testnet.events
     version: 1.2.0
-    start_at: 4804396
+    start_at: 4804554
 
 transforms:
   dao_events:
@@ -17,9 +17,9 @@ transforms:
     sql: |
       SELECT
         id AS event_id,
-        'builder-testnet' AS deployment_id,
+        'manager:CC7URLJJQQPPS4HCSNYWJ7YNK3CZMDUVELNOFA3NNDFMDM5YCHWYXV4L' AS deployment_id,
         contract_id,
-        CASE WHEN contract_id = 'CAWOHVXGQEVL34ECN6UCBBXSW5QEUHWH2COJ5RKLURJBM4JI2ZWDQDB6' THEN 'manager' ELSE 'unknown' END AS contract_role,
+        CASE WHEN contract_id = 'CC7URLJJQQPPS4HCSNYWJ7YNK3CZMDUVELNOFA3NNDFMDM5YCHWYXV4L' THEN 'manager' ELSE 'unknown' END AS contract_role,
         type,
         topics,
         data,
@@ -39,7 +39,7 @@ transforms:
         ledger_closed_at,
         _gs_op
       FROM stellar_events
-       WHERE ledger_sequence >= 4804396
+       WHERE ledger_sequence >= 4804554
 
   raw_events:
     type: script

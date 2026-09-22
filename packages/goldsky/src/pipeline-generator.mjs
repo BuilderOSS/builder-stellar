@@ -27,11 +27,13 @@ export function loadPackageEnv(env = process.env, envPaths = defaultEnvPaths) {
 
 export function resolveDeploymentSelection(env = process.env) {
   const merged = loadPackageEnv(env);
-  const network = merged.NEXT_PUBLIC_DAO_NETWORK || 'local';
-  const label = merged.NEXT_PUBLIC_DAO_LABEL || 'local';
-  const artifactPath = join(repoRoot, 'deploys', `${label}-${network}-manager.json`);
+  const configuredPath = merged.MANAGER_DEPLOYMENT_FILE;
+  if (!configuredPath) {
+    throw new Error('MANAGER_DEPLOYMENT_FILE is required');
+  }
+  const artifactPath = resolve(repoRoot, configuredPath);
 
-  return { network, label, artifactPath };
+  return { artifactPath };
 }
 
 export function resolvePostgresSecretName(env = process.env) {
@@ -60,17 +62,6 @@ export function renderTemplate(template, variables) {
   });
 }
 
-function formatContractRoleCases(contracts) {
-  return Object.entries(contracts).map(([role, contractId]) => `          WHEN '${contractId}' THEN '${role}'`).join('\n');
-}
-
-function formatContractIdList(contracts) {
-  const ids = Object.values(contracts);
-  return ids
-    .map((contractId, index) => `        '${contractId}'${index < ids.length - 1 ? ',' : ''}`)
-    .join('\n');
-}
-
 function resolveStartAt(deployment) {
   const txLedgers = Object.values(deployment.transactions ?? {})
     .map((tx) => tx?.ledger)
@@ -79,7 +70,10 @@ function resolveStartAt(deployment) {
   const deploymentLedger = Number.isFinite(deployment.deploymentLedger) ? deployment.deploymentLedger : null;
   const startLedger = deploymentLedger ?? (txLedgers.length ? Math.min(...txLedgers) : null);
 
-  return startLedger ?? 'latest';
+  if (startLedger === null) {
+    throw new Error('Manager deployment artifact must define deploymentLedger or a transaction ledger');
+  }
+  return startLedger;
 }
 
 export function buildGoldskyPipelineYaml({ deployment, secretName, templateSource, scriptSource }) {
@@ -87,7 +81,6 @@ export function buildGoldskyPipelineYaml({ deployment, secretName, templateSourc
   const rawScript = readFileSync(defaultRawScriptPath, 'utf8');
   const decodedScript = readFileSync(defaultDecodedScriptPath, 'utf8');
   const script = scriptSource ?? readFileSync(defaultScriptPath, 'utf8');
-  const deploymentId = `${deployment.label}-${deployment.network}`;
   const managerContract = deployment.manager;
   if (!managerContract) {
     throw new Error('Deployment artifact must define manager');
@@ -97,8 +90,8 @@ export function buildGoldskyPipelineYaml({ deployment, secretName, templateSourc
   return renderTemplate(template, {
     PIPELINE_NAME: 'dao-stellar-events',
     RESOURCE_SIZE: 's',
-    DESCRIPTION: `Index the ${deployment.network} DAO deployment with Goldsky Turbo`,
-    DEPLOYMENT_ID: deploymentId,
+    DESCRIPTION: `Index Manager ${managerContract} on ${deployment.network} with Goldsky Turbo`,
+    DEPLOYMENT_ID: `manager:${managerContract}`,
     START_AT: startAt,
     DATASET_NAME: `stellar_${deployment.network}.events`,
     MANAGER_CONTRACT_ID: managerContract,
@@ -118,5 +111,11 @@ export function writeGoldskyPipeline({ env = process.env, outputPath = defaultOu
   mkdirSync(dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, `${yaml.trimEnd()}\n`);
 
-  return { selection, deployment, secretName, outputPath, yaml };
+  return {
+    selection: { ...selection, network: deployment.network, label: deployment.label },
+    deployment,
+    secretName,
+    outputPath,
+    yaml
+  };
 }

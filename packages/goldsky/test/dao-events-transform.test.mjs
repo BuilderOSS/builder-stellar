@@ -375,14 +375,11 @@ test('builds activity feed row from decoded vote_cast event', () => {
 
 // Pipeline Generation Tests
 
-test('deployment selection uses shared env names', () => {
+test('deployment selection uses an explicit Manager artifact', () => {
   const selection = resolveDeploymentSelection({
-    NEXT_PUBLIC_DAO_NETWORK: 'testnet',
-    NEXT_PUBLIC_DAO_LABEL: 'builder'
+    MANAGER_DEPLOYMENT_FILE: 'deploys/builder-testnet-manager.json'
   });
 
-  assert.equal(selection.network, 'testnet');
-  assert.equal(selection.label, 'builder');
   assert.match(selection.artifactPath, /deploys\/builder-testnet-manager\.json$/);
 });
 
@@ -395,8 +392,8 @@ test('pipeline generator renders the current deployment and scripts', { skip: !e
 
   assert.match(yaml, /name: dao-stellar-events/);
   assert.match(yaml, /dataset_name: stellar_testnet\.events/);
-  assert.match(yaml, /start_at: 4804396/);
-  assert.match(yaml, /'builder-testnet' AS deployment_id/);
+  assert.match(yaml, new RegExp(`start_at: ${JSON.parse(readFileSync(deploymentFixture, 'utf8')).deploymentLedger}`));
+  assert.match(yaml, new RegExp(`'manager:${deployment.manager}' AS deployment_id`));
   assert.match(yaml, /schema: chain/);
   assert.match(yaml, /table: raw_events/);
   assert.match(yaml, /table: decoded_events/);
@@ -405,7 +402,7 @@ test('pipeline generator renders the current deployment and scripts', { skip: !e
   assert.match(yaml, /contract_role/);
   assert.match(yaml, /function invoke\(data\)/);
   assert.match(yaml, /event_name: string/);
-  assert.match(yaml, /CAWOHVXGQEVL34ECN6UCBBXSW5QEUHWH2COJ5RKLURJBM4JI2ZWDQDB6/);
+  assert.match(yaml, new RegExp(deployment.manager));
   assert.match(yaml, /secret_name: MY_SECRET/);
 });
 
@@ -413,15 +410,13 @@ test('writeGoldskyPipeline writes a file from env selection', { skip: !existsSyn
   const outputPath = join(mkdtempSync(join(tmpdir(), 'goldsky-pipeline-')), 'dao-stellar-events.yaml');
   const result = writeGoldskyPipeline({
     env: {
-      NEXT_PUBLIC_DAO_NETWORK: 'testnet',
-      NEXT_PUBLIC_DAO_LABEL: 'builder',
+      MANAGER_DEPLOYMENT_FILE: 'deploys/builder-testnet-manager.json',
       GOLDSKY_POSTGRES_SECRET: 'MY_SECRET'
     },
     outputPath
   });
 
-  assert.equal(result.selection.network, 'testnet');
-  assert.equal(result.selection.label, 'builder');
+  assert.match(result.selection.artifactPath, /deploys\/builder-testnet-manager\.json$/);
   assert.equal(result.secretName, 'MY_SECRET');
   assert.equal(result.outputPath, outputPath);
   assert.match(readFileSync(outputPath, 'utf8'), /name: dao-stellar-events/);

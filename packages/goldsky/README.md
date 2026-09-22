@@ -65,10 +65,15 @@ Injected into the pipeline:
 
 ### Manager Deployment
 
-The generator reads `deploys/<label>-<network>-manager.json`. The artifact must
-contain the Manager contract address and its deployment ledger. The Manager is
-the only configured contract input; `DaoCreated` and `DaoRegistered` events
-discover each DAO's module addresses.
+Set `MANAGER_DEPLOYMENT_FILE` to the Manager deployment artifact, for example:
+
+```env
+MANAGER_DEPLOYMENT_FILE=deploys/builder-testnet-manager.json
+```
+
+The artifact supplies the Manager contract address, network, and starting
+ledger. The Manager is the only configured contract input; `DaoCreated` and
+`DaoRegistered` events discover each DAO's module addresses.
 
 The generator also reads `packages/goldsky/.env` and `packages/goldsky/.env.local` when present.
 
