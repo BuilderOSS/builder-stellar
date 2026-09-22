@@ -9,9 +9,11 @@ import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { useCallback, useState } from 'react';
 
 import type { CreateDaoFormData } from './dao-creation-params';
+import type { DaoNetworkName } from './dao-config';
 import { formDataToCreationParams, generateNonce } from './dao-creation-params';
 import { getDeploymentConfig } from './deployment-config';
 import { waitForConfirmation } from './transaction-confirmation';
+import { useTransactionFeedback } from './transaction-feedback';
 
 export type DeploymentStep =
   | 'idle'
@@ -86,8 +88,9 @@ const STEP_ORDER: DeploymentStep[] = [
   'indexing'
 ];
 
-export function useDaoDeployment(deployer: string) {
+export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
   const [state, setState] = useState<DeploymentState>(initialState);
+  const tx = useTransactionFeedback(network);
 
   const updateState = useCallback((updates: Partial<DeploymentState>) => {
     setState((prev) => ({ ...prev, ...updates }));
@@ -195,6 +198,7 @@ export function useDaoDeployment(deployer: string) {
         });
 
         const assembled = await managerClient.create_dao({ params });
+        tx.start('Creating DAO...');
         const sent = await assembled.signAndSend();
         const hash = sent.sendTransactionResponse?.hash;
 
@@ -202,7 +206,9 @@ export function useDaoDeployment(deployer: string) {
           throw new Error('No transaction hash returned from create_dao');
         }
 
+        tx.submitted('DAO creation submitted', hash);
         await waitForConfirmation(hash, config.rpcUrl);
+        tx.success('DAO created', hash);
 
         if (!assembled.result) {
           throw new Error('No result from create_dao transaction');
@@ -219,11 +225,12 @@ export function useDaoDeployment(deployer: string) {
         return addresses;
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Failed to create DAO');
+        tx.fail(error, 'DAO creation failed');
         setError(error);
         throw error;
       }
     },
-    [deployer, state.transactions, setStep, updateState, markStepComplete, setError]
+    [deployer, state.transactions, setStep, updateState, markStepComplete, setError, tx]
   );
 
   // Step 3: Accept token ownership
@@ -247,6 +254,7 @@ export function useDaoDeployment(deployer: string) {
         });
 
         const assembled = await tokenClient.accept_ownership();
+        tx.start('Accepting token ownership...');
         const sent = await assembled.signAndSend();
         const hash = sent.sendTransactionResponse?.hash;
 
@@ -254,7 +262,9 @@ export function useDaoDeployment(deployer: string) {
           throw new Error('No transaction hash returned from accept_ownership');
         }
 
+        tx.submitted('Ownership acceptance submitted', hash);
         await waitForConfirmation(hash, config.rpcUrl);
+        tx.success('Token ownership accepted', hash);
 
         updateState({
           transactions: { ...state.transactions, acceptOwnership: hash }
@@ -262,11 +272,12 @@ export function useDaoDeployment(deployer: string) {
         markStepComplete('accepting-ownership');
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Failed to accept ownership');
+        tx.fail(error, 'Ownership acceptance failed');
         setError(error);
         throw error;
       }
     },
-    [deployer, state.transactions, setStep, updateState, markStepComplete, setError]
+    [deployer, state.transactions, setStep, updateState, markStepComplete, setError, tx]
   );
 
   // Step 4: Add artwork properties
@@ -296,6 +307,7 @@ export function useDaoDeployment(deployer: string) {
           ipfs_group: params.artwork_ipfs
         });
 
+        tx.start('Configuring artwork metadata...');
         const sent = await assembled.signAndSend();
         const hash = sent.sendTransactionResponse?.hash;
 
@@ -303,7 +315,9 @@ export function useDaoDeployment(deployer: string) {
           throw new Error('No transaction hash returned from add_properties');
         }
 
+        tx.submitted('Metadata configuration submitted', hash);
         await waitForConfirmation(hash, config.rpcUrl);
+        tx.success('Artwork metadata configured', hash);
 
         updateState({
           transactions: { ...state.transactions, addProperties: hash }
@@ -311,11 +325,12 @@ export function useDaoDeployment(deployer: string) {
         markStepComplete('adding-properties');
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Failed to add properties');
+        tx.fail(error, 'Metadata configuration failed');
         setError(error);
         throw error;
       }
     },
-    [deployer, state.nonce, state.transactions, setStep, updateState, markStepComplete, setError]
+    [deployer, state.nonce, state.transactions, setStep, updateState, markStepComplete, setError, tx]
   );
 
   // Step 5: Mint founder allocations (batched)
@@ -353,6 +368,7 @@ export function useDaoDeployment(deployer: string) {
             amount: founder.amount
           });
 
+          tx.start(`Minting allocation for ${founder.address.slice(0, 6)}...`);
           const sent = await assembled.signAndSend();
           const hash = sent.sendTransactionResponse?.hash;
 
@@ -360,7 +376,9 @@ export function useDaoDeployment(deployer: string) {
             throw new Error(`No transaction hash returned for founder ${founder.address}`);
           }
 
+          tx.submitted('Founder allocation submitted', hash);
           await waitForConfirmation(hash, config.rpcUrl);
+          tx.success('Founder allocation minted', hash);
           hashes.push(hash);
         }
 
@@ -370,11 +388,12 @@ export function useDaoDeployment(deployer: string) {
         markStepComplete('minting-founders');
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Failed to mint founder allocations');
+        tx.fail(error, 'Founder allocation failed');
         setError(error);
         throw error;
       }
     },
-    [deployer, state.transactions, setStep, updateState, markStepComplete, setError]
+    [deployer, state.transactions, setStep, updateState, markStepComplete, setError, tx]
   );
 
   // Step 6: Finalize DAO
@@ -402,6 +421,7 @@ export function useDaoDeployment(deployer: string) {
           launch_auction: launchAuction
         });
 
+        tx.start('Finalizing DAO...');
         const sent = await assembled.signAndSend();
         const hash = sent.sendTransactionResponse?.hash;
 
@@ -409,7 +429,9 @@ export function useDaoDeployment(deployer: string) {
           throw new Error('No transaction hash returned from finalize_dao');
         }
 
+        tx.submitted('DAO finalization submitted', hash);
         await waitForConfirmation(hash, config.rpcUrl);
+        tx.success('DAO finalized', hash);
 
         updateState({
           transactions: { ...state.transactions, finalize: hash }
@@ -417,11 +439,12 @@ export function useDaoDeployment(deployer: string) {
         markStepComplete('finalizing');
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Failed to finalize DAO');
+        tx.fail(error, 'DAO finalization failed');
         setError(error);
         throw error;
       }
     },
-    [deployer, state.transactions, setStep, updateState, markStepComplete, setError]
+    [deployer, state.transactions, setStep, updateState, markStepComplete, setError, tx]
   );
 
   // Step 7: Wait for indexing (polling)

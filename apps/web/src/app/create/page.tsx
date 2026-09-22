@@ -154,10 +154,13 @@ export default function CreateDaoPage() {
 
   // Deployment state
   const [isDeploying, setIsDeploying] = useState(false);
-  const { state: deploymentState, deployDao, reset: resetDeployment } = useDaoDeployment(session.address || '');
-
   // Network config
   const networkName = getDeploymentConfig().name;
+  const {
+    state: deploymentState,
+    deployDao,
+    reset: resetDeployment
+  } = useDaoDeployment(session.address || '', networkName);
 
   const handleProceedToStep2 = () => {
     if (canProceedToStep2) {

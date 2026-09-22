@@ -2,6 +2,7 @@
 
 import type { ArtworkItem, DaoCreationParams } from '@builder-stellar/manager-bindings';
 
+import { getTreasuryAssets } from './assets-config';
 import type { ArtworkProperty } from '@/stores/create-dao-store';
 
 /**
@@ -52,6 +53,14 @@ export function formDataToCreationParams(
   deployer: string,
   nonce: bigint
 ): DaoCreationParams {
+  const network = (process.env.NEXT_PUBLIC_NETWORK || 'testnet') as 'testnet' | 'public' | 'local';
+  const paymentAsset =
+    formData.auction.paymentAsset || getTreasuryAssets(network).find((asset) => asset.isNative)?.contractId;
+
+  if (!paymentAsset) {
+    throw new Error(`No default payment asset configured for network: ${network}`);
+  }
+
   // Build artwork items array
   const artworkItems: ArtworkItem[] = [];
   const propertyNames: string[] = [];
@@ -95,7 +104,7 @@ export function formDataToCreationParams(
     auction_duration: BigInt(formData.auction.duration),
     reserve_price: BigInt(formData.auction.reservePrice),
     time_buffer: BigInt(formData.auction.timeBuffer),
-    payment_asset: formData.auction.paymentAsset,
+    payment_asset: paymentAsset,
 
     // Governance (convert to bigint)
     voting_delay: BigInt(formData.governance.votingDelay),
