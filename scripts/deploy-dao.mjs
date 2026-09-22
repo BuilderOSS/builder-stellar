@@ -7,7 +7,7 @@ const networkConfigPath = args[1];
 
 if (!daoConfigPath || !networkConfigPath) {
   throw new Error(
-    'Usage: node scripts/create-dao.mjs <dao-config.json> <network-config.json>'
+    'Usage: node scripts/deploy-dao.mjs <dao-config.json> <network-config.json>'
   );
 }
 
@@ -429,8 +429,53 @@ writeDaoArtifact({
   transactions: postCreationTransactions
 });
 
-console.log(`\n=== DAO Creation Complete: Pending Finalization ===`);
-console.log(`Launch admin may now configure the DAO before calling finalize_dao.`);
+console.log('\n=== Finalizing DAO ===\n');
+const finalizeResult = runQuiet('stellar', [
+  'contract',
+  'invoke',
+  '--id',
+  managerAddress,
+  '--source-account',
+  identityName,
+  '--network',
+  networkName,
+  '--',
+  'finalize_dao',
+  '--token_address',
+  daoAddresses.token
+]);
+const finalizeOutput = finalizeResult.stdout + finalizeResult.stderr;
+if (!finalizeResult.ok) {
+  writeDaoArtifact({
+    status: 'pending',
+    predictedAddresses,
+    addresses: daoAddresses,
+    output: createOutput,
+    transactions: postCreationTransactions,
+    error: finalizeResult.stderr || finalizeResult.stdout || 'DAO finalization failed'
+  });
+  throw new Error('DAO configuration completed but finalization failed');
+}
+
+const finalizeTxHash = finalizeOutput.match(
+  /Signing transaction:\s*([a-f0-9]{64})/i
+);
+if (finalizeTxHash) {
+  postCreationTransactions.finalizeDao = enrichTransactionMetadata(
+    { txHash: finalizeTxHash[1] },
+    networkName
+  );
+}
+
+writeDaoArtifact({
+  status: 'operational',
+  predictedAddresses,
+  addresses: daoAddresses,
+  output: createOutput,
+  transactions: postCreationTransactions
+});
+
+console.log(`\n=== DAO Deployment Complete ===`);
 console.log(`Artifact saved to: ${daoArtifactPath}`);
 console.log(`\nTo query DAO addresses:`);
 console.log(

@@ -16,7 +16,7 @@
     "indexer:generate": "pnpm --dir packages/goldsky generate",
     "indexer:test": "pnpm --dir packages/goldsky test",
     "deploy:manager": "node scripts/deploy-manager.mjs",
-    "deploy:dao": "node scripts/create-dao.mjs"
+    "deploy:dao": "node scripts/deploy-dao.mjs"
   },
   "workspaces": [
     "apps/*",
