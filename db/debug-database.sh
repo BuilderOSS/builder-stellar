@@ -197,7 +197,8 @@ SELECT
   grantee,
   table_schema,
   COUNT(DISTINCT table_name) as table_count,
-  STRING_AGG(DISTINCT privilege_type, ', ' ORDER BY privilege_type) as privileges
+  STRING_AGG(DISTINCT privilege_type, ', ' ORDER BY privilege_type) as privileges,
+  STRING_AGG(DISTINCT table_name, ', ' ORDER BY table_name) as table_names
 FROM information_schema.table_privileges
 WHERE grantee IN ('goldsky_writer', 'app_server')
   AND table_schema IN ('chain', 'governance', 'token', 'auction', 'treasury', 'manager', 'metadata', 'app')
