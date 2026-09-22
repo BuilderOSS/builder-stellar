@@ -101,9 +101,12 @@ function invoke(data) {
   };
   // These aliases are intentionally not declared in the Goldsky schema. They keep
   // local transform fixtures useful while consumers migrate to topics/args.
+  // Type-safe: convert all to strings to maintain consistency
   Object.keys(topics).forEach(function (key) { result[key] = toStringOrNull(topics[key]); });
   Object.keys(args).forEach(function (key) {
-    if (key !== 'args' && key !== 'topics' && key !== 'payload') result[key] = args[key];
+    if (key !== 'args' && key !== 'topics' && key !== 'payload') {
+      result[key] = toStringOrNull(args[key]);  // Convert to string or null for consistency
+    }
   });
     return result;
 
