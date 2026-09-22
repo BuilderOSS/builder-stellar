@@ -1,5 +1,5 @@
 name: builder-stellar-events
-description: Index Manager CD5ARHFOXUWDVD6XG3ZFYQPQDUTDCFMWRG5GTKFTFGHDYWQJRV4G46BF on testnet with Goldsky Turbo
+description: Index Manager CD6WUNOLSU6KRY3VRBRQQIOR55WWTRQNKIHWQC5MJNKMYWJEDLQKSIVX on testnet with Goldsky Turbo
 resource_size: s
 use_dedicated_ip: false
 job: false
@@ -8,7 +8,7 @@ sources:
     type: dataset
     dataset_name: stellar_testnet.events
     version: 1.2.0
-    start_at: 4809830
+    start_at: 4813480
 
 transforms:
   # Each DAO-created event contains the five newly deployed module addresses.
@@ -23,7 +23,7 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"token"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CD5ARHFOXUWDVD6XG3ZFYQPQDUTDCFMWRG5GTKFTFGHDYWQJRV4G46BF'
+      WHERE contract_id = 'CD6WUNOLSU6KRY3VRBRQQIOR55WWTRQNKIHWQC5MJNKMYWJEDLQKSIVX'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -37,7 +37,7 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"metadata"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CD5ARHFOXUWDVD6XG3ZFYQPQDUTDCFMWRG5GTKFTFGHDYWQJRV4G46BF'
+      WHERE contract_id = 'CD6WUNOLSU6KRY3VRBRQQIOR55WWTRQNKIHWQC5MJNKMYWJEDLQKSIVX'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -51,7 +51,7 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"auction"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CD5ARHFOXUWDVD6XG3ZFYQPQDUTDCFMWRG5GTKFTFGHDYWQJRV4G46BF'
+      WHERE contract_id = 'CD6WUNOLSU6KRY3VRBRQQIOR55WWTRQNKIHWQC5MJNKMYWJEDLQKSIVX'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -65,7 +65,7 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"governor"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CD5ARHFOXUWDVD6XG3ZFYQPQDUTDCFMWRG5GTKFTFGHDYWQJRV4G46BF'
+      WHERE contract_id = 'CD6WUNOLSU6KRY3VRBRQQIOR55WWTRQNKIHWQC5MJNKMYWJEDLQKSIVX'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -79,7 +79,7 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"treasury"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CD5ARHFOXUWDVD6XG3ZFYQPQDUTDCFMWRG5GTKFTFGHDYWQJRV4G46BF'
+      WHERE contract_id = 'CD6WUNOLSU6KRY3VRBRQQIOR55WWTRQNKIHWQC5MJNKMYWJEDLQKSIVX'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -89,10 +89,10 @@ transforms:
     sql: |
       SELECT
         id AS event_id,
-        'manager:CD5ARHFOXUWDVD6XG3ZFYQPQDUTDCFMWRG5GTKFTFGHDYWQJRV4G46BF' AS deployment_id,
+        'manager:CD6WUNOLSU6KRY3VRBRQQIOR55WWTRQNKIHWQC5MJNKMYWJEDLQKSIVX' AS deployment_id,
         contract_id,
         CASE
-          WHEN contract_id = 'CD5ARHFOXUWDVD6XG3ZFYQPQDUTDCFMWRG5GTKFTFGHDYWQJRV4G46BF' THEN 'manager'
+          WHEN contract_id = 'CD6WUNOLSU6KRY3VRBRQQIOR55WWTRQNKIHWQC5MJNKMYWJEDLQKSIVX' THEN 'manager'
           WHEN dynamic_table_check('dao_tokens', contract_id) THEN 'token'
           WHEN dynamic_table_check('dao_metadata', contract_id) THEN 'metadata'
           WHEN dynamic_table_check('dao_auctions', contract_id) THEN 'auction'
@@ -119,9 +119,9 @@ transforms:
         ledger_closed_at,
         _gs_op
       FROM stellar_events
-       WHERE ledger_sequence >= 4809830
+       WHERE ledger_sequence >= 4813480
          AND (
-           contract_id = 'CD5ARHFOXUWDVD6XG3ZFYQPQDUTDCFMWRG5GTKFTFGHDYWQJRV4G46BF'
+           contract_id = 'CD6WUNOLSU6KRY3VRBRQQIOR55WWTRQNKIHWQC5MJNKMYWJEDLQKSIVX'
            OR dynamic_table_check('dao_tokens', contract_id)
            OR dynamic_table_check('dao_metadata', contract_id)
            OR dynamic_table_check('dao_auctions', contract_id)
