@@ -4,7 +4,7 @@
   "token": {
     "name": "Builder DAO",
     "symbol": "BUILD",
-    "uri": "https://test-dao-stellar-web.vercel.app/api/dao/{daoId}/token/"
+    "uri": "https://builder-stellar-web.vercel.app/api/dao/{daoId}/token/"
   },
   "metadata": {
     "projectUri": "https://test-dao-stellar-web.vercel.app",
