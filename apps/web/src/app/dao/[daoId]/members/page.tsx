@@ -14,11 +14,11 @@ export default function MembersPage() {
   const rows = data?.items ?? [];
 
   return (
-    <PageSection title="Members" description="A Goldsky-backed view of token holders with non-zero balances.">
+    <PageSection title="Members" description="A live view of token holders with non-zero balances.">
       <Card p="5">
         <Stack gap="3">
           <div className="section-toolbar">
-            <Text className="label">Goldsky members</Text>
+            <Text className="label">Member directory</Text>
             <Button type="button" variant="outline" size="sm" onClick={() => void mutate()} disabled={isLoading}>
               {isLoading ? 'Refreshing...' : 'Refresh'}
             </Button>
