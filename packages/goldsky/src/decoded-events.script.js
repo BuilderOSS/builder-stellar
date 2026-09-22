@@ -61,11 +61,7 @@ function invoke(data) {
 
   // Type-safe helpers to ensure consistent Arrow table types
   // CRITICAL: For Arrow serialization, all rows must have same type in each column
-  // Never mix null with values - use empty string for missing strings, 0 for missing numbers
-  function toStringOrNull(value) {
-    if (value === null || value === undefined) return null;
-    return String(value);
-  }
+  // Never mix null with values - use empty string for missing strings, null for missing numbers
   function toStringOrEmpty(value) {
     if (value === null || value === undefined) return '';
     return String(value);
