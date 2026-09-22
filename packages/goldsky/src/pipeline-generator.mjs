@@ -29,7 +29,7 @@ export function resolveDeploymentSelection(env = process.env) {
   const merged = loadPackageEnv(env);
   const network = merged.NEXT_PUBLIC_DAO_NETWORK || 'local';
   const label = merged.NEXT_PUBLIC_DAO_LABEL || 'local';
-  const artifactPath = join(repoRoot, 'deploys', `${label}-${network}.json`);
+  const artifactPath = join(repoRoot, 'deploys', `${label}-${network}-manager.json`);
 
   return { network, label, artifactPath };
 }
@@ -88,6 +88,10 @@ export function buildGoldskyPipelineYaml({ deployment, secretName, templateSourc
   const decodedScript = readFileSync(defaultDecodedScriptPath, 'utf8');
   const script = scriptSource ?? readFileSync(defaultScriptPath, 'utf8');
   const deploymentId = `${deployment.label}-${deployment.network}`;
+  const managerContract = deployment.manager;
+  if (!managerContract) {
+    throw new Error('Deployment artifact must define manager');
+  }
   const startAt = resolveStartAt(deployment);
 
   return renderTemplate(template, {
@@ -97,8 +101,7 @@ export function buildGoldskyPipelineYaml({ deployment, secretName, templateSourc
     DEPLOYMENT_ID: deploymentId,
     START_AT: startAt,
     DATASET_NAME: `stellar_${deployment.network}.events`,
-    CONTRACT_ROLE_CASES: formatContractRoleCases(deployment.contracts),
-    CONTRACT_ID_LIST: formatContractIdList(deployment.contracts),
+    MANAGER_CONTRACT_ID: managerContract,
     RAW_EVENTS_SCRIPT: indentBlock(rawScript, 6),
     DECODED_EVENTS_SCRIPT: indentBlock(decodedScript, 6),
     ACTIVITY_SCRIPT: indentBlock(script, 6),

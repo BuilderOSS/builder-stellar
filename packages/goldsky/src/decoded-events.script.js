@@ -53,7 +53,7 @@ function invoke(data) {
   function stringify(value) { return value === null || value === undefined ? null : String(value); }
   var result = {
     event_id: data.event_id || data.id || null, deployment_id: data.deployment_id || null, contract_id: data.contract_id || null,
-    contract_role: data.contract_role || 'unknown', event_name: eventName,
+    contract_role: data.contract_role === 'manager' ? 'manager' : roleForEvent(eventName), event_name: eventName,
     topic_0: stringify(topicValues[0]), topic_1: stringify(topicValues[1]), topic_2: stringify(topicValues[2]), topic_3: stringify(topicValues[3]),
     topics: JSON.stringify(topics), args: JSON.stringify(args), payload: JSON.stringify(Object.assign({}, topics, args)),
     transaction_hash: data.transaction_hash || null, transaction_successful: data.transaction_successful ?? null,
@@ -68,4 +68,15 @@ function invoke(data) {
     if (key !== 'args' && key !== 'topics' && key !== 'payload') result[key] = args[key];
   });
   return result;
+
+  function roleForEvent(name) {
+    var canonical = name.charAt(0).toUpperCase() + name.slice(1).replace(/_([a-z])/g, function (_, c) { return c.toUpperCase(); });
+    if (/^(Dao|Factory|Upgrade|Implementation|CurrentImplementations)/.test(canonical)) return 'manager';
+    if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue|Veto)/.test(canonical)) return 'governor';
+    if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken)/.test(canonical)) return 'auction';
+    if (/^(Execute|Treasury|GovernorChanged)/.test(canonical)) return 'treasury';
+    if (/^(Metadata|Property|Properties|Seed|ProjectURI|Description|RendererBase|ContractImage)/.test(canonical)) return 'metadata';
+    if (/^(Transfer|Mint|BatchMint|Delegate|Approve|MintAuthority|Token|Burn)/.test(canonical)) return 'token';
+    return 'unknown';
+  }
 }

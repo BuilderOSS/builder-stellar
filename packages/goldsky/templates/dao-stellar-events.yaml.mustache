@@ -19,10 +19,7 @@ transforms:
         id AS event_id,
         '{{DEPLOYMENT_ID}}' AS deployment_id,
         contract_id,
-        CASE contract_id
-{{CONTRACT_ROLE_CASES}}
-          ELSE 'unknown'
-        END AS contract_role,
+        CASE WHEN contract_id = '{{MANAGER_CONTRACT_ID}}' THEN 'manager' ELSE 'unknown' END AS contract_role,
         type,
         topics,
         data,
@@ -42,9 +39,7 @@ transforms:
         ledger_closed_at,
         _gs_op
       FROM stellar_events
-      WHERE contract_id IN (
-{{CONTRACT_ID_LIST}}
-      )
+       WHERE ledger_sequence >= {{START_AT}}
 
   raw_events:
     type: script
@@ -154,6 +149,6 @@ sinks:
     type: postgres
     from: activity_feed
     schema: app
-     table: activity_feed_events
+    table: activity_feed_events
     secret_name: {{POSTGRES_SECRET_NAME}}
     primary_key: activity_id

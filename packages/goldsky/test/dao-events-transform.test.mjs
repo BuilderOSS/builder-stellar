@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { buildGoldskyPipelineYaml, resolveDeploymentSelection, resolvePostgresSecretName, writeGoldskyPipeline } from '../src/pipeline-generator.mjs';
 
-const deploymentFixture = new URL('../../../deploys/builder-testnet.json', import.meta.url);
+const deploymentFixture = new URL('../../../deploys/builder-testnet-manager.json', import.meta.url);
 
 function loadInvoke(scriptName) {
   const source = readFileSync(new URL(`../src/${scriptName}`, import.meta.url), 'utf8');
@@ -383,7 +383,7 @@ test('deployment selection uses shared env names', () => {
 
   assert.equal(selection.network, 'testnet');
   assert.equal(selection.label, 'builder');
-  assert.match(selection.artifactPath, /deploys\/builder-testnet\.json$/);
+  assert.match(selection.artifactPath, /deploys\/builder-testnet-manager\.json$/);
 });
 
 test('pipeline generator renders the current deployment and scripts', { skip: !existsSync(deploymentFixture) }, () => {
@@ -395,7 +395,7 @@ test('pipeline generator renders the current deployment and scripts', { skip: !e
 
   assert.match(yaml, /name: dao-stellar-events/);
   assert.match(yaml, /dataset_name: stellar_testnet\.events/);
-  assert.match(yaml, /start_at: 4551728/);
+  assert.match(yaml, /start_at: 4804396/);
   assert.match(yaml, /'builder-testnet' AS deployment_id/);
   assert.match(yaml, /schema: chain/);
   assert.match(yaml, /table: raw_events/);
@@ -405,10 +405,7 @@ test('pipeline generator renders the current deployment and scripts', { skip: !e
   assert.match(yaml, /contract_role/);
   assert.match(yaml, /function invoke\(data\)/);
   assert.match(yaml, /event_name: string/);
-  assert.match(yaml, /CBGLIC3VDPNSXRQTHIHADJVL3WVM54ZIO7FV23SDC3DQTTDLO2NMYUK7/);
-  assert.match(yaml, /CCWTJATDBQN5H2M4RFTCB7Z3SHEMVZUXEB6YA7CHO5QME6AS55IUMEHI/);
-  assert.match(yaml, /CCPNKK3XDYHX57MNAUSWNRHDZKDOIG7DOGV43I4N3LJ74KK7TVZLXVW2/);
-  assert.match(yaml, /CBHISFJ2I27W7LWUYE3MX5ZS732BPVKPJ2BTO3ASSYAPEBSV7YZYD66E/);
+  assert.match(yaml, /CAWOHVXGQEVL34ECN6UCBBXSW5QEUHWH2COJ5RKLURJBM4JI2ZWDQDB6/);
   assert.match(yaml, /secret_name: MY_SECRET/);
 });
 
