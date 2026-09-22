@@ -22,7 +22,6 @@ SELECT
   CASE lower(e.event_name)
     WHEN 'proposal_queued' THEN 'queued'
     WHEN 'proposal_executed' THEN 'executed'
-    WHEN 'proposal_expired' THEN 'expired'
     WHEN 'proposal_canceled' THEN 'canceled'
     WHEN 'proposal_cancelled' THEN 'canceled'
     ELSE lower(e.event_name)
@@ -35,7 +34,7 @@ SELECT
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
 WHERE e.contract_role = 'governor'
-  AND lower(e.event_name) IN ('proposal_queued', 'proposal_executed', 'proposal_expired', 'proposal_canceled', 'proposal_cancelled');
+  AND lower(e.event_name) IN ('proposal_queued', 'proposal_executed', 'proposal_canceled', 'proposal_cancelled');
 
 -- Governance: Proposal votes
 CREATE OR REPLACE VIEW governance.proposal_votes AS

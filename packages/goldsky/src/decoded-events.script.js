@@ -1,30 +1,39 @@
 function invoke(data) {
-  function native(value) {
-    if (value === null || value === undefined || value === 'void') return null;
-    if (typeof value !== 'object') return value;
-    if (value.symbol !== undefined) return String(value.symbol);
-    if (value.address !== undefined) return String(value.address);
-    var scalar = ['u32', 'i32', 'u64', 'i64', 'u128', 'i128', 'u256', 'i256', 'bytes', 'string', 'bool'];
-    for (var i = 0; i < scalar.length; i += 1) {
-      if (value[scalar[i]] !== undefined) return scalar[i].match(/^[ui](64|128|256)$/) ? String(value[scalar[i]]) : value[scalar[i]];
-    }
-    if (Array.isArray(value.vec)) return value.vec.map(native);
-    if (Array.isArray(value.map)) {
-      var out = {};
-      value.map.forEach(function (entry) { if (entry && entry.key !== undefined) out[String(native(entry.key))] = native(entry.val); });
-      return out;
-    }
-    return value;
-  }
+  try {
+    if (!data) return null;
 
-  function json(value) {
-    if (typeof value !== 'string') return value;
-    try { return JSON.parse(value); } catch (_) { return null; }
-  }
+    function native(value) {
+      if (value === null || value === undefined || value === 'void') return null;
+      if (typeof value !== 'object') return value;
+      if (value.symbol !== undefined) return String(value.symbol);
+      if (value.address !== undefined) return String(value.address);
+      var scalar = ['u32', 'i32', 'u64', 'i64', 'u128', 'i128', 'u256', 'i256', 'bytes', 'string', 'bool'];
+      for (var i = 0; i < scalar.length; i += 1) {
+        if (value[scalar[i]] !== undefined) return scalar[i].match(/^[ui](64|128|256)$/) ? String(value[scalar[i]]) : value[scalar[i]];
+      }
+      if (Array.isArray(value.vec)) return value.vec.map(native);
+      if (Array.isArray(value.map)) {
+        var out = {};
+        value.map.forEach(function (entry) { if (entry && entry.key !== undefined) out[String(native(entry.key))] = native(entry.val); });
+        return out;
+      }
+      return value;
+    }
 
-  var rawTopics = json(data.topics);
-  var rawData = json(data.data);
-  if (!Array.isArray(rawTopics) || rawTopics.length === 0) return null;
+    function json(value) {
+      if (typeof value !== 'string') return value;
+      try { return JSON.parse(value); } catch (e) {
+        console.error('JSON parse error:', e.message, 'value:', String(value).substring(0, 100));
+        return null;
+      }
+    }
+
+    var rawTopics = json(data.topics);
+    var rawData = json(data.data);
+    if (!Array.isArray(rawTopics) || rawTopics.length === 0) {
+      console.error('Invalid topics for event:', data.event_id);
+      return null;
+    }
 
   var values = rawTopics.map(native);
   var eventName = String(values[0]);
@@ -67,16 +76,20 @@ function invoke(data) {
   Object.keys(args).forEach(function (key) {
     if (key !== 'args' && key !== 'topics' && key !== 'payload') result[key] = args[key];
   });
-  return result;
+    return result;
 
-  function roleForEvent(name) {
-    var canonical = name.charAt(0).toUpperCase() + name.slice(1).replace(/_([a-z])/g, function (_, c) { return c.toUpperCase(); });
-    if (/^(Dao|Factory|Upgrade|Implementation|CurrentImplementations)/.test(canonical)) return 'manager';
-    if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue|Veto)/.test(canonical)) return 'governor';
-    if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken)/.test(canonical)) return 'auction';
-    if (/^(Execute|Treasury|GovernorChanged)/.test(canonical)) return 'treasury';
-    if (/^(Metadata|Property|Properties|Seed|ProjectURI|Description|RendererBase|ContractImage)/.test(canonical)) return 'metadata';
-    if (/^(Transfer|Mint|BatchMint|Delegate|Approve|MintAuthority|Token|Burn)/.test(canonical)) return 'token';
-    return 'unknown';
+    function roleForEvent(name) {
+      var canonical = name.charAt(0).toUpperCase() + name.slice(1).replace(/_([a-z])/g, function (_, c) { return c.toUpperCase(); });
+      if (/^(Dao|Factory|Upgrade|Implementation|CurrentImplementations)/.test(canonical)) return 'manager';
+      if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue|Veto)/.test(canonical)) return 'governor';
+      if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken)/.test(canonical)) return 'auction';
+      if (/^(Execute|Treasury|GovernorChanged)/.test(canonical)) return 'treasury';
+      if (/^(Metadata|Property|Properties|Seed|ProjectURI|Description|RendererBase|ContractImage)/.test(canonical)) return 'metadata';
+      if (/^(Transfer|Mint|BatchMint|Delegate|Approve|MintAuthority|Token|Burn)/.test(canonical)) return 'token';
+      return 'unknown';
+    }
+  } catch (e) {
+    console.error('Decoder error:', e.message, 'event_id:', data?.event_id);
+    return null;
   }
 }

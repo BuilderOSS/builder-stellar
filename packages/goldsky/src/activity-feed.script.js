@@ -1,22 +1,26 @@
 function invoke(data) {
-  function parsePayload(value) {
-    if (typeof value === 'string') {
-      var trimmed = value.trim();
-      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
-        try {
-          return parsePayload(JSON.parse(trimmed));
-        } catch {
-          return null;
+  try {
+    if (!data) return null;
+
+    function parsePayload(value) {
+      try {
+        if (typeof value === 'string') {
+          var trimmed = value.trim();
+          if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+            return parsePayload(JSON.parse(trimmed));
+          }
         }
+
+        if (value && typeof value === 'object') {
+          return value;
+        }
+
+        return null;
+      } catch (e) {
+        console.error('Payload parse error:', e.message, 'value:', String(value).substring(0, 100));
+        return null;
       }
     }
-
-    if (value && typeof value === 'object') {
-      return value;
-    }
-
-    return null;
-  }
 
   function pick(row, keys) {
     var payload = parsePayload(row.args) || parsePayload(row.topics) || parsePayload(row.payload) || parsePayload(row.data);
@@ -65,7 +69,7 @@ function invoke(data) {
     Transfer: true, DelegateChanged: true, DelegateVotesChanged: true,
     ProposalCreated: true, ProposalQueued: true, VoteCast: true,
     ProposalCancelled: true, ProposalCanceled: true, ProposalExecuted: true,
-    ProposalExpired: true, AuctionCreated: true, BidPlaced: true,
+    AuctionCreated: true, BidPlaced: true,
     AuctionSettled: true, BidRefunded: true, AuctionCancelled: true,
     DaoCreated: true, DaoRegistered: true, DaoFinalized: true
   };
@@ -269,4 +273,8 @@ function invoke(data) {
     ledger_closed_at: data.ledger_closed_at || null,
     transaction_hash: data.transaction_hash
   };
+  } catch (e) {
+    console.error('Activity feed transform error:', e.message, 'event_id:', data?.event_id);
+    return null;
+  }
 }
