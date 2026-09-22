@@ -2,7 +2,7 @@
 
 'use client';
 
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Check } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -18,7 +18,7 @@ import {
   GovernanceStep,
   ReviewStep
 } from '@/components/create-dao';
-import { Badge, Button, Callout } from '@/components/ui';
+import { Badge, Button, Callout, Card, Heading, Text } from '@/components/ui';
 import type { CreateDaoFormData } from '@/lib/dao-creation-params';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { useDaoDeployment } from '@/lib/use-dao-deployment';
@@ -31,6 +31,73 @@ import {
   useCreateDaoStore
 } from '@/stores/create-dao-store';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
+
+function StepCard({
+  number,
+  title,
+  description,
+  isActive,
+  isCompleted,
+  canProceed,
+  onClick
+}: {
+  number: number;
+  title: string;
+  description: string;
+  isActive: boolean;
+  isCompleted: boolean;
+  canProceed: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <Card
+      p="4"
+      style={{
+        cursor: 'pointer',
+        background: isActive ? 'var(--accent-3)' : isCompleted ? 'var(--green-3)' : 'var(--gray-2)',
+        border: `2px solid ${isActive ? 'var(--accent-7)' : isCompleted ? 'var(--green-7)' : 'var(--gray-6)'}`,
+        transition: 'all 0.2s',
+        position: 'relative',
+        opacity: isActive || isCompleted ? 1 : 0.7
+      }}
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      aria-current={isActive ? 'step' : undefined}
+    >
+      <Stack gap="2">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Badge
+            style={{
+              background: isActive ? 'var(--accent-9)' : isCompleted ? 'var(--green-9)' : 'var(--gray-8)',
+              color: 'white',
+              padding: '4px 12px'
+            }}
+          >
+            {isCompleted ? <Check size={14} /> : number}
+          </Badge>
+          {!canProceed && !isCompleted && !isActive && (
+            <Badge style={{ background: 'var(--red-9)', color: 'white', fontSize: '0.75rem', padding: '2px 6px' }}>
+              Required
+            </Badge>
+          )}
+        </div>
+        <div>
+          <Heading as="h3" style={{ fontSize: '1rem', marginBottom: '4px' }}>
+            {title}
+          </Heading>
+          <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)' }}>{description}</Text>
+        </div>
+      </Stack>
+    </Card>
+  );
+}
 
 export default function CreateDaoPage() {
   const router = useRouter();
@@ -207,30 +274,69 @@ export default function CreateDaoPage() {
           ) : (
             <Stack gap="6">
               {/* Wizard Steps */}
-              <div className="stepper" aria-label={`DAO creation, step ${step} of 6`}>
-                <Badge style={{ opacity: step === 1 ? 1 : 0.5, cursor: 'pointer' }} onClick={() => setStep(1)}>
-                  1. Basic Info
-                </Badge>
-                <div className="stepper-line" aria-hidden="true" />
-                <Badge style={{ opacity: step === 2 ? 1 : 0.5, cursor: 'pointer' }} onClick={() => setStep(2)}>
-                  2. Artwork
-                </Badge>
-                <div className="stepper-line" aria-hidden="true" />
-                <Badge style={{ opacity: step === 3 ? 1 : 0.5, cursor: 'pointer' }} onClick={() => setStep(3)}>
-                  3. Auction
-                </Badge>
-                <div className="stepper-line" aria-hidden="true" />
-                <Badge style={{ opacity: step === 4 ? 1 : 0.5, cursor: 'pointer' }} onClick={() => setStep(4)}>
-                  4. Governance
-                </Badge>
-                <div className="stepper-line" aria-hidden="true" />
-                <Badge style={{ opacity: step === 5 ? 1 : 0.5, cursor: 'pointer' }} onClick={() => setStep(5)}>
-                  5. Founders
-                </Badge>
-                <div className="stepper-line" aria-hidden="true" />
-                <Badge style={{ opacity: step === 6 ? 1 : 0.5, cursor: 'pointer' }} onClick={() => setStep(6)}>
-                  6. Review
-                </Badge>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: '1rem'
+                }}
+                role="navigation"
+                aria-label="DAO creation wizard steps"
+              >
+                <StepCard
+                  number={1}
+                  title="Basic Info"
+                  description="Token and DAO details"
+                  isActive={step === 1}
+                  isCompleted={step > 1}
+                  canProceed={canProceedToStep2}
+                  onClick={() => setStep(1)}
+                />
+                <StepCard
+                  number={2}
+                  title="Artwork"
+                  description="NFT properties & IPFS"
+                  isActive={step === 2}
+                  isCompleted={step > 2}
+                  canProceed={canProceedToStep3}
+                  onClick={() => setStep(2)}
+                />
+                <StepCard
+                  number={3}
+                  title="Auction"
+                  description="Auction configuration"
+                  isActive={step === 3}
+                  isCompleted={step > 3}
+                  canProceed={canProceedToStep4}
+                  onClick={() => setStep(3)}
+                />
+                <StepCard
+                  number={4}
+                  title="Governance"
+                  description="Voting parameters"
+                  isActive={step === 4}
+                  isCompleted={step > 4}
+                  canProceed={canProceedToStep5}
+                  onClick={() => setStep(4)}
+                />
+                <StepCard
+                  number={5}
+                  title="Founders"
+                  description="Token allocations"
+                  isActive={step === 5}
+                  isCompleted={step > 5}
+                  canProceed={canProceedToStep6}
+                  onClick={() => setStep(5)}
+                />
+                <StepCard
+                  number={6}
+                  title="Review"
+                  description="Review & deploy"
+                  isActive={step === 6}
+                  isCompleted={false}
+                  canProceed={canSubmit}
+                  onClick={() => setStep(6)}
+                />
               </div>
 
               {/* Step 1: Basic Information */}
