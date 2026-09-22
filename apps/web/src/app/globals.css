@@ -283,42 +283,68 @@ textarea {
   border-color: var(--border-strong);
   background: var(--surface-3);
 }
-.wallet-menu__disconnect {
+.wallet-menu__panel {
   position: absolute;
   z-index: 70;
   top: calc(100% + 6px);
   right: 0;
-  display: inline-flex;
-  min-width: 126px;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 9px 10px;
+  display: grid;
+  width: max-content;
+  min-width: 210px;
+  gap: 4px;
+  padding: 8px;
   border: 1px solid var(--border-strong);
-  border-radius: 9px;
+  border-radius: 10px;
   background: var(--surface-2);
-  color: var(--text-primary);
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.82rem;
-  font-weight: 700;
-  gap: 7px;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.28);
   opacity: 0;
   pointer-events: none;
   transform: translateY(-4px);
   transition: 140ms ease;
   transition-property: opacity, transform, visibility;
   visibility: hidden;
+}
+.wallet-menu__balance {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 8px 10px 10px;
+  border-bottom: 1px solid var(--border-default);
+  color: var(--text-tertiary);
+  font-size: 0.78rem;
+}
+.wallet-menu__balance strong {
+  color: var(--text-primary);
+  font-size: 0.84rem;
+}
+.wallet-menu__action {
+  display: inline-flex;
+  min-width: 126px;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  gap: 7px;
+  text-decoration: none;
   white-space: nowrap;
 }
-.wallet-menu:hover .wallet-menu__disconnect,
-.wallet-menu:focus-within .wallet-menu__disconnect,
-.wallet-menu[open] .wallet-menu__disconnect {
+.wallet-menu:hover .wallet-menu__panel,
+.wallet-menu:focus-within .wallet-menu__panel,
+.wallet-menu[open] .wallet-menu__panel {
   opacity: 1;
   pointer-events: auto;
   transform: translateY(0);
   visibility: visible;
 }
-.wallet-menu__disconnect:hover {
+.wallet-menu__action:hover {
   background: var(--surface-3);
 }
 .content-shell {

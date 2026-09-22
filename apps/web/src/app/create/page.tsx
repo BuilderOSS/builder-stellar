@@ -49,8 +49,8 @@ function StepCard({
   canProceed: boolean;
   onClick: () => void;
 }) {
-  const bgColor = isActive ? 'var(--accent-2)' : 'var(--gray-2)';
-  const borderCol = isActive ? 'var(--accent-9)' : 'var(--gray-7)';
+  const bgColor = isActive ? 'var(--surface-2)' : 'var(--surface-1)';
+  const borderCol = isActive ? 'var(--action)' : 'var(--border-default)';
 
   return (
     <div
