@@ -345,6 +345,41 @@ const artworkIpfs = {
 };
 const postCreationTransactions = {};
 
+console.log('\n=== Accepting Token Ownership ===\n');
+const ownershipResult = runQuiet('stellar', [
+  'contract',
+  'invoke',
+  '--id',
+  daoAddresses.token,
+  '--source-account',
+  identityName,
+  '--network',
+  networkName,
+  '--',
+  'accept_ownership'
+]);
+const ownershipOutput = ownershipResult.stdout + ownershipResult.stderr;
+if (!ownershipResult.ok) {
+  writeDaoArtifact({
+    status: 'partial',
+    predictedAddresses,
+    addresses: daoAddresses,
+    output: createOutput,
+    transactions: postCreationTransactions,
+    error: ownershipResult.stderr || ownershipResult.stdout
+  });
+  throw new Error('DAO created but token ownership acceptance failed');
+}
+const ownershipTxHash = ownershipOutput.match(
+  /Signing transaction:\s*([a-f0-9]{64})/i
+);
+if (ownershipTxHash) {
+  postCreationTransactions.acceptOwnership = enrichTransactionMetadata(
+    { txHash: ownershipTxHash[1] },
+    networkName
+  );
+}
+
 console.log('\n=== Adding Metadata Properties ===\n');
 const propertiesResult = runQuiet('stellar', [
   'contract',
@@ -382,41 +417,6 @@ const propertiesTxHash = propertiesOutput.match(
 if (propertiesTxHash) {
   postCreationTransactions.addProperties = enrichTransactionMetadata(
     { txHash: propertiesTxHash[1] },
-    networkName
-  );
-}
-
-console.log('\n=== Accepting Token Ownership ===\n');
-const ownershipResult = runQuiet('stellar', [
-  'contract',
-  'invoke',
-  '--id',
-  daoAddresses.token,
-  '--source-account',
-  identityName,
-  '--network',
-  networkName,
-  '--',
-  'accept_ownership'
-]);
-const ownershipOutput = ownershipResult.stdout + ownershipResult.stderr;
-if (!ownershipResult.ok) {
-  writeDaoArtifact({
-    status: 'partial',
-    predictedAddresses,
-    addresses: daoAddresses,
-    output: createOutput,
-    transactions: postCreationTransactions,
-    error: ownershipResult.stderr || ownershipResult.stdout
-  });
-  throw new Error('DAO created but token ownership acceptance failed');
-}
-const ownershipTxHash = ownershipOutput.match(
-  /Signing transaction:\s*([a-f0-9]{64})/i
-);
-if (ownershipTxHash) {
-  postCreationTransactions.acceptOwnership = enrichTransactionMetadata(
-    { txHash: ownershipTxHash[1] },
     networkName
   );
 }

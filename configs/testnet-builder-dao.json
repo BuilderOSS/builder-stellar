@@ -1,6 +1,6 @@
 {
   "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
-  "nonce": 0,
+  "nonce": 2,
   "token": {
     "name": "Builder Test",
     "symbol": "BUILD",
@@ -55,6 +55,14 @@
   "founders": [
     {
       "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+      "amount": 10
+    },
+    {
+      "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
+      "amount": 10
+    },
+    {
+      "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
       "amount": 10
     }
   ],
