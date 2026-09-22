@@ -249,6 +249,31 @@ function invoke(data) {
     summary = String(eventName).replace(/_/g, ' ');
   }
 
+  // Ensure consistent string representation for JSON fields to avoid Arrow type inference issues
+  var topicsValue = data.topics;
+  if (typeof topicsValue === 'string') {
+    // Validate it's valid JSON
+    try {
+      JSON.parse(topicsValue);
+    } catch (e) {
+      topicsValue = '{}';
+    }
+  } else {
+    topicsValue = JSON.stringify(topicsValue || {});
+  }
+
+  var argsValue = data.args;
+  if (typeof argsValue === 'string') {
+    // Validate it's valid JSON
+    try {
+      JSON.parse(argsValue);
+    } catch (e) {
+      argsValue = '{}';
+    }
+  } else {
+    argsValue = JSON.stringify(argsValue || {});
+  }
+
   return {
     activity_id: data.event_id || data.id,
     deployment_id: data.deployment_id,
@@ -258,14 +283,14 @@ function invoke(data) {
     title: titleMap[normalizedEventName] || normalizedEventName,
     summary: summary,
     event_name: eventName,
-    topics: typeof data.topics === 'string' ? data.topics : JSON.stringify(data.topics || {}),
-    args: typeof data.args === 'string' ? data.args : JSON.stringify(data.args || {}),
+    topics: String(topicsValue),
+    args: String(argsValue),
     visibility: userFacing[normalizedEventName] ? (normalizedEventName.indexOf('Proposal') === 0 || normalizedEventName === 'VoteCast' ? 'governance' : 'public') : (kindMap[normalizedEventName] ? 'admin' : 'system'),
     proposal_id: pick(data, ['proposal_id']) || null,
     token_id: pick(data, ['token_id']) || null,
     amount: pick(data, ['amount', 'weight']) || null,
     actor: pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator']) || null,
-    addresses: JSON.stringify(addresses),
+    addresses: String(JSON.stringify(addresses)),
     ledger_sequence: data.ledger_sequence,
     transaction_index: data.transaction_index,
     operation_index: data.operation_index,
