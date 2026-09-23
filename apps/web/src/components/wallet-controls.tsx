@@ -6,7 +6,7 @@ import { KitEventType } from '@creit.tech/stellar-wallets-kit/types';
 import { Check, ChevronDown, Copy, ExternalLink, LogOut, Wallet } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import { Button } from '@/components/ui';
+import { Button, Skeleton } from '@/components/ui';
 import { getNetworkConfig, type NetworkName } from '@/config/networks';
 import { getExplorerAccountUrl } from '@/lib/explorer-links';
 import { useWalletBalance } from '@/lib/wallet-balance';
@@ -135,7 +135,6 @@ export function WalletControls({ network }: { network?: WalletNetwork }) {
   }
 
   function formatBalance(value: string | null | undefined) {
-    if (balanceLoading) return 'Loading...';
     if (value === null || typeof value === 'undefined') return 'Unavailable';
     return `${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })} XLM`;
   }
@@ -156,7 +155,13 @@ export function WalletControls({ network }: { network?: WalletNetwork }) {
           <div className="wallet-menu__panel">
             <div className="wallet-menu__balance">
               <span>Balance</span>
-              <strong>{formatBalance(session.address ? balance : null)}</strong>
+              <strong>
+                {balanceLoading ? (
+                  <Skeleton className="skeleton--inline" style={{ width: '80px', height: '1em' }} />
+                ) : (
+                  formatBalance(session.address ? balance : null)
+                )}
+              </strong>
             </div>
             <a
               className="wallet-menu__action"

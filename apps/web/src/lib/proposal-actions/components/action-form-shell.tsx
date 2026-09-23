@@ -5,7 +5,7 @@
 import type { ReactNode } from 'react';
 import { Stack } from 'styled-system/jsx';
 
-import { Badge, Button, Callout, Card, FieldLabel, Select, Text } from '@/components/ui';
+import { Badge, Button, Callout, Card, FieldLabel, Select, Skeleton, Text } from '@/components/ui';
 
 import { getAllActionHandlers } from '../registry';
 import type { PreconditionResult, ProposalActionType } from '../types';
@@ -38,9 +38,15 @@ export function ActionFormShell({
     <Card p="5">
       <Stack gap="3">
         {/* Precondition blocking message */}
-        {preconditionResult && !preconditionResult.canExecute && (
-          <Callout variant={preconditionResult.loading ? 'info' : 'error'} title={preconditionResult.reason} />
-        )}
+        {preconditionResult && !preconditionResult.canExecute && preconditionResult.loading ? (
+          <div role="status" aria-busy="true" className="inline-loading">
+            <span className="sr-only">Checking action requirements</span>
+            <Skeleton style={{ width: '220px', height: '1.1em' }} />
+          </div>
+        ) : null}
+        {preconditionResult && !preconditionResult.canExecute && !preconditionResult.loading ? (
+          <Callout variant="error" title={preconditionResult.reason} />
+        ) : null}
 
         {/* Header */}
         <div

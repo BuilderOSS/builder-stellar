@@ -8,5 +8,6 @@ export { IconLinkButton } from './icon-link-button';
 export { Input } from './input';
 export { Select } from './select';
 export { ShortId } from './short-id';
+export { Skeleton } from './skeleton';
 export { Heading, Text } from './text';
 export { Textarea } from './textarea';

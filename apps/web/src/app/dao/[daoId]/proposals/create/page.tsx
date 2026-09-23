@@ -4,14 +4,13 @@
 
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
-import { LoaderCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Grid, Stack } from 'styled-system/jsx';
 
 import { PageSection } from '@/components/page-section';
 import { ProposalActionConfirmDialog } from '@/components/proposal/proposal-action-confirm-dialog';
-import { Badge, Button, Callout, Card, Heading, Input, Text, Textarea } from '@/components/ui';
+import { Badge, Button, Callout, Card, Heading, Input, Skeleton, Text, Textarea } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { useGovernorSettings } from '@/lib/admin-queries';
 import { daoRoute } from '@/lib/dao-routes';
@@ -177,17 +176,14 @@ export default function ProposalCreatePage() {
       >
         <Stack gap="6">
           {session.address && (votingPowerLoading || settingsLoading) ? (
-            <div role="status" aria-live="polite">
-              <Callout
-                variant="info"
-                title={
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                    <LoaderCircle aria-hidden="true" className="is-spinning" size={16} />
-                    Checking proposal eligibility
-                  </span>
-                }
-                description="Reading your voting power and the current proposal threshold."
-              />
+            <div role="status" aria-live="polite" aria-busy="true" className="loading-card">
+              <span className="sr-only">Checking proposal eligibility</span>
+              <Card p="4">
+                <Stack gap="2">
+                  <Skeleton style={{ width: '190px', height: '1.1em' }} />
+                  <Skeleton style={{ width: '320px', maxWidth: '100%', height: '0.9em' }} />
+                </Stack>
+              </Card>
             </div>
           ) : proposalCreationError ? (
             <Callout variant="error" title="Unable to check proposal eligibility" description={proposalCreationError} />

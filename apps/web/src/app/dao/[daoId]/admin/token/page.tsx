@@ -138,6 +138,7 @@ export default function TokenAdminPage() {
           allowLabel=""
           revokeLabel=""
           editable={false}
+          loading={isLoading}
           emptyLabel="No explicit mint authorities indexed yet."
         />
       </Stack>

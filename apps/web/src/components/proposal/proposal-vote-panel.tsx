@@ -1,6 +1,6 @@
 import { Stack } from 'styled-system/jsx';
 
-import { Button, Callout, Card, Input, Text } from '@/components/ui';
+import { Button, Callout, Card, Input, Skeleton, Text } from '@/components/ui';
 
 const VOTE_OPTIONS = [
   { label: 'For', value: 1 },
@@ -71,9 +71,11 @@ export function ProposalVotePanel({
     <Stack gap="3">
       <Text className="label">Your vote</Text>
       <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-        {votingPowerLoading
-          ? 'Checking your voting power at this proposal snapshot...'
-          : votingPowerError || `Voting power at snapshot: ${votingPower ?? '0'}`}
+        {votingPowerLoading ? (
+          <Skeleton className="skeleton--inline" style={{ width: '220px', height: '1em' }} />
+        ) : (
+          votingPowerError || `Voting power at snapshot: ${votingPower ?? '0'}`
+        )}
       </Text>
       {currentVote ? (
         <Card p="4">

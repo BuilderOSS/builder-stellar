@@ -4,7 +4,7 @@
 
 import { Stack } from 'styled-system/jsx';
 
-import { Button, FieldHelperText, FieldLabel, Input, Select } from '@/components/ui';
+import { Button, FieldHelperText, FieldLabel, Input, Select, Skeleton } from '@/components/ui';
 
 import { useActionFormContext } from '../../context';
 import type { ActionFormProps } from '../../types';
@@ -67,7 +67,12 @@ export function TransferSacTokenForm({
         )}
         {balanceDisplay && (
           <FieldHelperText>
-            <strong>Treasury balance:</strong> {balancesLoading ? 'Loading...' : balanceDisplay}
+            <strong>Treasury balance:</strong>{' '}
+            {balancesLoading ? (
+              <Skeleton className="skeleton--inline" style={{ width: '90px', height: '1em' }} />
+            ) : (
+              balanceDisplay
+            )}
           </FieldHelperText>
         )}
       </Stack>

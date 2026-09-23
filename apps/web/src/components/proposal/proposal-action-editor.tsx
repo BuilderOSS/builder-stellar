@@ -2,7 +2,18 @@
 
 import { Stack } from 'styled-system/jsx';
 
-import { Badge, Button, Callout, Card, FieldHelperText, FieldLabel, Input, Select, Text } from '@/components/ui';
+import {
+  Badge,
+  Button,
+  Callout,
+  Card,
+  FieldHelperText,
+  FieldLabel,
+  Input,
+  Select,
+  Skeleton,
+  Text
+} from '@/components/ui';
 import { getProposalActionLabel, type ProposalActionType } from '@/lib/proposal-call';
 import type { AssetBalance } from '@/lib/treasury-queries';
 
@@ -63,11 +74,9 @@ export function ProposalActionEditor({
 
   const balanceDisplay =
     sacTransfer && assetCode
-      ? balancesLoading
-        ? 'Loading balance...'
-        : selectedAssetBalance
-          ? `${parseFloat(selectedAssetBalance.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 7 })} ${assetCode}`
-          : '0 ' + assetCode
+      ? selectedAssetBalance
+        ? `${parseFloat(selectedAssetBalance.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 7 })} ${assetCode}`
+        : '0 ' + assetCode
       : undefined;
 
   return (
@@ -131,9 +140,14 @@ export function ProposalActionEditor({
                   <option value="EURC">EURC</option>
                 </Select>
                 <FieldHelperText>Choose which SAC token to transfer from the treasury.</FieldHelperText>
-                {balanceDisplay ? (
+                {balanceDisplay || balancesLoading ? (
                   <FieldHelperText>
-                    <strong>Treasury balance:</strong> {balanceDisplay}
+                    <strong>Treasury balance:</strong>{' '}
+                    {balancesLoading ? (
+                      <Skeleton className="skeleton--inline" style={{ width: '90px', height: '1em' }} />
+                    ) : (
+                      balanceDisplay
+                    )}
                   </FieldHelperText>
                 ) : null}
               </Stack>

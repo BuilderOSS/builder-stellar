@@ -9,7 +9,7 @@ import { Grid, Stack } from 'styled-system/jsx';
 import useSWR from 'swr';
 
 import { PageSection } from '@/components/page-section';
-import { Button, Callout, Card, Heading, Input, ShortId, Text } from '@/components/ui';
+import { Button, Callout, Card, Heading, Input, ShortId, Skeleton, Text } from '@/components/ui';
 import type { NetworkName } from '@/config/networks';
 import { useDaoContext } from '@/contexts/dao-context';
 import { getTreasuryAssets } from '@/lib/assets-config';
@@ -182,7 +182,36 @@ export default function AuctionsPage() {
     <PageSection title="Auctions" description="Bid on the current DAO collectible and browse settled auctions.">
       <Stack gap="6">
         {error ? <Callout variant="error" title={error.message} /> : null}
-        {isLoading && !data ? <Text className="lede">Loading auction...</Text> : null}
+        {isLoading && !data ? (
+          <div role="status" aria-busy="true" className="auction-loading">
+            <span className="sr-only">Loading auction</span>
+            <Card p="6">
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 280px) 1fr', gap: '24px' }}>
+                <Skeleton style={{ width: '100%', aspectRatio: '1', borderRadius: '16px' }} />
+                <Stack gap="4">
+                  <Skeleton style={{ width: '110px', height: '0.8em' }} />
+                  <Skeleton style={{ width: '160px', height: '1.4em' }} />
+                  <Skeleton style={{ width: '220px', height: '1em' }} />
+                  <Skeleton style={{ width: '150px', height: '0.8em' }} />
+                  <Skeleton style={{ width: '100%', height: '2.5em' }} />
+                  <Skeleton style={{ width: '130px', height: '2.5em' }} />
+                </Stack>
+              </div>
+            </Card>
+            <Grid columns={{ base: 1, md: 2 }} gap="4" style={{ marginTop: '24px' }}>
+              {Array.from({ length: 2 }, (_, index) => (
+                <Card key={index} p="5">
+                  <Stack gap="3">
+                    <Skeleton style={{ width: '120px', height: '1.1em' }} />
+                    {Array.from({ length: 3 }, (_, row) => (
+                      <Skeleton key={row} style={{ width: '100%', height: '2em' }} />
+                    ))}
+                  </Stack>
+                </Card>
+              ))}
+            </Grid>
+          </div>
+        ) : null}
         {data?.auction ? (
           <>
             <Card p="6">
@@ -225,11 +254,13 @@ export default function AuctionsPage() {
                   </div>
 
                   <div className="auction-current__status" role="status">
-                    {auctionEnded
-                      ? 'Auction ended'
-                      : now
-                        ? formatRemaining(data.auction.end_time, now)
-                        : 'Checking auction status…'}
+                    {auctionEnded ? (
+                      'Auction ended'
+                    ) : now ? (
+                      formatRemaining(data.auction.end_time, now)
+                    ) : (
+                      <Skeleton className="skeleton--inline" style={{ width: '130px', height: '1em' }} />
+                    )}
                   </div>
 
                   <Text className="lede">
