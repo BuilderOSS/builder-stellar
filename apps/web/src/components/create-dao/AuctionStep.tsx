@@ -123,8 +123,10 @@ export function AuctionStep() {
                   placeholder="86400"
                   min="0"
                 />
-                {validationErrors.duration && (
-                  <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>{validationErrors.duration}</Text>
+                {validationErrors.auctionDuration && (
+                  <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>
+                    {validationErrors.auctionDuration}
+                  </Text>
                 )}
                 <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
                   How long each auction lasts. 86400 seconds = 24 hours
@@ -162,6 +164,9 @@ export function AuctionStep() {
                   placeholder="300"
                   min="0"
                 />
+                {validationErrors.timeBuffer && (
+                  <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>{validationErrors.timeBuffer}</Text>
+                )}
                 <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
                   If a bid is placed within this time of auction end, the auction extends by this amount. 300 seconds =
                   5 minutes

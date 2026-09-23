@@ -44,18 +44,19 @@ export function ArtworkStep() {
   };
 
   const validateProperties = () => {
-    if (artwork.properties.length === 0) {
+    const currentArtwork = useCreateDaoStore.getState().artwork;
+    if (currentArtwork.properties.length === 0) {
       setValidationError('artworkProperties', 'At least one artwork property is required');
       return;
     }
-    if (artwork.properties.length > 16) {
+    if (currentArtwork.properties.length > 16) {
       setValidationError('artworkProperties', 'Maximum 16 artwork properties allowed');
       return;
     }
 
     // Validate each property
     let hasErrors = false;
-    artwork.properties.forEach((property, index) => {
+    currentArtwork.properties.forEach((property, index) => {
       const error = validateArtworkProperty(property);
       if (error) {
         setValidationError(`artworkProperty${index}`, `Property ${index + 1}: ${error}`);
@@ -66,7 +67,7 @@ export function ArtworkStep() {
     });
 
     // Check for duplicate property names
-    if (hasDuplicates(artwork.properties, (p) => p.name.toLowerCase())) {
+    if (hasDuplicates(currentArtwork.properties, (p) => p.name.toLowerCase())) {
       setValidationError('artworkProperties', 'Duplicate property names are not allowed');
       hasErrors = true;
     } else if (!hasErrors) {

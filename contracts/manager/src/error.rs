@@ -45,7 +45,7 @@ pub enum ManagerError {
     /// Invalid parameter bounds
     InvalidParamBounds = 1103,
 
-    /// Founders exceed 99 percent
+    /// Founder allocations exceed the configured maximum
     FoundersExceed99Percent = 1104,
 
     /// Invalid quorum basis points
@@ -78,12 +78,15 @@ pub enum ManagerError {
     /// Invalid founder allocation
     NoFoundersSpecified = 1114,
 
-    /// Invalid founder percentage
+    /// Invalid founder allocation
     InvalidFounderPercentage = 1115,
     /// Governance timing does not fit the Governor contract's u32 fields
     InvalidGovernanceTiming = 1117,
     /// Founder allocations exceed the factory resource limit
     FounderAllocationTooLarge = 1118,
+
+    /// The auction must remain paused when it is not launched
+    AuctionMustBePaused = 1119,
 
     /// Current implementations not set
     CurrentImplementationsNotSet = 1116,

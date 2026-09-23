@@ -26,6 +26,9 @@ SELECT
   END AS state,
   (e.args::jsonb ->> 'eta')::bigint AS eta_seconds,
   e.ledger_sequence AS event_ledger,
+  e.transaction_index,
+  e.operation_index,
+  e.event_index,
   extract(epoch FROM to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000))::bigint AS event_timestamp_seconds,
   to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS event_at,
   e.transaction_hash
@@ -47,6 +50,9 @@ SELECT
   (e.args::jsonb ->> 'weight')::numeric(78,0) AS weight,
   e.args::jsonb ->> 'reason' AS reason,
   e.ledger_sequence AS event_ledger,
+  e.transaction_index,
+  e.operation_index,
+  e.event_index,
   extract(epoch FROM to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000))::bigint AS event_timestamp_seconds,
   to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS event_at,
   e.transaction_hash
@@ -91,6 +97,9 @@ SELECT
   (e.args::jsonb ->> 'enabled')::boolean AS enabled,
   e.args::jsonb ->> 'changed_by' AS changed_by,
   e.ledger_sequence AS event_ledger,
+  e.transaction_index,
+  e.operation_index,
+  e.event_index,
   extract(epoch FROM to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000))::bigint AS event_timestamp_seconds,
   to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS event_at,
   e.transaction_hash
@@ -109,10 +118,13 @@ WITH latest_events AS (
     authority,
     enabled,
     event_ledger,
+    transaction_index,
+    operation_index,
+    event_index,
     event_at,
     transaction_hash
   FROM governance.governor_authority_history
-  ORDER BY deployment_id, dao_id, authority, event_ledger DESC, event_id DESC
+  ORDER BY deployment_id, dao_id, authority, event_ledger DESC, transaction_index DESC, operation_index DESC, event_index DESC
 ), explicit_authorities AS (
   SELECT
     e.deployment_id,
@@ -162,6 +174,9 @@ WITH created AS (
     (e.args::jsonb ->> 'vote_end')::bigint AS vote_end_seconds,
     jsonb_array_length(COALESCE(e.args::jsonb -> 'targets', '[]'::jsonb)) AS action_count,
     e.ledger_sequence AS created_ledger,
+    e.transaction_index,
+    e.operation_index,
+    e.event_index,
     to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS created_at,
     e.transaction_hash AS created_transaction_hash
   FROM chain.decoded_events e
@@ -179,7 +194,7 @@ lifecycle AS (
     event_ledger AS updated_ledger,
     event_at AS updated_at
   FROM governance.proposal_lifecycle
-  ORDER BY deployment_id, dao_id, proposal_id, event_ledger DESC, lifecycle_event_id DESC
+  ORDER BY deployment_id, dao_id, proposal_id, event_ledger DESC, transaction_index DESC, operation_index DESC, event_index DESC
 )
 SELECT
   c.*,

@@ -53,7 +53,7 @@ function isPrivateAddress(address: string) {
   return isIP(address) === 4 ? isPrivateIpv4(address) : isPrivateIpv6(address);
 }
 
-export async function assertSafeRemoteUrl(value: string, allowIpfsGateway = false) {
+export async function assertSafeRemoteUrl(value: string, allowIpfsGateway = false): Promise<string[]> {
   const url = new URL(value);
   if (url.protocol !== 'https:') throw new Error('Artwork URL must use HTTPS');
   if (url.username || url.password) throw new Error('Artwork URL cannot contain credentials');
@@ -67,6 +67,8 @@ export async function assertSafeRemoteUrl(value: string, allowIpfsGateway = fals
   if (!addresses.length || addresses.some(({ address }) => isPrivateAddress(address))) {
     throw new Error(`Artwork URL resolves to a private address: ${hostname}`);
   }
+
+  return addresses.map(({ address }) => address);
 }
 
 function normalizeIpfsUri(uri: string): string | undefined {

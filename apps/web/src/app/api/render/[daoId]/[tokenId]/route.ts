@@ -1,4 +1,7 @@
+import { isIP } from 'node:net';
+
 import sharp from 'sharp';
+import { Agent } from 'undici';
 
 import { getDaoNetworkConfigById } from '@/lib/dao-config';
 import { assertSafeRemoteUrl, getFetchableUrls, IPFS_GATEWAYS } from '@/lib/ipfs-gateway';
@@ -32,12 +35,24 @@ async function fetchImage(uri: string) {
     try {
       for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
         const isIpfsGateway = IPFS_GATEWAYS.some((gateway) => new URL(gateway).hostname === new URL(url).hostname);
-        await assertSafeRemoteUrl(url, isIpfsGateway);
+        const addresses = await assertSafeRemoteUrl(url, isIpfsGateway);
+        const pinnedAddress = addresses[0];
+        const dispatcher = new Agent({
+          connect: {
+            lookup: (_hostname, _options, callback) => {
+              callback(null, pinnedAddress, isIP(pinnedAddress));
+            }
+          }
+        });
 
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
         try {
-          const response = await fetch(url, { redirect: 'manual', signal: controller.signal });
+          const response = await fetch(url, {
+            redirect: 'manual',
+            signal: controller.signal,
+            dispatcher
+          } as RequestInit & { dispatcher: Agent });
 
           if (response.status >= 300 && response.status < 400) {
             if (redirect === MAX_REDIRECTS) throw new Error('Too many artwork redirects');
@@ -72,6 +87,7 @@ async function fetchImage(uri: string) {
           return Buffer.concat(chunks, totalBytes);
         } finally {
           clearTimeout(timeout);
+          await dispatcher.close();
         }
       }
     } catch (error) {

@@ -5,7 +5,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 
 import {
@@ -20,8 +20,9 @@ import {
 import { Badge, Button, Callout, Heading, Text } from '@/components/ui';
 import { WalletControls } from '@/components/wallet-controls';
 import type { CreateDaoFormData } from '@/lib/dao-creation-params';
-import { getDeploymentConfig } from '@/lib/deployment-config';
+import { getDeploymentConfig, isDeploymentConfigured } from '@/lib/deployment-config';
 import { useDaoDeployment } from '@/lib/use-dao-deployment';
+import { validateDaoConfig } from '@/lib/validate-dao-config';
 import {
   selectCanProceedToStep2,
   selectCanProceedToStep3,
@@ -142,6 +143,8 @@ export default function CreateDaoPage() {
   const nextStep = useCreateDaoStore((s) => s.nextStep);
   const prevStep = useCreateDaoStore((s) => s.prevStep);
   const reset = useCreateDaoStore((s) => s.reset);
+  const setValidationError = useCreateDaoStore((s) => s.setValidationError);
+  const clearAllValidationErrors = useCreateDaoStore((s) => s.clearAllValidationErrors);
 
   // Validation selectors
   const canProceedToStep2 = useCreateDaoStore(selectCanProceedToStep2);
@@ -155,12 +158,17 @@ export default function CreateDaoPage() {
   // Deployment state
   const [isDeploying, setIsDeploying] = useState(false);
   // Network config
-  const networkName = getDeploymentConfig().name;
+  const deploymentReady = isDeploymentConfigured();
+  const networkName = deploymentReady ? getDeploymentConfig().name : 'testnet';
   const {
     state: deploymentState,
     deployDao,
     reset: resetDeployment
   } = useDaoDeployment(session.address || '', networkName);
+
+  useEffect(() => {
+    void useCreateDaoStore.persist.rehydrate();
+  }, []);
 
   const handleProceedToStep2 = () => {
     if (canProceedToStep2) {
@@ -193,7 +201,7 @@ export default function CreateDaoPage() {
   };
 
   const handleSubmit = async () => {
-    if (!session.address || !canSubmit) return;
+    if (!session.address || !canSubmit || !deploymentReady) return;
 
     setIsDeploying(true);
 
@@ -207,6 +215,16 @@ export default function CreateDaoPage() {
         founders,
         launchAdmin: session.address
       };
+
+      clearAllValidationErrors();
+      const validation = validateDaoConfig(formData);
+      if (!validation.valid) {
+        for (const error of validation.errors) setValidationError(error.field, error.message);
+        resetDeployment();
+        setIsDeploying(false);
+        setStep(1);
+        return;
+      }
 
       // Deploy DAO
       const addresses = await deployDao(formData);
@@ -258,7 +276,7 @@ export default function CreateDaoPage() {
             </Link>
 <div className="discovery-header__context">
               <span className="network-dot" aria-hidden="true" />
-              <span>{getDeploymentConfig().name}</span>
+               <span>{networkName}</span>
             </div>
             */}
             <WalletControls />
@@ -287,7 +305,13 @@ export default function CreateDaoPage() {
             </div>
           </section>
 
-          {!session.address ? (
+          {!deploymentReady ? (
+            <Callout
+              variant="warning"
+              title="Deployment Not Configured"
+              description="DAO creation is unavailable because the deployment environment is not configured. Please contact the site administrator."
+            />
+          ) : !session.address ? (
             <Callout
               variant="warning"
               title="Wallet Required"

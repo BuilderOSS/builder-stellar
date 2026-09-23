@@ -487,12 +487,15 @@ for (const founder of daoConfig.founders ?? []) {
       /Signing transaction:\s*([a-f0-9]{64})/i,
     );
     if (mintTxHash) {
-      founderMintTransactions.push(
-        enrichTransactionMetadata(
-          { txHash: mintTxHash[1], address: founder.address, amount },
-          networkName,
-        ),
-      );
+      const transaction = { txHash: mintTxHash[1], address: founder.address, amount };
+      try {
+        founderMintTransactions.push(enrichTransactionMetadata(transaction, networkName));
+      } catch (ledgerError) {
+        founderMintTransactions.push({
+          ...transaction,
+          ledgerError: ledgerError instanceof Error ? ledgerError.message : String(ledgerError),
+        });
+      }
     }
     remaining -= amount;
   }

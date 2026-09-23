@@ -13,7 +13,7 @@
 //!
 //! - Deploy complete DAOs with all 5 modules atomically
 //! - Deterministic address prediction before deployment
-//! - Founder allocation configuration (modulo-100 distribution)
+//! - Founder allocation configuration (fixed NFT counts)
 //! - Governance-owned from initialization
 //!
 //! ## 3. DAO Registry

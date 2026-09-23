@@ -332,6 +332,7 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
     {
       name: 'dao.create-dao.v1',
       storage,
+      skipHydration: true,
       partialize: (state) => ({
         step: state.step,
         basicInfo: state.basicInfo,
@@ -410,7 +411,7 @@ export const selectCanProceedToStep5 = (state: CreateDaoStore) =>
 
 export const selectCanProceedToStep6 = (state: CreateDaoStore) => {
   const totalAllocation = state.founders.reduce((sum, f) => sum + f.amount, 0);
-  return totalAllocation <= 99;
+  return totalAllocation <= 10_000;
 };
 
 export const selectTotalFounderAllocation = (state: CreateDaoStore) =>
