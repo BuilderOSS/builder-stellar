@@ -17,7 +17,7 @@ import { ProposalVoteHistory } from '@/components/proposal/proposal-vote-history
 import { ProposalVotePanel } from '@/components/proposal/proposal-vote-panel';
 import { ProposalVoteSummary } from '@/components/proposal/proposal-vote-summary';
 import type { ProposalDetail, ProposalVoteItem } from '@/components/proposal/types';
-import { Button, Callout } from '@/components/ui';
+import { Button, Callout, Card, Skeleton } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { keccak256Bytes } from '@/lib/keccak';
 import { encodeProposalCallArgs } from '@/lib/proposal-call';
@@ -330,7 +330,46 @@ export default function ProposalDetailPage() {
     >
       <Stack gap="4">
         {errorMessage ? <Callout variant="error" title={errorMessage} /> : null}
-        {isLoading && !detail ? <Callout variant="info" title="Loading proposal…" /> : null}
+        {isLoading && !detail ? (
+          <div className="proposal-detail-layout" role="status" aria-busy="true">
+            <span className="sr-only">Loading proposal</span>
+            <div className="proposal-detail-main">
+              <Card p="5">
+                <Stack gap="3">
+                  <Skeleton style={{ width: '42%', height: '1.5em' }} />
+                  <Skeleton style={{ width: '72%', height: '0.9em' }} />
+                  <Skeleton style={{ width: '100%', height: '96px' }} />
+                </Stack>
+              </Card>
+              <Card p="5">
+                <Stack gap="3">
+                  <Skeleton style={{ width: '130px', height: '1.1em' }} />
+                  <Skeleton style={{ width: '100%', height: '1em' }} />
+                  <Skeleton style={{ width: '84%', height: '1em' }} />
+                  <Skeleton style={{ width: '68%', height: '1em' }} />
+                </Stack>
+              </Card>
+              <Card p="5">
+                <Stack gap="3">
+                  <Skeleton style={{ width: '120px', height: '1.1em' }} />
+                  {Array.from({ length: 3 }, (_, index) => (
+                    <Skeleton key={index} style={{ width: '100%', height: '2.2em' }} />
+                  ))}
+                </Stack>
+              </Card>
+            </div>
+            <aside className="proposal-detail-sidebar">
+              <Card p="5">
+                <Stack gap="3">
+                  <Skeleton style={{ width: '60%', height: '1.1em' }} />
+                  <Skeleton style={{ width: '100%', height: '4em' }} />
+                  <Skeleton style={{ width: '100%', height: '8em' }} />
+                  <Skeleton style={{ width: '110px', height: '2.4em' }} />
+                </Stack>
+              </Card>
+            </aside>
+          </div>
+        ) : null}
 
         {detail ? (
           <div className="proposal-detail-layout">

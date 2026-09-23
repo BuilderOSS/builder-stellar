@@ -26,15 +26,16 @@ export function FoundersStep() {
   const [amountError, setAmountError] = useState('');
 
   const validateFounders = () => {
-    const totalAllocation = founders.reduce((sum, f) => sum + f.amount, 0);
-    if (totalAllocation > 99) {
-      setValidationError('founders', `Total founder allocation (${totalAllocation}%) exceeds maximum of 99%`);
+    const currentFounders = useCreateDaoStore.getState().founders;
+    const totalAllocation = currentFounders.reduce((sum, f) => sum + f.amount, 0);
+    if (totalAllocation > 10_000) {
+      setValidationError('founders', `Total founder allocation (${totalAllocation}) exceeds maximum of 10,000 tokens`);
       return;
     }
 
     // Validate each founder
     let hasErrors = false;
-    founders.forEach((founder, index) => {
+    currentFounders.forEach((founder, index) => {
       if (!isValidStellarAddress(founder.address)) {
         const error = getStellarAddressError(founder.address);
         setValidationError(`founder${index}Address`, `Founder ${index + 1}: ${error || 'Invalid address'}`);
@@ -46,8 +47,8 @@ export function FoundersStep() {
       if (founder.amount <= 0) {
         setValidationError(`founder${index}Amount`, `Founder ${index + 1}: Amount must be greater than 0`);
         hasErrors = true;
-      } else if (founder.amount > 99) {
-        setValidationError(`founder${index}Amount`, `Founder ${index + 1}: Amount cannot exceed 99%`);
+      } else if (founder.amount > 10_000) {
+        setValidationError(`founder${index}Amount`, `Founder ${index + 1}: Amount cannot exceed 10,000 tokens`);
         hasErrors = true;
       } else {
         clearValidationError(`founder${index}Amount`);
@@ -55,10 +56,10 @@ export function FoundersStep() {
     });
 
     // Check for duplicate addresses
-    if (hasDuplicates(founders, (f) => f.address.toLowerCase())) {
+    if (hasDuplicates(currentFounders, (f) => f.address.toLowerCase())) {
       setValidationError('founders', 'Duplicate founder addresses are not allowed');
       hasErrors = true;
-    } else if (!hasErrors && totalAllocation <= 99) {
+    } else if (!hasErrors && totalAllocation <= 10_000) {
       clearValidationError('founders');
     }
   };
@@ -83,8 +84,8 @@ export function FoundersStep() {
       setAmountError('Amount must be greater than 0');
       return;
     }
-    if (amount > 99) {
-      setAmountError('Amount cannot exceed 99%');
+    if (amount > 10_000) {
+      setAmountError('Amount cannot exceed 10,000 tokens');
       return;
     }
 
@@ -109,7 +110,7 @@ export function FoundersStep() {
     setTimeout(validateFounders, 0);
   };
 
-  const allocationValid = totalAllocation <= 99;
+  const allocationValid = totalAllocation <= 10_000;
 
   return (
     <Stack gap="4">
@@ -120,7 +121,7 @@ export function FoundersStep() {
               Founder Allocations
             </Heading>
             <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-              Distribute initial token allocations to founders. Total cannot exceed 99%.
+              Distribute initial token allocations to founders. Total cannot exceed 10,000 tokens.
             </Text>
           </div>
 
@@ -139,7 +140,7 @@ export function FoundersStep() {
                 color: allocationValid ? 'var(--success-11)' : 'var(--error-11)'
               }}
             >
-              Total Allocation: {totalAllocation}%
+              Total Allocation: {totalAllocation} tokens
             </Text>
             <Text
               style={{
@@ -148,7 +149,7 @@ export function FoundersStep() {
                 marginTop: '4px'
               }}
             >
-              {allocationValid ? `${99 - totalAllocation}% remaining` : 'Exceeds maximum of 99%'}
+              {allocationValid ? `${10_000 - totalAllocation} tokens remaining` : 'Exceeds maximum of 10,000 tokens'}
             </Text>
           </div>
 
@@ -185,7 +186,7 @@ export function FoundersStep() {
 
           <Stack gap="2">
             <label htmlFor="founderAmount">
-              <Text style={{ fontWeight: 600 }}>Token Amount (%)</Text>
+              <Text style={{ fontWeight: 600 }}>Token Amount</Text>
             </label>
             <Input
               id="founderAmount"
@@ -197,12 +198,10 @@ export function FoundersStep() {
               }}
               placeholder="10"
               min="1"
-              max="99"
+              max="10000"
             />
             {amountError && <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>{amountError}</Text>}
-            <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-              Percentage of total supply to allocate
-            </Text>
+            <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>Number of NFTs to allocate</Text>
           </Stack>
 
           <Button onClick={handleAddFounder} disabled={!newFounderAddress || !newFounderAmount || !allocationValid}>
@@ -241,10 +240,10 @@ export function FoundersStep() {
                         value={founder.amount}
                         onChange={(e) => handleUpdateAmount(index, e.target.value)}
                         min="1"
-                        max="99"
+                        max="10000"
                         style={{ width: '80px' }}
                       />
-                      <Badge>{founder.amount}%</Badge>
+                      <Badge>{founder.amount} NFTs</Badge>
                       <Button
                         variant="outline"
                         onClick={() => handleRemoveFounder(index)}

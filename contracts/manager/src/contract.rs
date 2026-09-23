@@ -723,6 +723,15 @@ impl ManagerContract {
 
         let treasury = creation.addresses.treasury.clone();
 
+        let auction_paused: bool = env.invoke_contract(
+            &creation.addresses.auction,
+            &Symbol::new(&env, "paused"),
+            Vec::new(&env),
+        );
+        if !launch_auction && !auction_paused {
+            return Err(ManagerError::AuctionMustBePaused);
+        }
+
         // The Treasury is the durable authority for governance-controlled mints.
         // Auction authority is granted only for auction-enabled DAOs.
         let _: () = env.invoke_contract(

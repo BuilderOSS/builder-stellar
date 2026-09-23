@@ -120,12 +120,12 @@ export function ReviewStep({ connectedAddress }: { connectedAddress: string }) {
                   <Card key={i} p="3" style={{ background: 'var(--gray-2)', border: '1px solid var(--gray-6)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <Text style={{ fontSize: '0.875rem', fontFamily: 'monospace' }}>{founder.address}</Text>
-                      <Badge>{founder.amount}%</Badge>
+                      <Badge>{founder.amount} NFTs</Badge>
                     </div>
                   </Card>
                 ))}
                 <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)' }}>
-                  Total: {founders.reduce((sum, f) => sum + f.amount, 0)}%
+                  Total: {founders.reduce((sum, f) => sum + f.amount, 0)} NFTs
                 </Text>
               </Stack>
             ) : (

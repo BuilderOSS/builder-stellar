@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
 import { PageSection } from '@/components/page-section';
-import { Callout, Card, Heading, ShortId, Text } from '@/components/ui';
+import { Callout, Card, Heading, ShortId, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { useGoldskyMemberList } from '@/lib/goldsky-queries';
 
@@ -18,7 +18,20 @@ export default function MemberProfilePage() {
   return (
     <PageSection title="Member profile" description="Membership and voting data indexed for this address.">
       <Card p="5">
-        {isLoading ? <Callout variant="info" title="Loading member profile…" /> : null}
+        {isLoading ? (
+          <div role="status" aria-busy="true" className="member-profile-loading">
+            <span className="sr-only">Loading member profile</span>
+            <Skeleton style={{ width: '220px', height: '1.1em' }} />
+            <div className="member-profile-stats">
+              {Array.from({ length: 3 }, (_, index) => (
+                <div key={index}>
+                  <Skeleton style={{ width: '100px', height: '0.8em' }} />
+                  <Skeleton style={{ width: '80px', height: '1.5em', marginTop: '8px' }} />
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {error ? <Callout variant="error" title="Member profile unavailable" description={error.message} /> : null}
         {!isLoading && !error && !member ? (
           <Callout

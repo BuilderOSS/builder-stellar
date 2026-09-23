@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 
-import { Card, Heading, Text } from '@/components/ui';
+import { Card, Heading, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { getDaoAccountRole } from '@/lib/account-role';
 import { daoRoute } from '@/lib/dao-routes';
@@ -17,9 +17,12 @@ export function TokenCard({ tokenId, owner }: { tokenId: number; owner: string }
   return (
     <Card p="3" className="membership-token-card" style={{ overflow: 'hidden', minWidth: 0 }}>
       {isLoading ? (
-        <Text className="lede" style={{ margin: 0 }}>
-          Loading token...
-        </Text>
+        <div role="status" aria-busy="true">
+          <span className="sr-only">Loading token</span>
+          <Skeleton style={{ width: '100%', aspectRatio: '1', borderRadius: '10px' }} />
+          <Skeleton style={{ width: '70%', height: '1.1em', marginTop: '12px' }} />
+          <Skeleton style={{ width: '86%', height: '0.8em', marginTop: '10px' }} />
+        </div>
       ) : error ? (
         <Text className="lede" style={{ margin: 0 }}>
           {error.message}

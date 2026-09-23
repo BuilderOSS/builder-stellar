@@ -9,6 +9,7 @@ import {
   isValidStellarAddress,
   isValidTokenSymbol,
   isValidUrl,
+  MAX_TOKEN_SYMBOL_LENGTH,
   validateArtworkProperty,
   validateDuration
 } from './validation';
@@ -44,7 +45,7 @@ export function validateDaoConfig(formData: CreateDaoFormData): ValidationResult
   } else if (!isValidTokenSymbol(formData.basicInfo.tokenSymbol)) {
     errors.push({
       field: 'tokenSymbol',
-      message: 'Token symbol must be uppercase alphanumeric, max 12 characters'
+      message: `Token symbol must be uppercase alphanumeric, max ${MAX_TOKEN_SYMBOL_LENGTH} characters`
     });
   }
 
@@ -124,8 +125,10 @@ export function validateDaoConfig(formData: CreateDaoFormData): ValidationResult
     if (!formData.auction.reservePrice || formData.auction.reservePrice.trim().length === 0) {
       errors.push({ field: 'reservePrice', message: 'Reserve price is required when auction is enabled' });
     } else {
-      const price = BigInt(formData.auction.reservePrice);
-      if (price <= 0n) {
+      const reservePrice = formData.auction.reservePrice.trim();
+      if (!/^\d+$/.test(reservePrice)) {
+        errors.push({ field: 'reservePrice', message: 'Reserve price must be a whole number' });
+      } else if (BigInt(reservePrice) <= 0n) {
         errors.push({ field: 'reservePrice', message: 'Reserve price must be greater than 0' });
       }
     }
@@ -176,10 +179,10 @@ export function validateDaoConfig(formData: CreateDaoFormData): ValidationResult
 
   // Total allocation
   const totalAllocation = formData.founders.reduce((sum, f) => sum + f.amount, 0);
-  if (totalAllocation > 99) {
+  if (totalAllocation > 10_000) {
     errors.push({
       field: 'founders',
-      message: `Total founder allocation (${totalAllocation}%) exceeds maximum of 99%`
+      message: `Total founder allocation (${totalAllocation}) exceeds maximum of 10,000 tokens`
     });
   }
 
@@ -200,8 +203,11 @@ export function validateDaoConfig(formData: CreateDaoFormData): ValidationResult
     if (founder.amount <= 0) {
       errors.push({ field: `founder${index}Amount`, message: `Founder ${index + 1}: Amount must be greater than 0` });
     }
-    if (founder.amount > 99) {
-      errors.push({ field: `founder${index}Amount`, message: `Founder ${index + 1}: Amount cannot exceed 99%` });
+    if (founder.amount > 10_000) {
+      errors.push({
+        field: `founder${index}Amount`,
+        message: `Founder ${index + 1}: Amount cannot exceed 10,000 tokens`
+      });
     }
   });
 

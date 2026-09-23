@@ -134,12 +134,14 @@ export function validateDuration(seconds: number, minSeconds: number = 60): stri
   return null;
 }
 
+export const MAX_TOKEN_SYMBOL_LENGTH = 12;
+
 /**
  * Validate token symbol format
  */
 export function isValidTokenSymbol(symbol: string): boolean {
   if (!symbol || symbol.trim().length === 0) return false;
-  if (symbol.length > 12) return false;
+  if (symbol.length > MAX_TOKEN_SYMBOL_LENGTH) return false;
   // Only alphanumeric characters
   return /^[A-Z0-9]+$/.test(symbol);
 }

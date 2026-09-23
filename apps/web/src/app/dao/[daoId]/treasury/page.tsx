@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { Stack } from 'styled-system/jsx';
 
 import { PageSection } from '@/components/page-section';
-import { Button, Callout, Card, Heading, ShortId, Text } from '@/components/ui';
+import { Button, Callout, Card, Heading, ShortId, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { findAsset } from '@/lib/assets-config';
 import { useGoldskyActivityFeed } from '@/lib/goldsky-queries';
@@ -79,9 +79,11 @@ export default function TreasuryPage() {
                 <div>
                   <Text className="label">Asset allocation</Text>
                   <Heading style={{ fontSize: '1.35rem', marginTop: '6px' }}>
-                    {balanceLoading && !balances
-                      ? 'Loading assets…'
-                      : `${fundedAssetCount} funded asset${fundedAssetCount === 1 ? '' : 's'}`}
+                    {balanceLoading && !balances ? (
+                      <Skeleton style={{ width: '150px', height: '1.35em' }} />
+                    ) : (
+                      `${fundedAssetCount} funded asset${fundedAssetCount === 1 ? '' : 's'}`
+                    )}
                   </Heading>
                 </div>
               </div>
@@ -109,7 +111,28 @@ export default function TreasuryPage() {
 
               {balanceError ? <Callout variant="error" title={balanceError.message} /> : null}
 
-              {balanceLoading && !balances ? <Callout variant="info" title="Loading treasury balances..." /> : null}
+              {balanceLoading && !balances ? (
+                <div className="skeleton-list" role="status" aria-busy="true">
+                  <span className="sr-only">Loading treasury balances</span>
+                  {Array.from({ length: 3 }, (_, index) => (
+                    <Card key={index} p="4">
+                      <div className="treasury-asset-row">
+                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                          <Skeleton className="skeleton--circle" style={{ width: '36px', height: '36px' }} />
+                          <Stack gap="1">
+                            <Skeleton style={{ width: '110px', height: '1em' }} />
+                            <Skeleton style={{ width: '70px', height: '0.75em' }} />
+                          </Stack>
+                        </div>
+                        <Stack gap="1" style={{ alignItems: 'flex-end' }}>
+                          <Skeleton style={{ width: '90px', height: '1em' }} />
+                          <Skeleton style={{ width: '42px', height: '0.75em' }} />
+                        </Stack>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              ) : null}
             </Stack>
           </Card>
 
@@ -163,7 +186,20 @@ export default function TreasuryPage() {
             {error ? (
               <Callout variant="error" title="Treasury activity unavailable" description={error.message} />
             ) : null}
-            {isLoading && !data ? <Callout variant="info" title="Loading treasury activity…" /> : null}
+            {isLoading && !data ? (
+              <div className="skeleton-list" role="status" aria-busy="true">
+                <span className="sr-only">Loading treasury activity</span>
+                {Array.from({ length: 4 }, (_, index) => (
+                  <div className="treasury-activity-row" key={index}>
+                    <Stack gap="1" style={{ flex: 1 }}>
+                      <Skeleton style={{ width: '56%', height: '1em' }} />
+                      <Skeleton style={{ width: '78%', height: '0.8em' }} />
+                    </Stack>
+                    <Skeleton style={{ width: '75px', height: '0.8em' }} />
+                  </div>
+                ))}
+              </div>
+            ) : null}
             {!isLoading && !treasuryActivity.length ? (
               <div className="empty-state" role="status">
                 <Text className="lede" style={{ margin: '0 auto' }}>

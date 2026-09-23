@@ -10,7 +10,7 @@ import { AdminSectionNav } from '@/components/admin/admin-section-nav';
 import { AuthorityPanel } from '@/components/admin/authority-panel';
 import { DurationInput } from '@/components/admin/duration-input';
 import { PageSection } from '@/components/page-section';
-import { Badge, Button, Callout, Card, Heading, Input, Text } from '@/components/ui';
+import { Badge, Button, Callout, Card, Heading, Input, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { useGovernorSettings } from '@/lib/admin-queries';
 import { formatDuration } from '@/lib/format-duration';
@@ -298,7 +298,9 @@ export default function GovernanceAdminPage() {
                 label="Voting delay"
                 value={drafts.votingDelay ?? settings?.votingDelay ?? ''}
                 onChange={(seconds) => setDrafts((current) => ({ ...current, votingDelay: String(seconds) }))}
-                helperText={`Current: ${settings ? formatSecondsValue(settings.votingDelay) : '—'} · Measured in seconds.`}
+                helperText={
+                  settings ? `Current: ${formatSecondsValue(settings.votingDelay)} · Measured in seconds.` : undefined
+                }
               />
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <Button
@@ -328,7 +330,9 @@ export default function GovernanceAdminPage() {
                 label="Voting period"
                 value={drafts.votingPeriod ?? settings?.votingPeriod ?? ''}
                 onChange={(seconds) => setDrafts((current) => ({ ...current, votingPeriod: String(seconds) }))}
-                helperText={`Current: ${settings ? formatSecondsValue(settings.votingPeriod) : '—'} · Measured in seconds.`}
+                helperText={
+                  settings ? `Current: ${formatSecondsValue(settings.votingPeriod)} · Measured in seconds.` : undefined
+                }
               />
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <Button
@@ -354,7 +358,12 @@ export default function GovernanceAdminPage() {
                 <Badge>Proposal threshold</Badge>
               </div>
               <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                Current: {settings?.proposalThreshold?.toString() ?? '—'} votes
+                Current:{' '}
+                {settings ? (
+                  `${settings.proposalThreshold.toString()} votes`
+                ) : (
+                  <Skeleton className="skeleton--inline" style={{ width: '90px', height: '1em' }} />
+                )}
               </Text>
               <Input
                 value={drafts.proposalThreshold ?? formatThreshold(settings?.proposalThreshold ?? 0n)}
@@ -365,7 +374,11 @@ export default function GovernanceAdminPage() {
                 placeholder="New proposal threshold"
               />
               <Text className="lede" style={{ margin: 0, fontSize: '0.8rem' }}>
-                {settings ? 'Apply this change in a single transaction.' : 'Loading current value...'}
+                {settings ? (
+                  'Apply this change in a single transaction.'
+                ) : (
+                  <Skeleton style={{ width: '210px', height: '0.8em' }} />
+                )}
               </Text>
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <Button
@@ -393,7 +406,12 @@ export default function GovernanceAdminPage() {
                 <Badge>Quorum</Badge>
               </div>
               <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                Current: {settings?.quorumBps ?? '—'} bps
+                Current:{' '}
+                {settings ? (
+                  `${settings.quorumBps} bps`
+                ) : (
+                  <Skeleton className="skeleton--inline" style={{ width: '80px', height: '1em' }} />
+                )}
               </Text>
               <Input
                 value={drafts.quorumBps ?? String(settings?.quorumBps ?? '')}
@@ -405,7 +423,11 @@ export default function GovernanceAdminPage() {
                 placeholder="New quorum bps"
               />
               <Text className="lede" style={{ margin: 0, fontSize: '0.8rem' }}>
-                {settings ? 'Apply this change in a single transaction.' : 'Loading current value...'}
+                {settings ? (
+                  'Apply this change in a single transaction.'
+                ) : (
+                  <Skeleton style={{ width: '210px', height: '0.8em' }} />
+                )}
               </Text>
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <Button
@@ -435,6 +457,7 @@ export default function GovernanceAdminPage() {
           allowLabel=""
           revokeLabel=""
           editable={false}
+          loading={authorityLoading}
           busy={authorityLoading}
           emptyLabel={authorityError?.message || 'No governance authorities indexed yet.'}
         />

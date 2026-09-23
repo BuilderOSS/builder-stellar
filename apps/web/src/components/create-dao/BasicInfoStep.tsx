@@ -5,7 +5,7 @@
 import { Stack } from 'styled-system/jsx';
 
 import { Card, Heading, Input, Text, Textarea } from '@/components/ui';
-import { isValidTokenSymbol } from '@/lib/validation';
+import { isValidTokenSymbol, MAX_TOKEN_SYMBOL_LENGTH } from '@/lib/validation';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
 export function BasicInfoStep() {
@@ -32,7 +32,10 @@ export function BasicInfoStep() {
     if (!upper.trim()) {
       setValidationError('tokenSymbol', 'Token symbol is required');
     } else if (!isValidTokenSymbol(upper)) {
-      setValidationError('tokenSymbol', 'Token symbol must be uppercase alphanumeric, max 12 characters');
+      setValidationError(
+        'tokenSymbol',
+        `Token symbol must be uppercase alphanumeric, max ${MAX_TOKEN_SYMBOL_LENGTH} characters`
+      );
     } else {
       clearValidationError('tokenSymbol');
     }
@@ -84,12 +87,14 @@ export function BasicInfoStep() {
               value={basicInfo.tokenSymbol}
               onChange={(e) => handleTokenSymbolChange(e.target.value)}
               placeholder="e.g., BUILD"
-              maxLength={12}
+              maxLength={MAX_TOKEN_SYMBOL_LENGTH}
             />
             {validationErrors.tokenSymbol && (
               <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>{validationErrors.tokenSymbol}</Text>
             )}
-            <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>Short identifier (max 10 characters)</Text>
+            <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
+              Short identifier (max {MAX_TOKEN_SYMBOL_LENGTH} characters)
+            </Text>
           </Stack>
 
           <Stack gap="2">

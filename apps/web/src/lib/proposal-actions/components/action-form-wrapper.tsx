@@ -5,7 +5,7 @@
 import { Suspense, useCallback, useState } from 'react';
 
 import { ProposalActionConfirmDialog } from '@/components/proposal/proposal-action-confirm-dialog';
-import { Text } from '@/components/ui';
+import { Skeleton } from '@/components/ui';
 import { selectValidationErrors, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
 import { useActionFormContext } from '../context';
@@ -116,7 +116,19 @@ export function ActionFormWrapper() {
         onCancel={handleCancel}
       >
         <ActionErrorBoundary actionType={editingState.actionType}>
-          <Suspense fallback={<Text>Loading form...</Text>}>
+          <Suspense
+            fallback={
+              <div role="status" aria-busy="true" className="skeleton-form">
+                <span className="sr-only">Loading action form</span>
+                <div style={{ display: 'grid', gap: '10px' }}>
+                  <Skeleton style={{ width: '100px', height: '0.9em' }} />
+                  <Skeleton style={{ width: '100%', height: '2.5em' }} />
+                  <Skeleton style={{ width: '180px', height: '0.9em' }} />
+                  <Skeleton style={{ width: '100%', height: '2.5em' }} />
+                </div>
+              </div>
+            }
+          >
             <FormComponent
               value={editingState.draftData}
               onChange={updateDraft}

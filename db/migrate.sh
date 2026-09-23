@@ -83,36 +83,33 @@ run_migration() {
 
   echo -e "${YELLOW}→ Checking migration: $version${NC}"
 
-  if [ "$(migration_applied "$version")" -gt 0 ]; then
-    echo -e "${BLUE}  ↳ Already applied, skipping${NC}"
-    return 0
-  fi
-
-  echo -e "${YELLOW}  ↳ Applying migration...${NC}"
-
   # Check if migration contains CONCURRENTLY (cannot run in transaction)
   if grep -q "CONCURRENTLY" "$file"; then
     echo -e "${BLUE}  ↳ Detected CONCURRENTLY - running outside transaction${NC}"
-
-    # Run migration outside transaction, then record it
-    psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f "$file"
-
-    if [ $? -eq 0 ]; then
-      # Record migration after successful execution
-      psql "$DATABASE_URL" -c "INSERT INTO public.schema_migrations (version) VALUES ('$version') ON CONFLICT (version) DO NOTHING;"
-      if [ $? -eq 0 ]; then
-        echo -e "${GREEN}  ✓ Successfully applied $version${NC}"
-      else
-        echo -e "${RED}  ✗ Failed to record migration ${version}${NC}"
-        exit 1
-      fi
-    else
-      echo -e "${RED}  ✗ Failed to apply $version${NC}"
-      exit 1
-    fi
+    psql -v ON_ERROR_STOP=1 "$DATABASE_URL" << EOF
+SELECT pg_advisory_lock(hashtextextended('stellar-builder-migrations', 0));
+SELECT COUNT(*) = 0 AS migration_needed
+FROM public.schema_migrations
+WHERE version = '$version';
+\gset
+\if :migration_needed
+\i $file
+INSERT INTO public.schema_migrations (version) VALUES ('$version') ON CONFLICT (version) DO NOTHING;
+\else
+\echo 'Already applied, skipping'
+\endif
+SELECT pg_advisory_unlock(hashtextextended('stellar-builder-migrations', 0));
+EOF
+    echo -e "${GREEN}  ✓ Migration check completed for $version${NC}"
   else
     # Run migration in a transaction for safety
     psql -v ON_ERROR_STOP=1 "$DATABASE_URL" << EOF
+SELECT pg_advisory_lock(hashtextextended('stellar-builder-migrations', 0));
+SELECT COUNT(*) = 0 AS migration_needed
+FROM public.schema_migrations
+WHERE version = '$version';
+\gset
+\if :migration_needed
 BEGIN;
 
 -- Run the migration
@@ -122,15 +119,12 @@ BEGIN;
 INSERT INTO public.schema_migrations (version) VALUES ('$version') ON CONFLICT (version) DO NOTHING;
 
 COMMIT;
+\else
+\echo 'Already applied, skipping'
+\endif
+SELECT pg_advisory_unlock(hashtextextended('stellar-builder-migrations', 0));
 EOF
-
-    if [ $? -eq 0 ]; then
-      echo -e "${GREEN}  ✓ Successfully applied $version${NC}"
-    else
-      echo -e "${RED}  ✗ Failed to apply $version${NC}"
-      echo -e "${RED}  Migration rolled back${NC}"
-      exit 1
-    fi
+    echo -e "${GREEN}  ✓ Migration check completed for $version${NC}"
   fi
 
   echo ""

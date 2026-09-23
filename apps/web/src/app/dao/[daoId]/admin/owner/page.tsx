@@ -168,7 +168,8 @@ export default function OwnerPage() {
             onRevoke={() => void updateAuthority('set_mint_authority', mintAuthority, false)}
             allowLabel="Allow minting"
             revokeLabel="Revoke minting"
-            busy={busy || mintAuthoritiesLoading}
+            busy={busy}
+            loading={mintAuthoritiesLoading}
             emptyLabel={mintAuthorityError?.message || 'No mint authorities indexed yet.'}
           />
           <AuthorityPanel
@@ -182,7 +183,8 @@ export default function OwnerPage() {
             onRevoke={() => void updateAuthority('set_governor_authority', governorAuthority, false)}
             allowLabel="Allow governance"
             revokeLabel="Revoke governance"
-            busy={busy || governorAuthoritiesLoading}
+            busy={busy}
+            loading={governorAuthoritiesLoading}
             emptyLabel={governorAuthorityError?.message || 'No governance authorities indexed yet.'}
           />
         </Grid>

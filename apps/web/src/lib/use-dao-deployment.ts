@@ -96,20 +96,25 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
     setState((prev) => ({ ...prev, ...updates }));
   }, []);
 
-  const setStep = useCallback(
-    (step: DeploymentStep) => {
-      const stepIndex = STEP_ORDER.indexOf(step);
-      updateState({
-        currentStep: step,
-        progress: {
-          ...state.progress,
-          currentStepIndex: stepIndex >= 0 ? stepIndex + 1 : 0,
-          currentStepLabel: STEP_LABELS[step]
-        }
-      });
+  const updateTransactions = useCallback(
+    (update: (transactions: DeploymentState['transactions']) => DeploymentState['transactions']) => {
+      setState((prev) => ({ ...prev, transactions: update(prev.transactions) }));
     },
-    [state.progress, updateState]
+    []
   );
+
+  const setStep = useCallback((step: DeploymentStep) => {
+    const stepIndex = STEP_ORDER.indexOf(step);
+    setState((prev) => ({
+      ...prev,
+      currentStep: step,
+      progress: {
+        ...prev.progress,
+        currentStepIndex: stepIndex >= 0 ? stepIndex + 1 : step === 'complete' ? prev.progress.totalSteps : 0,
+        currentStepLabel: STEP_LABELS[step]
+      }
+    }));
+  }, []);
 
   const markStepComplete = useCallback((step: DeploymentStep) => {
     setState((prev) => ({
@@ -216,10 +221,8 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
 
         const addresses = assembled.result.unwrap();
 
-        updateState({
-          createdAddresses: addresses,
-          transactions: { ...state.transactions, create: hash }
-        });
+        updateState({ createdAddresses: addresses });
+        updateTransactions((transactions) => ({ ...transactions, create: hash }));
         markStepComplete('creating');
 
         return addresses;
@@ -230,7 +233,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         throw error;
       }
     },
-    [deployer, state.transactions, setStep, updateState, markStepComplete, setError, tx]
+    [deployer, setStep, updateState, updateTransactions, markStepComplete, setError, tx]
   );
 
   // Step 3: Accept token ownership
@@ -266,9 +269,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         await waitForConfirmation(hash, config.rpcUrl);
         tx.success('Token ownership accepted', hash);
 
-        updateState({
-          transactions: { ...state.transactions, acceptOwnership: hash }
-        });
+        updateTransactions((transactions) => ({ ...transactions, acceptOwnership: hash }));
         markStepComplete('accepting-ownership');
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Failed to accept ownership');
@@ -277,7 +278,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         throw error;
       }
     },
-    [deployer, state.transactions, setStep, updateState, markStepComplete, setError, tx]
+    [deployer, setStep, updateTransactions, markStepComplete, setError, tx]
   );
 
   // Step 4: Add artwork properties
@@ -319,9 +320,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         await waitForConfirmation(hash, config.rpcUrl);
         tx.success('Artwork metadata configured', hash);
 
-        updateState({
-          transactions: { ...state.transactions, addProperties: hash }
-        });
+        updateTransactions((transactions) => ({ ...transactions, addProperties: hash }));
         markStepComplete('adding-properties');
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Failed to add properties');
@@ -330,7 +329,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         throw error;
       }
     },
-    [deployer, state.nonce, state.transactions, setStep, updateState, markStepComplete, setError, tx]
+    [deployer, state.nonce, setStep, updateTransactions, markStepComplete, setError, tx]
   );
 
   // Step 5: Mint founder allocations (batched)
@@ -346,8 +345,6 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
 
       try {
         const config = getDeploymentConfig();
-        const hashes: string[] = [];
-
         const tokenClient = new TokenClient({
           contractId: tokenAddress,
           rpcUrl: config.rpcUrl,
@@ -362,29 +359,33 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
 
         // Process each founder (could be optimized with batching in the future)
         for (const founder of formData.founders) {
-          const assembled = await tokenClient.batch_mint({
-            minter: formData.launchAdmin,
-            to: founder.address,
-            amount: founder.amount
-          });
+          let remaining = founder.amount;
+          while (remaining > 0) {
+            const amount = Math.min(remaining, 20);
+            const assembled = await tokenClient.batch_mint({
+              minter: formData.launchAdmin,
+              to: founder.address,
+              amount
+            });
 
-          tx.start(`Minting allocation for ${founder.address.slice(0, 6)}...`);
-          const sent = await assembled.signAndSend();
-          const hash = sent.sendTransactionResponse?.hash;
+            tx.start(`Minting allocation for ${founder.address.slice(0, 6)}...`);
+            const sent = await assembled.signAndSend();
+            const hash = sent.sendTransactionResponse?.hash;
 
-          if (!hash) {
-            throw new Error(`No transaction hash returned for founder ${founder.address}`);
+            if (!hash) {
+              throw new Error(`No transaction hash returned for founder ${founder.address}`);
+            }
+
+            tx.submitted('Founder allocation submitted', hash);
+            await waitForConfirmation(hash, config.rpcUrl);
+            tx.success('Founder allocation minted', hash);
+            updateTransactions((transactions) => ({
+              ...transactions,
+              founderMints: [...transactions.founderMints, hash]
+            }));
+            remaining -= amount;
           }
-
-          tx.submitted('Founder allocation submitted', hash);
-          await waitForConfirmation(hash, config.rpcUrl);
-          tx.success('Founder allocation minted', hash);
-          hashes.push(hash);
         }
-
-        updateState({
-          transactions: { ...state.transactions, founderMints: hashes }
-        });
         markStepComplete('minting-founders');
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Failed to mint founder allocations');
@@ -393,7 +394,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         throw error;
       }
     },
-    [deployer, state.transactions, setStep, updateState, markStepComplete, setError, tx]
+    [deployer, setStep, updateTransactions, markStepComplete, setError, tx]
   );
 
   // Step 6: Finalize DAO
@@ -433,9 +434,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         await waitForConfirmation(hash, config.rpcUrl);
         tx.success('DAO finalized', hash);
 
-        updateState({
-          transactions: { ...state.transactions, finalize: hash }
-        });
+        updateTransactions((transactions) => ({ ...transactions, finalize: hash }));
         markStepComplete('finalizing');
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Failed to finalize DAO');
@@ -444,7 +443,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         throw error;
       }
     },
-    [deployer, state.transactions, setStep, updateState, markStepComplete, setError, tx]
+    [deployer, setStep, updateTransactions, markStepComplete, setError, tx]
   );
 
   // Step 7: Wait for indexing (polling)
@@ -502,6 +501,10 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
   const deployDao = useCallback(
     async (formData: CreateDaoFormData) => {
       try {
+        if (formData.launchAdmin !== deployer) {
+          throw new Error('Launch admin must match the connected deployer wallet');
+        }
+
         // Generate nonce
         const nonce = generateNonce();
         updateState({ nonce });
@@ -549,6 +552,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
       }
     },
     [
+      deployer,
       updateState,
       predictAddresses,
       createDao,

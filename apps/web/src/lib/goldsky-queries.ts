@@ -133,7 +133,7 @@ export function useGoldskyMember(daoTokenAddress: string, address: string) {
       ? `/api/dao/${encodeURIComponent(daoTokenAddress)}/members?address=${encodeURIComponent(address)}`
       : null,
     fetchJson,
-    { keepPreviousData: true }
+    {}
   );
 }
 

@@ -8,7 +8,7 @@ import useSWR from 'swr';
 
 import { AdminSectionNav } from '@/components/admin/admin-section-nav';
 import { PageSection } from '@/components/page-section';
-import { Badge, Button, Callout, Card, Heading, Input, ShortId, Text } from '@/components/ui';
+import { Badge, Button, Callout, Card, Heading, Input, ShortId, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { getTreasuryAssets } from '@/lib/assets-config';
 import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
@@ -32,7 +32,10 @@ export default function AuctionAdminPage() {
   const [busy, setBusy] = useState(false);
   const [reservePrice, setReservePrice] = useState('');
   const [paymentToken, setPaymentToken] = useState('');
-  const { data, error, mutate } = useSWR<AuctionStatus>(`/api/dao/${encodeURIComponent(daoId)}/auctions`, fetcher);
+  const { data, error, mutate, isLoading } = useSWR<AuctionStatus>(
+    `/api/dao/${encodeURIComponent(daoId)}/auctions`,
+    fetcher
+  );
   const { data: mintAuthorities, error: mintAuthorityError } = useGoldskyMintAuthorities(config.tokenContractId);
   const isOwner = Boolean(session.address && session.address === config.adminAddress);
   const auctionCanMint = Boolean(
@@ -163,80 +166,95 @@ export default function AuctionAdminPage() {
               <Badge>Owner</Badge>
             </div>
             <Heading style={{ fontSize: '1.2rem' }}>Auction status</Heading>
-            <Text className="lede" style={{ margin: 0 }}>
-              {data?.paused
-                ? 'Bidding and automatic settlement are paused.'
-                : 'Auctions are active and accepting bids.'}
-            </Text>
-            {data?.paused && !auctionCanMint ? (
-              <Callout
-                variant="warning"
-                title="Auction mint authority is missing."
-                description={
-                  mintAuthorityError?.message ||
-                  `Grant ${config.auctionContractId} mint authority in Token Admin before resuming. Resuming launches the next auction and mints its token.`
-                }
-              />
+            {isLoading && !data ? (
+              <div role="status" aria-busy="true" className="skeleton-list">
+                <span className="sr-only">Loading auction controls</span>
+                <Skeleton style={{ width: '260px', height: '1em' }} />
+                <Skeleton style={{ width: '100%', height: '1em' }} />
+                <Skeleton style={{ width: '100%', height: '2.5em' }} />
+                <Skeleton style={{ width: '100%', height: '1em' }} />
+                <Skeleton style={{ width: '100%', height: '2.5em' }} />
+              </div>
+            ) : (
+              <Text className="lede" style={{ margin: 0 }}>
+                {data?.paused
+                  ? 'Bidding and automatic settlement are paused.'
+                  : 'Auctions are active and accepting bids.'}
+              </Text>
+            )}
+            {data ? (
+              <>
+                {data.paused && !auctionCanMint ? (
+                  <Callout
+                    variant="warning"
+                    title="Auction mint authority is missing."
+                    description={
+                      mintAuthorityError?.message ||
+                      `Grant ${config.auctionContractId} mint authority in Token Admin before resuming. Resuming launches the next auction and mints its token.`
+                    }
+                  />
+                ) : null}
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  <Button onClick={() => void updatePaused(true)} disabled={busy || data?.paused !== false}>
+                    Pause auctions
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => void updatePaused(false)}
+                    disabled={busy || data?.paused !== true || !auctionCanMint}
+                  >
+                    Resume auctions
+                  </Button>
+                </div>
+                <Text className="label">Auction payment token</Text>
+                <Text className="lede" style={{ margin: 0 }}>
+                  {data?.config.payment_token
+                    ? `${getTreasuryAssets(config.name).find((asset) => asset.contractId === data.config.payment_token)?.code ?? 'Unknown SAC'} · ${data.config.payment_token}`
+                    : 'Not configured'}
+                  . Changes apply after the next auction is created.
+                </Text>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  <Input
+                    value={paymentToken}
+                    onChange={(event) => setPaymentToken(event.target.value)}
+                    placeholder="SAC contract address"
+                    disabled={busy || data?.paused !== true}
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={() => void updatePaymentToken()}
+                    disabled={busy || data?.paused !== true || !paymentToken}
+                  >
+                    Update payment token
+                  </Button>
+                </div>
+                <Text className="label">Reserve price for the next auction</Text>
+                <Text className="lede" style={{ margin: 0 }}>
+                  Current reserve: {data ? Number(data.config.reserve_price) / 10_000_000 : '—'}{' '}
+                  {data?.config.payment_token
+                    ? (getTreasuryAssets(config.name).find((asset) => asset.contractId === data.config.payment_token)
+                        ?.code ?? 'SAC')
+                    : 'SAC'}{' '}
+                  units. Changes apply after the next auction is created.
+                </Text>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  <Input
+                    value={reservePrice}
+                    onChange={(event) => setReservePrice(event.target.value)}
+                    placeholder="For example 10"
+                    inputMode="decimal"
+                    disabled={busy || data?.paused !== true}
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={() => void updateReservePrice()}
+                    disabled={busy || data?.paused !== true || !reservePrice}
+                  >
+                    Update reserve
+                  </Button>
+                </div>
+              </>
             ) : null}
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              <Button onClick={() => void updatePaused(true)} disabled={busy || data?.paused !== false}>
-                Pause auctions
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => void updatePaused(false)}
-                disabled={busy || data?.paused !== true || !auctionCanMint}
-              >
-                Resume auctions
-              </Button>
-            </div>
-            <Text className="label">Auction payment token</Text>
-            <Text className="lede" style={{ margin: 0 }}>
-              {data?.config.payment_token
-                ? `${getTreasuryAssets(config.name).find((asset) => asset.contractId === data.config.payment_token)?.code ?? 'Unknown SAC'} · ${data.config.payment_token}`
-                : 'Not configured'}
-              . Changes apply after the next auction is created.
-            </Text>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              <Input
-                value={paymentToken}
-                onChange={(event) => setPaymentToken(event.target.value)}
-                placeholder="SAC contract address"
-                disabled={busy || data?.paused !== true}
-              />
-              <Button
-                variant="outline"
-                onClick={() => void updatePaymentToken()}
-                disabled={busy || data?.paused !== true || !paymentToken}
-              >
-                Update payment token
-              </Button>
-            </div>
-            <Text className="label">Reserve price for the next auction</Text>
-            <Text className="lede" style={{ margin: 0 }}>
-              Current reserve: {data ? Number(data.config.reserve_price) / 10_000_000 : '—'}{' '}
-              {data?.config.payment_token
-                ? (getTreasuryAssets(config.name).find((asset) => asset.contractId === data.config.payment_token)
-                    ?.code ?? 'SAC')
-                : 'SAC'}{' '}
-              units. Changes apply after the next auction is created.
-            </Text>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              <Input
-                value={reservePrice}
-                onChange={(event) => setReservePrice(event.target.value)}
-                placeholder="For example 10"
-                inputMode="decimal"
-                disabled={busy || data?.paused !== true}
-              />
-              <Button
-                variant="outline"
-                onClick={() => void updateReservePrice()}
-                disabled={busy || data?.paused !== true || !reservePrice}
-              >
-                Update reserve
-              </Button>
-            </div>
           </Stack>
         </Card>
       </Stack>

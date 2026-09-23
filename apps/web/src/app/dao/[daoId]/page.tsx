@@ -11,7 +11,7 @@ import { PageSection } from '@/components/page-section';
 import { ProposalStateBadge } from '@/components/proposal/proposal-state-badge';
 import type { ProposalListResponse } from '@/components/proposal/types';
 import { TokenCard } from '@/components/token/token-card';
-import { Button, Callout, Card, Heading, ShortId, Text } from '@/components/ui';
+import { Button, Callout, Card, Heading, ShortId, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { useGoldskyActivityFeed, useGoldskyHealth } from '@/lib/goldsky-queries';
 import { useTokenInventory } from '@/lib/token-queries';
@@ -46,6 +46,31 @@ type AuctionData = {
   config: { reserve_price: string; min_bid_increment_percent: number; payment_token: string | null };
   paused: boolean;
 };
+
+function DashboardRowSkeleton() {
+  return (
+    <div className="skeleton-row">
+      <Skeleton style={{ width: '42px', height: '1em' }} />
+      <div style={{ flex: 1, display: 'grid', gap: '8px' }}>
+        <Skeleton style={{ width: '62%', height: '1em' }} />
+        <Skeleton style={{ width: '34%', height: '0.8em' }} />
+      </div>
+      <Skeleton style={{ width: '74px', height: '1em' }} />
+    </div>
+  );
+}
+
+function ActivityRowSkeleton() {
+  return (
+    <div className="dashboard-activity-row">
+      <div style={{ flex: 1, display: 'grid', gap: '8px' }}>
+        <Skeleton style={{ width: '48%', height: '1em' }} />
+        <Skeleton style={{ width: '78%', height: '0.9em' }} />
+      </div>
+      <Skeleton style={{ width: '150px', height: '0.8em' }} />
+    </div>
+  );
+}
 
 async function fetchJson<T>(url: string) {
   const response = await fetch(url, { cache: 'no-store' });
@@ -240,9 +265,18 @@ export default function Page() {
                   <Callout variant="error" title="Auction unavailable" description={auctionError.message} />
                 ) : null}
                 {auctionLoading && !auctionData ? (
-                  <Text className="lede" style={{ margin: 0 }}>
-                    Loading auction...
-                  </Text>
+                  <div role="status" aria-busy="true">
+                    <span className="sr-only">Loading auction</span>
+                    <div className="dashboard-auction">
+                      <Skeleton style={{ width: '100%', aspectRatio: '1', borderRadius: '16px' }} />
+                      <div className="dashboard-auction__details" style={{ display: 'grid', gap: '10px' }}>
+                        <Skeleton style={{ width: '110px', height: '0.8em' }} />
+                        <Skeleton style={{ width: '150px', height: '1.2em' }} />
+                        <Skeleton style={{ width: '180px', height: '0.9em' }} />
+                        <Skeleton style={{ width: '120px', height: '0.8em' }} />
+                      </div>
+                    </div>
+                  </div>
                 ) : null}
                 {auctionData?.status === 'paused' ? (
                   <Callout
@@ -305,7 +339,14 @@ export default function Page() {
               {proposalsError ? (
                 <Callout variant="error" title="Proposal activity unavailable" description={proposalsError.message} />
               ) : null}
-              {proposalsLoading && !proposals ? <Callout variant="info" title="Loading proposal activity…" /> : null}
+              {proposalsLoading && !proposals ? (
+                <div className="skeleton-list" role="status" aria-busy="true">
+                  <span className="sr-only">Loading proposal activity</span>
+                  {Array.from({ length: 3 }, (_, index) => (
+                    <DashboardRowSkeleton key={index} />
+                  ))}
+                </div>
+              ) : null}
               {!proposalsLoading && !proposalItems.length ? (
                 <div className="empty-state" role="status">
                   <Text className="lede" style={{ margin: '0 auto' }}>
@@ -401,7 +442,15 @@ export default function Page() {
           {activityError ? (
             <Callout variant="error" title="Activity feed unavailable" description={activityError.message} />
           ) : null}
-          {!activityItems.length ? (
+          {activityLoading && !activityFeed ? (
+            <div className="skeleton-list" role="status" aria-busy="true">
+              <span className="sr-only">Loading activity feed</span>
+              {Array.from({ length: 5 }, (_, index) => (
+                <ActivityRowSkeleton key={index} />
+              ))}
+            </div>
+          ) : null}
+          {!activityLoading && !activityItems.length ? (
             <div className="empty-state" role="status">
               <Text className="lede" style={{ margin: '0 auto' }}>
                 No indexed activity yet. Governance and token events will appear here.
@@ -440,7 +489,7 @@ export default function Page() {
                     onClick={() => setActivityLimit((current) => current + ACTIVITY_PAGE_SIZE)}
                     disabled={activityLoading}
                   >
-                    {activityLoading ? 'Loading...' : 'Show more activity'}
+                    Show more activity
                   </Button>
                 </div>
               ) : null}
@@ -455,6 +504,18 @@ export default function Page() {
           <div className="dashboard-membership-card__scroll">
             {tokenError ? (
               <Callout variant="error" title="Token inventory unavailable" description={tokenError.message} />
+            ) : null}
+            {tokenLoading && !tokens ? (
+              <div className="token-inventory-grid" role="status" aria-busy="true">
+                <span className="sr-only">Loading token inventory</span>
+                {Array.from({ length: 4 }, (_, index) => (
+                  <Card key={index} p="3" className="membership-token-card" style={{ overflow: 'hidden' }}>
+                    <Skeleton style={{ width: '100%', aspectRatio: '1', borderRadius: '10px' }} />
+                    <Skeleton style={{ width: '70%', height: '1.1em', marginTop: '12px' }} />
+                    <Skeleton style={{ width: '86%', height: '0.8em', marginTop: '10px' }} />
+                  </Card>
+                ))}
+              </div>
             ) : null}
             {!tokenLoading && !tokens?.items.length ? (
               <div className="empty-state" role="status">
@@ -479,7 +540,7 @@ export default function Page() {
                       onClick={() => setTokenLimit((current) => current + TOKEN_PAGE_SIZE)}
                       disabled={tokenLoading}
                     >
-                      {tokenLoading ? 'Loading...' : 'Show more tokens'}
+                      Show more tokens
                     </Button>
                   </div>
                 ) : null}

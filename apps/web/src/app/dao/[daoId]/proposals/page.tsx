@@ -10,7 +10,7 @@ import useSWR from 'swr';
 import { PageSection } from '@/components/page-section';
 import { ProposalStateBadge } from '@/components/proposal/proposal-state-badge';
 import type { ProposalListResponse } from '@/components/proposal/types';
-import { Button, Callout, Heading, Input, Select, Text } from '@/components/ui';
+import { Button, Callout, Heading, Input, Select, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import type { GovernorSettings } from '@/lib/admin-queries';
 import { useGovernorSettings } from '@/lib/admin-queries';
@@ -151,7 +151,7 @@ export default function ProposalsPage() {
                 onClick={() => router.push(daoRoute(daoId, 'proposals/create'))}
                 disabled={createDisabled}
               >
-                {proposalEligibilityLoading ? 'Checking eligibility...' : 'Create proposal'}
+                Create proposal
               </Button>
               {createDisabledMessage ? (
                 <span className="proposal-create-tooltip__message" role="tooltip">
@@ -163,7 +163,26 @@ export default function ProposalsPage() {
         </div>
 
         {error ? <Callout variant="error" title={error.message} /> : null}
-        {!items.length ? (
+        {isLoading && !data ? (
+          <div className="proposal-list skeleton-list" role="status" aria-busy="true">
+            <span className="sr-only">Loading proposals</span>
+            {Array.from({ length: 5 }, (_, index) => (
+              <div className="proposal-row" key={index}>
+                <div className="proposal-row__identity" style={{ flex: 1 }}>
+                  <Skeleton style={{ width: '42px', height: '1em' }} />
+                  <div className="proposal-row__content" style={{ flex: 1 }}>
+                    <Skeleton style={{ width: '58%', height: '1em' }} />
+                    <Skeleton style={{ width: '30%', height: '0.8em' }} />
+                  </div>
+                </div>
+                <div className="proposal-row__outcome">
+                  <Skeleton style={{ width: '90px', height: '0.9em' }} />
+                  <Skeleton style={{ width: '72px', height: '1.4em' }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : !items.length ? (
           <div className="empty-state" role="status">
             <Heading style={{ fontSize: '1.15rem' }}>No proposals yet</Heading>
             <Text className="lede" style={{ margin: '8px auto 0' }}>

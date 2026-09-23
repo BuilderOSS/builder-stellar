@@ -3,7 +3,7 @@
 import { Grid, Stack } from 'styled-system/jsx';
 
 import { PageSection } from '@/components/page-section';
-import { Badge, Button, Callout, Card, ShortId, Text } from '@/components/ui';
+import { Badge, Button, Callout, Card, ShortId, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { getDaoAccountRole } from '@/lib/account-role';
 import { useGoldskyMemberList } from '@/lib/goldsky-queries';
@@ -25,14 +25,37 @@ export default function MembersPage() {
           </div>
 
           {error ? <Callout variant="error" title="Member directory unavailable" description={error.message} /> : null}
-          {isLoading ? <Callout variant="info" title="Loading member balances…" /> : null}
+          {isLoading ? (
+            <div role="status" aria-busy="true" className="members-loading">
+              <span className="sr-only">Loading member balances</span>
+              <div className="members-table-wrap">
+                <table className="members-table">
+                  <tbody>
+                    {Array.from({ length: 6 }, (_, index) => (
+                      <tr key={index}>
+                        <td>
+                          <Skeleton style={{ width: '120px', height: '1em' }} />
+                        </td>
+                        <td>
+                          <Skeleton style={{ width: '70px', height: '1em' }} />
+                        </td>
+                        <td>
+                          <Skeleton style={{ width: '35px', height: '1em' }} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
           {!isLoading && !rows.length ? (
             <div className="empty-state" role="status">
               <Text className="lede" style={{ margin: '0 auto' }}>
                 No token holders are indexed yet.
               </Text>
             </div>
-          ) : (
+          ) : !isLoading ? (
             <>
               <div className="members-table-wrap">
                 <table className="members-table">
@@ -70,7 +93,7 @@ export default function MembersPage() {
                 ))}
               </Grid>
             </>
-          )}
+          ) : null}
         </Stack>
       </Card>
     </PageSection>

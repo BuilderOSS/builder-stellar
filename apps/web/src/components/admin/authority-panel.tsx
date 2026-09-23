@@ -2,7 +2,7 @@
 
 import { Stack } from 'styled-system/jsx';
 
-import { Badge, Button, Card, Heading, Input, ShortId, Text } from '@/components/ui';
+import { Badge, Button, Card, Heading, Input, ShortId, Skeleton, Text } from '@/components/ui';
 
 type AuthorityItem = {
   authority: string;
@@ -23,6 +23,7 @@ export function AuthorityPanel({
   allowLabel,
   revokeLabel,
   busy,
+  loading = false,
   editable = true,
   emptyLabel = 'No authorities indexed yet.'
 }: {
@@ -37,6 +38,7 @@ export function AuthorityPanel({
   allowLabel: string;
   revokeLabel: string;
   busy?: boolean;
+  loading?: boolean;
   editable?: boolean;
   emptyLabel?: string;
 }) {
@@ -70,7 +72,19 @@ export function AuthorityPanel({
           </div>
         ) : null}
 
-        {!items.length ? (
+        {loading ? (
+          <div role="status" aria-busy="true" className="skeleton-list">
+            <span className="sr-only">Loading authorities</span>
+            {Array.from({ length: 3 }, (_, index) => (
+              <Card key={index} p="3">
+                <Stack gap="1">
+                  <Skeleton style={{ width: '180px', height: '1em' }} />
+                  <Skeleton style={{ width: '90px', height: '0.8em' }} />
+                </Stack>
+              </Card>
+            ))}
+          </div>
+        ) : !items.length ? (
           <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
             {emptyLabel}
           </Text>
