@@ -101,6 +101,7 @@ type CreateDaoActions = {
 
   // Founder management
   addFounder: (founder: FounderAllocation) => void;
+  replaceFounders: (founders: FounderAllocation[]) => void;
   removeFounder: (index: number) => void;
   updateFounder: (index: number, founder: FounderAllocation) => void;
 
@@ -280,6 +281,8 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
         set((state) => ({
           founders: [...state.founders, founder]
         })),
+
+      replaceFounders: (founders) => set({ founders }),
 
       removeFounder: (index) =>
         set((state) => {
