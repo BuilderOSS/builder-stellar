@@ -820,14 +820,15 @@ textarea {
 }
 
 .create-accordion {
+  display: grid;
+  gap: 12px;
+}
+
+.create-accordion__section {
   overflow: hidden;
   border: 1px solid var(--border-default);
   border-radius: 20px;
   background: var(--surface-1);
-}
-
-.create-accordion__section + .create-accordion__section {
-  border-top: 1px solid var(--border-default);
 }
 
 .create-accordion__heading {
@@ -881,6 +882,7 @@ textarea {
 }
 
 .create-accordion__chevron {
+  margin-left: auto;
   width: 22px;
   color: var(--text-tertiary);
   font-size: 1.35rem;
@@ -911,6 +913,45 @@ textarea {
 .create-section-actions p,
 .create-review-actions p {
   margin: 0;
+}
+
+.auction-choice-group {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.auction-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 78px;
+  padding: 16px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--surface-0);
+  cursor: pointer;
+  transition: 160ms ease;
+  transition-property: border-color, background-color, box-shadow;
+}
+
+.auction-choice:hover,
+.auction-choice:focus-within {
+  border-color: var(--border-strong);
+}
+
+.auction-choice.is-selected {
+  border-color: var(--action);
+  background: var(--focus-soft);
+  box-shadow: 0 0 0 3px var(--focus-soft);
+}
+
+.auction-choice input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--action);
 }
 .stepper {
   display: grid;
@@ -1805,7 +1846,7 @@ textarea {
   .create-progress__subtitle {
     display: none;
   }
-  .create-accordion {
+  .create-accordion__section {
     border-radius: 16px;
   }
   .create-accordion__trigger {
@@ -1822,6 +1863,9 @@ textarea {
   .create-review-actions,
   .create-section-actions {
     align-items: stretch;
+  }
+  .auction-choice-group {
+    grid-template-columns: 1fr;
   }
   .proposal-filters {
     grid-template-columns: 1fr;
