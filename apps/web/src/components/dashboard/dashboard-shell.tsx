@@ -10,9 +10,11 @@ import { MarketplaceComingSoon } from '@/components/marketplace/marketplace-comi
 import { Callout, Heading, Text } from '@/components/ui';
 import { WalletControls } from '@/components/wallet-controls';
 import type { DaoConfig } from '@/lib/dao-db';
+import { useDaoSessionStore } from '@/stores/dao-session-store';
 
 import { DashboardSidebar } from './dashboard-sidebar';
 import { type DashboardTab, DashboardTabs } from './dashboard-tabs';
+import { DashboardWelcome } from './dashboard-welcome';
 
 function EmptyDashboardTab({ tab }: { tab: Exclude<DashboardTab, 'discover' | 'marketplace'> }) {
   const copy =
@@ -31,6 +33,7 @@ function EmptyDashboardTab({ tab }: { tab: Exclude<DashboardTab, 'discover' | 'm
 
 export function DashboardShell({ daos, loadError }: { daos: DaoConfig[]; loadError: boolean }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const isNewcomer = !useDaoSessionStore((state) => state.address);
 
   return (
     <div className="page-shell dashboard-page-shell">
@@ -106,6 +109,9 @@ export function DashboardShell({ daos, loadError }: { daos: DaoConfig[]; loadErr
                 }
                 if (tab === 'marketplace') {
                   return <MarketplaceComingSoon />;
+                }
+                if (tab === 'feed') {
+                  return isNewcomer ? <DashboardWelcome /> : <EmptyDashboardTab tab={tab} />;
                 }
                 return <EmptyDashboardTab tab={tab as Exclude<DashboardTab, 'discover' | 'marketplace'>} />;
               }}

@@ -173,15 +173,20 @@ textarea {
   z-index: 50;
   top: 16px;
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
-  align-items: center;
-  gap: 16px;
+  gap: 0;
   padding: 12px;
   border: 1px solid var(--border-default);
   border-radius: 16px;
   background: rgba(12, 14, 17, 0.9);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
   backdrop-filter: blur(18px);
+}
+
+.app-header__top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
 }
 
 .brand-lockup {
@@ -231,13 +236,20 @@ textarea {
   gap: 3px;
 }
 .nav-groups {
-  display: grid;
+  display: block;
+  width: 100%;
   min-width: 0;
-  justify-items: center;
-  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.nav-groups::-webkit-scrollbar {
+  display: none;
 }
 .secondary-nav {
-  padding-top: 4px;
+  min-width: max-content;
+  justify-content: center;
+  margin-top: 12px;
+  padding-top: 8px;
   border-top: 1px solid var(--border-default);
 }
 
@@ -1849,62 +1861,6 @@ textarea {
 }
 
 @media (max-width: 1020px) {
-  .page-shell {
-    padding-bottom: 104px;
-  }
-  .app-header {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .nav-groups {
-    display: none;
-  }
-  .mobile-nav {
-    position: fixed;
-    z-index: 60;
-    right: 10px;
-    bottom: max(10px, env(safe-area-inset-bottom));
-    left: 10px;
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr)) min-content;
-    overflow: visible;
-    padding: 7px;
-    border: 1px solid var(--border-strong);
-    border-radius: 16px;
-    background: rgba(12, 14, 17, 0.94);
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-    backdrop-filter: blur(18px);
-  }
-  .mobile-nav .nav-link {
-    min-width: 0;
-    min-height: 48px;
-    flex-direction: column;
-    padding: 5px 2px;
-    font-size: 0.65rem;
-    gap: 3px;
-  }
-  .mobile-nav__more {
-    position: relative;
-  }
-  .mobile-nav__more > summary {
-    width: 40px;
-    min-height: 48px;
-    padding: 0;
-  }
-  .mobile-nav__more .dashboard-menu__panel {
-    top: auto;
-    right: 0;
-    bottom: calc(100% + 8px);
-  }
-  .mobile-nav__more .nav-link {
-    width: 100%;
-    flex: initial;
-    min-height: 40px;
-    flex-direction: row;
-    padding: 0 12px;
-    font-size: 0.84rem;
-    gap: 7px;
-    justify-content: flex-start;
-  }
   .treasury-layout,
   .proposal-detail-layout {
     grid-template-columns: 1fr;
@@ -1971,6 +1927,56 @@ textarea {
 @media (max-width: 680px) {
   .page-shell {
     padding: 10px 12px 104px;
+  }
+  .nav-groups {
+    display: none;
+  }
+  .mobile-nav {
+    position: fixed;
+    z-index: 60;
+    right: 10px;
+    bottom: max(10px, env(safe-area-inset-bottom));
+    left: 10px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) min-content;
+    overflow: visible;
+    padding: 7px;
+    border: 1px solid var(--border-strong);
+    border-radius: 16px;
+    background: rgba(12, 14, 17, 0.94);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(18px);
+  }
+  .mobile-nav .nav-link {
+    min-width: 0;
+    min-height: 48px;
+    flex-direction: column;
+    padding: 5px 2px;
+    font-size: 0.65rem;
+    gap: 3px;
+  }
+  .mobile-nav__more {
+    position: relative;
+  }
+  .mobile-nav__more > summary {
+    width: 40px;
+    min-height: 48px;
+    padding: 0;
+  }
+  .mobile-nav__more .dashboard-menu__panel {
+    top: auto;
+    right: 0;
+    bottom: calc(100% + 8px);
+  }
+  .mobile-nav__more .nav-link {
+    width: 100%;
+    flex: initial;
+    min-height: 40px;
+    flex-direction: row;
+    padding: 0 12px;
+    font-size: 0.84rem;
+    gap: 7px;
+    justify-content: flex-start;
   }
   .app-header {
     top: 8px;

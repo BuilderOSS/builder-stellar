@@ -96,18 +96,42 @@ export function DaoShell({ children }: { children: ReactNode }) {
       </a>
       <div className="app-frame">
         <header className="app-header">
-          <div className="dao-header__identity">
-            <Link className="dao-exit-button" href="/" aria-label="Exit DAO and return to Dashboard">
-              <ArrowLeft className="dao-exit-button__icon" aria-hidden="true" size={17} />
-              <span className="dao-exit-button__text">Exit DAO</span>
-            </Link>
-            <Link className="brand-lockup" href={`/dao/${daoId}`} aria-label={`${currentNetwork.tokenName} dashboard`}>
-              <Image className="brand-mark" src="/icon.svg" alt="" aria-hidden="true" width={44} height={44} priority />
-              <div className="brand-copy">
-                <p className="brand-name">{currentNetwork.tokenName}</p>
-                <p className="brand-kicker">Stellar governance</p>
+          <div className="app-header__top">
+            <div className="dao-header__identity">
+              <Link className="dao-exit-button" href="/" aria-label="Exit DAO and return to Dashboard">
+                <ArrowLeft className="dao-exit-button__icon" aria-hidden="true" size={17} />
+                <span className="dao-exit-button__text">Exit DAO</span>
+              </Link>
+              <Link
+                className="brand-lockup"
+                href={`/dao/${daoId}`}
+                aria-label={`${currentNetwork.tokenName} dashboard`}
+              >
+                <Image
+                  className="brand-mark"
+                  src="/icon.svg"
+                  alt=""
+                  aria-hidden="true"
+                  width={44}
+                  height={44}
+                  priority
+                />
+                <div className="brand-copy">
+                  <p className="brand-name">{currentNetwork.tokenName}</p>
+                  <p className="brand-kicker">Stellar governance</p>
+                </div>
+              </Link>
+            </div>
+
+            <div className="header-actions">
+              {/*
+              <div className="network-chip" title={`Configured for ${currentNetwork.label}`}>
+                <span className="network-dot" aria-hidden="true" />
+                {currentNetwork.label}
               </div>
-            </Link>
+              */}
+              <WalletControls network={currentNetwork} />
+            </div>
           </div>
 
           <div className="nav-groups">
@@ -116,16 +140,6 @@ export function DaoShell({ children }: { children: ReactNode }) {
                 <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href, item.exact)} />
               ))}
             </nav>
-          </div>
-
-          <div className="header-actions">
-            {/*
-            <div className="network-chip" title={`Configured for ${currentNetwork.label}`}>
-              <span className="network-dot" aria-hidden="true" />
-              {currentNetwork.label}
-            </div>
-*/}
-            <WalletControls network={currentNetwork} />
           </div>
         </header>
 
