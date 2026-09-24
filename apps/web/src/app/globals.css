@@ -2655,6 +2655,12 @@ textarea {
   margin-top: 0;
 }
 
+.dashboard-welcome__hint {
+  margin-top: 18px;
+  color: var(--text-tertiary);
+  font-size: 0.82rem;
+}
+
 .dashboard-sidebar__overlay {
   display: none;
 }
@@ -2705,10 +2711,6 @@ textarea {
 
   .dashboard-header .brand-lockup {
     margin-right: auto;
-  }
-
-  .dashboard-create-link {
-    display: none;
   }
 
   .dashboard-main {

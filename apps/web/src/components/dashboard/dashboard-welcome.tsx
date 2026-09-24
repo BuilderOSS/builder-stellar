@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRight, Compass, Plus } from 'lucide-react';
+import { ArrowRight, Compass } from 'lucide-react';
 import Link from 'next/link';
 
 import { Heading, Text } from '@/components/ui';
@@ -26,11 +26,10 @@ export function DashboardWelcome() {
           Explore DAOs
           <ArrowRight aria-hidden="true" size={16} />
         </Link>
-        <Link href="/create" className="nav-link">
-          <Plus aria-hidden="true" size={16} />
-          Create DAO
-        </Link>
       </div>
+      <Text className="dashboard-welcome__hint">
+        Want to start a community? Use <strong>Create DAO</strong> in the dashboard menu.
+      </Text>
     </section>
   );
 }

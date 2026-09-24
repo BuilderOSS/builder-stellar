@@ -1,6 +1,6 @@
 'use client';
 
-import { Menu, Plus } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -58,10 +58,6 @@ export function DashboardShell({ daos, loadError }: { daos: DaoConfig[]; loadErr
             </div>
           </Link>
           <div className="dashboard-header__actions">
-            <Link href="/create" className="nav-link dashboard-create-link">
-              <Plus aria-hidden="true" size={16} strokeWidth={2} />
-              Create DAO
-            </Link>
             <WalletControls />
           </div>
         </header>
