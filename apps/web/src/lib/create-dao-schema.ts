@@ -68,9 +68,9 @@ const artworkSchema = z
 const auctionSchema = z
   .object({
     enabled: z.boolean(),
-    duration: z.number(),
+    duration: z.number().int('Auction duration must be a whole number'),
     reservePrice: z.string(),
-    timeBuffer: z.number(),
+    timeBuffer: z.number().int('Time buffer must be a whole number'),
     paymentAsset: z.string()
   })
   .superRefine((auction, context) => {
@@ -90,7 +90,7 @@ const auctionSchema = z
     const timeBufferError = validateDuration(auction.timeBuffer, 60);
     if (timeBufferError) context.addIssue({ code: 'custom', message: timeBufferError, path: ['timeBuffer'] });
 
-    if (!isValidStellarAddress(auction.paymentAsset)) {
+    if (auction.paymentAsset !== '' && !isValidStellarAddress(auction.paymentAsset)) {
       context.addIssue({
         code: 'custom',
         message: getStellarAddressError(auction.paymentAsset) ?? 'Invalid payment asset address',
@@ -101,8 +101,8 @@ const auctionSchema = z
 
 const governanceSchema = z
   .object({
-    votingDelay: z.number(),
-    votingPeriod: z.number(),
+    votingDelay: z.number().int('Voting delay must be a whole number'),
+    votingPeriod: z.number().int('Voting period must be a whole number'),
     quorumBps: z.number().int().min(0).max(10000),
     proposalThresholdBps: z.number().int().min(0).max(10000)
   })
