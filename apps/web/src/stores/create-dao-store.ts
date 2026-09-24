@@ -70,7 +70,6 @@ export type FounderAllocation = {
  * State
  */
 type CreateDaoState = {
-  step: 1 | 2 | 3 | 4 | 5 | 6;
   basicInfo: BasicInfo;
   artwork: ArtworkConfig;
   auction: AuctionConfig;
@@ -86,11 +85,6 @@ type CreateDaoState = {
  * Actions
  */
 type CreateDaoActions = {
-  // Wizard navigation
-  setStep: (step: 1 | 2 | 3 | 4 | 5 | 6) => void;
-  nextStep: () => void;
-  prevStep: () => void;
-
   // Update form sections
   updateBasicInfo: (patch: Partial<BasicInfo>) => void;
   updateArtwork: (patch: Partial<ArtworkConfig>) => void;
@@ -127,7 +121,6 @@ type CreateDaoActions = {
 type CreateDaoStore = CreateDaoState & CreateDaoActions;
 
 const initialState: CreateDaoState = {
-  step: 1,
   basicInfo: {
     tokenName: '',
     tokenSymbol: '',
@@ -197,11 +190,6 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
   persist(
     (set) => ({
       ...initialState,
-
-      // Wizard navigation
-      setStep: (step) => set({ step }),
-      nextStep: () => set((state) => ({ step: Math.min(6, state.step + 1) as 1 | 2 | 3 | 4 | 5 | 6 })),
-      prevStep: () => set((state) => ({ step: Math.max(1, state.step - 1) as 1 | 2 | 3 | 4 | 5 | 6 })),
 
       // Update form sections
       updateBasicInfo: (patch) =>
@@ -334,7 +322,6 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
       storage,
       skipHydration: true,
       partialize: (state) => ({
-        step: state.step,
         basicInfo: state.basicInfo,
         artwork: state.artwork,
         auction: state.auction,
@@ -390,29 +377,6 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
     }
   )
 );
-
-// Selectors for validation
-export const selectCanProceedToStep2 = (state: CreateDaoStore) =>
-  state.basicInfo.tokenName.trim().length > 0 &&
-  state.basicInfo.tokenSymbol.trim().length > 0 &&
-  state.basicInfo.description.trim().length > 0;
-
-export const selectCanProceedToStep3 = (state: CreateDaoStore) =>
-  state.artwork.ipfs.baseUri.trim().length > 0 && state.artwork.properties.length > 0;
-
-export const selectCanProceedToStep4 = (state: CreateDaoStore) =>
-  !state.auction.enabled || (state.auction.paymentAsset.trim().length > 0 && Number(state.auction.reservePrice) > 0);
-
-export const selectCanProceedToStep5 = (state: CreateDaoStore) =>
-  state.governance.quorumBps >= 0 &&
-  state.governance.quorumBps <= 10000 &&
-  state.governance.proposalThresholdBps >= 0 &&
-  state.governance.proposalThresholdBps <= 10000;
-
-export const selectCanProceedToStep6 = (state: CreateDaoStore) => {
-  const totalAllocation = state.founders.reduce((sum, f) => sum + f.amount, 0);
-  return totalAllocation <= 10_000;
-};
 
 export const selectTotalFounderAllocation = (state: CreateDaoStore) =>
   state.founders.reduce((sum, f) => sum + f.amount, 0);

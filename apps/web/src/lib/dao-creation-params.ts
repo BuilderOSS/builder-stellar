@@ -2,49 +2,10 @@
 
 import type { ArtworkItem, DaoCreationParams } from '@builder-stellar/manager-bindings';
 
-import type { ArtworkProperty } from '@/stores/create-dao-store';
-
 import { getTreasuryAssets } from './assets-config';
+import type { CreateDaoFormData } from './create-dao-schema';
 
-/**
- * Form data structure matching the create DAO store
- */
-export interface CreateDaoFormData {
-  basicInfo: {
-    tokenName: string;
-    tokenSymbol: string;
-    tokenUri: string;
-    projectUri: string;
-    description: string;
-    contractImage: string;
-    rendererBase: string;
-  };
-  artwork: {
-    ipfs: {
-      baseUri: string;
-      extension: string;
-    };
-    properties: ArtworkProperty[];
-  };
-  auction: {
-    enabled: boolean;
-    duration: number;
-    reservePrice: string;
-    timeBuffer: number;
-    paymentAsset: string;
-  };
-  governance: {
-    votingDelay: number;
-    votingPeriod: number;
-    quorumBps: number;
-    proposalThresholdBps: number;
-  };
-  founders: Array<{
-    address: string;
-    amount: number;
-  }>;
-  launchAdmin: string;
-}
+export type { CreateDaoFormData } from './create-dao-schema';
 
 /**
  * Transform form data to Manager contract creation parameters

@@ -5,7 +5,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 
 import {
@@ -17,147 +17,171 @@ import {
   GovernanceStep,
   ReviewStep
 } from '@/components/create-dao';
-import { Badge, Button, Callout, Heading, Text } from '@/components/ui';
+import { Button, Callout, Text } from '@/components/ui';
 import { WalletControls } from '@/components/wallet-controls';
-import type { CreateDaoFormData } from '@/lib/dao-creation-params';
+import {
+  CREATE_DAO_SECTIONS,
+  type CreateDaoFormData,
+  createDaoSchema,
+  type CreateDaoSection,
+  sectionSchemas
+} from '@/lib/create-dao-schema';
 import { getDeploymentConfig, isDeploymentConfigured } from '@/lib/deployment-config';
 import { useDaoDeployment } from '@/lib/use-dao-deployment';
-import { validateDaoConfig } from '@/lib/validate-dao-config';
-import {
-  selectCanProceedToStep2,
-  selectCanProceedToStep3,
-  selectCanProceedToStep4,
-  selectCanProceedToStep5,
-  selectCanProceedToStep6,
-  useCreateDaoStore
-} from '@/stores/create-dao-store';
+import { useCreateDaoStore } from '@/stores/create-dao-store';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
-function StepCard({
-  number,
-  title,
-  description,
-  isActive,
-  isCompleted,
-  canProceed,
-  onClick
+type SectionStatus = 'complete' | 'active' | 'error' | 'pending';
+
+function validationField(path: PropertyKey[]) {
+  const [section, field, index, nestedField] = path;
+  if (section === 'basicInfo') return String(field ?? 'basicInfo');
+  if (section === 'artwork') {
+    if (field === 'ipfs') return index === 'baseUri' ? 'ipfsBaseUri' : 'ipfsExtension';
+    if (field === 'properties' && typeof index === 'number') return `artworkProperty${index}`;
+    return 'artworkProperties';
+  }
+  if (section === 'auction') {
+    return (
+      (
+        {
+          duration: 'auctionDuration',
+          timeBuffer: 'timeBuffer',
+          reservePrice: 'reservePrice',
+          paymentAsset: 'paymentAsset'
+        } as Record<string, string>
+      )[String(field)] ?? 'auction'
+    );
+  }
+  if (section === 'governance') return String(field ?? 'governance');
+  if (section === 'founders') {
+    if (typeof field === 'number' && nestedField)
+      return `founder${field}${String(nestedField).replace(/^./, (value) => value.toUpperCase())}`;
+    return 'founders';
+  }
+  return String(section ?? 'form');
+}
+
+function validationSection(path: PropertyKey[]): CreateDaoSection {
+  const section = path[0];
+  return section === 'basicInfo' ||
+    section === 'artwork' ||
+    section === 'auction' ||
+    section === 'governance' ||
+    section === 'founders'
+    ? section
+    : 'review';
+}
+
+function ProgressRail({
+  activeSection,
+  statuses,
+  onSelect
 }: {
-  number: number;
-  title: string;
-  description: string;
-  isActive: boolean;
-  isCompleted: boolean;
-  canProceed: boolean;
-  onClick: () => void;
+  activeSection: CreateDaoSection;
+  statuses: Record<CreateDaoSection, SectionStatus>;
+  onSelect: (section: CreateDaoSection) => void;
 }) {
-  const bgColor = isActive ? 'var(--surface-2)' : 'var(--surface-1)';
-  const borderCol = isActive ? 'var(--action)' : 'var(--border-default)';
+  return (
+    <nav className="create-progress" aria-label="DAO creation sections">
+      <ol className="create-progress__list">
+        {CREATE_DAO_SECTIONS.map((section, index) => {
+          const status = statuses[section.id];
+          const isActive = activeSection === section.id;
+          return (
+            <li className="create-progress__item" key={section.id}>
+              <button
+                className={`create-progress__button${isActive ? ' is-active' : ''}${status === 'complete' ? ' is-complete' : ''}${status === 'error' ? ' is-error' : ''}`}
+                type="button"
+                onClick={() => onSelect(section.id)}
+                aria-current={isActive ? 'step' : undefined}
+              >
+                <span className="create-progress__marker" aria-hidden="true">
+                  {status === 'complete' ? '\u2713' : section.number}
+                </span>
+                <span className="create-progress__copy">
+                  <span className="create-progress__title">{section.title}</span>
+                  <span className="create-progress__subtitle">{section.subtitle}</span>
+                </span>
+              </button>
+              {index < CREATE_DAO_SECTIONS.length - 1 && (
+                <span className="create-progress__connector" aria-hidden="true" />
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
+  );
+}
+
+function AccordionSection({
+  section,
+  status,
+  isOpen,
+  onToggle,
+  children
+}: {
+  section: (typeof CREATE_DAO_SECTIONS)[number];
+  status: SectionStatus;
+  isOpen: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  const panelId = `create-section-panel-${section.id}`;
+  const triggerId = `create-section-trigger-${section.id}`;
+  const statusLabel = status === 'complete' ? 'Complete' : status === 'error' ? 'Needs attention' : undefined;
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onClick}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onClick();
-        }
-      }}
-      aria-current={isActive ? 'step' : undefined}
-      style={{
-        display: 'block',
-        width: '100%',
-        cursor: 'pointer',
-        padding: '1rem',
-        background: bgColor,
-        borderWidth: '2px',
-        borderStyle: 'solid',
-        borderColor: borderCol,
-        borderRadius: '8px',
-        transition: 'all 0.15s ease',
-        boxSizing: 'border-box',
-        textAlign: 'left'
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = 'var(--accent-9)';
-        e.currentTarget.style.transform = 'translateY(-2px)';
-        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = borderCol;
-        e.currentTarget.style.transform = 'translateY(0)';
-        e.currentTarget.style.boxShadow = 'none';
-      }}
-    >
-      <Stack gap="2">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Badge
-            style={{
-              background: isActive ? 'var(--accent-9)' : isCompleted ? 'var(--green-9)' : 'var(--gray-8)',
-              color: 'white',
-              padding: '4px 12px',
-              pointerEvents: 'none'
-            }}
-          >
-            {number}
-          </Badge>
-          {!canProceed && !isCompleted && !isActive && (
-            <Badge
-              style={{
-                background: 'var(--red-9)',
-                color: 'white',
-                fontSize: '0.75rem',
-                padding: '2px 6px',
-                pointerEvents: 'none'
-              }}
-            >
-              Required
-            </Badge>
-          )}
-        </div>
-        <div style={{ textAlign: 'left' }}>
-          <Heading as="h3" style={{ fontSize: '1rem', marginBottom: '4px', pointerEvents: 'none' }}>
-            {title}
-          </Heading>
-          <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)', pointerEvents: 'none' }}>{description}</Text>
-        </div>
-      </Stack>
-    </div>
+    <section className={`create-accordion__section${isOpen ? ' is-open' : ''}`} data-section={section.id}>
+      <h2 className="create-accordion__heading">
+        <button
+          className="create-accordion__trigger"
+          id={triggerId}
+          type="button"
+          aria-expanded={isOpen}
+          aria-controls={panelId}
+          onClick={onToggle}
+        >
+          <span className="create-accordion__number" aria-hidden="true">
+            {status === 'complete' ? '\u2713' : section.number}
+          </span>
+          <span className="create-accordion__copy">
+            <span className="create-accordion__title">{section.title}</span>
+            <span className="create-accordion__subtitle">{section.subtitle}</span>
+          </span>
+          {statusLabel && <span className={`create-accordion__status is-${status}`}>{statusLabel}</span>}
+          <span className="create-accordion__chevron" aria-hidden="true">
+            {isOpen ? '\u2212' : '+'}
+          </span>
+        </button>
+      </h2>
+      <div className="create-accordion__panel" id={panelId} role="region" aria-labelledby={triggerId} hidden={!isOpen}>
+        <div className="create-accordion__body">{children}</div>
+      </div>
+    </section>
   );
 }
 
 export default function CreateDaoPage() {
   const router = useRouter();
   const session = useDaoSessionStore();
+  const sectionRefs = useRef<Partial<Record<CreateDaoSection, HTMLElement>>>({});
 
-  // Store hooks
-  const step = useCreateDaoStore((s) => s.step);
-  const basicInfo = useCreateDaoStore((s) => s.basicInfo);
-  const artwork = useCreateDaoStore((s) => s.artwork);
-  const auction = useCreateDaoStore((s) => s.auction);
-  const governance = useCreateDaoStore((s) => s.governance);
-  const founders = useCreateDaoStore((s) => s.founders);
+  const basicInfo = useCreateDaoStore((state) => state.basicInfo);
+  const artwork = useCreateDaoStore((state) => state.artwork);
+  const auction = useCreateDaoStore((state) => state.auction);
+  const governance = useCreateDaoStore((state) => state.governance);
+  const founders = useCreateDaoStore((state) => state.founders);
+  const validationErrors = useCreateDaoStore((state) => state.validationErrors);
+  const setValidationError = useCreateDaoStore((state) => state.setValidationError);
+  const clearAllValidationErrors = useCreateDaoStore((state) => state.clearAllValidationErrors);
+  const reset = useCreateDaoStore((state) => state.reset);
 
-  const setStep = useCreateDaoStore((s) => s.setStep);
-  const nextStep = useCreateDaoStore((s) => s.nextStep);
-  const prevStep = useCreateDaoStore((s) => s.prevStep);
-  const reset = useCreateDaoStore((s) => s.reset);
-  const setValidationError = useCreateDaoStore((s) => s.setValidationError);
-  const clearAllValidationErrors = useCreateDaoStore((s) => s.clearAllValidationErrors);
-
-  // Validation selectors
-  const canProceedToStep2 = useCreateDaoStore(selectCanProceedToStep2);
-  const canProceedToStep3 = useCreateDaoStore(selectCanProceedToStep3);
-  const canProceedToStep4 = useCreateDaoStore(selectCanProceedToStep4);
-  const canProceedToStep5 = useCreateDaoStore(selectCanProceedToStep5);
-  const canProceedToStep6 = useCreateDaoStore(selectCanProceedToStep6);
-
-  const canSubmit = canProceedToStep6;
-
-  // Deployment state
+  const [openSections, setOpenSections] = useState<Set<CreateDaoSection>>(new Set(['basicInfo']));
+  const [activeSection, setActiveSection] = useState<CreateDaoSection>('basicInfo');
+  const [reviewedSections, setReviewedSections] = useState<Set<CreateDaoSection>>(new Set());
   const [isDeploying, setIsDeploying] = useState(false);
-  // Network config
   const deploymentReady = isDeploymentConfigured();
   const networkName = deploymentReady ? getDeploymentConfig().name : 'testnet';
   const {
@@ -170,71 +194,128 @@ export default function CreateDaoPage() {
     void useCreateDaoStore.persist.rehydrate();
   }, []);
 
-  const handleProceedToStep2 = () => {
-    if (canProceedToStep2) {
-      nextStep();
-    }
+  const formData = useMemo<CreateDaoFormData>(
+    () => ({ basicInfo, artwork, auction, governance, founders, launchAdmin: session.address || '' }),
+    [artwork, auction, basicInfo, founders, governance, session.address]
+  );
+
+  const validationResults = useMemo(
+    () => ({
+      basicInfo: sectionSchemas.basicInfo.safeParse(formData.basicInfo),
+      artwork: sectionSchemas.artwork.safeParse(formData.artwork),
+      auction: sectionSchemas.auction.safeParse(formData.auction),
+      governance: sectionSchemas.governance.safeParse(formData.governance),
+      founders: sectionSchemas.founders.safeParse(formData.founders),
+      review: createDaoSchema.safeParse(formData)
+    }),
+    [formData]
+  );
+
+  const allEditableSectionsValid = (['basicInfo', 'artwork', 'auction', 'governance', 'founders'] as const).every(
+    (section) => validationResults[section].success
+  );
+  const canSubmit = allEditableSectionsValid && reviewedSections.size === 5 && validationResults.review.success;
+
+  const statuses = useMemo<Record<CreateDaoSection, SectionStatus>>(() => {
+    const getStatus = (section: Exclude<CreateDaoSection, 'review'>): SectionStatus => {
+      const storedError = Object.keys(validationErrors).some((key) => {
+        if (section === 'basicInfo') {
+          return [
+            'tokenName',
+            'tokenSymbol',
+            'description',
+            'projectUri',
+            'tokenUri',
+            'contractImage',
+            'rendererBase'
+          ].includes(key);
+        }
+        if (section === 'artwork') {
+          return (
+            key === 'ipfsBaseUri' ||
+            key === 'ipfsExtension' ||
+            key === 'artworkProperties' ||
+            key.startsWith('artworkProperty')
+          );
+        }
+        if (section === 'auction')
+          return ['auctionDuration', 'reservePrice', 'timeBuffer', 'paymentAsset', 'auction'].includes(key);
+        if (section === 'governance')
+          return ['votingDelay', 'votingPeriod', 'quorumBps', 'proposalThresholdBps', 'governance'].includes(key);
+        return key === 'founders' || key.startsWith('founder');
+      });
+      if (!validationResults[section].success && (reviewedSections.has(section) || storedError)) return 'error';
+      if (reviewedSections.has(section)) return 'complete';
+      if (openSections.has(section)) return 'active';
+      return 'pending';
+    };
+
+    return {
+      basicInfo: getStatus('basicInfo'),
+      artwork: getStatus('artwork'),
+      auction: getStatus('auction'),
+      governance: getStatus('governance'),
+      founders: getStatus('founders'),
+      review: canSubmit ? 'complete' : openSections.has('review') ? 'active' : 'pending'
+    };
+  }, [canSubmit, openSections, reviewedSections, validationErrors, validationResults]);
+
+  const setSectionOpen = (section: CreateDaoSection, open = true) => {
+    if (open) setActiveSection(section);
+    setOpenSections((current) => {
+      const next = new Set(current);
+      if (open) next.add(section);
+      else next.delete(section);
+      return next;
+    });
   };
 
-  const handleProceedToStep3 = () => {
-    if (canProceedToStep3) {
-      nextStep();
-    }
+  const selectSection = (section: CreateDaoSection) => {
+    setSectionOpen(section);
+    window.requestAnimationFrame(() => {
+      sectionRefs.current[section]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   };
 
-  const handleProceedToStep4 = () => {
-    if (canProceedToStep4) {
-      nextStep();
+  const markSectionReviewed = (section: Exclude<CreateDaoSection, 'review'>) => {
+    const result = validationResults[section];
+    if (!result.success) {
+      for (const issue of result.error.issues)
+        setValidationError(validationField([section, ...issue.path]), issue.message);
+      setSectionOpen(section);
+      return;
     }
-  };
 
-  const handleProceedToStep5 = () => {
-    if (canProceedToStep5) {
-      nextStep();
-    }
-  };
-
-  const handleProceedToStep6 = () => {
-    if (canProceedToStep6) {
-      nextStep();
-    }
+    setReviewedSections((current) => new Set(current).add(section));
+    setSectionOpen(section, false);
+    const nextSection = CREATE_DAO_SECTIONS[CREATE_DAO_SECTIONS.findIndex((item) => item.id === section) + 1];
+    if (nextSection) selectSection(nextSection.id);
   };
 
   const handleSubmit = async () => {
-    if (!session.address || !canSubmit || !deploymentReady) return;
+    clearAllValidationErrors();
+    const validation = createDaoSchema.safeParse(formData);
+    if (!validation.success) {
+      for (const issue of validation.error.issues) {
+        setValidationError(validationField(issue.path), issue.message);
+      }
+      const invalidSections = new Set<CreateDaoSection>();
+      for (const issue of validation.error.issues) {
+        invalidSections.add(validationSection(issue.path));
+      }
+      invalidSections.forEach((section) => setSectionOpen(section));
+      setSectionOpen('review');
+      return;
+    }
 
+    if (!session.address || !deploymentReady || !canSubmit) return;
     setIsDeploying(true);
 
     try {
-      // Build form data
-      const formData: CreateDaoFormData = {
-        basicInfo,
-        artwork,
-        auction,
-        governance,
-        founders,
-        launchAdmin: session.address
-      };
-
-      clearAllValidationErrors();
-      const validation = validateDaoConfig(formData);
-      if (!validation.valid) {
-        for (const error of validation.errors) setValidationError(error.field, error.message);
-        resetDeployment();
-        setIsDeploying(false);
-        return;
-      }
-
-      // Deploy DAO
-      const addresses = await deployDao(formData);
-
-      // Redirect to new DAO page
-      if (addresses) {
-        router.push(`/dao/${addresses.token}`);
-      }
-    } catch (err) {
-      console.error('Deployment failed:', err);
-      // Error is shown in DeploymentProgress component
+      const addresses = await deployDao(validation.data);
+      if (addresses) router.push(`/dao/${addresses.token}`);
+    } catch (error) {
+      console.error('Deployment failed:', error);
     }
   };
 
@@ -245,12 +326,7 @@ export default function CreateDaoPage() {
     router.push('/');
   };
 
-  const handleCancel = () => {
-    if (confirm('Are you sure you want to cancel? All progress will be lost.')) {
-      reset();
-      router.push('/');
-    }
-  };
+  const fieldErrorCount = Object.keys(validationErrors).length;
 
   return (
     <div className="page-shell">
@@ -258,7 +334,6 @@ export default function CreateDaoPage() {
         <a className="skip-link" href="#main-content">
           Skip to content
         </a>
-
         <header className="discovery-header">
           <Link className="brand-lockup" href="/" aria-label="Stellar DAO directory">
             <Image className="brand-mark" src="/icon.svg" alt="" aria-hidden="true" width={44} height={44} priority />
@@ -267,39 +342,28 @@ export default function CreateDaoPage() {
               <p className="brand-kicker">Governance directory</p>
             </div>
           </Link>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            {/*
-            <Link href="/" className="nav-link">
-              <ArrowLeft aria-hidden="true" size={16} strokeWidth={2} />
-              Back to Directory
-            </Link>
-<div className="discovery-header__context">
-              <span className="network-dot" aria-hidden="true" />
-               <span>{networkName}</span>
-            </div>
-            */}
-            <WalletControls />
-          </div>
+          <WalletControls />
         </header>
 
         <main id="main-content" className="discovery-main" tabIndex={-1}>
           <section className="discovery-hero" aria-labelledby="discovery-title">
             <div className="discovery-hero__copy">
-              <p className="eyebrow">DAO creation wizard</p>
+              <p className="eyebrow">DAO creation workspace</p>
               <h1 className="page-title" id="discovery-title">
-                Create a new DAO
+                Build your DAO
               </h1>
               <p className="lede">
-                Configure and deploy a new DAO on Stellar with governance tokens, auctions, and on-chain voting.
+                Configure your token, artwork, auctions, and governance in one place. You can revisit any section before
+                deployment.
               </p>
             </div>
-            <div className="discovery-hero__signal" aria-label="Creation progress">
-              <span className="label">{isDeploying ? 'Deployment status' : 'Wizard progress'}</span>
-              <strong>{isDeploying ? deploymentState.progress.currentStepLabel : `Step ${step} of 6`}</strong>
+            <div className="discovery-hero__signal">
+              <span className="label">Creation progress</span>
+              <strong>{reviewedSections.size} of 5 sections reviewed</strong>
               <span>
-                {isDeploying
-                  ? `${deploymentState.progress.currentStepIndex} of ${deploymentState.progress.totalSteps} steps`
-                  : 'Multi-step wizard'}
+                {fieldErrorCount > 0
+                  ? `${fieldErrorCount} item${fieldErrorCount === 1 ? '' : 's'} need attention`
+                  : 'Draft saved locally'}
               </span>
             </div>
           </section>
@@ -314,178 +378,113 @@ export default function CreateDaoPage() {
             <Callout
               variant="warning"
               title="Wallet Required"
-              description="Please connect your wallet to create a DAO. You'll need to be the deployer address and sign multiple transactions."
+              description="Please connect your wallet to create a DAO. You will need to sign multiple transactions."
             />
+          ) : isDeploying ? (
+            <DeploymentProgress state={deploymentState} network={networkName} onCancel={handleCloseDeployment} />
           ) : (
-            <Stack gap="6">
-              {/* Wizard Steps */}
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                  gap: '1rem'
-                }}
-                role="navigation"
-                aria-label="DAO creation wizard steps"
-              >
-                <StepCard
-                  number={1}
-                  title="Basic Info"
-                  description="Token and DAO details"
-                  isActive={step === 1}
-                  isCompleted={step > 1}
-                  canProceed={canProceedToStep2}
-                  onClick={() => setStep(1)}
-                />
-                <StepCard
-                  number={2}
-                  title="Artwork"
-                  description="NFT properties & IPFS"
-                  isActive={step === 2}
-                  isCompleted={step > 2}
-                  canProceed={canProceedToStep3}
-                  onClick={() => setStep(2)}
-                />
-                <StepCard
-                  number={3}
-                  title="Auction"
-                  description="Auction configuration"
-                  isActive={step === 3}
-                  isCompleted={step > 3}
-                  canProceed={canProceedToStep4}
-                  onClick={() => setStep(3)}
-                />
-                <StepCard
-                  number={4}
-                  title="Governance"
-                  description="Voting parameters"
-                  isActive={step === 4}
-                  isCompleted={step > 4}
-                  canProceed={canProceedToStep5}
-                  onClick={() => setStep(4)}
-                />
-                <StepCard
-                  number={5}
-                  title="Founders"
-                  description="Token allocations"
-                  isActive={step === 5}
-                  isCompleted={step > 5}
-                  canProceed={canProceedToStep6}
-                  onClick={() => setStep(5)}
-                />
-                <StepCard
-                  number={6}
-                  title="Review"
-                  description="Review & deploy"
-                  isActive={step === 6}
-                  isCompleted={false}
-                  canProceed={canSubmit}
-                  onClick={() => setStep(6)}
-                />
+            <Stack gap="5">
+              <ProgressRail activeSection={activeSection} statuses={statuses} onSelect={selectSection} />
+
+              <div className="create-accordion" aria-label="DAO configuration form">
+                <div
+                  ref={(element) => {
+                    sectionRefs.current.basicInfo = element ?? undefined;
+                  }}
+                >
+                  <AccordionSection
+                    section={CREATE_DAO_SECTIONS[0]}
+                    status={statuses.basicInfo}
+                    isOpen={openSections.has('basicInfo')}
+                    onToggle={() => setSectionOpen('basicInfo', !openSections.has('basicInfo'))}
+                  >
+                    <BasicInfoStep />
+                    <SectionAction label="Save and continue" onClick={() => markSectionReviewed('basicInfo')} />
+                  </AccordionSection>
+                </div>
+                <div
+                  ref={(element) => {
+                    sectionRefs.current.artwork = element ?? undefined;
+                  }}
+                >
+                  <AccordionSection
+                    section={CREATE_DAO_SECTIONS[1]}
+                    status={statuses.artwork}
+                    isOpen={openSections.has('artwork')}
+                    onToggle={() => setSectionOpen('artwork', !openSections.has('artwork'))}
+                  >
+                    <ArtworkStep />
+                    <SectionAction label="Save and continue" onClick={() => markSectionReviewed('artwork')} />
+                  </AccordionSection>
+                </div>
+                <div
+                  ref={(element) => {
+                    sectionRefs.current.auction = element ?? undefined;
+                  }}
+                >
+                  <AccordionSection
+                    section={CREATE_DAO_SECTIONS[2]}
+                    status={statuses.auction}
+                    isOpen={openSections.has('auction')}
+                    onToggle={() => setSectionOpen('auction', !openSections.has('auction'))}
+                  >
+                    <AuctionStep />
+                    <SectionAction label="Save and continue" onClick={() => markSectionReviewed('auction')} />
+                  </AccordionSection>
+                </div>
+                <div
+                  ref={(element) => {
+                    sectionRefs.current.governance = element ?? undefined;
+                  }}
+                >
+                  <AccordionSection
+                    section={CREATE_DAO_SECTIONS[3]}
+                    status={statuses.governance}
+                    isOpen={openSections.has('governance')}
+                    onToggle={() => setSectionOpen('governance', !openSections.has('governance'))}
+                  >
+                    <GovernanceStep />
+                    <SectionAction label="Save and continue" onClick={() => markSectionReviewed('governance')} />
+                  </AccordionSection>
+                </div>
+                <div
+                  ref={(element) => {
+                    sectionRefs.current.founders = element ?? undefined;
+                  }}
+                >
+                  <AccordionSection
+                    section={CREATE_DAO_SECTIONS[4]}
+                    status={statuses.founders}
+                    isOpen={openSections.has('founders')}
+                    onToggle={() => setSectionOpen('founders', !openSections.has('founders'))}
+                  >
+                    <FoundersStep />
+                    <SectionAction label="Save and continue" onClick={() => markSectionReviewed('founders')} />
+                  </AccordionSection>
+                </div>
+                <div
+                  ref={(element) => {
+                    sectionRefs.current.review = element ?? undefined;
+                  }}
+                >
+                  <AccordionSection
+                    section={CREATE_DAO_SECTIONS[5]}
+                    status={statuses.review}
+                    isOpen={openSections.has('review')}
+                    onToggle={() => setSectionOpen('review', !openSections.has('review'))}
+                  >
+                    <ReviewStep connectedAddress={session.address} />
+                    <div className="form-actions form-actions--split create-review-actions">
+                      <Text>
+                        {canSubmit ? 'Everything is ready to deploy.' : 'Review each section before deploying.'}
+                      </Text>
+                      <Button onClick={handleSubmit} disabled={!canSubmit}>
+                        Create DAO
+                      </Button>
+                    </div>
+                  </AccordionSection>
+                </div>
               </div>
-
-              {/* Step 1: Basic Information */}
-              {step === 1 && (
-                <Stack gap="4">
-                  <BasicInfoStep />
-                  <div className="form-actions form-actions--split">
-                    <Button variant="outline" onClick={handleCancel}>
-                      Cancel
-                    </Button>
-                    <Button onClick={handleProceedToStep2} disabled={!canProceedToStep2}>
-                      Continue to Artwork
-                    </Button>
-                  </div>
-                </Stack>
-              )}
-
-              {/* Step 2: Artwork Configuration */}
-              {step === 2 && (
-                <Stack gap="4">
-                  <ArtworkStep />
-                  <div className="form-actions form-actions--split">
-                    <Button variant="outline" onClick={prevStep}>
-                      Back to Basic Info
-                    </Button>
-                    <Button onClick={handleProceedToStep3} disabled={!canProceedToStep3}>
-                      Continue to Auction
-                    </Button>
-                  </div>
-                </Stack>
-              )}
-
-              {/* Step 3: Auction Settings */}
-              {step === 3 && (
-                <Stack gap="4">
-                  <AuctionStep />
-                  <div className="form-actions form-actions--split">
-                    <Button variant="outline" onClick={prevStep}>
-                      Back to Artwork
-                    </Button>
-                    <Button onClick={handleProceedToStep4} disabled={!canProceedToStep4}>
-                      Continue to Governance
-                    </Button>
-                  </div>
-                </Stack>
-              )}
-
-              {/* Step 4: Governance Parameters */}
-              {step === 4 && (
-                <Stack gap="4">
-                  <GovernanceStep />
-                  <div className="form-actions form-actions--split">
-                    <Button variant="outline" onClick={prevStep}>
-                      Back to Auction
-                    </Button>
-                    <Button onClick={handleProceedToStep5} disabled={!canProceedToStep5}>
-                      Continue to Founders
-                    </Button>
-                  </div>
-                </Stack>
-              )}
-
-              {/* Step 5: Founder Allocations */}
-              {step === 5 && (
-                <Stack gap="4">
-                  <FoundersStep />
-                  <div className="form-actions form-actions--split">
-                    <Button variant="outline" onClick={prevStep}>
-                      Back to Governance
-                    </Button>
-                    <Button onClick={handleProceedToStep6} disabled={!canProceedToStep6}>
-                      Continue to Review
-                    </Button>
-                  </div>
-                </Stack>
-              )}
-
-              {/* Step 6: Review & Submit */}
-              {step === 6 && !isDeploying && (
-                <Stack gap="4">
-                  <Callout
-                    variant="warning"
-                    badge="Blockchain Transaction"
-                    title="Creating a DAO requires multiple on-chain transactions"
-                    description="Your wallet will prompt you to sign several transactions. This process may take a few minutes to complete. Make sure you have enough XLM for transaction fees."
-                  />
-
-                  <ReviewStep connectedAddress={session.address} />
-
-                  <div className="form-actions form-actions--split">
-                    <Button variant="outline" onClick={prevStep}>
-                      Back to Founders
-                    </Button>
-                    <Button onClick={handleSubmit} disabled={!canSubmit}>
-                      Create DAO
-                    </Button>
-                  </div>
-                </Stack>
-              )}
-
-              {/* Deployment Progress */}
-              {isDeploying && (
-                <DeploymentProgress state={deploymentState} network={networkName} onCancel={handleCloseDeployment} />
-              )}
             </Stack>
           )}
         </main>
@@ -495,6 +494,17 @@ export default function CreateDaoPage() {
           <span>DAO creation on Stellar</span>
         </footer>
       </div>
+    </div>
+  );
+}
+
+function SectionAction({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <div className="form-actions form-actions--split create-section-actions">
+      <Text>Changes are saved to this draft automatically.</Text>
+      <Button type="button" onClick={onClick}>
+        {label}
+      </Button>
     </div>
   );
 }
