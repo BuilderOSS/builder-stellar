@@ -10,6 +10,7 @@ import { Grid, Stack } from 'styled-system/jsx';
 
 import { PageSection } from '@/components/page-section';
 import { ProposalActionConfirmDialog } from '@/components/proposal/proposal-action-confirm-dialog';
+import { ProposalWorkspacePanel } from '@/components/proposal/proposal-workspace-panel';
 import { Badge, Button, Callout, Card, Heading, Input, Skeleton, Text, Textarea } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { useGovernorSettings } from '@/lib/admin-queries';
@@ -285,12 +286,14 @@ export default function ProposalCreatePage() {
                         <ActionFormWrapper />
                       </Stack>
 
-                      <Stack gap="4">
-                        <Heading as="h3" style={{ fontSize: '1.125rem' }}>
-                          Queued Actions ({queuedActions.length})
-                        </Heading>
-                        <ProposalActionQueue />
-                      </Stack>
+                      <ProposalWorkspacePanel config={config}>
+                        <Stack gap="4">
+                          <Heading as="h3" style={{ fontSize: '1.125rem' }}>
+                            Queued Actions ({queuedActions.length})
+                          </Heading>
+                          <ProposalActionQueue />
+                        </Stack>
+                      </ProposalWorkspacePanel>
                     </Grid>
 
                     <div className="form-actions form-actions--split">
