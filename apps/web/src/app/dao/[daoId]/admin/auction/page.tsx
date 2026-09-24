@@ -2,16 +2,21 @@
 
 import { Client as AuctionClient } from '@builder-stellar/auction-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 import useSWR from 'swr';
 
+import { AdminPaymentTokenForm, AdminReservePriceForm } from '@/components/admin/admin-action-forms';
 import { AdminSectionNav } from '@/components/admin/admin-section-nav';
 import { PageSection } from '@/components/page-section';
 import { Badge, Button, Callout, Card, Heading, Input, ShortId, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
+import { startAdminProposal, treasuryIsOwner } from '@/lib/admin-proposals';
+import { useContractOwner } from '@/lib/admin-queries';
 import { getTreasuryAssets } from '@/lib/assets-config';
 import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
+import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
@@ -27,6 +32,7 @@ const fetcher = async (url: string): Promise<AuctionStatus> => {
 
 export default function AuctionAdminPage() {
   const { daoId, daoConfig: config } = useDaoContext();
+  const router = useRouter();
   const session = useDaoSessionStore();
   const tx = useTransactionFeedback(config.name);
   const [busy, setBusy] = useState(false);
@@ -37,13 +43,32 @@ export default function AuctionAdminPage() {
     fetcher
   );
   const { data: mintAuthorities, error: mintAuthorityError } = useGoldskyMintAuthorities(config.tokenContractId);
+  const { data: auctionOwner } = useContractOwner(config, 'auction', session.address || undefined);
   const isOwner = Boolean(session.address && session.address === config.adminAddress);
+  const canProposeAuction = Boolean(session.address && treasuryIsOwner(config, auctionOwner));
   const auctionCanMint = Boolean(
     mintAuthorities?.items.some((item) => item.authority === config.auctionContractId && item.enabled)
   );
 
   async function updatePaused(nextPaused: boolean) {
-    if (!session.address || !isOwner) return;
+    if (!session.address || (!isOwner && !canProposeAuction)) return;
+    if (!isOwner && canProposeAuction) {
+      const type = nextPaused ? 'pause-auction' : 'unpause-auction';
+      const handler = getActionHandler(type);
+      const action = handler.serialize({}, { config, session: { address: session.address, kit: StellarWalletsKit } });
+      startAdminProposal({
+        router,
+        daoId,
+        action,
+        source: `admin/auction/${type}`,
+        metadata: {
+          title: nextPaused ? 'Pause auctions' : 'Resume auctions',
+          description: nextPaused ? 'Pause auction activity.' : 'Resume auction activity.',
+          url: ''
+        }
+      });
+      return;
+    }
     setBusy(true);
     tx.start(nextPaused ? 'Pausing auctions...' : 'Resuming auctions...');
     try {
@@ -75,13 +100,32 @@ export default function AuctionAdminPage() {
   }
 
   async function updateReservePrice() {
-    if (!session.address || !isOwner || !data || data.paused !== true) return;
+    if (!session.address || (!isOwner && !canProposeAuction) || !data || data.paused !== true) return;
     const match = reservePrice.trim().match(/^(\d+)(?:\.(\d{1,7}))?$/);
     if (!match)
       return tx.fail(new Error('Enter a valid reserve price with up to 7 decimal places.'), 'Invalid reserve price');
     const amount = BigInt(match[1]) * 10_000_000n + BigInt((match[2] || '').padEnd(7, '0') || '0');
     if (amount < 1000n)
       return tx.fail(new Error('Reserve price must be at least 0.0001 payment tokens.'), 'Invalid reserve price');
+    if (!isOwner && canProposeAuction) {
+      const handler = getActionHandler('set-auction-reserve-price');
+      const action = handler.serialize(
+        { reservePrice: reservePrice.trim() },
+        { config, session: { address: session.address, kit: StellarWalletsKit } }
+      );
+      startAdminProposal({
+        router,
+        daoId,
+        action,
+        source: 'admin/auction/set-auction-reserve-price',
+        metadata: {
+          title: 'Update auction reserve price',
+          description: `Set the next auction reserve price to ${reservePrice.trim()}.`,
+          url: ''
+        }
+      });
+      return;
+    }
     setBusy(true);
     tx.start('Updating reserve price...');
     try {
@@ -111,9 +155,28 @@ export default function AuctionAdminPage() {
   }
 
   async function updatePaymentToken() {
-    if (!session.address || !isOwner || !data || data.paused !== true) return;
+    if (!session.address || (!isOwner && !canProposeAuction) || !data || data.paused !== true) return;
     const value = paymentToken.trim();
     if (!value) return tx.fail(new Error('Payment token contract address is required.'), 'Invalid payment token');
+    if (!isOwner && canProposeAuction) {
+      const handler = getActionHandler('set-auction-payment-token');
+      const action = handler.serialize(
+        { paymentToken: value },
+        { config, session: { address: session.address, kit: StellarWalletsKit } }
+      );
+      startAdminProposal({
+        router,
+        daoId,
+        action,
+        source: 'admin/auction/set-auction-payment-token',
+        metadata: {
+          title: 'Update auction payment token',
+          description: `Set the auction payment token to ${value}.`,
+          url: ''
+        }
+      });
+      return;
+    }
     setBusy(true);
     tx.start('Updating payment token...');
     try {
@@ -142,7 +205,7 @@ export default function AuctionAdminPage() {
     }
   }
 
-  if (!isOwner) {
+  if (!isOwner && !canProposeAuction) {
     return (
       <PageSection title="Auction controls" description="Owner-only auction operations.">
         <Callout variant="warning" badge="Access restricted" title="Connect the configured owner wallet to continue">
@@ -255,6 +318,62 @@ export default function AuctionAdminPage() {
                 </div>
               </>
             ) : null}
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <Button onClick={() => void updatePaused(true)} disabled={busy || data?.paused !== false}>
+                Pause auctions
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => void updatePaused(false)}
+                disabled={busy || data?.paused !== true || !auctionCanMint}
+              >
+                Resume auctions
+              </Button>
+            </div>
+            <Text className="label">Auction payment token</Text>
+            <Text className="lede" style={{ margin: 0 }}>
+              {data?.config.payment_token
+                ? `${getTreasuryAssets(config.name).find((asset) => asset.contractId === data.config.payment_token)?.code ?? 'Unknown SAC'} · ${data.config.payment_token}`
+                : 'Not configured'}
+              . Changes apply after the next auction is created.
+            </Text>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <AdminPaymentTokenForm
+                value={{ paymentToken }}
+                onChange={(value) => setPaymentToken(value.paymentToken)}
+                disabled={busy || data?.paused !== true}
+              />
+              <Button
+                variant="outline"
+                onClick={() => void updatePaymentToken()}
+                disabled={busy || data?.paused !== true || !paymentToken}
+              >
+                Update payment token
+              </Button>
+            </div>
+            <Text className="label">Reserve price for the next auction</Text>
+            <Text className="lede" style={{ margin: 0 }}>
+              Current reserve: {data ? Number(data.config.reserve_price) / 10_000_000 : '—'}{' '}
+              {data?.config.payment_token
+                ? (getTreasuryAssets(config.name).find((asset) => asset.contractId === data.config.payment_token)
+                    ?.code ?? 'SAC')
+                : 'SAC'}{' '}
+              units. Changes apply after the next auction is created.
+            </Text>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <AdminReservePriceForm
+                value={{ reservePrice }}
+                onChange={(value) => setReservePrice(value.reservePrice)}
+                disabled={busy || data?.paused !== true}
+              />
+              <Button
+                variant="outline"
+                onClick={() => void updateReservePrice()}
+                disabled={busy || data?.paused !== true || !reservePrice}
+              >
+                Update reserve
+              </Button>
+            </div>
           </Stack>
         </Card>
       </Stack>

@@ -1,20 +1,18 @@
 import { nativeToScVal } from '@stellar/stellar-sdk';
 
+import { getActionHandler } from '@/lib/proposal-actions/registry';
+import type {
+  BuildContext,
+  ProposalQueuedAction as RegisteredProposalQueuedAction
+} from '@/lib/proposal-actions/types';
+
 export type ProposalCallArg = string | number | boolean | null | ProposalCallArg[] | { [key: string]: ProposalCallArg };
 
 export type ProposalCallArgs = ProposalCallArg[][];
 export type EncodedProposalCallArgs = unknown[][];
 
-export type ProposalActionType = 'mint-governance-token' | 'batch-mint-governance-token' | 'transfer-sac-token';
-
-export type ProposalQueuedAction = {
-  id: string;
-  type: ProposalActionType;
-  recipient: string;
-  amount: string;
-  assetCode?: string;
-  assetContractId?: string;
-};
+export type ProposalActionType = RegisteredProposalQueuedAction['type'];
+export type ProposalQueuedAction = RegisteredProposalQueuedAction;
 
 export type ProposalCallVectors = {
   targets: string[];
@@ -95,6 +93,10 @@ function encodeI128(value: ProposalCallArg) {
   return nativeToScVal(String(value), { type: 'i128' });
 }
 
+function encodeU128(value: ProposalCallArg) {
+  return nativeToScVal(String(value), { type: 'u128' });
+}
+
 function encodeGeneric(value: ProposalCallArg) {
   return nativeToScVal(value);
 }
@@ -119,6 +121,25 @@ function encodeProposalCallArg(functionName: string, index: number, value: Propo
 
     return index === 2 ? encodeI128(value) : encodeGeneric(value);
   }
+
+  if (
+    functionName === 'set_mint_authority' ||
+    functionName === 'set_governor_authority' ||
+    functionName === 'set_voting_delay' ||
+    functionName === 'set_voting_period' ||
+    functionName === 'set_proposal_threshold' ||
+    functionName === 'set_quorum_bps' ||
+    functionName === 'pause' ||
+    functionName === 'unpause'
+  ) {
+    if (index === 0) return encodeAddress(value);
+    if (functionName === 'set_mint_authority' || functionName === 'set_governor_authority') return encodeGeneric(value);
+    if (functionName === 'set_proposal_threshold') return encodeU128(value);
+    return encodeU32(value);
+  }
+
+  if (functionName === 'set_reserve_price') return encodeI128(value);
+  if (functionName === 'set_payment_token') return encodeAddress(value);
 
   return encodeGeneric(value);
 }
@@ -146,44 +167,21 @@ export function buildMintProposalCall(
   };
 }
 
-function parsePositiveInteger(value: string) {
-  const trimmed = value.trim();
-  if (!/^\d+$/.test(trimmed)) {
-    return null;
-  }
-
-  const parsed = Number(trimmed);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
-}
-
-/**
- * Convert decimal amount to stroops (multiply by 10^7)
- * @param amount - Decimal amount as string (e.g., "100.5")
- * @returns Amount in stroops as bigint, or null if invalid
- */
-function parseDecimalToStroops(amount: string): bigint | null {
-  const trimmed = amount.trim();
-
-  // Validate format: optional negative, digits, optional decimal point and digits
-  if (!/^-?\d+(\.\d+)?$/.test(trimmed)) {
-    return null;
-  }
-
-  const value = parseFloat(trimmed);
-
-  // Check for negative or zero
-  if (value <= 0 || !isFinite(value)) {
-    return null;
-  }
-
-  // Convert to stroops (7 decimal places)
-  // Multiply by 10^7 and round to avoid floating point errors
-  const stroops = Math.round(value * 10_000_000);
-
-  return BigInt(stroops);
-}
-
 export function getProposalActionLabel(type: ProposalActionType) {
+  const labels: Partial<Record<ProposalActionType, string>> = {
+    'set-mint-authority': 'Set Mint Authority',
+    'set-governor-authority': 'Set Governor Authority',
+    'set-voting-delay': 'Set Voting Delay',
+    'set-voting-period': 'Set Voting Period',
+    'set-proposal-threshold': 'Set Proposal Threshold',
+    'set-quorum-bps': 'Set Quorum',
+    'pause-auction': 'Pause Auction',
+    'unpause-auction': 'Resume Auction',
+    'set-auction-reserve-price': 'Set Auction Reserve Price',
+    'set-auction-payment-token': 'Set Auction Payment Token'
+  };
+
+  if (labels[type]) return labels[type]!;
   if (type === 'batch-mint-governance-token') {
     return 'Batch Mint Governance Token';
   }
@@ -194,6 +192,26 @@ export function getProposalActionLabel(type: ProposalActionType) {
 }
 
 export function getProposalActionSummary(action: ProposalQueuedAction) {
+  if (action.type === 'set-mint-authority' || action.type === 'set-governor-authority') {
+    return `${action.enabled === false ? 'Revoke' : 'Grant'} ${getProposalActionLabel(action.type)} for ${action.authority || action.recipient}`;
+  }
+  if (
+    action.type === 'set-voting-delay' ||
+    action.type === 'set-voting-period' ||
+    action.type === 'set-proposal-threshold' ||
+    action.type === 'set-quorum-bps'
+  ) {
+    return `${getProposalActionLabel(action.type)} to ${action.value || action.amount}`;
+  }
+  if (action.type === 'pause-auction' || action.type === 'unpause-auction') {
+    return getProposalActionLabel(action.type);
+  }
+  if (action.type === 'set-auction-reserve-price') {
+    return `${getProposalActionLabel(action.type)} to ${action.reservePrice || action.amount}`;
+  }
+  if (action.type === 'set-auction-payment-token') {
+    return `${getProposalActionLabel(action.type)} to ${action.paymentToken || action.recipient}`;
+  }
   if (action.type === 'batch-mint-governance-token') {
     return `${getProposalActionLabel(action.type)} to ${action.recipient} for ${action.amount} tokens`;
   }
@@ -206,46 +224,24 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
 export function buildProposalCallVectors(
   actions: ProposalQueuedAction[],
   tokenContractId: string,
-  treasuryContractId: string
+  treasuryContractId: string,
+  config?: BuildContext['config']
 ): ProposalCallVectors {
-  const targets: string[] = [];
-  const functions: string[] = [];
-  const args: ProposalCallArgs = [];
+  const buildContext: BuildContext = {
+    config: config ?? ({} as BuildContext['config']),
+    governorContractId: config?.governorContractId ?? '',
+    tokenContractId,
+    treasuryAddress: treasuryContractId
+  };
 
-  for (const action of actions) {
-    if (action.type === 'batch-mint-governance-token') {
-      const amount = parsePositiveInteger(action.amount);
-      if (amount === null) {
-        throw new Error('Batch mint amount must be a positive whole number.');
-      }
+  const calls = actions.map((action) => {
+    const handler = getActionHandler(action.type as RegisteredProposalQueuedAction['type']);
+    return handler.buildCallVector(handler.deserialize(action), buildContext);
+  });
 
-      targets.push(tokenContractId);
-      functions.push('batch_mint');
-      args.push([treasuryContractId, action.recipient, amount]);
-      continue;
-    }
-
-    if (action.type === 'transfer-sac-token') {
-      if (!action.assetContractId) {
-        throw new Error('Asset contract ID is required for SAC token transfer.');
-      }
-
-      const amountStroops = parseDecimalToStroops(action.amount);
-      if (amountStroops === null) {
-        throw new Error('Transfer amount must be a positive decimal number.');
-      }
-
-      targets.push(action.assetContractId);
-      functions.push('transfer');
-      // SAC transfer: (from: Address, to: Address, amount: i128)
-      args.push([treasuryContractId, action.recipient, amountStroops.toString()]);
-      continue;
-    }
-
-    targets.push(tokenContractId);
-    functions.push('mint');
-    args.push([treasuryContractId, action.recipient]);
-  }
-
-  return { targets, functions, args };
+  return {
+    targets: calls.map((call) => call.target),
+    functions: calls.map((call) => call.function),
+    args: calls.map((call) => call.args)
+  };
 }

@@ -8,6 +8,8 @@ import { AdminSectionNav } from '@/components/admin/admin-section-nav';
 import { PageSection } from '@/components/page-section';
 import { Badge, Card, Heading, ShortId, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
+import { treasuryHasAuthority, treasuryIsOwner } from '@/lib/admin-proposals';
+import { useContractOwner } from '@/lib/admin-queries';
 import { useGoldskyGovernorAuthorities, useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
@@ -50,13 +52,31 @@ export default function AdminPage() {
   const session = useDaoSessionStore();
   const { data: mintAuthorities } = useGoldskyMintAuthorities(config.tokenContractId);
   const { data: governorAuthorities } = useGoldskyGovernorAuthorities(config.tokenContractId);
+  const { data: tokenOwner } = useContractOwner(config, 'token', session.address || undefined);
+  const { data: governorOwner } = useContractOwner(config, 'governor', session.address || undefined);
+  const { data: auctionOwner } = useContractOwner(config, 'auction', session.address || undefined);
 
   const isOwner = Boolean(session.address && session.address === config.adminAddress);
   const hasMintAccess = Boolean(isOwner || mintAuthorities?.items.some((item) => item.authority === session.address));
   const hasGovernanceAccess = Boolean(
     isOwner || governorAuthorities?.items.some((item) => item.authority === session.address)
   );
-  const hasAnyAccess = Boolean(isOwner || hasMintAccess || hasGovernanceAccess);
+  const canProposeOwnerActions = treasuryIsOwner(config, tokenOwner) || treasuryIsOwner(config, governorOwner);
+  const canProposeMint =
+    treasuryIsOwner(config, tokenOwner) || treasuryHasAuthority(config.treasuryContractId, mintAuthorities?.items);
+  const canProposeGovernance =
+    treasuryIsOwner(config, governorOwner) ||
+    treasuryHasAuthority(config.treasuryContractId, governorAuthorities?.items);
+  const canProposeAuction = treasuryIsOwner(config, auctionOwner);
+  const hasAnyAccess = Boolean(
+    isOwner ||
+    hasMintAccess ||
+    hasGovernanceAccess ||
+    canProposeOwnerActions ||
+    canProposeMint ||
+    canProposeGovernance ||
+    canProposeAuction
+  );
 
   return (
     <PageSection
@@ -83,6 +103,8 @@ export default function AdminPage() {
                 {isOwner ? <Badge>Owner</Badge> : null}
                 {hasMintAccess ? <Badge>Token Admin</Badge> : null}
                 {hasGovernanceAccess ? <Badge>Governance Admin</Badge> : null}
+                {!isOwner && canProposeMint ? <Badge>Mint proposals</Badge> : null}
+                {!isOwner && canProposeGovernance ? <Badge>Governance proposals</Badge> : null}
                 {!hasAnyAccess ? <Badge>Read only</Badge> : null}
               </div>
             </div>
@@ -104,28 +126,28 @@ export default function AdminPage() {
             title="Authority management"
             description="Add or remove mint and governance authorities from a single place."
             href={`/dao/${daoId}/admin/owner` as Route}
-            allowed={isOwner}
+            allowed={isOwner || canProposeOwnerActions}
           />
           <SectionCard
             label="Token Admin"
             title="Mint tokens"
             description="Mint voting tokens and review the current mint authority set."
             href={`/dao/${daoId}/admin/token` as Route}
-            allowed={hasMintAccess}
+            allowed={hasMintAccess || canProposeMint}
           />
           <SectionCard
             label="Governance Admin"
             title="Update governor settings"
             description="Edit voting delay, voting period, proposal threshold, and quorum in one atomic batch."
             href={`/dao/${daoId}/admin/governance` as Route}
-            allowed={hasGovernanceAccess}
+            allowed={hasGovernanceAccess || canProposeGovernance}
           />
           <SectionCard
             label="Owner"
             title="Auction controls"
             description="Pause or resume auction activity for emergency and maintenance operations."
             href={`/dao/${daoId}/admin/auction` as Route}
-            allowed={isOwner}
+            allowed={isOwner || canProposeAuction}
           />
         </Grid>
       </Stack>

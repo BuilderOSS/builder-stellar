@@ -2,7 +2,8 @@
 
 import { Stack } from 'styled-system/jsx';
 
-import { Badge, Button, Card, Heading, Input, ShortId, Skeleton, Text } from '@/components/ui';
+import { AuthorityActionForm } from '@/components/admin/admin-action-forms';
+import { Badge, Button, Card, Heading, ShortId, Skeleton, Text } from '@/components/ui';
 
 type AuthorityItem = {
   authority: string;
@@ -25,6 +26,7 @@ export function AuthorityPanel({
   busy,
   loading = false,
   editable = true,
+  formEnabled = true,
   emptyLabel = 'No authorities indexed yet.'
 }: {
   title: string;
@@ -40,6 +42,7 @@ export function AuthorityPanel({
   busy?: boolean;
   loading?: boolean;
   editable?: boolean;
+  formEnabled?: boolean;
   emptyLabel?: string;
 }) {
   return (
@@ -54,10 +57,11 @@ export function AuthorityPanel({
         </Text>
 
         {editable ? (
-          <Input
-            value={value}
-            onChange={(event) => onValueChange?.(event.target.value)}
-            placeholder="Address or contract id"
+          <AuthorityActionForm
+            value={{ authority: value, enabled: formEnabled }}
+            onChange={(nextValue) => onValueChange?.(nextValue.authority)}
+            disabled={Boolean(busy)}
+            showEnabled={false}
           />
         ) : null}
 

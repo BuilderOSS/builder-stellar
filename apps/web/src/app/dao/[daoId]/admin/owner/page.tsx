@@ -3,6 +3,7 @@
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { Client as TokenClient } from '@builder-stellar/token-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Grid, Stack } from 'styled-system/jsx';
 
@@ -11,8 +12,11 @@ import { AuthorityPanel } from '@/components/admin/authority-panel';
 import { PageSection } from '@/components/page-section';
 import { Badge, Callout, Card, Heading, ShortId, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
+import { startAdminProposal, treasuryIsOwner } from '@/lib/admin-proposals';
+import { useContractOwner } from '@/lib/admin-queries';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { useGoldskyGovernorAuthorities, useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
+import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
@@ -57,6 +61,7 @@ async function submitAuthorityUpdate(
 
 export default function OwnerPage() {
   const { daoId, daoConfig: config } = useDaoContext();
+  const router = useRouter();
   const session = useDaoSessionStore();
   const [mintAuthority, setMintAuthority] = useState('');
   const [governorAuthority, setGovernorAuthority] = useState('');
@@ -75,9 +80,14 @@ export default function OwnerPage() {
     error: governorAuthorityError,
     isLoading: governorAuthoritiesLoading
   } = useGoldskyGovernorAuthorities(config.tokenContractId);
+  const { data: tokenOwner } = useContractOwner(config, 'token', session.address || undefined);
+  const { data: governorOwner } = useContractOwner(config, 'governor', session.address || undefined);
   const isOwner = Boolean(session.address && session.address === config.adminAddress);
+  const canProposeAuthority = Boolean(
+    session.address && (treasuryIsOwner(config, tokenOwner) || treasuryIsOwner(config, governorOwner))
+  );
 
-  if (!isOwner) {
+  if (!isOwner && !canProposeAuthority) {
     return (
       <PageSection title="Owner" description="Owner-only authority management.">
         <Callout
@@ -110,6 +120,13 @@ export default function OwnerPage() {
       return;
     }
 
+    const treasuryOwnsTarget =
+      method === 'set_mint_authority' ? treasuryIsOwner(config, tokenOwner) : treasuryIsOwner(config, governorOwner);
+    if (!isOwner && !treasuryOwnsTarget) {
+      setFormMessage('The treasury does not currently own this contract.');
+      return;
+    }
+
     setBusy(true);
     setFormMessage('');
     const authorityType = method == 'set_mint_authority' ? 'Mint' : 'Governor';
@@ -117,6 +134,27 @@ export default function OwnerPage() {
     tx.start(`${actionType} ${authorityType} Authority...`);
 
     try {
+      if (!isOwner && treasuryOwnsTarget) {
+        const type = method === 'set_mint_authority' ? 'set-mint-authority' : 'set-governor-authority';
+        const handler = getActionHandler(type);
+        const action = handler.serialize(
+          { authority, enabled },
+          { config, session: { address: session.address, kit: StellarWalletsKit } }
+        );
+        startAdminProposal({
+          router,
+          daoId,
+          action,
+          source: `admin/owner/${type}`,
+          metadata: {
+            title: `${enabled ? 'Grant' : 'Revoke'} ${authorityType.toLowerCase()} authority`,
+            description: `${enabled ? 'Grant' : 'Revoke'} ${authorityType.toLowerCase()} authority for ${authority}.`,
+            url: ''
+          }
+        });
+        return;
+      }
+
       const sent = await submitAuthorityUpdate(config, session.address, method, authority, enabled);
       const hash = sent.sendTransactionResponse?.hash ?? '';
       tx.submitted(`${actionType} ${authorityType} Authority`, hash);

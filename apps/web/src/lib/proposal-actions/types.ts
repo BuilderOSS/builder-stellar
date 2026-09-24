@@ -9,7 +9,20 @@ import type { AssetBalance } from '@/lib/treasury-queries';
  * All supported proposal action types
  * Add new types here when adding new action handlers
  */
-export type ProposalActionType = 'mint-governance-token' | 'batch-mint-governance-token' | 'transfer-sac-token';
+export type ProposalActionType =
+  | 'mint-governance-token'
+  | 'batch-mint-governance-token'
+  | 'transfer-sac-token'
+  | 'set-mint-authority'
+  | 'set-governor-authority'
+  | 'set-voting-delay'
+  | 'set-voting-period'
+  | 'set-proposal-threshold'
+  | 'set-quorum-bps'
+  | 'pause-auction'
+  | 'unpause-auction'
+  | 'set-auction-reserve-price'
+  | 'set-auction-payment-token';
 
 /**
  * Queued action structure (persisted in store)

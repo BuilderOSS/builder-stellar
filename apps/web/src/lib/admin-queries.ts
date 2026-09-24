@@ -1,4 +1,6 @@
+import { Client as AuctionClient } from '@builder-stellar/auction-bindings';
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
+import { Client as TokenClient } from '@builder-stellar/token-bindings';
 import { Server } from '@stellar/stellar-sdk/rpc';
 import useSWR from 'swr';
 
@@ -50,4 +52,34 @@ export function useGovernorSettings(config: DaoNetworkConfig, publicKey: string)
       ? (['governor-settings', config.governorContractId, config.rpcUrl, config.passphrase, publicKey] as const)
       : null;
   return useSWR(key, fetchGovernorSettings, { keepPreviousData: true });
+}
+
+type ContractKind = 'token' | 'governor' | 'auction';
+type ContractOwnerKey = readonly ['contract-owner', ContractKind, string, string, string, string];
+
+async function fetchContractOwner([, kind, contractId, rpcUrl, passphrase, publicKey]: ContractOwnerKey) {
+  const options = { contractId, rpcUrl, networkPassphrase: passphrase, publicKey };
+  const client =
+    kind === 'token'
+      ? new TokenClient(options)
+      : kind === 'governor'
+        ? new GovernorClient(options)
+        : new AuctionClient(options);
+
+  return (await client.get_owner()).result;
+}
+
+export function useContractOwner(config: DaoNetworkConfig, kind: ContractKind, publicKey?: string) {
+  const contractId =
+    kind === 'token'
+      ? config.tokenContractId
+      : kind === 'governor'
+        ? config.governorContractId
+        : config.auctionContractId;
+  const key =
+    contractId && publicKey
+      ? (['contract-owner', kind, contractId, config.rpcUrl, config.passphrase, publicKey] as const)
+      : null;
+
+  return useSWR(key, fetchContractOwner);
 }
