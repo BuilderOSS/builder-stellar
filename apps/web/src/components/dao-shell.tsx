@@ -2,12 +2,11 @@
 
 import type { LucideIcon } from 'lucide-react';
 import {
-  Compass,
+  ArrowLeft,
   Gavel,
   Landmark,
   LayoutDashboard,
   MoreHorizontal,
-  Plus,
   Settings,
   ShieldAlert,
   Users,
@@ -29,8 +28,6 @@ type NavItem = { href: Route; label: string; icon: LucideIcon; exact?: boolean }
 
 function getNavItems(daoId: string): NavItem[] {
   return [
-    { href: '/', label: 'Explore DAOs', icon: Compass },
-    { href: '/create', label: 'Create DAO', icon: Plus },
     { href: `/dao/${daoId}` as Route, label: 'Dashboard', icon: LayoutDashboard, exact: true },
     { href: `/dao/${daoId}/proposals` as Route, label: 'Proposals', icon: Vote },
     { href: `/dao/${daoId}/auctions` as Route, label: 'Auctions', icon: Gavel },
@@ -86,8 +83,7 @@ export function DaoShell({ children }: { children: ReactNode }) {
     icon: Settings
   };
   const navItems = hasDaoMembership(memberLookup) ? [...baseNavItems, adminNavItem] : baseNavItems;
-  const desktopPrimaryNavItems = navItems.slice(0, 2);
-  const desktopSecondaryNavItems = navItems.slice(2);
+  const desktopNavItems = navItems;
   const mobilePrimaryNavItems = navItems.slice(0, 3);
   const mobileOverflowNavItems = navItems.slice(3);
 
@@ -98,22 +94,23 @@ export function DaoShell({ children }: { children: ReactNode }) {
       </a>
       <div className="app-frame">
         <header className="app-header">
-          <Link className="brand-lockup" href={`/dao/${daoId}`} aria-label={`${currentNetwork.tokenName} dashboard`}>
-            <Image className="brand-mark" src="/icon.svg" alt="" aria-hidden="true" width={44} height={44} priority />
-            <div className="brand-copy">
-              <p className="brand-name">{currentNetwork.tokenName}</p>
-              <p className="brand-kicker">Stellar governance</p>
-            </div>
-          </Link>
+          <div className="dao-header__identity">
+            <Link className="dao-exit-button" href="/" aria-label="Exit DAO and return to Dashboard">
+              <ArrowLeft className="dao-exit-button__icon" aria-hidden="true" size={17} />
+              <span className="dao-exit-button__text">Exit DAO</span>
+            </Link>
+            <Link className="brand-lockup" href={`/dao/${daoId}`} aria-label={`${currentNetwork.tokenName} dashboard`}>
+              <Image className="brand-mark" src="/icon.svg" alt="" aria-hidden="true" width={44} height={44} priority />
+              <div className="brand-copy">
+                <p className="brand-name">{currentNetwork.tokenName}</p>
+                <p className="brand-kicker">Stellar governance</p>
+              </div>
+            </Link>
+          </div>
 
           <div className="nav-groups">
-            <nav className="primary-nav" aria-label="Primary navigation">
-              {desktopPrimaryNavItems.map((item) => (
-                <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href, item.exact)} />
-              ))}
-            </nav>
             <nav className="secondary-nav" aria-label="DAO sections">
-              {desktopSecondaryNavItems.map((item) => (
+              {desktopNavItems.map((item) => (
                 <NavLink key={item.href} {...item} active={isRouteActive(pathname, item.href, item.exact)} />
               ))}
             </nav>
