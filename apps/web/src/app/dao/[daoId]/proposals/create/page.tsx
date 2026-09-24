@@ -10,6 +10,7 @@ import { Grid, Stack } from 'styled-system/jsx';
 
 import { PageSection } from '@/components/page-section';
 import { ProposalActionConfirmDialog } from '@/components/proposal/proposal-action-confirm-dialog';
+import { ProposalContextRail } from '@/components/proposal/proposal-context-rail';
 import { Badge, Button, Callout, Card, Heading, Input, Skeleton, Text, Textarea } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { useGovernorSettings } from '@/lib/admin-queries';
@@ -71,6 +72,7 @@ export default function ProposalCreatePage() {
   const [transactionBusy, setTransactionBusy] = useState(false);
 
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [contextRailOpen, setContextRailOpen] = useState(false);
 
   const proposalCreationError = votingPowerError?.message ?? settingsError?.message;
   const proposalCreationLocked =
@@ -172,228 +174,252 @@ export default function ProposalCreatePage() {
   return (
     <>
       <PageSection
-        title="Create proposal"
-        description="Draft the decision, assemble its on-chain actions, then verify every detail before asking the wallet to sign."
+        title="Proposal Studio"
+        description="Draft the decision, reference the DAO's current state, and verify every on-chain action before asking the wallet to sign."
       >
-        <Stack gap="6">
-          {session.address && (votingPowerLoading || settingsLoading) ? (
-            <div role="status" aria-live="polite" aria-busy="true" className="loading-card">
-              <span className="sr-only">Checking proposal eligibility</span>
-              <Card p="4">
-                <Stack gap="2">
-                  <Skeleton style={{ width: '190px', height: '1.1em' }} />
-                  <Skeleton style={{ width: '320px', maxWidth: '100%', height: '0.9em' }} />
-                </Stack>
-              </Card>
-            </div>
-          ) : proposalCreationError ? (
-            <Callout variant="error" title="Unable to check proposal eligibility" description={proposalCreationError} />
-          ) : proposalCreationLocked ? (
-            <Callout variant="warning" title="Cannot Create Proposals" description={proposalCreationDisabledMessage} />
-          ) : (
-            <>
-              {/* Wizard Steps */}
-              <div className="stepper" aria-label={`Proposal creation, step ${step} of 3`}>
-                <Badge style={{ opacity: step === 1 ? 1 : 0.5 }}>1. Details</Badge>
-                <div className="stepper-line" aria-hidden="true" />
-                <Badge style={{ opacity: step === 2 ? 1 : 0.5 }}>2. Actions</Badge>
-                <div className="stepper-line" aria-hidden="true" />
-                <Badge style={{ opacity: step === 3 ? 1 : 0.5 }}>3. Review</Badge>
+        <div className="proposal-studio-layout">
+          <Stack gap="6">
+            {session.address && (votingPowerLoading || settingsLoading) ? (
+              <div role="status" aria-live="polite" aria-busy="true" className="loading-card">
+                <span className="sr-only">Checking proposal eligibility</span>
+                <Card p="4">
+                  <Stack gap="2">
+                    <Skeleton style={{ width: '190px', height: '1.1em' }} />
+                    <Skeleton style={{ width: '320px', maxWidth: '100%', height: '0.9em' }} />
+                  </Stack>
+                </Card>
               </div>
+            ) : proposalCreationError ? (
+              <Callout
+                variant="error"
+                title="Unable to check proposal eligibility"
+                description={proposalCreationError}
+              />
+            ) : proposalCreationLocked ? (
+              <Callout
+                variant="warning"
+                title="Cannot Create Proposals"
+                description={proposalCreationDisabledMessage}
+              />
+            ) : (
+              <>
+                {/* Wizard Steps */}
+                <div className="stepper" aria-label={`Proposal creation, step ${step} of 3`}>
+                  <Badge style={{ opacity: step === 1 ? 1 : 0.5 }}>1. Details</Badge>
+                  <div className="stepper-line" aria-hidden="true" />
+                  <Badge style={{ opacity: step === 2 ? 1 : 0.5 }}>2. Actions</Badge>
+                  <div className="stepper-line" aria-hidden="true" />
+                  <Badge style={{ opacity: step === 3 ? 1 : 0.5 }}>3. Review</Badge>
+                </div>
 
-              {/* Step 1: Metadata */}
-              {step === 1 && (
-                <Stack gap="4">
-                  <Card p="5">
-                    <Stack gap="4">
-                      <Heading as="h2" style={{ fontSize: '1.25rem' }}>
-                        Proposal Details
-                      </Heading>
-
-                      <Stack gap="2">
-                        <label htmlFor="title">
-                          <Text style={{ fontWeight: 600 }}>Title</Text>
-                        </label>
-                        <Input
-                          id="title"
-                          value={metadata.title}
-                          onChange={(e) => updateMetadata({ title: e.target.value })}
-                          placeholder="Proposal title"
-                        />
-                        {!metadataValidation.valid && (
-                          <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>
-                            {metadataValidation.message}
-                          </Text>
-                        )}
-                      </Stack>
-
-                      <Stack gap="2">
-                        <label htmlFor="description">
-                          <Text style={{ fontWeight: 600 }}>Description</Text>
-                        </label>
-                        <Textarea
-                          id="description"
-                          value={metadata.description}
-                          onChange={(e) => updateMetadata({ description: e.target.value })}
-                          placeholder="Describe what this proposal does"
-                          rows={6}
-                        />
-                      </Stack>
-
-                      <Stack gap="2">
-                        <label htmlFor="url">
-                          <Text style={{ fontWeight: 600 }}>Discussion URL (optional)</Text>
-                        </label>
-                        <Input
-                          id="url"
-                          value={metadata.url}
-                          onChange={(e) => updateMetadata({ url: e.target.value })}
-                          placeholder="https://forum.example.com/proposal-discussion"
-                        />
-                      </Stack>
-                    </Stack>
-                  </Card>
-
-                  <div className="form-actions">
-                    <Button variant="outline" onClick={() => router.back()}>
-                      Cancel
-                    </Button>
-                    <Button onClick={handleProceedToStep2} disabled={!metadataValidation.valid}>
-                      Continue to Actions
-                    </Button>
-                  </div>
-                </Stack>
-              )}
-
-              {/* Step 2: Actions */}
-              {step === 2 && (
-                <ActionFormProvider config={config} session={{ address: session.address, kit: StellarWalletsKit }}>
+                {/* Step 1: Metadata */}
+                {step === 1 && (
                   <Stack gap="4">
-                    <div>
-                      <Heading as="h2" style={{ fontSize: '1.25rem', marginBottom: '8px' }}>
-                        Proposal Actions
-                      </Heading>
-                      <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-                        Add one or more actions that will execute if this proposal passes
-                      </Text>
-                    </div>
-
-                    <Grid columns={{ base: 1, lg: 2 }} gap="6">
+                    <Card p="5">
                       <Stack gap="4">
-                        {!editingState && <Button onClick={() => beginCreate()}>Add Action</Button>}
-
-                        <ActionFormWrapper />
-                      </Stack>
-
-                      <Stack gap="4">
-                        <Heading as="h3" style={{ fontSize: '1.125rem' }}>
-                          Queued Actions ({queuedActions.length})
+                        <Heading as="h2" style={{ fontSize: '1.25rem' }}>
+                          Proposal Details
                         </Heading>
-                        <ProposalActionQueue />
-                      </Stack>
-                    </Grid>
 
-                    <div className="form-actions form-actions--split">
-                      <Button variant="outline" onClick={() => setStep(1)}>
-                        Back to Details
+                        <Stack gap="2">
+                          <label htmlFor="title">
+                            <Text style={{ fontWeight: 600 }}>Title</Text>
+                          </label>
+                          <Input
+                            id="title"
+                            value={metadata.title}
+                            onChange={(e) => updateMetadata({ title: e.target.value })}
+                            placeholder="Proposal title"
+                          />
+                          {!metadataValidation.valid && (
+                            <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>
+                              {metadataValidation.message}
+                            </Text>
+                          )}
+                        </Stack>
+
+                        <Stack gap="2">
+                          <label htmlFor="description">
+                            <Text style={{ fontWeight: 600 }}>Description</Text>
+                          </label>
+                          <Textarea
+                            id="description"
+                            value={metadata.description}
+                            onChange={(e) => updateMetadata({ description: e.target.value })}
+                            placeholder="Describe what this proposal does"
+                            rows={6}
+                          />
+                        </Stack>
+
+                        <Stack gap="2">
+                          <label htmlFor="url">
+                            <Text style={{ fontWeight: 600 }}>Discussion URL (optional)</Text>
+                          </label>
+                          <Input
+                            id="url"
+                            value={metadata.url}
+                            onChange={(e) => updateMetadata({ url: e.target.value })}
+                            placeholder="https://forum.example.com/proposal-discussion"
+                          />
+                        </Stack>
+                      </Stack>
+                    </Card>
+
+                    <div className="form-actions">
+                      <Button variant="outline" onClick={() => router.back()}>
+                        Cancel
                       </Button>
-                      <Button onClick={handleProceedToStep3} disabled={!canProceed || queuedActions.length === 0}>
-                        Continue to Review
+                      <Button onClick={handleProceedToStep2} disabled={!metadataValidation.valid}>
+                        Continue to Actions
                       </Button>
                     </div>
                   </Stack>
-                </ActionFormProvider>
-              )}
+                )}
 
-              {/* Step 3: Review */}
-              {step === 3 && (
-                <Stack gap="4">
-                  <div>
-                    <Heading as="h2" style={{ fontSize: '1.25rem', marginBottom: '8px' }}>
-                      Review & Submit
-                    </Heading>
-                    <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-                      Review your proposal details and actions before submitting to the blockchain
-                    </Text>
-                  </div>
-
-                  <Callout
-                    variant="warning"
-                    badge="Wallet transaction"
-                    title="Submitting creates an on-chain governance proposal"
-                    description="Your wallet will show the final transaction for review. Confirm the target contracts, recipients, and amounts before signing."
-                  />
-
-                  <Card p="5">
+                {/* Step 2: Actions */}
+                {step === 2 && (
+                  <ActionFormProvider config={config} session={{ address: session.address, kit: StellarWalletsKit }}>
                     <Stack gap="4">
                       <div>
-                        <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)', marginBottom: '4px' }}>
-                          Title
+                        <Heading as="h2" style={{ fontSize: '1.25rem', marginBottom: '8px' }}>
+                          Proposal Actions
+                        </Heading>
+                        <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
+                          Add one or more actions that will execute if this proposal passes
                         </Text>
-                        <Text style={{ fontWeight: 600, fontSize: '1.125rem' }}>{metadata.title}</Text>
                       </div>
 
-                      <div>
-                        <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)', marginBottom: '4px' }}>
-                          Description
-                        </Text>
-                        <Text style={{ lineHeight: 1.6 }}>{metadata.description}</Text>
-                      </div>
+                      <Grid columns={{ base: 1, lg: 2 }} gap="6">
+                        <Stack gap="4">
+                          {!editingState && <Button onClick={() => beginCreate()}>Add Action</Button>}
 
-                      {metadata.url && (
-                        <div>
-                          <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)', marginBottom: '4px' }}>
-                            Discussion URL
-                          </Text>
-                          <a
-                            href={metadata.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{
-                              color: 'var(--accent-11)',
-                              textDecoration: 'underline',
-                              wordBreak: 'break-all'
-                            }}
-                          >
-                            {metadata.url}
-                          </a>
-                        </div>
-                      )}
-
-                      <div>
-                        <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)', marginBottom: '8px' }}>
-                          Actions ({queuedActions.length})
-                        </Text>
-                        <Stack gap="2">
-                          {queuedActions.map((action, i) => (
-                            <Card
-                              key={action.id}
-                              p="3"
-                              style={{ background: 'var(--gray-2)', border: '1px solid var(--gray-6)' }}
-                            >
-                              <Text style={{ fontSize: '0.875rem' }}>
-                                <strong>{i + 1}.</strong> {getProposalActionSummary(action)}
-                              </Text>
-                            </Card>
-                          ))}
+                          <ActionFormWrapper />
                         </Stack>
+
+                        <Stack gap="4">
+                          <Heading as="h3" style={{ fontSize: '1.125rem' }}>
+                            Queued Actions ({queuedActions.length})
+                          </Heading>
+                          <ProposalActionQueue />
+                        </Stack>
+                      </Grid>
+
+                      <div className="form-actions form-actions--split">
+                        <Button variant="outline" onClick={() => setStep(1)}>
+                          Back to Details
+                        </Button>
+                        <Button onClick={handleProceedToStep3} disabled={!canProceed || queuedActions.length === 0}>
+                          Continue to Review
+                        </Button>
                       </div>
                     </Stack>
-                  </Card>
+                  </ActionFormProvider>
+                )}
 
-                  <div className="form-actions form-actions--split">
-                    <Button variant="outline" onClick={() => setStep(2)}>
-                      Back to Actions
-                    </Button>
-                    <Button onClick={handleOpenConfirmDialog} disabled={proposalCreationLocked || transactionBusy}>
-                      {transactionBusy ? 'Submitting...' : 'Submit Proposal'}
-                    </Button>
-                  </div>
-                </Stack>
-              )}
-            </>
-          )}
-        </Stack>
+                {/* Step 3: Review */}
+                {step === 3 && (
+                  <Stack gap="4">
+                    <div>
+                      <Heading as="h2" style={{ fontSize: '1.25rem', marginBottom: '8px' }}>
+                        Review & Submit
+                      </Heading>
+                      <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
+                        Review your proposal details and actions before submitting to the blockchain
+                      </Text>
+                    </div>
+
+                    <Callout
+                      variant="warning"
+                      badge="Wallet transaction"
+                      title="Submitting creates an on-chain governance proposal"
+                      description="Your wallet will show the final transaction for review. Confirm the target contracts, recipients, and amounts before signing."
+                    />
+
+                    <Card p="5">
+                      <Stack gap="4">
+                        <div>
+                          <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)', marginBottom: '4px' }}>
+                            Title
+                          </Text>
+                          <Text style={{ fontWeight: 600, fontSize: '1.125rem' }}>{metadata.title}</Text>
+                        </div>
+
+                        <div>
+                          <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)', marginBottom: '4px' }}>
+                            Description
+                          </Text>
+                          <Text style={{ lineHeight: 1.6 }}>{metadata.description}</Text>
+                        </div>
+
+                        {metadata.url && (
+                          <div>
+                            <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)', marginBottom: '4px' }}>
+                              Discussion URL
+                            </Text>
+                            <a
+                              href={metadata.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                color: 'var(--accent-11)',
+                                textDecoration: 'underline',
+                                wordBreak: 'break-all'
+                              }}
+                            >
+                              {metadata.url}
+                            </a>
+                          </div>
+                        )}
+
+                        <div>
+                          <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)', marginBottom: '8px' }}>
+                            Actions ({queuedActions.length})
+                          </Text>
+                          <Stack gap="2">
+                            {queuedActions.map((action, i) => (
+                              <Card
+                                key={action.id}
+                                p="3"
+                                style={{ background: 'var(--gray-2)', border: '1px solid var(--gray-6)' }}
+                              >
+                                <Text style={{ fontSize: '0.875rem' }}>
+                                  <strong>{i + 1}.</strong> {getProposalActionSummary(action)}
+                                </Text>
+                              </Card>
+                            ))}
+                          </Stack>
+                        </div>
+                      </Stack>
+                    </Card>
+
+                    <div className="form-actions form-actions--split">
+                      <Button variant="outline" onClick={() => setStep(2)}>
+                        Back to Actions
+                      </Button>
+                      <Button onClick={handleOpenConfirmDialog} disabled={proposalCreationLocked || transactionBusy}>
+                        {transactionBusy ? 'Submitting...' : 'Submit Proposal'}
+                      </Button>
+                    </div>
+                  </Stack>
+                )}
+              </>
+            )}
+          </Stack>
+          <ProposalContextRail
+            key={editingState?.actionType ?? 'no-action'}
+            activeActionType={editingState?.actionType}
+            mobileOpen={contextRailOpen}
+            onMobileClose={() => setContextRailOpen(false)}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            className="proposal-context-mobile-trigger"
+            onClick={() => setContextRailOpen(true)}
+          >
+            Browse DAO context
+          </Button>
+        </div>
       </PageSection>
 
       {/* Confirm Dialog */}

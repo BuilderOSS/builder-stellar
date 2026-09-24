@@ -101,7 +101,6 @@ function ProgressRail({
                 </span>
                 <span className="create-progress__copy">
                   <span className="create-progress__title">{section.title}</span>
-                  <span className="create-progress__subtitle">{section.subtitle}</span>
                 </span>
               </button>
               {index < CREATE_DAO_SECTIONS.length - 1 && (
@@ -150,9 +149,20 @@ function AccordionSection({
             <span className="create-accordion__title">{section.title}</span>
             <span className="create-accordion__subtitle">{section.subtitle}</span>
           </span>
-          {statusLabel && <span className={`create-accordion__status is-${status}`}>{statusLabel}</span>}
-          <span className="create-accordion__chevron" aria-hidden="true">
-            {isOpen ? '\u2212' : '+'}
+          <span className="create-accordion__controls">
+            {statusLabel && (
+              <span className={`create-accordion__status is-${status}`} aria-label={statusLabel}>
+                {status === 'complete' && (
+                  <span className="create-accordion__status-check" aria-hidden="true">
+                    {'\u2713'}
+                  </span>
+                )}
+                <span className="create-accordion__status-text">{statusLabel}</span>
+              </span>
+            )}
+            <span className="create-accordion__chevron" aria-hidden="true">
+              {isOpen ? '\u2212' : '+'}
+            </span>
           </span>
         </button>
       </h2>
@@ -357,7 +367,7 @@ export default function CreateDaoPage() {
                 deployment.
               </p>
             </div>
-            <div className="discovery-hero__signal">
+            <div className="discovery-hero__signal discovery-hero__signal--progress">
               <span className="label">Creation progress</span>
               <strong>{reviewedSections.size} of 5 sections reviewed</strong>
               <span>

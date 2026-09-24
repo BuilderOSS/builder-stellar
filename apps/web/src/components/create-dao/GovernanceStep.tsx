@@ -2,188 +2,329 @@
 
 'use client';
 
+import { useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 
-import { Card, Heading, Input, Text } from '@/components/ui';
+import { DurationInput } from '@/components/admin/duration-input';
+import { Button, Card, Heading, Input, Text } from '@/components/ui';
+import { splitDuration } from '@/lib/duration';
 import { validateDuration } from '@/lib/validation';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
+const MIN_VOTING_PERIOD = 10 * 60;
+const MAX_VOTING_PERIOD = 30 * 86400;
+const IS_TESTNET = (process.env.NEXT_PUBLIC_NETWORK || process.env.NETWORK_PUBLIC_NETWORK || 'testnet') === 'testnet';
+
+const STANDARD_GOVERNANCE_PRESETS = [
+  {
+    id: 'fast',
+    title: 'Fast-moving',
+    description: 'For frequent decisions and active collaboration.',
+    votingDelay: 5 * 60,
+    votingPeriod: 60 * 60,
+    quorumBps: 500,
+    proposalThresholdBps: 50
+  },
+  {
+    id: 'balanced',
+    title: 'Balanced',
+    description: 'A practical starting point for most DAOs. Not sure where to start? Choose this.',
+    votingDelay: 86400,
+    votingPeriod: 3 * 86400,
+    quorumBps: 1000,
+    proposalThresholdBps: 100
+  },
+  {
+    id: 'deliberate',
+    title: 'Deliberate',
+    description: 'For decisions that need more time to review.',
+    votingDelay: 2 * 86400,
+    votingPeriod: 7 * 86400,
+    quorumBps: 2000,
+    proposalThresholdBps: 200
+  }
+] as const;
+
+const TESTING_GOVERNANCE_PRESET = {
+  id: 'testing',
+  title: 'Testnet Quickstart',
+  description: 'For testing DAO flows with short voting windows.',
+  votingDelay: 5 * 60,
+  votingPeriod: 10 * 60,
+  quorumBps: 0,
+  proposalThresholdBps: 0
+} as const;
+
+const GOVERNANCE_PRESETS = IS_TESTNET
+  ? ([TESTING_GOVERNANCE_PRESET, ...STANDARD_GOVERNANCE_PRESETS] as const)
+  : STANDARD_GOVERNANCE_PRESETS;
+
+function formatDuration(totalSeconds: number) {
+  const parts = splitDuration(totalSeconds);
+  const values = [
+    parts.days ? `${parts.days} day${parts.days === 1 ? '' : 's'}` : '',
+    parts.hours ? `${parts.hours} hour${parts.hours === 1 ? '' : 's'}` : '',
+    parts.minutes ? `${parts.minutes} minute${parts.minutes === 1 ? '' : 's'}` : '',
+    parts.seconds ? `${parts.seconds} second${parts.seconds === 1 ? '' : 's'}` : ''
+  ].filter(Boolean);
+
+  return values.length > 0 ? values.join(', ') : '0 seconds';
+}
+
 export function GovernanceStep() {
-  const governance = useCreateDaoStore((s) => s.governance);
-  const updateGovernance = useCreateDaoStore((s) => s.updateGovernance);
-  const validationErrors = useCreateDaoStore((s) => s.validationErrors);
-  const setValidationError = useCreateDaoStore((s) => s.setValidationError);
-  const clearValidationError = useCreateDaoStore((s) => s.clearValidationError);
+  const governance = useCreateDaoStore((state) => state.governance);
+  const updateGovernance = useCreateDaoStore((state) => state.updateGovernance);
+  const validationErrors = useCreateDaoStore((state) => state.validationErrors);
+  const setValidationError = useCreateDaoStore((state) => state.setValidationError);
+  const clearValidationError = useCreateDaoStore((state) => state.clearValidationError);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const handleVotingDelayChange = (value: string) => {
-    const seconds = Number(value);
-    if (!isNaN(seconds) && seconds >= 0) {
-      updateGovernance({ votingDelay: seconds });
-      const error = validateDuration(seconds, 300); // Min 5 minutes
-      if (error) {
-        setValidationError('votingDelay', error);
-      } else {
-        clearValidationError('votingDelay');
-      }
-    }
+  const matchingPreset = GOVERNANCE_PRESETS.find(
+    (preset) =>
+      preset.votingDelay === governance.votingDelay &&
+      preset.votingPeriod === governance.votingPeriod &&
+      preset.quorumBps === governance.quorumBps &&
+      preset.proposalThresholdBps === governance.proposalThresholdBps
+  )?.id;
+  const activePreset = matchingPreset ?? 'custom';
+  const advancedVisible = showAdvanced || activePreset === 'custom';
+
+  const updateDuration = (field: 'votingDelay' | 'votingPeriod', seconds: number) => {
+    updateGovernance({ [field]: seconds });
+    const minimum = field === 'votingDelay' ? 300 : MIN_VOTING_PERIOD;
+    const error = validateDuration(seconds, minimum);
+    setShowAdvanced(true);
+    if (error) setValidationError(field, error);
+    else clearValidationError(field);
   };
 
-  const handleVotingPeriodChange = (value: string) => {
-    const seconds = Number(value);
-    if (!isNaN(seconds) && seconds >= 0) {
-      updateGovernance({ votingPeriod: seconds });
-      const error = validateDuration(seconds, 3600); // Min 1 hour
-      if (error) {
-        setValidationError('votingPeriod', error);
-      } else {
-        clearValidationError('votingPeriod');
-      }
-    }
+  const applyPreset = (preset: (typeof GOVERNANCE_PRESETS)[number]) => {
+    updateGovernance({
+      votingDelay: preset.votingDelay,
+      votingPeriod: preset.votingPeriod,
+      quorumBps: preset.quorumBps,
+      proposalThresholdBps: preset.proposalThresholdBps
+    });
+    setShowAdvanced(false);
+    clearValidationError('votingDelay');
+    clearValidationError('votingPeriod');
+    clearValidationError('quorumBps');
+    clearValidationError('proposalThresholdBps');
   };
 
-  const handleQuorumBpsChange = (value: string) => {
-    const bps = Number(value);
-    if (!isNaN(bps)) {
-      updateGovernance({ quorumBps: bps });
-      if (bps < 0 || bps > 10000) {
-        setValidationError('quorumBps', 'Quorum must be between 0 and 10000 basis points');
-      } else {
-        clearValidationError('quorumBps');
-      }
-    }
-  };
+  const sliderValue = Math.min(
+    MAX_VOTING_PERIOD,
+    Math.max(MIN_VOTING_PERIOD, Math.round(governance.votingPeriod / 3600) * 3600)
+  );
 
-  const handleProposalThresholdBpsChange = (value: string) => {
-    const bps = Number(value);
-    if (!isNaN(bps)) {
-      updateGovernance({ proposalThresholdBps: bps });
-      if (bps < 0 || bps > 10000) {
-        setValidationError('proposalThresholdBps', 'Proposal threshold must be between 0 and 10000 basis points');
-      } else {
-        clearValidationError('proposalThresholdBps');
-      }
-    }
-  };
-
-  // Helper to convert basis points to percentage
   const bpsToPercent = (bps: number) => (bps / 100).toFixed(2);
+
+  const updatePercentage = (field: 'quorumBps' | 'proposalThresholdBps', value: string) => {
+    const percentage = Number(value);
+    if (Number.isNaN(percentage)) return;
+    const bps = Math.round(percentage * 100);
+    updateGovernance({ [field]: bps });
+    setShowAdvanced(true);
+    if (percentage < 0 || percentage > 100) {
+      setValidationError(field, 'Enter a percentage between 0% and 100%');
+    } else {
+      clearValidationError(field);
+    }
+  };
 
   return (
     <Stack gap="4">
       <Card p="5">
-        <Stack gap="4">
+        <Stack gap="5">
           <div>
             <Heading as="h2" style={{ fontSize: '1.25rem', marginBottom: '8px' }}>
-              Governance Parameters
+              How should your DAO make decisions?
             </Heading>
             <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-              Configure voting rules and proposal thresholds for your DAO
+              Choose a starting point. You can change these settings later.
             </Text>
           </div>
 
           <Stack gap="2">
-            <label htmlFor="votingDelay">
-              <Text style={{ fontWeight: 600 }}>Voting Delay (seconds)</Text>
-            </label>
-            <Input
+            <Text style={{ fontWeight: 650 }}>What will your DAO mostly coordinate?</Text>
+            <div className="governance-intent-grid" role="group" aria-label="Governance approach">
+              {GOVERNANCE_PRESETS.map((preset) => (
+                <button
+                  className={`governance-option${activePreset === preset.id ? ' is-selected' : ''}${preset.id === 'testing' ? ' is-testing' : ''}`}
+                  key={preset.id}
+                  type="button"
+                  aria-pressed={activePreset === preset.id}
+                  onClick={() => applyPreset(preset)}
+                >
+                  <span className="governance-option__title">{preset.title}</span>
+                  <span className="governance-option__description">{preset.description}</span>
+                  {preset.id === 'testing' && (
+                    <span className="governance-option__warning">Not recommended for production DAOs.</span>
+                  )}
+                  <span className="governance-option__timing">
+                    {formatDuration(preset.votingDelay)} delay / {formatDuration(preset.votingPeriod)} voting
+                  </span>
+                  <span className="governance-option__timing">
+                    {bpsToPercent(preset.quorumBps)}% quorum / {bpsToPercent(preset.proposalThresholdBps)}% to propose
+                  </span>
+                </button>
+              ))}
+              <button
+                className={`governance-option${activePreset === 'custom' ? ' is-selected' : ''}`}
+                type="button"
+                aria-pressed={activePreset === 'custom'}
+                onClick={() => {
+                  setShowAdvanced(true);
+                }}
+              >
+                <span className="governance-option__title">Custom / advanced</span>
+                <span className="governance-option__description">Set timings that fit your community.</span>
+                <span className="governance-option__timing">Your own timings and voting requirements</span>
+              </button>
+            </div>
+          </Stack>
+
+          <div className="governance-reassurance">
+            <Text>
+              These are starting points, not permanent choices. You can update your governance settings later as your
+              DAO evolves.
+            </Text>
+          </div>
+        </Stack>
+      </Card>
+
+      {advancedVisible && (
+        <Card p="5">
+          <Stack gap="5">
+            <div>
+              <Heading as="h3" style={{ fontSize: '1.1rem', marginBottom: '8px' }}>
+                Fine-tune your voting timeline
+              </Heading>
+              <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
+                Voting delay is the wait before voting starts. Voting period is how long members can vote.
+              </Text>
+            </div>
+
+            <DurationInput
               id="votingDelay"
-              type="number"
+              label="Voting delay"
               value={governance.votingDelay}
-              onChange={(e) => handleVotingDelayChange(e.target.value)}
-              placeholder="86400"
-              min="0"
+              onChange={(seconds) => updateDuration('votingDelay', seconds)}
+              helperText="Minimum 5 minutes."
             />
             {validationErrors.votingDelay && (
               <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>{validationErrors.votingDelay}</Text>
             )}
-            <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-              Time between proposal creation and voting start. 86400 seconds = 24 hours
-            </Text>
-          </Stack>
 
-          <Stack gap="2">
-            <label htmlFor="votingPeriod">
-              <Text style={{ fontWeight: 600 }}>Voting Period (seconds)</Text>
-            </label>
-            <Input
-              id="votingPeriod"
-              type="number"
-              value={governance.votingPeriod}
-              onChange={(e) => handleVotingPeriodChange(e.target.value)}
-              placeholder="259200"
-              min="0"
-            />
+            <Stack gap="3">
+              <div className="governance-slider-heading">
+                <Text style={{ fontWeight: 650 }}>Voting period</Text>
+                <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
+                  {formatDuration(governance.votingPeriod)}
+                </Text>
+              </div>
+              <input
+                className="governance-slider"
+                type="range"
+                min={MIN_VOTING_PERIOD}
+                max={MAX_VOTING_PERIOD}
+                step={3600}
+                value={sliderValue}
+                aria-label="Voting period in hours"
+                onChange={(event) => updateDuration('votingPeriod', Number(event.target.value))}
+              />
+              <div className="governance-slider-labels" aria-hidden="true">
+                <span>10 minutes</span>
+                <span>15 days</span>
+                <span>30 days</span>
+              </div>
+              <DurationInput
+                id="votingPeriod"
+                label="Custom voting period"
+                value={governance.votingPeriod}
+                onChange={(seconds) => updateDuration('votingPeriod', seconds)}
+                helperText="Minimum 10 minutes. Use the fields when you need an exact duration."
+              />
+            </Stack>
             {validationErrors.votingPeriod && (
               <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>{validationErrors.votingPeriod}</Text>
             )}
-            <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-              How long voting is open. 259200 seconds = 3 days
-            </Text>
           </Stack>
+          <div className="governance-advanced-footer">
+            <Button type="button" variant="outline" onClick={() => setShowAdvanced(false)}>
+              Hide advanced settings
+            </Button>
+          </div>
+        </Card>
+      )}
 
-          <Stack gap="2">
-            <label htmlFor="quorumBps">
-              <Text style={{ fontWeight: 600 }}>Quorum (basis points)</Text>
-            </label>
-            <Input
-              id="quorumBps"
-              type="number"
-              value={governance.quorumBps}
-              onChange={(e) => handleQuorumBpsChange(e.target.value)}
-              placeholder="1000"
-              min="0"
-              max="10000"
-            />
-            {validationErrors.quorumBps && (
-              <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>{validationErrors.quorumBps}</Text>
-            )}
-            <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-              Minimum % of votes needed for proposal to pass. 1000 basis points = {bpsToPercent(governance.quorumBps)}%
-              of total supply. Range: 0-10000
-            </Text>
-          </Stack>
+      {!advancedVisible && (
+        <div className="governance-advanced-prompt">
+          <Text>Need different timings or voting requirements?</Text>
+          <Button type="button" variant="outline" onClick={() => setShowAdvanced(true)}>
+            Customize settings
+          </Button>
+        </div>
+      )}
 
-          <Stack gap="2">
-            <label htmlFor="proposalThresholdBps">
-              <Text style={{ fontWeight: 600 }}>Proposal Threshold (basis points)</Text>
-            </label>
-            <Input
-              id="proposalThresholdBps"
-              type="number"
-              value={governance.proposalThresholdBps}
-              onChange={(e) => handleProposalThresholdBpsChange(e.target.value)}
-              placeholder="100"
-              min="0"
-              max="10000"
-            />
-            {validationErrors.proposalThresholdBps && (
-              <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>
-                {validationErrors.proposalThresholdBps}
+      {advancedVisible && (
+        <Card p="5">
+          <Stack gap="4">
+            <div>
+              <Heading as="h3" style={{ fontSize: '1.1rem', marginBottom: '8px' }}>
+                Voting requirements
+              </Heading>
+              <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
+                Set what proposals need to pass and who can create them.
               </Text>
-            )}
-            <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-              Minimum % of votes required to create a proposal. 100 basis points ={' '}
-              {bpsToPercent(governance.proposalThresholdBps)}% of total supply. Range: 0-10000
-            </Text>
-          </Stack>
-        </Stack>
-      </Card>
+            </div>
 
-      <Card p="5" style={{ background: 'var(--accent-2)', border: '1px solid var(--accent-6)' }}>
-        <Stack gap="2">
-          <Heading as="h3" style={{ fontSize: '1rem', color: 'var(--accent-11)' }}>
-            Understanding Basis Points
-          </Heading>
-          <Text style={{ fontSize: '0.875rem', color: 'var(--gray-12)' }}>1 basis point = 0.01%. Common values:</Text>
-          <ul style={{ marginLeft: '1.5rem', fontSize: '0.875rem', color: 'var(--gray-12)' }}>
-            <li>100 bps = 1%</li>
-            <li>500 bps = 5%</li>
-            <li>1000 bps = 10%</li>
-            <li>2000 bps = 20%</li>
-            <li>5000 bps = 50%</li>
-          </ul>
-        </Stack>
-      </Card>
+            <Stack gap="2">
+              <label htmlFor="quorumBps">
+                <Text style={{ fontWeight: 650 }}>What percentage of votes should be needed to pass a proposal?</Text>
+              </label>
+              <Input
+                id="quorumBps"
+                type="number"
+                value={bpsToPercent(governance.quorumBps)}
+                onChange={(event) => updatePercentage('quorumBps', event.target.value)}
+                min="0"
+                max="100"
+                step="0.01"
+              />
+              {validationErrors.quorumBps && (
+                <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>{validationErrors.quorumBps}</Text>
+              )}
+              <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
+                Percentage of total supply. Stored precisely as basis points.
+              </Text>
+            </Stack>
+
+            <Stack gap="2">
+              <label htmlFor="proposalThresholdBps">
+                <Text style={{ fontWeight: 650 }}>What percentage should someone need to create a proposal?</Text>
+              </label>
+              <Input
+                id="proposalThresholdBps"
+                type="number"
+                value={bpsToPercent(governance.proposalThresholdBps)}
+                onChange={(event) => updatePercentage('proposalThresholdBps', event.target.value)}
+                min="0"
+                max="100"
+                step="0.01"
+              />
+              {validationErrors.proposalThresholdBps && (
+                <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>
+                  {validationErrors.proposalThresholdBps}
+                </Text>
+              )}
+              <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
+                Percentage of total supply. Stored precisely as basis points.
+              </Text>
+            </Stack>
+          </Stack>
+        </Card>
+      )}
     </Stack>
   );
 }

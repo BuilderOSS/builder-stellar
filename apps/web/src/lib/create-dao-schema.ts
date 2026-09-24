@@ -110,7 +110,7 @@ const governanceSchema = z
     const votingDelayError = validateDuration(governance.votingDelay, 300);
     if (votingDelayError) context.addIssue({ code: 'custom', message: votingDelayError, path: ['votingDelay'] });
 
-    const votingPeriodError = validateDuration(governance.votingPeriod, 3600);
+    const votingPeriodError = validateDuration(governance.votingPeriod, 10 * 60);
     if (votingPeriodError) context.addIssue({ code: 'custom', message: votingPeriodError, path: ['votingPeriod'] });
   });
 
@@ -119,19 +119,22 @@ const founderSchema = z.object({
   amount: z.number().int().positive('Amount must be greater than 0').max(10000, 'Amount cannot exceed 10,000 tokens')
 });
 
-const foundersArraySchema = z.array(founderSchema).superRefine((founders, context) => {
-  const total = founders.reduce((sum, founder) => sum + founder.amount, 0);
-  if (total > 10000)
-    context.addIssue({
-      code: 'custom',
-      message: `Total founder allocation (${total}) exceeds maximum of 10,000 tokens`
-    });
+const foundersArraySchema = z
+  .array(founderSchema)
+  .max(100, 'Maximum 100 founders allowed')
+  .superRefine((founders, context) => {
+    const total = founders.reduce((sum, founder) => sum + founder.amount, 0);
+    if (total > 10000)
+      context.addIssue({
+        code: 'custom',
+        message: `Total founder allocation (${total}) exceeds maximum of 10,000 tokens`
+      });
 
-  const addresses = founders.map((founder) => founder.address.toLowerCase());
-  if (new Set(addresses).size !== addresses.length) {
-    context.addIssue({ code: 'custom', message: 'Duplicate founder addresses are not allowed' });
-  }
-});
+    const addresses = founders.map((founder) => founder.address.toLowerCase());
+    if (new Set(addresses).size !== addresses.length) {
+      context.addIssue({ code: 'custom', message: 'Duplicate founder addresses are not allowed' });
+    }
+  });
 
 export const foundersSchema = z.object({
   founders: foundersArraySchema

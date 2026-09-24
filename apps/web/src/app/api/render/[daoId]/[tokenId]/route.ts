@@ -1,7 +1,7 @@
 import { isIP } from 'node:net';
 
 import sharp from 'sharp';
-import { Agent } from 'undici';
+import { Agent, fetch } from 'undici';
 
 import { getDaoNetworkConfigById } from '@/lib/dao-config';
 import { assertSafeRemoteUrl, getFetchableUrls, IPFS_GATEWAYS } from '@/lib/ipfs-gateway';
@@ -52,7 +52,7 @@ async function fetchImage(uri: string) {
             redirect: 'manual',
             signal: controller.signal,
             dispatcher
-          } as RequestInit & { dispatcher: Agent });
+          });
 
           if (response.status >= 300 && response.status < 400) {
             if (redirect === MAX_REDIRECTS) throw new Error('Too many artwork redirects');

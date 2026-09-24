@@ -84,29 +84,45 @@ export function AuctionStep() {
         <Stack gap="4">
           <div>
             <Heading as="h2" style={{ fontSize: '1.25rem', marginBottom: '8px' }}>
-              Auction Settings
+              How will people mint?
             </Heading>
             <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-              Configure how your DAO&apos;s NFT auctions will work
+              Timed auctions are optional and can be changed later.
             </Text>
           </div>
 
           <Stack gap="2">
-            <label htmlFor="auctionEnabled">
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Text style={{ fontWeight: 600 }}>Do you want to use timed auctions?</Text>
+            <div className="auction-choice-group" role="radiogroup" aria-label="Timed auction preference">
+              <label className={`auction-choice${auction.enabled ? ' is-selected' : ''}`} htmlFor="auctionEnabled">
                 <input
-                  type="checkbox"
+                  type="radio"
                   id="auctionEnabled"
+                  name="auctionMode"
                   checked={auction.enabled}
-                  onChange={(e) => updateAuction({ enabled: e.target.checked })}
-                  style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                  onChange={() => updateAuction({ enabled: true })}
                 />
-                <Text style={{ fontWeight: 600 }}>Enable Auctions</Text>
-              </div>
-            </label>
-            <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-              If disabled, your DAO will not run automated auctions for minting new tokens
-            </Text>
+                <span>
+                  <Text style={{ fontWeight: 650 }}>Yes, use timed auctions</Text>
+                  <Text style={{ color: 'var(--gray-11)', fontSize: '0.8125rem' }}>Sell new NFTs through bidding.</Text>
+                </span>
+              </label>
+              <label className={`auction-choice${!auction.enabled ? ' is-selected' : ''}`} htmlFor="auctionDisabled">
+                <input
+                  type="radio"
+                  id="auctionDisabled"
+                  name="auctionMode"
+                  checked={!auction.enabled}
+                  onChange={() => updateAuction({ enabled: false })}
+                />
+                <span>
+                  <Text style={{ fontWeight: 650 }}>No, keep auctions off</Text>
+                  <Text style={{ color: 'var(--gray-11)', fontSize: '0.8125rem' }}>
+                    You can turn them on later if you change your mind.
+                  </Text>
+                </span>
+              </label>
+            </div>
           </Stack>
 
           {auction.enabled && (
