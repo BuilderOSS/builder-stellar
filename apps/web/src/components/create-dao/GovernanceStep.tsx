@@ -11,7 +11,7 @@ import { splitDuration } from '@/lib/duration';
 import { validateDuration } from '@/lib/validation';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
-const MIN_VOTING_PERIOD = 60 * 60;
+const MIN_VOTING_PERIOD = 10 * 60;
 const MAX_VOTING_PERIOD = 30 * 86400;
 const IS_TESTNET = (process.env.NEXT_PUBLIC_NETWORK || process.env.NETWORK_PUBLIC_NETWORK || 'testnet') === 'testnet';
 
@@ -47,10 +47,10 @@ const STANDARD_GOVERNANCE_PRESETS = [
 
 const TESTING_GOVERNANCE_PRESET = {
   id: 'testing',
-  title: 'Testing / super-fast',
-  description: 'For testing DAO flows on testnet with the shortest valid timings.',
+  title: 'Testnet Quickstart',
+  description: 'For testing DAO flows with short voting windows.',
   votingDelay: 5 * 60,
-  votingPeriod: 60 * 60,
+  votingPeriod: 10 * 60,
   quorumBps: 0,
   proposalThresholdBps: 0
 } as const;
@@ -91,7 +91,7 @@ export function GovernanceStep() {
 
   const updateDuration = (field: 'votingDelay' | 'votingPeriod', seconds: number) => {
     updateGovernance({ [field]: seconds });
-    const minimum = field === 'votingDelay' ? 300 : 3600;
+    const minimum = field === 'votingDelay' ? 300 : MIN_VOTING_PERIOD;
     const error = validateDuration(seconds, minimum);
     setShowAdvanced(true);
     if (error) setValidationError(field, error);
@@ -158,6 +158,9 @@ export function GovernanceStep() {
                 >
                   <span className="governance-option__title">{preset.title}</span>
                   <span className="governance-option__description">{preset.description}</span>
+                  {preset.id === 'testing' && (
+                    <span className="governance-option__warning">Not recommended for production DAOs.</span>
+                  )}
                   <span className="governance-option__timing">
                     {formatDuration(preset.votingDelay)} delay / {formatDuration(preset.votingPeriod)} voting
                   </span>
@@ -231,7 +234,7 @@ export function GovernanceStep() {
                 onChange={(event) => updateDuration('votingPeriod', Number(event.target.value))}
               />
               <div className="governance-slider-labels" aria-hidden="true">
-                <span>1 hour</span>
+                <span>10 minutes</span>
                 <span>15 days</span>
                 <span>30 days</span>
               </div>
@@ -240,7 +243,7 @@ export function GovernanceStep() {
                 label="Custom voting period"
                 value={governance.votingPeriod}
                 onChange={(seconds) => updateDuration('votingPeriod', seconds)}
-                helperText="Minimum 1 hour. Use the fields when you need an exact duration."
+                helperText="Minimum 10 minutes. Use the fields when you need an exact duration."
               />
             </Stack>
             {validationErrors.votingPeriod && (

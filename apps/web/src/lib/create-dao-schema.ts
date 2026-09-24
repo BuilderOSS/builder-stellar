@@ -110,7 +110,7 @@ const governanceSchema = z
     const votingDelayError = validateDuration(governance.votingDelay, 300);
     if (votingDelayError) context.addIssue({ code: 'custom', message: votingDelayError, path: ['votingDelay'] });
 
-    const votingPeriodError = validateDuration(governance.votingPeriod, 3600);
+    const votingPeriodError = validateDuration(governance.votingPeriod, 10 * 60);
     if (votingPeriodError) context.addIssue({ code: 'custom', message: votingPeriodError, path: ['votingPeriod'] });
   });
 
