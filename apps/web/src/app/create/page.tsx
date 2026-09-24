@@ -101,7 +101,6 @@ function ProgressRail({
                 </span>
                 <span className="create-progress__copy">
                   <span className="create-progress__title">{section.title}</span>
-                  <span className="create-progress__subtitle">{section.subtitle}</span>
                 </span>
               </button>
               {index < CREATE_DAO_SECTIONS.length - 1 && (

@@ -719,27 +719,26 @@ textarea {
 }
 
 .create-progress {
-  overflow-x: auto;
+  width: 100%;
   padding: 2px 0 6px;
-  scrollbar-width: thin;
 }
 
 .create-progress__list {
-  display: flex;
-  min-width: 760px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
 .create-progress__item {
-  display: flex;
-  align-items: center;
-  flex: 1 0 auto;
+  min-width: 0;
 }
 
 .create-progress__button {
   display: flex;
+  width: 100%;
   align-items: center;
   gap: 10px;
   min-width: 0;
@@ -799,10 +798,9 @@ textarea {
   color: var(--text-secondary);
   font-size: 0.82rem;
   font-weight: 700;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
-.create-progress__subtitle,
 .create-accordion__subtitle {
   overflow: hidden;
   color: var(--text-tertiary);
@@ -812,11 +810,7 @@ textarea {
 }
 
 .create-progress__connector {
-  height: 1px;
-  min-width: 20px;
-  flex: 1;
-  margin: 0 8px;
-  background: var(--border-default);
+  display: none;
 }
 
 .create-accordion {
@@ -1953,12 +1947,6 @@ textarea {
   .form-actions--split > button {
     width: 100%;
   }
-  .create-progress__list {
-    min-width: 680px;
-  }
-  .create-progress__subtitle {
-    display: none;
-  }
   .create-accordion__section {
     border-radius: 16px;
   }
@@ -2019,6 +2007,42 @@ textarea {
   .app-footer {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+@media (min-width: 680px) {
+  .create-progress__list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  .create-progress__list {
+    display: flex;
+    gap: 0;
+  }
+
+  .create-progress__item {
+    display: flex;
+    flex: 1 1 0;
+    align-items: center;
+  }
+
+  .create-progress__button {
+    width: auto;
+  }
+
+  .create-progress__title {
+    white-space: nowrap;
+  }
+
+  .create-progress__connector {
+    display: block;
+    height: 1px;
+    min-width: 12px;
+    flex: 1;
+    margin: 0 8px;
+    background: var(--border-default);
   }
 }
 
