@@ -932,6 +932,56 @@ textarea {
   margin: 0;
 }
 
+.founder-csv-upload {
+  display: grid;
+  gap: 16px;
+}
+
+.founder-csv-upload__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.founder-csv-upload__dropzone {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-0);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: 160ms ease;
+  transition-property: border-color, background-color, color;
+}
+
+.founder-csv-upload__dropzone:hover,
+.founder-csv-upload__dropzone:focus-visible,
+.founder-csv-upload__dropzone.is-dragging {
+  border-color: var(--action);
+  background: var(--focus-soft);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.founder-csv-upload__dropzone.is-processing {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.founder-csv-upload__error {
+  padding: 12px 14px;
+  border-left: 3px solid var(--negative);
+  background: rgba(239, 105, 105, 0.08);
+  color: var(--negative) !important;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
 .auction-choice-group {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2007,6 +2057,13 @@ textarea {
   .create-review-actions,
   .create-section-actions {
     align-items: stretch;
+  }
+  .founder-csv-upload__heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .founder-csv-upload__dropzone {
+    padding: 16px;
   }
   .auction-choice-group {
     grid-template-columns: 1fr;
