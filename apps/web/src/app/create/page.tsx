@@ -222,7 +222,6 @@ export default function CreateDaoPage() {
         for (const error of validation.errors) setValidationError(error.field, error.message);
         resetDeployment();
         setIsDeploying(false);
-        setStep(1);
         return;
       }
 

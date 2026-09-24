@@ -4,14 +4,31 @@
 
 import { Stack } from 'styled-system/jsx';
 
-import { Badge, Card, Heading, Text } from '@/components/ui';
+import { Badge, Callout, Card, Heading, Text } from '@/components/ui';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
 export function ReviewStep({ connectedAddress }: { connectedAddress: string }) {
-  const { basicInfo, artwork, auction, governance, founders } = useCreateDaoStore();
+  const { basicInfo, artwork, auction, governance, founders, validationErrors } = useCreateDaoStore();
+  const errors = Object.entries(validationErrors);
 
   return (
     <Stack gap="4">
+      {errors.length > 0 && (
+        <Callout
+          variant="error"
+          title="Please fix the highlighted fields before creating your DAO"
+          description="Use the wizard steps above to jump to a section, then return here to try again."
+        >
+          <ul style={{ margin: 0, paddingLeft: '1.25rem' }} aria-live="polite">
+            {errors.map(([field, message]) => (
+              <li key={field}>
+                <Text style={{ fontSize: '0.875rem' }}>{message}</Text>
+              </li>
+            ))}
+          </ul>
+        </Callout>
+      )}
+
       <Card p="5">
         <Stack gap="4">
           <Heading as="h2" style={{ fontSize: '1.25rem' }}>
