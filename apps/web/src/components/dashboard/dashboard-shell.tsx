@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 
 import { DaoDirectory } from '@/components/dao-directory';
+import { MarketplaceComingSoon } from '@/components/marketplace/marketplace-coming-soon';
 import { Callout, Heading, Text } from '@/components/ui';
 import { WalletControls } from '@/components/wallet-controls';
 import type { DaoConfig } from '@/lib/dao-db';
@@ -102,6 +103,9 @@ export function DashboardShell({ daos, loadError }: { daos: DaoConfig[]; loadErr
                       <DaoDirectory daos={daos} />
                     </div>
                   );
+                }
+                if (tab === 'marketplace') {
+                  return <MarketplaceComingSoon />;
                 }
                 return <EmptyDashboardTab tab={tab as Exclude<DashboardTab, 'discover' | 'marketplace'>} />;
               }}

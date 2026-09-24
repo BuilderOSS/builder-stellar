@@ -2122,6 +2122,75 @@ textarea {
   gap: 16px;
 }
 
+.marketplace-coming-soon {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  min-height: 360px;
+  align-content: center;
+  background:
+    radial-gradient(circle at 90% 10%, rgba(73, 166, 255, 0.12), transparent 34%),
+    var(--surface-1);
+}
+
+.marketplace-coming-soon__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 16px;
+  border: 1px solid rgba(73, 166, 255, 0.32);
+  border-radius: 14px;
+  background: var(--focus-soft);
+  color: var(--focus);
+}
+
+.marketplace-coming-soon__link {
+  margin-top: 20px;
+  text-decoration: none;
+}
+
+.marketplace-coming-soon__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--action);
+  border-radius: 10px;
+  background: var(--action);
+  color: white;
+  font-weight: 700;
+  transition: 160ms ease;
+}
+
+.marketplace-coming-soon__cta:hover {
+  border-color: var(--action-hover);
+  background: var(--action-hover);
+}
+
+.marketplace-coming-soon__cta--outline {
+  border-color: var(--border-strong);
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.marketplace-coming-soon__features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 28px;
+  color: var(--text-tertiary);
+  font-size: 0.76rem;
+}
+
+.marketplace-coming-soon__features span {
+  padding: 6px 9px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+}
+
 .proposal-workspace-tabs {
   display: flex;
   gap: 2px;

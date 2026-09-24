@@ -1,6 +1,6 @@
 'use client';
 
-import { Compass, Newspaper, Users } from 'lucide-react';
+import { Compass, Newspaper, Store, Users } from 'lucide-react';
 import type { Route } from 'next';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { ReactNode } from 'react';
@@ -10,7 +10,8 @@ export type DashboardTab = 'feed' | 'my-daos' | 'discover' | 'marketplace';
 const tabs: { id: DashboardTab; label: string; icon: typeof Newspaper }[] = [
   { id: 'feed', label: 'Feed', icon: Newspaper },
   { id: 'my-daos', label: 'My DAOs', icon: Users },
-  { id: 'discover', label: 'Discover', icon: Compass }
+  { id: 'discover', label: 'Discover', icon: Compass },
+  { id: 'marketplace', label: 'Marketplace', icon: Store }
 ];
 
 function isDashboardTab(value: string | null): value is DashboardTab {

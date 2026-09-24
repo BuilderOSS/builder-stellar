@@ -9,6 +9,7 @@ import {
   MoreHorizontal,
   Settings,
   ShieldAlert,
+  Store,
   Users,
   Vote
 } from 'lucide-react';
@@ -32,7 +33,8 @@ function getNavItems(daoId: string): NavItem[] {
     { href: `/dao/${daoId}/proposals` as Route, label: 'Proposals', icon: Vote },
     { href: `/dao/${daoId}/auctions` as Route, label: 'Auctions', icon: Gavel },
     { href: `/dao/${daoId}/treasury` as Route, label: 'Treasury', icon: Landmark },
-    { href: `/dao/${daoId}/members` as Route, label: 'Members', icon: Users }
+    { href: `/dao/${daoId}/members` as Route, label: 'Members', icon: Users },
+    { href: `/dao/${daoId}/marketplace` as Route, label: 'Marketplace', icon: Store }
   ];
 }
 
