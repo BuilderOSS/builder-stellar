@@ -719,8 +719,13 @@ textarea {
 }
 
 .create-progress {
+  position: sticky;
+  z-index: 40;
+  top: 88px;
   width: 100%;
-  padding: 2px 0 6px;
+  padding: 10px 0 12px;
+  border-bottom: 1px solid var(--border-default);
+  background: var(--canvas);
 }
 
 .create-progress__list {
@@ -1899,6 +1904,9 @@ textarea {
   }
   .discovery-header {
     padding-top: 4px;
+  }
+  .create-progress {
+    top: 72px;
   }
   .discovery-header__context {
     display: none;
