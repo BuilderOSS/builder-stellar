@@ -3,18 +3,21 @@
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { type SignTransaction } from '@stellar/stellar-sdk/contract';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Grid, Stack } from 'styled-system/jsx';
 
+import { AdminValueForm } from '@/components/admin/admin-action-forms';
 import { AdminSectionNav } from '@/components/admin/admin-section-nav';
 import { AuthorityPanel } from '@/components/admin/authority-panel';
-import { DurationInput } from '@/components/admin/duration-input';
 import { PageSection } from '@/components/page-section';
-import { Badge, Button, Callout, Card, Heading, Input, Skeleton, Text } from '@/components/ui';
+import { Badge, Button, Callout, Card, Heading, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
-import { useGovernorSettings } from '@/lib/admin-queries';
+import { startAdminProposal, treasuryHasAuthority, treasuryIsOwner } from '@/lib/admin-proposals';
+import { useContractOwner, useGovernorSettings } from '@/lib/admin-queries';
 import { formatDuration } from '@/lib/format-duration';
 import { useGoldskyGovernorAuthorities } from '@/lib/goldsky-queries';
+import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
@@ -58,6 +61,7 @@ function formatSecondsValue(value: number | null | undefined) {
 
 export default function GovernanceAdminPage() {
   const { daoId, daoConfig: config } = useDaoContext();
+  const router = useRouter();
   const session = useDaoSessionStore();
   const [drafts, setDrafts] = useState<Drafts>(EMPTY_DRAFTS);
   const [formMessage, setFormMessage] = useState('');
@@ -76,10 +80,39 @@ export default function GovernanceAdminPage() {
     isLoading: authorityLoading,
     mutate: refreshAuthorities
   } = useGoldskyGovernorAuthorities(config.tokenContractId);
+  const { data: governorOwner } = useContractOwner(config, 'governor', session.address || undefined);
   const isOwner = Boolean(session.address && session.address === config.adminAddress);
   const hasGovernanceAccess = Boolean(
     isOwner || governorAuthorities?.items.some((item) => item.authority === session.address)
   );
+  const canProposeGovernance = Boolean(
+    session.address &&
+    (treasuryIsOwner(config, governorOwner) ||
+      treasuryHasAuthority(config.treasuryContractId, governorAuthorities?.items))
+  );
+
+  function proposeSetting(
+    type: 'set-voting-delay' | 'set-voting-period' | 'set-proposal-threshold' | 'set-quorum-bps',
+    value: string,
+    label: string
+  ) {
+    const handler = getActionHandler(type);
+    const action = handler.serialize(
+      { value },
+      { config, session: { address: session.address, kit: StellarWalletsKit } }
+    );
+    startAdminProposal({
+      router,
+      daoId,
+      action,
+      source: `admin/governance/${type}`,
+      metadata: {
+        title: `Update ${label.toLowerCase()}`,
+        description: `Update the DAO ${label.toLowerCase()} to ${value}.`,
+        url: ''
+      }
+    });
+  }
 
   async function getGovernor() {
     if (!session.address) {
@@ -157,6 +190,11 @@ export default function GovernanceAdminPage() {
       return;
     }
 
+    if (!hasGovernanceAccess && canProposeGovernance) {
+      proposeSetting('set-voting-delay', String(value), 'voting delay');
+      return;
+    }
+
     await submitGovernorUpdate('votingDelay', 'Voting delay', async (governor) => {
       const assembled = await governor.set_voting_delay({ caller: session.address || '', voting_delay: value });
       const sent = await assembled.signAndSend();
@@ -177,6 +215,11 @@ export default function GovernanceAdminPage() {
       return;
     }
 
+    if (!hasGovernanceAccess && canProposeGovernance) {
+      proposeSetting('set-voting-period', String(value), 'voting period');
+      return;
+    }
+
     await submitGovernorUpdate('votingPeriod', 'Voting period', async (governor) => {
       const assembled = await governor.set_voting_period({ caller: session.address || '', voting_period: value });
       const sent = await assembled.signAndSend();
@@ -194,6 +237,11 @@ export default function GovernanceAdminPage() {
 
     if (value === settings.proposalThreshold) {
       setFormMessage('Proposal threshold is unchanged.');
+      return;
+    }
+
+    if (!hasGovernanceAccess && canProposeGovernance) {
+      proposeSetting('set-proposal-threshold', value.toString(), 'proposal threshold');
       return;
     }
 
@@ -220,6 +268,11 @@ export default function GovernanceAdminPage() {
       return;
     }
 
+    if (!hasGovernanceAccess && canProposeGovernance) {
+      proposeSetting('set-quorum-bps', String(value), 'quorum');
+      return;
+    }
+
     await submitGovernorUpdate('quorumBps', 'Quorum', async (governor) => {
       const assembled = await governor.set_quorum_bps({ caller: session.address || '', quorum_bps: value });
       const sent = await assembled.signAndSend();
@@ -227,7 +280,7 @@ export default function GovernanceAdminPage() {
     });
   }
 
-  if (!hasGovernanceAccess) {
+  if (!hasGovernanceAccess && !canProposeGovernance) {
     return (
       <PageSection title="Governance Admin" description="Governance settings and authority management.">
         <Callout
@@ -293,14 +346,13 @@ export default function GovernanceAdminPage() {
               <div>
                 <Badge>Voting delay</Badge>
               </div>
-              <DurationInput
-                id="voting-delay"
-                label="Voting delay"
-                value={drafts.votingDelay ?? settings?.votingDelay ?? ''}
-                onChange={(seconds) => setDrafts((current) => ({ ...current, votingDelay: String(seconds) }))}
-                helperText={
-                  settings ? `Current: ${formatSecondsValue(settings.votingDelay)} · Measured in seconds.` : undefined
-                }
+              <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+                Current: {settings ? formatSecondsValue(settings.votingDelay) : '—'} · Measured in seconds.
+              </Text>
+              <AdminValueForm
+                value={{ value: drafts.votingDelay ?? settings?.votingDelay?.toString() ?? '' }}
+                onChange={(value) => setDrafts((current) => ({ ...current, votingDelay: value.value }))}
+                disabled={busy}
               />
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <Button
@@ -325,14 +377,13 @@ export default function GovernanceAdminPage() {
               <div>
                 <Badge>Voting period</Badge>
               </div>
-              <DurationInput
-                id="voting-period"
-                label="Voting period"
-                value={drafts.votingPeriod ?? settings?.votingPeriod ?? ''}
-                onChange={(seconds) => setDrafts((current) => ({ ...current, votingPeriod: String(seconds) }))}
-                helperText={
-                  settings ? `Current: ${formatSecondsValue(settings.votingPeriod)} · Measured in seconds.` : undefined
-                }
+              <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+                Current: {settings ? formatSecondsValue(settings.votingPeriod) : '—'} · Measured in seconds.
+              </Text>
+              <AdminValueForm
+                value={{ value: drafts.votingPeriod ?? settings?.votingPeriod?.toString() ?? '' }}
+                onChange={(value) => setDrafts((current) => ({ ...current, votingPeriod: value.value }))}
+                disabled={busy}
               />
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <Button
@@ -365,13 +416,10 @@ export default function GovernanceAdminPage() {
                   <Skeleton className="skeleton--inline" style={{ width: '90px', height: '1em' }} />
                 )}
               </Text>
-              <Input
-                value={drafts.proposalThreshold ?? formatThreshold(settings?.proposalThreshold ?? 0n)}
-                type="number"
-                min="0"
-                step="1"
-                onChange={(event) => setDrafts((current) => ({ ...current, proposalThreshold: event.target.value }))}
-                placeholder="New proposal threshold"
+              <AdminValueForm
+                value={{ value: drafts.proposalThreshold ?? formatThreshold(settings?.proposalThreshold ?? 0n) }}
+                onChange={(value) => setDrafts((current) => ({ ...current, proposalThreshold: value.value }))}
+                disabled={busy}
               />
               <Text className="lede" style={{ margin: 0, fontSize: '0.8rem' }}>
                 {settings ? (
@@ -413,14 +461,10 @@ export default function GovernanceAdminPage() {
                   <Skeleton className="skeleton--inline" style={{ width: '80px', height: '1em' }} />
                 )}
               </Text>
-              <Input
-                value={drafts.quorumBps ?? String(settings?.quorumBps ?? '')}
-                type="number"
-                min="0"
-                max="10000"
-                step="1"
-                onChange={(event) => setDrafts((current) => ({ ...current, quorumBps: event.target.value }))}
-                placeholder="New quorum bps"
+              <AdminValueForm
+                value={{ value: drafts.quorumBps ?? String(settings?.quorumBps ?? '') }}
+                onChange={(value) => setDrafts((current) => ({ ...current, quorumBps: value.value }))}
+                disabled={busy}
               />
               <Text className="lede" style={{ margin: 0, fontSize: '0.8rem' }}>
                 {settings ? (

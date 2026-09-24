@@ -7,6 +7,7 @@ import { Stack } from 'styled-system/jsx';
 
 import { ProposalActionConfirmDialog } from '@/components/proposal/proposal-action-confirm-dialog';
 import { Badge, Button, Card, Text } from '@/components/ui';
+import { getProposalActionSummary } from '@/lib/proposal-call';
 import { useProposalComposerStore } from '@/stores/proposal-composer-store';
 
 import { getActionHandler } from '../registry';
@@ -86,9 +87,7 @@ export function ProposalActionQueue() {
                 {isEditing && <Badge style={{ marginBottom: '8px' }}>Currently editing</Badge>}
                 <Text style={{ fontWeight: 600, marginBottom: '4px' }}>{handler.label}</Text>
                 <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)' }}>
-                  To: {action.recipient}
-                  {action.amount && ` • Amount: ${action.amount}`}
-                  {action.assetCode && ` ${action.assetCode}`}
+                  {getProposalActionSummary(action)}
                 </Text>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>

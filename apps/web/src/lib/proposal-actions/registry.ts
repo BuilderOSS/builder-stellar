@@ -3,6 +3,18 @@
 import { batchMintGovernanceTokenHandler } from './actions/batch-mint-governance-token';
 import { mintGovernanceTokenHandler } from './actions/mint-governance-token';
 import { transferSacTokenHandler } from './actions/transfer-sac-token';
+import {
+  pauseAuctionHandler,
+  setAuctionPaymentTokenHandler,
+  setAuctionReservePriceHandler,
+  setGovernorAuthorityHandler,
+  setMintAuthorityHandler,
+  setProposalThresholdHandler,
+  setQuorumBpsHandler,
+  setVotingDelayHandler,
+  setVotingPeriodHandler,
+  unpauseAuctionHandler
+} from './admin-actions';
 import type { ActionHandler, ProposalActionType } from './types';
 
 /**
@@ -12,7 +24,17 @@ import type { ActionHandler, ProposalActionType } from './types';
 const REGISTERED_HANDLERS: ActionHandler[] = [
   mintGovernanceTokenHandler,
   batchMintGovernanceTokenHandler,
-  transferSacTokenHandler
+  transferSacTokenHandler,
+  setMintAuthorityHandler,
+  setGovernorAuthorityHandler,
+  setVotingDelayHandler,
+  setVotingPeriodHandler,
+  setProposalThresholdHandler,
+  setQuorumBpsHandler,
+  pauseAuctionHandler,
+  unpauseAuctionHandler,
+  setAuctionReservePriceHandler,
+  setAuctionPaymentTokenHandler
 ];
 
 const ACTION_REGISTRY = new Map<ProposalActionType, ActionHandler>(

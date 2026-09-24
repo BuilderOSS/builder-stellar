@@ -71,6 +71,7 @@ type ProposalComposerActions = {
     step?: 1 | 2 | 3;
     source?: string;
   }) => void;
+  startFromAdminAction: (data: { metadata: ProposalMetadata; action: ProposalQueuedAction; source?: string }) => void;
 
   // Validation
   setValidationErrors: (errors: ValidationResult | null) => void;
@@ -225,6 +226,15 @@ export const useProposalComposerStore = create<ProposalComposerStore>()(
           step: step || state.step,
           prepopulatedFrom: source
         })),
+
+      startFromAdminAction: ({ metadata, action, source }) =>
+        set({
+          ...initialState,
+          metadata,
+          queuedActions: [action],
+          step: 1,
+          prepopulatedFrom: source
+        }),
 
       // Validation
       setValidationErrors: (validationErrors) => set({ validationErrors }),

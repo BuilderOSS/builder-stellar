@@ -2,21 +2,28 @@
 
 import { Client as TokenClient } from '@builder-stellar/token-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 
 import { AdminSectionNav } from '@/components/admin/admin-section-nav';
 import { AuthorityPanel } from '@/components/admin/authority-panel';
 import { PageSection } from '@/components/page-section';
-import { Badge, Button, Callout, Card, Heading, Input, Text } from '@/components/ui';
+import { Badge, Button, Callout, Card, Heading, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
+import { startAdminProposal, treasuryHasAuthority, treasuryIsOwner } from '@/lib/admin-proposals';
+import { useContractOwner } from '@/lib/admin-queries';
 import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
+import { BatchMintGovernanceTokenForm } from '@/lib/proposal-actions/actions/batch-mint-governance-token/component';
+import type { BatchMintGovernanceTokenData } from '@/lib/proposal-actions/actions/batch-mint-governance-token/types';
+import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
 export default function TokenAdminPage() {
   const { daoId, daoConfig: config } = useDaoContext();
+  const router = useRouter();
   const session = useDaoSessionStore();
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('1');
@@ -24,12 +31,16 @@ export default function TokenAdminPage() {
   const [busy, setBusy] = useState(false);
   const tx = useTransactionFeedback(config.name);
   const { data: mintAuthorities, error, isLoading, mutate } = useGoldskyMintAuthorities(config.tokenContractId);
+  const { data: tokenOwner } = useContractOwner(config, 'token', session.address || undefined);
   const isOwner = Boolean(session.address && session.address === config.adminAddress);
   const hasMintAccess = Boolean(isOwner || mintAuthorities?.items.some((item) => item.authority === session.address));
+  const treasuryCanMint =
+    treasuryIsOwner(config, tokenOwner) || treasuryHasAuthority(config.treasuryContractId, mintAuthorities?.items);
+  const canProposeMint = Boolean(session.address && treasuryCanMint);
 
   async function handleMint() {
-    if (!session.address || !hasMintAccess) {
-      setFormMessage('Connect a mint authority wallet first.');
+    if (!session.address || (!hasMintAccess && !canProposeMint)) {
+      setFormMessage('Connect a mint authority wallet or use a DAO whose treasury has mint authority.');
       return;
     }
 
@@ -54,6 +65,26 @@ export default function TokenAdminPage() {
     tx.start('Preparing batch mint transaction...');
 
     try {
+      if (!hasMintAccess && canProposeMint) {
+        const handler = getActionHandler('batch-mint-governance-token');
+        const action = handler.serialize(
+          { recipient, amount },
+          { config, session: { address: session.address, kit: StellarWalletsKit } }
+        );
+        startAdminProposal({
+          router,
+          daoId,
+          action,
+          source: 'admin/token',
+          metadata: {
+            title: `Mint ${amount} governance token${amount === '1' ? '' : 's'}`,
+            description: `Mint ${amount} governance token${amount === '1' ? '' : 's'} to ${recipient}.`,
+            url: ''
+          }
+        });
+        return;
+      }
+
       const client = new TokenClient({
         contractId: config.tokenContractId,
         rpcUrl: config.rpcUrl,
@@ -100,25 +131,17 @@ export default function TokenAdminPage() {
                 ? 'Enter a recipient address and mint up to 20 tokens directly to that wallet.'
                 : 'Only a mint authority or the owner can mint from this page.'}
             </Text>
-            <Input
-              value={recipient}
-              onChange={(event) => setRecipient(event.target.value)}
-              placeholder="Recipient address"
-              disabled={!hasMintAccess}
-            />
-            <Input
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              type="number"
-              min="1"
-              max="20"
-              step="1"
-              placeholder="Amount (1-20)"
-              disabled={!hasMintAccess}
+            <BatchMintGovernanceTokenForm
+              value={{ recipient, amount } satisfies BatchMintGovernanceTokenData}
+              onChange={(value) => {
+                setRecipient(value.recipient);
+                setAmount(value.amount);
+              }}
+              disabled={!hasMintAccess && !canProposeMint}
             />
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <Button type="button" onClick={handleMint} disabled={busy || !hasMintAccess}>
-                {busy ? 'Minting...' : 'Batch mint'}
+              <Button type="button" onClick={handleMint} disabled={busy || (!hasMintAccess && !canProposeMint)}>
+                {busy ? 'Preparing...' : hasMintAccess ? 'Batch mint' : 'Create mint proposal'}
               </Button>
               <Button type="button" variant="outline" onClick={() => void mutate()} disabled={isLoading}>
                 {isLoading ? 'Refreshing...' : 'Refresh authorities'}

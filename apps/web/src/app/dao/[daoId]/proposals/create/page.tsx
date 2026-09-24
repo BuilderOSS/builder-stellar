@@ -15,7 +15,7 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { useGovernorSettings } from '@/lib/admin-queries';
 import { daoRoute } from '@/lib/dao-routes';
 import { ActionFormProvider, ActionFormWrapper, ProposalActionQueue } from '@/lib/proposal-actions';
-import { buildProposalCallVectors, encodeProposalCallArgs } from '@/lib/proposal-call';
+import { buildProposalCallVectors, encodeProposalCallArgs, getProposalActionSummary } from '@/lib/proposal-call';
 import { proposalIdToRouteId } from '@/lib/proposal-id';
 import { encodeProposalMetadata, validateProposalMetadataDraft } from '@/lib/proposal-metadata';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
@@ -119,7 +119,8 @@ export default function ProposalCreatePage() {
       const { targets, functions, args } = buildProposalCallVectors(
         queuedActions,
         config.tokenContractId,
-        config.treasuryContractId
+        config.treasuryContractId,
+        config
       );
 
       // Encode args and metadata
@@ -371,9 +372,7 @@ export default function ProposalCreatePage() {
                               style={{ background: 'var(--gray-2)', border: '1px solid var(--gray-6)' }}
                             >
                               <Text style={{ fontSize: '0.875rem' }}>
-                                <strong>{i + 1}.</strong> {action.type} → {action.recipient}
-                                {action.amount && ` • ${action.amount}`}
-                                {action.assetCode && ` ${action.assetCode}`}
+                                <strong>{i + 1}.</strong> {getProposalActionSummary(action)}
                               </Text>
                             </Card>
                           ))}
