@@ -7,33 +7,22 @@ import { useState } from 'react';
 
 import { DaoDirectory } from '@/components/dao-directory';
 import { MarketplaceComingSoon } from '@/components/marketplace/marketplace-coming-soon';
-import { Callout, Heading, Text } from '@/components/ui';
+import { Callout } from '@/components/ui';
 import { WalletControls } from '@/components/wallet-controls';
 import type { DaoConfig } from '@/lib/dao-db';
+import { useDashboardData } from '@/lib/goldsky-queries';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
+import { DashboardFeed } from './dashboard-feed';
 import { DashboardSidebar } from './dashboard-sidebar';
-import { type DashboardTab, DashboardTabs } from './dashboard-tabs';
+import { DashboardTabs } from './dashboard-tabs';
 import { DashboardWelcome } from './dashboard-welcome';
-
-function EmptyDashboardTab({ tab }: { tab: Exclude<DashboardTab, 'discover' | 'marketplace'> }) {
-  const copy =
-    tab === 'feed'
-      ? ['Your activity feed is quiet', 'Join a DAO to see proposals, votes, and treasury activity here.']
-      : ['No DAOs yet', 'Your DAOs will appear here once membership data is connected.'];
-
-  return (
-    <div className="dashboard-empty-state" role="status">
-      <p className="eyebrow">{tab === 'feed' ? 'Personalized activity' : 'Your communities'}</p>
-      <Heading style={{ fontSize: '1.35rem', margin: '8px 0' }}>{copy[0]}</Heading>
-      <Text className="lede">{copy[1]}</Text>
-    </div>
-  );
-}
 
 export function DashboardShell({ daos, loadError }: { daos: DaoConfig[]; loadError: boolean }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const isNewcomer = !useDaoSessionStore((state) => state.address);
+  const sessionAddress = useDaoSessionStore((state) => state.address);
+  const isNewcomer = !sessionAddress;
+  const { data: dashboardData, error: dashboardError, isLoading: dashboardLoading } = useDashboardData(sessionAddress);
 
   return (
     <div className="page-shell dashboard-page-shell">
@@ -77,7 +66,13 @@ export function DashboardShell({ daos, loadError }: { daos: DaoConfig[]; loadErr
           </main>
         ) : (
           <div className="dashboard-layout">
-            <DashboardSidebar daos={daos} isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+            <DashboardSidebar
+              myDaos={dashboardData?.myDaos ?? []}
+              myDaosLoading={dashboardLoading}
+              myDaosError={Boolean(dashboardError)}
+              isOpen={sidebarOpen}
+              onClose={() => setSidebarOpen(false)}
+            />
             <main id="main-content" className="dashboard-main" tabIndex={-1}>
               <section className="dashboard-intro dashboard-connected-hero" aria-labelledby="dashboard-title">
                 <div>
@@ -101,6 +96,15 @@ export function DashboardShell({ daos, loadError }: { daos: DaoConfig[]; loadErr
 
               <DashboardTabs>
                 {(tab) => {
+                  if (tab === 'feed') {
+                    return (
+                      <DashboardFeed
+                        items={dashboardData?.feed.items ?? []}
+                        isLoading={dashboardLoading}
+                        error={dashboardError ? 'Your dashboard activity is temporarily unavailable.' : undefined}
+                      />
+                    );
+                  }
                   if (tab === 'discover') {
                     return (
                       <div className="dashboard-discover-content">
@@ -111,10 +115,7 @@ export function DashboardShell({ daos, loadError }: { daos: DaoConfig[]; loadErr
                   if (tab === 'marketplace') {
                     return <MarketplaceComingSoon />;
                   }
-                  if (tab === 'feed') {
-                    return <EmptyDashboardTab tab={tab} />;
-                  }
-                  return <EmptyDashboardTab tab={tab as Exclude<DashboardTab, 'discover' | 'marketplace'>} />;
+                  return <MarketplaceComingSoon />;
                 }}
               </DashboardTabs>
             </main>

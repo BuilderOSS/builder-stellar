@@ -2849,7 +2849,6 @@ textarea {
   display: none;
 }
 
-.dashboard-sidebar__nav,
 .dashboard-sidebar__dao-list {
   display: grid;
   gap: 4px;
@@ -2858,7 +2857,7 @@ textarea {
 .dashboard-sidebar__section {
   display: grid;
   gap: 10px;
-  margin-top: 28px;
+  margin-top: 0;
 }
 
 .dashboard-sidebar__heading {
@@ -2927,6 +2926,10 @@ textarea {
   padding: 0 10px;
   color: var(--text-tertiary);
   font-size: 0.78rem;
+}
+
+.dashboard-sidebar__error {
+  color: var(--negative);
 }
 
 .dashboard-sidebar__actions {
@@ -3087,6 +3090,71 @@ textarea {
   border-bottom-color: var(--action);
 }
 
+.dashboard-feed {
+  display: grid;
+  gap: 24px;
+}
+
+.dashboard-feed__heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+}
+
+.dashboard-feed__hint {
+  max-width: 320px;
+  text-align: right;
+}
+
+.dashboard-feed__list {
+  display: grid;
+  gap: 10px;
+}
+
+.dashboard-feed__item {
+  display: grid;
+  gap: 0;
+}
+
+.dashboard-feed__item-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dashboard-feed__date {
+  color: var(--text-tertiary);
+  font-size: 0.76rem;
+}
+
+.dashboard-feed__summary {
+  color: var(--text-secondary);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.dashboard-feed__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  justify-self: start;
+  margin-top: 14px;
+  color: var(--action-hover);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.dashboard-feed__error {
+  color: var(--negative);
+}
+
+.dashboard-feed__empty {
+  min-height: 220px;
+}
+
 .dashboard-empty-state {
   display: grid;
   justify-items: start;
@@ -3204,6 +3272,21 @@ textarea {
   .dashboard-empty-state {
     min-height: 260px;
     padding: 28px 20px;
+  }
+
+  .dashboard-feed__heading {
+    display: block;
+  }
+
+  .dashboard-feed__hint {
+    margin-top: 12px;
+    text-align: left;
+  }
+
+  .dashboard-feed__item-topline {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
   }
 }
 
