@@ -18,15 +18,17 @@ export function treasuryHasAuthority(
 }
 
 export function startAdminProposal({
+  address,
   daoId,
   metadata,
   action,
   source
 }: {
+  address: string;
   daoId: string;
   metadata: { title: string; description: string; url: string };
   action: ProposalQueuedAction;
   source: string;
 }) {
-  useProposalComposerStore.getState().addAdminAction({ daoId, metadata, action, source });
+  useProposalComposerStore.getState().addAdminAction({ address, daoId, metadata, action, source });
 }

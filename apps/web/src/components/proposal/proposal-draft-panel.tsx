@@ -7,11 +7,13 @@ import { Stack } from 'styled-system/jsx';
 import { ProposalActionConfirmDialog } from '@/components/proposal/proposal-action-confirm-dialog';
 import { Badge, Button, Card, Heading, Text } from '@/components/ui';
 import { ProposalActionQueue } from '@/lib/proposal-actions';
+import { useDaoSessionStore } from '@/stores/dao-session-store';
 import { selectDraft, selectHasDraft, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
 export function ProposalDraftPanel({ daoId }: { daoId: string }) {
-  const draft = useProposalComposerStore(selectDraft(daoId));
-  const hasDraft = useProposalComposerStore(selectHasDraft(daoId));
+  const address = useDaoSessionStore((state) => state.address);
+  const draft = useProposalComposerStore(selectDraft(address || null, daoId));
+  const hasDraft = useProposalComposerStore(selectHasDraft(address || null, daoId));
   const reset = useProposalComposerStore((state) => state.reset);
   const router = useRouter();
   const [confirmClear, setConfirmClear] = useState(false);
@@ -58,7 +60,7 @@ export function ProposalDraftPanel({ daoId }: { daoId: string }) {
         confirmLabel="Clear draft"
         busy={false}
         onConfirm={() => {
-          reset(daoId);
+          reset(address, daoId);
           setConfirmClear(false);
         }}
         onCancel={() => setConfirmClear(false)}

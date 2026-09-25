@@ -18,9 +18,11 @@ export function ProposalDraftIndicator({
   address: string | null;
 }) {
   const router = useRouter();
-  const draft = useProposalComposerStore(selectDraft(daoId));
-  const hasDraft = useProposalComposerStore(selectHasDraft(daoId));
+  const draft = useProposalComposerStore(selectDraft(address, daoId));
+  const hasDraft = useProposalComposerStore(selectHasDraft(address, daoId));
   const eligibility = useProposalEligibility(config, address, !hasDraft);
+
+  if (hasDraft && !address) return null;
 
   const label = hasDraft
     ? `Continue proposal${draft.queuedActions.length ? ` · ${draft.queuedActions.length}` : ''}`

@@ -136,6 +136,7 @@ export default function OwnerPage() {
           { config, session: { address: session.address, kit: StellarWalletsKit } }
         );
         startAdminProposal({
+          address: session.address,
           daoId,
           action,
           source: `admin/owner/${type}`,

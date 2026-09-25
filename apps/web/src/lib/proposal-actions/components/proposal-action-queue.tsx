@@ -8,7 +8,8 @@ import { Stack } from 'styled-system/jsx';
 import { ProposalActionConfirmDialog } from '@/components/proposal/proposal-action-confirm-dialog';
 import { Badge, Button, Card, Text } from '@/components/ui';
 import { getProposalActionSummary } from '@/lib/proposal-call';
-import { useProposalComposerStore } from '@/stores/proposal-composer-store';
+import { useDaoSessionStore } from '@/stores/dao-session-store';
+import { normalizeWalletAddress, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
 import { getActionHandler } from '../registry';
 
@@ -21,8 +22,10 @@ type ConfirmDialogState = {
 } | null;
 
 export function ProposalActionQueue({ daoId, editable = true }: { daoId: string; editable?: boolean }) {
-  const queuedActions = useProposalComposerStore((s) => s.draftsByDaoId[daoId]?.queuedActions ?? []);
-  const editingState = useProposalComposerStore((s) => s.draftsByDaoId[daoId]?.editingState ?? null);
+  const address = useDaoSessionStore((state) => state.address);
+  const walletKey = normalizeWalletAddress(address);
+  const queuedActions = useProposalComposerStore((s) => s.draftsByWallet[walletKey]?.[daoId]?.queuedActions ?? []);
+  const editingState = useProposalComposerStore((s) => s.draftsByWallet[walletKey]?.[daoId]?.editingState ?? null);
   const editingIndex = editingState?.index;
   const beginEdit = useProposalComposerStore((s) => s.beginEdit);
   const removeAction = useProposalComposerStore((s) => s.removeAction);
@@ -38,13 +41,13 @@ export function ProposalActionQueue({ daoId, editable = true }: { daoId: string;
         message: 'Your current unsaved changes will be discarded (the original queued action remains unchanged).',
         confirmLabel: 'Switch',
         onConfirm: () => {
-          beginEdit(daoId, index);
+          beginEdit(address, daoId, index);
           setConfirmDialog(null);
         }
       });
       return;
     }
-    beginEdit(daoId, index);
+    beginEdit(address, daoId, index);
   };
 
   const handleRemove = (index: number, actionLabel: string) => {
@@ -54,7 +57,7 @@ export function ProposalActionQueue({ daoId, editable = true }: { daoId: string;
       message: `Are you sure you want to remove this ${actionLabel} action?`,
       confirmLabel: 'Remove',
       onConfirm: () => {
-        removeAction(daoId, index);
+        removeAction(address, daoId, index);
         setConfirmDialog(null);
       }
     });

@@ -100,6 +100,7 @@ export default function GovernanceAdminPage() {
       { config, session: { address: session.address, kit: StellarWalletsKit } }
     );
     startAdminProposal({
+      address: session.address,
       daoId,
       action,
       source: `admin/governance/${type}`,

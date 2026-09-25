@@ -56,6 +56,7 @@ export default function AuctionAdminPage() {
       const handler = getActionHandler(type);
       const action = handler.serialize({}, { config, session: { address: session.address, kit: StellarWalletsKit } });
       startAdminProposal({
+        address: session.address,
         daoId,
         action,
         source: `admin/auction/${type}`,
@@ -113,6 +114,7 @@ export default function AuctionAdminPage() {
         { config, session: { address: session.address, kit: StellarWalletsKit } }
       );
       startAdminProposal({
+        address: session.address,
         daoId,
         action,
         source: 'admin/auction/set-auction-reserve-price',
@@ -164,6 +166,7 @@ export default function AuctionAdminPage() {
         { config, session: { address: session.address, kit: StellarWalletsKit } }
       );
       startAdminProposal({
+        address: session.address,
         daoId,
         action,
         source: 'admin/auction/set-auction-payment-token',

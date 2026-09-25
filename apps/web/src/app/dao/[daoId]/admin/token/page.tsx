@@ -66,6 +66,7 @@ export default function TokenAdminPage() {
           { config, session: { address: session.address, kit: StellarWalletsKit } }
         );
         startAdminProposal({
+          address: session.address,
           daoId,
           action,
           source: 'admin/token',
