@@ -41,7 +41,7 @@ export default function ProposalsPage() {
   const router = useRouter();
   const session = useDaoSessionStore();
   const eligibility = useProposalEligibility(config, session.address);
-  const hasDraft = useProposalComposerStore(selectHasDraft(daoId));
+  const hasDraft = useProposalComposerStore(selectHasDraft(session.address || null, daoId));
   const { data, error, isLoading, mutate } = useSWR<ProposalListResponse>(
     `/api/dao/${encodeURIComponent(daoId)}/proposals?limit=24`,
     async (url: string) => {
@@ -71,6 +71,7 @@ export default function ProposalsPage() {
     });
   }, [items, query, status]);
   const createDisabled = !hasDraft && !eligibility.eligible;
+  const canShowProposalAction = Boolean(session.address) || !hasDraft;
   const createDisabledMessage = createDisabled ? eligibility.message : undefined;
 
   return (
@@ -111,21 +112,23 @@ export default function ProposalsPage() {
             >
               <RefreshCw aria-hidden="true" className={isLoading ? 'is-spinning' : undefined} size={16} />
             </Button>
-            <span className="proposal-create-tooltip" tabIndex={createDisabledMessage ? 0 : undefined}>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => router.push(daoRoute(daoId, 'proposals/create'))}
-                disabled={createDisabled}
-              >
-                {hasDraft ? 'Continue proposal' : 'Create proposal'}
-              </Button>
-              {createDisabledMessage ? (
-                <span className="proposal-create-tooltip__message" role="tooltip">
-                  {createDisabledMessage}
-                </span>
-              ) : null}
-            </span>
+            {canShowProposalAction ? (
+              <span className="proposal-create-tooltip" tabIndex={createDisabledMessage ? 0 : undefined}>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => router.push(daoRoute(daoId, 'proposals/create'))}
+                  disabled={createDisabled}
+                >
+                  {hasDraft ? 'Continue proposal' : 'Create proposal'}
+                </Button>
+                {createDisabledMessage ? (
+                  <span className="proposal-create-tooltip__message" role="tooltip">
+                    {createDisabledMessage}
+                  </span>
+                ) : null}
+              </span>
+            ) : null}
           </div>
         </div>
 

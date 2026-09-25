@@ -1,11 +1,14 @@
 'use client';
 
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
+
+import type { AuthStatus } from '@/lib/auth/types';
 
 type DaoSessionState = {
   address: string;
   status: string;
+  authStatus: AuthStatus;
+  authError: string;
   syncedAt: string;
   walletNetworkPassphrase: string;
   walletNetworkIssue: string;
@@ -13,6 +16,9 @@ type DaoSessionState = {
 
 type DaoSessionActions = {
   updateSession: (patch: Partial<DaoSessionState>) => void;
+  setAuthStatus: (authStatus: AuthStatus, authError?: string) => void;
+  setAuthenticatedAddress: (address: string) => void;
+  resetAuth: () => void;
 };
 
 type DaoSessionStore = DaoSessionState & DaoSessionActions;
@@ -20,50 +26,41 @@ type DaoSessionStore = DaoSessionState & DaoSessionActions;
 const initialState: DaoSessionState = {
   address: '',
   status: 'Disconnected',
+  authStatus: 'anonymous',
+  authError: '',
   syncedAt: '',
   walletNetworkPassphrase: '',
   walletNetworkIssue: ''
 };
 
-const memoryStorage = {
-  getItem: (_name: string) => null,
-  setItem: (_name: string, _value: string) => undefined,
-  removeItem: (_name: string) => undefined
-};
+export const useDaoSessionStore = create<DaoSessionStore>((set) => ({
+  ...initialState,
+  updateSession: (patch) =>
+    set((current) => {
+      let changed = false;
+      const next = { ...current };
 
-const storage = createJSONStorage(() => (typeof window === 'undefined' ? memoryStorage : window.localStorage));
+      for (const [key, value] of Object.entries(patch) as Array<
+        [keyof DaoSessionState, DaoSessionState[keyof DaoSessionState]]
+      >) {
+        if (typeof value !== 'undefined' && next[key] !== value) {
+          next[key] = value as never;
+          changed = true;
+        }
+      }
 
-export const useDaoSessionStore = create<DaoSessionStore>()(
-  persist(
-    (set) => ({
-      ...initialState,
-      updateSession: (patch) =>
-        set((current) => {
-          let changed = false;
-          const next = { ...current };
-
-          for (const [key, value] of Object.entries(patch) as Array<
-            [keyof DaoSessionState, DaoSessionState[keyof DaoSessionState]]
-          >) {
-            if (typeof value !== 'undefined' && next[key] !== value) {
-              next[key] = value as never;
-              changed = true;
-            }
-          }
-
-          return changed ? next : current;
-        })
+      return changed ? next : current;
     }),
-    {
-      name: 'dao.session.v1',
-      storage,
-      partialize: (state) => ({
-        address: state.address,
-        status: state.status,
-        syncedAt: state.syncedAt,
-        walletNetworkPassphrase: state.walletNetworkPassphrase,
-        walletNetworkIssue: state.walletNetworkIssue
-      })
-    }
-  )
-);
+  setAuthStatus: (authStatus, authError = '') => set({ authStatus, authError }),
+  setAuthenticatedAddress: (address) => set({ address, authStatus: 'authenticated', authError: '' }),
+  resetAuth: () =>
+    set({
+      address: '',
+      authStatus: 'anonymous',
+      authError: '',
+      status: 'Disconnected',
+      syncedAt: '',
+      walletNetworkPassphrase: '',
+      walletNetworkIssue: ''
+    })
+}));

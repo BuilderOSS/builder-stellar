@@ -87,6 +87,12 @@ configs/               Network and DAO configuration
 - `pnpm lint` - lint the web application
 - `pnpm typecheck` - type-check the web application
 
+## Wallet Authentication
+
+The web app uses Stellar Wallets Kit SEP-53 message signing with a stateless `iron-session` cookie. Configure `APP_URL` and a private `IRON_PASSWORD` of at least 32 characters for deployed environments. Local development may use the request origin when `APP_URL` is omitted.
+
+Authentication endpoints are `/api/auth/challenge`, `/api/auth/verify`, `/api/auth/session`, and `/api/auth/logout`. Existing discovery and indexed-data `GET` endpoints remain public. Future state-changing API routes must use the authenticated address from the server session, never an address supplied in a request body or query string. SameSite cookies provide the current baseline CSRF protection; mutation routes should add an explicit CSRF token check before shipping.
+
 ## Technology
 
 Rust and Soroban power the contracts. The application uses Next.js, TypeScript, Panda CSS, Stellar Wallets Kit, Goldsky, and PostgreSQL.

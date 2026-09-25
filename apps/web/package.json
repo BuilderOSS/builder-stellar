@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "panda:codegen": "panda codegen && panda cssgen"
   },
@@ -26,6 +27,7 @@
     "@noble/hashes": "^2.2.0",
     "@stellar/stellar-sdk": "^17.0.1",
     "buffer": "^6.0.3",
+    "iron-session": "^8.0.4",
     "next": "^15.4.0",
     "papaparse": "^5.7.0",
     "react": "^19.0.0",
@@ -56,6 +58,7 @@
     "eslint-plugin-unused-imports": "^4.4.1",
     "lucide-react": "^1.27.0",
     "prettier": "^3.9.6",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.4"
   }
 }

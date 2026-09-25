@@ -36,10 +36,10 @@ export default function ProposalCreatePage() {
   const { daoConfig: config } = useDaoContext();
 
   // Zustand store hooks
-  const draft = useProposalComposerStore(selectDraft(daoId));
+  const draft = useProposalComposerStore(selectDraft(session.address || null, daoId));
   const { step, metadata, queuedActions, editingState } = draft;
-  const hasDraft = useProposalComposerStore(selectHasDraft(daoId));
-  const canProceed = useProposalComposerStore(selectCanProceedToStep2(daoId));
+  const hasDraft = useProposalComposerStore(selectHasDraft(session.address || null, daoId));
+  const canProceed = useProposalComposerStore(selectCanProceedToStep2(session.address || null, daoId));
 
   const setStep = useProposalComposerStore((s) => s.setStep);
   const updateMetadata = useProposalComposerStore((s) => s.updateMetadata);
@@ -67,13 +67,13 @@ export default function ProposalCreatePage() {
 
   const handleProceedToStep2 = () => {
     if (metadataValidation.valid) {
-      setStep(daoId, 2);
+      setStep(session.address, daoId, 2);
     }
   };
 
   const handleProceedToStep3 = () => {
     if (canProceed && queuedActions.length > 0) {
-      setStep(daoId, 3);
+      setStep(session.address, daoId, 3);
     }
   };
 
@@ -133,7 +133,7 @@ export default function ProposalCreatePage() {
       txFeedback.success('Proposal created', hash);
 
       // Reset store and navigate
-      reset(daoId);
+      reset(session.address, daoId);
       router.push(proposalId ? daoRoute(daoId, `proposals/${proposalId}`) : daoRoute(daoId, 'proposals'));
     } catch (err: any) {
       console.error('Proposal creation error:', err);
@@ -214,7 +214,7 @@ export default function ProposalCreatePage() {
                           <Input
                             id="title"
                             value={metadata.title}
-                            onChange={(e) => updateMetadata(daoId, { title: e.target.value })}
+                            onChange={(e) => updateMetadata(session.address, daoId, { title: e.target.value })}
                             placeholder="Proposal title"
                           />
                           {!metadataValidation.valid && (
@@ -231,7 +231,7 @@ export default function ProposalCreatePage() {
                           <Textarea
                             id="description"
                             value={metadata.description}
-                            onChange={(e) => updateMetadata(daoId, { description: e.target.value })}
+                            onChange={(e) => updateMetadata(session.address, daoId, { description: e.target.value })}
                             placeholder="Describe what this proposal does"
                             rows={6}
                           />
@@ -244,7 +244,7 @@ export default function ProposalCreatePage() {
                           <Input
                             id="url"
                             value={metadata.url}
-                            onChange={(e) => updateMetadata(daoId, { url: e.target.value })}
+                            onChange={(e) => updateMetadata(session.address, daoId, { url: e.target.value })}
                             placeholder="https://forum.example.com/proposal-discussion"
                           />
                         </Stack>
@@ -277,7 +277,9 @@ export default function ProposalCreatePage() {
 
                       <Grid columns={{ base: 1, lg: 2 }} gap="6">
                         <Stack gap="4">
-                          {!editingState && <Button onClick={() => beginCreate(daoId)}>Add Action</Button>}
+                          {!editingState && (
+                            <Button onClick={() => beginCreate(session.address, daoId)}>Add Action</Button>
+                          )}
 
                           <ActionFormWrapper daoId={daoId} />
                         </Stack>
@@ -291,7 +293,7 @@ export default function ProposalCreatePage() {
                       </Grid>
 
                       <div className="form-actions form-actions--split">
-                        <Button variant="outline" onClick={() => setStep(daoId, 1)}>
+                        <Button variant="outline" onClick={() => setStep(session.address, daoId, 1)}>
                           Back to Details
                         </Button>
                         <Button onClick={handleProceedToStep3} disabled={!canProceed || queuedActions.length === 0}>
@@ -379,7 +381,7 @@ export default function ProposalCreatePage() {
                     </Card>
 
                     <div className="form-actions form-actions--split">
-                      <Button variant="outline" onClick={() => setStep(daoId, 2)}>
+                      <Button variant="outline" onClick={() => setStep(session.address, daoId, 2)}>
                         Back to Actions
                       </Button>
                       <Button onClick={handleOpenConfirmDialog} disabled={proposalCreationLocked || transactionBusy}>

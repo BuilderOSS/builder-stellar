@@ -6,7 +6,12 @@ import { Suspense, useCallback, useState } from 'react';
 
 import { ProposalActionConfirmDialog } from '@/components/proposal/proposal-action-confirm-dialog';
 import { Skeleton } from '@/components/ui';
-import { selectValidationErrors, useProposalComposerStore } from '@/stores/proposal-composer-store';
+import { useDaoSessionStore } from '@/stores/dao-session-store';
+import {
+  normalizeWalletAddress,
+  selectValidationErrors,
+  useProposalComposerStore
+} from '@/stores/proposal-composer-store';
 
 import { useActionFormContext } from '../context';
 import { getActionHandler } from '../registry';
@@ -29,11 +34,13 @@ type ConfirmDialogState = {
 export function ActionFormWrapper({ daoId }: { daoId: string }) {
   const context = useActionFormContext();
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>(null);
+  const address = useDaoSessionStore((state) => state.address);
+  const walletKey = normalizeWalletAddress(address);
 
   // Subscribe to only what we need (performance optimization)
-  const editingState = useProposalComposerStore((s) => s.draftsByDaoId[daoId]?.editingState ?? null);
-  const validationErrors = useProposalComposerStore(selectValidationErrors(daoId));
-  const busy = useProposalComposerStore((s) => s.draftsByDaoId[daoId]?.busy ?? false);
+  const editingState = useProposalComposerStore((s) => s.draftsByWallet[walletKey]?.[daoId]?.editingState ?? null);
+  const validationErrors = useProposalComposerStore(selectValidationErrors(address || null, daoId));
+  const busy = useProposalComposerStore((s) => s.draftsByWallet[walletKey]?.[daoId]?.busy ?? false);
 
   // Actions
   const updateDraft = useProposalComposerStore((s) => s.updateDraft);
@@ -53,14 +60,14 @@ export function ActionFormWrapper({ daoId }: { daoId: string }) {
     const validation = handler.validate(editingState.draftData, context);
 
     if (!validation.valid) {
-      setValidationErrors(daoId, validation);
+      setValidationErrors(address, daoId, validation);
       return;
     }
 
     const action = handler.serialize(editingState.draftData, context);
-    saveAction(daoId, action);
-    setValidationErrors(daoId, null);
-  }, [daoId, editingState, context, saveAction, setValidationErrors]);
+    saveAction(address, daoId, action);
+    setValidationErrors(address, daoId, null);
+  }, [address, daoId, editingState, context, saveAction, setValidationErrors]);
 
   const handleActionTypeChange = useCallback(
     (newType: ProposalActionType) => {
@@ -76,24 +83,24 @@ export function ActionFormWrapper({ daoId }: { daoId: string }) {
           message: 'Switching action type will clear your current draft. Continue?',
           confirmLabel: 'Switch',
           onConfirm: () => {
-            changeActionType(daoId, newType);
-            setValidationErrors(daoId, null);
+            changeActionType(address, daoId, newType);
+            setValidationErrors(address, daoId, null);
             setConfirmDialog(null);
           }
         });
         return;
       }
 
-      changeActionType(daoId, newType);
-      setValidationErrors(daoId, null);
+      changeActionType(address, daoId, newType);
+      setValidationErrors(address, daoId, null);
     },
-    [daoId, editingState, changeActionType, setValidationErrors]
+    [address, daoId, editingState, changeActionType, setValidationErrors]
   );
 
   const handleCancel = useCallback(() => {
-    cancelEdit(daoId);
-    setValidationErrors(daoId, null);
-  }, [daoId, cancelEdit, setValidationErrors]);
+    cancelEdit(address, daoId);
+    setValidationErrors(address, daoId, null);
+  }, [address, daoId, cancelEdit, setValidationErrors]);
 
   // No editing state - show empty state
   if (!editingState) {
@@ -131,7 +138,7 @@ export function ActionFormWrapper({ daoId }: { daoId: string }) {
           >
             <FormComponent
               value={editingState.draftData}
-              onChange={(value) => updateDraft(daoId, value)}
+              onChange={(value) => updateDraft(address, daoId, value)}
               disabled={isDisabled}
               validationErrors={validationErrors || undefined}
             />
