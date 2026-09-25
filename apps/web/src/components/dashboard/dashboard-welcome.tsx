@@ -1,35 +1,34 @@
 'use client';
 
-import { ArrowRight, Compass } from 'lucide-react';
+import { ArrowRight, Compass, Plus } from 'lucide-react';
 import Link from 'next/link';
 
+import { DaoDirectory } from '@/components/dao-directory';
 import { Heading, Text } from '@/components/ui';
+import type { DaoConfig } from '@/lib/dao-db';
 
-export function DashboardWelcome() {
+export function DashboardWelcome({ daos }: { daos: DaoConfig[] }) {
   return (
-    <section className="dashboard-empty-state" aria-labelledby="dashboard-welcome-title">
-      <p className="eyebrow">Welcome to Stellar DAOs</p>
-      <Heading id="dashboard-welcome-title" style={{ fontSize: 'clamp(1.8rem, 4vw, 2.5rem)', margin: '8px 0 12px' }}>
-        Find a community to follow, or start one of your own.
-      </Heading>
-      <Text className="lede" style={{ maxWidth: '620px' }}>
-        Explore live DAO directories, governance activity, and community details on Stellar. You can browse without
-        connecting a wallet.
-      </Text>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '28px' }}>
-        <Link
-          href="/?tab=discover"
-          className="nav-link"
-          style={{ background: 'var(--action)', color: 'var(--surface-0)' }}
-        >
-          <Compass aria-hidden="true" size={16} />
-          Explore DAOs
-          <ArrowRight aria-hidden="true" size={16} />
-        </Link>
-      </div>
-      <Text className="dashboard-welcome__hint">
-        Want to start a community? Use <strong>Create DAO</strong> in the dashboard menu.
-      </Text>
-    </section>
+    <>
+      <section className="dashboard-guest-hero" aria-labelledby="dashboard-welcome-title">
+        <p className="eyebrow">Explore Stellar governance</p>
+        <Heading id="dashboard-welcome-title">Find a DAO to explore.</Heading>
+        <Text className="lede">
+          Browse communities, proposals, and treasury activity. You can explore without connecting a wallet.
+        </Text>
+        <div className="dashboard-guest-hero__actions">
+          <Link href="#dao-directory-title" className="nav-link dashboard-guest-hero__primary">
+            <Compass aria-hidden="true" size={16} />
+            Explore DAOs
+            <ArrowRight aria-hidden="true" size={16} />
+          </Link>
+          <Link href="/create" className="nav-link dashboard-guest-hero__secondary">
+            <Plus aria-hidden="true" size={16} />
+            Create a DAO
+          </Link>
+        </div>
+      </section>
+      <DaoDirectory daos={daos} />
+    </>
   );
 }
