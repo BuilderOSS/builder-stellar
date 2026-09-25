@@ -5,7 +5,7 @@
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Grid, Stack } from 'styled-system/jsx';
 
 import { PageSection } from '@/components/page-section';
@@ -73,6 +73,8 @@ export default function ProposalCreatePage() {
 
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [contextRailOpen, setContextRailOpen] = useState(false);
+  const contextTriggerRef = useRef<HTMLButtonElement>(null);
+  const closeContextRail = useCallback(() => setContextRailOpen(false), []);
 
   const proposalCreationError = votingPowerError?.message ?? settingsError?.message;
   const proposalCreationLocked =
@@ -409,15 +411,19 @@ export default function ProposalCreatePage() {
             key={editingState?.actionType ?? 'no-action'}
             activeActionType={editingState?.actionType}
             mobileOpen={contextRailOpen}
-            onMobileClose={() => setContextRailOpen(false)}
+            onMobileClose={closeContextRail}
+            mobileTriggerRef={contextTriggerRef}
           />
           <Button
             type="button"
             variant="outline"
             className="proposal-context-mobile-trigger"
             onClick={() => setContextRailOpen(true)}
+            ref={contextTriggerRef}
+            aria-expanded={contextRailOpen}
+            aria-controls="proposal-context-rail"
           >
-            Browse DAO context
+            Reference DAO context
           </Button>
         </div>
       </PageSection>
