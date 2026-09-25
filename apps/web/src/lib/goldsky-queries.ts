@@ -195,5 +195,7 @@ export function useGoldskyHealth(_daoId: string) {
 }
 
 export function useDashboardData(address: string) {
-  return useSWR<DashboardResponse>(address ? '/api/dashboard' : null, fetchJson, { keepPreviousData: true });
+  return useSWR<DashboardResponse>(address ? `/api/dashboard?wallet=${encodeURIComponent(address)}` : null, fetchJson, {
+    keepPreviousData: false
+  });
 }

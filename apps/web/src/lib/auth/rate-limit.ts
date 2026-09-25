@@ -17,13 +17,21 @@ function pruneExpired(now: number) {
 }
 
 function getClientKey(request: Request) {
-  return request.headers.get('x-real-ip') || request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  return request.headers.get('x-vercel-forwarded-for')?.trim() || null;
 }
 
 export function enforceAuthRateLimit(request: Request, scope: string, limit: number, windowMs = 60_000) {
   const now = Date.now();
   pruneExpired(now);
-  const key = `${scope}:${getClientKey(request)}`;
+  const clientKey = getClientKey(request);
+  if (!clientKey) {
+    return NextResponse.json(
+      { code: 'RATE_LIMIT_IDENTITY_UNAVAILABLE', message: 'Unable to identify the requesting client.' },
+      { status: 503 }
+    );
+  }
+
+  const key = `${scope}:${clientKey}`;
   const current = entries.get(key);
 
   if (!current || current.resetAt <= now) {

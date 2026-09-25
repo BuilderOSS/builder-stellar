@@ -1,16 +1,25 @@
 import type { Route } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
+import { notFound } from 'next/navigation';
 import { Grid, Stack } from 'styled-system/jsx';
 
 import { PageSection } from '@/components/page-section';
 import { Badge, Card, ShortId, Text } from '@/components/ui';
 import { TOKEN_DESCRIPTION, TOKEN_NAME } from '@/lib/token-config';
 
+function parseTokenId(value: string) {
+  if (!/^\d+$/.test(value)) notFound();
+
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) notFound();
+
+  return parsed;
+}
+
 export default async function TokenPage({ params }: { params: Promise<{ daoId: string; tokenId: string }> }) {
   const { daoId, tokenId } = await params;
-  const resolvedTokenId = Number.parseInt(tokenId, 10);
-  const displayTokenId = Number.isFinite(resolvedTokenId) ? resolvedTokenId : 0;
+  const displayTokenId = parseTokenId(tokenId);
   const tokenName = `${TOKEN_NAME} #${displayTokenId}`;
 
   return (

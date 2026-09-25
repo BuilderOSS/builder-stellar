@@ -90,7 +90,14 @@ const memoryStorage = {
   removeItem: (_name: string) => undefined
 };
 
-const storage = createJSONStorage(() => (typeof window === 'undefined' ? memoryStorage : window.localStorage));
+const LEGACY_STORAGE_KEY = 'dao.proposal-drafts.v2';
+const storage = createJSONStorage(() => {
+  if (typeof window === 'undefined') return memoryStorage;
+
+  // v3 intentionally discards unscoped v2 drafts rather than assigning them to an unknown wallet.
+  window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+  return window.localStorage;
+});
 
 function withUpdatedAt(draft: ProposalDraft, patch: Partial<ProposalDraft>): ProposalDraft {
   return { ...draft, ...patch, updatedAt: Date.now() };
