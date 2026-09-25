@@ -1,29 +1,29 @@
 'use client';
 
-import { Compass, Home, Plus, X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 
 import { Text } from '@/components/ui';
-import type { DaoConfig } from '@/lib/dao-db';
 import { daoRoute } from '@/lib/dao-routes';
+import type { DashboardDao } from '@/lib/goldsky-queries';
 
-function daoName(dao: DaoConfig) {
-  return dao.token_name || dao.label || 'Unnamed DAO';
+function daoName(dao: DashboardDao) {
+  return dao.token_name || dao.token_symbol || 'Unnamed DAO';
 }
 
 export function DashboardSidebar({
-  daos,
+  myDaos,
+  myDaosLoading,
+  myDaosError,
   isOpen,
   onClose
 }: {
-  daos: DaoConfig[];
+  myDaos: DashboardDao[];
+  myDaosLoading: boolean;
+  myDaosError: boolean;
   isOpen: boolean;
   onClose: () => void;
 }) {
-  const searchParams = useSearchParams();
-  const isHomeActive = !searchParams.get('tab') || searchParams.get('tab') === 'feed';
-
   return (
     <>
       {isOpen ? (
@@ -45,33 +45,20 @@ export function DashboardSidebar({
           </button>
         </div>
 
-        <nav className="dashboard-sidebar__nav" aria-label="Dashboard sections">
-          <Link
-            className={`dashboard-sidebar-item${isHomeActive ? ' dashboard-sidebar-item--active' : ''}`}
-            href="/?tab=feed"
-            onClick={onClose}
-          >
-            <Home aria-hidden="true" size={17} />
-            <span>Home</span>
-          </Link>
-          <Link
-            className={`dashboard-sidebar-item${searchParams.get('tab') === 'discover' ? ' dashboard-sidebar-item--active' : ''}`}
-            href="/?tab=discover"
-            onClick={onClose}
-          >
-            <Compass aria-hidden="true" size={17} />
-            <span>Discover DAOs</span>
-          </Link>
-        </nav>
-
         <div className="dashboard-sidebar__section">
           <div className="dashboard-sidebar__heading">
-            <span className="label">DAO directory</span>
-            <span className="dashboard-sidebar__count">{daos.length}</span>
+            <span className="label">My DAOs</span>
+            <span className="dashboard-sidebar__count">{myDaos.length}</span>
           </div>
-          {daos.length ? (
+          {myDaosLoading ? (
+            <Text className="dashboard-sidebar__empty">Loading your DAOs...</Text>
+          ) : myDaosError ? (
+            <Text className="dashboard-sidebar__empty dashboard-sidebar__error">
+              Unable to load your DAOs right now.
+            </Text>
+          ) : myDaos.length ? (
             <nav className="dashboard-sidebar__dao-list" aria-label="Available DAOs">
-              {daos.map((dao) => (
+              {myDaos.map((dao) => (
                 <Link
                   key={dao.dao_id}
                   className="dashboard-sidebar-item dashboard-sidebar-item--dao"
@@ -86,7 +73,7 @@ export function DashboardSidebar({
               ))}
             </nav>
           ) : (
-            <Text className="dashboard-sidebar__empty">No operational DAOs yet.</Text>
+            <Text className="dashboard-sidebar__empty">You haven&apos;t joined a DAO yet.</Text>
           )}
         </div>
 

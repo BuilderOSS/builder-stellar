@@ -632,6 +632,95 @@ export async function getGoldskyDaoList() {
   };
 }
 
+export async function getDashboardData(address: string, params: { limit?: number; offset?: number } = {}) {
+  const { limit = 20, offset = 0 } = params;
+  const deploymentId = getDeploymentId();
+  const normalizedAddress = address.trim().toLowerCase();
+
+  const myDaosQuery = `
+    WITH member_daos AS (
+      SELECT DISTINCT dao_id
+      FROM token.members
+      WHERE deployment_id = $1
+        AND LOWER(address) = $2
+        AND (owned_token_count > 0 OR voting_power > 0)
+    )
+    SELECT
+      d.dao_id,
+      d.token_name,
+      d.token_symbol,
+      d.token_description,
+      d.status
+    FROM manager.daos d
+    WHERE d.deployment_id = $1
+      AND d.status = 'operational'
+      AND (
+        d.dao_id IN (SELECT dao_id FROM member_daos)
+        OR LOWER(d.creator) = $2
+        OR LOWER(d.admin_address) = $2
+      )
+    ORDER BY d.created_ledger DESC
+  `;
+
+  const feedQuery = `
+    WITH my_daos AS (
+      SELECT DISTINCT dao_id
+      FROM token.members
+      WHERE deployment_id = $1
+        AND LOWER(address) = $2
+        AND (owned_token_count > 0 OR voting_power > 0)
+      UNION
+      SELECT dao_id
+      FROM manager.daos
+      WHERE deployment_id = $1
+        AND (LOWER(creator) = $2 OR LOWER(admin_address) = $2)
+    )
+    SELECT
+      activity.activity_id,
+      activity.dao_id,
+      activity.contract_role,
+      activity.kind,
+      activity.title,
+      activity.summary,
+      activity.proposal_id,
+      activity.actor,
+      activity.ledger_sequence,
+      activity.ledger_closed_at AS timestamp,
+      activity.transaction_hash,
+      d.token_name,
+      d.token_symbol,
+      COUNT(*) OVER()::int AS total_count
+    FROM app.activity_feed activity
+    JOIN my_daos mine ON mine.dao_id = activity.dao_id
+    JOIN manager.daos d
+      ON d.deployment_id = activity.deployment_id
+     AND d.dao_id = activity.dao_id
+    WHERE activity.deployment_id = $1
+      AND d.status = 'operational'
+    ORDER BY activity.ledger_sequence DESC, activity.activity_id DESC
+    LIMIT $3 OFFSET $4
+  `;
+
+  const [myDaosResult, feedResult] = await Promise.all([
+    pool.query(myDaosQuery, [deploymentId, normalizedAddress]),
+    pool.query(feedQuery, [deploymentId, normalizedAddress, limit, offset])
+  ]);
+
+  const total = Number(feedResult.rows[0]?.total_count ?? 0);
+
+  return {
+    myDaos: myDaosResult.rows,
+    feed: {
+      items: feedResult.rows.map(({ total_count: _totalCount, ...item }) => item),
+      total,
+      limit,
+      offset,
+      hasMore: offset + feedResult.rows.length < total
+    },
+    generatedAt: new Date().toISOString()
+  };
+}
+
 /**
  * Health Check
  *

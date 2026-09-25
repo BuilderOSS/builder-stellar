@@ -90,6 +90,43 @@ export type GoldskyHealthResponse = {
   error?: string;
 };
 
+export type DashboardDao = {
+  dao_id: string;
+  token_name: string | null;
+  token_symbol: string | null;
+  token_description: string | null;
+  status: string;
+};
+
+export type DashboardFeedItem = {
+  activity_id: string;
+  dao_id: string;
+  contract_role: string;
+  kind: string;
+  title: string;
+  summary: string;
+  proposal_id: string | null;
+  actor: string | null;
+  ledger_sequence: number;
+  timestamp: string | number | null;
+  transaction_hash: string | null;
+  token_name: string | null;
+  token_symbol: string | null;
+};
+
+export type DashboardResponse = {
+  myDaos: DashboardDao[];
+  feed: {
+    items: DashboardFeedItem[];
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  };
+  generatedAt: string;
+  message?: string;
+};
+
 async function fetchJson<T>(url: string) {
   const response = await fetch(url, { cache: 'no-store' });
   const json = (await response.json()) as T & { message?: string };
@@ -155,4 +192,12 @@ export function useGoldskyGovernorAuthorities(daoTokenAddress: string) {
 
 export function useGoldskyHealth(_daoId: string) {
   return useSWR<GoldskyHealthResponse>('/api/goldsky/health', fetchJson, { keepPreviousData: true });
+}
+
+export function useDashboardData(address: string) {
+  return useSWR<DashboardResponse>(
+    address ? `/api/dashboard?address=${encodeURIComponent(address)}` : null,
+    fetchJson,
+    { keepPreviousData: true }
+  );
 }
