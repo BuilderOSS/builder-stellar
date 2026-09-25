@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { authErrorResponse, requireAuthenticatedSession } from '@/lib/auth/server';
 import { getDashboardData } from '@/lib/goldsky';
 
 export const dynamic = 'force-dynamic';
@@ -14,14 +15,15 @@ function parseLimit(value: string | null, fallback = 20) {
 }
 
 export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const address = url.searchParams.get('address')?.trim();
-
-  if (!address) {
-    return NextResponse.json({ message: 'Wallet address is required' }, { status: 400 });
+  let address: string;
+  try {
+    ({ address } = await requireAuthenticatedSession());
+  } catch (error) {
+    return authErrorResponse(error);
   }
 
   try {
+    const url = new URL(request.url);
     const payload = await getDashboardData(address, {
       limit: parseLimit(url.searchParams.get('limit')),
       offset: parseNonNegativeInt(url.searchParams.get('offset'), 0)
