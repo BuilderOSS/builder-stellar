@@ -26,14 +26,14 @@ type ConfirmDialogState = {
  * ActionFormWrapper consumes Zustand store directly
  * NO PROPS needed - all state comes from store
  */
-export function ActionFormWrapper() {
+export function ActionFormWrapper({ daoId }: { daoId: string }) {
   const context = useActionFormContext();
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>(null);
 
   // Subscribe to only what we need (performance optimization)
-  const editingState = useProposalComposerStore((s) => s.editingState);
-  const validationErrors = useProposalComposerStore(selectValidationErrors);
-  const busy = useProposalComposerStore((s) => s.busy);
+  const editingState = useProposalComposerStore((s) => s.draftsByDaoId[daoId]?.editingState ?? null);
+  const validationErrors = useProposalComposerStore(selectValidationErrors(daoId));
+  const busy = useProposalComposerStore((s) => s.draftsByDaoId[daoId]?.busy ?? false);
 
   // Actions
   const updateDraft = useProposalComposerStore((s) => s.updateDraft);
@@ -53,14 +53,14 @@ export function ActionFormWrapper() {
     const validation = handler.validate(editingState.draftData, context);
 
     if (!validation.valid) {
-      setValidationErrors(validation);
+      setValidationErrors(daoId, validation);
       return;
     }
 
     const action = handler.serialize(editingState.draftData, context);
-    saveAction(action);
-    setValidationErrors(null);
-  }, [editingState, context, saveAction, setValidationErrors]);
+    saveAction(daoId, action);
+    setValidationErrors(daoId, null);
+  }, [daoId, editingState, context, saveAction, setValidationErrors]);
 
   const handleActionTypeChange = useCallback(
     (newType: ProposalActionType) => {
@@ -76,24 +76,24 @@ export function ActionFormWrapper() {
           message: 'Switching action type will clear your current draft. Continue?',
           confirmLabel: 'Switch',
           onConfirm: () => {
-            changeActionType(newType);
-            setValidationErrors(null);
+            changeActionType(daoId, newType);
+            setValidationErrors(daoId, null);
             setConfirmDialog(null);
           }
         });
         return;
       }
 
-      changeActionType(newType);
-      setValidationErrors(null);
+      changeActionType(daoId, newType);
+      setValidationErrors(daoId, null);
     },
-    [editingState, changeActionType, setValidationErrors]
+    [daoId, editingState, changeActionType, setValidationErrors]
   );
 
   const handleCancel = useCallback(() => {
-    cancelEdit();
-    setValidationErrors(null);
-  }, [cancelEdit, setValidationErrors]);
+    cancelEdit(daoId);
+    setValidationErrors(daoId, null);
+  }, [daoId, cancelEdit, setValidationErrors]);
 
   // No editing state - show empty state
   if (!editingState) {
@@ -131,7 +131,7 @@ export function ActionFormWrapper() {
           >
             <FormComponent
               value={editingState.draftData}
-              onChange={updateDraft}
+              onChange={(value) => updateDraft(daoId, value)}
               disabled={isDisabled}
               validationErrors={validationErrors || undefined}
             />

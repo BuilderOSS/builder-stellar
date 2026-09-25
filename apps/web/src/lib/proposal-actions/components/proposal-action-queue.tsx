@@ -20,9 +20,9 @@ type ConfirmDialogState = {
   onConfirm: () => void;
 } | null;
 
-export function ProposalActionQueue() {
-  const queuedActions = useProposalComposerStore((s) => s.queuedActions);
-  const editingState = useProposalComposerStore((s) => s.editingState);
+export function ProposalActionQueue({ daoId, editable = true }: { daoId: string; editable?: boolean }) {
+  const queuedActions = useProposalComposerStore((s) => s.draftsByDaoId[daoId]?.queuedActions ?? []);
+  const editingState = useProposalComposerStore((s) => s.draftsByDaoId[daoId]?.editingState ?? null);
   const editingIndex = editingState?.index;
   const beginEdit = useProposalComposerStore((s) => s.beginEdit);
   const removeAction = useProposalComposerStore((s) => s.removeAction);
@@ -38,13 +38,13 @@ export function ProposalActionQueue() {
         message: 'Your current unsaved changes will be discarded (the original queued action remains unchanged).',
         confirmLabel: 'Switch',
         onConfirm: () => {
-          beginEdit(index);
+          beginEdit(daoId, index);
           setConfirmDialog(null);
         }
       });
       return;
     }
-    beginEdit(index);
+    beginEdit(daoId, index);
   };
 
   const handleRemove = (index: number, actionLabel: string) => {
@@ -54,7 +54,7 @@ export function ProposalActionQueue() {
       message: `Are you sure you want to remove this ${actionLabel} action?`,
       confirmLabel: 'Remove',
       onConfirm: () => {
-        removeAction(index);
+        removeAction(daoId, index);
         setConfirmDialog(null);
       }
     });
@@ -91,21 +91,23 @@ export function ProposalActionQueue() {
                 </Text>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleEdit(index)}
-                  disabled={isEditing}
-                >
-                  {isEditing ? 'Editing' : 'Edit'}
-                </Button>
+                {editable ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleEdit(index)}
+                    disabled={isEditing}
+                  >
+                    {isEditing ? 'Editing' : 'Edit'}
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => handleRemove(index, handler.label)}
-                  disabled={isEditing}
+                  disabled={editable && isEditing}
                 >
                   Remove
                 </Button>

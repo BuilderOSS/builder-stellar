@@ -6,6 +6,7 @@ import { Grid, Stack } from 'styled-system/jsx';
 
 import { AdminSectionNav } from '@/components/admin/admin-section-nav';
 import { PageSection } from '@/components/page-section';
+import { ProposalDraftPanel } from '@/components/proposal/proposal-draft-panel';
 import { Badge, Card, Heading, ShortId, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryHasAuthority, treasuryIsOwner } from '@/lib/admin-proposals';
@@ -119,6 +120,8 @@ export default function AdminPage() {
         </Card>
 
         <AdminSectionNav daoId={daoId} active="" />
+
+        <ProposalDraftPanel daoId={daoId} />
 
         <Grid columns={{ base: 1, lg: 3 }} gap="4">
           <SectionCard

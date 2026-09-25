@@ -19,6 +19,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { type ReactNode } from 'react';
 
+import { ProposalDraftIndicator } from '@/components/proposal/proposal-draft-indicator';
 import { Callout } from '@/components/ui';
 import { WalletControls } from '@/components/wallet-controls';
 import { useDaoContext } from '@/contexts/dao-context';
@@ -130,6 +131,7 @@ export function DaoShell({ children }: { children: ReactNode }) {
                 {currentNetwork.label}
               </div>
               */}
+              <ProposalDraftIndicator daoId={daoId} config={currentNetwork} address={session.address} />
               <WalletControls network={currentNetwork} />
             </div>
           </div>

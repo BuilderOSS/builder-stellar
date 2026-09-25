@@ -3,7 +3,6 @@
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { type SignTransaction } from '@stellar/stellar-sdk/contract';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Grid, Stack } from 'styled-system/jsx';
 
@@ -61,7 +60,6 @@ function formatSecondsValue(value: number | null | undefined) {
 
 export default function GovernanceAdminPage() {
   const { daoId, daoConfig: config } = useDaoContext();
-  const router = useRouter();
   const session = useDaoSessionStore();
   const [drafts, setDrafts] = useState<Drafts>(EMPTY_DRAFTS);
   const [formMessage, setFormMessage] = useState('');
@@ -102,7 +100,6 @@ export default function GovernanceAdminPage() {
       { config, session: { address: session.address, kit: StellarWalletsKit } }
     );
     startAdminProposal({
-      router,
       daoId,
       action,
       source: `admin/governance/${type}`,
@@ -112,6 +109,7 @@ export default function GovernanceAdminPage() {
         url: ''
       }
     });
+    setFormMessage(`${label} added to the proposal draft.`);
   }
 
   async function getGovernor() {
@@ -366,7 +364,11 @@ export default function GovernanceAdminPage() {
                     (drafts.votingDelay ?? String(settings.votingDelay)) === String(settings.votingDelay)
                   }
                 >
-                  {busy && activeAction === 'votingDelay' ? 'Applying...' : 'Apply'}
+                  {busy && activeAction === 'votingDelay'
+                    ? 'Applying...'
+                    : hasGovernanceAccess
+                      ? 'Apply'
+                      : 'Add to proposal'}
                 </Button>
               </div>
             </Stack>
@@ -397,7 +399,11 @@ export default function GovernanceAdminPage() {
                     (drafts.votingPeriod ?? String(settings.votingPeriod)) === String(settings.votingPeriod)
                   }
                 >
-                  {busy && activeAction === 'votingPeriod' ? 'Applying...' : 'Apply'}
+                  {busy && activeAction === 'votingPeriod'
+                    ? 'Applying...'
+                    : hasGovernanceAccess
+                      ? 'Apply'
+                      : 'Add to proposal'}
                 </Button>
               </div>
             </Stack>
@@ -442,7 +448,11 @@ export default function GovernanceAdminPage() {
                       formatThreshold(settings.proposalThreshold)
                   }
                 >
-                  {busy && activeAction === 'proposalThreshold' ? 'Applying...' : 'Apply'}
+                  {busy && activeAction === 'proposalThreshold'
+                    ? 'Applying...'
+                    : hasGovernanceAccess
+                      ? 'Apply'
+                      : 'Add to proposal'}
                 </Button>
               </div>
             </Stack>
@@ -485,7 +495,11 @@ export default function GovernanceAdminPage() {
                     (drafts.quorumBps ?? String(settings.quorumBps)) === String(settings.quorumBps)
                   }
                 >
-                  {busy && activeAction === 'quorumBps' ? 'Applying...' : 'Apply'}
+                  {busy && activeAction === 'quorumBps'
+                    ? 'Applying...'
+                    : hasGovernanceAccess
+                      ? 'Apply'
+                      : 'Add to proposal'}
                 </Button>
               </div>
             </Stack>

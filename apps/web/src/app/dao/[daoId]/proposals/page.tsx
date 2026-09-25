@@ -12,11 +12,10 @@ import { ProposalStateBadge } from '@/components/proposal/proposal-state-badge';
 import type { ProposalListResponse } from '@/components/proposal/types';
 import { Button, Callout, Heading, Input, Select, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
-import type { GovernorSettings } from '@/lib/admin-queries';
-import { useGovernorSettings } from '@/lib/admin-queries';
 import { daoRoute } from '@/lib/dao-routes';
-import { useVotingPower, type VotingPowerSnapshot } from '@/lib/voting-power';
+import { useProposalEligibility } from '@/lib/proposal-eligibility';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
+import { selectHasDraft, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
 function formatTimestamp(timestamp: number) {
   if (!timestamp) return '—';
@@ -35,38 +34,14 @@ function formatVoteTotal(value: string) {
   }
 }
 
-function formatProposalCreationDisabledMessage(
-  votingPower: VotingPowerSnapshot | undefined,
-  settings: GovernorSettings | undefined,
-  errorMessage?: string
-) {
-  if (errorMessage) {
-    return errorMessage;
-  }
-
-  if (!votingPower || !settings) {
-    return 'Connect a wallet with enough voting power to create proposals.';
-  }
-
-  return `You need at least ${settings.proposalThreshold.toString()} votes to create a proposal. Current voting power: ${votingPower.votes.toString()}.`;
-}
-
 export default function ProposalsPage() {
   const { daoId, daoConfig: config } = useDaoContext();
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
   const router = useRouter();
   const session = useDaoSessionStore();
-  const {
-    data: votingPower,
-    error: votingPowerError,
-    isLoading: votingPowerLoading
-  } = useVotingPower(config, session.address);
-  const {
-    data: governorSettings,
-    error: governorSettingsError,
-    isLoading: governorSettingsLoading
-  } = useGovernorSettings(config, session.address || config.adminAddress);
+  const eligibility = useProposalEligibility(config, session.address);
+  const hasDraft = useProposalComposerStore(selectHasDraft(daoId));
   const { data, error, isLoading, mutate } = useSWR<ProposalListResponse>(
     `/api/dao/${encodeURIComponent(daoId)}/proposals?limit=24`,
     async (url: string) => {
@@ -95,16 +70,8 @@ export default function ProposalsPage() {
       return matchesStatus && matchesQuery;
     });
   }, [items, query, status]);
-  const proposalEligibilityLoading = votingPowerLoading || governorSettingsLoading;
-  const proposalEligibilityError = votingPowerError ?? governorSettingsError;
-  const hasProposalVotes = Boolean(
-    votingPower && governorSettings && votingPower.votes >= governorSettings.proposalThreshold
-  );
-  const createDisabled =
-    !session.address || proposalEligibilityLoading || Boolean(proposalEligibilityError) || !hasProposalVotes;
-  const createDisabledMessage = createDisabled
-    ? formatProposalCreationDisabledMessage(votingPower, governorSettings, proposalEligibilityError?.message)
-    : undefined;
+  const createDisabled = !hasDraft && !eligibility.eligible;
+  const createDisabledMessage = createDisabled ? eligibility.message : undefined;
 
   return (
     <PageSection title="Proposals" description="Browse proposal history and review on-chain proposal state.">
@@ -151,7 +118,7 @@ export default function ProposalsPage() {
                 onClick={() => router.push(daoRoute(daoId, 'proposals/create'))}
                 disabled={createDisabled}
               >
-                Create proposal
+                {hasDraft ? 'Continue proposal' : 'Create proposal'}
               </Button>
               {createDisabledMessage ? (
                 <span className="proposal-create-tooltip__message" role="tooltip">
