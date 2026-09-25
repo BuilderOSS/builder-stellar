@@ -3020,21 +3020,33 @@ textarea {
   margin: 8px 0 12px;
 }
 
-.dashboard-intro__signal {
+.dashboard-connected-hero {
   display: grid;
-  flex: 0 0 180px;
-  gap: 4px;
-  padding: 16px;
-  border-left: 1px solid var(--border-strong);
+  width: 100%;
+  margin-bottom: 36px;
+  padding: clamp(28px, 5vw, 56px) clamp(24px, 5vw, 64px);
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  background:
+    radial-gradient(circle at 82% 12%, rgba(8, 124, 240, 0.18), transparent 34%),
+    linear-gradient(120deg, var(--surface-1), rgba(17, 19, 23, 0.64));
 }
 
-.dashboard-intro__signal strong {
+.dashboard-connected-hero .page-title {
+  max-width: 760px;
+  margin: 14px 0 20px;
+  font-size: clamp(2.6rem, 5vw, 4.25rem);
+  line-height: 0.96;
+  letter-spacing: -0.06em;
+}
+
+.dashboard-connected-hero .lede {
+  max-width: 500px;
+  margin: 0;
+  color: var(--text-secondary);
   font-size: 1rem;
-}
-
-.dashboard-intro__signal span:last-child {
-  color: var(--text-tertiary);
-  font-size: 0.78rem;
+  line-height: 1.6;
 }
 
 .dashboard-tabs {
@@ -3185,11 +3197,8 @@ textarea {
     font-size: clamp(2rem, 9vw, 3rem);
   }
 
-  .dashboard-intro__signal {
-    margin-top: 24px;
-    padding: 12px 0 0;
-    border-top: 1px solid var(--border-strong);
-    border-left: 0;
+  .dashboard-connected-hero .page-title {
+    font-size: clamp(2.6rem, 10vw, 4.25rem);
   }
 
   .dashboard-empty-state {
