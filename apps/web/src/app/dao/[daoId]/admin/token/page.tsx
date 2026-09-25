@@ -2,7 +2,6 @@
 
 import { Client as TokenClient } from '@builder-stellar/token-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 
@@ -23,7 +22,6 @@ import { useDaoSessionStore } from '@/stores/dao-session-store';
 
 export default function TokenAdminPage() {
   const { daoId, daoConfig: config } = useDaoContext();
-  const router = useRouter();
   const session = useDaoSessionStore();
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('1');
@@ -60,10 +58,6 @@ export default function TokenAdminPage() {
       return;
     }
 
-    setBusy(true);
-    setFormMessage('');
-    tx.start('Preparing batch mint transaction...');
-
     try {
       if (!hasMintAccess && canProposeMint) {
         const handler = getActionHandler('batch-mint-governance-token');
@@ -72,7 +66,6 @@ export default function TokenAdminPage() {
           { config, session: { address: session.address, kit: StellarWalletsKit } }
         );
         startAdminProposal({
-          router,
           daoId,
           action,
           source: 'admin/token',
@@ -82,8 +75,15 @@ export default function TokenAdminPage() {
             url: ''
           }
         });
+        setFormMessage(`Added ${amount} governance token${amount === '1' ? '' : 's'} to the proposal draft.`);
+        setRecipient('');
+        setAmount('1');
         return;
       }
+
+      setBusy(true);
+      setFormMessage('');
+      tx.start('Preparing batch mint transaction...');
 
       const client = new TokenClient({
         contractId: config.tokenContractId,

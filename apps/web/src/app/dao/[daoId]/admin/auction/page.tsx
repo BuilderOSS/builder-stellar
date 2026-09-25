@@ -2,7 +2,6 @@
 
 import { Client as AuctionClient } from '@builder-stellar/auction-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 import useSWR from 'swr';
@@ -32,10 +31,10 @@ const fetcher = async (url: string): Promise<AuctionStatus> => {
 
 export default function AuctionAdminPage() {
   const { daoId, daoConfig: config } = useDaoContext();
-  const router = useRouter();
   const session = useDaoSessionStore();
   const tx = useTransactionFeedback(config.name);
   const [busy, setBusy] = useState(false);
+  const [formMessage, setFormMessage] = useState('');
   const [reservePrice, setReservePrice] = useState('');
   const [paymentToken, setPaymentToken] = useState('');
   const { data, error, mutate, isLoading } = useSWR<AuctionStatus>(
@@ -57,7 +56,6 @@ export default function AuctionAdminPage() {
       const handler = getActionHandler(type);
       const action = handler.serialize({}, { config, session: { address: session.address, kit: StellarWalletsKit } });
       startAdminProposal({
-        router,
         daoId,
         action,
         source: `admin/auction/${type}`,
@@ -67,6 +65,7 @@ export default function AuctionAdminPage() {
           url: ''
         }
       });
+      setFormMessage(`${nextPaused ? 'Pause' : 'Resume'} auctions added to the proposal draft.`);
       return;
     }
     setBusy(true);
@@ -114,7 +113,6 @@ export default function AuctionAdminPage() {
         { config, session: { address: session.address, kit: StellarWalletsKit } }
       );
       startAdminProposal({
-        router,
         daoId,
         action,
         source: 'admin/auction/set-auction-reserve-price',
@@ -124,6 +122,7 @@ export default function AuctionAdminPage() {
           url: ''
         }
       });
+      setFormMessage('Auction reserve price update added to the proposal draft.');
       return;
     }
     setBusy(true);
@@ -165,7 +164,6 @@ export default function AuctionAdminPage() {
         { config, session: { address: session.address, kit: StellarWalletsKit } }
       );
       startAdminProposal({
-        router,
         daoId,
         action,
         source: 'admin/auction/set-auction-payment-token',
@@ -175,6 +173,7 @@ export default function AuctionAdminPage() {
           url: ''
         }
       });
+      setFormMessage('Auction payment token update added to the proposal draft.');
       return;
     }
     setBusy(true);
@@ -223,6 +222,7 @@ export default function AuctionAdminPage() {
       <Stack gap="4">
         <AdminSectionNav daoId={daoId} active="/auction" />
         {error ? <Callout variant="error" title={error.message} /> : null}
+        {formMessage ? <Callout variant="warning" title={formMessage} /> : null}
         <Card p="5">
           <Stack gap="4">
             <div>
@@ -259,14 +259,14 @@ export default function AuctionAdminPage() {
                 ) : null}
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                   <Button onClick={() => void updatePaused(true)} disabled={busy || data?.paused !== false}>
-                    Pause auctions
+                    {isOwner ? 'Pause auctions' : 'Add pause proposal'}
                   </Button>
                   <Button
                     variant="outline"
                     onClick={() => void updatePaused(false)}
                     disabled={busy || data?.paused !== true || !auctionCanMint}
                   >
-                    Resume auctions
+                    {isOwner ? 'Resume auctions' : 'Add resume proposal'}
                   </Button>
                 </div>
                 <Text className="label">Auction payment token</Text>
@@ -288,7 +288,7 @@ export default function AuctionAdminPage() {
                     onClick={() => void updatePaymentToken()}
                     disabled={busy || data?.paused !== true || !paymentToken}
                   >
-                    Update payment token
+                    {isOwner ? 'Update payment token' : 'Add payment token proposal'}
                   </Button>
                 </div>
                 <Text className="label">Reserve price for the next auction</Text>
@@ -313,21 +313,21 @@ export default function AuctionAdminPage() {
                     onClick={() => void updateReservePrice()}
                     disabled={busy || data?.paused !== true || !reservePrice}
                   >
-                    Update reserve
+                    {isOwner ? 'Update reserve' : 'Add reserve proposal'}
                   </Button>
                 </div>
               </>
             ) : null}
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <Button onClick={() => void updatePaused(true)} disabled={busy || data?.paused !== false}>
-                Pause auctions
+                {isOwner ? 'Pause auctions' : 'Add pause proposal'}
               </Button>
               <Button
                 variant="outline"
                 onClick={() => void updatePaused(false)}
                 disabled={busy || data?.paused !== true || !auctionCanMint}
               >
-                Resume auctions
+                {isOwner ? 'Resume auctions' : 'Add resume proposal'}
               </Button>
             </div>
             <Text className="label">Auction payment token</Text>
@@ -348,7 +348,7 @@ export default function AuctionAdminPage() {
                 onClick={() => void updatePaymentToken()}
                 disabled={busy || data?.paused !== true || !paymentToken}
               >
-                Update payment token
+                {isOwner ? 'Update payment token' : 'Add payment token proposal'}
               </Button>
             </div>
             <Text className="label">Reserve price for the next auction</Text>
@@ -371,7 +371,7 @@ export default function AuctionAdminPage() {
                 onClick={() => void updateReservePrice()}
                 disabled={busy || data?.paused !== true || !reservePrice}
               >
-                Update reserve
+                {isOwner ? 'Update reserve' : 'Add reserve proposal'}
               </Button>
             </div>
           </Stack>

@@ -5,7 +5,7 @@
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Grid, Stack } from 'styled-system/jsx';
 
 import { PageSection } from '@/components/page-section';
@@ -13,29 +13,21 @@ import { ProposalActionConfirmDialog } from '@/components/proposal/proposal-acti
 import { ProposalContextRail } from '@/components/proposal/proposal-context-rail';
 import { Badge, Button, Callout, Card, Heading, Input, Skeleton, Text, Textarea } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
-import { useGovernorSettings } from '@/lib/admin-queries';
 import { daoRoute } from '@/lib/dao-routes';
 import { ActionFormProvider, ActionFormWrapper, ProposalActionQueue } from '@/lib/proposal-actions';
 import { buildProposalCallVectors, encodeProposalCallArgs, getProposalActionSummary } from '@/lib/proposal-call';
+import { useProposalEligibility } from '@/lib/proposal-eligibility';
 import { proposalIdToRouteId } from '@/lib/proposal-id';
 import { encodeProposalMetadata, validateProposalMetadataDraft } from '@/lib/proposal-metadata';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
-import { useVotingPower } from '@/lib/voting-power';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
-import { selectCanProceedToStep2, useProposalComposerStore } from '@/stores/proposal-composer-store';
-
-function formatProposalCreationDisabledMessage(votingPower: any, settings: any, errorMessage?: string) {
-  if (errorMessage) {
-    return errorMessage;
-  }
-
-  if (!votingPower || !settings) {
-    return 'Connect a wallet with enough voting power to create proposals.';
-  }
-
-  return `You need at least ${settings.proposalThreshold.toString()} votes to create a proposal. Current voting power: ${votingPower.votes.toString()}.`;
-}
+import {
+  selectCanProceedToStep2,
+  selectDraft,
+  selectHasDraft,
+  useProposalComposerStore
+} from '@/stores/proposal-composer-store';
 
 export default function ProposalCreatePage() {
   const { daoId } = useDaoContext();
@@ -44,11 +36,10 @@ export default function ProposalCreatePage() {
   const { daoConfig: config } = useDaoContext();
 
   // Zustand store hooks
-  const step = useProposalComposerStore((s) => s.step);
-  const metadata = useProposalComposerStore((s) => s.metadata);
-  const queuedActions = useProposalComposerStore((s) => s.queuedActions);
-  const editingState = useProposalComposerStore((s) => s.editingState);
-  const canProceed = useProposalComposerStore(selectCanProceedToStep2);
+  const draft = useProposalComposerStore(selectDraft(daoId));
+  const { step, metadata, queuedActions, editingState } = draft;
+  const hasDraft = useProposalComposerStore(selectHasDraft(daoId));
+  const canProceed = useProposalComposerStore(selectCanProceedToStep2(daoId));
 
   const setStep = useProposalComposerStore((s) => s.setStep);
   const updateMetadata = useProposalComposerStore((s) => s.updateMetadata);
@@ -56,16 +47,7 @@ export default function ProposalCreatePage() {
   const reset = useProposalComposerStore((s) => s.reset);
 
   // Queries
-  const {
-    data: votingPower,
-    error: votingPowerError,
-    isLoading: votingPowerLoading
-  } = useVotingPower(config, session.address);
-  const {
-    data: settings,
-    error: settingsError,
-    isLoading: settingsLoading
-  } = useGovernorSettings(config, session.address);
+  const eligibility = useProposalEligibility(config, session.address);
 
   // Transaction feedback
   const txFeedback = useTransactionFeedback(config.name);
@@ -73,35 +55,25 @@ export default function ProposalCreatePage() {
 
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [contextRailOpen, setContextRailOpen] = useState(false);
+  const contextTriggerRef = useRef<HTMLButtonElement>(null);
+  const closeContextRail = useCallback(() => setContextRailOpen(false), []);
 
-  const proposalCreationError = votingPowerError?.message ?? settingsError?.message;
-  const proposalCreationLocked =
-    !session.address ||
-    votingPowerLoading ||
-    settingsLoading ||
-    Boolean(votingPowerError || settingsError) ||
-    !votingPower ||
-    !settings ||
-    votingPower.votes < settings.proposalThreshold;
-
-  const proposalCreationDisabledMessage = formatProposalCreationDisabledMessage(
-    votingPower,
-    settings,
-    proposalCreationError || (session.address ? undefined : 'Connect wallet to create proposals')
-  );
+  const proposalCreationError = eligibility.error?.message;
+  const proposalCreationLocked = !eligibility.eligible;
+  const proposalCreationDisabledMessage = eligibility.message;
 
   // Metadata validation
   const metadataValidation = validateProposalMetadataDraft(metadata);
 
   const handleProceedToStep2 = () => {
     if (metadataValidation.valid) {
-      setStep(2);
+      setStep(daoId, 2);
     }
   };
 
   const handleProceedToStep3 = () => {
     if (canProceed && queuedActions.length > 0) {
-      setStep(3);
+      setStep(daoId, 3);
     }
   };
 
@@ -161,7 +133,7 @@ export default function ProposalCreatePage() {
       txFeedback.success('Proposal created', hash);
 
       // Reset store and navigate
-      reset();
+      reset(daoId);
       router.push(proposalId ? daoRoute(daoId, `proposals/${proposalId}`) : daoRoute(daoId, 'proposals'));
     } catch (err: any) {
       console.error('Proposal creation error:', err);
@@ -179,7 +151,7 @@ export default function ProposalCreatePage() {
       >
         <div className="proposal-studio-layout">
           <Stack gap="6">
-            {session.address && (votingPowerLoading || settingsLoading) ? (
+            {session.address && eligibility.loading ? (
               <div role="status" aria-live="polite" aria-busy="true" className="loading-card">
                 <span className="sr-only">Checking proposal eligibility</span>
                 <Card p="4">
@@ -189,13 +161,13 @@ export default function ProposalCreatePage() {
                   </Stack>
                 </Card>
               </div>
-            ) : proposalCreationError ? (
+            ) : proposalCreationError && !hasDraft ? (
               <Callout
                 variant="error"
                 title="Unable to check proposal eligibility"
                 description={proposalCreationError}
               />
-            ) : proposalCreationLocked ? (
+            ) : proposalCreationLocked && !hasDraft ? (
               <Callout
                 variant="warning"
                 title="Cannot Create Proposals"
@@ -203,6 +175,20 @@ export default function ProposalCreatePage() {
               />
             ) : (
               <>
+                {proposalCreationError ? (
+                  <Callout
+                    variant="warning"
+                    title="Proposal eligibility could not be checked"
+                    description={proposalCreationError}
+                  />
+                ) : null}
+                {proposalCreationLocked && !proposalCreationError ? (
+                  <Callout
+                    variant="warning"
+                    title="Proposal submission is currently unavailable"
+                    description={proposalCreationDisabledMessage}
+                  />
+                ) : null}
                 {/* Wizard Steps */}
                 <div className="stepper" aria-label={`Proposal creation, step ${step} of 3`}>
                   <Badge style={{ opacity: step === 1 ? 1 : 0.5 }}>1. Details</Badge>
@@ -228,7 +214,7 @@ export default function ProposalCreatePage() {
                           <Input
                             id="title"
                             value={metadata.title}
-                            onChange={(e) => updateMetadata({ title: e.target.value })}
+                            onChange={(e) => updateMetadata(daoId, { title: e.target.value })}
                             placeholder="Proposal title"
                           />
                           {!metadataValidation.valid && (
@@ -245,7 +231,7 @@ export default function ProposalCreatePage() {
                           <Textarea
                             id="description"
                             value={metadata.description}
-                            onChange={(e) => updateMetadata({ description: e.target.value })}
+                            onChange={(e) => updateMetadata(daoId, { description: e.target.value })}
                             placeholder="Describe what this proposal does"
                             rows={6}
                           />
@@ -258,7 +244,7 @@ export default function ProposalCreatePage() {
                           <Input
                             id="url"
                             value={metadata.url}
-                            onChange={(e) => updateMetadata({ url: e.target.value })}
+                            onChange={(e) => updateMetadata(daoId, { url: e.target.value })}
                             placeholder="https://forum.example.com/proposal-discussion"
                           />
                         </Stack>
@@ -291,21 +277,21 @@ export default function ProposalCreatePage() {
 
                       <Grid columns={{ base: 1, lg: 2 }} gap="6">
                         <Stack gap="4">
-                          {!editingState && <Button onClick={() => beginCreate()}>Add Action</Button>}
+                          {!editingState && <Button onClick={() => beginCreate(daoId)}>Add Action</Button>}
 
-                          <ActionFormWrapper />
+                          <ActionFormWrapper daoId={daoId} />
                         </Stack>
 
                         <Stack gap="4">
                           <Heading as="h3" style={{ fontSize: '1.125rem' }}>
                             Queued Actions ({queuedActions.length})
                           </Heading>
-                          <ProposalActionQueue />
+                          <ProposalActionQueue daoId={daoId} />
                         </Stack>
                       </Grid>
 
                       <div className="form-actions form-actions--split">
-                        <Button variant="outline" onClick={() => setStep(1)}>
+                        <Button variant="outline" onClick={() => setStep(daoId, 1)}>
                           Back to Details
                         </Button>
                         <Button onClick={handleProceedToStep3} disabled={!canProceed || queuedActions.length === 0}>
@@ -393,7 +379,7 @@ export default function ProposalCreatePage() {
                     </Card>
 
                     <div className="form-actions form-actions--split">
-                      <Button variant="outline" onClick={() => setStep(2)}>
+                      <Button variant="outline" onClick={() => setStep(daoId, 2)}>
                         Back to Actions
                       </Button>
                       <Button onClick={handleOpenConfirmDialog} disabled={proposalCreationLocked || transactionBusy}>
@@ -409,15 +395,19 @@ export default function ProposalCreatePage() {
             key={editingState?.actionType ?? 'no-action'}
             activeActionType={editingState?.actionType}
             mobileOpen={contextRailOpen}
-            onMobileClose={() => setContextRailOpen(false)}
+            onMobileClose={closeContextRail}
+            mobileTriggerRef={contextTriggerRef}
           />
           <Button
             type="button"
             variant="outline"
             className="proposal-context-mobile-trigger"
             onClick={() => setContextRailOpen(true)}
+            ref={contextTriggerRef}
+            aria-expanded={contextRailOpen}
+            aria-controls="proposal-context-rail"
           >
-            Browse DAO context
+            Reference DAO context
           </Button>
         </div>
       </PageSection>

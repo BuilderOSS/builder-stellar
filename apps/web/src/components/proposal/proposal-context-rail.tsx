@@ -2,7 +2,7 @@
 
 import { Copy, ExternalLink, RefreshCw, Search, WalletCards, X } from 'lucide-react';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 import useSWR from 'swr';
 
@@ -20,6 +20,7 @@ type ProposalContextRailProps = {
   activeActionType?: string;
   mobileOpen: boolean;
   onMobileClose: () => void;
+  mobileTriggerRef: React.RefObject<HTMLButtonElement | null>;
 };
 
 const tabs: Array<{ id: ContextTab; label: string; shortLabel: string }> = [
@@ -201,8 +202,16 @@ function HistoryPanel({ daoId }: { daoId: string }) {
   );
 }
 
-export function ProposalContextRail({ activeActionType, mobileOpen, onMobileClose }: ProposalContextRailProps) {
+export function ProposalContextRail({
+  activeActionType,
+  mobileOpen,
+  onMobileClose,
+  mobileTriggerRef
+}: ProposalContextRailProps) {
   const { daoId, daoTokenAddress, daoConfig: config } = useDaoContext();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const railRef = useRef<HTMLElement>(null);
+  const wasMobileOpen = useRef(false);
   const [activeTab, setActiveTab] = useState<ContextTab>(
     activeActionType?.includes('transfer') ? 'treasury' : 'snapshot'
   );
@@ -216,111 +225,180 @@ export function ProposalContextRail({ activeActionType, mobileOpen, onMobileClos
     keepPreviousData: true
   });
 
+  useEffect(() => {
+    if (!mobileOpen) {
+      if (wasMobileOpen.current) {
+        wasMobileOpen.current = false;
+        mobileTriggerRef.current?.focus();
+      }
+      return;
+    }
+
+    wasMobileOpen.current = true;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    closeButtonRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onMobileClose();
+      if (event.key !== 'Tab') return;
+
+      const focusable = railRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (!focusable?.length) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!railRef.current?.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [mobileOpen, mobileTriggerRef, onMobileClose]);
+
   const selectTab = (tab: ContextTab) => {
     setActiveTab(tab);
   };
 
   return (
-    <aside className={`proposal-context-rail${mobileOpen ? ' is-mobile-open' : ''}`} aria-label="DAO context">
-      <div className="proposal-context-rail__header">
-        <div>
-          <Text className="label">DAO workspace</Text>
-          <Text className="proposal-context-rail__title">Reference while you draft</Text>
-        </div>
-        <Button
+    <>
+      {mobileOpen ? (
+        <button
+          className="proposal-context-backdrop"
           type="button"
-          variant="outline"
-          size="sm"
-          className="proposal-context-close"
-          onClick={onMobileClose}
           aria-label="Close DAO context"
-        >
-          <X size={18} aria-hidden="true" />
-        </Button>
-      </div>
-      <nav className="proposal-context-tabs" aria-label="DAO context views">
-        {tabs.map((tab) => (
-          <button
-            className={activeTab === tab.id ? 'is-active' : undefined}
-            key={tab.id}
+          onClick={onMobileClose}
+        />
+      ) : null}
+      <aside
+        id="proposal-context-rail"
+        ref={railRef}
+        className={`proposal-context-rail${mobileOpen ? ' is-mobile-open' : ''}`}
+        aria-label="DAO context"
+        aria-labelledby="proposal-context-title"
+        aria-modal={mobileOpen || undefined}
+        role={mobileOpen ? 'dialog' : undefined}
+      >
+        <div className="proposal-context-rail__header">
+          <div>
+            <Text className="label">DAO workspace</Text>
+            <Text className="proposal-context-rail__title" id="proposal-context-title">
+              Reference while you draft
+            </Text>
+          </div>
+          <Button
             type="button"
-            onClick={() => selectTab(tab.id)}
-            aria-selected={activeTab === tab.id}
-            role="tab"
+            variant="outline"
+            size="sm"
+            className="proposal-context-close"
+            onClick={onMobileClose}
+            aria-label="Close DAO context"
+            ref={closeButtonRef}
           >
-            <span className="proposal-context-tab-label">{tab.label}</span>
-            <span className="proposal-context-tab-short-label">{tab.shortLabel}</span>
-          </button>
-        ))}
-      </nav>
-
-      <div className="proposal-context-rail__body">
-        {activeTab === 'snapshot' ? (
-          <Stack gap="4">
-            <div>
-              <Text className="proposal-context-kicker">Current state</Text>
-              <Text className="proposal-context-intro">A quick read on the DAO before you choose what to change.</Text>
-            </div>
-            <div className="proposal-context-metrics">
-              <Metric label="Members" value={members ? formatNumber(members.total) : '—'} detail="Token holders" />
-              <Metric
-                label="Treasury assets"
-                value={balances ? formatNumber(balances.length) : '—'}
-                detail="Configured assets"
-              />
-              <Metric
-                label="Recent proposals"
-                value={proposals ? formatNumber(proposals.items.length) : '—'}
-                detail="Latest 8"
-              />
-            </div>
-            <DataState
-              loading={balancesLoading || membersLoading || proposalsLoading}
-              error={balancesError || membersError || proposalsError}
+            <X size={18} aria-hidden="true" />
+          </Button>
+        </div>
+        <nav className="proposal-context-tabs" aria-label="DAO context views">
+          {tabs.map((tab) => (
+            <button
+              className={activeTab === tab.id ? 'is-active' : undefined}
+              key={tab.id}
+              type="button"
+              onClick={() => selectTab(tab.id)}
+              aria-selected={activeTab === tab.id}
+              role="tab"
             >
-              <Card className="proposal-context-note" p="3">
-                <WalletCards size={17} aria-hidden="true" />
-                <Text>
-                  Use the rail to look up addresses, check available assets, or compare how this DAO has handled similar
-                  decisions.
+              <span className="proposal-context-tab-label">{tab.label}</span>
+              <span className="proposal-context-tab-short-label">{tab.shortLabel}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="proposal-context-rail__body">
+          {activeTab === 'snapshot' ? (
+            <Stack gap="4">
+              <div>
+                <Text className="proposal-context-kicker">Current state</Text>
+                <Text className="proposal-context-intro">
+                  A quick read on the DAO before you choose what to change.
                 </Text>
-              </Card>
-            </DataState>
-          </Stack>
-        ) : null}
-        {activeTab === 'treasury' ? (
-          <Stack gap="4">
-            <div>
-              <Text className="proposal-context-kicker">Available to act on</Text>
-              <Text className="proposal-context-intro">
-                Check live balances before drafting a transfer or funding request.
-              </Text>
-            </div>
-            <TreasuryPanel balances={balances} loading={balancesLoading} error={balancesError} />
-          </Stack>
-        ) : null}
-        {activeTab === 'members' ? (
-          <Stack gap="4">
-            <div>
-              <Text className="proposal-context-kicker">Find a recipient</Text>
-              <Text className="proposal-context-intro">Search the member directory without leaving the proposal.</Text>
-            </div>
-            <MemberPanel daoTokenAddress={daoTokenAddress} />
-          </Stack>
-        ) : null}
-        {activeTab === 'history' ? (
-          <Stack gap="4">
-            <div>
-              <Text className="proposal-context-kicker">Learn from precedent</Text>
-              <Text className="proposal-context-intro">Review recent decisions before writing a new one.</Text>
-            </div>
-            <HistoryPanel daoId={daoId} />
-          </Stack>
-        ) : null}
-      </div>
-      <Link className="proposal-context-rail__footer" href={`/dao/${daoId}/proposals`}>
-        Browse all proposals <ExternalLink size={14} aria-hidden="true" />
-      </Link>
-    </aside>
+              </div>
+              <div className="proposal-context-metrics">
+                <Metric label="Members" value={members ? formatNumber(members.total) : '—'} detail="Token holders" />
+                <Metric
+                  label="Treasury assets"
+                  value={balances ? formatNumber(balances.length) : '—'}
+                  detail="Configured assets"
+                />
+                <Metric
+                  label="Recent proposals"
+                  value={proposals ? formatNumber(proposals.items.length) : '—'}
+                  detail="Latest 8"
+                />
+              </div>
+              <DataState
+                loading={balancesLoading || membersLoading || proposalsLoading}
+                error={balancesError || membersError || proposalsError}
+              >
+                <Card className="proposal-context-note" p="3">
+                  <WalletCards size={17} aria-hidden="true" />
+                  <Text>
+                    Use the rail to look up addresses, check available assets, or compare how this DAO has handled
+                    similar decisions.
+                  </Text>
+                </Card>
+              </DataState>
+            </Stack>
+          ) : null}
+          {activeTab === 'treasury' ? (
+            <Stack gap="4">
+              <div>
+                <Text className="proposal-context-kicker">Available to act on</Text>
+                <Text className="proposal-context-intro">
+                  Check live balances before drafting a transfer or funding request.
+                </Text>
+              </div>
+              <TreasuryPanel balances={balances} loading={balancesLoading} error={balancesError} />
+            </Stack>
+          ) : null}
+          {activeTab === 'members' ? (
+            <Stack gap="4">
+              <div>
+                <Text className="proposal-context-kicker">Find a recipient</Text>
+                <Text className="proposal-context-intro">
+                  Search the member directory without leaving the proposal.
+                </Text>
+              </div>
+              <MemberPanel daoTokenAddress={daoTokenAddress} />
+            </Stack>
+          ) : null}
+          {activeTab === 'history' ? (
+            <Stack gap="4">
+              <div>
+                <Text className="proposal-context-kicker">Learn from precedent</Text>
+                <Text className="proposal-context-intro">Review recent decisions before writing a new one.</Text>
+              </div>
+              <HistoryPanel daoId={daoId} />
+            </Stack>
+          ) : null}
+        </div>
+        <Link className="proposal-context-rail__footer" href={`/dao/${daoId}/proposals`}>
+          Browse all proposals <ExternalLink size={14} aria-hidden="true" />
+        </Link>
+      </aside>
+    </>
   );
 }

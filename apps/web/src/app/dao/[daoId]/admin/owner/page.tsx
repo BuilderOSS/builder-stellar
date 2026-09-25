@@ -3,7 +3,6 @@
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { Client as TokenClient } from '@builder-stellar/token-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Grid, Stack } from 'styled-system/jsx';
 
@@ -61,7 +60,6 @@ async function submitAuthorityUpdate(
 
 export default function OwnerPage() {
   const { daoId, daoConfig: config } = useDaoContext();
-  const router = useRouter();
   const session = useDaoSessionStore();
   const [mintAuthority, setMintAuthority] = useState('');
   const [governorAuthority, setGovernorAuthority] = useState('');
@@ -127,11 +125,7 @@ export default function OwnerPage() {
       return;
     }
 
-    setBusy(true);
-    setFormMessage('');
     const authorityType = method == 'set_mint_authority' ? 'Mint' : 'Governor';
-    const actionType = enabled ? 'Granting' : 'Revoking';
-    tx.start(`${actionType} ${authorityType} Authority...`);
 
     try {
       if (!isOwner && treasuryOwnsTarget) {
@@ -142,7 +136,6 @@ export default function OwnerPage() {
           { config, session: { address: session.address, kit: StellarWalletsKit } }
         );
         startAdminProposal({
-          router,
           daoId,
           action,
           source: `admin/owner/${type}`,
@@ -152,8 +145,16 @@ export default function OwnerPage() {
             url: ''
           }
         });
+        setFormMessage(
+          `${enabled ? 'Grant' : 'Revoke'} ${authorityType.toLowerCase()} authority added to the proposal draft.`
+        );
         return;
       }
+
+      setBusy(true);
+      setFormMessage('');
+      const actionType = enabled ? 'Granting' : 'Revoking';
+      tx.start(`${actionType} ${authorityType} Authority...`);
 
       const sent = await submitAuthorityUpdate(config, session.address, method, authority, enabled);
       const hash = sent.sendTransactionResponse?.hash ?? '';
@@ -204,8 +205,8 @@ export default function OwnerPage() {
             onValueChange={setMintAuthority}
             onAllow={() => void updateAuthority('set_mint_authority', mintAuthority, true)}
             onRevoke={() => void updateAuthority('set_mint_authority', mintAuthority, false)}
-            allowLabel="Allow minting"
-            revokeLabel="Revoke minting"
+            allowLabel={isOwner ? 'Allow minting' : 'Propose grant'}
+            revokeLabel={isOwner ? 'Revoke minting' : 'Propose revoke'}
             busy={busy}
             loading={mintAuthoritiesLoading}
             emptyLabel={mintAuthorityError?.message || 'No mint authorities indexed yet.'}
@@ -219,8 +220,8 @@ export default function OwnerPage() {
             onValueChange={setGovernorAuthority}
             onAllow={() => void updateAuthority('set_governor_authority', governorAuthority, true)}
             onRevoke={() => void updateAuthority('set_governor_authority', governorAuthority, false)}
-            allowLabel="Allow governance"
-            revokeLabel="Revoke governance"
+            allowLabel={isOwner ? 'Allow governance' : 'Propose grant'}
+            revokeLabel={isOwner ? 'Revoke governance' : 'Propose revoke'}
             busy={busy}
             loading={governorAuthoritiesLoading}
             emptyLabel={governorAuthorityError?.message || 'No governance authorities indexed yet.'}

@@ -42,15 +42,17 @@ export function DashboardShell({ daos, loadError }: { daos: DaoConfig[]; loadErr
       </a>
       <div className="app-frame dashboard-frame">
         <header className="dashboard-header">
-          <button
-            className="dashboard-menu-button"
-            type="button"
-            aria-label="Open dashboard menu"
-            onClick={() => setSidebarOpen(true)}
-          >
-            <Menu aria-hidden="true" size={20} />
-          </button>
-          <Link className="brand-lockup" href="/?tab=feed" aria-label="Stellar DAO dashboard">
+          {!isNewcomer ? (
+            <button
+              className="dashboard-menu-button"
+              type="button"
+              aria-label="Open dashboard menu"
+              onClick={() => setSidebarOpen(true)}
+            >
+              <Menu aria-hidden="true" size={20} />
+            </button>
+          ) : null}
+          <Link className="brand-lockup" href="/" aria-label="Stellar DAO dashboard">
             <Image className="brand-mark" src="/icon.svg" alt="" aria-hidden="true" width={44} height={44} priority />
             <div className="brand-copy">
               <p className="brand-name">Stellar DAOs</p>
@@ -62,30 +64,8 @@ export function DashboardShell({ daos, loadError }: { daos: DaoConfig[]; loadErr
           </div>
         </header>
 
-        <div className="dashboard-layout">
-          <DashboardSidebar daos={daos} isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-          <main id="main-content" className="dashboard-main" tabIndex={-1}>
-            <section className="dashboard-intro" aria-labelledby="dashboard-title">
-              <div>
-                <p className="eyebrow">The DAO home base</p>
-                <h1 className="page-title" id="dashboard-title">
-                  Stay close to the communities you govern.
-                </h1>
-                <p className="lede">
-                  Move between your activity, DAO directory, and onchain governance spaces from one place.
-                </p>
-              </div>
-              <div className="dashboard-intro__signal" aria-label="Directory summary">
-                <span className="label">Directory status</span>
-                <strong>{loadError ? 'Sync paused' : daos.length ? 'Live directory' : 'Waiting for DAOs'}</strong>
-                <span>
-                  {loadError
-                    ? 'Database unavailable'
-                    : `${daos.length} operational ${daos.length === 1 ? 'DAO' : 'DAOs'}`}
-                </span>
-              </div>
-            </section>
-
+        {isNewcomer ? (
+          <main id="main-content" className="dashboard-main dashboard-guest-main" tabIndex={-1}>
             {loadError ? (
               <Callout
                 variant="error"
@@ -93,27 +73,62 @@ export function DashboardShell({ daos, loadError }: { daos: DaoConfig[]; loadErr
                 description="The directory could not reach its indexed data. Try again later or open a DAO directly if you have its URL."
               />
             ) : null}
-
-            <DashboardTabs>
-              {(tab) => {
-                if (tab === 'discover') {
-                  return (
-                    <div className="dashboard-discover-content">
-                      <DaoDirectory daos={daos} />
-                    </div>
-                  );
-                }
-                if (tab === 'marketplace') {
-                  return <MarketplaceComingSoon />;
-                }
-                if (tab === 'feed') {
-                  return isNewcomer ? <DashboardWelcome /> : <EmptyDashboardTab tab={tab} />;
-                }
-                return <EmptyDashboardTab tab={tab as Exclude<DashboardTab, 'discover' | 'marketplace'>} />;
-              }}
-            </DashboardTabs>
+            <DashboardWelcome daos={daos} />
           </main>
-        </div>
+        ) : (
+          <div className="dashboard-layout">
+            <DashboardSidebar daos={daos} isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+            <main id="main-content" className="dashboard-main" tabIndex={-1}>
+              <section className="dashboard-intro" aria-labelledby="dashboard-title">
+                <div>
+                  <p className="eyebrow">The DAO home base</p>
+                  <h1 className="page-title" id="dashboard-title">
+                    Stay close to the communities you govern.
+                  </h1>
+                  <p className="lede">
+                    Move between your activity, DAO directory, and onchain governance spaces from one place.
+                  </p>
+                </div>
+                <div className="dashboard-intro__signal" aria-label="Directory summary">
+                  <span className="label">Directory status</span>
+                  <strong>{loadError ? 'Sync paused' : daos.length ? 'Live directory' : 'Waiting for DAOs'}</strong>
+                  <span>
+                    {loadError
+                      ? 'Database unavailable'
+                      : `${daos.length} operational ${daos.length === 1 ? 'DAO' : 'DAOs'}`}
+                  </span>
+                </div>
+              </section>
+
+              {loadError ? (
+                <Callout
+                  variant="error"
+                  title="DAO discovery is temporarily unavailable"
+                  description="The directory could not reach its indexed data. Try again later or open a DAO directly if you have its URL."
+                />
+              ) : null}
+
+              <DashboardTabs>
+                {(tab) => {
+                  if (tab === 'discover') {
+                    return (
+                      <div className="dashboard-discover-content">
+                        <DaoDirectory daos={daos} />
+                      </div>
+                    );
+                  }
+                  if (tab === 'marketplace') {
+                    return <MarketplaceComingSoon />;
+                  }
+                  if (tab === 'feed') {
+                    return <EmptyDashboardTab tab={tab} />;
+                  }
+                  return <EmptyDashboardTab tab={tab as Exclude<DashboardTab, 'discover' | 'marketplace'>} />;
+                }}
+              </DashboardTabs>
+            </main>
+          </div>
+        )}
         <footer className="app-footer dashboard-footer">
           <span>Built for transparent, community-owned coordination.</span>
           <span>Stellar network directory</span>
