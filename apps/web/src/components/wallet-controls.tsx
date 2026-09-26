@@ -177,6 +177,7 @@ export function WalletControls({ network }: { network?: WalletNetwork }) {
       let authMethod: 'sep53' | 'sep10' = 'sep53';
       try {
         setAuthStatus('awaiting-signature');
+        console.log('[Auth] Attempting SEP-53 message signing', { address: result.address, wallet: isWalletConnectSelected() ? 'WalletConnect' : 'Desktop' });
         const { signedMessage, signerAddress } = await StellarWalletsKit.signMessage(message, {
           networkPassphrase: currentNetwork.passphrase,
           address: result.address
@@ -186,18 +187,23 @@ export function WalletControls({ network }: { network?: WalletNetwork }) {
         }
 
         setAuthStatus('verifying-signature');
+        console.log('[Auth] SEP-53 signature obtained, verifying...');
         await verifyAuthProof({
           address: result.address,
           message,
           signature: normalizeWalletSignature(signedMessage)
         });
+        console.log('[Auth] SEP-53 verification successful');
       } catch (error) {
+        console.warn('[Auth] SEP-53 failed, attempting SEP-10 fallback', { error: error instanceof Error ? error.message : String(error) });
         if (!isSep53UnsupportedError(error)) throw error;
 
         authMethod = 'sep10';
         setAuthStatus('requesting-challenge');
+        console.log('[Auth] Requesting SEP-10 challenge...');
         const sep10Challenge = await requestSep10Challenge(result.address);
         setAuthStatus('awaiting-signature');
+        console.log('[Auth] Attempting SEP-10 transaction signing');
         const { signedTxXdr, signerAddress } = await StellarWalletsKit.signTransaction(sep10Challenge.xdr, {
           networkPassphrase: currentNetwork.passphrase,
           address: result.address
@@ -207,7 +213,9 @@ export function WalletControls({ network }: { network?: WalletNetwork }) {
         }
 
         setAuthStatus('verifying-signature');
+        console.log('[Auth] SEP-10 transaction signed, verifying...');
         await verifySep10Proof(signedTxXdr);
+        console.log('[Auth] SEP-10 verification successful');
       }
 
       setAuthenticatedAddress(result.address);
