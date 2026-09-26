@@ -10,7 +10,7 @@ import { AdminPaymentTokenForm, AdminReservePriceForm } from '@/components/admin
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
 import { AdminSectionNav } from '@/components/admin/admin-section-nav';
 import { PageSection } from '@/components/page-section';
-import { Badge, Button, Callout, Card, Heading, Input, ShortId, Skeleton, Text } from '@/components/ui';
+import { Badge, Button, Callout, Card, Heading, ShortId, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsOwner } from '@/lib/admin-proposals';
 import { useContractOwner } from '@/lib/admin-queries';
@@ -266,65 +266,6 @@ export default function AuctionAdminPage() {
                       }
                     />
                   ) : null}
-                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                    <Button onClick={() => void updatePaused(true)} disabled={busy || data?.paused !== false}>
-                      {isOwner ? 'Pause auctions' : 'Add pause proposal'}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => void updatePaused(false)}
-                      disabled={busy || data?.paused !== true || !auctionCanMint}
-                    >
-                      {isOwner ? 'Resume auctions' : 'Add resume proposal'}
-                    </Button>
-                  </div>
-                  <Text className="label">Auction payment token</Text>
-                  <Text className="lede" style={{ margin: 0 }}>
-                    {data?.config.payment_token
-                      ? `${getTreasuryAssets(config.name).find((asset) => asset.contractId === data.config.payment_token)?.code ?? 'Unknown SAC'} · ${data.config.payment_token}`
-                      : 'Not configured'}
-                    . Changes apply after the next auction is created.
-                  </Text>
-                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                    <Input
-                      value={paymentToken}
-                      onChange={(event) => setPaymentToken(event.target.value)}
-                      placeholder="SAC contract address"
-                      disabled={busy || data?.paused !== true}
-                    />
-                    <Button
-                      variant="outline"
-                      onClick={() => void updatePaymentToken()}
-                      disabled={busy || data?.paused !== true || !paymentToken}
-                    >
-                      {isOwner ? 'Update payment token' : 'Add payment token proposal'}
-                    </Button>
-                  </div>
-                  <Text className="label">Reserve price for the next auction</Text>
-                  <Text className="lede" style={{ margin: 0 }}>
-                    Current reserve: {data ? Number(data.config.reserve_price) / 10_000_000 : '—'}{' '}
-                    {data?.config.payment_token
-                      ? (getTreasuryAssets(config.name).find((asset) => asset.contractId === data.config.payment_token)
-                          ?.code ?? 'SAC')
-                      : 'SAC'}{' '}
-                    units. Changes apply after the next auction is created.
-                  </Text>
-                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                    <Input
-                      value={reservePrice}
-                      onChange={(event) => setReservePrice(event.target.value)}
-                      placeholder="For example 10"
-                      inputMode="decimal"
-                      disabled={busy || data?.paused !== true}
-                    />
-                    <Button
-                      variant="outline"
-                      onClick={() => void updateReservePrice()}
-                      disabled={busy || data?.paused !== true || !reservePrice}
-                    >
-                      {isOwner ? 'Update reserve' : 'Add reserve proposal'}
-                    </Button>
-                  </div>
                 </>
               ) : null}
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>

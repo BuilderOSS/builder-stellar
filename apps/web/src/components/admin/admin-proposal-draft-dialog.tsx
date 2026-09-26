@@ -16,9 +16,10 @@ export function AdminProposalDraftDialog({
   onResolve: (resolution: 'add' | 'replace' | 'keep') => void;
 }) {
   if (!pending) return null;
-  const duplicate = pending.findings.some((finding) => finding.kind === 'duplicate');
-  const conflict = pending.findings.some((finding) => finding.kind === 'conflict');
-  const highRisk = pending.findings.some((finding) => finding.kind === 'high-risk');
+  const findings = Array.isArray(pending.findings) ? pending.findings : [];
+  const duplicate = findings.some((finding) => finding.kind === 'duplicate');
+  const conflict = findings.some((finding) => finding.kind === 'conflict');
+  const highRisk = findings.some((finding) => finding.kind === 'high-risk');
 
   return (
     <div className="proposal-consent-backdrop" role="presentation" onClick={onCancel}>
@@ -43,7 +44,7 @@ export function AdminProposalDraftDialog({
               This only updates your local proposal draft. Your wallet will not be asked to sign yet.
             </Text>
           </Card>
-          {pending.findings.map((finding, index) => (
+          {findings.map((finding, index) => (
             <Card
               key={`${finding.kind}-${index}`}
               p="3"

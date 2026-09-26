@@ -19,6 +19,7 @@
   --negative: #ef6969;
   --skeleton: rgba(255, 255, 255, 0.09);
   --skeleton-highlight: rgba(255, 255, 255, 0.15);
+  --overlay-opacity: 0.74;
   --content-width: 1240px;
   --page-gutter: clamp(16px, 4vw, 48px);
 }
@@ -303,7 +304,7 @@ textarea {
   display: grid;
   place-items: center;
   padding: 20px;
-  background: rgba(0, 0, 0, 0.74);
+  background: rgb(0 0 0 / var(--overlay-opacity));
   backdrop-filter: blur(6px);
 }
 .proposal-consent-dialog {
