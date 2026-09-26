@@ -7,6 +7,8 @@ type AuthMessageInput = {
   nonce: string;
   issuedAt: string;
   expirationTime: string;
+  serverPublicKey?: string;
+  serverSignature?: string;
 };
 
 export function createAuthMessage(input: AuthMessageInput) {
@@ -21,6 +23,8 @@ export function createAuthMessage(input: AuthMessageInput) {
     `Network: ${input.network}`,
     `Nonce: ${input.nonce}`,
     `Issued At: ${input.issuedAt}`,
-    `Expiration Time: ${input.expirationTime}`
+    `Expiration Time: ${input.expirationTime}`,
+    ...(input.serverPublicKey ? [`Server Public Key: ${input.serverPublicKey}`] : []),
+    ...(input.serverSignature ? [`Server Signature: ${input.serverSignature}`] : [])
   ].join('\n');
 }

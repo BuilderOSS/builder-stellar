@@ -13,7 +13,8 @@ export async function GET(request: Request) {
   const session = await getAuthSession();
   const response: AuthSessionResponse = {
     authenticated: Boolean(session.address && session.network),
-    address: session.address ?? null
+    address: session.address ?? null,
+    authMethod: session.authMethod ?? null
   };
 
   return NextResponse.json(response, { headers: { 'Cache-Control': 'no-store' } });

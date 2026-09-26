@@ -19,6 +19,9 @@ function assertChallenge(session: AuthSession) {
   if (!session.challenge) {
     throw new AuthError('NO_CHALLENGE', 'Authentication challenge is missing or already consumed.');
   }
+  if (session.challenge.method !== 'sep53') {
+    throw new AuthError('INVALID_MESSAGE', 'Authentication challenge type is invalid.');
+  }
 
   const issuedAt = Date.parse(session.challenge.issuedAt);
   const expiresAt = Date.parse(session.challenge.expiresAt);
@@ -71,7 +74,11 @@ export function verifyAuthProof(input: VerifyAuthInput) {
     throw new AuthError('DOMAIN_MISMATCH', 'Authentication origin does not match this deployment.');
   }
 
-  const expectedMessage = createAuthMessage({
+  if (challenge.address !== input.address) {
+    throw new AuthError('INVALID_MESSAGE', 'Authentication wallet does not match the challenge.');
+  }
+
+  const unsignedMessage = createAuthMessage({
     appName: input.appName,
     address: input.address,
     domain: input.domain,
@@ -80,6 +87,32 @@ export function verifyAuthProof(input: VerifyAuthInput) {
     nonce: challenge.nonce,
     issuedAt: challenge.issuedAt,
     expirationTime: challenge.expiresAt
+  });
+  const serverSignature = assertSignatureEncoding(challenge.serverSignature);
+  let validServerSignature = false;
+  try {
+    validServerSignature = Keypair.fromPublicKey(challenge.serverPublicKey).verifyMessage(
+      unsignedMessage,
+      serverSignature
+    );
+  } catch {
+    validServerSignature = false;
+  }
+  if (!validServerSignature) {
+    throw new AuthError('INVALID_SIGNATURE', 'Server authentication signature could not be verified.');
+  }
+
+  const expectedMessage = createAuthMessage({
+    appName: input.appName,
+    address: input.address,
+    domain: input.domain,
+    uri: input.uri,
+    network: input.network.label,
+    nonce: challenge.nonce,
+    issuedAt: challenge.issuedAt,
+    expirationTime: challenge.expiresAt,
+    serverPublicKey: challenge.serverPublicKey,
+    serverSignature: challenge.serverSignature
   });
 
   if (input.message !== expectedMessage) {

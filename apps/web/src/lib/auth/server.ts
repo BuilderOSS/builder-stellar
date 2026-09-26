@@ -1,3 +1,4 @@
+import { Keypair } from '@stellar/stellar-sdk';
 import { getIronSession, type SessionOptions } from 'iron-session';
 import { cookies } from 'next/headers';
 
@@ -7,6 +8,7 @@ import type { AuthSession } from './types';
 
 export const AUTH_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 export const AUTH_SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+export const SEP10_CHALLENGE_TTL_SECONDS = 5 * 60;
 
 const challengeClaims = new Map<string, { state: 'pending' | 'consumed'; expiresAt: number }>();
 
@@ -74,6 +76,25 @@ export function getAuthOrigin(request: Request) {
 
 export function getAuthAppName() {
   return process.env.AUTH_APP_NAME?.trim() || 'Stellar DAOs';
+}
+
+export function getSep10ServerKeypair() {
+  const secret = process.env.STELLAR_WEB_AUTH_SECRET?.trim();
+  if (!secret) throw new Error('STELLAR_WEB_AUTH_SECRET must be configured for SEP-10 authentication.');
+
+  try {
+    return Keypair.fromSecret(secret);
+  } catch {
+    throw new Error('STELLAR_WEB_AUTH_SECRET is not a valid Stellar secret key.');
+  }
+}
+
+export function getSep10Domains(request: Request) {
+  const requestHost = new URL(getAuthOrigin(request)).hostname;
+  const homeDomain = process.env.STELLAR_HOME_DOMAIN?.trim() || requestHost;
+  const webAuthDomain = process.env.STELLAR_WEB_AUTH_DOMAIN?.trim() || requestHost;
+  if (!homeDomain || !webAuthDomain) throw new Error('SEP-10 domains must be configured.');
+  return { homeDomain, webAuthDomain };
 }
 
 function pruneChallengeClaims(now = Date.now()) {

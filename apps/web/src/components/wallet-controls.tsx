@@ -1,6 +1,5 @@
 'use client';
 
-import { defaultModules } from '@creit.tech/stellar-wallets-kit/modules/utils';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { KitEventType } from '@creit.tech/stellar-wallets-kit/types';
 import { Check, ChevronDown, Copy, ExternalLink, LogOut, Wallet } from 'lucide-react';
@@ -10,14 +9,18 @@ import { Button, Skeleton } from '@/components/ui';
 import { getNetworkConfig, type NetworkName } from '@/config/networks';
 import {
   createClientAuthMessage,
+  isSep53UnsupportedError,
   logoutAuth,
   normalizeWalletSignature,
   requestAuthChallenge,
+  requestSep10Challenge,
   useAuthSession,
-  verifyAuthProof
+  verifyAuthProof,
+  verifySep10Proof
 } from '@/lib/auth/client';
 import { getExplorerAccountUrl } from '@/lib/explorer-links';
 import { useWalletBalance } from '@/lib/wallet-balance';
+import { initializeWalletKit, isWalletConnectSelected } from '@/lib/wallet-kit';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
 type WalletNetwork = {
@@ -50,6 +53,15 @@ async function validateWalletNetwork(
         : `Wallet is on ${walletNetwork.network ?? 'an unknown network'} and must be switched to ${currentNetwork.label}.`
     });
   } catch (error) {
+    if (isWalletConnectSelected()) {
+      updateSession({
+        status: `Connected on ${currentNetwork.label}`,
+        walletNetworkPassphrase: currentNetwork.passphrase,
+        walletNetworkIssue: ''
+      });
+      return;
+    }
+
     updateSession({
       status: 'Wallet network validation unavailable',
       walletNetworkPassphrase: '',
@@ -97,7 +109,7 @@ export function WalletControls({ network }: { network?: WalletNetwork }) {
   );
 
   useEffect(() => {
-    StellarWalletsKit.init({ modules: defaultModules() });
+    initializeWalletKit(networkName);
 
     const handleWalletAddress = (address: string) => {
       setWalletAddress(address);
@@ -126,7 +138,7 @@ export function WalletControls({ network }: { network?: WalletNetwork }) {
       onStateUpdated();
       onDisconnect();
     };
-  }, [invalidateAuth, resetAuth, session.address, session.authStatus]);
+  }, [invalidateAuth, networkName, resetAuth, session.address, session.authStatus]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -151,32 +163,55 @@ export function WalletControls({ network }: { network?: WalletNetwork }) {
       setAuthStatus('connecting-wallet');
       const result = await StellarWalletsKit.authModal();
       setWalletAddress(result.address);
-      const walletNetwork = await StellarWalletsKit.getNetwork();
-      if (walletNetwork.networkPassphrase !== currentNetwork.passphrase) {
-        throw new Error(`Switch your wallet to ${currentNetwork.label} and try again.`);
+      if (!isWalletConnectSelected()) {
+        const walletNetwork = await StellarWalletsKit.getNetwork();
+        if (walletNetwork.networkPassphrase !== currentNetwork.passphrase) {
+          throw new Error(`Switch your wallet to ${currentNetwork.label} and try again.`);
+        }
       }
 
       setAuthStatus('requesting-challenge');
-      const challenge = await requestAuthChallenge();
+      const challenge = await requestAuthChallenge(result.address);
       const message = createClientAuthMessage(challenge, result.address);
 
-      setAuthStatus('awaiting-signature');
-      const { signedMessage, signerAddress } = await StellarWalletsKit.signMessage(message, {
-        networkPassphrase: currentNetwork.passphrase,
-        address: result.address
-      });
-      if (signerAddress && signerAddress !== result.address) {
-        throw new Error('The wallet signed with a different address.');
+      let authMethod: 'sep53' | 'sep10' = 'sep53';
+      try {
+        setAuthStatus('awaiting-signature');
+        const { signedMessage, signerAddress } = await StellarWalletsKit.signMessage(message, {
+          networkPassphrase: currentNetwork.passphrase,
+          address: result.address
+        });
+        if (signerAddress && signerAddress !== result.address) {
+          throw new Error('The wallet signed with a different address.');
+        }
+
+        setAuthStatus('verifying-signature');
+        await verifyAuthProof({
+          address: result.address,
+          message,
+          signature: normalizeWalletSignature(signedMessage)
+        });
+      } catch (error) {
+        if (!isSep53UnsupportedError(error)) throw error;
+
+        authMethod = 'sep10';
+        setAuthStatus('requesting-challenge');
+        const sep10Challenge = await requestSep10Challenge(result.address);
+        setAuthStatus('awaiting-signature');
+        const { signedTxXdr, signerAddress } = await StellarWalletsKit.signTransaction(sep10Challenge.xdr, {
+          networkPassphrase: currentNetwork.passphrase,
+          address: result.address
+        });
+        if (signerAddress && signerAddress !== result.address) {
+          throw new Error('The wallet signed with a different address.');
+        }
+
+        setAuthStatus('verifying-signature');
+        await verifySep10Proof(signedTxXdr);
       }
 
-      setAuthStatus('verifying-signature');
-      await verifyAuthProof({
-        address: result.address,
-        message,
-        signature: normalizeWalletSignature(signedMessage)
-      });
       setAuthenticatedAddress(result.address);
-      updateSession({ status: `Connected on ${currentNetwork.label}` });
+      updateSession({ status: `Connected on ${currentNetwork.label} via ${authMethod.toUpperCase()}` });
       await mutateAuthSession();
     } catch (error) {
       resetAuth();
