@@ -6,18 +6,20 @@ import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { useState } from 'react';
 import { Grid, Stack } from 'styled-system/jsx';
 
+import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
 import { AdminSectionNav } from '@/components/admin/admin-section-nav';
 import { AuthorityPanel } from '@/components/admin/authority-panel';
 import { PageSection } from '@/components/page-section';
 import { Badge, Callout, Card, Heading, ShortId, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
-import { startAdminProposal, treasuryIsOwner } from '@/lib/admin-proposals';
+import { treasuryIsOwner } from '@/lib/admin-proposals';
 import { useContractOwner } from '@/lib/admin-queries';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { useGoldskyGovernorAuthorities, useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
+import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
 async function submitAuthorityUpdate(
@@ -65,6 +67,7 @@ export default function OwnerPage() {
   const [governorAuthority, setGovernorAuthority] = useState('');
   const [formMessage, setFormMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const proposalDraft = useAdminProposalDraft();
   const tx = useTransactionFeedback(config.name);
   const {
     data: mintAuthorities,
@@ -135,8 +138,7 @@ export default function OwnerPage() {
           { authority, enabled },
           { config, session: { address: session.address, kit: StellarWalletsKit } }
         );
-        startAdminProposal({
-          address: session.address,
+        proposalDraft.requestAdd({
           daoId,
           action,
           source: `admin/owner/${type}`,
@@ -144,11 +146,12 @@ export default function OwnerPage() {
             title: `${enabled ? 'Grant' : 'Revoke'} ${authorityType.toLowerCase()} authority`,
             description: `${enabled ? 'Grant' : 'Revoke'} ${authorityType.toLowerCase()} authority for ${authority}.`,
             url: ''
-          }
+          },
+          onAdded: () =>
+            setFormMessage(
+              `${enabled ? 'Grant' : 'Revoke'} ${authorityType.toLowerCase()} authority added to the proposal draft.`
+            )
         });
-        setFormMessage(
-          `${enabled ? 'Grant' : 'Revoke'} ${authorityType.toLowerCase()} authority added to the proposal draft.`
-        );
         return;
       }
 
@@ -178,57 +181,64 @@ export default function OwnerPage() {
   }
 
   return (
-    <PageSection title="Owner" description="Manage mint and governance authorities from one control center.">
-      <Stack gap="4">
-        <AdminSectionNav daoId={daoId} active="/owner" />
+    <>
+      <AdminProposalDraftDialog
+        pending={proposalDraft.pending}
+        onCancel={proposalDraft.cancel}
+        onResolve={proposalDraft.resolve}
+      />
+      <PageSection title="Owner" description="Manage mint and governance authorities from one control center.">
+        <Stack gap="4">
+          <AdminSectionNav daoId={daoId} active="/owner" />
 
-        <Card p="5">
-          <Stack gap="3">
-            <div>
-              <Badge>Owner</Badge>
-            </div>
-            <Heading style={{ fontSize: '1.2rem' }}>Owner controls</Heading>
-            <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-              The owner can add or remove both token and governance authorities. Those authorities can then use the
-              matching admin pages.
-            </Text>
-            {formMessage ? <Callout variant="warning" title={formMessage} /> : null}
-          </Stack>
-        </Card>
+          <Card p="5">
+            <Stack gap="3">
+              <div>
+                <Badge>Owner</Badge>
+              </div>
+              <Heading style={{ fontSize: '1.2rem' }}>Owner controls</Heading>
+              <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+                The owner can add or remove both token and governance authorities. Those authorities can then use the
+                matching admin pages.
+              </Text>
+              {formMessage ? <Callout variant="warning" title={formMessage} /> : null}
+            </Stack>
+          </Card>
 
-        <Grid columns={{ base: 1, xl: 2 }} gap="4">
-          <AuthorityPanel
-            title="Mint authority"
-            badge="Token"
-            description="Grant or revoke who can mint voting tokens."
-            items={mintAuthorities?.items ?? []}
-            value={mintAuthority}
-            onValueChange={setMintAuthority}
-            onAllow={() => void updateAuthority('set_mint_authority', mintAuthority, true)}
-            onRevoke={() => void updateAuthority('set_mint_authority', mintAuthority, false)}
-            allowLabel={isOwner ? 'Allow minting' : 'Propose grant'}
-            revokeLabel={isOwner ? 'Revoke minting' : 'Propose revoke'}
-            busy={busy}
-            loading={mintAuthoritiesLoading}
-            emptyLabel={mintAuthorityError?.message || 'No mint authorities indexed yet.'}
-          />
-          <AuthorityPanel
-            title="Governor authority"
-            badge="Governance"
-            description="Grant or revoke who can update governor settings."
-            items={governorAuthorities?.items ?? []}
-            value={governorAuthority}
-            onValueChange={setGovernorAuthority}
-            onAllow={() => void updateAuthority('set_governor_authority', governorAuthority, true)}
-            onRevoke={() => void updateAuthority('set_governor_authority', governorAuthority, false)}
-            allowLabel={isOwner ? 'Allow governance' : 'Propose grant'}
-            revokeLabel={isOwner ? 'Revoke governance' : 'Propose revoke'}
-            busy={busy}
-            loading={governorAuthoritiesLoading}
-            emptyLabel={governorAuthorityError?.message || 'No governance authorities indexed yet.'}
-          />
-        </Grid>
-      </Stack>
-    </PageSection>
+          <Grid columns={{ base: 1, xl: 2 }} gap="4">
+            <AuthorityPanel
+              title="Mint authority"
+              badge="Token"
+              description="Grant or revoke who can mint voting tokens."
+              items={mintAuthorities?.items ?? []}
+              value={mintAuthority}
+              onValueChange={setMintAuthority}
+              onAllow={() => void updateAuthority('set_mint_authority', mintAuthority, true)}
+              onRevoke={() => void updateAuthority('set_mint_authority', mintAuthority, false)}
+              allowLabel={isOwner ? 'Allow minting' : 'Propose grant'}
+              revokeLabel={isOwner ? 'Revoke minting' : 'Propose revoke'}
+              busy={busy}
+              loading={mintAuthoritiesLoading}
+              emptyLabel={mintAuthorityError?.message || 'No mint authorities indexed yet.'}
+            />
+            <AuthorityPanel
+              title="Governor authority"
+              badge="Governance"
+              description="Grant or revoke who can update governor settings."
+              items={governorAuthorities?.items ?? []}
+              value={governorAuthority}
+              onValueChange={setGovernorAuthority}
+              onAllow={() => void updateAuthority('set_governor_authority', governorAuthority, true)}
+              onRevoke={() => void updateAuthority('set_governor_authority', governorAuthority, false)}
+              allowLabel={isOwner ? 'Allow governance' : 'Propose grant'}
+              revokeLabel={isOwner ? 'Revoke governance' : 'Propose revoke'}
+              busy={busy}
+              loading={governorAuthoritiesLoading}
+              emptyLabel={governorAuthorityError?.message || 'No governance authorities indexed yet.'}
+            />
+          </Grid>
+        </Stack>
+      </PageSection>
+    </>
   );
 }

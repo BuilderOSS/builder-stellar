@@ -5,6 +5,8 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
+import { formatStroops } from '@/lib/auction-values';
+
 /**
  * Artwork property with items
  */
@@ -43,7 +45,7 @@ type ArtworkConfig = {
 type AuctionConfig = {
   enabled: boolean;
   duration: number; // seconds
-  reservePrice: string; // stroops
+  reservePrice: string; // payment-token units
   timeBuffer: number; // seconds
   paymentAsset: string; // Stellar asset address
 };
@@ -162,7 +164,7 @@ const initialState: CreateDaoState = {
   auction: {
     enabled: true,
     duration: 86400, // 24 hours
-    reservePrice: '1000000000', // 100 XLM
+    reservePrice: '100', // 100 payment tokens
     timeBuffer: 300, // 5 minutes
     paymentAsset: ''
   },
@@ -322,6 +324,7 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
     }),
     {
       name: 'dao.create-dao.v1',
+      version: 2,
       storage,
       skipHydration: true,
       partialize: (state) => ({
@@ -332,6 +335,16 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
         founders: state.founders,
         launchAdmin: state.launchAdmin
       }),
+      migrate: (persistedState, version) => {
+        const persisted = persistedState as Partial<CreateDaoState>;
+        if (version === 0 && persisted.auction?.reservePrice) {
+          const reservePrice = persisted.auction.reservePrice;
+          if (/^\d+$/.test(reservePrice)) {
+            persisted.auction = { ...persisted.auction, reservePrice: formatStroops(reservePrice) };
+          }
+        }
+        return persisted as CreateDaoState;
+      },
       merge: (persistedState, currentState) => {
         const persisted = (persistedState ?? {}) as Partial<CreateDaoState>;
         const merged = { ...currentState, ...persisted } as CreateDaoStore;

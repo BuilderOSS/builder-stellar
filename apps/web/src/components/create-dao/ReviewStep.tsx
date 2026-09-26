@@ -5,10 +5,15 @@
 import { Stack } from 'styled-system/jsx';
 
 import { Badge, Callout, Card, Heading, Text } from '@/components/ui';
+import { getTreasuryAssets } from '@/lib/assets-config';
+import { decimalToStroops, formatStroops, getConfiguredAuctionNetwork } from '@/lib/auction-values';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
 export function ReviewStep({ connectedAddress }: { connectedAddress: string }) {
   const { basicInfo, artwork, auction, governance, founders, validationErrors } = useCreateDaoStore();
+  const paymentAsset = getTreasuryAssets(getConfiguredAuctionNetwork()).find(
+    (asset) => asset.contractId === auction.paymentAsset
+  );
   const errors = Object.entries(validationErrors);
 
   return (
@@ -89,13 +94,19 @@ export function ReviewStep({ connectedAddress }: { connectedAddress: string }) {
                   />
                   <DetailRow
                     label="Reserve Price"
-                    value={`${auction.reservePrice} stroops (${(Number(auction.reservePrice) / 10000000).toFixed(2)} XLM)`}
+                    value={`${auction.reservePrice} ${paymentAsset?.code ?? 'payment tokens'} (${formatStroops(
+                      decimalToStroops(auction.reservePrice) ?? 0n
+                    )} stroops)`}
                   />
                   <DetailRow
                     label="Time Buffer"
                     value={`${auction.timeBuffer} seconds (${(auction.timeBuffer / 60).toFixed(0)} minutes)`}
                   />
-                  <DetailRow label="Payment Asset" value={auction.paymentAsset} mono />
+                  <DetailRow
+                    label="Payment Asset"
+                    value={`${paymentAsset?.code ?? 'Custom SAC'} · ${auction.paymentAsset}`}
+                    mono
+                  />
                 </>
               )}
             </Stack>

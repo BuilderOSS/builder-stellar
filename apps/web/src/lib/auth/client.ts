@@ -4,7 +4,7 @@ import { Buffer } from 'buffer';
 import useSWR from 'swr';
 
 import { createAuthMessage } from './message';
-import type { AuthChallengeResponse, AuthSessionResponse } from './types';
+import type { AuthChallengeResponse, AuthSessionResponse, Sep10ChallengeResponse } from './types';
 
 async function fetchJson<T>(url: string, init?: RequestInit) {
   const response = await fetch(url, { ...init, cache: 'no-store', credentials: 'include' });
@@ -20,8 +20,12 @@ export function useAuthSession() {
   });
 }
 
-export async function requestAuthChallenge() {
-  return fetchJson<AuthChallengeResponse>('/api/auth/challenge', { method: 'POST' });
+export async function requestAuthChallenge(address: string) {
+  return fetchJson<AuthChallengeResponse>('/api/auth/challenge', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ address })
+  });
 }
 
 export async function verifyAuthProof(input: { address: string; message: string; signature: string }) {
@@ -29,6 +33,18 @@ export async function verifyAuthProof(input: { address: string; message: string;
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input)
+  });
+}
+
+export async function requestSep10Challenge(address: string) {
+  return fetchJson<Sep10ChallengeResponse>(`/api/auth/sep10/challenge?address=${encodeURIComponent(address)}`);
+}
+
+export async function verifySep10Proof(signedTxXdr: string) {
+  return fetchJson<AuthSessionResponse>('/api/auth/sep10/verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ signedTxXdr })
   });
 }
 
@@ -54,6 +70,16 @@ export function createClientAuthMessage(challenge: AuthChallengeResponse, addres
     network: challenge.network,
     nonce: challenge.nonce,
     issuedAt: challenge.issuedAt,
-    expirationTime: challenge.expirationTime
+    expirationTime: challenge.expirationTime,
+    serverPublicKey: challenge.serverPublicKey,
+    serverSignature: challenge.serverSignature
   });
+}
+
+export function isSep53UnsupportedError(error: unknown) {
+  const candidate = error as { code?: number; message?: string; error?: { code?: number; message?: string } };
+  const code = candidate?.code ?? candidate?.error?.code;
+  const message = String(candidate?.message ?? candidate?.error?.message ?? '').toLowerCase();
+  if (/(reject|denied|declined|cancel)/.test(message)) return false;
+  return code === -3 || /(unsupported|not supported|not implemented|method not found|signmessage)/.test(message);
 }

@@ -13,20 +13,25 @@ const network = {
 
 function createFixture() {
   const keypair = Keypair.random();
+  const serverKeypair = Keypair.random();
   const issuedTimestamp = Date.now() - 1000;
   const issuedAt = new Date(issuedTimestamp).toISOString();
   const expiresAt = new Date(issuedTimestamp + 5 * 60 * 1000 - 1000).toISOString();
   const session = {
     challenge: {
+      method: 'sep53' as const,
       nonce: 'nonce-123',
       issuedAt,
       expiresAt,
       network: 'testnet',
       domain: 'localhost:3000',
-      uri: 'http://localhost:3000'
+      uri: 'http://localhost:3000',
+      address: keypair.publicKey(),
+      serverPublicKey: serverKeypair.publicKey(),
+      serverSignature: ''
     }
   };
-  const message = createAuthMessage({
+  const unsignedMessage = createAuthMessage({
     appName: 'Stellar DAOs',
     address: keypair.publicKey(),
     domain: 'localhost:3000',
@@ -35,6 +40,19 @@ function createFixture() {
     nonce: session.challenge.nonce,
     issuedAt,
     expirationTime: expiresAt
+  });
+  session.challenge.serverSignature = Buffer.from(serverKeypair.signMessage(unsignedMessage)).toString('base64');
+  const message = createAuthMessage({
+    appName: 'Stellar DAOs',
+    address: keypair.publicKey(),
+    domain: 'localhost:3000',
+    uri: 'http://localhost:3000',
+    network: 'Testnet',
+    nonce: session.challenge.nonce,
+    issuedAt,
+    expirationTime: expiresAt,
+    serverPublicKey: session.challenge.serverPublicKey,
+    serverSignature: session.challenge.serverSignature
   });
   const signature = Buffer.from(keypair.signMessage(message)).toString('base64');
 

@@ -7,18 +7,20 @@ import { useState } from 'react';
 import { Grid, Stack } from 'styled-system/jsx';
 
 import { AdminValueForm } from '@/components/admin/admin-action-forms';
+import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
 import { AdminSectionNav } from '@/components/admin/admin-section-nav';
 import { AuthorityPanel } from '@/components/admin/authority-panel';
 import { PageSection } from '@/components/page-section';
 import { Badge, Button, Callout, Card, Heading, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
-import { startAdminProposal, treasuryHasAuthority, treasuryIsOwner } from '@/lib/admin-proposals';
+import { treasuryHasAuthority, treasuryIsOwner } from '@/lib/admin-proposals';
 import { useContractOwner, useGovernorSettings } from '@/lib/admin-queries';
 import { formatDuration } from '@/lib/format-duration';
 import { useGoldskyGovernorAuthorities } from '@/lib/goldsky-queries';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
+import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
 type Drafts = Partial<{
@@ -65,6 +67,7 @@ export default function GovernanceAdminPage() {
   const [formMessage, setFormMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [activeAction, setActiveAction] = useState<GovernorSettingKey | ''>('');
+  const proposalDraft = useAdminProposalDraft();
   const tx = useTransactionFeedback(config.name);
   const {
     data: settings,
@@ -99,8 +102,7 @@ export default function GovernanceAdminPage() {
       { value },
       { config, session: { address: session.address, kit: StellarWalletsKit } }
     );
-    startAdminProposal({
-      address: session.address,
+    proposalDraft.requestAdd({
       daoId,
       action,
       source: `admin/governance/${type}`,
@@ -108,9 +110,9 @@ export default function GovernanceAdminPage() {
         title: `Update ${label.toLowerCase()}`,
         description: `Update the DAO ${label.toLowerCase()} to ${value}.`,
         url: ''
-      }
+      },
+      onAdded: () => setFormMessage(`${label} added to the proposal draft.`)
     });
-    setFormMessage(`${label} added to the proposal draft.`);
   }
 
   async function getGovernor() {
@@ -310,217 +312,224 @@ export default function GovernanceAdminPage() {
   }
 
   return (
-    <PageSection title="Governance Admin" description="Edit governor parameters and apply them one at a time.">
-      <Stack gap="4">
-        <AdminSectionNav daoId={daoId} active="/governance" />
+    <>
+      <AdminProposalDraftDialog
+        pending={proposalDraft.pending}
+        onCancel={proposalDraft.cancel}
+        onResolve={proposalDraft.resolve}
+      />
+      <PageSection title="Governance Admin" description="Edit governor parameters and apply them one at a time.">
+        <Stack gap="4">
+          <AdminSectionNav daoId={daoId} active="/governance" />
 
-        <Card p="5">
-          <Stack gap="3">
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+          <Card p="5">
+            <Stack gap="3">
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                <Stack gap="3">
+                  <div>
+                    <Badge>Live values</Badge>
+                  </div>
+                  <Heading style={{ fontSize: '1.2rem' }}>Current governor settings</Heading>
+                </Stack>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void refreshSettings()}
+                  disabled={settingsLoading}
+                >
+                  {settingsLoading ? 'Refreshing...' : 'Refresh'}
+                </Button>
+              </div>
+
+              {settingsError ? <Callout variant="error" title={settingsError.message} /> : null}
+              {formMessage ? <Callout variant="warning" title={formMessage} /> : null}
+            </Stack>
+          </Card>
+
+          <Grid columns={{ base: 1, xl: 2 }} gap="4">
+            <Card p="5">
               <Stack gap="3">
                 <div>
-                  <Badge>Live values</Badge>
+                  <Badge>Voting delay</Badge>
                 </div>
-                <Heading style={{ fontSize: '1.2rem' }}>Current governor settings</Heading>
+                <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+                  Current: {settings ? formatSecondsValue(settings.votingDelay) : '—'} · Measured in seconds.
+                </Text>
+                <AdminValueForm
+                  value={{ value: drafts.votingDelay ?? settings?.votingDelay?.toString() ?? '' }}
+                  onChange={(value) => setDrafts((current) => ({ ...current, votingDelay: value.value }))}
+                  disabled={busy}
+                />
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <Button
+                    type="button"
+                    onClick={() => void applyVotingDelay()}
+                    disabled={
+                      busy ||
+                      activeAction === 'votingDelay' ||
+                      !settings ||
+                      parseWholeNumber(drafts.votingDelay ?? String(settings.votingDelay)) === null ||
+                      (drafts.votingDelay ?? String(settings.votingDelay)) === String(settings.votingDelay)
+                    }
+                  >
+                    {busy && activeAction === 'votingDelay'
+                      ? 'Applying...'
+                      : hasGovernanceAccess
+                        ? 'Apply'
+                        : 'Add to proposal'}
+                  </Button>
+                </div>
               </Stack>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => void refreshSettings()}
-                disabled={settingsLoading}
-              >
-                {settingsLoading ? 'Refreshing...' : 'Refresh'}
-              </Button>
-            </div>
+            </Card>
 
-            {settingsError ? <Callout variant="error" title={settingsError.message} /> : null}
-            {formMessage ? <Callout variant="warning" title={formMessage} /> : null}
-          </Stack>
-        </Card>
+            <Card p="5">
+              <Stack gap="3">
+                <div>
+                  <Badge>Voting period</Badge>
+                </div>
+                <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+                  Current: {settings ? formatSecondsValue(settings.votingPeriod) : '—'} · Measured in seconds.
+                </Text>
+                <AdminValueForm
+                  value={{ value: drafts.votingPeriod ?? settings?.votingPeriod?.toString() ?? '' }}
+                  onChange={(value) => setDrafts((current) => ({ ...current, votingPeriod: value.value }))}
+                  disabled={busy}
+                />
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <Button
+                    type="button"
+                    onClick={() => void applyVotingPeriod()}
+                    disabled={
+                      busy ||
+                      activeAction === 'votingPeriod' ||
+                      !settings ||
+                      parseWholeNumber(drafts.votingPeriod ?? String(settings.votingPeriod)) === null ||
+                      (drafts.votingPeriod ?? String(settings.votingPeriod)) === String(settings.votingPeriod)
+                    }
+                  >
+                    {busy && activeAction === 'votingPeriod'
+                      ? 'Applying...'
+                      : hasGovernanceAccess
+                        ? 'Apply'
+                        : 'Add to proposal'}
+                  </Button>
+                </div>
+              </Stack>
+            </Card>
 
-        <Grid columns={{ base: 1, xl: 2 }} gap="4">
-          <Card p="5">
-            <Stack gap="3">
-              <div>
-                <Badge>Voting delay</Badge>
-              </div>
-              <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                Current: {settings ? formatSecondsValue(settings.votingDelay) : '—'} · Measured in seconds.
-              </Text>
-              <AdminValueForm
-                value={{ value: drafts.votingDelay ?? settings?.votingDelay?.toString() ?? '' }}
-                onChange={(value) => setDrafts((current) => ({ ...current, votingDelay: value.value }))}
-                disabled={busy}
-              />
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <Button
-                  type="button"
-                  onClick={() => void applyVotingDelay()}
-                  disabled={
-                    busy ||
-                    activeAction === 'votingDelay' ||
-                    !settings ||
-                    parseWholeNumber(drafts.votingDelay ?? String(settings.votingDelay)) === null ||
-                    (drafts.votingDelay ?? String(settings.votingDelay)) === String(settings.votingDelay)
-                  }
-                >
-                  {busy && activeAction === 'votingDelay'
-                    ? 'Applying...'
-                    : hasGovernanceAccess
-                      ? 'Apply'
-                      : 'Add to proposal'}
-                </Button>
-              </div>
-            </Stack>
-          </Card>
+            <Card p="5">
+              <Stack gap="3">
+                <div>
+                  <Badge>Proposal threshold</Badge>
+                </div>
+                <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+                  Current:{' '}
+                  {settings ? (
+                    `${settings.proposalThreshold.toString()} votes`
+                  ) : (
+                    <Skeleton className="skeleton--inline" style={{ width: '90px', height: '1em' }} />
+                  )}
+                </Text>
+                <AdminValueForm
+                  value={{ value: drafts.proposalThreshold ?? formatThreshold(settings?.proposalThreshold ?? 0n) }}
+                  onChange={(value) => setDrafts((current) => ({ ...current, proposalThreshold: value.value }))}
+                  disabled={busy}
+                />
+                <Text className="lede" style={{ margin: 0, fontSize: '0.8rem' }}>
+                  {settings ? (
+                    'Apply this change in a single transaction.'
+                  ) : (
+                    <Skeleton style={{ width: '210px', height: '0.8em' }} />
+                  )}
+                </Text>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <Button
+                    type="button"
+                    onClick={() => void applyProposalThreshold()}
+                    disabled={
+                      busy ||
+                      activeAction === 'proposalThreshold' ||
+                      !settings ||
+                      parseBigIntValue(drafts.proposalThreshold ?? formatThreshold(settings.proposalThreshold)) ===
+                        null ||
+                      (drafts.proposalThreshold ?? formatThreshold(settings.proposalThreshold)) ===
+                        formatThreshold(settings.proposalThreshold)
+                    }
+                  >
+                    {busy && activeAction === 'proposalThreshold'
+                      ? 'Applying...'
+                      : hasGovernanceAccess
+                        ? 'Apply'
+                        : 'Add to proposal'}
+                  </Button>
+                </div>
+              </Stack>
+            </Card>
 
-          <Card p="5">
-            <Stack gap="3">
-              <div>
-                <Badge>Voting period</Badge>
-              </div>
-              <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                Current: {settings ? formatSecondsValue(settings.votingPeriod) : '—'} · Measured in seconds.
-              </Text>
-              <AdminValueForm
-                value={{ value: drafts.votingPeriod ?? settings?.votingPeriod?.toString() ?? '' }}
-                onChange={(value) => setDrafts((current) => ({ ...current, votingPeriod: value.value }))}
-                disabled={busy}
-              />
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <Button
-                  type="button"
-                  onClick={() => void applyVotingPeriod()}
-                  disabled={
-                    busy ||
-                    activeAction === 'votingPeriod' ||
-                    !settings ||
-                    parseWholeNumber(drafts.votingPeriod ?? String(settings.votingPeriod)) === null ||
-                    (drafts.votingPeriod ?? String(settings.votingPeriod)) === String(settings.votingPeriod)
-                  }
-                >
-                  {busy && activeAction === 'votingPeriod'
-                    ? 'Applying...'
-                    : hasGovernanceAccess
-                      ? 'Apply'
-                      : 'Add to proposal'}
-                </Button>
-              </div>
-            </Stack>
-          </Card>
+            <Card p="5">
+              <Stack gap="3">
+                <div>
+                  <Badge>Quorum</Badge>
+                </div>
+                <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+                  Current:{' '}
+                  {settings ? (
+                    `${settings.quorumBps} bps`
+                  ) : (
+                    <Skeleton className="skeleton--inline" style={{ width: '80px', height: '1em' }} />
+                  )}
+                </Text>
+                <AdminValueForm
+                  value={{ value: drafts.quorumBps ?? String(settings?.quorumBps ?? '') }}
+                  onChange={(value) => setDrafts((current) => ({ ...current, quorumBps: value.value }))}
+                  disabled={busy}
+                />
+                <Text className="lede" style={{ margin: 0, fontSize: '0.8rem' }}>
+                  {settings ? (
+                    'Apply this change in a single transaction.'
+                  ) : (
+                    <Skeleton style={{ width: '210px', height: '0.8em' }} />
+                  )}
+                </Text>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <Button
+                    type="button"
+                    onClick={() => void applyQuorumBps()}
+                    disabled={
+                      busy ||
+                      activeAction === 'quorumBps' ||
+                      !settings ||
+                      parseWholeNumber(drafts.quorumBps ?? String(settings.quorumBps)) === null ||
+                      (drafts.quorumBps ?? String(settings.quorumBps)) === String(settings.quorumBps)
+                    }
+                  >
+                    {busy && activeAction === 'quorumBps'
+                      ? 'Applying...'
+                      : hasGovernanceAccess
+                        ? 'Apply'
+                        : 'Add to proposal'}
+                  </Button>
+                </div>
+              </Stack>
+            </Card>
+          </Grid>
 
-          <Card p="5">
-            <Stack gap="3">
-              <div>
-                <Badge>Proposal threshold</Badge>
-              </div>
-              <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                Current:{' '}
-                {settings ? (
-                  `${settings.proposalThreshold.toString()} votes`
-                ) : (
-                  <Skeleton className="skeleton--inline" style={{ width: '90px', height: '1em' }} />
-                )}
-              </Text>
-              <AdminValueForm
-                value={{ value: drafts.proposalThreshold ?? formatThreshold(settings?.proposalThreshold ?? 0n) }}
-                onChange={(value) => setDrafts((current) => ({ ...current, proposalThreshold: value.value }))}
-                disabled={busy}
-              />
-              <Text className="lede" style={{ margin: 0, fontSize: '0.8rem' }}>
-                {settings ? (
-                  'Apply this change in a single transaction.'
-                ) : (
-                  <Skeleton style={{ width: '210px', height: '0.8em' }} />
-                )}
-              </Text>
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <Button
-                  type="button"
-                  onClick={() => void applyProposalThreshold()}
-                  disabled={
-                    busy ||
-                    activeAction === 'proposalThreshold' ||
-                    !settings ||
-                    parseBigIntValue(drafts.proposalThreshold ?? formatThreshold(settings.proposalThreshold)) ===
-                      null ||
-                    (drafts.proposalThreshold ?? formatThreshold(settings.proposalThreshold)) ===
-                      formatThreshold(settings.proposalThreshold)
-                  }
-                >
-                  {busy && activeAction === 'proposalThreshold'
-                    ? 'Applying...'
-                    : hasGovernanceAccess
-                      ? 'Apply'
-                      : 'Add to proposal'}
-                </Button>
-              </div>
-            </Stack>
-          </Card>
-
-          <Card p="5">
-            <Stack gap="3">
-              <div>
-                <Badge>Quorum</Badge>
-              </div>
-              <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                Current:{' '}
-                {settings ? (
-                  `${settings.quorumBps} bps`
-                ) : (
-                  <Skeleton className="skeleton--inline" style={{ width: '80px', height: '1em' }} />
-                )}
-              </Text>
-              <AdminValueForm
-                value={{ value: drafts.quorumBps ?? String(settings?.quorumBps ?? '') }}
-                onChange={(value) => setDrafts((current) => ({ ...current, quorumBps: value.value }))}
-                disabled={busy}
-              />
-              <Text className="lede" style={{ margin: 0, fontSize: '0.8rem' }}>
-                {settings ? (
-                  'Apply this change in a single transaction.'
-                ) : (
-                  <Skeleton style={{ width: '210px', height: '0.8em' }} />
-                )}
-              </Text>
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <Button
-                  type="button"
-                  onClick={() => void applyQuorumBps()}
-                  disabled={
-                    busy ||
-                    activeAction === 'quorumBps' ||
-                    !settings ||
-                    parseWholeNumber(drafts.quorumBps ?? String(settings.quorumBps)) === null ||
-                    (drafts.quorumBps ?? String(settings.quorumBps)) === String(settings.quorumBps)
-                  }
-                >
-                  {busy && activeAction === 'quorumBps'
-                    ? 'Applying...'
-                    : hasGovernanceAccess
-                      ? 'Apply'
-                      : 'Add to proposal'}
-                </Button>
-              </div>
-            </Stack>
-          </Card>
-        </Grid>
-
-        <AuthorityPanel
-          title="Governor authorities"
-          badge="Governance"
-          description="Current wallets explicitly allowed to manage governance settings. The owner is always included."
-          items={governorAuthorities?.items ?? []}
-          value=""
-          allowLabel=""
-          revokeLabel=""
-          editable={false}
-          loading={authorityLoading}
-          busy={authorityLoading}
-          emptyLabel={authorityError?.message || 'No governance authorities indexed yet.'}
-        />
-      </Stack>
-    </PageSection>
+          <AuthorityPanel
+            title="Governor authorities"
+            badge="Governance"
+            description="Current wallets explicitly allowed to manage governance settings. The owner is always included."
+            items={governorAuthorities?.items ?? []}
+            value=""
+            allowLabel=""
+            revokeLabel=""
+            editable={false}
+            loading={authorityLoading}
+            busy={authorityLoading}
+            emptyLabel={authorityError?.message || 'No governance authorities indexed yet.'}
+          />
+        </Stack>
+      </PageSection>
+    </>
   );
 }

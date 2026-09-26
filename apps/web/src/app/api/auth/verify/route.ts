@@ -39,8 +39,17 @@ export async function POST(request: Request) {
     const domain = new URL(uri).host;
     const session = await getAuthSession();
     const challenge = session.challenge;
-    if (!challenge || !claimAuthChallenge(challenge.nonce, Date.parse(challenge.expiresAt))) {
+    if (!challenge || challenge.method !== 'sep53') {
       throw new AuthError('NO_CHALLENGE', 'Authentication challenge is missing or already consumed.');
+    }
+    const claim = claimAuthChallenge(challenge.nonce, Date.parse(challenge.expiresAt));
+    if (!claim.success) {
+      throw new AuthError(
+        'NO_CHALLENGE',
+        claim.reason === 'consumed'
+          ? 'Challenge already used. Please request a new one.'
+          : 'Challenge verification in progress. Please wait.'
+      );
     }
     claimedNonce = challenge.nonce;
 
@@ -56,12 +65,13 @@ export async function POST(request: Request) {
     delete session.challenge;
     session.address = body.data.address;
     session.network = network.name;
+    session.authMethod = 'sep53';
     session.authenticatedAt = Date.now();
     await session.save();
     consumeAuthChallenge(claimedNonce);
 
     return NextResponse.json(
-      { authenticated: true, address: body.data.address },
+      { authenticated: true, address: body.data.address, authMethod: 'sep53' },
       { headers: { 'Cache-Control': 'no-store' } }
     );
   } catch (error) {

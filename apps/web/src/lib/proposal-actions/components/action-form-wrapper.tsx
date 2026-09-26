@@ -141,6 +141,7 @@ export function ActionFormWrapper({ daoId }: { daoId: string }) {
               onChange={(value) => updateDraft(address, daoId, value)}
               disabled={isDisabled}
               validationErrors={validationErrors || undefined}
+              network={context.config.name}
             />
           </Suspense>
         </ActionErrorBoundary>

@@ -8,6 +8,8 @@ import {
   AdminValueForm,
   AuthorityProposalActionForm
 } from '@/components/admin/admin-action-forms';
+import { decimalToStroops, validateReservePrice } from '@/lib/auction-values';
+import { getStellarAddressError, isValidStellarAddress } from '@/lib/validation';
 
 import type { ActionHandler, ValidationResult } from './types';
 
@@ -35,26 +37,15 @@ function wholeNumber(value: string, label: string): ValidationResult {
 }
 
 function decimalPrice(value: string): ValidationResult {
-  if (!/^\d+(?:\.\d{1,7})?$/.test(value.trim())) {
+  const error = validateReservePrice(value);
+  if (error) {
     return {
       valid: false,
-      message: 'Reserve price must be a number with up to 7 decimal places.',
-      fields: { reservePrice: 'Enter a valid reserve price.' }
+      message: error,
+      fields: { reservePrice: error }
     };
   }
-  const stroops = decimalToStroops(value);
-  return stroops >= 1000n
-    ? valid()
-    : {
-        valid: false,
-        message: 'Reserve price is too low.',
-        fields: { reservePrice: 'Minimum reserve price is 0.0001.' }
-      };
-}
-
-function decimalToStroops(value: string): bigint {
-  const [whole, fraction = ''] = value.trim().split('.');
-  return BigInt(whole) * 10_000_000n + BigInt(fraction.padEnd(7, '0') || '0');
+  return valid();
 }
 
 function authorityHandler(
@@ -170,7 +161,7 @@ export const setAuctionReservePriceHandler: ActionHandler<AdminReservePriceDraft
   buildCallVector: (data, context) => ({
     target: context.config.auctionContractId,
     function: 'set_reserve_price',
-    args: [decimalToStroops(data.reservePrice).toString()]
+    args: [decimalToStroops(data.reservePrice)?.toString() ?? '0']
   })
 };
 
@@ -181,7 +172,15 @@ export const setAuctionPaymentTokenHandler: ActionHandler<AdminPaymentTokenDraft
   group: 'Administration',
   FormComponent: AdminPaymentTokenForm,
   getDefaultValues: () => ({ paymentToken: '' }),
-  validate: (data) => required(data.paymentToken, 'paymentToken', 'Payment token contract address'),
+  validate: (data) => {
+    const requiredResult = required(data.paymentToken, 'paymentToken', 'Payment token contract address');
+    if (!requiredResult.valid) return requiredResult;
+    if (!isValidStellarAddress(data.paymentToken.trim())) {
+      const message = getStellarAddressError(data.paymentToken.trim()) ?? 'Invalid payment token contract address';
+      return { valid: false, message, fields: { paymentToken: message } };
+    }
+    return valid();
+  },
   serialize: (data) => ({
     id: crypto.randomUUID(),
     type: 'set-auction-payment-token',
