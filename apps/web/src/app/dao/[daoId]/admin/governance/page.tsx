@@ -11,6 +11,7 @@ import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draf
 import { AdminSectionNav } from '@/components/admin/admin-section-nav';
 import { AuthorityPanel } from '@/components/admin/authority-panel';
 import { DurationInput } from '@/components/admin/duration-input';
+import { PercentageInput } from '@/components/admin/percentage-input';
 import { PageSection } from '@/components/page-section';
 import { Badge, Button, Callout, Card, Heading, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
@@ -29,7 +30,7 @@ type Drafts = Partial<{
   votingDelay: number;
   votingPeriod: number;
   proposalThreshold: string;
-  quorumBps: string;
+  quorumBps: number;
 }>;
 
 type GovernorSettingKey = 'votingDelay' | 'votingPeriod' | 'proposalThreshold' | 'quorumBps';
@@ -258,11 +259,7 @@ export default function GovernanceAdminPage() {
 
   async function applyQuorumBps() {
     if (!settings) return;
-    const value = parseWholeNumber(drafts.quorumBps ?? String(settings.quorumBps));
-    if (value === null) {
-      setFormMessage('Quorum must be a whole number.');
-      return;
-    }
+    const value = typeof drafts.quorumBps === 'number' ? drafts.quorumBps : settings.quorumBps;
 
     if (value === settings.quorumBps) {
       setFormMessage('Quorum is unchanged.');
@@ -480,24 +477,19 @@ export default function GovernanceAdminPage() {
                 <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
                   Current:{' '}
                   {settings ? (
-                    `${settings.quorumBps} bps`
+                    `${(settings.quorumBps / 100).toFixed(2)}%`
                   ) : (
                     <Skeleton className="skeleton--inline" style={{ width: '80px', height: '1em' }} />
                   )}
                 </Text>
-                <AdminValueForm
-                  value={{ value: drafts.quorumBps ?? String(settings?.quorumBps ?? '') }}
-                  onChange={(value) => setDrafts((current) => ({ ...current, quorumBps: value.value }))}
+                <PercentageInput
+                  id="quorum-bps"
+                  label="Enter quorum percentage"
+                  value={drafts.quorumBps ?? settings?.quorumBps ?? 0}
+                  onChange={(value) => setDrafts((current) => ({ ...current, quorumBps: value }))}
                   disabled={busy}
-                  draftPreview={draftStatus.actionsInDraft.find((a) => a.type === 'set-quorum-bps')}
+                  helperText="Percentage of votes required to pass a proposal."
                 />
-                <Text className="lede" style={{ margin: 0, fontSize: '0.8rem' }}>
-                  {settings ? (
-                    'Apply this change in a single transaction.'
-                  ) : (
-                    <Skeleton style={{ width: '210px', height: '0.8em' }} />
-                  )}
-                </Text>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <Button
                     type="button"
@@ -506,8 +498,7 @@ export default function GovernanceAdminPage() {
                       busy ||
                       activeAction === 'quorumBps' ||
                       !settings ||
-                      parseWholeNumber(drafts.quorumBps ?? String(settings.quorumBps)) === null ||
-                      (drafts.quorumBps ?? String(settings.quorumBps)) === String(settings.quorumBps)
+                      (typeof drafts.quorumBps === 'number' ? drafts.quorumBps : settings.quorumBps) === settings.quorumBps
                     }
                   >
                     {busy && activeAction === 'quorumBps'
