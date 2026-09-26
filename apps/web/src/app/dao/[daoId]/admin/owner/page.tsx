@@ -20,6 +20,7 @@ import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
+import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
 async function submitAuthorityUpdate(
@@ -68,6 +69,10 @@ export default function OwnerPage() {
   const [formMessage, setFormMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const proposalDraft = useAdminProposalDraft();
+  const draftStatus = useAdminDraftStatus(daoId, [
+    'set-mint-authority',
+    'set-governor-authority'
+  ]);
   const tx = useTransactionFeedback(config.name);
   const {
     data: mintAuthorities,
@@ -220,6 +225,7 @@ export default function OwnerPage() {
               busy={busy}
               loading={mintAuthoritiesLoading}
               emptyLabel={mintAuthorityError?.message || 'No mint authorities indexed yet.'}
+              draftPreview={draftStatus.actionsInDraft.find((a) => a.type === 'set-mint-authority')}
             />
             <AuthorityPanel
               title="Governor authority"
@@ -235,6 +241,7 @@ export default function OwnerPage() {
               busy={busy}
               loading={governorAuthoritiesLoading}
               emptyLabel={governorAuthorityError?.message || 'No governance authorities indexed yet.'}
+              draftPreview={draftStatus.actionsInDraft.find((a) => a.type === 'set-governor-authority')}
             />
           </Grid>
         </Stack>

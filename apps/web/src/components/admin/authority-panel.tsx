@@ -4,6 +4,7 @@ import { Stack } from 'styled-system/jsx';
 
 import { AuthorityActionForm } from '@/components/admin/admin-action-forms';
 import { Badge, Button, Card, Heading, ShortId, Skeleton, Text } from '@/components/ui';
+import type { ProposalQueuedAction } from '@/stores/proposal-composer-store';
 
 type AuthorityItem = {
   authority: string;
@@ -27,7 +28,8 @@ export function AuthorityPanel({
   loading = false,
   editable = true,
   formEnabled = true,
-  emptyLabel = 'No authorities indexed yet.'
+  emptyLabel = 'No authorities indexed yet.',
+  draftPreview
 }: {
   title: string;
   badge: string;
@@ -44,6 +46,7 @@ export function AuthorityPanel({
   editable?: boolean;
   formEnabled?: boolean;
   emptyLabel?: string;
+  draftPreview?: ProposalQueuedAction;
 }) {
   return (
     <Card p="5">
@@ -62,6 +65,7 @@ export function AuthorityPanel({
             onChange={(nextValue) => onValueChange?.(nextValue.authority)}
             disabled={Boolean(busy)}
             showEnabled={false}
+            draftPreview={draftPreview}
           />
         ) : null}
 

@@ -21,6 +21,7 @@ import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
+import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
 type Drafts = Partial<{
@@ -68,6 +69,12 @@ export default function GovernanceAdminPage() {
   const [busy, setBusy] = useState(false);
   const [activeAction, setActiveAction] = useState<GovernorSettingKey | ''>('');
   const proposalDraft = useAdminProposalDraft();
+  const draftStatus = useAdminDraftStatus(daoId, [
+    'set-voting-delay',
+    'set-voting-period',
+    'set-proposal-threshold',
+    'set-quorum-bps'
+  ]);
   const tx = useTransactionFeedback(config.name);
   const {
     data: settings,
@@ -360,6 +367,7 @@ export default function GovernanceAdminPage() {
                   value={{ value: drafts.votingDelay ?? settings?.votingDelay?.toString() ?? '' }}
                   onChange={(value) => setDrafts((current) => ({ ...current, votingDelay: value.value }))}
                   disabled={busy}
+                  draftPreview={draftStatus.actionsInDraft.find((a) => a.type === 'set-voting-delay')}
                 />
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <Button
@@ -395,6 +403,7 @@ export default function GovernanceAdminPage() {
                   value={{ value: drafts.votingPeriod ?? settings?.votingPeriod?.toString() ?? '' }}
                   onChange={(value) => setDrafts((current) => ({ ...current, votingPeriod: value.value }))}
                   disabled={busy}
+                  draftPreview={draftStatus.actionsInDraft.find((a) => a.type === 'set-voting-period')}
                 />
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <Button
@@ -435,6 +444,7 @@ export default function GovernanceAdminPage() {
                   value={{ value: drafts.proposalThreshold ?? formatThreshold(settings?.proposalThreshold ?? 0n) }}
                   onChange={(value) => setDrafts((current) => ({ ...current, proposalThreshold: value.value }))}
                   disabled={busy}
+                  draftPreview={draftStatus.actionsInDraft.find((a) => a.type === 'set-proposal-threshold')}
                 />
                 <Text className="lede" style={{ margin: 0, fontSize: '0.8rem' }}>
                   {settings ? (
@@ -484,6 +494,7 @@ export default function GovernanceAdminPage() {
                   value={{ value: drafts.quorumBps ?? String(settings?.quorumBps ?? '') }}
                   onChange={(value) => setDrafts((current) => ({ ...current, quorumBps: value.value }))}
                   disabled={busy}
+                  draftPreview={draftStatus.actionsInDraft.find((a) => a.type === 'set-quorum-bps')}
                 />
                 <Text className="lede" style={{ margin: 0, fontSize: '0.8rem' }}>
                   {settings ? (

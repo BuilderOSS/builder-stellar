@@ -22,6 +22,7 @@ import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
+import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
 import { getStellarAddressError, isValidStellarAddress } from '@/lib/validation';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
@@ -45,6 +46,12 @@ export default function AuctionAdminPage() {
   const [autoPauseDialogOpen, setAutoPauseDialogOpen] = useState(false);
   const [autoPauseAction, setAutoPauseAction] = useState<AuctionAutoPauseAction | null>(null);
   const proposalDraft = useAdminProposalDraft();
+  const draftStatus = useAdminDraftStatus(daoId, [
+    'set-auction-reserve-price',
+    'set-auction-payment-token',
+    'pause-auction',
+    'unpause-auction'
+  ]);
   const { data, error, mutate, isLoading } = useSWR<AuctionStatus>(
     `/api/dao/${encodeURIComponent(daoId)}/auctions`,
     fetcher
@@ -412,6 +419,7 @@ export default function AuctionAdminPage() {
                   onChange={(value) => setPaymentToken(value.paymentToken)}
                   network={config.name}
                   disabled={busy}
+                  draftPreview={draftStatus.actionsInDraft.find((a) => a.type === 'set-auction-payment-token')}
                 />
                 <Button
                   variant="outline"
@@ -435,6 +443,7 @@ export default function AuctionAdminPage() {
                   value={{ reservePrice }}
                   onChange={(value) => setReservePrice(value.reservePrice)}
                   disabled={busy}
+                  draftPreview={draftStatus.actionsInDraft.find((a) => a.type === 'set-auction-reserve-price')}
                 />
                 <Button
                   variant="outline"
