@@ -14,6 +14,7 @@ import { ProposalContextRail } from '@/components/proposal/proposal-context-rail
 import { Badge, Button, Callout, Card, Heading, Input, Skeleton, Text, Textarea } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
+import { analyzeProposalAction } from '@/lib/proposal-action-identity';
 import { ActionFormProvider, ActionFormWrapper, ProposalActionQueue } from '@/lib/proposal-actions';
 import { buildProposalCallVectors, encodeProposalCallArgs, getProposalActionSummary } from '@/lib/proposal-call';
 import { useProposalEligibility } from '@/lib/proposal-eligibility';
@@ -61,6 +62,10 @@ export default function ProposalCreatePage() {
   const proposalCreationError = eligibility.error?.message;
   const proposalCreationLocked = !eligibility.eligible;
   const proposalCreationDisabledMessage = eligibility.message;
+  const draftFindings = queuedActions.flatMap((action, index) =>
+    analyzeProposalAction(action, queuedActions.slice(0, index)).filter((finding) => finding.severity === 'error')
+  );
+  const hasBlockingDraftFindings = draftFindings.length > 0;
 
   // Metadata validation
   const metadataValidation = validateProposalMetadataDraft(metadata);
@@ -323,6 +328,15 @@ export default function ProposalCreatePage() {
                       description="Your wallet will show the final transaction for review. Confirm the target contracts, recipients, and amounts before signing."
                     />
 
+                    {hasBlockingDraftFindings ? (
+                      <Callout
+                        variant="error"
+                        badge="Resolve before submitting"
+                        title="This draft contains duplicate or conflicting actions"
+                        description="Return to Actions and remove or replace the flagged action before submitting the proposal."
+                      />
+                    ) : null}
+
                     <Card p="5">
                       <Stack gap="4">
                         <div>
@@ -384,7 +398,10 @@ export default function ProposalCreatePage() {
                       <Button variant="outline" onClick={() => setStep(session.address, daoId, 2)}>
                         Back to Actions
                       </Button>
-                      <Button onClick={handleOpenConfirmDialog} disabled={proposalCreationLocked || transactionBusy}>
+                      <Button
+                        onClick={handleOpenConfirmDialog}
+                        disabled={proposalCreationLocked || transactionBusy || hasBlockingDraftFindings}
+                      >
                         {transactionBusy ? 'Submitting...' : 'Submit Proposal'}
                       </Button>
                     </div>
@@ -420,7 +437,7 @@ export default function ProposalCreatePage() {
         onConfirm={handleConfirmSubmit}
         onCancel={() => setConfirmDialogOpen(false)}
         title="Confirm Proposal Creation"
-        message="This will submit your proposal to the blockchain. You'll need to sign the transaction with your wallet."
+        message={`This will submit ${queuedActions.length} action${queuedActions.length === 1 ? '' : 's'} to the blockchain as a governance proposal. Your wallet will show the final transaction for review before signing.`}
         confirmLabel="Create Proposal"
         busy={transactionBusy}
       />

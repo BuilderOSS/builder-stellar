@@ -283,6 +283,54 @@ textarea {
   background: var(--surface-2);
   color: var(--text-primary);
 }
+.admin-section-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  background: var(--surface-1);
+}
+.admin-proposal-tray {
+  border-color: var(--accent-7);
+  background: linear-gradient(120deg, var(--surface-1), var(--accent-2));
+}
+.proposal-consent-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.74);
+  backdrop-filter: blur(6px);
+}
+.proposal-consent-dialog {
+  width: min(100%, 560px);
+  max-height: min(720px, calc(100vh - 40px));
+  overflow: auto;
+  border-color: var(--border-strong);
+  background: var(--surface-1);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.48);
+}
+@media (max-width: 560px) {
+  .admin-section-nav {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+  .admin-proposal-tray > div:first-child {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .proposal-consent-backdrop {
+    align-items: end;
+    padding: 10px;
+  }
+  .proposal-consent-dialog {
+    max-height: calc(100vh - 20px);
+  }
+}
 .header-actions {
   display: flex;
   align-items: center;
@@ -2563,9 +2611,7 @@ textarea {
   gap: 4px;
   min-height: 360px;
   align-content: center;
-  background:
-    radial-gradient(circle at 90% 10%, rgba(73, 166, 255, 0.12), transparent 34%),
-    var(--surface-1);
+  background: radial-gradient(circle at 90% 10%, rgba(73, 166, 255, 0.12), transparent 34%), var(--surface-1);
 }
 
 .marketplace-coming-soon__icon {

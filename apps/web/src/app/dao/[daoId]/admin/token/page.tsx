@@ -5,12 +5,13 @@ import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 
+import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
 import { AdminSectionNav } from '@/components/admin/admin-section-nav';
 import { AuthorityPanel } from '@/components/admin/authority-panel';
 import { PageSection } from '@/components/page-section';
 import { Badge, Button, Callout, Card, Heading, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
-import { startAdminProposal, treasuryHasAuthority, treasuryIsOwner } from '@/lib/admin-proposals';
+import { treasuryHasAuthority, treasuryIsOwner } from '@/lib/admin-proposals';
 import { useContractOwner } from '@/lib/admin-queries';
 import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { BatchMintGovernanceTokenForm } from '@/lib/proposal-actions/actions/batch-mint-governance-token/component';
@@ -18,6 +19,7 @@ import type { BatchMintGovernanceTokenData } from '@/lib/proposal-actions/action
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
+import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
 export default function TokenAdminPage() {
@@ -27,6 +29,7 @@ export default function TokenAdminPage() {
   const [amount, setAmount] = useState('1');
   const [formMessage, setFormMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const proposalDraft = useAdminProposalDraft();
   const tx = useTransactionFeedback(config.name);
   const { data: mintAuthorities, error, isLoading, mutate } = useGoldskyMintAuthorities(config.tokenContractId);
   const { data: tokenOwner } = useContractOwner(config, 'token', session.address || undefined);
@@ -65,8 +68,7 @@ export default function TokenAdminPage() {
           { recipient, amount },
           { config, session: { address: session.address, kit: StellarWalletsKit } }
         );
-        startAdminProposal({
-          address: session.address,
+        proposalDraft.requestAdd({
           daoId,
           action,
           source: 'admin/token',
@@ -74,11 +76,13 @@ export default function TokenAdminPage() {
             title: `Mint ${amount} governance token${amount === '1' ? '' : 's'}`,
             description: `Mint ${amount} governance token${amount === '1' ? '' : 's'} to ${recipient}.`,
             url: ''
+          },
+          onAdded: () => {
+            setFormMessage(`Added ${amount} governance token${amount === '1' ? '' : 's'} to the proposal draft.`);
+            setRecipient('');
+            setAmount('1');
           }
         });
-        setFormMessage(`Added ${amount} governance token${amount === '1' ? '' : 's'} to the proposal draft.`);
-        setRecipient('');
-        setAmount('1');
         return;
       }
 
@@ -117,55 +121,62 @@ export default function TokenAdminPage() {
   }
 
   return (
-    <PageSection title="Token Admin" description="Mint tokens and review the current mint-authority set.">
-      <Stack gap="4">
-        <AdminSectionNav daoId={daoId} active="/token" />
+    <>
+      <AdminProposalDraftDialog
+        pending={proposalDraft.pending}
+        onCancel={proposalDraft.cancel}
+        onResolve={proposalDraft.resolve}
+      />
+      <PageSection title="Token Admin" description="Mint tokens and review the current mint-authority set.">
+        <Stack gap="4">
+          <AdminSectionNav daoId={daoId} active="/token" />
 
-        <Card p="5">
-          <Stack gap="3">
-            <div>
-              <Badge>{hasMintAccess ? 'Mint enabled' : 'Read only'}</Badge>
-            </div>
-            <Heading style={{ fontSize: '1.2rem' }}>Mint voting token</Heading>
-            <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-              {hasMintAccess
-                ? 'Enter a recipient address and mint up to 20 tokens directly to that wallet.'
-                : 'Only a mint authority or the owner can mint from this page.'}
-            </Text>
-            <BatchMintGovernanceTokenForm
-              value={{ recipient, amount } satisfies BatchMintGovernanceTokenData}
-              onChange={(value) => {
-                setRecipient(value.recipient);
-                setAmount(value.amount);
-              }}
-              disabled={!hasMintAccess && !canProposeMint}
-            />
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <Button type="button" onClick={handleMint} disabled={busy || (!hasMintAccess && !canProposeMint)}>
-                {busy ? 'Preparing...' : hasMintAccess ? 'Batch mint' : 'Create mint proposal'}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => void mutate()} disabled={isLoading}>
-                {isLoading ? 'Refreshing...' : 'Refresh authorities'}
-              </Button>
-            </div>
-            {formMessage ? <Callout variant="warning" title={formMessage} /> : null}
-            {error ? <Callout variant="error" title={error.message} /> : null}
-          </Stack>
-        </Card>
+          <Card p="5">
+            <Stack gap="3">
+              <div>
+                <Badge>{hasMintAccess ? 'Mint enabled' : 'Read only'}</Badge>
+              </div>
+              <Heading style={{ fontSize: '1.2rem' }}>Mint voting token</Heading>
+              <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+                {hasMintAccess
+                  ? 'Enter a recipient address and mint up to 20 tokens directly to that wallet.'
+                  : 'Only a mint authority or the owner can mint from this page.'}
+              </Text>
+              <BatchMintGovernanceTokenForm
+                value={{ recipient, amount } satisfies BatchMintGovernanceTokenData}
+                onChange={(value) => {
+                  setRecipient(value.recipient);
+                  setAmount(value.amount);
+                }}
+                disabled={!hasMintAccess && !canProposeMint}
+              />
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <Button type="button" onClick={handleMint} disabled={busy || (!hasMintAccess && !canProposeMint)}>
+                  {busy ? 'Preparing...' : hasMintAccess ? 'Batch mint' : 'Create mint proposal'}
+                </Button>
+                <Button type="button" variant="outline" onClick={() => void mutate()} disabled={isLoading}>
+                  {isLoading ? 'Refreshing...' : 'Refresh authorities'}
+                </Button>
+              </div>
+              {formMessage ? <Callout variant="warning" title={formMessage} /> : null}
+              {error ? <Callout variant="error" title={error.message} /> : null}
+            </Stack>
+          </Card>
 
-        <AuthorityPanel
-          title="Mint authorities"
-          badge="Token"
-          description="These wallets are explicitly allowed to mint. The owner is always allowed too."
-          items={mintAuthorities?.items ?? []}
-          value=""
-          allowLabel=""
-          revokeLabel=""
-          editable={false}
-          loading={isLoading}
-          emptyLabel="No explicit mint authorities indexed yet."
-        />
-      </Stack>
-    </PageSection>
+          <AuthorityPanel
+            title="Mint authorities"
+            badge="Token"
+            description="These wallets are explicitly allowed to mint. The owner is always allowed too."
+            items={mintAuthorities?.items ?? []}
+            value=""
+            allowLabel=""
+            revokeLabel=""
+            editable={false}
+            loading={isLoading}
+            emptyLabel="No explicit mint authorities indexed yet."
+          />
+        </Stack>
+      </PageSection>
+    </>
   );
 }

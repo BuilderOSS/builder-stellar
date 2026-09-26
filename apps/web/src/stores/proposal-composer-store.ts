@@ -40,6 +40,7 @@ type ProposalComposerActions = {
   updateDraft: (address: string, daoId: string, draftData: any) => void;
   changeActionType: (address: string, daoId: string, actionType: ProposalActionType) => void;
   saveAction: (address: string, daoId: string, action: ProposalQueuedAction) => void;
+  replaceAction: (address: string, daoId: string, index: number, action: ProposalQueuedAction) => void;
   cancelEdit: (address: string, daoId: string) => void;
   removeAction: (address: string, daoId: string, index: number) => void;
   reorderActions: (address: string, daoId: string, fromIndex: number, toIndex: number) => void;
@@ -211,6 +212,14 @@ export const useProposalComposerStore = create<ProposalComposerStore>()(
             editingState: null,
             formMessage: 'Action added'
           });
+        }),
+
+      replaceAction: (address, daoId, index, action) =>
+        updateDaoDraft(set, address, daoId, (draft) => {
+          if (!draft.queuedActions[index]) return draft;
+          const queuedActions = [...draft.queuedActions];
+          queuedActions[index] = action;
+          return withUpdatedAt(draft, { queuedActions, formMessage: 'Action replaced in proposal draft' });
         }),
 
       cancelEdit: (address, daoId) =>

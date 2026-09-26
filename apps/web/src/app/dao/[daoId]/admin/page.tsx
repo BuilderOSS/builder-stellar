@@ -119,7 +119,7 @@ export default function AdminPage() {
           </Stack>
         </Card>
 
-        <AdminSectionNav daoId={daoId} active="" />
+        <AdminSectionNav daoId={daoId} active="" showDraftTray={false} />
 
         <ProposalDraftPanel daoId={daoId} />
 
