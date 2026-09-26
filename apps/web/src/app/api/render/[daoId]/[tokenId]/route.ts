@@ -11,10 +11,11 @@ import { parseTokenId } from '@/lib/token-id';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const REQUEST_TIMEOUT_MS = 20_000;
+const REQUEST_TIMEOUT_MS = 45_000;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_TOTAL_IMAGE_BYTES = 32 * 1024 * 1024;
 const MAX_LAYERS = 16;
+const MAX_CONCURRENT_LAYER_FETCHES = 4;
 const MAX_REDIRECTS = 3;
 const MAX_INPUT_PIXELS = 16_777_216;
 const SIZE = 1080;
@@ -34,6 +35,23 @@ async function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<
   });
 }
 
+async function mapWithConcurrency<T, U>(values: T[], limit: number, mapper: (value: T) => Promise<U>) {
+  const results = new Array<U>(values.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= values.length) return;
+      results[index] = await mapper(values[index]);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, values.length) }, worker));
+  return results;
+}
+
 async function fetchImage(uri: string, signal: AbortSignal, maxBytes: number) {
   const urls = getFetchableUrls(uri);
   if (!urls?.length) throw new Error(`Unsupported artwork URL: ${uri}`);
@@ -48,8 +66,14 @@ async function fetchImage(uri: string, signal: AbortSignal, maxBytes: number) {
         const pinnedAddress = addresses[0];
         const dispatcher = new Agent({
           connect: {
-            lookup: (_hostname, _options, callback) => {
-              callback(null, pinnedAddress, isIP(pinnedAddress));
+            lookup: (_hostname, options, callback) => {
+              const family = isIP(pinnedAddress);
+              if (options.all) {
+                callback(null, [{ address: pinnedAddress, family }]);
+                return;
+              }
+
+              callback(null, pinnedAddress, family);
             }
           }
         });
@@ -123,17 +147,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
     if (metadata.artwork.length === 0) throw new Error(`No artwork found for token ${resolvedTokenId}`);
     if (metadata.artwork.length > MAX_LAYERS) throw new Error('Artwork has too many layers');
 
-    const layers: Buffer[] = [];
-    let totalBytes = 0;
-    for (const { url } of metadata.artwork) {
-      const layer = await fetchImage(
-        url,
-        controller.signal,
-        Math.min(MAX_IMAGE_BYTES, MAX_TOTAL_IMAGE_BYTES - totalBytes)
-      );
-      totalBytes += layer.byteLength;
-      layers.push(layer);
-    }
+    const maxBytesPerLayer = Math.min(MAX_IMAGE_BYTES, Math.floor(MAX_TOTAL_IMAGE_BYTES / metadata.artwork.length));
+    const layers = await mapWithConcurrency(metadata.artwork, MAX_CONCURRENT_LAYER_FETCHES, ({ url }) =>
+      fetchImage(url, controller.signal, maxBytesPerLayer)
+    );
 
     const base = await withSignal(
       sharp(layers[0], { limitInputPixels: MAX_INPUT_PIXELS }).resize(SIZE, SIZE, { fit: 'contain' }).png().toBuffer(),
