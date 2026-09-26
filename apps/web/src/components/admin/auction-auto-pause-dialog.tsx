@@ -2,7 +2,7 @@
 
 import { Stack } from 'styled-system/jsx';
 
-import { Button, Dialog, Heading, Text } from '@/components/ui';
+import { Button, Card, Heading, Text } from '@/components/ui';
 
 export type AuctionAutoPauseAction = 'payment-token' | 'reserve-price';
 
@@ -21,23 +21,30 @@ export function AuctionAutoPauseDialog({
   onCancel,
   isLoading = false
 }: AuctionAutoPauseDialogProps) {
-  const actionLabel =
-    action === 'payment-token' ? 'Update payment token' : 'Update reserve price';
+  const actionLabel = action === 'payment-token' ? 'Update payment token' : 'Update reserve price';
+
+  if (!open) return null;
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onCancel()}>
-      <div style={{ maxWidth: '500px' }}>
+    <div className="proposal-consent-backdrop" role="presentation" onClick={isLoading ? undefined : onCancel}>
+      <Card
+        className="proposal-consent-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auction-auto-pause-title"
+        onClick={(event) => event.stopPropagation()}
+        p="5"
+      >
         <Stack gap="4">
           <Stack gap="2">
-            <Heading style={{ fontSize: '1.125rem' }}>
+            <Heading id="auction-auto-pause-title" style={{ fontSize: '1.125rem' }}>
               Pause auctions to make changes
             </Heading>
             <Text style={{ margin: 0 }}>
-              Auctions are currently active. To update the {action === 'payment-token' ? 'payment token' : 'reserve price'}, the auctions must be paused first.
+              Auctions are currently active. To update the{' '}
+              {action === 'payment-token' ? 'payment token' : 'reserve price'}, the auctions must be paused first.
             </Text>
-            <Text style={{ margin: 0, marginTop: '0.5rem' }}>
-              The following actions will be executed together:
-            </Text>
+            <Text style={{ margin: 0, marginTop: '0.5rem' }}>The following actions will be executed together:</Text>
             <ol style={{ margin: '0.5rem 0 0 1.5rem', paddingLeft: 0 }}>
               <li style={{ marginBottom: '0.25rem' }}>
                 <strong>Pause auctions</strong> - Stop all auction activity
@@ -51,22 +58,15 @@ export function AuctionAutoPauseDialog({
             </Text>
           </Stack>
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-            <Button
-              variant="outline"
-              onClick={onCancel}
-              disabled={isLoading}
-            >
+            <Button variant="outline" onClick={onCancel} disabled={isLoading}>
               Cancel
             </Button>
-            <Button
-              onClick={onConfirm}
-              disabled={isLoading}
-            >
+            <Button onClick={onConfirm} disabled={isLoading}>
               {isLoading ? 'Processing...' : 'Pause and update'}
             </Button>
           </div>
         </Stack>
-      </div>
-    </Dialog>
+      </Card>
+    </div>
   );
 }

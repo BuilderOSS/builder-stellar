@@ -19,8 +19,8 @@ import { useGoldskyGovernorAuthorities, useGoldskyMintAuthorities } from '@/lib/
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
-import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
+import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
 async function submitAuthorityUpdate(
@@ -69,10 +69,7 @@ export default function OwnerPage() {
   const [formMessage, setFormMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const proposalDraft = useAdminProposalDraft();
-  const draftStatus = useAdminDraftStatus(daoId, [
-    'set-mint-authority',
-    'set-governor-authority'
-  ]);
+  const draftStatus = useAdminDraftStatus(daoId, ['set-mint-authority', 'set-governor-authority']);
   const tx = useTransactionFeedback(config.name);
   const {
     data: mintAuthorities,

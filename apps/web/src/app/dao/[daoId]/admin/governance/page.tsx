@@ -22,8 +22,8 @@ import { useGoldskyGovernorAuthorities } from '@/lib/goldsky-queries';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
-import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
+import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
 type Drafts = Partial<{
@@ -39,15 +39,6 @@ const EMPTY_DRAFTS: Drafts = {};
 
 function formatThreshold(value: bigint) {
   return value.toString();
-}
-
-function parseWholeNumber(value: string) {
-  const trimmed = value.trim();
-  if (!/^\d+$/.test(trimmed)) {
-    return null;
-  }
-
-  return Number(trimmed);
 }
 
 function parseBigIntValue(value: string) {
@@ -378,7 +369,8 @@ export default function GovernanceAdminPage() {
                       busy ||
                       activeAction === 'votingDelay' ||
                       !settings ||
-                      (typeof drafts.votingDelay === 'number' ? drafts.votingDelay : settings.votingDelay) === settings.votingDelay
+                      (typeof drafts.votingDelay === 'number' ? drafts.votingDelay : settings.votingDelay) ===
+                        settings.votingDelay
                     }
                   >
                     {busy && activeAction === 'votingDelay'
@@ -410,7 +402,9 @@ export default function GovernanceAdminPage() {
                   helperText="How long voting remains open after it starts. Minimum 1 day. Longer periods allow more participation. Common: 3-7 days."
                 />
                 <Stack gap="1">
-                  {typeof drafts.votingPeriod === 'number' && settings && drafts.votingPeriod !== settings.votingPeriod ? (
+                  {typeof drafts.votingPeriod === 'number' &&
+                  settings &&
+                  drafts.votingPeriod !== settings.votingPeriod ? (
                     <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: '#3b82f6' }}>
                       Change: {formatSecondsValue(settings.votingPeriod)} → {formatSecondsValue(drafts.votingPeriod)}
                     </Text>
@@ -424,7 +418,8 @@ export default function GovernanceAdminPage() {
                       busy ||
                       activeAction === 'votingPeriod' ||
                       !settings ||
-                      (typeof drafts.votingPeriod === 'number' ? drafts.votingPeriod : settings.votingPeriod) === settings.votingPeriod
+                      (typeof drafts.votingPeriod === 'number' ? drafts.votingPeriod : settings.votingPeriod) ===
+                        settings.votingPeriod
                     }
                   >
                     {busy && activeAction === 'votingPeriod'
@@ -540,7 +535,8 @@ export default function GovernanceAdminPage() {
                       busy ||
                       activeAction === 'quorumBps' ||
                       !settings ||
-                      (typeof drafts.quorumBps === 'number' ? drafts.quorumBps : settings.quorumBps) === settings.quorumBps
+                      (typeof drafts.quorumBps === 'number' ? drafts.quorumBps : settings.quorumBps) ===
+                        settings.quorumBps
                     }
                   >
                     {busy && activeAction === 'quorumBps'

@@ -4,7 +4,7 @@ import { Stack } from 'styled-system/jsx';
 
 import { AuthorityActionForm } from '@/components/admin/admin-action-forms';
 import { Badge, Button, Card, Heading, ShortId, Skeleton, Text } from '@/components/ui';
-import type { ProposalQueuedAction } from '@/stores/proposal-composer-store';
+import type { ProposalQueuedAction } from '@/lib/proposal-actions/types';
 
 type AuthorityItem = {
   authority: string;

@@ -6,10 +6,10 @@ import { useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 import useSWR from 'swr';
 
-import { AuctionAutoPauseDialog, type AuctionAutoPauseAction } from '@/components/admin/auction-auto-pause-dialog';
 import { AdminPaymentTokenForm, AdminReservePriceForm } from '@/components/admin/admin-action-forms';
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
 import { AdminSectionNav } from '@/components/admin/admin-section-nav';
+import { type AuctionAutoPauseAction, AuctionAutoPauseDialog } from '@/components/admin/auction-auto-pause-dialog';
 import { PageSection } from '@/components/page-section';
 import { Badge, Button, Callout, Card, Heading, ShortId, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
@@ -21,8 +21,8 @@ import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
-import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
+import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { getStellarAddressError, isValidStellarAddress } from '@/lib/validation';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
@@ -78,10 +78,12 @@ export default function AuctionAdminPage() {
     // Determine action type and messaging based on auction status
     const isLaunching = data?.status === 'not-launched' && !nextPaused;
     const actionType = nextPaused ? 'pause-auction' : 'unpause-auction';
-    const actionTitle = isLaunching ? 'Launch auctions' : (nextPaused ? 'Pause auctions' : 'Resume auctions');
+    const actionTitle = isLaunching ? 'Launch auctions' : nextPaused ? 'Pause auctions' : 'Resume auctions';
     const actionDescription = isLaunching
       ? 'Launch auctions and create the first token.'
-      : (nextPaused ? 'Pause auction activity.' : 'Resume auction activity.');
+      : nextPaused
+        ? 'Pause auction activity.'
+        : 'Resume auction activity.';
 
     if (!isOwner && canProposeAuction) {
       const handler = getActionHandler(actionType);
@@ -100,7 +102,7 @@ export default function AuctionAdminPage() {
       return;
     }
     setBusy(true);
-    tx.start(isLaunching ? 'Launching auctions...' : (nextPaused ? 'Pausing auctions...' : 'Resuming auctions...'));
+    tx.start(isLaunching ? 'Launching auctions...' : nextPaused ? 'Pausing auctions...' : 'Resuming auctions...');
     try {
       const client = new AuctionClient({
         contractId: config.auctionContractId,
@@ -118,8 +120,12 @@ export default function AuctionAdminPage() {
         : await client.unpause({ caller: session.address });
       const sent = await assembled.signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
-      const submittedMessage = nextPaused ? 'Auction pause submitted' : (isLaunching ? 'Auction launch submitted' : 'Auction resume submitted');
-      const successMessage = nextPaused ? 'Auctions paused' : (isLaunching ? 'Auctions launched' : 'Auctions resumed');
+      const submittedMessage = nextPaused
+        ? 'Auction pause submitted'
+        : isLaunching
+          ? 'Auction launch submitted'
+          : 'Auction resume submitted';
+      const successMessage = nextPaused ? 'Auctions paused' : isLaunching ? 'Auctions launched' : 'Auctions resumed';
       tx.submitted(submittedMessage, hash);
       await waitForConfirmation(hash, config.rpcUrl);
       tx.success(successMessage, hash);
@@ -152,7 +158,10 @@ export default function AuctionAdminPage() {
       // Add pause action if auctions are active
       if (data.paused === false) {
         const pauseHandler = getActionHandler('pause-auction');
-        const pauseAction = pauseHandler.serialize({}, { config, session: { address: session.address, kit: StellarWalletsKit } });
+        const pauseAction = pauseHandler.serialize(
+          {},
+          { config, session: { address: session.address, kit: StellarWalletsKit } }
+        );
         actions.push(pauseAction);
       }
       const handler = getActionHandler('set-auction-reserve-price');
@@ -170,12 +179,17 @@ export default function AuctionAdminPage() {
           source: `admin/auction/${i === 0 && data.paused === false ? 'pause-auction' : 'set-auction-reserve-price'}`,
           metadata: {
             title: i === 0 && data.paused === false ? 'Pause auctions' : 'Update auction reserve price',
-            description: i === 0 && data.paused === false ? 'Pause auction activity.' : `Set the next auction reserve price to ${reservePrice.trim()}.`,
+            description:
+              i === 0 && data.paused === false
+                ? 'Pause auction activity.'
+                : `Set the next auction reserve price to ${reservePrice.trim()}.`,
             url: ''
           },
           onAdded: () => {
             if (i === actions.length - 1) {
-              setFormMessage(`${data.paused === false ? 'Pause and update' : 'Update'} reserve price added to the proposal draft.`);
+              setFormMessage(
+                `${data.paused === false ? 'Pause and update' : 'Update'} reserve price added to the proposal draft.`
+              );
               setReservePrice('');
             }
           }
@@ -205,7 +219,7 @@ export default function AuctionAdminPage() {
         const pauseHash = pauseSent.sendTransactionResponse?.hash ?? '';
         tx.submitted('Auction pause submitted', pauseHash);
         await waitForConfirmation(pauseHash, config.rpcUrl);
-        tx.submitted('Auctions paused, updating reserve price...');
+        tx.submitted('Auctions paused, updating reserve price...', pauseHash);
       }
 
       const client = new AuctionClient({
@@ -256,7 +270,10 @@ export default function AuctionAdminPage() {
       // Add pause action if auctions are active
       if (data.paused === false) {
         const pauseHandler = getActionHandler('pause-auction');
-        const pauseAction = pauseHandler.serialize({}, { config, session: { address: session.address, kit: StellarWalletsKit } });
+        const pauseAction = pauseHandler.serialize(
+          {},
+          { config, session: { address: session.address, kit: StellarWalletsKit } }
+        );
         actions.push(pauseAction);
       }
       const handler = getActionHandler('set-auction-payment-token');
@@ -274,12 +291,17 @@ export default function AuctionAdminPage() {
           source: `admin/auction/${i === 0 && data.paused === false ? 'pause-auction' : 'set-auction-payment-token'}`,
           metadata: {
             title: i === 0 && data.paused === false ? 'Pause auctions' : 'Update auction payment token',
-            description: i === 0 && data.paused === false ? 'Pause auction activity.' : `Set the auction payment token to ${value}.`,
+            description:
+              i === 0 && data.paused === false
+                ? 'Pause auction activity.'
+                : `Set the auction payment token to ${value}.`,
             url: ''
           },
           onAdded: () => {
             if (i === actions.length - 1) {
-              setFormMessage(`${data.paused === false ? 'Pause and update' : 'Update'} payment token added to the proposal draft.`);
+              setFormMessage(
+                `${data.paused === false ? 'Pause and update' : 'Update'} payment token added to the proposal draft.`
+              );
               setPaymentToken('');
             }
           }
@@ -309,7 +331,7 @@ export default function AuctionAdminPage() {
         const pauseHash = pauseSent.sendTransactionResponse?.hash ?? '';
         tx.submitted('Auction pause submitted', pauseHash);
         await waitForConfirmation(pauseHash, config.rpcUrl);
-        tx.submitted('Auctions paused, updating payment token...');
+        tx.submitted('Auctions paused, updating payment token...', pauseHash);
       }
 
       const client = new AuctionClient({
@@ -416,10 +438,7 @@ export default function AuctionAdminPage() {
               ) : null}
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 {data?.status === 'not-launched' ? (
-                  <Button
-                    onClick={() => void updatePaused(false)}
-                    disabled={busy || !auctionCanMint}
-                  >
+                  <Button onClick={() => void updatePaused(false)} disabled={busy || !auctionCanMint}>
                     {isOwner ? 'Launch auctions' : 'Create launch proposal'}
                   </Button>
                 ) : (
@@ -442,7 +461,8 @@ export default function AuctionAdminPage() {
                 {data?.config.payment_token
                   ? `${getTreasuryAssets(config.name).find((asset) => asset.contractId === data.config.payment_token)?.code ?? 'Unknown SAC'} · ${data.config.payment_token}`
                   : 'Not configured'}
-                . Changes apply after the next auction is created. If auctions are active, they will be paused automatically.
+                . Changes apply after the next auction is created. If auctions are active, they will be paused
+                automatically.
               </Text>
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 <AdminPaymentTokenForm
@@ -452,11 +472,7 @@ export default function AuctionAdminPage() {
                   disabled={busy}
                   draftPreview={draftStatus.actionsInDraft.find((a) => a.type === 'set-auction-payment-token')}
                 />
-                <Button
-                  variant="outline"
-                  onClick={() => void updatePaymentToken()}
-                  disabled={busy || !paymentToken}
-                >
+                <Button variant="outline" onClick={() => void updatePaymentToken()} disabled={busy || !paymentToken}>
                   {isOwner ? 'Update payment token' : 'Add payment token proposal'}
                 </Button>
               </div>
@@ -467,7 +483,8 @@ export default function AuctionAdminPage() {
                   ? (getTreasuryAssets(config.name).find((asset) => asset.contractId === data.config.payment_token)
                       ?.code ?? 'SAC')
                   : 'SAC'}{' '}
-                units. Changes apply after the next auction is created. If auctions are active, they will be paused automatically.
+                units. Changes apply after the next auction is created. If auctions are active, they will be paused
+                automatically.
               </Text>
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 <AdminReservePriceForm
@@ -476,11 +493,7 @@ export default function AuctionAdminPage() {
                   disabled={busy}
                   draftPreview={draftStatus.actionsInDraft.find((a) => a.type === 'set-auction-reserve-price')}
                 />
-                <Button
-                  variant="outline"
-                  onClick={() => void updateReservePrice()}
-                  disabled={busy || !reservePrice}
-                >
+                <Button variant="outline" onClick={() => void updateReservePrice()} disabled={busy || !reservePrice}>
                   {isOwner ? 'Update reserve' : 'Add reserve proposal'}
                 </Button>
               </div>

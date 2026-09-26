@@ -7,8 +7,7 @@ import { AuctionPaymentTokenSelect } from '@/components/auction/auction-payment-
 import { AuctionReservePriceField } from '@/components/auction/auction-reserve-price-field';
 import { FieldHelperText, FieldLabel, Input, Select } from '@/components/ui';
 import { getConfiguredAuctionNetwork } from '@/lib/auction-values';
-import type { ActionFormProps } from '@/lib/proposal-actions/types';
-import type { ProposalQueuedAction } from '@/stores/proposal-composer-store';
+import type { ActionFormProps, ProposalQueuedAction } from '@/lib/proposal-actions/types';
 
 export type AdminAuthorityDraft = { authority: string; enabled: boolean };
 export type AdminValueDraft = { value: string };

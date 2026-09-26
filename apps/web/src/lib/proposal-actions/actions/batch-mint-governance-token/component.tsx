@@ -7,9 +7,8 @@ import { Stack } from 'styled-system/jsx';
 import { AdminDraftActionPreview } from '@/components/admin/admin-draft-action-preview';
 import { FieldHelperText, FieldLabel, Input } from '@/components/ui';
 
-import type { ActionFormProps } from '../../types';
+import type { ActionFormProps, ProposalQueuedAction } from '../../types';
 import type { BatchMintGovernanceTokenData } from './types';
-import type { ProposalQueuedAction } from '@/stores/proposal-composer-store';
 
 export function BatchMintGovernanceTokenForm({
   value,

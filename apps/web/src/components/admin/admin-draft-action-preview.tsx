@@ -5,8 +5,8 @@ import { useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 
 import { Badge, Text } from '@/components/ui';
+import type { ProposalQueuedAction } from '@/lib/proposal-actions/types';
 import { getProposalActionLabel, getProposalActionSummary } from '@/lib/proposal-call';
-import type { ProposalQueuedAction } from '@/stores/proposal-composer-store';
 
 interface AdminDraftActionPreviewProps {
   action: ProposalQueuedAction;
@@ -106,9 +106,7 @@ export function AdminDraftActionPreview({
           }}
         >
           <Stack gap="2">
-            <Badge style={{ width: 'fit-content', fontSize: '0.75rem' }}>
-              {label}
-            </Badge>
+            <Badge style={{ width: 'fit-content', fontSize: '0.75rem' }}>{label}</Badge>
             <Text
               style={{
                 fontSize: '0.875rem',

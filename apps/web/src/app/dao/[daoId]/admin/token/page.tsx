@@ -19,8 +19,8 @@ import type { BatchMintGovernanceTokenData } from '@/lib/proposal-actions/action
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
-import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
+import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
 export default function TokenAdminPage() {
