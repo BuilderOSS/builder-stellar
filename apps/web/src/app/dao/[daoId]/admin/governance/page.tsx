@@ -361,6 +361,11 @@ export default function GovernanceAdminPage() {
                   disabled={busy}
                   helperText="Time between proposal creation and when voting begins. Minimum 5 minutes. Example: 1 day gives members time to see new proposals."
                 />
+                {typeof drafts.votingDelay === 'number' && settings && drafts.votingDelay !== settings.votingDelay ? (
+                  <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: '#3b82f6' }}>
+                    Change: {formatSecondsValue(settings.votingDelay)} → {formatSecondsValue(drafts.votingDelay)}
+                  </Text>
+                ) : null}
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <Button
                     type="button"
@@ -398,6 +403,11 @@ export default function GovernanceAdminPage() {
                   disabled={busy}
                   helperText="How long voting remains open after it starts. Minimum 1 day. Longer periods allow more participation. Common: 3-7 days."
                 />
+                {typeof drafts.votingPeriod === 'number' && settings && drafts.votingPeriod !== settings.votingPeriod ? (
+                  <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: '#3b82f6' }}>
+                    Change: {formatSecondsValue(settings.votingPeriod)} → {formatSecondsValue(drafts.votingPeriod)}
+                  </Text>
+                ) : null}
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <Button
                     type="button"
@@ -445,6 +455,13 @@ export default function GovernanceAdminPage() {
                     <Skeleton style={{ width: '210px', height: '0.8em' }} />
                   )}
                 </Text>
+                {settings &&
+                drafts.proposalThreshold &&
+                drafts.proposalThreshold !== formatThreshold(settings.proposalThreshold) ? (
+                  <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: '#3b82f6' }}>
+                    Change: {formatThreshold(settings.proposalThreshold)} → {drafts.proposalThreshold} votes
+                  </Text>
+                ) : null}
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <Button
                     type="button"
@@ -490,6 +507,11 @@ export default function GovernanceAdminPage() {
                   disabled={busy}
                   helperText="Percentage of total votes needed for a proposal to pass. Example: 10% means 10 out of 100 votes required."
                 />
+                {typeof drafts.quorumBps === 'number' && settings && drafts.quorumBps !== settings.quorumBps ? (
+                  <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: '#3b82f6' }}>
+                    Change: {(settings.quorumBps / 100).toFixed(2)}% → {(drafts.quorumBps / 100).toFixed(2)}%
+                  </Text>
+                ) : null}
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <Button
                     type="button"
