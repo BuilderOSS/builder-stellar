@@ -55,7 +55,7 @@ async function validateWalletNetwork(
   } catch (error) {
     if (isWalletConnectSelected()) {
       updateSession({
-        status: `Connected on ${currentNetwork.label}`,
+        status: `Connected on ${currentNetwork.label} (verify mobile wallet network)`,
         walletNetworkPassphrase: currentNetwork.passphrase,
         walletNetworkIssue: ''
       });

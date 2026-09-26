@@ -49,6 +49,56 @@ Comprehensive guide for deploying the Stellar DAO Builder to production.
 - [ ] Neon dashboard access verified
 - [ ] Health check endpoint accessible after deployment
 
+### Wallet Authentication Environment
+
+Set these values before deploying the web app:
+
+```env
+# Required for the encrypted application session
+IRON_PASSWORD=<at-least-32-characters>
+
+# Required for server-signed SEP-53 and SEP-10 authentication
+STELLAR_WEB_AUTH_SECRET=<funded-account-secret-key>
+STELLAR_HOME_DOMAIN=app.example.com
+STELLAR_WEB_AUTH_DOMAIN=app.example.com
+
+# Required for WalletConnect wallets, including Freighter Mobile
+NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=<walletconnect-cloud-project-id>
+```
+
+`APP_URL` must be the production origin, and `NEXT_PUBLIC_NETWORK` must match the
+network used by the server authentication account. Keep
+`STELLAR_WEB_AUTH_SECRET` server-only. `AUTH_APP_NAME` is optional and defaults to
+`Stellar DAOs`.
+
+## Authentication Methods
+
+The application supports two wallet authentication methods:
+
+- **SEP-53** (preferred): lightweight message signing.
+- **SEP-10** (fallback): transaction-based authentication for wallets without message signing.
+
+Both methods establish the same application session and use server-signed
+challenges. Their underlying challenge structures remain protocol-specific.
+
+## MVP Authentication Limitations
+
+### Horizontal Scaling
+
+- Challenge claims are stored in memory and are not shared across instances.
+- This works for a single-instance deployment.
+- Migrate challenge claims to Redis or another shared store before adding multiple instances.
+
+### WalletConnect Network Validation
+
+- WalletConnect wallets do not expose a reliable pre-signing network query through the installed SDK.
+- The UI displays a network reminder, and server-side verification still rejects network mismatches.
+
+### Challenge Pruning
+
+- Expired claims are pruned on each authentication request with an O(n) scan.
+- This is sufficient for MVP traffic; use shared storage with TTLs at higher scale.
+
 ---
 
 ## Deployment Overview

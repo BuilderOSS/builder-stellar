@@ -46,8 +46,14 @@ export async function POST(request: Request) {
     }
 
     const challengeId = createHash('sha256').update(challenge.xdr).digest('hex');
-    if (!claimAuthChallenge(challengeId, expiresAt)) {
-      throw new AuthError('NO_CHALLENGE', 'SEP-10 authentication challenge is missing or already consumed.');
+    const claim = claimAuthChallenge(challengeId, expiresAt);
+    if (!claim.success) {
+      throw new AuthError(
+        'NO_CHALLENGE',
+        claim.reason === 'consumed'
+          ? 'Challenge already used. Please request a new one.'
+          : 'Challenge verification in progress. Please wait.'
+      );
     }
     claimedChallenge = challengeId;
 

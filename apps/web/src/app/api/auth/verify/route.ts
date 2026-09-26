@@ -39,12 +39,17 @@ export async function POST(request: Request) {
     const domain = new URL(uri).host;
     const session = await getAuthSession();
     const challenge = session.challenge;
-    if (
-      !challenge ||
-      challenge.method !== 'sep53' ||
-      !claimAuthChallenge(challenge.nonce, Date.parse(challenge.expiresAt))
-    ) {
+    if (!challenge || challenge.method !== 'sep53') {
       throw new AuthError('NO_CHALLENGE', 'Authentication challenge is missing or already consumed.');
+    }
+    const claim = claimAuthChallenge(challenge.nonce, Date.parse(challenge.expiresAt));
+    if (!claim.success) {
+      throw new AuthError(
+        'NO_CHALLENGE',
+        claim.reason === 'consumed'
+          ? 'Challenge already used. Please request a new one.'
+          : 'Challenge verification in progress. Please wait.'
+      );
     }
     claimedNonce = challenge.nonce;
 

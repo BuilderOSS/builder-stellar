@@ -8,13 +8,13 @@ describe('authentication safeguards', () => {
     const nonce = `nonce-${crypto.randomUUID()}`;
     const expiresAt = Date.now() + 60_000;
 
-    expect(claimAuthChallenge(nonce, expiresAt)).toBe(true);
-    expect(claimAuthChallenge(nonce, expiresAt)).toBe(false);
+    expect(claimAuthChallenge(nonce, expiresAt)).toEqual({ success: true });
+    expect(claimAuthChallenge(nonce, expiresAt)).toEqual({ success: false, reason: 'in-use' });
 
     releaseAuthChallenge(nonce);
-    expect(claimAuthChallenge(nonce, expiresAt)).toBe(true);
+    expect(claimAuthChallenge(nonce, expiresAt)).toEqual({ success: true });
     consumeAuthChallenge(nonce);
-    expect(claimAuthChallenge(nonce, expiresAt)).toBe(false);
+    expect(claimAuthChallenge(nonce, expiresAt)).toEqual({ success: false, reason: 'consumed' });
   });
 
   it('rate-limits authentication requests', async () => {

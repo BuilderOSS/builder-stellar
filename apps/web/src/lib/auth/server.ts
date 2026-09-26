@@ -105,9 +105,15 @@ function pruneChallengeClaims(now = Date.now()) {
 
 export function claimAuthChallenge(nonce: string, expiresAt: number) {
   pruneChallengeClaims();
-  if (challengeClaims.has(nonce)) return false;
+  const existing = challengeClaims.get(nonce);
+  if (existing) {
+    return {
+      success: false as const,
+      reason: existing.state === 'consumed' ? ('consumed' as const) : ('in-use' as const)
+    };
+  }
   challengeClaims.set(nonce, { state: 'pending', expiresAt });
-  return true;
+  return { success: true as const };
 }
 
 export function consumeAuthChallenge(nonce: string) {
