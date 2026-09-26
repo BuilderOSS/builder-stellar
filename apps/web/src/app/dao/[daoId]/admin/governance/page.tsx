@@ -452,6 +452,10 @@ export default function GovernanceAdminPage() {
                     )}
                   </Text>
                 </Stack>
+                {/* Draft preview shows when this setting change is already in the proposal queue.
+                    This prevents users from accidentally queuing the same change twice, since admin
+                    users interact with isolated settings one at a time (unlike proposal creation
+                    where the full queue is always visible below). */}
                 <AdminValueForm
                   value={{ value: drafts.proposalThreshold ?? formatThreshold(settings?.proposalThreshold ?? 0n) }}
                   onChange={(value) => setDrafts((current) => ({ ...current, proposalThreshold: value.value }))}
