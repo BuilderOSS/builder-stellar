@@ -118,9 +118,11 @@ export default function AuctionAdminPage() {
         : await client.unpause({ caller: session.address });
       const sent = await assembled.signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
-      tx.submitted(nextPaused ? 'Auction pause submitted' : 'Auction resume submitted', hash);
+      const submittedMessage = nextPaused ? 'Auction pause submitted' : (isLaunching ? 'Auction launch submitted' : 'Auction resume submitted');
+      const successMessage = nextPaused ? 'Auctions paused' : (isLaunching ? 'Auctions launched' : 'Auctions resumed');
+      tx.submitted(submittedMessage, hash);
       await waitForConfirmation(hash, config.rpcUrl);
-      tx.success(nextPaused ? 'Auctions paused' : 'Auctions resumed', hash);
+      tx.success(successMessage, hash);
       await mutate();
     } catch (updateError) {
       tx.fail(updateError, 'Auction control failed');
