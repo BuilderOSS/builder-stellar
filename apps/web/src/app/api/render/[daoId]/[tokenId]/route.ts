@@ -6,26 +6,35 @@ import { Agent, fetch } from 'undici';
 import { getDaoNetworkConfigById } from '@/lib/dao-config';
 import { assertSafeRemoteUrl, getFetchableUrls, IPFS_GATEWAYS } from '@/lib/ipfs-gateway';
 import { resolveOnchainTokenMetadata } from '@/lib/onchain-token-metadata';
+import { parseTokenId } from '@/lib/token-id';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const REQUEST_TIMEOUT_MS = 20_000;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_TOTAL_IMAGE_BYTES = 32 * 1024 * 1024;
+const MAX_LAYERS = 16;
 const MAX_REDIRECTS = 3;
 const MAX_INPUT_PIXELS = 16_777_216;
 const SIZE = 1080;
-// MVP supports static raster layers only. SVG and animated formats are rejected
-// so untrusted markup and time-varying output never enter the compositor.
-const ALLOWED_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const ALLOWED_IMAGE_FORMATS = new Set(['png', 'jpeg', 'webp']);
 
-function parseTokenId(value: string) {
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed) || parsed < 0) throw new Error('Invalid token id');
-  return parsed;
+function abortError() {
+  return new DOMException('Artwork request timed out', 'AbortError');
 }
 
-async function fetchImage(uri: string) {
+async function withSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) throw abortError();
+
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(abortError());
+    signal.addEventListener('abort', abort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+  });
+}
+
+async function fetchImage(uri: string, signal: AbortSignal, maxBytes: number) {
   const urls = getFetchableUrls(uri);
   if (!urls?.length) throw new Error(`Unsupported artwork URL: ${uri}`);
 
@@ -35,7 +44,7 @@ async function fetchImage(uri: string) {
     try {
       for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
         const isIpfsGateway = IPFS_GATEWAYS.some((gateway) => new URL(gateway).hostname === new URL(url).hostname);
-        const addresses = await assertSafeRemoteUrl(url, isIpfsGateway);
+        const addresses = await withSignal(assertSafeRemoteUrl(url, isIpfsGateway), signal);
         const pinnedAddress = addresses[0];
         const dispatcher = new Agent({
           connect: {
@@ -45,12 +54,10 @@ async function fetchImage(uri: string) {
           }
         });
 
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
         try {
           const response = await fetch(url, {
             redirect: 'manual',
-            signal: controller.signal,
+            signal,
             dispatcher
           });
 
@@ -63,13 +70,8 @@ async function fetchImage(uri: string) {
           }
 
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const contentType = response.headers.get('content-type')?.split(';')[0].toLowerCase();
-          if (!contentType || !ALLOWED_MIME_TYPES.has(contentType)) {
-            throw new Error(`Unsupported artwork MIME type: ${contentType || 'unknown'}`);
-          }
-
           const contentLength = Number(response.headers.get('content-length'));
-          if (Number.isFinite(contentLength) && contentLength > MAX_IMAGE_BYTES) {
+          if (Number.isFinite(contentLength) && contentLength > maxBytes) {
             throw new Error('Artwork exceeds size limit');
           }
 
@@ -81,12 +83,16 @@ async function fetchImage(uri: string) {
             const { done, value } = await reader.read();
             if (done) break;
             totalBytes += value.byteLength;
-            if (totalBytes > MAX_IMAGE_BYTES) throw new Error('Artwork exceeds size limit');
+            if (totalBytes > maxBytes) throw new Error('Artwork exceeds size limit');
             chunks.push(Buffer.from(value));
           }
-          return Buffer.concat(chunks, totalBytes);
+          const image = Buffer.concat(chunks, totalBytes);
+          const metadata = await withSignal(sharp(image, { limitInputPixels: MAX_INPUT_PIXELS }).metadata(), signal);
+          if (!metadata.format || !ALLOWED_IMAGE_FORMATS.has(metadata.format)) {
+            throw new Error('Unsupported artwork format');
+          }
+          return image;
         } finally {
-          clearTimeout(timeout);
           await dispatcher.close();
         }
       }
@@ -98,42 +104,57 @@ async function fetchImage(uri: string) {
   throw lastError || new Error('Artwork fetch failed');
 }
 
-function fallbackSvg(message: string) {
-  const safe = message.replace(
-    /[&<>"']/g,
-    (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[character] || character
-  );
-  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080"><rect width="1080" height="1080" fill="#16181d"/><text x="540" y="510" fill="#fff" font-family="sans-serif" font-size="42" text-anchor="middle">Artwork unavailable</text><text x="540" y="570" fill="#9aa3b2" font-family="sans-serif" font-size="24" text-anchor="middle">${safe}</text></svg>`;
+function fallbackSvg() {
+  return '<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080"><rect width="1080" height="1080" fill="#16181d"/><text x="540" y="540" fill="#fff" font-family="sans-serif" font-size="42" text-anchor="middle">Artwork unavailable</text></svg>';
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ daoId: string; tokenId: string }> }) {
   const { daoId, tokenId } = await params;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const resolvedTokenId = parseTokenId(tokenId);
-    const config = await getDaoNetworkConfigById(daoId);
+    const config = await withSignal(getDaoNetworkConfigById(daoId), controller.signal);
     const origin = new URL(request.url).origin;
-    const metadata = await resolveOnchainTokenMetadata(
-      config,
-      resolvedTokenId,
-      `${origin}/api/render/${daoId}/${resolvedTokenId}`
+    const metadata = await withSignal(
+      resolveOnchainTokenMetadata(config, resolvedTokenId, `${origin}/api/render/${daoId}/${resolvedTokenId}`),
+      controller.signal
     );
     if (metadata.artwork.length === 0) throw new Error(`No artwork found for token ${resolvedTokenId}`);
-    const layers = await Promise.all(metadata.artwork.map(({ url }) => fetchImage(url)));
-    const base = await sharp(layers[0], { limitInputPixels: MAX_INPUT_PIXELS })
-      .resize(SIZE, SIZE, { fit: 'contain' })
-      .png()
-      .toBuffer();
-    const overlays = await Promise.all(
-      layers
-        .slice(1)
-        .map((layer) =>
-          sharp(layer, { limitInputPixels: MAX_INPUT_PIXELS }).resize(SIZE, SIZE, { fit: 'contain' }).png().toBuffer()
-        )
+    if (metadata.artwork.length > MAX_LAYERS) throw new Error('Artwork has too many layers');
+
+    const layers: Buffer[] = [];
+    let totalBytes = 0;
+    for (const { url } of metadata.artwork) {
+      const layer = await fetchImage(
+        url,
+        controller.signal,
+        Math.min(MAX_IMAGE_BYTES, MAX_TOTAL_IMAGE_BYTES - totalBytes)
+      );
+      totalBytes += layer.byteLength;
+      layers.push(layer);
+    }
+
+    const base = await withSignal(
+      sharp(layers[0], { limitInputPixels: MAX_INPUT_PIXELS }).resize(SIZE, SIZE, { fit: 'contain' }).png().toBuffer(),
+      controller.signal
     );
-    const image = await sharp(base)
-      .composite(overlays.map((input) => ({ input })))
-      .webp({ quality: 85 })
-      .toBuffer();
+    const overlays: Buffer[] = [];
+    for (const layer of layers.slice(1)) {
+      overlays.push(
+        await withSignal(
+          sharp(layer, { limitInputPixels: MAX_INPUT_PIXELS }).resize(SIZE, SIZE, { fit: 'contain' }).png().toBuffer(),
+          controller.signal
+        )
+      );
+    }
+    const image = await withSignal(
+      sharp(base)
+        .composite(overlays.map((input) => ({ input })))
+        .webp({ quality: 85 })
+        .toBuffer(),
+      controller.signal
+    );
 
     return new Response(image, {
       headers: {
@@ -142,13 +163,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
       }
     });
   } catch (error) {
-    return new Response(fallbackSvg(error instanceof Error ? error.message : 'Unable to render token'), {
+    console.error('Token artwork render failed', error);
+    return new Response(fallbackSvg(), {
       status: 200,
       headers: {
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+        'Cache-Control': 'no-store',
         'Content-Type': 'image/svg+xml; charset=utf-8',
         'X-Renderer-Fallback': 'true'
       }
     });
+  } finally {
+    clearTimeout(timeout);
   }
 }

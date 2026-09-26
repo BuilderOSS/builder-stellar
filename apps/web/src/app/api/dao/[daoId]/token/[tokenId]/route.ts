@@ -2,17 +2,9 @@ import { NextResponse } from 'next/server';
 
 import { getDaoNetworkConfigById } from '@/lib/dao-config';
 import { resolveOnchainTokenMetadata } from '@/lib/onchain-token-metadata';
+import { parseTokenId } from '@/lib/token-id';
 
 export const dynamic = 'force-dynamic';
-
-function parseTokenId(value: string) {
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed) || parsed < 0) {
-    throw new Error('Invalid token id');
-  }
-
-  return parsed;
-}
 
 export async function GET(request: Request, { params }: { params: Promise<{ daoId: string; tokenId: string }> }) {
   try {
