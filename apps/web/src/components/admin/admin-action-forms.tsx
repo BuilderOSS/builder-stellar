@@ -2,11 +2,12 @@
 
 import { Stack } from 'styled-system/jsx';
 
+import { AdminDraftActionPreview } from '@/components/admin/admin-draft-action-preview';
 import { AuctionPaymentTokenSelect } from '@/components/auction/auction-payment-token-select';
 import { AuctionReservePriceField } from '@/components/auction/auction-reserve-price-field';
 import { FieldHelperText, FieldLabel, Input, Select } from '@/components/ui';
 import { getConfiguredAuctionNetwork } from '@/lib/auction-values';
-import type { ActionFormProps } from '@/lib/proposal-actions/types';
+import type { ActionFormProps, ProposalQueuedAction } from '@/lib/proposal-actions/types';
 
 export type AdminAuthorityDraft = { authority: string; enabled: boolean };
 export type AdminValueDraft = { value: string };
@@ -22,10 +23,12 @@ export function AuthorityActionForm({
   onChange,
   disabled,
   validationErrors,
-  showEnabled = true
-}: ActionFormProps<AdminAuthorityDraft> & { showEnabled?: boolean }) {
+  showEnabled = true,
+  draftPreview
+}: ActionFormProps<AdminAuthorityDraft> & { showEnabled?: boolean; draftPreview?: ProposalQueuedAction }) {
   return (
     <Stack gap="2">
+      {draftPreview && <AdminDraftActionPreview action={draftPreview} compact />}
       <FieldLabel htmlFor="admin-authority">Authority</FieldLabel>
       <Input
         id="admin-authority"
@@ -62,9 +65,16 @@ export function AuthorityProposalActionForm(props: ActionFormProps<AdminAuthorit
   return <AuthorityActionForm {...props} showEnabled />;
 }
 
-export function AdminValueForm({ value, onChange, disabled, validationErrors }: ActionFormProps<AdminValueDraft>) {
+export function AdminValueForm({
+  value,
+  onChange,
+  disabled,
+  validationErrors,
+  draftPreview
+}: ActionFormProps<AdminValueDraft> & { draftPreview?: ProposalQueuedAction }) {
   return (
     <Stack gap="2">
+      {draftPreview && <AdminDraftActionPreview action={draftPreview} compact />}
       <FieldLabel htmlFor="admin-value">New value</FieldLabel>
       <Input
         id="admin-value"
@@ -82,16 +92,20 @@ export function AdminReservePriceForm({
   value,
   onChange,
   disabled,
-  validationErrors
-}: ActionFormProps<AdminReservePriceDraft>) {
+  validationErrors,
+  draftPreview
+}: ActionFormProps<AdminReservePriceDraft> & { draftPreview?: ProposalQueuedAction }) {
   return (
-    <AuctionReservePriceField
-      value={value.reservePrice}
-      onChange={(reservePrice) => onChange({ reservePrice })}
-      error={validationErrors && !validationErrors.valid ? validationErrors.fields?.reservePrice : undefined}
-      disabled={disabled}
-      id="admin-reserve-price"
-    />
+    <Stack gap="1">
+      {draftPreview && <AdminDraftActionPreview action={draftPreview} compact />}
+      <AuctionReservePriceField
+        value={value.reservePrice}
+        onChange={(reservePrice) => onChange({ reservePrice })}
+        error={validationErrors && !validationErrors.valid ? validationErrors.fields?.reservePrice : undefined}
+        disabled={disabled}
+        id="admin-reserve-price"
+      />
+    </Stack>
   );
 }
 
@@ -100,16 +114,20 @@ export function AdminPaymentTokenForm({
   onChange,
   disabled,
   validationErrors,
-  network = getConfiguredAuctionNetwork()
-}: ActionFormProps<AdminPaymentTokenDraft>) {
+  network = getConfiguredAuctionNetwork(),
+  draftPreview
+}: ActionFormProps<AdminPaymentTokenDraft> & { draftPreview?: ProposalQueuedAction }) {
   return (
-    <AuctionPaymentTokenSelect
-      network={network}
-      value={value.paymentToken}
-      onChange={(paymentToken) => onChange({ paymentToken })}
-      error={validationErrors && !validationErrors.valid ? validationErrors.fields?.paymentToken : undefined}
-      disabled={disabled}
-      id="admin-payment-token"
-    />
+    <Stack gap="1">
+      {draftPreview && <AdminDraftActionPreview action={draftPreview} compact />}
+      <AuctionPaymentTokenSelect
+        network={network}
+        value={value.paymentToken}
+        onChange={(paymentToken) => onChange({ paymentToken })}
+        error={validationErrors && !validationErrors.valid ? validationErrors.fields?.paymentToken : undefined}
+        disabled={disabled}
+        id="admin-payment-token"
+      />
+    </Stack>
   );
 }

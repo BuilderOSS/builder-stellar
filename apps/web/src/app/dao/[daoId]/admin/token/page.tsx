@@ -19,6 +19,7 @@ import type { BatchMintGovernanceTokenData } from '@/lib/proposal-actions/action
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
+import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
@@ -30,6 +31,7 @@ export default function TokenAdminPage() {
   const [formMessage, setFormMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const proposalDraft = useAdminProposalDraft();
+  const draftStatus = useAdminDraftStatus(daoId, ['batch-mint-governance-token']);
   const tx = useTransactionFeedback(config.name);
   const { data: mintAuthorities, error, isLoading, mutate } = useGoldskyMintAuthorities(config.tokenContractId);
   const { data: tokenOwner } = useContractOwner(config, 'token', session.address || undefined);
@@ -149,6 +151,7 @@ export default function TokenAdminPage() {
                   setAmount(value.amount);
                 }}
                 disabled={!hasMintAccess && !canProposeMint}
+                draftPreview={draftStatus.actionsInDraft.find((a) => a.type === 'batch-mint-governance-token')}
               />
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <Button type="button" onClick={handleMint} disabled={busy || (!hasMintAccess && !canProposeMint)}>

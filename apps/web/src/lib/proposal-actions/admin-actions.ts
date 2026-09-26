@@ -140,7 +140,9 @@ function emptyAuctionHandler(type: 'pause-auction' | 'unpause-auction', label: s
 }
 
 export const pauseAuctionHandler = emptyAuctionHandler('pause-auction', 'Pause auction');
-export const unpauseAuctionHandler = emptyAuctionHandler('unpause-auction', 'Resume auction');
+// Label is generic since unpause can mean either "launch" (first time) or "resume" (after pause)
+// Admin page determines context-aware label based on auction status
+export const unpauseAuctionHandler = emptyAuctionHandler('unpause-auction', 'Resume or launch auction');
 
 export const setAuctionReservePriceHandler: ActionHandler<AdminReservePriceDraft> = {
   type: 'set-auction-reserve-price',

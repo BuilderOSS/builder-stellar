@@ -192,6 +192,9 @@ export function WalletControls({ network }: { network?: WalletNetwork }) {
           signature: normalizeWalletSignature(signedMessage)
         });
       } catch (error) {
+        console.warn('[Auth] SEP-53 failed, attempting SEP-10 fallback', {
+          error: error instanceof Error ? error.message : String(error)
+        });
         if (!isSep53UnsupportedError(error)) throw error;
 
         authMethod = 'sep10';

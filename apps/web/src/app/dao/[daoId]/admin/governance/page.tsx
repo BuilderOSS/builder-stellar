@@ -10,6 +10,8 @@ import { AdminValueForm } from '@/components/admin/admin-action-forms';
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
 import { AdminSectionNav } from '@/components/admin/admin-section-nav';
 import { AuthorityPanel } from '@/components/admin/authority-panel';
+import { DurationInput } from '@/components/admin/duration-input';
+import { PercentageInput } from '@/components/admin/percentage-input';
 import { PageSection } from '@/components/page-section';
 import { Badge, Button, Callout, Card, Heading, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
@@ -20,14 +22,15 @@ import { useGoldskyGovernorAuthorities } from '@/lib/goldsky-queries';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
+import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
 type Drafts = Partial<{
-  votingDelay: string;
-  votingPeriod: string;
+  votingDelay: number;
+  votingPeriod: number;
   proposalThreshold: string;
-  quorumBps: string;
+  quorumBps: number;
 }>;
 
 type GovernorSettingKey = 'votingDelay' | 'votingPeriod' | 'proposalThreshold' | 'quorumBps';
@@ -36,15 +39,6 @@ const EMPTY_DRAFTS: Drafts = {};
 
 function formatThreshold(value: bigint) {
   return value.toString();
-}
-
-function parseWholeNumber(value: string) {
-  const trimmed = value.trim();
-  if (!/^\d+$/.test(trimmed)) {
-    return null;
-  }
-
-  return Number(trimmed);
 }
 
 function parseBigIntValue(value: string) {
@@ -68,6 +62,12 @@ export default function GovernanceAdminPage() {
   const [busy, setBusy] = useState(false);
   const [activeAction, setActiveAction] = useState<GovernorSettingKey | ''>('');
   const proposalDraft = useAdminProposalDraft();
+  const draftStatus = useAdminDraftStatus(daoId, [
+    'set-voting-delay',
+    'set-voting-period',
+    'set-proposal-threshold',
+    'set-quorum-bps'
+  ]);
   const tx = useTransactionFeedback(config.name);
   const {
     data: settings,
@@ -180,11 +180,7 @@ export default function GovernanceAdminPage() {
 
   async function applyVotingDelay() {
     if (!settings) return;
-    const value = parseWholeNumber(drafts.votingDelay ?? String(settings.votingDelay));
-    if (value === null) {
-      setFormMessage('Voting delay must be a whole number.');
-      return;
-    }
+    const value = typeof drafts.votingDelay === 'number' ? drafts.votingDelay : settings.votingDelay;
 
     if (value === settings.votingDelay) {
       setFormMessage('Voting delay is unchanged.');
@@ -205,11 +201,7 @@ export default function GovernanceAdminPage() {
 
   async function applyVotingPeriod() {
     if (!settings) return;
-    const value = parseWholeNumber(drafts.votingPeriod ?? String(settings.votingPeriod));
-    if (value === null) {
-      setFormMessage('Voting period must be a whole number.');
-      return;
-    }
+    const value = typeof drafts.votingPeriod === 'number' ? drafts.votingPeriod : settings.votingPeriod;
 
     if (value === settings.votingPeriod) {
       setFormMessage('Voting period is unchanged.');
@@ -258,11 +250,7 @@ export default function GovernanceAdminPage() {
 
   async function applyQuorumBps() {
     if (!settings) return;
-    const value = parseWholeNumber(drafts.quorumBps ?? String(settings.quorumBps));
-    if (value === null) {
-      setFormMessage('Quorum must be a whole number.');
-      return;
-    }
+    const value = typeof drafts.quorumBps === 'number' ? drafts.quorumBps : settings.quorumBps;
 
     if (value === settings.quorumBps) {
       setFormMessage('Quorum is unchanged.');
@@ -353,14 +341,26 @@ export default function GovernanceAdminPage() {
                 <div>
                   <Badge>Voting delay</Badge>
                 </div>
-                <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                  Current: {settings ? formatSecondsValue(settings.votingDelay) : '—'} · Measured in seconds.
-                </Text>
-                <AdminValueForm
-                  value={{ value: drafts.votingDelay ?? settings?.votingDelay?.toString() ?? '' }}
-                  onChange={(value) => setDrafts((current) => ({ ...current, votingDelay: value.value }))}
+                <Stack gap="1">
+                  <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+                    Current: {settings ? formatSecondsValue(settings.votingDelay) : '—'}
+                  </Text>
+                </Stack>
+                <DurationInput
+                  id="voting-delay"
+                  label="Enter voting delay"
+                  value={drafts.votingDelay ?? settings?.votingDelay ?? 0}
+                  onChange={(value) => setDrafts((current) => ({ ...current, votingDelay: value }))}
                   disabled={busy}
+                  helperText="Time between proposal creation and when voting begins. Minimum 5 minutes. Example: 1 day gives members time to see new proposals."
                 />
+                <Stack gap="1">
+                  {typeof drafts.votingDelay === 'number' && settings && drafts.votingDelay !== settings.votingDelay ? (
+                    <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: '#3b82f6' }}>
+                      Change: {formatSecondsValue(settings.votingDelay)} → {formatSecondsValue(drafts.votingDelay)}
+                    </Text>
+                  ) : null}
+                </Stack>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <Button
                     type="button"
@@ -369,8 +369,8 @@ export default function GovernanceAdminPage() {
                       busy ||
                       activeAction === 'votingDelay' ||
                       !settings ||
-                      parseWholeNumber(drafts.votingDelay ?? String(settings.votingDelay)) === null ||
-                      (drafts.votingDelay ?? String(settings.votingDelay)) === String(settings.votingDelay)
+                      (typeof drafts.votingDelay === 'number' ? drafts.votingDelay : settings.votingDelay) ===
+                        settings.votingDelay
                     }
                   >
                     {busy && activeAction === 'votingDelay'
@@ -388,14 +388,28 @@ export default function GovernanceAdminPage() {
                 <div>
                   <Badge>Voting period</Badge>
                 </div>
-                <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                  Current: {settings ? formatSecondsValue(settings.votingPeriod) : '—'} · Measured in seconds.
-                </Text>
-                <AdminValueForm
-                  value={{ value: drafts.votingPeriod ?? settings?.votingPeriod?.toString() ?? '' }}
-                  onChange={(value) => setDrafts((current) => ({ ...current, votingPeriod: value.value }))}
+                <Stack gap="1">
+                  <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+                    Current: {settings ? formatSecondsValue(settings.votingPeriod) : '—'}
+                  </Text>
+                </Stack>
+                <DurationInput
+                  id="voting-period"
+                  label="Enter voting period"
+                  value={drafts.votingPeriod ?? settings?.votingPeriod ?? 0}
+                  onChange={(value) => setDrafts((current) => ({ ...current, votingPeriod: value }))}
                   disabled={busy}
+                  helperText="How long voting remains open after it starts. Minimum 1 day. Longer periods allow more participation. Common: 3-7 days."
                 />
+                <Stack gap="1">
+                  {typeof drafts.votingPeriod === 'number' &&
+                  settings &&
+                  drafts.votingPeriod !== settings.votingPeriod ? (
+                    <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: '#3b82f6' }}>
+                      Change: {formatSecondsValue(settings.votingPeriod)} → {formatSecondsValue(drafts.votingPeriod)}
+                    </Text>
+                  ) : null}
+                </Stack>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <Button
                     type="button"
@@ -404,8 +418,8 @@ export default function GovernanceAdminPage() {
                       busy ||
                       activeAction === 'votingPeriod' ||
                       !settings ||
-                      parseWholeNumber(drafts.votingPeriod ?? String(settings.votingPeriod)) === null ||
-                      (drafts.votingPeriod ?? String(settings.votingPeriod)) === String(settings.votingPeriod)
+                      (typeof drafts.votingPeriod === 'number' ? drafts.votingPeriod : settings.votingPeriod) ===
+                        settings.votingPeriod
                     }
                   >
                     {busy && activeAction === 'votingPeriod'
@@ -423,26 +437,42 @@ export default function GovernanceAdminPage() {
                 <div>
                   <Badge>Proposal threshold</Badge>
                 </div>
-                <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                  Current:{' '}
-                  {settings ? (
-                    `${settings.proposalThreshold.toString()} votes`
-                  ) : (
-                    <Skeleton className="skeleton--inline" style={{ width: '90px', height: '1em' }} />
-                  )}
-                </Text>
+                <Stack gap="1">
+                  <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+                    Current:{' '}
+                    {settings ? (
+                      `${settings.proposalThreshold.toString()} votes`
+                    ) : (
+                      <Skeleton className="skeleton--inline" style={{ width: '90px', height: '1em' }} />
+                    )}
+                  </Text>
+                </Stack>
+                {/* Draft preview shows when this setting change is already in the proposal queue.
+                    This prevents users from accidentally queuing the same change twice, since admin
+                    users interact with isolated settings one at a time (unlike proposal creation
+                    where the full queue is always visible below). */}
                 <AdminValueForm
                   value={{ value: drafts.proposalThreshold ?? formatThreshold(settings?.proposalThreshold ?? 0n) }}
                   onChange={(value) => setDrafts((current) => ({ ...current, proposalThreshold: value.value }))}
                   disabled={busy}
+                  draftPreview={draftStatus.actionsInDraft.find((a) => a.type === 'set-proposal-threshold')}
                 />
-                <Text className="lede" style={{ margin: 0, fontSize: '0.8rem' }}>
-                  {settings ? (
-                    'Apply this change in a single transaction.'
-                  ) : (
-                    <Skeleton style={{ width: '210px', height: '0.8em' }} />
-                  )}
-                </Text>
+                <Stack gap="1">
+                  <Text className="lede" style={{ margin: 0, fontSize: '0.8rem' }}>
+                    {settings ? (
+                      'Minimum voting power required to create a proposal. Higher values prevent spam.'
+                    ) : (
+                      <Skeleton style={{ width: '210px', height: '0.8em' }} />
+                    )}
+                  </Text>
+                  {settings &&
+                  drafts.proposalThreshold &&
+                  drafts.proposalThreshold !== formatThreshold(settings.proposalThreshold) ? (
+                    <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: '#3b82f6' }}>
+                      Change: {formatThreshold(settings.proposalThreshold)} → {drafts.proposalThreshold} votes
+                    </Text>
+                  ) : null}
+                </Stack>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <Button
                     type="button"
@@ -472,26 +502,31 @@ export default function GovernanceAdminPage() {
                 <div>
                   <Badge>Quorum</Badge>
                 </div>
-                <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                  Current:{' '}
-                  {settings ? (
-                    `${settings.quorumBps} bps`
-                  ) : (
-                    <Skeleton className="skeleton--inline" style={{ width: '80px', height: '1em' }} />
-                  )}
-                </Text>
-                <AdminValueForm
-                  value={{ value: drafts.quorumBps ?? String(settings?.quorumBps ?? '') }}
-                  onChange={(value) => setDrafts((current) => ({ ...current, quorumBps: value.value }))}
+                <Stack gap="1">
+                  <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+                    Current:{' '}
+                    {settings ? (
+                      `${(settings.quorumBps / 100).toFixed(2)}%`
+                    ) : (
+                      <Skeleton className="skeleton--inline" style={{ width: '80px', height: '1em' }} />
+                    )}
+                  </Text>
+                </Stack>
+                <PercentageInput
+                  id="quorum-bps"
+                  label="Enter quorum percentage"
+                  value={drafts.quorumBps ?? settings?.quorumBps ?? 0}
+                  onChange={(value) => setDrafts((current) => ({ ...current, quorumBps: value }))}
                   disabled={busy}
+                  helperText="Percentage of total votes needed for a proposal to pass. Example: 10% means 10 out of 100 votes required."
                 />
-                <Text className="lede" style={{ margin: 0, fontSize: '0.8rem' }}>
-                  {settings ? (
-                    'Apply this change in a single transaction.'
-                  ) : (
-                    <Skeleton style={{ width: '210px', height: '0.8em' }} />
-                  )}
-                </Text>
+                <Stack gap="1">
+                  {typeof drafts.quorumBps === 'number' && settings && drafts.quorumBps !== settings.quorumBps ? (
+                    <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: '#3b82f6' }}>
+                      Change: {(settings.quorumBps / 100).toFixed(2)}% → {(drafts.quorumBps / 100).toFixed(2)}%
+                    </Text>
+                  ) : null}
+                </Stack>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <Button
                     type="button"
@@ -500,8 +535,8 @@ export default function GovernanceAdminPage() {
                       busy ||
                       activeAction === 'quorumBps' ||
                       !settings ||
-                      parseWholeNumber(drafts.quorumBps ?? String(settings.quorumBps)) === null ||
-                      (drafts.quorumBps ?? String(settings.quorumBps)) === String(settings.quorumBps)
+                      (typeof drafts.quorumBps === 'number' ? drafts.quorumBps : settings.quorumBps) ===
+                        settings.quorumBps
                     }
                   >
                     {busy && activeAction === 'quorumBps'

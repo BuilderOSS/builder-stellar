@@ -35,6 +35,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ dao
     const auction = jsonValue(auctionTx.result) as { token_id?: string } | null;
     const paused = Boolean(pausedTx.result);
     if (!auction || typeof auction.token_id === 'undefined') {
+      // No auction token exists yet. Determine if we've never launched or if we paused after launching.
+      // If there's auction history, we've been paused. Otherwise, we've never launched.
       return NextResponse.json({
         status: paused && history.length > 0 ? 'paused' : 'not-launched',
         auction: null,
