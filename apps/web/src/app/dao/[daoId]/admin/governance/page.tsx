@@ -10,6 +10,7 @@ import { AdminValueForm } from '@/components/admin/admin-action-forms';
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
 import { AdminSectionNav } from '@/components/admin/admin-section-nav';
 import { AuthorityPanel } from '@/components/admin/authority-panel';
+import { DurationInput } from '@/components/admin/duration-input';
 import { PageSection } from '@/components/page-section';
 import { Badge, Button, Callout, Card, Heading, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
@@ -25,8 +26,8 @@ import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
 type Drafts = Partial<{
-  votingDelay: string;
-  votingPeriod: string;
+  votingDelay: number;
+  votingPeriod: number;
   proposalThreshold: string;
   quorumBps: string;
 }>;
@@ -187,11 +188,7 @@ export default function GovernanceAdminPage() {
 
   async function applyVotingDelay() {
     if (!settings) return;
-    const value = parseWholeNumber(drafts.votingDelay ?? String(settings.votingDelay));
-    if (value === null) {
-      setFormMessage('Voting delay must be a whole number.');
-      return;
-    }
+    const value = typeof drafts.votingDelay === 'number' ? drafts.votingDelay : settings.votingDelay;
 
     if (value === settings.votingDelay) {
       setFormMessage('Voting delay is unchanged.');
@@ -212,11 +209,7 @@ export default function GovernanceAdminPage() {
 
   async function applyVotingPeriod() {
     if (!settings) return;
-    const value = parseWholeNumber(drafts.votingPeriod ?? String(settings.votingPeriod));
-    if (value === null) {
-      setFormMessage('Voting period must be a whole number.');
-      return;
-    }
+    const value = typeof drafts.votingPeriod === 'number' ? drafts.votingPeriod : settings.votingPeriod;
 
     if (value === settings.votingPeriod) {
       setFormMessage('Voting period is unchanged.');
@@ -361,13 +354,15 @@ export default function GovernanceAdminPage() {
                   <Badge>Voting delay</Badge>
                 </div>
                 <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                  Current: {settings ? formatSecondsValue(settings.votingDelay) : '—'} · Measured in seconds.
+                  Current: {settings ? formatSecondsValue(settings.votingDelay) : '—'}
                 </Text>
-                <AdminValueForm
-                  value={{ value: drafts.votingDelay ?? settings?.votingDelay?.toString() ?? '' }}
-                  onChange={(value) => setDrafts((current) => ({ ...current, votingDelay: value.value }))}
+                <DurationInput
+                  id="voting-delay"
+                  label="Enter voting delay"
+                  value={drafts.votingDelay ?? settings?.votingDelay ?? 0}
+                  onChange={(value) => setDrafts((current) => ({ ...current, votingDelay: value }))}
                   disabled={busy}
-                  draftPreview={draftStatus.actionsInDraft.find((a) => a.type === 'set-voting-delay')}
+                  helperText="Minimum 5 minutes. The time before voting begins."
                 />
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <Button
@@ -377,8 +372,7 @@ export default function GovernanceAdminPage() {
                       busy ||
                       activeAction === 'votingDelay' ||
                       !settings ||
-                      parseWholeNumber(drafts.votingDelay ?? String(settings.votingDelay)) === null ||
-                      (drafts.votingDelay ?? String(settings.votingDelay)) === String(settings.votingDelay)
+                      (typeof drafts.votingDelay === 'number' ? drafts.votingDelay : settings.votingDelay) === settings.votingDelay
                     }
                   >
                     {busy && activeAction === 'votingDelay'
@@ -397,13 +391,15 @@ export default function GovernanceAdminPage() {
                   <Badge>Voting period</Badge>
                 </div>
                 <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                  Current: {settings ? formatSecondsValue(settings.votingPeriod) : '—'} · Measured in seconds.
+                  Current: {settings ? formatSecondsValue(settings.votingPeriod) : '—'}
                 </Text>
-                <AdminValueForm
-                  value={{ value: drafts.votingPeriod ?? settings?.votingPeriod?.toString() ?? '' }}
-                  onChange={(value) => setDrafts((current) => ({ ...current, votingPeriod: value.value }))}
+                <DurationInput
+                  id="voting-period"
+                  label="Enter voting period"
+                  value={drafts.votingPeriod ?? settings?.votingPeriod ?? 0}
+                  onChange={(value) => setDrafts((current) => ({ ...current, votingPeriod: value }))}
                   disabled={busy}
-                  draftPreview={draftStatus.actionsInDraft.find((a) => a.type === 'set-voting-period')}
+                  helperText="The duration during which voting is active. Minimum 1 day."
                 />
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <Button
@@ -413,8 +409,7 @@ export default function GovernanceAdminPage() {
                       busy ||
                       activeAction === 'votingPeriod' ||
                       !settings ||
-                      parseWholeNumber(drafts.votingPeriod ?? String(settings.votingPeriod)) === null ||
-                      (drafts.votingPeriod ?? String(settings.votingPeriod)) === String(settings.votingPeriod)
+                      (typeof drafts.votingPeriod === 'number' ? drafts.votingPeriod : settings.votingPeriod) === settings.votingPeriod
                     }
                   >
                     {busy && activeAction === 'votingPeriod'
