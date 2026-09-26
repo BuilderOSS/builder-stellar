@@ -359,7 +359,7 @@ export default function GovernanceAdminPage() {
                   value={drafts.votingDelay ?? settings?.votingDelay ?? 0}
                   onChange={(value) => setDrafts((current) => ({ ...current, votingDelay: value }))}
                   disabled={busy}
-                  helperText="Minimum 5 minutes. The time before voting begins."
+                  helperText="Time between proposal creation and when voting begins. Minimum 5 minutes. Example: 1 day gives members time to see new proposals."
                 />
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <Button
@@ -396,7 +396,7 @@ export default function GovernanceAdminPage() {
                   value={drafts.votingPeriod ?? settings?.votingPeriod ?? 0}
                   onChange={(value) => setDrafts((current) => ({ ...current, votingPeriod: value }))}
                   disabled={busy}
-                  helperText="The duration during which voting is active. Minimum 1 day."
+                  helperText="How long voting remains open after it starts. Minimum 1 day. Longer periods allow more participation. Common: 3-7 days."
                 />
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <Button
@@ -440,7 +440,7 @@ export default function GovernanceAdminPage() {
                 />
                 <Text className="lede" style={{ margin: 0, fontSize: '0.8rem' }}>
                   {settings ? (
-                    'Apply this change in a single transaction.'
+                    'Minimum voting power required to create a proposal. Higher values prevent spam.'
                   ) : (
                     <Skeleton style={{ width: '210px', height: '0.8em' }} />
                   )}
@@ -488,7 +488,7 @@ export default function GovernanceAdminPage() {
                   value={drafts.quorumBps ?? settings?.quorumBps ?? 0}
                   onChange={(value) => setDrafts((current) => ({ ...current, quorumBps: value }))}
                   disabled={busy}
-                  helperText="Percentage of votes required to pass a proposal."
+                  helperText="Percentage of total votes needed for a proposal to pass. Example: 10% means 10 out of 100 votes required."
                 />
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <Button
