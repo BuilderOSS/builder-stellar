@@ -350,9 +350,11 @@ export default function GovernanceAdminPage() {
                 <div>
                   <Badge>Voting delay</Badge>
                 </div>
-                <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                  Current: {settings ? formatSecondsValue(settings.votingDelay) : '—'}
-                </Text>
+                <Stack gap="1">
+                  <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+                    Current: {settings ? formatSecondsValue(settings.votingDelay) : '—'}
+                  </Text>
+                </Stack>
                 <DurationInput
                   id="voting-delay"
                   label="Enter voting delay"
@@ -361,11 +363,13 @@ export default function GovernanceAdminPage() {
                   disabled={busy}
                   helperText="Time between proposal creation and when voting begins. Minimum 5 minutes. Example: 1 day gives members time to see new proposals."
                 />
-                {typeof drafts.votingDelay === 'number' && settings && drafts.votingDelay !== settings.votingDelay ? (
-                  <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: '#3b82f6' }}>
-                    Change: {formatSecondsValue(settings.votingDelay)} → {formatSecondsValue(drafts.votingDelay)}
-                  </Text>
-                ) : null}
+                <Stack gap="1">
+                  {typeof drafts.votingDelay === 'number' && settings && drafts.votingDelay !== settings.votingDelay ? (
+                    <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: '#3b82f6' }}>
+                      Change: {formatSecondsValue(settings.votingDelay)} → {formatSecondsValue(drafts.votingDelay)}
+                    </Text>
+                  ) : null}
+                </Stack>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <Button
                     type="button"
@@ -392,9 +396,11 @@ export default function GovernanceAdminPage() {
                 <div>
                   <Badge>Voting period</Badge>
                 </div>
-                <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                  Current: {settings ? formatSecondsValue(settings.votingPeriod) : '—'}
-                </Text>
+                <Stack gap="1">
+                  <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+                    Current: {settings ? formatSecondsValue(settings.votingPeriod) : '—'}
+                  </Text>
+                </Stack>
                 <DurationInput
                   id="voting-period"
                   label="Enter voting period"
@@ -403,11 +409,13 @@ export default function GovernanceAdminPage() {
                   disabled={busy}
                   helperText="How long voting remains open after it starts. Minimum 1 day. Longer periods allow more participation. Common: 3-7 days."
                 />
-                {typeof drafts.votingPeriod === 'number' && settings && drafts.votingPeriod !== settings.votingPeriod ? (
-                  <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: '#3b82f6' }}>
-                    Change: {formatSecondsValue(settings.votingPeriod)} → {formatSecondsValue(drafts.votingPeriod)}
-                  </Text>
-                ) : null}
+                <Stack gap="1">
+                  {typeof drafts.votingPeriod === 'number' && settings && drafts.votingPeriod !== settings.votingPeriod ? (
+                    <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: '#3b82f6' }}>
+                      Change: {formatSecondsValue(settings.votingPeriod)} → {formatSecondsValue(drafts.votingPeriod)}
+                    </Text>
+                  ) : null}
+                </Stack>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <Button
                     type="button"
@@ -434,34 +442,38 @@ export default function GovernanceAdminPage() {
                 <div>
                   <Badge>Proposal threshold</Badge>
                 </div>
-                <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                  Current:{' '}
-                  {settings ? (
-                    `${settings.proposalThreshold.toString()} votes`
-                  ) : (
-                    <Skeleton className="skeleton--inline" style={{ width: '90px', height: '1em' }} />
-                  )}
-                </Text>
+                <Stack gap="1">
+                  <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+                    Current:{' '}
+                    {settings ? (
+                      `${settings.proposalThreshold.toString()} votes`
+                    ) : (
+                      <Skeleton className="skeleton--inline" style={{ width: '90px', height: '1em' }} />
+                    )}
+                  </Text>
+                </Stack>
                 <AdminValueForm
                   value={{ value: drafts.proposalThreshold ?? formatThreshold(settings?.proposalThreshold ?? 0n) }}
                   onChange={(value) => setDrafts((current) => ({ ...current, proposalThreshold: value.value }))}
                   disabled={busy}
                   draftPreview={draftStatus.actionsInDraft.find((a) => a.type === 'set-proposal-threshold')}
                 />
-                <Text className="lede" style={{ margin: 0, fontSize: '0.8rem' }}>
-                  {settings ? (
-                    'Minimum voting power required to create a proposal. Higher values prevent spam.'
-                  ) : (
-                    <Skeleton style={{ width: '210px', height: '0.8em' }} />
-                  )}
-                </Text>
-                {settings &&
-                drafts.proposalThreshold &&
-                drafts.proposalThreshold !== formatThreshold(settings.proposalThreshold) ? (
-                  <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: '#3b82f6' }}>
-                    Change: {formatThreshold(settings.proposalThreshold)} → {drafts.proposalThreshold} votes
+                <Stack gap="1">
+                  <Text className="lede" style={{ margin: 0, fontSize: '0.8rem' }}>
+                    {settings ? (
+                      'Minimum voting power required to create a proposal. Higher values prevent spam.'
+                    ) : (
+                      <Skeleton style={{ width: '210px', height: '0.8em' }} />
+                    )}
                   </Text>
-                ) : null}
+                  {settings &&
+                  drafts.proposalThreshold &&
+                  drafts.proposalThreshold !== formatThreshold(settings.proposalThreshold) ? (
+                    <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: '#3b82f6' }}>
+                      Change: {formatThreshold(settings.proposalThreshold)} → {drafts.proposalThreshold} votes
+                    </Text>
+                  ) : null}
+                </Stack>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <Button
                     type="button"
@@ -491,14 +503,16 @@ export default function GovernanceAdminPage() {
                 <div>
                   <Badge>Quorum</Badge>
                 </div>
-                <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                  Current:{' '}
-                  {settings ? (
-                    `${(settings.quorumBps / 100).toFixed(2)}%`
-                  ) : (
-                    <Skeleton className="skeleton--inline" style={{ width: '80px', height: '1em' }} />
-                  )}
-                </Text>
+                <Stack gap="1">
+                  <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+                    Current:{' '}
+                    {settings ? (
+                      `${(settings.quorumBps / 100).toFixed(2)}%`
+                    ) : (
+                      <Skeleton className="skeleton--inline" style={{ width: '80px', height: '1em' }} />
+                    )}
+                  </Text>
+                </Stack>
                 <PercentageInput
                   id="quorum-bps"
                   label="Enter quorum percentage"
@@ -507,11 +521,13 @@ export default function GovernanceAdminPage() {
                   disabled={busy}
                   helperText="Percentage of total votes needed for a proposal to pass. Example: 10% means 10 out of 100 votes required."
                 />
-                {typeof drafts.quorumBps === 'number' && settings && drafts.quorumBps !== settings.quorumBps ? (
-                  <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: '#3b82f6' }}>
-                    Change: {(settings.quorumBps / 100).toFixed(2)}% → {(drafts.quorumBps / 100).toFixed(2)}%
-                  </Text>
-                ) : null}
+                <Stack gap="1">
+                  {typeof drafts.quorumBps === 'number' && settings && drafts.quorumBps !== settings.quorumBps ? (
+                    <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: '#3b82f6' }}>
+                      Change: {(settings.quorumBps / 100).toFixed(2)}% → {(drafts.quorumBps / 100).toFixed(2)}%
+                    </Text>
+                  ) : null}
+                </Stack>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <Button
                     type="button"
