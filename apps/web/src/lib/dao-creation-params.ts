@@ -3,6 +3,7 @@
 import type { ArtworkItem, DaoCreationParams } from '@builder-stellar/manager-bindings';
 
 import { getTreasuryAssets } from './assets-config';
+import { decimalToStroops } from './auction-values';
 import type { CreateDaoFormData } from './create-dao-schema';
 
 export type { CreateDaoFormData } from './create-dao-schema';
@@ -21,6 +22,11 @@ export function formDataToCreationParams(
 
   if (!paymentAsset) {
     throw new Error(`No default payment asset configured for network: ${network}`);
+  }
+
+  const reservePrice = decimalToStroops(formData.auction.reservePrice);
+  if (reservePrice === null) {
+    throw new Error('Invalid auction reserve price.');
   }
 
   // Build artwork items array
@@ -64,7 +70,7 @@ export function formDataToCreationParams(
 
     // Auction (convert to bigint)
     auction_duration: BigInt(formData.auction.duration),
-    reserve_price: BigInt(formData.auction.reservePrice),
+    reserve_price: reservePrice,
     time_buffer: BigInt(formData.auction.timeBuffer),
     payment_asset: paymentAsset,
 

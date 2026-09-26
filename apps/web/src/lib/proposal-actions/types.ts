@@ -105,6 +105,7 @@ export interface ActionFormProps<TData> {
   onChange: (value: TData) => void;
   disabled: boolean;
   validationErrors?: ValidationResult;
+  network?: DaoNetworkConfig['name'];
 }
 
 /**

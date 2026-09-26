@@ -2,10 +2,15 @@
 
 'use client';
 
+import { useEffect } from 'react';
 import { Stack } from 'styled-system/jsx';
 
+import { AuctionPaymentTokenSelect } from '@/components/auction/auction-payment-token-select';
+import { AuctionReservePriceField } from '@/components/auction/auction-reserve-price-field';
 import { Card, Heading, Input, Text } from '@/components/ui';
-import { getStellarAddressError, isValidStellarAddress, validateDuration } from '@/lib/validation';
+import { getTreasuryAssets } from '@/lib/assets-config';
+import { getConfiguredAuctionNetwork, validateReservePrice } from '@/lib/auction-values';
+import { validateDuration } from '@/lib/validation';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
 export function AuctionStep() {
@@ -46,37 +51,30 @@ export function AuctionStep() {
   };
 
   const handleReservePriceChange = (value: string) => {
-    // Allow empty string or valid numbers
-    if (value === '' || /^\d+$/.test(value)) {
-      updateAuction({ reservePrice: value });
-      if (auction.enabled) {
-        if (!value || value.trim().length === 0) {
-          setValidationError('reservePrice', 'Reserve price is required when auction is enabled');
-        } else {
-          const price = BigInt(value);
-          if (price <= 0n) {
-            setValidationError('reservePrice', 'Reserve price must be greater than 0');
-          } else {
-            clearValidationError('reservePrice');
-          }
-        }
-      }
+    updateAuction({ reservePrice: value });
+    if (auction.enabled) {
+      const error = validateReservePrice(value);
+      if (error) setValidationError('reservePrice', error);
+      else clearValidationError('reservePrice');
     }
   };
 
   const handlePaymentAssetChange = (value: string) => {
     updateAuction({ paymentAsset: value });
     if (auction.enabled) {
-      if (!value || value.trim().length === 0) {
-        setValidationError('paymentAsset', 'Payment asset address is required when auction is enabled');
-      } else if (!isValidStellarAddress(value)) {
-        const addressError = getStellarAddressError(value);
-        setValidationError('paymentAsset', addressError || 'Invalid payment asset address');
-      } else {
-        clearValidationError('paymentAsset');
-      }
+      if (!value) setValidationError('paymentAsset', 'Payment token is required when auction is enabled');
+      else clearValidationError('paymentAsset');
     }
   };
+
+  const network = getConfiguredAuctionNetwork();
+  const selectedAsset = getTreasuryAssets(network).find((asset) => asset.contractId === auction.paymentAsset);
+
+  useEffect(() => {
+    if (!auction.enabled || auction.paymentAsset) return;
+    const defaultAsset = getTreasuryAssets(network).find((asset) => asset.isNative && asset.contractId);
+    if (defaultAsset?.contractId) updateAuction({ paymentAsset: defaultAsset.contractId });
+  }, [auction.enabled, auction.paymentAsset, network, updateAuction]);
 
   return (
     <Stack gap="4">
@@ -149,24 +147,13 @@ export function AuctionStep() {
                 </Text>
               </Stack>
 
-              <Stack gap="2">
-                <label htmlFor="reservePrice">
-                  <Text style={{ fontWeight: 600 }}>Reserve Price (stroops) *</Text>
-                </label>
-                <Input
-                  id="reservePrice"
-                  type="text"
-                  value={auction.reservePrice}
-                  onChange={(e) => handleReservePriceChange(e.target.value)}
-                  placeholder="1000000000"
-                />
-                {validationErrors.reservePrice && (
-                  <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>{validationErrors.reservePrice}</Text>
-                )}
-                <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-                  Minimum bid price in stroops (1 XLM = 10,000,000 stroops). 1,000,000,000 stroops = 100 XLM
-                </Text>
-              </Stack>
+              <AuctionReservePriceField
+                value={auction.reservePrice}
+                onChange={handleReservePriceChange}
+                tokenCode={selectedAsset?.code}
+                error={validationErrors.reservePrice}
+                id="reservePrice"
+              />
 
               <Stack gap="2">
                 <label htmlFor="timeBuffer">
@@ -189,23 +176,13 @@ export function AuctionStep() {
                 </Text>
               </Stack>
 
-              <Stack gap="2">
-                <label htmlFor="paymentAsset">
-                  <Text style={{ fontWeight: 600 }}>Payment Asset (Contract Address) *</Text>
-                </label>
-                <Input
-                  id="paymentAsset"
-                  value={auction.paymentAsset}
-                  onChange={(e) => handlePaymentAssetChange(e.target.value)}
-                  placeholder="C..."
-                />
-                {validationErrors.paymentAsset && (
-                  <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>{validationErrors.paymentAsset}</Text>
-                )}
-                <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-                  Stellar asset contract address for auction payments (e.g., USDC or native XLM token)
-                </Text>
-              </Stack>
+              <AuctionPaymentTokenSelect
+                network={network}
+                value={auction.paymentAsset}
+                onChange={handlePaymentAssetChange}
+                error={validationErrors.paymentAsset}
+                id="paymentAsset"
+              />
             </>
           )}
         </Stack>

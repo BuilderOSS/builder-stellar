@@ -2,7 +2,10 @@
 
 import { Stack } from 'styled-system/jsx';
 
+import { AuctionPaymentTokenSelect } from '@/components/auction/auction-payment-token-select';
+import { AuctionReservePriceField } from '@/components/auction/auction-reserve-price-field';
 import { FieldHelperText, FieldLabel, Input, Select } from '@/components/ui';
+import { getConfiguredAuctionNetwork } from '@/lib/auction-values';
 import type { ActionFormProps } from '@/lib/proposal-actions/types';
 
 export type AdminAuthorityDraft = { authority: string; enabled: boolean };
@@ -82,21 +85,13 @@ export function AdminReservePriceForm({
   validationErrors
 }: ActionFormProps<AdminReservePriceDraft>) {
   return (
-    <Stack gap="2">
-      <FieldLabel htmlFor="admin-reserve-price">Reserve price</FieldLabel>
-      <Input
-        id="admin-reserve-price"
-        value={value.reservePrice}
-        onChange={(event) => onChange({ reservePrice: event.target.value })}
-        inputMode="decimal"
-        placeholder="For example 10"
-        disabled={disabled}
-      />
-      <ErrorText
-        message={validationErrors && !validationErrors.valid ? validationErrors.fields?.reservePrice : undefined}
-      />
-      <FieldHelperText>Use up to 7 decimal places.</FieldHelperText>
-    </Stack>
+    <AuctionReservePriceField
+      value={value.reservePrice}
+      onChange={(reservePrice) => onChange({ reservePrice })}
+      error={validationErrors && !validationErrors.valid ? validationErrors.fields?.reservePrice : undefined}
+      disabled={disabled}
+      id="admin-reserve-price"
+    />
   );
 }
 
@@ -104,21 +99,17 @@ export function AdminPaymentTokenForm({
   value,
   onChange,
   disabled,
-  validationErrors
+  validationErrors,
+  network = getConfiguredAuctionNetwork()
 }: ActionFormProps<AdminPaymentTokenDraft>) {
   return (
-    <Stack gap="2">
-      <FieldLabel htmlFor="admin-payment-token">Payment token</FieldLabel>
-      <Input
-        id="admin-payment-token"
-        value={value.paymentToken}
-        onChange={(event) => onChange({ paymentToken: event.target.value })}
-        placeholder="SAC contract address"
-        disabled={disabled}
-      />
-      <ErrorText
-        message={validationErrors && !validationErrors.valid ? validationErrors.fields?.paymentToken : undefined}
-      />
-    </Stack>
+    <AuctionPaymentTokenSelect
+      network={network}
+      value={value.paymentToken}
+      onChange={(paymentToken) => onChange({ paymentToken })}
+      error={validationErrors && !validationErrors.valid ? validationErrors.fields?.paymentToken : undefined}
+      disabled={disabled}
+      id="admin-payment-token"
+    />
   );
 }

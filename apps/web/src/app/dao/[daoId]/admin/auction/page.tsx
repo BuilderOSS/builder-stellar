@@ -15,11 +15,13 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsOwner } from '@/lib/admin-proposals';
 import { useContractOwner } from '@/lib/admin-queries';
 import { getTreasuryAssets } from '@/lib/assets-config';
+import { formatStroops } from '@/lib/auction-values';
 import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
+import { getStellarAddressError, isValidStellarAddress } from '@/lib/validation';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
 type AuctionStatus = { paused: boolean; config: { reserve_price: string; payment_token: string | null } };
@@ -160,6 +162,12 @@ export default function AuctionAdminPage() {
     if (!session.address || (!isOwner && !canProposeAuction) || !data || data.paused !== true) return;
     const value = paymentToken.trim();
     if (!value) return tx.fail(new Error('Payment token contract address is required.'), 'Invalid payment token');
+    if (!isValidStellarAddress(value)) {
+      return tx.fail(
+        new Error(getStellarAddressError(value) ?? 'Invalid payment token contract address.'),
+        'Invalid payment token'
+      );
+    }
     if (!isOwner && canProposeAuction) {
       const handler = getActionHandler('set-auction-payment-token');
       const action = handler.serialize(
@@ -291,6 +299,7 @@ export default function AuctionAdminPage() {
                 <AdminPaymentTokenForm
                   value={{ paymentToken }}
                   onChange={(value) => setPaymentToken(value.paymentToken)}
+                  network={config.name}
                   disabled={busy || data?.paused !== true}
                 />
                 <Button
@@ -303,7 +312,7 @@ export default function AuctionAdminPage() {
               </div>
               <Text className="label">Reserve price for the next auction</Text>
               <Text className="lede" style={{ margin: 0 }}>
-                Current reserve: {data ? Number(data.config.reserve_price) / 10_000_000 : '—'}{' '}
+                Current reserve: {data ? formatStroops(data.config.reserve_price) : '—'}{' '}
                 {data?.config.payment_token
                   ? (getTreasuryAssets(config.name).find((asset) => asset.contractId === data.config.payment_token)
                       ?.code ?? 'SAC')

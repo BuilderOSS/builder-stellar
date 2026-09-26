@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { decimalToStroops, MIN_RESERVE_PRICE_STROOPS, validateReservePrice } from './auction-values';
 import {
   getStellarAddressError,
   isValidHttpUrl,
@@ -79,10 +80,11 @@ const auctionSchema = z
     const durationError = validateDuration(auction.duration, 300);
     if (durationError) context.addIssue({ code: 'custom', message: durationError, path: ['duration'] });
 
-    if (!/^\d+$/.test(auction.reservePrice.trim()) || BigInt(auction.reservePrice.trim()) <= 0n) {
+    const reservePriceError = validateReservePrice(auction.reservePrice);
+    if (reservePriceError || (decimalToStroops(auction.reservePrice) ?? 0n) < MIN_RESERVE_PRICE_STROOPS) {
       context.addIssue({
         code: 'custom',
-        message: 'Reserve price must be a positive whole number',
+        message: reservePriceError ?? 'Reserve price is below the minimum',
         path: ['reservePrice']
       });
     }
@@ -90,7 +92,9 @@ const auctionSchema = z
     const timeBufferError = validateDuration(auction.timeBuffer, 60);
     if (timeBufferError) context.addIssue({ code: 'custom', message: timeBufferError, path: ['timeBuffer'] });
 
-    if (auction.paymentAsset !== '' && !isValidStellarAddress(auction.paymentAsset)) {
+    if (!auction.paymentAsset) {
+      context.addIssue({ code: 'custom', message: 'Payment token is required', path: ['paymentAsset'] });
+    } else if (!isValidStellarAddress(auction.paymentAsset)) {
       context.addIssue({
         code: 'custom',
         message: getStellarAddressError(auction.paymentAsset) ?? 'Invalid payment asset address',
