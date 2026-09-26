@@ -26,13 +26,21 @@ import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
 import { getStellarAddressError, isValidStellarAddress } from '@/lib/validation';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
-type AuctionStatus = { paused: boolean; config: { reserve_price: string; payment_token: string | null } };
+type AuctionStatus = {
+  status: 'not-launched' | 'paused' | 'active';
+  paused: boolean;
+  config: { reserve_price: string; payment_token: string | null };
+};
 
 const fetcher = async (url: string): Promise<AuctionStatus> => {
   const response = await fetch(url, { cache: 'no-store' });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message || 'Auction status unavailable');
-  return { paused: Boolean(payload.paused), config: payload.config };
+  return {
+    status: payload.status || (payload.paused ? 'paused' : 'active'),
+    paused: Boolean(payload.paused),
+    config: payload.config
+  };
 };
 
 export default function AuctionAdminPage() {
@@ -66,25 +74,33 @@ export default function AuctionAdminPage() {
 
   async function updatePaused(nextPaused: boolean) {
     if (!session.address || (!isOwner && !canProposeAuction)) return;
+
+    // Determine action type and messaging based on auction status
+    const isLaunching = data?.status === 'not-launched' && !nextPaused;
+    const actionType = nextPaused ? 'pause-auction' : 'unpause-auction';
+    const actionTitle = isLaunching ? 'Launch auctions' : (nextPaused ? 'Pause auctions' : 'Resume auctions');
+    const actionDescription = isLaunching
+      ? 'Launch auctions and create the first token.'
+      : (nextPaused ? 'Pause auction activity.' : 'Resume auction activity.');
+
     if (!isOwner && canProposeAuction) {
-      const type = nextPaused ? 'pause-auction' : 'unpause-auction';
-      const handler = getActionHandler(type);
+      const handler = getActionHandler(actionType);
       const action = handler.serialize({}, { config, session: { address: session.address, kit: StellarWalletsKit } });
       proposalDraft.requestAdd({
         daoId,
         action,
-        source: `admin/auction/${type}`,
+        source: `admin/auction/${actionType}`,
         metadata: {
-          title: nextPaused ? 'Pause auctions' : 'Resume auctions',
-          description: nextPaused ? 'Pause auction activity.' : 'Resume auction activity.',
+          title: actionTitle,
+          description: actionDescription,
           url: ''
         },
-        onAdded: () => setFormMessage(`${nextPaused ? 'Pause' : 'Resume'} auctions added to the proposal draft.`)
+        onAdded: () => setFormMessage(`${actionTitle} added to the proposal draft.`)
       });
       return;
     }
     setBusy(true);
-    tx.start(nextPaused ? 'Pausing auctions...' : 'Resuming auctions...');
+    tx.start(isLaunching ? 'Launching auctions...' : (nextPaused ? 'Pausing auctions...' : 'Resuming auctions...'));
     try {
       const client = new AuctionClient({
         contractId: config.auctionContractId,
@@ -375,36 +391,49 @@ export default function AuctionAdminPage() {
                 </div>
               ) : (
                 <Text className="lede" style={{ margin: 0 }}>
-                  {data?.paused
-                    ? 'Bidding and automatic settlement are paused.'
-                    : 'Auctions are active and accepting bids.'}
+                  {data?.status === 'not-launched'
+                    ? 'Auctions have not yet been launched. Click launch to create the first auction.'
+                    : data?.paused
+                      ? 'Bidding and automatic settlement are paused.'
+                      : 'Auctions are active and accepting bids.'}
                 </Text>
               )}
               {data ? (
                 <>
-                  {data.paused && !auctionCanMint ? (
+                  {(data.status === 'not-launched' || data.paused) && !auctionCanMint ? (
                     <Callout
                       variant="warning"
                       title="Auction mint authority is missing."
                       description={
                         mintAuthorityError?.message ||
-                        `Grant ${config.auctionContractId} mint authority in Token Admin before resuming. Resuming launches the next auction and mints its token.`
+                        `Grant ${config.auctionContractId} mint authority in Token Admin before ${data.status === 'not-launched' ? 'launching' : 'resuming'}. ${data.status === 'not-launched' ? 'Launching' : 'Resuming'} creates the first auction and mints its token.`
                       }
                     />
                   ) : null}
                 </>
               ) : null}
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                <Button onClick={() => void updatePaused(true)} disabled={busy || data?.paused !== false}>
-                  {isOwner ? 'Pause auctions' : 'Add pause proposal'}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => void updatePaused(false)}
-                  disabled={busy || data?.paused !== true || !auctionCanMint}
-                >
-                  {isOwner ? 'Resume auctions' : 'Add resume proposal'}
-                </Button>
+                {data?.status === 'not-launched' ? (
+                  <Button
+                    onClick={() => void updatePaused(false)}
+                    disabled={busy || !auctionCanMint}
+                  >
+                    {isOwner ? 'Launch auctions' : 'Create launch proposal'}
+                  </Button>
+                ) : (
+                  <>
+                    <Button onClick={() => void updatePaused(true)} disabled={busy || data?.paused !== false}>
+                      {isOwner ? 'Pause auctions' : 'Add pause proposal'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => void updatePaused(false)}
+                      disabled={busy || data?.paused !== true || !auctionCanMint}
+                    >
+                      {isOwner ? 'Resume auctions' : 'Add resume proposal'}
+                    </Button>
+                  </>
+                )}
               </div>
               <Text className="label">Auction payment token</Text>
               <Text className="lede" style={{ margin: 0 }}>
