@@ -16,6 +16,31 @@ export type ArtworkProperty = {
 };
 
 /**
+ * DAO identity image source
+ * Can be generated, uploaded, or the default Builder logo
+ */
+export type DaoImageSource =
+  | { kind: 'generated'; gatewayUrl: string; ipfsUri: string; prompt: string; model: string }
+  | { kind: 'uploaded'; gatewayUrl: string; ipfsUri: string; filename: string }
+  | { kind: 'default'; gatewayUrl: string }
+  | { kind: 'legacy-unconfirmed' }; // Backwards compatibility
+
+/**
+ * Token artwork source
+ * Can be a starter collection or uploaded directory
+ */
+export type ArtworkSource =
+  | { kind: 'starter'; starterId: string }
+  | {
+      kind: 'uploaded';
+      baseUri: string;
+      extension: '.png' | '.webp';
+      properties: ArtworkProperty[];
+      gatewayUrl: string;
+    }
+  | { kind: 'legacy-unconfirmed' }; // Backwards compatibility
+
+/**
  * Basic information about the DAO
  */
 type BasicInfo = {
@@ -78,6 +103,8 @@ type CreateDaoState = {
   governance: GovernanceConfig;
   founders: FounderAllocation[];
   launchAdmin: string;
+  daoImageSource?: DaoImageSource;
+  artworkSource?: ArtworkSource;
   busy: boolean;
   formMessage: string;
   validationErrors: Record<string, string>;
@@ -93,6 +120,12 @@ type CreateDaoActions = {
   updateAuction: (patch: Partial<AuctionConfig>) => void;
   updateGovernance: (patch: Partial<GovernanceConfig>) => void;
   updateLaunchAdmin: (address: string) => void;
+
+  // Image source management
+  setDaoImageSource: (source: DaoImageSource) => void;
+  clearDaoImageSource: () => void;
+  setArtworkSource: (source: ArtworkSource) => void;
+  clearArtworkSource: () => void;
 
   // Artwork property management
   addArtworkProperty: () => void;
@@ -217,6 +250,32 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
 
       updateLaunchAdmin: (address) => set({ launchAdmin: address }),
 
+      // Image source management
+      setDaoImageSource: (source) => set({ daoImageSource: source }),
+      clearDaoImageSource: () => set({ daoImageSource: undefined }),
+      setArtworkSource: (source) => {
+        set((state) => {
+          // When setting artwork source, update both artworkSource and artwork properties
+          if (source.kind === 'starter' || source.kind === 'uploaded') {
+            return {
+              artworkSource: source,
+              artwork:
+                source.kind === 'uploaded'
+                  ? {
+                      ipfs: {
+                        baseUri: source.baseUri,
+                        extension: source.extension,
+                      },
+                      properties: source.properties,
+                    }
+                  : state.artwork, // Keep existing artwork for starter collections
+            };
+          }
+          return { artworkSource: source };
+        });
+      },
+      clearArtworkSource: () => set({ artworkSource: undefined }),
+
       // Artwork property management
       addArtworkProperty: () =>
         set((state) => {
@@ -324,7 +383,7 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
     }),
     {
       name: 'dao.create-dao.v1',
-      version: 2,
+      version: 3,
       storage,
       skipHydration: true,
       partialize: (state) => ({
@@ -333,16 +392,33 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
         auction: state.auction,
         governance: state.governance,
         founders: state.founders,
-        launchAdmin: state.launchAdmin
+        launchAdmin: state.launchAdmin,
+        daoImageSource: state.daoImageSource,
+        artworkSource: state.artworkSource,
       }),
       migrate: (persistedState, version) => {
         const persisted = persistedState as Partial<CreateDaoState>;
+
+        // Version 0 -> 1: Format reserve price
         if (version === 0 && persisted.auction?.reservePrice) {
           const reservePrice = persisted.auction.reservePrice;
           if (/^\d+$/.test(reservePrice)) {
             persisted.auction = { ...persisted.auction, reservePrice: formatStroops(reservePrice) };
           }
         }
+
+        // Version 1-2 -> 3: Mark legacy artwork as unconfirmed
+        // If daoImageSource is not set, mark it as legacy-unconfirmed
+        // If artworkSource is not set, mark it as legacy-unconfirmed
+        if (version < 3) {
+          if (!persisted.daoImageSource) {
+            persisted.daoImageSource = { kind: 'legacy-unconfirmed' };
+          }
+          if (!persisted.artworkSource) {
+            persisted.artworkSource = { kind: 'legacy-unconfirmed' };
+          }
+        }
+
         return persisted as CreateDaoState;
       },
       merge: (persistedState, currentState) => {

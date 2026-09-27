@@ -2,15 +2,17 @@
 
 'use client';
 
-import { Stack } from 'styled-system/jsx';
+import { Stack, Box } from 'styled-system/jsx';
 
 import { Badge, Callout, Card, Heading, Text } from '@/components/ui';
 import { getTreasuryAssets } from '@/lib/assets-config';
 import { decimalToStroops, formatStroops, getConfiguredAuctionNetwork } from '@/lib/auction-values';
+import { getStarterCollection } from '@/lib/starter-collections';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
 export function ReviewStep({ connectedAddress }: { connectedAddress: string }) {
-  const { basicInfo, artwork, auction, governance, founders, validationErrors } = useCreateDaoStore();
+  const { basicInfo, artwork, auction, governance, founders, validationErrors, daoImageSource, artworkSource } =
+    useCreateDaoStore();
   const paymentAsset = getTreasuryAssets(getConfiguredAuctionNetwork()).find(
     (asset) => asset.contractId === auction.paymentAsset
   );
@@ -54,6 +56,86 @@ export function ReviewStep({ connectedAddress }: { connectedAddress: string }) {
               Note: Token URI and metadata endpoints will be configured automatically using your DAO&apos;s contract
               address after deployment.
             </Text>
+          </div>
+
+          {/* DAO Identity Image */}
+          <div>
+            <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)', marginBottom: '8px', fontWeight: 600 }}>
+              DAO Identity Image
+            </Text>
+            {daoImageSource && daoImageSource.kind !== 'legacy-unconfirmed' ? (
+              <Stack gap="2">
+                {daoImageSource.kind === 'generated' && (
+                  <>
+                    <DetailRow label="Source" value="Generated" />
+                    <DetailRow label="Model" value={daoImageSource.model} />
+                    <DetailRow label="Prompt" value={daoImageSource.prompt} mono />
+                  </>
+                )}
+                {daoImageSource.kind === 'uploaded' && (
+                  <>
+                    <DetailRow label="Source" value="Uploaded" />
+                    <DetailRow label="Filename" value={daoImageSource.filename} />
+                  </>
+                )}
+                {daoImageSource.kind === 'default' && <DetailRow label="Source" value="Builder Default" />}
+                {(daoImageSource.kind === 'generated' || daoImageSource.kind === 'uploaded') && (
+                  <>
+                    <DetailRow label="IPFS URI" value={daoImageSource.ipfsUri} mono />
+                    <DetailRow label="Gateway URL" value={daoImageSource.gatewayUrl} mono />
+                  </>
+                )}
+                {daoImageSource.kind === 'default' && (
+                  <DetailRow label="URL" value={daoImageSource.gatewayUrl} mono />
+                )}
+              </Stack>
+            ) : (
+              <Text style={{ fontSize: '0.875rem', color: 'var(--error-9)' }}>
+                DAO image not selected or using legacy settings
+              </Text>
+            )}
+          </div>
+
+          {/* Artwork Source */}
+          <div>
+            <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)', marginBottom: '8px', fontWeight: 600 }}>
+              Artwork Source
+            </Text>
+            {artworkSource && artworkSource.kind !== 'legacy-unconfirmed' ? (
+              <Stack gap="2">
+                {artworkSource.kind === 'starter' && (
+                  <>
+                    <DetailRow label="Source" value="Starter Collection" />
+                    {(() => {
+                      const collection = getStarterCollection(artworkSource.starterId);
+                      return collection ? (
+                        <>
+                          <DetailRow label="Collection" value={collection.name} />
+                          <DetailRow label="License" value={collection.license} />
+                          <DetailRow label="Attribution" value={collection.attribution} />
+                          <DetailRow label="Traits" value={collection.properties.length.toString()} />
+                        </>
+                      ) : (
+                        <DetailRow label="Collection ID" value={artworkSource.starterId} />
+                      );
+                    })()}
+                  </>
+                )}
+                {artworkSource.kind === 'uploaded' && (
+                  <>
+                    <DetailRow label="Source" value="Uploaded Directory" />
+                    <DetailRow label="Base URI" value={artworkSource.baseUri} mono />
+                    <DetailRow label="Extension" value={artworkSource.extension} />
+                    <DetailRow label="Traits" value={artworkSource.properties.length.toString()} />
+                    <DetailRow label="Gateway URL" value={artworkSource.gatewayUrl} mono />
+                  </>
+                )}
+              </Stack>
+            ) : (
+              <Text style={{ fontSize: '0.875rem', color: 'var(--error-9)' }}>
+                Artwork source not selected or using legacy settings
+              </Text>
+            )}
           </div>
 
           {/* Artwork */}

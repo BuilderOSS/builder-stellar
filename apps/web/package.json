@@ -16,6 +16,7 @@
     "panda:codegen": "panda codegen && panda cssgen"
   },
   "dependencies": {
+    "@ai-sdk/gateway": "^0.1.0",
     "@builder-stellar/auction-bindings": "workspace:*",
     "@builder-stellar/governor-bindings": "workspace:*",
     "@builder-stellar/manager-bindings": "workspace:*",
@@ -26,6 +27,7 @@
     "@neondatabase/serverless": "^1.1.0",
     "@noble/hashes": "^2.2.0",
     "@stellar/stellar-sdk": "^17.0.1",
+    "ai": "^4.0.0",
     "buffer": "^6.0.3",
     "iron-session": "^8.0.4",
     "next": "^15.4.0",
