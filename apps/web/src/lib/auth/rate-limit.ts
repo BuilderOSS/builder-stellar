@@ -16,8 +16,28 @@ function pruneExpired(now: number) {
   }
 }
 
-function getClientKey(request: Request) {
-  return request.headers.get('x-vercel-forwarded-for')?.trim() || null;
+function getClientKey(request: Request): string | null {
+  // Try Vercel header first (production)
+  const vercelIp = request.headers.get('x-vercel-forwarded-for')?.trim();
+  if (vercelIp) return vercelIp;
+
+  // Fallback to standard proxy headers
+  const forwardedFor = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  if (forwardedFor) return forwardedFor;
+
+  const realIp = request.headers.get('x-real-ip')?.trim();
+  if (realIp) return realIp;
+
+  const cloudflareIp = request.headers.get('cf-connecting-ip')?.trim();
+  if (cloudflareIp) return cloudflareIp;
+
+  // Development fallback - allow local dev with static identifier
+  if (process.env.NODE_ENV === 'development') {
+    return 'localhost-dev';
+  }
+
+  // Fail closed in production if no valid IP found
+  return null;
 }
 
 export function enforceAuthRateLimit(request: Request, scope: string, limit: number, windowMs = 60_000) {
