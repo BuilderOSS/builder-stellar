@@ -7,10 +7,14 @@ import { Stack, Box, Flex } from 'styled-system/jsx';
 import { Badge, Button, Card, Heading, Input, Text } from '@/components/ui';
 import { GeneratedImageCandidate } from '@/lib/ai-image-generation';
 import { UPLOAD_POLICIES, validateImageDimensions, validateFileSize, validateMimeType } from '@/lib/pinata-upload';
-import { DaoImageSource } from '@/stores/create-dao-store';
-import { useCreateDaoStore } from '@/stores/create-dao-store';
+import {
+  DEFAULT_DAO_IMAGE_URL,
+  DaoImageSource,
+  LOCAL_DEFAULT_DAO_IMAGE_URL,
+  useCreateDaoStore,
+} from '@/stores/create-dao-store';
 
-const DEFAULT_IMAGE_URL = 'https://builder-stellar-web.vercel.app/images/dao-logo.png';
+const DEFAULT_IMAGE_URL = DEFAULT_DAO_IMAGE_URL;
 
 export function DaoImageField() {
   const basicInfo = useCreateDaoStore((s) => s.basicInfo);
@@ -114,8 +118,10 @@ export function DaoImageField() {
     daoImageSource?.kind === 'generated' || daoImageSource?.kind === 'uploaded'
       ? daoImageSource.gatewayUrl
       : daoImageSource?.kind === 'default'
-        ? DEFAULT_IMAGE_URL
-        : basicInfo.contractImage || DEFAULT_IMAGE_URL;
+        ? LOCAL_DEFAULT_DAO_IMAGE_URL
+        : basicInfo.contractImage === DEFAULT_IMAGE_URL
+          ? LOCAL_DEFAULT_DAO_IMAGE_URL
+          : basicInfo.contractImage || LOCAL_DEFAULT_DAO_IMAGE_URL;
 
   // Get source badge
   const getSourceBadge = () => {
@@ -507,6 +513,11 @@ export function DaoImageField() {
               src={displayImage}
               alt="DAO Identity"
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              onError={(event) => {
+                if (!event.currentTarget.src.endsWith(LOCAL_DEFAULT_DAO_IMAGE_URL)) {
+                  event.currentTarget.src = LOCAL_DEFAULT_DAO_IMAGE_URL;
+                }
+              }}
             />
           </Box>
 
@@ -515,7 +526,8 @@ export function DaoImageField() {
 
           {/* Action Buttons */}
           <Flex gap="2" style={{ flexWrap: 'wrap' }}>
-            {process.env.NEXT_PUBLIC_IMAGE_GENERATION_ENABLED === 'true' && (
+            {process.env.NEXT_PUBLIC_IMAGE_GENERATION_ENABLED === 'true' &&
+              process.env.NEXT_PUBLIC_PINATA_UPLOADS_ENABLED === 'true' && (
               <Button
                 onClick={() => setGenerationOpen(true)}
                 disabled={isGenerating || isUploading}

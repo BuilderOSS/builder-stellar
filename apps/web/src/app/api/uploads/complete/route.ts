@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { AuthError, requireAuthenticatedSession, authErrorResponse } from '@/lib/auth/server';
-import { cidToUrls, validateUploadCompletion, UploadCompletionSchema } from '@/lib/pinata-upload';
+import {
+  cidToUrls,
+  getPreferredGatewayHost,
+  validateUploadCompletion,
+  UploadCompletionSchema,
+} from '@/lib/pinata-upload';
 import {
   getPinataService,
   PinataError,
@@ -148,7 +153,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // Convert CID to URLs
-    const { ipfsUri, gatewayUrl } = cidToUrls(completion.cid);
+    const { ipfsUri, gatewayUrl } = cidToUrls(completion.cid, getPreferredGatewayHost());
 
     return NextResponse.json(
       {

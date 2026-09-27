@@ -7,6 +7,9 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { formatStroops } from '@/lib/auction-values';
 
+export const DEFAULT_DAO_IMAGE_URL = 'https://builder-stellar-web.vercel.app/images/dao-logo.png';
+export const LOCAL_DEFAULT_DAO_IMAGE_URL = '/images/dao-logo.png';
+
 /**
  * Artwork property with items
  */
@@ -163,7 +166,7 @@ const initialState: CreateDaoState = {
     tokenUri: 'https://builder-stellar-web.vercel.app/api/dao/{daoId}/token/',
     projectUri: 'https://test-dao-stellar-web.vercel.app',
     description: '',
-    contractImage: 'https://builder-stellar-web.vercel.app/images/dao-logo.png',
+    contractImage: DEFAULT_DAO_IMAGE_URL,
     rendererBase: 'https://builder-stellar-web.vercel.app/api/render/'
   },
   artwork: {
