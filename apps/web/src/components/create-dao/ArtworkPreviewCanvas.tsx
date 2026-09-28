@@ -8,9 +8,8 @@ import { Button, Text } from '@/components/ui';
 import { ArtworkProperty, ArtworkSource } from '@/stores/create-dao-store';
 
 export interface ArtworkPreviewCanvasProps {
-  source: ArtworkSource;
+  source: Extract<ArtworkSource, { kind: 'uploaded' }>;
   orderedLayers: ArtworkProperty[];
-  isGenerating?: boolean;
 }
 
 interface LayerImage {
@@ -82,7 +81,9 @@ async function loadImage(url: string): Promise<Blob | null> {
  * - Error handling with fallback
  * - Real-time preview updates
  */
-export function ArtworkPreviewCanvas({ source, orderedLayers, _isGenerating = false }: ArtworkPreviewCanvasProps) {
+export function ArtworkPreviewCanvas({ source: uploadedSource, orderedLayers }: ArtworkPreviewCanvasProps) {
+  // Ensure we're working with an uploaded source that has the required properties
+  const source = uploadedSource as Extract<typeof uploadedSource, { kind: 'uploaded' }>;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [layerImages, setLayerImages] = useState<LayerImage[]>([]);
   const [loadingProgress, setLoadingProgress] = useState(0);

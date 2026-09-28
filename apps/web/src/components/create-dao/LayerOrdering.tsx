@@ -22,7 +22,7 @@ export interface LayerOrderingProps {
  * - Visual feedback for current position
  * - Remove layer option
  */
-export function LayerOrdering({ orderedLayers, setOrderedLayers, _onGeneratingChange }: LayerOrderingProps) {
+export function LayerOrdering({ orderedLayers, setOrderedLayers }: LayerOrderingProps) {
   const [activeDragIndex, setActiveDragIndex] = useState<number | null>(null);
   const [dragInsertIndex, setDragInsertIndex] = useState<number | null>(null);
   const dragMetaRef = useRef<{ startY: number; pointerId: number } | null>(null);
@@ -142,7 +142,12 @@ export function LayerOrdering({ orderedLayers, setOrderedLayers, _onGeneratingCh
             const isInsertPoint = dragInsertIndex === index;
 
             return (
-              <Box key={`${layer.name}-${index}`} ref={(el) => (rowRefsRef.current[index] = el)}>
+              <Box
+                key={`${layer.name}-${index}`}
+                ref={(el) => {
+                  if (el) rowRefsRef.current[index] = el;
+                }}
+              >
                 {/* Insert indicator */}
                 {isInsertPoint && activeDragIndex !== null && (
                   <Box

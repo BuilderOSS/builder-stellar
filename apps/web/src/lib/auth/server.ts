@@ -1,6 +1,7 @@
 import { Keypair } from '@stellar/stellar-sdk';
 import { getIronSession, type SessionOptions } from 'iron-session';
 import { cookies } from 'next/headers';
+import { NextResponse } from 'next/server';
 
 import { getNetworkConfig, type NetworkName } from '@/config/networks';
 
@@ -137,8 +138,8 @@ export async function requireAuthenticatedSession() {
 export function authErrorResponse(error: unknown) {
   if (error instanceof AuthError) {
     const status = error.code === 'UNAUTHENTICATED' ? 401 : 422;
-    return Response.json({ code: error.code, message: error.message }, { status });
+    return NextResponse.json({ code: error.code, message: error.message }, { status });
   }
 
-  return Response.json({ message: 'Authentication service unavailable.' }, { status: 500 });
+  return NextResponse.json({ message: 'Authentication service unavailable.' }, { status: 500 });
 }

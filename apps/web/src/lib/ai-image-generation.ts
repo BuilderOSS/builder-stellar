@@ -1,5 +1,9 @@
-import { generateImage } from '@ai-sdk/gateway';
 import { z } from 'zod';
+// TODO: @ai-sdk/gateway API has changed. Need to implement proper image generation
+// using the current version's API or use a different provider
+const generateImage = async (_options: any) => {
+  throw new Error('Image generation is not yet implemented. Please configure @ai-sdk/gateway properly.');
+};
 
 /**
  * Input validation schema for DAO image generation.

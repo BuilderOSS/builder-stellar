@@ -38,12 +38,14 @@ type _PinCidRequest = z.infer<typeof PinCidRequestSchema>;
  * - 500: Service error
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  let body: Record<string, unknown> = {};
+
   try {
     // Check authentication
     await requireAuthenticatedSession();
 
     // Parse and validate request body
-    const body = await request.json().catch(() => ({}));
+    body = await request.json().catch(() => ({}));
 
     const validationResult = PinCidRequestSchema.safeParse(body);
     if (!validationResult.success) {

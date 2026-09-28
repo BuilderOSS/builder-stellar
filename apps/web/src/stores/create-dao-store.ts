@@ -157,7 +157,7 @@ type CreateDaoActions = {
   reset: () => void;
 };
 
-type CreateDaoStore = CreateDaoState & CreateDaoActions;
+export type CreateDaoStore = CreateDaoState & CreateDaoActions;
 
 const initialState: CreateDaoState = {
   basicInfo: {

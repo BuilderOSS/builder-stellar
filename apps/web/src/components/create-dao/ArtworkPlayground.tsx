@@ -10,9 +10,11 @@ import { ArtworkProperty, ArtworkSource } from '@/stores/create-dao-store';
 import { ArtworkPreviewCanvas } from './ArtworkPreviewCanvas';
 import { LayerOrdering } from './LayerOrdering';
 
+export type UploadedArtworkSource = Extract<ArtworkSource, { kind: 'uploaded' }>;
+
 export interface ArtworkPlaygroundProps {
-  source: ArtworkSource;
-  onComplete: (source: ArtworkSource) => void;
+  source: UploadedArtworkSource;
+  onComplete: (source: UploadedArtworkSource) => void;
   onBack: () => void;
 }
 
@@ -28,7 +30,7 @@ export type OrderedTraits = ArtworkProperty[];
  * - Finalize when satisfied
  */
 export function ArtworkPlayground({ source, onComplete, onBack }: ArtworkPlaygroundProps) {
-  const [orderedLayers, setOrderedLayers] = useState<OrderedTraits>(source.properties || []);
+  const [orderedLayers, setOrderedLayers] = useState<OrderedTraits>(source.properties);
   const [isGenerating, setIsGenerating] = useState(false);
 
   // Can only proceed if we have properties
@@ -36,7 +38,7 @@ export function ArtworkPlayground({ source, onComplete, onBack }: ArtworkPlaygro
 
   const handleComplete = useCallback(() => {
     // Update source with new layer order
-    const updatedSource: ArtworkSource = {
+    const updatedSource: UploadedArtworkSource = {
       ...source,
       properties: orderedLayers
     };
@@ -60,7 +62,7 @@ export function ArtworkPlayground({ source, onComplete, onBack }: ArtworkPlaygro
         Reorder layers to control which traits appear on top. The preview updates in real-time as you reorganize.
       </Text>
 
-      <Flex gap="4" style={{ flexDirection: 'column', '@media (min-width: 1024px)': { flexDirection: 'row' } }}>
+      <Flex gap="4" style={{ flexDirection: 'column' }} className="lg:flex-row">
         {/* Layer Ordering - Left Side */}
         <Box style={{ flex: 1, minWidth: 0 }}>
           <Card p="5">
@@ -80,7 +82,7 @@ export function ArtworkPlayground({ source, onComplete, onBack }: ArtworkPlaygro
                 Preview
               </Heading>
 
-              <ArtworkPreviewCanvas source={source} orderedLayers={orderedLayers} isGenerating={isGenerating} />
+              <ArtworkPreviewCanvas source={source} orderedLayers={orderedLayers} />
 
               <Text style={{ fontSize: '0.75rem', color: 'var(--gray-10)' }}>
                 {orderedLayers.length} layer{orderedLayers.length !== 1 ? 's' : ''} • Layers render from bottom to top

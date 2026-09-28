@@ -1,4 +1,4 @@
-import { CreateDaoStore } from '@/stores/create-dao-store';
+import { ArtworkProperty, CreateDaoStore } from '@/stores/create-dao-store';
 
 /**
  * Deployment preflight validation.
@@ -73,8 +73,8 @@ export function validateDeploymentReady(state: CreateDaoStore): DeploymentValida
     }
 
     // Check for duplicate property names
-    const names = state.artwork.properties.map((p) => p.name.toLowerCase());
-    const duplicates = names.filter((name, index) => names.indexOf(name) !== index);
+    const names = state.artwork.properties.map((p: ArtworkProperty) => p.name.toLowerCase());
+    const duplicates = names.filter((name: string, index: number) => names.indexOf(name) !== index);
     if (duplicates.length > 0) {
       errors.push(`Duplicate property names: ${Array.from(new Set(duplicates)).join(', ')}`);
     }

@@ -144,7 +144,7 @@ export function validateImageDimensions(
  */
 export function validateMimeType(mimeType: string, uploadType: UploadType): { valid: boolean; error?: string } {
   const policy = UPLOAD_POLICIES[uploadType];
-  const allowedMimes = 'allowedMimes' in policy ? policy.allowedMimes : [];
+  const allowedMimes: readonly string[] = 'allowedMimes' in policy ? policy.allowedMimes : [];
 
   if (!allowedMimes.includes(mimeType)) {
     return {

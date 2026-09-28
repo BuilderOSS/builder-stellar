@@ -182,7 +182,6 @@ export class PinataService {
                 pinFileToIPFS: true,
                 // All other endpoints disabled for security
                 pinByHash: false,
-                pinByHash: false,
                 pinJSONToIPFS: false,
                 pinJobs: false,
                 unpin: false,

@@ -86,10 +86,10 @@ describe('authentication safeguards', () => {
 
     try {
       // Temporarily set to non-development to test production behavior
-      process.env.NODE_ENV = 'production';
+      Object.defineProperty(process.env, 'NODE_ENV', { value: 'production', configurable: true });
       expect((enforceAuthRateLimit(request, scope, 2) as Response).status).toBe(503);
     } finally {
-      process.env.NODE_ENV = nodeEnv;
+      Object.defineProperty(process.env, 'NODE_ENV', { value: nodeEnv, configurable: true });
     }
   });
 
@@ -100,12 +100,12 @@ describe('authentication safeguards', () => {
 
     try {
       // Set to development to test fallback behavior
-      process.env.NODE_ENV = 'development';
+      Object.defineProperty(process.env, 'NODE_ENV', { value: 'development', configurable: true });
       expect(enforceAuthRateLimit(request, scope, 2)).toBeNull();
       expect(enforceAuthRateLimit(request, scope, 2)).toBeNull();
       expect((enforceAuthRateLimit(request, scope, 2) as Response).status).toBe(429);
     } finally {
-      process.env.NODE_ENV = nodeEnv;
+      Object.defineProperty(process.env, 'NODE_ENV', { value: nodeEnv, configurable: true });
     }
   });
 });

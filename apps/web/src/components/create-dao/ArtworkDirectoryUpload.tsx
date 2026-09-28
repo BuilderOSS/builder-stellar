@@ -75,7 +75,7 @@ function validateDirectory(files: File[]): {
   // Process each file
   for (const file of files) {
     const path = (file as any).webkitRelativePath || file.name;
-    const parts = path.split('/').filter((p) => p);
+    const parts = path.split('/').filter((p: string) => p);
 
     // Validate path depth
     if (parts.length < 3) {
@@ -270,7 +270,8 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
     for (let i = 0; i < Math.min(3, allItems.length); i++) {
       previewIds.push(Math.floor(Math.random() * allItems.length));
     }
-    setPreviewTokenIds(previewIds);
+    // Preview IDs are computed but not stored as they're not needed for the current flow
+    void previewIds;
   }, []);
 
   // Handle upload with race condition guard and progress tracking
@@ -520,6 +521,7 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
               <input
                 ref={directoryInputRef}
                 type="file"
+                // @ts-expect-error webkitdirectory is not part of HTML spec but supported by browsers
                 webkitdirectory="true"
                 multiple
                 onChange={(e) => handleDirectorySelect(e.target.files)}

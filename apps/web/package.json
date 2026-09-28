@@ -16,7 +16,7 @@
     "panda:codegen": "panda codegen && panda cssgen"
   },
   "dependencies": {
-    "@ai-sdk/gateway": "^0.1.0",
+    "@ai-sdk/gateway": "^4.0.96",
     "@builder-stellar/auction-bindings": "workspace:*",
     "@builder-stellar/governor-bindings": "workspace:*",
     "@builder-stellar/manager-bindings": "workspace:*",

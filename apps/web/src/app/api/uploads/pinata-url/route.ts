@@ -104,6 +104,8 @@ function getAuthorization(uploadId: string): any | null {
  * - 500: Service error
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  let body: Record<string, unknown> = {};
+
   try {
     // Check if feature is enabled
     if (process.env.NEXT_PUBLIC_PINATA_UPLOADS_ENABLED !== 'true') {
@@ -119,7 +121,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     await requireAuthenticatedSession();
 
     // Parse and validate request body
-    const body = await request.json().catch(() => ({}));
+    body = await request.json().catch(() => ({}));
 
     const validationResult = PinataUrlRequestSchema.safeParse(body);
     if (!validationResult.success) {

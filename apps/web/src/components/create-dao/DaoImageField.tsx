@@ -30,7 +30,7 @@ export function DaoImageField() {
   const [generationError, setGenerationError] = useState<string>('');
 
   // Local state for manual upload
-  const [uploadError, setUploadError] = useState<string>('');
+  const [uploadError, setUploadError] = useState<string | undefined>('');
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
