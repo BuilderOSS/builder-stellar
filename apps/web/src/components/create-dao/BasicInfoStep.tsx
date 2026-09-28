@@ -4,6 +4,7 @@
 
 import { Stack } from 'styled-system/jsx';
 
+import { DaoImageField } from '@/components/create-dao/DaoImageField';
 import { Card, Heading, Input, Text, Textarea } from '@/components/ui';
 import { isValidTokenSymbol, MAX_TOKEN_SYMBOL_LENGTH } from '@/lib/validation';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
@@ -54,6 +55,9 @@ export function BasicInfoStep() {
 
   return (
     <Stack gap="4">
+      {/* DAO Identity Image */}
+      <DaoImageField />
+
       <Card p="5">
         <Stack gap="4">
           <Heading as="h2" style={{ fontSize: '1.25rem' }}>

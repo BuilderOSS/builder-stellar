@@ -2,15 +2,19 @@
 
 'use client';
 
-import { Trash2 } from 'lucide-react';
-import { Stack } from 'styled-system/jsx';
+import { ChevronDown, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { Box, Stack } from 'styled-system/jsx';
 
+import { ArtworkSourceStep } from '@/components/create-dao/ArtworkSourceStep';
 import { Badge, Button, Card, Heading, Input, Text } from '@/components/ui';
 import { hasDuplicates, isValidIpfsUri, validateArtworkProperty } from '@/lib/validation';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
 export function ArtworkStep() {
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const artwork = useCreateDaoStore((s) => s.artwork);
+  const artworkSource = useCreateDaoStore((s) => s.artworkSource);
   const updateArtwork = useCreateDaoStore((s) => s.updateArtwork);
   const addArtworkProperty = useCreateDaoStore((s) => s.addArtworkProperty);
   const removeArtworkProperty = useCreateDaoStore((s) => s.removeArtworkProperty);
@@ -93,177 +97,238 @@ export function ArtworkStep() {
     setTimeout(validateProperties, 0);
   };
 
+  const isSourceSelected =
+    artworkSource && artworkSource.kind !== 'legacy-unconfirmed' && artworkSource.kind !== undefined;
+
   return (
     <Stack gap="4">
-      <Card p="5">
-        <Stack gap="4">
-          <Heading as="h2" style={{ fontSize: '1.25rem' }}>
-            IPFS Configuration
-          </Heading>
+      {/* Artwork Source Selection */}
+      <ArtworkSourceStep />
 
-          <Stack gap="2">
-            <label htmlFor="ipfsBaseUri">
-              <Text style={{ fontWeight: 600 }}>IPFS Base URI *</Text>
-            </label>
-            <Input
-              id="ipfsBaseUri"
-              value={artwork.ipfs.baseUri}
-              onChange={(e) => handleBaseUriChange(e.target.value)}
-              placeholder="ipfs://Qm.../  or  https://ipfs.io/ipfs/Qm.../"
-            />
-            {validationErrors.ipfsBaseUri && (
-              <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>{validationErrors.ipfsBaseUri}</Text>
-            )}
-            <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-              Base URI where artwork files are stored on IPFS
-            </Text>
-          </Stack>
-
-          <Stack gap="2">
-            <label htmlFor="ipfsExtension">
-              <Text style={{ fontWeight: 600 }}>File Extension</Text>
-            </label>
-            <Input
-              id="ipfsExtension"
-              value={artwork.ipfs.extension}
-              onChange={(e) => handleExtensionChange(e.target.value)}
-              placeholder=".png"
-            />
-            {validationErrors.ipfsExtension && (
-              <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>{validationErrors.ipfsExtension}</Text>
-            )}
-            <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-              File extension for artwork files (e.g., .png, .jpg, .svg)
-            </Text>
-          </Stack>
-        </Stack>
-      </Card>
-
-      <Card p="5">
-        <Stack gap="4">
-          <div>
-            <Heading as="h2" style={{ fontSize: '1.25rem', marginBottom: '8px' }}>
-              Artwork Properties
-              {artwork.properties.length > 0 && (
-                <Badge style={{ marginLeft: '8px' }}>{artwork.properties.length} / 16</Badge>
-              )}
-            </Heading>
-            <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-              Define the traits that make up your DAO&apos;s artwork. Maximum 16 properties.
-            </Text>
-          </div>
-
-          {validationErrors.properties && (
-            <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>{validationErrors.properties}</Text>
-          )}
-
-          {artwork.properties.length === 0 ? (
-            <div
+      {/* Advanced Metadata Editor - Only shown after source is selected */}
+      {isSourceSelected && (
+        <Card p="5">
+          <Stack gap="4">
+            {/* Disclosure Toggle */}
+            <Box
+              onClick={() => setAdvancedOpen(!advancedOpen)}
               style={{
-                padding: '2rem',
-                textAlign: 'center',
-                border: '1px dashed var(--gray-6)',
-                borderRadius: '8px'
+                cursor: 'pointer',
+                padding: '1rem',
+                backgroundColor: 'var(--gray-2)',
+                borderRadius: '0.375rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
               }}
             >
-              <Text style={{ color: 'var(--gray-11)', marginBottom: '1rem' }}>No properties added yet</Text>
-              <Button onClick={addArtworkProperty} disabled={artwork.properties.length >= 16}>
-                Add First Property
-              </Button>
-            </div>
-          ) : (
-            <>
+              <Heading as="h3" style={{ fontSize: '1rem', margin: 0 }}>
+                Advanced Metadata Editor
+              </Heading>
+              <ChevronDown
+                size={20}
+                style={{
+                  transform: advancedOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.2s'
+                }}
+              />
+            </Box>
+
+            {advancedOpen && (
               <Stack gap="4">
-                {artwork.properties.map((property, propertyIndex) => (
-                  <Card
-                    key={propertyIndex}
-                    p="4"
-                    style={{ background: 'var(--gray-2)', border: '1px solid var(--gray-6)' }}
-                  >
-                    <Stack gap="3">
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <Text style={{ fontWeight: 600 }}>Property {propertyIndex + 1}</Text>
-                        <Button
-                          variant="outline"
-                          onClick={() => removeArtworkProperty(propertyIndex)}
-                          style={{
-                            padding: '4px 8px',
-                            fontSize: '0.875rem',
-                            color: 'var(--error-9)'
-                          }}
-                        >
-                          <Trash2 size={14} />
+                <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)' }}>
+                  Customize the trait properties and items for your collection. These settings override the source
+                  defaults.
+                </Text>
+
+                <Card p="5">
+                  <Stack gap="4">
+                    <Heading as="h2" style={{ fontSize: '1.25rem' }}>
+                      IPFS Configuration
+                    </Heading>
+
+                    <Stack gap="2">
+                      <label htmlFor="ipfsBaseUri">
+                        <Text style={{ fontWeight: 600 }}>IPFS Base URI *</Text>
+                      </label>
+                      <Input
+                        id="ipfsBaseUri"
+                        value={artwork.ipfs.baseUri}
+                        onChange={(e) => handleBaseUriChange(e.target.value)}
+                        placeholder="ipfs://Qm.../  or  https://ipfs.io/ipfs/Qm.../"
+                      />
+                      {validationErrors.ipfsBaseUri && (
+                        <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>
+                          {validationErrors.ipfsBaseUri}
+                        </Text>
+                      )}
+                      <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
+                        Base URI where artwork files are stored on IPFS
+                      </Text>
+                    </Stack>
+
+                    <Stack gap="2">
+                      <label htmlFor="ipfsExtension">
+                        <Text style={{ fontWeight: 600 }}>File Extension</Text>
+                      </label>
+                      <Input
+                        id="ipfsExtension"
+                        value={artwork.ipfs.extension}
+                        onChange={(e) => handleExtensionChange(e.target.value)}
+                        placeholder=".png"
+                      />
+                      {validationErrors.ipfsExtension && (
+                        <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>
+                          {validationErrors.ipfsExtension}
+                        </Text>
+                      )}
+                      <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
+                        File extension for artwork files (e.g., .png, .jpg, .svg)
+                      </Text>
+                    </Stack>
+                  </Stack>
+                </Card>
+
+                <Card p="5">
+                  <Stack gap="4">
+                    <div>
+                      <Heading as="h2" style={{ fontSize: '1.25rem', marginBottom: '8px' }}>
+                        Artwork Properties
+                        {artwork.properties.length > 0 && (
+                          <Badge style={{ marginLeft: '8px' }}>{artwork.properties.length} / 16</Badge>
+                        )}
+                      </Heading>
+                      <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
+                        Define the traits that make up your DAO&apos;s artwork. Maximum 16 properties.
+                      </Text>
+                    </div>
+
+                    {validationErrors.properties && (
+                      <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>
+                        {validationErrors.properties}
+                      </Text>
+                    )}
+
+                    {artwork.properties.length === 0 ? (
+                      <div
+                        style={{
+                          padding: '2rem',
+                          textAlign: 'center',
+                          border: '1px dashed var(--gray-6)',
+                          borderRadius: '8px'
+                        }}
+                      >
+                        <Text style={{ color: 'var(--gray-11)', marginBottom: '1rem' }}>No properties added yet</Text>
+                        <Button onClick={addArtworkProperty} disabled={artwork.properties.length >= 16}>
+                          Add First Property
                         </Button>
                       </div>
-
-                      <Stack gap="2">
-                        <label htmlFor={`property-name-${propertyIndex}`}>
-                          <Text style={{ fontSize: '0.875rem', fontWeight: 500 }}>Property Name</Text>
-                        </label>
-                        <Input
-                          id={`property-name-${propertyIndex}`}
-                          value={property.name}
-                          onChange={(e) => handlePropertyNameChange(propertyIndex, property, e.target.value)}
-                          placeholder="e.g., 0-backgrounds or 1-bodies"
-                        />
-                        {validationErrors[`artworkProperty${propertyIndex}`] && (
-                          <Text style={{ color: 'var(--error-9)', fontSize: '0.75rem' }}>
-                            {validationErrors[`artworkProperty${propertyIndex}`]}
-                          </Text>
-                        )}
-                        <Text style={{ color: 'var(--gray-11)', fontSize: '0.75rem' }}>
-                          Prefix with number for ordering (e.g., 0-backgrounds, 1-bodies)
-                        </Text>
-                      </Stack>
-
-                      <Stack gap="2">
-                        <Text style={{ fontSize: '0.875rem', fontWeight: 500 }}>Items ({property.items.length})</Text>
-
-                        {property.items.map((item, itemIndex) => (
-                          <div key={itemIndex} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                            <Input
-                              value={item}
-                              onChange={(e) => {
-                                const items = [...property.items];
-                                items[itemIndex] = e.target.value;
-                                handlePropertyItemChange(propertyIndex, property, items);
-                              }}
-                              placeholder="Item name"
-                              style={{ flex: 1 }}
-                            />
-                            <Button
-                              variant="outline"
-                              onClick={() => removeArtworkItem(propertyIndex, itemIndex)}
-                              style={{
-                                padding: '8px 12px',
-                                color: 'var(--error-9)'
-                              }}
+                    ) : (
+                      <>
+                        <Stack gap="4">
+                          {artwork.properties.map((property, propertyIndex) => (
+                            <Card
+                              key={propertyIndex}
+                              p="4"
+                              style={{ background: 'var(--gray-2)', border: '1px solid var(--gray-6)' }}
                             >
-                              <Trash2 size={14} />
-                            </Button>
-                          </div>
-                        ))}
+                              <Stack gap="3">
+                                <div
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between'
+                                  }}
+                                >
+                                  <Text style={{ fontWeight: 600 }}>Property {propertyIndex + 1}</Text>
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => removeArtworkProperty(propertyIndex)}
+                                    style={{
+                                      padding: '4px 8px',
+                                      fontSize: '0.875rem',
+                                      color: 'var(--error-9)'
+                                    }}
+                                  >
+                                    <Trash2 size={14} />
+                                  </Button>
+                                </div>
 
-                        <Button
-                          variant="outline"
-                          onClick={() => addArtworkItem(propertyIndex, '')}
-                          style={{ fontSize: '0.875rem' }}
-                        >
-                          + Add Item
+                                <Stack gap="2">
+                                  <label htmlFor={`property-name-${propertyIndex}`}>
+                                    <Text style={{ fontSize: '0.875rem', fontWeight: 500 }}>Property Name</Text>
+                                  </label>
+                                  <Input
+                                    id={`property-name-${propertyIndex}`}
+                                    value={property.name}
+                                    onChange={(e) => handlePropertyNameChange(propertyIndex, property, e.target.value)}
+                                    placeholder="e.g., 0-backgrounds or 1-bodies"
+                                  />
+                                  {validationErrors[`artworkProperty${propertyIndex}`] && (
+                                    <Text style={{ color: 'var(--error-9)', fontSize: '0.75rem' }}>
+                                      {validationErrors[`artworkProperty${propertyIndex}`]}
+                                    </Text>
+                                  )}
+                                  <Text style={{ color: 'var(--gray-11)', fontSize: '0.75rem' }}>
+                                    Prefix with number for ordering (e.g., 0-backgrounds, 1-bodies)
+                                  </Text>
+                                </Stack>
+
+                                <Stack gap="2">
+                                  <Text style={{ fontSize: '0.875rem', fontWeight: 500 }}>
+                                    Items ({property.items.length})
+                                  </Text>
+
+                                  {property.items.map((item, itemIndex) => (
+                                    <div key={itemIndex} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                      <Input
+                                        value={item}
+                                        onChange={(e) => {
+                                          const items = [...property.items];
+                                          items[itemIndex] = e.target.value;
+                                          handlePropertyItemChange(propertyIndex, property, items);
+                                        }}
+                                        placeholder="Item name"
+                                        style={{ flex: 1 }}
+                                      />
+                                      <Button
+                                        variant="outline"
+                                        onClick={() => removeArtworkItem(propertyIndex, itemIndex)}
+                                        style={{
+                                          padding: '8px 12px',
+                                          color: 'var(--error-9)'
+                                        }}
+                                      >
+                                        <Trash2 size={14} />
+                                      </Button>
+                                    </div>
+                                  ))}
+
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => addArtworkItem(propertyIndex, '')}
+                                    style={{ fontSize: '0.875rem' }}
+                                  >
+                                    + Add Item
+                                  </Button>
+                                </Stack>
+                              </Stack>
+                            </Card>
+                          ))}
+                        </Stack>
+
+                        <Button onClick={addArtworkProperty} disabled={artwork.properties.length >= 16}>
+                          + Add Property
                         </Button>
-                      </Stack>
-                    </Stack>
-                  </Card>
-                ))}
+                      </>
+                    )}
+                  </Stack>
+                </Card>
               </Stack>
-
-              <Button onClick={addArtworkProperty} disabled={artwork.properties.length >= 16}>
-                + Add Property
-              </Button>
-            </>
-          )}
-        </Stack>
-      </Card>
+            )}
+          </Stack>
+        </Card>
+      )}
     </Stack>
   );
 }

@@ -145,3 +145,87 @@ export function isValidTokenSymbol(symbol: string): boolean {
   // Only alphanumeric characters
   return /^[A-Z0-9]+$/.test(symbol);
 }
+
+/**
+ * Artwork upload validation constants (based on Pinata legacy endpoint requirements)
+ */
+export const ARTWORK_VALIDATION = {
+  // Minimum image dimensions (staging uses 600px)
+  MIN_IMAGE_DIMENSION: 600,
+  // Maximum aggregate size for directory uploads (200MB like Pinata legacy)
+  MAX_AGGREGATE_SIZE_BYTES: 200 * 1024 * 1024,
+  // Maximum file size for single images (2MB)
+  MAX_SINGLE_FILE_SIZE_BYTES: 2 * 1024 * 1024,
+  // Maximum number of traits per collection
+  MAX_TRAITS: 16,
+  // Allowed MIME types for artwork
+  ALLOWED_MIME_TYPES: ['image/png', 'image/svg+xml', 'image/jpeg', 'image/webp']
+};
+
+/**
+ * Validate image dimensions
+ * SVG images are exempt from dimension checks (they scale)
+ */
+export function validateImageDimensions(
+  width: number | undefined,
+  height: number | undefined,
+  mimeType: string
+): { valid: boolean; error?: string } {
+  // SVG images don't need dimension validation
+  if (mimeType === 'image/svg+xml') {
+    return { valid: true };
+  }
+
+  // For raster images, require square dimensions
+  if (!width || !height) {
+    return { valid: false, error: 'Image dimensions could not be determined' };
+  }
+
+  if (width !== height) {
+    return { valid: false, error: 'Image must be square (width = height)' };
+  }
+
+  if (width < ARTWORK_VALIDATION.MIN_IMAGE_DIMENSION || height < ARTWORK_VALIDATION.MIN_IMAGE_DIMENSION) {
+    return {
+      valid: false,
+      error: `Image must be at least ${ARTWORK_VALIDATION.MIN_IMAGE_DIMENSION}x${ARTWORK_VALIDATION.MIN_IMAGE_DIMENSION}px (current: ${width}x${height}px)`
+    };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Validate that all files have the same MIME type
+ */
+export function validateMimeTypeConsistency(mimeTypes: string[]): { valid: boolean; error?: string } {
+  if (mimeTypes.length === 0) {
+    return { valid: true };
+  }
+
+  const uniqueMimeTypes = new Set(mimeTypes);
+  if (uniqueMimeTypes.size > 1) {
+    return {
+      valid: false,
+      error: `All files must have the same MIME type. Found: ${Array.from(uniqueMimeTypes).join(', ')}`
+    };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Validate aggregate file size
+ */
+export function validateAggregateFileSize(totalBytes: number): { valid: boolean; error?: string } {
+  if (totalBytes > ARTWORK_VALIDATION.MAX_AGGREGATE_SIZE_BYTES) {
+    const maxMB = ARTWORK_VALIDATION.MAX_AGGREGATE_SIZE_BYTES / (1024 * 1024);
+    const totalMB = totalBytes / (1024 * 1024);
+    return {
+      valid: false,
+      error: `Total file size exceeds ${maxMB}MB limit (current: ${totalMB.toFixed(2)}MB)`
+    };
+  }
+
+  return { valid: true };
+}

@@ -3,6 +3,7 @@ export { Button } from './button';
 export { Callout } from './callout';
 export { Card } from './card';
 export { CopyIconButton } from './copy-icon-button';
+export { FallbackImage } from './FallbackImage';
 export { Field, FieldHelperText, FieldLabel } from './field';
 export { IconLinkButton } from './icon-link-button';
 export { Input } from './input';
