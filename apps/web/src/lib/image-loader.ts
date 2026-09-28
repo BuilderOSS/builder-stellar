@@ -40,9 +40,7 @@ export async function loadImageWithFallback(uri: string, timeoutMs: number = 100
       return blob;
     } catch (err) {
       lastError = err instanceof Error ? err : new Error('Unknown error');
-      console.warn(
-        `Gateway ${i + 1}/${urls.length} failed (${url.replace(/^https?:\/\//, '')}): ${lastError.message}`
-      );
+      console.warn(`Gateway ${i + 1}/${urls.length} failed (${url.replace(/^https?:\/\//, '')}): ${lastError.message}`);
       // Continue to next gateway
     }
   }
