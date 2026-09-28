@@ -1,19 +1,17 @@
 'use client';
 
-import { Menu } from 'lucide-react';
-import Image from 'next/image';
-import Link from 'next/link';
 import { useState } from 'react';
 
 import { DaoDirectory } from '@/components/dao-directory';
 import { MarketplaceComingSoon } from '@/components/marketplace/marketplace-coming-soon';
 import { Callout } from '@/components/ui';
-import { WalletControls } from '@/components/wallet-controls';
 import type { DaoConfig } from '@/lib/dao-db';
 import { useDashboardData } from '@/lib/goldsky-queries';
 import { useDaoSessionStore } from '@/stores/dao-session-store';
 
 import { DashboardFeed } from './dashboard-feed';
+import { DashboardFooter } from './dashboard-footer';
+import { DashboardHeader } from './dashboard-header';
 import { DashboardSidebar } from './dashboard-sidebar';
 import { DashboardTabs } from './dashboard-tabs';
 import { DashboardWelcome } from './dashboard-welcome';
@@ -30,28 +28,7 @@ export function DashboardShell({ daos, loadError }: { daos: DaoConfig[]; loadErr
         Skip to content
       </a>
       <div className="app-frame dashboard-frame">
-        <header className="dashboard-header">
-          {!isNewcomer ? (
-            <button
-              className="dashboard-menu-button"
-              type="button"
-              aria-label="Open dashboard menu"
-              onClick={() => setSidebarOpen(true)}
-            >
-              <Menu aria-hidden="true" size={20} />
-            </button>
-          ) : null}
-          <Link className="brand-lockup" href="/" aria-label="Stellar DAO dashboard">
-            <Image className="brand-mark" src="/icon.svg" alt="" aria-hidden="true" width={44} height={44} priority />
-            <div className="brand-copy">
-              <p className="brand-name">Stellar DAOs</p>
-              <p className="brand-kicker">Your governance home</p>
-            </div>
-          </Link>
-          <div className="dashboard-header__actions">
-            <WalletControls />
-          </div>
-        </header>
+        <DashboardHeader showMenuButton={!isNewcomer} onMenuClick={() => setSidebarOpen(true)} />
 
         {isNewcomer ? (
           <main id="main-content" className="dashboard-main dashboard-guest-main" tabIndex={-1}>
@@ -121,10 +98,7 @@ export function DashboardShell({ daos, loadError }: { daos: DaoConfig[]; loadErr
             </main>
           </div>
         )}
-        <footer className="app-footer dashboard-footer">
-          <span>Built for transparent, community-owned coordination.</span>
-          <span>Stellar network directory</span>
-        </footer>
+        <DashboardFooter />
       </div>
     </div>
   );

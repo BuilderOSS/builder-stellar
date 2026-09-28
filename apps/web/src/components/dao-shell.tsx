@@ -19,6 +19,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { type ReactNode } from 'react';
 
+import { DashboardFooter } from '@/components/dashboard/dashboard-footer';
 import { ProposalDraftIndicator } from '@/components/proposal/proposal-draft-indicator';
 import { Callout } from '@/components/ui';
 import { WalletControls } from '@/components/wallet-controls';
@@ -218,10 +219,7 @@ export function DaoShell({ children }: { children: ReactNode }) {
           ) : null}
         </main>
 
-        <footer className="app-footer">
-          <span>{currentNetwork.tokenDescription}</span>
-          <span title={currentNetwork.rpcUrl}>Network status: {session.status || 'Ready'}</span>
-        </footer>
+        <DashboardFooter />
       </div>
     </div>
   );
