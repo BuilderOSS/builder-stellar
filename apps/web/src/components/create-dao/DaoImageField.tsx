@@ -6,16 +6,14 @@ import { Box, Flex, Stack } from 'styled-system/jsx';
 
 import { Badge, Button, Card, Heading, Input, Text } from '@/components/ui';
 import { GeneratedImageCandidate } from '@/lib/ai-image-generation';
+import { loadImageUrlWithFallback } from '@/lib/image-loader';
 import {
-  cidToUrls,
-  getPreferredGatewayHost,
   normalizeIpfsCid,
   UPLOAD_POLICIES,
   validateFileSize,
   validateImageDimensions,
   validateMimeType
 } from '@/lib/pinata-upload';
-import { isValidHttpUrl } from '@/lib/validation';
 import { DEFAULT_DAO_IMAGE_URL, LOCAL_DEFAULT_DAO_IMAGE_URL, useCreateDaoStore } from '@/stores/create-dao-store';
 
 const DEFAULT_IMAGE_URL = DEFAULT_DAO_IMAGE_URL;
@@ -486,44 +484,47 @@ export function DaoImageField() {
 
   const handleUseImageUrl = () => {
     const input = imageUrl.trim();
-    const cid = normalizeIpfsCid(input);
-    const url = isValidHttpUrl(input) ? input : cid ? cidToUrls(cid, getPreferredGatewayHost()).gatewayUrl : null;
     setImageUrlError(undefined);
 
-    if (!url) {
-      setImageUrlError('Enter a valid HTTP/HTTPS image URL or IPFS CID.');
+    const normalizedUri = normalizeImageInput(input);
+    if (!normalizedUri) {
+      setImageUrlError('Enter an HTTPS image URL or IPFS CID. HTTP URLs are not supported.');
       return;
     }
 
     setIsValidatingImageUrl(true);
-    const image = new Image();
-    let settled = false;
-    const timeout = window.setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      image.src = '';
-      setIsValidatingImageUrl(false);
-      setImageUrlError('The image URL did not respond in time. Check the URL and try again.');
-    }, 15000);
-
-    image.onload = () => {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timeout);
-      setIsValidatingImageUrl(false);
-      setDaoImageSource({ kind: 'url', gatewayUrl: url });
-      updateBasicInfo({ contractImage: url });
-      clearValidationError('daoImage');
-    };
-    image.onerror = () => {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timeout);
-      setIsValidatingImageUrl(false);
-      setImageUrlError('That URL could not be loaded as an image. Check that it is public and still available.');
-    };
-    image.src = url;
+    void loadImageUrlWithFallback(normalizedUri, 15000)
+      .then(({ url }) => {
+        setDaoImageSource({ kind: 'url', gatewayUrl: url });
+        updateBasicInfo({ contractImage: url });
+        clearValidationError('daoImage');
+      })
+      .catch((error) => {
+        setImageUrlError(
+          error instanceof Error
+            ? `That image could not be loaded. ${error.message}`
+            : 'That image could not be loaded. Check that it is public and still available.'
+        );
+      })
+      .finally(() => setIsValidatingImageUrl(false));
   };
+
+  function normalizeImageInput(input: string): string | null {
+    if (!input || /^http:\/\//i.test(input)) return null;
+    if (/^ipfs:\/\//i.test(input)) return input.replace(/^ipfs:\/\//i, 'ipfs://');
+    if (/^https:\/\//i.test(input)) return input;
+    if (/^[a-z][a-z\d+.-]*:\/\//i.test(input)) return null;
+
+    const cid = normalizeIpfsCid(input);
+    if (cid) return `ipfs://${cid}`;
+
+    try {
+      const httpsUrl = `https://${input}`;
+      return new URL(httpsUrl).protocol === 'https:' ? httpsUrl : null;
+    } catch {
+      return null;
+    }
+  }
 
   return (
     <Stack gap="4">

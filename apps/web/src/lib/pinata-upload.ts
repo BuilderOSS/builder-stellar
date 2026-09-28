@@ -25,7 +25,7 @@ export const UPLOAD_POLICIES = {
     allowedMimes: ['image/png', 'image/jpeg', 'image/webp'],
     maxBytes: 5 * 1024 * 1024, // 5MB
     maxDimensionPixels: 4000,
-    minDimensionPixels: 256,
+    minDimensionPixels: 128,
     requiresSquare: true,
     description: 'DAO identity image (PNG, JPEG, or WebP)'
   },

@@ -29,6 +29,7 @@
     "@stellar/stellar-sdk": "^17.0.1",
     "ai": "^4.0.0",
     "buffer": "^6.0.3",
+    "framer-motion": "^13.4.4",
     "iron-session": "^8.0.4",
     "next": "^15.4.0",
     "papaparse": "^5.7.0",

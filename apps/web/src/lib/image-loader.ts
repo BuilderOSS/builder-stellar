@@ -10,6 +10,17 @@ import { getFetchableUrls } from '@/lib/ipfs-client';
  * @throws Error if all gateways fail or URI is invalid
  */
 export async function loadImageWithFallback(uri: string, timeoutMs: number = 10000): Promise<Blob> {
+  const result = await loadImageUrlWithFallback(uri, timeoutMs);
+  return result.blob;
+}
+
+/**
+ * Load an image and return the gateway URL that succeeded.
+ */
+export async function loadImageUrlWithFallback(
+  uri: string,
+  timeoutMs: number = 10000
+): Promise<{ blob: Blob; url: string }> {
   const urls = getFetchableUrls(uri);
   if (!urls?.length) {
     throw new Error(`Invalid image URI: ${uri}`);
@@ -37,7 +48,7 @@ export async function loadImageWithFallback(uri: string, timeoutMs: number = 100
         throw new Error('Invalid image type');
       }
 
-      return blob;
+      return { blob, url };
     } catch (err) {
       lastError = err instanceof Error ? err : new Error('Unknown error');
       console.warn(`Gateway ${i + 1}/${urls.length} failed (${url.replace(/^https?:\/\//, '')}): ${lastError.message}`);
