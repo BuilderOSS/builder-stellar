@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Flex, Stack } from 'styled-system/jsx';
 
 import { Button, Text } from '@/components/ui';
+import { loadImageWithFallback } from '@/lib/image-loader';
 import { ArtworkProperty, ArtworkSource } from '@/stores/create-dao-store';
 
 export interface ArtworkPreviewCanvasProps {
@@ -51,24 +52,10 @@ function buildLayerUrl(baseUri: string, property: ArtworkProperty, extension: st
   return `${cleanBase}/${property.name}/${itemName}${extension}`;
 }
 
-async function loadImage(url: string): Promise<Blob | null> {
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const blob = await response.blob();
-
-    // Validate it's an image
-    if (!blob.type.startsWith('image/')) {
-      throw new Error('Not an image');
-    }
-
-    return blob;
-  } catch (err) {
-    throw new Error(`Failed to load image: ${err instanceof Error ? err.message : 'Unknown error'}`);
-  }
+async function loadImage(url: string): Promise<Blob> {
+  // Use the fallback gateway mechanism for robust loading
+  // 15s timeout per gateway (more generous than default 10s for previews)
+  return loadImageWithFallback(url, 15000);
 }
 
 /**
@@ -115,11 +102,7 @@ export function ArtworkPreviewCanvas({ source: uploadedSource, orderedLayers }: 
 
         try {
           const blob = await loadImage(url);
-          if (blob) {
-            layers.push({ name: property.name, blob });
-          } else {
-            layers.push({ name: property.name, error: 'No blob returned' });
-          }
+          layers.push({ name: property.name, blob });
         } catch (err) {
           layers.push({
             name: property.name,
