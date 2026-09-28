@@ -1,4 +1,4 @@
-import { getFetchableUrls } from '@/lib/ipfs-gateway';
+import { getFetchableUrls } from '@/lib/ipfs-client';
 
 /**
  * Load an image with automatic gateway fallback.
