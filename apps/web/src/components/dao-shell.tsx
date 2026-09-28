@@ -20,6 +20,7 @@ import { usePathname } from 'next/navigation';
 import { type ReactNode } from 'react';
 
 import { DashboardFooter } from '@/components/dashboard/dashboard-footer';
+import { NetworkIndicator } from '@/components/network-indicator';
 import { ProposalDraftIndicator } from '@/components/proposal/proposal-draft-indicator';
 import { Callout } from '@/components/ui';
 import { WalletControls } from '@/components/wallet-controls';
@@ -135,12 +136,7 @@ export function DaoShell({ children }: { children: ReactNode }) {
             </div>
 
             <div className="header-actions">
-              {/*
-              <div className="network-chip" title={`Configured for ${currentNetwork.label}`}>
-                <span className="network-dot" aria-hidden="true" />
-                {currentNetwork.label}
-              </div>
-              */}
+              <NetworkIndicator networkLabel={currentNetwork.label} isConnected={Boolean(session.address)} />
               <ProposalDraftIndicator daoId={daoId} config={currentNetwork} address={session.address} />
               <WalletControls network={currentNetwork} />
             </div>
