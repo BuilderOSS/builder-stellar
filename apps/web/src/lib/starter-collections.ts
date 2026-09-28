@@ -30,29 +30,29 @@ export const STARTER_COLLECTIONS: StarterCollection[] = [
     properties: [
       {
         name: '0-backgrounds',
-        items: ['bg-cool', 'bg-warm'],
+        items: ['bg-cool', 'bg-warm']
       },
       {
         name: '1-bodies',
-        items: ['body-rust', 'body-blue-sky', 'body-darkbrown'],
+        items: ['body-rust', 'body-blue-sky', 'body-darkbrown']
       },
       {
         name: '2-accessories',
-        items: ['accessory-txt-cc2', 'accessory-txt-ico', 'accessory-flash'],
+        items: ['accessory-txt-cc2', 'accessory-txt-ico', 'accessory-flash']
       },
       {
         name: '3-heads',
-        items: ['head-hotdog', 'head-ufo', 'head-goldcoin'],
+        items: ['head-hotdog', 'head-ufo', 'head-goldcoin']
       },
       {
         name: '4-glasses',
-        items: ['glasses-square-teal', 'glasses-square-guava', 'glasses-square-black-rgb'],
-      },
+        items: ['glasses-square-teal', 'glasses-square-guava', 'glasses-square-black-rgb']
+      }
     ],
     previewTokenIds: [0, 1, 2, 3, 4],
     license: 'CC0',
-    attribution: 'Inspired by Nouns DAO artwork',
-  },
+    attribution: 'Inspired by Nouns DAO artwork'
+  }
 ];
 
 /**

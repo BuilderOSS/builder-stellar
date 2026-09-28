@@ -159,7 +159,7 @@ export const ARTWORK_VALIDATION = {
   // Maximum number of traits per collection
   MAX_TRAITS: 16,
   // Allowed MIME types for artwork
-  ALLOWED_MIME_TYPES: ['image/png', 'image/svg+xml', 'image/jpeg', 'image/webp'],
+  ALLOWED_MIME_TYPES: ['image/png', 'image/svg+xml', 'image/jpeg', 'image/webp']
 };
 
 /**
@@ -188,7 +188,7 @@ export function validateImageDimensions(
   if (width < ARTWORK_VALIDATION.MIN_IMAGE_DIMENSION || height < ARTWORK_VALIDATION.MIN_IMAGE_DIMENSION) {
     return {
       valid: false,
-      error: `Image must be at least ${ARTWORK_VALIDATION.MIN_IMAGE_DIMENSION}x${ARTWORK_VALIDATION.MIN_IMAGE_DIMENSION}px (current: ${width}x${height}px)`,
+      error: `Image must be at least ${ARTWORK_VALIDATION.MIN_IMAGE_DIMENSION}x${ARTWORK_VALIDATION.MIN_IMAGE_DIMENSION}px (current: ${width}x${height}px)`
     };
   }
 
@@ -207,7 +207,7 @@ export function validateMimeTypeConsistency(mimeTypes: string[]): { valid: boole
   if (uniqueMimeTypes.size > 1) {
     return {
       valid: false,
-      error: `All files must have the same MIME type. Found: ${Array.from(uniqueMimeTypes).join(', ')}`,
+      error: `All files must have the same MIME type. Found: ${Array.from(uniqueMimeTypes).join(', ')}`
     };
   }
 
@@ -223,7 +223,7 @@ export function validateAggregateFileSize(totalBytes: number): { valid: boolean;
     const totalMB = totalBytes / (1024 * 1024);
     return {
       valid: false,
-      error: `Total file size exceeds ${maxMB}MB limit (current: ${totalMB.toFixed(2)}MB)`,
+      error: `Total file size exceeds ${maxMB}MB limit (current: ${totalMB.toFixed(2)}MB)`
     };
   }
 

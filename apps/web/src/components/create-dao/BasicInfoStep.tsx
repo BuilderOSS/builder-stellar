@@ -4,8 +4,8 @@
 
 import { Stack } from 'styled-system/jsx';
 
-import { Card, Heading, Input, Text, Textarea } from '@/components/ui';
 import { DaoImageField } from '@/components/create-dao/DaoImageField';
+import { Card, Heading, Input, Text, Textarea } from '@/components/ui';
 import { isValidTokenSymbol, MAX_TOKEN_SYMBOL_LENGTH } from '@/lib/validation';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 

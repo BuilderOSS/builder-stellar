@@ -4,10 +4,10 @@
 
 import { ChevronDown, Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { Stack, Flex, Box } from 'styled-system/jsx';
+import { Box, Stack } from 'styled-system/jsx';
 
-import { Badge, Button, Card, Heading, Input, Text } from '@/components/ui';
 import { ArtworkSourceStep } from '@/components/create-dao/ArtworkSourceStep';
+import { Badge, Button, Card, Heading, Input, Text } from '@/components/ui';
 import { hasDuplicates, isValidIpfsUri, validateArtworkProperty } from '@/lib/validation';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
@@ -98,9 +98,7 @@ export function ArtworkStep() {
   };
 
   const isSourceSelected =
-    artworkSource &&
-    artworkSource.kind !== 'legacy-unconfirmed' &&
-    artworkSource.kind !== undefined;
+    artworkSource && artworkSource.kind !== 'legacy-unconfirmed' && artworkSource.kind !== undefined;
 
   return (
     <Stack gap="4">
@@ -121,7 +119,7 @@ export function ArtworkStep() {
                 borderRadius: '0.375rem',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'space-between',
+                justifyContent: 'space-between'
               }}
             >
               <Heading as="h3" style={{ fontSize: '1rem', margin: 0 }}>
@@ -131,7 +129,7 @@ export function ArtworkStep() {
                 size={20}
                 style={{
                   transform: advancedOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                  transition: 'transform 0.2s',
+                  transition: 'transform 0.2s'
                 }}
               />
             </Box>
@@ -139,8 +137,8 @@ export function ArtworkStep() {
             {advancedOpen && (
               <Stack gap="4">
                 <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)' }}>
-                  Customize the trait properties and items for your collection. These settings override the
-                  source defaults.
+                  Customize the trait properties and items for your collection. These settings override the source
+                  defaults.
                 </Text>
 
                 <Card p="5">
@@ -217,12 +215,10 @@ export function ArtworkStep() {
                           padding: '2rem',
                           textAlign: 'center',
                           border: '1px dashed var(--gray-6)',
-                          borderRadius: '8px',
+                          borderRadius: '8px'
                         }}
                       >
-                        <Text style={{ color: 'var(--gray-11)', marginBottom: '1rem' }}>
-                          No properties added yet
-                        </Text>
+                        <Text style={{ color: 'var(--gray-11)', marginBottom: '1rem' }}>No properties added yet</Text>
                         <Button onClick={addArtworkProperty} disabled={artwork.properties.length >= 16}>
                           Add First Property
                         </Button>
@@ -241,7 +237,7 @@ export function ArtworkStep() {
                                   style={{
                                     display: 'flex',
                                     alignItems: 'center',
-                                    justifyContent: 'space-between',
+                                    justifyContent: 'space-between'
                                   }}
                                 >
                                   <Text style={{ fontWeight: 600 }}>Property {propertyIndex + 1}</Text>
@@ -251,7 +247,7 @@ export function ArtworkStep() {
                                     style={{
                                       padding: '4px 8px',
                                       fontSize: '0.875rem',
-                                      color: 'var(--error-9)',
+                                      color: 'var(--error-9)'
                                     }}
                                   >
                                     <Trash2 size={14} />
@@ -260,16 +256,12 @@ export function ArtworkStep() {
 
                                 <Stack gap="2">
                                   <label htmlFor={`property-name-${propertyIndex}`}>
-                                    <Text style={{ fontSize: '0.875rem', fontWeight: 500 }}>
-                                      Property Name
-                                    </Text>
+                                    <Text style={{ fontSize: '0.875rem', fontWeight: 500 }}>Property Name</Text>
                                   </label>
                                   <Input
                                     id={`property-name-${propertyIndex}`}
                                     value={property.name}
-                                    onChange={(e) =>
-                                      handlePropertyNameChange(propertyIndex, property, e.target.value)
-                                    }
+                                    onChange={(e) => handlePropertyNameChange(propertyIndex, property, e.target.value)}
                                     placeholder="e.g., 0-backgrounds or 1-bodies"
                                   />
                                   {validationErrors[`artworkProperty${propertyIndex}`] && (
@@ -288,10 +280,7 @@ export function ArtworkStep() {
                                   </Text>
 
                                   {property.items.map((item, itemIndex) => (
-                                    <div
-                                      key={itemIndex}
-                                      style={{ display: 'flex', gap: '8px', alignItems: 'center' }}
-                                    >
+                                    <div key={itemIndex} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                       <Input
                                         value={item}
                                         onChange={(e) => {
@@ -307,7 +296,7 @@ export function ArtworkStep() {
                                         onClick={() => removeArtworkItem(propertyIndex, itemIndex)}
                                         style={{
                                           padding: '8px 12px',
-                                          color: 'var(--error-9)',
+                                          color: 'var(--error-9)'
                                         }}
                                       >
                                         <Trash2 size={14} />

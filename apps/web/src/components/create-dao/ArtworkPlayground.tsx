@@ -1,8 +1,8 @@
 'use client';
 
 import { ChevronLeft } from 'lucide-react';
-import { useCallback, useState, useMemo } from 'react';
-import { Stack, Box, Flex } from 'styled-system/jsx';
+import { useCallback, useState } from 'react';
+import { Box, Flex, Stack } from 'styled-system/jsx';
 
 import { Button, Card, Heading, Text } from '@/components/ui';
 import { ArtworkProperty, ArtworkSource } from '@/stores/create-dao-store';
@@ -38,7 +38,7 @@ export function ArtworkPlayground({ source, onComplete, onBack }: ArtworkPlaygro
     // Update source with new layer order
     const updatedSource: ArtworkSource = {
       ...source,
-      properties: orderedLayers,
+      properties: orderedLayers
     };
     onComplete(updatedSource);
   }, [source, orderedLayers, onComplete]);
@@ -47,10 +47,7 @@ export function ArtworkPlayground({ source, onComplete, onBack }: ArtworkPlaygro
     <Stack gap="4">
       {/* Header */}
       <Flex gap="2" style={{ alignItems: 'center' }}>
-        <Button
-          onClick={onBack}
-          style={{ backgroundColor: 'transparent', color: 'var(--gray-11)', padding: '0.5rem' }}
-        >
+        <Button onClick={onBack} style={{ backgroundColor: 'transparent', color: 'var(--gray-11)', padding: '0.5rem' }}>
           <ChevronLeft size={20} />
         </Button>
         <Heading as="h3" style={{ fontSize: '1.25rem' }}>
@@ -60,8 +57,7 @@ export function ArtworkPlayground({ source, onComplete, onBack }: ArtworkPlaygro
 
       {/* Info */}
       <Text style={{ color: 'var(--gray-11)', fontSize: '0.9rem' }}>
-        Reorder layers to control which traits appear on top. The preview updates in real-time as you
-        reorganize.
+        Reorder layers to control which traits appear on top. The preview updates in real-time as you reorganize.
       </Text>
 
       <Flex gap="4" style={{ flexDirection: 'column', '@media (min-width: 1024px)': { flexDirection: 'row' } }}>
@@ -87,8 +83,7 @@ export function ArtworkPlayground({ source, onComplete, onBack }: ArtworkPlaygro
               <ArtworkPreviewCanvas source={source} orderedLayers={orderedLayers} isGenerating={isGenerating} />
 
               <Text style={{ fontSize: '0.75rem', color: 'var(--gray-10)' }}>
-                {orderedLayers.length} layer{orderedLayers.length !== 1 ? 's' : ''} • Layers render from bottom to
-                top
+                {orderedLayers.length} layer{orderedLayers.length !== 1 ? 's' : ''} • Layers render from bottom to top
               </Text>
             </Stack>
           </Card>

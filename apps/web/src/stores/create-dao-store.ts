@@ -267,11 +267,11 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
                   ? {
                       ipfs: {
                         baseUri: source.baseUri,
-                        extension: source.extension,
+                        extension: source.extension
                       },
-                      properties: source.properties,
+                      properties: source.properties
                     }
-                  : state.artwork, // Keep existing artwork for starter collections
+                  : state.artwork // Keep existing artwork for starter collections
             };
           }
           return { artworkSource: source };
@@ -397,7 +397,7 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
         founders: state.founders,
         launchAdmin: state.launchAdmin,
         daoImageSource: state.daoImageSource,
-        artworkSource: state.artworkSource,
+        artworkSource: state.artworkSource
       }),
       migrate: (persistedState, version) => {
         const persisted = persistedState as Partial<CreateDaoState>;

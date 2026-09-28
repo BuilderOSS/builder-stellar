@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 
-import {
-  generateDaoImageCandidates,
-  GenerateDaoImageInputSchema,
-} from '@/lib/ai-image-generation';
-import { AuthError, requireAuthenticatedSession, authErrorResponse } from '@/lib/auth/server';
+import { generateDaoImageCandidates, GenerateDaoImageInputSchema } from '@/lib/ai-image-generation';
+import { AuthError, authErrorResponse, requireAuthenticatedSession } from '@/lib/auth/server';
 
 /**
  * Simple in-memory rate limiter for MVP
@@ -16,7 +12,7 @@ const generationLimiter = new Map<string, { count: number; resetAt: number }>();
 function checkRateLimit(
   key: string,
   maxPerHour: number = 3,
-  maxConcurrent: number = 1
+  _maxConcurrent: number = 1
 ): { allowed: boolean; reason?: string } {
   const now = Date.now();
   const limit = generationLimiter.get(key);
@@ -30,7 +26,7 @@ function checkRateLimit(
   if (limit.count >= maxPerHour) {
     return {
       allowed: false,
-      reason: `Rate limit exceeded. Maximum ${maxPerHour} requests per hour.`,
+      reason: `Rate limit exceeded. Maximum ${maxPerHour} requests per hour.`
     };
   }
 
@@ -96,18 +92,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     // Check if feature is enabled
     if (process.env.NEXT_PUBLIC_IMAGE_GENERATION_ENABLED !== 'true') {
-      return NextResponse.json(
-        { error: 'Image generation is not enabled', code: 'FEATURE_DISABLED' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Image generation is not enabled', code: 'FEATURE_DISABLED' }, { status: 404 });
     }
 
     // Validate CSRF token
     if (!validateCsrfToken(request)) {
-      return NextResponse.json(
-        { error: 'CSRF validation failed', code: 'CSRF_INVALID' },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: 'CSRF validation failed', code: 'CSRF_INVALID' }, { status: 403 });
     }
 
     // Check authentication
@@ -120,10 +110,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const rateLimit = checkRateLimit(rateLimitKey);
 
     if (!rateLimit.allowed) {
-      return NextResponse.json(
-        { error: rateLimit.reason, code: 'RATE_LIMIT_EXCEEDED' },
-        { status: 429 }
-      );
+      return NextResponse.json({ error: rateLimit.reason, code: 'RATE_LIMIT_EXCEEDED' }, { status: 429 });
     }
 
     // Parse and validate request body
@@ -137,8 +124,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           code: 'VALIDATION_ERROR',
           details: validationResult.error.issues.map((issue) => ({
             path: issue.path.join('.'),
-            message: issue.message,
-          })),
+            message: issue.message
+          }))
         },
         { status: 422 }
       );
@@ -156,8 +143,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           temporaryUrl: c.temporaryUrl,
           expiresAt: c.expiresAt.toISOString(),
           model: c.model,
-          revisedPrompt: c.revisedPrompt,
-        })),
+          revisedPrompt: c.revisedPrompt
+        }))
       },
       { status: 200 }
     );
@@ -167,10 +154,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     if (error instanceof SyntaxError) {
-      return NextResponse.json(
-        { error: 'Invalid JSON in request body', code: 'JSON_PARSE_ERROR' },
-        { status: 422 }
-      );
+      return NextResponse.json({ error: 'Invalid JSON in request body', code: 'JSON_PARSE_ERROR' }, { status: 422 });
     }
 
     // Log error server-side only
@@ -179,7 +163,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json(
       {
         error: 'Image generation failed. Please try again later.',
-        code: 'GENERATION_ERROR',
+        code: 'GENERATION_ERROR'
       },
       { status: 500 }
     );

@@ -1,8 +1,8 @@
 'use client';
 
-import { GripVertical, ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
-import { useRef, useState, useEffect } from 'react';
-import { Stack, Box, Flex } from 'styled-system/jsx';
+import { ChevronDown, ChevronUp, GripVertical, Trash2 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Box, Flex, Stack } from 'styled-system/jsx';
 
 import { Button, Text } from '@/components/ui';
 import { ArtworkProperty } from '@/stores/create-dao-store';
@@ -22,7 +22,7 @@ export interface LayerOrderingProps {
  * - Visual feedback for current position
  * - Remove layer option
  */
-export function LayerOrdering({ orderedLayers, setOrderedLayers, onGeneratingChange }: LayerOrderingProps) {
+export function LayerOrdering({ orderedLayers, setOrderedLayers, _onGeneratingChange }: LayerOrderingProps) {
   const [activeDragIndex, setActiveDragIndex] = useState<number | null>(null);
   const [dragInsertIndex, setDragInsertIndex] = useState<number | null>(null);
   const dragMetaRef = useRef<{ startY: number; pointerId: number } | null>(null);
@@ -72,7 +72,7 @@ export function LayerOrdering({ orderedLayers, setOrderedLayers, onGeneratingCha
     setActiveDragIndex(index);
     dragMetaRef.current = {
       startY: e.clientY,
-      pointerId: e.pointerId,
+      pointerId: e.pointerId
     };
 
     (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
@@ -80,8 +80,6 @@ export function LayerOrdering({ orderedLayers, setOrderedLayers, onGeneratingCha
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragMetaRef.current || activeDragIndex === null) return;
-
-    const deltaY = e.clientY - dragMetaRef.current.startY;
 
     // Find which layer the pointer is over
     let insertIndex = activeDragIndex;
@@ -152,7 +150,7 @@ export function LayerOrdering({ orderedLayers, setOrderedLayers, onGeneratingCha
                       height: '2px',
                       backgroundColor: 'var(--info-9)',
                       marginBottom: '0.5rem',
-                      borderRadius: '1px',
+                      borderRadius: '1px'
                     }}
                   />
                 )}
@@ -168,7 +166,7 @@ export function LayerOrdering({ orderedLayers, setOrderedLayers, onGeneratingCha
                     alignItems: 'center',
                     cursor: activeDragIndex !== null ? 'grabbing' : 'grab',
                     transition: 'all 0.15s',
-                    opacity: activeDragIndex === index ? 0.7 : 1,
+                    opacity: activeDragIndex === index ? 0.7 : 1
                   }}
                   onPointerDown={(e) => handlePointerDown(index, e)}
                   onPointerMove={handlePointerMove}
@@ -200,7 +198,7 @@ export function LayerOrdering({ orderedLayers, setOrderedLayers, onGeneratingCha
                       style={{
                         padding: '0.5rem',
                         backgroundColor: 'transparent',
-                        color: isBottom ? 'var(--gray-8)' : 'var(--gray-11)',
+                        color: isBottom ? 'var(--gray-8)' : 'var(--gray-11)'
                       }}
                       title="Move up"
                     >
@@ -212,7 +210,7 @@ export function LayerOrdering({ orderedLayers, setOrderedLayers, onGeneratingCha
                       style={{
                         padding: '0.5rem',
                         backgroundColor: 'transparent',
-                        color: isTop ? 'var(--gray-8)' : 'var(--gray-11)',
+                        color: isTop ? 'var(--gray-8)' : 'var(--gray-11)'
                       }}
                       title="Move down"
                     >
@@ -223,7 +221,7 @@ export function LayerOrdering({ orderedLayers, setOrderedLayers, onGeneratingCha
                       style={{
                         padding: '0.5rem',
                         backgroundColor: 'transparent',
-                        color: 'var(--error-9)',
+                        color: 'var(--error-9)'
                       }}
                       title="Remove layer"
                     >

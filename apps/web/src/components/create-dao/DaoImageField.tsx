@@ -1,18 +1,13 @@
 'use client';
 
-import { Upload, AlertCircle } from 'lucide-react';
+import { AlertCircle, Upload } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
-import { Stack, Box, Flex } from 'styled-system/jsx';
+import { Box, Flex, Stack } from 'styled-system/jsx';
 
 import { Badge, Button, Card, Heading, Input, Text } from '@/components/ui';
 import { GeneratedImageCandidate } from '@/lib/ai-image-generation';
-import { UPLOAD_POLICIES, validateImageDimensions, validateFileSize, validateMimeType } from '@/lib/pinata-upload';
-import {
-  DEFAULT_DAO_IMAGE_URL,
-  DaoImageSource,
-  LOCAL_DEFAULT_DAO_IMAGE_URL,
-  useCreateDaoStore,
-} from '@/stores/create-dao-store';
+import { UPLOAD_POLICIES, validateFileSize, validateImageDimensions, validateMimeType } from '@/lib/pinata-upload';
+import { DEFAULT_DAO_IMAGE_URL, LOCAL_DEFAULT_DAO_IMAGE_URL, useCreateDaoStore } from '@/stores/create-dao-store';
 
 const DEFAULT_IMAGE_URL = DEFAULT_DAO_IMAGE_URL;
 
@@ -20,9 +15,7 @@ export function DaoImageField() {
   const basicInfo = useCreateDaoStore((s) => s.basicInfo);
   const daoImageSource = useCreateDaoStore((s) => s.daoImageSource);
   const setDaoImageSource = useCreateDaoStore((s) => s.setDaoImageSource);
-  const clearDaoImageSource = useCreateDaoStore((s) => s.clearDaoImageSource);
   const updateBasicInfo = useCreateDaoStore((s) => s.updateBasicInfo);
-  const setValidationError = useCreateDaoStore((s) => s.setValidationError);
   const clearValidationError = useCreateDaoStore((s) => s.clearValidationError);
   const validationErrors = useCreateDaoStore((s) => s.validationErrors);
 
@@ -47,71 +40,66 @@ export function DaoImageField() {
   /**
    * Upload blob to Pinata with XHR progress tracking
    */
-  const uploadBlobToSignedUrl = useCallback(
-    (blob: Blob, signedUrl: string, runId: string): Promise<Response> => {
-      return new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
+  const uploadBlobToSignedUrl = useCallback((blob: Blob, signedUrl: string, runId: string): Promise<Response> => {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
 
-        // Track upload progress
-        xhr.upload.addEventListener('progress', (event) => {
-          if (uploadRunIdRef.current !== runId) {
-            // Upload was superseded
-            xhr.abort();
-            reject(new Error('Upload cancelled'));
-            return;
-          }
+      // Track upload progress
+      xhr.upload.addEventListener('progress', (event) => {
+        if (uploadRunIdRef.current !== runId) {
+          // Upload was superseded
+          xhr.abort();
+          reject(new Error('Upload cancelled'));
+          return;
+        }
 
-          if (event.lengthComputable) {
-            const progress = Math.round((event.loaded / event.total) * 100);
-            setUploadProgress(progress);
-          }
-        });
-
-        xhr.addEventListener('load', () => {
-          if (uploadRunIdRef.current !== runId) {
-            reject(new Error('Upload cancelled'));
-            return;
-          }
-
-          if (xhr.status >= 200 && xhr.status < 300) {
-            // Convert XHR response to fetch Response
-            resolve(
-              new Response(xhr.response, {
-                status: xhr.status,
-                statusText: xhr.statusText,
-                headers: new Headers(),
-              })
-            );
-          } else {
-            reject(new Error(`Upload failed with status ${xhr.status}`));
-          }
-        });
-
-        xhr.addEventListener('error', () => {
-          if (uploadRunIdRef.current === runId) {
-            reject(
-              new Error(
-                'Network connection lost during upload. Please check your internet connection and try again.'
-              )
-            );
-          }
-        });
-
-        xhr.addEventListener('abort', () => {
-          if (uploadRunIdRef.current === runId) {
-            reject(new Error('Upload was cancelled'));
-          }
-        });
-
-        // Send upload
-        const formData = new FormData();
-        formData.append('file', blob);
-        xhr.open('POST', signedUrl);
-        xhr.send(formData);
+        if (event.lengthComputable) {
+          const progress = Math.round((event.loaded / event.total) * 100);
+          setUploadProgress(progress);
+        }
       });
-    },
-    []
-  );
+
+      xhr.addEventListener('load', () => {
+        if (uploadRunIdRef.current !== runId) {
+          reject(new Error('Upload cancelled'));
+          return;
+        }
+
+        if (xhr.status >= 200 && xhr.status < 300) {
+          // Convert XHR response to fetch Response
+          resolve(
+            new Response(xhr.response, {
+              status: xhr.status,
+              statusText: xhr.statusText,
+              headers: new Headers()
+            })
+          );
+        } else {
+          reject(new Error(`Upload failed with status ${xhr.status}`));
+        }
+      });
+
+      xhr.addEventListener('error', () => {
+        if (uploadRunIdRef.current === runId) {
+          reject(
+            new Error('Network connection lost during upload. Please check your internet connection and try again.')
+          );
+        }
+      });
+
+      xhr.addEventListener('abort', () => {
+        if (uploadRunIdRef.current === runId) {
+          reject(new Error('Upload was cancelled'));
+        }
+      });
+
+      // Send upload
+      const formData = new FormData();
+      formData.append('file', blob);
+      xhr.open('POST', signedUrl);
+      xhr.send(formData);
+    });
+  }, []);
 
   // Get the current display image
   const displayImage =
@@ -154,39 +142,30 @@ export function DaoImageField() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-csrf-token': 'required', // TODO: Generate proper CSRF token
+          'x-csrf-token': 'required' // TODO: Generate proper CSRF token
         },
         body: JSON.stringify({
           name: basicInfo.tokenName,
           description: basicInfo.description,
           artDirection: generationPrompt,
-          stylePreset,
-        }),
+          stylePreset
+        })
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         if (response.status === 429) {
-          throw new Error(
-            'Too many generation requests. Please wait a moment and try again.'
-          );
+          throw new Error('Too many generation requests. Please wait a moment and try again.');
         } else if (response.status === 404) {
-          throw new Error(
-            'Image generation is not enabled. Please contact the administrator.'
-          );
+          throw new Error('Image generation is not enabled. Please contact the administrator.');
         }
-        throw new Error(
-          errorData.error || 'Failed to generate images. Please try again.'
-        );
+        throw new Error(errorData.error || 'Failed to generate images. Please try again.');
       }
 
       const data = await response.json();
       setCandidates(data.candidates);
     } catch (error) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : 'Image generation failed. Please try again.';
+      const errorMessage = error instanceof Error ? error.message : 'Image generation failed. Please try again.';
       setGenerationError(errorMessage);
       console.error('Generation error:', error);
     } finally {
@@ -195,136 +174,136 @@ export function DaoImageField() {
   };
 
   // Upload selected candidate to Pinata with race condition guard
-  const uploadCandidate = useCallback(async (candidate: GeneratedImageCandidate) => {
-    // Generate unique run ID for this upload
-    const runId = `upload-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-    uploadRunIdRef.current = runId;
+  const uploadCandidate = useCallback(
+    async (candidate: GeneratedImageCandidate) => {
+      // Generate unique run ID for this upload
+      const runId = `upload-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      uploadRunIdRef.current = runId;
 
-    setIsUploading(true);
-    setUploadProgress(0);
-    setGenerationError('');
+      setIsUploading(true);
+      setUploadProgress(0);
+      setGenerationError('');
 
-    try {
-      // Get signed URL from backend
-      const urlResponse = await fetch('/api/uploads/pinata-url', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-csrf-token': 'required', // TODO: Generate proper CSRF token
-        },
-        body: JSON.stringify({
-          uploadType: 'dao-image',
-          mimeType: 'image/png',
-          sizeBytes: 5 * 1024 * 1024, // Estimate
-          filename: `dao-image-${Date.now()}.png`,
-        }),
-      });
-
-      if (!urlResponse.ok) {
-        throw new Error('Failed to get upload URL');
-      }
-
-      const authData = await urlResponse.json();
-      const { signedUrl, uploadId } = authData;
-
-      // Check if operation was superseded
-      if (uploadRunIdRef.current !== runId) {
-        return;
-      }
-
-      // Download the image from temporary URL and upload to Pinata
-      const imageResponse = await fetch(candidate.temporaryUrl);
-      if (!imageResponse.ok) {
-        throw new Error('Failed to fetch candidate image');
-      }
-
-      const imageBlob = await imageResponse.blob();
-
-      // Check if operation was superseded
-      if (uploadRunIdRef.current !== runId) {
-        return;
-      }
-
-      // Upload directly to signed URL with progress tracking
-      const pinataResponse = await uploadBlobToSignedUrl(imageBlob, signedUrl, runId);
-
-      if (!pinataResponse.ok) {
-        throw new Error('Failed to upload image to Pinata. Please try again.');
-      }
-
-      // Check if operation was superseded
-      if (uploadRunIdRef.current !== runId) {
-        return;
-      }
-
-      // Extract CID from Pinata response
-      const uploadedData = await pinataResponse.json();
-      const cid = uploadedData.data?.cid || uploadedData.cid;
-      if (!cid) {
-        throw new Error('Image upload succeeded but CID was not returned. Please try again.');
-      }
-
-      // Complete the upload
-      const completeResponse = await fetch('/api/uploads/complete', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          uploadId,
-          cid,
-          filename: `dao-image-${Date.now()}.png`,
-          mimeType: 'image/png',
-          sizeBytes: imageBlob.size,
-          uploadType: 'dao-image',
-        }),
-      });
-
-      if (!completeResponse.ok) {
-        const errorData = await completeResponse.json().catch(() => ({}));
-        const errorCode = errorData.code;
-        if (errorCode === 'CID_NOT_FOUND') {
-          throw new Error('Upload verification failed. The image may not have uploaded correctly. Please try again.');
-        }
-        throw new Error('Failed to finalize image upload. Please try again.');
-      }
-
-      const result = await completeResponse.json();
-
-      // Final check before updating store
-      if (uploadRunIdRef.current === runId) {
-        // Update store with generated source
-        setDaoImageSource({
-          kind: 'generated',
-          gatewayUrl: result.gatewayUrl,
-          ipfsUri: result.ipfsUri,
-          prompt: basicInfo.description,
-          model: candidate.model,
+      try {
+        // Get signed URL from backend
+        const urlResponse = await fetch('/api/uploads/pinata-url', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-token': 'required' // TODO: Generate proper CSRF token
+          },
+          body: JSON.stringify({
+            uploadType: 'dao-image',
+            mimeType: 'image/png',
+            sizeBytes: 5 * 1024 * 1024, // Estimate
+            filename: `dao-image-${Date.now()}.png`
+          })
         });
 
-        updateBasicInfo({ contractImage: result.gatewayUrl });
-        setGenerationOpen(false);
-        setCandidates([]);
-        setSelectedCandidate(null);
-        clearValidationError('daoImage');
+        if (!urlResponse.ok) {
+          throw new Error('Failed to get upload URL');
+        }
+
+        const authData = await urlResponse.json();
+        const { signedUrl, uploadId } = authData;
+
+        // Check if operation was superseded
+        if (uploadRunIdRef.current !== runId) {
+          return;
+        }
+
+        // Download the image from temporary URL and upload to Pinata
+        const imageResponse = await fetch(candidate.temporaryUrl);
+        if (!imageResponse.ok) {
+          throw new Error('Failed to fetch candidate image');
+        }
+
+        const imageBlob = await imageResponse.blob();
+
+        // Check if operation was superseded
+        if (uploadRunIdRef.current !== runId) {
+          return;
+        }
+
+        // Upload directly to signed URL with progress tracking
+        const pinataResponse = await uploadBlobToSignedUrl(imageBlob, signedUrl, runId);
+
+        if (!pinataResponse.ok) {
+          throw new Error('Failed to upload image to Pinata. Please try again.');
+        }
+
+        // Check if operation was superseded
+        if (uploadRunIdRef.current !== runId) {
+          return;
+        }
+
+        // Extract CID from Pinata response
+        const uploadedData = await pinataResponse.json();
+        const cid = uploadedData.data?.cid || uploadedData.cid;
+        if (!cid) {
+          throw new Error('Image upload succeeded but CID was not returned. Please try again.');
+        }
+
+        // Complete the upload
+        const completeResponse = await fetch('/api/uploads/complete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            uploadId,
+            cid,
+            filename: `dao-image-${Date.now()}.png`,
+            mimeType: 'image/png',
+            sizeBytes: imageBlob.size,
+            uploadType: 'dao-image'
+          })
+        });
+
+        if (!completeResponse.ok) {
+          const errorData = await completeResponse.json().catch(() => ({}));
+          const errorCode = errorData.code;
+          if (errorCode === 'CID_NOT_FOUND') {
+            throw new Error('Upload verification failed. The image may not have uploaded correctly. Please try again.');
+          }
+          throw new Error('Failed to finalize image upload. Please try again.');
+        }
+
+        const result = await completeResponse.json();
+
+        // Final check before updating store
+        if (uploadRunIdRef.current === runId) {
+          // Update store with generated source
+          setDaoImageSource({
+            kind: 'generated',
+            gatewayUrl: result.gatewayUrl,
+            ipfsUri: result.ipfsUri,
+            prompt: basicInfo.description,
+            model: candidate.model
+          });
+
+          updateBasicInfo({ contractImage: result.gatewayUrl });
+          setGenerationOpen(false);
+          setCandidates([]);
+          setSelectedCandidate(null);
+          clearValidationError('daoImage');
+        }
+      } catch (error) {
+        // Only update error state if this is still the active upload
+        if (uploadRunIdRef.current === runId) {
+          const errorMessage = error instanceof Error ? error.message : 'Image upload failed. Please try again.';
+          setGenerationError(errorMessage);
+          console.error('Upload error:', error);
+        }
+      } finally {
+        if (uploadRunIdRef.current === runId) {
+          setIsUploading(false);
+          setUploadProgress(0);
+        }
       }
-    } catch (error) {
-      // Only update error state if this is still the active upload
-      if (uploadRunIdRef.current === runId) {
-        const errorMessage =
-          error instanceof Error
-            ? error.message
-            : 'Image upload failed. Please try again.';
-        setGenerationError(errorMessage);
-        console.error('Upload error:', error);
-      }
-    } finally {
-      if (uploadRunIdRef.current === runId) {
-        setIsUploading(false);
-        setUploadProgress(0);
-      }
-    }
-  }, [basicInfo.description, clearValidationError, updateBasicInfo, setDaoImageSource, uploadBlobToSignedUrl]);
+    },
+    [basicInfo.description, clearValidationError, updateBasicInfo, setDaoImageSource, uploadBlobToSignedUrl]
+  );
 
   // Handle manual file upload with race condition guard
   const handleFileSelect = useCallback(
@@ -375,14 +354,14 @@ export function DaoImageField() {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'x-csrf-token': 'required', // TODO: Generate proper CSRF token
+              'x-csrf-token': 'required' // TODO: Generate proper CSRF token
             },
             body: JSON.stringify({
               uploadType: 'dao-image',
               mimeType: file.type,
               sizeBytes: file.size,
-              filename: file.name,
-            }),
+              filename: file.name
+            })
           });
 
           if (!urlResponse.ok) {
@@ -420,7 +399,7 @@ export function DaoImageField() {
           const completeResponse = await fetch('/api/uploads/complete', {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/json',
+              'Content-Type': 'application/json'
             },
             body: JSON.stringify({
               uploadId,
@@ -428,15 +407,17 @@ export function DaoImageField() {
               filename: file.name,
               mimeType: file.type,
               sizeBytes: file.size,
-              uploadType: 'dao-image',
-            }),
+              uploadType: 'dao-image'
+            })
           });
 
           if (!completeResponse.ok) {
             const errorData = await completeResponse.json().catch(() => ({}));
             const errorCode = errorData.code;
             if (errorCode === 'CID_NOT_FOUND') {
-              throw new Error('Upload verification failed. The image may not have uploaded correctly. Please try again.');
+              throw new Error(
+                'Upload verification failed. The image may not have uploaded correctly. Please try again.'
+              );
             } else if (errorCode === 'AUTHORIZATION_EXPIRED') {
               throw new Error('Your upload session expired. Please try uploading again.');
             }
@@ -452,7 +433,7 @@ export function DaoImageField() {
               kind: 'uploaded',
               gatewayUrl: result.gatewayUrl,
               ipfsUri: result.ipfsUri,
-              filename: file.name,
+              filename: file.name
             });
 
             updateBasicInfo({ contractImage: result.gatewayUrl });
@@ -461,10 +442,7 @@ export function DaoImageField() {
         } catch (error) {
           // Only update error state if this is still the active upload
           if (uploadRunIdRef.current === runId) {
-            const errorMessage =
-              error instanceof Error
-                ? error.message
-                : 'Image upload failed. Please try again.';
+            const errorMessage = error instanceof Error ? error.message : 'Image upload failed. Please try again.';
             setUploadError(errorMessage);
             console.error('Upload error:', error);
           }
@@ -506,9 +484,10 @@ export function DaoImageField() {
               overflow: 'hidden',
               backgroundColor: 'var(--gray-2)',
               aspectRatio: '1',
-              maxWidth: '200px',
+              maxWidth: '200px'
             }}
           >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={displayImage}
               alt="DAO Identity"
@@ -528,14 +507,14 @@ export function DaoImageField() {
           <Flex gap="2" style={{ flexWrap: 'wrap' }}>
             {process.env.NEXT_PUBLIC_IMAGE_GENERATION_ENABLED === 'true' &&
               process.env.NEXT_PUBLIC_PINATA_UPLOADS_ENABLED === 'true' && (
-              <Button
-                onClick={() => setGenerationOpen(true)}
-                disabled={isGenerating || isUploading}
-                style={{ cursor: 'pointer' }}
-              >
-                Generate Image
-              </Button>
-            )}
+                <Button
+                  onClick={() => setGenerationOpen(true)}
+                  disabled={isGenerating || isUploading}
+                  style={{ cursor: 'pointer' }}
+                >
+                  Generate Image
+                </Button>
+              )}
 
             {process.env.NEXT_PUBLIC_PINATA_UPLOADS_ENABLED === 'true' && (
               <>
@@ -572,7 +551,7 @@ export function DaoImageField() {
                 padding: '1rem',
                 backgroundColor: 'var(--error-2)',
                 borderRadius: '0.375rem',
-                border: '1px solid var(--error-6)',
+                border: '1px solid var(--error-6)'
               }}
             >
               <AlertCircle size={20} style={{ color: 'var(--error-9)', flexShrink: 0, marginTop: '0.125rem' }} />
@@ -590,7 +569,7 @@ export function DaoImageField() {
                 padding: '1rem',
                 backgroundColor: 'var(--error-2)',
                 borderRadius: '0.375rem',
-                border: '1px solid var(--error-6)',
+                border: '1px solid var(--error-6)'
               }}
             >
               <AlertCircle size={20} style={{ color: 'var(--error-9)', flexShrink: 0, marginTop: '0.125rem' }} />
@@ -622,7 +601,7 @@ export function DaoImageField() {
                   height: '8px',
                   backgroundColor: 'var(--gray-4)',
                   borderRadius: '4px',
-                  overflow: 'hidden',
+                  overflow: 'hidden'
                 }}
               >
                 <Box
@@ -630,7 +609,7 @@ export function DaoImageField() {
                     width: `${uploadProgress}%`,
                     height: '100%',
                     backgroundColor: 'var(--info-9)',
-                    transition: 'width 0.3s ease-out',
+                    transition: 'width 0.3s ease-out'
                   }}
                 />
               </Box>
@@ -675,7 +654,7 @@ export function DaoImageField() {
                       borderRadius: '0.375rem',
                       border: '1px solid var(--gray-6)',
                       backgroundColor: 'white',
-                      color: 'var(--gray-12)',
+                      color: 'var(--gray-12)'
                     }}
                   >
                     <option value="modern">Modern</option>
@@ -701,9 +680,10 @@ export function DaoImageField() {
                             overflow: 'hidden',
                             cursor: 'pointer',
                             border:
-                              selectedCandidate?.id === c.id ? '3px solid var(--info-9)' : '1px solid var(--gray-6)',
+                              selectedCandidate?.id === c.id ? '3px solid var(--info-9)' : '1px solid var(--gray-6)'
                           }}
                         >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={c.temporaryUrl}
                             alt="Candidate"

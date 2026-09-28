@@ -6,26 +6,14 @@ import { z } from 'zod';
  * Ensures all user inputs are properly sanitized before use.
  */
 export const GenerateDaoImageInputSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1, 'DAO name is required')
-    .max(100, 'DAO name must be 100 characters or less'),
+  name: z.string().trim().min(1, 'DAO name is required').max(100, 'DAO name must be 100 characters or less'),
   description: z
     .string()
     .trim()
     .min(1, 'Description is required')
     .max(500, 'Description must be 500 characters or less'),
-  artDirection: z
-    .string()
-    .trim()
-    .max(600, 'Art direction must be 600 characters or less')
-    .optional()
-    .default(''),
-  stylePreset: z
-    .enum(['modern', 'vintage', 'abstract', 'minimal', 'vibrant'])
-    .optional()
-    .default('modern'),
+  artDirection: z.string().trim().max(600, 'Art direction must be 600 characters or less').optional().default(''),
+  stylePreset: z.enum(['modern', 'vintage', 'abstract', 'minimal', 'vibrant']).optional().default('modern')
 });
 
 export type GenerateDaoImageInput = z.infer<typeof GenerateDaoImageInputSchema>;
@@ -53,13 +41,11 @@ function buildPrompt(input: GenerateDaoImageInput): string {
     vintage: 'Vintage-inspired with retro elements',
     abstract: 'Abstract and conceptual design',
     minimal: 'Minimalist with essential elements only',
-    vibrant: 'Vibrant colors and dynamic energy',
+    vibrant: 'Vibrant colors and dynamic energy'
   };
 
   const styleDescription = styleGuides[input.stylePreset];
-  const artDirectionSegment = input.artDirection
-    ? `\n\nAdditional direction: ${input.artDirection}`
-    : '';
+  const artDirectionSegment = input.artDirection ? `\n\nAdditional direction: ${input.artDirection}` : '';
 
   // Product-owned prompt template
   return `
@@ -121,7 +107,7 @@ export async function generateDaoImageCandidates(
           // depending on the model. This handles the common case.
           // Adjust based on actual provider response structure.
           messages: [],
-          abortSignal: options?.abortSignal,
+          abortSignal: options?.abortSignal
         });
 
         // Normalize provider output
@@ -131,7 +117,7 @@ export async function generateDaoImageCandidates(
           temporaryUrl: (image as any).url || '',
           expiresAt: new Date(Date.now() + 1 * 60 * 60 * 1000), // 1 hour
           model,
-          revisedPrompt: (image as any).revisedPrompt,
+          revisedPrompt: (image as any).revisedPrompt
         });
       } catch (error) {
         // Log individual candidate failures but continue generating others
@@ -155,9 +141,7 @@ export async function generateDaoImageCandidates(
         throw new Error('Generation quota exceeded. Please try again later.');
       }
       if (error.message.includes('content_policy')) {
-        throw new Error(
-          'The request was blocked by content policy filters. Please try different inputs.'
-        );
+        throw new Error('The request was blocked by content policy filters. Please try different inputs.');
       }
       if (error.message.includes('timeout')) {
         throw new Error('Generation request timed out. Please try again.');

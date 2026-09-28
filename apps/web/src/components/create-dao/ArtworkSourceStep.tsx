@@ -2,11 +2,11 @@
 
 import { Upload } from 'lucide-react';
 import { useState } from 'react';
-import { Stack, Flex, Box } from 'styled-system/jsx';
+import { Box, Flex, Stack } from 'styled-system/jsx';
 
-import { Badge, Button, Card, Heading, Text } from '@/components/ui';
 import { ArtworkDirectoryUpload } from '@/components/create-dao/ArtworkDirectoryUpload';
 import { ArtworkPlayground } from '@/components/create-dao/ArtworkPlayground';
+import { Badge, Button, Card, Heading, Text } from '@/components/ui';
 import { getAvailableCollections, getRandomPreviewTokenId } from '@/lib/starter-collections';
 import { ArtworkSource, useCreateDaoStore } from '@/stores/create-dao-store';
 
@@ -27,7 +27,7 @@ export function ArtworkSourceStep() {
     if (collection) {
       const source: ArtworkSource = {
         kind: 'starter',
-        starterId: collection.id,
+        starterId: collection.id
       };
       setArtworkSource(source);
       setSourceChoice('starter');
@@ -134,7 +134,7 @@ export function ArtworkSourceStep() {
                         minWidth: '250px',
                         cursor: 'pointer',
                         border: '1px solid var(--gray-6)',
-                        transition: 'all 0.2s',
+                        transition: 'all 0.2s'
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.borderColor = 'var(--info-9)';
@@ -153,9 +153,10 @@ export function ArtworkSourceStep() {
                             overflow: 'hidden',
                             backgroundColor: 'var(--gray-2)',
                             aspectRatio: '1',
-                            minHeight: '150px',
+                            minHeight: '150px'
                           }}
                         >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={`${basicInfo.rendererBase}${basicInfo.tokenUri.split('/')[basicInfo.tokenUri.split('/').length - 2]}/${getRandomPreviewTokenId(collection)}`}
                             alt={collection.name}
@@ -177,16 +178,11 @@ export function ArtworkSourceStep() {
                             <Badge>{collection.properties.length} traits</Badge>
                             <Badge>{collection.license}</Badge>
                           </Flex>
-                          <Text style={{ fontSize: '0.75rem', color: 'var(--gray-10)' }}>
-                            {collection.attribution}
-                          </Text>
+                          <Text style={{ fontSize: '0.75rem', color: 'var(--gray-10)' }}>{collection.attribution}</Text>
                         </Stack>
 
                         {/* Select Button */}
-                        <Button
-                          onClick={() => handleSelectStarter(collection.id)}
-                          style={{ width: '100%' }}
-                        >
+                        <Button onClick={() => handleSelectStarter(collection.id)} style={{ width: '100%' }}>
                           Select Collection
                         </Button>
                       </Stack>
@@ -241,20 +237,11 @@ export function ArtworkSourceStep() {
       )}
 
       {/* Upload Mode */}
-      {uploadMode && (
-        <ArtworkDirectoryUpload
-          onComplete={handleUploadComplete}
-          onCancel={() => setUploadMode(false)}
-        />
-      )}
+      {uploadMode && <ArtworkDirectoryUpload onComplete={handleUploadComplete} onCancel={() => setUploadMode(false)} />}
 
       {/* Playground Mode - Layer ordering and preview */}
       {playgroundMode && artworkSource && artworkSource.kind === 'uploaded' && (
-        <ArtworkPlayground
-          source={artworkSource}
-          onComplete={handlePlaygroundComplete}
-          onBack={handlePlaygroundBack}
-        />
+        <ArtworkPlayground source={artworkSource} onComplete={handlePlaygroundComplete} onBack={handlePlaygroundBack} />
       )}
     </Stack>
   );

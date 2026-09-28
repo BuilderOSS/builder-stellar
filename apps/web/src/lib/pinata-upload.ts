@@ -13,7 +13,7 @@ const IPFS_GATEWAY_HOSTS = [
   'dweb.link',
   'w3s.link',
   'nft.storage',
-  'cf-ipfs.com',
+  'cf-ipfs.com'
 ];
 
 /**
@@ -27,7 +27,7 @@ export const UPLOAD_POLICIES = {
     maxDimensionPixels: 4000,
     minDimensionPixels: 256,
     requiresSquare: true,
-    description: 'DAO identity image (PNG, JPEG, or WebP)',
+    description: 'DAO identity image (PNG, JPEG, or WebP)'
   },
   'artwork-directory': {
     allowedMimes: ['image/png', 'image/jpeg', 'image/webp'],
@@ -37,8 +37,8 @@ export const UPLOAD_POLICIES = {
     minDimensionPixels: 64,
     requiresSquare: true,
     maxFilesPerDirectory: 1000,
-    description: 'Token artwork directory (PNG, JPEG, or WebP)',
-  },
+    description: 'Token artwork directory (PNG, JPEG, or WebP)'
+  }
 } as const;
 
 export type UploadType = keyof typeof UPLOAD_POLICIES;
@@ -78,10 +78,7 @@ export interface UploadResult {
 /**
  * Converts an IPFS CID to both canonical and gateway URL forms.
  */
-export function cidToUrls(
-  cid: string,
-  preferredGatewayHost?: string
-): { ipfsUri: string; gatewayUrl: string } {
+export function cidToUrls(cid: string, preferredGatewayHost?: string): { ipfsUri: string; gatewayUrl: string } {
   const ipfsUri = `ipfs://${cid}`;
 
   // Use provided gateway or first in fallback list
@@ -121,21 +118,21 @@ export function validateImageDimensions(
   if (width < policy.minDimensionPixels || height < policy.minDimensionPixels) {
     return {
       valid: false,
-      error: `Image dimensions must be at least ${policy.minDimensionPixels}x${policy.minDimensionPixels}`,
+      error: `Image dimensions must be at least ${policy.minDimensionPixels}x${policy.minDimensionPixels}`
     };
   }
 
   if (width > policy.maxDimensionPixels || height > policy.maxDimensionPixels) {
     return {
       valid: false,
-      error: `Image dimensions cannot exceed ${policy.maxDimensionPixels}x${policy.maxDimensionPixels}`,
+      error: `Image dimensions cannot exceed ${policy.maxDimensionPixels}x${policy.maxDimensionPixels}`
     };
   }
 
   if (policy.requiresSquare && width !== height) {
     return {
       valid: false,
-      error: `Image must be square (width: ${width}px, height: ${height}px)`,
+      error: `Image must be square (width: ${width}px, height: ${height}px)`
     };
   }
 
@@ -145,17 +142,14 @@ export function validateImageDimensions(
 /**
  * Validates MIME type against policy.
  */
-export function validateMimeType(
-  mimeType: string,
-  uploadType: UploadType
-): { valid: boolean; error?: string } {
+export function validateMimeType(mimeType: string, uploadType: UploadType): { valid: boolean; error?: string } {
   const policy = UPLOAD_POLICIES[uploadType];
   const allowedMimes = 'allowedMimes' in policy ? policy.allowedMimes : [];
 
   if (!allowedMimes.includes(mimeType)) {
     return {
       valid: false,
-      error: `Invalid file type. Allowed: ${allowedMimes.join(', ')}. Received: ${mimeType}`,
+      error: `Invalid file type. Allowed: ${allowedMimes.join(', ')}. Received: ${mimeType}`
     };
   }
 
@@ -165,10 +159,7 @@ export function validateMimeType(
 /**
  * Validates file size against policy.
  */
-export function validateFileSize(
-  sizeBytes: number,
-  uploadType: UploadType
-): { valid: boolean; error?: string } {
+export function validateFileSize(sizeBytes: number, uploadType: UploadType): { valid: boolean; error?: string } {
   const policy = UPLOAD_POLICIES[uploadType];
 
   // Check per-file limit
@@ -176,7 +167,7 @@ export function validateFileSize(
     const maxMB = Math.round(policy.maxBytesPerFile / 1024 / 1024);
     return {
       valid: false,
-      error: `File exceeds maximum size of ${maxMB}MB`,
+      error: `File exceeds maximum size of ${maxMB}MB`
     };
   }
 
@@ -185,7 +176,7 @@ export function validateFileSize(
     const maxMB = Math.round(policy.maxBytes / 1024 / 1024);
     return {
       valid: false,
-      error: `File exceeds maximum size of ${maxMB}MB`,
+      error: `File exceeds maximum size of ${maxMB}MB`
     };
   }
 
@@ -236,7 +227,7 @@ export const UploadCompletionSchema = z.object({
   filename: z.string(),
   mimeType: z.string(),
   sizeBytes: z.number().int().positive(),
-  uploadType: z.enum(['dao-image', 'artwork-directory']),
+  uploadType: z.enum(['dao-image', 'artwork-directory'])
 });
 
 export type UploadCompletion = z.infer<typeof UploadCompletionSchema>;
@@ -253,7 +244,7 @@ export function validateUploadCompletion(
   if (!parseResult.success) {
     return {
       valid: false,
-      error: `Invalid upload completion data: ${parseResult.error.message}`,
+      error: `Invalid upload completion data: ${parseResult.error.message}`
     };
   }
 
@@ -263,7 +254,7 @@ export function validateUploadCompletion(
   if (data.uploadId !== authorization.uploadId) {
     return {
       valid: false,
-      error: 'Upload ID mismatch',
+      error: 'Upload ID mismatch'
     };
   }
 
@@ -271,7 +262,7 @@ export function validateUploadCompletion(
   if (data.uploadType !== authorization.uploadType) {
     return {
       valid: false,
-      error: 'Upload type mismatch',
+      error: 'Upload type mismatch'
     };
   }
 
@@ -279,7 +270,7 @@ export function validateUploadCompletion(
   if (data.mimeType !== authorization.expectedMime) {
     return {
       valid: false,
-      error: `MIME type mismatch. Expected ${authorization.expectedMime}, got ${data.mimeType}`,
+      error: `MIME type mismatch. Expected ${authorization.expectedMime}, got ${data.mimeType}`
     };
   }
 
@@ -287,7 +278,7 @@ export function validateUploadCompletion(
   if (data.sizeBytes > authorization.maxBytes) {
     return {
       valid: false,
-      error: `File size exceeds authorized limit of ${authorization.maxBytes} bytes`,
+      error: `File size exceeds authorized limit of ${authorization.maxBytes} bytes`
     };
   }
 
@@ -320,6 +311,6 @@ export function createUploadAuthorization(
     expiresAt: new Date(Date.now() + expirationSeconds * 1000),
     uploadType,
     expectedMime,
-    maxBytes,
+    maxBytes
   };
 }

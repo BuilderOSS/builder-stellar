@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { AuthError, requireAuthenticatedSession, authErrorResponse } from '@/lib/auth/server';
+
+import { AuthError, authErrorResponse, requireAuthenticatedSession } from '@/lib/auth/server';
 import { getPinataService, PinataError } from '@/lib/pinata-service';
 
 /**
@@ -8,10 +9,10 @@ import { getPinataService, PinataError } from '@/lib/pinata-service';
  */
 const PinCidRequestSchema = z.object({
   cid: z.string().min(1),
-  name: z.string().optional(),
+  name: z.string().optional()
 });
 
-type PinCidRequest = z.infer<typeof PinCidRequestSchema>;
+type _PinCidRequest = z.infer<typeof PinCidRequestSchema>;
 
 /**
  * POST /api/pinata/pin-cid
@@ -39,7 +40,7 @@ type PinCidRequest = z.infer<typeof PinCidRequestSchema>;
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     // Check authentication
-    const session = await requireAuthenticatedSession();
+    await requireAuthenticatedSession();
 
     // Parse and validate request body
     const body = await request.json().catch(() => ({}));
@@ -52,8 +53,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           code: 'VALIDATION_ERROR',
           details: validationResult.error.issues.map((issue) => ({
             path: issue.path.join('.'),
-            message: issue.message,
-          })),
+            message: issue.message
+          }))
         },
         { status: 422 }
       );
@@ -68,7 +69,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json(
       {
         success: true,
-        cid,
+        cid
       },
       { status: 200 }
     );
@@ -78,10 +79,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     if (error instanceof SyntaxError) {
-      return NextResponse.json(
-        { error: 'Invalid JSON in request body', code: 'JSON_PARSE_ERROR' },
-        { status: 422 }
-      );
+      return NextResponse.json({ error: 'Invalid JSON in request body', code: 'JSON_PARSE_ERROR' }, { status: 422 });
     }
 
     if (error instanceof PinataError) {
@@ -89,13 +87,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         cid: (error as any).cid,
         code: error.code,
         message: error.message,
-        status: error.status,
+        status: error.status
       });
       return NextResponse.json(
         {
           error: error.message || 'Failed to pin content to IPFS',
           code: error.code || 'SERVICE_ERROR',
-          status: error.status,
+          status: error.status
         },
         { status: error.status || 500 }
       );
@@ -104,14 +102,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     console.error('[/api/pinata/pin-cid] Unexpected error:', {
       message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
-      cid: body.cid,
+      cid: body.cid
     });
 
     return NextResponse.json(
       {
         error: 'Failed to pin content. Please try again later.',
         code: 'INTERNAL_SERVER_ERROR',
-        retryable: true,
+        retryable: true
       },
       { status: 500 }
     );

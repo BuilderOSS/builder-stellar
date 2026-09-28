@@ -98,7 +98,7 @@ export function validateDeploymentReady(state: CreateDaoStore): DeploymentValida
   return {
     valid: errors.length === 0,
     errors,
-    warnings,
+    warnings
   };
 }
 
@@ -147,6 +147,6 @@ export function validateImageSources(state: CreateDaoStore): { valid: boolean; e
 
   return {
     valid: errors.length === 0,
-    errors,
+    errors
   };
 }

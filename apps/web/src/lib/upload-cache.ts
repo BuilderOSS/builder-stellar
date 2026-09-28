@@ -47,7 +47,7 @@ export function cacheUpload(fileHash: string, cid: string): void {
     const uploadData: CachedUpload = {
       cid,
       uri: `ipfs://${cid}`,
-      timestamp: Date.now(),
+      timestamp: Date.now()
     };
 
     localStorage.setItem(`${CACHE_PREFIX}/${fileHash}`, JSON.stringify(uploadData));

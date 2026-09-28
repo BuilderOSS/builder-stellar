@@ -1,8 +1,8 @@
 'use client';
 
 import { AlertCircle, RotateCcw } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import { Stack, Box, Flex } from 'styled-system/jsx';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Box, Flex, Stack } from 'styled-system/jsx';
 
 import { Button, Text } from '@/components/ui';
 import { ArtworkProperty, ArtworkSource } from '@/stores/create-dao-store';
@@ -19,6 +19,59 @@ interface LayerImage {
   error?: string;
 }
 
+// Pure utility functions outside component to avoid recreation
+function getGatewayUrl(ipfsUri: string): string {
+  if (!ipfsUri) return '';
+
+  // Extract CID from ipfs:// or gateway URL
+  if (ipfsUri.startsWith('ipfs://')) {
+    const cid = ipfsUri.replace('ipfs://', '');
+    const gateway = process.env.NEXT_PUBLIC_PINATA_GATEWAY || 'nouns-builder.mypinata.cloud';
+    return `https://${gateway}/ipfs/${cid}`;
+  }
+
+  // Already a gateway URL
+  return ipfsUri;
+}
+
+function buildLayerUrl(baseUri: string, property: ArtworkProperty, extension: string): string {
+  if (!baseUri || !property.name || property.items.length === 0) {
+    return '';
+  }
+
+  // Use first item as preview
+  const itemName = property.items[0];
+  const cleanBase = baseUri.replace(/\/$/, '');
+
+  // Handle different base URI formats
+  if (cleanBase.startsWith('ipfs://') || cleanBase.startsWith('https://')) {
+    const gatewayUrl = getGatewayUrl(cleanBase);
+    return `${gatewayUrl}/${property.name}/${itemName}${extension}`;
+  }
+
+  return `${cleanBase}/${property.name}/${itemName}${extension}`;
+}
+
+async function loadImage(url: string): Promise<Blob | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const blob = await response.blob();
+
+    // Validate it's an image
+    if (!blob.type.startsWith('image/')) {
+      throw new Error('Not an image');
+    }
+
+    return blob;
+  } catch (err) {
+    throw new Error(`Failed to load image: ${err instanceof Error ? err.message : 'Unknown error'}`);
+  }
+}
+
 /**
  * Canvas-based artwork preview component.
  *
@@ -29,73 +82,14 @@ interface LayerImage {
  * - Error handling with fallback
  * - Real-time preview updates
  */
-export function ArtworkPreviewCanvas({
-  source,
-  orderedLayers,
-  isGenerating = false,
-}: ArtworkPreviewCanvasProps) {
+export function ArtworkPreviewCanvas({ source, orderedLayers, _isGenerating = false }: ArtworkPreviewCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [layerImages, setLayerImages] = useState<LayerImage[]>([]);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  // Get gateway URL for IPFS URI
-  const getGatewayUrl = (ipfsUri: string): string => {
-    if (!ipfsUri) return '';
-
-    // Extract CID from ipfs:// or gateway URL
-    if (ipfsUri.startsWith('ipfs://')) {
-      const cid = ipfsUri.replace('ipfs://', '');
-      const gateway = process.env.NEXT_PUBLIC_PINATA_GATEWAY || 'nouns-builder.mypinata.cloud';
-      return `https://${gateway}/ipfs/${cid}`;
-    }
-
-    // Already a gateway URL
-    return ipfsUri;
-  };
-
-  // Build layer image URL
-  const buildLayerUrl = (baseUri: string, property: ArtworkProperty, extension: string): string => {
-    if (!baseUri || !property.name || property.items.length === 0) {
-      return '';
-    }
-
-    // Use first item as preview
-    const itemName = property.items[0];
-    const cleanBase = baseUri.replace(/\/$/, '');
-
-    // Handle different base URI formats
-    if (cleanBase.startsWith('ipfs://') || cleanBase.startsWith('https://')) {
-      const gatewayUrl = getGatewayUrl(cleanBase);
-      return `${gatewayUrl}/${property.name}/${itemName}${extension}`;
-    }
-
-    return `${cleanBase}/${property.name}/${itemName}${extension}`;
-  };
-
-  // Load image from URL
-  const loadImage = async (url: string): Promise<Blob | null> => {
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const blob = await response.blob();
-
-      // Validate it's an image
-      if (!blob.type.startsWith('image/')) {
-        throw new Error('Not an image');
-      }
-
-      return blob;
-    } catch (err) {
-      throw new Error(`Failed to load image: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    }
-  };
-
   // Load all layer images
-  const loadLayers = async () => {
+  const loadLayers = useCallback(async () => {
     if (!source || !orderedLayers.length) {
       setLayerImages([]);
       return;
@@ -128,7 +122,7 @@ export function ArtworkPreviewCanvas({
         } catch (err) {
           layers.push({
             name: property.name,
-            error: err instanceof Error ? err.message : 'Unknown error',
+            error: err instanceof Error ? err.message : 'Unknown error'
           });
         }
 
@@ -140,10 +134,10 @@ export function ArtworkPreviewCanvas({
       setError(err instanceof Error ? err.message : 'Failed to load artwork');
       setLayerImages([]);
     }
-  };
+  }, [source, orderedLayers]);
 
   // Render canvas
-  const renderCanvas = async () => {
+  const renderCanvas = useCallback(async () => {
     if (!canvasRef.current || layerImages.length === 0) return;
 
     const canvas = canvasRef.current;
@@ -192,17 +186,37 @@ export function ArtworkPreviewCanvas({
         console.warn(`Failed to render layer ${layer.name}:`, err);
       }
     }
-  };
-
-  // Load layers when orderedLayers change
-  useEffect(() => {
-    loadLayers();
-  }, [source, orderedLayers]);
-
-  // Render canvas when layerImages change
-  useEffect(() => {
-    renderCanvas();
   }, [layerImages]);
+
+  // Load layers when dependencies change
+  useEffect(() => {
+    let isMounted = true;
+
+    (async () => {
+      if (isMounted) {
+        await loadLayers();
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [loadLayers]);
+
+  // Render canvas when layer images change
+  useEffect(() => {
+    let isMounted = true;
+
+    (async () => {
+      if (isMounted) {
+        await renderCanvas();
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [renderCanvas]);
 
   const handleReload = () => {
     loadLayers();
@@ -225,7 +239,7 @@ export function ArtworkPreviewCanvas({
           alignItems: 'center',
           justifyContent: 'center',
           minHeight: '300px',
-          overflow: 'hidden',
+          overflow: 'hidden'
         }}
       >
         {isLoading ? (
@@ -237,7 +251,7 @@ export function ArtworkPreviewCanvas({
                 height: '4px',
                 backgroundColor: 'var(--gray-4)',
                 borderRadius: '2px',
-                overflow: 'hidden',
+                overflow: 'hidden'
               }}
             >
               <Box
@@ -245,7 +259,7 @@ export function ArtworkPreviewCanvas({
                   width: `${loadingProgress}%`,
                   height: '100%',
                   backgroundColor: 'var(--info-9)',
-                  transition: 'width 0.2s ease-out',
+                  transition: 'width 0.2s ease-out'
                 }}
               />
             </Box>
@@ -267,7 +281,7 @@ export function ArtworkPreviewCanvas({
             style={{
               maxWidth: '100%',
               maxHeight: '100%',
-              display: hasImages ? 'block' : 'none',
+              display: hasImages ? 'block' : 'none'
             }}
           />
         )}
@@ -275,7 +289,15 @@ export function ArtworkPreviewCanvas({
 
       {/* Status */}
       {hasErrors && (
-        <Flex gap="2" style={{ alignItems: 'flex-start', padding: '0.75rem', backgroundColor: 'var(--warning-2)', borderRadius: '0.375rem' }}>
+        <Flex
+          gap="2"
+          style={{
+            alignItems: 'flex-start',
+            padding: '0.75rem',
+            backgroundColor: 'var(--warning-2)',
+            borderRadius: '0.375rem'
+          }}
+        >
           <AlertCircle size={16} style={{ color: 'var(--warning-9)', flexShrink: 0, marginTop: '0.125rem' }} />
           <Text style={{ fontSize: '0.75rem', color: 'var(--warning-11)' }}>
             Some layers failed to load. Check the gateway URLs are accessible.
@@ -294,7 +316,7 @@ export function ArtworkPreviewCanvas({
               style={{
                 padding: '0.5rem',
                 borderBottom: '1px solid var(--gray-4)',
-                alignItems: 'center',
+                alignItems: 'center'
               }}
             >
               <Box
@@ -303,15 +325,11 @@ export function ArtworkPreviewCanvas({
                   height: '8px',
                   borderRadius: '50%',
                   backgroundColor: layer.error ? 'var(--error-9)' : layer.blob ? 'var(--success-9)' : 'var(--gray-7)',
-                  flexShrink: 0,
+                  flexShrink: 0
                 }}
               />
               <Text style={{ flex: 1, fontSize: '0.75rem' }}>{layer.name}</Text>
-              {layer.error && (
-                <Text style={{ fontSize: '0.7rem', color: 'var(--error-9)' }}>
-                  {layer.error}
-                </Text>
-              )}
+              {layer.error && <Text style={{ fontSize: '0.7rem', color: 'var(--error-9)' }}>{layer.error}</Text>}
             </Flex>
           ))}
         </Box>

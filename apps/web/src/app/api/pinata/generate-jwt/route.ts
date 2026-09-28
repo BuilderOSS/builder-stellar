@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { AuthError, requireAuthenticatedSession, authErrorResponse } from '@/lib/auth/server';
-import { getPinataService, PinataError, AuthenticationError } from '@/lib/pinata-service';
+
+import { AuthError, authErrorResponse, requireAuthenticatedSession } from '@/lib/auth/server';
+import { AuthenticationError, getPinataService, PinataError } from '@/lib/pinata-service';
 
 /**
  * Simple in-memory rate limiter for JWT generation
@@ -8,10 +9,7 @@ import { getPinataService, PinataError, AuthenticationError } from '@/lib/pinata
  */
 const jwtLimiter = new Map<string, { count: number; resetAt: number }>();
 
-function checkRateLimit(
-  key: string,
-  maxPerMinute: number = 20
-): { allowed: boolean; reason?: string } {
+function checkRateLimit(key: string, maxPerMinute: number = 20): { allowed: boolean; reason?: string } {
   const now = Date.now();
   const limit = jwtLimiter.get(key);
 
@@ -24,7 +22,7 @@ function checkRateLimit(
   if (limit.count >= maxPerMinute) {
     return {
       allowed: false,
-      reason: `Rate limit exceeded. Maximum ${maxPerMinute} requests per minute.`,
+      reason: `Rate limit exceeded. Maximum ${maxPerMinute} requests per minute.`
     };
   }
 
@@ -64,7 +62,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         {
           error: rateLimit.reason,
           code: 'RATE_LIMIT_EXCEEDED',
-          retryAfter: 60,
+          retryAfter: 60
         },
         { status: 429, headers: { 'Retry-After': '60' } }
       );
@@ -82,7 +80,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           {
             error: 'IPFS service authentication failed. The server may not be configured correctly.',
             code: 'SERVICE_AUTH_FAILED',
-            details: process.env.NODE_ENV === 'development' ? jwtError.message : undefined,
+            details: process.env.NODE_ENV === 'development' ? jwtError.message : undefined
           },
           { status: 500 }
         );
@@ -101,7 +99,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json(
       {
         jwt,
-        expiresAt: expiresAt.toISOString(),
+        expiresAt: expiresAt.toISOString()
       },
       { status: 200 }
     );
@@ -114,13 +112,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       console.error('[/api/pinata/generate-jwt] Pinata service error:', {
         code: error.code,
         message: error.message,
-        status: error.status,
+        status: error.status
       });
       return NextResponse.json(
         {
           error: error.message || 'Failed to generate upload token',
           code: error.code || 'SERVICE_ERROR',
-          status: error.status,
+          status: error.status
         },
         { status: error.status || 500 }
       );
@@ -128,14 +126,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     console.error('[/api/pinata/generate-jwt] Unexpected error:', {
       message: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
+      stack: error instanceof Error ? error.stack : undefined
     });
 
     return NextResponse.json(
       {
         error: 'Failed to generate upload token. Please try again later.',
         code: 'INTERNAL_SERVER_ERROR',
-        retryable: true,
+        retryable: true
       },
       { status: 500 }
     );

@@ -1,13 +1,13 @@
 'use client';
 
-import { Upload, CheckCircle, AlertCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle, Upload } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
-import { Stack, Box, Flex } from 'styled-system/jsx';
+import { Box, Flex, Stack } from 'styled-system/jsx';
 
 import { Button, Card, Heading, Text } from '@/components/ui';
+import { hashFiles } from '@/lib/file-hash';
+import { cacheUpload, getCachedUpload } from '@/lib/upload-cache';
 import { ArtworkProperty, ArtworkSource } from '@/stores/create-dao-store';
-import { hashFiles, quickHashFiles } from '@/lib/file-hash';
-import { getCachedUpload, cacheUpload } from '@/lib/upload-cache';
 
 /**
  * Error categories for better error handling and user feedback
@@ -21,7 +21,7 @@ export enum ArtworkErrorType {
   DUPLICATE_ITEM = 'DUPLICATE_ITEM',
   HIDDEN_FILE = 'HIDDEN_FILE',
   UPLOAD_FAILED = 'UPLOAD_FAILED',
-  NETWORK_ERROR = 'NETWORK_ERROR',
+  NETWORK_ERROR = 'NETWORK_ERROR'
 }
 
 export class ArtworkValidationError extends Error {
@@ -58,7 +58,11 @@ export interface ArtworkDirectoryUploadProps {
  * Validates a directory structure for artwork.
  * Expected layout: <collection>/<trait>/<item>.ext
  */
-function validateDirectory(files: File[]): { valid: boolean; error?: ArtworkValidationError; data?: ValidatedDirectory } {
+function validateDirectory(files: File[]): {
+  valid: boolean;
+  error?: ArtworkValidationError;
+  data?: ValidatedDirectory;
+} {
   const properties = new Map<string, string[]>();
   const items: DirectoryItem[] = [];
   let extension: '.png' | '.webp' | null = null;
@@ -75,9 +79,7 @@ function validateDirectory(files: File[]): { valid: boolean; error?: ArtworkVali
 
     // Validate path depth
     if (parts.length < 3) {
-      allErrors.push(
-        `"${path}": File is in wrong location. Expected: collection-folder/trait-name/image-name.ext`
-      );
+      allErrors.push(`"${path}": File is in wrong location. Expected: collection-folder/trait-name/image-name.ext`);
       continue;
     }
 
@@ -87,17 +89,13 @@ function validateDirectory(files: File[]): { valid: boolean; error?: ArtworkVali
     const filename = parts[1];
 
     if (!filename || parts.length !== 2) {
-      allErrors.push(
-        `"${path}": File is in wrong location. Expected: collection-folder/trait-name/image-name.ext`
-      );
+      allErrors.push(`"${path}": File is in wrong location. Expected: collection-folder/trait-name/image-name.ext`);
       continue;
     }
 
     // Check for hidden files (e.g., .DS_Store)
     if (filename.startsWith('.')) {
-      allErrors.push(
-        `"${filename}": Hidden files are not allowed. Please remove system files like .DS_Store`
-      );
+      allErrors.push(`"${filename}": Hidden files are not allowed. Please remove system files like .DS_Store`);
       continue;
     }
 
@@ -110,9 +108,7 @@ function validateDirectory(files: File[]): { valid: boolean; error?: ArtworkVali
 
     const ext = filename.substring(lastDot).toLowerCase();
     if (ext !== '.png' && ext !== '.webp') {
-      allErrors.push(
-        `"${filename}": Unsupported format "${ext}". Only PNG and WebP are allowed.`
-      );
+      allErrors.push(`"${filename}": Unsupported format "${ext}". Only PNG and WebP are allowed.`);
       continue;
     }
 
@@ -120,17 +116,13 @@ function validateDirectory(files: File[]): { valid: boolean; error?: ArtworkVali
     if (extension === null) {
       extension = ext as '.png' | '.webp';
     } else if (extension !== ext) {
-      allErrors.push(
-        `"${filename}": Uses "${ext}" but collection uses "${extension}". All files must match.`
-      );
+      allErrors.push(`"${filename}": Uses "${ext}" but collection uses "${extension}". All files must match.`);
       continue;
     }
 
     // Check file size
     if (file.size > 2 * 1024 * 1024) {
-      allErrors.push(
-        `"${filename}": File is ${(file.size / 1024 / 1024).toFixed(2)}MB (max 2MB per file)`
-      );
+      allErrors.push(`"${filename}": File is ${(file.size / 1024 / 1024).toFixed(2)}MB (max 2MB per file)`);
       continue;
     }
 
@@ -141,9 +133,7 @@ function validateDirectory(files: File[]): { valid: boolean; error?: ArtworkVali
     const itemName = filename.substring(0, lastDot);
     const traitItems = properties.get(trait)!;
     if (traitItems.includes(itemName)) {
-      allErrors.push(
-        `"${itemName}" in "${trait}": Duplicate item. Each trait item must be unique.`
-      );
+      allErrors.push(`"${itemName}" in "${trait}": Duplicate item. Each trait item must be unique.`);
       continue;
     }
     traitItems.push(itemName);
@@ -154,7 +144,7 @@ function validateDirectory(files: File[]): { valid: boolean; error?: ArtworkVali
       path,
       name: filename,
       size: file.size,
-      file,
+      file
     });
   }
 
@@ -168,13 +158,15 @@ function validateDirectory(files: File[]): { valid: boolean; error?: ArtworkVali
 
     return {
       valid: false,
-      error: new ArtworkValidationError(ArtworkErrorType.DIRECTORY_STRUCTURE, errorMsg),
+      error: new ArtworkValidationError(ArtworkErrorType.DIRECTORY_STRUCTURE, errorMsg)
     };
   }
 
   if (allErrors.length > 0 && validFiles.length > 0) {
     // Some files had errors but some are valid - continue with valid ones but warn user
-    console.warn(`[validateDirectory] ${allErrors.length} files had validation errors, continuing with ${validFiles.length} valid files`);
+    console.warn(
+      `[validateDirectory] ${allErrors.length} files had validation errors, continuing with ${validFiles.length} valid files`
+    );
   }
 
   if (items.length === 0) {
@@ -183,7 +175,7 @@ function validateDirectory(files: File[]): { valid: boolean; error?: ArtworkVali
       error: new ArtworkValidationError(
         ArtworkErrorType.DIRECTORY_STRUCTURE,
         'No image files found. Make sure your directory contains PNG or WebP images in subdirectories.'
-      ),
+      )
     };
   }
 
@@ -193,7 +185,7 @@ function validateDirectory(files: File[]): { valid: boolean; error?: ArtworkVali
       error: new ArtworkValidationError(
         ArtworkErrorType.FILE_SIZE,
         `Collection is too large (${(totalSize / 1024 / 1024).toFixed(1)}MB total, max 200MB). Consider reducing image sizes or removing some traits.`
-      ),
+      )
     };
   }
 
@@ -203,7 +195,7 @@ function validateDirectory(files: File[]): { valid: boolean; error?: ArtworkVali
       error: new ArtworkValidationError(
         ArtworkErrorType.DIRECTORY_STRUCTURE,
         'No traits found. Ensure your directory structure is: collection-folder/trait-name/image-name.ext'
-      ),
+      )
     };
   }
 
@@ -213,7 +205,7 @@ function validateDirectory(files: File[]): { valid: boolean; error?: ArtworkVali
       error: new ArtworkValidationError(
         ArtworkErrorType.MAX_TRAITS,
         `Too many traits (${properties.size}, max 16). Remove ${properties.size - 16} trait folders to proceed.`
-      ),
+      )
     };
   }
 
@@ -224,8 +216,8 @@ function validateDirectory(files: File[]): { valid: boolean; error?: ArtworkVali
       properties,
       extension: extension!,
       totalSize,
-      itemCount: items.length,
-    },
+      itemCount: items.length
+    }
   };
 }
 
@@ -236,7 +228,6 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
   const [uploadError, setUploadError] = useState<string>('');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStage, setUploadStage] = useState<'preparing' | 'uploading' | 'verifying' | 'finalizing'>('preparing');
-  const [previewTokenIds, setPreviewTokenIds] = useState<number[]>([]);
 
   const directoryInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -246,44 +237,41 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
   const processRunIdRef = useRef<string>('');
 
   // Handle directory selection with race condition guard
-  const handleDirectorySelect = useCallback(
-    async (files: FileList | null) => {
-      if (!files || files.length === 0) return;
+  const handleDirectorySelect = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
 
-      // Generate unique run ID for this process
-      const runId = `process-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-      processRunIdRef.current = runId;
+    // Generate unique run ID for this process
+    const runId = `process-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    processRunIdRef.current = runId;
 
-      setValidationError('');
-      setValidatedDirectory(null);
-      setUploadProgress(0);
+    setValidationError('');
+    setValidatedDirectory(null);
+    setUploadProgress(0);
 
-      const fileArray = Array.from(files);
-      const validation = validateDirectory(fileArray);
+    const fileArray = Array.from(files);
+    const validation = validateDirectory(fileArray);
 
-      // Check if this operation was superseded
-      if (processRunIdRef.current !== runId) {
-        return;
-      }
+    // Check if this operation was superseded
+    if (processRunIdRef.current !== runId) {
+      return;
+    }
 
-      if (!validation.valid) {
-        const errorMessage = validation.error?.message || 'Validation failed';
-        setValidationError(errorMessage);
-        return;
-      }
+    if (!validation.valid) {
+      const errorMessage = validation.error?.message || 'Validation failed';
+      setValidationError(errorMessage);
+      return;
+    }
 
-      setValidatedDirectory(validation.data!);
+    setValidatedDirectory(validation.data!);
 
-      // Generate preview token IDs (random sample of items)
-      const allItems = validation.data!.items;
-      const previewIds = [];
-      for (let i = 0; i < Math.min(3, allItems.length); i++) {
-        previewIds.push(Math.floor(Math.random() * allItems.length));
-      }
-      setPreviewTokenIds(previewIds);
-    },
-    []
-  );
+    // Generate preview token IDs (random sample of items)
+    const allItems = validation.data!.items;
+    const previewIds = [];
+    for (let i = 0; i < Math.min(3, allItems.length); i++) {
+      previewIds.push(Math.floor(Math.random() * allItems.length));
+    }
+    setPreviewTokenIds(previewIds);
+  }, []);
 
   // Handle upload with race condition guard and progress tracking
   const handleUpload = useCallback(async () => {
@@ -321,7 +309,7 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
         const properties: ArtworkProperty[] = Array.from(validatedDirectory.properties.entries()).map(
           ([name, items]) => ({
             name,
-            items,
+            items
           })
         );
 
@@ -330,7 +318,7 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
           baseUri: `${cached.uri}/`,
           extension: validatedDirectory.extension,
           properties,
-          gatewayUrl: `https://${process.env.NEXT_PUBLIC_PINATA_GATEWAY}/ipfs/${cached.cid}/`,
+          gatewayUrl: `https://${process.env.NEXT_PUBLIC_PINATA_GATEWAY}/ipfs/${cached.cid}/`
         };
 
         onComplete(source);
@@ -346,15 +334,14 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
       const jwtResponse = await fetch('/api/pinata/generate-jwt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        signal: abortController.signal,
+        signal: abortController.signal
       });
 
       if (!jwtResponse.ok) {
-        const errorData = (await jwtResponse.json().catch(() => ({}))) as any;
+        // Attempt to parse error response (used for debugging)
+        void jwtResponse.json().catch(() => ({}));
         if (jwtResponse.status === 429) {
-          throw new Error(
-            'Too many upload attempts. Please wait a moment and try again.'
-          );
+          throw new Error('Too many upload attempts. Please wait a moment and try again.');
         }
         throw new Error('Failed to connect to upload service. Please check your internet connection.');
       }
@@ -378,14 +365,14 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
       formData.append(
         'pinataOptions',
         JSON.stringify({
-          cidVersion: 1,
+          cidVersion: 1
         })
       );
 
       formData.append(
         'pinataMetadata',
         JSON.stringify({
-          name: 'builder',
+          name: 'builder'
         })
       );
 
@@ -397,10 +384,10 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
       const uploadResponse = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${jwt}`,
+          Authorization: `Bearer ${jwt}`
         },
         body: formData,
-        signal: abortController.signal,
+        signal: abortController.signal
       });
 
       if (!uploadResponse.ok) {
@@ -438,18 +425,18 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
       fetch('/api/pinata/pin-cid', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cid }),
+        body: JSON.stringify({ cid })
       }).catch((err) => console.warn('[handleUpload] Failed to pin CID:', err));
 
       setUploadProgress(100);
 
       // Convert properties to ArtworkProperty[]
-      const properties: ArtworkProperty[] = Array.from(
-        validatedDirectory.properties.entries()
-      ).map(([name, items]) => ({
-        name,
-        items,
-      }));
+      const properties: ArtworkProperty[] = Array.from(validatedDirectory.properties.entries()).map(
+        ([name, items]) => ({
+          name,
+          items
+        })
+      );
 
       // Create source with real CID
       const source: ArtworkSource = {
@@ -457,7 +444,7 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
         baseUri: `ipfs://${cid}/`,
         extension: validatedDirectory.extension,
         properties,
-        gatewayUrl: `https://${process.env.NEXT_PUBLIC_PINATA_GATEWAY}/ipfs/${cid}/`,
+        gatewayUrl: `https://${process.env.NEXT_PUBLIC_PINATA_GATEWAY}/ipfs/${cid}/`
       };
 
       // Final check before completing
@@ -470,10 +457,7 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
         if (error instanceof DOMException && error.name === 'AbortError') {
           setUploadError('Upload was cancelled.');
         } else {
-          const errorMessage =
-            error instanceof Error
-              ? error.message
-              : 'Directory upload failed. Please try again.';
+          const errorMessage = error instanceof Error ? error.message : 'Directory upload failed. Please try again.';
           setUploadError(errorMessage);
           console.error('Upload error:', error);
         }
@@ -515,7 +499,7 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
                   padding: '2rem',
                   textAlign: 'center',
                   cursor: 'pointer',
-                  transition: 'all 0.2s',
+                  transition: 'all 0.2s'
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.borderColor = 'var(--info-9)';
@@ -530,9 +514,7 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
                   <Upload size={40} style={{ color: 'var(--gray-10)' }} />
                 </Flex>
                 <Text style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Click to select a directory</Text>
-                <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)' }}>
-                  or drag and drop a folder here
-                </Text>
+                <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)' }}>or drag and drop a folder here</Text>
               </Box>
 
               <input
@@ -557,7 +539,7 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
                     color: 'var(--gray-12)',
                     lineHeight: '1.6',
                     overflowX: 'auto',
-                    whiteSpace: 'pre',
+                    whiteSpace: 'pre'
                   }}
                 >
                   <Text style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
@@ -576,13 +558,16 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
                 </Box>
                 <Stack gap="1" style={{ fontSize: '0.75rem', color: 'var(--gray-11)' }}>
                   <Text>
-                    <span style={{ fontWeight: 500, color: 'var(--gray-12)' }}>Level 1:</span> Folder name (any name, used only for organization)
+                    <span style={{ fontWeight: 500, color: 'var(--gray-12)' }}>Level 1:</span> Folder name (any name,
+                    used only for organization)
                   </Text>
                   <Text>
-                    <span style={{ fontWeight: 500, color: 'var(--gray-12)' }}>Level 2:</span> Trait names (e.g., Background, Eyes, Mouth) - these become your properties
+                    <span style={{ fontWeight: 500, color: 'var(--gray-12)' }}>Level 2:</span> Trait names (e.g.,
+                    Background, Eyes, Mouth) - these become your properties
                   </Text>
                   <Text>
-                    <span style={{ fontWeight: 500, color: 'var(--gray-12)' }}>Level 3:</span> Item names (e.g., blue.png, happy.png) - each image in a trait
+                    <span style={{ fontWeight: 500, color: 'var(--gray-12)' }}>Level 3:</span> Item names (e.g.,
+                    blue.png, happy.png) - each image in a trait
                   </Text>
                 </Stack>
               </Stack>
@@ -608,7 +593,7 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
                     padding: '0.75rem',
                     backgroundColor: 'var(--error-2)',
                     borderRadius: '0.375rem',
-                    border: '1px solid var(--error-6)',
+                    border: '1px solid var(--error-6)'
                   }}
                 >
                   <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>
@@ -677,7 +662,7 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
                     padding: '1rem',
                     backgroundColor: 'var(--error-2)',
                     borderRadius: '0.375rem',
-                    border: '1px solid var(--error-6)',
+                    border: '1px solid var(--error-6)'
                   }}
                 >
                   <AlertCircle size={20} style={{ color: 'var(--error-9)', flexShrink: 0, marginTop: '0.125rem' }} />
@@ -709,7 +694,7 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
                       height: '8px',
                       backgroundColor: 'var(--gray-4)',
                       borderRadius: '4px',
-                      overflow: 'hidden',
+                      overflow: 'hidden'
                     }}
                     role="progressbar"
                     aria-valuenow={uploadProgress}
@@ -722,7 +707,7 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
                         width: `${uploadProgress}%`,
                         height: '100%',
                         backgroundColor: 'var(--info-9)',
-                        transition: 'width 0.3s ease-out',
+                        transition: 'width 0.3s ease-out'
                       }}
                     />
                   </Box>
@@ -733,11 +718,7 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
               <Flex gap="2">
                 {!isUploading ? (
                   <>
-                    <Button
-                      onClick={handleUpload}
-                      disabled={isUploading}
-                      style={{ flex: 1 }}
-                    >
+                    <Button onClick={handleUpload} disabled={isUploading} style={{ flex: 1 }}>
                       Upload Collection
                     </Button>
                     <Button

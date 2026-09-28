@@ -1,21 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 
-import { AuthError, requireAuthenticatedSession, authErrorResponse } from '@/lib/auth/server';
+import { getAuthorization } from '@/app/api/uploads/pinata-url/route';
+import { AuthError, authErrorResponse, requireAuthenticatedSession } from '@/lib/auth/server';
+import { BackendFailedError, getPinataService, NotFoundError, PinataError } from '@/lib/pinata-service';
 import {
   cidToUrls,
   getPreferredGatewayHost,
-  validateUploadCompletion,
   UploadCompletionSchema,
+  validateUploadCompletion
 } from '@/lib/pinata-upload';
-import {
-  getPinataService,
-  PinataError,
-  NotFoundError,
-  BackendFailedError,
-} from '@/lib/pinata-service';
-import { getAuthorization } from '@/app/api/uploads/pinata-url/route';
-
 
 /**
  * POST /api/uploads/complete
@@ -53,14 +46,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     // Check if feature is enabled
     if (process.env.NEXT_PUBLIC_PINATA_UPLOADS_ENABLED !== 'true') {
-      return NextResponse.json(
-        { error: 'File uploads are not enabled', code: 'FEATURE_DISABLED' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'File uploads are not enabled', code: 'FEATURE_DISABLED' }, { status: 404 });
     }
 
     // Check authentication
-    const session = await requireAuthenticatedSession();
+    await requireAuthenticatedSession();
 
     // Parse and validate request body
     const body = await request.json().catch(() => ({}));
@@ -73,8 +63,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           code: 'VALIDATION_ERROR',
           details: validationResult.error.issues.map((issue) => ({
             path: issue.path.join('.'),
-            message: issue.message,
-          })),
+            message: issue.message
+          }))
         },
         { status: 422 }
       );
@@ -90,7 +80,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json(
         {
           error: 'Upload authorization not found. Your upload session may have expired. Please try again.',
-          code: 'AUTHORIZATION_NOT_FOUND',
+          code: 'AUTHORIZATION_NOT_FOUND'
         },
         { status: 404 }
       );
@@ -102,7 +92,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json(
         {
           error: 'Upload authorization has expired. Your session lasted too long. Please try uploading again.',
-          code: 'AUTHORIZATION_EXPIRED',
+          code: 'AUTHORIZATION_EXPIRED'
         },
         { status: 410 }
       );
@@ -112,10 +102,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const completionValidation = validateUploadCompletion(completion, authorization);
 
     if (!completionValidation.valid) {
-      return NextResponse.json(
-        { error: completionValidation.error, code: 'VALIDATION_FAILED' },
-        { status: 422 }
-      );
+      return NextResponse.json({ error: completionValidation.error, code: 'VALIDATION_FAILED' }, { status: 422 });
     }
 
     // Verify CID with Pinata API
@@ -136,7 +123,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         return NextResponse.json(
           {
             error: 'Uploaded file size does not match reported size',
-            code: 'SIZE_MISMATCH',
+            code: 'SIZE_MISMATCH'
           },
           { status: 422 }
         );
@@ -162,7 +149,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         gatewayUrl,
         mimeType: completion.mimeType,
         sizeBytes: completion.sizeBytes,
-        filename: completion.filename,
+        filename: completion.filename
       },
       { status: 200 }
     );
@@ -172,10 +159,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     if (error instanceof SyntaxError) {
-      return NextResponse.json(
-        { error: 'Invalid JSON in request body', code: 'JSON_PARSE_ERROR' },
-        { status: 422 }
-      );
+      return NextResponse.json({ error: 'Invalid JSON in request body', code: 'JSON_PARSE_ERROR' }, { status: 422 });
     }
 
     // Handle Pinata verification errors
@@ -183,8 +167,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       console.warn(`[/api/uploads/complete] CID not found on IPFS: ${(error as any).cid}`);
       return NextResponse.json(
         {
-          error: 'Uploaded content not found on IPFS. The upload may not have completed successfully. Please try uploading again.',
-          code: 'CID_NOT_FOUND',
+          error:
+            'Uploaded content not found on IPFS. The upload may not have completed successfully. Please try uploading again.',
+          code: 'CID_NOT_FOUND'
         },
         { status: 404 }
       );
@@ -193,12 +178,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (error instanceof BackendFailedError) {
       console.error('[/api/uploads/complete] Backend error during verification:', {
         message: error.message,
-        cid: (error as any).cid,
+        cid: (error as any).cid
       });
       return NextResponse.json(
         {
           error: error.message || 'IPFS service error during verification',
-          code: error.code || 'SERVICE_ERROR',
+          code: error.code || 'SERVICE_ERROR'
         },
         { status: error.status || 500 }
       );
@@ -209,13 +194,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         code: error.code,
         message: error.message,
         status: error.status,
-        cid: (error as any).cid,
+        cid: (error as any).cid
       });
       return NextResponse.json(
         {
           error: error.message || 'Failed to verify upload with IPFS',
           code: error.code || 'SERVICE_ERROR',
-          status: error.status,
+          status: error.status
         },
         { status: error.status || 500 }
       );
@@ -224,14 +209,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     console.error('[/api/uploads/complete] Unexpected error:', {
       message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
-      cid: (error as any)?.cid,
+      cid: (error as any)?.cid
     });
 
     return NextResponse.json(
       {
         error: 'Failed to complete upload. Please try again later.',
         code: 'INTERNAL_SERVER_ERROR',
-        retryable: true,
+        retryable: true
       },
       { status: 500 }
     );

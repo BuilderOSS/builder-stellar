@@ -2,7 +2,7 @@
 
 'use client';
 
-import { Stack, Box } from 'styled-system/jsx';
+import { Stack } from 'styled-system/jsx';
 
 import { Badge, Callout, Card, Heading, Text } from '@/components/ui';
 import { getTreasuryAssets } from '@/lib/assets-config';
@@ -85,9 +85,7 @@ export function ReviewStep({ connectedAddress }: { connectedAddress: string }) {
                     <DetailRow label="Gateway URL" value={daoImageSource.gatewayUrl} mono />
                   </>
                 )}
-                {daoImageSource.kind === 'default' && (
-                  <DetailRow label="URL" value={daoImageSource.gatewayUrl} mono />
-                )}
+                {daoImageSource.kind === 'default' && <DetailRow label="URL" value={daoImageSource.gatewayUrl} mono />}
               </Stack>
             ) : (
               <Text style={{ fontSize: '0.875rem', color: 'var(--error-9)' }}>

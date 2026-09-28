@@ -1,20 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
-import { AuthError, requireAuthenticatedSession, authErrorResponse } from '@/lib/auth/server';
-import {
-  createUploadAuthorization,
-  isValidUploadType,
-  validateMimeType,
-  validateFileSize,
-} from '@/lib/pinata-upload';
-import {
-  getPinataService,
-  PinataError,
-  AuthenticationError,
-  RateLimitError,
-  InvalidRequestError,
-} from '@/lib/pinata-service';
+import { AuthError, authErrorResponse, requireAuthenticatedSession } from '@/lib/auth/server';
+import { AuthenticationError, getPinataService, PinataError, RateLimitError } from '@/lib/pinata-service';
+import { createUploadAuthorization, isValidUploadType, validateFileSize, validateMimeType } from '@/lib/pinata-upload';
 
 /**
  * Request validation schema for signed URL generation
@@ -23,10 +12,10 @@ const PinataUrlRequestSchema = z.object({
   uploadType: z.enum(['dao-image', 'artwork-directory']),
   mimeType: z.string(),
   sizeBytes: z.number().int().positive(),
-  filename: z.string().min(1),
+  filename: z.string().min(1)
 });
 
-type PinataUrlRequest = z.infer<typeof PinataUrlRequestSchema>;
+type _PinataUrlRequest = z.infer<typeof PinataUrlRequestSchema>;
 
 /**
  * Simple CSRF token validation (same as in /api/artwork/generate)
@@ -64,7 +53,7 @@ function storeAuthorization(uploadId: string, authorization: any): void {
   // Store new authorization
   authorizationStore.set(uploadId, {
     authorization,
-    expiresAt: authorization.expiresAt.getTime(),
+    expiresAt: authorization.expiresAt.getTime()
   });
 }
 
@@ -118,22 +107,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     // Check if feature is enabled
     if (process.env.NEXT_PUBLIC_PINATA_UPLOADS_ENABLED !== 'true') {
-      return NextResponse.json(
-        { error: 'File uploads are not enabled', code: 'FEATURE_DISABLED' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'File uploads are not enabled', code: 'FEATURE_DISABLED' }, { status: 404 });
     }
 
     // Validate CSRF token
     if (!validateCsrfToken(request)) {
-      return NextResponse.json(
-        { error: 'CSRF validation failed', code: 'CSRF_INVALID' },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: 'CSRF validation failed', code: 'CSRF_INVALID' }, { status: 403 });
     }
 
     // Check authentication
-    const session = await requireAuthenticatedSession();
+    await requireAuthenticatedSession();
 
     // Parse and validate request body
     const body = await request.json().catch(() => ({}));
@@ -146,8 +129,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           code: 'VALIDATION_ERROR',
           details: validationResult.error.issues.map((issue) => ({
             path: issue.path.join('.'),
-            message: issue.message,
-          })),
+            message: issue.message
+          }))
         },
         { status: 422 }
       );
@@ -157,28 +140,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     // Validate upload type
     if (!isValidUploadType(data.uploadType)) {
-      return NextResponse.json(
-        { error: 'Invalid upload type', code: 'INVALID_UPLOAD_TYPE' },
-        { status: 422 }
-      );
+      return NextResponse.json({ error: 'Invalid upload type', code: 'INVALID_UPLOAD_TYPE' }, { status: 422 });
     }
 
     // Validate MIME type
     const mimeValidation = validateMimeType(data.mimeType, data.uploadType);
     if (!mimeValidation.valid) {
-      return NextResponse.json(
-        { error: mimeValidation.error, code: 'INVALID_MIME_TYPE' },
-        { status: 422 }
-      );
+      return NextResponse.json({ error: mimeValidation.error, code: 'INVALID_MIME_TYPE' }, { status: 422 });
     }
 
     // Validate file size
     const sizeValidation = validateFileSize(data.sizeBytes, data.uploadType);
     if (!sizeValidation.valid) {
-      return NextResponse.json(
-        { error: sizeValidation.error, code: 'FILE_TOO_LARGE' },
-        { status: 422 }
-      );
+      return NextResponse.json({ error: sizeValidation.error, code: 'FILE_TOO_LARGE' }, { status: 422 });
     }
 
     // Generate signed URL from Pinata API
@@ -198,7 +172,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         expiresAt: authorization.expiresAt.toISOString(),
         uploadType: authorization.uploadType,
         expectedMime: authorization.expectedMime,
-        maxBytes: authorization.maxBytes,
+        maxBytes: authorization.maxBytes
       },
       { status: 200 }
     );
@@ -208,10 +182,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     if (error instanceof SyntaxError) {
-      return NextResponse.json(
-        { error: 'Invalid JSON in request body', code: 'JSON_PARSE_ERROR' },
-        { status: 422 }
-      );
+      return NextResponse.json({ error: 'Invalid JSON in request body', code: 'JSON_PARSE_ERROR' }, { status: 422 });
     }
 
     // Handle Pinata service errors
@@ -221,26 +192,26 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         {
           error: 'Too many upload requests. Please wait before trying again.',
           code: 'RATE_LIMITED',
-          retryAfter: error.retryAfter,
+          retryAfter: error.retryAfter
         },
         {
           status: 429,
           headers: {
-            'Retry-After': error.retryAfter.toString(),
-          },
+            'Retry-After': error.retryAfter.toString()
+          }
         }
       );
     }
 
     if (error instanceof AuthenticationError) {
       console.error('[/api/uploads/pinata-url] IPFS service authentication failed:', {
-        message: error.message,
+        message: error.message
       });
       return NextResponse.json(
         {
           error: 'IPFS service authentication failed. The server may not be configured correctly.',
           code: 'SERVICE_AUTH_FAILED',
-          details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+          details: process.env.NODE_ENV === 'development' ? error.message : undefined
         },
         { status: 500 }
       );
@@ -251,13 +222,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         code: error.code,
         message: error.message,
         status: error.status,
-        uploadType: body?.uploadType,
+        uploadType: body?.uploadType
       });
       return NextResponse.json(
         {
           error: error.message || 'Failed to generate upload URL',
           code: error.code || 'SERVICE_ERROR',
-          status: error.status,
+          status: error.status
         },
         { status: error.status || 500 }
       );
@@ -266,14 +237,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     console.error('[/api/uploads/pinata-url] Unexpected error:', {
       message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
-      uploadType: body?.uploadType,
+      uploadType: body?.uploadType
     });
 
     return NextResponse.json(
       {
         error: 'Failed to generate upload URL. Please try again later.',
         code: 'INTERNAL_SERVER_ERROR',
-        retryable: true,
+        retryable: true
       },
       { status: 500 }
     );

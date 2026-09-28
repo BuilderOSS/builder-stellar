@@ -1,10 +1,14 @@
-import { UploadType, cidToUrls, getPreferredGatewayHost } from './pinata-upload';
+import { cidToUrls, getPreferredGatewayHost, UploadType } from './pinata-upload';
 
 /**
  * Custom error classes for Pinata operations
  */
 export class PinataError extends Error {
-  constructor(message: string, public code?: string, public status?: number) {
+  constructor(
+    message: string,
+    public code?: string,
+    public status?: number
+  ) {
     super(message);
     this.name = 'PinataError';
   }
@@ -70,12 +74,12 @@ export class PinataService {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.jwt}`,
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           uploadType: uploadType,
-          expiresIn: 1800, // 30 minutes
-        }),
+          expiresIn: 1800 // 30 minutes
+        })
       });
 
       if (!response.ok) {
@@ -91,9 +95,7 @@ export class PinataService {
       return data.data.signedUrl;
     } catch (error) {
       if (error instanceof PinataError) throw error;
-      throw new BackendFailedError(
-        error instanceof Error ? error.message : 'Failed to create signed upload URL'
-      );
+      throw new BackendFailedError(error instanceof Error ? error.message : 'Failed to create signed upload URL');
     }
   }
 
@@ -105,8 +107,8 @@ export class PinataService {
       const response = await fetch(`${this.apiUrl}/v3/files/${cid}`, {
         method: 'GET',
         headers: {
-          Authorization: `Bearer ${this.jwt}`,
-        },
+          Authorization: `Bearer ${this.jwt}`
+        }
       });
 
       if (!response.ok) {
@@ -120,13 +122,11 @@ export class PinataService {
       const data = await response.json();
       return {
         size: data.data?.size || 0,
-        name: data.data?.name,
+        name: data.data?.name
       };
     } catch (error) {
       if (error instanceof PinataError) throw error;
-      throw new BackendFailedError(
-        error instanceof Error ? error.message : 'Failed to verify CID'
-      );
+      throw new BackendFailedError(error instanceof Error ? error.message : 'Failed to verify CID');
     }
   }
 
@@ -140,12 +140,12 @@ export class PinataService {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.jwt}`,
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           cidVersion: 1,
-          name: name || cid,
-        }),
+          name: name || cid
+        })
       });
 
       if (!response.ok) {
@@ -157,9 +157,7 @@ export class PinataService {
       await response.json();
     } catch (error) {
       if (error instanceof PinataError) throw error;
-      throw new BackendFailedError(
-        error instanceof Error ? error.message : 'Failed to pin CID to IPFS'
-      );
+      throw new BackendFailedError(error instanceof Error ? error.message : 'Failed to pin CID to IPFS');
     }
   }
 
@@ -173,7 +171,7 @@ export class PinataService {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.jwt}`,
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           keyName: 'Single Use Upload JWT',
@@ -188,11 +186,11 @@ export class PinataService {
                 pinJSONToIPFS: false,
                 pinJobs: false,
                 unpin: false,
-                userPinnedDataTotal: false,
-              },
-            },
-          },
-        }),
+                userPinnedDataTotal: false
+              }
+            }
+          }
+        })
       });
 
       if (!response.ok) {
@@ -208,9 +206,7 @@ export class PinataService {
       return data.JWT;
     } catch (error) {
       if (error instanceof PinataError) throw error;
-      throw new BackendFailedError(
-        error instanceof Error ? error.message : 'Failed to generate upload JWT'
-      );
+      throw new BackendFailedError(error instanceof Error ? error.message : 'Failed to generate upload JWT');
     }
   }
 
@@ -233,10 +229,7 @@ export class PinataService {
     }
 
     if (status === 429) {
-      const retryAfter = parseInt(
-        (errorData?.retryAfter || errorData?.['retry-after'] || '60') as string,
-        10
-      ) || 60;
+      const retryAfter = parseInt((errorData?.retryAfter || errorData?.['retry-after'] || '60') as string, 10) || 60;
       throw new RateLimitError(retryAfter);
     }
 

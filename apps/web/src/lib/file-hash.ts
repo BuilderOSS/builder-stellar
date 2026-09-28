@@ -14,7 +14,7 @@ export async function hashFiles(files: File[]): Promise<string> {
     name: file.name,
     size: file.size,
     lastModified: file.lastModified,
-    type: file.type,
+    type: file.type
   }));
 
   const metadataString = JSON.stringify(fileMetadata);
