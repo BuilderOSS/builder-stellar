@@ -33,7 +33,14 @@ export type DaoImageSource =
  * Can be a starter collection or uploaded directory
  */
 export type ArtworkSource =
-  | { kind: 'starter'; starterId: string }
+  | {
+      kind: 'starter';
+      starterId: string;
+      baseUri: string;
+      extension: '.png' | '.webp';
+      properties: ArtworkProperty[];
+      gatewayUrl: string;
+    }
   | {
       kind: 'uploaded';
       baseUri: string;
@@ -257,21 +264,18 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
       setDaoImageSource: (source) => set({ daoImageSource: source }),
       clearDaoImageSource: () => set({ daoImageSource: undefined }),
       setArtworkSource: (source) => {
-        set((state) => {
+        set(() => {
           // When setting artwork source, update both artworkSource and artwork properties
           if (source.kind === 'starter' || source.kind === 'uploaded') {
             return {
               artworkSource: source,
-              artwork:
-                source.kind === 'uploaded'
-                  ? {
-                      ipfs: {
-                        baseUri: source.baseUri,
-                        extension: source.extension
-                      },
-                      properties: source.properties
-                    }
-                  : state.artwork // Keep existing artwork for starter collections
+              artwork: {
+                ipfs: {
+                  baseUri: source.baseUri,
+                  extension: source.extension
+                },
+                properties: source.properties
+              }
             };
           }
           return { artworkSource: source };

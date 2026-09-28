@@ -8,7 +8,7 @@ import { Button, Text } from '@/components/ui';
 import { ArtworkProperty, ArtworkSource } from '@/stores/create-dao-store';
 
 export interface ArtworkPreviewCanvasProps {
-  source: Extract<ArtworkSource, { kind: 'uploaded' }>;
+  source: Extract<ArtworkSource, { kind: 'uploaded' | 'starter' }>;
   orderedLayers: ArtworkProperty[];
 }
 

@@ -10,11 +10,11 @@ import { ArtworkProperty, ArtworkSource } from '@/stores/create-dao-store';
 import { ArtworkPreviewCanvas } from './ArtworkPreviewCanvas';
 import { LayerOrdering } from './LayerOrdering';
 
-export type UploadedArtworkSource = Extract<ArtworkSource, { kind: 'uploaded' }>;
+export type PlaygroundArtworkSource = Extract<ArtworkSource, { kind: 'uploaded' | 'starter' }>;
 
 export interface ArtworkPlaygroundProps {
-  source: UploadedArtworkSource;
-  onComplete: (source: UploadedArtworkSource) => void;
+  source: PlaygroundArtworkSource;
+  onComplete: (source: PlaygroundArtworkSource) => void;
   onBack: () => void;
 }
 
@@ -38,7 +38,7 @@ export function ArtworkPlayground({ source, onComplete, onBack }: ArtworkPlaygro
 
   const handleComplete = useCallback(() => {
     // Update source with new layer order
-    const updatedSource: UploadedArtworkSource = {
+    const updatedSource: PlaygroundArtworkSource = {
       ...source,
       properties: orderedLayers
     };

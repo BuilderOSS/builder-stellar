@@ -7,7 +7,8 @@ import { Box, Flex, Stack } from 'styled-system/jsx';
 import { ArtworkDirectoryUpload } from '@/components/create-dao/ArtworkDirectoryUpload';
 import { ArtworkPlayground } from '@/components/create-dao/ArtworkPlayground';
 import { Badge, Button, Card, Heading, Text } from '@/components/ui';
-import { getAvailableCollections, getRandomPreviewTokenId } from '@/lib/starter-collections';
+import { cidToUrls } from '@/lib/pinata-upload';
+import { getAvailableCollections, getRandomPreviewTokenId, getStarterCollection } from '@/lib/starter-collections';
 import { ArtworkSource, useCreateDaoStore } from '@/stores/create-dao-store';
 
 export function ArtworkSourceStep() {
@@ -23,14 +24,22 @@ export function ArtworkSourceStep() {
 
   // Handle starter collection selection
   const handleSelectStarter = (collectionId: string) => {
-    const collection = starterCollections.find((c) => c.id === collectionId);
+    const collection = getStarterCollection(collectionId);
     if (collection) {
       const source: ArtworkSource = {
         kind: 'starter',
-        starterId: collection.id
+        starterId: collection.id,
+        baseUri: collection.baseUri,
+        extension: collection.extension,
+        properties: collection.properties,
+        gatewayUrl: collection.baseUri.startsWith('ipfs://')
+          ? cidToUrls(collection.baseUri.replace('ipfs://', '').replace(/\/$/, '')).gatewayUrl
+          : collection.baseUri
       };
       setArtworkSource(source);
       setSourceChoice('starter');
+      // Show playground for layer ordering
+      setPlaygroundMode(true);
     }
   };
 
@@ -241,8 +250,8 @@ export function ArtworkSourceStep() {
       {/* Upload Mode */}
       {uploadMode && <ArtworkDirectoryUpload onComplete={handleUploadComplete} onCancel={() => setUploadMode(false)} />}
 
-      {/* Playground Mode - Layer ordering and preview */}
-      {playgroundMode && artworkSource && artworkSource.kind === 'uploaded' && (
+      {/* Playground Mode - Layer ordering and preview for both starter and uploaded collections */}
+      {playgroundMode && artworkSource && (artworkSource.kind === 'starter' || artworkSource.kind === 'uploaded') && (
         <ArtworkPlayground source={artworkSource} onComplete={handlePlaygroundComplete} onBack={handlePlaygroundBack} />
       )}
     </Stack>
