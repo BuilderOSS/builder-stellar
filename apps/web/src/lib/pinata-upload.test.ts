@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { cidToUrls, getPreferredGatewayHost, normalizeIpfsCid } from './pinata-upload';
+import {
+  cidToUrls,
+  createUploadAuthorization,
+  getPreferredGatewayHost,
+  normalizeIpfsCid,
+  validateUploadCompletion
+} from './pinata-upload';
 
 const originalGateway = process.env.NEXT_PUBLIC_PINATA_GATEWAY;
 
@@ -37,5 +43,44 @@ describe('IPFS upload URLs', () => {
       ipfsUri: 'ipfs://bafytest',
       gatewayUrl: 'https://nouns-builder.mypinata.cloud/ipfs/bafytest'
     });
+  });
+});
+
+describe('upload completion validation', () => {
+  it('accepts JPEG files for DAO image uploads', () => {
+    const authorization = createUploadAuthorization('dao-image', 'https://uploads.example/sign');
+
+    expect(
+      validateUploadCompletion(
+        {
+          uploadId: authorization.uploadId,
+          cid: 'bafytest',
+          filename: 'dao.jpg',
+          mimeType: 'image/jpeg',
+          sizeBytes: 1024,
+          uploadType: 'dao-image'
+        },
+        authorization
+      )
+    ).toEqual({ valid: true });
+  });
+
+  it('rejects MIME types outside the DAO image policy', () => {
+    const authorization = createUploadAuthorization('dao-image', 'https://uploads.example/sign');
+
+    const result = validateUploadCompletion(
+      {
+        uploadId: authorization.uploadId,
+        cid: 'bafytest',
+        filename: 'dao.gif',
+        mimeType: 'image/gif',
+        sizeBytes: 1024,
+        uploadType: 'dao-image'
+      },
+      authorization
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain('image/jpeg');
   });
 });

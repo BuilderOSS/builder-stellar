@@ -114,15 +114,18 @@ export class PinataService {
   }
 
   /**
-   * Verifies a CID exists on Pinata and retrieves its metadata
+   * Verifies a CID exists on Pinata by pinning it through the public files API.
+   * Pinata's v3 file lookup uses a file ID, not a CID.
    */
   async verifyCid(cid: string): Promise<{ size: number; name?: string }> {
     try {
-      const response = await fetch(`${this.apiUrl}/v3/files/${cid}`, {
-        method: 'GET',
+      const response = await fetch(`${this.apiUrl}/v3/files/public/pin_by_cid`, {
+        method: 'POST',
         headers: {
-          Authorization: `Bearer ${this.jwt}`
-        }
+          Authorization: `Bearer ${this.jwt}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ cid })
       });
 
       if (!response.ok) {
@@ -133,11 +136,8 @@ export class PinataService {
         this.handleApiError(response.status, error);
       }
 
-      const data = await response.json();
-      return {
-        size: data.data?.size || 0,
-        name: data.data?.name
-      };
+      await response.json().catch(() => undefined);
+      return { size: 0 };
     } catch (error) {
       if (error instanceof PinataError) throw error;
       throw new BackendFailedError(error instanceof Error ? error.message : 'Failed to verify CID');
@@ -150,16 +150,13 @@ export class PinataService {
    */
   async pinCidToIPFS(cid: string, name?: string): Promise<void> {
     try {
-      const response = await fetch(`${this.apiUrl}/v3/pin_files/${cid}`, {
+      const response = await fetch(`${this.apiUrl}/v3/files/public/pin_by_cid`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.jwt}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          cidVersion: 1,
-          name: name || cid
-        })
+        body: JSON.stringify({ cid, ...(name ? { name } : {}) })
       });
 
       if (!response.ok) {

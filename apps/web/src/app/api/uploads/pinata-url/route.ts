@@ -52,7 +52,7 @@ function validateCsrfToken(request: NextRequest): boolean {
  *   signedUrl: string (use this to upload directly to Pinata)
  *   expiresAt: ISO8601 timestamp
  *   uploadType: string
- *   expectedMime: string
+ *   expectedMimes: string[]
  *   maxBytes: number
  * }
  *
@@ -133,7 +133,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         signedUrl: authorization.signedUrl,
         expiresAt: authorization.expiresAt.toISOString(),
         uploadType: authorization.uploadType,
-        expectedMime: authorization.expectedMime,
+        expectedMimes: authorization.expectedMimes,
         maxBytes: authorization.maxBytes
       },
       { status: 200 }

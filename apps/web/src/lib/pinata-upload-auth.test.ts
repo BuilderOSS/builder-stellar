@@ -24,7 +24,7 @@ describe('upload authorization tokens', () => {
     expect(reloaded).toMatchObject({
       uploadId,
       uploadType: 'dao-image',
-      expectedMime: 'image/png',
+      expectedMimes: ['image/png', 'image/jpeg', 'image/webp'],
       maxBytes: 5 * 1024 * 1024
     });
   });

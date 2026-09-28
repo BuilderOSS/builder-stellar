@@ -59,7 +59,7 @@ export interface UploadAuthorization {
   signedUrl: string;
   expiresAt: Date;
   uploadType: UploadType;
-  expectedMime: string;
+  expectedMimes: string[];
   maxBytes: number;
 }
 
@@ -281,11 +281,11 @@ export function validateUploadCompletion(
     };
   }
 
-  // Verify MIME type matches authorization
-  if (data.mimeType !== authorization.expectedMime) {
+  // Verify MIME type matches one of the authorized formats
+  if (!authorization.expectedMimes.includes(data.mimeType)) {
     return {
       valid: false,
-      error: `MIME type mismatch. Expected ${authorization.expectedMime}, got ${data.mimeType}`
+      error: `MIME type mismatch. Expected one of ${authorization.expectedMimes.join(', ')}, got ${data.mimeType}`
     };
   }
 
@@ -317,7 +317,7 @@ export function createUploadAuthorization(
   expirationSeconds: number = 3600
 ): UploadAuthorization {
   const policy = UPLOAD_POLICIES[uploadType];
-  const expectedMime = 'allowedMimes' in policy ? policy.allowedMimes[0] : 'image/png';
+  const expectedMimes = 'allowedMimes' in policy ? Array.from(policy.allowedMimes) : ['image/png'];
   const maxBytes = 'maxBytes' in policy ? policy.maxBytes : policy.maxBytesPerFile;
 
   return {
@@ -325,7 +325,7 @@ export function createUploadAuthorization(
     signedUrl,
     expiresAt: new Date(Date.now() + expirationSeconds * 1000),
     uploadType,
-    expectedMime,
+    expectedMimes,
     maxBytes
   };
 }

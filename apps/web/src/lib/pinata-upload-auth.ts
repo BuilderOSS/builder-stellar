@@ -22,7 +22,7 @@ function encodeAuthorization(authorization: UploadAuthorization): string {
   const payload = Buffer.from(
     JSON.stringify({
       uploadType: authorization.uploadType,
-      expectedMime: authorization.expectedMime,
+      expectedMimes: authorization.expectedMimes,
       maxBytes: authorization.maxBytes,
       expiresAt: authorization.expiresAt.toISOString()
     })
@@ -81,7 +81,7 @@ export function getAuthorization(uploadId: string): UploadAuthorization | null {
 
   let parsed: {
     uploadType: UploadAuthorization['uploadType'];
-    expectedMime: string;
+    expectedMimes: string[];
     maxBytes: number;
     expiresAt: string;
   };
@@ -96,7 +96,8 @@ export function getAuthorization(uploadId: string): UploadAuthorization | null {
   if (
     !Number.isFinite(expiresAt.getTime()) ||
     !['dao-image', 'artwork-directory'].includes(parsed.uploadType) ||
-    !parsed.expectedMime ||
+    !Array.isArray(parsed.expectedMimes) ||
+    parsed.expectedMimes.length === 0 ||
     !Number.isFinite(parsed.maxBytes)
   ) {
     return null;
@@ -111,7 +112,7 @@ export function getAuthorization(uploadId: string): UploadAuthorization | null {
     signedUrl: '',
     expiresAt,
     uploadType: parsed.uploadType,
-    expectedMime: parsed.expectedMime,
+    expectedMimes: parsed.expectedMimes,
     maxBytes: parsed.maxBytes
   };
 }
