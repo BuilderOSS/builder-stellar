@@ -1,11 +1,11 @@
 'use client';
 
 import { AlertCircle, RotateCcw } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRef } from 'react';
 import { Box, Flex, Stack } from 'styled-system/jsx';
 
 import { Button, Text } from '@/components/ui';
-import { loadImageWithFallback } from '@/lib/image-loader';
+import { useArtworkPreview } from '@/hooks/useArtworkPreview';
 import { ArtworkProperty, ArtworkSource } from '@/stores/create-dao-store';
 
 export interface ArtworkPreviewCanvasProps {
@@ -13,203 +13,27 @@ export interface ArtworkPreviewCanvasProps {
   orderedLayers: ArtworkProperty[];
 }
 
-interface LayerImage {
-  name: string;
-  blob?: Blob;
-  error?: string;
-}
-
-// Pure utility functions outside component to avoid recreation
-function getGatewayUrl(ipfsUri: string): string {
-  if (!ipfsUri) return '';
-
-  // Extract CID from ipfs:// or gateway URL
-  if (ipfsUri.startsWith('ipfs://')) {
-    const cid = ipfsUri.replace('ipfs://', '');
-    const gateway = process.env.NEXT_PUBLIC_PINATA_GATEWAY || 'nouns-builder.mypinata.cloud';
-    return `https://${gateway}/ipfs/${cid}`;
-  }
-
-  // Already a gateway URL
-  return ipfsUri;
-}
-
-function buildLayerUrl(baseUri: string, property: ArtworkProperty, extension: string): string {
-  if (!baseUri || !property.name || property.items.length === 0) {
-    return '';
-  }
-
-  // Use first item as preview
-  const itemName = property.items[0];
-  const cleanBase = baseUri.replace(/\/$/, '');
-
-  // Handle different base URI formats
-  if (cleanBase.startsWith('ipfs://') || cleanBase.startsWith('https://')) {
-    const gatewayUrl = getGatewayUrl(cleanBase);
-    return `${gatewayUrl}/${property.name}/${itemName}${extension}`;
-  }
-
-  return `${cleanBase}/${property.name}/${itemName}${extension}`;
-}
-
-async function loadImage(url: string): Promise<Blob> {
-  // Use the fallback gateway mechanism for robust loading
-  // 15s timeout per gateway (more generous than default 10s for previews)
-  return loadImageWithFallback(url, 15000);
-}
-
 /**
  * Canvas-based artwork preview component.
  *
  * Composites layers on a canvas in order (bottom to top).
  * Features:
- * - Loads images from gateway URLs
+ * - Loads images from gateway URLs with fallback
  * - Local Canvas API rendering
- * - Error handling with fallback
+ * - Error handling with real-time feedback
  * - Real-time preview updates
+ *
+ * Uses useArtworkPreview hook for layer management.
  */
-export function ArtworkPreviewCanvas({ source: uploadedSource, orderedLayers }: ArtworkPreviewCanvasProps) {
-  // Ensure we're working with an uploaded source that has the required properties
-  const source = uploadedSource as Extract<typeof uploadedSource, { kind: 'uploaded' }>;
+export function ArtworkPreviewCanvas({ source, orderedLayers }: ArtworkPreviewCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [layerImages, setLayerImages] = useState<LayerImage[]>([]);
-  const [loadingProgress, setLoadingProgress] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-
-  // Load all layer images
-  const loadLayers = useCallback(async () => {
-    if (!source || !orderedLayers.length) {
-      setLayerImages([]);
-      return;
-    }
-
-    const baseUri = source.baseUri;
-    const extension = source.extension || '.png';
-    const layers: LayerImage[] = [];
-
-    try {
-      setError(null);
-      setLoadingProgress(0);
-
-      for (let i = 0; i < orderedLayers.length; i++) {
-        const property = orderedLayers[i];
-        const url = buildLayerUrl(baseUri, property, extension);
-
-        if (!url) {
-          layers.push({ name: property.name, error: 'Invalid URL' });
-          continue;
-        }
-
-        try {
-          const blob = await loadImage(url);
-          layers.push({ name: property.name, blob });
-        } catch (err) {
-          layers.push({
-            name: property.name,
-            error: err instanceof Error ? err.message : 'Unknown error'
-          });
-        }
-
-        setLoadingProgress(Math.round(((i + 1) / orderedLayers.length) * 100));
-      }
-
-      setLayerImages(layers);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load artwork');
-      setLayerImages([]);
-    }
-  }, [source, orderedLayers]);
-
-  // Render canvas
-  const renderCanvas = useCallback(async () => {
-    if (!canvasRef.current || layerImages.length === 0) return;
-
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-
-    if (!ctx) return;
-
-    // Set canvas size
-    const size = 400;
-    canvas.width = size;
-    canvas.height = size;
-
-    // Clear canvas
-    ctx.fillStyle = '#f5f5f5';
-    ctx.fillRect(0, 0, size, size);
-
-    // Composite layers
-    for (const layer of layerImages) {
-      if (!layer.blob) continue;
-
-      try {
-        const url = URL.createObjectURL(layer.blob);
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-
-        await new Promise<void>((resolve, reject) => {
-          img.onload = () => {
-            // Draw image centered, maintaining aspect ratio
-            const scale = Math.min(size / img.width, size / img.height);
-            const x = (size - img.width * scale) / 2;
-            const y = (size - img.height * scale) / 2;
-
-            ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
-            URL.revokeObjectURL(url);
-            resolve();
-          };
-
-          img.onerror = () => {
-            URL.revokeObjectURL(url);
-            reject(new Error('Failed to draw image'));
-          };
-
-          img.src = url;
-        });
-      } catch (err) {
-        console.warn(`Failed to render layer ${layer.name}:`, err);
-      }
-    }
-  }, [layerImages]);
-
-  // Load layers when dependencies change
-  useEffect(() => {
-    let isMounted = true;
-
-    (async () => {
-      if (isMounted) {
-        await loadLayers();
-      }
-    })();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [loadLayers]);
-
-  // Render canvas when layer images change
-  useEffect(() => {
-    let isMounted = true;
-
-    (async () => {
-      if (isMounted) {
-        await renderCanvas();
-      }
-    })();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [renderCanvas]);
-
-  const handleReload = () => {
-    loadLayers();
-  };
-
-  // Determine display state
-  const isLoading = layerImages.length === 0 && orderedLayers.length > 0 && !error;
-  const hasErrors = layerImages.some((l) => l.error);
-  const hasImages = layerImages.some((l) => l.blob);
+  const { layerImages, loadingProgress, error, isLoading, hasErrors, hasImages, reload } = useArtworkPreview({
+    source,
+    orderedLayers,
+    canvasRef,
+    canvasSize: 400,
+    timeoutMs: 15000
+  });
 
   return (
     <Stack gap="3">
@@ -255,7 +79,7 @@ export function ArtworkPreviewCanvas({ source: uploadedSource, orderedLayers }: 
               <AlertCircle size={32} style={{ color: 'var(--error-9)' }} />
             </Flex>
             <Text style={{ fontSize: '0.875rem', color: 'var(--error-9)' }}>{error}</Text>
-            <Button size="sm" onClick={handleReload}>
+            <Button size="sm" onClick={reload}>
               Retry
             </Button>
           </Stack>
@@ -322,7 +146,7 @@ export function ArtworkPreviewCanvas({ source: uploadedSource, orderedLayers }: 
       {/* Reload */}
       <Button
         size="sm"
-        onClick={handleReload}
+        onClick={reload}
         style={{ alignSelf: 'flex-start', backgroundColor: 'transparent', color: 'var(--gray-11)' }}
       >
         <RotateCcw size={14} style={{ marginRight: '0.5rem' }} />
