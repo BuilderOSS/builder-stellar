@@ -4,8 +4,7 @@ import { AlertCircle, Upload } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 import { Box, Flex, Stack } from 'styled-system/jsx';
 
-import { Badge, Button, Card, Heading, Input, Text } from '@/components/ui';
-import { useFallbackSrc } from '@/hooks/useFallbackSrc';
+import { Badge, Button, Card, FallbackImage, Heading, Input, Text } from '@/components/ui';
 import { GeneratedImageCandidate } from '@/lib/ai-image-generation';
 import { loadImageUrlWithFallback } from '@/lib/image-loader';
 import {
@@ -121,7 +120,6 @@ export function DaoImageField() {
         : basicInfo.contractImage === DEFAULT_IMAGE_URL
           ? LOCAL_DEFAULT_DAO_IMAGE_URL
           : basicInfo.contractImage || LOCAL_DEFAULT_DAO_IMAGE_URL;
-  const { dataSrc: resolvedDisplayImage } = useFallbackSrc({ src: displayImage });
 
   // Get source badge
   const getSourceBadge = () => {
@@ -546,9 +544,10 @@ export function DaoImageField() {
               maxWidth: '200px'
             }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={resolvedDisplayImage || LOCAL_DEFAULT_DAO_IMAGE_URL}
+            <FallbackImage
+              key={displayImage}
+              src={displayImage}
+              errorFallbackSrc={LOCAL_DEFAULT_DAO_IMAGE_URL}
               alt="DAO Identity"
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             />
