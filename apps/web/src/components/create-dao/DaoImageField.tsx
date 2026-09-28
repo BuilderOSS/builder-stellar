@@ -7,6 +7,7 @@ import { Box, Flex, Stack } from 'styled-system/jsx';
 import { Badge, Button, Card, Heading, Input, Text } from '@/components/ui';
 import { GeneratedImageCandidate } from '@/lib/ai-image-generation';
 import { UPLOAD_POLICIES, validateFileSize, validateImageDimensions, validateMimeType } from '@/lib/pinata-upload';
+import { isValidHttpUrl } from '@/lib/validation';
 import { DEFAULT_DAO_IMAGE_URL, LOCAL_DEFAULT_DAO_IMAGE_URL, useCreateDaoStore } from '@/stores/create-dao-store';
 
 const DEFAULT_IMAGE_URL = DEFAULT_DAO_IMAGE_URL;
@@ -32,6 +33,9 @@ export function DaoImageField() {
   // Local state for manual upload
   const [uploadError, setUploadError] = useState<string | undefined>('');
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [imageUrl, setImageUrl] = useState('');
+  const [imageUrlError, setImageUrlError] = useState<string>();
+  const [isValidatingImageUrl, setIsValidatingImageUrl] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Race condition guards: prevent stale uploads from overwriting newer ones
@@ -103,7 +107,7 @@ export function DaoImageField() {
 
   // Get the current display image
   const displayImage =
-    daoImageSource?.kind === 'generated' || daoImageSource?.kind === 'uploaded'
+    daoImageSource?.kind === 'generated' || daoImageSource?.kind === 'uploaded' || daoImageSource?.kind === 'url'
       ? daoImageSource.gatewayUrl
       : daoImageSource?.kind === 'default'
         ? LOCAL_DEFAULT_DAO_IMAGE_URL
@@ -121,6 +125,9 @@ export function DaoImageField() {
     }
     if (daoImageSource.kind === 'uploaded') {
       return <Badge style={{ backgroundColor: 'var(--info-9)', color: 'white' }}>Uploaded</Badge>;
+    }
+    if (daoImageSource.kind === 'url') {
+      return <Badge style={{ backgroundColor: 'var(--info-9)', color: 'white' }}>External URL</Badge>;
     }
     if (daoImageSource.kind === 'default') {
       return <Badge style={{ backgroundColor: 'var(--gray-9)', color: 'white' }}>Default</Badge>;
@@ -469,6 +476,45 @@ export function DaoImageField() {
     clearValidationError('daoImage');
   };
 
+  const handleUseImageUrl = () => {
+    const url = imageUrl.trim();
+    setImageUrlError(undefined);
+
+    if (!isValidHttpUrl(url)) {
+      setImageUrlError('Enter a valid HTTP or HTTPS image URL.');
+      return;
+    }
+
+    setIsValidatingImageUrl(true);
+    const image = new Image();
+    let settled = false;
+    const timeout = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      image.src = '';
+      setIsValidatingImageUrl(false);
+      setImageUrlError('The image URL did not respond in time. Check the URL and try again.');
+    }, 15000);
+
+    image.onload = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      setIsValidatingImageUrl(false);
+      setDaoImageSource({ kind: 'url', gatewayUrl: url });
+      updateBasicInfo({ contractImage: url });
+      clearValidationError('daoImage');
+    };
+    image.onerror = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      setIsValidatingImageUrl(false);
+      setImageUrlError('That URL could not be loaded as an image. Check that it is public and still available.');
+    };
+    image.src = url;
+  };
+
   return (
     <Stack gap="4">
       <Card p="5">
@@ -558,6 +604,38 @@ export function DaoImageField() {
               <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>{uploadError}</Text>
             </Flex>
           )}
+
+          <Card p="4" style={{ border: '1px solid var(--gray-6)' }}>
+            <Stack gap="3">
+              <Stack gap="1">
+                <Text style={{ fontWeight: 600, fontSize: '0.875rem' }}>External image URL</Text>
+                <Text style={{ color: 'var(--gray-11)', fontSize: '0.75rem' }}>
+                  Paste a public image URL. It will be checked now, but you are responsible for keeping it available.
+                </Text>
+              </Stack>
+              <Flex gap="2" style={{ alignItems: 'flex-start' }}>
+                <Input
+                  aria-label="External image URL"
+                  value={imageUrl}
+                  onChange={(event) => {
+                    setImageUrl(event.target.value);
+                    setImageUrlError(undefined);
+                  }}
+                  placeholder="https://example.com/dao-image.png"
+                  disabled={isValidatingImageUrl}
+                  style={{ flex: 1 }}
+                />
+                <Button onClick={handleUseImageUrl} disabled={isValidatingImageUrl || !imageUrl.trim()}>
+                  {isValidatingImageUrl ? 'Checking...' : 'Use URL'}
+                </Button>
+              </Flex>
+              {imageUrlError && (
+                <Text role="alert" style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>
+                  {imageUrlError}
+                </Text>
+              )}
+            </Stack>
+          </Card>
 
           {validationErrors.daoImage && (
             <Flex

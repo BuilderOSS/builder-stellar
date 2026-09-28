@@ -25,6 +25,7 @@ export type ArtworkProperty = {
 export type DaoImageSource =
   | { kind: 'generated'; gatewayUrl: string; ipfsUri: string; prompt: string; model: string }
   | { kind: 'uploaded'; gatewayUrl: string; ipfsUri: string; filename: string }
+  | { kind: 'url'; gatewayUrl: string }
   | { kind: 'default'; gatewayUrl: string }
   | { kind: 'legacy-unconfirmed' }; // Backwards compatibility
 

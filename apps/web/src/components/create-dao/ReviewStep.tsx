@@ -78,6 +78,12 @@ export function ReviewStep({ connectedAddress }: { connectedAddress: string }) {
                     <DetailRow label="Filename" value={daoImageSource.filename} />
                   </>
                 )}
+                {daoImageSource.kind === 'url' && (
+                  <>
+                    <DetailRow label="Source" value="External URL" />
+                    <DetailRow label="URL" value={daoImageSource.gatewayUrl} mono />
+                  </>
+                )}
                 {daoImageSource.kind === 'default' && <DetailRow label="Source" value="Builder Default" />}
                 {(daoImageSource.kind === 'generated' || daoImageSource.kind === 'uploaded') && (
                   <>

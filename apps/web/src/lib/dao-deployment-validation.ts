@@ -120,9 +120,9 @@ export function validateImageSources(state: CreateDaoStore): { valid: boolean; e
       if (!daoImageSource.gatewayUrl?.startsWith('http')) {
         errors.push('DAO image gateway URL is invalid');
       }
-    } else if (daoImageSource.kind === 'default') {
+    } else if (daoImageSource.kind === 'default' || daoImageSource.kind === 'url') {
       if (!daoImageSource.gatewayUrl?.startsWith('http')) {
-        errors.push('Default DAO image URL is invalid');
+        errors.push('DAO image URL is invalid');
       }
     }
   }
