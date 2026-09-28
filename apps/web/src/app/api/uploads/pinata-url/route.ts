@@ -125,11 +125,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const authorization = createUploadAuthorization(data.uploadType, signedUrl);
 
     // Store authorization for verification during completion
-    storeAuthorization(authorization.uploadId, authorization);
+    const uploadId = storeAuthorization(authorization.uploadId, authorization);
 
     return NextResponse.json(
       {
-        uploadId: authorization.uploadId,
+        uploadId,
         signedUrl: authorization.signedUrl,
         expiresAt: authorization.expiresAt.toISOString(),
         uploadType: authorization.uploadType,
