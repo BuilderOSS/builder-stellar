@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { cidToUrls, getPreferredGatewayHost } from './pinata-upload';
+import { cidToUrls, getPreferredGatewayHost, normalizeIpfsCid } from './pinata-upload';
 
 const originalGateway = process.env.NEXT_PUBLIC_PINATA_GATEWAY;
 
@@ -13,6 +13,13 @@ afterEach(() => {
 });
 
 describe('IPFS upload URLs', () => {
+  it('normalizes bare and ipfs-prefixed CIDs', () => {
+    expect(normalizeIpfsCid('bafybeigdyrzt3testcid')).toBe('bafybeigdyrzt3testcid');
+    expect(normalizeIpfsCid('ipfs://bafybeigdyrzt3testcid')).toBe('bafybeigdyrzt3testcid');
+    expect(normalizeIpfsCid('https://example.com/image.png')).toBeNull();
+    expect(normalizeIpfsCid('ipfs://bafytest/image.png')).toBeNull();
+  });
+
   it('uses the configured gateway for finalized URLs', () => {
     process.env.NEXT_PUBLIC_PINATA_GATEWAY = 'custom.example.com';
 

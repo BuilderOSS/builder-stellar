@@ -6,7 +6,15 @@ import { Box, Flex, Stack } from 'styled-system/jsx';
 
 import { Badge, Button, Card, Heading, Input, Text } from '@/components/ui';
 import { GeneratedImageCandidate } from '@/lib/ai-image-generation';
-import { UPLOAD_POLICIES, validateFileSize, validateImageDimensions, validateMimeType } from '@/lib/pinata-upload';
+import {
+  cidToUrls,
+  getPreferredGatewayHost,
+  normalizeIpfsCid,
+  UPLOAD_POLICIES,
+  validateFileSize,
+  validateImageDimensions,
+  validateMimeType
+} from '@/lib/pinata-upload';
 import { isValidHttpUrl } from '@/lib/validation';
 import { DEFAULT_DAO_IMAGE_URL, LOCAL_DEFAULT_DAO_IMAGE_URL, useCreateDaoStore } from '@/stores/create-dao-store';
 
@@ -477,11 +485,13 @@ export function DaoImageField() {
   };
 
   const handleUseImageUrl = () => {
-    const url = imageUrl.trim();
+    const input = imageUrl.trim();
+    const cid = normalizeIpfsCid(input);
+    const url = isValidHttpUrl(input) ? input : cid ? cidToUrls(cid, getPreferredGatewayHost()).gatewayUrl : null;
     setImageUrlError(undefined);
 
-    if (!isValidHttpUrl(url)) {
-      setImageUrlError('Enter a valid HTTP or HTTPS image URL.');
+    if (!url) {
+      setImageUrlError('Enter a valid HTTP/HTTPS image URL or IPFS CID.');
       return;
     }
 
@@ -610,7 +620,8 @@ export function DaoImageField() {
               <Stack gap="1">
                 <Text style={{ fontWeight: 600, fontSize: '0.875rem' }}>External image URL</Text>
                 <Text style={{ color: 'var(--gray-11)', fontSize: '0.75rem' }}>
-                  Paste a public image URL. It will be checked now, but you are responsible for keeping it available.
+                  Paste a public image URL or IPFS CID. It will be checked now, but you are responsible for keeping it
+                  available.
                 </Text>
               </Stack>
               <Flex gap="2" style={{ alignItems: 'flex-start' }}>
@@ -621,7 +632,7 @@ export function DaoImageField() {
                     setImageUrl(event.target.value);
                     setImageUrlError(undefined);
                   }}
-                  placeholder="https://example.com/dao-image.png"
+                  placeholder="https://example.com/dao-image.png or bafy..."
                   disabled={isValidatingImageUrl}
                   style={{ flex: 1 }}
                 />

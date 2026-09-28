@@ -89,6 +89,21 @@ export function cidToUrls(cid: string, preferredGatewayHost?: string): { ipfsUri
 }
 
 /**
+ * Normalizes a bare CID or ipfs:// CID entered by a user.
+ * The resolved gateway is still checked by the caller before it is accepted.
+ */
+export function normalizeIpfsCid(value: string): string | null {
+  const trimmed = value.trim();
+  const cid = trimmed.startsWith('ipfs://') ? trimmed.slice('ipfs://'.length) : trimmed;
+
+  if (cid.length < 10 || cid.length > 128 || !/^[a-zA-Z0-9]+$/.test(cid)) {
+    return null;
+  }
+
+  return cid;
+}
+
+/**
  * Gets the preferred IPFS gateway host.
  * Falls back to hardcoded list if environment variable is not set.
  */
