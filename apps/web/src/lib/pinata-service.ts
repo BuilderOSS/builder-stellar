@@ -55,6 +55,7 @@ export class BackendFailedError extends PinataError {
 export class PinataService {
   private jwt: string;
   private apiUrl = 'https://api.pinata.cloud';
+  private uploadUrl = 'https://uploads.pinata.cloud';
 
   constructor() {
     const jwt = process.env.PINATA_JWT;
@@ -70,15 +71,27 @@ export class PinataService {
    */
   async createSignedUploadUrl(uploadType: UploadType): Promise<string> {
     try {
-      const response = await fetch(`${this.apiUrl}/v3/files/sign`, {
+      const uploadPolicy =
+        uploadType === 'dao-image'
+          ? {
+              max_file_size: 5 * 1024 * 1024,
+              allow_mime_types: ['image/png', 'image/jpeg', 'image/webp']
+            }
+          : {
+              max_file_size: 100 * 1024 * 1024,
+              allow_mime_types: ['directory']
+            };
+
+      const response = await fetch(`${this.uploadUrl}/v3/files/sign`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.jwt}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          uploadType: uploadType,
-          expiresIn: 1800 // 30 minutes
+          expires: 30,
+          date: Math.floor(Date.now() / 1000),
+          ...uploadPolicy
         })
       });
 
@@ -88,11 +101,12 @@ export class PinataService {
       }
 
       const data = await response.json();
-      if (!data.data?.signedUrl) {
+      const signedUrl = data.data?.signedUrl ?? data.data;
+      if (typeof signedUrl !== 'string' || !signedUrl) {
         throw new BackendFailedError('Signed URL not returned from Pinata');
       }
 
-      return data.data.signedUrl;
+      return signedUrl;
     } catch (error) {
       if (error instanceof PinataError) throw error;
       throw new BackendFailedError(error instanceof Error ? error.message : 'Failed to create signed upload URL');
