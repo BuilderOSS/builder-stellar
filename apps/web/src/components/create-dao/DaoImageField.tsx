@@ -5,6 +5,7 @@ import { useCallback, useRef, useState } from 'react';
 import { Box, Flex, Stack } from 'styled-system/jsx';
 
 import { Badge, Button, Card, Heading, Input, Text } from '@/components/ui';
+import { useFallbackSrc } from '@/hooks/useFallbackSrc';
 import { GeneratedImageCandidate } from '@/lib/ai-image-generation';
 import { loadImageUrlWithFallback } from '@/lib/image-loader';
 import {
@@ -120,6 +121,7 @@ export function DaoImageField() {
         : basicInfo.contractImage === DEFAULT_IMAGE_URL
           ? LOCAL_DEFAULT_DAO_IMAGE_URL
           : basicInfo.contractImage || LOCAL_DEFAULT_DAO_IMAGE_URL;
+  const { dataSrc: resolvedDisplayImage } = useFallbackSrc({ src: displayImage });
 
   // Get source badge
   const getSourceBadge = () => {
@@ -546,14 +548,9 @@ export function DaoImageField() {
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={displayImage}
+              src={resolvedDisplayImage || LOCAL_DEFAULT_DAO_IMAGE_URL}
               alt="DAO Identity"
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              onError={(event) => {
-                if (!event.currentTarget.src.endsWith(LOCAL_DEFAULT_DAO_IMAGE_URL)) {
-                  event.currentTarget.src = LOCAL_DEFAULT_DAO_IMAGE_URL;
-                }
-              }}
             />
           </Box>
 
