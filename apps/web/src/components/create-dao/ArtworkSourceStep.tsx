@@ -191,31 +191,33 @@ export function ArtworkSourceStep() {
                 </Flex>
               </Stack>
 
-              {/* Upload Option */}
-              <Stack gap="3">
-                <Heading as="h3" style={{ fontSize: '1rem' }}>
-                  Upload Your Collection
-                </Heading>
-                <Card p="4" style={{ border: '2px dashed var(--gray-6)' }}>
-                  <Stack gap="3">
-                    <Flex style={{ justifyContent: 'center', alignItems: 'center' }}>
-                      <Upload size={32} style={{ color: 'var(--gray-10)' }} />
-                    </Flex>
-                    <Stack gap="2" style={{ textAlign: 'center' }}>
-                      <Text style={{ fontWeight: 600 }}>Upload Your Own Collection</Text>
-                      <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)' }}>
-                        Upload a directory of trait assets in PNG/WebP format
-                      </Text>
-                      <Text style={{ fontSize: '0.75rem', color: 'var(--gray-10)' }}>
-                        Required layout: collection/trait-name/item-name.png
-                      </Text>
+              {/* Upload Option - Only shown when Pinata uploads are enabled */}
+              {process.env.NEXT_PUBLIC_PINATA_UPLOADS_ENABLED === 'true' && (
+                <Stack gap="3">
+                  <Heading as="h3" style={{ fontSize: '1rem' }}>
+                    Upload Your Collection
+                  </Heading>
+                  <Card p="4" style={{ border: '2px dashed var(--gray-6)' }}>
+                    <Stack gap="3">
+                      <Flex style={{ justifyContent: 'center', alignItems: 'center' }}>
+                        <Upload size={32} style={{ color: 'var(--gray-10)' }} />
+                      </Flex>
+                      <Stack gap="2" style={{ textAlign: 'center' }}>
+                        <Text style={{ fontWeight: 600 }}>Upload Your Own Collection</Text>
+                        <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)' }}>
+                          Upload a directory of trait assets in PNG/WebP format
+                        </Text>
+                        <Text style={{ fontSize: '0.75rem', color: 'var(--gray-10)' }}>
+                          Required layout: collection/trait-name/item-name.png
+                        </Text>
+                      </Stack>
+                      <Button onClick={() => setUploadMode(true)} style={{ width: '100%' }}>
+                        Upload Directory
+                      </Button>
                     </Stack>
-                    <Button onClick={() => setUploadMode(true)} style={{ width: '100%' }}>
-                      Upload Directory
-                    </Button>
-                  </Stack>
-                </Card>
-              </Stack>
+                  </Card>
+                </Stack>
+              )}
 
               {/* AI Generation (disabled for now) */}
               <Stack gap="3">

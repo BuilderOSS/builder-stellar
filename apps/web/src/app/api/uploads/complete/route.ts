@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getAuthorization } from '@/app/api/uploads/pinata-url/route';
 import { AuthError, authErrorResponse, requireAuthenticatedSession } from '@/lib/auth/server';
 import { BackendFailedError, getPinataService, NotFoundError, PinataError } from '@/lib/pinata-service';
 import {
@@ -9,6 +8,7 @@ import {
   UploadCompletionSchema,
   validateUploadCompletion
 } from '@/lib/pinata-upload';
+import { getAuthorization } from '@/lib/pinata-upload-auth';
 
 /**
  * POST /api/uploads/complete
