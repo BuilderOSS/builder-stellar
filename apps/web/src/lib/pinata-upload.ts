@@ -159,6 +159,9 @@ export function validateImageDimensions(
  */
 export function validateMimeType(mimeType: string, uploadType: UploadType): { valid: boolean; error?: string } {
   const policy = UPLOAD_POLICIES[uploadType];
+  if (uploadType === 'artwork-directory' && mimeType === 'directory') {
+    return { valid: true };
+  }
   const allowedMimes: readonly string[] = 'allowedMimes' in policy ? policy.allowedMimes : [];
 
   if (!allowedMimes.includes(mimeType)) {
@@ -176,6 +179,14 @@ export function validateMimeType(mimeType: string, uploadType: UploadType): { va
  */
 export function validateFileSize(sizeBytes: number, uploadType: UploadType): { valid: boolean; error?: string } {
   const policy = UPLOAD_POLICIES[uploadType];
+
+  if (uploadType === 'artwork-directory' && 'maxTotalBytes' in policy && sizeBytes > policy.maxTotalBytes) {
+    const maxMB = Math.round(policy.maxTotalBytes / 1024 / 1024);
+    return {
+      valid: false,
+      error: `Directory exceeds maximum size of ${maxMB}MB`
+    };
+  }
 
   // Check per-file limit
   if ('maxBytesPerFile' in policy && sizeBytes > policy.maxBytesPerFile) {

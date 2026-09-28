@@ -176,8 +176,8 @@ export function ArtworkPreviewCanvas({ source, orderedLayers }: ArtworkPreviewCa
                 >
                   <motion.div
                     animate={{
-                      scale: layer.blob ? [1, 1.2, 1] : 1,
-                      boxShadow: layer.blob
+                      scale: layer.url ? [1, 1.2, 1] : 1,
+                      boxShadow: layer.url
                         ? [
                             '0 0 0 0px var(--success-9)',
                             '0 0 0 4px rgba(74, 197, 130, 0.3)',
@@ -186,8 +186,8 @@ export function ArtworkPreviewCanvas({ source, orderedLayers }: ArtworkPreviewCa
                         : 'none'
                     }}
                     transition={{
-                      duration: layer.blob ? 1.5 : 0,
-                      repeat: layer.blob ? Infinity : 0,
+                      duration: layer.url ? 1.5 : 0,
+                      repeat: layer.url ? Infinity : 0,
                       repeatDelay: 2
                     }}
                     style={{
@@ -196,7 +196,7 @@ export function ArtworkPreviewCanvas({ source, orderedLayers }: ArtworkPreviewCa
                       borderRadius: '50%',
                       backgroundColor: layer.error
                         ? 'var(--error-9)'
-                        : layer.blob
+                        : layer.url
                           ? 'var(--success-9)'
                           : 'var(--gray-7)',
                       flexShrink: 0

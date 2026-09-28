@@ -228,6 +228,7 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
   const [uploadError, setUploadError] = useState<string>('');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStage, setUploadStage] = useState<'preparing' | 'uploading' | 'verifying' | 'finalizing'>('preparing');
+  const [hasConfirmedUpload, setHasConfirmedUpload] = useState(false);
 
   const directoryInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -247,6 +248,7 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
     setValidationError('');
     setValidatedDirectory(null);
     setUploadProgress(0);
+    setHasConfirmedUpload(false);
 
     const fileArray = Array.from(files);
     const validation = validateDirectory(fileArray);
@@ -276,7 +278,7 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
 
   // Handle upload with race condition guard and progress tracking
   const handleUpload = useCallback(async () => {
-    if (!validatedDirectory) return;
+    if (!validatedDirectory || !hasConfirmedUpload) return;
 
     // Generate unique run ID for this upload
     const runId = `upload-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -329,25 +331,33 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
       // Check if cancelled before proceeding
       if (uploadRunIdRef.current !== runId) return;
 
-      // Generate JWT for directory upload
+      // Request a signed URL for the complete directory upload.
       setUploadStage('preparing');
       setUploadProgress(5);
-      const jwtResponse = await fetch('/api/pinata/generate-jwt', {
+      const urlResponse = await fetch('/api/uploads/pinata-url', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': 'required'
+        },
+        body: JSON.stringify({
+          uploadType: 'artwork-directory',
+          mimeType: 'directory',
+          sizeBytes: validatedDirectory.totalSize,
+          filename: 'builder'
+        }),
         signal: abortController.signal
       });
 
-      if (!jwtResponse.ok) {
-        // Attempt to parse error response (used for debugging)
-        void jwtResponse.json().catch(() => ({}));
-        if (jwtResponse.status === 429) {
-          throw new Error('Too many upload attempts. Please wait a moment and try again.');
-        }
-        throw new Error('Failed to connect to upload service. Please check your internet connection.');
+      if (!urlResponse.ok) {
+        const errorData = (await urlResponse.json().catch(() => ({}))) as { error?: string };
+        throw new Error(
+          errorData.error || 'Failed to connect to upload service. Please check your internet connection.'
+        );
       }
 
-      const { jwt } = (await jwtResponse.json()) as { jwt: string };
+      const { signedUrl } = (await urlResponse.json()) as { signedUrl: string };
+      if (!signedUrl) throw new Error('Upload service did not return a signed URL. Please try again.');
 
       // Check if cancelled
       if (uploadRunIdRef.current !== runId) return;
@@ -379,14 +389,11 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
 
       formData.append('network', 'public');
 
-      // Upload to legacy Pinata endpoint
+      // Upload to the Pinata signed endpoint.
       setUploadStage('uploading');
       setUploadProgress(10);
-      const uploadResponse = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
+      const uploadResponse = await fetch(signedUrl, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${jwt}`
-        },
         body: formData,
         signal: abortController.signal
       });
@@ -403,8 +410,11 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
         throw new Error(errorData.error?.message || 'Failed to upload directory to IPFS. Please try again.');
       }
 
-      const uploadData = (await uploadResponse.json()) as any;
-      const cid = uploadData.IpfsHash;
+      const uploadData = (await uploadResponse.json()) as {
+        IpfsHash?: string;
+        data?: { cid?: string };
+      };
+      const cid = uploadData.data?.cid || uploadData.IpfsHash;
 
       if (!cid) {
         throw new Error('Upload appeared successful but no storage location was returned. Please try again.');
@@ -470,7 +480,7 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
         abortControllerRef.current = null;
       }
     }
-  }, [validatedDirectory, onComplete]);
+  }, [validatedDirectory, hasConfirmedUpload, onComplete]);
 
   // Handle cancellation
   const handleCancelUpload = useCallback(() => {
@@ -716,17 +726,32 @@ export function ArtworkDirectoryUpload({ onComplete, onCancel }: ArtworkDirector
                 </Stack>
               )}
 
+              <label style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', fontSize: '0.875rem' }}>
+                <input
+                  type="checkbox"
+                  checked={hasConfirmedUpload}
+                  onChange={(event) => setHasConfirmedUpload(event.target.checked)}
+                  disabled={isUploading}
+                  style={{ marginTop: '0.2rem' }}
+                />
+                <span>
+                  I reviewed this directory and confirm I want to upload {validatedDirectory.itemCount} files (
+                  {(validatedDirectory.totalSize / 1024 / 1024).toFixed(2)}MB).
+                </span>
+              </label>
+
               {/* Actions */}
               <Flex gap="2">
                 {!isUploading ? (
                   <>
-                    <Button onClick={handleUpload} disabled={isUploading} style={{ flex: 1 }}>
-                      Upload Collection
+                    <Button onClick={handleUpload} disabled={isUploading || !hasConfirmedUpload} style={{ flex: 1 }}>
+                      Confirm and Upload Collection
                     </Button>
                     <Button
                       onClick={() => {
                         setValidatedDirectory(null);
                         setValidationError('');
+                        setHasConfirmedUpload(false);
                       }}
                       disabled={isUploading}
                     >

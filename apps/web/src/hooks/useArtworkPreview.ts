@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-import { loadImageWithFallback } from '@/lib/image-loader';
+import { getFetchableUrls } from '@/lib/ipfs-client';
 import { ArtworkProperty, ArtworkSource } from '@/stores/create-dao-store';
 
 export interface LayerImage {
   name: string;
-  blob?: Blob;
+  url?: string;
   error?: string;
 }
 
@@ -27,6 +27,26 @@ interface UseArtworkPreviewResult {
   hasErrors: boolean;
   hasImages: boolean;
   reload: () => void;
+}
+
+function loadImage(url: string, timeoutMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const timeoutId = window.setTimeout(() => {
+      image.src = '';
+      reject(new Error('Image load timed out'));
+    }, timeoutMs);
+
+    image.onload = () => {
+      window.clearTimeout(timeoutId);
+      resolve();
+    };
+    image.onerror = () => {
+      window.clearTimeout(timeoutId);
+      reject(new Error('Failed to load image'));
+    };
+    image.src = url;
+  });
 }
 
 /**
@@ -107,8 +127,23 @@ export function useArtworkPreview({
         }
 
         try {
-          const blob = await loadImageWithFallback(url, timeoutMs);
-          layers.push({ name: property.name, blob });
+          const urls = getFetchableUrls(url);
+          if (!urls?.length) throw new Error('Invalid image URL');
+
+          let loadedUrl: string | undefined;
+          let lastError: Error | undefined;
+          for (const candidate of urls) {
+            try {
+              await loadImage(candidate, timeoutMs);
+              loadedUrl = candidate;
+              break;
+            } catch (err) {
+              lastError = err instanceof Error ? err : new Error('Failed to load image');
+            }
+          }
+
+          if (!loadedUrl) throw lastError ?? new Error('All image gateways failed');
+          layers.push({ name: property.name, url: loadedUrl });
         } catch (err) {
           layers.push({
             name: property.name,
@@ -143,12 +178,10 @@ export function useArtworkPreview({
 
     // Composite layers (bottom to top)
     for (const layer of layers) {
-      if (!layer.blob) continue;
+      if (!layer.url) continue;
 
       try {
-        const url = URL.createObjectURL(layer.blob);
         const img = new Image();
-        img.crossOrigin = 'anonymous';
 
         await new Promise<void>((resolve, reject) => {
           img.onload = () => {
@@ -158,16 +191,12 @@ export function useArtworkPreview({
             const y = (size - img.height * scale) / 2;
 
             ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
-            URL.revokeObjectURL(url);
             resolve();
           };
 
-          img.onerror = () => {
-            URL.revokeObjectURL(url);
-            reject(new Error('Failed to draw image'));
-          };
+          img.onerror = () => reject(new Error('Failed to draw image'));
 
-          img.src = url;
+          img.src = layer.url!;
         });
       } catch (err) {
         console.warn(`Failed to render layer ${layer.name}:`, err);
@@ -208,7 +237,7 @@ export function useArtworkPreview({
   // Determine state
   const isLoading = layerImages.length === 0 && orderedLayers.length > 0 && !error;
   const hasErrors = layerImages.some((l) => l.error);
-  const hasImages = layerImages.some((l) => l.blob);
+  const hasImages = layerImages.some((l) => l.url);
 
   return {
     layerImages,
