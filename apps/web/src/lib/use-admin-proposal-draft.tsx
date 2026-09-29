@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { analyzeProposalAction, type ProposalDraftFinding } from '@/lib/proposal-action-identity';
 import type { ProposalQueuedAction } from '@/lib/proposal-actions/types';
 import { getProposalActionSummary } from '@/lib/proposal-call';
-import { useDaoSessionStore } from '@/stores/dao-session-store';
+import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { normalizeWalletAddress, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
 export type AdminProposalRequest = {
@@ -22,7 +22,7 @@ export type PendingAdminProposal = AdminProposalRequest & {
 };
 
 export function useAdminProposalDraft() {
-  const address = useDaoSessionStore((state) => state.address);
+  const address = useAuthSessionStore((state) => state.address);
   const [pending, setPending] = useState<PendingAdminProposal | null>(null);
 
   function requestAdd(request: AdminProposalRequest) {

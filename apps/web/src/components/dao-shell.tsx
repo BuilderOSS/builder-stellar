@@ -26,7 +26,7 @@ import { Callout } from '@/components/ui';
 import { WalletControls } from '@/components/wallet-controls';
 import { useDaoContext } from '@/contexts/dao-context';
 import { useGoldskyMember } from '@/lib/goldsky-queries';
-import { useDaoSessionStore } from '@/stores/dao-session-store';
+import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 type NavItem = { href: Route; label: string; icon: LucideIcon; exact?: boolean };
 
@@ -86,7 +86,7 @@ function hasDaoMembership(member: ReturnType<typeof useGoldskyMember>['data']) {
 export function DaoShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { daoId, daoConfig: currentNetwork } = useDaoContext();
-  const session = useDaoSessionStore();
+  const session = useAuthSessionStore();
   const { data: memberLookup } = useGoldskyMember(currentNetwork.tokenContractId, session.address);
   const walletDisabled = Boolean(session.address && session.walletNetworkIssue);
 

@@ -41,7 +41,7 @@ Important baseline details:
 - Refund transfers currently invoke the asset directly. Persistent claim accounting and a claim entrypoint are missing.
 - None of the four protocol contracts currently exposes WASM replacement. New deployments must include upgrade entrypoints from initialization; Manager cannot retrofit the existing contracts through an absent interface.
 - Deployment currently uses an admin owner for all modules. Final governance authority and Auction mint permission must be explicitly established.
-- `dao-session-store.ts` persists wallet state, not DAO identity. `dao-config.ts` resolves an environment-selected deployment; this is not runtime multi-DAO selection.
+- `auth-session-store.ts` persists wallet state, not DAO identity. `dao-config.ts` resolves an environment-selected deployment; this is not runtime multi-DAO selection.
 - The app already has SAC transfer forms, bidding, combined settlement/next-auction creation, and owner-unpause controls. Adapt those flows.
 - Token metadata is currently an app-generated SVG keyed by token ID and deployment-wide branding. IPFS artwork ingestion, on-chain seeds, and DAO-scoped metadata resolution are new work.
 - Indexed tables already contain `deployment_id`, currently derived from deployment label/network. The work is durable identity and complete isolation, not simply adding a column.

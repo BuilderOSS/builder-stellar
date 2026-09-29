@@ -21,11 +21,11 @@ import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
-import { useDaoSessionStore } from '@/stores/dao-session-store';
+import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 export default function TokenAdminPage() {
   const { daoId, daoConfig: config } = useDaoContext();
-  const session = useDaoSessionStore();
+  const session = useAuthSessionStore();
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('1');
   const [formMessage, setFormMessage] = useState('');

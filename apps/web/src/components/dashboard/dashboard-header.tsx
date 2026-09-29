@@ -4,7 +4,7 @@ import Link from 'next/link';
 
 import { NetworkIndicator } from '@/components/network-indicator';
 import { WalletControls } from '@/components/wallet-controls';
-import { useDaoSessionStore } from '@/stores/dao-session-store';
+import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 interface DashboardHeaderProps {
   showMenuButton?: boolean;
@@ -12,7 +12,7 @@ interface DashboardHeaderProps {
 }
 
 export function DashboardHeader({ showMenuButton = false, onMenuClick }: DashboardHeaderProps) {
-  const session = useDaoSessionStore();
+  const session = useAuthSessionStore();
   return (
     <header className="dashboard-header">
       {showMenuButton ? (

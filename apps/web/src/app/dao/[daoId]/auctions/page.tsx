@@ -15,7 +15,7 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { getTreasuryAssets } from '@/lib/assets-config';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
-import { useDaoSessionStore } from '@/stores/dao-session-store';
+import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 type AuctionData = {
   auction: {
@@ -82,7 +82,7 @@ function formatRemaining(endTime: string, now: number) {
 
 export default function AuctionsPage() {
   const { daoId, daoConfig: config } = useDaoContext();
-  const session = useDaoSessionStore();
+  const session = useAuthSessionStore();
   const tx = useTransactionFeedback(config.name);
   const { data, error, isLoading, mutate } = useSWR<AuctionData>(
     `/api/dao/${encodeURIComponent(daoId)}/auctions`,

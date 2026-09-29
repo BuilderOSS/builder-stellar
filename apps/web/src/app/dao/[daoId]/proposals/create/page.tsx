@@ -22,7 +22,7 @@ import { proposalIdToRouteId } from '@/lib/proposal-id';
 import { encodeProposalMetadata, validateProposalMetadataDraft } from '@/lib/proposal-metadata';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
-import { useDaoSessionStore } from '@/stores/dao-session-store';
+import { useAuthSessionStore } from '@/stores/auth-session-store';
 import {
   selectCanProceedToStep2,
   selectDraft,
@@ -33,7 +33,7 @@ import {
 export default function ProposalCreatePage() {
   const { daoId } = useDaoContext();
   const router = useRouter();
-  const session = useDaoSessionStore();
+  const session = useAuthSessionStore();
   const { daoConfig: config } = useDaoContext();
 
   // Zustand store hooks

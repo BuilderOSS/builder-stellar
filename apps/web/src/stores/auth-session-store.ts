@@ -4,7 +4,7 @@ import { create } from 'zustand';
 
 import type { AuthStatus } from '@/lib/auth/types';
 
-type DaoSessionState = {
+type AuthSessionState = {
   address: string;
   status: string;
   authStatus: AuthStatus;
@@ -14,16 +14,16 @@ type DaoSessionState = {
   walletNetworkIssue: string;
 };
 
-type DaoSessionActions = {
-  updateSession: (patch: Partial<DaoSessionState>) => void;
+type AuthSessionActions = {
+  updateSession: (patch: Partial<AuthSessionState>) => void;
   setAuthStatus: (authStatus: AuthStatus, authError?: string) => void;
   setAuthenticatedAddress: (address: string) => void;
   resetAuth: () => void;
 };
 
-type DaoSessionStore = DaoSessionState & DaoSessionActions;
+type AuthSessionStore = AuthSessionState & AuthSessionActions;
 
-const initialState: DaoSessionState = {
+const initialState: AuthSessionState = {
   address: '',
   status: 'Disconnected',
   authStatus: 'anonymous',
@@ -33,7 +33,7 @@ const initialState: DaoSessionState = {
   walletNetworkIssue: ''
 };
 
-export const useDaoSessionStore = create<DaoSessionStore>((set) => ({
+export const useAuthSessionStore = create<AuthSessionStore>((set) => ({
   ...initialState,
   updateSession: (patch) =>
     set((current) => {
@@ -41,7 +41,7 @@ export const useDaoSessionStore = create<DaoSessionStore>((set) => ({
       const next = { ...current };
 
       for (const [key, value] of Object.entries(patch) as Array<
-        [keyof DaoSessionState, DaoSessionState[keyof DaoSessionState]]
+        [keyof AuthSessionState, AuthSessionState[keyof AuthSessionState]]
       >) {
         if (typeof value !== 'undefined' && next[key] !== value) {
           next[key] = value as never;

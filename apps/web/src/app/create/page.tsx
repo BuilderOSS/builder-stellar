@@ -28,8 +28,8 @@ import {
 } from '@/lib/create-dao-schema';
 import { getDeploymentConfig, isDeploymentConfigured } from '@/lib/deployment-config';
 import { useDaoDeployment } from '@/lib/use-dao-deployment';
+import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
-import { useDaoSessionStore } from '@/stores/dao-session-store';
 
 type SectionStatus = 'complete' | 'active' | 'error' | 'pending';
 
@@ -175,7 +175,7 @@ function AccordionSection({
 
 export default function CreateDaoPage() {
   const router = useRouter();
-  const session = useDaoSessionStore();
+  const session = useAuthSessionStore();
   const sectionRefs = useRef<Partial<Record<CreateDaoSection, HTMLElement>>>({});
 
   const basicInfo = useCreateDaoStore((state) => state.basicInfo);

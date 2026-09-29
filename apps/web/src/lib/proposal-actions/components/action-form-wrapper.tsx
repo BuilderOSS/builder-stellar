@@ -6,7 +6,7 @@ import { Suspense, useCallback, useState } from 'react';
 
 import { ProposalActionConfirmDialog } from '@/components/proposal/proposal-action-confirm-dialog';
 import { Skeleton } from '@/components/ui';
-import { useDaoSessionStore } from '@/stores/dao-session-store';
+import { useAuthSessionStore } from '@/stores/auth-session-store';
 import {
   normalizeWalletAddress,
   selectValidationErrors,
@@ -34,7 +34,7 @@ type ConfirmDialogState = {
 export function ActionFormWrapper({ daoId }: { daoId: string }) {
   const context = useActionFormContext();
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>(null);
-  const address = useDaoSessionStore((state) => state.address);
+  const address = useAuthSessionStore((state) => state.address);
   const walletKey = normalizeWalletAddress(address);
 
   // Subscribe to only what we need (performance optimization)

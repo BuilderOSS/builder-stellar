@@ -7,7 +7,7 @@ import { MarketplaceComingSoon } from '@/components/marketplace/marketplace-comi
 import { Callout } from '@/components/ui';
 import type { DaoConfig } from '@/lib/dao-db';
 import { useDashboardData } from '@/lib/goldsky-queries';
-import { useDaoSessionStore } from '@/stores/dao-session-store';
+import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import { DashboardFeed } from './dashboard-feed';
 import { DashboardFooter } from './dashboard-footer';
@@ -18,7 +18,7 @@ import { DashboardWelcome } from './dashboard-welcome';
 
 export function DashboardShell({ daos, loadError }: { daos: DaoConfig[]; loadError: boolean }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const sessionAddress = useDaoSessionStore((state) => state.address);
+  const sessionAddress = useAuthSessionStore((state) => state.address);
   const isNewcomer = !sessionAddress;
   const { data: dashboardData, error: dashboardError, isLoading: dashboardLoading } = useDashboardData(sessionAddress);
 

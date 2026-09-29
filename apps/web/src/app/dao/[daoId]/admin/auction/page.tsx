@@ -24,7 +24,7 @@ import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { getStellarAddressError, isValidStellarAddress } from '@/lib/validation';
-import { useDaoSessionStore } from '@/stores/dao-session-store';
+import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 type AuctionStatus = {
   status: 'not-launched' | 'paused' | 'active';
@@ -45,7 +45,7 @@ const fetcher = async (url: string): Promise<AuctionStatus> => {
 
 export default function AuctionAdminPage() {
   const { daoId, daoConfig: config } = useDaoContext();
-  const session = useDaoSessionStore();
+  const session = useAuthSessionStore();
   const tx = useTransactionFeedback(config.name);
   const [busy, setBusy] = useState(false);
   const [formMessage, setFormMessage] = useState('');
