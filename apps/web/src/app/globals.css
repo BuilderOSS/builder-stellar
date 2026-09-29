@@ -1813,12 +1813,23 @@ textarea {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 328px);
   gap: 24px;
-  align-items: start;
+  align-items: stretch;
+}
+
+.proposal-studio-main {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 20px;
 }
 
 .proposal-context-rail {
   position: sticky;
   top: 100px;
+  display: flex;
+  height: calc(100vh - 124px);
+  max-height: calc(100vh - 124px);
+  flex-direction: column;
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--gray-6);
@@ -1889,7 +1900,9 @@ textarea {
 }
 
 .proposal-context-rail__body {
-  min-height: 280px;
+  min-height: 0;
+  overflow-y: auto;
+  flex: 1;
   padding: 18px;
 }
 
@@ -2049,6 +2062,7 @@ textarea {
     bottom: 0;
     left: auto;
     width: min(380px, calc(100vw - 28px));
+    height: 100vh;
     max-height: none;
     border-radius: 16px 0 0 16px;
     background: var(--surface-1);
@@ -2081,7 +2095,9 @@ textarea {
     position: fixed;
     z-index: 61;
     right: 16px;
-    bottom: 76px;
+    bottom: max(16px, env(safe-area-inset-bottom));
+    border-color: var(--border-strong);
+    background: var(--surface-1);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
   }
 
@@ -2110,6 +2126,12 @@ textarea {
   }
 }
 
+@media (min-width: 681px) and (max-width: 1020px) {
+  .proposal-context-mobile-trigger {
+    right: 24px;
+  }
+}
+
 @media (max-width: 680px) {
   .proposal-context-rail {
     top: auto;
@@ -2133,7 +2155,8 @@ textarea {
     left: 10px;
     width: calc(100% - 20px);
     min-height: 40px;
-    justify-content: space-between;
+    justify-content: center;
+    text-align: center;
     border-color: var(--border-strong);
     border-radius: 12px 12px 8px 8px;
     background: rgba(23, 26, 31, 0.98);
