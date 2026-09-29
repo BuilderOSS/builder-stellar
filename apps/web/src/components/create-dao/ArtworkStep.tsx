@@ -240,7 +240,14 @@ export function ArtworkStep() {
                                     justifyContent: 'space-between'
                                   }}
                                 >
-                                  <Text style={{ fontWeight: 600 }}>Property {propertyIndex + 1}</Text>
+                                  <Text style={{ fontWeight: 600 }}>
+                                    Property {propertyIndex + 1} ·{' '}
+                                    {propertyIndex === 0
+                                      ? 'Base layer'
+                                      : propertyIndex === artwork.properties.length - 1
+                                        ? 'Top layer'
+                                        : `Layer ${propertyIndex + 1}`}
+                                  </Text>
                                   <Button
                                     variant="outline"
                                     onClick={() => removeArtworkProperty(propertyIndex)}
