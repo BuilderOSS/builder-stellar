@@ -4,6 +4,7 @@ import { ArrowUpRight } from 'lucide-react';
 import Link from 'next/link';
 
 import { Card, Heading, Text } from '@/components/ui';
+import { formatActivitySummary } from '@/lib/activity-feed';
 import { daoRoute } from '@/lib/dao-routes';
 import type { DashboardFeedItem } from '@/lib/goldsky-queries';
 
@@ -62,7 +63,7 @@ export function DashboardFeed({
                 <Text className="dashboard-feed__date">{formatActivityDate(item.timestamp)}</Text>
               </div>
               <Heading style={{ fontSize: '1rem', margin: '8px 0 4px' }}>{item.title}</Heading>
-              <Text className="dashboard-feed__summary">{item.summary}</Text>
+              <Text className="dashboard-feed__summary">{formatActivitySummary(item)}</Text>
               <Link className="dashboard-feed__link" href={daoRoute(item.dao_id)}>
                 Open DAO
                 <ArrowUpRight aria-hidden="true" size={14} />

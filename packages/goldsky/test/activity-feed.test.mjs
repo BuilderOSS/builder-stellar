@@ -175,8 +175,23 @@ for (const test of eventTests) {
 }
 console.log('✅ Passed\n');
 
-// Test 9: Topic values survive the decoded_events schema boundary
-console.log('Test 9: Topic-only token IDs are included in summaries');
+// Test 9: Structured fields are extracted from decoded topic and argument JSON
+console.log('Test 9: Structured event fields are extracted from topics and args');
+const structuredResult = invoke({
+  event_id: 'structured-1',
+  event_name: 'bid_placed',
+  deployment_id: 'test',
+  contract_id: 'test',
+  topics: JSON.stringify({ token_id: '33', bidder: 'BIDDER' }),
+  args: JSON.stringify({ amount: '1000000000' })
+});
+assert.strictEqual(structuredResult.token_id, '33');
+assert.strictEqual(structuredResult.amount, '1000000000');
+assert.strictEqual(structuredResult.summary, 'Bid of 1000000000 placed on token 33');
+console.log('✅ Passed\n');
+
+// Test 10: Topic values survive the decoded_events schema boundary
+console.log('Test 10: Topic-only token IDs are included in summaries');
 const topicOnlyEvents = [
   {
     event_name: 'AuctionCreated',
@@ -204,8 +219,8 @@ for (const event of topicOnlyEvents) {
 }
 console.log('✅ Passed\n');
 
-// Test 10: Kind mapping
-console.log('Test 10: Kind mapping for known events');
+// Test 11: Kind mapping
+console.log('Test 11: Kind mapping for known events');
 const result = invoke({
   event_id: '5',
   event_name: 'Transfer',
@@ -215,8 +230,8 @@ const result = invoke({
 assert.strictEqual(result.kind, 'token.transfer', 'Transfer event should map to token.transfer kind');
 console.log('✅ Passed\n');
 
-// Test 11: Visibility assignment
-console.log('Test 11: Visibility assignment based on event type');
+// Test 12: Visibility assignment
+console.log('Test 12: Visibility assignment based on event type');
 const governanceResult = invoke({
   event_id: '6',
   event_name: 'VoteCast',
@@ -242,8 +257,8 @@ const adminResult = invoke({
 assert.strictEqual(adminResult.visibility, 'admin', 'MintAuthorityChanged should have admin visibility');
 console.log('✅ Passed\n');
 
-// Test 12: Addresses array handling
-console.log('Test 12: Addresses array handling');
+// Test 13: Addresses array handling
+console.log('Test 13: Addresses array handling');
 const addressesResult = invoke({
   event_id: '9',
   event_name: 'Transfer',
@@ -260,8 +275,8 @@ assert.ok(addresses.includes('BOB'), 'addresses should contain owner address');
 assert.ok(addresses.includes('ALICE'), 'addresses should contain proposer address');
 console.log('✅ Passed\n');
 
-// Test 13: Multiple rows consistency (Arrow type inference test)
-console.log('Test 13: Type consistency across multiple rows (Arrow simulation)');
+// Test 14: Multiple rows consistency (Arrow type inference test)
+console.log('Test 14: Type consistency across multiple rows (Arrow simulation)');
 const rows = [
   { event_id: '1', event_name: 'Mint', deployment_id: 'test', contract_id: 'test', topics: '{}', ledger_sequence: 100 },
   { event_id: '2', event_name: 'Transfer', deployment_id: 'test', contract_id: 'test', topics: null, ledger_sequence: 101 },
@@ -284,8 +299,8 @@ for (const result of results) {
 }
 console.log('✅ Passed - All rows have consistent types\n');
 
-// Test 14: Empty/edge case values
-console.log('Test 14: Empty/edge case values');
+// Test 15: Empty/edge case values
+console.log('Test 15: Empty/edge case values');
 const edgeCaseResult = invoke({
   event_id: '',
   event_name: 'Transfer',
@@ -305,7 +320,7 @@ console.log('✅ Passed\n');
 
 // Summary
 console.log('═══════════════════════════════════════');
-console.log('✅ All 14 tests passed!');
+console.log('✅ All 15 tests passed!');
 console.log('═══════════════════════════════════════');
 console.log('\n📊 Test Coverage:');
 console.log('  • Null/undefined input handling');

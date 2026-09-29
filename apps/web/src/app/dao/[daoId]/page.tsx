@@ -13,6 +13,7 @@ import type { ProposalListResponse } from '@/components/proposal/types';
 import { TokenCard } from '@/components/token/token-card';
 import { Button, Callout, Card, Heading, ShortId, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
+import { formatActivitySummary } from '@/lib/activity-feed';
 import { useGoldskyActivityFeed, useGoldskyHealth } from '@/lib/goldsky-queries';
 import { useTokenInventory } from '@/lib/token-queries';
 
@@ -470,7 +471,7 @@ export default function Page() {
                       <div>
                         <Text style={{ margin: 0, fontWeight: 700 }}>{item.title}</Text>
                         <Text className="lede" style={{ margin: '4px 0 0', fontSize: '0.9rem' }}>
-                          {item.summary}
+                          {formatActivitySummary(item)}
                         </Text>
                       </div>
                       <Text className="lede dashboard-activity-meta">

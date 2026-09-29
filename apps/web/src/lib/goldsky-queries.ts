@@ -7,7 +7,12 @@ export type GoldskyActivityItem = {
   kind: string;
   title: string;
   summary: string;
+  event_name: string | null;
+  topics: string | null;
+  args: string | null;
   proposal_id: string | null;
+  token_id: string | null;
+  amount: string | null;
   proposal_number: string | null;
   actor: string | null;
   addresses: string | string[] | null;
@@ -105,7 +110,12 @@ export type DashboardFeedItem = {
   kind: string;
   title: string;
   summary: string;
+  event_name: string | null;
+  topics: string | null;
+  args: string | null;
   proposal_id: string | null;
+  token_id: string | null;
+  amount: string | null;
   actor: string | null;
   ledger_sequence: number;
   timestamp: string | number | null;
