@@ -109,6 +109,53 @@ function settingHandler(
   };
 }
 
+function auctionDurationHandler(
+  type: 'set-auction-duration' | 'set-auction-time-buffer',
+  label: string,
+  functionName: 'set_duration' | 'set_time_buffer',
+  minimum: number
+): ActionHandler<AdminValueDraft> {
+  return {
+    type,
+    label,
+    description: `Update ${label.toLowerCase()}`,
+    group: 'Administration',
+    FormComponent: AdminValueForm,
+    getDefaultValues: () => ({ value: '' }),
+    validate: (data) => {
+      const parsed = Number(data.value.trim());
+      if (!/^\d+$/.test(data.value.trim()) || !Number.isSafeInteger(parsed)) {
+        return {
+          valid: false,
+          message: `${label} must be a whole number.`,
+          fields: { value: `${label} must be a whole number.` }
+        };
+      }
+      if (parsed < minimum) {
+        return {
+          valid: false,
+          message: `${label} must be at least ${minimum} seconds.`,
+          fields: { value: `${label} must be at least ${minimum} seconds.` }
+        };
+      }
+      return valid();
+    },
+    serialize: (data) => ({
+      id: crypto.randomUUID(),
+      type,
+      recipient: '',
+      amount: data.value.trim(),
+      value: data.value.trim()
+    }),
+    deserialize: (action) => ({ value: action.value || action.amount || '' }),
+    buildCallVector: (data, context) => ({
+      target: context.config.auctionContractId,
+      function: functionName,
+      args: [Number(data.value.trim())]
+    })
+  };
+}
+
 export const setMintAuthorityHandler = authorityHandler('set-mint-authority', 'Set mint authority');
 export const setGovernorAuthorityHandler = authorityHandler('set-governor-authority', 'Set governor authority');
 export const setVotingDelayHandler = settingHandler('set-voting-delay', 'Voting delay', 'set_voting_delay');
@@ -119,6 +166,18 @@ export const setProposalThresholdHandler = settingHandler(
   'set_proposal_threshold'
 );
 export const setQuorumBpsHandler = settingHandler('set-quorum-bps', 'Quorum', 'set_quorum_bps');
+export const setAuctionDurationHandler = auctionDurationHandler(
+  'set-auction-duration',
+  'Auction duration',
+  'set_duration',
+  300
+);
+export const setAuctionTimeBufferHandler = auctionDurationHandler(
+  'set-auction-time-buffer',
+  'Auction time buffer',
+  'set_time_buffer',
+  60
+);
 
 function emptyAuctionHandler(type: 'pause-auction' | 'unpause-auction', label: string): ActionHandler<EmptyDraft> {
   return {
