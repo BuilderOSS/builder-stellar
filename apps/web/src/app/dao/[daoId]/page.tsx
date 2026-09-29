@@ -1,6 +1,6 @@
 'use client';
 
-import { Activity, ChevronDown, MoreHorizontal, RefreshCw } from 'lucide-react';
+import { Activity, ChevronDown, RefreshCw } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
@@ -207,28 +207,16 @@ export default function Page() {
             <DaoContractList config={config} className="dashboard-contract-menu__items" />
           </div>
         </details>
-        <details className="dashboard-menu dashboard-menu--options">
-          <summary
-            className="dashboard-menu__trigger dashboard-menu__trigger--icon"
-            aria-label="Dashboard options"
-            title="Dashboard options"
-          >
-            <MoreHorizontal aria-hidden="true" size={18} />
-          </summary>
-          <div className="dashboard-menu__panel dashboard-options-menu">
-            <Text className="label">Dashboard options</Text>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void refreshDashboard()}
-              disabled={isDashboardRefreshing}
-            >
-              <RefreshCw aria-hidden="true" className={isDashboardRefreshing ? 'is-spinning' : undefined} size={15} />
-              {isDashboardRefreshing ? 'Refreshing…' : 'Refresh dashboard'}
-            </Button>
-          </div>
-        </details>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void refreshDashboard()}
+          disabled={isDashboardRefreshing}
+        >
+          <RefreshCw aria-hidden="true" className={isDashboardRefreshing ? 'is-spinning' : undefined} size={15} />
+          {isDashboardRefreshing ? 'Refreshing…' : 'Refresh dashboard'}
+        </Button>
       </div>
 
       <div className="dashboard-secondary-grid">
