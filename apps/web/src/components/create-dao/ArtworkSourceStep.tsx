@@ -6,13 +6,28 @@ import { Box, Flex, Stack } from 'styled-system/jsx';
 
 import { ArtworkDirectoryUpload } from '@/components/create-dao/ArtworkDirectoryUpload';
 import { ArtworkPlayground } from '@/components/create-dao/ArtworkPlayground';
+import { ArtworkPreviewCanvas } from '@/components/create-dao/ArtworkPreviewCanvas';
 import { Badge, Button, Card, Heading, Text } from '@/components/ui';
 import { cidToUrls } from '@/lib/pinata-upload';
-import { getAvailableCollections, getRandomPreviewTokenId, getStarterCollection } from '@/lib/starter-collections';
+import { getAvailableCollections, getStarterCollection } from '@/lib/starter-collections';
 import { ArtworkSource, useCreateDaoStore } from '@/stores/create-dao-store';
 
+function starterSource(collection: ReturnType<typeof getStarterCollection>) {
+  if (!collection) return null;
+
+  return {
+    kind: 'starter' as const,
+    starterId: collection.id,
+    baseUri: collection.baseUri,
+    extension: collection.extension,
+    properties: collection.properties,
+    gatewayUrl: collection.baseUri.startsWith('ipfs://')
+      ? cidToUrls(collection.baseUri.replace('ipfs://', '').replace(/\/$/, '')).gatewayUrl
+      : collection.baseUri
+  };
+}
+
 export function ArtworkSourceStep() {
-  const basicInfo = useCreateDaoStore((s) => s.basicInfo);
   const artworkSource = useCreateDaoStore((s) => s.artworkSource);
   const setArtworkSource = useCreateDaoStore((s) => s.setArtworkSource);
 
@@ -25,17 +40,8 @@ export function ArtworkSourceStep() {
   // Handle starter collection selection
   const handleSelectStarter = (collectionId: string) => {
     const collection = getStarterCollection(collectionId);
-    if (collection) {
-      const source: ArtworkSource = {
-        kind: 'starter',
-        starterId: collection.id,
-        baseUri: collection.baseUri,
-        extension: collection.extension,
-        properties: collection.properties,
-        gatewayUrl: collection.baseUri.startsWith('ipfs://')
-          ? cidToUrls(collection.baseUri.replace('ipfs://', '').replace(/\/$/, '')).gatewayUrl
-          : collection.baseUri
-      };
+    const source = starterSource(collection);
+    if (source) {
       setArtworkSource(source);
       setSourceChoice('starter');
       // Show playground for layer ordering
@@ -165,16 +171,12 @@ export function ArtworkSourceStep() {
                             minHeight: '150px'
                           }}
                         >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={`${basicInfo.rendererBase}${basicInfo.tokenUri.split('/')[basicInfo.tokenUri.split('/').length - 2]}/${getRandomPreviewTokenId(collection)}`}
-                            alt={collection.name}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            onError={(e) => {
-                              // Fallback to solid color on render error
-                              e.currentTarget.style.backgroundColor = 'var(--gray-3)';
-                            }}
-                          />
+                          {starterSource(collection) ? (
+                            <ArtworkPreviewCanvas
+                              source={starterSource(collection)!}
+                              orderedLayers={collection.properties}
+                            />
+                          ) : null}
                         </Box>
 
                         {/* Collection Info */}
