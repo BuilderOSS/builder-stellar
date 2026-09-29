@@ -22,6 +22,41 @@
   --overlay-opacity: 0.74;
   --content-width: 1240px;
   --page-gutter: clamp(16px, 4vw, 48px);
+
+  /* Compatibility aliases for legacy scale-based component styles. */
+  --accent-2: var(--focus-soft);
+  --accent-6: var(--action);
+  --accent-7: var(--action);
+  --accent-9: var(--action);
+  --accent-11: var(--action-hover);
+  --gray-1: var(--surface-1);
+  --gray-2: var(--surface-2);
+  --gray-3: var(--surface-3);
+  --gray-4: var(--border-default);
+  --gray-6: var(--border-strong);
+  --gray-8: var(--text-tertiary);
+  --gray-9: var(--text-secondary);
+  --gray-10: var(--text-secondary);
+  --gray-11: var(--text-secondary);
+  --gray-12: var(--text-primary);
+  --info-2: var(--focus-soft);
+  --info-3: var(--focus-soft);
+  --info-4: var(--focus-soft);
+  --info-9: var(--focus);
+  --error-2: rgba(239, 105, 105, 0.12);
+  --error-6: var(--negative);
+  --error-9: var(--negative);
+  --error-11: var(--negative);
+  --warning-2: rgba(244, 183, 64, 0.12);
+  --warning-9: var(--warning);
+  --warning-11: var(--warning);
+  --success-2: rgba(71, 200, 121, 0.12);
+  --success-6: var(--positive);
+  --success-9: var(--positive);
+  --success-11: var(--positive);
+  --amber-7: var(--warning);
+  --red-7: var(--negative);
+  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.32);
 }
 
 * {
