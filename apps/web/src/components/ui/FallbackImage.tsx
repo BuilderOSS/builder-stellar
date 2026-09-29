@@ -10,6 +10,10 @@ type FallbackImageProps = Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src' 
 };
 
 export function FallbackImage({ src, errorFallbackSrc, ...props }: FallbackImageProps) {
+  return <FallbackImageContent key={src ?? 'fallback'} src={src} errorFallbackSrc={errorFallbackSrc} {...props} />;
+}
+
+function FallbackImageContent({ src, errorFallbackSrc, ...props }: FallbackImageProps) {
   const urls = useMemo(() => getFetchableUrls(src) ?? [], [src]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [hasExhaustedSources, setHasExhaustedSources] = useState(urls.length === 0);

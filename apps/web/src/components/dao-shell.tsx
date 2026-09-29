@@ -14,11 +14,11 @@ import {
   Vote
 } from 'lucide-react';
 import type { Route } from 'next';
-import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { type ReactNode } from 'react';
 
+import { DaoImage } from '@/components/dao-image';
 import { DashboardFooter } from '@/components/dashboard/dashboard-footer';
 import { NetworkIndicator } from '@/components/network-indicator';
 import { ProposalDraftIndicator } from '@/components/proposal/proposal-draft-indicator';
@@ -119,14 +119,12 @@ export function DaoShell({ children }: { children: ReactNode }) {
                 href={`/dao/${daoId}`}
                 aria-label={`${currentNetwork.tokenName} dashboard`}
               >
-                <Image
+                <DaoImage
                   className="brand-mark"
-                  src="/icon.svg"
-                  alt=""
-                  aria-hidden="true"
+                  src={currentNetwork.contractImage}
+                  alt={`${currentNetwork.tokenName} logo`}
                   width={44}
                   height={44}
-                  priority
                 />
                 <div className="brand-copy">
                   <p className="brand-name">{currentNetwork.tokenName}</p>

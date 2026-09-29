@@ -100,6 +100,7 @@ export type DashboardDao = {
   token_name: string | null;
   token_symbol: string | null;
   token_description: string | null;
+  contract_image: string | null;
   status: string;
 };
 

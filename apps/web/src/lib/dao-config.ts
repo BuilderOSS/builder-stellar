@@ -20,6 +20,7 @@ export type DaoNetworkConfig = {
   adminAddress: string;
   tokenContractId: string;
   metadataContractId: string;
+  contractImage: string;
   governorContractId: string;
   treasuryContractId: string;
   auctionContractId: string;
@@ -57,6 +58,7 @@ export async function getDaoNetworkConfigById(daoId: string): Promise<DaoNetwork
     adminAddress: daoConfig.admin_address || '',
     tokenContractId: daoConfig.token_address,
     metadataContractId: daoConfig.metadata_contract ?? '',
+    contractImage: daoConfig.contract_image ?? '',
     governorContractId: daoConfig.governor_contract,
     treasuryContractId: daoConfig.treasury_contract ?? '',
     auctionContractId: daoConfig.auction_contract ?? '',

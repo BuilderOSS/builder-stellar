@@ -193,11 +193,6 @@ export default function Page() {
   return (
     <PageSection title="Dashboard" description="Your DAO activity at a glance.">
       <div className="dashboard-controls">
-        {isDashboardRefreshing ? (
-          <Text className="dashboard-sync-status" role="status" aria-live="polite">
-            Syncing…
-          </Text>
-        ) : null}
         <details className="dashboard-menu">
           <summary className="dashboard-menu__trigger">
             Contracts <ChevronDown aria-hidden="true" size={14} />

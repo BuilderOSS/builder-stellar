@@ -655,8 +655,12 @@ export async function getDashboardData(address: string, params: { limit?: number
       d.token_name,
       d.token_symbol,
       d.token_description,
+      metadata_config.contract_image,
       d.status
     FROM manager.daos d
+    LEFT JOIN metadata.configuration metadata_config
+      ON metadata_config.deployment_id = d.deployment_id
+      AND metadata_config.dao_id = d.dao_id
     WHERE d.deployment_id = $1
       AND d.status = 'operational'
       AND (

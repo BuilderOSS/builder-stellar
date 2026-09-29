@@ -235,6 +235,9 @@ textarea {
 }
 .brand-mark {
   flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
   border: 1px solid var(--border-strong);
   border-radius: 10px;
   background: var(--surface-2);
@@ -669,7 +672,23 @@ textarea {
   gap: 16px;
 }
 .discovery-card__identity {
+  display: flex;
+  align-items: center;
   min-width: 0;
+  gap: 12px;
+}
+.discovery-card__identity > div:last-child {
+  min-width: 0;
+}
+.discovery-card__image {
+  display: block;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--surface-2);
 }
 .discovery-card__title {
   margin: 7px 0 0;
@@ -3006,6 +3025,7 @@ textarea {
   justify-content: center;
   width: 30px;
   height: 30px;
+  object-fit: cover;
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   background: var(--surface-2);

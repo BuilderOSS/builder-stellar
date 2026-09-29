@@ -4,6 +4,7 @@ import { ArrowUpRight, Search } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 
+import { DaoImage } from '@/components/dao-image';
 import { Badge, Card, Heading, Input, Text } from '@/components/ui';
 import type { DaoConfig } from '@/lib/dao-db';
 import { daoRoute } from '@/lib/dao-routes';
@@ -79,8 +80,11 @@ export function DaoDirectory({ daos }: { daos: DaoConfig[] }) {
               <Card className="interactive-card discovery-card" p="5">
                 <div className="discovery-card__topline">
                   <div className="discovery-card__identity">
-                    <Text className="label">{dao.token_symbol || 'DAO'}</Text>
-                    <Heading className="discovery-card__title">{daoName(dao)}</Heading>
+                    <DaoImage className="discovery-card__image" src={dao.contract_image} alt={`${daoName(dao)} logo`} />
+                    <div>
+                      <Text className="label">{dao.token_symbol || 'DAO'}</Text>
+                      <Heading className="discovery-card__title">{daoName(dao)}</Heading>
+                    </div>
                   </div>
                   <ArrowUpRight aria-hidden="true" className="discovery-card__arrow" size={18} />
                 </div>
