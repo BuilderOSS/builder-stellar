@@ -136,7 +136,7 @@ export function DaoShell({ children }: { children: ReactNode }) {
             </div>
 
             <div className="header-actions">
-              <NetworkIndicator networkLabel={currentNetwork.label} isConnected={Boolean(session.address)} />
+              <NetworkIndicator isConnected={Boolean(session.address)} />
               <ProposalDraftIndicator daoId={daoId} config={currentNetwork} address={session.address} />
               <WalletControls network={currentNetwork} />
             </div>

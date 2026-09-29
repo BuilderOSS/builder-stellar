@@ -2,7 +2,9 @@ import { Menu } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 
+import { NetworkIndicator } from '@/components/network-indicator';
 import { WalletControls } from '@/components/wallet-controls';
+import { useDaoSessionStore } from '@/stores/dao-session-store';
 
 interface DashboardHeaderProps {
   showMenuButton?: boolean;
@@ -10,6 +12,7 @@ interface DashboardHeaderProps {
 }
 
 export function DashboardHeader({ showMenuButton = false, onMenuClick }: DashboardHeaderProps) {
+  const session = useDaoSessionStore();
   return (
     <header className="dashboard-header">
       {showMenuButton ? (
@@ -25,6 +28,7 @@ export function DashboardHeader({ showMenuButton = false, onMenuClick }: Dashboa
         </div>
       </Link>
       <div className="dashboard-header__actions">
+        <NetworkIndicator isConnected={Boolean(session.address)} />
         <WalletControls />
       </div>
     </header>
