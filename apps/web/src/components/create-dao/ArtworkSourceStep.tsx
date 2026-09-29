@@ -30,8 +30,8 @@ function starterSource(collection: ReturnType<typeof getStarterCollection>) {
 export function ArtworkSourceStep() {
   const artworkSource = useCreateDaoStore((s) => s.artworkSource);
   const setArtworkSource = useCreateDaoStore((s) => s.setArtworkSource);
+  const clearArtworkSource = useCreateDaoStore((s) => s.clearArtworkSource);
 
-  const [sourceChoice, setSourceChoice] = useState<'starter' | 'upload' | null>(null);
   const [uploadMode, setUploadMode] = useState(false);
   const [playgroundMode, setPlaygroundMode] = useState(false);
 
@@ -43,7 +43,6 @@ export function ArtworkSourceStep() {
     const source = starterSource(collection);
     if (source) {
       setArtworkSource(source);
-      setSourceChoice('starter');
       // Show playground for layer ordering
       setPlaygroundMode(true);
     }
@@ -53,7 +52,6 @@ export function ArtworkSourceStep() {
   const handleUploadComplete = (source: ArtworkSource) => {
     if (source.kind === 'uploaded') {
       setArtworkSource(source);
-      setSourceChoice('upload');
       setUploadMode(false);
       // Show playground for layer ordering and preview
       setPlaygroundMode(true);
@@ -68,6 +66,11 @@ export function ArtworkSourceStep() {
 
   // Back from playground
   const handlePlaygroundBack = () => {
+    setPlaygroundMode(false);
+  };
+
+  const handleChangeSelection = () => {
+    clearArtworkSource();
     setPlaygroundMode(false);
   };
 
@@ -103,25 +106,30 @@ export function ArtworkSourceStep() {
   return (
     <Stack gap="4">
       {/* Current Selection Display */}
-      {artworkSource && artworkSource.kind !== 'legacy-unconfirmed' && (
+      {artworkSource && artworkSource.kind !== 'legacy-unconfirmed' && !playgroundMode && (
         <Card p="5" style={{ backgroundColor: 'var(--info-2)' }}>
           <Stack gap="3">
             <Flex gap="2" style={{ alignItems: 'center' }}>
               <Badge style={{ backgroundColor: 'var(--info-9)', color: 'white' }}>Selected</Badge>
               <Heading as="h3" style={{ fontSize: '1rem' }}>
-                Artwork Source Configured
+                Your artwork
               </Heading>
             </Flex>
             {getSelectionDescription()}
-            <Button onClick={() => setSourceChoice(null)} style={{ width: 'fit-content' }}>
-              Change Selection
-            </Button>
+            <Flex gap="2" style={{ flexWrap: 'wrap' }}>
+              <Button onClick={() => setPlaygroundMode(true)} style={{ width: 'fit-content' }}>
+                Preview and organize layers
+              </Button>
+              <Button variant="outline" onClick={handleChangeSelection} style={{ width: 'fit-content' }}>
+                Choose different artwork
+              </Button>
+            </Flex>
           </Stack>
         </Card>
       )}
 
       {/* Source Selection Screen */}
-      {!sourceChoice && (
+      {(!artworkSource || artworkSource.kind === 'legacy-unconfirmed') && !uploadMode && !playgroundMode && (
         <Card p="5">
           <Stack gap="4">
             <Stack gap="2">
@@ -147,37 +155,18 @@ export function ArtworkSourceStep() {
                       style={{
                         flex: '0 1 calc(50% - 0.75rem)',
                         minWidth: '250px',
-                        cursor: 'pointer',
-                        border: '1px solid var(--gray-6)',
-                        transition: 'all 0.2s'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = 'var(--info-9)';
-                        e.currentTarget.style.boxShadow = '0 0 0 2px var(--info-3)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = 'var(--gray-6)';
-                        e.currentTarget.style.boxShadow = 'none';
+                        border: '1px solid var(--gray-6)'
                       }}
                     >
                       <Stack gap="3">
                         {/* Preview Render */}
-                        <Box
-                          style={{
-                            borderRadius: '0.375rem',
-                            overflow: 'hidden',
-                            backgroundColor: 'var(--gray-2)',
-                            aspectRatio: '1',
-                            minHeight: '150px'
-                          }}
-                        >
-                          {starterSource(collection) ? (
-                            <ArtworkPreviewCanvas
-                              source={starterSource(collection)!}
-                              orderedLayers={collection.properties}
-                            />
-                          ) : null}
-                        </Box>
+                        {starterSource(collection) ? (
+                          <ArtworkPreviewCanvas
+                            source={starterSource(collection)!}
+                            orderedLayers={collection.properties}
+                            showShuffle={false}
+                          />
+                        ) : null}
 
                         {/* Collection Info */}
                         <Stack gap="2">
@@ -229,21 +218,6 @@ export function ArtworkSourceStep() {
                   </Card>
                 </Stack>
               )}
-
-              {/* AI Generation (disabled for now) */}
-              <Stack gap="3">
-                <Heading as="h3" style={{ fontSize: '1rem' }}>
-                  AI Generation
-                </Heading>
-                <Card p="4" style={{ backgroundColor: 'var(--gray-2)', opacity: 0.6 }}>
-                  <Stack gap="2">
-                    <Text style={{ fontWeight: 600 }}>AI-Generated Collections</Text>
-                    <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)' }}>
-                      Coming soon. Generate composable artwork from a DAO description.
-                    </Text>
-                  </Stack>
-                </Card>
-              </Stack>
             </Stack>
           </Stack>
         </Card>

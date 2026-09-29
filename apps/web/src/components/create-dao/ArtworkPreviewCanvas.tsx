@@ -12,6 +12,7 @@ import { ArtworkProperty, ArtworkSource } from '@/stores/create-dao-store';
 export interface ArtworkPreviewCanvasProps {
   source: Extract<ArtworkSource, { kind: 'uploaded' | 'starter' }>;
   orderedLayers: ArtworkProperty[];
+  showShuffle?: boolean;
 }
 
 /**
@@ -26,7 +27,7 @@ export interface ArtworkPreviewCanvasProps {
  *
  * Uses useArtworkPreview hook for layer management.
  */
-export function ArtworkPreviewCanvas({ source, orderedLayers }: ArtworkPreviewCanvasProps) {
+export function ArtworkPreviewCanvas({ source, orderedLayers, showShuffle = true }: ArtworkPreviewCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { loadingProgress, error, isLoading, hasErrors, hasImages, reload } = useArtworkPreview({
     source,
@@ -156,27 +157,28 @@ export function ArtworkPreviewCanvas({ source, orderedLayers }: ArtworkPreviewCa
         )}
       </AnimatePresence>
 
-      {/* Reload */}
-      <motion.div
-        whileHover={{ scale: 1.01 }}
-        whileTap={{ scale: 0.99 }}
-        transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-      >
-        <Button
-          size="sm"
-          onClick={reload}
-          style={{ alignSelf: 'flex-start', backgroundColor: 'transparent', color: 'var(--gray-11)' }}
+      {showShuffle && (
+        <motion.div
+          whileHover={{ scale: 1.01 }}
+          whileTap={{ scale: 0.99 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 30 }}
         >
-          <motion.div
-            animate={{ rotate: !isLoading ? 0 : 360 }}
-            transition={{ duration: isLoading ? 2 : 0, repeat: isLoading ? Infinity : 0, ease: 'linear' }}
-            style={{ display: 'flex', marginRight: '0.5rem' }}
+          <Button
+            size="sm"
+            onClick={reload}
+            style={{ alignSelf: 'flex-start', backgroundColor: 'transparent', color: 'var(--gray-11)' }}
           >
-            <RotateCcw size={14} />
-          </motion.div>
-          Shuffle Preview
-        </Button>
-      </motion.div>
+            <motion.div
+              animate={{ rotate: !isLoading ? 0 : 360 }}
+              transition={{ duration: isLoading ? 2 : 0, repeat: isLoading ? Infinity : 0, ease: 'linear' }}
+              style={{ display: 'flex', marginRight: '0.5rem' }}
+            >
+              <RotateCcw size={14} />
+            </motion.div>
+            Shuffle Preview
+          </Button>
+        </motion.div>
+      )}
     </Stack>
   );
 }
