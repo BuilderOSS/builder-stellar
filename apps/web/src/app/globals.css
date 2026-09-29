@@ -1432,6 +1432,19 @@ textarea {
   display: grid;
   gap: 10px;
 }
+.dao-contract-list__missing {
+  color: var(--gray-11);
+  font-size: 0.78rem;
+}
+.dao-contract-list__row {
+  padding: 11px;
+  border: 1px solid var(--gray-6);
+  border-radius: 10px;
+  background: var(--gray-2);
+}
+.dao-contract-list--compact .mono {
+  font-size: 0.72rem;
+}
 .dashboard-options-menu {
   min-width: 250px;
 }
@@ -1880,18 +1893,6 @@ textarea {
   padding: 18px;
 }
 
-.proposal-context-rail__footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 12px 18px;
-  border-top: 1px solid var(--gray-6);
-  color: var(--accent-11);
-  font-size: 0.8rem;
-  text-decoration: none;
-}
-
 .proposal-context-kicker {
   color: var(--accent-11);
   font-size: 0.72rem;
@@ -1911,25 +1912,6 @@ textarea {
   margin-top: 6px;
 }
 
-.proposal-context-metrics {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.proposal-context-metric {
-  display: grid;
-  gap: 3px;
-  padding: 11px;
-  border: 1px solid var(--gray-6);
-  border-radius: 10px;
-  background: var(--gray-2);
-}
-
-.proposal-context-metric strong {
-  font-size: 1.1rem;
-}
-
 .proposal-context-list,
 .proposal-context-loading {
   display: grid;
@@ -1938,6 +1920,15 @@ textarea {
 
 .proposal-context-loading {
   padding-top: 4px;
+}
+
+.proposal-context-skeleton-row {
+  display: grid;
+  gap: 8px;
+  padding: 11px;
+  border: 1px solid var(--gray-6);
+  border-radius: 10px;
+  background: var(--gray-2);
 }
 
 .proposal-context-row,
@@ -2000,9 +1991,32 @@ textarea {
   align-items: flex-start;
 }
 
-.proposal-context-member-heading button {
-  min-height: 28px;
-  padding: 4px 7px;
+.proposal-context-member-address {
+  min-width: 0;
+  flex: 1;
+}
+
+.proposal-context-members {
+  display: grid;
+  gap: 10px;
+}
+
+.proposal-context-members .proposal-context-list {
+  gap: 6px;
+}
+
+.proposal-context-members .mono {
+  font-size: 0.72rem;
+}
+
+.proposal-context-members svg {
+  width: 12px;
+  height: 12px;
+}
+
+.proposal-context-members .proposal-context-member {
+  gap: 4px;
+  padding: 8px;
 }
 
 .proposal-context-history-row {
@@ -2020,27 +2034,6 @@ textarea {
   margin-top: 4px;
   font-size: 0.84rem;
   line-height: 1.35;
-}
-
-.proposal-context-note {
-  display: flex;
-  gap: 9px;
-  align-items: flex-start;
-  border-color: var(--accent-6);
-  background: rgba(157, 179, 203, 0.08);
-}
-
-.proposal-context-note svg {
-  flex: 0 0 auto;
-  margin-top: 2px;
-  color: var(--accent-11);
-}
-
-.proposal-context-note p {
-  margin: 0;
-  color: var(--gray-11);
-  font-size: 0.79rem;
-  line-height: 1.45;
 }
 
 @media (max-width: 1020px) {
@@ -2115,10 +2108,6 @@ textarea {
     min-height: 0;
     flex: 1;
   }
-
-  .proposal-context-rail__footer {
-    padding-bottom: calc(12px + env(safe-area-inset-bottom));
-  }
 }
 
 @media (max-width: 680px) {
@@ -2153,10 +2142,6 @@ textarea {
 
   .proposal-context-rail__body {
     max-height: calc(min(82dvh, 720px) - 132px);
-  }
-
-  .proposal-context-rail__footer {
-    padding-bottom: calc(12px + env(safe-area-inset-bottom));
   }
 
   .proposal-context-tab-label {

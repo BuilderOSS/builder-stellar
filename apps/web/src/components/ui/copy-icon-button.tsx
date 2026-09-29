@@ -6,9 +6,10 @@ type CopyIconButtonProps = {
   copied: boolean;
   onClick: () => void;
   label?: string;
+  compact?: boolean;
 };
 
-export function CopyIconButton({ copied, onClick, label }: CopyIconButtonProps) {
+export function CopyIconButton({ copied, onClick, label, compact = false }: CopyIconButtonProps) {
   const title = copied ? 'Copied' : (label ?? 'Copy');
 
   return (
@@ -22,19 +23,19 @@ export function CopyIconButton({ copied, onClick, label }: CopyIconButtonProps) 
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        width: '2.75rem',
-        height: '2.75rem',
-        minWidth: '2.75rem',
-        minHeight: '2.75rem',
+        width: compact ? '2rem' : '2.75rem',
+        height: compact ? '2rem' : '2.75rem',
+        minWidth: compact ? '2rem' : '2.75rem',
+        minHeight: compact ? '2rem' : '2.75rem',
         padding: 0,
-        borderRadius: '10px',
+        borderRadius: compact ? '8px' : '10px',
         border: '1px solid var(--border-default)',
         background: 'var(--surface-2)',
         color: 'var(--text-secondary)',
         cursor: 'pointer'
       }}
     >
-      {copied ? <Check size={16} /> : <Copy size={16} />}
+      {copied ? <Check size={compact ? 14 : 16} /> : <Copy size={compact ? 14 : 16} />}
     </button>
   );
 }

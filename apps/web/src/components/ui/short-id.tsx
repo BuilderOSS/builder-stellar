@@ -25,7 +25,17 @@ function getExplorerUrl(value: string, network: Parameters<typeof getExplorerCon
   return '';
 }
 
-export function ShortId({ value, label, explorerUrl }: { value: string; label?: string; explorerUrl?: string }) {
+export function ShortId({
+  value,
+  label,
+  explorerUrl,
+  compact = false
+}: {
+  value: string;
+  label?: string;
+  explorerUrl?: string;
+  compact?: boolean;
+}) {
   const { daoConfig } = useDaoContext();
   const [copied, setCopied] = useState(false);
   const displayValue = shorten(value);
@@ -55,11 +65,11 @@ export function ShortId({ value, label, explorerUrl }: { value: string; label?: 
       </div>
       <HStack gap="1">
         {resolvedExplorerUrl ? (
-          <IconLinkButton href={resolvedExplorerUrl} label="Open in Stellar Expert">
+          <IconLinkButton href={resolvedExplorerUrl} label="Open in Stellar Expert" compact={compact}>
             <ArrowUpRight size={12} />
           </IconLinkButton>
         ) : null}
-        <CopyIconButton copied={copied} onClick={copyValue} label="Copy address" />
+        <CopyIconButton copied={copied} onClick={copyValue} label="Copy address" compact={compact} />
       </HStack>
     </HStack>
   );

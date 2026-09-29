@@ -7,11 +7,12 @@ import { useEffect, useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 import useSWR from 'swr';
 
+import { DaoContractList } from '@/components/dao-contract-list';
 import { PageSection } from '@/components/page-section';
 import { ProposalStateBadge } from '@/components/proposal/proposal-state-badge';
 import type { ProposalListResponse } from '@/components/proposal/types';
 import { TokenCard } from '@/components/token/token-card';
-import { Button, Callout, Card, Heading, ShortId, Skeleton, Text } from '@/components/ui';
+import { Button, Callout, Card, Heading, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { formatActivitySummary } from '@/lib/activity-feed';
 import { useGoldskyActivityFeed, useGoldskyHealth } from '@/lib/goldsky-queries';
@@ -203,33 +204,7 @@ export default function Page() {
           </summary>
           <div className="dashboard-menu__panel dashboard-contract-menu">
             <Text className="label">Contracts</Text>
-            <div className="dashboard-contract-menu__items">
-              {config.tokenContractId ? (
-                <ShortId label="Token" value={config.tokenContractId} />
-              ) : (
-                <Text>Token: Missing</Text>
-              )}
-              {config.governorContractId ? (
-                <ShortId label="Governor" value={config.governorContractId} />
-              ) : (
-                <Text>Governor: Missing</Text>
-              )}
-              {config.treasuryContractId ? (
-                <ShortId label="Treasury" value={config.treasuryContractId} />
-              ) : (
-                <Text>Treasury: Missing</Text>
-              )}
-              {config.auctionContractId ? (
-                <ShortId label="Auction" value={config.auctionContractId} />
-              ) : (
-                <Text>Auction: Missing</Text>
-              )}
-              {config.metadataContractId ? (
-                <ShortId label="Metadata" value={config.metadataContractId} />
-              ) : (
-                <Text>Metadata: Missing</Text>
-              )}
-            </div>
+            <DaoContractList config={config} className="dashboard-contract-menu__items" />
           </div>
         </details>
         <details className="dashboard-menu dashboard-menu--options">

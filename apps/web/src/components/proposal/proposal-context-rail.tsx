@@ -1,20 +1,20 @@
 'use client';
 
-import { Copy, ExternalLink, RefreshCw, Search, WalletCards, X } from 'lucide-react';
+import { RefreshCw, Search, X } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 import useSWR from 'swr';
 
-import { Badge, Button, Callout, Card, Input, ShortId, Skeleton, Text } from '@/components/ui';
+import { DaoContractList } from '@/components/dao-contract-list';
+import { Badge, Button, Callout, Input, ShortId, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { useGoldskyMemberList } from '@/lib/goldsky-queries';
-import type { AssetBalance } from '@/lib/treasury-queries';
 import { useTreasuryBalances } from '@/lib/treasury-queries';
 
 import type { ProposalListResponse } from './types';
 
-type ContextTab = 'snapshot' | 'treasury' | 'members' | 'history';
+type ContextTab = 'treasury' | 'members' | 'contracts' | 'history';
 
 type ProposalContextRailProps = {
   activeActionType?: string;
@@ -24,10 +24,10 @@ type ProposalContextRailProps = {
 };
 
 const tabs: Array<{ id: ContextTab; label: string; shortLabel: string }> = [
-  { id: 'snapshot', label: 'Snapshot', shortLabel: 'Overview' },
   { id: 'treasury', label: 'Treasury', shortLabel: 'Treasury' },
   { id: 'members', label: 'Members', shortLabel: 'Members' },
-  { id: 'history', label: 'Past proposals', shortLabel: 'History' }
+  { id: 'contracts', label: 'Contracts', shortLabel: 'Contracts' },
+  { id: 'history', label: 'History', shortLabel: 'History' }
 ];
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -56,33 +56,64 @@ function formatDate(timestamp: number) {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(timestamp * 1000));
 }
 
-function DataState({ loading, error, children }: { loading: boolean; error?: Error; children: React.ReactNode }) {
+function DataState({
+  loading,
+  error,
+  hasData,
+  loadingContent,
+  children
+}: {
+  loading: boolean;
+  error?: Error;
+  hasData: boolean;
+  loadingContent: React.ReactNode;
+  children: React.ReactNode;
+}) {
   if (loading) {
     return (
-      <div className="proposal-context-loading" role="status" aria-busy="true">
-        <Skeleton style={{ width: '75%', height: '0.85rem' }} />
-        <Skeleton style={{ width: '52%', height: '0.85rem' }} />
-        <Skeleton style={{ width: '64%', height: '0.85rem' }} />
+      <div role="status" aria-busy="true">
+        {loadingContent}
       </div>
     );
   }
-  if (error) return <Callout variant="error" title="Data unavailable" description={error.message} />;
-  return children;
+
+  if (error && !hasData) {
+    return <Callout variant="error" title="Data unavailable" description={error.message} />;
+  }
+
+  return (
+    <>
+      {error ? <Callout variant="error" title="Some data may be out of date" description={error.message} /> : null}
+      {children}
+    </>
+  );
 }
 
-function Metric({ label, value, detail }: { label: string; value: string; detail?: string }) {
+function PanelSkeleton({ type }: { type: 'balances' | 'members' | 'history' }) {
+  const count = type === 'members' ? 4 : 3;
+
   return (
-    <div className="proposal-context-metric">
-      <Text className="label">{label}</Text>
-      <strong>{value}</strong>
-      {detail ? <Text className="proposal-context-detail">{detail}</Text> : null}
+    <div className="proposal-context-loading">
+      {Array.from({ length: count }, (_, index) => (
+        <div className="proposal-context-skeleton-row" key={index}>
+          <Skeleton style={{ width: type === 'history' ? '68%' : '42%', height: '0.85rem' }} />
+          <Skeleton style={{ width: type === 'members' ? '78%' : '34%', height: '0.7rem' }} />
+        </div>
+      ))}
     </div>
   );
 }
 
-function TreasuryPanel({ balances, loading, error }: { balances?: AssetBalance[]; loading: boolean; error?: Error }) {
+function TreasuryPanel({ config }: { config: Parameters<typeof useTreasuryBalances>[0] }) {
+  const { data: balances, error, isLoading } = useTreasuryBalances(config);
+
   return (
-    <DataState loading={loading} error={error}>
+    <DataState
+      loading={isLoading && !balances}
+      error={error}
+      hasData={Boolean(balances)}
+      loadingContent={<PanelSkeleton type="balances" />}
+    >
       <div className="proposal-context-list">
         {balances?.length ? (
           balances.map((asset) => (
@@ -95,7 +126,7 @@ function TreasuryPanel({ balances, loading, error }: { balances?: AssetBalance[]
             </div>
           ))
         ) : (
-          <Text className="proposal-context-detail">No configured treasury assets.</Text>
+          <Text className="proposal-context-detail">No assets are configured for this treasury.</Text>
         )}
       </div>
     </DataState>
@@ -113,12 +144,8 @@ function MemberPanel({ daoTokenAddress }: { daoTokenAddress: string }) {
       ),
     [data?.items, normalizedQuery]
   );
-  const copyAddress = async (address: string) => {
-    await navigator.clipboard?.writeText(address);
-  };
-
   return (
-    <>
+    <div className="proposal-context-members">
       <div className="proposal-context-search">
         <Search size={15} aria-hidden="true" />
         <Input
@@ -135,36 +162,32 @@ function MemberPanel({ daoTokenAddress }: { daoTokenAddress: string }) {
           Refresh
         </Button>
       </div>
-      <DataState loading={isLoading && !data} error={error}>
+      <DataState
+        loading={isLoading && !data}
+        error={error}
+        hasData={Boolean(data)}
+        loadingContent={<PanelSkeleton type="members" />}
+      >
         {rows.length ? (
           <div className="proposal-context-list">
             {rows.slice(0, 12).map((member, index) => (
               <div className="proposal-context-member" key={member.address}>
                 <div className="proposal-context-member-heading">
                   <Badge>#{index + 1}</Badge>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    aria-label={`Copy ${member.address}`}
-                    onClick={() => void copyAddress(member.address)}
-                  >
-                    <Copy size={14} aria-hidden="true" />
-                  </Button>
+                  <div className="proposal-context-member-address">
+                    <ShortId value={member.address} compact />
+                  </div>
                 </div>
-                <ShortId value={member.address} />
-                <Text className="proposal-context-detail">
-                  {formatNumber(member.voting_power)} voting power · {member.owned_token_count} tokens
-                </Text>
+                <Text className="proposal-context-detail">{formatNumber(member.voting_power)} voting power</Text>
               </div>
             ))}
             {rows.length > 12 ? <Text className="proposal-context-detail">Showing the top 12 matches.</Text> : null}
           </div>
         ) : (
-          <Text className="proposal-context-detail">No members match this address.</Text>
+          <Text className="proposal-context-detail">No members match that address.</Text>
         )}
       </DataState>
-    </>
+    </div>
   );
 }
 
@@ -176,7 +199,12 @@ function HistoryPanel({ daoId }: { daoId: string }) {
   );
 
   return (
-    <DataState loading={isLoading && !data} error={error}>
+    <DataState
+      loading={isLoading && !data}
+      error={error}
+      hasData={Boolean(data)}
+      loadingContent={<PanelSkeleton type="history" />}
+    >
       <div className="proposal-context-list">
         {data?.items.length ? (
           data.items.map((proposal) => (
@@ -195,7 +223,9 @@ function HistoryPanel({ daoId }: { daoId: string }) {
             </Link>
           ))
         ) : (
-          <Text className="proposal-context-detail">No past proposals yet. This can be the DAO's first decision.</Text>
+          <Text className="proposal-context-detail">
+            No proposals yet. This could be the DAO&apos;s first decision.
+          </Text>
         )}
       </div>
     </DataState>
@@ -213,17 +243,8 @@ export function ProposalContextRail({
   const railRef = useRef<HTMLElement>(null);
   const wasMobileOpen = useRef(false);
   const [activeTab, setActiveTab] = useState<ContextTab>(
-    activeActionType?.includes('transfer') ? 'treasury' : 'snapshot'
+    activeActionType?.includes('transfer') ? 'treasury' : 'members'
   );
-  const { data: balances, error: balancesError, isLoading: balancesLoading } = useTreasuryBalances(config);
-  const { data: members, error: membersError, isLoading: membersLoading } = useGoldskyMemberList(daoTokenAddress, 1);
-  const {
-    data: proposals,
-    error: proposalsError,
-    isLoading: proposalsLoading
-  } = useSWR<ProposalListResponse>(`/api/dao/${encodeURIComponent(daoId)}/proposals?limit=8`, fetchJson, {
-    keepPreviousData: true
-  });
 
   useEffect(() => {
     if (!mobileOpen) {
@@ -296,8 +317,9 @@ export function ProposalContextRail({
           <div>
             <Text className="label">DAO workspace</Text>
             <Text className="proposal-context-rail__title" id="proposal-context-title">
-              Reference while you draft
+              Context for your proposal
             </Text>
+            <Text className="proposal-context-intro">Live details to ground your next decision.</Text>
           </div>
           <Button
             type="button"
@@ -311,7 +333,7 @@ export function ProposalContextRail({
             <X size={18} aria-hidden="true" />
           </Button>
         </div>
-        <nav className="proposal-context-tabs" aria-label="DAO context views">
+        <nav className="proposal-context-tabs" aria-label="DAO workspace views" role="tablist">
           {tabs.map((tab) => (
             <button
               className={activeTab === tab.id ? 'is-active' : undefined}
@@ -319,6 +341,7 @@ export function ProposalContextRail({
               type="button"
               onClick={() => selectTab(tab.id)}
               aria-selected={activeTab === tab.id}
+              aria-controls="proposal-context-panel"
               role="tab"
             >
               <span className="proposal-context-tab-label">{tab.label}</span>
@@ -327,77 +350,46 @@ export function ProposalContextRail({
           ))}
         </nav>
 
-        <div className="proposal-context-rail__body">
-          {activeTab === 'snapshot' ? (
-            <Stack gap="4">
-              <div>
-                <Text className="proposal-context-kicker">Current state</Text>
-                <Text className="proposal-context-intro">
-                  A quick read on the DAO before you choose what to change.
-                </Text>
-              </div>
-              <div className="proposal-context-metrics">
-                <Metric label="Members" value={members ? formatNumber(members.total) : '—'} detail="Token holders" />
-                <Metric
-                  label="Treasury assets"
-                  value={balances ? formatNumber(balances.length) : '—'}
-                  detail="Configured assets"
-                />
-                <Metric
-                  label="Recent proposals"
-                  value={proposals ? formatNumber(proposals.items.length) : '—'}
-                  detail="Latest 8"
-                />
-              </div>
-              <DataState
-                loading={balancesLoading || membersLoading || proposalsLoading}
-                error={balancesError || membersError || proposalsError}
-              >
-                <Card className="proposal-context-note" p="3">
-                  <WalletCards size={17} aria-hidden="true" />
-                  <Text>
-                    Use the rail to look up addresses, check available assets, or compare how this DAO has handled
-                    similar decisions.
-                  </Text>
-                </Card>
-              </DataState>
-            </Stack>
-          ) : null}
+        <div className="proposal-context-rail__body" id="proposal-context-panel" role="tabpanel" tabIndex={0}>
           {activeTab === 'treasury' ? (
             <Stack gap="4">
               <div>
-                <Text className="proposal-context-kicker">Available to act on</Text>
+                <Text className="proposal-context-kicker">Available resources</Text>
                 <Text className="proposal-context-intro">
-                  Check live balances before drafting a transfer or funding request.
+                  Check balances before proposing a transfer or funding change.
                 </Text>
               </div>
-              <TreasuryPanel balances={balances} loading={balancesLoading} error={balancesError} />
+              <TreasuryPanel config={config} />
             </Stack>
           ) : null}
           {activeTab === 'members' ? (
             <Stack gap="4">
               <div>
-                <Text className="proposal-context-kicker">Find a recipient</Text>
-                <Text className="proposal-context-intro">
-                  Search the member directory without leaving the proposal.
-                </Text>
+                <Text className="proposal-context-kicker">People in the DAO</Text>
+                <Text className="proposal-context-intro">Find a recipient or verify voting power.</Text>
               </div>
               <MemberPanel daoTokenAddress={daoTokenAddress} />
+            </Stack>
+          ) : null}
+          {activeTab === 'contracts' ? (
+            <Stack gap="4">
+              <div>
+                <Text className="proposal-context-kicker">On-chain addresses</Text>
+                <Text className="proposal-context-intro">Copy the contracts this proposal can interact with.</Text>
+              </div>
+              <DaoContractList config={config} className="proposal-context-list" compact />
             </Stack>
           ) : null}
           {activeTab === 'history' ? (
             <Stack gap="4">
               <div>
-                <Text className="proposal-context-kicker">Learn from precedent</Text>
-                <Text className="proposal-context-intro">Review recent decisions before writing a new one.</Text>
+                <Text className="proposal-context-kicker">Past decisions</Text>
+                <Text className="proposal-context-intro">See how this DAO has handled similar proposals.</Text>
               </div>
               <HistoryPanel daoId={daoId} />
             </Stack>
           ) : null}
         </div>
-        <Link className="proposal-context-rail__footer" href={`/dao/${daoId}/proposals`}>
-          Browse all proposals <ExternalLink size={14} aria-hidden="true" />
-        </Link>
       </aside>
     </>
   );
