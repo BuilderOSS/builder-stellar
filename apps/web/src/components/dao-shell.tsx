@@ -2,10 +2,10 @@
 
 import type { LucideIcon } from 'lucide-react';
 import {
-  ArrowLeft,
   Gavel,
   Landmark,
   LayoutDashboard,
+  LogOut,
   MoreHorizontal,
   Settings,
   ShieldAlert,
@@ -111,7 +111,7 @@ export function DaoShell({ children }: { children: ReactNode }) {
           <div className="app-header__top">
             <div className="dao-header__identity">
               <Link className="dao-exit-button" href="/" aria-label="Exit DAO and return to Dashboard">
-                <ArrowLeft className="dao-exit-button__icon" aria-hidden="true" size={17} />
+                <LogOut className="dao-exit-button__icon" aria-hidden="true" size={17} />
                 <span className="dao-exit-button__text">Exit DAO</span>
               </Link>
               <Link
