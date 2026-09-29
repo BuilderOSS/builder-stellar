@@ -1625,6 +1625,9 @@ textarea {
   align-items: stretch;
   gap: 16px;
 }
+.dashboard-secondary-grid > :only-child {
+  grid-column: 1 / -1;
+}
 .dashboard-secondary-card {
   height: 31rem;
   min-height: 0;
