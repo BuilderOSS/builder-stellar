@@ -2403,10 +2403,6 @@ textarea {
     width: 38px;
     height: 38px;
   }
-  .brand-kicker,
-  .network-chip {
-    display: none;
-  }
   .content-shell {
     padding-top: 32px;
   }
