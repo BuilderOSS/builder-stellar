@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { loadImageWithFallback } from '@/lib/image-loader';
 import { ArtworkProperty, ArtworkSource } from '@/stores/create-dao-store';
@@ -20,13 +20,17 @@ interface UseArtworkPreviewOptions {
 }
 
 interface UseArtworkPreviewResult {
-  layerImages: LayerImage[];
   loadingProgress: number;
   error: string | null;
   isLoading: boolean;
   hasErrors: boolean;
   hasImages: boolean;
   reload: () => void;
+}
+
+export function pickRandomArtworkItem(items: string[], random = Math.random) {
+  if (items.length === 0) return '';
+  return items[Math.floor(random() * items.length)];
 }
 
 /**
@@ -51,17 +55,17 @@ export function useArtworkPreview({
   const [layerImages, setLayerImages] = useState<LayerImage[]>([]);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const loadIdRef = useRef(0);
 
   /**
    * Build layer URL from source properties
    */
   const buildLayerUrl = useCallback(
-    (property: ArtworkProperty, extension: string): string => {
+    (property: ArtworkProperty, itemName: string, extension: string): string => {
       if (!source.baseUri || !property.name || property.items.length === 0) {
         return '';
       }
 
-      const itemName = property.items[0];
       const cleanBase = source.baseUri.replace(/\/$/, '');
 
       // Handle different base URI formats
@@ -85,6 +89,8 @@ export function useArtworkPreview({
    * Load all layer images
    */
   const loadLayers = useCallback(async () => {
+    const loadId = ++loadIdRef.current;
+
     if (!source || !orderedLayers.length) {
       setLayerImages([]);
       return;
@@ -96,10 +102,12 @@ export function useArtworkPreview({
     try {
       setError(null);
       setLoadingProgress(0);
+      setLayerImages([]);
 
       for (let i = 0; i < orderedLayers.length; i++) {
         const property = orderedLayers[i];
-        const url = buildLayerUrl(property, extension);
+        const itemName = pickRandomArtworkItem(property.items);
+        const url = buildLayerUrl(property, itemName, extension);
 
         if (!url) {
           layers.push({ name: property.name, error: 'Invalid URL' });
@@ -116,11 +124,14 @@ export function useArtworkPreview({
           });
         }
 
+        if (loadId !== loadIdRef.current) return;
         setLoadingProgress(Math.round(((i + 1) / orderedLayers.length) * 100));
       }
 
+      if (loadId !== loadIdRef.current) return;
       setLayerImages(layers);
     } catch (err) {
+      if (loadId !== loadIdRef.current) return;
       setError(err instanceof Error ? err.message : 'Failed to load artwork');
       setLayerImages([]);
     }
@@ -193,15 +204,24 @@ export function useArtworkPreview({
   // Render canvas when layer images change
   useEffect(() => {
     let isMounted = true;
+    let frameId: number | undefined;
 
-    (async () => {
-      if (isMounted && canvasRef.current && layerImages.length > 0) {
-        await performCanvasRender(canvasRef.current, layerImages, canvasSize);
+    const renderWhenCanvasIsMounted = () => {
+      if (!isMounted || layerImages.length === 0) return;
+
+      if (!canvasRef.current) {
+        frameId = requestAnimationFrame(renderWhenCanvasIsMounted);
+        return;
       }
-    })();
+
+      void performCanvasRender(canvasRef.current, layerImages, canvasSize);
+    };
+
+    frameId = requestAnimationFrame(renderWhenCanvasIsMounted);
 
     return () => {
       isMounted = false;
+      if (frameId !== undefined) cancelAnimationFrame(frameId);
     };
   }, [layerImages, canvasSize, performCanvasRender, canvasRef]);
 
@@ -211,7 +231,6 @@ export function useArtworkPreview({
   const hasImages = layerImages.some((l) => l.blob);
 
   return {
-    layerImages,
     loadingProgress,
     error,
     isLoading,
