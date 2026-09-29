@@ -7,7 +7,7 @@ import { Stack } from 'styled-system/jsx';
 import { Badge, Button, Card, Text } from '@/components/ui';
 import { daoAdminRoute } from '@/lib/dao-routes';
 import { ProposalActionQueue } from '@/lib/proposal-actions';
-import { useDaoSessionStore } from '@/stores/dao-session-store';
+import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { selectDraft, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
 const ITEMS: Array<{ section: string; label: string }> = [
@@ -28,7 +28,7 @@ export function AdminSectionNav({
   showDraftTray?: boolean;
 }) {
   const router = useRouter();
-  const address = useDaoSessionStore((state) => state.address);
+  const address = useAuthSessionStore((state) => state.address);
   const draft = useProposalComposerStore(selectDraft(address || null, daoId));
 
   return (

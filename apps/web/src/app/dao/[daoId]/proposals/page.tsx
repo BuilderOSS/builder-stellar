@@ -14,7 +14,7 @@ import { Button, Callout, Heading, Input, Select, Skeleton, Text } from '@/compo
 import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
 import { useProposalEligibility } from '@/lib/proposal-eligibility';
-import { useDaoSessionStore } from '@/stores/dao-session-store';
+import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { selectHasDraft, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
 function formatTimestamp(timestamp: number) {
@@ -39,7 +39,7 @@ export default function ProposalsPage() {
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
   const router = useRouter();
-  const session = useDaoSessionStore();
+  const session = useAuthSessionStore();
   const eligibility = useProposalEligibility(config, session.address);
   const hasDraft = useProposalComposerStore(selectHasDraft(session.address || null, daoId));
   const { data, error, isLoading, mutate } = useSWR<ProposalListResponse>(

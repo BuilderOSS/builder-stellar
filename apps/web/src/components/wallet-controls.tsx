@@ -21,7 +21,7 @@ import {
 import { getExplorerAccountUrl } from '@/lib/explorer-links';
 import { useWalletBalance } from '@/lib/wallet-balance';
 import { initializeWalletKit, isWalletConnectSelected } from '@/lib/wallet-kit';
-import { useDaoSessionStore } from '@/stores/dao-session-store';
+import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 type WalletNetwork = {
   name: NetworkName;
@@ -36,7 +36,7 @@ function shortenAddress(value: string) {
 
 async function validateWalletNetwork(
   currentNetwork: WalletNetwork,
-  updateSession: ReturnType<typeof useDaoSessionStore.getState>['updateSession']
+  updateSession: ReturnType<typeof useAuthSessionStore.getState>['updateSession']
 ) {
   try {
     const walletNetwork = await StellarWalletsKit.getNetwork();
@@ -81,11 +81,11 @@ export function WalletControls({ network }: { network?: WalletNetwork }) {
   const networkName = currentNetwork.name;
   const networkLabel = currentNetwork.label;
   const networkPassphrase = currentNetwork.passphrase;
-  const session = useDaoSessionStore();
-  const updateSession = useDaoSessionStore((state) => state.updateSession);
-  const setAuthStatus = useDaoSessionStore((state) => state.setAuthStatus);
-  const setAuthenticatedAddress = useDaoSessionStore((state) => state.setAuthenticatedAddress);
-  const resetAuth = useDaoSessionStore((state) => state.resetAuth);
+  const session = useAuthSessionStore();
+  const updateSession = useAuthSessionStore((state) => state.updateSession);
+  const setAuthStatus = useAuthSessionStore((state) => state.setAuthStatus);
+  const setAuthenticatedAddress = useAuthSessionStore((state) => state.setAuthenticatedAddress);
+  const resetAuth = useAuthSessionStore((state) => state.resetAuth);
   const { data: authSession, mutate: mutateAuthSession } = useAuthSession();
   const [copied, setCopied] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string | null | undefined>(undefined);

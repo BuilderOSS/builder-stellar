@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { enforceAuthRateLimit } from './rate-limit';
 import { claimAuthChallenge, consumeAuthChallenge, releaseAuthChallenge } from './server';
@@ -82,30 +82,26 @@ describe('authentication safeguards', () => {
   it('fails closed in production when no IP headers are present', () => {
     const scope = `missing-identity-prod-${crypto.randomUUID()}`;
     const request = new Request('http://localhost:3000/api/auth/verify');
-    const nodeEnv = process.env.NODE_ENV;
-
     try {
       // Temporarily set to non-development to test production behavior
-      Object.defineProperty(process.env, 'NODE_ENV', { value: 'production', configurable: true });
+      vi.stubEnv('NODE_ENV', 'production');
       expect((enforceAuthRateLimit(request, scope, 2) as Response).status).toBe(503);
     } finally {
-      Object.defineProperty(process.env, 'NODE_ENV', { value: nodeEnv, configurable: true });
+      vi.unstubAllEnvs();
     }
   });
 
   it('allows local development with static localhost identifier when no headers present', () => {
     const scope = `dev-localhost-${crypto.randomUUID()}`;
     const request = new Request('http://localhost:3000/api/auth/verify');
-    const nodeEnv = process.env.NODE_ENV;
-
     try {
       // Set to development to test fallback behavior
-      Object.defineProperty(process.env, 'NODE_ENV', { value: 'development', configurable: true });
+      vi.stubEnv('NODE_ENV', 'development');
       expect(enforceAuthRateLimit(request, scope, 2)).toBeNull();
       expect(enforceAuthRateLimit(request, scope, 2)).toBeNull();
       expect((enforceAuthRateLimit(request, scope, 2) as Response).status).toBe(429);
     } finally {
-      Object.defineProperty(process.env, 'NODE_ENV', { value: nodeEnv, configurable: true });
+      vi.unstubAllEnvs();
     }
   });
 });

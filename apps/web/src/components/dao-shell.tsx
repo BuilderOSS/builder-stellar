@@ -2,10 +2,10 @@
 
 import type { LucideIcon } from 'lucide-react';
 import {
-  ArrowLeft,
   Gavel,
   Landmark,
   LayoutDashboard,
+  LogOut,
   MoreHorizontal,
   Settings,
   ShieldAlert,
@@ -14,11 +14,11 @@ import {
   Vote
 } from 'lucide-react';
 import type { Route } from 'next';
-import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { type ReactNode } from 'react';
 
+import { DaoImage } from '@/components/dao-image';
 import { DashboardFooter } from '@/components/dashboard/dashboard-footer';
 import { NetworkIndicator } from '@/components/network-indicator';
 import { ProposalDraftIndicator } from '@/components/proposal/proposal-draft-indicator';
@@ -26,7 +26,7 @@ import { Callout } from '@/components/ui';
 import { WalletControls } from '@/components/wallet-controls';
 import { useDaoContext } from '@/contexts/dao-context';
 import { useGoldskyMember } from '@/lib/goldsky-queries';
-import { useDaoSessionStore } from '@/stores/dao-session-store';
+import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 type NavItem = { href: Route; label: string; icon: LucideIcon; exact?: boolean };
 
@@ -86,7 +86,7 @@ function hasDaoMembership(member: ReturnType<typeof useGoldskyMember>['data']) {
 export function DaoShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { daoId, daoConfig: currentNetwork } = useDaoContext();
-  const session = useDaoSessionStore();
+  const session = useAuthSessionStore();
   const { data: memberLookup } = useGoldskyMember(currentNetwork.tokenContractId, session.address);
   const walletDisabled = Boolean(session.address && session.walletNetworkIssue);
 
@@ -111,7 +111,7 @@ export function DaoShell({ children }: { children: ReactNode }) {
           <div className="app-header__top">
             <div className="dao-header__identity">
               <Link className="dao-exit-button" href="/" aria-label="Exit DAO and return to Dashboard">
-                <ArrowLeft className="dao-exit-button__icon" aria-hidden="true" size={17} />
+                <LogOut className="dao-exit-button__icon" aria-hidden="true" size={17} />
                 <span className="dao-exit-button__text">Exit DAO</span>
               </Link>
               <Link
@@ -119,14 +119,12 @@ export function DaoShell({ children }: { children: ReactNode }) {
                 href={`/dao/${daoId}`}
                 aria-label={`${currentNetwork.tokenName} dashboard`}
               >
-                <Image
+                <DaoImage
                   className="brand-mark"
-                  src="/icon.svg"
-                  alt=""
-                  aria-hidden="true"
+                  src={currentNetwork.contractImage}
+                  alt={`${currentNetwork.tokenName} logo`}
                   width={44}
                   height={44}
-                  priority
                 />
                 <div className="brand-copy">
                   <p className="brand-name">{currentNetwork.tokenName}</p>
@@ -136,7 +134,7 @@ export function DaoShell({ children }: { children: ReactNode }) {
             </div>
 
             <div className="header-actions">
-              <NetworkIndicator networkLabel={currentNetwork.label} isConnected={Boolean(session.address)} />
+              <NetworkIndicator isConnected={Boolean(session.address)} />
               <ProposalDraftIndicator daoId={daoId} config={currentNetwork} address={session.address} />
               <WalletControls network={currentNetwork} />
             </div>

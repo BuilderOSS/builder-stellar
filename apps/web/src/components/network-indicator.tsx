@@ -1,9 +1,11 @@
 interface NetworkIndicatorProps {
-  networkLabel: string;
   isConnected?: boolean;
 }
+import { getNetworkConfig, type NetworkName } from '@/config/networks';
 
-export function NetworkIndicator({ networkLabel, isConnected = true }: NetworkIndicatorProps) {
+export function NetworkIndicator({ isConnected = true }: NetworkIndicatorProps) {
+  const { label: networkLabel } = getNetworkConfig((process.env.NEXT_PUBLIC_NETWORK || 'testnet') as NetworkName);
+
   if (!isConnected) {
     return null;
   }

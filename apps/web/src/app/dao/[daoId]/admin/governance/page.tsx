@@ -24,7 +24,7 @@ import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
-import { useDaoSessionStore } from '@/stores/dao-session-store';
+import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 type Drafts = Partial<{
   votingDelay: number;
@@ -56,7 +56,7 @@ function formatSecondsValue(value: number | null | undefined) {
 
 export default function GovernanceAdminPage() {
   const { daoId, daoConfig: config } = useDaoContext();
-  const session = useDaoSessionStore();
+  const session = useAuthSessionStore();
   const [drafts, setDrafts] = useState<Drafts>(EMPTY_DRAFTS);
   const [formMessage, setFormMessage] = useState('');
   const [busy, setBusy] = useState(false);

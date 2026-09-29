@@ -21,7 +21,7 @@ import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
-import { useDaoSessionStore } from '@/stores/dao-session-store';
+import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 async function submitAuthorityUpdate(
   config: DaoNetworkConfig,
@@ -63,7 +63,7 @@ async function submitAuthorityUpdate(
 
 export default function OwnerPage() {
   const { daoId, daoConfig: config } = useDaoContext();
-  const session = useDaoSessionStore();
+  const session = useAuthSessionStore();
   const [mintAuthority, setMintAuthority] = useState('');
   const [governorAuthority, setGovernorAuthority] = useState('');
   const [formMessage, setFormMessage] = useState('');

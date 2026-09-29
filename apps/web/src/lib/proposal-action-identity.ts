@@ -83,6 +83,10 @@ export function getProposalActionResourceKey(action: ProposalQueuedAction): stri
       return 'auction:reserve-price';
     case 'set-auction-payment-token':
       return 'auction:payment-token';
+    case 'set-auction-duration':
+      return 'auction:duration';
+    case 'set-auction-time-buffer':
+      return 'auction:time-buffer';
     default:
       return action.type;
   }

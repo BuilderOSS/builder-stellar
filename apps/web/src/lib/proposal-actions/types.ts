@@ -21,6 +21,8 @@ export type ProposalActionType =
   | 'set-quorum-bps'
   | 'pause-auction'
   | 'unpause-auction'
+  | 'set-auction-duration'
+  | 'set-auction-time-buffer'
   | 'set-auction-reserve-price'
   | 'set-auction-payment-token';
 

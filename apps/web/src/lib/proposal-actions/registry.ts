@@ -5,8 +5,10 @@ import { mintGovernanceTokenHandler } from './actions/mint-governance-token';
 import { transferSacTokenHandler } from './actions/transfer-sac-token';
 import {
   pauseAuctionHandler,
+  setAuctionDurationHandler,
   setAuctionPaymentTokenHandler,
   setAuctionReservePriceHandler,
+  setAuctionTimeBufferHandler,
   setGovernorAuthorityHandler,
   setMintAuthorityHandler,
   setProposalThresholdHandler,
@@ -34,7 +36,9 @@ const REGISTERED_HANDLERS: ActionHandler[] = [
   pauseAuctionHandler,
   unpauseAuctionHandler,
   setAuctionReservePriceHandler,
-  setAuctionPaymentTokenHandler
+  setAuctionPaymentTokenHandler,
+  setAuctionDurationHandler,
+  setAuctionTimeBufferHandler
 ];
 
 const ACTION_REGISTRY = new Map<ProposalActionType, ActionHandler>(

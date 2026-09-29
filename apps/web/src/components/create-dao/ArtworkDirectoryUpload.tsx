@@ -5,6 +5,7 @@ import { useCallback, useRef, useState } from 'react';
 import { Box, Flex, Stack } from 'styled-system/jsx';
 
 import { Button, Card, Heading, Text } from '@/components/ui';
+import { compareArtworkNames } from '@/lib/artwork-order';
 import { hashFiles } from '@/lib/file-hash';
 import { cacheUpload, getCachedUpload } from '@/lib/upload-cache';
 import { ArtworkProperty, ArtworkSource } from '@/stores/create-dao-store';
@@ -212,8 +213,12 @@ function validateDirectory(files: File[]): {
   return {
     valid: true,
     data: {
-      items,
-      properties,
+      items: [...items].sort((a, b) => compareArtworkNames(a.path, b.path)),
+      properties: new Map(
+        [...properties.entries()]
+          .sort(([a], [b]) => compareArtworkNames(a, b))
+          .map(([name, traitItems]) => [name, [...traitItems].sort(compareArtworkNames)])
+      ),
       extension: extension!,
       totalSize,
       itemCount: items.length

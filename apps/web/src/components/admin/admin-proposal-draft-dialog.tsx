@@ -33,13 +33,23 @@ export function AdminProposalDraftDialog({
       >
         <Stack gap="4">
           <div>
-            <Badge>{getProposalActionLabel(pending.action.type)}</Badge>
+            <Badge>
+              {pending.requests.length > 1
+                ? `${pending.requests.length} actions`
+                : getProposalActionLabel(pending.action.type)}
+            </Badge>
             <Heading id="proposal-consent-title" style={{ marginTop: '10px', fontSize: '1.35rem' }}>
               Review before adding to draft
             </Heading>
           </div>
           <Card p="3" style={{ background: 'var(--gray-2)' }}>
-            <Text style={{ fontWeight: 600 }}>{pending.summary}</Text>
+            <Stack gap="1">
+              {pending.summaries.map((summary) => (
+                <Text key={summary} style={{ fontWeight: 600 }}>
+                  {summary}
+                </Text>
+              ))}
+            </Stack>
             <Text style={{ marginTop: '6px', fontSize: '0.875rem', color: 'var(--gray-11)' }}>
               This only updates your local proposal draft. Your wallet will not be asked to sign yet.
             </Text>
@@ -70,7 +80,12 @@ export function AdminProposalDraftDialog({
                 Add to draft
               </Button>
             ) : null}
-            {duplicate && !conflict ? (
+            {duplicate && !conflict && pending.requests.length > 1 ? (
+              <Button type="button" onClick={() => onResolve('add')}>
+                Add available actions
+              </Button>
+            ) : null}
+            {duplicate && !conflict && pending.requests.length === 1 ? (
               <Text style={{ alignSelf: 'center', fontSize: '0.875rem', color: 'var(--gray-11)' }}>
                 Nothing added. Remove the existing duplicate from the draft if needed.
               </Text>

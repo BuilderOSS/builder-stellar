@@ -12,6 +12,7 @@ import { ArtworkProperty, ArtworkSource } from '@/stores/create-dao-store';
 export interface ArtworkPreviewCanvasProps {
   source: Extract<ArtworkSource, { kind: 'uploaded' | 'starter' }>;
   orderedLayers: ArtworkProperty[];
+  showShuffle?: boolean;
 }
 
 /**
@@ -26,9 +27,9 @@ export interface ArtworkPreviewCanvasProps {
  *
  * Uses useArtworkPreview hook for layer management.
  */
-export function ArtworkPreviewCanvas({ source, orderedLayers }: ArtworkPreviewCanvasProps) {
+export function ArtworkPreviewCanvas({ source, orderedLayers, showShuffle = true }: ArtworkPreviewCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { layerImages, loadingProgress, error, isLoading, hasErrors, hasImages, reload } = useArtworkPreview({
+  const { loadingProgress, error, isLoading, hasErrors, hasImages, reload } = useArtworkPreview({
     source,
     orderedLayers,
     canvasRef,
@@ -50,7 +51,10 @@ export function ArtworkPreviewCanvas({ source, orderedLayers }: ArtworkPreviewCa
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          minHeight: '300px',
+          width: '100%',
+          maxWidth: '400px',
+          aspectRatio: '1 / 1',
+          marginInline: 'auto',
           overflow: 'hidden'
         }}
       >
@@ -116,8 +120,9 @@ export function ArtworkPreviewCanvas({ source, orderedLayers }: ArtworkPreviewCa
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3 }}
               style={{
-                maxWidth: '100%',
-                maxHeight: '100%',
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
                 display: hasImages ? 'block' : 'none'
               }}
             />
@@ -152,97 +157,28 @@ export function ArtworkPreviewCanvas({ source, orderedLayers }: ArtworkPreviewCa
         )}
       </AnimatePresence>
 
-      {/* Layer List */}
-      <Stack gap="2">
-        <Text style={{ fontWeight: 600, fontSize: '0.75rem' }}>Layer Status</Text>
-        <Box style={{ fontSize: '0.75rem', color: 'var(--gray-11)', maxHeight: '150px', overflowY: 'auto' }}>
-          <AnimatePresence>
-            {layerImages.map((layer, index) => (
-              <motion.div
-                key={layer.name}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
-                transition={{ duration: 0.2, delay: index * 0.05 }}
-                layout
-              >
-                <Flex
-                  gap="2"
-                  style={{
-                    padding: '0.5rem',
-                    borderBottom: '1px solid var(--gray-4)',
-                    alignItems: 'center'
-                  }}
-                >
-                  <motion.div
-                    animate={{
-                      scale: layer.url ? [1, 1.2, 1] : 1,
-                      boxShadow: layer.url
-                        ? [
-                            '0 0 0 0px var(--success-9)',
-                            '0 0 0 4px rgba(74, 197, 130, 0.3)',
-                            '0 0 0 0px rgba(74, 197, 130, 0)'
-                          ]
-                        : 'none'
-                    }}
-                    transition={{
-                      duration: layer.url ? 1.5 : 0,
-                      repeat: layer.url ? Infinity : 0,
-                      repeatDelay: 2
-                    }}
-                    style={{
-                      width: '8px',
-                      height: '8px',
-                      borderRadius: '50%',
-                      backgroundColor: layer.error
-                        ? 'var(--error-9)'
-                        : layer.url
-                          ? 'var(--success-9)'
-                          : 'var(--gray-7)',
-                      flexShrink: 0
-                    }}
-                  />
-                  <Text style={{ flex: 1, fontSize: '0.75rem' }}>{layer.name}</Text>
-                  <AnimatePresence>
-                    {layer.error && (
-                      <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <Text style={{ fontSize: '0.7rem', color: 'var(--error-9)' }}>{layer.error}</Text>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </Flex>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </Box>
-      </Stack>
-
-      {/* Reload */}
-      <motion.div
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-      >
-        <Button
-          size="sm"
-          onClick={reload}
-          style={{ alignSelf: 'flex-start', backgroundColor: 'transparent', color: 'var(--gray-11)' }}
+      {showShuffle && (
+        <motion.div
+          whileHover={{ scale: 1.01 }}
+          whileTap={{ scale: 0.99 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 30 }}
         >
-          <motion.div
-            animate={{ rotate: !isLoading ? 0 : 360 }}
-            transition={{ duration: isLoading ? 2 : 0, repeat: isLoading ? Infinity : 0, ease: 'linear' }}
-            style={{ display: 'flex', marginRight: '0.5rem' }}
+          <Button
+            size="sm"
+            onClick={reload}
+            style={{ alignSelf: 'flex-start', backgroundColor: 'transparent', color: 'var(--gray-11)' }}
           >
-            <RotateCcw size={14} />
-          </motion.div>
-          Reload Preview
-        </Button>
-      </motion.div>
+            <motion.div
+              animate={{ rotate: !isLoading ? 0 : 360 }}
+              transition={{ duration: isLoading ? 2 : 0, repeat: isLoading ? Infinity : 0, ease: 'linear' }}
+              style={{ display: 'flex', marginRight: '0.5rem' }}
+            >
+              <RotateCcw size={14} />
+            </motion.div>
+            Shuffle Preview
+          </Button>
+        </motion.div>
+      )}
     </Stack>
   );
 }

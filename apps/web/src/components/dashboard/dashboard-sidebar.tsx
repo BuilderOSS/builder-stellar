@@ -3,6 +3,7 @@
 import { Plus, X } from 'lucide-react';
 import Link from 'next/link';
 
+import { DaoImage } from '@/components/dao-image';
 import { Text } from '@/components/ui';
 import { daoRoute } from '@/lib/dao-routes';
 import type { DashboardDao } from '@/lib/goldsky-queries';
@@ -65,9 +66,11 @@ export function DashboardSidebar({
                   href={daoRoute(dao.dao_id)}
                   onClick={onClose}
                 >
-                  <span className="dashboard-sidebar-item__avatar" aria-hidden="true">
-                    {(dao.token_symbol || daoName(dao)).slice(0, 1).toUpperCase()}
-                  </span>
+                  <DaoImage
+                    className="dashboard-sidebar-item__avatar"
+                    src={dao.contract_image}
+                    alt={`${daoName(dao)} logo`}
+                  />
                   <span className="dashboard-sidebar-item__name">{daoName(dao)}</span>
                 </Link>
               ))}

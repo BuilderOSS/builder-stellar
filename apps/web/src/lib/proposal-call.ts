@@ -89,6 +89,10 @@ function encodeU32(value: ProposalCallArg) {
   return nativeToScVal(Number(value), { type: 'u32' });
 }
 
+function encodeU64(value: ProposalCallArg) {
+  return nativeToScVal(String(value), { type: 'u64' });
+}
+
 function encodeI128(value: ProposalCallArg) {
   return nativeToScVal(String(value), { type: 'i128' });
 }
@@ -129,12 +133,17 @@ function encodeProposalCallArg(functionName: string, index: number, value: Propo
     functionName === 'set_voting_period' ||
     functionName === 'set_proposal_threshold' ||
     functionName === 'set_quorum_bps' ||
+    functionName === 'set_duration' ||
+    functionName === 'set_time_buffer' ||
     functionName === 'pause' ||
     functionName === 'unpause'
   ) {
-    if (index === 0) return encodeAddress(value);
-    if (functionName === 'set_mint_authority' || functionName === 'set_governor_authority') return encodeGeneric(value);
-    if (functionName === 'set_proposal_threshold') return encodeU128(value);
+    if (functionName === 'set_duration' || functionName === 'set_time_buffer') return encodeU64(value);
+    if (functionName === 'set_mint_authority' || functionName === 'set_governor_authority') {
+      return index === 0 ? encodeAddress(value) : encodeGeneric(value);
+    }
+    if (functionName === 'pause' || functionName === 'unpause') return encodeAddress(value);
+    if (functionName === 'set_proposal_threshold') return index === 0 ? encodeAddress(value) : encodeU128(value);
     return encodeU32(value);
   }
 
@@ -177,6 +186,8 @@ export function getProposalActionLabel(type: ProposalActionType) {
     'set-quorum-bps': 'Set Quorum',
     'pause-auction': 'Pause Auction',
     'unpause-auction': 'Resume Auction',
+    'set-auction-duration': 'Set Auction Duration',
+    'set-auction-time-buffer': 'Set Auction Time Buffer',
     'set-auction-reserve-price': 'Set Auction Reserve Price',
     'set-auction-payment-token': 'Set Auction Payment Token'
   };
@@ -208,6 +219,9 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
   }
   if (action.type === 'set-auction-reserve-price') {
     return `${getProposalActionLabel(action.type)} to ${action.reservePrice || action.amount}`;
+  }
+  if (action.type === 'set-auction-duration' || action.type === 'set-auction-time-buffer') {
+    return `${getProposalActionLabel(action.type)} to ${action.value || action.amount} seconds`;
   }
   if (action.type === 'set-auction-payment-token') {
     return `${getProposalActionLabel(action.type)} to ${action.paymentToken || action.recipient}`;

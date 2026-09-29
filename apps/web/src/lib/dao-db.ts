@@ -42,6 +42,7 @@ export interface DaoConfig {
   auction_contract: string | null;
   treasury_contract: string | null;
   metadata_contract: string | null;
+  contract_image: string | null;
 
   // Token Metadata (from DaoCreationParams)
   token_name: string | null;
@@ -56,6 +57,7 @@ export interface DaoConfig {
   // Lifecycle State
   status: 'pending' | 'operational'; // DAO lifecycle status
   auction_enabled: boolean | null;
+  auction_paused: boolean | null;
 
   // Blockchain Timeline
   created_ledger: number;
@@ -110,32 +112,37 @@ export async function getDaoConfigFromDatabase(daoId: string): Promise<DaoConfig
   // Query manager.daos table for complete DAO configuration
   const query = `
     SELECT
-      deployment_id,
-      dao_id,
-      token_address,
-      creator,
-      manager_contract,
-      token_contract,
-      governor_contract,
-      auction_contract,
-      treasury_contract,
-      metadata_contract,
-      token_name,
-      token_symbol,
-      token_description,
-      token_uri,
-      admin_address,
-      status,
-      auction_enabled,
-      created_ledger,
-      created_at,
-      created_tx_hash,
-      finalized_ledger,
-      finalized_at,
-      finalized_tx_hash,
-      indexed_at
-    FROM manager.daos
-    WHERE deployment_id = $1 AND dao_id = $2
+      d.deployment_id,
+      d.dao_id,
+      d.token_address,
+      d.creator,
+      d.manager_contract,
+      d.token_contract,
+      d.governor_contract,
+      d.auction_contract,
+      d.treasury_contract,
+      d.metadata_contract,
+      metadata_config.contract_image,
+      d.token_name,
+      d.token_symbol,
+      d.token_description,
+      d.token_uri,
+      d.admin_address,
+      d.status,
+      d.auction_enabled,
+      d.auction_paused,
+      d.created_ledger,
+      d.created_at,
+      d.created_tx_hash,
+      d.finalized_ledger,
+      d.finalized_at,
+      d.finalized_tx_hash,
+      d.indexed_at
+    FROM manager.daos d
+    LEFT JOIN metadata.configuration metadata_config
+      ON metadata_config.deployment_id = d.deployment_id
+      AND metadata_config.dao_id = d.dao_id
+    WHERE d.deployment_id = $1 AND d.dao_id = $2
     LIMIT 1
   `;
 
@@ -159,6 +166,7 @@ export async function getDaoConfigFromDatabase(daoId: string): Promise<DaoConfig
     auction_contract: row.auction_contract,
     treasury_contract: row.treasury_contract,
     metadata_contract: row.metadata_contract,
+    contract_image: row.contract_image,
     token_name: row.token_name,
     token_symbol: row.token_symbol,
     token_description: row.token_description,
@@ -167,6 +175,7 @@ export async function getDaoConfigFromDatabase(daoId: string): Promise<DaoConfig
     label: '', // Not yet stored in database, can be added later
     status: row.status || 'pending',
     auction_enabled: row.auction_enabled ?? null,
+    auction_paused: row.auction_paused ?? null,
     created_ledger: row.created_ledger,
     created_at: row.created_at,
     created_tx_hash: row.created_tx_hash,
@@ -199,32 +208,37 @@ export async function getAllDaosFromDatabase(status?: 'pending' | 'operational')
   // Build query with optional status filter
   let query = `
     SELECT
-      deployment_id,
-      dao_id,
-      token_address,
-      creator,
-      manager_contract,
-      token_contract,
-      governor_contract,
-      auction_contract,
-      treasury_contract,
-      metadata_contract,
-      token_name,
-      token_symbol,
-      token_description,
-      token_uri,
-      admin_address,
-      status,
-      auction_enabled,
-      created_ledger,
-      created_at,
-      created_tx_hash,
-      finalized_ledger,
-      finalized_at,
-      finalized_tx_hash,
-      indexed_at
-    FROM manager.daos
-    WHERE deployment_id = $1
+      d.deployment_id,
+      d.dao_id,
+      d.token_address,
+      d.creator,
+      d.manager_contract,
+      d.token_contract,
+      d.governor_contract,
+      d.auction_contract,
+      d.treasury_contract,
+      d.metadata_contract,
+      metadata_config.contract_image,
+      d.token_name,
+      d.token_symbol,
+      d.token_description,
+      d.token_uri,
+      d.admin_address,
+      d.status,
+      d.auction_enabled,
+      d.auction_paused,
+      d.created_ledger,
+      d.created_at,
+      d.created_tx_hash,
+      d.finalized_ledger,
+      d.finalized_at,
+      d.finalized_tx_hash,
+      d.indexed_at
+    FROM manager.daos d
+    LEFT JOIN metadata.configuration metadata_config
+      ON metadata_config.deployment_id = d.deployment_id
+      AND metadata_config.dao_id = d.dao_id
+    WHERE d.deployment_id = $1
   `;
 
   const params: any[] = [deploymentId];
@@ -250,6 +264,7 @@ export async function getAllDaosFromDatabase(status?: 'pending' | 'operational')
     auction_contract: row.auction_contract,
     treasury_contract: row.treasury_contract,
     metadata_contract: row.metadata_contract,
+    contract_image: row.contract_image,
     token_name: row.token_name,
     token_symbol: row.token_symbol,
     token_description: row.token_description,
@@ -258,6 +273,7 @@ export async function getAllDaosFromDatabase(status?: 'pending' | 'operational')
     label: '',
     status: row.status || 'pending',
     auction_enabled: row.auction_enabled ?? null,
+    auction_paused: row.auction_paused ?? null,
     created_ledger: row.created_ledger,
     created_at: row.created_at,
     created_tx_hash: row.created_tx_hash,

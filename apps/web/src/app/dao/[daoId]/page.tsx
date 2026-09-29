@@ -1,18 +1,20 @@
 'use client';
 
-import { Activity, ChevronDown, MoreHorizontal, RefreshCw } from 'lucide-react';
+import { Activity, ChevronDown, RefreshCw } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 import useSWR from 'swr';
 
+import { DaoContractList } from '@/components/dao-contract-list';
 import { PageSection } from '@/components/page-section';
 import { ProposalStateBadge } from '@/components/proposal/proposal-state-badge';
 import type { ProposalListResponse } from '@/components/proposal/types';
 import { TokenCard } from '@/components/token/token-card';
-import { Button, Callout, Card, Heading, ShortId, Skeleton, Text } from '@/components/ui';
+import { Button, Callout, Card, Heading, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
+import { formatActivitySummary } from '@/lib/activity-feed';
 import { useGoldskyActivityFeed, useGoldskyHealth } from '@/lib/goldsky-queries';
 import { useTokenInventory } from '@/lib/token-queries';
 
@@ -191,68 +193,25 @@ export default function Page() {
   return (
     <PageSection title="Dashboard" description="Your DAO activity at a glance.">
       <div className="dashboard-controls">
-        {isDashboardRefreshing ? (
-          <Text className="dashboard-sync-status" role="status" aria-live="polite">
-            Syncing…
-          </Text>
-        ) : null}
         <details className="dashboard-menu">
           <summary className="dashboard-menu__trigger">
             Contracts <ChevronDown aria-hidden="true" size={14} />
           </summary>
           <div className="dashboard-menu__panel dashboard-contract-menu">
             <Text className="label">Contracts</Text>
-            <div className="dashboard-contract-menu__items">
-              {config.tokenContractId ? (
-                <ShortId label="Token" value={config.tokenContractId} />
-              ) : (
-                <Text>Token: Missing</Text>
-              )}
-              {config.governorContractId ? (
-                <ShortId label="Governor" value={config.governorContractId} />
-              ) : (
-                <Text>Governor: Missing</Text>
-              )}
-              {config.treasuryContractId ? (
-                <ShortId label="Treasury" value={config.treasuryContractId} />
-              ) : (
-                <Text>Treasury: Missing</Text>
-              )}
-              {config.auctionContractId ? (
-                <ShortId label="Auction" value={config.auctionContractId} />
-              ) : (
-                <Text>Auction: Missing</Text>
-              )}
-              {config.metadataContractId ? (
-                <ShortId label="Metadata" value={config.metadataContractId} />
-              ) : (
-                <Text>Metadata: Missing</Text>
-              )}
-            </div>
+            <DaoContractList config={config} className="dashboard-contract-menu__items" />
           </div>
         </details>
-        <details className="dashboard-menu dashboard-menu--options">
-          <summary
-            className="dashboard-menu__trigger dashboard-menu__trigger--icon"
-            aria-label="Dashboard options"
-            title="Dashboard options"
-          >
-            <MoreHorizontal aria-hidden="true" size={18} />
-          </summary>
-          <div className="dashboard-menu__panel dashboard-options-menu">
-            <Text className="label">Dashboard options</Text>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void refreshDashboard()}
-              disabled={isDashboardRefreshing}
-            >
-              <RefreshCw aria-hidden="true" className={isDashboardRefreshing ? 'is-spinning' : undefined} size={15} />
-              {isDashboardRefreshing ? 'Refreshing…' : 'Refresh dashboard'}
-            </Button>
-          </div>
-        </details>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void refreshDashboard()}
+          disabled={isDashboardRefreshing}
+        >
+          <RefreshCw aria-hidden="true" className={isDashboardRefreshing ? 'is-spinning' : undefined} size={15} />
+          {isDashboardRefreshing ? 'Refreshing…' : 'Refresh dashboard'}
+        </Button>
       </div>
 
       <div className="dashboard-secondary-grid">
@@ -470,7 +429,7 @@ export default function Page() {
                       <div>
                         <Text style={{ margin: 0, fontWeight: 700 }}>{item.title}</Text>
                         <Text className="lede" style={{ margin: '4px 0 0', fontSize: '0.9rem' }}>
-                          {item.summary}
+                          {formatActivitySummary(item)}
                         </Text>
                       </div>
                       <Text className="lede dashboard-activity-meta">

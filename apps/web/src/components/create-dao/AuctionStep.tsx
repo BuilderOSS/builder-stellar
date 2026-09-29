@@ -5,9 +5,10 @@
 import { useEffect } from 'react';
 import { Stack } from 'styled-system/jsx';
 
+import { DurationInput } from '@/components/admin/duration-input';
 import { AuctionPaymentTokenSelect } from '@/components/auction/auction-payment-token-select';
 import { AuctionReservePriceField } from '@/components/auction/auction-reserve-price-field';
-import { Card, Heading, Input, Text } from '@/components/ui';
+import { Card, Heading, Text } from '@/components/ui';
 import { getTreasuryAssets } from '@/lib/assets-config';
 import { getConfiguredAuctionNetwork, validateReservePrice } from '@/lib/auction-values';
 import { validateDuration } from '@/lib/validation';
@@ -20,32 +21,26 @@ export function AuctionStep() {
   const setValidationError = useCreateDaoStore((s) => s.setValidationError);
   const clearValidationError = useCreateDaoStore((s) => s.clearValidationError);
 
-  const handleDurationChange = (value: string) => {
-    const seconds = Number(value);
-    if (!isNaN(seconds) && seconds >= 0) {
-      updateAuction({ duration: seconds });
-      if (auction.enabled) {
-        const error = validateDuration(seconds, 300); // Min 5 minutes
-        if (error) {
-          setValidationError('auctionDuration', error);
-        } else {
-          clearValidationError('auctionDuration');
-        }
+  const handleDurationChange = (seconds: number) => {
+    updateAuction({ duration: seconds });
+    if (auction.enabled) {
+      const error = validateDuration(seconds, 300); // Min 5 minutes
+      if (error) {
+        setValidationError('auctionDuration', error);
+      } else {
+        clearValidationError('auctionDuration');
       }
     }
   };
 
-  const handleTimeBufferChange = (value: string) => {
-    const seconds = Number(value);
-    if (!isNaN(seconds) && seconds >= 0) {
-      updateAuction({ timeBuffer: seconds });
-      if (auction.enabled) {
-        const error = validateDuration(seconds, 60); // Min 1 minute
-        if (error) {
-          setValidationError('timeBuffer', error);
-        } else {
-          clearValidationError('timeBuffer');
-        }
+  const handleTimeBufferChange = (seconds: number) => {
+    updateAuction({ timeBuffer: seconds });
+    if (auction.enabled) {
+      const error = validateDuration(seconds, 60); // Min 1 minute
+      if (error) {
+        setValidationError('timeBuffer', error);
+      } else {
+        clearValidationError('timeBuffer');
       }
     }
   };
@@ -126,25 +121,18 @@ export function AuctionStep() {
           {auction.enabled && (
             <>
               <Stack gap="2">
-                <label htmlFor="duration">
-                  <Text style={{ fontWeight: 600 }}>Auction Duration (seconds) *</Text>
-                </label>
-                <Input
+                <DurationInput
                   id="duration"
-                  type="number"
+                  label="Auction duration"
                   value={auction.duration}
-                  onChange={(e) => handleDurationChange(e.target.value)}
-                  placeholder="86400"
-                  min="0"
+                  onChange={handleDurationChange}
+                  helperText="How long each auction lasts. Minimum 5 minutes."
                 />
                 {validationErrors.auctionDuration && (
                   <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>
                     {validationErrors.auctionDuration}
                   </Text>
                 )}
-                <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-                  How long each auction lasts. 86400 seconds = 24 hours
-                </Text>
               </Stack>
 
               <AuctionReservePriceField
@@ -156,24 +144,16 @@ export function AuctionStep() {
               />
 
               <Stack gap="2">
-                <label htmlFor="timeBuffer">
-                  <Text style={{ fontWeight: 600 }}>Time Buffer (seconds)</Text>
-                </label>
-                <Input
+                <DurationInput
                   id="timeBuffer"
-                  type="number"
+                  label="Time buffer"
                   value={auction.timeBuffer}
-                  onChange={(e) => handleTimeBufferChange(e.target.value)}
-                  placeholder="300"
-                  min="0"
+                  onChange={handleTimeBufferChange}
+                  helperText="Extra time added when a bid arrives near the end. Minimum 1 minute."
                 />
                 {validationErrors.timeBuffer && (
                   <Text style={{ color: 'var(--error-9)', fontSize: '0.875rem' }}>{validationErrors.timeBuffer}</Text>
                 )}
-                <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-                  If a bid is placed within this time of auction end, the auction extends by this amount. 300 seconds =
-                  5 minutes
-                </Text>
               </Stack>
 
               <AuctionPaymentTokenSelect

@@ -1,6 +1,6 @@
 import { getProposalActionResourceKey } from '@/lib/proposal-action-identity';
 import type { ProposalActionType, ProposalQueuedAction } from '@/lib/proposal-actions/types';
-import { useDaoSessionStore } from '@/stores/dao-session-store';
+import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { normalizeWalletAddress, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
 /**
@@ -8,7 +8,7 @@ import { normalizeWalletAddress, useProposalComposerStore } from '@/stores/propo
  * Useful for forms to show draft previews and detect conflicts
  */
 export function useAdminDraftStatus(daoId: string, actionTypes: ProposalActionType | ProposalActionType[]) {
-  const address = useDaoSessionStore((state) => state.address);
+  const address = useAuthSessionStore((state) => state.address);
   const draft = useProposalComposerStore((state) => {
     if (!address) return null;
     const walletKey = normalizeWalletAddress(address);

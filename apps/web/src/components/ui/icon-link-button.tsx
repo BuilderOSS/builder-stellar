@@ -4,9 +4,10 @@ type IconLinkButtonProps = {
   href: string;
   label: string;
   children: ReactNode;
+  compact?: boolean;
 };
 
-export function IconLinkButton({ href, label, children }: IconLinkButtonProps) {
+export function IconLinkButton({ href, label, children, compact = false }: IconLinkButtonProps) {
   return (
     <a
       href={href}
@@ -19,12 +20,12 @@ export function IconLinkButton({ href, label, children }: IconLinkButtonProps) {
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        width: '2.75rem',
-        height: '2.75rem',
-        minWidth: '2.75rem',
-        minHeight: '2.75rem',
+        width: compact ? '2rem' : '2.75rem',
+        height: compact ? '2rem' : '2.75rem',
+        minWidth: compact ? '2rem' : '2.75rem',
+        minHeight: compact ? '2rem' : '2.75rem',
         padding: 0,
-        borderRadius: '10px',
+        borderRadius: compact ? '8px' : '10px',
         border: '1px solid var(--border-default)',
         background: 'var(--surface-2)',
         color: 'var(--text-secondary)',

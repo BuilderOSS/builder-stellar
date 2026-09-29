@@ -26,7 +26,7 @@ import { proposalActionMode } from '@/lib/proposal-state';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useVotingPower } from '@/lib/voting-power';
-import { useDaoSessionStore } from '@/stores/dao-session-store';
+import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 type ProposalPageData = {
   detail: ProposalDetail;
@@ -85,7 +85,7 @@ export default function ProposalDetailPage() {
   const { daoId, daoConfig: config } = useDaoContext();
   const params = useParams<{ proposalId: string }>();
   const proposalId = params.proposalId;
-  const session = useDaoSessionStore();
+  const session = useAuthSessionStore();
   const [voteReason, setVoteReason] = useState('');
   const [selectedVoteType, setSelectedVoteType] = useState<number | null>(null);
   const [formMessage, setFormMessage] = useState('');

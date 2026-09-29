@@ -12,7 +12,7 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryHasAuthority, treasuryIsOwner } from '@/lib/admin-proposals';
 import { useContractOwner } from '@/lib/admin-queries';
 import { useGoldskyGovernorAuthorities, useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
-import { useDaoSessionStore } from '@/stores/dao-session-store';
+import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 function SectionCard({
   title,
@@ -50,7 +50,7 @@ function SectionCard({
 
 export default function AdminPage() {
   const { daoId, daoConfig: config } = useDaoContext();
-  const session = useDaoSessionStore();
+  const session = useAuthSessionStore();
   const { data: mintAuthorities } = useGoldskyMintAuthorities(config.tokenContractId);
   const { data: governorAuthorities } = useGoldskyGovernorAuthorities(config.tokenContractId);
   const { data: tokenOwner } = useContractOwner(config, 'token', session.address || undefined);

@@ -136,10 +136,15 @@ export async function getGoldskyActivityFeed(
       activity_id,
       contract_id,
       contract_role,
+      event_name,
+      topics,
+      args,
       kind,
       title,
       summary,
       proposal_id,
+      token_id,
+      amount,
       actor,
       addresses,
       ledger_sequence,
@@ -650,8 +655,12 @@ export async function getDashboardData(address: string, params: { limit?: number
       d.token_name,
       d.token_symbol,
       d.token_description,
+      metadata_config.contract_image,
       d.status
     FROM manager.daos d
+    LEFT JOIN metadata.configuration metadata_config
+      ON metadata_config.deployment_id = d.deployment_id
+      AND metadata_config.dao_id = d.dao_id
     WHERE d.deployment_id = $1
       AND d.status = 'operational'
       AND (
@@ -679,10 +688,15 @@ export async function getDashboardData(address: string, params: { limit?: number
       activity.activity_id,
       activity.dao_id,
       activity.contract_role,
+      activity.event_name,
+      activity.topics,
+      activity.args,
       activity.kind,
       activity.title,
       activity.summary,
       activity.proposal_id,
+      activity.token_id,
+      activity.amount,
       activity.actor,
       activity.ledger_sequence,
       activity.ledger_closed_at AS timestamp,
