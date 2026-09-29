@@ -54,8 +54,8 @@ export function useAdminProposalDraft() {
       });
     }
 
-    pending.onAdded?.();
     setPending(null);
+    pending.onAdded?.();
   }
 
   return { pending, requestAdd, resolve, cancel };

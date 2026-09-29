@@ -55,6 +55,7 @@ export default function AuctionAdminPage() {
   const [autoPauseAction, setAutoPauseAction] = useState<AuctionAutoPauseAction | null>(null);
   const proposalDraft = useAdminProposalDraft();
   const draftStatus = useAdminDraftStatus(daoId, [
+    'set-mint-authority',
     'set-auction-reserve-price',
     'set-auction-payment-token',
     'pause-auction',
@@ -71,21 +72,72 @@ export default function AuctionAdminPage() {
   const auctionCanMint = Boolean(
     mintAuthorities?.items.some((item) => item.authority === config.auctionContractId && item.enabled)
   );
+  const auctionMintAuthorityQueued = draftStatus.actionsInDraft.some(
+    (action) =>
+      action.type === 'set-mint-authority' && action.authority === config.auctionContractId && action.enabled !== false
+  );
 
   async function updatePaused(nextPaused: boolean) {
     if (!session.address || (!isOwner && !canProposeAuction)) return;
 
     // Determine action type and messaging based on auction status
     const isLaunching = data?.status === 'not-launched' && !nextPaused;
+    const isEnabling = config.auctionEnabled === false && !nextPaused;
     const actionType = nextPaused ? 'pause-auction' : 'unpause-auction';
-    const actionTitle = isLaunching ? 'Launch auctions' : nextPaused ? 'Pause auctions' : 'Resume auctions';
-    const actionDescription = isLaunching
-      ? 'Launch auctions and create the first token.'
-      : nextPaused
-        ? 'Pause auction activity.'
-        : 'Resume auction activity.';
+    const actionTitle = isEnabling
+      ? 'Enable auctions'
+      : isLaunching
+        ? 'Launch auctions'
+        : nextPaused
+          ? 'Pause auctions'
+          : 'Resume auctions';
+    const actionDescription = isEnabling
+      ? 'Enable auction activity and create the first token.'
+      : isLaunching
+        ? 'Launch auctions and create the first token.'
+        : nextPaused
+          ? 'Pause auction activity.'
+          : 'Resume auction activity.';
 
     if (!isOwner && canProposeAuction) {
+      if (!nextPaused && !auctionCanMint && !auctionMintAuthorityQueued) {
+        const mintAuthorityHandler = getActionHandler('set-mint-authority');
+        const mintAuthorityAction = mintAuthorityHandler.serialize(
+          { authority: config.auctionContractId, enabled: true },
+          { config, session: { address: session.address, kit: StellarWalletsKit } }
+        );
+        const unpauseHandler = getActionHandler('unpause-auction');
+        const unpauseAction = unpauseHandler.serialize(
+          {},
+          { config, session: { address: session.address, kit: StellarWalletsKit } }
+        );
+
+        proposalDraft.requestAdd({
+          daoId,
+          action: mintAuthorityAction,
+          source: 'admin/auction/set-mint-authority',
+          metadata: {
+            title: 'Enable auction mint authority',
+            description: `Allow ${config.auctionContractId} to mint auction tokens.`,
+            url: ''
+          },
+          onAdded: () => {
+            proposalDraft.requestAdd({
+              daoId,
+              action: unpauseAction,
+              source: 'admin/auction/unpause-auction',
+              metadata: {
+                title: isEnabling ? 'Enable auctions' : 'Resume auctions',
+                description: actionDescription,
+                url: ''
+              },
+              onAdded: () => setFormMessage(`${isEnabling ? 'Enable' : 'Resume'} auctions added to the proposal draft.`)
+            });
+          }
+        });
+        return;
+      }
+
       const handler = getActionHandler(actionType);
       const action = handler.serialize({}, { config, session: { address: session.address, kit: StellarWalletsKit } });
       proposalDraft.requestAdd({
@@ -102,7 +154,15 @@ export default function AuctionAdminPage() {
       return;
     }
     setBusy(true);
-    tx.start(isLaunching ? 'Launching auctions...' : nextPaused ? 'Pausing auctions...' : 'Resuming auctions...');
+    tx.start(
+      isEnabling
+        ? 'Enabling auctions...'
+        : isLaunching
+          ? 'Launching auctions...'
+          : nextPaused
+            ? 'Pausing auctions...'
+            : 'Resuming auctions...'
+    );
     try {
       const client = new AuctionClient({
         contractId: config.auctionContractId,
@@ -122,10 +182,18 @@ export default function AuctionAdminPage() {
       const hash = sent.sendTransactionResponse?.hash ?? '';
       const submittedMessage = nextPaused
         ? 'Auction pause submitted'
-        : isLaunching
-          ? 'Auction launch submitted'
-          : 'Auction resume submitted';
-      const successMessage = nextPaused ? 'Auctions paused' : isLaunching ? 'Auctions launched' : 'Auctions resumed';
+        : isEnabling
+          ? 'Auction enable submitted'
+          : isLaunching
+            ? 'Auction launch submitted'
+            : 'Auction resume submitted';
+      const successMessage = nextPaused
+        ? 'Auctions paused'
+        : isEnabling
+          ? 'Auctions enabled'
+          : isLaunching
+            ? 'Auctions launched'
+            : 'Auctions resumed';
       tx.submitted(submittedMessage, hash);
       await waitForConfirmation(hash, config.rpcUrl);
       tx.success(successMessage, hash);
@@ -438,8 +506,14 @@ export default function AuctionAdminPage() {
               ) : null}
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 {data?.status === 'not-launched' ? (
-                  <Button onClick={() => void updatePaused(false)} disabled={busy || !auctionCanMint}>
-                    {isOwner ? 'Launch auctions' : 'Create launch proposal'}
+                  <Button onClick={() => void updatePaused(false)} disabled={busy || (isOwner && !auctionCanMint)}>
+                    {isOwner
+                      ? config.auctionEnabled === false
+                        ? 'Enable auctions'
+                        : 'Launch auctions'
+                      : config.auctionEnabled === false
+                        ? 'Create enable proposal'
+                        : 'Create launch proposal'}
                   </Button>
                 ) : (
                   <>
@@ -449,7 +523,7 @@ export default function AuctionAdminPage() {
                     <Button
                       variant="outline"
                       onClick={() => void updatePaused(false)}
-                      disabled={busy || data?.paused !== true || !auctionCanMint}
+                      disabled={busy || data?.paused !== true || (isOwner && !auctionCanMint)}
                     >
                       {isOwner ? 'Resume auctions' : 'Add resume proposal'}
                     </Button>

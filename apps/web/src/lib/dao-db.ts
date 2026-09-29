@@ -57,6 +57,7 @@ export interface DaoConfig {
   // Lifecycle State
   status: 'pending' | 'operational'; // DAO lifecycle status
   auction_enabled: boolean | null;
+  auction_paused: boolean | null;
 
   // Blockchain Timeline
   created_ledger: number;
@@ -129,6 +130,7 @@ export async function getDaoConfigFromDatabase(daoId: string): Promise<DaoConfig
       d.admin_address,
       d.status,
       d.auction_enabled,
+      d.auction_paused,
       d.created_ledger,
       d.created_at,
       d.created_tx_hash,
@@ -173,6 +175,7 @@ export async function getDaoConfigFromDatabase(daoId: string): Promise<DaoConfig
     label: '', // Not yet stored in database, can be added later
     status: row.status || 'pending',
     auction_enabled: row.auction_enabled ?? null,
+    auction_paused: row.auction_paused ?? null,
     created_ledger: row.created_ledger,
     created_at: row.created_at,
     created_tx_hash: row.created_tx_hash,
@@ -223,6 +226,7 @@ export async function getAllDaosFromDatabase(status?: 'pending' | 'operational')
       d.admin_address,
       d.status,
       d.auction_enabled,
+      d.auction_paused,
       d.created_ledger,
       d.created_at,
       d.created_tx_hash,
@@ -269,6 +273,7 @@ export async function getAllDaosFromDatabase(status?: 'pending' | 'operational')
     label: '',
     status: row.status || 'pending',
     auction_enabled: row.auction_enabled ?? null,
+    auction_paused: row.auction_paused ?? null,
     created_ledger: row.created_ledger,
     created_at: row.created_at,
     created_tx_hash: row.created_tx_hash,

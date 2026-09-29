@@ -16,7 +16,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ dao
   try {
     const { daoId } = await params;
     const config = await getDaoNetworkConfigById(daoId);
-    if (!config.auctionContractId || config.auctionEnabled === false) {
+    if (!config.auctionContractId) {
       return NextResponse.json({ message: 'Auctions are disabled for this DAO.' }, { status: 404 });
     }
 
@@ -34,13 +34,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ dao
     const auctionTx = await client.get_auction();
     const auction = jsonValue(auctionTx.result) as { token_id?: string } | null;
     const paused = Boolean(pausedTx.result);
+    const auctionEnabled = config.auctionEnabled !== false || !paused;
     if (!auction || typeof auction.token_id === 'undefined') {
       // No auction token exists yet. Determine if we've never launched or if we paused after launching.
       // If there's auction history, we've been paused. Otherwise, we've never launched.
       return NextResponse.json({
         status: paused && history.length > 0 ? 'paused' : 'not-launched',
         auction: null,
-        auctionEnabled: true,
+        auctionEnabled,
         paused,
         config: jsonValue(configTx.result),
         history
@@ -51,7 +52,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ dao
       jsonValue({
         status: paused ? 'paused' : 'active',
         auction,
-        auctionEnabled: true,
+        auctionEnabled,
         config: configTx.result,
         paused,
         bids,
