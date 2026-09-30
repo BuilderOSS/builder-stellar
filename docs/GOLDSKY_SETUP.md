@@ -2,7 +2,7 @@
 
 PostgreSQL-backed event indexer for Nouns Builder Stellar using Goldsky Turbo Pipelines.
 
-This guide covers setting up the Goldsky indexer to track on-chain events from Token, Governor, Treasury, and Auction contracts.
+This guide covers setting up the Goldsky indexer to track on-chain events from Manager, Token, Governor, Treasury, Auction, Metadata, and Marketplace contracts. Goldsky is the durable DAO discovery and history layer; Manager does not retain a permanent DAO registry.
 
 ## Overview
 

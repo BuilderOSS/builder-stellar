@@ -1,16 +1,16 @@
 # Builder for Stellar
 
-Builder for Stellar is a Soroban DAO framework. The current implementation provides a Manager contract that deploys and records DAOs composed of five modules: Token, Metadata, Auction, Governor, and Treasury.
+Builder for Stellar is a Soroban DAO framework. The redesign provides a Manager deployment module that deploys six independent DAO modules: Token, Metadata, Auction, Governor, Treasury, and Marketplace.
 
 ## Current Status
 
-- Five Soroban DAO modules are implemented and covered by Rust tests.
-- Manager combines the implementation registry, DAO factory, and DAO registry.
-- Treasury owns the DAO modules in production and is the module-administration authority.
+- Six Soroban DAO modules are planned, with Marketplace as the next module.
+- Manager is the implementation registry and DAO factory, not a permanent DAO registry.
+- Treasury owns every DAO module after finalization, including itself, and is the module-administration authority.
 - Founder allocations are fixed token amounts and the total is capped at 10,000 tokens.
 - Metadata uses mutable properties and items, with mint hooks that generate token attributes.
 - 153 Rust tests pass (`pnpm contracts:test:unit`).
-- Multi-DAO database, indexer, and frontend layers are not complete. The contract registry exists, but the surrounding application infrastructure remains future work.
+- Goldsky and PostgreSQL provide durable DAO discovery and history. Manager stores only temporary pending creation state.
 
 ## Quick Start
 
@@ -72,9 +72,10 @@ configs/               Network and DAO configuration
 - [Architecture](docs/ARCHITECTURE.md)
 - [Deployment Guide](docs/DEPLOYMENT.md)
 - [Manager Deployment](docs/MANAGER_DEPLOYMENT.md)
+- [Manager Redesign](docs/MANAGER_REDESIGN.md)
+- [Marketplace Plan](docs/MARKETPLACE_PLAN.md)
 - [Goldsky Setup](docs/GOLDSKY_SETUP.md)
 - [Mercury notes](docs/MERCURY.md) (historical)
-- [Migration and indexer notes](docs/MULTI_DAO_MIGRATION_NOTES.md) (historical/future)
 
 ## Common Commands
 

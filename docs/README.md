@@ -37,6 +37,8 @@ The Stellar Builder platform is a multi-tenant DAO system where one application 
   - Testing checklist
 
 **Deployment:**
+- [MANAGER_REDESIGN.md](./MANAGER_REDESIGN.md) - Approved Manager storage, upgrade, versioning, and testnet-reset design
+- [MARKETPLACE_PLAN.md](./MARKETPLACE_PLAN.md) - Per-DAO fixed-price primary and secondary marketplace plan
 - [MANAGER_DEPLOYMENT.md](./MANAGER_DEPLOYMENT.md) - Manager setup
 - [DAO_DEPLOYMENT.md](./DAO_DEPLOYMENT.md) - DAO creation
 - [DEPLOYMENT.md](./DEPLOYMENT.md) - Direct contract deployment (legacy)
@@ -45,13 +47,12 @@ The Stellar Builder platform is a multi-tenant DAO system where one application 
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - Smart contracts overview
 - [MULTITENANT_ARCHITECTURE.md](./MULTITENANT_ARCHITECTURE.md) - Multi-tenant model
-- [MULTI_DAO_MIGRATION_NOTES.md](./MULTI_DAO_MIGRATION_NOTES.md) - Migration insights
 
 ### Support & Reference
 
 - [GOLDSKY_SETUP.md](./GOLDSKY_SETUP.md) - Goldsky configuration
 - [GOLDSKY_MULTI_DAO_DATA_ARCHITECTURE.md](./GOLDSKY_MULTI_DAO_DATA_ARCHITECTURE.md) - Original design docs
-- [mvp-technical-plan.md](./mvp-technical-plan.md) - Technical specification
+- [mvp-technical-plan.md](./mvp-technical-plan.md) - Legacy technical reference; current decisions live in the redesign plans
 - [STELLAR_INDEXER_COMPARISON.md](./STELLAR_INDEXER_COMPARISON.md) - Indexer evaluation
 
 ### Troubleshooting
@@ -78,7 +79,7 @@ A "deployment" is one instance of the application managing one manager contract.
 
 ### DAO
 
-A "DAO" is one organization governed by the manager.
+A "DAO" is one organization created by Manager and governed by its own Governor/Treasury pair.
 
 **Identified by**: `dao_id = token_contract_address` (e.g., `CBGLIC3V...`)
 
@@ -86,7 +87,7 @@ A "DAO" is one organization governed by the manager.
 - Multiple per deployment
 - Immutable after creation
 - Independently configured
-- Own governance, treasury, auctions
+- Own governance, treasury, auctions, and marketplace
 
 ### Lifecycle
 
@@ -122,7 +123,7 @@ insert           ownership transfer    update status
 ### Scripts
 
 - `scripts/deploy-manager.mjs` - Deploy manager contract
-- `scripts/deploy-dao.mjs` - Deploy DAO (creates 5 contracts)
+- `scripts/deploy-dao.mjs` - Deploy DAO (creates 6 contracts)
 - `scripts/deploy-dao.mjs` - Also configures and finalizes
 
 ### Configuration
@@ -144,7 +145,6 @@ insert           ownership transfer    update status
 | MANAGER_DEPLOYMENT.md | ✅ Current | Sept 2026 |
 | GOLDSKY_SETUP.md | ✅ Current | Sept 2026 |
 | ARCHITECTURE.md | ✅ Current | Sept 2026 |
-| MULTI_DAO_MIGRATION_NOTES.md | ℹ️ Reference | Sept 2026 |
 | mvp-technical-plan.md | ℹ️ Reference | Sept 2026 |
 | STELLAR_INDEXER_COMPARISON.md | ℹ️ Reference | Sept 2026 |
 | DEPLOYMENT.md | ⚠️ Legacy | Sept 2026 |

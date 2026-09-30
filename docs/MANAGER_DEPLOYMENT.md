@@ -1,15 +1,15 @@
 # Manager Deployment Guide
 
-Manager is the current platform contract. It combines the implementation registry, DAO factory, and DAO registry. It deploys five modules per DAO: Token, Metadata, Auction, Governor, and Treasury.
+Manager is the platform deployment module. It owns the implementation registry and DAO factory. It deploys six modules per DAO: Token, Metadata, Auction, Governor, Treasury, and Marketplace. It does not retain a permanent DAO registry.
 
 ## Responsibilities
 
 - Register and revoke module WASM implementations.
-- Select the current implementation hash for each module.
+- Select the current implementation hash and `0.1.0` version for each module.
 - Approve explicit upgrade transitions.
 - Deploy modules at deterministic addresses using creator and nonce salts.
 - Initialize module relationships and fixed founder allocations.
-- Record DAO registrations and enumerate them with pagination.
+- Keep one temporary `PendingDao` record until finalization, then delete it.
 - Pause and unpause DAO creation.
 
 ## Deploy Manager
@@ -18,7 +18,7 @@ Manager is the current platform contract. It combines the implementation registr
 pnpm deploy:manager configs/testnet-manager.json --force
 ```
 
-The deployment script builds Manager and the five module crates, installs the five implementation WASMs, registers their hashes, selects current implementations, and writes a Manager artifact under `deploys/`.
+The deployment script builds Manager and the six module crates, installs the six implementation WASMs, registers their `0.1.0` hashes, selects current implementations, and writes a versioned Manager artifact under `deploys/`.
 
 ## Create a DAO
 
@@ -42,17 +42,17 @@ stellar contract invoke \
   --nonce <NONCE>
 ```
 
-The result contains deterministic addresses for all five modules. After creation, verify each address and confirm that Treasury owns the modules in production.
+The result contains deterministic addresses for all six modules. After finalization, verify each address and confirm that Treasury owns every module, including itself.
 
 ## Upgrade Workflow
 
-For a module upgrade:
+For a DAO module upgrade:
 
 1. Build and install the new WASM.
 2. Register its hash with Manager.
 3. Have the Manager owner approve the exact `from_hash -> to_hash` pair.
-4. Invoke the module upgrade with `from_hash` and `to_hash` as the Treasury/module owner.
-5. Verify that the module's current hash is now `to_hash`.
+4. Create and execute a DAO Governor proposal routed through `Treasury.execute` to the target module's `upgrade` method. This same route applies to Governor and Treasury self-upgrades.
+5. The target module verifies its current hash, asks Manager to validate the active approved transition and target version, writes the new version/hash, emits an event, and updates its own WASM.
 
 The module rejects upgrades without owner authorization, without Manager approval, or when `from_hash` does not match the current hash. Revoked or unknown implementations cannot be used. Approving a destination hash alone is not enough; the transition is directional.
 
@@ -69,6 +69,6 @@ stellar contract fetch --id <TOKEN_ADDRESS> --network <network>
 
 ## Current Scope
 
-Manager's on-chain DAO registry is implemented. The multi-DAO database schema, Goldsky discovery/backfill pipeline, and frontend DAO directory/routing are not complete. Existing migration and indexer documents describe historical or future work rather than a finished application path.
+Goldsky and PostgreSQL provide the durable DAO directory and history. Manager stores no permanent DAO registry. For the full storage and versioning policy, see [MANAGER_REDESIGN.md](./MANAGER_REDESIGN.md).
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) and [DEPLOYMENT.md](./DEPLOYMENT.md) for the system model and direct module deployment.

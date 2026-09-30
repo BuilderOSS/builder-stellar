@@ -196,7 +196,7 @@ Stellar Blockchain
 
 #### **Recommendation for Your Use Case: 🥇 TOP CHOICE**
 Goldsky Turbo Pipelines is the best fit for your DAO factory because:
-1. TypeScript transforms let you combine data from 5 contracts into unified tables
+1. TypeScript transforms let you combine data from 6 DAO modules into unified tables
 2. PostgreSQL destination enables complex relational queries
 3. Testnet support for development workflow
 4. Free tier to start, scalable pricing
@@ -783,7 +783,7 @@ Self-hosting SubQuery **can work** for your DAO factory, but:
 
 **Why It's #1:**
 1. **Testnet support** - Critical for development workflow ✅
-2. **TypeScript transforms** - Combine data from 5 contracts into unified tables ✅
+2. **TypeScript transforms** - Combine data from 6 DAO modules into unified tables ✅
 3. **PostgreSQL destination** - Complex relational queries, aggregations ✅
 4. **Free tier** - Test before committing budget ✅
 5. **Managed service** - Low DevOps overhead ✅
@@ -817,7 +817,7 @@ export default function transform(events) {
 **Next Steps:**
 1. Sign up for free tier
 2. Set up testnet pipeline
-3. Test with 3-5 contracts (governor, token, treasury)
+3. Test with the six DAO modules (governor, token, treasury, auction, metadata, marketplace)
 4. Measure performance and query capability
 5. Evaluate cost at scale
 
@@ -856,7 +856,7 @@ export default function transform(events) {
 1. **Testnet support** - Confirmed working (initial concern resolved) ✅
 2. **TypeScript handlers** - Familiar language ✅
 3. **GraphQL API** - Auto-generated with subscriptions ✅
-4. **Multi-contract** - Single project for all 5 contracts ✅
+4. **Multi-contract** - Single project for all 6 DAO modules ✅
 5. **Managed** - One-click deployment, auto-scaling ✅
 6. **99.99% SLA** - Production-grade reliability ✅
 

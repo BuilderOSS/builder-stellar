@@ -8,7 +8,7 @@ This directory owns the PostgreSQL schema for the Goldsky-backed multi-tenant re
    - Creates all schemas (chain, governance, token, auction, treasury, manager, metadata, app)
    - Creates Goldsky event landing tables (chain.raw_events, chain.decoded_events)
    - Creates activity feed table (app.activity_feed_events)
-   - **NEW:** Creates manager.daos table for DAO registry with multi-tenant support
+   - Creates the Goldsky read model for DAO discovery and module history; Manager itself has no permanent DAO registry
    - All tables are immutable (triggers prevent updates/deletes on events)
 
 2. **0002_goldsky_views.sql** - Views and Queries
@@ -18,7 +18,9 @@ This directory owns the PostgreSQL schema for the Goldsky-backed multi-tenant re
    - Treasury views
    - Auction views
 
-No further migrations needed - schema is stable.
+The next clean testnet baseline uses a versioned schema and wipes the legacy
+read model before ingestion. Do not mix events from the legacy five-module
+Manager deployment with the new six-module `0.1.0` deployment.
 
 ## Multi-Tenant Design
 
@@ -33,9 +35,10 @@ All data is keyed by `(deployment_id, dao_id)`:
   - Example: "CBGLIC3V..."
   - Composite key ensures complete multi-tenant isolation
 
-## manager.daos Table
+## manager.daos Read Model
 
-The primary DAO registry:
+The database projection is the durable DAO registry. It is populated from
+`DaoCreated` and `DaoFinalized` events, not from Manager storage:
 
 ```sql
 CREATE TABLE manager.daos (
@@ -51,6 +54,7 @@ CREATE TABLE manager.daos (
   auction_contract TEXT,      -- Auctions
   treasury_contract TEXT,     -- Treasury
   metadata_contract TEXT,     -- NFT metadata
+  marketplace_contract TEXT,  -- Fixed-price sales
 
   -- Token Metadata
   token_name VARCHAR(255),    -- "Nouns", "Builder"
@@ -87,6 +91,10 @@ CREATE TABLE manager.daos (
    └─ Finalizes DAO for operation
    └─ Event triggers UPDATE manager.daos SET status='operational'
 ```
+
+Completed Manager pending state and completed Marketplace/Auction/Proposal
+snapshots are deleted on-chain after they are no longer needed. Goldsky keeps
+the immutable event history and reconstructs the API views.
 
 ## Field Naming Conventions
 

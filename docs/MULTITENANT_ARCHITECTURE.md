@@ -98,7 +98,7 @@ This ensures:
 ### Creation Phase
 
 1. **create_dao(params)**
-   - Manager deploys 5 contracts (Token, Governor, Auction, Treasury, Metadata)
+    - Manager deploys 6 contracts (Token, Governor, Auction, Treasury, Metadata, Marketplace)
    - DaoCreated event emitted
    - Status: **pending**
    - Contracts owned by launch_admin
@@ -115,9 +115,12 @@ This ensures:
 
 4. **finalize_dao(token_address)**
    - Manager validates completion
-   - Transfers module ownership to Treasury
+    - Checks accepted Token ownership and expected total supply
+    - Grants post-finalization mint authorities
+    - Transfers every module's ownership/upgrade authority to Treasury
    - Status: **operational**
-   - First auction launched
+    - Auction launches only when requested; otherwise it remains paused for later governance enablement
+    - Marketplace remains available for governance-controlled fixed-price sales
    - Cannot be repeated (idempotent check)
 
 ### Operational Phase
@@ -354,7 +357,7 @@ The Goldsky indexer populates the `manager.daos` table by:
 
 1. **Decoding DaoCreated Events**
    - Extracts token metadata from DaoCreationParams
-   - Records all 5 contract addresses
+   - Records all 6 contract addresses, including Marketplace
    - Stores creator and admin addresses
 
 2. **Inserting into manager.daos**

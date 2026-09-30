@@ -1,4 +1,9 @@
-# Nouns Builder on Stellar MVP Technical Plan
+# Nouns Builder on Stellar MVP Technical Plan (Legacy Reference)
+
+> The active architecture is defined by [MANAGER_REDESIGN.md](./MANAGER_REDESIGN.md)
+> and [MARKETPLACE_PLAN.md](./MARKETPLACE_PLAN.md). This document is retained
+> for implementation history; its permanent Manager registry and separate
+> Factory/Registry model are superseded.
 
 ## 1. Objective and implementation boundaries
 
@@ -10,7 +15,7 @@ Build on the existing Rust contracts, generated TypeScript bindings, Next.js app
 
 - Auctions accept a configurable SAC asset, defaulting to native XLM's testnet Stellar Asset Contract (SAC).
 - Preserve the existing Governor-authorized Treasury execution capability. Do not introduce an asset allowlist or token-interface management system. Typed application actions support transfers, governance minting, configuration, and upgrades; their friendly forms do not imply that Treasury rejects all other contract calls.
-- Use typed internal dispatch for module/self-actions to avoid Soroban reentrancy. Reuse the Governor queue delay rather than introduce a second Treasury timelock.
+- Use checked proposal dispatch for module actions, including the Governor and Treasury self-upgrade paths. Reuse the Governor queue delay rather than introduce a second Treasury timelock.
 - Mint a bounded founder allocation once at creation. Explicit governance-approved minting remains available in addition to auction minting.
 - Default the one-shot launch admin to the creator, with an optional alternate address. Governance can launch first and consume the same permission.
 - Require expiry for settlement, accept valid bids without extending after the extension cap, and transfer canceled NFTs to Treasury.
@@ -26,8 +31,8 @@ Build on the existing Rust contracts, generated TypeScript bindings, Next.js app
 | Area | Source evidence | Implementation work |
 | --- | --- | --- |
 | Token | `contracts/token/src/contract.rs`: ownership, transfers, approvals, delegation, checkpointed votes, authorized mint/batch mint | Founder bootstrap, explicit NFT metadata/read surface, immutable seeds, factory authorities, upgrades, retention |
-| Governor | `contracts/governor/src/contract.rs`: proposal/vote/queue/execute, timestamp windows, historical snapshots | Non-reentrant internal dispatch, upgrade validation, bounded settings, authorization and retention verification |
-| Treasury | `contracts/treasury/src/contract.rs`: Governor-authorized arbitrary calls; owner can replace Governor | Final governance ownership, internal self-actions, upgrades and proposal/action event linkage; preserve ordinary execution |
+| Governor | `contracts/governor/src/contract.rs`: proposal/vote/queue/execute, timestamp windows, historical snapshots | Treasury-routed self-upgrade, bounded settings, authorization, replay protection, and retention verification |
+| Treasury | `contracts/treasury/src/contract.rs`: Governor-authorized arbitrary calls; Treasury is self-owned after finalization | Final Treasury ownership, self-upgrade through Governor -> Treasury.execute, and proposal/action event linkage; preserve ordinary execution |
 | Auction | `contracts/auction/src/{contract,helpers,storage}.rs`: paused launch, SAC bidding, extensions, settlement and Treasury proceeds | One-shot launch capability, pull refunds, expiry checks, cap behavior, cancellation disposition, upgrades |
 | Deployment | `scripts/deploy-dao.mjs`: address prediction and constructor wiring for four contracts | Manager, Factory, Registry, MetadataRegistry, atomic initialization and final authority setup |
 | Frontend | `apps/web/src/app`, `components`, `lib`, `stores`: proposal, auction, treasury, members, token and admin screens | Multi-DAO routing/state, creation/IPFS, pre-launch UX, precision, transaction recovery and accessibility |
@@ -54,7 +59,7 @@ Important baseline details:
 
 **DaoFactory:** authenticate creators, validate bounded configuration, predict and atomically deploy DAO modules from active Manager implementations, perform bounded bootstrap operations, and register complete DAOs.
 
-**DaoRegistry:** register token-address DAO identity, module roles/addresses, creator, creation ledger, factory version and implementation references. Restrict canonical registration to the configured Factory. Expose lookup for reconciliation; provide bounded enumeration/indexing support.
+**DAO read model:** Goldsky/PostgreSQL registers token-address DAO identity, module roles/addresses, creator, creation ledger, module versions, and implementation references from events. Manager keeps only temporary pending creation state.
 
 **Per-DAO modules:** Token, Governor, Treasury, Auction, and MetadataRegistry. Each has explicit peer references, final governance authority, version information, and a module-local upgrade entrypoint.
 
@@ -82,21 +87,21 @@ The target is contract-owned governance authority, with no creator-wide admin pr
 | Founder bootstrap | One-use Factory capability with immutable configured recipients/counts |
 | Auction mint | Explicit Auction mint authority |
 | Governance mint/configure Token | Governor-approved Treasury call; Treasury is Token governance owner/minter |
-| Configure Auction/Metadata | Governor-approved Treasury call; Treasury is their governance owner |
-| Governor-local settings/upgrade | Approved proposal dispatched inside Governor; no call back through Treasury |
-| Treasury execution | Configured Governor authorization |
-| Treasury-local settings/upgrade | Governor-authorized internal Treasury dispatch; no external call back into Treasury |
+| Configure Auction/Metadata/Marketplace | Governor-approved Treasury call; Treasury is their governance owner |
+| Governor upgrade | Governor-approved proposal routed through Treasury to Governor.upgrade |
+| Treasury execution and upgrade | Configured Governor authorization; Treasury owns itself |
+| Treasury-local settings/upgrade | Governor-authorized Treasury dispatch, including `Treasury.upgrade` through `Treasury.execute` |
 | Initial launch | One-shot launch admin or governance; either permanently consumes the capability |
 | Refund claim / holder transfer | Claimant / current token owner authorization |
 | Storage maintenance | Permissionless, bounded, no configuration or ownership mutation |
 
-Construct Governor with its own final governance identity and Treasury with its governance-controlled owner identity; adapt internal ownable/setter helpers as necessary rather than relying on recursive entrypoint calls. Validate this matrix with explicit Soroban authorization tests before interface freeze.
+Construct every module with bootstrap authority, then transfer every module's final ownership/upgrade authority to Treasury. Governor and Treasury upgrades intentionally use `Governor -> Treasury.execute -> target.upgrade`; validate these recursive target paths with real-WASM authorization tests before interface freeze.
 
 Do not use ownership renunciation as handoff: current Token mint checks and Governor authority checks require an owner. OpenZeppelin ownership transfer is two-step if used; a contract-address acceptance path must be specified and tested. Prefer final-authority construction with one-use bootstrap permissions.
 
 ### 3.4 Non-reentrant execution and upgrades
 
-The current `Governor.execute → Treasury.execute → target` loop cannot safely handle a call back into Governor or Treasury. Dispatch Governor-local actions internally and Treasury-local actions inside Treasury; external modules remain scoped calls. Retain ordinary Governor-authorized Treasury calls for existing execution behavior.
+The current `Governor.execute → Treasury.execute → target` loop must explicitly support target calls back into Governor and Treasury for self-upgrades. Test `Governor → Treasury → Governor.upgrade` and `Governor → Treasury → Treasury.upgrade` with real WASM before interface freeze. Retain ordinary Governor-authorized Treasury calls for existing execution behavior.
 
 Each upgrade-enabled module invokes Soroban `update_current_contract_wasm` on itself after authorization. At execution, bind and validate:
 
@@ -286,7 +291,7 @@ Run the existing checks and record outcomes. Capture contract/pipeline configura
 
 ### Step 2 — Contract platform and lifecycle completion
 
-Implement Manager/Factory/Registry/MetadataRegistry and upgrade-enabled module versions. Add founder bootstrap, final authorities, non-reentrant dispatch, claim accounting, auction edge rules and TTL maintenance. Regenerate bindings; extend deployment/build/test scripts to include every module.
+Implement the versioned Manager factory and six upgrade-enabled DAO modules, including Marketplace. Add founder bootstrap, final Treasury authority, event-first retention, non-reentrant dispatch, claim accounting, auction edge rules, and TTL maintenance. Regenerate bindings and extend deployment/build/test scripts to include every module.
 
 ### Step 3 — Data correctness and automatic discovery
 

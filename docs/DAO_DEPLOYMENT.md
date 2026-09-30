@@ -1,6 +1,7 @@
 # DAO Deployment Guide
 
-> **Status**: Complete - Ready to use
+> **Status**: Versioned redesign reference. Use `MANAGER_REDESIGN.md` and
+> `MARKETPLACE_PLAN.md` for the new six-module deployment baseline.
 
 This guide covers creating and deploying new DAOs using the multi-tenant system.
 
@@ -67,6 +68,10 @@ Create a JSON file describing the DAO (e.g., `configs/my-dao.json`):
     "paymentAsset": "native"    // or contract address
   },
 
+  "marketplace": {
+    "secondaryFeeBps": 250
+  },
+
   "governance": {
     "votingDelay": 1,
     "votingPeriod": 604800,     // 7 days in seconds
@@ -85,7 +90,7 @@ node scripts/deploy-dao.mjs configs/my-dao.json configs/testnet-config.json
 ```
 
 **What it does** (in order):
-1. Creates all 5 contracts
+1. Creates all 6 contracts, including Marketplace
 2. Initializes contracts
 3. Configures metadata properties
 4. Accepts token ownership
@@ -111,7 +116,7 @@ AND token_name = 'My DAO';
 
 Should see:
 - Status: 'operational'
-- All 5 contracts populated
+- All 6 contracts populated, including `marketplace_contract`
 - token_name, token_symbol filled
 
 ### Step 4: Verify in Frontend
@@ -144,7 +149,7 @@ DAO has been created but not yet finalized.
 **Operations Blocked**:
 - No proposals can be created
 - No votes can be cast
-- Auction not launched
+- Auction not launched unless requested; Marketplace sales are governance-controlled after finalization
 
 **Database**:
 ```sql
@@ -162,7 +167,8 @@ DAO is fully configured and ready for operation.
 **Features Enabled**:
 - Proposals can be created
 - Voting is active
-- Auctions run continuously
+- Auctions run continuously when enabled
+- Marketplace fixed-price sales are available through Governor proposals
 - Treasury controls funds
 
 **Database**:
