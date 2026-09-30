@@ -18,4 +18,5 @@ manager = { path = "../manager", features = ["testutils"] }
 governor = { path = "../governor", features = ["testutils"] }
 treasury = { path = "../treasury", features = ["testutils"] }
 auction = { path = "../auction", features = ["testutils"] }
+marketplace = { path = "../marketplace", features = ["testutils"] }
 stellar-governance = { workspace = true }

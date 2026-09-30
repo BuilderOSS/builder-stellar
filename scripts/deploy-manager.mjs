@@ -258,7 +258,9 @@ function setCurrentImplementations(managerAddress, implementations) {
     '--governor',
     implementations.governor,
     '--treasury',
-    implementations.treasury
+    implementations.treasury,
+    '--marketplace',
+    implementations.marketplace
   ]);
 
   if (!result.ok) {
@@ -321,7 +323,7 @@ async function writeDeployArtifact(
 }
 
 async function main() {
-  // Build all contracts including manager and metadata
+  // Build all DAO contracts including manager and metadata.
   run(
     'cargo',
     [
@@ -338,6 +340,8 @@ async function main() {
       'manager',
       '-p',
       'metadata',
+      '-p',
+      'marketplace',
       '--release',
       '--target',
       'wasm32v1-none'
@@ -363,14 +367,15 @@ async function main() {
 
   console.log(`Manager deployed: ${managerDeploy.id}`);
 
-  // Install all 5 implementation WASMs
+  // Install all 6 implementation WASMs
   console.log('\n=== Installing Implementation WASMs ===\n');
   const implementations = {
     token: installWasm('token'),
     metadata: installWasm('metadata'),
     auction: installWasm('auction'),
     governor: installWasm('governor'),
-    treasury: installWasm('treasury')
+    treasury: installWasm('treasury'),
+    marketplace: installWasm('marketplace')
   };
 
   // Register implementations with Manager
@@ -392,6 +397,11 @@ async function main() {
     implementations.treasury,
     'Treasury'
   );
+  registerImplementation(
+    managerDeploy.id,
+    implementations.marketplace,
+    'Marketplace'
+  );
 
   // Set current implementations
   console.log('\n=== Setting Current Implementations ===\n');
@@ -412,6 +422,7 @@ async function main() {
   console.log(`AUCTION_WASM=${implementations.auction}`);
   console.log(`GOVERNOR_WASM=${implementations.governor}`);
   console.log(`TREASURY_WASM=${implementations.treasury}`);
+  console.log(`MARKETPLACE_WASM=${implementations.marketplace}`);
 }
 
 await main();

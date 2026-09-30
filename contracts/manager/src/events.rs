@@ -41,15 +41,6 @@ pub struct FactoryPaused {}
 #[contractevent]
 pub struct FactoryUnpaused {}
 #[contractevent]
-pub struct DaoRegistered {
-    #[topic]
-    pub token_address: Address,
-    #[topic]
-    pub creator: Address,
-    pub modules: DaoModules,
-}
-
-#[contractevent]
 pub struct DaoFinalized {
     #[topic]
     pub token_address: Address,
@@ -64,6 +55,7 @@ pub struct CurrentImplementationsUpdated {
     pub auction: BytesN<32>,
     pub governor: BytesN<32>,
     pub treasury: BytesN<32>,
+    pub marketplace: BytesN<32>,
 }
 
 // ============================================================================
@@ -144,25 +136,6 @@ pub fn emit_factory_unpaused(env: &Env) {
     FactoryUnpaused {}.publish(env);
 }
 
-// ============================================================================
-// Registry Events
-// ============================================================================
-
-/// Emitted when a DAO is registered.
-pub fn emit_dao_registered(
-    env: &Env,
-    token_address: &Address,
-    creator: &Address,
-    modules: &DaoModules,
-) {
-    DaoRegistered {
-        token_address: token_address.clone(),
-        creator: creator.clone(),
-        modules: modules.clone(),
-    }
-    .publish(env);
-}
-
 pub fn emit_dao_finalized(
     env: &Env,
     token_address: &Address,
@@ -191,6 +164,7 @@ pub fn emit_current_implementations_updated(
     auction: &BytesN<32>,
     governor: &BytesN<32>,
     treasury: &BytesN<32>,
+    marketplace: &BytesN<32>,
 ) {
     CurrentImplementationsUpdated {
         token: token.clone(),
@@ -198,6 +172,7 @@ pub fn emit_current_implementations_updated(
         auction: auction.clone(),
         governor: governor.clone(),
         treasury: treasury.clone(),
+        marketplace: marketplace.clone(),
     }
     .publish(env);
 }

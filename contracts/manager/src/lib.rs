@@ -11,7 +11,7 @@
 //!
 //! ## 2. DAO Factory
 //!
-//! - Deploy complete DAOs with all 5 modules atomically
+//! - Deploy complete DAOs with all 6 modules atomically
 //! - Deterministic address prediction before deployment
 //! - Founder allocation configuration (fixed NFT counts)
 //! - Governance-owned from initialization
@@ -49,6 +49,6 @@ mod test;
 pub use contract::*;
 pub use error::*;
 pub use storage::{
-    DaoAddresses, DaoCreation, DaoCreationParams, DaoMetadata, DaoModules, DaoRegistration,
-    FounderAllocation, ImplementationVersion, UpgradeApproval,
+    DaoAddresses, DaoCreationParams, DaoModules, FounderAllocation, ImplementationVersion,
+    PendingDao, UpgradeApproval,
 };

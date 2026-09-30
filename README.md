@@ -4,12 +4,12 @@ Builder for Stellar is a Soroban DAO framework. The redesign provides a Manager 
 
 ## Current Status
 
-- Six Soroban DAO modules are planned, with Marketplace as the next module.
+- Six Soroban DAO modules are deployed by Manager: Token, Metadata, Auction, Governor, Treasury, and Marketplace.
 - Manager is the implementation registry and DAO factory, not a permanent DAO registry.
 - Treasury owns every DAO module after finalization, including itself, and is the module-administration authority.
 - Founder allocations are fixed token amounts and the total is capped at 10,000 tokens.
 - Metadata uses mutable properties and items, with mint hooks that generate token attributes.
-- 153 Rust tests pass (`pnpm contracts:test:unit`).
+- 154 Rust tests pass (`pnpm contracts:test`).
 - Goldsky and PostgreSQL provide durable DAO discovery and history. Manager stores only temporary pending creation state.
 
 ## Quick Start
@@ -43,11 +43,21 @@ pnpm local:down
 ### Testing
 
 ```bash
-pnpm contracts:test:unit  # 153 Rust unit tests
-pnpm contracts:test:e2e
-pnpm contracts:test:all
+pnpm contracts:test       # 154 Rust unit and e2e tests
 pnpm indexer:test          # Goldsky package tests, not multi-DAO completeness
 ```
+
+#### macOS SDK Override
+
+On macOS, use the Command Line Tools 26.5 SDK when running the full contract
+test command:
+
+```bash
+SDKROOT="/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk" pnpm contracts:test
+```
+
+The workspace `.envrc` exports this value automatically when entering
+`~/code/nouns/stellar-builder` with direnv enabled.
 
 ## Project Structure
 
@@ -57,7 +67,8 @@ contracts/metadata/    Mutable properties/items and mint hook
 contracts/auction/     Auction membership module
 contracts/governor/    Proposal and voting logic
 contracts/treasury/    Asset custody and module ownership
-contracts/manager/     Implementation registry, factory, and DAO registry
+contracts/manager/     Implementation registry and DAO factory
+contracts/marketplace/ Primary and secondary NFT marketplace
 contracts/e2e/         Contract integration tests
 apps/web/              Next.js frontend
 packages/*-bindings/   Generated TypeScript clients

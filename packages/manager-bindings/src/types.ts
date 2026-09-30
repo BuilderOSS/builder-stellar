@@ -49,7 +49,7 @@ export const ManagerError = {
    */
   1103 : { message: "InvalidParamBounds" },
   /**
-   * Founders exceed 99 percent
+   * Founder allocations exceed the configured maximum
    */
   1104 : { message: "FoundersExceed99Percent" },
   /**
@@ -93,7 +93,7 @@ export const ManagerError = {
    */
   1114 : { message: "NoFoundersSpecified" },
   /**
-   * Invalid founder percentage
+   * Invalid founder allocation
    */
   1115 : { message: "InvalidFounderPercentage" },
   /**
@@ -104,6 +104,10 @@ export const ManagerError = {
    * Founder allocations exceed the factory resource limit
    */
   1118 : { message: "FounderAllocationTooLarge" },
+  /**
+   * The auction must remain paused when it is not launched
+   */
+  1119 : { message: "AuctionMustBePaused" },
   /**
    * Current implementations not set
    */
@@ -148,18 +152,6 @@ export interface DaoFinalizedEvent {
     finalized_ledger?: number;
     modules?: DaoModules;
     launch_auction?: boolean;
-  };
-}
-
-/**
- * Event: DaoRegistered
- */
-export interface DaoRegisteredEvent {
-  name: "DaoRegistered";
-  data: {
-    token_address: string;
-    creator: string;
-    modules?: DaoModules;
   };
 }
 
@@ -230,29 +222,24 @@ export interface CurrentImplementationsUpdatedEvent {
     auction?: Uint8Array;
     governor?: Uint8Array;
     treasury?: Uint8Array;
+    marketplace?: Uint8Array;
   };
 }
 
 /**
- * Union: DaoStatus
- */
- export type DaoStatus =
-  { tag: "Pending"; values: void } |
-  { tag: "Operational"; values: void };
-
-/**
- * Module addresses for a DAO (same as DaoAddresses but for registry context).
+ * Struct: DaoModules
  */
 export interface DaoModules {
   auction: string;
   governor: string;
+  marketplace: string;
   metadata: string;
   token: string;
   treasury: string;
 }
 
 /**
- * Storage keys for the Manager contract.
+ * Union: ManagerKey
  */
  export type ManagerKey =
   { tag: "Admin"; values: void } |
@@ -266,11 +253,18 @@ export interface DaoModules {
   { tag: "CurrentAuctionWasm"; values: void } |
   { tag: "CurrentGovernorWasm"; values: void } |
   { tag: "CurrentTreasuryWasm"; values: void } |
-  { tag: "DaoCreation"; values: readonly [string] } |
-  { tag: "NonceUsed"; values: readonly [string, bigint] } |
-  { tag: "DaoRegistration"; values: readonly [string] } |
-  { tag: "DaoList"; values: void } |
-  { tag: "DaoCount"; values: void };
+  { tag: "CurrentMarketplaceWasm"; values: void } |
+  { tag: "PendingDao"; values: readonly [string] };
+
+/**
+ * The only factory state retained until the launch administrator finalizes a DAO.
+ */
+export interface PendingDao {
+  addresses: DaoAddresses;
+  creator: string;
+  founder_supply: number;
+  launch_admin: string;
+}
 
 /**
  * Struct: ArtworkItem
@@ -282,106 +276,23 @@ export interface ArtworkItem {
 }
 
 /**
- * Complete record of a DAO creation.
- */
-export interface DaoCreation {
-  /**
-   * All module addresses
-   */
-  addresses: DaoAddresses;
-  /**
-   * Timestamp when created
-   */
-  created_at: bigint;
-  /**
-   * Ledger sequence when created
-   */
-  created_ledger: number;
-  /**
-   * Creator address
-   */
-  creator: string;
-  /**
-   * Creation parameters
-   */
-  params: DaoCreationParams;
-  status: DaoStatus;
-}
-
-/**
- * Metadata about a DAO.
- */
-export interface DaoMetadata {
-  /**
-   * Optional description (can be updated by governance)
-   */
-  description: string | null;
-  /**
-   * DAO name
-   */
-  name: string;
-}
-
-/**
- * Addresses of all deployed DAO modules.
+ * Struct: DaoAddresses
  */
 export interface DaoAddresses {
   auction: string;
   governor: string;
+  marketplace: string;
   metadata: string;
   token: string;
   treasury: string;
 }
 
 /**
- * Complete registration record for a DAO.
- */
-export interface DaoRegistration {
-  /**
-   * Timestamp when created
-   */
-  created_at: bigint;
-  /**
-   * Ledger when created
-   */
-  created_ledger: number;
-  /**
-   * Creator address
-   */
-  creator: string;
-  /**
-   * Manager version that created this DAO
-   */
-  factory_version: number;
-  /**
-   * DAO metadata
-   */
-  metadata: DaoMetadata;
-  /**
-   * All module addresses
-   */
-  modules: DaoModules;
-  /**
-   * Token address (canonical DAO ID)
-   */
-  token_address: string;
-}
-
-/**
- * Represents an approved upgrade path between two implementations.
+ * Struct: UpgradeApproval
  */
 export interface UpgradeApproval {
-  /**
-   * Ledger sequence when approved
-   */
   approved_at: bigint;
-  /**
-   * Source WASM hash
-   */
   from_hash: Uint8Array;
-  /**
-   * Target WASM hash
-   */
   to_hash: Uint8Array;
 }
 
@@ -394,7 +305,7 @@ export interface ArtworkIpfsGroup {
 }
 
 /**
- * Complete parameters for creating a new DAO.
+ * Struct: DaoCreationParams
  */
 export interface DaoCreationParams {
   artwork_ipfs: ArtworkIpfsGroup;
@@ -402,16 +313,10 @@ export interface DaoCreationParams {
   artwork_property_names: Array<string>;
   auction_duration: bigint;
   contract_image: string;
-  /**
-   * Who's creating this DAO
-   */
   deployer: string;
   description: string;
   founders: Array<FounderAllocation>;
   launch_admin: string;
-  /**
-   * Uniqueness key (user increments to avoid collisions)
-   */
   nonce: bigint;
   payment_asset: string;
   project_uri: string;
@@ -428,42 +333,21 @@ export interface DaoCreationParams {
 }
 
 /**
- * Fixed founder allocation minted before the DAO is launched.
+ * Struct: FounderAllocation
  */
 export interface FounderAllocation {
-  /**
-   * Founder address receiving tokens
-   */
   address: string;
-  /**
-   * Number of NFTs to mint
-   */
   amount: number;
 }
 
 /**
- * Represents a registered contract implementation version.
+ * Struct: ImplementationVersion
  */
 export interface ImplementationVersion {
-  /**
-   * Implementation name (e.g., "Token", "Governor", "Metadata")
-   */
   name: string;
-  /**
-   * Ledger sequence when published
-   */
   published_at: bigint;
-  /**
-   * Whether this implementation has been revoked (emergency measure)
-   */
   revoked: boolean;
-  /**
-   * Version number (monotonically increasing)
-   */
   version: number;
-  /**
-   * WASM bytecode hash
-   */
   wasm_hash: Uint8Array;
 }
 
@@ -566,5 +450,5 @@ export interface CreateContractWithConstructorHostFnContext {
   { tag: "Wasm"; values: readonly [Uint8Array] } |
   { tag: "StellarAsset"; values: void } |
   { tag: "Account"; values: void };
-    export type ContractEvent = DaoCreatedEvent | DaoFinalizedEvent | DaoRegisteredEvent | FactoryPausedEvent | FactoryUnpausedEvent | UpgradeApprovedEvent | ImplementationRevokedEvent | ImplementationRegisteredEvent | CurrentImplementationsUpdatedEvent;
+    export type ContractEvent = DaoCreatedEvent | DaoFinalizedEvent | FactoryPausedEvent | FactoryUnpausedEvent | UpgradeApprovedEvent | ImplementationRevokedEvent | ImplementationRegisteredEvent | CurrentImplementationsUpdatedEvent;
     

@@ -107,21 +107,6 @@ fn test_factory_pause() {
 }
 
 #[test]
-fn test_dao_enumeration_empty() {
-    let (env, client, admin) = setup();
-
-    // Initially no DAOs
-    assert_eq!(client.get_dao_count(), 0);
-
-    // Enumerate should return empty
-    let daos = client.enumerate_daos(&0, &10);
-    assert_eq!(daos.len(), 0);
-
-    let _ = env;
-    let _ = admin;
-}
-
-#[test]
 fn test_set_current_implementations() {
     let (env, client, admin) = setup();
 
@@ -131,18 +116,21 @@ fn test_set_current_implementations() {
     let auction_name = String::from_str(&env, "Auction");
     let governor_name = String::from_str(&env, "Governor");
     let treasury_name = String::from_str(&env, "Treasury");
+    let marketplace_name = String::from_str(&env, "Marketplace");
 
     let token_wasm = BytesN::from_array(&env, &[1u8; 32]);
     let metadata_wasm = BytesN::from_array(&env, &[2u8; 32]);
     let auction_wasm = BytesN::from_array(&env, &[3u8; 32]);
     let governor_wasm = BytesN::from_array(&env, &[4u8; 32]);
     let treasury_wasm = BytesN::from_array(&env, &[5u8; 32]);
+    let marketplace_wasm = BytesN::from_array(&env, &[6u8; 32]);
 
     client.register_implementation(&token_name, &1u32, &token_wasm);
     client.register_implementation(&metadata_name, &1u32, &metadata_wasm);
     client.register_implementation(&auction_name, &1u32, &auction_wasm);
     client.register_implementation(&governor_name, &1u32, &governor_wasm);
     client.register_implementation(&treasury_name, &1u32, &treasury_wasm);
+    client.register_implementation(&marketplace_name, &1u32, &marketplace_wasm);
 
     // Set current implementations
     client.set_current_implementations(
@@ -151,6 +139,7 @@ fn test_set_current_implementations() {
         &auction_wasm,
         &governor_wasm,
         &treasury_wasm,
+        &marketplace_wasm,
     );
 
     // Verify they were set correctly
@@ -171,6 +160,7 @@ fn test_set_current_implementations_rejects_unknown_hash() {
     let auction_wasm = BytesN::from_array(&env, &[3u8; 32]);
     let governor_wasm = BytesN::from_array(&env, &[4u8; 32]);
     let treasury_wasm = BytesN::from_array(&env, &[5u8; 32]);
+    let marketplace_wasm = BytesN::from_array(&env, &[6u8; 32]);
 
     client.set_current_implementations(
         &token_wasm,
@@ -178,6 +168,7 @@ fn test_set_current_implementations_rejects_unknown_hash() {
         &auction_wasm,
         &governor_wasm,
         &treasury_wasm,
+        &marketplace_wasm,
     );
 
     let _ = admin;
@@ -193,18 +184,21 @@ fn test_predict_addresses() {
     let auction_name = String::from_str(&env, "Auction");
     let governor_name = String::from_str(&env, "Governor");
     let treasury_name = String::from_str(&env, "Treasury");
+    let marketplace_name = String::from_str(&env, "Marketplace");
 
     let token_wasm = BytesN::from_array(&env, &[1u8; 32]);
     let metadata_wasm = BytesN::from_array(&env, &[2u8; 32]);
     let auction_wasm = BytesN::from_array(&env, &[3u8; 32]);
     let governor_wasm = BytesN::from_array(&env, &[4u8; 32]);
     let treasury_wasm = BytesN::from_array(&env, &[5u8; 32]);
+    let marketplace_wasm = BytesN::from_array(&env, &[6u8; 32]);
 
     client.register_implementation(&token_name, &1u32, &token_wasm);
     client.register_implementation(&metadata_name, &1u32, &metadata_wasm);
     client.register_implementation(&auction_name, &1u32, &auction_wasm);
     client.register_implementation(&governor_name, &1u32, &governor_wasm);
     client.register_implementation(&treasury_name, &1u32, &treasury_wasm);
+    client.register_implementation(&marketplace_name, &1u32, &marketplace_wasm);
 
     client.set_current_implementations(
         &token_wasm,
@@ -212,6 +206,7 @@ fn test_predict_addresses() {
         &auction_wasm,
         &governor_wasm,
         &treasury_wasm,
+        &marketplace_wasm,
     );
 
     let creator = Address::generate(&env);
@@ -239,20 +234,6 @@ fn test_predict_addresses() {
     assert_ne!(addresses.token, addresses3.token);
 
     let _ = admin;
-}
-
-#[test]
-fn test_nonce_tracking() {
-    let (env, client, _admin) = setup();
-
-    let creator = Address::generate(&env);
-    let nonce = 100u64;
-
-    // Initially nonce is not used
-    assert!(!client.is_nonce_used(&creator, &nonce));
-
-    // Note: We can't actually test nonce usage without creating a DAO,
-    // which requires all the WASM contracts to be deployed
 }
 
 #[test]
@@ -371,34 +352,6 @@ fn test_upgrade_approval_workflow() {
     assert!(!client.is_upgrade_approved(&v1_wasm, &v3_wasm)); // v1 -> v3 not approved
 
     let _ = admin;
-}
-
-#[test]
-fn test_dao_count_starts_at_zero() {
-    let (env, client, _admin) = setup();
-    assert_eq!(client.get_dao_count(), 0);
-    let _ = env;
-}
-
-#[test]
-fn test_enumerate_daos_with_pagination() {
-    let (env, client, _admin) = setup();
-
-    // Test empty enumeration with different limits
-    let daos_10 = client.enumerate_daos(&0, &10);
-    assert_eq!(daos_10.len(), 0);
-
-    let daos_5 = client.enumerate_daos(&0, &5);
-    assert_eq!(daos_5.len(), 0);
-
-    let daos_1 = client.enumerate_daos(&0, &1);
-    assert_eq!(daos_1.len(), 0);
-
-    // Test with offset
-    let daos_offset = client.enumerate_daos(&5, &10);
-    assert_eq!(daos_offset.len(), 0);
-
-    let _ = env;
 }
 
 #[test]

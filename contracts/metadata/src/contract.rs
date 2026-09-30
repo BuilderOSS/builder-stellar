@@ -15,6 +15,16 @@ pub struct MetadataContract;
 
 #[contractimpl]
 impl MetadataContract {
+    pub fn finalize_upgrade_authority(env: Env, new_owner: Address) {
+        let manager: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Manager)
+            .expect("manager not set");
+        manager.require_auth();
+        env.storage().instance().set(&DataKey::Owner, &new_owner);
+    }
+
     /// Initialize the metadata contract
     ///
     /// # Arguments
