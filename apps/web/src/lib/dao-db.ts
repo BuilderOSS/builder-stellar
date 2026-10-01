@@ -56,7 +56,21 @@ export interface DaoConfig {
 
   // Lifecycle State
   status: 'pending' | 'operational'; // DAO lifecycle status
+
+  /**
+   * Auction enabled state: Was auction EVER enabled?
+   * - null: DAO still pending (hasn't launched yet)
+   * - true: Enabled at launch OR re-enabled after being disabled (via unpause)
+   * - false: Launched with auctions disabled, but can be reactivated later
+   */
   auction_enabled: boolean | null;
+
+  /**
+   * Auction pause state: Is auction currently paused?
+   * - null: DAO still pending (hasn't launched yet)
+   * - true: Auction is paused or disabled (can be resumed if ever enabled)
+   * - false: Auction is active and accepting bids
+   */
   auction_paused: boolean | null;
 
   // Blockchain Timeline

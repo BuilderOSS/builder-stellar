@@ -761,15 +761,22 @@ export default function AuctionAdminPage() {
                 </>
               ) : null}
               {config.auctionEnabled === false ? (
-                <EnableAuctionsForm
-                  value={populatedEnableValues}
-                  onChange={setEnableValues}
-                  onSubmit={() => void handleEnableAuctions()}
-                  network={config.name}
-                  errors={enableErrors}
-                  disabled={busy || !data}
-                  submitLabel={isOwner ? 'Enable auctions' : 'Add setup to proposal'}
-                />
+                <>
+                  <Callout
+                    variant="info"
+                    title="Auctions are currently disabled"
+                    description="Configure auction parameters below and enable them. Once enabled, you can pause and resume auctions as needed."
+                  />
+                  <EnableAuctionsForm
+                    value={populatedEnableValues}
+                    onChange={setEnableValues}
+                    onSubmit={() => void handleEnableAuctions()}
+                    network={config.name}
+                    errors={enableErrors}
+                    disabled={busy || !data}
+                    submitLabel={isOwner ? 'Enable auctions' : 'Add setup to proposal'}
+                  />
+                </>
               ) : (
                 <>
                   <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>

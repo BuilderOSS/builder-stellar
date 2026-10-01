@@ -1,12 +1,16 @@
 -- =============================================================================
 -- MANAGER AUCTION REACTIVATION
 --
--- `dao_launched.launch_auction` records the initial auction choice. A DAO that
--- started with auctions disabled can later be enabled by unpausing its auction
--- contract, so manager.daos must also account for a later Unpaused event.
+-- `dao_launched.launch_auction` records the initial auction choice. A DAO can
+-- transition from disabled to enabled by configuring and unpausing the auction
+-- contract at any time after creation.
 --
--- auction_enabled: was auction ever enabled? (launch_auction=true OR unpaused occurred)
--- auction_paused: is auction currently paused? (disabled DAOs are treated as paused)
+-- auction_enabled: was auction EVER enabled? (launch_auction=true OR unpaused occurred at any point)
+-- auction_paused: is auction currently paused? (null if pending, true if paused/disabled, false if active)
+--
+-- Reactivation Logic:
+-- - If initially disabled (launch_auction=false) but later unpaused, auction_enabled becomes true
+-- - This allows DAOs to transition from disabled → configured → active at any time post-launch
 -- =============================================================================
 
 CREATE OR REPLACE VIEW manager.daos AS
@@ -120,8 +124,11 @@ SELECT
   NULL::timestamptz AS indexed_at,
   CASE
     WHEN l.dao_id IS NULL THEN NULL::boolean
-    WHEN (COALESCE(l.auction_enabled, true) OR ar.dao_id IS NOT NULL) = false THEN true
-    ELSE COALESCE(acps.currently_paused, false)
+    -- If auction has never been unpaused (no reactivation), it's paused (can't be active without unpause)
+    WHEN ar.dao_id IS NULL AND COALESCE(l.auction_enabled, true) = false THEN true
+    -- If auction was enabled at launch or has been unpaused, use current pause state
+    WHEN ar.dao_id IS NOT NULL OR COALESCE(l.auction_enabled, true) = true THEN COALESCE(acps.currently_paused, false)
+    ELSE true
   END AS auction_paused
 FROM created c
 LEFT JOIN launched l USING (deployment_id, dao_id)

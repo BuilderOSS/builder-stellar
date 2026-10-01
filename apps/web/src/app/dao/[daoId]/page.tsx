@@ -141,7 +141,7 @@ export default function Page() {
     isLoading: auctionLoading,
     mutate: refreshAuction
   } = useSWR<AuctionData>(
-    config.auctionContractId && config.auctionEnabled !== false
+    config.auctionContractId
       ? `/api/dao/${encodeURIComponent(daoId)}/auctions`
       : null,
     fetchJson,
@@ -215,13 +215,20 @@ export default function Page() {
       </div>
 
       <div className="dashboard-secondary-grid">
-        {config.auctionContractId && config.auctionEnabled !== false ? (
+        {config.auctionContractId ? (
           <Card className="dashboard-secondary-card" p="5">
             <div className="dashboard-secondary-card__content">
               <Heading style={{ fontSize: '1.35rem', margin: 0 }}>Auction</Heading>
               <div className="dashboard-secondary-card__scroll">
                 {auctionError ? (
                   <Callout variant="error" title="Auction unavailable" description={auctionError.message} />
+                ) : null}
+                {config.auctionEnabled === false ? (
+                  <Callout
+                    variant="info"
+                    title="Auctions are disabled"
+                    description="Visit Admin > Auctions to configure and enable auctions for this DAO."
+                  />
                 ) : null}
                 {auctionLoading && !auctionData ? (
                   <div role="status" aria-busy="true">
@@ -248,7 +255,7 @@ export default function Page() {
                   <Callout
                     variant="info"
                     title="The first auction has not launched yet"
-                    description="Auctions are enabled for this DAO, but the first auction will appear after the auction module is resumed and launched."
+                    description="Auctions are configured for this DAO, but the first auction will appear after the auction module is launched."
                   />
                 ) : null}
                 {auctionData?.auction ? (

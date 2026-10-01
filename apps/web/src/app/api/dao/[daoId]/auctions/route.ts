@@ -34,14 +34,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ dao
     const auctionTx = await client.get_auction();
     const auction = jsonValue(auctionTx.result) as { token_id?: string } | null;
     const paused = Boolean(pausedTx.result);
-    const auctionEnabled = config.auctionEnabled !== false || !paused;
     if (!auction || typeof auction.token_id === 'undefined') {
       // No auction token exists yet. Determine if we've never launched or if we paused after launching.
       // If there's auction history, we've been paused. Otherwise, we've never launched.
       return NextResponse.json({
         status: paused && history.length > 0 ? 'paused' : 'not-launched',
         auction: null,
-        auctionEnabled,
+        auctionEnabled: config.auctionEnabled,
         paused,
         config: jsonValue(configTx.result),
         history
@@ -52,7 +51,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ dao
       jsonValue({
         status: paused ? 'paused' : 'active',
         auction,
-        auctionEnabled,
+        auctionEnabled: config.auctionEnabled,
         config: configTx.result,
         paused,
         bids,

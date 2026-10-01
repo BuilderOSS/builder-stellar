@@ -30,22 +30,18 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 type NavItem = { href: Route; label: string; icon: LucideIcon; exact?: boolean };
 
-function getNavItems(daoId: string, auctionEnabled?: boolean | null): NavItem[] {
+function getNavItems(daoId: string, _auctionEnabled?: boolean | null): NavItem[] {
   const items: NavItem[] = [
     { href: `/dao/${daoId}` as Route, label: 'Dashboard', icon: LayoutDashboard, exact: true },
     { href: `/dao/${daoId}/proposals` as Route, label: 'Proposals', icon: Vote },
     { href: `/dao/${daoId}/treasury` as Route, label: 'Treasury', icon: Landmark },
+    { href: `/dao/${daoId}/auctions` as Route, label: 'Auctions', icon: Gavel },
     { href: `/dao/${daoId}/members` as Route, label: 'Members', icon: Users },
     { href: `/dao/${daoId}/marketplace` as Route, label: 'Marketplace', icon: Store }
   ];
 
-  // Show Auctions tab based on current auction enabled state.
-  // - false: permanently disabled at finalization, hide tab
-  // - true: enabled (either at finalization or re-enabled later), show tab
-  // - null: DAO still pending finalization, show tab (might be enabled)
-  if (auctionEnabled !== false) {
-    items.splice(3, 0, { href: `/dao/${daoId}/auctions` as Route, label: 'Auctions', icon: Gavel });
-  }
+  // Auctions are always visible for operational DAOs. Users can view the status
+  // and enable/disable from the admin page. Disabled auctions can be reactivated.
 
   return items;
 }
