@@ -239,8 +239,7 @@ fn test_predict_addresses() {
 #[test]
 #[should_panic]
 fn test_create_dao_when_paused_fails() {
-    use crate::storage::{ArtworkIpfsGroup, DaoCreationParams};
-    use soroban_sdk::Vec;
+    use crate::storage::DaoCreationParams;
 
     let (env, client, _admin) = setup();
 
@@ -249,34 +248,11 @@ fn test_create_dao_when_paused_fails() {
 
     // Try to create DAO - should fail
     let deployer = Address::generate(&env);
-    let payment_asset = Address::generate(&env);
-
     let params = DaoCreationParams {
         deployer: deployer.clone(),
         nonce: 1,
-        token_name: String::from_str(&env, "Test DAO"),
-        token_symbol: String::from_str(&env, "TEST"),
-        token_uri: String::from_str(&env, "https://test.com"),
-        project_uri: String::from_str(&env, "https://project.test"),
-        description: String::from_str(&env, "Test description"),
-        contract_image: String::from_str(&env, "https://test.com/image.png"),
-        renderer_base: String::from_str(&env, "https://renderer.test"),
-        artwork_property_names: Vec::new(&env),
-        artwork_items: Vec::new(&env),
-        artwork_ipfs: ArtworkIpfsGroup {
-            base_uri: String::from_str(&env, "ipfs://"),
-            extension: String::from_str(&env, ".png"),
-        },
-        auction_duration: 86400,
-        reserve_price: 1000,
-        time_buffer: 300,
-        payment_asset,
-        voting_delay: 1,
-        voting_period: 100,
-        quorum_bps: 1000,
-        proposal_threshold_bps: 100,
-        founders: Vec::new(&env),
         launch_admin: deployer,
+        initial_config: crate::storage::InitialDaoConfig::Defaults,
     };
 
     client.create_dao(&params);

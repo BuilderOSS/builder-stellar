@@ -23,8 +23,9 @@ impl MarketplaceContract {
         manager: Address,
         current_hash: BytesN<32>,
         version: String,
+        default_secondary_fee_bps: u32,
     ) {
-        if DEFAULT_SECONDARY_FEE_BPS > MAX_FEE_BPS {
+        if default_secondary_fee_bps > MAX_FEE_BPS {
             panic_with_error!(e, MarketplaceError::InvalidFee);
         }
         storage::set_config(
@@ -33,7 +34,7 @@ impl MarketplaceContract {
                 token: token.clone(),
                 treasury: treasury.clone(),
                 payment_asset: payment_asset.clone(),
-                default_secondary_fee_bps: DEFAULT_SECONDARY_FEE_BPS,
+                default_secondary_fee_bps,
                 manager,
                 current_hash,
                 version: version.clone(),

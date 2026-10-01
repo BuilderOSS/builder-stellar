@@ -13,7 +13,7 @@ and Governor control its modules. Builder's Manager remains only the platform
 implementation registry, deployment factory, and upgrade-policy service.
 
 Goldsky is the durable discovery and history layer. `DaoCreated` and
-`DaoFinalized` are the canonical events for database/API projections.
+`DaoLaunched` are the canonical events for database/API projections.
 
 ## Phase 0: Manager
 
@@ -56,22 +56,21 @@ address:
 PendingDao {
     addresses: DaoAddresses,
     launch_admin: Address,
-    expected_founder_supply: u32,
 }
 ```
 
 `get_pending_dao(token_address)` exposes this state for launch recovery.
 
 The entry exists only between successful `create_dao` and successful
-`finalize_dao`:
+`launch_dao`:
 
 1. `create_dao` deploys all six deterministic modules and writes `PendingDao`
    atomically.
-2. The launch administrator accepts Token ownership, configures Metadata, and
-   mints the founder allocation in separate retriable transactions.
-3. `finalize_dao` reads this one entry, validates launch readiness, transfers
-   final authority, emits `DaoFinalized`, and deletes the entry.
-4. A failed finalization rolls back every cross-contract call, leaving the
+2. The launch administrator accepts Token ownership and configures every module
+   in separate retriable transactions, including token metadata and allocations.
+3. `launch_dao` reads this one entry, transfers final authority, emits
+   `DaoLaunched`, and deletes the entry.
+4. A failed launch rolls back every cross-contract call, leaving the
    pending entry unchanged and available for retry.
 
 The system must remove `DaoCreation`, `DaoCreationStorageParams`,
@@ -87,40 +86,36 @@ finalization unpauses it.
 
 The Auction constructor always receives valid, non-optional configuration:
 
-- payment SAC address;
+- launch-admin placeholder payment address;
 - duration of at least 300 seconds;
 - reserve price of at least 1,000 stroops;
 - nonzero time buffer;
 - Manager-selected 10% minimum bid increment.
 
-When the creator chooses not to launch auctions, the UI supplies platform
-defaults instead of displaying or requiring auction configuration. The default
-payment asset is the network-native XLM SAC. The paused Auction transfers to
-Treasury at finalization, so DAO governance can change its paused configuration
-and enable it later.
+Creation uses safe defaults and the launch administrator can replace the
+payment asset and auction settings before launch. The Auction transfers to
+Treasury at launch, so DAO governance can change its configuration and enable
+it later.
 
 ### Creation and Finalization Validation
 
-`create_dao` validates every constructor requirement before deployment. It
-loads each current implementation through one helper that requires both a
-registration and `revoked == false`.
+`create_dao` only validates factory state and implementation availability. It
+deploys modules with safe defaults so the launch administrator can configure
+the DAO after creation.
 
 Custom module WASMs remain valid: a Manager owner can register any WASM and
 select it as current. A WASM hash cannot prove its contract interface on-chain.
 The registered module role is administrator-attested and deployment/testing is
 the compatibility gate.
 
-`finalize_dao` requires:
+`launch_dao` requires only:
 
 - the pending launch administrator's authorization;
-- Token ownership accepted by that launch administrator;
-- Token total supply equal to `expected_founder_supply`;
-- Auction still paused if `launch_auction` is false.
 
- It then grants Treasury and, conditionally, Auction and Marketplace mint
- authority; transfers Token, Governor, Treasury, Auction, and Marketplace
- ownership; transfers Metadata upgrade authority; emits `DaoFinalized`; and
- deletes `PendingDao`.
+It grants Treasury and Marketplace, plus Auction when requested, mint
+authority; transfers Token, Governor, Treasury, Auction, and Marketplace
+ownership; transfers Metadata upgrade authority; emits `DaoLaunched`; and
+deletes `PendingDao`.
 
 Use dedicated errors for a revoked current implementation and an incomplete
 launch. Remove unused Manager error variants rather than retaining misleading
@@ -251,7 +246,7 @@ testnet upgrade rehearsal before it becomes the next deployment baseline.
 5. Wipe the existing testnet read-model database before ingesting the new
    Manager events. Do not mix legacy and versioned deployment rows.
 6. Apply the versioned database schema, start Goldsky from the new Manager
-   deployment ledger, and verify `DaoCreated`, `DaoFinalized`, implementation,
+    deployment ledger, and verify `DaoCreated`, `DaoLaunched`, implementation,
    and upgrade projections.
 7. Create one DAO with auctions enabled and one with auctions initially paused;
    verify launch recovery, final authority, event projections, version fields,

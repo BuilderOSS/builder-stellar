@@ -49,6 +49,7 @@ mod test;
 pub use contract::*;
 pub use error::*;
 pub use storage::{
-    DaoAddresses, DaoCreationParams, DaoModules, FounderAllocation, ImplementationVersion,
-    PendingDao, UpgradeApproval,
+    ArtworkIpfsGroup, AuctionConfig, DaoAddresses, DaoCreationParams, DaoModules, GovernanceConfig,
+    ImplementationVersion, InitialDaoConfig, InitialDaoConfigValues, MarketplaceConfig, PendingDao,
+    UpgradeApproval,
 };

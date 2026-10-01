@@ -113,7 +113,7 @@ This ensures:
 
 ### Finalization Phase
 
-4. **finalize_dao(token_address)**
+4. **launch_dao(token_address)**
    - Manager validates completion
     - Checks accepted Token ownership and expected total supply
     - Grants post-finalization mint authorities
@@ -365,7 +365,7 @@ The Goldsky indexer populates the `manager.daos` table by:
    - Records blockchain timeline
    - Stores transaction hashes
 
-3. **Handling DaoFinalized Events**
+3. **Handling DaoLaunched Events**
    - Updates status to 'operational'
    - Records finalization timeline
    - Marks DAO ready for operation

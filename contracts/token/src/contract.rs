@@ -86,6 +86,13 @@ impl DaoTokenContract {
         e.deployer().update_current_contract_wasm(to_hash);
     }
 
+    /// Updates collection metadata during the launch-admin setup window or
+    /// later through the module owner.
+    #[only_owner]
+    pub fn set_metadata(e: &Env, uri: String, name: String, symbol: String) {
+        Base::set_metadata(e, uri, name, symbol);
+    }
+
     /// Grants or revokes minting authority for an address.
     ///
     /// Only the contract owner can call this function. This allows delegating

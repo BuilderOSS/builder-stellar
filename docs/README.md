@@ -94,9 +94,9 @@ A "DAO" is one organization created by Manager and governed by its own Governor/
 ```
 create_dao()           Pending  →  Operational
     ↓                    ↓
-DaoCreated           configure        finalize_dao()
+DaoCreated           configure        launch_dao()
     ↓                    ↓                 ↓
-Database         properties, metadata  DaoFinalized
+Database         properties, metadata  DaoLaunched
 insert           ownership transfer    update status
 ```
 

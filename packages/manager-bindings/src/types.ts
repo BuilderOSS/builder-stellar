@@ -138,18 +138,17 @@ export interface DaoCreatedEvent {
     creator: string;
     created_ledger?: number;
     modules?: DaoModules;
-    founders?: Array<FounderAllocation>;
   };
 }
 
 /**
- * Event: DaoFinalized
+ * Event: DaoLaunched
  */
-export interface DaoFinalizedEvent {
-  name: "DaoFinalized";
+export interface DaoLaunchedEvent {
+  name: "DaoLaunched";
   data: {
     token_address: string;
-    finalized_ledger?: number;
+    launched_ledger?: number;
     modules?: DaoModules;
     launch_auction?: boolean;
   };
@@ -244,7 +243,6 @@ export interface DaoModules {
  export type ManagerKey =
   { tag: "Admin"; values: void } |
   { tag: "FactoryPaused"; values: void } |
-  { tag: "FactoryVersion"; values: void } |
   { tag: "Implementation"; values: readonly [Uint8Array] } |
   { tag: "LatestImplementation"; values: readonly [string] } |
   { tag: "UpgradeApproval"; values: readonly [Uint8Array, Uint8Array] } |
@@ -261,18 +259,7 @@ export interface DaoModules {
  */
 export interface PendingDao {
   addresses: DaoAddresses;
-  creator: string;
-  founder_supply: number;
   launch_admin: string;
-}
-
-/**
- * Struct: ArtworkItem
- */
-export interface ArtworkItem {
-  is_new_property: boolean;
-  name: string;
-  property_id: number;
 }
 
 /**
@@ -285,6 +272,16 @@ export interface DaoAddresses {
   metadata: string;
   token: string;
   treasury: string;
+}
+
+/**
+ * Struct: AuctionConfig
+ */
+export interface AuctionConfig {
+  duration: bigint;
+  payment_asset: string;
+  reserve_price: bigint;
+  time_buffer: bigint;
 }
 
 /**
@@ -305,39 +302,39 @@ export interface ArtworkIpfsGroup {
 }
 
 /**
- * Struct: DaoCreationParams
+ * Struct: GovernanceConfig
  */
-export interface DaoCreationParams {
-  artwork_ipfs: ArtworkIpfsGroup;
-  artwork_items: Array<ArtworkItem>;
-  artwork_property_names: Array<string>;
-  auction_duration: bigint;
-  contract_image: string;
-  deployer: string;
-  description: string;
-  founders: Array<FounderAllocation>;
-  launch_admin: string;
-  nonce: bigint;
-  payment_asset: string;
-  project_uri: string;
-  proposal_threshold_bps: number;
+export interface GovernanceConfig {
+  proposal_threshold: bigint;
+  queue_delay: number;
   quorum_bps: number;
-  renderer_base: string;
-  reserve_price: bigint;
-  time_buffer: bigint;
-  token_name: string;
-  token_symbol: string;
-  token_uri: string;
-  voting_delay: bigint;
-  voting_period: bigint;
+  voting_delay: number;
+  voting_period: number;
 }
 
 /**
- * Struct: FounderAllocation
+ * Union: InitialDaoConfig
  */
-export interface FounderAllocation {
-  address: string;
-  amount: number;
+ export type InitialDaoConfig =
+  { tag: "Defaults"; values: void } |
+  { tag: "Custom"; values: readonly [InitialDaoConfigValues] };
+
+/**
+ * Struct: DaoCreationParams
+ */
+export interface DaoCreationParams {
+  deployer: string;
+  initial_config: InitialDaoConfig;
+  launch_admin: string;
+  nonce: bigint;
+}
+
+/**
+ * Struct: MarketplaceConfig
+ */
+export interface MarketplaceConfig {
+  payment_asset: string;
+  secondary_fee_bps: number;
 }
 
 /**
@@ -349,6 +346,22 @@ export interface ImplementationVersion {
   revoked: boolean;
   version: number;
   wasm_hash: Uint8Array;
+}
+
+/**
+ * Struct: InitialDaoConfigValues
+ */
+export interface InitialDaoConfigValues {
+  auction: AuctionConfig;
+  contract_image: string;
+  description: string;
+  governance: GovernanceConfig;
+  marketplace: MarketplaceConfig;
+  project_uri: string;
+  renderer_base: string;
+  token_name: string;
+  token_symbol: string;
+  token_uri: string;
 }
 
 /**
@@ -450,5 +463,5 @@ export interface CreateContractWithConstructorHostFnContext {
   { tag: "Wasm"; values: readonly [Uint8Array] } |
   { tag: "StellarAsset"; values: void } |
   { tag: "Account"; values: void };
-    export type ContractEvent = DaoCreatedEvent | DaoFinalizedEvent | FactoryPausedEvent | FactoryUnpausedEvent | UpgradeApprovedEvent | ImplementationRevokedEvent | ImplementationRegisteredEvent | CurrentImplementationsUpdatedEvent;
+    export type ContractEvent = DaoCreatedEvent | DaoLaunchedEvent | FactoryPausedEvent | FactoryUnpausedEvent | UpgradeApprovedEvent | ImplementationRevokedEvent | ImplementationRegisteredEvent | CurrentImplementationsUpdatedEvent;
     

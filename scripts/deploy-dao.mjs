@@ -165,42 +165,9 @@ if (!predictedAddresses) {
   );
 }
 
-const tokenUri = daoConfig.token.uri.replace(
-  "{daoId}",
-  predictedAddresses.token,
-);
-
 const createParams = JSON.stringify({
   deployer: daoConfig.deployer,
   nonce: daoConfig.nonce,
-  token_name: daoConfig.token.name,
-  token_symbol: daoConfig.token.symbol,
-  token_uri: tokenUri,
-  project_uri: daoConfig.metadata.projectUri,
-  description: daoConfig.metadata.description,
-  contract_image: daoConfig.metadata.contractImage,
-  renderer_base: daoConfig.metadata.rendererBase,
-  artwork_property_names: artworkProperties.map((property) => property.name),
-  artwork_items: artworkProperties.flatMap((property, propertyId) =>
-    property.items.map((name) => ({
-      property_id: propertyId,
-      name,
-      is_new_property: true,
-    })),
-  ),
-  artwork_ipfs: {
-    base_uri: daoConfig.metadata.artwork.ipfs.baseUri,
-    extension: daoConfig.metadata.artwork.ipfs.extension,
-  },
-  auction_duration: daoConfig.auction.duration,
-  reserve_price: String(daoConfig.auction.reservePrice),
-  time_buffer: daoConfig.auction.timeBuffer,
-  payment_asset: daoConfig.auction.paymentAsset,
-  voting_delay: daoConfig.governance.votingDelay,
-  voting_period: daoConfig.governance.votingPeriod,
-  quorum_bps: daoConfig.governance.quorumBps,
-  proposal_threshold_bps: daoConfig.governance.proposalThresholdBps,
-  founders: daoConfig.founders ?? [],
   launch_admin: daoConfig.launchAdmin,
 });
 
@@ -512,8 +479,8 @@ writeDaoArtifact({
   transactions: postCreationTransactions,
 });
 
-console.log("\n=== Finalizing DAO ===\n");
-const finalizeResult = runQuiet("stellar", [
+console.log("\n=== Launching DAO ===\n");
+const launchResult = runQuiet("stellar", [
   "contract",
   "invoke",
   "--id",
@@ -523,14 +490,14 @@ const finalizeResult = runQuiet("stellar", [
   "--network",
   networkName,
   "--",
-  "finalize_dao",
+  "launch_dao",
   "--token_address",
   daoAddresses.token,
   "--launch_auction",
   String(launchAuction),
 ]);
-const finalizeOutput = finalizeResult.stdout + finalizeResult.stderr;
-if (!finalizeResult.ok) {
+const launchOutput = launchResult.stdout + launchResult.stderr;
+if (!launchResult.ok) {
   writeDaoArtifact({
     status: "pending",
     predictedAddresses,
@@ -538,19 +505,19 @@ if (!finalizeResult.ok) {
     output: createOutput,
     transactions: postCreationTransactions,
     error:
-      finalizeResult.stderr ||
-      finalizeResult.stdout ||
-      "DAO finalization failed",
+      launchResult.stderr ||
+      launchResult.stdout ||
+      "DAO launch failed",
   });
-  throw new Error("DAO configuration completed but finalization failed");
+  throw new Error("DAO configuration completed but launch failed");
 }
 
-const finalizeTxHash = finalizeOutput.match(
+const launchTxHash = launchOutput.match(
   /Signing transaction:\s*([a-f0-9]{64})/i,
 );
-if (finalizeTxHash) {
-  postCreationTransactions.finalizeDao = enrichTransactionMetadata(
-    { txHash: finalizeTxHash[1] },
+if (launchTxHash) {
+  postCreationTransactions.launchDao = enrichTransactionMetadata(
+    { txHash: launchTxHash[1] },
     networkName,
   );
 }

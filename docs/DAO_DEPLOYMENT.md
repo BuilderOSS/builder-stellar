@@ -162,7 +162,7 @@ finalized_at = NULL
 
 DAO is fully configured and ready for operation.
 
-**When**: After `finalize_dao()` completes
+**When**: After `launch_dao()` completes
 
 **Features Enabled**:
 - Proposals can be created
@@ -311,7 +311,7 @@ Look for `"error"` field with error message.
 
 ### DAO stuck in pending
 
-If `finalize_dao()` didn't complete:
+If `launch_dao()` didn't complete:
 
 1. Check if it was called:
    ```bash
@@ -325,7 +325,7 @@ If `finalize_dao()` didn't complete:
      --id MANAGER_ADDRESS \
      --source-account IDENTITY \
      --network testnet \
-     -- finalize_dao \
+      -- launch_dao \
      --token_address DAO_TOKEN_ADDRESS
    ```
 

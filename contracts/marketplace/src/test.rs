@@ -104,6 +104,7 @@ fn fixture() -> Fixture {
             manager,
             BytesN::from_array(&env, &[0; 32]),
             String::from_str(&env, "0.1.0"),
+            250u32,
         ),
     );
     let marketplace = crate::contract::MarketplaceContractClient::new(&env, &marketplace_id);
@@ -135,6 +136,7 @@ fn constructor_starts_paused_and_stores_config() {
             manager.clone(),
             BytesN::from_array(&env, &[0; 32]),
             String::from_str(&env, "0.1.0"),
+            250u32,
         ),
     );
     let config: MarketplaceConfig = env.invoke_contract(

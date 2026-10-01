@@ -38,7 +38,7 @@ All data is keyed by `(deployment_id, dao_id)`:
 ## manager.daos Read Model
 
 The database projection is the durable DAO registry. It is populated from
-`DaoCreated` and `DaoFinalized` events, not from Manager storage:
+`DaoCreated` and `DaoLaunched` events, not from Manager storage:
 
 ```sql
 CREATE TABLE manager.daos (
@@ -87,7 +87,7 @@ CREATE TABLE manager.daos (
 
 2. add_properties() → configure metadata
 3. accept_ownership() → transfer token ownership
-4. finalize_dao(token_address)
+4. launch_dao(token_address)
    └─ Finalizes DAO for operation
    └─ Event triggers UPDATE manager.daos SET status='operational'
 ```

@@ -1,13 +1,13 @@
 //! Event emission functions for the Manager contract.
 
-use soroban_sdk::{contractevent, Address, BytesN, Env, String, Vec};
+use soroban_sdk::{contractevent, Address, BytesN, Env, String};
 
-use crate::storage::{DaoModules, FounderAllocation};
+use crate::storage::DaoModules;
 
 #[contractevent]
 pub struct ImplementationRegistered {
     pub name: String,
-    pub version: u32,
+    pub version: String,
     #[topic]
     pub wasm_hash: BytesN<32>,
     pub published_at: u64,
@@ -32,21 +32,21 @@ pub struct DaoCreated {
     pub token_address: Address,
     #[topic]
     pub creator: Address,
-    pub created_ledger: u32,
+    pub created_ledger: u64,
     pub modules: DaoModules,
-    pub founders: Vec<FounderAllocation>,
 }
 #[contractevent]
 pub struct FactoryPaused {}
 #[contractevent]
 pub struct FactoryUnpaused {}
 #[contractevent]
-pub struct DaoFinalized {
+pub struct DaoLaunched {
     #[topic]
     pub token_address: Address,
-    pub finalized_ledger: u32,
+    pub launched_ledger: u64,
     pub modules: DaoModules,
     pub launch_auction: bool,
+    pub launch_marketplace: bool,
 }
 #[contractevent]
 pub struct CurrentImplementationsUpdated {
@@ -66,13 +66,13 @@ pub struct CurrentImplementationsUpdated {
 pub fn emit_implementation_registered(
     env: &Env,
     name: &String,
-    version: u32,
+    version: &String,
     wasm_hash: &BytesN<32>,
     published_at: u64,
 ) {
     ImplementationRegistered {
         name: name.clone(),
-        version,
+        version: version.clone(),
         wasm_hash: wasm_hash.clone(),
         published_at,
     }
@@ -112,16 +112,14 @@ pub fn emit_dao_created(
     env: &Env,
     token_address: &Address,
     creator: &Address,
-    created_ledger: u32,
+    created_ledger: u64,
     modules: &DaoModules,
-    founders: &Vec<FounderAllocation>,
 ) {
     DaoCreated {
         token_address: token_address.clone(),
         creator: creator.clone(),
         created_ledger,
         modules: modules.clone(),
-        founders: founders.clone(),
     }
     .publish(env);
 }
@@ -136,18 +134,20 @@ pub fn emit_factory_unpaused(env: &Env) {
     FactoryUnpaused {}.publish(env);
 }
 
-pub fn emit_dao_finalized(
+pub fn emit_dao_launched(
     env: &Env,
     token_address: &Address,
-    finalized_ledger: u32,
+    launched_ledger: u64,
     modules: &DaoModules,
     launch_auction: bool,
+    launch_marketplace: bool,
 ) {
-    DaoFinalized {
+    DaoLaunched {
         token_address: token_address.clone(),
-        finalized_ledger,
+        launched_ledger,
         modules: modules.clone(),
         launch_auction,
+        launch_marketplace,
     }
     .publish(env);
 }

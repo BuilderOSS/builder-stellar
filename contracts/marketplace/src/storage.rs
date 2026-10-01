@@ -5,7 +5,6 @@ use crate::error::MarketplaceError;
 const TTL: u32 = 518_400;
 const MAX_TTL: u32 = 518_400;
 pub const MAX_FEE_BPS: u32 = 10_000;
-pub const DEFAULT_SECONDARY_FEE_BPS: u32 = 250;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[contracttype]

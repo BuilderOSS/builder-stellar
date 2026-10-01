@@ -1903,6 +1903,7 @@ fn marketplace_primary_sale_uses_real_token_and_sac() {
             manager,
             BytesN::from_array(&e, &[0; 32]),
             String::from_str(&e, "0.1.0"),
+            250u32,
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);

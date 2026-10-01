@@ -3,7 +3,7 @@
 //! The central hub for the Stellar Builder platform, combining:
 //! 1. Implementation Management - Registry of contract implementations
 //! 2. DAO Factory - Atomic deployment of new DAOs
-//! 3. DAO Registry - Discovery and enumeration of deployed DAOs
+//! 3. DAO Lifecycle - Deployment and launch handoff
 
 use soroban_sdk::{
     contract, contractimpl, vec, Address, BytesN, Env, IntoVal, String, Symbol, Val, Vec,
@@ -21,18 +21,17 @@ pub struct ManagerContract;
 // Constants
 // ============================================================================
 
-/// Maximum string length for names, symbols, URIs (prevent DoS)
+/// Maximum string length for implementation names.
 const MAX_STRING_LENGTH: u32 = 256;
-
-/// Maximum number of founders per DAO
-const MAX_FOUNDERS: u32 = 10;
-
-/// Maximum basis points (100%)
-const MAX_BPS: u32 = 10000;
-const MAX_FOUNDER_ALLOCATION: u32 = 10_000;
 const MIN_AUCTION_DURATION: u64 = 300;
 const MIN_RESERVE_PRICE: i128 = 1_000;
 const MIN_GOVERNANCE_DELAY: u64 = 300;
+const DEFAULT_TIME_BUFFER: u64 = 60;
+const DEFAULT_QUORUM_BPS: u32 = 1;
+const MAX_BPS: u32 = 10_000;
+const DEFAULT_QUEUE_DELAY: u32 = 300;
+const DEFAULT_VOTING_PERIOD: u32 = 600;
+const DEFAULT_SECONDARY_FEE_BPS: u32 = 250;
 
 #[contractimpl]
 impl ManagerContract {
@@ -63,18 +62,18 @@ impl ManagerContract {
     /// # Arguments
     ///
     /// * `name` - Implementation name (e.g., "Token", "Governor")
-    /// * `version` - Version number (must be > 0)
+    /// * `version` - Version string (e.g., "0.1.0")
     /// * `wasm_hash` - WASM bytecode hash
     ///
     /// # Errors
     ///
     /// * `Unauthorized` - Caller is not admin
     /// * `InvalidImplementationName` - Name is empty or too long
-    /// * `InvalidVersion` - Version is 0
+    /// * `InvalidVersion` - Version is empty or too long
     pub fn register_implementation(
         env: Env,
         name: String,
-        version: u32,
+        version: String,
         wasm_hash: BytesN<32>,
     ) -> Result<(), ManagerError> {
         // Check authorization
@@ -82,14 +81,12 @@ impl ManagerContract {
 
         // Validate inputs
         Self::validate_string(&name)?;
-        if version == 0 {
-            return Err(ManagerError::InvalidVersion);
-        }
+        Self::validate_string(&version)?;
 
         // Create implementation record
         let implementation = ImplementationVersion {
             name: name.clone(),
-            version,
+            version: version.clone(),
             wasm_hash: wasm_hash.clone(),
             published_at: env.ledger().sequence() as u64,
             revoked: false,
@@ -110,7 +107,7 @@ impl ManagerContract {
         emit_implementation_registered(
             &env,
             &name,
-            version,
+            &version,
             &wasm_hash,
             implementation.published_at,
         );
@@ -426,17 +423,12 @@ impl ManagerContract {
 
     /// Create a new DAO with all 6 modules atomically deployed.
     ///
-    /// This is the main factory function that:
-    /// 1. Validates all parameters
-    /// 2. Checks factory not paused and nonce not used
-    /// 3. Deploys all 6 contracts (Token, Metadata, Auction, Governor, Treasury, Marketplace)
-    /// 4. Initializes them with proper cross-references
-    /// 5. Sets up launch configuration and module relationships
-    /// 6. Registers the DAO in the registry
+    /// This deploys all six modules with safe defaults. The launch administrator
+    /// owns the setup window and may configure the modules before `launch_dao`.
     ///
     /// # Arguments
     ///
-    /// * `params` - Complete DAO creation parameters
+    /// * `params` - Deployer, deterministic nonce, and launch administrator
     ///
     /// # Returns
     ///
@@ -447,8 +439,6 @@ impl ManagerContract {
     /// * `FactoryPaused` - Factory is paused
     /// * `NonceAlreadyUsed` - This (creator, nonce) pair was already used
     /// * `CurrentImplementationsNotSet` - Current WASM hashes not configured
-    /// * `InvalidParamBounds` - Invalid parameter values
-    /// * Various validation errors from `validate_dao_params`
     pub fn create_dao(env: Env, params: DaoCreationParams) -> Result<DaoAddresses, ManagerError> {
         // The deployer owns the newly-created modules and must authorize the
         // factory operation and subsequent owner-gated setup calls.
@@ -459,10 +449,40 @@ impl ManagerContract {
             return Err(ManagerError::FactoryPaused);
         }
 
-        // Validate parameters
-        Self::validate_dao_params(&params)?;
+        // Validate and extract configuration
+        Self::validate_initial_config(&params.initial_config)?;
+        let (
+            token_name,
+            token_symbol,
+            token_uri,
+            project_uri,
+            description,
+            contract_image,
+            renderer_base,
+            governance,
+            auction_duration,
+            reserve_price,
+            time_buffer,
+            payment_asset,
+            marketplace_payment_asset,
+            marketplace_fee_bps,
+        ) = (
+            params.initial_config.token_name.clone(),
+            params.initial_config.token_symbol.clone(),
+            params.initial_config.token_uri.clone(),
+            params.initial_config.project_uri.clone(),
+            params.initial_config.description.clone(),
+            params.initial_config.contract_image.clone(),
+            params.initial_config.renderer_base.clone(),
+            params.initial_config.governance.clone(),
+            params.initial_config.auction.duration,
+            params.initial_config.auction.reserve_price,
+            params.initial_config.auction.time_buffer,
+            params.initial_config.auction.payment_asset.clone(),
+            params.initial_config.marketplace.payment_asset.clone(),
+            params.initial_config.marketplace.secondary_fee_bps,
+        );
 
-        // Check nonce not already used
         // Get current implementation WASM hashes
         let token_wasm: BytesN<32> = env
             .storage()
@@ -559,16 +579,15 @@ impl ManagerContract {
             ),
         );
 
-        // Step 2: Deploy and initialize Token. The manager owns the token during
-        // creation so it can hand ownership to the launch administrator before
-        // the launch configuration is completed.
+        // Step 2: Deploy and initialize Token with launch_admin as owner.
+        // The launch_admin configures the token, governance, and auction before launch.
         token_deployer.deploy_v2(
             token_wasm.clone(),
             (
-                env.current_contract_address(),
-                params.token_uri.clone(),
-                params.token_name.clone(),
-                params.token_symbol.clone(),
+                params.launch_admin.clone(),
+                token_uri,
+                token_name,
+                token_symbol,
                 metadata_addr.clone(),
                 env.current_contract_address(),
                 token_wasm.clone(),
@@ -579,43 +598,27 @@ impl ManagerContract {
         metadata_deployer.deploy_v2(metadata_wasm.clone(), ());
 
         // Step 4: Deploy and initialize Governor
-        // Governor constructor needs: owner, token, treasury, voting_delay, voting_period,
-        // queue_delay (not in params - using voting_delay), proposal_threshold (needs conversion), quorum_bps
-        let queue_delay = params.voting_delay; // Using same as voting_delay for now
-        let founder_supply: u32 = params
-            .founders
-            .iter()
-            .try_fold(0u32, |total, founder| total.checked_add(founder.amount))
-            .ok_or(ManagerError::FounderAllocationTooLarge)?;
-        let proposal_threshold = (founder_supply as u128)
-            .checked_mul(params.proposal_threshold_bps as u128)
-            .and_then(|value| value.checked_div(MAX_BPS as u128))
-            .ok_or(ManagerError::FounderAllocationTooLarge)?;
-        let proposal_threshold = if params.proposal_threshold_bps > 0 && proposal_threshold == 0 {
-            1
-        } else {
-            proposal_threshold
-        };
-
+        // Governor starts with minimum valid timing and permissive thresholds;
+        // launch_admin may replace them before launch.
         governor_deployer.deploy_v2(
             governor_wasm.clone(),
             (
                 params.launch_admin.clone(),
                 token_addr.clone(),
                 treasury_addr.clone(),
-                params.voting_delay as u32,
-                params.voting_period as u32,
-                queue_delay as u32,
-                proposal_threshold,
-                params.quorum_bps,
+                governance.voting_delay,
+                governance.voting_period,
+                governance.queue_delay,
+                governance.proposal_threshold,
+                governance.quorum_bps,
                 env.current_contract_address(),
                 governor_wasm.clone(),
             ),
         );
 
         // Step 5: Deploy and initialize Auction
-        // Auction constructor needs: owner, token, treasury, duration, reserve_price,
-        // min_bid_increment_percent (using quorum_bps for now), time_buffer, payment_token
+        // Auction starts with safe defaults and uses launch_admin as a temporary
+        // payment address until it is configured before launch.
         let min_bid_increment = 10u32; // 10% default
 
         auction_deployer.deploy_v2(
@@ -624,11 +627,11 @@ impl ManagerContract {
                 params.launch_admin.clone(),
                 token_addr.clone(),
                 treasury_addr.clone(),
-                params.auction_duration,
-                params.reserve_price,
+                auction_duration,
+                reserve_price,
                 min_bid_increment,
-                params.time_buffer,
-                params.payment_asset.clone(),
+                time_buffer,
+                payment_asset,
                 env.current_contract_address(),
                 auction_wasm.clone(),
             ),
@@ -639,17 +642,17 @@ impl ManagerContract {
             marketplace_wasm.clone(),
             (
                 token_addr.clone(),
-                treasury_addr.clone(),
-                params.payment_asset.clone(),
+                params.launch_admin.clone(),
+                marketplace_payment_asset,
                 env.current_contract_address(),
                 marketplace_wasm,
                 String::from_str(&env, "0.1.0"),
+                marketplace_fee_bps,
             ),
         );
 
-        // Step 6: Initialize Metadata contract without artwork properties.
-        // launch_admin adds them after creation to keep this transaction within
-        // Soroban resource limits.
+        // Initialize Metadata with empty values. The launch administrator can
+        // replace the settings and add artwork before launch.
         let empty_property_names: Vec<String> = Vec::new(&env);
         let empty_items: Vec<Val> = Vec::new(&env);
         // Using invoke_contract directly since we don't have a Client import
@@ -659,28 +662,20 @@ impl ManagerContract {
             vec![
                 &env,
                 token_addr.clone().into_val(&env),
-                params.project_uri.clone().into_val(&env),
-                params.description.clone().into_val(&env),
-                params.contract_image.clone().into_val(&env),
-                params.renderer_base.clone().into_val(&env),
+                project_uri.into_val(&env),
+                description.into_val(&env),
+                contract_image.into_val(&env),
+                renderer_base.into_val(&env),
                 env.current_contract_address().into_val(&env),
                 metadata_wasm.clone().into_val(&env),
                 params.launch_admin.clone().into_val(&env),
                 empty_property_names.into_val(&env),
                 empty_items.into_val(&env),
-                params.artwork_ipfs.clone().into_val(&env),
-            ],
-        );
-
-        // The manager owns the token during creation. Leave a pending transfer
-        // for launch_admin to accept after metadata properties are configured.
-        let _: () = env.invoke_contract(
-            &token_addr,
-            &Symbol::new(&env, "transfer_ownership"),
-            vec![
-                &env,
-                params.launch_admin.clone().into_val(&env),
-                (env.ledger().sequence() + 100_000).into_val(&env),
+                ArtworkIpfsGroup {
+                    base_uri: String::from_str(&env, ""),
+                    extension: String::from_str(&env, ""),
+                }
+                .into_val(&env),
             ],
         );
 
@@ -696,9 +691,7 @@ impl ManagerContract {
 
         let pending = PendingDao {
             addresses: addresses.clone(),
-            creator: params.deployer.clone(),
             launch_admin: params.launch_admin.clone(),
-            founder_supply,
         };
         env.storage()
             .instance()
@@ -718,22 +711,44 @@ impl ManagerContract {
             &env,
             &token_addr,
             &params.deployer,
-            env.ledger().sequence(),
+            env.ledger().sequence() as u64,
             &modules,
-            &params.founders,
         );
 
         Ok(addresses)
     }
 
-    /// Closes the launch-admin setup window and hands module ownership to the
-    /// Treasury. All configuration remains editable by launch_admin until this
-    /// one-way transition is executed. When `launch_auction` is false, the
-    /// Auction module remains paused and does not receive mint authority.
-    pub fn finalize_dao(
+    /// Launch a configured DAO.
+    ///
+    /// # Authorization
+    ///
+    /// Only callable by the launch_admin who created the DAO.
+    ///
+    /// # Arguments
+    ///
+    /// * `token_address` - Address of the DAO's token contract
+    /// * `launch_config` - Configuration for what to enable at launch
+    ///   - `launch_auction` - Whether to unpause the auction
+    ///   - `launch_marketplace` - Whether to unpause the marketplace
+    ///
+    /// # Validation
+    ///
+    /// - Token total supply must be > 0 (at least one token minted)
+    /// - launch_admin must be the current token owner
+    ///
+    /// # Effects
+    ///
+    /// 1. Validates launch preconditions
+    /// 2. Grants Treasury and Marketplace mint authority over tokens
+    /// 3. Optionally grants Auction mint authority if launch_auction is true
+    /// 4. Transfers Token, Governor, Treasury, Marketplace, and Auction ownership to Treasury
+    /// 5. Transfers Metadata upgrade authority to Treasury
+    /// 6. Conditionally unpauses Auction and Marketplace based on launch_config
+    /// 7. Deletes the temporary PendingDao state
+    pub fn launch_dao(
         env: Env,
         token_address: Address,
-        launch_auction: bool,
+        launch_config: LaunchConfig,
     ) -> Result<(), ManagerError> {
         let pending: PendingDao = env
             .storage()
@@ -742,46 +757,36 @@ impl ManagerContract {
             .ok_or(ManagerError::DaoNotFound)?;
         pending.launch_admin.require_auth();
 
-        let token_owner: Address = env.invoke_contract(
-            &pending.addresses.token,
-            &Symbol::new(&env, "get_owner"),
-            Vec::new(&env),
-        );
-        if token_owner != pending.launch_admin {
-            return Err(ManagerError::InvalidParamBounds);
-        }
-        let total_supply: u32 = env.invoke_contract(
-            &pending.addresses.token,
-            &Symbol::new(&env, "get_total_supply"),
-            Vec::new(&env),
-        );
-        if total_supply != pending.founder_supply {
-            return Err(ManagerError::InvalidParamBounds);
-        }
-
         let treasury = pending.addresses.treasury.clone();
 
-        let auction_paused: bool = env.invoke_contract(
-            &pending.addresses.auction,
-            &Symbol::new(&env, "paused"),
-            Vec::new(&env),
+        // Validate launch preconditions
+        // Check that launch_admin is the token owner
+        let token_owner: Address = env.invoke_contract(
+            &pending.addresses.token,
+            &Symbol::new(&env, "owner"),
+            vec![&env],
         );
-        if !launch_auction && !auction_paused {
-            return Err(ManagerError::AuctionMustBePaused);
+        if token_owner != pending.launch_admin {
+            return Err(ManagerError::Unauthorized);
         }
 
-        // Treasury, Marketplace, and optionally Auction are all primary-sale minters.
+        // Check that token total supply > 0
+        let total_supply: i128 = env.invoke_contract(
+            &pending.addresses.token,
+            &Symbol::new(&env, "total_supply"),
+            vec![&env],
+        );
+        if total_supply <= 0 {
+            return Err(ManagerError::InvalidVersion); // Reusing error type for now
+        }
+
+        // Grant mint authorities to Treasury, Marketplace, and optionally Auction
         let _: () = env.invoke_contract(
             &pending.addresses.token,
             &Symbol::new(&env, "enable_mint_authority_by_manager"),
             vec![&env, pending.addresses.treasury.clone().into_val(&env)],
         );
-        let _: () = env.invoke_contract(
-            &pending.addresses.token,
-            &Symbol::new(&env, "enable_mint_authority_by_manager"),
-            vec![&env, pending.addresses.marketplace.clone().into_val(&env)],
-        );
-        if launch_auction {
+        if launch_config.launch_auction {
             let _: () = env.invoke_contract(
                 &pending.addresses.token,
                 &Symbol::new(&env, "enable_mint_authority_by_manager"),
@@ -793,6 +798,8 @@ impl ManagerContract {
             &Symbol::new(&env, "enable_mint_authority_by_manager"),
             vec![&env, pending.addresses.marketplace.clone().into_val(&env)],
         );
+
+        // Transfer ownership of modules to Treasury (using finalize_ownership which directly sets owner)
         for (module, method) in [
             (pending.addresses.token.clone(), "finalize_ownership"),
             (pending.addresses.governor.clone(), "finalize_ownership"),
@@ -805,23 +812,40 @@ impl ManagerContract {
                 vec![&env, treasury.clone().into_val(&env)],
             );
         }
+
+        // Transfer Auction ownership with launch_auction flag
         let _: () = env.invoke_contract(
             &pending.addresses.auction,
             &Symbol::new(&env, "finalize_ownership"),
             vec![
                 &env,
                 treasury.clone().into_val(&env),
-                launch_auction.into_val(&env),
+                launch_config.launch_auction.into_val(&env),
             ],
         );
+
+        // Conditionally unpause Marketplace if requested
+        if launch_config.launch_marketplace {
+            let _: () = env.invoke_contract(
+                &pending.addresses.marketplace,
+                &Symbol::new(&env, "unpause"),
+                vec![&env],
+            );
+        }
+
+        // Transfer Metadata upgrade authority to Treasury
         let _: () = env.invoke_contract(
             &pending.addresses.metadata,
             &Symbol::new(&env, "finalize_upgrade_authority"),
             vec![&env, treasury.clone().into_val(&env)],
         );
+
+        // Delete pending DAO state
         env.storage()
             .instance()
             .remove(&ManagerKey::PendingDao(token_address.clone()));
+
+        // Emit launch event
         let modules = DaoModules {
             token: pending.addresses.token.clone(),
             metadata: pending.addresses.metadata.clone(),
@@ -830,12 +854,13 @@ impl ManagerContract {
             treasury: pending.addresses.treasury.clone(),
             marketplace: pending.addresses.marketplace.clone(),
         };
-        emit_dao_finalized(
+        emit_dao_launched(
             &env,
             &token_address,
-            env.ledger().sequence(),
+            env.ledger().sequence() as u64,
             &modules,
-            launch_auction,
+            launch_config.launch_auction,
+            launch_config.launch_marketplace,
         );
         Ok(())
     }
@@ -936,7 +961,6 @@ impl ManagerContract {
         BytesN::from_array(env, &hash.to_array())
     }
 
-    /// Validate string length.
     fn validate_string(s: &String) -> Result<(), ManagerError> {
         let len = s.len();
         if len == 0 {
@@ -948,66 +972,41 @@ impl ManagerContract {
         Ok(())
     }
 
-    /// Validate DAO creation parameters.
-    fn validate_dao_params(params: &DaoCreationParams) -> Result<(), ManagerError> {
-        // Validate strings
-        Self::validate_string(&params.token_name)?;
-        Self::validate_string(&params.token_symbol)?;
-        Self::validate_string(&params.token_uri)?;
-        Self::validate_string(&params.project_uri)?;
-        Self::validate_string(&params.description)?;
-        Self::validate_string(&params.contract_image)?;
-        Self::validate_string(&params.renderer_base)?;
-
-        // Validate founders
-        if params.founders.len() > MAX_FOUNDERS {
-            return Err(ManagerError::InvalidParamBounds);
+    fn validate_initial_config(config: &InitialDaoConfigValues) -> Result<(), ManagerError> {
+        for value in [
+            &config.token_name,
+            &config.token_symbol,
+            &config.token_uri,
+            &config.project_uri,
+            &config.description,
+            &config.contract_image,
+            &config.renderer_base,
+        ] {
+            Self::validate_string(value)?;
         }
 
-        for founder in params.founders.iter() {
-            if founder.amount == 0 {
-                return Err(ManagerError::InvalidFounderPercentage);
-            }
-        }
-
-        // Validate governance params
-        if params.quorum_bps > MAX_BPS {
-            return Err(ManagerError::InvalidQuorumBps);
-        }
-
-        if params.proposal_threshold_bps > MAX_BPS {
-            return Err(ManagerError::InvalidProposalThresholdBps);
-        }
-
-        if params.voting_delay < MIN_GOVERNANCE_DELAY
-            || params.voting_period < MIN_GOVERNANCE_DELAY
-            || params.voting_delay > u32::MAX as u64
-            || params.voting_period > u32::MAX as u64
+        if u64::from(config.governance.voting_delay) < MIN_GOVERNANCE_DELAY
+            || u64::from(config.governance.voting_period) < MIN_GOVERNANCE_DELAY
+            || u64::from(config.governance.queue_delay) < MIN_GOVERNANCE_DELAY
         {
             return Err(ManagerError::InvalidGovernanceTiming);
         }
-
-        let founder_total = params
-            .founders
-            .iter()
-            .try_fold(0u32, |total, founder| total.checked_add(founder.amount));
-        if founder_total.is_none() || founder_total.unwrap() > MAX_FOUNDER_ALLOCATION {
-            return Err(ManagerError::FounderAllocationTooLarge);
+        if config.governance.quorum_bps > MAX_BPS {
+            return Err(ManagerError::InvalidQuorumBps);
         }
 
-        // Validate auction params
-        if params.auction_duration < MIN_AUCTION_DURATION {
+        if config.auction.duration < MIN_AUCTION_DURATION {
             return Err(ManagerError::InvalidDuration);
         }
-
-        if params.reserve_price < MIN_RESERVE_PRICE {
+        if config.auction.reserve_price < MIN_RESERVE_PRICE {
             return Err(ManagerError::InvalidParamBounds);
         }
-
-        if params.time_buffer == 0 {
+        if config.auction.time_buffer == 0 {
             return Err(ManagerError::InvalidTimeBuffer);
         }
-
+        if config.marketplace.secondary_fee_bps > MAX_BPS {
+            return Err(ManagerError::InvalidParamBounds);
+        }
         Ok(())
     }
 }
