@@ -933,6 +933,83 @@ impl ManagerContract {
         })
     }
 
+    /// Upgrade the Manager contract itself.
+    ///
+    /// # Authorization
+    ///
+    /// Only callable by admin.
+    ///
+    /// # Arguments
+    ///
+    /// * `from_hash` - Current Manager WASM hash (must match stored hash)
+    /// * `to_hash` - Target Manager WASM hash (must be registered and active)
+    ///
+    /// # Errors
+    ///
+    /// * `Unauthorized` - Caller is not admin
+    /// * `ImplementationNotFound` - Target implementation doesn't exist or is revoked
+    /// * `InvalidVersion` - from_hash doesn't match current hash
+    pub fn upgrade_manager(
+        env: Env,
+        from_hash: BytesN<32>,
+        to_hash: BytesN<32>,
+    ) -> Result<(), ManagerError> {
+        // Require admin authorization
+        Self::require_admin(&env)?;
+
+        // Get current Manager hash and version
+        let current_hash: BytesN<32> = env
+            .storage()
+            .instance()
+            .get(&ManagerKey::CurrentManagerWasm)
+            .ok_or(ManagerError::InvalidVersion)?;
+
+        let current_version: String = env
+            .storage()
+            .instance()
+            .get(&ManagerKey::CurrentManagerVersion)
+            .ok_or(ManagerError::InvalidVersion)?;
+
+        // Verify from_hash matches current hash
+        if from_hash != current_hash {
+            return Err(ManagerError::InvalidVersion);
+        }
+
+        // Verify to_hash is registered and not revoked
+        let to_impl: ImplementationVersion = env
+            .storage()
+            .instance()
+            .get(&ManagerKey::Implementation(to_hash.clone()))
+            .ok_or(ManagerError::ImplementationNotFound)?;
+
+        if to_impl.revoked {
+            return Err(ManagerError::ImplementationNotFound);
+        }
+
+        // Update Manager's stored hash and version
+        env.storage()
+            .instance()
+            .set(&ManagerKey::CurrentManagerWasm, &to_hash);
+        env.storage()
+            .instance()
+            .set(&ManagerKey::CurrentManagerVersion, &to_impl.version.clone());
+
+        // Emit upgrade event
+        emit_manager_upgraded(
+            &env,
+            &from_hash,
+            &to_hash,
+            &current_version,
+            &to_impl.version,
+            env.ledger().sequence() as u64,
+        );
+
+        // Update Manager's own WASM
+        env.deployer().update_current_contract_wasm(to_hash);
+
+        Ok(())
+    }
+
     // ========================================================================
     // Helper Functions
     // ========================================================================

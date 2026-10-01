@@ -57,6 +57,16 @@ pub struct CurrentImplementationsUpdated {
     pub treasury: BytesN<32>,
     pub marketplace: BytesN<32>,
 }
+#[contractevent]
+pub struct ManagerUpgraded {
+    #[topic]
+    pub from_hash: BytesN<32>,
+    #[topic]
+    pub to_hash: BytesN<32>,
+    pub from_version: String,
+    pub to_version: String,
+    pub upgraded_at: u64,
+}
 
 // ============================================================================
 // Implementation Management Events
@@ -173,6 +183,25 @@ pub fn emit_current_implementations_updated(
         governor: governor.clone(),
         treasury: treasury.clone(),
         marketplace: marketplace.clone(),
+    }
+    .publish(env);
+}
+
+/// Emitted when Manager itself is upgraded.
+pub fn emit_manager_upgraded(
+    env: &Env,
+    from_hash: &BytesN<32>,
+    to_hash: &BytesN<32>,
+    from_version: &String,
+    to_version: &String,
+    upgraded_at: u64,
+) {
+    ManagerUpgraded {
+        from_hash: from_hash.clone(),
+        to_hash: to_hash.clone(),
+        from_version: from_version.clone(),
+        to_version: to_version.clone(),
+        upgraded_at,
     }
     .publish(env);
 }
