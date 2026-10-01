@@ -319,15 +319,21 @@ If `launch_dao()` didn't complete:
    cat deploys/testnet-my-dao-1.json | grep finalize
    ```
 
-2. Call finalize directly:
+2. Call launch_dao directly with LaunchConfig:
    ```bash
    stellar contract invoke \
      --id MANAGER_ADDRESS \
      --source-account IDENTITY \
      --network testnet \
-      -- launch_dao \
-     --token_address DAO_TOKEN_ADDRESS
+     -- launch_dao \
+     --token_address DAO_TOKEN_ADDRESS \
+     --launch_auction true \
+     --launch_marketplace true
    ```
+
+   The LaunchConfig controls:
+   - `launch_auction`: Whether to unpause the Auction (true to enable, false to keep paused)
+   - `launch_marketplace`: Whether to unpause the Marketplace (true to enable, false to keep paused)
 
 3. Check status updated:
    ```sql

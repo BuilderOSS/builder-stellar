@@ -108,14 +108,29 @@ select it as current. A WASM hash cannot prove its contract interface on-chain.
 The registered module role is administrator-attested and deployment/testing is
 the compatibility gate.
 
-`launch_dao` requires only:
+`launch_dao` requires:
 
 - the pending launch administrator's authorization;
+- token total supply > 0 (at least one token minted);
+- launch_admin must be the current token owner.
 
-It grants Treasury and Marketplace, plus Auction when requested, mint
-authority; transfers Token, Governor, Treasury, Auction, and Marketplace
-ownership; transfers Metadata upgrade authority; emits `DaoLaunched`; and
-deletes `PendingDao`.
+It accepts a `LaunchConfig` struct with launch preferences:
+
+```rust
+LaunchConfig {
+    launch_auction: bool,     // Whether to unpause Auction
+    launch_marketplace: bool, // Whether to unpause Marketplace
+}
+```
+
+It then:
+- Grants Treasury, Marketplace, and optionally Auction mint authority over tokens;
+- Transfers Token, Governor, Treasury, Auction, and Marketplace ownership to Treasury;
+- Transfers Metadata upgrade authority to Treasury;
+- Conditionally unpauses Auction if `launch_auction` is true;
+- Conditionally unpauses Marketplace if `launch_marketplace` is true;
+- Emits `DaoLaunched` with launch configuration flags; and
+- Deletes `PendingDao`.
 
 Use dedicated errors for a revoked current implementation and an incomplete
 launch. Remove unused Manager error variants rather than retaining misleading
@@ -160,10 +175,11 @@ This permits Manager evolution without granting Builder control over any DAO.
 
 Every Manager and DAO module starts at semantic version **0.1.0**.
 
-Use one contract-compatible version value:
+Use a String version value in Semantic Versioning format (e.g., "0.1.0"):
 
 ```rust
-ContractVersion { major: u16, minor: u16, patch: u16 }
+// Stored as String in both Manager and DAO modules
+version: String  // e.g., "0.1.0", "0.2.0"
 ```
 
 The version is stored with each registered implementation and as the current
@@ -180,9 +196,22 @@ The deployment artifact records:
   hashes and `0.1.0` versions;
 - deployment ledger and transaction hash.
 
+**Version Storage:**
+- Manager stores its own `CurrentManagerVersion` via `ManagerKey::CurrentManagerVersion`
+- Each DAO module stores version via their respective storage key:
+  - Token: `TokenKey::CurrentVersion`
+  - Governor: `GovernorKey::CurrentVersion`
+  - Treasury: `TreasuryKey::CurrentVersion`
+  - Auction: `DataKey::CurrentVersion`
+  - Metadata: `DataKey::CurrentVersion`
+  - Marketplace: `StorageKey::CurrentVersion`
+- Version is set during module initialization/deployment and updated during upgrades
+
 The database stores Manager and module address/hash/version as immutable
 creation facts, then records upgrade events as an append-only history. Goldsky
 must project these events without relying on an on-chain DAO registry.
+Version parsing (String to structured versioning) happens in Goldsky/frontend,
+not on-chain.
 
 ## Later Contract Phases
 
