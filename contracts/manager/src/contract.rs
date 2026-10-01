@@ -637,6 +637,7 @@ impl ManagerContract {
                 payment_asset,
                 env.current_contract_address(),
                 auction_wasm.clone(),
+                String::from_str(&env, "0.1.0"),
             ),
         );
 
@@ -679,6 +680,7 @@ impl ManagerContract {
                     extension: String::from_str(&env, ""),
                 }
                 .into_val(&env),
+                String::from_str(&env, "0.1.0").into_val(&env),
             ],
         );
 

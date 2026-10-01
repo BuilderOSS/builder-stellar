@@ -52,6 +52,7 @@ impl MetadataContract {
         property_names: Vec<String>,
         items: Vec<ItemParam>,
         ipfs_group: IpfsGroup,
+        version: String,
     ) -> Result<(), Error> {
         if is_initialized(&env) {
             return Err(Error::AlreadyInitialized);
@@ -74,6 +75,9 @@ impl MetadataContract {
         env.storage()
             .instance()
             .set(&DataKey::CurrentHash, &current_hash);
+        env.storage()
+            .instance()
+            .set(&DataKey::CurrentVersion, &version);
         set_initialized(&env);
 
         emit_metadata_initialized(&env, &token, &renderer_base);

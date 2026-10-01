@@ -3,7 +3,7 @@
 //! This module defines the auction state machine, configuration parameters,
 //! and TTL management for the continuous auction system.
 
-use soroban_sdk::{contracttype, panic_with_error, Address, Env};
+use soroban_sdk::{contracttype, panic_with_error, Address, Env, String};
 
 use crate::error::AuctionError;
 
@@ -67,6 +67,7 @@ pub enum DataKey {
     Launched,
     Manager,
     CurrentHash,
+    CurrentVersion,
 }
 
 /// Auction configuration parameters.

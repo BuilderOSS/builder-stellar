@@ -14,6 +14,7 @@ pub enum DataKey {
     Manager,
     Owner,
     CurrentHash,
+    CurrentVersion,
 }
 
 // Data structures

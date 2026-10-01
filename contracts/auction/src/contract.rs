@@ -139,6 +139,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         payment_token: Address,
         manager: Address,
         current_hash: BytesN<32>,
+        version: String,
     ) {
         // Validate config
         if duration < MIN_AUCTION_DURATION || min_bid_increment_percent == 0 {
@@ -176,6 +177,9 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         e.storage()
             .instance()
             .set(&DataKey::CurrentHash, &current_hash);
+        e.storage()
+            .instance()
+            .set(&DataKey::CurrentVersion, &version);
 
         // Not launched yet
         set_launched(e, false);
