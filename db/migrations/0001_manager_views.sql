@@ -12,13 +12,15 @@ WITH created AS (
     e.deployment_id,
     e.topic_0 AS dao_id,
     e.topic_0 AS token_address,
-    e.topic_1 AS creator,
+    e.topic_1 AS deployer,
+    e.topic_2 AS launch_admin,
     e.contract_id AS manager_contract,
     e.args::jsonb #>> '{modules,token}' AS token_contract,
     e.args::jsonb #>> '{modules,governor}' AS governor_contract,
     e.args::jsonb #>> '{modules,auction}' AS auction_contract,
     e.args::jsonb #>> '{modules,treasury}' AS treasury_contract,
     e.args::jsonb #>> '{modules,metadata}' AS metadata_contract,
+    e.args::jsonb #>> '{modules,marketplace}' AS marketplace_contract,
     e.ledger_sequence AS created_ledger,
     to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS created_at,
     e.transaction_hash AS created_tx_hash
@@ -26,17 +28,18 @@ WITH created AS (
   WHERE e.contract_role = 'manager'
     AND e.event_name IN ('dao_created', 'dao_registered')
   ORDER BY e.deployment_id, e.topic_0, e.ledger_sequence, e.event_id
-), finalized AS (
+), launched AS (
   SELECT DISTINCT ON (e.deployment_id, e.topic_0)
     e.deployment_id,
     e.topic_0 AS dao_id,
-    e.ledger_sequence AS finalized_ledger,
-    to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS finalized_at,
-    e.transaction_hash AS finalized_tx_hash,
-    (e.args::jsonb ->> 'launch_auction')::boolean AS auction_enabled
+    e.ledger_sequence AS launched_ledger,
+    to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS launched_at,
+    e.transaction_hash AS launched_tx_hash,
+    (e.args::jsonb ->> 'launch_auction')::boolean AS auction_enabled,
+    (e.args::jsonb ->> 'launch_marketplace')::boolean AS marketplace_enabled
   FROM chain.decoded_events e
   WHERE e.contract_role = 'manager'
-    AND e.event_name = 'dao_finalized'
+    AND e.event_name = 'dao_launched'
   ORDER BY e.deployment_id, e.topic_0, e.ledger_sequence DESC, e.event_id DESC
 ), token_metadata AS (
   SELECT DISTINCT ON (e.deployment_id, e.contract_id)
@@ -56,32 +59,38 @@ SELECT
   c.deployment_id,
   c.dao_id,
   c.token_address,
-  c.creator,
+  c.deployer,
+  c.launch_admin,
   c.manager_contract,
   c.token_contract,
   c.governor_contract,
   c.auction_contract,
   c.treasury_contract,
   c.metadata_contract,
+  c.marketplace_contract,
   tm.token_name,
   tm.token_symbol,
   tm.token_description,
   tm.token_uri,
   tm.admin_address,
-  CASE WHEN f.dao_id IS NULL THEN 'pending' ELSE 'operational' END AS status,
+  CASE WHEN l.dao_id IS NULL THEN 'pending' ELSE 'operational' END AS status,
   CASE
-    WHEN f.dao_id IS NULL THEN NULL::boolean
-    ELSE COALESCE(f.auction_enabled, true)
+    WHEN l.dao_id IS NULL THEN NULL::boolean
+    ELSE COALESCE(l.auction_enabled, true)
   END AS auction_enabled,
+  CASE
+    WHEN l.dao_id IS NULL THEN NULL::boolean
+    ELSE COALESCE(l.marketplace_enabled, true)
+  END AS marketplace_enabled,
   c.created_ledger,
   c.created_at,
   c.created_tx_hash,
-  f.finalized_ledger,
-  f.finalized_at,
-  f.finalized_tx_hash,
+  l.launched_ledger,
+  l.launched_at,
+  l.launched_tx_hash,
   NULL::timestamptz AS indexed_at
 FROM created c
-LEFT JOIN finalized f USING (deployment_id, dao_id)
+LEFT JOIN launched l USING (deployment_id, dao_id)
 LEFT JOIN token_metadata tm USING (deployment_id, token_contract);
 
 CREATE OR REPLACE VIEW manager.founder_allocations AS
@@ -108,7 +117,8 @@ SELECT deployment_id, dao_id, 'token'::text AS module_role, token_address AS mod
 UNION ALL SELECT deployment_id, dao_id, 'auction', auction_contract FROM manager.daos WHERE auction_contract IS NOT NULL
 UNION ALL SELECT deployment_id, dao_id, 'metadata', metadata_contract FROM manager.daos WHERE metadata_contract IS NOT NULL
 UNION ALL SELECT deployment_id, dao_id, 'governor', governor_contract FROM manager.daos WHERE governor_contract IS NOT NULL
-UNION ALL SELECT deployment_id, dao_id, 'treasury', treasury_contract FROM manager.daos WHERE treasury_contract IS NOT NULL;
+UNION ALL SELECT deployment_id, dao_id, 'treasury', treasury_contract FROM manager.daos WHERE treasury_contract IS NOT NULL
+UNION ALL SELECT deployment_id, dao_id, 'marketplace', marketplace_contract FROM manager.daos WHERE marketplace_contract IS NOT NULL;
 
 CREATE OR REPLACE VIEW manager.event_identity AS
 SELECT DISTINCT e.deployment_id, e.contract_id,

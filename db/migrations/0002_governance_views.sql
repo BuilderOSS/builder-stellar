@@ -147,12 +147,12 @@ WITH latest_events AS (
     d.governor_contract AS contract_id,
     d.treasury_contract AS authority,
     true AS enabled,
-    d.finalized_ledger AS event_ledger,
-    d.finalized_at AS event_at,
-    d.finalized_tx_hash AS transaction_hash,
+    d.launched_ledger AS event_ledger,
+    d.launched_at AS event_at,
+    d.launched_tx_hash AS transaction_hash,
     'owner'::text AS source
   FROM manager.daos d
-  WHERE d.finalized_ledger IS NOT NULL
+  WHERE d.launched_ledger IS NOT NULL
 )
 SELECT * FROM explicit_authorities
 UNION ALL
