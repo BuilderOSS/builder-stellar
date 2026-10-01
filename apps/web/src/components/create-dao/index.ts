@@ -8,4 +8,5 @@ export { BasicInfoStep } from './BasicInfoStep';
 export { DeploymentProgress } from './DeploymentProgress';
 export { FoundersStep } from './FoundersStep';
 export { GovernanceStep } from './GovernanceStep';
+export { PurposeStep } from './PurposeStep';
 export { ReviewStep } from './ReviewStep';

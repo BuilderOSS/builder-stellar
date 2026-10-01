@@ -141,9 +141,7 @@ export default function Page() {
     isLoading: auctionLoading,
     mutate: refreshAuction
   } = useSWR<AuctionData>(
-    config.auctionContractId
-      ? `/api/dao/${encodeURIComponent(daoId)}/auctions`
-      : null,
+    config.auctionContractId ? `/api/dao/${encodeURIComponent(daoId)}/auctions` : null,
     fetchJson,
     { refreshInterval: 15_000 }
   );
