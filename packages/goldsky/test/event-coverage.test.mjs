@@ -64,6 +64,41 @@ const REQUIRED_EVENTS = {
     'TreasuryUpdated',
     'BidRefunded',
     'AuctionCancelled'
+  ],
+  metadata: [
+    'MetadataInitialized',
+    'PropertyAdded',
+    'PropertiesReset',
+    'ProjectURIUpdated',
+    'DescriptionUpdated',
+    'RendererBaseUpdated',
+    'ContractImageUpdated',
+    'SeedGenerated'
+  ],
+  marketplace: [
+    'MarketplaceInitialized',
+    'PrimaryListingCreated',
+    'SecondaryListingCreated',
+    'ListingPurchased',
+    'ListingCancelled',
+    'ListingExpired',
+    'PaymentAssetUpdated',
+    'SecondaryFeeUpdated',
+    'MarketplacePaused',
+    'MarketplaceUnpaused',
+    'MarketplaceUpgraded'
+  ],
+  manager: [
+    'ManagerInitialized',
+    'DaoCreated',
+    'DaoLaunched',
+    'ImplementationRegistered',
+    'UpgradeApproved',
+    'ImplementationRevoked',
+    'CurrentImplementationsUpdated',
+    'ManagerUpgraded',
+    'FactoryPaused',
+    'FactoryUnpaused'
   ]
 };
 
@@ -136,13 +171,49 @@ test('decoder handles all required auction events', () => {
   );
 });
 
+test('decoder handles all required metadata events', () => {
+  const handled = getHandledEvents();
+  const missing = REQUIRED_EVENTS.metadata.filter(event => !handled.has(event));
+
+  assert.strictEqual(
+    missing.length,
+    0,
+    `Missing metadata events: ${missing.join(', ')}`
+  );
+});
+
+test('decoder handles all required marketplace events', () => {
+  const handled = getHandledEvents();
+  const missing = REQUIRED_EVENTS.marketplace.filter(event => !handled.has(event));
+
+  assert.strictEqual(
+    missing.length,
+    0,
+    `Missing marketplace events: ${missing.join(', ')}`
+  );
+});
+
+test('decoder handles all required manager events', () => {
+  const handled = getHandledEvents();
+  const missing = REQUIRED_EVENTS.manager.filter(event => !handled.has(event));
+
+  assert.strictEqual(
+    missing.length,
+    0,
+    `Missing manager events: ${missing.join(', ')}`
+  );
+});
+
 test('all required DAO events are covered', () => {
   const handled = getHandledEvents();
   const allRequired = [
     ...REQUIRED_EVENTS.token,
     ...REQUIRED_EVENTS.governor,
     ...REQUIRED_EVENTS.treasury,
-    ...REQUIRED_EVENTS.auction
+    ...REQUIRED_EVENTS.auction,
+    ...REQUIRED_EVENTS.metadata,
+    ...REQUIRED_EVENTS.marketplace,
+    ...REQUIRED_EVENTS.manager
   ];
 
   const missing = allRequired.filter(event => !handled.has(event));

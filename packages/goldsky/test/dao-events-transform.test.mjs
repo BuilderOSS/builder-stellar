@@ -31,13 +31,13 @@ test('decoded events use the canonical envelope and preserve unknown fields', ()
   assert.equal(decoded.decoder_version, 'v2');
 });
 
-test('manager topics preserve token address then creator order for both event name styles', () => {
+test('manager topics preserve token address, deployer, and launch_admin order for both event name styles', () => {
   for (const eventName of ['dao_created', 'DaoCreated']) {
     const decoded = decodeEvent({
-      topics: JSON.stringify([{ symbol: eventName }, { address: 'TOKEN_ADDR' }, { address: 'CREATOR_ADDR' }]),
+      topics: JSON.stringify([{ symbol: eventName }, { address: 'TOKEN_ADDR' }, { address: 'DEPLOYER_ADDR' }, { address: 'LAUNCH_ADMIN_ADDR' }]),
       data: JSON.stringify({ map: [] })
     });
-    assert.deepEqual(topicsOf(decoded), { token_address: 'TOKEN_ADDR', creator: 'CREATOR_ADDR' });
+    assert.deepEqual(topicsOf(decoded), { token_address: 'TOKEN_ADDR', deployer: 'DEPLOYER_ADDR', launch_admin: 'LAUNCH_ADMIN_ADDR' });
     assert.equal(decoded.event_name, eventName);
   }
 });
