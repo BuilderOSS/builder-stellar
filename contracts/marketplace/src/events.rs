@@ -8,6 +8,7 @@ pub struct MarketplaceInitialized {
     pub treasury: Address,
     pub payment_asset: Address,
     pub version: String,
+    pub default_secondary_fee_bps: u32,
 }
 
 #[contractevent]
@@ -86,6 +87,24 @@ pub struct MarketplaceUnpaused {}
 pub struct MarketplaceUpgraded {
     pub from_hash: BytesN<32>,
     pub to_hash: BytesN<32>,
+}
+
+pub fn emit_marketplace_initialized(
+    e: &Env,
+    token: &Address,
+    treasury: &Address,
+    payment_asset: &Address,
+    version: &String,
+    default_secondary_fee_bps: u32,
+) {
+    MarketplaceInitialized {
+        token: token.clone(),
+        treasury: treasury.clone(),
+        payment_asset: payment_asset.clone(),
+        version: version.clone(),
+        default_secondary_fee_bps,
+    }
+    .publish(e);
 }
 
 pub fn emit_created(e: &Env, id: u32, listing: &crate::storage::Listing) {

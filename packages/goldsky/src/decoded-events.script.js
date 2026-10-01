@@ -50,12 +50,12 @@ function invoke(data) {
     AuctionSettled: ['token_id'], BidRefunded: ['token_id', 'bidder'], AuctionCancelled: ['token_id'], Execute: ['governor', 'target'],
     TokenInitialized: ['owner'], MintAuthorityChanged: ['authority'], GovernorInitialized: ['owner'], TreasuryChanged: ['old_treasury', 'new_treasury'],
     TokenContractChanged: ['old_token_contract', 'new_token_contract'], GovernorAuthorityChanged: ['authority'], AuctionInitialized: ['owner'],
-    TreasuryInitialized: ['owner'], GovernorChanged: ['old_governor', 'new_governor'], DaoCreated: ['token_address', 'creator'], DaoLaunched: ['token_address'],
-     SeedGenerated: ['token_id'], MetadataInitialized: ['token'], ProposalExpired: [],
+    TreasuryInitialized: ['owner'], GovernorChanged: ['old_governor', 'new_governor'], DaoCreated: ['token_address', 'deployer', 'launch_admin'], DaoLaunched: ['token_address'],
+    ManagerInitialized: ['admin'], SeedGenerated: ['token_id'], MetadataInitialized: ['token'], ProposalExpired: [],
     ProposalThresholdChanged: ['caller'], QuorumBpsChanged: ['caller'], QueueDelayChanged: ['caller'], VotingDelayChanged: ['caller'], VotingPeriodChanged: ['caller'], DurationUpdated: [], ReservePriceUpdated: [], MinBidIncrementUpdated: [],
     TimeBufferUpdated: [], PaymentTokenUpdated: [], TreasuryUpdated: [], FactoryPaused: [], FactoryUnpaused: [], UpgradeApproved: [],
     ImplementationRevoked: [], ImplementationRegistered: [], CurrentImplementationsUpdated: [], PropertyAdded: [],
-    PropertiesReset: [], ProjectURIUpdated: [], DescriptionUpdated: [], RendererBaseUpdated: [], ContractImageUpdated: []
+    PropertiesReset: [], ProjectURIUpdated: [], DescriptionUpdated: [], RendererBaseUpdated: [], ContractImageUpdated: [], ManagerUpgraded: []
   };
   var names = topicNames[eventName] || topicNames[toCanonical(eventName)] || [];
   var topics = {};

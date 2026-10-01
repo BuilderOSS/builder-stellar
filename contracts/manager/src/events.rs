@@ -5,6 +5,14 @@ use soroban_sdk::{contractevent, Address, BytesN, Env, String};
 use crate::storage::DaoModules;
 
 #[contractevent]
+pub struct ManagerInitialized {
+    #[topic]
+    pub admin: Address,
+    pub version: String,
+    pub deployed_at: u64,
+}
+
+#[contractevent]
 pub struct ImplementationRegistered {
     pub name: String,
     pub version: String,
@@ -31,7 +39,9 @@ pub struct DaoCreated {
     #[topic]
     pub token_address: Address,
     #[topic]
-    pub creator: Address,
+    pub deployer: Address,
+    #[topic]
+    pub launch_admin: Address,
     pub created_ledger: u64,
     pub modules: DaoModules,
 }
@@ -121,13 +131,15 @@ pub fn emit_implementation_revoked(env: &Env, wasm_hash: &BytesN<32>, revoked_at
 pub fn emit_dao_created(
     env: &Env,
     token_address: &Address,
-    creator: &Address,
+    deployer: &Address,
+    launch_admin: &Address,
     created_ledger: u64,
     modules: &DaoModules,
 ) {
     DaoCreated {
         token_address: token_address.clone(),
-        creator: creator.clone(),
+        deployer: deployer.clone(),
+        launch_admin: launch_admin.clone(),
         created_ledger,
         modules: modules.clone(),
     }
@@ -183,6 +195,16 @@ pub fn emit_current_implementations_updated(
         governor: governor.clone(),
         treasury: treasury.clone(),
         marketplace: marketplace.clone(),
+    }
+    .publish(env);
+}
+
+/// Emitted when Manager is initialized.
+pub fn emit_manager_initialized(env: &Env, admin: &Address, version: &String, deployed_at: u64) {
+    ManagerInitialized {
+        admin: admin.clone(),
+        version: version.clone(),
+        deployed_at,
     }
     .publish(env);
 }

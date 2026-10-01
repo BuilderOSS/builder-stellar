@@ -31,6 +31,7 @@ export interface TreasuryInitializedEvent {
   data: {
     owner: string;
     governor?: string;
+    version?: string;
   };
 }
 

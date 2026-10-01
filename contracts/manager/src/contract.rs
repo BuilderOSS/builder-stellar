@@ -55,6 +55,9 @@ impl ManagerContract {
         env.storage()
             .instance()
             .set(&ManagerKey::CurrentManagerVersion, &version);
+
+        // Emit initialization event
+        emit_manager_initialized(&env, &admin, &version, env.ledger().sequence() as u64);
     }
 
     // ========================================================================
@@ -724,6 +727,7 @@ impl ManagerContract {
             &env,
             &token_addr,
             &params.deployer,
+            &params.launch_admin,
             env.ledger().sequence() as u64,
             &modules,
         );

@@ -196,6 +196,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
             min_bid_increment_percent,
             time_buffer,
             &payment_token,
+            &version,
         );
     }
 

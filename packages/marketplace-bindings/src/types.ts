@@ -129,6 +129,7 @@ export interface MarketplaceInitializedEvent {
     treasury?: string;
     payment_asset?: string;
     version?: string;
+    default_secondary_fee_bps?: number;
   };
 }
 

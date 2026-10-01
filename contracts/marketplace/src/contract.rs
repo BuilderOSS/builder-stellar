@@ -41,13 +41,14 @@ impl MarketplaceContract {
                 paused: true,
             },
         );
-        MarketplaceInitialized {
-            token,
-            treasury,
-            payment_asset,
-            version,
-        }
-        .publish(e);
+        emit_marketplace_initialized(
+            e,
+            &token,
+            &treasury,
+            &payment_asset,
+            &version,
+            default_secondary_fee_bps,
+        );
     }
 
     pub fn get_config(e: &Env) -> MarketplaceConfig {

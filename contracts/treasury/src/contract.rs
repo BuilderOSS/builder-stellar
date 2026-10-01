@@ -60,7 +60,7 @@ impl DaoTreasuryContract {
             .instance()
             .set(&TreasuryKey::CurrentVersion, &version);
 
-        emit_treasury_initialized(e, &owner, &governor);
+        emit_treasury_initialized(e, &owner, &governor, &version);
     }
 
     pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {

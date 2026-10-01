@@ -22,6 +22,7 @@ pub struct TokenInitialized {
     pub uri: String,
     pub name: String,
     pub symbol: String,
+    pub version: String,
 }
 
 /// Emitted when minting authority is granted or revoked for an address.
@@ -86,12 +87,14 @@ pub fn emit_token_initialized(
     uri: &String,
     name: &String,
     symbol: &String,
+    version: &String,
 ) {
     TokenInitialized {
         owner: owner.clone(),
         uri: uri.clone(),
         name: name.clone(),
         symbol: symbol.clone(),
+        version: version.clone(),
     }
     .publish(e);
 }

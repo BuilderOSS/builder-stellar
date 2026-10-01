@@ -60,9 +60,9 @@ impl MetadataContract {
 
         let settings = Settings {
             token: token.clone(),
-            project_uri,
-            description,
-            contract_image,
+            project_uri: project_uri.clone(),
+            description: description.clone(),
+            contract_image: contract_image.clone(),
             renderer_base: renderer_base.clone(),
         };
 
@@ -80,7 +80,16 @@ impl MetadataContract {
             .set(&DataKey::CurrentVersion, &version);
         set_initialized(&env);
 
-        emit_metadata_initialized(&env, &token, &renderer_base);
+        emit_metadata_initialized(
+            &env,
+            &token,
+            &renderer_base,
+            &version,
+            &owner,
+            &project_uri,
+            &description,
+            &contract_image,
+        );
 
         Ok(())
     }

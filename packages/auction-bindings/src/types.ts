@@ -197,6 +197,7 @@ export interface AuctionInitializedEvent {
     min_bid_increment_percent?: number;
     time_buffer?: bigint;
     payment_token?: string;
+    version?: string;
   };
 }
 

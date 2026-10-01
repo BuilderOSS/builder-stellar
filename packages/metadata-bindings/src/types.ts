@@ -80,6 +80,11 @@ export interface MetadataInitializedEvent {
   data: {
     token: string;
     renderer_base?: string;
+    version?: string;
+    owner?: string;
+    project_uri?: string;
+    description?: string;
+    contract_image?: string;
   };
 }
 

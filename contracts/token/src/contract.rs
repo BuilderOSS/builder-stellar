@@ -62,7 +62,7 @@ impl DaoTokenContract {
         e.storage()
             .instance()
             .set(&TokenKey::CurrentVersion, &version);
-        emit_token_initialized(e, &owner, &uri, &name, &symbol);
+        emit_token_initialized(e, &owner, &uri, &name, &symbol, &version);
     }
 
     pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {

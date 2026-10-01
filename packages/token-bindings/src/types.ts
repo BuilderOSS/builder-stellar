@@ -68,6 +68,7 @@ export interface TokenInitializedEvent {
     uri?: string;
     name?: string;
     symbol?: string;
+    version?: string;
   };
 }
 

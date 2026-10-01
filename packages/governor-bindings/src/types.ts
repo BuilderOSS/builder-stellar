@@ -106,6 +106,7 @@ export interface GovernorInitializedEvent {
     queue_delay?: number;
     proposal_threshold?: bigint;
     quorum_bps?: number;
+    version?: string;
   };
 }
 

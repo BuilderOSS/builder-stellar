@@ -5,7 +5,7 @@
 //! - Governor address changes
 //! - Proposal action executions
 
-use soroban_sdk::{contractevent, Address, Symbol};
+use soroban_sdk::{contractevent, Address, String, Symbol};
 
 // Standard contract events
 
@@ -15,6 +15,7 @@ pub struct TreasuryInitialized {
     #[topic]
     pub owner: Address,
     pub governor: Address,
+    pub version: String,
 }
 
 #[contractevent]
@@ -40,10 +41,11 @@ pub struct Execute {
 
 use soroban_sdk::Env;
 
-pub fn emit_treasury_initialized(e: &Env, owner: &Address, governor: &Address) {
+pub fn emit_treasury_initialized(e: &Env, owner: &Address, governor: &Address, version: &String) {
     TreasuryInitialized {
         owner: owner.clone(),
         governor: governor.clone(),
+        version: version.clone(),
     }
     .publish(e);
 }

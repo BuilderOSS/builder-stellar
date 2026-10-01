@@ -135,7 +135,8 @@ export interface DaoCreatedEvent {
   name: "DaoCreated";
   data: {
     token_address: string;
-    creator: string;
+    deployer: string;
+    launch_admin: string;
     created_ledger?: bigint;
     modules?: DaoModules;
   };
@@ -198,6 +199,18 @@ export interface UpgradeApprovedEvent {
     from_hash: Uint8Array;
     to_hash: Uint8Array;
     approved_at?: bigint;
+  };
+}
+
+/**
+ * Event: ManagerInitialized
+ */
+export interface ManagerInitializedEvent {
+  name: "ManagerInitialized";
+  data: {
+    admin: string;
+    version?: string;
+    deployed_at?: bigint;
   };
 }
 
@@ -481,5 +494,5 @@ export interface CreateContractWithConstructorHostFnContext {
   { tag: "Wasm"; values: readonly [Uint8Array] } |
   { tag: "StellarAsset"; values: void } |
   { tag: "Account"; values: void };
-    export type ContractEvent = DaoCreatedEvent | DaoLaunchedEvent | FactoryPausedEvent | FactoryUnpausedEvent | ManagerUpgradedEvent | UpgradeApprovedEvent | ImplementationRevokedEvent | ImplementationRegisteredEvent | CurrentImplementationsUpdatedEvent;
+    export type ContractEvent = DaoCreatedEvent | DaoLaunchedEvent | FactoryPausedEvent | FactoryUnpausedEvent | ManagerUpgradedEvent | UpgradeApprovedEvent | ManagerInitializedEvent | ImplementationRevokedEvent | ImplementationRegisteredEvent | CurrentImplementationsUpdatedEvent;
     
