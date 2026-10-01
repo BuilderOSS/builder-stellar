@@ -81,6 +81,7 @@ impl DaoGovernorContract {
         quorum_bps: u32,
         manager: Address,
         current_hash: BytesN<32>,
+        version: String,
     ) {
         assert!(quorum_bps <= BPS_DENOMINATOR as u32);
 
@@ -100,6 +101,9 @@ impl DaoGovernorContract {
         e.storage()
             .instance()
             .set(&GovernorKey::CurrentHash, &current_hash);
+        e.storage()
+            .instance()
+            .set(&GovernorKey::CurrentVersion, &version);
 
         let name = String::from_str(e, "MvpDaoGovernor");
         let version = String::from_str(e, "1.0.0");

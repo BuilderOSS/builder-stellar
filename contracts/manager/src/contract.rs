@@ -576,6 +576,7 @@ impl ManagerContract {
                 governor_addr.clone(),
                 env.current_contract_address(),
                 treasury_wasm.clone(),
+                String::from_str(&env, "0.1.0"),
             ),
         );
 
@@ -591,6 +592,7 @@ impl ManagerContract {
                 metadata_addr.clone(),
                 env.current_contract_address(),
                 token_wasm.clone(),
+                String::from_str(&env, "0.1.0"),
             ),
         );
 
@@ -613,6 +615,7 @@ impl ManagerContract {
                 governance.quorum_bps,
                 env.current_contract_address(),
                 governor_wasm.clone(),
+                String::from_str(&env, "0.1.0"),
             ),
         );
 

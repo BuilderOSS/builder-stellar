@@ -46,6 +46,7 @@ impl DaoTreasuryContract {
         governor: Address,
         manager: Address,
         current_hash: BytesN<32>,
+        version: String,
     ) {
         set_owner(e, &owner);
         e.storage()
@@ -55,6 +56,9 @@ impl DaoTreasuryContract {
         e.storage()
             .instance()
             .set(&TreasuryKey::CurrentHash, &current_hash);
+        e.storage()
+            .instance()
+            .set(&TreasuryKey::CurrentVersion, &version);
 
         emit_treasury_initialized(e, &owner, &governor);
     }

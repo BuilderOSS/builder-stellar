@@ -34,6 +34,9 @@ impl DaoTokenContract {
     /// * `name` - The human-readable name of the token collection
     /// * `symbol` - The short symbol/ticker for the token
     /// * `metadata` - The metadata contract address for artwork generation
+    /// * `manager` - The Manager contract address for upgrade validation
+    /// * `current_hash` - The WASM hash of this contract implementation
+    /// * `version` - The semantic version string (e.g., "0.1.0")
     ///
     /// # Events
     ///
@@ -47,6 +50,7 @@ impl DaoTokenContract {
         metadata: Address,
         manager: Address,
         current_hash: BytesN<32>,
+        version: String,
     ) {
         Base::set_metadata(e, uri.clone(), name.clone(), symbol.clone());
         set_owner(e, &owner);
@@ -55,6 +59,9 @@ impl DaoTokenContract {
         e.storage()
             .instance()
             .set(&TokenKey::CurrentHash, &current_hash);
+        e.storage()
+            .instance()
+            .set(&TokenKey::CurrentVersion, &version);
         emit_token_initialized(e, &owner, &uri, &name, &symbol);
     }
 

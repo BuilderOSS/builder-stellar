@@ -4,7 +4,7 @@
 //! and TTL management. The Governor uses a hybrid storage approach with some data
 //! in the library's storage and custom data in contract-specific keys.
 
-use soroban_sdk::{contracttype, Address, BytesN};
+use soroban_sdk::{contracttype, Address, BytesN, String};
 use stellar_governance::governor::ProposalState;
 
 // TTL constants for proposal storage
@@ -98,6 +98,7 @@ pub const MIN_QUEUE_DELAY: u32 = 300; // 5 minutes in seconds
 #[contracttype]
 pub enum GovernorKey {
     CurrentHash,
+    CurrentVersion,
     /// Address of the Treasury contract that executes approved proposals.
     Treasury,
     /// Delay (in seconds) between queueing and execution eligibility.
