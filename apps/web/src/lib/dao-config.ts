@@ -26,6 +26,7 @@ export type DaoNetworkConfig = {
   auctionContractId: string;
   auctionEnabled: boolean | null;
   auctionPaused: boolean | null;
+  status: 'pending' | 'operational';
 };
 
 export type DaoNetworkName = NetworkName;
@@ -64,6 +65,7 @@ export async function getDaoNetworkConfigById(daoId: string): Promise<DaoNetwork
     treasuryContractId: daoConfig.treasury_contract ?? '',
     auctionContractId: daoConfig.auction_contract ?? '',
     auctionEnabled: daoConfig.auction_enabled,
-    auctionPaused: daoConfig.auction_paused
+    auctionPaused: daoConfig.auction_paused,
+    status: daoConfig.status
   };
 }

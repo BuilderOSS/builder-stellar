@@ -8,6 +8,7 @@ import { Stack } from 'styled-system/jsx';
 import useSWR from 'swr';
 
 import { DaoContractList } from '@/components/dao-contract-list';
+import { LaunchChecklist } from '@/components/launch-checklist';
 import { PageSection } from '@/components/page-section';
 import { ProposalStateBadge } from '@/components/proposal/proposal-state-badge';
 import type { ProposalListResponse } from '@/components/proposal/types';
@@ -211,6 +212,8 @@ export default function Page() {
           {isDashboardRefreshing ? 'Refreshing…' : 'Refresh dashboard'}
         </Button>
       </div>
+
+      {config.status === 'pending' ? <LaunchChecklist daoId={daoId} config={config} /> : null}
 
       <div className="dashboard-secondary-grid">
         {config.auctionContractId ? (
