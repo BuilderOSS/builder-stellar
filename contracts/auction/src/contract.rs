@@ -1,5 +1,6 @@
 use soroban_sdk::{
-    contract, contractimpl, contracttrait, panic_with_error, Address, BytesN, Env, IntoVal, Symbol,
+    contract, contractimpl, contracttrait, panic_with_error, Address, BytesN, Env, IntoVal, String,
+    Symbol,
 };
 use stellar_access::ownable::{self, Ownable, OwnableStorageKey};
 use stellar_contract_utils::pausable::{self, Pausable};
@@ -37,6 +38,7 @@ pub trait DaoAuctionContractTrait {
         payment_token: Address,
         manager: Address,
         current_hash: BytesN<32>,
+        version: String,
     );
 
     /// Create a bid with SAC token

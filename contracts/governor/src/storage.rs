@@ -4,7 +4,7 @@
 //! and TTL management. The Governor uses a hybrid storage approach with some data
 //! in the library's storage and custom data in contract-specific keys.
 
-use soroban_sdk::{contracttype, Address, BytesN, String};
+use soroban_sdk::{contracttype, Address, BytesN};
 use stellar_governance::governor::ProposalState;
 
 // TTL constants for proposal storage

@@ -50,6 +50,6 @@ pub use contract::*;
 pub use error::*;
 pub use storage::{
     ArtworkIpfsGroup, AuctionConfig, DaoAddresses, DaoCreationParams, DaoModules, GovernanceConfig,
-    ImplementationVersion, InitialDaoConfig, InitialDaoConfigValues, MarketplaceConfig, PendingDao,
+    ImplementationVersion, InitialDaoConfigValues, LaunchConfig, MarketplaceConfig, PendingDao,
     UpgradeApproval,
 };
