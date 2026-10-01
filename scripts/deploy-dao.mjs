@@ -60,6 +60,7 @@ for (const implementation of [
   "auction",
   "governor",
   "treasury",
+  "marketplace",
 ]) {
   if (!managerArtifact.implementations[implementation]) {
     throw new Error(
@@ -142,7 +143,7 @@ const predictResult = runQuiet("stellar", [
   networkName,
   "--",
   "predict_addresses",
-  "--creator",
+  "--deployer",
   daoConfig.deployer,
   "--nonce",
   String(daoConfig.nonce),
@@ -480,6 +481,11 @@ writeDaoArtifact({
   transactions: postCreationTransactions,
 });
 
+const launchConfig = JSON.stringify({
+  launch_auction: launchAuction,
+  launch_marketplace: launchMarketplace,
+});
+
 console.log("\n=== Launching DAO ===\n");
 const launchResult = runQuiet("stellar", [
   "contract",
@@ -494,10 +500,8 @@ const launchResult = runQuiet("stellar", [
   "launch_dao",
   "--token_address",
   daoAddresses.token,
-  "--launch_auction",
-  String(launchAuction),
-  "--launch_marketplace",
-  String(launchMarketplace),
+  "--config",
+  launchConfig,
 ]);
 const launchOutput = launchResult.stdout + launchResult.stderr;
 if (!launchResult.ok) {
