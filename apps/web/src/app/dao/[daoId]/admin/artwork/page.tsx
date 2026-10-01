@@ -4,9 +4,8 @@ import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { Stack } from 'styled-system/jsx';
 
-import { AdminSectionNav } from '@/components/admin/admin-section-nav';
 import { PageSection } from '@/components/page-section';
-import { Badge, Button, Callout, Card, Heading, Text } from '@/components/ui';
+import { Button, Callout, Card, Heading, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 
 export default function ArtworkAdminPage() {
@@ -21,14 +20,6 @@ export default function ArtworkAdminPage() {
             Back to dashboard
           </Link>
         </div>
-
-        <AdminSectionNav
-          sections={[
-            { id: 'overview', label: 'Overview' },
-            { id: 'properties', label: 'Artwork Properties' }
-          ]}
-          current="overview"
-        />
 
         <Card p="5">
           <Stack gap="4">
@@ -60,7 +51,7 @@ export default function ArtworkAdminPage() {
               <Text style={{ color: 'var(--gray-11)', marginBottom: '1rem' }}>
                 Define the traits and properties that will be used to generate your DAO's token artwork.
               </Text>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <Button
                   disabled
                   title="Artwork configuration will be available after DAO launch"
@@ -68,7 +59,7 @@ export default function ArtworkAdminPage() {
                 >
                   Configure Properties
                 </Button>
-                <Badge variant="outline">Coming soon</Badge>
+                <Text style={{ fontSize: '0.875rem', color: 'var(--gray-10)' }}>Coming soon</Text>
               </div>
             </div>
 
@@ -79,7 +70,7 @@ export default function ArtworkAdminPage() {
               <Text style={{ color: 'var(--gray-11)', marginBottom: '1rem' }}>
                 Configure the IPFS-hosted renderer that generates artwork for each token based on its properties.
               </Text>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <Button
                   disabled
                   title="Renderer configuration will be available after DAO launch"
@@ -87,7 +78,7 @@ export default function ArtworkAdminPage() {
                 >
                   Configure Renderer
                 </Button>
-                <Badge variant="outline">Coming soon</Badge>
+                <Text style={{ fontSize: '0.875rem', color: 'var(--gray-10)' }}>Coming soon</Text>
               </div>
             </div>
 

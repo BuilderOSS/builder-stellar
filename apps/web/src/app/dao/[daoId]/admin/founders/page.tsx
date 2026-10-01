@@ -4,9 +4,8 @@ import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { Stack } from 'styled-system/jsx';
 
-import { AdminSectionNav } from '@/components/admin/admin-section-nav';
 import { PageSection } from '@/components/page-section';
-import { Badge, Button, Callout, Card, Heading, Text } from '@/components/ui';
+import { Button, Callout, Card, Heading, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 
 export default function FoundersAdminPage() {
@@ -21,14 +20,6 @@ export default function FoundersAdminPage() {
             Back to dashboard
           </Link>
         </div>
-
-        <AdminSectionNav
-          sections={[
-            { id: 'overview', label: 'Overview' },
-            { id: 'allocations', label: 'Founder Allocations' }
-          ]}
-          current="overview"
-        />
 
         <Card p="5">
           <Stack gap="4">
@@ -52,7 +43,7 @@ export default function FoundersAdminPage() {
               <Text style={{ color: 'var(--gray-11)', marginBottom: '1rem' }}>
                 Specify founder addresses and their initial token amounts. Total allocation cannot exceed your DAO's maximum supply.
               </Text>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <Button
                   disabled
                   title="Founder allocation configuration will be available after DAO launch"
@@ -60,7 +51,7 @@ export default function FoundersAdminPage() {
                 >
                   Add Founder Allocations
                 </Button>
-                <Badge variant="outline">Coming soon</Badge>
+                <Text style={{ fontSize: '0.875rem', color: 'var(--gray-10)' }}>Coming soon</Text>
               </div>
             </div>
 

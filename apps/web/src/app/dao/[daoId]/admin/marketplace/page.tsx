@@ -4,9 +4,8 @@ import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { Stack } from 'styled-system/jsx';
 
-import { AdminSectionNav } from '@/components/admin/admin-section-nav';
 import { PageSection } from '@/components/page-section';
-import { Badge, Button, Callout, Card, Heading, Text } from '@/components/ui';
+import { Button, Callout, Card, Heading, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 
 export default function MarketplaceAdminPage() {
@@ -21,14 +20,6 @@ export default function MarketplaceAdminPage() {
             Back to dashboard
           </Link>
         </div>
-
-        <AdminSectionNav
-          sections={[
-            { id: 'overview', label: 'Overview' },
-            { id: 'settings', label: 'Marketplace Settings' }
-          ]}
-          current="overview"
-        />
 
         <Card p="5">
           <Stack gap="4">
@@ -52,7 +43,7 @@ export default function MarketplaceAdminPage() {
               <Text style={{ color: 'var(--gray-11)', marginBottom: '1rem' }}>
                 Configure marketplace fees, payment tokens, and trading parameters.
               </Text>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <Button
                   disabled
                   title="Marketplace configuration will be available after DAO launch"
@@ -60,7 +51,7 @@ export default function MarketplaceAdminPage() {
                 >
                   Configure Marketplace
                 </Button>
-                <Badge variant="outline">Coming soon</Badge>
+                <Text style={{ fontSize: '0.875rem', color: 'var(--gray-10)' }}>Coming soon</Text>
               </div>
             </div>
 
@@ -71,7 +62,7 @@ export default function MarketplaceAdminPage() {
               <Text style={{ color: 'var(--gray-11)', marginBottom: '1rem' }}>
                 Define marketplace fee percentages and fee recipient addresses.
               </Text>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <Button
                   disabled
                   title="Fee configuration will be available after DAO launch"
@@ -79,7 +70,7 @@ export default function MarketplaceAdminPage() {
                 >
                   Configure Fees
                 </Button>
-                <Badge variant="outline">Coming soon</Badge>
+                <Text style={{ fontSize: '0.875rem', color: 'var(--gray-10)' }}>Coming soon</Text>
               </div>
             </div>
 
