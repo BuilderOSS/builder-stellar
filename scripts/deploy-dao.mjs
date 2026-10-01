@@ -126,6 +126,7 @@ for (const [index, property] of artworkProperties.entries()) {
   }
 }
 const launchAuction = daoConfig.auction.enabled !== false;
+const launchMarketplace = daoConfig.marketplace?.enabled !== false;
 const founderMintBatchSize = 20;
 
 // Predict DAO addresses before creation
@@ -495,6 +496,8 @@ const launchResult = runQuiet("stellar", [
   daoAddresses.token,
   "--launch_auction",
   String(launchAuction),
+  "--launch_marketplace",
+  String(launchMarketplace),
 ]);
 const launchOutput = launchResult.stdout + launchResult.stderr;
 if (!launchResult.ok) {

@@ -223,7 +223,7 @@ function registerImplementation(managerAddress, wasmHash, name) {
     '--name',
     name,
     '--version',
-    '1'
+    '0.1.0'
   ]);
 
   if (!result.ok) {
@@ -359,10 +359,11 @@ async function main() {
 
   // Deploy Manager contract
   console.log('\n=== Deploying Manager Contract ===\n');
+  const managerWasmHash = wasmHash('manager');
   const managerDeploy = deployIfMissing(
     'manager',
     `dao-manager-${networkName}`,
-    ['--admin', adminAddress]
+    ['--admin', adminAddress, '--current_hash', managerWasmHash, '--version', '0.1.0']
   );
 
   console.log(`Manager deployed: ${managerDeploy.id}`);

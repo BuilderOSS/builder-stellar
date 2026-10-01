@@ -44,9 +44,17 @@ impl ManagerContract {
     /// # Arguments
     ///
     /// * `admin` - The address that will control implementation management and factory settings
-    pub fn __constructor(env: Env, admin: Address) {
+    /// * `current_hash` - Current Manager WASM hash for upgrade tracking
+    /// * `version` - Current Manager version (e.g., "0.1.0")
+    pub fn __constructor(env: Env, admin: Address, current_hash: BytesN<32>, version: String) {
         set_admin(&env, &admin);
         set_factory_paused(&env, false);
+        env.storage()
+            .instance()
+            .set(&ManagerKey::CurrentManagerWasm, &current_hash);
+        env.storage()
+            .instance()
+            .set(&ManagerKey::CurrentManagerVersion, &version);
     }
 
     // ========================================================================
