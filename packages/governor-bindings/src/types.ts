@@ -165,6 +165,7 @@ export interface ProposalThresholdChangedEvent {
  */
  export type GovernorKey =
   { tag: "CurrentHash"; values: void } |
+  { tag: "CurrentVersion"; values: void } |
   /**
    * Address of the Treasury contract that executes approved proposals.
    */

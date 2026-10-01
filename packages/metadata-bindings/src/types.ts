@@ -124,7 +124,8 @@ export interface Item {
   { tag: "Attributes"; values: readonly [number] } |
   { tag: "Manager"; values: void } |
   { tag: "Owner"; values: void } |
-  { tag: "CurrentHash"; values: void };
+  { tag: "CurrentHash"; values: void } |
+  { tag: "CurrentVersion"; values: void };
 
 /**
  * Struct: Property

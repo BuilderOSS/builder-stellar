@@ -136,7 +136,7 @@ export interface DaoCreatedEvent {
   data: {
     token_address: string;
     creator: string;
-    created_ledger?: number;
+    created_ledger?: bigint;
     modules?: DaoModules;
   };
 }
@@ -148,9 +148,10 @@ export interface DaoLaunchedEvent {
   name: "DaoLaunched";
   data: {
     token_address: string;
-    launched_ledger?: number;
+    launched_ledger?: bigint;
     modules?: DaoModules;
     launch_auction?: boolean;
+    launch_marketplace?: boolean;
   };
 }
 
@@ -171,6 +172,20 @@ export interface FactoryUnpausedEvent {
   name: "FactoryUnpaused";
   data: {
 
+  };
+}
+
+/**
+ * Event: ManagerUpgraded
+ */
+export interface ManagerUpgradedEvent {
+  name: "ManagerUpgraded";
+  data: {
+    from_hash: Uint8Array;
+    to_hash: Uint8Array;
+    from_version?: string;
+    to_version?: string;
+    upgraded_at?: bigint;
   };
 }
 
@@ -204,7 +219,7 @@ export interface ImplementationRegisteredEvent {
   name: "ImplementationRegistered";
   data: {
     name?: string;
-    version?: number;
+    version?: string;
     wasm_hash: Uint8Array;
     published_at?: bigint;
   };
@@ -252,6 +267,8 @@ export interface DaoModules {
   { tag: "CurrentGovernorWasm"; values: void } |
   { tag: "CurrentTreasuryWasm"; values: void } |
   { tag: "CurrentMarketplaceWasm"; values: void } |
+  { tag: "CurrentManagerWasm"; values: void } |
+  { tag: "CurrentManagerVersion"; values: void } |
   { tag: "PendingDao"; values: readonly [string] };
 
 /**
@@ -272,6 +289,14 @@ export interface DaoAddresses {
   metadata: string;
   token: string;
   treasury: string;
+}
+
+/**
+ * Struct: LaunchConfig
+ */
+export interface LaunchConfig {
+  launch_auction: boolean;
+  launch_marketplace: boolean;
 }
 
 /**
@@ -313,18 +338,11 @@ export interface GovernanceConfig {
 }
 
 /**
- * Union: InitialDaoConfig
- */
- export type InitialDaoConfig =
-  { tag: "Defaults"; values: void } |
-  { tag: "Custom"; values: readonly [InitialDaoConfigValues] };
-
-/**
  * Struct: DaoCreationParams
  */
 export interface DaoCreationParams {
   deployer: string;
-  initial_config: InitialDaoConfig;
+  initial_config: InitialDaoConfigValues;
   launch_admin: string;
   nonce: bigint;
 }
@@ -344,7 +362,7 @@ export interface ImplementationVersion {
   name: string;
   published_at: bigint;
   revoked: boolean;
-  version: number;
+  version: string;
   wasm_hash: Uint8Array;
 }
 
@@ -463,5 +481,5 @@ export interface CreateContractWithConstructorHostFnContext {
   { tag: "Wasm"; values: readonly [Uint8Array] } |
   { tag: "StellarAsset"; values: void } |
   { tag: "Account"; values: void };
-    export type ContractEvent = DaoCreatedEvent | DaoLaunchedEvent | FactoryPausedEvent | FactoryUnpausedEvent | UpgradeApprovedEvent | ImplementationRevokedEvent | ImplementationRegisteredEvent | CurrentImplementationsUpdatedEvent;
+    export type ContractEvent = DaoCreatedEvent | DaoLaunchedEvent | FactoryPausedEvent | FactoryUnpausedEvent | ManagerUpgradedEvent | UpgradeApprovedEvent | ImplementationRevokedEvent | ImplementationRegisteredEvent | CurrentImplementationsUpdatedEvent;
     

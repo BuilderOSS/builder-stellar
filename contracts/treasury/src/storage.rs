@@ -4,7 +4,7 @@
 //! the authorized Governor contract. Ownership is managed via the Ownable
 //! trait's storage keys.
 
-use soroban_sdk::{contracttype, String};
+use soroban_sdk::contracttype;
 
 /// Storage keys for treasury-specific instance data.
 ///

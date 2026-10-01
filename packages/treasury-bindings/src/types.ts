@@ -49,7 +49,8 @@ export interface TreasuryInitializedEvent {
    */
   { tag: "Governor"; values: void } |
   { tag: "Manager"; values: void } |
-  { tag: "CurrentHash"; values: void };
+  { tag: "CurrentHash"; values: void } |
+  { tag: "CurrentVersion"; values: void };
 
 /**
  * Error Enum: RoleTransferError
