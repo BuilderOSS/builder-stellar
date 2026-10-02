@@ -476,8 +476,12 @@ impl DaoTokenContract {
             .instance()
             .get::<VotesStorageKey, u32>(&VotesStorageKey::NumTotalSupplyCheckpoints)
             .unwrap_or(0);
-        let _ = e.storage().persistent().get::<VotesStorageKey, Checkpoint>(
+        e.storage().persistent().set(
             &VotesStorageKey::TotalSupplyCheckpoint(total_supply_index),
+            &Checkpoint {
+                ledger: e.ledger().sequence(),
+                votes: 0,
+            },
         );
 
         let delegate_index = e
@@ -485,8 +489,12 @@ impl DaoTokenContract {
             .persistent()
             .get::<VotesStorageKey, u32>(&VotesStorageKey::NumCheckpoints(account.clone()))
             .unwrap_or(0);
-        let _ = e.storage().persistent().get::<VotesStorageKey, Checkpoint>(
+        e.storage().persistent().set(
             &VotesStorageKey::DelegateCheckpoint(account.clone(), delegate_index),
+            &Checkpoint {
+                ledger: e.ledger().sequence(),
+                votes: 0,
+            },
         );
     }
 
