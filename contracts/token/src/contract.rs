@@ -484,11 +484,15 @@ impl DaoTokenContract {
             },
         );
 
-        let delegate_index = e
+        let delegate_count_key = VotesStorageKey::NumCheckpoints(account.clone());
+        let delegate_count = e
             .storage()
             .persistent()
-            .get::<VotesStorageKey, u32>(&VotesStorageKey::NumCheckpoints(account.clone()))
-            .unwrap_or(0);
+            .get::<VotesStorageKey, u32>(&delegate_count_key);
+        if delegate_count.is_none() {
+            e.storage().persistent().set(&delegate_count_key, &0_u32);
+        }
+        let delegate_index = delegate_count.unwrap_or(0);
         e.storage().persistent().set(
             &VotesStorageKey::DelegateCheckpoint(account.clone(), delegate_index),
             &Checkpoint {
