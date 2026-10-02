@@ -2,12 +2,14 @@
 
 'use client';
 
-import { Check, ChevronRight } from 'lucide-react';
+import { Check, ChevronRight, Rocket } from 'lucide-react';
 import type { Route } from 'next';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 import { Box, Stack } from 'styled-system/jsx';
 
-import { Card, Heading, Text } from '@/components/ui';
+import { Button, Callout, Card, Heading, Text } from '@/components/ui';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 
 type ChecklistItem = {
@@ -110,8 +112,34 @@ function ChecklistItemRow({ item }: { item: ChecklistItem }) {
 }
 
 export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoNetworkConfig }) {
+  const router = useRouter();
   const items = getChecklistItems(daoId, config);
   const completedCount = items.filter((item) => item.completed).length;
+  const isComplete = completedCount === items.length;
+  const [isLaunching, setIsLaunching] = useState(false);
+
+  const handleLaunchDao = async () => {
+    setIsLaunching(true);
+    try {
+      // Call the launch_dao endpoint to finalize the DAO
+      const response = await fetch(`/api/dao/${encodeURIComponent(daoId)}/launch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to launch DAO');
+      }
+
+      // Update DAO status and redirect
+      router.refresh();
+    } catch (error) {
+      console.error('Error launching DAO:', error);
+      setIsLaunching(false);
+    }
+  };
 
   return (
     <Card p="5">
@@ -131,19 +159,43 @@ export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoN
           ))}
         </Stack>
 
-        <Box
-          style={{
-            padding: '1rem',
-            borderRadius: '0.5rem',
-            backgroundColor: 'var(--gray-3)',
-            borderLeft: '4px solid var(--blue-9)'
-          }}
-        >
-          <Text style={{ fontSize: '0.875rem', color: 'var(--gray-12)' }}>
-            <strong>Ready to launch?</strong> Once you've completed the setup, visit the Admin page to finalize your DAO
-            launch.
-          </Text>
-        </Box>
+        {isComplete ? (
+          <Callout
+            variant="success"
+            title="All setup complete!"
+            description="Your DAO is ready to launch. Click the button below to finalize the setup and transition to operational status."
+          />
+        ) : (
+          <Box
+            style={{
+              padding: '1rem',
+              borderRadius: '0.5rem',
+              backgroundColor: 'var(--gray-3)',
+              borderLeft: '4px solid var(--blue-9)'
+            }}
+          >
+            <Text style={{ fontSize: '0.875rem', color: 'var(--gray-12)' }}>
+              <strong>Complete the setup</strong> by visiting each admin section above. Once all items are checked, you
+              can launch your DAO.
+            </Text>
+          </Box>
+        )}
+
+        {isComplete && (
+          <Button
+            onClick={() => void handleLaunchDao()}
+            disabled={isLaunching}
+            style={{
+              width: '100%',
+              padding: '12px 16px',
+              fontSize: '1rem',
+              fontWeight: 600
+            }}
+          >
+            <Rocket size={18} style={{ marginRight: '8px' }} aria-hidden="true" />
+            {isLaunching ? 'Launching DAO...' : 'Launch DAO'}
+          </Button>
+        )}
       </Stack>
     </Card>
   );

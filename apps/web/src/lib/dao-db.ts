@@ -297,3 +297,37 @@ export async function getAllDaosFromDatabase(status?: 'pending' | 'operational')
     indexed_at: row.indexed_at
   }));
 }
+
+/**
+ * Update DAO status from 'pending' to 'operational'
+ *
+ * Called when the launch_admin finalizes the DAO setup.
+ * Updates the status column in the manager.daos table.
+ *
+ * @param daoId - Token contract address (DAO ID)
+ * @param status - New status ('operational')
+ */
+export async function updateDaoStatus(daoId: string, status: 'operational'): Promise<void> {
+  const deploymentId = process.env.NEXT_PUBLIC_DEPLOYMENT_ID;
+
+  if (!deploymentId) {
+    throw new Error('NEXT_PUBLIC_DEPLOYMENT_ID environment variable is required');
+  }
+
+  if (!daoId) {
+    throw new Error('DAO ID is required');
+  }
+
+  const query = `
+    UPDATE manager.daos
+    SET status = $1, finalized_at = NOW()
+    WHERE deployment_id = $2 AND dao_id = $3
+    RETURNING dao_id
+  `;
+
+  const result = await pool.query(query, [status, deploymentId, daoId]);
+
+  if (result.rows.length === 0) {
+    throw new Error(`DAO not found: ${daoId}`);
+  }
+}
