@@ -228,16 +228,12 @@ if (phase === 'admin_checklist') {
   if (!resumeAdmin) {
     const founderMints = [];
     for (const founder of daoConfig.founders) {
-      let remaining = founder.amount;
-      while (remaining > 0) {
-        const amount = 1;
-        const output = invoke(addresses.token, 'mint', {
-          minter: daoConfig.launchAdmin,
-          to: founder.address
-        });
-        founderMints.push(transaction(output, { address: founder.address, amount }));
-        remaining -= amount;
-      }
+      const output = invoke(addresses.token, 'batch_mint', {
+        minter: daoConfig.launchAdmin,
+        to: founder.address,
+        amount: founder.amount
+      });
+      founderMints.push(transaction(output, { address: founder.address, amount: founder.amount }));
     }
     transactions.founderMints = founderMints;
 
@@ -274,12 +270,12 @@ if (phase === 'admin_checklist') {
   let nextTokenId = daoConfig.founders.reduce((total, founder) => total + founder.amount, 0);
   let remainingListings = listingCount;
   while ((!resumeAdmin || process.env.DEPLOY_DAO_RESUME_MINT === '1') && remainingListings > 0) {
-    const amount = 1;
-    invoke(addresses.token, 'mint', {
+    invoke(addresses.token, 'batch_mint', {
       minter: daoConfig.launchAdmin,
-      to: daoConfig.launchAdmin
+      to: daoConfig.launchAdmin,
+      amount: remainingListings
     });
-    remainingListings -= amount;
+    remainingListings = 0;
   }
   for (let index = 0; index < listingCount; index += 1) {
     invoke(addresses.token, 'approve', {
