@@ -1,10 +1,10 @@
 {
-  "status": "operational",
+  "status": "created",
   "network": "testnet",
   "label": "builder",
   "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
   "nonce": 0,
-  "manager": "CD6WUNOLSU6KRY3VRBRQQIOR55WWTRQNKIHWQC5MJNKMYWJEDLQKSIVX",
+  "manager": "CBWFJUHKRC7L54EUULISGKRHSBY26MO45PVZPMGSIOF2CXG727OJCWKR",
   "predictedAddresses": {
     "token": "CBGQUSYFZLJZKDLMDVDVR5JBQCFTG7V6W7H27FWGGSNRY446IFOPN4PU",
     "metadata": "CBUZJEW2EBI6TM2ZQNSCCL7EAIR6GV5C7TIR4NBSXAI432PYVVSKBUNZ",
@@ -13,11 +13,12 @@
     "treasury": "CDNSTE5KJ7WOCHNQHJMGOX7VEU6G37YLPJFIMGQCVGG6IKADHZE3ZQ22"
   },
   "addresses": {
-    "token": "CBGQUSYFZLJZKDLMDVDVR5JBQCFTG7V6W7H27FWGGSNRY446IFOPN4PU",
-    "metadata": "CBUZJEW2EBI6TM2ZQNSCCL7EAIR6GV5C7TIR4NBSXAI432PYVVSKBUNZ",
-    "auction": "CC6DXVKAWEGJAT3TAJNLUUEGWPMBFAZDCDKSHEVUSFLDO73TASHBASF7",
-    "governor": "CBO77WWAJEXAMT3LPJPB3VSQVQH5NZU6UNM4XNAVMHAAQMWMYJIDPHFW",
-    "treasury": "CDNSTE5KJ7WOCHNQHJMGOX7VEU6G37YLPJFIMGQCVGG6IKADHZE3ZQ22"
+    "token": "CBFQMB5G63V4QD27ONIVTK6JCP7AZNQRGNEOL72JTLSQVO5VXBPJMGJM",
+    "metadata": "CBVSNSKL6LYWZKBCVNZTCOHI7OOOUGMI7NA6CJ4ZS435TWQYGMND7U2Q",
+    "auction": "CDDXXDOH2ZP4PSB5FDFITUDOAULVB3ZIGJBQWXECPZ32GWVWWITXQ2HV",
+    "governor": "CDZJ5SISQ2NK6FVNWYOPFHEYI3FGFNJNMCVLBE7REWLYPJ4KU4M4ILPN",
+    "treasury": "CDNBGCJVBEPK733LJYSM6NLZMHAWRK5BOOFGBUTMGEQ2JZILY7AISSPB",
+    "marketplace": "CBDZOJCSOHIBLL63RXEI6W2AJFOWDB5XPUCMKGOGI2T5MYRB3FQEJCSL"
   },
   "config": {
     "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
@@ -30,8 +31,8 @@
     "metadata": {
       "projectUri": "https://test-dao-stellar-web.vercel.app",
       "description": "Unlock the possibilities of collective creation",
-      "contractImage": "https://test-dao-stellar-web.vercel.app/images/dao-logo.png",
-      "rendererBase": "https://test-dao-stellar-web.vercel.app/api/render/",
+      "contractImage": "https://builder-stellar-web.vercel.app/images/dao-logo.png",
+      "rendererBase": "https://builder-stellar-web.vercel.app/api/render/",
       "artwork": {
         "ipfs": {
           "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
@@ -87,7 +88,15 @@
       "timeBuffer": 300,
       "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
     },
+    "marketplace": {
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      "secondaryFeeBps": 250,
+      "primaryListingCount": 10,
+      "primaryPrice": "10000000000",
+      "primaryListingDuration": 2592000
+    },
     "governance": {
+      "queueDelay": 300,
       "votingDelay": 300,
       "votingPeriod": 300,
       "quorumBps": 1000,
@@ -112,41 +121,308 @@
   "createdAt": "2026-09-22T15:33:35.936Z",
   "transactions": {
     "createDao": {
-      "txHash": "b07c40e2e45682dada4f425c1377fcc68ae6301658991bfd868816b6fc950935",
-      "ledger": 4813513
+      "txHash": "9450397b7625454ad23e1a33ab38abec3365c0e7b651918166d92a2e271d4f22",
+      "ledger": 4981633
     },
     "acceptOwnership": {
       "txHash": "58d5488b5fd6d886db36009af910cbaa5c12a897ab456971c86d373782147ab4",
       "ledger": 4813515
     },
     "addProperties": {
-      "txHash": "9d87171214d863ec30fd117fa80cd2ca989a663611f5f77c44ad391369db2c79",
-      "ledger": 4813517
+      "txHash": "ec925a1eb120b3937502050169712151d3adc788b4883fbf08cc6fbcee633a2e",
+      "ledger": 4981504
     },
     "founderMints": [
       {
-        "txHash": "4dc304a73736bcc796ce80ba6fa469a784ef4296b1d2ab42b9bb3cdcd37b7fb7",
+        "txHash": "7ea0de0bf36ef3b38680f7182337fa86eb49446abc3ca4bd8ecf9ed93b29bec3",
         "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
-        "amount": 10,
-        "ledger": 4813519
+        "amount": 1,
+        "ledger": 4981444
       },
       {
-        "txHash": "6aeb71be5ede2d3ff2f9d5f1c8d1b312ed21200e167114993281128c300e82dd",
+        "txHash": "80e7b85f5ebec7404a1ad77da30c0a2b9f66f2fdcdcb6497873ca15ce095ae1e",
+        "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+        "amount": 1,
+        "ledger": 4981446
+      },
+      {
+        "txHash": "29056613135a1c186268b17020b03208e5e7881563173425b17c646a64f196db",
+        "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+        "amount": 1,
+        "ledger": 4981448
+      },
+      {
+        "txHash": "53ae54712d3ddee005ab25275f985a8b6b6b48a4313623dcf7251dd40a9beced",
+        "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+        "amount": 1,
+        "ledger": 4981450
+      },
+      {
+        "txHash": "48e9cde84719a8b26d71e38810065d3dcd0c31a549866b5b6477d8bee7a58784",
+        "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+        "amount": 1,
+        "ledger": 4981452
+      },
+      {
+        "txHash": "659060f6e7c1bb210212137bdf72f43bf6aab3be6e57baf9e1d35e5335aeec7d",
+        "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+        "amount": 1,
+        "ledger": 4981454
+      },
+      {
+        "txHash": "180096614c14891dbc0b6b01a587c5943ef2d2d8b219b822959765a8d40e320d",
+        "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+        "amount": 1,
+        "ledger": 4981456
+      },
+      {
+        "txHash": "b0f0c3389804e82f2927915acf0c5377a96e388ae9aa6ea07c7231b14e3165ef",
+        "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+        "amount": 1,
+        "ledger": 4981458
+      },
+      {
+        "txHash": "86c1a9bc7ecd1cdf94550ec84e171220430f9cede38dbf0db3307b830898dfb0",
+        "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+        "amount": 1,
+        "ledger": 4981460
+      },
+      {
+        "txHash": "7fc7cedd71a226a71d76ec9256653c131c231e81cdc2b3fa85fec761d0d895c5",
+        "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+        "amount": 1,
+        "ledger": 4981462
+      },
+      {
+        "txHash": "12121dec4558b1513a65a478c1a82f83f5424d19425f523df071b520347487e6",
         "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
-        "amount": 10,
-        "ledger": 4813521
+        "amount": 1,
+        "ledger": 4981464
       },
       {
-        "txHash": "f856b4312093b197a8d285c27bb48be63aa18db323b365149cd77776f6e02ebd",
+        "txHash": "997b50694f6515d56ce487dfcca93d4e825447ce5e83d228aaad42184eea8cf3",
+        "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
+        "amount": 1,
+        "ledger": 4981466
+      },
+      {
+        "txHash": "d04196079844e1c0360134e2cf36509af9fbc60bbe594a6600e2f6af792a828c",
+        "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
+        "amount": 1,
+        "ledger": 4981468
+      },
+      {
+        "txHash": "76bf69618b55550496a87b4b6bb56d6cc8328fa719bc8397496fa48c04d8277c",
+        "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
+        "amount": 1,
+        "ledger": 4981470
+      },
+      {
+        "txHash": "1839ac8be1163eca35f7d3a456d925dca4ebffa5887a969f90d55f9ec3fcafdf",
+        "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
+        "amount": 1,
+        "ledger": 4981472
+      },
+      {
+        "txHash": "fc54d16ccaf0f57c34a6104789a362641b8a5f63d94ef11d4fd3a30cac37f73f",
+        "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
+        "amount": 1,
+        "ledger": 4981474
+      },
+      {
+        "txHash": "93e0e018b02d3762752873addf6639c3f3382d26caae1407407a76bdcc801c96",
+        "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
+        "amount": 1,
+        "ledger": 4981476
+      },
+      {
+        "txHash": "f85513388a452d29ce34e302aec12fb992547fcc9ea65f2188370118b93cc08e",
+        "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
+        "amount": 1,
+        "ledger": 4981478
+      },
+      {
+        "txHash": "fd7b9547b37434eef4837c2fb24123dbd76fed7e46f074c50dbc7f22410139d0",
+        "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
+        "amount": 1,
+        "ledger": 4981480
+      },
+      {
+        "txHash": "9550596f5622fc0d1f0d97d221687aba5013f52e06a24b98ae898db699d68a3f",
+        "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
+        "amount": 1,
+        "ledger": 4981482
+      },
+      {
+        "txHash": "33641f34f8432747693cd13c73391daf50a1a850d9ee390b6f7e5d75926d93ae",
         "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
-        "amount": 10,
-        "ledger": 4813523
+        "amount": 1,
+        "ledger": 4981484
+      },
+      {
+        "txHash": "cee31517d898bef1205ddf33cb311f859e1469fc8d5f5330d41c3eff40d36b04",
+        "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
+        "amount": 1,
+        "ledger": 4981486
+      },
+      {
+        "txHash": "23d5f7827dd3229d2b8861e6ec060a28ba8d3be335075606e8145f38c1300705",
+        "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
+        "amount": 1,
+        "ledger": 4981488
+      },
+      {
+        "txHash": "20c3c22c10c6197d433100af67c3e523c1f67826a11779d169f88f34ded9636c",
+        "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
+        "amount": 1,
+        "ledger": 4981490
+      },
+      {
+        "txHash": "d209f9c66e55b558ec71bc42110efc7d14ace7be9bf0f364033bb64574fbe381",
+        "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
+        "amount": 1,
+        "ledger": 4981492
+      },
+      {
+        "txHash": "baf6c7ef2a6cb9fe383aafcbe7c787a2f60b1c88f343d1dad08fe1ae641128d6",
+        "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
+        "amount": 1,
+        "ledger": 4981494
+      },
+      {
+        "txHash": "0bc388038b062e740001765f99b690964a7e108e175e9afa3aca98c0d2179d6d",
+        "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
+        "amount": 1,
+        "ledger": 4981496
+      },
+      {
+        "txHash": "43a852161271da07d5a61d30d98231588680f580378553123d999c1a018f528c",
+        "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
+        "amount": 1,
+        "ledger": 4981498
+      },
+      {
+        "txHash": "74339012a32f0f9498ca8bc79ff50445cf449782b10208af4239c40e3e34781c",
+        "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
+        "amount": 1,
+        "ledger": 4981500
+      },
+      {
+        "txHash": "da4dac39975465f58ab27e383ffc8a0321b4ff119e59d024422c026a06a43a2a",
+        "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
+        "amount": 1,
+        "ledger": 4981502
       }
     ],
     "finalizeDao": {
       "txHash": "f96c42855b3a9dd6266f76588fbdb8c09602497d732482a62554abdfb79763ea",
       "ledger": 4813525
-    }
+    },
+    "new_project_uri": {
+      "txHash": "fd6bf6db5c8fe0392048dfdfd091ebb530ffae9df9c3376a7d81d702d8beab84",
+      "ledger": 4981506
+    },
+    "new_description": {
+      "txHash": "d03e48d45a2977e54d2704c148dc6d104ee8f963475f6d609445b9a276f333c2",
+      "ledger": 4981508
+    },
+    "new_contract_image": {
+      "txHash": "98a39b1252148a83dfe3cbaade92a045aca1e4679c1354101774a9ed62c6835a",
+      "ledger": 4981509
+    },
+    "new_renderer_base": {
+      "txHash": "da50f742be11aa75d1a3959299f12b0dd080a8ec689509629f50f43dc03bc7da",
+      "ledger": 4981511
+    },
+    "duration": {
+      "txHash": "f49c8ef6c8c6a31d584759abe720bdcca93118b4bea4b50f41c9b136fffc2fb7",
+      "ledger": 4981513
+    },
+    "reserve_price": {
+      "txHash": "8bbd51688939d1e0c6cd4401a26d247384a23adfd607f88f4edef5eb73a7bb4c",
+      "ledger": 4981515
+    },
+    "time_buffer": {
+      "txHash": "a56fcaf6d7ee913f90df77584009d911bca18339c53ffa8f662ad948e44bdb15",
+      "ledger": 4981517
+    },
+    "payment_token": {
+      "txHash": "b9437f77f253cf37f0185055337ea991981d85231f94510baaa30a221caf586a",
+      "ledger": 4981519
+    },
+    "marketplaceListings": [
+      {
+        "txHash": "26302b307820b9c2fcee2de61566f8e195c0733b0328e3b686bf223993b1b051",
+        "tokenId": 30,
+        "price": "10000000000",
+        "expiresAt": 1793523223,
+        "ledger": 4981551
+      },
+      {
+        "txHash": "983c6cd0a384e60518e08d2c0299e21245cd86a87e6f1cf438cf9501b6f47ead",
+        "tokenId": 31,
+        "price": "10000000000",
+        "expiresAt": 1793523223,
+        "ledger": 4981555
+      },
+      {
+        "txHash": "f55121ad8f7a7b2915814e8993bce2e73382b3be336c264185c22c1b0c534703",
+        "tokenId": 32,
+        "price": "10000000000",
+        "expiresAt": 1793523223,
+        "ledger": 4981559
+      },
+      {
+        "txHash": "564883e429abe811fd5ecff46c4667d2c75a5fb453c41208e582460acfc3c193",
+        "tokenId": 33,
+        "price": "10000000000",
+        "expiresAt": 1793523223,
+        "ledger": 4981563
+      },
+      {
+        "txHash": "db3188a9cd36770746a6d4c12d3846fedbd48b96e4b3cb89d41fe96308181ee0",
+        "tokenId": 34,
+        "price": "10000000000",
+        "expiresAt": 1793523223,
+        "ledger": 4981567
+      },
+      {
+        "txHash": "fe34ba32d8238b58f82751f8c1886e9b9dfcd691f999c63a4dd1eea8a92d2d73",
+        "tokenId": 35,
+        "price": "10000000000",
+        "expiresAt": 1793523223,
+        "ledger": 4981571
+      },
+      {
+        "txHash": "dd732f934fff017e671466e187a8f2ed323f4715c5b644014cafd58977b4054f",
+        "tokenId": 36,
+        "price": "10000000000",
+        "expiresAt": 1793523223,
+        "ledger": 4981575
+      },
+      {
+        "txHash": "af302ce94e87b01eb64136867f1f2ce24c6695ec0d15dfa6c9a167f16ddffda5",
+        "tokenId": 37,
+        "price": "10000000000",
+        "expiresAt": 1793523223,
+        "ledger": 4981579
+      },
+      {
+        "txHash": "69e235bac06c9c9595418e50b9950d1284707f4a1d82e80d53de71f87d571046",
+        "tokenId": 38,
+        "price": "10000000000",
+        "expiresAt": 1793523223,
+        "ledger": 4981583
+      },
+      {
+        "txHash": "99c67ea62c149c98f9e10e88c7d1869497ced1f179ef730fe2a04794ebdbc35e",
+        "tokenId": 39,
+        "price": "10000000000",
+        "expiresAt": 1793523223,
+        "ledger": 4981587
+      }
+    ]
   },
-  "deploymentLedger": 4813513
+  "deploymentLedger": 4813515,
+  "updatedAt": "2026-10-02T09:02:35.836Z"
 }
