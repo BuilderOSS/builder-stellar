@@ -4,7 +4,8 @@ use soroban_sdk::{
 };
 use stellar_access::ownable::{set_owner, Ownable, OwnableStorageKey};
 use stellar_governance::votes::{
-    emit_delegate_changed as emit_library_delegate_changed, get_delegate, Votes, VotesStorageKey,
+    emit_delegate_changed as emit_library_delegate_changed, get_delegate, Checkpoint, Votes,
+    VotesStorageKey,
 };
 use stellar_macros::only_owner;
 use stellar_tokens::non_fungible::{votes::NonFungibleVotes, Base};
@@ -338,6 +339,8 @@ impl DaoTokenContract {
     /// power checkpoints for both sender and receiver delegates.
     pub fn transfer(e: &Env, from: &Address, to: &Address, token_id: u32) {
         Self::ensure_self_delegate(e, to);
+        Self::preflight_checkpoint_writes(e, from);
+        Self::preflight_checkpoint_writes(e, to);
         NonFungibleVotes::transfer(e, from, to, token_id);
         // Note: OpenZeppelin's NonFungibleVotes::transfer() automatically emits standard Transfer event
     }
@@ -364,6 +367,8 @@ impl DaoTokenContract {
     /// power checkpoints for both sender and receiver delegates.
     pub fn transfer_from(e: &Env, spender: &Address, from: &Address, to: &Address, token_id: u32) {
         Self::ensure_self_delegate(e, to);
+        Self::preflight_checkpoint_writes(e, from);
+        Self::preflight_checkpoint_writes(e, to);
         NonFungibleVotes::transfer_from(e, spender, from, to, token_id);
         // Note: OpenZeppelin's NonFungibleVotes::transfer_from() automatically emits standard Transfer event
     }
@@ -471,23 +476,18 @@ impl DaoTokenContract {
             .instance()
             .get::<VotesStorageKey, u32>(&VotesStorageKey::NumTotalSupplyCheckpoints)
             .unwrap_or(0);
-        let _ = e
-            .storage()
-            .persistent()
-            .has(&VotesStorageKey::TotalSupplyCheckpoint(total_supply_index));
+        let _ = e.storage().persistent().get::<VotesStorageKey, Checkpoint>(
+            &VotesStorageKey::TotalSupplyCheckpoint(total_supply_index),
+        );
 
         let delegate_index = e
             .storage()
             .persistent()
             .get::<VotesStorageKey, u32>(&VotesStorageKey::NumCheckpoints(account.clone()))
             .unwrap_or(0);
-        let _ = e
-            .storage()
-            .persistent()
-            .has(&VotesStorageKey::DelegateCheckpoint(
-                account.clone(),
-                delegate_index,
-            ));
+        let _ = e.storage().persistent().get::<VotesStorageKey, Checkpoint>(
+            &VotesStorageKey::DelegateCheckpoint(account.clone(), delegate_index),
+        );
     }
 
     /// Validates that an address has permission to mint tokens.
