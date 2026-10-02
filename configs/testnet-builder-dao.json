@@ -47,7 +47,15 @@
     "timeBuffer": 300,
     "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
   },
+  "marketplace": {
+    "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+    "secondaryFeeBps": 250,
+    "primaryListingCount": 10,
+    "primaryPrice": "10000000000",
+    "primaryListingDuration": 2592000
+  },
   "governance": {
+    "queueDelay": 300,
     "votingDelay": 300,
     "votingPeriod": 300,
     "quorumBps": 1000,

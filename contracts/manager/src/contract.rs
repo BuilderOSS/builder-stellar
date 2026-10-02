@@ -26,12 +26,7 @@ const MAX_STRING_LENGTH: u32 = 256;
 const MIN_AUCTION_DURATION: u64 = 300;
 const MIN_RESERVE_PRICE: i128 = 1_000;
 const MIN_GOVERNANCE_DELAY: u64 = 300;
-const DEFAULT_TIME_BUFFER: u64 = 60;
-const DEFAULT_QUORUM_BPS: u32 = 1;
 const MAX_BPS: u32 = 10_000;
-const DEFAULT_QUEUE_DELAY: u32 = 300;
-const DEFAULT_VOTING_PERIOD: u32 = 600;
-const DEFAULT_SECONDARY_FEE_BPS: u32 = 250;
 
 #[contractimpl]
 impl ManagerContract {

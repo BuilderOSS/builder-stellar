@@ -24,6 +24,7 @@ fn setup() -> (Env, DaoTokenContractClient<'static>, Address) {
             metadata,
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
         ),
     );
     let client = DaoTokenContractClient::new(&e, &contract_id);
@@ -44,6 +45,7 @@ fn setup_no_auth() -> (Env, DaoTokenContractClient<'static>, Address) {
             metadata,
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
         ),
     );
     let client = DaoTokenContractClient::new(&e, &contract_id);
@@ -60,6 +62,19 @@ fn mint_defaults_to_self_delegate() {
     assert_eq!(client.balance(&alice), 1);
     assert_eq!(client.get_delegate(&alice), Some(alice.clone()));
     assert_eq!(client.get_votes(&alice), 1);
+}
+
+#[test]
+fn consecutive_mints_create_new_checkpoints() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+
+    client.mint(&owner, &alice);
+    client.mint(&owner, &alice);
+
+    assert_eq!(client.balance(&alice), 2);
+    assert_eq!(client.get_votes(&alice), 2);
+    assert_eq!(client.get_total_supply(), 2);
 }
 
 #[test]

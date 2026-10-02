@@ -1,545 +1,313 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { enrichTransactionMetadata, runQuiet } from "./lib.mjs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { enrichTransactionMetadata, runQuiet } from './lib.mjs';
 
 const args = process.argv.slice(2);
-const daoConfigPath = args[0];
-const networkConfigPath = args[1];
+const phase = args[0];
+const daoConfigPath = args[1];
+const networkConfigPath = args[2];
+const phases = ['create_dao', 'admin_checklist', 'launch_dao'];
 
-if (!daoConfigPath || !networkConfigPath) {
+if (!phases.includes(phase) || !daoConfigPath || !networkConfigPath) {
   throw new Error(
-    "Usage: node scripts/deploy-dao.mjs <dao-config.json> <network-config.json>",
+    'Usage: node scripts/deploy-dao.mjs <create_dao|admin_checklist|launch_dao> <dao-config.json> <network-config.json>'
   );
 }
 
-// Load DAO configuration
-if (!existsSync(daoConfigPath)) {
-  throw new Error(`DAO config file not found: ${daoConfigPath}`);
+function loadJson(path, label) {
+  if (!existsSync(path)) throw new Error(`${label} file not found: ${path}`);
+  return JSON.parse(readFileSync(path, 'utf8'));
 }
-const daoConfig = JSON.parse(readFileSync(daoConfigPath, "utf8"));
 
-// Load network configuration (same as used for deploy-manager.mjs)
-if (!existsSync(networkConfigPath)) {
-  throw new Error(`Network config file not found: ${networkConfigPath}`);
-}
-const networkConfig = JSON.parse(readFileSync(networkConfigPath, "utf8"));
-
+const daoConfig = loadJson(daoConfigPath, 'DAO config');
+const networkConfig = loadJson(networkConfigPath, 'Network config');
 const networkName = networkConfig.network;
-const identityName =
-  process.env.DEPLOY_IDENTITY?.trim() || `${networkName}-admin`;
+const identityName = process.env.DEPLOY_IDENTITY?.trim() || `${networkName}-admin`;
 const managerArtifactPath = `deploys/${networkConfig.label}-${networkName}-manager.json`;
 const daoArtifactPath = `deploys/${networkConfig.label}-${networkName}-dao-${daoConfig.nonce}.json`;
 
-// Load Manager deployment artifact
 if (!existsSync(managerArtifactPath)) {
   throw new Error(
     `Manager deployment artifact not found: ${managerArtifactPath}\n` +
-      `Please run: node scripts/deploy-manager.mjs ${networkConfigPath}`,
+      `Please run: node scripts/deploy-manager.mjs ${networkConfigPath}`
   );
 }
-const managerArtifact = JSON.parse(readFileSync(managerArtifactPath, "utf8"));
+
+const managerArtifact = loadJson(managerArtifactPath, 'Manager deployment artifact');
+if (managerArtifact.network !== networkName || managerArtifact.label !== networkConfig.label) {
+  throw new Error(`Manager artifact ${managerArtifactPath} does not match ${networkName}/${networkConfig.label}`);
+}
 const managerAddress = managerArtifact.manager;
-
-if (
-  managerArtifact.network !== networkName ||
-  managerArtifact.label !== networkConfig.label
-) {
-  throw new Error(
-    `Manager artifact ${managerArtifactPath} does not match ${networkName}/${networkConfig.label}`,
-  );
-}
-
 if (!managerAddress || !managerArtifact.implementations) {
-  throw new Error(
-    `Manager artifact ${managerArtifactPath} must contain manager and implementations`,
-  );
+  throw new Error(`Manager artifact ${managerArtifactPath} must contain manager and implementations`);
 }
 
-for (const implementation of [
-  "token",
-  "metadata",
-  "auction",
-  "governor",
-  "treasury",
-  "marketplace",
-]) {
-  if (!managerArtifact.implementations[implementation]) {
-    throw new Error(
-      `Manager artifact ${managerArtifactPath} is missing ${implementation} implementation`,
-    );
-  }
-}
-
-// Validate DAO config
 const required = [
-  ["deployer", daoConfig.deployer],
-  ["nonce", daoConfig.nonce],
-  ["token.name", daoConfig.token?.name],
-  ["token.symbol", daoConfig.token?.symbol],
-  ["token.uri", daoConfig.token?.uri],
-  ["metadata.projectUri", daoConfig.metadata?.projectUri],
-  ["metadata.description", daoConfig.metadata?.description],
-  ["metadata.contractImage", daoConfig.metadata?.contractImage],
-  ["metadata.rendererBase", daoConfig.metadata?.rendererBase],
-  ["metadata.artwork.ipfs.baseUri", daoConfig.metadata?.artwork?.ipfs?.baseUri],
-  [
-    "metadata.artwork.ipfs.extension",
-    daoConfig.metadata?.artwork?.ipfs?.extension,
-  ],
-  ["auction.duration", daoConfig.auction?.duration],
-  ["auction.reservePrice", daoConfig.auction?.reservePrice],
-  ["auction.timeBuffer", daoConfig.auction?.timeBuffer],
-  ["auction.paymentAsset", daoConfig.auction?.paymentAsset],
-  ["governance.votingDelay", daoConfig.governance?.votingDelay],
-  ["governance.votingPeriod", daoConfig.governance?.votingPeriod],
-  ["governance.quorumBps", daoConfig.governance?.quorumBps],
-  [
-    "governance.proposalThresholdBps",
-    daoConfig.governance?.proposalThresholdBps,
-  ],
-  ["launchAdmin", daoConfig.launchAdmin],
+  ['deployer', daoConfig.deployer],
+  ['nonce', daoConfig.nonce],
+  ['token.name', daoConfig.token?.name],
+  ['token.symbol', daoConfig.token?.symbol],
+  ['token.uri', daoConfig.token?.uri],
+  ['metadata.projectUri', daoConfig.metadata?.projectUri],
+  ['metadata.description', daoConfig.metadata?.description],
+  ['metadata.contractImage', daoConfig.metadata?.contractImage],
+  ['metadata.rendererBase', daoConfig.metadata?.rendererBase],
+  ['metadata.artwork.ipfs.baseUri', daoConfig.metadata?.artwork?.ipfs?.baseUri],
+  ['metadata.artwork.ipfs.extension', daoConfig.metadata?.artwork?.ipfs?.extension],
+  ['auction.duration', daoConfig.auction?.duration],
+  ['auction.reservePrice', daoConfig.auction?.reservePrice],
+  ['auction.timeBuffer', daoConfig.auction?.timeBuffer],
+  ['auction.paymentAsset', daoConfig.auction?.paymentAsset],
+  ['governance.votingDelay', daoConfig.governance?.votingDelay],
+  ['governance.votingPeriod', daoConfig.governance?.votingPeriod],
+  ['governance.quorumBps', daoConfig.governance?.quorumBps],
+  ['governance.proposalThresholdBps', daoConfig.governance?.proposalThresholdBps],
+  ['launchAdmin', daoConfig.launchAdmin]
 ];
+const missing = required.find(([, value]) => value === undefined || value === null || value === '');
+if (missing) throw new Error(`DAO config ${daoConfigPath} must define ${missing[0]}`);
 
-const missing = required.find(
-  ([, value]) => value === undefined || value === null,
-);
-if (missing) {
-  throw new Error(`DAO config ${daoConfigPath} must define ${missing[0]}`);
-}
-
-const artworkProperties = daoConfig.metadata.artwork?.properties;
-if (!Array.isArray(artworkProperties) || artworkProperties.length === 0) {
-  throw new Error(
-    `DAO config ${daoConfigPath} must define metadata.artwork.properties`,
-  );
-}
-if (artworkProperties.length > 16) {
-  throw new Error("DAO artwork cannot contain more than 16 properties");
+const artworkProperties = daoConfig.metadata.artwork.properties;
+if (!Array.isArray(artworkProperties) || artworkProperties.length === 0 || artworkProperties.length > 16) {
+  throw new Error('DAO artwork must define between 1 and 16 properties');
 }
 for (const [index, property] of artworkProperties.entries()) {
-  if (
-    !property.name ||
-    !Array.isArray(property.items) ||
-    property.items.length === 0
-  ) {
-    throw new Error(
-      `DAO artwork property ${index} must define a name and at least one item`,
-    );
+  if (!property.name || !Array.isArray(property.items) || property.items.length === 0) {
+    throw new Error(`DAO artwork property ${index} must define a name and at least one item`);
   }
 }
-const launchAuction = daoConfig.auction.enabled !== false;
-const launchMarketplace = daoConfig.marketplace?.enabled !== false;
-const founderMintBatchSize = 20;
-
-// Predict DAO addresses before creation
-console.log("\n=== Predicting DAO Addresses ===\n");
-const predictResult = runQuiet("stellar", [
-  "contract",
-  "invoke",
-  "--id",
-  managerAddress,
-  "--source-account",
-  identityName,
-  "--network",
-  networkName,
-  "--",
-  "predict_addresses",
-  "--deployer",
-  daoConfig.deployer,
-  "--nonce",
-  String(daoConfig.nonce),
-]);
-
-if (!predictResult.ok) {
-  console.error("Predict output:", predictResult.stdout);
-  console.error("Predict error:", predictResult.stderr);
-  throw new Error("Failed to predict DAO addresses");
+if (!Array.isArray(daoConfig.founders) || daoConfig.founders.length !== 3) {
+  throw new Error('DAO config must define exactly three founders');
 }
 
-console.log("Predicted addresses:");
-console.log(predictResult.stdout);
+const marketplaceConfig = daoConfig.marketplace ?? {};
+const queueDelay = daoConfig.governance.queueDelay ?? 300;
+const marketplacePaymentAsset = marketplaceConfig.paymentAsset ?? daoConfig.auction.paymentAsset;
+const listingCount = marketplaceConfig.primaryListingCount ?? 10;
+const listingPrice = marketplaceConfig.primaryPrice ?? '10000000000';
+const listingDuration = marketplaceConfig.primaryListingDuration ?? 30 * 24 * 60 * 60;
+const resumeAdmin = process.env.DEPLOY_DAO_RESUME === '1';
 
-const predictedAddresses = extractDaoAddresses(
-  predictResult.stdout + predictResult.stderr,
-);
-if (!predictedAddresses) {
-  throw new Error(
-    "Manager prediction succeeded but DaoAddresses could not be parsed from Stellar CLI output",
-  );
-}
-
-const createParams = JSON.stringify({
-  deployer: daoConfig.deployer,
-  nonce: daoConfig.nonce,
-  launch_admin: daoConfig.launchAdmin,
-});
-
-function writeDaoArtifact({
-  status,
-  predictedAddresses,
-  addresses,
-  output,
-  error,
-  transactions = {},
-}) {
-  const txHashMatch = output?.match(/Signing transaction:\s*([a-f0-9]{64})/i);
-  let transaction = txHashMatch ? { txHash: txHashMatch[1] } : null;
-
-  if (transaction) {
-    try {
-      transaction = enrichTransactionMetadata(transaction, networkName);
-    } catch (ledgerError) {
-      transaction.ledgerError =
-        ledgerError instanceof Error
-          ? ledgerError.message
-          : String(ledgerError);
-    }
+function invoke(id, method, params = {}) {
+  const result = runQuiet('stellar', [
+    'contract', 'invoke', '--id', id, '--source-account', identityName,
+    '--network', networkName, '--', method,
+    ...Object.entries(params).flatMap(([name, value]) => [`--${name}`, typeof value === 'string' ? value : JSON.stringify(value)])
+  ], { env: { ...process.env, STELLAR_NO_CACHE: 'true' } });
+  if (!result.ok) {
+    console.error(`${method} output:`, result.stdout);
+    console.error(`${method} error:`, result.stderr);
+    throw new Error(`Failed to invoke ${method}`);
   }
+  return result.stdout + result.stderr;
+}
 
-  const artifact = {
-    status,
-    network: networkName,
-    label: networkConfig.label,
-    deployer: daoConfig.deployer,
-    nonce: daoConfig.nonce,
-    manager: managerAddress,
-    predictedAddresses,
-    addresses: addresses ?? null,
-    config: daoConfig,
-    createdAt: new Date().toISOString(),
+function transaction(output, extra = {}) {
+  const match = output.match(/Signing transaction:\s*([a-f0-9]{64})/i);
+  if (!match) return null;
+  try {
+    return enrichTransactionMetadata({ txHash: match[1], ...extra }, networkName);
+  } catch (error) {
+    return { txHash: match[1], ...extra, ledgerError: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function addressesFromOutput(output) {
+  const normalized = output.replace(/\\"/g, '"');
+  const aliases = {
+    token: ['token', 'token_address'], metadata: ['metadata', 'metadata_address'],
+    auction: ['auction', 'auction_address'], governor: ['governor', 'governor_address'],
+    treasury: ['treasury', 'treasury_address'], marketplace: ['marketplace', 'marketplace_address']
   };
-
-  const allTransactions = transaction
-    ? { createDao: transaction, ...transactions }
-    : transactions;
-  if (Object.keys(allTransactions).length > 0) {
-    artifact.transactions = allTransactions;
-    const ledgers = Object.values(allTransactions)
-      .map((metadata) => metadata?.ledger)
-      .filter((ledger) => Number.isFinite(ledger));
-    if (ledgers.length > 0) {
-      artifact.deploymentLedger = Math.min(...ledgers);
+  function find(value) {
+    if (!value || typeof value !== 'object') return null;
+    const result = {};
+    for (const [name, keys] of Object.entries(aliases)) {
+      const key = keys.find((candidate) => typeof value[candidate] === 'string');
+      if (key) result[name] = value[key];
+    }
+    if (Object.keys(result).length === Object.keys(aliases).length) return result;
+    return Object.values(value).map(find).find(Boolean) ?? null;
+  }
+  for (const match of normalized.matchAll(/\{[^{}]*\}/g)) {
+    try {
+      const result = find(JSON.parse(match[0]));
+      if (result) return result;
+    } catch {
+      // Ignore diagnostic objects printed by the Stellar CLI.
     }
   }
+  return null;
+}
 
-  if (error) {
-    artifact.error = error instanceof Error ? error.message : String(error);
+function loadDaoArtifact() {
+  if (!existsSync(daoArtifactPath)) {
+    throw new Error(`DAO artifact not found: ${daoArtifactPath}. Run create_dao first.`);
   }
+  const artifact = loadJson(daoArtifactPath, 'DAO artifact');
+  if (!artifact.addresses?.token || !artifact.addresses.marketplace) {
+    throw new Error(`DAO artifact ${daoArtifactPath} does not contain DAO addresses`);
+  }
+  return artifact;
+}
 
-  mkdirSync("deploys", { recursive: true });
+function writeArtifact({ status, addresses, transactions = {}, error }) {
+  const previous = existsSync(daoArtifactPath) ? loadJson(daoArtifactPath, 'DAO artifact') : {};
+  const allTransactions = { ...(previous.transactions ?? {}), ...transactions };
+  const ledgers = Object.values(allTransactions).flatMap((value) => Array.isArray(value) ? value : [value])
+    .map((value) => value?.ledger).filter(Number.isFinite);
+  const artifact = {
+    ...previous, status, network: networkName, label: networkConfig.label,
+    deployer: daoConfig.deployer, nonce: daoConfig.nonce, manager: managerAddress,
+    addresses: addresses ?? previous.addresses ?? null, config: daoConfig,
+    updatedAt: new Date().toISOString()
+  };
+  if (Object.keys(allTransactions).length > 0) artifact.transactions = allTransactions;
+  if (ledgers.length > 0) artifact.deploymentLedger = Math.min(...ledgers);
+  if (error) artifact.error = error instanceof Error ? error.message : String(error);
+  mkdirSync('deploys', { recursive: true });
   writeFileSync(daoArtifactPath, `${JSON.stringify(artifact, null, 2)}\n`);
   console.log(`DAO artifact written to ${daoArtifactPath}`);
 }
 
-// Create the DAO
-console.log("\n=== Creating DAO ===\n");
-const createResult = runQuiet("stellar", [
-  "contract",
-  "invoke",
-  "--id",
-  managerAddress,
-  "--source-account",
-  identityName,
-  "--network",
-  networkName,
-  "--",
-  "create_dao",
-  "--params",
-  createParams,
-]);
-
-if (!createResult.ok) {
-  console.error("Create DAO output:", createResult.stdout);
-  console.error("Create DAO error:", createResult.stderr);
-  writeDaoArtifact({
-    status: "failed",
-    predictedAddresses,
-    output: createResult.stdout + createResult.stderr,
-    error: createResult.stderr || createResult.stdout || "DAO creation failed",
-  });
-  throw new Error("Failed to create DAO");
-}
-
-console.log(createResult.stdout);
-console.error(createResult.stderr);
-
-// Parse the result to extract DAO addresses
-// The stellar CLI returns the result in the output
-function extractDaoAddresses(output) {
-  const normalized = output.replace(/\\"/g, '"');
-  const candidates = [];
-
-  for (const match of normalized.matchAll(/\{[^{}]*\}/g)) {
-    try {
-      candidates.push(JSON.parse(match[0]));
-    } catch {
-      // Stellar CLI output may contain non-JSON diagnostic lines.
+function initialConfig() {
+  const u32 = (value) => ({ u32: Number(value) });
+  const u64 = (value) => ({ u64: String(value) });
+  const u128 = (value) => ({ u128: String(value) });
+  const i128 = (value) => ({ i128: String(value) });
+  return {
+    token_name: daoConfig.token.name,
+    token_symbol: daoConfig.token.symbol,
+    token_uri: daoConfig.token.uri,
+    project_uri: daoConfig.metadata.projectUri,
+    description: daoConfig.metadata.description,
+    contract_image: daoConfig.metadata.contractImage,
+    renderer_base: daoConfig.metadata.rendererBase,
+    governance: {
+      voting_delay: u32(daoConfig.governance.votingDelay),
+      voting_period: u32(daoConfig.governance.votingPeriod),
+      queue_delay: u32(queueDelay),
+      proposal_threshold: u128(daoConfig.governance.proposalThresholdBps),
+      quorum_bps: u32(daoConfig.governance.quorumBps)
+    },
+    auction: {
+      duration: u64(daoConfig.auction.duration),
+      reserve_price: i128(daoConfig.auction.reservePrice),
+      time_buffer: u64(daoConfig.auction.timeBuffer),
+      payment_asset: daoConfig.auction.paymentAsset
+    },
+    marketplace: {
+      payment_asset: marketplacePaymentAsset,
+      secondary_fee_bps: u32(marketplaceConfig.secondaryFeeBps ?? 250)
     }
-  }
-
-  const keys = {
-    token: ["token", "token_address"],
-    metadata: ["metadata", "metadata_address"],
-    auction: ["auction", "auction_address"],
-    governor: ["governor", "governor_address"],
-    treasury: ["treasury", "treasury_address"],
   };
-
-  function findObject(value) {
-    if (!value || typeof value !== "object") return null;
-    const result = {};
-    for (const [name, aliases] of Object.entries(keys)) {
-      const key = aliases.find((alias) => typeof value[alias] === "string");
-      if (key) result[name] = value[key];
-    }
-    if (Object.keys(result).length === 5) return result;
-    for (const child of Object.values(value)) {
-      const found = findObject(child);
-      if (found) return found;
-    }
-    return null;
-  }
-
-  return candidates.map(findObject).find(Boolean) ?? null;
 }
 
-const createOutput = createResult.stdout + createResult.stderr;
-const daoAddresses = extractDaoAddresses(createOutput);
-if (!daoAddresses) {
-  throw new Error(
-    "DAO creation succeeded but DaoAddresses could not be parsed from Stellar CLI output",
-  );
-}
+let artifact;
+let addresses;
+let transactions = {};
 
-for (const name of Object.keys(predictedAddresses)) {
-  if (predictedAddresses[name] !== daoAddresses[name]) {
-    throw new Error(
-      `Predicted ${name} address does not match created DAO address`,
-    );
-  }
-}
-
-const artworkNames = artworkProperties.map((property) => property.name);
-const artworkItems = artworkProperties.flatMap((property, propertyId) =>
-  property.items.map((name) => ({
-    property_id: propertyId,
-    name,
-    is_new_property: true,
-  })),
-);
-const artworkIpfs = {
-  base_uri: daoConfig.metadata.artwork.ipfs.baseUri,
-  extension: daoConfig.metadata.artwork.ipfs.extension,
-};
-const postCreationTransactions = {};
-
-console.log("\n=== Accepting Token Ownership ===\n");
-const ownershipResult = runQuiet("stellar", [
-  "contract",
-  "invoke",
-  "--id",
-  daoAddresses.token,
-  "--source-account",
-  identityName,
-  "--network",
-  networkName,
-  "--",
-  "accept_ownership",
-]);
-const ownershipOutput = ownershipResult.stdout + ownershipResult.stderr;
-if (!ownershipResult.ok) {
-  writeDaoArtifact({
-    status: "partial",
-    predictedAddresses,
-    addresses: daoAddresses,
-    output: createOutput,
-    transactions: postCreationTransactions,
-    error: ownershipResult.stderr || ownershipResult.stdout,
+if (phase === 'create_dao') {
+  console.log('\n=== Creating DAO (paused, no members or listings) ===\n');
+  const output = invoke(managerAddress, 'create_dao', {
+    params: JSON.stringify({ deployer: daoConfig.deployer, nonce: { u64: String(daoConfig.nonce) }, launch_admin: daoConfig.launchAdmin, initial_config: initialConfig() })
   });
-  throw new Error("DAO created but token ownership acceptance failed");
-}
-const ownershipTxHash = ownershipOutput.match(
-  /Signing transaction:\s*([a-f0-9]{64})/i,
-);
-if (ownershipTxHash) {
-  postCreationTransactions.acceptOwnership = enrichTransactionMetadata(
-    { txHash: ownershipTxHash[1] },
-    networkName,
-  );
+  addresses = addressesFromOutput(output);
+  if (!addresses) throw new Error('DAO creation succeeded but DAO addresses could not be parsed');
+  transactions.createDao = transaction(output);
+  writeArtifact({ status: 'created', addresses, transactions });
+  console.log('Create phase complete. Run admin_checklist next.');
+  process.exit(0);
 }
 
-console.log("\n=== Adding Metadata Properties ===\n");
-const propertiesResult = runQuiet("stellar", [
-  "contract",
-  "invoke",
-  "--id",
-  daoAddresses.metadata,
-  "--source-account",
-  identityName,
-  "--network",
-  networkName,
-  "--",
-  "add_properties",
-  "--names",
-  JSON.stringify(artworkNames),
-  "--items",
-  JSON.stringify(artworkItems),
-  "--ipfs_group",
-  JSON.stringify(artworkIpfs),
-]);
-const propertiesOutput = propertiesResult.stdout + propertiesResult.stderr;
-if (!propertiesResult.ok) {
-  writeDaoArtifact({
-    status: "partial",
-    predictedAddresses,
-    addresses: daoAddresses,
-    output: createOutput,
-    transactions: postCreationTransactions,
-    error: propertiesResult.stderr || propertiesResult.stdout,
-  });
-  throw new Error("DAO created but metadata properties failed");
-}
-const propertiesTxHash = propertiesOutput.match(
-  /Signing transaction:\s*([a-f0-9]{64})/i,
-);
-if (propertiesTxHash) {
-  postCreationTransactions.addProperties = enrichTransactionMetadata(
-    { txHash: propertiesTxHash[1] },
-    networkName,
-  );
-}
+artifact = loadDaoArtifact();
+addresses = artifact.addresses;
 
-console.log("\n=== Minting Founder Allocations ===\n");
-const founderMintTransactions = [];
-for (const founder of daoConfig.founders ?? []) {
-  let remaining = founder.amount;
-  while (remaining > 0) {
-    // Keep batches below the contract maximum to leave room for metadata hooks
-    // and per-token events in Soroban's resource budget.
-    const amount = Math.min(remaining, founderMintBatchSize);
-    const mintResult = runQuiet("stellar", [
-      "contract",
-      "invoke",
-      "--id",
-      daoAddresses.token,
-      "--source-account",
-      identityName,
-      "--network",
-      networkName,
-      "--",
-      "batch_mint",
-      "--minter",
-      daoConfig.launchAdmin,
-      "--to",
-      founder.address,
-      "--amount",
-      String(amount),
-    ]);
-    const mintOutput = mintResult.stdout + mintResult.stderr;
-    if (!mintResult.ok) {
-      writeDaoArtifact({
-        status: "partial",
-        predictedAddresses,
-        addresses: daoAddresses,
-        output: createOutput,
-        transactions: {
-          ...postCreationTransactions,
-          founderMints: founderMintTransactions,
-        },
-        error: mintResult.stderr || mintResult.stdout,
-      });
-      throw new Error(
-        `DAO created but founder mint failed for ${founder.address}`,
-      );
-    }
+if (phase === 'admin_checklist') {
+  console.log('\n=== Admin Checklist ===\n');
 
-    const mintTxHash = mintOutput.match(
-      /Signing transaction:\s*([a-f0-9]{64})/i,
-    );
-    if (mintTxHash) {
-      const transaction = { txHash: mintTxHash[1], address: founder.address, amount };
-      try {
-        founderMintTransactions.push(enrichTransactionMetadata(transaction, networkName));
-      } catch (ledgerError) {
-        founderMintTransactions.push({
-          ...transaction,
-          ledgerError: ledgerError instanceof Error ? ledgerError.message : String(ledgerError),
+  if (!resumeAdmin) {
+    const founderMints = [];
+    for (const founder of daoConfig.founders) {
+      let remaining = founder.amount;
+      while (remaining > 0) {
+        const amount = 1;
+        const output = invoke(addresses.token, 'mint', {
+          minter: daoConfig.launchAdmin,
+          to: founder.address
         });
+        founderMints.push(transaction(output, { address: founder.address, amount }));
+        remaining -= amount;
       }
     }
-    remaining -= amount;
+    transactions.founderMints = founderMints;
+
+    const names = artworkProperties.map(({ name }) => name);
+    const items = artworkProperties.flatMap((property, propertyId) => property.items.map((name) => ({ property_id: propertyId, name, is_new_property: true })));
+    transactions.addProperties = transaction(invoke(addresses.metadata, 'add_properties', {
+      names: JSON.stringify(names), items: JSON.stringify(items), ipfs_group: JSON.stringify({ base_uri: daoConfig.metadata.artwork.ipfs.baseUri, extension: daoConfig.metadata.artwork.ipfs.extension })
+    }));
+
+    for (const [method, name, value] of [
+      ['update_project_uri', 'new_project_uri', daoConfig.metadata.projectUri],
+      ['update_description', 'new_description', daoConfig.metadata.description],
+      ['update_contract_image', 'new_contract_image', daoConfig.metadata.contractImage],
+      ['update_renderer_base', 'new_renderer_base', daoConfig.metadata.rendererBase]
+    ]) transactions[name] = transaction(invoke(addresses.metadata, method, { [name]: value }));
+
+    for (const [method, name, value] of [
+      ['set_duration', 'duration', daoConfig.auction.duration],
+      ['set_reserve_price', 'reserve_price', String(daoConfig.auction.reservePrice)],
+      ['set_time_buffer', 'time_buffer', daoConfig.auction.timeBuffer],
+      ['set_payment_token', 'payment_token', daoConfig.auction.paymentAsset]
+    ]) transactions[name] = transaction(invoke(addresses.auction, method, { [name]: value }));
+
+    console.log('Governance configuration:', JSON.stringify({ ...daoConfig.governance, queueDelay }, null, 2));
+    console.log('Marketplace configuration:', JSON.stringify({ paymentAsset: marketplacePaymentAsset, secondaryFeeBps: marketplaceConfig.secondaryFeeBps ?? 250 }, null, 2));
+    invoke(addresses.token, 'set_mint_authority', { authority: addresses.marketplace, enabled: true });
+    invoke(addresses.marketplace, 'set_payment_asset', { payment_asset: marketplacePaymentAsset });
+    invoke(addresses.marketplace, 'set_secondary_fee_bps', { fee_bps: marketplaceConfig.secondaryFeeBps ?? 250 });
+    invoke(addresses.marketplace, 'unpause');
   }
-}
-if (founderMintTransactions.length > 0) {
-  postCreationTransactions.founderMints = founderMintTransactions;
+
+  const listings = [];
+  const expiresAt = Math.floor(Date.now() / 1000) + listingDuration;
+  let nextTokenId = daoConfig.founders.reduce((total, founder) => total + founder.amount, 0);
+  let remainingListings = listingCount;
+  while ((!resumeAdmin || process.env.DEPLOY_DAO_RESUME_MINT === '1') && remainingListings > 0) {
+    const amount = 1;
+    invoke(addresses.token, 'mint', {
+      minter: daoConfig.launchAdmin,
+      to: daoConfig.launchAdmin
+    });
+    remainingListings -= amount;
+  }
+  for (let index = 0; index < listingCount; index += 1) {
+    invoke(addresses.token, 'approve', {
+      owner: daoConfig.launchAdmin,
+      spender: addresses.marketplace,
+      token_id: nextTokenId + index,
+      expiration_ledger: 5100000
+    });
+    const output = invoke(addresses.marketplace, 'list', {
+      token_id: nextTokenId + index,
+      seller: daoConfig.launchAdmin,
+      price: String(listingPrice),
+      expires_at: expiresAt
+    });
+    listings.push(transaction(output, { tokenId: nextTokenId + index, price: String(listingPrice), expiresAt }));
+  }
+  transactions.marketplaceListings = listings;
+  writeArtifact({ status: 'checklist_complete', addresses, transactions });
+  console.log(`Admin checklist complete: ${listingCount} marketplace tokens listed at ${listingPrice} stroops each.`);
+  console.log('Review the artifact and run launch_dao when ready.');
+  process.exit(0);
 }
 
-writeDaoArtifact({
-  status: "pending",
-  predictedAddresses,
-  addresses: daoAddresses,
-  output: createOutput,
-  transactions: postCreationTransactions,
+console.log('\n=== Launching DAO (auctions and marketplace enabled) ===\n');
+const launchOutput = invoke(managerAddress, 'launch_dao', {
+  token_address: addresses.token,
+  launch_config: JSON.stringify({ launch_auction: true, launch_marketplace: true })
 });
-
-const launchConfig = JSON.stringify({
-  launch_auction: launchAuction,
-  launch_marketplace: launchMarketplace,
-});
-
-console.log("\n=== Launching DAO ===\n");
-const launchResult = runQuiet("stellar", [
-  "contract",
-  "invoke",
-  "--id",
-  managerAddress,
-  "--source-account",
-  identityName,
-  "--network",
-  networkName,
-  "--",
-  "launch_dao",
-  "--token_address",
-  daoAddresses.token,
-  "--config",
-  launchConfig,
-]);
-const launchOutput = launchResult.stdout + launchResult.stderr;
-if (!launchResult.ok) {
-  writeDaoArtifact({
-    status: "pending",
-    predictedAddresses,
-    addresses: daoAddresses,
-    output: createOutput,
-    transactions: postCreationTransactions,
-    error:
-      launchResult.stderr ||
-      launchResult.stdout ||
-      "DAO launch failed",
-  });
-  throw new Error("DAO configuration completed but launch failed");
-}
-
-const launchTxHash = launchOutput.match(
-  /Signing transaction:\s*([a-f0-9]{64})/i,
-);
-if (launchTxHash) {
-  postCreationTransactions.launchDao = enrichTransactionMetadata(
-    { txHash: launchTxHash[1] },
-    networkName,
-  );
-}
-
-writeDaoArtifact({
-  status: "operational",
-  predictedAddresses,
-  addresses: daoAddresses,
-  output: createOutput,
-  transactions: postCreationTransactions,
-});
-
-console.log(`\n=== DAO Deployment Complete ===`);
-console.log(`Artifact saved to: ${daoArtifactPath}`);
-console.log(`\nTo query DAO addresses:`);
-console.log(
-  `stellar contract invoke --id ${managerAddress} --source-account ${identityName} --network ${networkName} -- predict --creator ${daoConfig.deployer} --nonce ${daoConfig.nonce}`,
-);
+transactions.launchDao = transaction(launchOutput);
+writeArtifact({ status: 'operational', addresses, transactions });
+console.log('DAO launch complete. Auctions and marketplace are enabled.');

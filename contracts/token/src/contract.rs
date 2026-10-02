@@ -216,6 +216,7 @@ impl DaoTokenContract {
         minter.require_auth();
         Self::ensure_mint_authority(e, minter);
         Self::ensure_self_delegate(e, to);
+        Self::preflight_checkpoint_writes(e, to);
         let token_id = NonFungibleVotes::sequential_mint(e, to);
         // Note: OpenZeppelin's NonFungibleVotes::sequential_mint() automatically emits standard Mint event
 
@@ -267,6 +268,7 @@ impl DaoTokenContract {
         let mut last_token_id = 0;
 
         for _ in 0..amount {
+            Self::preflight_checkpoint_writes(e, to);
             let token_id = NonFungibleVotes::sequential_mint(e, to);
 
             // Generate artwork seed via metadata contract
@@ -307,6 +309,11 @@ impl DaoTokenContract {
     /// Panics if the token ID does not exist.
     pub fn owner_of(e: &Env, token_id: u32) -> Address {
         Base::owner_of(e, token_id)
+    }
+
+    /// Returns the token contract owner used during the launch setup window.
+    pub fn owner(e: &Env) -> Address {
+        stellar_access::ownable::get_owner(e).expect("owner not set")
     }
 
     /// Transfers a token from one address to another.
@@ -453,6 +460,34 @@ impl DaoTokenContract {
 
         // Always extend TTL when delegation is checked/used
         Self::extend_delegation_ttl(e, account);
+    }
+
+    /// Include the next checkpoint keys in Soroban's transaction footprint.
+    /// The votes library writes these keys directly when a mint creates a new
+    /// ledger checkpoint, so a missing-key write must be preflighted first.
+    fn preflight_checkpoint_writes(e: &Env, account: &Address) {
+        let total_supply_index = e
+            .storage()
+            .instance()
+            .get::<VotesStorageKey, u32>(&VotesStorageKey::NumTotalSupplyCheckpoints)
+            .unwrap_or(0);
+        let _ = e
+            .storage()
+            .persistent()
+            .has(&VotesStorageKey::TotalSupplyCheckpoint(total_supply_index));
+
+        let delegate_index = e
+            .storage()
+            .persistent()
+            .get::<VotesStorageKey, u32>(&VotesStorageKey::NumCheckpoints(account.clone()))
+            .unwrap_or(0);
+        let _ = e
+            .storage()
+            .persistent()
+            .has(&VotesStorageKey::DelegateCheckpoint(
+                account.clone(),
+                delegate_index,
+            ));
     }
 
     /// Validates that an address has permission to mint tokens.
