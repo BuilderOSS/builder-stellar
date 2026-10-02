@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronLeft } from 'lucide-react';
+import { ArrowRight, ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { Stack } from 'styled-system/jsx';
 
@@ -12,7 +12,7 @@ export default function FoundersAdminPage() {
   const { daoId } = useDaoContext();
 
   return (
-    <PageSection title="Founders Setup" description="Manage founder token allocations">
+    <PageSection title="Founders Setup" description="Mint tokens for your DAO's founders">
       <Stack gap="4">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Link href={`/dao/${daoId}`} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -24,47 +24,45 @@ export default function FoundersAdminPage() {
         <Card p="5">
           <Stack gap="4">
             <div>
-              <Heading style={{ fontSize: '1.35rem', margin: 0 }}>Founder Token Allocations</Heading>
+              <Heading style={{ fontSize: '1.35rem', margin: 0 }}>Mint Founder Tokens</Heading>
               <Text style={{ color: 'var(--gray-11)', marginTop: '8px' }}>
-                Manage the initial token allocations for your DAO's founders.
+                Mint tokens directly to founder addresses using the token mint admin page.
               </Text>
             </div>
 
             <Callout
               variant="info"
-              title="Founders membership mode"
-              description="You selected the 'Fixed Founders' membership mode during DAO creation. Founders receive a predetermined allocation of tokens."
+              title="How to mint founder tokens"
+              description="Click the button below to navigate to the token mint page. From there, you can mint tokens to individual founder addresses or batch mint to multiple addresses."
             />
 
-            <div style={{ padding: '2rem', backgroundColor: 'var(--gray-2)', borderRadius: '0.5rem' }}>
-              <Heading style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>Add Founder Allocations</Heading>
-              <Text style={{ color: 'var(--gray-11)', marginBottom: '1rem' }}>
-                Specify founder addresses and their initial token amounts. Total allocation cannot exceed your DAO's
-                maximum supply.
-              </Text>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <Button
-                  disabled
-                  title="Founder allocation configuration will be available after DAO launch"
-                  style={{ opacity: 0.6, cursor: 'not-allowed' }}
-                >
-                  Add Founder Allocations
+            <div
+              style={{
+                padding: '2rem',
+                backgroundColor: 'var(--blue-2)',
+                borderRadius: '0.5rem',
+                border: '1px solid var(--blue-6)'
+              }}
+            >
+              <Heading style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>Ready to mint founder tokens?</Heading>
+              <Text style={{ color: 'var(--gray-11)', marginBottom: '1.5rem' }}>Use the token mint admin page to:</Text>
+              <ul style={{ color: 'var(--gray-11)', marginBottom: '1.5rem', paddingLeft: '1.5rem' }}>
+                <li>Mint tokens individually to each founder</li>
+                <li>Batch mint to multiple addresses at once</li>
+                <li>View minting history and totals</li>
+              </ul>
+              <Link href={`/dao/${daoId}/admin/token`}>
+                <Button style={{ width: '100%' }}>
+                  Go to Token Mint Admin
+                  <ArrowRight size={16} style={{ marginLeft: '8px' }} />
                 </Button>
-                <Text style={{ fontSize: '0.875rem', color: 'var(--gray-10)' }}>Coming soon</Text>
-              </div>
-            </div>
-
-            <div style={{ padding: '2rem', backgroundColor: 'var(--gray-2)', borderRadius: '0.5rem' }}>
-              <Heading style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>Current Allocations</Heading>
-              <Text style={{ color: 'var(--gray-11)' }}>
-                No founders have been allocated tokens yet. Configure founders above to get started.
-              </Text>
+              </Link>
             </div>
 
             <Callout
-              variant="info"
+              variant="success"
               title="Next steps"
-              description="After launching your DAO, you'll be able to allocate tokens to founders and mint their initial allocation."
+              description="After minting founder tokens, return to the checklist to mark this step as complete and continue with other setup tasks."
             />
           </Stack>
         </Card>

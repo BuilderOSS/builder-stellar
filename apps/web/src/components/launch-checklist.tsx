@@ -32,9 +32,9 @@ function getChecklistItems(daoId: string, config: DaoNetworkConfig): ChecklistIt
     },
     {
       id: 'founders',
-      title: 'Set Up Founders',
-      description: 'Allocate initial tokens to founders (if using founders membership mode)',
-      completed: false, // Will be tracked separately once we add this to database
+      title: 'Mint Founder Tokens',
+      description: 'Batch mint tokens to founder addresses (optional)',
+      completed: false, // Optional step - can be completed anytime
       link: `/dao/${daoId}/admin/founders` as Route
     },
     {
@@ -43,13 +43,6 @@ function getChecklistItems(daoId: string, config: DaoNetworkConfig): ChecklistIt
       description: 'Set auction parameters, reserve price, and payment token',
       completed: config.auctionEnabled === true,
       link: `/dao/${daoId}/admin/auction` as Route
-    },
-    {
-      id: 'marketplace',
-      title: 'Set Up Marketplace',
-      description: 'Configure marketplace settings for token trading (if needed)',
-      completed: false, // Will be tracked separately once we add this to database
-      link: `/dao/${daoId}/admin/marketplace` as Route
     }
   ];
 }
@@ -115,8 +108,9 @@ function ChecklistItemRow({ item }: { item: ChecklistItem }) {
 export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoNetworkConfig }) {
   const router = useRouter();
   const items = getChecklistItems(daoId, config);
-  const completedCount = items.filter((item) => item.completed).length;
-  const isComplete = completedCount === items.length;
+  const requiredItems = items.filter((item) => item.id !== 'founders'); // Founders is optional
+  const requiredCompletedCount = requiredItems.filter((item) => item.completed).length;
+  const isComplete = requiredCompletedCount === requiredItems.length;
   const [isLaunching, setIsLaunching] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
 
@@ -159,7 +153,8 @@ export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoN
             Launch Checklist
           </Heading>
           <Text style={{ color: 'var(--gray-11)', fontSize: '0.9375rem' }}>
-            {completedCount} of {items.length} setup tasks completed. Complete these before launching your DAO.
+            {requiredCompletedCount} of {requiredItems.length} required setup tasks completed. Complete these before
+            launching your DAO.
           </Text>
         </Box>
 

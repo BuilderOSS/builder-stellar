@@ -253,7 +253,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         throw error;
       }
     },
-    [deployer, setError, tx]
+    [deployer, tx]
   );
 
   // Main deployment orchestrator
