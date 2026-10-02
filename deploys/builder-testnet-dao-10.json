@@ -1,5 +1,5 @@
 {
-  "status": "created",
+  "status": "checklist_complete",
   "network": "testnet",
   "label": "builder",
   "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
@@ -111,12 +111,140 @@
     ],
     "launchAdmin": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO"
   },
-  "updatedAt": "2026-10-02T10:53:16.535Z",
+  "updatedAt": "2026-10-02T10:59:53.519Z",
   "transactions": {
     "createDao": {
       "txHash": "9d20eccaf2aaa126631b8e199c3de3904e80de9a7e06145c75af06c01f36a0cc",
       "ledger": 4982961
-    }
+    },
+    "founderMints": [
+      {
+        "txHash": "f765f30d8925728a775efc6d4bfef3b23a2e0811bcd113997f17c04b0768b327",
+        "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+        "amount": 10,
+        "ledger": 4982967
+      },
+      {
+        "txHash": "5aa8f8af20a2f9d11e190ae6d50d5b68f76c88081d81693352e16dbdc19d412f",
+        "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
+        "amount": 10,
+        "ledger": 4982970
+      },
+      {
+        "txHash": "2a4841a37c2b2cd28f3afbd6299778044ba2e1db7812ed4fbbc9ffa5a3156392",
+        "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
+        "amount": 10,
+        "ledger": 4982973
+      }
+    ],
+    "addProperties": {
+      "txHash": "05ac8b7390e94a8004c235ef4bbe1f57ef4df0eede59566c3cdd311d1cb5dc87",
+      "ledger": 4982975
+    },
+    "new_project_uri": {
+      "txHash": "055fd72b09a2b35d5d230372f96d2d1d6f024aecc2b77f59362a172683d9b8ef",
+      "ledger": 4982977
+    },
+    "new_description": {
+      "txHash": "f638838d54428ce1ad7ab166a02d0bcb40a6dbfd9c2cc9f52f0c4e56fb83f4b0",
+      "ledger": 4982979
+    },
+    "new_contract_image": {
+      "txHash": "e63409bea519a42378e833376604fb34e258fba81eab6d89e29f50e78656057a",
+      "ledger": 4982981
+    },
+    "new_renderer_base": {
+      "txHash": "9958f2bf8f7d8283c219a7fc02c1607ee3b4db28916754860b2c3c9d78240aab",
+      "ledger": 4982983
+    },
+    "duration": {
+      "txHash": "175530bb3580fac7dcccdda4178cf9efdc7ada0e0a87da209b7947957179db96",
+      "ledger": 4982985
+    },
+    "reserve_price": {
+      "txHash": "882f26cae59b4b529696cca7da7d0721ee3ce416ab1665e3745b8a7f3f1c164d",
+      "ledger": 4982987
+    },
+    "time_buffer": {
+      "txHash": "0228f16eba4d22f8517a945b79358da56c5f35374813507dfe53a6fa52e4655e",
+      "ledger": 4982989
+    },
+    "payment_token": {
+      "txHash": "6c3b1c893bf1206ee6bde69e12315aa2fc759cc8cba23eb2f1e3943e1d4ad531",
+      "ledger": 4982991
+    },
+    "marketplaceListings": [
+      {
+        "txHash": "ebe4ddec246429958afaf01c95fe73314824eee99f3dc51d24061518395db06b",
+        "tokenId": 30,
+        "price": "10000000000",
+        "expiresAt": 1793530584,
+        "ledger": 4983005
+      },
+      {
+        "txHash": "310caaf73434ff473e6064419915bab3f4dadb65fc0dd4009fa0370cf63ee478",
+        "tokenId": 31,
+        "price": "10000000000",
+        "expiresAt": 1793530584,
+        "ledger": 4983009
+      },
+      {
+        "txHash": "0d429fb31b18ba2cfacdf6a0712c98ebc4e479529b31211a69e6e2ff4dae7c33",
+        "tokenId": 32,
+        "price": "10000000000",
+        "expiresAt": 1793530584,
+        "ledger": 4983013
+      },
+      {
+        "txHash": "22e7af743f2fa72ec220dfc65b5a1667f1c22b6908c7d7a2935780980761ecbb",
+        "tokenId": 33,
+        "price": "10000000000",
+        "expiresAt": 1793530584,
+        "ledger": 4983017
+      },
+      {
+        "txHash": "17742e597f1ef8bdbcffb267a21c2bf1fcc57af842bb7f2ab152abfe4909c702",
+        "tokenId": 34,
+        "price": "10000000000",
+        "expiresAt": 1793530584,
+        "ledger": 4983021
+      },
+      {
+        "txHash": "1c837a24c2473173d756f979b72e1432d4214ed37d38606f531bb8f384d7e20f",
+        "tokenId": 35,
+        "price": "10000000000",
+        "expiresAt": 1793530584,
+        "ledger": 4983025
+      },
+      {
+        "txHash": "96e8d4673bfe2d8ab44a6f8f9e52ee4ea60177709a2f69995ead9e4d63b4a972",
+        "tokenId": 36,
+        "price": "10000000000",
+        "expiresAt": 1793530584,
+        "ledger": 4983029
+      },
+      {
+        "txHash": "8273fbcb0c48544301d7ebe12c68ed0daaf2b00baf8d49a0869bd4b46cf1ed54",
+        "tokenId": 37,
+        "price": "10000000000",
+        "expiresAt": 1793530584,
+        "ledger": 4983033
+      },
+      {
+        "txHash": "bd3de3dad951fef3396f3f3f83ebb5a2f0887c9af662f30d9945bb163f2ddfd7",
+        "tokenId": 38,
+        "price": "10000000000",
+        "expiresAt": 1793530584,
+        "ledger": 4983037
+      },
+      {
+        "txHash": "447bd568bb2b86ad80adfcecbd8b8de1ea2ee38087c5a741bcac4fd119a4d662",
+        "tokenId": 39,
+        "price": "10000000000",
+        "expiresAt": 1793530584,
+        "ledger": 4983041
+      }
+    ]
   },
   "deploymentLedger": 4982961
 }
