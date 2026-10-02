@@ -88,6 +88,7 @@ fn setup() -> (
             Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
@@ -99,6 +100,7 @@ fn setup() -> (
             Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
         ),
     );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
@@ -116,6 +118,7 @@ fn setup() -> (
             1_000_u32,
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
         ),
     );
     let governor = DaoGovernorContractClient::new(&e, &governor_id);
@@ -307,6 +310,7 @@ fn quorum_uses_total_supply_bps() {
             Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
@@ -318,6 +322,7 @@ fn quorum_uses_total_supply_bps() {
             Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
         ),
     );
     let governor_id = e.register(
@@ -333,6 +338,7 @@ fn quorum_uses_total_supply_bps() {
             3_000_u32,
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
         ),
     );
     let governor = DaoGovernorContractClient::new(&e, &governor_id);
@@ -364,6 +370,7 @@ fn set_treasury_requires_owner() {
             Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
         ),
     );
     let treasury_id = e.register(
@@ -373,6 +380,7 @@ fn set_treasury_requires_owner() {
             Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
         ),
     );
     let governor_id = e.register(
@@ -388,6 +396,7 @@ fn set_treasury_requires_owner() {
             1_000_u32,
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
         ),
     );
     let governor = DaoGovernorContractClient::new(&e, &governor_id);

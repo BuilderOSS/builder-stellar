@@ -297,8 +297,6 @@ fn manager_registry_and_predictions_are_creator_scoped() {
     ];
     for (index, hash) in hashes.iter().enumerate() {
         manager.register_implementation(
-            hash,
-            &String::from_str(&e, "0.1.0"),
             &String::from_str(
                 &e,
                 [
@@ -310,6 +308,8 @@ fn manager_registry_and_predictions_are_creator_scoped() {
                     "Marketplace",
                 ][index],
             ),
+            &String::from_str(&e, "0.1.0"),
+            hash,
         );
     }
     manager.set_current_implementations(

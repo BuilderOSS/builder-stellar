@@ -2,8 +2,8 @@ extern crate std;
 
 use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
 use soroban_sdk::{
-    contract, contractimpl, symbol_short, testutils::Address as _, vec, Address, Env, IntoVal, Val,
-    Vec,
+    contract, contractimpl, symbol_short, testutils::Address as _, vec, Address, Env, IntoVal,
+    String, Val, Vec,
 };
 
 use crate::{DaoTreasuryContract, DaoTreasuryContractClient};
@@ -40,6 +40,7 @@ fn treasury_executes_arbitrary_call_for_governor() {
             governor.clone(),
             Address::generate(&e),
             soroban_sdk::BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
         ),
     );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
@@ -66,6 +67,7 @@ fn treasury_rejects_non_governor() {
             governor.clone(),
             Address::generate(&e),
             soroban_sdk::BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
         ),
     );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
@@ -100,6 +102,7 @@ fn set_governor_requires_owner() {
             Address::generate(&e),
             Address::generate(&e),
             soroban_sdk::BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
         ),
     );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
