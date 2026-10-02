@@ -9,12 +9,10 @@
  * - dao_id: Token contract address (primary multi-tenant key)
  */
 
-import { Pool } from '@neondatabase/serverless';
+import type { AppProposalDetail, AppProposalList, TokenMember } from '@prisma/client';
 
-// Initialize connection pool with read-only app_server role
-const pool = new Pool({
-  connectionString: process.env.APP_DATABASE_URL
-});
+import { DEPLOYMENT_ID } from '@/config/deployments.generated';
+import { prisma } from '@/lib/prisma';
 
 /**
  * Get the deployment_id for this app instance.
@@ -24,20 +22,56 @@ const pool = new Pool({
  *
  * Example: "manager:CBSKIHNNVKEJWV3A2OI63BWUC637LR4P2GBV4MPJB5PDOMVUMS6KOMAH"
  *
- * This is set by the Goldsky pipeline and must match what's in the database.
+ * This is generated from the latest manager deployment artifact and must match what's in the database.
  * All DAOs under this manager share the same deployment_id.
  */
 function getDeploymentId(): string {
-  const deploymentId = process.env.NEXT_PUBLIC_DEPLOYMENT_ID;
+  return DEPLOYMENT_ID;
+}
 
-  if (!deploymentId) {
-    throw new Error(
-      'NEXT_PUBLIC_DEPLOYMENT_ID environment variable is required. ' +
-        'Format: "manager:CONTRACT_ADDRESS" (e.g., "manager:CBSKIHNNVKEJWV3A2OI63BWUC637LR4P2GBV4MPJB5PDOMVUMS6KOMAH")'
-    );
-  }
+function mapProposalList(row: AppProposalList) {
+  return {
+    proposal_id: row.proposalId,
+    proposal_number: row.proposalNumber,
+    proposer: row.proposer,
+    description: row.description,
+    snapshot_ledger: row.snapshotLedger === null ? null : Number(row.snapshotLedger),
+    vote_start_timestamp: row.voteStartSeconds === null ? null : Number(row.voteStartSeconds),
+    deadline_ledger: row.voteEndSeconds === null ? null : Number(row.voteEndSeconds),
+    eta: row.etaSeconds === null ? null : Number(row.etaSeconds),
+    state: row.state,
+    for_votes: Number(row.forVotes),
+    against_votes: Number(row.againstVotes),
+    abstain_votes: Number(row.abstainVotes),
+    created_timestamp: row.createdAt?.getTime() ? Math.floor(row.createdAt.getTime() / 1000) : null,
+    created_ledger: Number(row.createdLedger),
+    updated_ledger: row.updatedLedger === null ? null : Number(row.updatedLedger),
+    updated_timestamp: row.updatedAt?.getTime() ? Math.floor(row.updatedAt.getTime() / 1000) : null
+  };
+}
 
-  return deploymentId;
+function mapProposalDetail(row: AppProposalDetail) {
+  const actions = Array.isArray(row.actions) ? row.actions : [];
+  return {
+    ...mapProposalList(row),
+    vote_summary: {
+      for: Number(row.forVotes),
+      against: Number(row.againstVotes),
+      abstain: Number(row.abstainVotes)
+    },
+    votes: Array.isArray(row.votes) ? row.votes : [],
+    actions
+  };
+}
+
+function mapMember(row: TokenMember) {
+  return {
+    address: row.address,
+    owned_token_count: Number(row.ownedTokenCount),
+    delegated_to: row.delegatedTo,
+    voting_power: Number(row.votingPower),
+    last_activity_ledger: row.lastActivityLedger === null ? null : Number(row.lastActivityLedger)
+  };
 }
 
 /**
@@ -61,40 +95,48 @@ async function getDaoIdFromUrl(daoId: string): Promise<string> {
 
 export async function getGoldskyAuctionHistory(daoId: string, limit = 24, offset = 0) {
   const deploymentId = getDeploymentId();
-  const dao_id = await getDaoIdFromUrl(daoId);
-  const result = await pool.query(
-    `
-    SELECT * FROM auction.auctions
-    WHERE deployment_id = $1 AND dao_id = $2 AND settled = true
-    ORDER BY token_id DESC
-    LIMIT $3 OFFSET $4
-  `,
-    [deploymentId, dao_id, limit, offset]
-  );
-  return result.rows;
+  const daoIdFromUrl = await getDaoIdFromUrl(daoId);
+  const rows = await prisma.auctionAuction.findMany({
+    where: { deploymentId, daoId: daoIdFromUrl, settled: true },
+    orderBy: { tokenId: 'desc' },
+    take: limit,
+    skip: offset
+  });
+
+  return rows.map((row) => ({
+    event_id: row.eventId,
+    token_id: Number(row.tokenId),
+    start_seconds: Number(row.startSeconds),
+    end_seconds: Number(row.endSeconds),
+    duration_seconds: row.durationSeconds === null ? null : Number(row.durationSeconds),
+    time_buffer_seconds: row.timeBufferSeconds === null ? null : Number(row.timeBufferSeconds),
+    reserve_price: row.reservePrice.toString(),
+    payment_token: row.paymentToken,
+    settled: row.settled,
+    cancelled: row.cancelled,
+    created_ledger: Number(row.createdLedger),
+    transaction_hash: row.transactionHash
+  }));
 }
 
 export async function getGoldskyAuctionBids(daoId: string, tokenId: string, limit = 20) {
   const deploymentId = getDeploymentId();
-  const dao_id = await getDaoIdFromUrl(daoId);
-  const result = await pool.query(
-    `
-     SELECT
-       event_id,
-       bidder,
-       amount,
-       NULL::text AS payment_type,
-       event_ledger AS ledger_sequence,
-       event_at AS timestamp,
-       transaction_hash
-    FROM auction.bids
-    WHERE deployment_id = $1 AND dao_id = $2 AND token_id = $3
-    ORDER BY ledger_sequence DESC, event_id DESC
-    LIMIT $4
-  `,
-    [deploymentId, dao_id, tokenId, limit]
-  );
-  return result.rows;
+  const daoIdFromUrl = await getDaoIdFromUrl(daoId);
+  const rows = await prisma.auctionBid.findMany({
+    where: { deploymentId, daoId: daoIdFromUrl, tokenId: BigInt(tokenId) },
+    orderBy: [{ eventLedger: 'desc' }, { eventId: 'desc' }],
+    take: limit
+  });
+
+  return rows.map((row) => ({
+    event_id: row.eventId,
+    bidder: row.bidder,
+    amount: row.amount.toString(),
+    payment_type: null,
+    ledger_sequence: Number(row.eventLedger),
+    timestamp: row.eventAt,
+    transaction_hash: row.transactionHash
+  }));
 }
 
 /**
@@ -113,66 +155,47 @@ export async function getGoldskyActivityFeed(
 ) {
   const { limit = 25, offset = 0, contractId, kind } = params;
   const deploymentId = getDeploymentId();
-  const dao_id = await getDaoIdFromUrl(daoId);
-
-  const conditions: string[] = ['deployment_id = $1', 'dao_id = $2'];
-  const values: any[] = [deploymentId, dao_id];
-  let paramIndex = 3;
-
-  if (contractId) {
-    conditions.push(`contract_id = $${paramIndex++}`);
-    values.push(contractId);
-  }
-
-  if (kind) {
-    conditions.push(`kind = $${paramIndex++}`);
-    values.push(kind);
-  }
-
-  const whereClause = `WHERE ${conditions.join(' AND ')}`;
-
-  const query = `
-    SELECT
-      activity_id,
-      contract_id,
-      contract_role,
-      event_name,
-      topics,
-      args,
-      kind,
-      title,
-      summary,
-      proposal_id,
-      token_id,
-      amount,
-      actor,
-      addresses,
-      ledger_sequence,
-      transaction_hash,
-      ledger_closed_at AS timestamp
-    FROM app.activity_feed
-    ${whereClause}
-    ORDER BY ledger_sequence DESC, activity_id DESC
-    LIMIT $${paramIndex++} OFFSET $${paramIndex++}
-  `;
-
-  values.push(limit, offset);
-
-  const [result, countResult] = await Promise.all([
-    pool.query(query, values),
-    pool.query(
-      `SELECT COUNT(*)::int AS total FROM app.activity_feed ${whereClause}`,
-      values.slice(0, values.length - 2)
-    )
+  const daoIdFromUrl = await getDaoIdFromUrl(daoId);
+  const where = {
+    deploymentId,
+    daoId: daoIdFromUrl,
+    ...(contractId ? { contractId } : {}),
+    ...(kind ? { kind } : {})
+  };
+  const [rows, total] = await Promise.all([
+    prisma.appActivityFeed.findMany({
+      where,
+      orderBy: [{ ledgerSequence: 'desc' }, { activityId: 'desc' }],
+      take: limit,
+      skip: offset
+    }),
+    prisma.appActivityFeed.count({ where })
   ]);
-  const total = countResult.rows[0]?.total ?? 0;
 
   return {
-    items: result.rows,
+    items: rows.map((row) => ({
+      activity_id: row.activityId,
+      contract_id: row.contractId,
+      contract_role: row.contractRole,
+      event_name: row.eventName,
+      topics: row.topics,
+      args: row.args,
+      kind: row.kind,
+      title: row.title,
+      summary: row.summary,
+      proposal_id: row.proposalId,
+      token_id: row.tokenId,
+      amount: row.amount,
+      actor: row.actor,
+      addresses: row.addresses,
+      ledger_sequence: Number(row.ledgerSequence),
+      transaction_hash: row.transactionHash,
+      timestamp: row.ledgerClosedAt
+    })),
     total,
     limit,
     offset,
-    hasMore: offset + result.rows.length < total,
+    hasMore: offset + rows.length < total,
     generatedAt: new Date().toISOString()
   };
 }
@@ -192,59 +215,24 @@ export async function getGoldskyProposalList(
 ) {
   const { limit = 50, offset = 0, status } = params;
   const deploymentId = getDeploymentId();
-  const dao_id = await getDaoIdFromUrl(daoId);
-
-  const conditions: string[] = ['deployment_id = $1', 'dao_id = $2'];
-  const values: any[] = [deploymentId, dao_id];
-  let paramIndex = 3;
-
-  if (status) {
-    conditions.push(`state = $${paramIndex++}`);
-    values.push(status);
-  }
-
-  const whereClause = `WHERE ${conditions.join(' AND ')}`;
-
-  const query = `
-    SELECT
-      proposal_id,
-      proposal_number,
-      proposer,
-      description,
-      snapshot_ledger,
-       vote_start_seconds AS vote_start_timestamp,
-       vote_end_seconds AS deadline_ledger,
-       eta_seconds AS eta,
-      state,
-      for_votes,
-      against_votes,
-      abstain_votes,
-       extract(epoch FROM created_at)::bigint AS created_timestamp,
-      created_ledger,
-      updated_ledger,
-       extract(epoch FROM updated_at)::bigint AS updated_timestamp
-    FROM app.proposal_list
-    ${whereClause}
-    ORDER BY proposal_number DESC
-    LIMIT $${paramIndex++} OFFSET $${paramIndex++}
-  `;
-
-  values.push(limit, offset);
-
-  const [result, countResult] = await Promise.all([
-    pool.query(query, values),
-    pool.query(
-      `SELECT COUNT(*)::int AS total FROM app.proposal_list ${whereClause}`,
-      values.slice(0, values.length - 2)
-    )
+  const daoIdFromUrl = await getDaoIdFromUrl(daoId);
+  const where = { deploymentId, daoId: daoIdFromUrl, ...(status ? { state: status } : {}) };
+  const [rows, total] = await Promise.all([
+    prisma.appProposalList.findMany({
+      where,
+      orderBy: { proposalNumber: 'desc' },
+      take: limit,
+      skip: offset
+    }),
+    prisma.appProposalList.count({ where })
   ]);
 
   return {
-    items: result.rows,
-    total: countResult.rows[0]?.total ?? 0,
+    items: rows.map(mapProposalList),
+    total,
     limit,
     offset,
-    hasMore: offset + result.rows.length < (countResult.rows[0]?.total ?? 0),
+    hasMore: offset + rows.length < total,
     generatedAt: new Date().toISOString()
   };
 }
@@ -256,41 +244,25 @@ export async function getGoldskyProposalList(
  */
 export async function getGoldskyProposalDetail(daoId: string, proposalId: string) {
   const deploymentId = getDeploymentId();
-  const dao_id = await getDaoIdFromUrl(daoId);
-  const query = `
-    SELECT
-      proposal_id,
-      proposal_number,
-       proposer,
-       description,
-       snapshot_ledger,
-       vote_start_seconds AS vote_start_timestamp,
-       vote_end_seconds AS deadline_ledger,
-       eta_seconds AS eta,
-       state,
-        jsonb_build_object(
-          'for', for_votes,
-          'against', against_votes,
-          'abstain', abstain_votes
-        ) AS vote_summary,
-       votes,
-       actions,
-       extract(epoch FROM created_at)::bigint AS created_timestamp,
-       created_ledger,
-       updated_ledger,
-       extract(epoch FROM updated_at)::bigint AS updated_timestamp
-    FROM app.proposal_detail
-    WHERE deployment_id = $1 AND dao_id = $2 AND (proposal_id = $3 OR proposal_number::text = $3)
-  `;
+  const daoIdFromUrl = await getDaoIdFromUrl(daoId);
+  const numericProposalNumber = Number(proposalId);
+  const row = await prisma.appProposalDetail.findFirst({
+    where: {
+      deploymentId,
+      daoId: daoIdFromUrl,
+      OR: [
+        { proposalId },
+        ...(Number.isInteger(numericProposalNumber) ? [{ proposalNumber: numericProposalNumber }] : [])
+      ]
+    }
+  });
 
-  const result = await pool.query(query, [deploymentId, dao_id, proposalId]);
-
-  if (result.rows.length === 0) {
+  if (!row) {
     throw new Error(`Proposal not found: ${proposalId}`);
   }
 
   return {
-    proposal: result.rows[0],
+    proposal: mapProposalDetail(row),
     generatedAt: new Date().toISOString()
   };
 }
@@ -311,17 +283,20 @@ export async function getGoldskyProposalVotes(
 ) {
   const { proposalId, limit = 100, offset = 0, support } = params;
   const deploymentId = getDeploymentId();
-  const dao_id = await getDaoIdFromUrl(daoId);
-
-  const proposalResult = await pool.query(
-    `SELECT proposal_id
-     FROM app.proposal_detail
-     WHERE deployment_id = $1 AND dao_id = $2
-       AND (proposal_id = $3 OR proposal_number::text = $3)
-     LIMIT 1`,
-    [deploymentId, dao_id, proposalId]
-  );
-  const resolvedProposalId = proposalResult.rows[0]?.proposal_id;
+  const daoIdFromUrl = await getDaoIdFromUrl(daoId);
+  const numericProposalNumber = Number(proposalId);
+  const proposal = await prisma.appProposalDetail.findFirst({
+    where: {
+      deploymentId,
+      daoId: daoIdFromUrl,
+      OR: [
+        { proposalId },
+        ...(Number.isInteger(numericProposalNumber) ? [{ proposalNumber: numericProposalNumber }] : [])
+      ]
+    },
+    select: { proposalId: true }
+  });
+  const resolvedProposalId = proposal?.proposalId;
 
   if (!resolvedProposalId) {
     return {
@@ -335,55 +310,25 @@ export async function getGoldskyProposalVotes(
     };
   }
 
-  const conditions = ['deployment_id = $1', 'dao_id = $2', 'proposal_id = $3'];
-  const values: any[] = [deploymentId, dao_id, resolvedProposalId];
-  let paramIndex = 4;
-
-  if (support !== undefined) {
-    conditions.push(`support = $${paramIndex++}`);
-    values.push(support);
-  }
-
-  const query = `
-    SELECT
-      vote_event_id AS id,
-      proposal_id AS "proposalId",
-      contract_id AS "contractId",
-      voter,
-      support,
-      weight,
-      reason,
-      extract(epoch FROM event_at)::bigint AS timestamp,
-      transaction_hash AS "txHash",
-      event_ledger AS ledger
-    FROM governance.proposal_votes
-    WHERE ${conditions.join(' AND ')}
-    ORDER BY ledger DESC
-    LIMIT $${paramIndex++} OFFSET $${paramIndex++}
-  `;
-
-  values.push(limit, offset);
-
-  const [result, countResult] = await Promise.all([
-    pool.query(query, values),
-    pool.query(
-      `SELECT COUNT(*)::int AS total FROM governance.proposal_votes WHERE ${conditions.join(' AND ')}`,
-      values.slice(0, values.length - 2)
-    )
+  const where = {
+    deploymentId,
+    daoId: daoIdFromUrl,
+    proposalId: resolvedProposalId,
+    ...(support === undefined ? {} : { support })
+  };
+  const [rows, total, tallyRows] = await Promise.all([
+    prisma.governanceProposalVote.findMany({
+      where,
+      orderBy: { eventLedger: 'desc' },
+      take: limit,
+      skip: offset
+    }),
+    prisma.governanceProposalVote.count({ where }),
+    prisma.governanceProposalVote.findMany({
+      where: { deploymentId, daoId: daoIdFromUrl, proposalId: resolvedProposalId },
+      select: { support: true, weight: true }
+    })
   ]);
-
-  // Get vote tallies
-  const tallyQuery = `
-    SELECT
-      support,
-      COUNT(*) as vote_count,
-      SUM(weight::numeric) as total_weight
-    FROM governance.proposal_votes
-    WHERE deployment_id = $1 AND dao_id = $2 AND proposal_id = $3
-    GROUP BY support
-  `;
-
-  const tallyResult = await pool.query(tallyQuery, [deploymentId, dao_id, resolvedProposalId]);
 
   const tally = {
     for: '0',
@@ -391,19 +336,29 @@ export async function getGoldskyProposalVotes(
     abstain: '0'
   };
 
-  tallyResult.rows.forEach((row: any) => {
-    if (row.support === 1) tally.for = row.total_weight || '0';
-    if (row.support === 0) tally.against = row.total_weight || '0';
-    if (row.support === 2) tally.abstain = row.total_weight || '0';
+  tallyRows.forEach((row) => {
+    const key = row.support === 1 ? 'for' : row.support === 0 ? 'against' : row.support === 2 ? 'abstain' : null;
+    if (key) tally[key] = (BigInt(tally[key]) + BigInt(row.weight.toString())).toString();
   });
 
   return {
-    items: result.rows,
-    total: countResult.rows[0]?.total ?? 0,
+    items: rows.map((row) => ({
+      id: row.voteEventId,
+      proposalId: row.proposalId,
+      contractId: row.contractId,
+      voter: row.voter,
+      support: row.support,
+      weight: row.weight.toString(),
+      reason: row.reason,
+      timestamp: row.eventAt?.getTime() ? Math.floor(row.eventAt.getTime() / 1000) : null,
+      txHash: row.transactionHash,
+      ledger: Number(row.eventLedger)
+    })),
+    total,
     tally,
     limit,
     offset,
-    hasMore: offset + result.rows.length < (countResult.rows[0]?.total ?? 0),
+    hasMore: offset + rows.length < total,
     generatedAt: new Date().toISOString()
   };
 }
@@ -422,51 +377,27 @@ export async function getGoldskyTokenInventory(
 ) {
   const { limit = 100, offset = 0 } = params;
   const deploymentId = getDeploymentId();
-  const dao_id = await getDaoIdFromUrl(daoId);
-
-  const query = `
-    SELECT
-      token_id,
-      owner,
-       event_ledger AS ledger_sequence,
-       event_at AS timestamp,
-      transaction_hash
-    FROM token.inventory
-    WHERE deployment_id = $1 AND dao_id = $2
-    ORDER BY token_id DESC
-    LIMIT $3 OFFSET $4
-  `;
-
-  const [result, countResult, supplyResult] = await Promise.all([
-    pool.query(query, [deploymentId, dao_id, limit, offset]),
-    pool.query('SELECT COUNT(*)::int AS total FROM token.inventory WHERE deployment_id = $1 AND dao_id = $2', [
-      deploymentId,
-      dao_id
-    ]),
-    pool.query(
-      'SELECT COUNT(*)::bigint as total_supply FROM token.inventory WHERE deployment_id = $1 AND dao_id = $2',
-      [deploymentId, dao_id]
-    )
+  const daoIdFromUrl = await getDaoIdFromUrl(daoId);
+  const where = { deploymentId, daoId: daoIdFromUrl };
+  const [rows, total] = await Promise.all([
+    prisma.tokenInventory.findMany({ where, orderBy: { tokenId: 'desc' }, take: limit, skip: offset }),
+    prisma.tokenInventory.count({ where })
   ]);
 
-  // Get total supply
-  const totalSupply = supplyResult.rows[0]?.total_supply || '0';
-  const total = countResult.rows[0]?.total ?? 0;
-
   return {
-    items: result.rows.map((row: any) => ({
-      tokenId: Number(row.token_id),
+    items: rows.map((row) => ({
+      tokenId: Number(row.tokenId),
       owner: row.owner,
-      ledger: Number(row.ledger_sequence),
-      timestamp: row.timestamp ? Math.floor(new Date(row.timestamp).getTime() / 1000) : 0,
-      txHash: row.transaction_hash,
-      contractId: row.deployment_id
+      ledger: Number(row.eventLedger),
+      timestamp: row.eventAt ? Math.floor(row.eventAt.getTime() / 1000) : 0,
+      txHash: row.transactionHash,
+      contractId: row.deploymentId
     })),
     total,
-    totalSupply,
+    totalSupply: String(total),
     limit,
     offset,
-    hasMore: offset + result.rows.length < total,
+    hasMore: offset + rows.length < total,
     generatedAt: new Date().toISOString()
   };
 }
@@ -474,49 +405,33 @@ export async function getGoldskyTokenInventory(
 export async function getGoldskyMemberList(daoId: string, params: { limit?: number; offset?: number } = {}) {
   const { limit = 100, offset = 0 } = params;
   const deploymentId = getDeploymentId();
-  const dao_id = await getDaoIdFromUrl(daoId);
-  const [result, countResult] = await Promise.all([
-    pool.query(
-      `
-      SELECT address, owned_token_count, delegated_to, voting_power, last_activity_ledger
-      FROM token.members
-      WHERE deployment_id = $1 AND dao_id = $2
-      ORDER BY voting_power DESC, address
-      LIMIT $3 OFFSET $4
-    `,
-      [deploymentId, dao_id, limit, offset]
-    ),
-    pool.query('SELECT COUNT(*)::int AS total FROM token.members WHERE deployment_id = $1 AND dao_id = $2', [
-      deploymentId,
-      dao_id
-    ])
+  const daoIdFromUrl = await getDaoIdFromUrl(daoId);
+  const where = { deploymentId, daoId: daoIdFromUrl };
+  const [rows, total] = await Promise.all([
+    prisma.tokenMember.findMany({
+      where,
+      orderBy: [{ votingPower: 'desc' }, { address: 'asc' }],
+      take: limit,
+      skip: offset
+    }),
+    prisma.tokenMember.count({ where })
   ]);
-  const total = countResult.rows[0]?.total ?? 0;
 
   return {
-    items: result.rows,
+    items: rows.map(mapMember),
     total,
     limit,
     offset,
-    hasMore: offset + result.rows.length < total,
+    hasMore: offset + rows.length < total,
     generatedAt: new Date().toISOString()
   };
 }
 
 export async function getGoldskyMember(daoId: string, address: string) {
   const deploymentId = getDeploymentId();
-  const dao_id = await getDaoIdFromUrl(daoId);
-  const result = await pool.query(
-    `
-    SELECT address, owned_token_count, delegated_to, voting_power, last_activity_ledger
-    FROM token.members
-    WHERE deployment_id = $1 AND dao_id = $2 AND address = $3
-    LIMIT 1
-  `,
-    [deploymentId, dao_id, address]
-  );
-
-  return result.rows[0] ?? null;
+  const daoIdFromUrl = await getDaoIdFromUrl(daoId);
+  const row = await prisma.tokenMember.findFirst({ where: { deploymentId, daoId: daoIdFromUrl, address } });
+  return row ? mapMember(row) : null;
 }
 
 /**
@@ -526,22 +441,19 @@ export async function getGoldskyMember(daoId: string, address: string) {
  */
 export async function getGoldskyMintAuthorities(daoId: string) {
   const deploymentId = getDeploymentId();
-  const dao_id = await getDaoIdFromUrl(daoId);
-  const query = `
-    SELECT
-      authority,
-      enabled,
-       event_ledger AS last_updated_ledger
-    FROM token.mint_authorities
-    WHERE deployment_id = $1 AND dao_id = $2 AND enabled = true
-    ORDER BY authority
-  `;
-
-  const result = await pool.query(query, [deploymentId, dao_id]);
+  const daoIdFromUrl = await getDaoIdFromUrl(daoId);
+  const rows = await prisma.tokenMintAuthority.findMany({
+    where: { deploymentId, daoId: daoIdFromUrl, enabled: true },
+    orderBy: { authority: 'asc' }
+  });
 
   return {
-    items: result.rows,
-    total: result.rowCount,
+    items: rows.map((row) => ({
+      authority: row.authority,
+      enabled: row.enabled,
+      last_updated_ledger: Number(row.eventLedger)
+    })),
+    total: rows.length,
     generatedAt: new Date().toISOString()
   };
 }
@@ -553,22 +465,19 @@ export async function getGoldskyMintAuthorities(daoId: string) {
  */
 export async function getGoldskyGovernorAuthorities(daoId: string) {
   const deploymentId = getDeploymentId();
-  const dao_id = await getDaoIdFromUrl(daoId);
-  const query = `
-    SELECT
-      authority,
-      enabled,
-       event_ledger AS last_updated_ledger
-    FROM governance.governor_authorities
-    WHERE deployment_id = $1 AND dao_id = $2 AND enabled = true
-    ORDER BY authority
-  `;
-
-  const result = await pool.query(query, [deploymentId, dao_id]);
+  const daoIdFromUrl = await getDaoIdFromUrl(daoId);
+  const rows = await prisma.governanceGovernorAuthority.findMany({
+    where: { deploymentId, daoId: daoIdFromUrl, enabled: true },
+    orderBy: { authority: 'asc' }
+  });
 
   return {
-    items: result.rows,
-    total: result.rowCount,
+    items: rows.map((row) => ({
+      authority: row.authority,
+      enabled: row.enabled,
+      last_updated_ledger: Number(row.eventLedger)
+    })),
+    total: rows.length,
     generatedAt: new Date().toISOString()
   };
 }
@@ -580,24 +489,21 @@ export async function getGoldskyGovernorAuthorities(daoId: string) {
  */
 export async function getGoldskyProposalLifecycle(daoId: string, proposalId: string) {
   const deploymentId = getDeploymentId();
-  const dao_id = await getDaoIdFromUrl(daoId);
-  const query = `
-    SELECT
-      event_type,
-      actor,
-      timestamp,
-      transaction_hash,
-      ledger_sequence
-    FROM governance.proposal_lifecycle
-    WHERE deployment_id = $1 AND dao_id = $2 AND proposal_id = $3
-    ORDER BY ledger_sequence ASC
-  `;
-
-  const result = await pool.query(query, [deploymentId, dao_id, proposalId]);
+  const daoIdFromUrl = await getDaoIdFromUrl(daoId);
+  const rows = await prisma.governanceProposalLifecycle.findMany({
+    where: { deploymentId, daoId: daoIdFromUrl, proposalId },
+    orderBy: { eventLedger: 'asc' }
+  });
 
   return {
-    items: result.rows,
-    total: result.rowCount,
+    items: rows.map((row) => ({
+      event_type: row.state,
+      actor: null,
+      timestamp: row.eventAt,
+      transaction_hash: row.transactionHash,
+      ledger_sequence: Number(row.eventLedger)
+    })),
+    total: rows.length,
     generatedAt: new Date().toISOString()
   };
 }
@@ -610,29 +516,25 @@ export async function getGoldskyProposalLifecycle(daoId: string, proposalId: str
  */
 export async function getGoldskyDaoList() {
   const deploymentId = getDeploymentId();
-
-  const query = `
-    SELECT
-      dao_id,
-      token_address,
-      creator,
-      manager_contract,
-      governor_contract,
-      auction_contract,
-      treasury_contract,
-      metadata_contract,
-      created_timestamp,
-      created_ledger
-    FROM manager.daos
-    WHERE deployment_id = $1
-    ORDER BY created_ledger DESC
-  `;
-
-  const result = await pool.query(query, [deploymentId]);
+  const rows = await prisma.managerDao.findMany({
+    where: { deploymentId },
+    orderBy: { createdLedger: 'desc' }
+  });
 
   return {
-    items: result.rows,
-    total: result.rowCount,
+    items: rows.map((row) => ({
+      dao_id: row.daoId,
+      token_address: row.tokenAddress,
+      creator: row.deployer,
+      manager_contract: row.managerContract,
+      governor_contract: row.governorContract,
+      auction_contract: row.auctionContract,
+      treasury_contract: row.treasuryContract,
+      metadata_contract: row.metadataContract,
+      created_timestamp: row.createdAt,
+      created_ledger: Number(row.createdLedger)
+    })),
+    total: rows.length,
     generatedAt: new Date().toISOString()
   };
 }
@@ -641,95 +543,79 @@ export async function getDashboardData(address: string, params: { limit?: number
   const { limit = 20, offset = 0 } = params;
   const deploymentId = getDeploymentId();
   const normalizedAddress = address.trim().toLowerCase();
-
-  const myDaosQuery = `
-    WITH member_daos AS (
-      SELECT DISTINCT dao_id
-      FROM token.members
-      WHERE deployment_id = $1
-        AND LOWER(address) = $2
-        AND (owned_token_count > 0 OR voting_power > 0)
-    )
-    SELECT
-      d.dao_id,
-      d.token_name,
-      d.token_symbol,
-      d.token_description,
-      metadata_config.contract_image,
-      d.status
-    FROM manager.daos d
-    LEFT JOIN metadata.configuration metadata_config
-      ON metadata_config.deployment_id = d.deployment_id
-      AND metadata_config.dao_id = d.dao_id
-    WHERE d.deployment_id = $1
-      AND d.status = 'operational'
-      AND (
-        d.dao_id IN (SELECT dao_id FROM member_daos)
-        OR LOWER(d.creator) = $2
-        OR LOWER(d.admin_address) = $2
-      )
-    ORDER BY d.created_ledger DESC
-  `;
-
-  const feedQuery = `
-    WITH my_daos AS (
-      SELECT DISTINCT dao_id
-      FROM token.members
-      WHERE deployment_id = $1
-        AND LOWER(address) = $2
-        AND (owned_token_count > 0 OR voting_power > 0)
-      UNION
-      SELECT dao_id
-      FROM manager.daos
-      WHERE deployment_id = $1
-        AND (LOWER(creator) = $2 OR LOWER(admin_address) = $2)
-    )
-    SELECT
-      activity.activity_id,
-      activity.dao_id,
-      activity.contract_role,
-      activity.event_name,
-      activity.topics,
-      activity.args,
-      activity.kind,
-      activity.title,
-      activity.summary,
-      activity.proposal_id,
-      activity.token_id,
-      activity.amount,
-      activity.actor,
-      activity.ledger_sequence,
-      activity.ledger_closed_at AS timestamp,
-      activity.transaction_hash,
-      d.token_name,
-      d.token_symbol,
-      COUNT(*) OVER()::int AS total_count
-    FROM app.activity_feed activity
-    JOIN my_daos mine ON mine.dao_id = activity.dao_id
-    JOIN manager.daos d
-      ON d.deployment_id = activity.deployment_id
-     AND d.dao_id = activity.dao_id
-    WHERE activity.deployment_id = $1
-      AND d.status = 'operational'
-    ORDER BY activity.ledger_sequence DESC, activity.activity_id DESC
-    LIMIT $3 OFFSET $4
-  `;
-
-  const [myDaosResult, feedResult] = await Promise.all([
-    pool.query(myDaosQuery, [deploymentId, normalizedAddress]),
-    pool.query(feedQuery, [deploymentId, normalizedAddress, limit, offset])
+  const members = await prisma.tokenMember.findMany({
+    where: { deploymentId, address: { equals: normalizedAddress, mode: 'insensitive' } },
+    select: { daoId: true, ownedTokenCount: true, votingPower: true }
+  });
+  const memberDaoIds = members.filter((row) => row.ownedTokenCount > 0 || row.votingPower > 0).map((row) => row.daoId);
+  const ownedOrAdminWhere = {
+    deploymentId,
+    status: 'operational',
+    OR: [
+      ...(memberDaoIds.length ? [{ daoId: { in: memberDaoIds } }] : []),
+      { deployer: { equals: normalizedAddress, mode: 'insensitive' as const } },
+      { adminAddress: { equals: normalizedAddress, mode: 'insensitive' as const } }
+    ]
+  };
+  const [myDaos, myDaoCandidates] = await Promise.all([
+    prisma.managerDao.findMany({ where: ownedOrAdminWhere, orderBy: { createdLedger: 'desc' } }),
+    prisma.managerDao.findMany({
+      where: {
+        deploymentId,
+        OR: [
+          ...(memberDaoIds.length ? [{ daoId: { in: memberDaoIds } }] : []),
+          { deployer: { equals: normalizedAddress, mode: 'insensitive' as const } },
+          { adminAddress: { equals: normalizedAddress, mode: 'insensitive' as const } }
+        ]
+      },
+      select: { daoId: true, tokenName: true, tokenSymbol: true }
+    })
   ]);
-
-  const total = Number(feedResult.rows[0]?.total_count ?? 0);
+  const daoIds = myDaoCandidates.map((row) => row.daoId);
+  const [feedRows, total] = await Promise.all([
+    prisma.appActivityFeed.findMany({
+      where: { deploymentId, daoId: { in: daoIds } },
+      orderBy: [{ ledgerSequence: 'desc' }, { activityId: 'desc' }],
+      take: limit,
+      skip: offset
+    }),
+    prisma.appActivityFeed.count({ where: { deploymentId, daoId: { in: daoIds } } })
+  ]);
+  const daoById = new Map(myDaoCandidates.map((row) => [row.daoId, row]));
 
   return {
-    myDaos: myDaosResult.rows,
+    myDaos: myDaos.map((row) => ({
+      dao_id: row.daoId,
+      token_name: row.tokenName,
+      token_symbol: row.tokenSymbol,
+      token_description: row.tokenDescription,
+      status: row.status
+    })),
     feed: {
-      items: feedResult.rows.map(({ total_count: _totalCount, ...item }) => item),
+      items: feedRows.map((row) => ({
+        activity_id: row.activityId,
+        dao_id: row.daoId,
+        contract_role: row.contractRole,
+        event_name: row.eventName,
+        topics: row.topics,
+        args: row.args,
+        kind: row.kind,
+        title: row.title,
+        summary: row.summary,
+        proposal_id: row.proposalId,
+        token_id: row.tokenId,
+        amount: row.amount,
+        actor: row.actor,
+        ledger_sequence: Number(row.ledgerSequence),
+        timestamp: row.ledgerClosedAt,
+        transaction_hash: row.transactionHash,
+        token_name: daoById.get(row.daoId ?? '')?.tokenName ?? null,
+        token_symbol: daoById.get(row.daoId ?? '')?.tokenSymbol ?? null
+      })),
       total,
       limit,
       offset,
-      hasMore: offset + feedResult.rows.length < total
+      hasMore: offset + feedRows.length < total
     },
     generatedAt: new Date().toISOString()
   };
@@ -742,22 +628,16 @@ export async function getDashboardData(address: string, params: { limit?: number
  */
 export async function getGoldskyHealth() {
   try {
-    const query = `
-      SELECT
-        MAX(ledger_sequence) as latest_ledger,
-        COUNT(*) as total_events,
-        MAX(ingested_at) as last_ingestion
-      FROM chain.raw_events
-    `;
-
-    const result = await pool.query(query);
-    const stats = result.rows[0];
+    const [latestEvent, totalEvents] = await Promise.all([
+      prisma.chainRawEvent.findFirst({ orderBy: { ledgerSequence: 'desc' } }),
+      prisma.chainRawEvent.count()
+    ]);
 
     return {
       status: 'healthy',
-      latestLedger: stats.latest_ledger,
-      totalEvents: stats.total_events,
-      lastIngestion: stats.last_ingestion,
+      latestLedger: latestEvent ? Number(latestEvent.ledgerSequence) : null,
+      totalEvents,
+      lastIngestion: latestEvent?.ingestedAt ?? null,
       generatedAt: new Date().toISOString()
     };
   } catch (error) {

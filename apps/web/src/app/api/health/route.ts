@@ -1,5 +1,6 @@
-import { Pool } from '@neondatabase/serverless';
 import { NextResponse } from 'next/server';
+
+import { prisma } from '@/lib/prisma';
 
 /**
  * Health check endpoint for monitoring production deployment
@@ -13,19 +14,10 @@ import { NextResponse } from 'next/server';
  * Usage: GET /api/health
  */
 export async function GET() {
-  const pool = new Pool({
-    connectionString: process.env.APP_DATABASE_URL
-  });
-
   try {
     const startTime = Date.now();
 
     // Get database connection from environment (read-only app role)
-    const databaseUrl = process.env.APP_DATABASE_URL;
-    if (!databaseUrl) {
-      return NextResponse.json({ status: 'error', message: 'APP_DATABASE_URL not configured' }, { status: 503 });
-    }
-
     // Check 1: Latest ledger from Stellar RPC
     let rpcLatestLedger = null;
     let rpcCheckTime = 0;
@@ -53,8 +45,8 @@ export async function GET() {
     let eventProcessingTime = 0;
     try {
       const t1 = Date.now();
-      const result = await pool.query('SELECT MAX(ledger_sequence) as latest_ledger FROM chain.decoded_events');
-      latestLedger = result.rows[0]?.latest_ledger || null;
+      const result = await prisma.chainDecodedEvent.findFirst({ orderBy: { ledgerSequence: 'desc' } });
+      latestLedger = result ? Number(result.ledgerSequence) : null;
       eventProcessingTime = Date.now() - t1;
     } catch (e) {
       console.error('Failed to check latest event:', e);
@@ -65,8 +57,7 @@ export async function GET() {
     let daoCheckTime = 0;
     try {
       const t1 = Date.now();
-      const result = await pool.query('SELECT COUNT(*) as count FROM manager.daos');
-      daoCount = parseInt(result.rows[0]?.count || '0');
+      daoCount = await prisma.managerDao.count();
       daoCheckTime = Date.now() - t1;
     } catch (e) {
       console.error('Failed to count DAOs:', e);
@@ -77,11 +68,12 @@ export async function GET() {
     let activityCheckTime = 0;
     try {
       const t1 = Date.now();
-      const result = await pool.query(
-        `SELECT COUNT(*) as count FROM app.activity_feed_events
-         WHERE (ledger_closed_at::numeric / 1000) > EXTRACT(epoch FROM NOW() - INTERVAL '1 hour')`
-      );
-      recentActivityCount = parseInt(result.rows[0]?.count || '0');
+      const activity = await prisma.appActivityFeed.findMany({ select: { ledgerClosedAt: true } });
+      const hourAgo = Date.now() - 60 * 60 * 1000;
+      recentActivityCount = activity.filter((row) => {
+        const timestamp = Number(row.ledgerClosedAt);
+        return Number.isFinite(timestamp) && timestamp > hourAgo;
+      }).length;
       activityCheckTime = Date.now() - t1;
     } catch (e) {
       console.error('Failed to check recent activity:', e);
@@ -133,7 +125,5 @@ export async function GET() {
       },
       { status: 500 }
     );
-  } finally {
-    await pool.end();
   }
 }

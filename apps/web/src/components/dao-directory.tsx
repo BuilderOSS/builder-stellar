@@ -33,7 +33,17 @@ function daoName(dao: DaoConfig) {
   return dao.token_name || dao.label || 'Unnamed DAO';
 }
 
-export function DaoDirectory({ daos }: { daos: DaoConfig[] }) {
+export function DaoDirectory({
+  daos,
+  eyebrow = 'Available communities',
+  heading = 'Choose a DAO to explore',
+  hint = 'Every card opens the full governance dashboard.'
+}: {
+  daos: DaoConfig[];
+  eyebrow?: string;
+  heading?: string;
+  hint?: string;
+}) {
   const [query, setQuery] = useState('');
   const normalizedQuery = query.trim().toLowerCase();
   const filteredDaos = daos.filter((dao) => {
@@ -66,11 +76,11 @@ export function DaoDirectory({ daos }: { daos: DaoConfig[] }) {
       <div className="discovery-directory__heading">
         <div>
           <p className="eyebrow" id="dao-directory-title">
-            Available communities
+            {eyebrow}
           </p>
-          <Heading style={{ fontSize: '1.35rem', margin: '6px 0 0' }}>Choose a DAO to explore</Heading>
+          <Heading style={{ fontSize: '1.35rem', margin: '6px 0 0' }}>{heading}</Heading>
         </div>
-        <Text className="lede discovery-directory__hint">Every card opens the full governance dashboard.</Text>
+        <Text className="lede discovery-directory__hint">{hint}</Text>
       </div>
 
       {filteredDaos.length ? (

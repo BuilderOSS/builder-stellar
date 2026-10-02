@@ -16,7 +16,15 @@ import { DashboardSidebar } from './dashboard-sidebar';
 import { DashboardTabs } from './dashboard-tabs';
 import { DashboardWelcome } from './dashboard-welcome';
 
-export function DashboardShell({ daos, loadError }: { daos: DaoConfig[]; loadError: boolean }) {
+export function DashboardShell({
+  daos,
+  pendingDaos,
+  loadError
+}: {
+  daos: DaoConfig[];
+  pendingDaos: DaoConfig[];
+  loadError: boolean;
+}) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const sessionAddress = useAuthSessionStore((state) => state.address);
   const isNewcomer = !sessionAddress;
@@ -75,7 +83,7 @@ export function DashboardShell({ daos, loadError }: { daos: DaoConfig[]; loadErr
                 />
               ) : null}
 
-              <DashboardTabs>
+              <DashboardTabs showPending={pendingDaos.length > 0}>
                 {(tab) => {
                   if (tab === 'feed') {
                     return (
@@ -90,6 +98,18 @@ export function DashboardShell({ daos, loadError }: { daos: DaoConfig[]; loadErr
                     return (
                       <div className="dashboard-discover-content">
                         <DaoDirectory daos={daos} />
+                      </div>
+                    );
+                  }
+                  if (tab === 'pending') {
+                    return (
+                      <div className="dashboard-discover-content">
+                        <DaoDirectory
+                          daos={pendingDaos}
+                          eyebrow="Launch queue"
+                          heading="DAOs waiting for launch"
+                          hint="Only you can see DAOs where you are the launch administrator."
+                        />
                       </div>
                     );
                   }

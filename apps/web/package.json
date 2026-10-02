@@ -3,9 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "panda codegen && panda cssgen",
+    "predev": "node ../../scripts/generate-web-deployment.mjs && node ../../scripts/generate-prisma.mjs && panda codegen && panda cssgen",
     "dev": "next dev",
-    "prebuild": "pnpm --filter @builder-stellar/token-bindings --filter @builder-stellar/manager-bindings  --filter @builder-stellar/metadata-bindings --filter @builder-stellar/governor-bindings --filter @builder-stellar/treasury-bindings --filter @builder-stellar/auction-bindings build && panda codegen && panda cssgen",
+    "prebuild": "node ../../scripts/generate-web-deployment.mjs && node ../../scripts/generate-prisma.mjs && pnpm --filter @builder-stellar/token-bindings --filter @builder-stellar/manager-bindings  --filter @builder-stellar/metadata-bindings --filter @builder-stellar/governor-bindings --filter @builder-stellar/treasury-bindings --filter @builder-stellar/auction-bindings build && panda codegen && panda cssgen",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
@@ -24,8 +24,8 @@
     "@builder-stellar/token-bindings": "workspace:*",
     "@builder-stellar/treasury-bindings": "workspace:*",
     "@creit.tech/stellar-wallets-kit": "^2.5.0",
-    "@neondatabase/serverless": "^1.1.0",
     "@noble/hashes": "^2.2.0",
+    "@prisma/client": "^6.19.0",
     "@stellar/stellar-sdk": "^17.0.1",
     "ai": "^4.0.0",
     "buffer": "^6.0.3",
@@ -61,6 +61,7 @@
     "eslint-plugin-unused-imports": "^4.4.1",
     "lucide-react": "^1.27.0",
     "prettier": "^3.9.6",
+    "prisma": "6.19.0",
     "typescript": "^5.8.0",
     "vitest": "^3.2.4"
   }
