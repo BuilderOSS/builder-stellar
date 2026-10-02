@@ -20,6 +20,7 @@ import { type ReactNode } from 'react';
 
 import { DaoImage } from '@/components/dao-image';
 import { DashboardFooter } from '@/components/dashboard/dashboard-footer';
+import { GlobalNavRail, MobileNavRail, useActiveNavItem, useNavRailItems } from '@/components/global-nav-rail';
 import { NetworkIndicator } from '@/components/network-indicator';
 import { ProposalDraftIndicator } from '@/components/proposal/proposal-draft-indicator';
 import { Callout } from '@/components/ui';
@@ -86,6 +87,10 @@ export function DaoShell({ children }: { children: ReactNode }) {
   const { data: memberLookup } = useGoldskyMember(currentNetwork.tokenContractId, session.address);
   const walletDisabled = Boolean(session.address && session.walletNetworkIssue);
 
+  // Global nav rail hooks
+  const navRailItems = useNavRailItems();
+  const activeNavId = useActiveNavItem(navRailItems);
+
   const baseNavItems = getNavItems(daoId, currentNetwork.auctionEnabled);
   const adminNavItem: NavItem = {
     href: `/dao/${daoId}/admin` as Route,
@@ -97,11 +102,17 @@ export function DaoShell({ children }: { children: ReactNode }) {
   const mobilePrimaryNavItems = navItems.slice(0, 3);
   const mobileOverflowNavItems = navItems.slice(3);
 
+  const handleNavRailNavigate = (id: string, href: string) => {
+    window.location.href = href;
+  };
+
   return (
     <div className="page-shell">
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
+      <GlobalNavRail items={navRailItems} activeId={activeNavId} onNavigate={handleNavRailNavigate} />
+      <MobileNavRail items={navRailItems} activeId={activeNavId} />
       <div className="app-frame">
         <header className="app-header">
           <div className="app-header__top">

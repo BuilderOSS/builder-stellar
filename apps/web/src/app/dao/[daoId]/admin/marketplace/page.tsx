@@ -37,9 +37,7 @@ export default function MarketplaceAdminPage() {
             />
 
             <div style={{ padding: '2rem', backgroundColor: 'var(--gray-2)', borderRadius: '0.5rem' }}>
-              <Heading style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>
-                Marketplace Parameters
-              </Heading>
+              <Heading style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>Marketplace Parameters</Heading>
               <Text style={{ color: 'var(--gray-11)', marginBottom: '1rem' }}>
                 Configure marketplace fees, payment tokens, and trading parameters.
               </Text>
@@ -56,9 +54,7 @@ export default function MarketplaceAdminPage() {
             </div>
 
             <div style={{ padding: '2rem', backgroundColor: 'var(--gray-2)', borderRadius: '0.5rem' }}>
-              <Heading style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>
-                Fee Structure
-              </Heading>
+              <Heading style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>Fee Structure</Heading>
               <Text style={{ color: 'var(--gray-11)', marginBottom: '1rem' }}>
                 Define marketplace fee percentages and fee recipient addresses.
               </Text>
@@ -75,12 +71,8 @@ export default function MarketplaceAdminPage() {
             </div>
 
             <div style={{ padding: '2rem', backgroundColor: 'var(--gray-2)', borderRadius: '0.5rem' }}>
-              <Heading style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>
-                Trading Tokens
-              </Heading>
-              <Text style={{ color: 'var(--gray-11)' }}>
-                No trading tokens have been configured yet.
-              </Text>
+              <Heading style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>Trading Tokens</Heading>
+              <Text style={{ color: 'var(--gray-11)' }}>No trading tokens have been configured yet.</Text>
             </div>
 
             <Callout

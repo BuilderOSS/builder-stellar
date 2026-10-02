@@ -17,6 +17,56 @@ export const LOCAL_DEFAULT_DAO_IMAGE_URL = '/images/dao-logo.png';
 export type MembershipMode = 'founders' | 'marketplace' | 'auctions';
 
 /**
+ * Artwork property (trait) for DAO token artwork
+ */
+export type ArtworkProperty = {
+  name: string;
+  items: string[];
+};
+
+/**
+ * Artwork configuration for IPFS-based collections (legacy)
+ */
+export type ArtworkConfig = {
+  ipfs: {
+    baseUri: string;
+    extension: string;
+  };
+  properties: ArtworkProperty[];
+};
+
+/**
+ * DAO image source (legacy)
+ */
+export type DaoImageSource =
+  | { kind: 'default'; gatewayUrl: string }
+  | { kind: 'generated'; model: string; prompt: string; ipfsUri: string; gatewayUrl: string }
+  | { kind: 'uploaded'; filename: string; ipfsUri: string; gatewayUrl: string }
+  | { kind: 'url'; gatewayUrl: string }
+  | { kind: 'legacy-unconfirmed' };
+
+/**
+ * Artwork source - can be uploaded, generated, or from starter collection
+ */
+export type ArtworkSource =
+  | {
+      kind: 'uploaded';
+      baseUri: string;
+      extension: string;
+      properties: ArtworkProperty[];
+      gatewayUrl?: string;
+    }
+  | {
+      kind: 'starter';
+      collectionId: string;
+      properties: ArtworkProperty[];
+    }
+  | {
+      kind: 'generated';
+      seed: string;
+    };
+
+/**
  * Basic information about the DAO
  */
 type BasicInfo = {
@@ -66,6 +116,12 @@ type CreateDaoState = {
   busy: boolean;
   formMessage: string;
   validationErrors: Record<string, string>;
+  // Backwards compatibility for legacy components (no longer used in creation flow)
+  artworkSource?: ArtworkSource | null;
+  artwork?: ArtworkConfig;
+  daoImageSource?: DaoImageSource;
+  auction?: { enabled: boolean; duration: number };
+  founders?: FounderAllocation[];
 };
 
 /**
@@ -87,6 +143,22 @@ type CreateDaoActions = {
   setFormMessage: (message: string) => void;
   clearFormMessage: () => void;
   setBusy: (busy: boolean) => void;
+
+  // Backwards compatibility for legacy components (no longer used in creation flow)
+  setArtworkSource: (source: ArtworkSource) => void;
+  clearArtworkSource: () => void;
+  updateArtwork: (patch: Partial<ArtworkConfig>) => void;
+  addArtworkItem: () => void;
+  removeArtworkItem: (index: number) => void;
+  setDaoImageSource: (source: DaoImageSource) => void;
+  updateAuction: (patch: Partial<{ enabled: boolean; duration: number }>) => void;
+  addFounder: (founder?: FounderAllocation) => void;
+  removeFounder: (index: number) => void;
+  updateFounder: (index: number, founder: Partial<FounderAllocation>) => void;
+  replaceFounders: (founders: FounderAllocation[]) => void;
+  addArtworkProperty: () => void;
+  removeArtworkProperty: (index: number) => void;
+  updateArtworkProperty: (index: number, property: Partial<ArtworkProperty>) => void;
 
   // Reset
   reset: () => void;
@@ -169,6 +241,85 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
       setFormMessage: (formMessage) => set({ formMessage }),
       clearFormMessage: () => set({ formMessage: '' }),
       setBusy: (busy) => set({ busy }),
+
+      // Backwards compatibility for artwork components
+      setArtworkSource: (source) => set({ artworkSource: source }),
+      clearArtworkSource: () => set({ artworkSource: null }),
+      updateArtwork: (patch) =>
+        set((state) => ({
+          artwork: { ...state.artwork, ...patch }
+        })),
+      addArtworkItem: () => {
+        // No-op for backwards compatibility
+        return;
+      },
+      removeArtworkItem: () => {
+        // No-op for backwards compatibility
+        return;
+      },
+      setDaoImageSource: (source) => set({ daoImageSource: source }),
+      updateAuction: (patch) =>
+        set((state) => ({
+          auction: { ...state.auction, ...patch }
+        })),
+
+      // Backwards compatibility for founder components
+      addFounder: (founder) =>
+        set((state) => ({
+          founders: [...(state.founders ?? []), founder ?? { address: '', amount: 0 }]
+        })),
+
+      removeFounder: (index) =>
+        set((state) => ({
+          founders: (state.founders ?? []).filter((_, i) => i !== index)
+        })),
+
+      updateFounder: (index, founder) =>
+        set((state) => ({
+          founders: (state.founders ?? []).map((f, i) => (i === index ? { ...f, ...founder } : f))
+        })),
+
+      replaceFounders: (founders) => set({ founders }),
+
+      // Backwards compatibility for artwork properties
+      addArtworkProperty: () =>
+        set((state) => {
+          if (!state.artworkSource || state.artworkSource.kind === 'generated') {
+            return state;
+          }
+          return {
+            artworkSource: {
+              ...state.artworkSource,
+              properties: [...state.artworkSource.properties, { name: '', items: [] }]
+            }
+          };
+        }),
+
+      removeArtworkProperty: (index) =>
+        set((state) => {
+          if (!state.artworkSource || state.artworkSource.kind === 'generated') {
+            return state;
+          }
+          return {
+            artworkSource: {
+              ...state.artworkSource,
+              properties: state.artworkSource.properties.filter((_, i) => i !== index)
+            }
+          };
+        }),
+
+      updateArtworkProperty: (index, property) =>
+        set((state) => {
+          if (!state.artworkSource || state.artworkSource.kind === 'generated') {
+            return state;
+          }
+          return {
+            artworkSource: {
+              ...state.artworkSource,
+              properties: state.artworkSource.properties.map((p, i) => (i === index ? { ...p, ...property } : p))
+            }
+          };
+        }),
 
       // Reset
       reset: () => set(initialState)

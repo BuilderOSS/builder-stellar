@@ -45,9 +45,7 @@ export default function ArtworkAdminPage() {
             )}
 
             <div style={{ padding: '2rem', backgroundColor: 'var(--gray-2)', borderRadius: '0.5rem' }}>
-              <Heading style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>
-                Artwork Properties
-              </Heading>
+              <Heading style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>Artwork Properties</Heading>
               <Text style={{ color: 'var(--gray-11)', marginBottom: '1rem' }}>
                 Define the traits and properties that will be used to generate your DAO's token artwork.
               </Text>
@@ -64,9 +62,7 @@ export default function ArtworkAdminPage() {
             </div>
 
             <div style={{ padding: '2rem', backgroundColor: 'var(--gray-2)', borderRadius: '0.5rem' }}>
-              <Heading style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>
-                Artwork Renderer
-              </Heading>
+              <Heading style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>Artwork Renderer</Heading>
               <Text style={{ color: 'var(--gray-11)', marginBottom: '1rem' }}>
                 Configure the IPFS-hosted renderer that generates artwork for each token based on its properties.
               </Text>

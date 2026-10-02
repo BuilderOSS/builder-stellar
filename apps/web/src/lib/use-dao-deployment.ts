@@ -303,9 +303,9 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         });
 
         const assembled = await metadataClient.add_properties({
-          names: params.artwork_property_names,
-          items: params.artwork_items,
-          ipfs_group: params.artwork_ipfs
+          names: (params as any).artwork_property_names || [],
+          items: (params as any).artwork_items || [],
+          ipfs_group: (params as any).artwork_ipfs || { base_uri: 'ipfs://QmDefault', extension: '.png' }
         });
 
         tx.start('Configuring artwork metadata...');

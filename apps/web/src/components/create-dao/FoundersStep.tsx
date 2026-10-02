@@ -10,18 +10,30 @@ import { FounderCsvUpload } from '@/components/create-dao/FounderCsvUpload';
 import { Badge, Button, Card, Heading, Input, Text } from '@/components/ui';
 import { MAX_FOUNDER_ALLOCATION, MAX_FOUNDERS } from '@/lib/founders-csv';
 import { getStellarAddressError, hasDuplicates, isValidStellarAddress } from '@/lib/validation';
-import { selectTotalFounderAllocation, useCreateDaoStore } from '@/stores/create-dao-store';
+import { useCreateDaoStore } from '@/stores/create-dao-store';
 
 export function FoundersStep() {
-  const founders = useCreateDaoStore((s) => s.founders);
-  const addFounder = useCreateDaoStore((s) => s.addFounder);
-  const replaceFounders = useCreateDaoStore((s) => s.replaceFounders);
-  const removeFounder = useCreateDaoStore((s) => s.removeFounder);
-  const updateFounder = useCreateDaoStore((s) => s.updateFounder);
-  const totalAllocation = useCreateDaoStore(selectTotalFounderAllocation);
-  const validationErrors = useCreateDaoStore((s) => s.validationErrors);
-  const setValidationError = useCreateDaoStore((s) => s.setValidationError);
-  const clearValidationError = useCreateDaoStore((s) => s.clearValidationError);
+  const {
+    founders,
+    addFounder,
+    replaceFounders,
+    removeFounder,
+    updateFounder,
+    validationErrors,
+    setValidationError,
+    clearValidationError
+  } = useCreateDaoStore((s) => ({
+    founders: s.founders ?? [],
+    addFounder: s.addFounder,
+    replaceFounders: s.replaceFounders,
+    removeFounder: s.removeFounder,
+    updateFounder: s.updateFounder,
+    validationErrors: s.validationErrors,
+    setValidationError: s.setValidationError,
+    clearValidationError: s.clearValidationError
+  }));
+
+  const totalAllocation = founders.reduce((sum, f) => sum + f.amount, 0);
 
   const [newFounderAddress, setNewFounderAddress] = useState('');
   const [newFounderAmount, setNewFounderAmount] = useState('');
@@ -29,7 +41,7 @@ export function FoundersStep() {
   const [amountError, setAmountError] = useState('');
 
   const validateFounders = () => {
-    const currentFounders = useCreateDaoStore.getState().founders;
+    const currentFounders = useCreateDaoStore.getState().founders ?? [];
     const totalAllocation = currentFounders.reduce((sum, f) => sum + f.amount, 0);
     if (totalAllocation > MAX_FOUNDER_ALLOCATION) {
       setValidationError(

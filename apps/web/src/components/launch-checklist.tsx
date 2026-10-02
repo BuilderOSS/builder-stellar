@@ -3,8 +3,8 @@
 'use client';
 
 import { Check, ChevronRight } from 'lucide-react';
-import Link from 'next/link';
 import type { Route } from 'next';
+import Link from 'next/link';
 import { Box, Stack } from 'styled-system/jsx';
 
 import { Card, Heading, Text } from '@/components/ui';
@@ -140,7 +140,8 @@ export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoN
           }}
         >
           <Text style={{ fontSize: '0.875rem', color: 'var(--gray-12)' }}>
-            <strong>Ready to launch?</strong> Once you've completed the setup, visit the Admin page to finalize your DAO launch.
+            <strong>Ready to launch?</strong> Once you've completed the setup, visit the Admin page to finalize your DAO
+            launch.
           </Text>
         </Box>
       </Stack>

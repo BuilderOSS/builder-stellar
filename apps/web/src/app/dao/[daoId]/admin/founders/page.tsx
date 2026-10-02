@@ -37,11 +37,10 @@ export default function FoundersAdminPage() {
             />
 
             <div style={{ padding: '2rem', backgroundColor: 'var(--gray-2)', borderRadius: '0.5rem' }}>
-              <Heading style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>
-                Add Founder Allocations
-              </Heading>
+              <Heading style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>Add Founder Allocations</Heading>
               <Text style={{ color: 'var(--gray-11)', marginBottom: '1rem' }}>
-                Specify founder addresses and their initial token amounts. Total allocation cannot exceed your DAO's maximum supply.
+                Specify founder addresses and their initial token amounts. Total allocation cannot exceed your DAO's
+                maximum supply.
               </Text>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                 <Button
@@ -56,9 +55,7 @@ export default function FoundersAdminPage() {
             </div>
 
             <div style={{ padding: '2rem', backgroundColor: 'var(--gray-2)', borderRadius: '0.5rem' }}>
-              <Heading style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>
-                Current Allocations
-              </Heading>
+              <Heading style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>Current Allocations</Heading>
               <Text style={{ color: 'var(--gray-11)' }}>
                 No founders have been allocated tokens yet. Configure founders above to get started.
               </Text>

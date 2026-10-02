@@ -29,7 +29,7 @@ export function validateDeploymentReady(state: CreateDaoStore): DeploymentValida
   }
 
   // DAO Image Source validation
-  if (!state.daoImageSource || state.daoImageSource.kind === 'legacy-unconfirmed') {
+  if (!state.daoImageSource) {
     errors.push('DAO identity image must be selected or generated');
   }
   if (state.daoImageSource && 'gatewayUrl' in state.daoImageSource && !state.daoImageSource.gatewayUrl) {
@@ -45,49 +45,48 @@ export function validateDeploymentReady(state: CreateDaoStore): DeploymentValida
   }
 
   // Artwork Source validation
-  if (!state.artworkSource || state.artworkSource.kind === 'legacy-unconfirmed') {
+  if (!state.artworkSource) {
     errors.push('Artwork source must be selected (starter collection or uploaded directory)');
   }
 
-  // IPFS validation
-  if (!state.artwork.ipfs.baseUri?.trim()) {
-    errors.push('IPFS base URI is required');
-  }
-  if (!state.artwork.ipfs.extension?.trim()) {
-    errors.push('File extension is required');
-  }
-
-  // Properties validation
-  if (!state.artwork.properties || state.artwork.properties.length === 0) {
-    errors.push('At least one artwork property is required');
-  } else {
-    // Validate each property
-    for (let i = 0; i < state.artwork.properties.length; i++) {
-      const property = state.artwork.properties[i];
-      if (!property.name?.trim()) {
-        errors.push(`Property ${i + 1}: name is required`);
-      }
-      if (!property.items || property.items.length === 0) {
-        errors.push(`Property "${property.name}": at least one item is required`);
-      }
+  // IPFS validation (legacy)
+  if (state.artwork) {
+    if (!state.artwork.ipfs.baseUri?.trim()) {
+      errors.push('IPFS base URI is required');
+    }
+    if (!state.artwork.ipfs.extension?.trim()) {
+      errors.push('File extension is required');
     }
 
-    // Check for duplicate property names
-    const names = state.artwork.properties.map((p: ArtworkProperty) => p.name.toLowerCase());
-    const duplicates = names.filter((name: string, index: number) => names.indexOf(name) !== index);
-    if (duplicates.length > 0) {
-      errors.push(`Duplicate property names: ${Array.from(new Set(duplicates)).join(', ')}`);
+    // Properties validation (legacy)
+    if (!state.artwork.properties || state.artwork.properties.length === 0) {
+      errors.push('At least one artwork property is required');
+    } else {
+      // Validate each property
+      for (let i = 0; i < state.artwork.properties.length; i++) {
+        const property = state.artwork.properties[i];
+        if (!property.name?.trim()) {
+          errors.push(`Property ${i + 1}: name is required`);
+        }
+        if (!property.items || property.items.length === 0) {
+          errors.push(`Property "${property.name}": at least one item is required`);
+        }
+      }
+
+      // Check for duplicate property names
+      const names = state.artwork.properties.map((p: ArtworkProperty) => p.name.toLowerCase());
+      const duplicates = names.filter((name: string, index: number) => names.indexOf(name) !== index);
+      if (duplicates.length > 0) {
+        errors.push(`Duplicate property names: ${Array.from(new Set(duplicates)).join(', ')}`);
+      }
     }
   }
 
   // Founders validation (optional but warn if high vote threshold with no founders)
-  if (state.founders.length === 0 && state.governance.proposalThresholdBps < 100) {
-    warnings.push('No founders allocated. Ensure governance parameters are appropriate.');
-  }
-
-  // Auction validation
-  if (state.auction.enabled && !state.auction.paymentAsset?.trim()) {
-    errors.push('Payment asset is required when auctions are enabled');
+  if (!state.founders || state.founders.length === 0) {
+    if (state.governance.proposalThresholdBps < 100) {
+      warnings.push('No founders allocated. Ensure governance parameters are appropriate.');
+    }
   }
 
   // Launch admin validation
@@ -110,7 +109,7 @@ export function validateImageSources(state: CreateDaoStore): { valid: boolean; e
 
   // DAO Image Source
   const daoImageSource = state.daoImageSource;
-  if (!daoImageSource || daoImageSource.kind === 'legacy-unconfirmed') {
+  if (!daoImageSource) {
     errors.push('DAO image source not selected');
   } else {
     if (daoImageSource.kind === 'generated' || daoImageSource.kind === 'uploaded') {
@@ -129,7 +128,7 @@ export function validateImageSources(state: CreateDaoStore): { valid: boolean; e
 
   // Artwork Source
   const artworkSource = state.artworkSource;
-  if (!artworkSource || artworkSource.kind === 'legacy-unconfirmed') {
+  if (!artworkSource) {
     errors.push('Artwork source not selected');
   } else {
     if (artworkSource.kind === 'uploaded') {

@@ -62,6 +62,9 @@ export function useArtworkPreview({
    */
   const buildLayerUrl = useCallback(
     (property: ArtworkProperty, itemName: string, extension: string): string => {
+      if (!source || source.kind === 'starter') {
+        return '';
+      }
       if (!source.baseUri || !property.name || property.items.length === 0) {
         return '';
       }
@@ -82,7 +85,7 @@ export function useArtworkPreview({
 
       return `${cleanBase}/${property.name}/${itemName}${extension}`;
     },
-    [source.baseUri]
+    [source]
   );
 
   /**
@@ -96,7 +99,7 @@ export function useArtworkPreview({
       return;
     }
 
-    const extension = source.extension || '.png';
+    const extension = source.kind === 'uploaded' ? source.extension || '.png' : '.png';
     const layers: LayerImage[] = [];
 
     try {

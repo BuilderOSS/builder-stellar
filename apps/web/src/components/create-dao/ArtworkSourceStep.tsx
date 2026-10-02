@@ -8,7 +8,6 @@ import { ArtworkDirectoryUpload } from '@/components/create-dao/ArtworkDirectory
 import { ArtworkPlayground } from '@/components/create-dao/ArtworkPlayground';
 import { ArtworkPreviewCanvas } from '@/components/create-dao/ArtworkPreviewCanvas';
 import { Badge, Button, Card, Heading, Text } from '@/components/ui';
-import { cidToUrls } from '@/lib/pinata-upload';
 import { getAvailableCollections, getStarterCollection } from '@/lib/starter-collections';
 import { ArtworkSource, useCreateDaoStore } from '@/stores/create-dao-store';
 
@@ -17,13 +16,8 @@ function starterSource(collection: ReturnType<typeof getStarterCollection>) {
 
   return {
     kind: 'starter' as const,
-    starterId: collection.id,
-    baseUri: collection.baseUri,
-    extension: collection.extension,
-    properties: collection.properties,
-    gatewayUrl: collection.baseUri.startsWith('ipfs://')
-      ? cidToUrls(collection.baseUri.replace('ipfs://', '').replace(/\/$/, '')).gatewayUrl
-      : collection.baseUri
+    collectionId: collection.id,
+    properties: collection.properties
   };
 }
 
@@ -76,11 +70,11 @@ export function ArtworkSourceStep() {
 
   // Get the current selection description
   const getSelectionDescription = () => {
-    if (!artworkSource || artworkSource.kind === 'legacy-unconfirmed') {
+    if (!artworkSource) {
       return null;
     }
     if (artworkSource.kind === 'starter') {
-      const collection = starterCollections.find((c) => c.id === artworkSource.starterId);
+      const collection = starterCollections.find((c) => c.id === artworkSource.collectionId);
       return collection ? (
         <Box>
           <Text style={{ fontWeight: 600 }}>{collection.name}</Text>
@@ -101,12 +95,21 @@ export function ArtworkSourceStep() {
         </Box>
       );
     }
+    if (artworkSource.kind === 'generated') {
+      return (
+        <Box>
+          <Text style={{ fontWeight: 600 }}>Generated Collection</Text>
+          <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)' }}>Seed: {artworkSource.seed}</Text>
+        </Box>
+      );
+    }
+    return null;
   };
 
   return (
     <Stack gap="4">
       {/* Current Selection Display */}
-      {artworkSource && artworkSource.kind !== 'legacy-unconfirmed' && !playgroundMode && (
+      {artworkSource && !playgroundMode && (
         <Card p="5" style={{ backgroundColor: 'var(--info-2)' }}>
           <Stack gap="3">
             <Flex gap="2" style={{ alignItems: 'center' }}>
@@ -129,7 +132,7 @@ export function ArtworkSourceStep() {
       )}
 
       {/* Source Selection Screen */}
-      {(!artworkSource || artworkSource.kind === 'legacy-unconfirmed') && !uploadMode && !playgroundMode && (
+      {!artworkSource && !uploadMode && !playgroundMode && (
         <Card p="5">
           <Stack gap="4">
             <Stack gap="2">

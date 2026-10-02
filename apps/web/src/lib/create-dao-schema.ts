@@ -1,13 +1,10 @@
 import { z } from 'zod';
 
-import { decimalToStroops, MIN_RESERVE_PRICE_STROOPS, validateReservePrice } from './auction-values';
 import {
   getStellarAddressError,
   isValidHttpUrl,
-  isValidIpfsUri,
   isValidStellarAddress,
   isValidTokenSymbol,
-  validateArtworkProperty,
   validateDuration
 } from './validation';
 
@@ -37,78 +34,6 @@ const basicInfoSchema = z.object({
   contractImage: z.string().refine(isValidHttpUrl, 'Contract image must be a valid HTTP/HTTPS URL'),
   rendererBase: z.string().refine(isValidHttpUrl, 'Renderer base must be a valid HTTP/HTTPS URL')
 });
-
-// Keep for backwards compatibility with components that may still reference these
-const _artworkPropertySchema = z
-  .object({
-    name: z.string(),
-    items: z.array(z.string())
-  })
-  .superRefine((property, context) => {
-    const error = validateArtworkProperty(property);
-    if (error) context.addIssue({ code: 'custom', message: error, path: ['name'] });
-  });
-
-// Keep for backwards compatibility with components that may still reference these
-const _artworkSchema = z
-  .object({
-    ipfs: z.object({
-      baseUri: z.string().refine(isValidIpfsUri, 'IPFS base URI must be a valid IPFS URI'),
-      extension: z
-        .string()
-        .trim()
-        .min(1, 'File extension is required')
-        .startsWith('.', 'File extension must start with a dot')
-    }),
-    properties: z
-      .array(artworkPropertySchema)
-      .min(1, 'At least one artwork property is required')
-      .max(16, 'Maximum 16 artwork properties allowed')
-  })
-  .superRefine((artwork, context) => {
-    const names = artwork.properties.map((property) => property.name.trim().toLowerCase());
-    if (new Set(names).size !== names.length) {
-      context.addIssue({ code: 'custom', message: 'Duplicate property names are not allowed', path: ['properties'] });
-    }
-  });
-
-// Keep for backwards compatibility with components that may still reference these
-const _auctionSchema = z
-  .object({
-    enabled: z.boolean(),
-    duration: z.number().int('Auction duration must be a whole number'),
-    reservePrice: z.string(),
-    timeBuffer: z.number().int('Time buffer must be a whole number'),
-    paymentAsset: z.string()
-  })
-  .superRefine((auction, context) => {
-    if (!auction.enabled) return;
-
-    const durationError = validateDuration(auction.duration, 300);
-    if (durationError) context.addIssue({ code: 'custom', message: durationError, path: ['duration'] });
-
-    const reservePriceError = validateReservePrice(auction.reservePrice);
-    if (reservePriceError || (decimalToStroops(auction.reservePrice) ?? 0n) < MIN_RESERVE_PRICE_STROOPS) {
-      context.addIssue({
-        code: 'custom',
-        message: reservePriceError ?? 'Reserve price is below the minimum',
-        path: ['reservePrice']
-      });
-    }
-
-    const timeBufferError = validateDuration(auction.timeBuffer, 60);
-    if (timeBufferError) context.addIssue({ code: 'custom', message: timeBufferError, path: ['timeBuffer'] });
-
-    if (!auction.paymentAsset) {
-      context.addIssue({ code: 'custom', message: 'Payment token is required', path: ['paymentAsset'] });
-    } else if (!isValidStellarAddress(auction.paymentAsset)) {
-      context.addIssue({
-        code: 'custom',
-        message: getStellarAddressError(auction.paymentAsset) ?? 'Invalid payment asset address',
-        path: ['paymentAsset']
-      });
-    }
-  });
 
 const governanceSchema = z
   .object({

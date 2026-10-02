@@ -22,11 +22,15 @@ export function DashboardShell({ daos, loadError }: { daos: DaoConfig[]; loadErr
   const isNewcomer = !sessionAddress;
   const { data: dashboardData, error: dashboardError, isLoading: dashboardLoading } = useDashboardData(sessionAddress);
 
+  // Don't use nav rail on dashboard (only on DAO pages)
+  // Global nav rail is added by DaoShell for DAO pages
+
   return (
     <div className="page-shell dashboard-page-shell">
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
+      {/* Nav rail is only used on DAO pages, not on dashboard */}
       <div className="app-frame dashboard-frame">
         <DashboardHeader showMenuButton={!isNewcomer} onMenuClick={() => setSidebarOpen(true)} />
 
