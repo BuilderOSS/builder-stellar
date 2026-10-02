@@ -1,0 +1,122 @@
+{
+  "status": "created",
+  "network": "testnet",
+  "label": "builder",
+  "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+  "nonce": 7,
+  "manager": "CDGMF5UREP7SZLG2Q7POLK6DXWQ2JXS4W7DMBGLAWKN4O64SAKC6YYAP",
+  "addresses": {
+    "token": "CCBUXHOZ6EVDNNKRLBTHZMJH6OS6E2KT66NU2WBCNMRSFP65ZC5RWJIG",
+    "metadata": "CBIAQU75LBOBAUYAWVR7MTO73FJ2QNVIZIF4BU7BJJASHHHBWHZNOY7X",
+    "auction": "CDJL2IAUF36Z3UDXBQACTM5MEX5CR47IE7ZAYSCGW5YI2GKZWASUTAEQ",
+    "governor": "CAQINTDTQBSF7J3XLCMAIWKLQDMK7NULNAGVQD4OPMUEFQVJLRQJ3Z52",
+    "treasury": "CDEXYOIEJBWDXNDFQYGC436ZFNTZDHEHZOQCAXN2RJBQQ24MAQOMHDIE",
+    "marketplace": "CB5DKLJKBVL6E2P3ZYSZCPINKGYL5WOADKNNDEVSSZM3NKKPASXNS5B6"
+  },
+  "config": {
+    "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+    "nonce": 7,
+    "token": {
+      "name": "Builder DAO",
+      "symbol": "BUILD",
+      "uri": "https://builder-stellar-web.vercel.app/api/dao/{daoId}/token/"
+    },
+    "metadata": {
+      "projectUri": "https://test-dao-stellar-web.vercel.app",
+      "description": "Unlock the possibilities of collective creation",
+      "contractImage": "https://builder-stellar-web.vercel.app/images/dao-logo.png",
+      "rendererBase": "https://builder-stellar-web.vercel.app/api/render/",
+      "artwork": {
+        "ipfs": {
+          "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+          "extension": ".png"
+        },
+        "properties": [
+          {
+            "name": "0-backgrounds",
+            "items": [
+              "bg-cool",
+              "bg-warm"
+            ]
+          },
+          {
+            "name": "1-bodies",
+            "items": [
+              "body-rust",
+              "body-blue-sky",
+              "body-darkbrown"
+            ]
+          },
+          {
+            "name": "2-accessories",
+            "items": [
+              "accessory-txt-cc2",
+              "accessory-txt-ico",
+              "accessory-flash"
+            ]
+          },
+          {
+            "name": "3-heads",
+            "items": [
+              "head-hotdog",
+              "head-ufo",
+              "head-goldcoin"
+            ]
+          },
+          {
+            "name": "4-glasses",
+            "items": [
+              "glasses-square-teal",
+              "glasses-square-guava",
+              "glasses-square-black-rgb"
+            ]
+          }
+        ]
+      }
+    },
+    "auction": {
+      "enabled": true,
+      "duration": 300,
+      "reservePrice": "1000000000",
+      "timeBuffer": 300,
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+    },
+    "marketplace": {
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      "secondaryFeeBps": 250,
+      "primaryListingCount": 10,
+      "primaryPrice": "10000000000",
+      "primaryListingDuration": 2592000
+    },
+    "governance": {
+      "queueDelay": 300,
+      "votingDelay": 300,
+      "votingPeriod": 300,
+      "quorumBps": 1000,
+      "proposalThresholdBps": 100
+    },
+    "founders": [
+      {
+        "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+        "amount": 10
+      },
+      {
+        "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
+        "amount": 10
+      },
+      {
+        "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
+        "amount": 10
+      }
+    ],
+    "launchAdmin": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO"
+  },
+  "updatedAt": "2026-10-02T07:58:18.849Z",
+  "transactions": {
+    "createDao": {
+      "txHash": "bca3fc0527d53fe71c0ae316b2d1c6b044915c50e4d6ce3d5d08c3cb8b5549f7",
+      "ledger": 4980862
+    }
+  },
+  "deploymentLedger": 4980862
+}

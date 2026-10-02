@@ -299,35 +299,44 @@ export async function getAllDaosFromDatabase(status?: 'pending' | 'operational')
 }
 
 /**
- * Update DAO status from 'pending' to 'operational'
+ * DAO status is now derived from DaoLaunched event presence
  *
- * Called when the launch_admin finalizes the DAO setup.
- * Updates the status column in the manager.daos table.
+ * When launch_dao is called on-chain:
+ * 1. Manager emits DaoLaunched event
+ * 2. Goldsky indexes the event
+ * 3. manager.daos view derives status = 'operational'
+ *
+ * No manual database updates needed.
+ */
+
+/**
+ * Wait for DAO to be indexed in the database
+ *
+ * After create_dao is called on-chain, Goldsky takes time to index the event.
+ * This function polls the database until the DAO appears.
  *
  * @param daoId - Token contract address (DAO ID)
- * @param status - New status ('operational')
+ * @param timeoutMs - Maximum time to wait (default 30000ms)
+ * @throws Error if DAO not found within timeout
  */
-export async function updateDaoStatus(daoId: string, status: 'operational'): Promise<void> {
-  const deploymentId = process.env.NEXT_PUBLIC_DEPLOYMENT_ID;
+export async function waitForDaoIndexed(daoId: string, timeoutMs = 30000): Promise<void> {
+  const startTime = Date.now();
+  const pollInterval = 1000; // 1 second
 
-  if (!deploymentId) {
-    throw new Error('NEXT_PUBLIC_DEPLOYMENT_ID environment variable is required');
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const config = await getDaoConfigFromDatabase(daoId);
+      if (config) {
+        // DAO found!
+        return;
+      }
+    } catch {
+      // DAO not found yet, continue polling
+    }
+
+    // Wait before next poll
+    await new Promise((resolve) => setTimeout(resolve, pollInterval));
   }
 
-  if (!daoId) {
-    throw new Error('DAO ID is required');
-  }
-
-  const query = `
-    UPDATE manager.daos
-    SET status = $1, finalized_at = NOW()
-    WHERE deployment_id = $2 AND dao_id = $3
-    RETURNING dao_id
-  `;
-
-  const result = await pool.query(query, [status, deploymentId, daoId]);
-
-  if (result.rows.length === 0) {
-    throw new Error(`DAO not found: ${daoId}`);
-  }
+  throw new Error(`DAO ${daoId} not indexed after ${timeoutMs}ms. Please check Goldsky indexer status.`);
 }

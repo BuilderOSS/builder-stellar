@@ -27,11 +27,6 @@ const DEPLOYMENT_STEPS: Array<{ key: DeploymentStep; label: string; description:
     key: 'creating',
     label: 'Create DAO',
     description: 'Deploying contracts to blockchain'
-  },
-  {
-    key: 'finalizing',
-    label: 'Finalize DAO',
-    description: 'Completing setup and launching'
   }
 ];
 
@@ -245,8 +240,6 @@ function getTxHashForStep(step: DeploymentStep, transactions: DeploymentState['t
   switch (step) {
     case 'creating':
       return transactions.create;
-    case 'finalizing':
-      return transactions.finalize;
     default:
       return undefined;
   }

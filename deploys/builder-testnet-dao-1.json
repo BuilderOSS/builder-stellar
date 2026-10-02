@@ -1,0 +1,194 @@
+{
+  "status": "checklist_complete",
+  "network": "testnet",
+  "label": "builder",
+  "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+  "nonce": 1,
+  "manager": "CAQBRMAPE43LKW4GU4EDTJGRNXOQYPSA7CNQUC3Z7YPQWZFYUDI7EZ7C",
+  "addresses": {
+    "token": "CBVQULQSNAK7BDNJW3CSAQNBXDZKFUXNI5BZ5H3QFRHTS3CDSKFD2KGY",
+    "metadata": "CAH6AOV5MEJVZW3TGH2KNNN4YFLCXPRMSI5I7ZGE6X7762YYL6LQTI72",
+    "auction": "CD36YKTIB3XZ6AVUSKM33P35HNSTXSXAXMXD4DSBT55YO52OKUQITH4M",
+    "governor": "CCG2IBYMZ6JWTELHJQ4P33UMBOHPYZ26FJGAE6B6UWHAOFWXFTSEJ5DX",
+    "treasury": "CAGK4H2FIOLZGP6UXO3M4WUTPKAP2H2T7PAGLDWSDX6O2MIS3MX2HHQM",
+    "marketplace": "CBNF5JXSCJHEONAD7J5QSNOVGQP5XRKONB6YH54RJS6OGPKPDTQ5J7S2"
+  },
+  "config": {
+    "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+    "nonce": 1,
+    "token": {
+      "name": "Builder DAO",
+      "symbol": "BUILD",
+      "uri": "https://builder-stellar-web.vercel.app/api/dao/{daoId}/token/"
+    },
+    "metadata": {
+      "projectUri": "https://test-dao-stellar-web.vercel.app",
+      "description": "Unlock the possibilities of collective creation",
+      "contractImage": "https://builder-stellar-web.vercel.app/images/dao-logo.png",
+      "rendererBase": "https://builder-stellar-web.vercel.app/api/render/",
+      "artwork": {
+        "ipfs": {
+          "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+          "extension": ".png"
+        },
+        "properties": [
+          {
+            "name": "0-backgrounds",
+            "items": [
+              "bg-cool",
+              "bg-warm"
+            ]
+          },
+          {
+            "name": "1-bodies",
+            "items": [
+              "body-rust",
+              "body-blue-sky",
+              "body-darkbrown"
+            ]
+          },
+          {
+            "name": "2-accessories",
+            "items": [
+              "accessory-txt-cc2",
+              "accessory-txt-ico",
+              "accessory-flash"
+            ]
+          },
+          {
+            "name": "3-heads",
+            "items": [
+              "head-hotdog",
+              "head-ufo",
+              "head-goldcoin"
+            ]
+          },
+          {
+            "name": "4-glasses",
+            "items": [
+              "glasses-square-teal",
+              "glasses-square-guava",
+              "glasses-square-black-rgb"
+            ]
+          }
+        ]
+      }
+    },
+    "auction": {
+      "enabled": true,
+      "duration": 300,
+      "reservePrice": "1000000000",
+      "timeBuffer": 300,
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+    },
+    "marketplace": {
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      "secondaryFeeBps": 250,
+      "primaryListingCount": 10,
+      "primaryPrice": "10000000000",
+      "primaryListingDuration": 2592000
+    },
+    "governance": {
+      "queueDelay": 300,
+      "votingDelay": 300,
+      "votingPeriod": 300,
+      "quorumBps": 1000,
+      "proposalThresholdBps": 100
+    },
+    "founders": [
+      {
+        "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+        "amount": 10
+      },
+      {
+        "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
+        "amount": 10
+      },
+      {
+        "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
+        "amount": 10
+      }
+    ],
+    "launchAdmin": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO"
+  },
+  "updatedAt": "2026-10-02T07:51:03.769Z",
+  "transactions": {
+    "createDao": {
+      "txHash": "087b9c84dea39f11059003e4dbde5b97cdf998aba34f6be1229740f5ff409a59",
+      "ledger": 4980658
+    },
+    "marketplaceListings": [
+      {
+        "txHash": "0c6c0470dc326e3690bf0771448699d4c111dd85af2bc705f87c11f54632c30f",
+        "tokenId": 30,
+        "price": "10000000000",
+        "expiresAt": 1793519275,
+        "ledger": 4980741
+      },
+      {
+        "txHash": "725d4429479f9ceb24e416e1b4c1efe82fdbe1bcfab69950588da975834efa30",
+        "tokenId": 31,
+        "price": "10000000000",
+        "expiresAt": 1793519275,
+        "ledger": 4980744
+      },
+      {
+        "txHash": "c95a036d37775f64826b68640cf3b94d1281841ac16f2d1b43d3a8a7710d2e50",
+        "tokenId": 32,
+        "price": "10000000000",
+        "expiresAt": 1793519275,
+        "ledger": 4980748
+      },
+      {
+        "txHash": "ed4faa1eb7c7f9ff62ac41be469ce8269ea5248fbf4276d939a0bbb97fd7553b",
+        "tokenId": 33,
+        "price": "10000000000",
+        "expiresAt": 1793519275,
+        "ledger": 4980752
+      },
+      {
+        "txHash": "3996256f9f9a2656720a0233e38f26631864ba7bab011d307bc94c8955fffede",
+        "tokenId": 34,
+        "price": "10000000000",
+        "expiresAt": 1793519275,
+        "ledger": 4980755
+      },
+      {
+        "txHash": "cf193930af3ed42cd859e4efd0158abfcb6445d7e467aae33b6dc70055ae966c",
+        "tokenId": 35,
+        "price": "10000000000",
+        "expiresAt": 1793519275,
+        "ledger": 4980759
+      },
+      {
+        "txHash": "7fa1b7dd10c504c149ef4e8f64d62ae79f636aa8269b1573859f00497894f1ff",
+        "tokenId": 36,
+        "price": "10000000000",
+        "expiresAt": 1793519275,
+        "ledger": 4980764
+      },
+      {
+        "txHash": "d865351b8c0d0cd88880983d7afbef37aacbfdd7abd68138eebb45cc5b83e874",
+        "tokenId": 37,
+        "price": "10000000000",
+        "expiresAt": 1793519275,
+        "ledger": 4980768
+      },
+      {
+        "txHash": "5ba5d15ce4e63f8e03a1bc3ae9e1435a8a884ed584b2a624ace5c27f23c6739f",
+        "tokenId": 38,
+        "price": "10000000000",
+        "expiresAt": 1793519275,
+        "ledger": 4980772
+      },
+      {
+        "txHash": "b18a6db63a9db2abbae0aed5173edefb6715b0529f4ebd5245806176d7392e8b",
+        "tokenId": 39,
+        "price": "10000000000",
+        "expiresAt": 1793519275,
+        "ledger": 4980775
+      }
+    ]
+  },
+  "deploymentLedger": 4980658
+}

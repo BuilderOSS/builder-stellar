@@ -13,12 +13,13 @@ import { waitForConfirmation } from './transaction-confirmation';
 import { useTransactionFeedback } from './transaction-feedback';
 
 /**
- * 3-step DAO deployment process:
- * 1. predict - Predict contract addresses
- * 2. create - Create DAO contracts
- * 3. finalize - Finalize and launch DAO
+ * 2-step DAO deployment process:
+ * 1. predict - Predict contract addresses (read-only)
+ * 2. create - Create DAO contracts (paused, owned by launch_admin)
+ *
+ * Launch happens later via admin panel after configuration
  */
-export type DeploymentStep = 'idle' | 'predicting' | 'creating' | 'finalizing' | 'complete' | 'error';
+export type DeploymentStep = 'idle' | 'predicting' | 'creating' | 'complete' | 'error';
 
 export interface DeploymentState {
   currentStep: DeploymentStep;
@@ -45,7 +46,7 @@ const initialState: DeploymentState = {
   createdAddresses: null,
   transactions: {},
   progress: {
-    totalSteps: 3,
+    totalSteps: 2,
     currentStepIndex: 0,
     currentStepLabel: 'Ready to deploy'
   },
@@ -57,12 +58,11 @@ const STEP_LABELS: Record<DeploymentStep, string> = {
   idle: 'Ready to deploy',
   predicting: 'Predicting contract addresses...',
   creating: 'Creating DAO contracts...',
-  finalizing: 'Finalizing DAO...',
   complete: 'DAO created successfully!',
   error: 'Deployment failed'
 };
 
-const STEP_ORDER: DeploymentStep[] = ['predicting', 'creating', 'finalizing'];
+const STEP_ORDER: DeploymentStep[] = ['predicting', 'creating'];
 
 export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
   const [state, setState] = useState<DeploymentState>(initialState);
@@ -212,11 +212,10 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
     [deployer, setStep, updateState, updateTransactions, markStepComplete, setError, tx]
   );
 
-  // Step 3: Launch DAO (launch_dao)
+  // Launch DAO - called from admin panel after checklist completion
+  // This transitions the DAO from 'pending' to 'operational' state
   const launchDao = useCallback(
     async (tokenAddress: string, launchConfig: { launch_auction: boolean; launch_marketplace: boolean }) => {
-      setStep('finalizing');
-
       try {
         const config = getDeploymentConfig();
 
@@ -248,17 +247,13 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         tx.submitted('DAO launch submitted', hash);
         await waitForConfirmation(hash, config.rpcUrl);
         tx.success('DAO launched', hash);
-
-        updateTransactions((transactions) => ({ ...transactions, finalize: hash }));
-        markStepComplete('finalizing');
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Failed to launch DAO');
         tx.fail(error, 'DAO launch failed');
-        setError(error);
         throw error;
       }
     },
-    [deployer, setStep, updateTransactions, markStepComplete, setError, tx]
+    [deployer, setError, tx]
   );
 
   // Main deployment orchestrator
@@ -286,7 +281,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
           }
         };
 
-        // Step 2: Create DAO
+        // Step 2: Create DAO (contracts paused, owned by launch_admin)
         const createdAddresses = await createDao(updatedFormData, nonce);
 
         // Validate addresses match prediction
@@ -294,10 +289,11 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
           throw new Error('Created token address does not match prediction');
         }
 
-        // Step 3: Launch (without launching auctions - user configures via admin panel)
-        await launchDao(createdAddresses.token, { launch_auction: false, launch_marketplace: false });
+        // Store launch_admin in localStorage for DAO page to detect admin mode
+        const storageKey = `dao_launch_admin_${createdAddresses.token}`;
+        localStorage.setItem(storageKey, deployer);
 
-        // Mark complete
+        // Mark complete - user will configure and launch via admin panel
         setStep('complete');
 
         return createdAddresses;
@@ -306,12 +302,13 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         throw err;
       }
     },
-    [deployer, updateState, predictAddresses, createDao, launchDao, setStep]
+    [deployer, updateState, predictAddresses, createDao, setStep]
   );
 
   return {
     state,
     deployDao,
+    launchDao,
     reset
   };
 }

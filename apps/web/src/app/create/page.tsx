@@ -18,6 +18,7 @@ import {
   type CreateDaoSection,
   sectionSchemas
 } from '@/lib/create-dao-schema';
+import { waitForDaoIndexed } from '@/lib/dao-db';
 import { getDeploymentConfig, isDeploymentConfigured } from '@/lib/deployment-config';
 import { useDaoDeployment } from '@/lib/use-dao-deployment';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
@@ -281,6 +282,11 @@ export default function CreateDaoPage() {
         // Store launch_admin in localStorage for DAO page to detect admin mode
         const storageKey = `dao_launch_admin_${addresses.token}`;
         localStorage.setItem(storageKey, session.address);
+
+        // Wait for Goldsky to index the DAO before redirecting
+        // This prevents 404 when DAO page loads
+        await waitForDaoIndexed(addresses.token);
+
         router.push(`/dao/${addresses.token}`);
       }
     } catch (error) {

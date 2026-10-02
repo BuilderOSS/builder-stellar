@@ -11,6 +11,7 @@ import { Box, Stack } from 'styled-system/jsx';
 
 import { Button, Callout, Card, Heading, Text } from '@/components/ui';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
+import { useDaoDeployment } from '@/lib/use-dao-deployment';
 
 type ChecklistItem = {
   id: string;
@@ -117,26 +118,35 @@ export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoN
   const completedCount = items.filter((item) => item.completed).length;
   const isComplete = completedCount === items.length;
   const [isLaunching, setIsLaunching] = useState(false);
+  const [launchError, setLaunchError] = useState<string | null>(null);
+
+  // Get network from config
+  const networkName = config.name;
+  // Get launch_admin from database (loaded from DaoCreated event)
+  const launchAdminAddress = config.adminAddress;
+
+  const { launchDao } = useDaoDeployment(launchAdminAddress || '', networkName);
 
   const handleLaunchDao = async () => {
+    if (!launchAdminAddress) {
+      setLaunchError('Launch admin address not found');
+      return;
+    }
+
     setIsLaunching(true);
+    setLaunchError(null);
+
     try {
-      // Call the launch_dao endpoint to finalize the DAO
-      const response = await fetch(`/api/dao/${encodeURIComponent(daoId)}/launch`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+      // Call on-chain launch_dao with all modules enabled
+      await launchDao(daoId, { launch_auction: true, launch_marketplace: true });
 
-      if (!response.ok) {
-        throw new Error('Failed to launch DAO');
-      }
-
-      // Update DAO status and redirect
+      // Wait a bit for transaction to settle, then refresh
+      await new Promise((resolve) => setTimeout(resolve, 2000));
       router.refresh();
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to launch DAO';
       console.error('Error launching DAO:', error);
+      setLaunchError(message);
       setIsLaunching(false);
     }
   };
@@ -158,6 +168,8 @@ export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoN
             <ChecklistItemRow key={item.id} item={item} />
           ))}
         </Stack>
+
+        {launchError && <Callout variant="error" title="Launch failed" description={launchError} />}
 
         {isComplete ? (
           <Callout
