@@ -59,9 +59,13 @@ impl MarketplaceContract {
         storage::get_listing(e, token_id)
     }
 
-    pub fn finalize_ownership(e: &Env, new_treasury: Address) {
+    pub fn finalize_ownership(e: &Env, new_treasury: Address, launch_marketplace: bool) {
         let mut config = Self::get_config(e);
         config.manager.require_auth();
+        if launch_marketplace && config.paused {
+            config.paused = false;
+            MarketplaceUnpaused {}.publish(e);
+        }
         config.treasury = new_treasury;
         storage::set_config(e, &config);
     }

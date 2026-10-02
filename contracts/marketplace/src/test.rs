@@ -152,6 +152,34 @@ fn constructor_starts_paused_and_stores_config() {
 }
 
 #[test]
+fn manager_can_finalize_ownership_and_launch_marketplace() {
+    let fixture = fixture();
+    let new_treasury = Address::generate(&fixture.env);
+
+    fixture.marketplace.pause();
+    fixture.marketplace.finalize_ownership(&new_treasury, &true);
+
+    let config = fixture.marketplace.get_config();
+    assert_eq!(config.treasury, new_treasury);
+    assert!(!config.paused);
+}
+
+#[test]
+fn manager_can_finalize_ownership_without_launching_marketplace() {
+    let fixture = fixture();
+    let new_treasury = Address::generate(&fixture.env);
+
+    fixture.marketplace.pause();
+    fixture
+        .marketplace
+        .finalize_ownership(&new_treasury, &false);
+
+    let config = fixture.marketplace.get_config();
+    assert_eq!(config.treasury, new_treasury);
+    assert!(config.paused);
+}
+
+#[test]
 fn primary_listing_can_be_purchased() {
     let fixture = fixture();
     let token_id = fixture.marketplace.mint_and_list(&100, &2_000);

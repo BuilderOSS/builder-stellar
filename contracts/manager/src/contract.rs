@@ -816,7 +816,6 @@ impl ManagerContract {
             (pending.addresses.token.clone(), "finalize_ownership"),
             (pending.addresses.governor.clone(), "finalize_ownership"),
             (pending.addresses.treasury.clone(), "finalize_ownership"),
-            (pending.addresses.marketplace.clone(), "finalize_ownership"),
         ] {
             let _: () = env.invoke_contract(
                 &module,
@@ -824,6 +823,16 @@ impl ManagerContract {
                 vec![&env, treasury.clone().into_val(&env)],
             );
         }
+
+        let _: () = env.invoke_contract(
+            &pending.addresses.marketplace,
+            &Symbol::new(&env, "finalize_ownership"),
+            vec![
+                &env,
+                treasury.clone().into_val(&env),
+                launch_config.launch_marketplace.into_val(&env),
+            ],
+        );
 
         // Transfer Auction ownership with launch_auction flag
         let _: () = env.invoke_contract(
@@ -835,15 +844,6 @@ impl ManagerContract {
                 launch_config.launch_auction.into_val(&env),
             ],
         );
-
-        // Conditionally unpause Marketplace if requested
-        if launch_config.launch_marketplace {
-            let _: () = env.invoke_contract(
-                &pending.addresses.marketplace,
-                &Symbol::new(&env, "unpause"),
-                vec![&env],
-            );
-        }
 
         // Transfer Metadata upgrade authority to Treasury
         let _: () = env.invoke_contract(

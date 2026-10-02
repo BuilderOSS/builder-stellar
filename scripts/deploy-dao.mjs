@@ -300,12 +300,9 @@ if (phase === 'admin_checklist') {
 }
 
 console.log('\n=== Launching DAO (auctions and marketplace enabled) ===\n');
-// Marketplace authorization belongs to launch_admin until launch_dao transfers
-// ownership to Treasury, so unpause it before the manager finalizes ownership.
-invoke(addresses.marketplace, 'unpause');
 const launchOutput = invoke(managerAddress, 'launch_dao', {
   token_address: addresses.token,
-  launch_config: JSON.stringify({ launch_auction: true, launch_marketplace: false })
+  launch_config: JSON.stringify({ launch_auction: true, launch_marketplace: true })
 });
 transactions.launchDao = transaction(launchOutput);
 writeArtifact({ status: 'operational', addresses, transactions });
