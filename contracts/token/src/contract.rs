@@ -213,6 +213,11 @@ impl DaoTokenContract {
     ///
     /// Emits both a standard `Mint` event (via OpenZeppelin) and a custom
     /// `MintWithMinter` event that includes the minter's address.
+    /// Returns total minted voting units for manager launch validation.
+    pub fn total_supply(e: &Env) -> i128 {
+        <Self as Votes>::get_total_supply(e) as i128
+    }
+
     pub fn mint(e: &Env, minter: &Address, to: &Address) -> u32 {
         minter.require_auth();
         Self::ensure_mint_authority(e, minter);
