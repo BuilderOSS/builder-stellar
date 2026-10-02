@@ -1,14 +1,14 @@
 {
   "network": "testnet",
   "label": "builder",
-  "deploymentLedger": 4982938,
+  "deploymentLedger": 4983407,
   "config": {
     "label": "builder",
     "adminAddress": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
     "rpcUrl": "https://soroban-testnet.stellar.org",
     "networkPassphrase": "Test SDF Network ; September 2015"
   },
-  "manager": "CAKNVK4AKGRAQD5WNHB4U3EIXQTBN7SH63UKAKV2VVEQKDRC4TX4GNK2",
+  "manager": "CAMI673YU3NJYT3VO5GXXPWDSSJPUXAHJR2L6ITUMBQXRTNG2N36QK5K",
   "implementations": {
     "token": "f3f19d2162cadaef4fd2729000c36ff3e21953591df9a20c01548f74832d574d",
     "metadata": "7dc945457fab787a4bb96c1a44aae3f7e9598b2bf4335fa9022b268c3153befa",
@@ -17,12 +17,12 @@
     "treasury": "efb18248dbddefa90af35d0e9151b49e61e51bc74676a28b44891f7045f0122d",
     "marketplace": "1a64e742ea5d37cddb283563e341892e8a16f92613c9016c65fefaf47aa7a451"
   },
-  "deployedAt": "2026-10-02T10:52:56.318Z",
+  "deployedAt": "2026-10-02T11:31:39.761Z",
   "transactions": {
     "manager": {
-      "deployedAt": "2026-10-02T10:51:27.799Z",
-      "txHash": "c6c824fd93632285d0c4dbfcbedd5265afc5f0a27f9d2b73f361ab21e1c15331",
-      "ledger": 4982938
+      "deployedAt": "2026-10-02T11:30:24.124Z",
+      "txHash": "ccb76b31b6767ad07ab3cdb564cd376f88a58cae3fc66b1c7ef6448f1c529e18",
+      "ledger": 4983407
     }
   }
 }
