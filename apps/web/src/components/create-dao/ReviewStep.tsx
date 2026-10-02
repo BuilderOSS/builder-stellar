@@ -1,7 +1,7 @@
 'use client';
 
-import { useCreateDaoStore } from '@/stores/create-dao-store';
 import { formatDuration } from '@/lib/time-utils';
+import { useCreateDaoStore } from '@/stores/create-dao-store';
 
 interface ReviewStepProps {
   connectedAddress?: string;
@@ -13,7 +13,10 @@ export function ReviewStep({ connectedAddress }: ReviewStepProps) {
   const governance = useCreateDaoStore((s) => s.governance);
   const launchAdmin = useCreateDaoStore((s) => s.launchAdmin);
 
-  const governancePresets: Record<string, { votingDelay: number; votingPeriod: number; quorumBps: number; proposalThresholdBps: number }> = {
+  const governancePresets: Record<
+    string,
+    { votingDelay: number; votingPeriod: number; quorumBps: number; proposalThresholdBps: number }
+  > = {
     testing: { votingDelay: 60, votingPeriod: 300, quorumBps: 1000, proposalThresholdBps: 100 },
     fast: { votingDelay: 3600, votingPeriod: 86400, quorumBps: 500, proposalThresholdBps: 100 },
     balanced: { votingDelay: 86400, votingPeriod: 259200, quorumBps: 1000, proposalThresholdBps: 100 },
@@ -39,7 +42,9 @@ export function ReviewStep({ connectedAddress }: ReviewStepProps) {
       {/* Header */}
       <div className="space-y-2">
         <h2 className="text-2xl font-bold">Review Your DAO</h2>
-        <p className="text-text-secondary">Verify all settings before deployment. You can configure artwork, auctions, and marketplace after launch.</p>
+        <p className="text-text-secondary">
+          Verify all settings before deployment. You can configure artwork, auctions, and marketplace after launch.
+        </p>
       </div>
 
       {/* Basic Info Summary */}
@@ -74,7 +79,8 @@ export function ReviewStep({ connectedAddress }: ReviewStepProps) {
             <p className="font-medium text-text-primary capitalize">{purpose.membershipMode}</p>
             {purpose.membershipMode !== 'founders' && (
               <p className="text-xs text-text-secondary mt-2">
-                {purpose.membershipMode === 'auctions' && 'Members will be allocated tokens through recurring auctions.'}
+                {purpose.membershipMode === 'auctions' &&
+                  'Members will be allocated tokens through recurring auctions.'}
                 {purpose.membershipMode === 'marketplace' && 'Members can trade tokens freely on the marketplace.'}
               </p>
             )}
@@ -128,7 +134,8 @@ export function ReviewStep({ connectedAddress }: ReviewStepProps) {
           <div>
             <h4 className="font-semibold text-text-primary">After Deployment</h4>
             <p className="text-sm text-text-secondary mt-1">
-              The DAO will be created with these settings. You can then configure artwork, auctions, marketplace, and other features in the admin panel before launching.
+              The DAO will be created with these settings. You can then configure artwork, auctions, marketplace, and
+              other features in the admin panel before launching.
             </p>
             <p className="text-xs text-text-secondary mt-2 space-y-1">
               <span className="block">• Setup artwork properties and IPFS metadata</span>

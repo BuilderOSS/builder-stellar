@@ -247,7 +247,9 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
       clearArtworkSource: () => set({ artworkSource: null }),
       updateArtwork: (patch) =>
         set((state) => ({
-          artwork: { ...state.artwork, ...patch }
+          artwork: state.artwork
+            ? { ...state.artwork, ...patch }
+            : { ipfs: { baseUri: '', extension: '' }, properties: [], ...patch }
         })),
       addArtworkItem: () => {
         // No-op for backwards compatibility
@@ -260,7 +262,7 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
       setDaoImageSource: (source) => set({ daoImageSource: source }),
       updateAuction: (patch) =>
         set((state) => ({
-          auction: { ...state.auction, ...patch }
+          auction: state.auction ? { ...state.auction, ...patch } : { enabled: false, duration: 3600, ...patch }
         })),
 
       // Backwards compatibility for founder components

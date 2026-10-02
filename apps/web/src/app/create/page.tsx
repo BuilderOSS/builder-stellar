@@ -277,7 +277,12 @@ export default function CreateDaoPage() {
 
     try {
       const addresses = await deployDao(validation.data);
-      if (addresses) router.push(`/dao/${addresses.token}`);
+      if (addresses) {
+        // Store launch_admin in localStorage for DAO page to detect admin mode
+        const storageKey = `dao_launch_admin_${addresses.token}`;
+        localStorage.setItem(storageKey, session.address);
+        router.push(`/dao/${addresses.token}`);
+      }
     } catch (error) {
       console.error('Deployment failed:', error);
     }

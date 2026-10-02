@@ -15,6 +15,7 @@ import type { ProposalListResponse } from '@/components/proposal/types';
 import { TokenCard } from '@/components/token/token-card';
 import { Button, Callout, Card, Heading, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
+import { useIsLaunchAdmin } from '@/hooks/useIsLaunchAdmin';
 import { formatActivitySummary } from '@/lib/activity-feed';
 import { useGoldskyActivityFeed, useGoldskyHealth } from '@/lib/goldsky-queries';
 import { useTokenInventory } from '@/lib/token-queries';
@@ -103,6 +104,7 @@ const TOKEN_PAGE_SIZE = 8;
 
 export default function Page() {
   const { daoId, daoConfig: config } = useDaoContext();
+  const isLaunchAdmin = useIsLaunchAdmin(daoId);
   const [activityLimit, setActivityLimit] = useState(ACTIVITY_PAGE_SIZE);
   const [tokenLimit, setTokenLimit] = useState(TOKEN_PAGE_SIZE);
   const [refreshingDashboard, setRefreshingDashboard] = useState(false);
@@ -189,8 +191,28 @@ export default function Page() {
     }
   }
 
+  // Show launch_admin mode or regular dashboard
+  if (config.status === 'pending' && !isLaunchAdmin) {
+    return (
+      <PageSection title={config.tokenName} description="DAO is launching soon">
+        <Callout
+          variant="info"
+          title="DAO Launch in Progress"
+          description="This DAO is being set up by its launch administrator. Check back soon to explore this community."
+        />
+      </PageSection>
+    );
+  }
+
   return (
-    <PageSection title="Dashboard" description="Your DAO activity at a glance.">
+    <PageSection
+      title={isLaunchAdmin && config.status === 'pending' ? '⚙️ Admin: Launch Setup' : 'Dashboard'}
+      description={
+        isLaunchAdmin && config.status === 'pending'
+          ? 'Complete the checklist to launch your DAO'
+          : 'Your DAO activity at a glance.'
+      }
+    >
       <div className="dashboard-controls">
         <details className="dashboard-menu">
           <summary className="dashboard-menu__trigger">
@@ -213,7 +235,7 @@ export default function Page() {
         </Button>
       </div>
 
-      {config.status === 'pending' ? <LaunchChecklist daoId={daoId} config={config} /> : null}
+      {isLaunchAdmin && config.status === 'pending' ? <LaunchChecklist daoId={daoId} config={config} /> : null}
 
       <div className="dashboard-secondary-grid">
         {config.auctionContractId ? (

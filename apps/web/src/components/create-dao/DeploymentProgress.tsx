@@ -29,29 +29,9 @@ const DEPLOYMENT_STEPS: Array<{ key: DeploymentStep; label: string; description:
     description: 'Deploying contracts to blockchain'
   },
   {
-    key: 'accepting-ownership',
-    label: 'Accept Ownership',
-    description: 'Taking ownership of token contract'
-  },
-  {
-    key: 'adding-properties',
-    label: 'Configure Metadata',
-    description: 'Setting up artwork properties'
-  },
-  {
-    key: 'minting-founders',
-    label: 'Mint Allocations',
-    description: 'Distributing founder tokens'
-  },
-  {
     key: 'finalizing',
     label: 'Finalize DAO',
-    description: 'Transferring ownership to treasury'
-  },
-  {
-    key: 'indexing',
-    label: 'Index DAO',
-    description: 'Waiting for blockchain confirmation'
+    description: 'Completing setup and launching'
   }
 ];
 
@@ -265,12 +245,6 @@ function getTxHashForStep(step: DeploymentStep, transactions: DeploymentState['t
   switch (step) {
     case 'creating':
       return transactions.create;
-    case 'accepting-ownership':
-      return transactions.acceptOwnership;
-    case 'adding-properties':
-      return transactions.addProperties;
-    case 'minting-founders':
-      return transactions.founderMints[0]; // Show first mint tx
     case 'finalizing':
       return transactions.finalize;
     default:
