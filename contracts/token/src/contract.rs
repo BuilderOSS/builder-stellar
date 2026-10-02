@@ -222,7 +222,7 @@ impl DaoTokenContract {
         minter.require_auth();
         Self::ensure_mint_authority(e, minter);
         Self::ensure_self_delegate(e, to);
-        Self::preflight_checkpoint_writes(e, to);
+        Self::preflight_checkpoint_writes(e, to, 1);
         let token_id = NonFungibleVotes::sequential_mint(e, to);
         // Note: OpenZeppelin's NonFungibleVotes::sequential_mint() automatically emits standard Mint event
 
@@ -273,8 +273,8 @@ impl DaoTokenContract {
 
         let mut last_token_id = 0;
 
+        Self::preflight_checkpoint_writes(e, to, amount);
         for _ in 0..amount {
-            Self::preflight_checkpoint_writes(e, to);
             let token_id = NonFungibleVotes::sequential_mint(e, to);
 
             // Generate artwork seed via metadata contract
@@ -344,8 +344,8 @@ impl DaoTokenContract {
     /// power checkpoints for both sender and receiver delegates.
     pub fn transfer(e: &Env, from: &Address, to: &Address, token_id: u32) {
         Self::ensure_self_delegate(e, to);
-        Self::preflight_checkpoint_writes(e, from);
-        Self::preflight_checkpoint_writes(e, to);
+        Self::preflight_checkpoint_writes(e, from, 1);
+        Self::preflight_checkpoint_writes(e, to, 1);
         NonFungibleVotes::transfer(e, from, to, token_id);
         // Note: OpenZeppelin's NonFungibleVotes::transfer() automatically emits standard Transfer event
     }
@@ -372,8 +372,8 @@ impl DaoTokenContract {
     /// power checkpoints for both sender and receiver delegates.
     pub fn transfer_from(e: &Env, spender: &Address, from: &Address, to: &Address, token_id: u32) {
         Self::ensure_self_delegate(e, to);
-        Self::preflight_checkpoint_writes(e, from);
-        Self::preflight_checkpoint_writes(e, to);
+        Self::preflight_checkpoint_writes(e, from, 1);
+        Self::preflight_checkpoint_writes(e, to, 1);
         NonFungibleVotes::transfer_from(e, spender, from, to, token_id);
         // Note: OpenZeppelin's NonFungibleVotes::transfer_from() automatically emits standard Transfer event
     }
@@ -475,19 +475,21 @@ impl DaoTokenContract {
     /// Include the next checkpoint keys in Soroban's transaction footprint.
     /// The votes library writes these keys directly when a mint creates a new
     /// ledger checkpoint, so a missing-key write must be preflighted first.
-    fn preflight_checkpoint_writes(e: &Env, account: &Address) {
+    fn preflight_checkpoint_writes(e: &Env, account: &Address, count: u32) {
         let total_supply_index = e
             .storage()
             .instance()
             .get::<VotesStorageKey, u32>(&VotesStorageKey::NumTotalSupplyCheckpoints)
             .unwrap_or(0);
-        e.storage().persistent().set(
-            &VotesStorageKey::TotalSupplyCheckpoint(total_supply_index),
-            &Checkpoint {
-                ledger: e.ledger().sequence(),
-                votes: 0,
-            },
-        );
+        for index in total_supply_index..total_supply_index + count {
+            e.storage().persistent().set(
+                &VotesStorageKey::TotalSupplyCheckpoint(index),
+                &Checkpoint {
+                    ledger: e.ledger().sequence(),
+                    votes: 0,
+                },
+            );
+        }
 
         let delegate_count_key = VotesStorageKey::NumCheckpoints(account.clone());
         let delegate_count = e
@@ -498,13 +500,15 @@ impl DaoTokenContract {
         e.storage()
             .persistent()
             .set(&delegate_count_key, &delegate_index);
-        e.storage().persistent().set(
-            &VotesStorageKey::DelegateCheckpoint(account.clone(), delegate_index),
-            &Checkpoint {
-                ledger: e.ledger().sequence(),
-                votes: 0,
-            },
-        );
+        for index in delegate_index..delegate_index + count {
+            e.storage().persistent().set(
+                &VotesStorageKey::DelegateCheckpoint(account.clone(), index),
+                &Checkpoint {
+                    ledger: e.ledger().sequence(),
+                    votes: 0,
+                },
+            );
+        }
     }
 
     /// Validates that an address has permission to mint tokens.
