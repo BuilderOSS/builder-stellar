@@ -1,5 +1,5 @@
 {
-  "status": "checklist_complete",
+  "status": "operational",
   "network": "testnet",
   "label": "builder",
   "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
@@ -111,7 +111,7 @@
     ],
     "launchAdmin": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO"
   },
-  "updatedAt": "2026-10-02T10:59:53.519Z",
+  "updatedAt": "2026-10-02T11:00:36.180Z",
   "transactions": {
     "createDao": {
       "txHash": "9d20eccaf2aaa126631b8e199c3de3904e80de9a7e06145c75af06c01f36a0cc",
@@ -244,7 +244,11 @@
         "expiresAt": 1793530584,
         "ledger": 4983041
       }
-    ]
+    ],
+    "launchDao": {
+      "txHash": "200f222c5fb2f0718d9908a8f556f5d13270ef3980d0476d154a4a50ea845004",
+      "ledger": 4983049
+    }
   },
   "deploymentLedger": 4982961
 }
