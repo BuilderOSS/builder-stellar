@@ -193,10 +193,10 @@ WHERE status = 'operational' AND creator IS NULL;
 **Option 1: Manual Health Checks**
 ```bash
 # Terminal monitoring
-watch -n 30 'curl -s http://localhost:3000/api/health | jq .'
+watch -n 30 'curl -s http://localhost:5000/api/health | jq .'
 
 # Or via cron for alerts (email if fails)
-*/5 * * * * curl -sf http://localhost:3000/api/health || echo "Health check failed" | mail
+*/5 * * * * curl -sf http://localhost:5000/api/health || echo "Health check failed" | mail
 ```
 
 **Option 2: Uptime Monitoring Service**

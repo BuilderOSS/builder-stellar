@@ -11,10 +11,10 @@ This guide covers creating and deploying new DAOs using the multi-tenant system.
    - See [MANAGER_DEPLOYMENT.md](./MANAGER_DEPLOYMENT.md)
 
 2. Environment configured
-   - `NEXT_PUBLIC_DEPLOYMENT_ID=manager:...` in app .env
+   - A current `deploys/*-manager.json` artifact; the web predev/prebuild hook generates the deployment ID
    - `NEXT_PUBLIC_NETWORK=testnet` in app .env
-   - `DATABASE_URL` for admin scripts
-   - `APP_DATABASE_URL` for app queries
+   - `APP_DATABASE_URL` for the web app's Prisma read-only queries
+   - `DATABASE_URL` only where an admin or migration script explicitly requires it
 
 3. Required tools
    - Node.js 20+
@@ -133,7 +133,7 @@ console.log(dao.governor_contract); // "CB..."
 Or via API route:
 
 ```bash
-curl http://localhost:3000/api/dao/CB.../config
+curl http://localhost:5000/api/dao/CB.../config
 ```
 
 ## DAO Lifecycle States

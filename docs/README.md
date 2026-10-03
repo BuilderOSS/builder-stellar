@@ -29,6 +29,7 @@ The Stellar Builder platform is a multi-tenant DAO system where one application 
   - Indexes and performance
   - Query examples
   - Permissions
+- The web app accesses these views through Prisma using the read-only `app_server` role.
 
 - [GOLDSKY_MULTITENANT_INTEGRATION.md](./GOLDSKY_MULTITENANT_INTEGRATION.md) - Pipeline integration
   - What needs updating in Goldsky
@@ -70,7 +71,8 @@ A "deployment" is one instance of the application managing one manager contract.
 
 **Identified by**: `deployment_id = "manager:CONTRACT_ADDRESS"`
 
-**Environment**: `NEXT_PUBLIC_DEPLOYMENT_ID=manager:ABC...`
+**Generated from**: the most recent `deploys/*-manager.json` artifact by
+`scripts/generate-web-deployment.mjs`
 
 **Properties**:
 - One per application instance
@@ -107,6 +109,8 @@ insert           ownership transfer    update status
 ### Code
 
 - `apps/web/src/lib/dao-db.ts` - Database query helpers
+- `apps/web/src/lib/prisma.ts` - Prisma client singleton
+- `apps/web/prisma/schema.prisma` - Read-only models for indexed database views
 - `apps/web/src/config/networks.ts` - Network configuration
 - `scripts/deploy-dao.mjs` - DAO deployment script
 - `db/migrations/0001_goldsky_base.sql` - Database schema
@@ -205,4 +209,4 @@ These are preserved for historical reference but the current docs are the source
 
 ---
 
-**Last Updated**: September 22, 2026
+**Last Updated**: October 3, 2026

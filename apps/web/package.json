@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "predev": "node ../../scripts/generate-web-deployment.mjs && node ../../scripts/generate-prisma.mjs && panda codegen && panda cssgen",
-    "dev": "next dev",
+    "dev": "next dev --port 5000",
     "prebuild": "node ../../scripts/generate-web-deployment.mjs && node ../../scripts/generate-prisma.mjs && pnpm --filter @builder-stellar/token-bindings --filter @builder-stellar/manager-bindings  --filter @builder-stellar/metadata-bindings --filter @builder-stellar/governor-bindings --filter @builder-stellar/treasury-bindings --filter @builder-stellar/auction-bindings build && panda codegen && panda cssgen",
     "build": "next build",
     "start": "next start",

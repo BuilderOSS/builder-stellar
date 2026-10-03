@@ -60,7 +60,8 @@ Format: `"manager:CONTRACT_ADDRESS"`
 Example: `"manager:CBSKIHNNVKEJWV3A2OI63BWUC637LR4P2GBV4MPJB5PDOMVUMS6KOMAH"`
 
 **Properties:**
-- Set via environment variable `NEXT_PUBLIC_DEPLOYMENT_ID`
+- Generated from the most recent `deploys/*-manager.json` artifact by
+  `scripts/generate-web-deployment.mjs`
 - Constant per application instance
 - Never changes during app lifetime
 - Filters all database queries at the database level
@@ -184,7 +185,7 @@ CREATE TABLE manager.daos (
 
 ```env
 # Multi-tenant Deployment
-NEXT_PUBLIC_DEPLOYMENT_ID=manager:CBSKIHNNVKEJWV3A2OI63BWUC637LR4P2GBV4MPJB5PDOMVUMS6KOMAH
+# Generated during the web app predev/prebuild hook from deploys/*-manager.json
 
 # Network Configuration
 NEXT_PUBLIC_NETWORK=testnet  # or 'public', 'local'
@@ -385,7 +386,7 @@ See [GOLDSKY_MULTITENANT_INTEGRATION.md](./GOLDSKY_MULTITENANT_INTEGRATION.md) f
 
 ### Application-Level Isolation
 
-- Environment variable `NEXT_PUBLIC_DEPLOYMENT_ID` is constant per instance
+- Generated `apps/web/src/config/deployments.generated.ts` is constant per app instance
 - All API routes include `daoId` parameter
 - Context provider scopes components to single DAO
 - Navigation links include `daoId` for route structure

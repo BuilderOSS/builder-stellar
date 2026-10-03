@@ -40,6 +40,13 @@ pnpm dev
 pnpm local:down
 ```
 
+The web app is available at `http://localhost:5000`. Before starting it, copy
+`apps/web/.env.example` to `apps/web/.env` and set `APP_DATABASE_URL` to the
+read-only PostgreSQL connection used by the Goldsky read model. The dev and
+build hooks generate the Prisma client and select the deployment from the most
+recent `deploys/*-manager.json` artifact; do not set `NEXT_PUBLIC_DEPLOYMENT_ID`
+manually.
+
 ### Testing
 
 ```bash
@@ -98,6 +105,7 @@ configs/               Network and DAO configuration
 - `pnpm build` - build the web application
 - `pnpm lint` - lint the web application
 - `pnpm typecheck` - type-check the web application
+- `pnpm --dir apps/web test` - run web application tests
 
 ## Wallet Authentication
 
@@ -107,7 +115,7 @@ Authentication endpoints are `/api/auth/challenge`, `/api/auth/verify`, `/api/au
 
 ## Technology
 
-Rust and Soroban power the contracts. The application uses Next.js, TypeScript, Panda CSS, Stellar Wallets Kit, Goldsky, and PostgreSQL.
+Rust and Soroban power the contracts. The application uses Next.js, TypeScript, Panda CSS, Stellar Wallets Kit, Goldsky, Prisma, and PostgreSQL. Prisma is configured with read-only models over the indexed database views; schema changes and Goldsky ingestion remain outside the web app.
 
 ## License
 
