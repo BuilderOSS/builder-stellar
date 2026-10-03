@@ -289,10 +289,6 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
           throw new Error('Created token address does not match prediction');
         }
 
-        // Store launch_admin in localStorage for DAO page to detect admin mode
-        const storageKey = `dao_launch_admin_${createdAddresses.token}`;
-        localStorage.setItem(storageKey, deployer);
-
         // Mark complete - user will configure and launch via admin panel
         setStep('complete');
 

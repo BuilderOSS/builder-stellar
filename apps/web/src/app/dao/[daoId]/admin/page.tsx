@@ -11,6 +11,7 @@ import { Badge, Card, Heading, ShortId, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryHasAuthority, treasuryIsOwner } from '@/lib/admin-proposals';
 import { useContractOwner } from '@/lib/admin-queries';
+import { isDaoAdmin } from '@/lib/dao-config';
 import { useGoldskyGovernorAuthorities, useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
@@ -57,7 +58,7 @@ export default function AdminPage() {
   const { data: governorOwner } = useContractOwner(config, 'governor', session.address || undefined);
   const { data: auctionOwner } = useContractOwner(config, 'auction', session.address || undefined);
 
-  const isOwner = Boolean(session.address && session.address === config.adminAddress);
+  const isOwner = isDaoAdmin(config, session.address);
   const hasMintAccess = Boolean(isOwner || mintAuthorities?.items.some((item) => item.authority === session.address));
   const hasGovernanceAccess = Boolean(
     isOwner || governorAuthorities?.items.some((item) => item.authority === session.address)

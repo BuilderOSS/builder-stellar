@@ -18,6 +18,7 @@ export type DaoNetworkConfig = {
   tokenSymbol: string;
   tokenDescription: string;
   adminAddress: string;
+  launchAdmin: string;
   tokenContractId: string;
   metadataContractId: string;
   contractImage: string;
@@ -30,6 +31,19 @@ export type DaoNetworkConfig = {
 };
 
 export type DaoNetworkName = NetworkName;
+
+export function isDaoAdmin(config: DaoNetworkConfig, address: string | null | undefined): boolean {
+  if (!address) return false;
+
+  const normalizedAddress = address.trim().toLowerCase();
+  const configuredOwner = config.adminAddress.trim().toLowerCase();
+  const pendingLaunchAdmin = config.launchAdmin.trim().toLowerCase();
+
+  return Boolean(
+    normalizedAddress &&
+    (normalizedAddress === configuredOwner || (config.status === 'pending' && normalizedAddress === pendingLaunchAdmin))
+  );
+}
 
 /**
  * Get DAO configuration by ID (token contract address)
@@ -57,7 +71,9 @@ export async function getDaoNetworkConfigById(daoId: string): Promise<DaoNetwork
     tokenName: daoConfig.token_name || '',
     tokenSymbol: daoConfig.token_symbol || '',
     tokenDescription: daoConfig.token_description || '',
-    adminAddress: daoConfig.admin_address || '',
+    // Before launch, the launch administrator owns the module contracts.
+    adminAddress: daoConfig.admin_address || (daoConfig.status === 'pending' ? daoConfig.launch_admin || '' : ''),
+    launchAdmin: daoConfig.launch_admin || '',
     tokenContractId: daoConfig.token_address,
     metadataContractId: daoConfig.metadata_contract ?? '',
     contractImage: daoConfig.contract_image ?? '',

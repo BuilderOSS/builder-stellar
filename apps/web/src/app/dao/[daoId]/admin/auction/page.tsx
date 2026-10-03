@@ -23,6 +23,7 @@ import { treasuryIsOwner } from '@/lib/admin-proposals';
 import { useContractOwner } from '@/lib/admin-queries';
 import { getTreasuryAssets } from '@/lib/assets-config';
 import { decimalToStroops, formatStroops, validateReservePrice } from '@/lib/auction-values';
+import { isDaoAdmin } from '@/lib/dao-config';
 import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
@@ -100,7 +101,7 @@ export default function AuctionAdminPage() {
   );
   const { data: mintAuthorities, error: mintAuthorityError } = useGoldskyMintAuthorities(config.tokenContractId);
   const { data: auctionOwner } = useContractOwner(config, 'auction', session.address || undefined);
-  const isOwner = Boolean(session.address && session.address === config.adminAddress);
+  const isOwner = isDaoAdmin(config, session.address);
   const canProposeAuction = Boolean(session.address && treasuryIsOwner(config, auctionOwner));
   const auctionCanMint = Boolean(
     mintAuthorities?.items.some((item) => item.authority === config.auctionContractId && item.enabled)

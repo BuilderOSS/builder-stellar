@@ -116,8 +116,8 @@ export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoN
 
   // Get network from config
   const networkName = config.name;
-  // Get launch_admin from database (loaded from DaoCreated event)
-  const launchAdminAddress = config.adminAddress;
+  // Get launch_admin from the indexed DaoCreated event.
+  const launchAdminAddress = config.launchAdmin;
 
   const { launchDao } = useDaoDeployment(launchAdminAddress || '', networkName);
 

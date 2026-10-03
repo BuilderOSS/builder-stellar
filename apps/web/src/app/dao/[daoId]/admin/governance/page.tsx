@@ -17,6 +17,7 @@ import { Badge, Button, Callout, Card, Heading, Skeleton, Text } from '@/compone
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryHasAuthority, treasuryIsOwner } from '@/lib/admin-proposals';
 import { useContractOwner, useGovernorSettings } from '@/lib/admin-queries';
+import { isDaoAdmin } from '@/lib/dao-config';
 import { formatDuration } from '@/lib/format-duration';
 import { useGoldskyGovernorAuthorities } from '@/lib/goldsky-queries';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
@@ -74,7 +75,10 @@ export default function GovernanceAdminPage() {
     mutate: refreshSettings,
     error: settingsError,
     isLoading: settingsLoading
-  } = useGovernorSettings(config, session.address || config.adminAddress);
+  } = useGovernorSettings(
+    config,
+    session.address || (config.status === 'pending' ? config.launchAdmin : config.adminAddress)
+  );
   const {
     data: governorAuthorities,
     error: authorityError,
@@ -82,7 +86,7 @@ export default function GovernanceAdminPage() {
     mutate: refreshAuthorities
   } = useGoldskyGovernorAuthorities(config.tokenContractId);
   const { data: governorOwner } = useContractOwner(config, 'governor', session.address || undefined);
-  const isOwner = Boolean(session.address && session.address === config.adminAddress);
+  const isOwner = isDaoAdmin(config, session.address);
   const hasGovernanceAccess = Boolean(
     isOwner || governorAuthorities?.items.some((item) => item.authority === session.address)
   );

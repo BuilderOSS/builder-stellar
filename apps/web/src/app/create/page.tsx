@@ -279,10 +279,6 @@ export default function CreateDaoPage() {
     try {
       const addresses = await deployDao(validation.data);
       if (addresses) {
-        // Store launch_admin in localStorage for DAO page to detect admin mode
-        const storageKey = `dao_launch_admin_${addresses.token}`;
-        localStorage.setItem(storageKey, session.address);
-
         // Wait for Goldsky to index the DAO before redirecting
         // This prevents 404 when DAO page loads
         await waitForDaoIndexed(addresses.token);

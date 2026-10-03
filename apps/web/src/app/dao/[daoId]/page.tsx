@@ -104,7 +104,7 @@ const TOKEN_PAGE_SIZE = 8;
 
 export default function Page() {
   const { daoId, daoConfig: config } = useDaoContext();
-  const isLaunchAdmin = useIsLaunchAdmin(daoId);
+  const isLaunchAdmin = useIsLaunchAdmin(config.launchAdmin);
   const [activityLimit, setActivityLimit] = useState(ACTIVITY_PAGE_SIZE);
   const [tokenLimit, setTokenLimit] = useState(TOKEN_PAGE_SIZE);
   const [refreshingDashboard, setRefreshingDashboard] = useState(false);
