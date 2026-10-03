@@ -19,4 +19,5 @@ pub enum TreasuryKey {
     Governor,
     Manager,
     CurrentHash,
+    CurrentVersion,
 }

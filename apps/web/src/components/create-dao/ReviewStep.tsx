@@ -1,297 +1,156 @@
-// components/create-dao/ReviewStep.tsx
-
 'use client';
 
-import { Stack } from 'styled-system/jsx';
-
-import { Badge, Callout, Card, Heading, Text } from '@/components/ui';
-import { getTreasuryAssets } from '@/lib/assets-config';
-import { decimalToStroops, formatStroops, getConfiguredAuctionNetwork } from '@/lib/auction-values';
-import { getStarterCollection } from '@/lib/starter-collections';
+import { formatDuration } from '@/lib/time-utils';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
-export function ReviewStep({ connectedAddress }: { connectedAddress: string }) {
-  const { basicInfo, artwork, auction, governance, founders, validationErrors, daoImageSource, artworkSource } =
-    useCreateDaoStore();
-  const paymentAsset = getTreasuryAssets(getConfiguredAuctionNetwork()).find(
-    (asset) => asset.contractId === auction.paymentAsset
-  );
-  const errors = Object.entries(validationErrors);
-
-  return (
-    <Stack gap="4">
-      {errors.length > 0 && (
-        <Callout
-          variant="error"
-          title="Please fix the highlighted fields before creating your DAO"
-          description="Use the wizard steps above to jump to a section, then return here to try again."
-        >
-          <ul style={{ margin: 0, paddingLeft: '1.25rem' }} aria-live="polite">
-            {errors.map(([field, message]) => (
-              <li key={field}>
-                <Text style={{ fontSize: '0.875rem' }}>{message}</Text>
-              </li>
-            ))}
-          </ul>
-        </Callout>
-      )}
-
-      <Card p="5">
-        <Stack gap="4">
-          <Heading as="h2" style={{ fontSize: '1.25rem' }}>
-            Review Configuration
-          </Heading>
-
-          {/* Basic Info */}
-          <div>
-            <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)', marginBottom: '8px', fontWeight: 600 }}>
-              Token Information
-            </Text>
-            <Stack gap="2">
-              <DetailRow label="Name" value={basicInfo.tokenName} />
-              <DetailRow label="Symbol" value={basicInfo.tokenSymbol} />
-              <DetailRow label="Description" value={basicInfo.description} />
-            </Stack>
-            <Text style={{ fontSize: '0.75rem', color: 'var(--gray-11)', marginTop: '8px', fontStyle: 'italic' }}>
-              Note: Token URI and metadata endpoints will be configured automatically using your DAO&apos;s contract
-              address after deployment.
-            </Text>
-          </div>
-
-          {/* DAO Identity Image */}
-          <div>
-            <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)', marginBottom: '8px', fontWeight: 600 }}>
-              DAO Identity Image
-            </Text>
-            {daoImageSource && daoImageSource.kind !== 'legacy-unconfirmed' ? (
-              <Stack gap="2">
-                {daoImageSource.kind === 'generated' && (
-                  <>
-                    <DetailRow label="Source" value="Generated" />
-                    <DetailRow label="Model" value={daoImageSource.model} />
-                    <DetailRow label="Prompt" value={daoImageSource.prompt} mono />
-                  </>
-                )}
-                {daoImageSource.kind === 'uploaded' && (
-                  <>
-                    <DetailRow label="Source" value="Uploaded" />
-                    <DetailRow label="Filename" value={daoImageSource.filename} />
-                  </>
-                )}
-                {daoImageSource.kind === 'url' && (
-                  <>
-                    <DetailRow label="Source" value="External URL" />
-                    <DetailRow label="URL" value={daoImageSource.gatewayUrl} mono />
-                  </>
-                )}
-                {daoImageSource.kind === 'default' && <DetailRow label="Source" value="Builder Default" />}
-                {(daoImageSource.kind === 'generated' || daoImageSource.kind === 'uploaded') && (
-                  <>
-                    <DetailRow label="IPFS URI" value={daoImageSource.ipfsUri} mono />
-                    <DetailRow label="Gateway URL" value={daoImageSource.gatewayUrl} mono />
-                  </>
-                )}
-                {daoImageSource.kind === 'default' && <DetailRow label="URL" value={daoImageSource.gatewayUrl} mono />}
-              </Stack>
-            ) : (
-              <Text style={{ fontSize: '0.875rem', color: 'var(--error-9)' }}>
-                DAO image not selected or using legacy settings
-              </Text>
-            )}
-          </div>
-
-          {/* Artwork Source */}
-          <div>
-            <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)', marginBottom: '8px', fontWeight: 600 }}>
-              Artwork Source
-            </Text>
-            {artworkSource && artworkSource.kind !== 'legacy-unconfirmed' ? (
-              <Stack gap="2">
-                {artworkSource.kind === 'starter' && (
-                  <>
-                    <DetailRow label="Source" value="Starter Collection" />
-                    {(() => {
-                      const collection = getStarterCollection(artworkSource.starterId);
-                      return collection ? (
-                        <>
-                          <DetailRow label="Collection" value={collection.name} />
-                          <DetailRow label="License" value={collection.license} />
-                          <DetailRow label="Attribution" value={collection.attribution} />
-                          <DetailRow label="Traits" value={collection.properties.length.toString()} />
-                        </>
-                      ) : (
-                        <DetailRow label="Collection ID" value={artworkSource.starterId} />
-                      );
-                    })()}
-                  </>
-                )}
-                {artworkSource.kind === 'uploaded' && (
-                  <>
-                    <DetailRow label="Source" value="Uploaded Directory" />
-                    <DetailRow label="Base URI" value={artworkSource.baseUri} mono />
-                    <DetailRow label="Extension" value={artworkSource.extension} />
-                    <DetailRow label="Traits" value={artworkSource.properties.length.toString()} />
-                    <DetailRow label="Gateway URL" value={artworkSource.gatewayUrl} mono />
-                  </>
-                )}
-              </Stack>
-            ) : (
-              <Text style={{ fontSize: '0.875rem', color: 'var(--error-9)' }}>
-                Artwork source not selected or using legacy settings
-              </Text>
-            )}
-          </div>
-
-          {/* Artwork */}
-          <div>
-            <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)', marginBottom: '8px', fontWeight: 600 }}>
-              Artwork Configuration
-            </Text>
-            <Stack gap="2">
-              <DetailRow label="IPFS Base URI" value={artwork.ipfs.baseUri} />
-              <DetailRow label="File Extension" value={artwork.ipfs.extension} />
-              <div>
-                <Text style={{ fontSize: '0.875rem', fontWeight: 500, marginBottom: '4px' }}>
-                  Properties ({artwork.properties.length})
-                </Text>
-                {artwork.properties.map((property, i) => (
-                  <div key={i} style={{ marginLeft: '1rem', marginBottom: '8px' }}>
-                    <Text style={{ fontSize: '0.875rem' }}>
-                      <strong>{property.name}</strong>: {property.items.length} items
-                    </Text>
-                  </div>
-                ))}
-              </div>
-            </Stack>
-          </div>
-
-          {/* Auction */}
-          <div>
-            <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)', marginBottom: '8px', fontWeight: 600 }}>
-              Auction Settings
-            </Text>
-            <Stack gap="2">
-              <DetailRow label="Enabled" value={auction.enabled ? 'Yes' : 'No'} />
-              {auction.enabled && (
-                <>
-                  <DetailRow
-                    label="Duration"
-                    value={`${auction.duration} seconds (${(auction.duration / 3600).toFixed(1)} hours)`}
-                  />
-                  <DetailRow
-                    label="Reserve Price"
-                    value={`${auction.reservePrice} ${paymentAsset?.code ?? 'payment tokens'} (${formatStroops(
-                      decimalToStroops(auction.reservePrice) ?? 0n
-                    )} stroops)`}
-                  />
-                  <DetailRow
-                    label="Time Buffer"
-                    value={`${auction.timeBuffer} seconds (${(auction.timeBuffer / 60).toFixed(0)} minutes)`}
-                  />
-                  <DetailRow
-                    label="Payment Asset"
-                    value={`${paymentAsset?.code ?? 'Custom SAC'} · ${auction.paymentAsset}`}
-                    mono
-                  />
-                </>
-              )}
-            </Stack>
-          </div>
-
-          {/* Governance */}
-          <div>
-            <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)', marginBottom: '8px', fontWeight: 600 }}>
-              Governance Parameters
-            </Text>
-            <Stack gap="2">
-              <DetailRow
-                label="Voting Delay"
-                value={`${governance.votingDelay} seconds (${(governance.votingDelay / 3600).toFixed(1)} hours)`}
-              />
-              <DetailRow
-                label="Voting Period"
-                value={`${governance.votingPeriod} seconds (${(governance.votingPeriod / 86400).toFixed(1)} days)`}
-              />
-              <DetailRow
-                label="Quorum"
-                value={`${governance.quorumBps} basis points (${(governance.quorumBps / 100).toFixed(2)}%)`}
-              />
-              <DetailRow
-                label="Proposal Threshold"
-                value={`${governance.proposalThresholdBps} basis points (${(governance.proposalThresholdBps / 100).toFixed(2)}%)`}
-              />
-            </Stack>
-          </div>
-
-          {/* Founders */}
-          <div>
-            <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)', marginBottom: '8px', fontWeight: 600 }}>
-              Founder Allocations ({founders.length})
-            </Text>
-            {founders.length > 0 ? (
-              <Stack gap="2">
-                {founders.map((founder, i) => (
-                  <Card key={i} p="3" style={{ background: 'var(--gray-2)', border: '1px solid var(--gray-6)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Text style={{ fontSize: '0.875rem', fontFamily: 'monospace' }}>{founder.address}</Text>
-                      <Badge>{founder.amount} NFTs</Badge>
-                    </div>
-                  </Card>
-                ))}
-                <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)' }}>
-                  Total: {founders.reduce((sum, f) => sum + f.amount, 0)} NFTs
-                </Text>
-              </Stack>
-            ) : (
-              <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)' }}>No founders added</Text>
-            )}
-          </div>
-        </Stack>
-      </Card>
-
-      <Card p="5">
-        <Stack gap="4">
-          <div>
-            <Heading as="h2" style={{ fontSize: '1.25rem', marginBottom: '8px' }}>
-              Launch Configuration
-            </Heading>
-            <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>
-              Your connected wallet will be the admin during DAO launch
-            </Text>
-          </div>
-
-          <DetailRow label="Launch Admin Address" value={connectedAddress} mono />
-        </Stack>
-      </Card>
-    </Stack>
-  );
+interface ReviewStepProps {
+  connectedAddress?: string;
 }
 
-// Helper component for displaying key-value pairs
-function DetailRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+export function ReviewStep({ connectedAddress }: ReviewStepProps) {
+  const basicInfo = useCreateDaoStore((s) => s.basicInfo);
+  const purpose = useCreateDaoStore((s) => s.purpose);
+  const governance = useCreateDaoStore((s) => s.governance);
+  const launchAdmin = useCreateDaoStore((s) => s.launchAdmin);
+
+  const governancePresets: Record<
+    string,
+    { votingDelay: number; votingPeriod: number; quorumBps: number; proposalThresholdBps: number }
+  > = {
+    testing: { votingDelay: 60, votingPeriod: 300, quorumBps: 1000, proposalThresholdBps: 100 },
+    fast: { votingDelay: 3600, votingPeriod: 86400, quorumBps: 500, proposalThresholdBps: 100 },
+    balanced: { votingDelay: 86400, votingPeriod: 259200, quorumBps: 1000, proposalThresholdBps: 100 },
+    deliberate: { votingDelay: 172800, votingPeriod: 604800, quorumBps: 1500, proposalThresholdBps: 200 }
+  };
+
+  const getPresetName = () => {
+    for (const [name, config] of Object.entries(governancePresets)) {
+      if (
+        config.votingDelay === governance.votingDelay &&
+        config.votingPeriod === governance.votingPeriod &&
+        config.quorumBps === governance.quorumBps &&
+        config.proposalThresholdBps === governance.proposalThresholdBps
+      ) {
+        return name;
+      }
+    }
+    return 'custom';
+  };
+
   return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        paddingBottom: '8px',
-        borderBottom: '1px solid var(--gray-4)'
-      }}
-    >
-      <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)' }}>{label}</Text>
-      <Text
-        style={{
-          fontSize: '0.875rem',
-          fontWeight: 500,
-          fontFamily: mono ? 'monospace' : 'inherit',
-          textAlign: 'right',
-          maxWidth: '60%',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis'
-        }}
-      >
-        {value}
-      </Text>
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="space-y-2">
+        <h2 className="text-2xl font-bold">Review Your DAO</h2>
+        <p className="text-text-secondary">
+          Verify all settings before deployment. You can configure artwork, auctions, and marketplace after launch.
+        </p>
+      </div>
+
+      {/* Basic Info Summary */}
+      <div className="rounded-lg border border-border-strong bg-surface-1 p-6 space-y-4">
+        <h3 className="font-semibold text-text-primary">Basic Information</h3>
+        <div className="grid grid-cols-2 gap-6">
+          <div>
+            <p className="text-sm text-text-secondary">DAO Name</p>
+            <p className="font-medium text-text-primary">{basicInfo.tokenName}</p>
+          </div>
+          <div>
+            <p className="text-sm text-text-secondary">Token Symbol</p>
+            <p className="font-medium text-text-primary">{basicInfo.tokenSymbol}</p>
+          </div>
+          <div className="col-span-2">
+            <p className="text-sm text-text-secondary">Description</p>
+            <p className="text-text-primary">{basicInfo.description}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Purpose Summary */}
+      <div className="rounded-lg border border-border-strong bg-surface-1 p-6 space-y-4">
+        <h3 className="font-semibold text-text-primary">Purpose & Membership</h3>
+        <div className="space-y-3">
+          <div>
+            <p className="text-sm text-text-secondary">DAO Purpose</p>
+            <p className="text-text-primary">{purpose.purpose}</p>
+          </div>
+          <div>
+            <p className="text-sm text-text-secondary">Membership Model</p>
+            <p className="font-medium text-text-primary capitalize">{purpose.membershipMode}</p>
+            {purpose.membershipMode !== 'founders' && (
+              <p className="text-xs text-text-secondary mt-2">
+                {purpose.membershipMode === 'auctions' &&
+                  'Members will be allocated tokens through recurring auctions.'}
+                {purpose.membershipMode === 'marketplace' && 'Members can trade tokens freely on the marketplace.'}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Governance Summary */}
+      <div className="rounded-lg border border-border-strong bg-surface-1 p-6 space-y-4">
+        <h3 className="font-semibold text-text-primary">Governance Parameters</h3>
+        <div className="grid grid-cols-2 gap-6">
+          <div>
+            <p className="text-sm text-text-secondary">Voting Delay</p>
+            <p className="font-medium text-text-primary">{formatDuration(governance.votingDelay)}</p>
+          </div>
+          <div>
+            <p className="text-sm text-text-secondary">Voting Period</p>
+            <p className="font-medium text-text-primary">{formatDuration(governance.votingPeriod)}</p>
+          </div>
+          <div>
+            <p className="text-sm text-text-secondary">Quorum</p>
+            <p className="font-medium text-text-primary">{(governance.quorumBps / 100).toFixed(1)}%</p>
+          </div>
+          <div>
+            <p className="text-sm text-text-secondary">Proposal Threshold</p>
+            <p className="font-medium text-text-primary">{(governance.proposalThresholdBps / 100).toFixed(1)}%</p>
+          </div>
+          <div className="col-span-2">
+            <p className="text-sm text-text-secondary">Preset</p>
+            <p className="font-medium text-text-primary capitalize">{getPresetName()}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Admin Address */}
+      <div className="rounded-lg border border-border-strong bg-surface-1 p-6 space-y-4">
+        <h3 className="font-semibold text-text-primary">Launch Admin</h3>
+        <div>
+          <p className="text-sm text-text-secondary">Address</p>
+          <p className="font-mono text-sm text-text-primary break-all">{launchAdmin}</p>
+          {launchAdmin === connectedAddress && (
+            <p className="text-xs text-action mt-2">✓ You will be the launch admin</p>
+          )}
+        </div>
+      </div>
+
+      {/* Post-Launch Configuration Note */}
+      <div className="rounded-lg border border-border-action bg-surface-2 p-6 space-y-3">
+        <div className="flex gap-3">
+          <span className="text-lg">ℹ️</span>
+          <div>
+            <h4 className="font-semibold text-text-primary">After Deployment</h4>
+            <p className="text-sm text-text-secondary mt-1">
+              The DAO will be created with these settings. You can then configure artwork, auctions, marketplace, and
+              other features in the admin panel before launching.
+            </p>
+            <p className="text-xs text-text-secondary mt-2 space-y-1">
+              <span className="block">• Setup artwork properties and IPFS metadata</span>
+              <span className="block">• Configure auction parameters</span>
+              <span className="block">• Setup marketplace payment tokens</span>
+              <span className="block">• Allocate founder tokens (if applicable)</span>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Ready to Deploy Message */}
+      <div className="p-4 rounded-lg bg-action/10 border border-action text-action">
+        <p className="text-sm font-medium">✓ Ready to deploy! Click "Create DAO" to proceed to wallet signing.</p>
+      </div>
     </div>
   );
 }

@@ -14,7 +14,7 @@ import { Badge, Callout, Card, Heading, ShortId, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsOwner } from '@/lib/admin-proposals';
 import { useContractOwner } from '@/lib/admin-queries';
-import type { DaoNetworkConfig } from '@/lib/dao-config';
+import { type DaoNetworkConfig, isDaoAdmin } from '@/lib/dao-config';
 import { useGoldskyGovernorAuthorities, useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
@@ -85,7 +85,7 @@ export default function OwnerPage() {
   } = useGoldskyGovernorAuthorities(config.tokenContractId);
   const { data: tokenOwner } = useContractOwner(config, 'token', session.address || undefined);
   const { data: governorOwner } = useContractOwner(config, 'governor', session.address || undefined);
-  const isOwner = Boolean(session.address && session.address === config.adminAddress);
+  const isOwner = isDaoAdmin(config, session.address);
   const canProposeAuthority = Boolean(
     session.address && (treasuryIsOwner(config, tokenOwner) || treasuryIsOwner(config, governorOwner))
   );

@@ -6,12 +6,31 @@ pub struct MetadataInitialized {
     #[topic]
     pub token: Address,
     pub renderer_base: String,
+    pub version: String,
+    pub owner: Address,
+    pub project_uri: String,
+    pub description: String,
+    pub contract_image: String,
 }
 
-pub fn emit_metadata_initialized(env: &Env, token: &Address, renderer_base: &String) {
+pub fn emit_metadata_initialized(
+    env: &Env,
+    token: &Address,
+    renderer_base: &String,
+    version: &String,
+    owner: &Address,
+    project_uri: &String,
+    description: &String,
+    contract_image: &String,
+) {
     let event = MetadataInitialized {
         token: token.clone(),
         renderer_base: renderer_base.clone(),
+        version: version.clone(),
+        owner: owner.clone(),
+        project_uri: project_uri.clone(),
+        description: description.clone(),
+        contract_image: contract_image.clone(),
     };
     event.publish(env);
 }

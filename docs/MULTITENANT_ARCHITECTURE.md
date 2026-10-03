@@ -60,7 +60,8 @@ Format: `"manager:CONTRACT_ADDRESS"`
 Example: `"manager:CBSKIHNNVKEJWV3A2OI63BWUC637LR4P2GBV4MPJB5PDOMVUMS6KOMAH"`
 
 **Properties:**
-- Set via environment variable `NEXT_PUBLIC_DEPLOYMENT_ID`
+- Generated from the most recent `deploys/*-manager.json` artifact by
+  `scripts/generate-web-deployment.mjs`
 - Constant per application instance
 - Never changes during app lifetime
 - Filters all database queries at the database level
@@ -98,7 +99,7 @@ This ensures:
 ### Creation Phase
 
 1. **create_dao(params)**
-   - Manager deploys 5 contracts (Token, Governor, Auction, Treasury, Metadata)
+    - Manager deploys 6 contracts (Token, Governor, Auction, Treasury, Metadata, Marketplace)
    - DaoCreated event emitted
    - Status: **pending**
    - Contracts owned by launch_admin
@@ -113,11 +114,14 @@ This ensures:
 
 ### Finalization Phase
 
-4. **finalize_dao(token_address)**
+4. **launch_dao(token_address)**
    - Manager validates completion
-   - Transfers module ownership to Treasury
+    - Checks accepted Token ownership and expected total supply
+    - Grants post-finalization mint authorities
+    - Transfers every module's ownership/upgrade authority to Treasury
    - Status: **operational**
-   - First auction launched
+    - Auction launches only when requested; otherwise it remains paused for later governance enablement
+    - Marketplace remains available for governance-controlled fixed-price sales
    - Cannot be repeated (idempotent check)
 
 ### Operational Phase
@@ -181,7 +185,7 @@ CREATE TABLE manager.daos (
 
 ```env
 # Multi-tenant Deployment
-NEXT_PUBLIC_DEPLOYMENT_ID=manager:CBSKIHNNVKEJWV3A2OI63BWUC637LR4P2GBV4MPJB5PDOMVUMS6KOMAH
+# Generated during the web app predev/prebuild hook from deploys/*-manager.json
 
 # Network Configuration
 NEXT_PUBLIC_NETWORK=testnet  # or 'public', 'local'
@@ -354,7 +358,7 @@ The Goldsky indexer populates the `manager.daos` table by:
 
 1. **Decoding DaoCreated Events**
    - Extracts token metadata from DaoCreationParams
-   - Records all 5 contract addresses
+   - Records all 6 contract addresses, including Marketplace
    - Stores creator and admin addresses
 
 2. **Inserting into manager.daos**
@@ -362,7 +366,7 @@ The Goldsky indexer populates the `manager.daos` table by:
    - Records blockchain timeline
    - Stores transaction hashes
 
-3. **Handling DaoFinalized Events**
+3. **Handling DaoLaunched Events**
    - Updates status to 'operational'
    - Records finalization timeline
    - Marks DAO ready for operation
@@ -382,7 +386,7 @@ See [GOLDSKY_MULTITENANT_INTEGRATION.md](./GOLDSKY_MULTITENANT_INTEGRATION.md) f
 
 ### Application-Level Isolation
 
-- Environment variable `NEXT_PUBLIC_DEPLOYMENT_ID` is constant per instance
+- Generated `apps/web/src/config/deployments.generated.ts` is constant per app instance
 - All API routes include `daoId` parameter
 - Context provider scopes components to single DAO
 - Navigation links include `daoId` for route structure

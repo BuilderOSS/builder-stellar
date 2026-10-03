@@ -67,6 +67,7 @@ pub enum DataKey {
     Launched,
     Manager,
     CurrentHash,
+    CurrentVersion,
 }
 
 /// Auction configuration parameters.

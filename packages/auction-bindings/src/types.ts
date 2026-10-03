@@ -197,6 +197,7 @@ export interface AuctionInitializedEvent {
     min_bid_increment_percent?: number;
     time_buffer?: bigint;
     payment_token?: string;
+    version?: string;
   };
 }
 
@@ -250,7 +251,8 @@ export interface MinBidIncrementUpdatedEvent {
    */
   { tag: "Launched"; values: void } |
   { tag: "Manager"; values: void } |
-  { tag: "CurrentHash"; values: void };
+  { tag: "CurrentHash"; values: void } |
+  { tag: "CurrentVersion"; values: void };
 
 /**
  * Current state of an active auction.

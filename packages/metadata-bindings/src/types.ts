@@ -80,6 +80,11 @@ export interface MetadataInitializedEvent {
   data: {
     token: string;
     renderer_base?: string;
+    version?: string;
+    owner?: string;
+    project_uri?: string;
+    description?: string;
+    contract_image?: string;
   };
 }
 
@@ -124,7 +129,8 @@ export interface Item {
   { tag: "Attributes"; values: readonly [number] } |
   { tag: "Manager"; values: void } |
   { tag: "Owner"; values: void } |
-  { tag: "CurrentHash"; values: void };
+  { tag: "CurrentHash"; values: void } |
+  { tag: "CurrentVersion"; values: void };
 
 /**
  * Struct: Property

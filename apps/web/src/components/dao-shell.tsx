@@ -20,6 +20,7 @@ import { type ReactNode } from 'react';
 
 import { DaoImage } from '@/components/dao-image';
 import { DashboardFooter } from '@/components/dashboard/dashboard-footer';
+import { GlobalNavRail, MobileNavRail, useActiveNavItem, useNavRailItems } from '@/components/global-nav-rail';
 import { NetworkIndicator } from '@/components/network-indicator';
 import { ProposalDraftIndicator } from '@/components/proposal/proposal-draft-indicator';
 import { Callout } from '@/components/ui';
@@ -30,22 +31,18 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 type NavItem = { href: Route; label: string; icon: LucideIcon; exact?: boolean };
 
-function getNavItems(daoId: string, auctionEnabled?: boolean | null): NavItem[] {
+function getNavItems(daoId: string, _auctionEnabled?: boolean | null): NavItem[] {
   const items: NavItem[] = [
     { href: `/dao/${daoId}` as Route, label: 'Dashboard', icon: LayoutDashboard, exact: true },
     { href: `/dao/${daoId}/proposals` as Route, label: 'Proposals', icon: Vote },
     { href: `/dao/${daoId}/treasury` as Route, label: 'Treasury', icon: Landmark },
+    { href: `/dao/${daoId}/auctions` as Route, label: 'Auctions', icon: Gavel },
     { href: `/dao/${daoId}/members` as Route, label: 'Members', icon: Users },
     { href: `/dao/${daoId}/marketplace` as Route, label: 'Marketplace', icon: Store }
   ];
 
-  // Show Auctions tab based on current auction enabled state.
-  // - false: permanently disabled at finalization, hide tab
-  // - true: enabled (either at finalization or re-enabled later), show tab
-  // - null: DAO still pending finalization, show tab (might be enabled)
-  if (auctionEnabled !== false) {
-    items.splice(3, 0, { href: `/dao/${daoId}/auctions` as Route, label: 'Auctions', icon: Gavel });
-  }
+  // Auctions are always visible for operational DAOs. Users can view the status
+  // and enable/disable from the admin page. Disabled auctions can be reactivated.
 
   return items;
 }
@@ -90,6 +87,10 @@ export function DaoShell({ children }: { children: ReactNode }) {
   const { data: memberLookup } = useGoldskyMember(currentNetwork.tokenContractId, session.address);
   const walletDisabled = Boolean(session.address && session.walletNetworkIssue);
 
+  // Global nav rail hooks
+  const navRailItems = useNavRailItems();
+  const activeNavId = useActiveNavItem(navRailItems);
+
   const baseNavItems = getNavItems(daoId, currentNetwork.auctionEnabled);
   const adminNavItem: NavItem = {
     href: `/dao/${daoId}/admin` as Route,
@@ -101,11 +102,17 @@ export function DaoShell({ children }: { children: ReactNode }) {
   const mobilePrimaryNavItems = navItems.slice(0, 3);
   const mobileOverflowNavItems = navItems.slice(3);
 
+  const handleNavRailNavigate = (id: string, href: string) => {
+    window.location.href = href;
+  };
+
   return (
     <div className="page-shell">
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
+      <GlobalNavRail items={navRailItems} activeId={activeNavId} onNavigate={handleNavRailNavigate} />
+      <MobileNavRail items={navRailItems} activeId={activeNavId} />
       <div className="app-frame">
         <header className="app-header">
           <div className="app-header__top">

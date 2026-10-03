@@ -10,7 +10,7 @@ The Goldsky pipeline needs to:
 1. Decode `DaoCreated` events from manager contract
 2. Extract token metadata from DaoCreationParams
 3. Insert/update `manager.daos` table
-4. Handle `DaoFinalized` events to update status
+4. Handle `DaoLaunched` events to update status
 
 **Location**: `packages/goldsky/src/`
 
@@ -131,14 +131,14 @@ ON CONFLICT (deployment_id, dao_id) DO NOTHING;
 3. Verify all fields are populated correctly
 4. Verify token_name, token_symbol, token_description are not NULL
 
-### 3. Handle DaoFinalized Events (Optional but Recommended)
+### 3. Handle DaoLaunched Events (Optional but Recommended)
 
-**Task A**: Add DaoFinalized event to manager contract
+**Task A**: Add DaoLaunched event to manager contract
 
-The manager contract may not currently emit DaoFinalized. If not, add:
+The manager contract may not currently emit DaoLaunched. If not, add:
 
 ```rust
-// In contracts/manager/src/contract.rs:finalize_dao()
+// In contracts/manager/src/contract.rs:launch_dao()
 // After successful finalization:
 env.events().publish((
     Symbol::new(&env, "dao_finalized"),
@@ -146,15 +146,15 @@ env.events().publish((
 ));
 ```
 
-**Task B**: Decode DaoFinalized event
+**Task B**: Decode DaoLaunched event
 
 ```javascript
 // In decoded-events.script.js:
-if (eventName === 'dao_finalized' || eventName === 'daofinalized') {
+if (eventName === 'dao_launched' || eventName === 'daolaunched') {
   const decoded = {
-    event_type: 'dao_finalized',
+    event_type: 'dao_launched',
     dao_id: topics[0],     // token_address
-    finalized_by: topics[1] // who called finalize_dao
+    launched_by: topics[1] // who called launch_dao
   };
   return decoded;
 }
@@ -166,9 +166,9 @@ if (eventName === 'dao_finalized' || eventName === 'daofinalized') {
 UPDATE manager.daos
 SET
   status = 'operational',
-  finalized_ledger = e.ledger_sequence,
-  finalized_at = to_timestamp(nullif(e.ledger_closed_at, '')::numeric / 1000),
-  finalized_tx_hash = e.transaction_hash
+    launched_ledger = e.ledger_sequence,
+    launched_at = to_timestamp(nullif(e.ledger_closed_at, '')::numeric / 1000),
+    launched_tx_hash = e.transaction_hash
 FROM chain.decoded_events e
 WHERE e.contract_role = 'manager'
   AND lower(e.event_name) IN ('dao_finalized', 'daofinalized')
@@ -189,7 +189,7 @@ WHERE e.contract_role = 'manager'
 - [ ] Verify all fields populated (contracts, metadata, creator)
 - [ ] Finalize DAO via script or direct contract call
 - [ ] Verify status changed to 'operational'
-- [ ] Verify `finalized_ledger` and `finalized_at` populated
+ - [ ] Verify `launched_ledger` and `launched_at` populated
 
 ### SQL Verification
 
@@ -224,7 +224,7 @@ WHERE deployment_id = 'manager:...'
 AND dao_id = 'CB...';
 
 -- Check status after finalization
-SELECT status, finalized_ledger, finalized_at
+SELECT status, launched_ledger, launched_at
 FROM manager.daos
 WHERE deployment_id = 'manager:...'
 AND dao_id = 'CB...';
@@ -232,8 +232,8 @@ AND dao_id = 'CB...';
 
 ## Deployment Order
 
-1. **Update Manager Contract** (if DaoFinalized event needed)
-   - Add event emission in finalize_dao()
+1. **Update Manager Contract** (if DaoLaunched event needed)
+   - Add event emission in launch_dao()
    - Rebuild and redeploy
 
 2. **Update Goldsky Pipeline** (in order)
@@ -287,14 +287,14 @@ AND dao_id = 'CB...';
 
 ### Status not updating to operational
 
-1. Check DaoFinalized event is being emitted:
+1. Check DaoLaunched event is being emitted:
    ```sql
    SELECT COUNT(*) FROM chain.decoded_events
    WHERE contract_role = 'manager'
    AND lower(event_name) IN ('dao_finalized', 'daofinalized');
    ```
 
-2. If no events, add DaoFinalized to manager contract
+2. If no events, add DaoLaunched to manager contract
 
 3. Check UPDATE query correctly maps topic_0 to dao_id
 
@@ -313,7 +313,7 @@ Before implementing, clarify:
    - Is it `modules.token`, `modules.governor`, etc.?
    - Or flattened as `token_contract`, `governor_contract`?
 
-3. **Current Events** - Does manager contract already emit DaoFinalized?
+3. **Current Events** - Does manager contract already emit DaoLaunched?
    - If yes, what's the event structure?
    - If no, do we need to add it?
 
@@ -335,7 +335,7 @@ Before implementing, clarify:
    - All DAOs start in 'pending' state
    - Test end-to-end
 
-2. **Phase 2**: Add DaoFinalized event and status updates
+2. **Phase 2**: Add DaoLaunched event and status updates
    - Update status when finalization happens
    - Complete lifecycle tracking
 

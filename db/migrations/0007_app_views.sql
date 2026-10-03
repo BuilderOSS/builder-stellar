@@ -121,7 +121,7 @@ SELECT
   e.deployment_id,
   e.contract_id AS manager_contract,
   e.args::jsonb ->> 'name' AS name,
-  (e.args::jsonb ->> 'version')::integer AS version,
+  e.args::jsonb ->> 'version' AS version,
   e.topic_0 AS wasm_hash,
   (e.args::jsonb ->> 'published_at')::bigint AS published_at,
   e.ledger_sequence AS event_ledger,
@@ -143,6 +143,7 @@ SELECT DISTINCT ON (e.deployment_id)
   e.args::jsonb ->> 'auction' AS auction_impl,
   e.args::jsonb ->> 'governor' AS governor_impl,
   e.args::jsonb ->> 'treasury' AS treasury_impl,
+  e.args::jsonb ->> 'marketplace' AS marketplace_impl,
   e.ledger_sequence AS updated_ledger,
   to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS updated_at,
   e.transaction_hash

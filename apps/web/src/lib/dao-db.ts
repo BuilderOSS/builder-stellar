@@ -9,13 +9,9 @@
  * - dao_id = token contract address (unique identifier per DAO)
  */
 
-import { Pool } from '@neondatabase/serverless';
-
+import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { getNetworkConfig, type NetworkName } from '@/config/networks';
-
-const pool = new Pool({
-  connectionString: process.env.APP_DATABASE_URL
-});
+import { prisma } from '@/lib/prisma';
 
 /**
  * DAO Configuration from Database
@@ -31,6 +27,7 @@ export interface DaoConfig {
   // Core Identity
   token_address: string; // Same as dao_id
   creator: string | null; // Account that deployed this DAO
+  launch_admin: string | null;
 
   // Network (derived from environment)
   network: NetworkName;
@@ -56,7 +53,21 @@ export interface DaoConfig {
 
   // Lifecycle State
   status: 'pending' | 'operational'; // DAO lifecycle status
+
+  /**
+   * Auction enabled state: Was auction EVER enabled?
+   * - null: DAO still pending (hasn't launched yet)
+   * - true: Enabled at launch OR re-enabled after being disabled (via unpause)
+   * - false: Launched with auctions disabled, but can be reactivated later
+   */
   auction_enabled: boolean | null;
+
+  /**
+   * Auction pause state: Is auction currently paused?
+   * - null: DAO still pending (hasn't launched yet)
+   * - true: Auction is paused or disabled (can be resumed if ever enabled)
+   * - false: Auction is active and accepting bids
+   */
   auction_paused: boolean | null;
 
   // Blockchain Timeline
@@ -100,90 +111,22 @@ function getDeploymentNetwork(): NetworkName {
  * @throws Error if DAO not found or database unavailable
  */
 export async function getDaoConfigFromDatabase(daoId: string): Promise<DaoConfig> {
-  const deploymentId = process.env.NEXT_PUBLIC_DEPLOYMENT_ID;
-
-  if (!deploymentId) {
-    throw new Error('NEXT_PUBLIC_DEPLOYMENT_ID environment variable is required');
-  }
-
-  // Determine network from environment
+  const deploymentId = DEPLOYMENT_ID;
   const network = getDeploymentNetwork();
 
-  // Query manager.daos table for complete DAO configuration
-  const query = `
-    SELECT
-      d.deployment_id,
-      d.dao_id,
-      d.token_address,
-      d.creator,
-      d.manager_contract,
-      d.token_contract,
-      d.governor_contract,
-      d.auction_contract,
-      d.treasury_contract,
-      d.metadata_contract,
-      metadata_config.contract_image,
-      d.token_name,
-      d.token_symbol,
-      d.token_description,
-      d.token_uri,
-      d.admin_address,
-      d.status,
-      d.auction_enabled,
-      d.auction_paused,
-      d.created_ledger,
-      d.created_at,
-      d.created_tx_hash,
-      d.finalized_ledger,
-      d.finalized_at,
-      d.finalized_tx_hash,
-      d.indexed_at
-    FROM manager.daos d
-    LEFT JOIN metadata.configuration metadata_config
-      ON metadata_config.deployment_id = d.deployment_id
-      AND metadata_config.dao_id = d.dao_id
-    WHERE d.deployment_id = $1 AND d.dao_id = $2
-    LIMIT 1
-  `;
+  const row = await prisma.managerDao.findFirst({
+    where: { deploymentId, daoId }
+  });
 
-  const result = await pool.query(query, [deploymentId, daoId]);
-
-  if (result.rows.length === 0) {
+  if (!row) {
     throw new Error(`DAO not found: ${daoId}`);
   }
 
-  const row = result.rows[0];
+  const metadata = await prisma.metadataConfiguration.findFirst({
+    where: { deploymentId, daoId }
+  });
 
-  return {
-    deployment_id: row.deployment_id,
-    dao_id: row.dao_id,
-    token_address: row.token_address,
-    creator: row.creator,
-    network,
-    manager_contract: row.manager_contract,
-    token_contract: row.token_contract,
-    governor_contract: row.governor_contract,
-    auction_contract: row.auction_contract,
-    treasury_contract: row.treasury_contract,
-    metadata_contract: row.metadata_contract,
-    contract_image: row.contract_image,
-    token_name: row.token_name,
-    token_symbol: row.token_symbol,
-    token_description: row.token_description,
-    token_uri: row.token_uri,
-    admin_address: row.admin_address,
-    label: '', // Not yet stored in database, can be added later
-    status: row.status || 'pending',
-    auction_enabled: row.auction_enabled ?? null,
-    auction_paused: row.auction_paused ?? null,
-    created_ledger: row.created_ledger,
-    created_at: row.created_at,
-    created_tx_hash: row.created_tx_hash,
-    finalized_ledger: row.finalized_ledger,
-    finalized_at: row.finalized_at,
-    finalized_tx_hash: row.finalized_tx_hash,
-    indexed_at: row.indexed_at
-  };
+  return mapDaoConfig(row, network, metadata?.contractImage ?? null);
 }
 
 /**
@@ -197,89 +140,120 @@ export async function getDaoConfigFromDatabase(daoId: string): Promise<DaoConfig
  * @returns Array of DAO configurations
  */
 export async function getAllDaosFromDatabase(status?: 'pending' | 'operational'): Promise<DaoConfig[]> {
-  const deploymentId = process.env.NEXT_PUBLIC_DEPLOYMENT_ID;
-
-  if (!deploymentId) {
-    throw new Error('NEXT_PUBLIC_DEPLOYMENT_ID environment variable is required');
-  }
-
+  const deploymentId = DEPLOYMENT_ID;
   const network = getDeploymentNetwork();
 
-  // Build query with optional status filter
-  let query = `
-    SELECT
-      d.deployment_id,
-      d.dao_id,
-      d.token_address,
-      d.creator,
-      d.manager_contract,
-      d.token_contract,
-      d.governor_contract,
-      d.auction_contract,
-      d.treasury_contract,
-      d.metadata_contract,
-      metadata_config.contract_image,
-      d.token_name,
-      d.token_symbol,
-      d.token_description,
-      d.token_uri,
-      d.admin_address,
-      d.status,
-      d.auction_enabled,
-      d.auction_paused,
-      d.created_ledger,
-      d.created_at,
-      d.created_tx_hash,
-      d.finalized_ledger,
-      d.finalized_at,
-      d.finalized_tx_hash,
-      d.indexed_at
-    FROM manager.daos d
-    LEFT JOIN metadata.configuration metadata_config
-      ON metadata_config.deployment_id = d.deployment_id
-      AND metadata_config.dao_id = d.dao_id
-    WHERE d.deployment_id = $1
-  `;
+  const rows = await prisma.managerDao.findMany({
+    where: { deploymentId, ...(status ? { status } : {}) },
+    orderBy: { createdLedger: 'desc' }
+  });
+  const metadata = await prisma.metadataConfiguration.findMany({
+    where: { deploymentId }
+  });
+  const images = new Map(metadata.map((item) => [item.daoId, item.contractImage]));
 
-  const params: any[] = [deploymentId];
+  return rows.map((row) => mapDaoConfig(row, network, images.get(row.daoId) ?? null));
+}
 
-  if (status) {
-    query += ` AND status = $${params.length + 1}`;
-    params.push(status);
+export async function getPendingDaosForLaunchAdmin(address: string): Promise<DaoConfig[]> {
+  const launchAdmin = address.trim();
+  if (!launchAdmin) return [];
+
+  const deploymentId = DEPLOYMENT_ID;
+  const network = getDeploymentNetwork();
+  const rows = await prisma.managerDao.findMany({
+    where: {
+      deploymentId,
+      status: 'pending',
+      launchAdmin: { equals: launchAdmin, mode: 'insensitive' }
+    },
+    orderBy: { createdLedger: 'desc' }
+  });
+  const metadata = await prisma.metadataConfiguration.findMany({
+    where: { deploymentId, daoId: { in: rows.map((row) => row.daoId) } }
+  });
+  const images = new Map(metadata.map((item) => [item.daoId, item.contractImage]));
+
+  return rows.map((row) => mapDaoConfig(row, network, images.get(row.daoId) ?? null));
+}
+
+function mapDaoConfig(
+  row: Awaited<ReturnType<typeof prisma.managerDao.findFirst>> extends infer T ? Exclude<T, null> : never,
+  network: NetworkName,
+  contractImage: string | null
+): DaoConfig {
+  return {
+    deployment_id: row.deploymentId,
+    dao_id: row.daoId,
+    token_address: row.tokenAddress,
+    creator: row.deployer,
+    launch_admin: row.launchAdmin,
+    network,
+    manager_contract: row.managerContract,
+    token_contract: row.tokenContract,
+    governor_contract: row.governorContract,
+    auction_contract: row.auctionContract,
+    treasury_contract: row.treasuryContract,
+    metadata_contract: row.metadataContract,
+    contract_image: contractImage,
+    token_name: row.tokenName,
+    token_symbol: row.tokenSymbol,
+    token_description: row.tokenDescription,
+    token_uri: row.tokenUri,
+    admin_address: row.adminAddress,
+    label: '',
+    status: row.status === 'operational' ? 'operational' : 'pending',
+    auction_enabled: row.auctionEnabled,
+    auction_paused: row.auctionPaused,
+    created_ledger: Number(row.createdLedger),
+    created_at: row.createdAt?.toISOString() ?? null,
+    created_tx_hash: row.createdTxHash,
+    finalized_ledger: row.launchedLedger === null ? null : Number(row.launchedLedger),
+    finalized_at: row.launchedAt?.toISOString() ?? null,
+    finalized_tx_hash: row.launchedTxHash,
+    indexed_at: row.indexedAt?.toISOString() ?? null
+  };
+}
+
+/**
+ * DAO status is now derived from DaoLaunched event presence
+ *
+ * When launch_dao is called on-chain:
+ * 1. Manager emits DaoLaunched event
+ * 2. Goldsky indexes the event
+ * 3. manager.daos view derives status = 'operational'
+ *
+ * No manual database updates needed.
+ */
+
+/**
+ * Wait for DAO to be indexed in the database
+ *
+ * After create_dao is called on-chain, Goldsky takes time to index the event.
+ * This function polls the database until the DAO appears.
+ *
+ * @param daoId - Token contract address (DAO ID)
+ * @param timeoutMs - Maximum time to wait (default 30000ms)
+ * @throws Error if DAO not found within timeout
+ */
+export async function waitForDaoIndexed(daoId: string, timeoutMs = 30000): Promise<void> {
+  const startTime = Date.now();
+  const pollInterval = 1000; // 1 second
+
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const config = await getDaoConfigFromDatabase(daoId);
+      if (config) {
+        // DAO found!
+        return;
+      }
+    } catch {
+      // DAO not found yet, continue polling
+    }
+
+    // Wait before next poll
+    await new Promise((resolve) => setTimeout(resolve, pollInterval));
   }
 
-  query += ` ORDER BY created_ledger DESC`;
-
-  const result = await pool.query(query, params);
-
-  return result.rows.map((row) => ({
-    deployment_id: row.deployment_id,
-    dao_id: row.dao_id,
-    token_address: row.token_address,
-    creator: row.creator,
-    network,
-    manager_contract: row.manager_contract,
-    token_contract: row.token_contract,
-    governor_contract: row.governor_contract,
-    auction_contract: row.auction_contract,
-    treasury_contract: row.treasury_contract,
-    metadata_contract: row.metadata_contract,
-    contract_image: row.contract_image,
-    token_name: row.token_name,
-    token_symbol: row.token_symbol,
-    token_description: row.token_description,
-    token_uri: row.token_uri,
-    admin_address: row.admin_address,
-    label: '',
-    status: row.status || 'pending',
-    auction_enabled: row.auction_enabled ?? null,
-    auction_paused: row.auction_paused ?? null,
-    created_ledger: row.created_ledger,
-    created_at: row.created_at,
-    created_tx_hash: row.created_tx_hash,
-    finalized_ledger: row.finalized_ledger,
-    finalized_at: row.finalized_at,
-    finalized_tx_hash: row.finalized_tx_hash,
-    indexed_at: row.indexed_at
-  }));
+  throw new Error(`DAO ${daoId} not indexed after ${timeoutMs}ms. Please check Goldsky indexer status.`);
 }

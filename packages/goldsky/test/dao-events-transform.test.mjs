@@ -31,13 +31,13 @@ test('decoded events use the canonical envelope and preserve unknown fields', ()
   assert.equal(decoded.decoder_version, 'v2');
 });
 
-test('manager topics preserve token address then creator order for both event name styles', () => {
-  for (const eventName of ['dao_created', 'DaoRegistered']) {
+test('manager topics preserve token address, deployer, and launch_admin order for both event name styles', () => {
+  for (const eventName of ['dao_created', 'DaoCreated']) {
     const decoded = decodeEvent({
-      topics: JSON.stringify([{ symbol: eventName }, { address: 'TOKEN_ADDR' }, { address: 'CREATOR_ADDR' }]),
+      topics: JSON.stringify([{ symbol: eventName }, { address: 'TOKEN_ADDR' }, { address: 'DEPLOYER_ADDR' }, { address: 'LAUNCH_ADMIN_ADDR' }]),
       data: JSON.stringify({ map: [] })
     });
-    assert.deepEqual(topicsOf(decoded), { token_address: 'TOKEN_ADDR', creator: 'CREATOR_ADDR' });
+    assert.deepEqual(topicsOf(decoded), { token_address: 'TOKEN_ADDR', deployer: 'DEPLOYER_ADDR', launch_admin: 'LAUNCH_ADMIN_ADDR' });
     assert.equal(decoded.event_name, eventName);
   }
 });
@@ -56,22 +56,22 @@ test('preserves the indexed contract role for lifecycle events', () => {
   assert.equal(decoded.event_name, 'paused');
 });
 
-test('DaoFinalized uses the token address as the DAO identity topic', () => {
+test('DaoLaunched uses the token address as the DAO identity topic', () => {
   const decoded = decodeEvent({
     topics: JSON.stringify([
-      { symbol: 'DaoFinalized' },
+      { symbol: 'DaoLaunched' },
       { address: 'TOKEN_ADDR' }
     ]),
     data: JSON.stringify({
       map: [
-        { key: { symbol: 'finalized_ledger' }, val: { u32: 42 } },
+         { key: { symbol: 'launched_ledger' }, val: { u32: 42 } },
         { key: { symbol: 'modules' }, val: { map: [] } }
       ]
     })
   });
 
   assert.deepEqual(topicsOf(decoded), { token_address: 'TOKEN_ADDR' });
-  assert.deepEqual(argsOf(decoded), { finalized_ledger: 42, modules: {} });
+  assert.deepEqual(argsOf(decoded), { launched_ledger: 42, modules: {} });
 });
 
 // XDR-JSON Flattening Tests

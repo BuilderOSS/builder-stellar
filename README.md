@@ -1,16 +1,16 @@
 # Builder for Stellar
 
-Builder for Stellar is a Soroban DAO framework. The current implementation provides a Manager contract that deploys and records DAOs composed of five modules: Token, Metadata, Auction, Governor, and Treasury.
+Builder for Stellar is a Soroban DAO framework. The redesign provides a Manager deployment module that deploys six independent DAO modules: Token, Metadata, Auction, Governor, Treasury, and Marketplace.
 
 ## Current Status
 
-- Five Soroban DAO modules are implemented and covered by Rust tests.
-- Manager combines the implementation registry, DAO factory, and DAO registry.
-- Treasury owns the DAO modules in production and is the module-administration authority.
+- Six Soroban DAO modules are deployed by Manager: Token, Metadata, Auction, Governor, Treasury, and Marketplace.
+- Manager is the implementation registry and DAO factory, not a permanent DAO registry.
+- Treasury owns every DAO module after finalization, including itself, and is the module-administration authority.
 - Founder allocations are fixed token amounts and the total is capped at 10,000 tokens.
 - Metadata uses mutable properties and items, with mint hooks that generate token attributes.
-- 153 Rust tests pass (`pnpm contracts:test:unit`).
-- Multi-DAO database, indexer, and frontend layers are not complete. The contract registry exists, but the surrounding application infrastructure remains future work.
+- 154 Rust tests pass (`pnpm contracts:test`).
+- Goldsky and PostgreSQL provide durable DAO discovery and history. Manager stores only temporary pending creation state.
 
 ## Quick Start
 
@@ -40,14 +40,31 @@ pnpm dev
 pnpm local:down
 ```
 
+The web app is available at `http://localhost:5000`. Before starting it, copy
+`apps/web/.env.example` to `apps/web/.env` and set `APP_DATABASE_URL` to the
+read-only PostgreSQL connection used by the Goldsky read model. The dev and
+build hooks generate the Prisma client and select the deployment from the most
+recent `deploys/*-manager.json` artifact; do not set `NEXT_PUBLIC_DEPLOYMENT_ID`
+manually.
+
 ### Testing
 
 ```bash
-pnpm contracts:test:unit  # 153 Rust unit tests
-pnpm contracts:test:e2e
-pnpm contracts:test:all
+pnpm contracts:test       # 154 Rust unit and e2e tests
 pnpm indexer:test          # Goldsky package tests, not multi-DAO completeness
 ```
+
+#### macOS SDK Override
+
+On macOS, use the Command Line Tools 26.5 SDK when running the full contract
+test command:
+
+```bash
+SDKROOT="/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk" pnpm contracts:test
+```
+
+The workspace `.envrc` exports this value automatically when entering
+`~/code/nouns/stellar-builder` with direnv enabled.
 
 ## Project Structure
 
@@ -57,7 +74,8 @@ contracts/metadata/    Mutable properties/items and mint hook
 contracts/auction/     Auction membership module
 contracts/governor/    Proposal and voting logic
 contracts/treasury/    Asset custody and module ownership
-contracts/manager/     Implementation registry, factory, and DAO registry
+contracts/manager/     Implementation registry and DAO factory
+contracts/marketplace/ Primary and secondary NFT marketplace
 contracts/e2e/         Contract integration tests
 apps/web/              Next.js frontend
 packages/*-bindings/   Generated TypeScript clients
@@ -72,9 +90,10 @@ configs/               Network and DAO configuration
 - [Architecture](docs/ARCHITECTURE.md)
 - [Deployment Guide](docs/DEPLOYMENT.md)
 - [Manager Deployment](docs/MANAGER_DEPLOYMENT.md)
+- [Manager Redesign](docs/MANAGER_REDESIGN.md)
+- [Marketplace Plan](docs/MARKETPLACE_PLAN.md)
 - [Goldsky Setup](docs/GOLDSKY_SETUP.md)
 - [Mercury notes](docs/MERCURY.md) (historical)
-- [Migration and indexer notes](docs/MULTI_DAO_MIGRATION_NOTES.md) (historical/future)
 
 ## Common Commands
 
@@ -86,6 +105,7 @@ configs/               Network and DAO configuration
 - `pnpm build` - build the web application
 - `pnpm lint` - lint the web application
 - `pnpm typecheck` - type-check the web application
+- `pnpm --dir apps/web test` - run web application tests
 
 ## Wallet Authentication
 
@@ -95,7 +115,7 @@ Authentication endpoints are `/api/auth/challenge`, `/api/auth/verify`, `/api/au
 
 ## Technology
 
-Rust and Soroban power the contracts. The application uses Next.js, TypeScript, Panda CSS, Stellar Wallets Kit, Goldsky, and PostgreSQL.
+Rust and Soroban power the contracts. The application uses Next.js, TypeScript, Panda CSS, Stellar Wallets Kit, Goldsky, Prisma, and PostgreSQL. Prisma is configured with read-only models over the indexed database views; schema changes and Goldsky ingestion remain outside the web app.
 
 ## License
 

@@ -1,6 +1,6 @@
 use soroban_sdk::{
     auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation},
-    contract, contractimpl, vec, Address, BytesN, Env, IntoVal, Symbol, Val, Vec,
+    contract, contractimpl, vec, Address, BytesN, Env, IntoVal, String, Symbol, Val, Vec,
 };
 use stellar_access::ownable::{set_owner, Ownable, OwnableStorageKey};
 use stellar_macros::only_owner;
@@ -46,6 +46,7 @@ impl DaoTreasuryContract {
         governor: Address,
         manager: Address,
         current_hash: BytesN<32>,
+        version: String,
     ) {
         set_owner(e, &owner);
         e.storage()
@@ -55,8 +56,11 @@ impl DaoTreasuryContract {
         e.storage()
             .instance()
             .set(&TreasuryKey::CurrentHash, &current_hash);
+        e.storage()
+            .instance()
+            .set(&TreasuryKey::CurrentVersion, &version);
 
-        emit_treasury_initialized(e, &owner, &governor);
+        emit_treasury_initialized(e, &owner, &governor, &version);
     }
 
     pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {

@@ -51,4 +51,5 @@ pub enum TokenKey {
     Metadata,
     Manager,
     CurrentHash,
+    CurrentVersion,
 }

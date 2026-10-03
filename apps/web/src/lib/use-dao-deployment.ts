@@ -1,31 +1,25 @@
 // lib/use-dao-deployment.ts
-
 'use client';
 
 import { Client as ManagerClient, type DaoAddresses } from '@builder-stellar/manager-bindings';
-import { Client as MetadataClient } from '@builder-stellar/metadata-bindings';
-import { Client as TokenClient } from '@builder-stellar/token-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { useCallback, useState } from 'react';
 
+import type { CreateDaoFormData } from './create-dao-schema';
 import type { DaoNetworkName } from './dao-config';
-import type { CreateDaoFormData } from './dao-creation-params';
 import { formDataToCreationParams, generateNonce } from './dao-creation-params';
 import { getDeploymentConfig } from './deployment-config';
 import { waitForConfirmation } from './transaction-confirmation';
 import { useTransactionFeedback } from './transaction-feedback';
 
-export type DeploymentStep =
-  | 'idle'
-  | 'predicting'
-  | 'creating'
-  | 'accepting-ownership'
-  | 'adding-properties'
-  | 'minting-founders'
-  | 'finalizing'
-  | 'indexing'
-  | 'complete'
-  | 'error';
+/**
+ * 2-step DAO deployment process:
+ * 1. predict - Predict contract addresses (read-only)
+ * 2. create - Create DAO contracts (paused, owned by launch_admin)
+ *
+ * Launch happens later via admin panel after configuration
+ */
+export type DeploymentStep = 'idle' | 'predicting' | 'creating' | 'complete' | 'error';
 
 export interface DeploymentState {
   currentStep: DeploymentStep;
@@ -34,9 +28,6 @@ export interface DeploymentState {
   createdAddresses: DaoAddresses | null;
   transactions: {
     create?: string;
-    acceptOwnership?: string;
-    addProperties?: string;
-    founderMints: string[];
     finalize?: string;
   };
   progress: {
@@ -53,11 +44,9 @@ const initialState: DeploymentState = {
   completedSteps: new Set(),
   predictedAddresses: null,
   createdAddresses: null,
-  transactions: {
-    founderMints: []
-  },
+  transactions: {},
   progress: {
-    totalSteps: 7,
+    totalSteps: 2,
     currentStepIndex: 0,
     currentStepLabel: 'Ready to deploy'
   },
@@ -69,24 +58,11 @@ const STEP_LABELS: Record<DeploymentStep, string> = {
   idle: 'Ready to deploy',
   predicting: 'Predicting contract addresses...',
   creating: 'Creating DAO contracts...',
-  'accepting-ownership': 'Accepting token ownership...',
-  'adding-properties': 'Configuring artwork metadata...',
-  'minting-founders': 'Minting founder allocations...',
-  finalizing: 'Finalizing DAO...',
-  indexing: 'Waiting for blockchain indexing...',
   complete: 'DAO created successfully!',
   error: 'Deployment failed'
 };
 
-const STEP_ORDER: DeploymentStep[] = [
-  'predicting',
-  'creating',
-  'accepting-ownership',
-  'adding-properties',
-  'minting-founders',
-  'finalizing',
-  'indexing'
-];
+const STEP_ORDER: DeploymentStep[] = ['predicting', 'creating'];
 
 export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
   const [state, setState] = useState<DeploymentState>(initialState);
@@ -236,172 +212,10 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
     [deployer, setStep, updateState, updateTransactions, markStepComplete, setError, tx]
   );
 
-  // Step 3: Accept token ownership
-  const acceptOwnership = useCallback(
-    async (tokenAddress: string) => {
-      setStep('accepting-ownership');
-
-      try {
-        const config = getDeploymentConfig();
-
-        const tokenClient = new TokenClient({
-          contractId: tokenAddress,
-          rpcUrl: config.rpcUrl,
-          networkPassphrase: config.networkPassphrase,
-          publicKey: deployer,
-          signTransaction: async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
-            StellarWalletsKit.signTransaction(xdr, {
-              networkPassphrase: opts?.networkPassphrase ?? config.networkPassphrase,
-              address: opts?.address ?? deployer
-            })
-        });
-
-        const assembled = await tokenClient.accept_ownership();
-        tx.start('Accepting token ownership...');
-        const sent = await assembled.signAndSend();
-        const hash = sent.sendTransactionResponse?.hash;
-
-        if (!hash) {
-          throw new Error('No transaction hash returned from accept_ownership');
-        }
-
-        tx.submitted('Ownership acceptance submitted', hash);
-        await waitForConfirmation(hash, config.rpcUrl);
-        tx.success('Token ownership accepted', hash);
-
-        updateTransactions((transactions) => ({ ...transactions, acceptOwnership: hash }));
-        markStepComplete('accepting-ownership');
-      } catch (err) {
-        const error = err instanceof Error ? err : new Error('Failed to accept ownership');
-        tx.fail(error, 'Ownership acceptance failed');
-        setError(error);
-        throw error;
-      }
-    },
-    [deployer, setStep, updateTransactions, markStepComplete, setError, tx]
-  );
-
-  // Step 4: Add artwork properties
-  const addProperties = useCallback(
-    async (metadataAddress: string, formData: CreateDaoFormData) => {
-      setStep('adding-properties');
-
-      try {
-        const config = getDeploymentConfig();
-        const params = formDataToCreationParams(formData, deployer, state.nonce!);
-
-        const metadataClient = new MetadataClient({
-          contractId: metadataAddress,
-          rpcUrl: config.rpcUrl,
-          networkPassphrase: config.networkPassphrase,
-          publicKey: deployer,
-          signTransaction: async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
-            StellarWalletsKit.signTransaction(xdr, {
-              networkPassphrase: opts?.networkPassphrase ?? config.networkPassphrase,
-              address: opts?.address ?? deployer
-            })
-        });
-
-        const assembled = await metadataClient.add_properties({
-          names: params.artwork_property_names,
-          items: params.artwork_items,
-          ipfs_group: params.artwork_ipfs
-        });
-
-        tx.start('Configuring artwork metadata...');
-        const sent = await assembled.signAndSend();
-        const hash = sent.sendTransactionResponse?.hash;
-
-        if (!hash) {
-          throw new Error('No transaction hash returned from add_properties');
-        }
-
-        tx.submitted('Metadata configuration submitted', hash);
-        await waitForConfirmation(hash, config.rpcUrl);
-        tx.success('Artwork metadata configured', hash);
-
-        updateTransactions((transactions) => ({ ...transactions, addProperties: hash }));
-        markStepComplete('adding-properties');
-      } catch (err) {
-        const error = err instanceof Error ? err : new Error('Failed to add properties');
-        tx.fail(error, 'Metadata configuration failed');
-        setError(error);
-        throw error;
-      }
-    },
-    [deployer, state.nonce, setStep, updateTransactions, markStepComplete, setError, tx]
-  );
-
-  // Step 5: Mint founder allocations (batched)
-  const mintFounders = useCallback(
-    async (tokenAddress: string, formData: CreateDaoFormData) => {
-      if (formData.founders.length === 0) {
-        // Skip if no founders
-        markStepComplete('minting-founders');
-        return;
-      }
-
-      setStep('minting-founders');
-
-      try {
-        const config = getDeploymentConfig();
-        const tokenClient = new TokenClient({
-          contractId: tokenAddress,
-          rpcUrl: config.rpcUrl,
-          networkPassphrase: config.networkPassphrase,
-          publicKey: deployer,
-          signTransaction: async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
-            StellarWalletsKit.signTransaction(xdr, {
-              networkPassphrase: opts?.networkPassphrase ?? config.networkPassphrase,
-              address: opts?.address ?? deployer
-            })
-        });
-
-        // Process each founder (could be optimized with batching in the future)
-        for (const founder of formData.founders) {
-          let remaining = founder.amount;
-          while (remaining > 0) {
-            const amount = Math.min(remaining, 20);
-            const assembled = await tokenClient.batch_mint({
-              minter: formData.launchAdmin,
-              to: founder.address,
-              amount
-            });
-
-            tx.start(`Minting allocation for ${founder.address.slice(0, 6)}...`);
-            const sent = await assembled.signAndSend();
-            const hash = sent.sendTransactionResponse?.hash;
-
-            if (!hash) {
-              throw new Error(`No transaction hash returned for founder ${founder.address}`);
-            }
-
-            tx.submitted('Founder allocation submitted', hash);
-            await waitForConfirmation(hash, config.rpcUrl);
-            tx.success('Founder allocation minted', hash);
-            updateTransactions((transactions) => ({
-              ...transactions,
-              founderMints: [...transactions.founderMints, hash]
-            }));
-            remaining -= amount;
-          }
-        }
-        markStepComplete('minting-founders');
-      } catch (err) {
-        const error = err instanceof Error ? err : new Error('Failed to mint founder allocations');
-        tx.fail(error, 'Founder allocation failed');
-        setError(error);
-        throw error;
-      }
-    },
-    [deployer, setStep, updateTransactions, markStepComplete, setError, tx]
-  );
-
-  // Step 6: Finalize DAO
-  const finalizeDao = useCallback(
-    async (tokenAddress: string, launchAuction: boolean) => {
-      setStep('finalizing');
-
+  // Launch DAO - called from admin panel after checklist completion
+  // This transitions the DAO from 'pending' to 'operational' state
+  const launchDao = useCallback(
+    async (tokenAddress: string, launchConfig: { launch_auction: boolean; launch_marketplace: boolean }) => {
       try {
         const config = getDeploymentConfig();
 
@@ -417,84 +231,29 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
             })
         });
 
-        const assembled = await managerClient.finalize_dao({
+        const assembled = await managerClient.launch_dao({
           token_address: tokenAddress,
-          launch_auction: launchAuction
+          launch_config: launchConfig
         });
 
-        tx.start('Finalizing DAO...');
+        tx.start('Launching DAO...');
         const sent = await assembled.signAndSend();
         const hash = sent.sendTransactionResponse?.hash;
 
         if (!hash) {
-          throw new Error('No transaction hash returned from finalize_dao');
+          throw new Error('No transaction hash returned from launch_dao');
         }
 
-        tx.submitted('DAO finalization submitted', hash);
+        tx.submitted('DAO launch submitted', hash);
         await waitForConfirmation(hash, config.rpcUrl);
-        tx.success('DAO finalized', hash);
-
-        updateTransactions((transactions) => ({ ...transactions, finalize: hash }));
-        markStepComplete('finalizing');
+        tx.success('DAO launched', hash);
       } catch (err) {
-        const error = err instanceof Error ? err : new Error('Failed to finalize DAO');
-        tx.fail(error, 'DAO finalization failed');
-        setError(error);
+        const error = err instanceof Error ? err : new Error('Failed to launch DAO');
+        tx.fail(error, 'DAO launch failed');
         throw error;
       }
     },
-    [deployer, setStep, updateTransactions, markStepComplete, setError, tx]
-  );
-
-  // Step 7: Wait for indexing (polling)
-  const waitForIndexing = useCallback(
-    async (tokenAddress: string) => {
-      setStep('indexing');
-
-      try {
-        let indexed = false;
-        let attempts = 0;
-        const maxAttempts = 30; // 1 minute max (2s intervals)
-        const requestTimeout = 5000;
-
-        while (!indexed && attempts < maxAttempts) {
-          const controller = new AbortController();
-          const timeoutId = window.setTimeout(() => controller.abort(), requestTimeout);
-
-          try {
-            const response = await fetch(`/api/dao/${tokenAddress}`, {
-              signal: controller.signal,
-              cache: 'no-store'
-            });
-            if (response.ok) {
-              indexed = true;
-            }
-          } catch {
-            // Not indexed yet
-          } finally {
-            window.clearTimeout(timeoutId);
-          }
-
-          attempts++;
-          if (!indexed && attempts < maxAttempts) {
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-          }
-        }
-
-        if (!indexed) {
-          console.warn('DAO not indexed within timeout, but deployment completed successfully');
-        }
-
-        markStepComplete('indexing');
-        setStep('complete');
-      } catch (err) {
-        // Don't fail on indexing issues - the DAO is deployed
-        console.error('Indexing check failed:', err);
-        markStepComplete('indexing');
-        setStep('complete');
-      }
-    },
-    [setStep, markStepComplete]
+    [deployer, tx]
   );
 
   // Main deployment orchestrator
@@ -522,7 +281,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
           }
         };
 
-        // Step 2: Create DAO
+        // Step 2: Create DAO (contracts paused, owned by launch_admin)
         const createdAddresses = await createDao(updatedFormData, nonce);
 
         // Validate addresses match prediction
@@ -530,20 +289,8 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
           throw new Error('Created token address does not match prediction');
         }
 
-        // Step 3: Accept ownership
-        await acceptOwnership(createdAddresses.token);
-
-        // Step 4: Add properties
-        await addProperties(createdAddresses.metadata, updatedFormData);
-
-        // Step 5: Mint founders
-        await mintFounders(createdAddresses.token, updatedFormData);
-
-        // Step 6: Finalize
-        await finalizeDao(createdAddresses.token, updatedFormData.auction.enabled);
-
-        // Step 7: Wait for indexing
-        await waitForIndexing(createdAddresses.token);
+        // Mark complete - user will configure and launch via admin panel
+        setStep('complete');
 
         return createdAddresses;
       } catch (err) {
@@ -551,22 +298,13 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         throw err;
       }
     },
-    [
-      deployer,
-      updateState,
-      predictAddresses,
-      createDao,
-      acceptOwnership,
-      addProperties,
-      mintFounders,
-      finalizeDao,
-      waitForIndexing
-    ]
+    [deployer, updateState, predictAddresses, createDao, setStep]
   );
 
   return {
     state,
     deployDao,
+    launchDao,
     reset
   };
 }

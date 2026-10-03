@@ -1,6 +1,7 @@
 # DAO Deployment Guide
 
-> **Status**: Complete - Ready to use
+> **Status**: Versioned redesign reference. Use `MANAGER_REDESIGN.md` and
+> `MARKETPLACE_PLAN.md` for the new six-module deployment baseline.
 
 This guide covers creating and deploying new DAOs using the multi-tenant system.
 
@@ -10,10 +11,10 @@ This guide covers creating and deploying new DAOs using the multi-tenant system.
    - See [MANAGER_DEPLOYMENT.md](./MANAGER_DEPLOYMENT.md)
 
 2. Environment configured
-   - `NEXT_PUBLIC_DEPLOYMENT_ID=manager:...` in app .env
+   - A current `deploys/*-manager.json` artifact; the web predev/prebuild hook generates the deployment ID
    - `NEXT_PUBLIC_NETWORK=testnet` in app .env
-   - `DATABASE_URL` for admin scripts
-   - `APP_DATABASE_URL` for app queries
+   - `APP_DATABASE_URL` for the web app's Prisma read-only queries
+   - `DATABASE_URL` only where an admin or migration script explicitly requires it
 
 3. Required tools
    - Node.js 20+
@@ -67,6 +68,10 @@ Create a JSON file describing the DAO (e.g., `configs/my-dao.json`):
     "paymentAsset": "native"    // or contract address
   },
 
+  "marketplace": {
+    "secondaryFeeBps": 250
+  },
+
   "governance": {
     "votingDelay": 1,
     "votingPeriod": 604800,     // 7 days in seconds
@@ -85,7 +90,7 @@ node scripts/deploy-dao.mjs configs/my-dao.json configs/testnet-config.json
 ```
 
 **What it does** (in order):
-1. Creates all 5 contracts
+1. Creates all 6 contracts, including Marketplace
 2. Initializes contracts
 3. Configures metadata properties
 4. Accepts token ownership
@@ -111,7 +116,7 @@ AND token_name = 'My DAO';
 
 Should see:
 - Status: 'operational'
-- All 5 contracts populated
+- All 6 contracts populated, including `marketplace_contract`
 - token_name, token_symbol filled
 
 ### Step 4: Verify in Frontend
@@ -128,7 +133,7 @@ console.log(dao.governor_contract); // "CB..."
 Or via API route:
 
 ```bash
-curl http://localhost:3000/api/dao/CB.../config
+curl http://localhost:5000/api/dao/CB.../config
 ```
 
 ## DAO Lifecycle States
@@ -144,7 +149,7 @@ DAO has been created but not yet finalized.
 **Operations Blocked**:
 - No proposals can be created
 - No votes can be cast
-- Auction not launched
+- Auction not launched unless requested; Marketplace sales are governance-controlled after finalization
 
 **Database**:
 ```sql
@@ -157,12 +162,13 @@ finalized_at = NULL
 
 DAO is fully configured and ready for operation.
 
-**When**: After `finalize_dao()` completes
+**When**: After `launch_dao()` completes
 
 **Features Enabled**:
 - Proposals can be created
 - Voting is active
-- Auctions run continuously
+- Auctions run continuously when enabled
+- Marketplace fixed-price sales are available through Governor proposals
 - Treasury controls funds
 
 **Database**:
@@ -305,7 +311,7 @@ Look for `"error"` field with error message.
 
 ### DAO stuck in pending
 
-If `finalize_dao()` didn't complete:
+If `launch_dao()` didn't complete:
 
 1. Check if it was called:
    ```bash
@@ -313,15 +319,21 @@ If `finalize_dao()` didn't complete:
    cat deploys/testnet-my-dao-1.json | grep finalize
    ```
 
-2. Call finalize directly:
+2. Call launch_dao directly with LaunchConfig:
    ```bash
    stellar contract invoke \
      --id MANAGER_ADDRESS \
      --source-account IDENTITY \
      --network testnet \
-     -- finalize_dao \
-     --token_address DAO_TOKEN_ADDRESS
+     -- launch_dao \
+     --token_address DAO_TOKEN_ADDRESS \
+     --launch_auction true \
+     --launch_marketplace true
    ```
+
+   The LaunchConfig controls:
+   - `launch_auction`: Whether to unpause the Auction (true to enable, false to keep paused)
+   - `launch_marketplace`: Whether to unpause the Marketplace (true to enable, false to keep paused)
 
 3. Check status updated:
    ```sql

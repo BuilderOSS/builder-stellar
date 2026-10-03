@@ -193,10 +193,10 @@ WHERE status = 'operational' AND creator IS NULL;
 **Option 1: Manual Health Checks**
 ```bash
 # Terminal monitoring
-watch -n 30 'curl -s http://localhost:3000/api/health | jq .'
+watch -n 30 'curl -s http://localhost:5000/api/health | jq .'
 
 # Or via cron for alerts (email if fails)
-*/5 * * * * curl -sf http://localhost:3000/api/health || echo "Health check failed" | mail
+*/5 * * * * curl -sf http://localhost:5000/api/health || echo "Health check failed" | mail
 ```
 
 **Option 2: Uptime Monitoring Service**
@@ -223,7 +223,7 @@ watch -n 30 'curl -s http://localhost:3000/api/health | jq .'
 | **Health Check Failed** | 2+ consecutive fails | Check API service, database connection |
 | **Connection Pool** | > 80% capacity | Investigate connection leaks, optimize queries |
 | **Storage Growth** | > 20% per day | Analyze event volume, consider partitioning |
-| **NULL Creator** | > 0 finalized DAOs without creator | Verify DaoFinalized event includes creator field |
+| **NULL Creator** | > 0 launched DAOs without creator | Verify DaoLaunched event includes creator field |
 
 ---
 
@@ -320,7 +320,7 @@ SELECT COUNT(*) FROM manager.daos WHERE status = 'operational' AND creator IS NU
 ```
 
 **Fix**:
-- Verify DaoFinalized event includes creator field
+- Verify DaoLaunched event includes creator field
 - If not, add to event struct and redeploy contract
 - Backfill from DaoCreated event via join
 

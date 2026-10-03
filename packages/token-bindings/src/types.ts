@@ -68,6 +68,7 @@ export interface TokenInitializedEvent {
     uri?: string;
     name?: string;
     symbol?: string;
+    version?: string;
   };
 }
 
@@ -108,7 +109,8 @@ export interface MintAuthorityChangedEvent {
    */
   { tag: "Metadata"; values: void } |
   { tag: "Manager"; values: void } |
-  { tag: "CurrentHash"; values: void };
+  { tag: "CurrentHash"; values: void } |
+  { tag: "CurrentVersion"; values: void };
 
 /**
  * Event emitted when an account is frozen.

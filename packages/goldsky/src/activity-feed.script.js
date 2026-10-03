@@ -96,7 +96,7 @@ function invoke(data) {
     ProposalCancelled: true, ProposalCanceled: true, ProposalExecuted: true,
     AuctionCreated: true, BidPlaced: true,
     AuctionSettled: true, BidRefunded: true, AuctionCancelled: true,
-    DaoCreated: true, DaoRegistered: true, DaoFinalized: true
+    DaoCreated: true, DaoLaunched: true
   };
 
   var kindMap = {
@@ -139,8 +139,7 @@ function invoke(data) {
     BidRefunded: 'auction.bid_refunded',
     AuctionCancelled: 'auction.cancelled',
     DaoCreated: 'manager.dao_created',
-    DaoRegistered: 'manager.dao_registered',
-    DaoFinalized: 'manager.dao_finalized',
+    DaoLaunched: 'manager.dao_launched',
     FactoryPaused: 'manager.factory_paused',
     FactoryUnpaused: 'manager.factory_unpaused',
     UpgradeApproved: 'manager.upgrade_approved',
@@ -197,8 +196,7 @@ function invoke(data) {
     BidRefunded: 'Bid refunded',
     AuctionCancelled: 'Auction cancelled',
     DaoCreated: 'DAO created',
-    DaoRegistered: 'DAO registered',
-    DaoFinalized: 'DAO finalized',
+    DaoLaunched: 'DAO launched',
     FactoryPaused: 'Factory paused',
     FactoryUnpaused: 'Factory unpaused',
     UpgradeApproved: 'Upgrade approved',
@@ -258,8 +256,7 @@ function invoke(data) {
     BatchMint: function() { return 'Minted ' + (amount || 'batch') + ' tokens'; },
     DelegateChanged: function() { return 'Delegation changed'; },
     DaoCreated: function() { return 'DAO created by ' + (creator || 'unknown'); },
-    DaoRegistered: function() { return 'DAO registered for token ' + (tokenAddress || 'unknown'); },
-    DaoFinalized: function() { return 'DAO finalized for token ' + (tokenAddress || 'unknown'); },
+    DaoLaunched: function() { return 'DAO launched for token ' + (tokenAddress || 'unknown'); },
     ImplementationRegistered: function() { return 'Implementation "' + (name || 'unknown') + '" registered'; },
     SeedGenerated: function() { return 'Seed generated for token ' + (tokenId || 'unknown'); },
     PropertyAdded: function() { return 'Property "' + (name || 'unknown') + '" added'; }

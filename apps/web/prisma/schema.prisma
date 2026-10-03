@@ -1,0 +1,300 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["views"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("APP_DATABASE_URL")
+  schemas  = ["app", "auction", "chain", "governance", "manager", "metadata", "token"]
+}
+
+view ManagerDao {
+  deploymentId        String    @map("deployment_id")
+  daoId               String    @map("dao_id")
+  tokenAddress        String    @map("token_address")
+  deployer            String?
+  launchAdmin         String?   @map("launch_admin")
+  managerContract     String    @map("manager_contract")
+  tokenContract       String    @map("token_contract")
+  governorContract    String    @map("governor_contract")
+  auctionContract     String?   @map("auction_contract")
+  treasuryContract    String?   @map("treasury_contract")
+  metadataContract    String?   @map("metadata_contract")
+  marketplaceContract String?   @map("marketplace_contract")
+  tokenName           String?   @map("token_name")
+  tokenSymbol         String?   @map("token_symbol")
+  tokenDescription    String?   @map("token_description")
+  tokenUri            String?   @map("token_uri")
+  adminAddress        String?   @map("admin_address")
+  status              String
+  auctionEnabled      Boolean?  @map("auction_enabled")
+  marketplaceEnabled  Boolean?  @map("marketplace_enabled")
+  auctionPaused       Boolean?  @map("auction_paused")
+  createdLedger       BigInt    @map("created_ledger")
+  createdAt           DateTime? @map("created_at")
+  createdTxHash       String?   @map("created_tx_hash")
+  launchedLedger      BigInt?   @map("launched_ledger")
+  launchedAt          DateTime? @map("launched_at")
+  launchedTxHash      String?   @map("launched_tx_hash")
+  indexedAt           DateTime? @map("indexed_at")
+
+  @@map("daos")
+  @@schema("manager")
+}
+
+view MetadataConfiguration {
+  deploymentId        String    @map("deployment_id")
+  daoId               String    @map("dao_id")
+  metadataContract    String    @map("metadata_contract")
+  tokenContract       String    @map("token_contract")
+  rendererBase        String?   @map("renderer_base")
+  projectUri          String?   @map("project_uri")
+  description         String?
+  contractImage       String?   @map("contract_image")
+  initLedger          BigInt    @map("init_ledger")
+  initAt              DateTime? @map("init_at")
+  initTransactionHash String?   @map("init_transaction_hash")
+
+  @@map("configuration")
+  @@schema("metadata")
+}
+
+view AppActivityFeed {
+  activityId       String  @map("activity_id")
+  deploymentId     String  @map("deployment_id")
+  daoId            String? @map("dao_id")
+  contractId       String  @map("contract_id")
+  contractRole     String  @map("contract_role")
+  eventName        String  @map("event_name")
+  topics           String
+  args             String
+  kind             String
+  title            String
+  summary          String
+  actor            String?
+  addresses        String
+  proposalId       String? @map("proposal_id")
+  tokenId          String? @map("token_id")
+  amount           String?
+  visibility       String
+  ledgerSequence   BigInt  @map("ledger_sequence")
+  transactionIndex BigInt? @map("transaction_index")
+  operationIndex   BigInt? @map("operation_index")
+  eventIndex       BigInt? @map("event_index")
+  ledgerClosedAt   String? @map("ledger_closed_at")
+  transactionHash  String  @map("transaction_hash")
+
+  @@map("activity_feed")
+  @@schema("app")
+}
+
+view AppProposalList {
+  proposalNumber         Int       @map("proposal_number")
+  createdEventId         String    @map("created_event_id")
+  deploymentId           String    @map("deployment_id")
+  daoId                  String    @map("dao_id")
+  contractId             String    @map("contract_id")
+  proposalId             String    @map("proposal_id")
+  proposer               String
+  description            String?
+  snapshotLedger         BigInt?   @map("snapshot_ledger")
+  voteStartSeconds       BigInt?   @map("vote_start_seconds")
+  voteEndSeconds         BigInt?   @map("vote_end_seconds")
+  actionCount            Int       @map("action_count")
+  createdLedger          BigInt    @map("created_ledger")
+  transactionIndex       BigInt?   @map("transaction_index")
+  operationIndex         BigInt?   @map("operation_index")
+  eventIndex             BigInt?   @map("event_index")
+  createdAt              DateTime? @map("created_at")
+  createdTransactionHash String    @map("created_transaction_hash")
+  state                  String
+  etaSeconds             BigInt?   @map("eta_seconds")
+  updatedLedger          BigInt?   @map("updated_ledger")
+  updatedAt              DateTime? @map("updated_at")
+  forVotes               BigInt    @map("for_votes")
+  againstVotes           BigInt    @map("against_votes")
+  abstainVotes           BigInt    @map("abstain_votes")
+
+  @@map("proposal_list")
+  @@schema("app")
+}
+
+view AppProposalDetail {
+  proposalNumber         Int       @map("proposal_number")
+  createdEventId         String    @map("created_event_id")
+  deploymentId           String    @map("deployment_id")
+  daoId                  String    @map("dao_id")
+  contractId             String    @map("contract_id")
+  proposalId             String    @map("proposal_id")
+  proposer               String
+  description            String?
+  snapshotLedger         BigInt?   @map("snapshot_ledger")
+  voteStartSeconds       BigInt?   @map("vote_start_seconds")
+  voteEndSeconds         BigInt?   @map("vote_end_seconds")
+  actionCount            Int       @map("action_count")
+  createdLedger          BigInt    @map("created_ledger")
+  transactionIndex       BigInt?   @map("transaction_index")
+  operationIndex         BigInt?   @map("operation_index")
+  eventIndex             BigInt?   @map("event_index")
+  createdAt              DateTime? @map("created_at")
+  createdTransactionHash String    @map("created_transaction_hash")
+  state                  String
+  etaSeconds             BigInt?   @map("eta_seconds")
+  updatedLedger          BigInt?   @map("updated_ledger")
+  updatedAt              DateTime? @map("updated_at")
+  forVotes               BigInt    @map("for_votes")
+  againstVotes           BigInt    @map("against_votes")
+  abstainVotes           BigInt    @map("abstain_votes")
+  actions                Json
+  votes                  Json
+
+  @@map("proposal_detail")
+  @@schema("app")
+}
+
+view GovernanceProposalVote {
+  voteEventId      String    @map("vote_event_id")
+  deploymentId     String    @map("deployment_id")
+  daoId            String    @map("dao_id")
+  contractId       String    @map("contract_id")
+  proposalId       String    @map("proposal_id")
+  voter            String
+  support          Int
+  weight           Decimal
+  reason           String?
+  eventLedger      BigInt    @map("event_ledger")
+  transactionIndex BigInt?   @map("transaction_index")
+  operationIndex   BigInt?   @map("operation_index")
+  eventIndex       BigInt?   @map("event_index")
+  eventAt          DateTime? @map("event_at")
+  transactionHash  String    @map("transaction_hash")
+
+  @@map("proposal_votes")
+  @@schema("governance")
+}
+
+view GovernanceProposalLifecycle {
+  lifecycleEventId String    @map("lifecycle_event_id")
+  deploymentId     String    @map("deployment_id")
+  daoId            String    @map("dao_id")
+  contractId       String    @map("contract_id")
+  proposalId       String    @map("proposal_id")
+  state            String
+  etaSeconds       BigInt?   @map("eta_seconds")
+  eventLedger      BigInt    @map("event_ledger")
+  eventAt          DateTime? @map("event_at")
+  transactionHash  String    @map("transaction_hash")
+
+  @@map("proposal_lifecycle")
+  @@schema("governance")
+}
+
+view TokenInventory {
+  eventId         String    @map("event_id")
+  deploymentId    String    @map("deployment_id")
+  daoId           String    @map("dao_id")
+  contractId      String    @map("contract_id")
+  tokenId         BigInt    @map("token_id")
+  owner           String
+  eventLedger     BigInt    @map("event_ledger")
+  eventAt         DateTime? @map("event_at")
+  transactionHash String    @map("transaction_hash")
+
+  @@map("inventory")
+  @@schema("token")
+}
+
+view TokenMember {
+  deploymentId       String  @map("deployment_id")
+  daoId              String  @map("dao_id")
+  contractId         String  @map("contract_id")
+  address            String
+  ownedTokenCount    BigInt  @map("owned_token_count")
+  delegatedTo        String? @map("delegated_to")
+  votingPower        BigInt  @map("voting_power")
+  lastActivityLedger BigInt? @map("last_activity_ledger")
+
+  @@map("members")
+  @@schema("token")
+}
+
+view TokenMintAuthority {
+  deploymentId String  @map("deployment_id")
+  daoId        String  @map("dao_id")
+  contractId   String  @map("contract_id")
+  authority    String
+  enabled      Boolean
+  eventLedger  BigInt  @map("event_ledger")
+
+  @@map("mint_authorities")
+  @@schema("token")
+}
+
+view GovernanceGovernorAuthority {
+  deploymentId String  @map("deployment_id")
+  daoId        String  @map("dao_id")
+  contractId   String  @map("contract_id")
+  authority    String
+  enabled      Boolean
+  eventLedger  BigInt  @map("event_ledger")
+
+  @@map("governor_authorities")
+  @@schema("governance")
+}
+
+view AuctionAuction {
+  eventId           String  @map("event_id")
+  deploymentId      String  @map("deployment_id")
+  daoId             String  @map("dao_id")
+  contractId        String  @map("contract_id")
+  tokenId           BigInt  @map("token_id")
+  startSeconds      BigInt  @map("start_seconds")
+  endSeconds        BigInt  @map("end_seconds")
+  durationSeconds   BigInt? @map("duration_seconds")
+  timeBufferSeconds BigInt? @map("time_buffer_seconds")
+  reservePrice      Decimal @map("reserve_price")
+  paymentToken      String? @map("payment_token")
+  settled           Boolean
+  cancelled         Boolean
+  createdLedger     BigInt  @map("created_ledger")
+  transactionHash   String  @map("transaction_hash")
+
+  @@map("auctions")
+  @@schema("auction")
+}
+
+view AuctionBid {
+  eventId         String    @map("event_id")
+  deploymentId    String    @map("deployment_id")
+  daoId           String    @map("dao_id")
+  contractId      String    @map("contract_id")
+  tokenId         BigInt    @map("token_id")
+  bidder          String
+  amount          Decimal
+  extended        Boolean?
+  newEndSeconds   BigInt?   @map("new_end_seconds")
+  eventLedger     BigInt    @map("event_ledger")
+  eventAt         DateTime? @map("event_at")
+  transactionHash String    @map("transaction_hash")
+
+  @@map("bids")
+  @@schema("auction")
+}
+
+view ChainRawEvent {
+  eventId        String   @map("event_id")
+  ledgerSequence BigInt   @map("ledger_sequence")
+  ingestedAt     DateTime @map("ingested_at")
+
+  @@map("raw_events")
+  @@schema("chain")
+}
+
+view ChainDecodedEvent {
+  eventId        String @map("event_id")
+  ledgerSequence BigInt @map("ledger_sequence")
+
+  @@map("decoded_events")
+  @@schema("chain")
+}

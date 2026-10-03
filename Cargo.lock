@@ -182,7 +182,7 @@ checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 
 [[package]]
 name = "auction"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "soroban-sdk",
  "stellar-access",
@@ -405,11 +405,12 @@ dependencies = [
 
 [[package]]
 name = "dao-e2e"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "auction",
  "governor",
  "manager",
+ "marketplace",
  "metadata",
  "soroban-sdk",
  "stellar-governance",
@@ -752,7 +753,7 @@ dependencies = [
 
 [[package]]
 name = "governor"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "soroban-sdk",
  "stellar-access",
@@ -981,7 +982,7 @@ dependencies = [
 
 [[package]]
 name = "manager"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "auction",
  "governor",
@@ -992,6 +993,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "marketplace"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -999,7 +1007,7 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
 name = "metadata"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "soroban-sdk",
  "stellar-access",
@@ -1814,7 +1822,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "token"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "soroban-sdk",
  "stellar-access",
@@ -1825,7 +1833,7 @@ dependencies = [
 
 [[package]]
 name = "treasury"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "soroban-sdk",
  "stellar-access",

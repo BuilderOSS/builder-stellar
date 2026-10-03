@@ -3445,6 +3445,44 @@ textarea {
   }
 }
 
+/* Global Navigation Rail */
+.group:hover .group-hover-opacity-100,
+.group:focus-visible .group-focus-visible-opacity-100 {
+  opacity: 1;
+}
+
+.group:hover .group-hover-border-action,
+.group:focus-visible .group-focus-visible-border-action {
+  border-color: var(--action);
+}
+
+/* Responsive utilities for nav rail */
+.nav-rail-desktop {
+  display: none;
+}
+
+.nav-rail-mobile {
+  display: flex;
+}
+
+.nav-tooltip {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .nav-rail-desktop {
+    display: flex;
+  }
+
+  .nav-rail-mobile {
+    display: none;
+  }
+
+  .nav-tooltip {
+    display: block;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

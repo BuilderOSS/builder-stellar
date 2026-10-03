@@ -24,6 +24,7 @@ pub struct GovernorInitialized {
     pub queue_delay: u32,
     pub proposal_threshold: u128,
     pub quorum_bps: u32,
+    pub version: String,
 }
 
 #[contractevent]
@@ -114,7 +115,7 @@ pub fn emit_governor_initialized(
     e: &Env,
     owner: &Address,
     #[allow(unused_variables)] name: &String,
-    #[allow(unused_variables)] version: &String,
+    version: &String,
     token_contract: &Address,
     treasury_contract: &Address,
     voting_delay: u32,
@@ -132,6 +133,7 @@ pub fn emit_governor_initialized(
         queue_delay,
         proposal_threshold,
         quorum_bps,
+        version: version.clone(),
     }
     .publish(e);
 }

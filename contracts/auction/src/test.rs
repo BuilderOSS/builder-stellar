@@ -4,7 +4,7 @@ extern crate std;
 
 use soroban_sdk::{
     testutils::{Address as _, Ledger},
-    Address, BytesN, Env,
+    Address, BytesN, Env, String,
 };
 
 use crate::contract::{DaoAuctionContract, DaoAuctionContractClient};
@@ -37,6 +37,7 @@ fn setup_auction_contract(
             payment_token.clone(), // SECURITY FIX: SAC-only
             Address::generate(e),
             BytesN::from_array(e, &[0u8; 32]),
+            String::from_str(e, "0.1.0"),
         ),
     );
     let auction = DaoAuctionContractClient::new(e, &auction_address);
@@ -79,6 +80,7 @@ fn setup_with_payment_token(
             payment_token.clone(),
             Address::generate(e),
             BytesN::from_array(e, &[0u8; 32]),
+            String::from_str(e, "0.1.0"),
         ),
     );
     let auction = DaoAuctionContractClient::new(e, &auction_address);
@@ -145,6 +147,7 @@ fn test_constructor_rejects_zero_duration() {
             Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
         ),
     );
 }
@@ -170,6 +173,7 @@ fn test_constructor_rejects_zero_min_bid_increment() {
             Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
         ),
     );
 }
@@ -421,6 +425,7 @@ fn test_constructor_rejects_low_reserve_price() {
             Some(payment_token),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
         ),
     );
 }
@@ -448,6 +453,7 @@ fn test_constructor_rejects_high_min_increment() {
             Some(payment_token),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
         ),
     );
 }

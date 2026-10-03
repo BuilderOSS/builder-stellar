@@ -98,6 +98,7 @@ pub const MIN_QUEUE_DELAY: u32 = 300; // 5 minutes in seconds
 #[contracttype]
 pub enum GovernorKey {
     CurrentHash,
+    CurrentVersion,
     /// Address of the Treasury contract that executes approved proposals.
     Treasury,
     /// Delay (in seconds) between queueing and execution eligibility.

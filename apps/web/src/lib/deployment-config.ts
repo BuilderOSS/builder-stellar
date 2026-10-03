@@ -1,5 +1,6 @@
 // lib/deployment-config.ts
 
+import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { getNetworkConfig, type NetworkConfig, type NetworkName } from '@/config/networks';
 
 export interface DeploymentConfig extends NetworkConfig {
@@ -15,7 +16,7 @@ export function getManagerAddress(deploymentId: string): string {
   const managerAddress = deploymentId.trim().replace(/^manager:/, '');
 
   if (!managerAddress) {
-    throw new Error('NEXT_PUBLIC_DEPLOYMENT_ID must contain a Manager contract address.');
+    throw new Error('Generated deployment ID must contain a Manager contract address.');
   }
 
   return managerAddress;
@@ -27,20 +28,11 @@ export function getManagerAddress(deploymentId: string): string {
  */
 export function getDeploymentConfig(): DeploymentConfig {
   const network = (process.env.NEXT_PUBLIC_NETWORK || 'testnet') as NetworkName;
-  const deploymentId = process.env.NEXT_PUBLIC_DEPLOYMENT_ID;
-
-  if (!deploymentId) {
-    throw new Error(
-      'NEXT_PUBLIC_DEPLOYMENT_ID environment variable not configured. ' +
-        'This should contain the Manager deployment ID for DAO creation.'
-    );
-  }
-
   const networkConfig = getNetworkConfig(network);
 
   return {
     ...networkConfig,
-    managerAddress: getManagerAddress(deploymentId)
+    managerAddress: getManagerAddress(DEPLOYMENT_ID)
   };
 }
 

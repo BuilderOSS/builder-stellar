@@ -5,13 +5,19 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import { formatStroops } from '@/lib/auction-values';
-
 export const DEFAULT_DAO_IMAGE_URL = 'https://builder-stellar-web.vercel.app/images/dao-logo.png';
 export const LOCAL_DEFAULT_DAO_IMAGE_URL = '/images/dao-logo.png';
 
 /**
- * Artwork property with items
+ * Membership mode defines how tokens are allocated in the DAO
+ * - founders: Fixed list of founder allocations
+ * - marketplace: Recurring token buy/sell via marketplace
+ * - auctions: Token minting via auctions
+ */
+export type MembershipMode = 'founders' | 'marketplace' | 'auctions';
+
+/**
+ * Artwork property (trait) for DAO token artwork
  */
 export type ArtworkProperty = {
   name: string;
@@ -19,37 +25,46 @@ export type ArtworkProperty = {
 };
 
 /**
- * DAO identity image source
- * Can be generated, uploaded, or the default Builder logo
+ * Artwork configuration for IPFS-based collections (legacy)
  */
-export type DaoImageSource =
-  | { kind: 'generated'; gatewayUrl: string; ipfsUri: string; prompt: string; model: string }
-  | { kind: 'uploaded'; gatewayUrl: string; ipfsUri: string; filename: string }
-  | { kind: 'url'; gatewayUrl: string }
-  | { kind: 'default'; gatewayUrl: string }
-  | { kind: 'legacy-unconfirmed' }; // Backwards compatibility
+export type ArtworkConfig = {
+  ipfs: {
+    baseUri: string;
+    extension: string;
+  };
+  properties: ArtworkProperty[];
+};
 
 /**
- * Token artwork source
- * Can be a starter collection or uploaded directory
+ * DAO image source (legacy)
+ */
+export type DaoImageSource =
+  | { kind: 'default'; gatewayUrl: string }
+  | { kind: 'generated'; model: string; prompt: string; ipfsUri: string; gatewayUrl: string }
+  | { kind: 'uploaded'; filename: string; ipfsUri: string; gatewayUrl: string }
+  | { kind: 'url'; gatewayUrl: string }
+  | { kind: 'legacy-unconfirmed' };
+
+/**
+ * Artwork source - can be uploaded, generated, or from starter collection
  */
 export type ArtworkSource =
   | {
-      kind: 'starter';
-      starterId: string;
-      baseUri: string;
-      extension: '.png' | '.webp';
-      properties: ArtworkProperty[];
-      gatewayUrl: string;
-    }
-  | {
       kind: 'uploaded';
       baseUri: string;
-      extension: '.png' | '.webp';
+      extension: string;
       properties: ArtworkProperty[];
-      gatewayUrl: string;
+      gatewayUrl?: string;
     }
-  | { kind: 'legacy-unconfirmed' }; // Backwards compatibility
+  | {
+      kind: 'starter';
+      collectionId: string;
+      properties: ArtworkProperty[];
+    }
+  | {
+      kind: 'generated';
+      seed: string;
+    };
 
 /**
  * Basic information about the DAO
@@ -65,25 +80,11 @@ type BasicInfo = {
 };
 
 /**
- * Artwork and NFT configuration
+ * Purpose and membership configuration
  */
-type ArtworkConfig = {
-  ipfs: {
-    baseUri: string;
-    extension: string;
-  };
-  properties: ArtworkProperty[];
-};
-
-/**
- * Auction settings
- */
-type AuctionConfig = {
-  enabled: boolean;
-  duration: number; // seconds
-  reservePrice: string; // payment-token units
-  timeBuffer: number; // seconds
-  paymentAsset: string; // Stellar asset address
+type PurposeConfig = {
+  purpose: string;
+  membershipMode: MembershipMode;
 };
 
 /**
@@ -109,16 +110,18 @@ export type FounderAllocation = {
  */
 type CreateDaoState = {
   basicInfo: BasicInfo;
-  artwork: ArtworkConfig;
-  auction: AuctionConfig;
+  purpose: PurposeConfig;
   governance: GovernanceConfig;
-  founders: FounderAllocation[];
   launchAdmin: string;
-  daoImageSource?: DaoImageSource;
-  artworkSource?: ArtworkSource;
   busy: boolean;
   formMessage: string;
   validationErrors: Record<string, string>;
+  // Backwards compatibility for legacy components (no longer used in creation flow)
+  artworkSource?: ArtworkSource | null;
+  artwork?: ArtworkConfig;
+  daoImageSource?: DaoImageSource;
+  auction?: { enabled: boolean; duration: number };
+  founders?: FounderAllocation[];
 };
 
 /**
@@ -127,29 +130,9 @@ type CreateDaoState = {
 type CreateDaoActions = {
   // Update form sections
   updateBasicInfo: (patch: Partial<BasicInfo>) => void;
-  updateArtwork: (patch: Partial<ArtworkConfig>) => void;
-  updateAuction: (patch: Partial<AuctionConfig>) => void;
+  updatePurpose: (patch: Partial<PurposeConfig>) => void;
   updateGovernance: (patch: Partial<GovernanceConfig>) => void;
   updateLaunchAdmin: (address: string) => void;
-
-  // Image source management
-  setDaoImageSource: (source: DaoImageSource) => void;
-  clearDaoImageSource: () => void;
-  setArtworkSource: (source: ArtworkSource) => void;
-  clearArtworkSource: () => void;
-
-  // Artwork property management
-  addArtworkProperty: () => void;
-  removeArtworkProperty: (index: number) => void;
-  updateArtworkProperty: (index: number, property: ArtworkProperty) => void;
-  addArtworkItem: (propertyIndex: number, item: string) => void;
-  removeArtworkItem: (propertyIndex: number, itemIndex: number) => void;
-
-  // Founder management
-  addFounder: (founder: FounderAllocation) => void;
-  replaceFounders: (founders: FounderAllocation[]) => void;
-  removeFounder: (index: number) => void;
-  updateFounder: (index: number, founder: FounderAllocation) => void;
 
   // Validation
   setValidationError: (field: string, error: string) => void;
@@ -160,6 +143,22 @@ type CreateDaoActions = {
   setFormMessage: (message: string) => void;
   clearFormMessage: () => void;
   setBusy: (busy: boolean) => void;
+
+  // Backwards compatibility for legacy components (no longer used in creation flow)
+  setArtworkSource: (source: ArtworkSource) => void;
+  clearArtworkSource: () => void;
+  updateArtwork: (patch: Partial<ArtworkConfig>) => void;
+  addArtworkItem: () => void;
+  removeArtworkItem: (index: number) => void;
+  setDaoImageSource: (source: DaoImageSource) => void;
+  updateAuction: (patch: Partial<{ enabled: boolean; duration: number }>) => void;
+  addFounder: (founder?: FounderAllocation) => void;
+  removeFounder: (index: number) => void;
+  updateFounder: (index: number, founder: Partial<FounderAllocation>) => void;
+  replaceFounders: (founders: FounderAllocation[]) => void;
+  addArtworkProperty: () => void;
+  removeArtworkProperty: (index: number) => void;
+  updateArtworkProperty: (index: number, property: Partial<ArtworkProperty>) => void;
 
   // Reset
   reset: () => void;
@@ -177,40 +176,9 @@ const initialState: CreateDaoState = {
     contractImage: DEFAULT_DAO_IMAGE_URL,
     rendererBase: 'https://builder-stellar-web.vercel.app/api/render/'
   },
-  artwork: {
-    ipfs: {
-      baseUri: 'ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/',
-      extension: '.png'
-    },
-    properties: [
-      {
-        name: '0-backgrounds',
-        items: ['bg-cool', 'bg-warm']
-      },
-      {
-        name: '1-bodies',
-        items: ['body-rust', 'body-blue-sky', 'body-darkbrown']
-      },
-      {
-        name: '2-accessories',
-        items: ['accessory-txt-cc2', 'accessory-txt-ico', 'accessory-flash']
-      },
-      {
-        name: '3-heads',
-        items: ['head-hotdog', 'head-ufo', 'head-goldcoin']
-      },
-      {
-        name: '4-glasses',
-        items: ['glasses-square-teal', 'glasses-square-guava', 'glasses-square-black-rgb']
-      }
-    ]
-  },
-  auction: {
-    enabled: true,
-    duration: 86400, // 24 hours
-    reservePrice: '100', // 100 payment tokens
-    timeBuffer: 300, // 5 minutes
-    paymentAsset: ''
+  purpose: {
+    purpose: '',
+    membershipMode: 'auctions'
   },
   governance: {
     votingDelay: 86400, // 24 hours
@@ -218,7 +186,6 @@ const initialState: CreateDaoState = {
     quorumBps: 1000, // 10%
     proposalThresholdBps: 100 // 1%
   },
-  founders: [],
   launchAdmin: '',
   busy: false,
   formMessage: '',
@@ -244,14 +211,9 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
           basicInfo: { ...state.basicInfo, ...patch }
         })),
 
-      updateArtwork: (patch) =>
+      updatePurpose: (patch) =>
         set((state) => ({
-          artwork: { ...state.artwork, ...patch }
-        })),
-
-      updateAuction: (patch) =>
-        set((state) => ({
-          auction: { ...state.auction, ...patch }
+          purpose: { ...state.purpose, ...patch }
         })),
 
       updateGovernance: (patch) =>
@@ -260,112 +222,6 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
         })),
 
       updateLaunchAdmin: (address) => set({ launchAdmin: address }),
-
-      // Image source management
-      setDaoImageSource: (source) => set({ daoImageSource: source }),
-      clearDaoImageSource: () => set({ daoImageSource: undefined }),
-      setArtworkSource: (source) => {
-        set(() => {
-          // When setting artwork source, update both artworkSource and artwork properties
-          if (source.kind === 'starter' || source.kind === 'uploaded') {
-            return {
-              artworkSource: source,
-              artwork: {
-                ipfs: {
-                  baseUri: source.baseUri,
-                  extension: source.extension
-                },
-                properties: source.properties
-              }
-            };
-          }
-          return { artworkSource: source };
-        });
-      },
-      clearArtworkSource: () => set({ artworkSource: undefined }),
-
-      // Artwork property management
-      addArtworkProperty: () =>
-        set((state) => {
-          if (state.artwork.properties.length >= 16) {
-            return {
-              formMessage: 'Maximum 16 properties allowed',
-              validationErrors: { ...state.validationErrors, properties: 'Maximum 16 properties allowed' }
-            };
-          }
-          return {
-            artwork: {
-              ...state.artwork,
-              properties: [...state.artwork.properties, { name: '', items: [] }]
-            }
-          };
-        }),
-
-      removeArtworkProperty: (index) =>
-        set((state) => {
-          const properties = [...state.artwork.properties];
-          properties.splice(index, 1);
-          return {
-            artwork: { ...state.artwork, properties }
-          };
-        }),
-
-      updateArtworkProperty: (index, property) =>
-        set((state) => {
-          const properties = [...state.artwork.properties];
-          properties[index] = property;
-          return {
-            artwork: { ...state.artwork, properties }
-          };
-        }),
-
-      addArtworkItem: (propertyIndex, item) =>
-        set((state) => {
-          const properties = [...state.artwork.properties];
-          properties[propertyIndex] = {
-            ...properties[propertyIndex],
-            items: [...properties[propertyIndex].items, item]
-          };
-          return {
-            artwork: { ...state.artwork, properties }
-          };
-        }),
-
-      removeArtworkItem: (propertyIndex, itemIndex) =>
-        set((state) => {
-          const properties = [...state.artwork.properties];
-          const items = [...properties[propertyIndex].items];
-          items.splice(itemIndex, 1);
-          properties[propertyIndex] = {
-            ...properties[propertyIndex],
-            items
-          };
-          return {
-            artwork: { ...state.artwork, properties }
-          };
-        }),
-
-      // Founder management
-      addFounder: (founder) =>
-        set((state) => ({
-          founders: [...state.founders, founder]
-        })),
-
-      replaceFounders: (founders) => set({ founders }),
-
-      removeFounder: (index) =>
-        set((state) => {
-          const founders = [...state.founders];
-          founders.splice(index, 1);
-          return { founders };
-        }),
-
-      updateFounder: (index, founder) =>
-        set((state) => {
-          const founders = [...state.founders];
-          founders[index] = founder;
-          return { founders };
-        }),
 
       // Validation
       setValidationError: (field, error) =>
@@ -386,45 +242,107 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
       clearFormMessage: () => set({ formMessage: '' }),
       setBusy: (busy) => set({ busy }),
 
+      // Backwards compatibility for artwork components
+      setArtworkSource: (source) => set({ artworkSource: source }),
+      clearArtworkSource: () => set({ artworkSource: null }),
+      updateArtwork: (patch) =>
+        set((state) => ({
+          artwork: state.artwork
+            ? { ...state.artwork, ...patch }
+            : { ipfs: { baseUri: '', extension: '' }, properties: [], ...patch }
+        })),
+      addArtworkItem: () => {
+        // No-op for backwards compatibility
+        return;
+      },
+      removeArtworkItem: () => {
+        // No-op for backwards compatibility
+        return;
+      },
+      setDaoImageSource: (source) => set({ daoImageSource: source }),
+      updateAuction: (patch) =>
+        set((state) => ({
+          auction: state.auction ? { ...state.auction, ...patch } : { enabled: false, duration: 3600, ...patch }
+        })),
+
+      // Backwards compatibility for founder components
+      addFounder: (founder) =>
+        set((state) => ({
+          founders: [...(state.founders ?? []), founder ?? { address: '', amount: 0 }]
+        })),
+
+      removeFounder: (index) =>
+        set((state) => ({
+          founders: (state.founders ?? []).filter((_, i) => i !== index)
+        })),
+
+      updateFounder: (index, founder) =>
+        set((state) => ({
+          founders: (state.founders ?? []).map((f, i) => (i === index ? { ...f, ...founder } : f))
+        })),
+
+      replaceFounders: (founders) => set({ founders }),
+
+      // Backwards compatibility for artwork properties
+      addArtworkProperty: () =>
+        set((state) => {
+          if (!state.artworkSource || state.artworkSource.kind === 'generated') {
+            return state;
+          }
+          return {
+            artworkSource: {
+              ...state.artworkSource,
+              properties: [...state.artworkSource.properties, { name: '', items: [] }]
+            }
+          };
+        }),
+
+      removeArtworkProperty: (index) =>
+        set((state) => {
+          if (!state.artworkSource || state.artworkSource.kind === 'generated') {
+            return state;
+          }
+          return {
+            artworkSource: {
+              ...state.artworkSource,
+              properties: state.artworkSource.properties.filter((_, i) => i !== index)
+            }
+          };
+        }),
+
+      updateArtworkProperty: (index, property) =>
+        set((state) => {
+          if (!state.artworkSource || state.artworkSource.kind === 'generated') {
+            return state;
+          }
+          return {
+            artworkSource: {
+              ...state.artworkSource,
+              properties: state.artworkSource.properties.map((p, i) => (i === index ? { ...p, ...property } : p))
+            }
+          };
+        }),
+
       // Reset
       reset: () => set(initialState)
     }),
     {
-      name: 'dao.create-dao.v1',
-      version: 3,
+      name: 'dao.create-dao.v4',
+      version: 4,
       storage,
       skipHydration: true,
       partialize: (state) => ({
         basicInfo: state.basicInfo,
-        artwork: state.artwork,
-        auction: state.auction,
+        purpose: state.purpose,
         governance: state.governance,
-        founders: state.founders,
-        launchAdmin: state.launchAdmin,
-        daoImageSource: state.daoImageSource,
-        artworkSource: state.artworkSource
+        launchAdmin: state.launchAdmin
       }),
       migrate: (persistedState, version) => {
         const persisted = persistedState as Partial<CreateDaoState>;
 
-        // Version 0 -> 1: Format reserve price
-        if (version === 0 && persisted.auction?.reservePrice) {
-          const reservePrice = persisted.auction.reservePrice;
-          if (/^\d+$/.test(reservePrice)) {
-            persisted.auction = { ...persisted.auction, reservePrice: formatStroops(reservePrice) };
-          }
-        }
-
-        // Version 1-2 -> 3: Mark legacy artwork as unconfirmed
-        // If daoImageSource is not set, mark it as legacy-unconfirmed
-        // If artworkSource is not set, mark it as legacy-unconfirmed
-        if (version < 3) {
-          if (!persisted.daoImageSource) {
-            persisted.daoImageSource = { kind: 'legacy-unconfirmed' };
-          }
-          if (!persisted.artworkSource) {
-            persisted.artworkSource = { kind: 'legacy-unconfirmed' };
-          }
+        // Version < 4: Remove old artwork/auction/founders fields
+        if (version < 4) {
+          // Remove old fields (implicit - just don't restore them)
         }
 
         return persisted as CreateDaoState;
@@ -432,19 +350,6 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
       merge: (persistedState, currentState) => {
         const persisted = (persistedState ?? {}) as Partial<CreateDaoState>;
         const merged = { ...currentState, ...persisted } as CreateDaoStore;
-
-        // If persisted artwork has no properties, use the default ones
-        if (merged.artwork?.properties?.length === 0) {
-          merged.artwork = initialState.artwork;
-        }
-
-        // If persisted artwork has no IPFS base URI, use the default one
-        if (!merged.artwork?.ipfs?.baseUri) {
-          merged.artwork = {
-            ...merged.artwork,
-            ipfs: initialState.artwork.ipfs
-          };
-        }
 
         // Restore default URLs if they're missing
         if (!merged.basicInfo?.tokenUri) {
@@ -477,6 +382,3 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
     }
   )
 );
-
-export const selectTotalFounderAllocation = (state: CreateDaoStore) =>
-  state.founders.reduce((sum, f) => sum + f.amount, 0);

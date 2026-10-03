@@ -1,23 +1,17 @@
 {
-  "status": "operational",
+  "status": "created",
   "network": "testnet",
   "label": "builder",
   "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
   "nonce": 0,
-  "manager": "CD6WUNOLSU6KRY3VRBRQQIOR55WWTRQNKIHWQC5MJNKMYWJEDLQKSIVX",
-  "predictedAddresses": {
-    "token": "CBGQUSYFZLJZKDLMDVDVR5JBQCFTG7V6W7H27FWGGSNRY446IFOPN4PU",
-    "metadata": "CBUZJEW2EBI6TM2ZQNSCCL7EAIR6GV5C7TIR4NBSXAI432PYVVSKBUNZ",
-    "auction": "CC6DXVKAWEGJAT3TAJNLUUEGWPMBFAZDCDKSHEVUSFLDO73TASHBASF7",
-    "governor": "CBO77WWAJEXAMT3LPJPB3VSQVQH5NZU6UNM4XNAVMHAAQMWMYJIDPHFW",
-    "treasury": "CDNSTE5KJ7WOCHNQHJMGOX7VEU6G37YLPJFIMGQCVGG6IKADHZE3ZQ22"
-  },
+  "manager": "CAMI673YU3NJYT3VO5GXXPWDSSJPUXAHJR2L6ITUMBQXRTNG2N36QK5K",
   "addresses": {
-    "token": "CBGQUSYFZLJZKDLMDVDVR5JBQCFTG7V6W7H27FWGGSNRY446IFOPN4PU",
-    "metadata": "CBUZJEW2EBI6TM2ZQNSCCL7EAIR6GV5C7TIR4NBSXAI432PYVVSKBUNZ",
-    "auction": "CC6DXVKAWEGJAT3TAJNLUUEGWPMBFAZDCDKSHEVUSFLDO73TASHBASF7",
-    "governor": "CBO77WWAJEXAMT3LPJPB3VSQVQH5NZU6UNM4XNAVMHAAQMWMYJIDPHFW",
-    "treasury": "CDNSTE5KJ7WOCHNQHJMGOX7VEU6G37YLPJFIMGQCVGG6IKADHZE3ZQ22"
+    "token": "CAQSP2B54IX7IRKOHEG4XQMXGYW47PYNRUKA26PG2VCIJNFWYN6M5FK7",
+    "metadata": "CB2VF33DY34G7JI2H6LHPWLFM6SJDM2Z5YZEZVRPPERQ5BAJGL5QW4NE",
+    "auction": "CDRVOLZ63ACQVX5SMZYTNY5HXSTGWIZB2U6QCIIYVS3Z2V5UZAKXOMVB",
+    "governor": "CA2TM6PGTHLQEATRLF2M3QK25QOYFVDOD53VUJNM7BUQPVMHJMPOOGVB",
+    "treasury": "CAZEFOPHOUFFJGLWMFUCO5LDAQZWGTMWNXT6BFQVCT32MFSX4SGSZE4R",
+    "marketplace": "CACIOZFX76UWPUDIXMKK3S4QUY57WSN5TDHZOBYHCH7WBBPPIP4SFT7W"
   },
   "config": {
     "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
@@ -30,8 +24,8 @@
     "metadata": {
       "projectUri": "https://test-dao-stellar-web.vercel.app",
       "description": "Unlock the possibilities of collective creation",
-      "contractImage": "https://test-dao-stellar-web.vercel.app/images/dao-logo.png",
-      "rendererBase": "https://test-dao-stellar-web.vercel.app/api/render/",
+      "contractImage": "https://builder-stellar-web.vercel.app/images/dao-logo.png",
+      "rendererBase": "https://builder-stellar-web.vercel.app/api/render/",
       "artwork": {
         "ipfs": {
           "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
@@ -87,7 +81,15 @@
       "timeBuffer": 300,
       "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
     },
+    "marketplace": {
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      "secondaryFeeBps": 250,
+      "primaryListingCount": 10,
+      "primaryPrice": "10000000000",
+      "primaryListingDuration": 2592000
+    },
     "governance": {
+      "queueDelay": 300,
       "votingDelay": 300,
       "votingPeriod": 300,
       "quorumBps": 1000,
@@ -109,44 +111,12 @@
     ],
     "launchAdmin": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO"
   },
-  "createdAt": "2026-09-22T15:33:35.936Z",
+  "updatedAt": "2026-10-02T11:31:53.965Z",
   "transactions": {
     "createDao": {
-      "txHash": "b07c40e2e45682dada4f425c1377fcc68ae6301658991bfd868816b6fc950935",
-      "ledger": 4813513
-    },
-    "acceptOwnership": {
-      "txHash": "58d5488b5fd6d886db36009af910cbaa5c12a897ab456971c86d373782147ab4",
-      "ledger": 4813515
-    },
-    "addProperties": {
-      "txHash": "9d87171214d863ec30fd117fa80cd2ca989a663611f5f77c44ad391369db2c79",
-      "ledger": 4813517
-    },
-    "founderMints": [
-      {
-        "txHash": "4dc304a73736bcc796ce80ba6fa469a784ef4296b1d2ab42b9bb3cdcd37b7fb7",
-        "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
-        "amount": 10,
-        "ledger": 4813519
-      },
-      {
-        "txHash": "6aeb71be5ede2d3ff2f9d5f1c8d1b312ed21200e167114993281128c300e82dd",
-        "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
-        "amount": 10,
-        "ledger": 4813521
-      },
-      {
-        "txHash": "f856b4312093b197a8d285c27bb48be63aa18db323b365149cd77776f6e02ebd",
-        "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
-        "amount": 10,
-        "ledger": 4813523
-      }
-    ],
-    "finalizeDao": {
-      "txHash": "f96c42855b3a9dd6266f76588fbdb8c09602497d732482a62554abdfb79763ea",
-      "ledger": 4813525
+      "txHash": "580ccbb01c27ed60b2919fea6ae4757b2244e721679d421929737fbf732d9fb8",
+      "ledger": 4983425
     }
   },
-  "deploymentLedger": 4813513
+  "deploymentLedger": 4983425
 }

@@ -15,6 +15,16 @@ pub struct MetadataContract;
 
 #[contractimpl]
 impl MetadataContract {
+    pub fn finalize_upgrade_authority(env: Env, new_owner: Address) {
+        let manager: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Manager)
+            .expect("manager not set");
+        manager.require_auth();
+        env.storage().instance().set(&DataKey::Owner, &new_owner);
+    }
+
     /// Initialize the metadata contract
     ///
     /// # Arguments
@@ -42,6 +52,7 @@ impl MetadataContract {
         property_names: Vec<String>,
         items: Vec<ItemParam>,
         ipfs_group: IpfsGroup,
+        version: String,
     ) -> Result<(), Error> {
         if is_initialized(&env) {
             return Err(Error::AlreadyInitialized);
@@ -49,9 +60,9 @@ impl MetadataContract {
 
         let settings = Settings {
             token: token.clone(),
-            project_uri,
-            description,
-            contract_image,
+            project_uri: project_uri.clone(),
+            description: description.clone(),
+            contract_image: contract_image.clone(),
             renderer_base: renderer_base.clone(),
         };
 
@@ -64,9 +75,21 @@ impl MetadataContract {
         env.storage()
             .instance()
             .set(&DataKey::CurrentHash, &current_hash);
+        env.storage()
+            .instance()
+            .set(&DataKey::CurrentVersion, &version);
         set_initialized(&env);
 
-        emit_metadata_initialized(&env, &token, &renderer_base);
+        emit_metadata_initialized(
+            &env,
+            &token,
+            &renderer_base,
+            &version,
+            &owner,
+            &project_uri,
+            &description,
+            &contract_image,
+        );
 
         Ok(())
     }

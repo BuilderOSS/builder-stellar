@@ -1,13 +1,21 @@
 //! Event emission functions for the Manager contract.
 
-use soroban_sdk::{contractevent, Address, BytesN, Env, String, Vec};
+use soroban_sdk::{contractevent, Address, BytesN, Env, String};
 
-use crate::storage::{DaoModules, FounderAllocation};
+use crate::storage::DaoModules;
+
+#[contractevent]
+pub struct ManagerInitialized {
+    #[topic]
+    pub admin: Address,
+    pub version: String,
+    pub deployed_at: u64,
+}
 
 #[contractevent]
 pub struct ImplementationRegistered {
     pub name: String,
-    pub version: u32,
+    pub version: String,
     #[topic]
     pub wasm_hash: BytesN<32>,
     pub published_at: u64,
@@ -31,31 +39,24 @@ pub struct DaoCreated {
     #[topic]
     pub token_address: Address,
     #[topic]
-    pub creator: Address,
-    pub created_ledger: u32,
+    pub deployer: Address,
+    #[topic]
+    pub launch_admin: Address,
+    pub created_ledger: u64,
     pub modules: DaoModules,
-    pub founders: Vec<FounderAllocation>,
 }
 #[contractevent]
 pub struct FactoryPaused {}
 #[contractevent]
 pub struct FactoryUnpaused {}
 #[contractevent]
-pub struct DaoRegistered {
+pub struct DaoLaunched {
     #[topic]
     pub token_address: Address,
-    #[topic]
-    pub creator: Address,
-    pub modules: DaoModules,
-}
-
-#[contractevent]
-pub struct DaoFinalized {
-    #[topic]
-    pub token_address: Address,
-    pub finalized_ledger: u32,
+    pub launched_ledger: u64,
     pub modules: DaoModules,
     pub launch_auction: bool,
+    pub launch_marketplace: bool,
 }
 #[contractevent]
 pub struct CurrentImplementationsUpdated {
@@ -64,6 +65,17 @@ pub struct CurrentImplementationsUpdated {
     pub auction: BytesN<32>,
     pub governor: BytesN<32>,
     pub treasury: BytesN<32>,
+    pub marketplace: BytesN<32>,
+}
+#[contractevent]
+pub struct ManagerUpgraded {
+    #[topic]
+    pub from_hash: BytesN<32>,
+    #[topic]
+    pub to_hash: BytesN<32>,
+    pub from_version: String,
+    pub to_version: String,
+    pub upgraded_at: u64,
 }
 
 // ============================================================================
@@ -74,13 +86,13 @@ pub struct CurrentImplementationsUpdated {
 pub fn emit_implementation_registered(
     env: &Env,
     name: &String,
-    version: u32,
+    version: &String,
     wasm_hash: &BytesN<32>,
     published_at: u64,
 ) {
     ImplementationRegistered {
         name: name.clone(),
-        version,
+        version: version.clone(),
         wasm_hash: wasm_hash.clone(),
         published_at,
     }
@@ -119,17 +131,17 @@ pub fn emit_implementation_revoked(env: &Env, wasm_hash: &BytesN<32>, revoked_at
 pub fn emit_dao_created(
     env: &Env,
     token_address: &Address,
-    creator: &Address,
-    created_ledger: u32,
+    deployer: &Address,
+    launch_admin: &Address,
+    created_ledger: u64,
     modules: &DaoModules,
-    founders: &Vec<FounderAllocation>,
 ) {
     DaoCreated {
         token_address: token_address.clone(),
-        creator: creator.clone(),
+        deployer: deployer.clone(),
+        launch_admin: launch_admin.clone(),
         created_ledger,
         modules: modules.clone(),
-        founders: founders.clone(),
     }
     .publish(env);
 }
@@ -144,37 +156,20 @@ pub fn emit_factory_unpaused(env: &Env) {
     FactoryUnpaused {}.publish(env);
 }
 
-// ============================================================================
-// Registry Events
-// ============================================================================
-
-/// Emitted when a DAO is registered.
-pub fn emit_dao_registered(
+pub fn emit_dao_launched(
     env: &Env,
     token_address: &Address,
-    creator: &Address,
-    modules: &DaoModules,
-) {
-    DaoRegistered {
-        token_address: token_address.clone(),
-        creator: creator.clone(),
-        modules: modules.clone(),
-    }
-    .publish(env);
-}
-
-pub fn emit_dao_finalized(
-    env: &Env,
-    token_address: &Address,
-    finalized_ledger: u32,
+    launched_ledger: u64,
     modules: &DaoModules,
     launch_auction: bool,
+    launch_marketplace: bool,
 ) {
-    DaoFinalized {
+    DaoLaunched {
         token_address: token_address.clone(),
-        finalized_ledger,
+        launched_ledger,
         modules: modules.clone(),
         launch_auction,
+        launch_marketplace,
     }
     .publish(env);
 }
@@ -191,6 +186,7 @@ pub fn emit_current_implementations_updated(
     auction: &BytesN<32>,
     governor: &BytesN<32>,
     treasury: &BytesN<32>,
+    marketplace: &BytesN<32>,
 ) {
     CurrentImplementationsUpdated {
         token: token.clone(),
@@ -198,6 +194,36 @@ pub fn emit_current_implementations_updated(
         auction: auction.clone(),
         governor: governor.clone(),
         treasury: treasury.clone(),
+        marketplace: marketplace.clone(),
+    }
+    .publish(env);
+}
+
+/// Emitted when Manager is initialized.
+pub fn emit_manager_initialized(env: &Env, admin: &Address, version: &String, deployed_at: u64) {
+    ManagerInitialized {
+        admin: admin.clone(),
+        version: version.clone(),
+        deployed_at,
+    }
+    .publish(env);
+}
+
+/// Emitted when Manager itself is upgraded.
+pub fn emit_manager_upgraded(
+    env: &Env,
+    from_hash: &BytesN<32>,
+    to_hash: &BytesN<32>,
+    from_version: &String,
+    to_version: &String,
+    upgraded_at: u64,
+) {
+    ManagerUpgraded {
+        from_hash: from_hash.clone(),
+        to_hash: to_hash.clone(),
+        from_version: from_version.clone(),
+        to_version: to_version.clone(),
+        upgraded_at,
     }
     .publish(env);
 }

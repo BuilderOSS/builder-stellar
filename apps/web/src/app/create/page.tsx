@@ -8,15 +8,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 
-import {
-  ArtworkStep,
-  AuctionStep,
-  BasicInfoStep,
-  DeploymentProgress,
-  FoundersStep,
-  GovernanceStep,
-  ReviewStep
-} from '@/components/create-dao';
+import { BasicInfoStep, DeploymentProgress, GovernanceStep, PurposeStep, ReviewStep } from '@/components/create-dao';
 import { Button, Callout, Text } from '@/components/ui';
 import { WalletControls } from '@/components/wallet-controls';
 import {
@@ -26,6 +18,7 @@ import {
   type CreateDaoSection,
   sectionSchemas
 } from '@/lib/create-dao-schema';
+import { waitForDaoIndexed } from '@/lib/dao-db';
 import { getDeploymentConfig, isDeploymentConfigured } from '@/lib/deployment-config';
 import { useDaoDeployment } from '@/lib/use-dao-deployment';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
@@ -34,42 +27,17 @@ import { useCreateDaoStore } from '@/stores/create-dao-store';
 type SectionStatus = 'complete' | 'active' | 'error' | 'pending';
 
 function validationField(path: PropertyKey[]) {
-  const [section, field, index, nestedField] = path;
+  const [section, field] = path;
   if (section === 'basicInfo') return String(field ?? 'basicInfo');
-  if (section === 'artwork') {
-    if (field === 'ipfs') return index === 'baseUri' ? 'ipfsBaseUri' : 'ipfsExtension';
-    if (field === 'properties' && typeof index === 'number') return `artworkProperty${index}`;
-    return 'artworkProperties';
-  }
-  if (section === 'auction') {
-    return (
-      (
-        {
-          duration: 'auctionDuration',
-          timeBuffer: 'timeBuffer',
-          reservePrice: 'reservePrice',
-          paymentAsset: 'paymentAsset'
-        } as Record<string, string>
-      )[String(field)] ?? 'auction'
-    );
-  }
+  if (section === 'purpose') return String(field ?? 'purpose');
   if (section === 'governance') return String(field ?? 'governance');
-  if (section === 'founders') {
-    if (typeof field === 'number' && nestedField)
-      return `founder${field}${String(nestedField).replace(/^./, (value) => value.toUpperCase())}`;
-    return 'founders';
-  }
   return String(section ?? 'form');
 }
 
 function validationSection(path: PropertyKey[]): CreateDaoSection {
   const section = path[0];
-  return section === 'basicInfo' ||
-    section === 'artwork' ||
-    section === 'auction' ||
-    section === 'governance' ||
-    section === 'founders'
-    ? section
+  return section === 'basicInfo' || section === 'purpose' || section === 'governance'
+    ? (section as CreateDaoSection)
     : 'review';
 }
 
@@ -179,10 +147,8 @@ export default function CreateDaoPage() {
   const sectionRefs = useRef<Partial<Record<CreateDaoSection, HTMLElement>>>({});
 
   const basicInfo = useCreateDaoStore((state) => state.basicInfo);
-  const artwork = useCreateDaoStore((state) => state.artwork);
-  const auction = useCreateDaoStore((state) => state.auction);
+  const purpose = useCreateDaoStore((state) => state.purpose);
   const governance = useCreateDaoStore((state) => state.governance);
-  const founders = useCreateDaoStore((state) => state.founders);
   const validationErrors = useCreateDaoStore((state) => state.validationErrors);
   const setValidationError = useCreateDaoStore((state) => state.setValidationError);
   const clearAllValidationErrors = useCreateDaoStore((state) => state.clearAllValidationErrors);
@@ -205,26 +171,24 @@ export default function CreateDaoPage() {
   }, []);
 
   const formData = useMemo<CreateDaoFormData>(
-    () => ({ basicInfo, artwork, auction, governance, founders, launchAdmin: session.address || '' }),
-    [artwork, auction, basicInfo, founders, governance, session.address]
+    () => ({ basicInfo, purpose, governance, launchAdmin: session.address || '' }),
+    [basicInfo, purpose, governance, session.address]
   );
 
   const validationResults = useMemo(
     () => ({
       basicInfo: sectionSchemas.basicInfo.safeParse(formData.basicInfo),
-      artwork: sectionSchemas.artwork.safeParse(formData.artwork),
-      auction: sectionSchemas.auction.safeParse(formData.auction),
+      purpose: sectionSchemas.purpose.safeParse(formData.purpose),
       governance: sectionSchemas.governance.safeParse(formData.governance),
-      founders: sectionSchemas.founders.safeParse(formData.founders),
       review: createDaoSchema.safeParse(formData)
     }),
     [formData]
   );
 
-  const allEditableSectionsValid = (['basicInfo', 'artwork', 'auction', 'governance', 'founders'] as const).every(
+  const allEditableSectionsValid = (['basicInfo', 'purpose', 'governance'] as const).every(
     (section) => validationResults[section].success
   );
-  const canSubmit = allEditableSectionsValid && reviewedSections.size === 5 && validationResults.review.success;
+  const canSubmit = allEditableSectionsValid && reviewedSections.size === 3 && validationResults.review.success;
 
   const statuses = useMemo<Record<CreateDaoSection, SectionStatus>>(() => {
     const getStatus = (section: Exclude<CreateDaoSection, 'review'>): SectionStatus => {
@@ -240,19 +204,12 @@ export default function CreateDaoPage() {
             'rendererBase'
           ].includes(key);
         }
-        if (section === 'artwork') {
-          return (
-            key === 'ipfsBaseUri' ||
-            key === 'ipfsExtension' ||
-            key === 'artworkProperties' ||
-            key.startsWith('artworkProperty')
-          );
+        if (section === 'purpose') {
+          return ['purpose', 'membershipMode'].includes(key);
         }
-        if (section === 'auction')
-          return ['auctionDuration', 'reservePrice', 'timeBuffer', 'paymentAsset', 'auction'].includes(key);
         if (section === 'governance')
           return ['votingDelay', 'votingPeriod', 'quorumBps', 'proposalThresholdBps', 'governance'].includes(key);
-        return key === 'founders' || key.startsWith('founder');
+        return false;
       });
       if (!validationResults[section].success && (reviewedSections.has(section) || storedError)) return 'error';
       if (reviewedSections.has(section)) return 'complete';
@@ -262,10 +219,8 @@ export default function CreateDaoPage() {
 
     return {
       basicInfo: getStatus('basicInfo'),
-      artwork: getStatus('artwork'),
-      auction: getStatus('auction'),
+      purpose: getStatus('purpose'),
       governance: getStatus('governance'),
-      founders: getStatus('founders'),
       review: canSubmit ? 'complete' : openSections.has('review') ? 'active' : 'pending'
     };
   }, [canSubmit, openSections, reviewedSections, validationErrors, validationResults]);
@@ -323,7 +278,13 @@ export default function CreateDaoPage() {
 
     try {
       const addresses = await deployDao(validation.data);
-      if (addresses) router.push(`/dao/${addresses.token}`);
+      if (addresses) {
+        // Wait for Goldsky to index the DAO before redirecting
+        // This prevents 404 when DAO page loads
+        await waitForDaoIndexed(addresses.token);
+
+        router.push(`/dao/${addresses.token}`);
+      }
     } catch (error) {
       console.error('Deployment failed:', error);
     }
@@ -363,13 +324,13 @@ export default function CreateDaoPage() {
                 Build your DAO
               </h1>
               <p className="lede">
-                Configure your token, artwork, auctions, and governance in one place. You can revisit any section before
-                deployment.
+                Set up your DAO identity, purpose, and governance in minutes. Configure advanced settings later from
+                your DAO dashboard.
               </p>
             </div>
             <div className="discovery-hero__signal discovery-hero__signal--progress">
               <span className="label">Creation progress</span>
-              <strong>{reviewedSections.size} of 5 sections reviewed</strong>
+              <strong>{reviewedSections.size} of 3 sections reviewed</strong>
               <span>
                 {fieldErrorCount > 0
                   ? `${fieldErrorCount} item${fieldErrorCount === 1 ? '' : 's'} need attention`
@@ -414,32 +375,17 @@ export default function CreateDaoPage() {
                 </div>
                 <div
                   ref={(element) => {
-                    sectionRefs.current.artwork = element ?? undefined;
+                    sectionRefs.current.purpose = element ?? undefined;
                   }}
                 >
                   <AccordionSection
                     section={CREATE_DAO_SECTIONS[1]}
-                    status={statuses.artwork}
-                    isOpen={openSections.has('artwork')}
-                    onToggle={() => setSectionOpen('artwork', !openSections.has('artwork'))}
+                    status={statuses.purpose}
+                    isOpen={openSections.has('purpose')}
+                    onToggle={() => setSectionOpen('purpose', !openSections.has('purpose'))}
                   >
-                    <ArtworkStep />
-                    <SectionAction label="Save and continue" onClick={() => markSectionReviewed('artwork')} />
-                  </AccordionSection>
-                </div>
-                <div
-                  ref={(element) => {
-                    sectionRefs.current.auction = element ?? undefined;
-                  }}
-                >
-                  <AccordionSection
-                    section={CREATE_DAO_SECTIONS[2]}
-                    status={statuses.auction}
-                    isOpen={openSections.has('auction')}
-                    onToggle={() => setSectionOpen('auction', !openSections.has('auction'))}
-                  >
-                    <AuctionStep />
-                    <SectionAction label="Save and continue" onClick={() => markSectionReviewed('auction')} />
+                    <PurposeStep />
+                    <SectionAction label="Save and continue" onClick={() => markSectionReviewed('purpose')} />
                   </AccordionSection>
                 </div>
                 <div
@@ -448,7 +394,7 @@ export default function CreateDaoPage() {
                   }}
                 >
                   <AccordionSection
-                    section={CREATE_DAO_SECTIONS[3]}
+                    section={CREATE_DAO_SECTIONS[2]}
                     status={statuses.governance}
                     isOpen={openSections.has('governance')}
                     onToggle={() => setSectionOpen('governance', !openSections.has('governance'))}
@@ -459,26 +405,11 @@ export default function CreateDaoPage() {
                 </div>
                 <div
                   ref={(element) => {
-                    sectionRefs.current.founders = element ?? undefined;
-                  }}
-                >
-                  <AccordionSection
-                    section={CREATE_DAO_SECTIONS[4]}
-                    status={statuses.founders}
-                    isOpen={openSections.has('founders')}
-                    onToggle={() => setSectionOpen('founders', !openSections.has('founders'))}
-                  >
-                    <FoundersStep />
-                    <SectionAction label="Save and continue" onClick={() => markSectionReviewed('founders')} />
-                  </AccordionSection>
-                </div>
-                <div
-                  ref={(element) => {
                     sectionRefs.current.review = element ?? undefined;
                   }}
                 >
                   <AccordionSection
-                    section={CREATE_DAO_SECTIONS[5]}
+                    section={CREATE_DAO_SECTIONS[3]}
                     status={statuses.review}
                     isOpen={openSections.has('review')}
                     onToggle={() => setSectionOpen('review', !openSections.has('review'))}

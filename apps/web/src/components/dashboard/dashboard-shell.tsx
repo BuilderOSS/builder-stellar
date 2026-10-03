@@ -16,17 +16,29 @@ import { DashboardSidebar } from './dashboard-sidebar';
 import { DashboardTabs } from './dashboard-tabs';
 import { DashboardWelcome } from './dashboard-welcome';
 
-export function DashboardShell({ daos, loadError }: { daos: DaoConfig[]; loadError: boolean }) {
+export function DashboardShell({
+  daos,
+  pendingDaos,
+  loadError
+}: {
+  daos: DaoConfig[];
+  pendingDaos: DaoConfig[];
+  loadError: boolean;
+}) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const sessionAddress = useAuthSessionStore((state) => state.address);
   const isNewcomer = !sessionAddress;
   const { data: dashboardData, error: dashboardError, isLoading: dashboardLoading } = useDashboardData(sessionAddress);
+
+  // Don't use nav rail on dashboard (only on DAO pages)
+  // Global nav rail is added by DaoShell for DAO pages
 
   return (
     <div className="page-shell dashboard-page-shell">
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
+      {/* Nav rail is only used on DAO pages, not on dashboard */}
       <div className="app-frame dashboard-frame">
         <DashboardHeader showMenuButton={!isNewcomer} onMenuClick={() => setSidebarOpen(true)} />
 
@@ -71,7 +83,7 @@ export function DashboardShell({ daos, loadError }: { daos: DaoConfig[]; loadErr
                 />
               ) : null}
 
-              <DashboardTabs>
+              <DashboardTabs showPending={pendingDaos.length > 0}>
                 {(tab) => {
                   if (tab === 'feed') {
                     return (
@@ -86,6 +98,18 @@ export function DashboardShell({ daos, loadError }: { daos: DaoConfig[]; loadErr
                     return (
                       <div className="dashboard-discover-content">
                         <DaoDirectory daos={daos} />
+                      </div>
+                    );
+                  }
+                  if (tab === 'pending') {
+                    return (
+                      <div className="dashboard-discover-content">
+                        <DaoDirectory
+                          daos={pendingDaos}
+                          eyebrow="Launch queue"
+                          heading="DAOs waiting for launch"
+                          hint="Only you can see DAOs where you are the launch administrator."
+                        />
                       </div>
                     );
                   }
