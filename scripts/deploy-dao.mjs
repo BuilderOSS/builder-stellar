@@ -85,7 +85,6 @@ const marketplacePaymentAsset = marketplaceConfig.paymentAsset ?? daoConfig.auct
 const listingCount = marketplaceConfig.primaryListingCount ?? 10;
 const listingPrice = marketplaceConfig.primaryPrice ?? '10000000000';
 const listingDuration = marketplaceConfig.primaryListingDuration ?? 30 * 24 * 60 * 60;
-const resumeAdmin = process.env.DEPLOY_DAO_RESUME === '1';
 
 function invoke(id, method, params = {}) {
   const result = runQuiet('stellar', [
@@ -99,6 +98,27 @@ function invoke(id, method, params = {}) {
     throw new Error(`Failed to invoke ${method}`);
   }
   return result.stdout + result.stderr;
+}
+
+function invokeView(id, method, params = {}) {
+  const result = runQuiet('stellar', [
+    'contract', 'invoke', '--id', id, '--source-account', identityName,
+    '--network', networkName, '--send', 'no', '--', method,
+    ...Object.entries(params).flatMap(([name, value]) => [`--${name}`, typeof value === 'string' ? value : JSON.stringify(value)])
+  ], { env: { ...process.env, STELLAR_NO_CACHE: 'true' } });
+  if (!result.ok) throw new Error(`Failed to query ${method}: ${result.stderr || result.stdout}`);
+  const output = (result.stdout + result.stderr).replace(/\x1b\[[0-9;]*m/g, '').trim();
+  const json = output.match(/(\{.*\}|\[.*\])\s*$/s)?.[1];
+  if (json) {
+    try {
+      return JSON.parse(json);
+    } catch {
+      // Fall through to scalar parsing.
+    }
+  }
+  const value = output.match(/(?:^|\n)"?(true|false|-?\d+)"?\s*$/i)?.[1];
+  if (value === undefined) throw new Error(`Could not parse ${method} result: ${output}`);
+  return value === 'true' ? true : value === 'false' ? false : Number(value);
 }
 
 function transaction(output, extra = {}) {
@@ -164,6 +184,7 @@ function writeArtifact({ status, addresses, transactions = {}, error }) {
   if (Object.keys(allTransactions).length > 0) artifact.transactions = allTransactions;
   if (ledgers.length > 0) artifact.deploymentLedger = Math.min(...ledgers);
   if (error) artifact.error = error instanceof Error ? error.message : String(error);
+  else delete artifact.error;
   mkdirSync('deploys', { recursive: true });
   writeFileSync(daoArtifactPath, `${JSON.stringify(artifact, null, 2)}\n`);
   console.log(`DAO artifact written to ${daoArtifactPath}`);
@@ -221,82 +242,128 @@ if (phase === 'create_dao') {
 
 artifact = loadDaoArtifact();
 addresses = artifact.addresses;
+transactions = { ...(artifact.transactions ?? {}) };
 
 if (phase === 'admin_checklist') {
   console.log('\n=== Admin Checklist ===\n');
 
-  if (!resumeAdmin) {
-    const founderMints = [];
-    for (const founder of daoConfig.founders) {
-      const output = invoke(addresses.token, 'batch_mint', {
-        minter: daoConfig.launchAdmin,
-        to: founder.address,
-        amount: founder.amount
-      });
-      founderMints.push(transaction(output, { address: founder.address, amount: founder.amount }));
+  const checkpoint = (status = 'checklist_partial', error) =>
+    writeArtifact({ status, addresses, transactions, error });
+
+  try {
+    {
+      const founderMints = transactions.founderMints ?? [];
+      for (let index = founderMints.length; index < daoConfig.founders.length; index += 1) {
+        const founder = daoConfig.founders[index];
+        const output = invoke(addresses.token, 'batch_mint', {
+          minter: daoConfig.launchAdmin,
+          to: founder.address,
+          amount: founder.amount
+        });
+        founderMints.push(transaction(output, { address: founder.address, amount: founder.amount }));
+        transactions.founderMints = founderMints;
+        checkpoint();
+      }
+
+      if (!transactions.addProperties) {
+        const names = artworkProperties.map(({ name }) => name);
+        const items = artworkProperties.flatMap((property, propertyId) => property.items.map((name) => ({ property_id: propertyId, name, is_new_property: true })));
+        transactions.addProperties = invokeView(addresses.metadata, 'properties_count') > 0
+          ? { skipped: true, reason: 'properties already exist' }
+          : transaction(invoke(addresses.metadata, 'add_properties', {
+              names: JSON.stringify(names), items: JSON.stringify(items), ipfs_group: JSON.stringify({ base_uri: daoConfig.metadata.artwork.ipfs.baseUri, extension: daoConfig.metadata.artwork.ipfs.extension })
+            }));
+        checkpoint();
+      }
+
+      for (const [method, name, value] of [
+        ['update_project_uri', 'new_project_uri', daoConfig.metadata.projectUri],
+        ['update_description', 'new_description', daoConfig.metadata.description],
+        ['update_contract_image', 'new_contract_image', daoConfig.metadata.contractImage],
+        ['update_renderer_base', 'new_renderer_base', daoConfig.metadata.rendererBase]
+      ]) {
+        if (!transactions[name]) {
+          transactions[name] = transaction(invoke(addresses.metadata, method, { [name]: value }));
+          checkpoint();
+        }
+      }
+
+      for (const [method, name, value] of [
+        ['set_duration', 'duration', daoConfig.auction.duration],
+        ['set_reserve_price', 'reserve_price', String(daoConfig.auction.reservePrice)],
+        ['set_time_buffer', 'time_buffer', daoConfig.auction.timeBuffer],
+        ['set_payment_token', 'payment_token', daoConfig.auction.paymentAsset]
+      ]) {
+        if (!transactions[name]) {
+          transactions[name] = transaction(invoke(addresses.auction, method, { [name]: value }));
+          checkpoint();
+        }
+      }
+
+      console.log('Governance configuration:', JSON.stringify({ ...daoConfig.governance, queueDelay }, null, 2));
+      console.log('Marketplace configuration:', JSON.stringify({ paymentAsset: marketplacePaymentAsset, secondaryFeeBps: marketplaceConfig.secondaryFeeBps ?? 250 }, null, 2));
+      if (!transactions.setMintAuthority) {
+        invoke(addresses.token, 'set_mint_authority', { authority: addresses.marketplace, enabled: true });
+        transactions.setMintAuthority = true;
+        checkpoint();
+      }
+      if (!transactions.setMarketplacePaymentAsset) {
+        invoke(addresses.marketplace, 'set_payment_asset', { payment_asset: marketplacePaymentAsset });
+        transactions.setMarketplacePaymentAsset = true;
+        checkpoint();
+      }
+      if (!transactions.setSecondaryFeeBps) {
+        invoke(addresses.marketplace, 'set_secondary_fee_bps', { fee_bps: marketplaceConfig.secondaryFeeBps ?? 250 });
+        transactions.setSecondaryFeeBps = true;
+        checkpoint();
+      }
+      if (!transactions.unpauseMarketplace) {
+        if (invokeView(addresses.marketplace, 'get_config').paused) invoke(addresses.marketplace, 'unpause');
+        transactions.unpauseMarketplace = true;
+        checkpoint();
+      }
     }
-    transactions.founderMints = founderMints;
 
-    const names = artworkProperties.map(({ name }) => name);
-    const items = artworkProperties.flatMap((property, propertyId) => property.items.map((name) => ({ property_id: propertyId, name, is_new_property: true })));
-    transactions.addProperties = transaction(invoke(addresses.metadata, 'add_properties', {
-      names: JSON.stringify(names), items: JSON.stringify(items), ipfs_group: JSON.stringify({ base_uri: daoConfig.metadata.artwork.ipfs.baseUri, extension: daoConfig.metadata.artwork.ipfs.extension })
-    }));
-
-    for (const [method, name, value] of [
-      ['update_project_uri', 'new_project_uri', daoConfig.metadata.projectUri],
-      ['update_description', 'new_description', daoConfig.metadata.description],
-      ['update_contract_image', 'new_contract_image', daoConfig.metadata.contractImage],
-      ['update_renderer_base', 'new_renderer_base', daoConfig.metadata.rendererBase]
-    ]) transactions[name] = transaction(invoke(addresses.metadata, method, { [name]: value }));
-
-    for (const [method, name, value] of [
-      ['set_duration', 'duration', daoConfig.auction.duration],
-      ['set_reserve_price', 'reserve_price', String(daoConfig.auction.reservePrice)],
-      ['set_time_buffer', 'time_buffer', daoConfig.auction.timeBuffer],
-      ['set_payment_token', 'payment_token', daoConfig.auction.paymentAsset]
-    ]) transactions[name] = transaction(invoke(addresses.auction, method, { [name]: value }));
-
-    console.log('Governance configuration:', JSON.stringify({ ...daoConfig.governance, queueDelay }, null, 2));
-    console.log('Marketplace configuration:', JSON.stringify({ paymentAsset: marketplacePaymentAsset, secondaryFeeBps: marketplaceConfig.secondaryFeeBps ?? 250 }, null, 2));
-    invoke(addresses.token, 'set_mint_authority', { authority: addresses.marketplace, enabled: true });
-    invoke(addresses.marketplace, 'set_payment_asset', { payment_asset: marketplacePaymentAsset });
-    invoke(addresses.marketplace, 'set_secondary_fee_bps', { fee_bps: marketplaceConfig.secondaryFeeBps ?? 250 });
-    invoke(addresses.marketplace, 'unpause');
+    const listings = transactions.marketplaceListings ?? [];
+    const expiresAt = listings[0]?.expiresAt ?? Math.floor(Date.now() / 1000) + listingDuration;
+    let nextTokenId = invokeView(addresses.token, 'total_supply');
+    let remainingListings = listingCount - listings.length;
+    if (!transactions.listingMint && remainingListings > 0) {
+      invoke(addresses.token, 'batch_mint', {
+        minter: daoConfig.launchAdmin,
+        to: daoConfig.launchAdmin,
+        amount: remainingListings
+      });
+      transactions.listingMint = { amount: remainingListings };
+      checkpoint();
+    }
+    for (let index = listings.length; index < listingCount; index += 1) {
+      const tokenId = nextTokenId + index;
+      invoke(addresses.token, 'approve', {
+        owner: daoConfig.launchAdmin,
+        spender: addresses.marketplace,
+        token_id: tokenId,
+        expiration_ledger: 5100000
+      });
+      const output = invoke(addresses.marketplace, 'list', {
+        token_id: tokenId,
+        seller: daoConfig.launchAdmin,
+        price: String(listingPrice),
+        expires_at: expiresAt
+      });
+      listings.push(transaction(output, { tokenId, price: String(listingPrice), expiresAt }));
+      transactions.marketplaceListings = listings;
+      checkpoint();
+    }
+    transactions.marketplaceListings = listings;
+    checkpoint('checklist_complete');
+    console.log(`Admin checklist complete: ${listingCount} marketplace tokens listed at ${listingPrice} stroops each.`);
+    console.log('Review the artifact and run launch_dao when ready.');
+    process.exit(0);
+  } catch (error) {
+    checkpoint('checklist_partial', error);
+    throw error;
   }
-
-  const listings = [];
-  const expiresAt = Math.floor(Date.now() / 1000) + listingDuration;
-  let nextTokenId = daoConfig.founders.reduce((total, founder) => total + founder.amount, 0);
-  let remainingListings = listingCount;
-  while ((!resumeAdmin || process.env.DEPLOY_DAO_RESUME_MINT === '1') && remainingListings > 0) {
-    invoke(addresses.token, 'batch_mint', {
-      minter: daoConfig.launchAdmin,
-      to: daoConfig.launchAdmin,
-      amount: remainingListings
-    });
-    remainingListings = 0;
-  }
-  for (let index = 0; index < listingCount; index += 1) {
-    invoke(addresses.token, 'approve', {
-      owner: daoConfig.launchAdmin,
-      spender: addresses.marketplace,
-      token_id: nextTokenId + index,
-      expiration_ledger: 5100000
-    });
-    const output = invoke(addresses.marketplace, 'list', {
-      token_id: nextTokenId + index,
-      seller: daoConfig.launchAdmin,
-      price: String(listingPrice),
-      expires_at: expiresAt
-    });
-    listings.push(transaction(output, { tokenId: nextTokenId + index, price: String(listingPrice), expiresAt }));
-  }
-  transactions.marketplaceListings = listings;
-  writeArtifact({ status: 'checklist_complete', addresses, transactions });
-  console.log(`Admin checklist complete: ${listingCount} marketplace tokens listed at ${listingPrice} stroops each.`);
-  console.log('Review the artifact and run launch_dao when ready.');
-  process.exit(0);
 }
 
 console.log('\n=== Launching DAO (auctions and marketplace enabled) ===\n');
