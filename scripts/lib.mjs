@@ -23,7 +23,8 @@ export function runQuiet(command, args, options = {}) {
     stdio: ['ignore', 'pipe', 'pipe'],
     encoding: 'utf8',
     env: options.env ?? process.env,
-    cwd: options.cwd ?? process.cwd()
+    cwd: options.cwd ?? process.cwd(),
+    timeout: options.timeout
   });
 
   return {
@@ -45,7 +46,7 @@ export function fetchTransactionLedger(txHash, networkName) {
     networkName,
     '--output',
     'json-formatted'
-  ]);
+  ], { timeout: 15_000 });
 
   if (!result.ok) {
     throw new Error(
