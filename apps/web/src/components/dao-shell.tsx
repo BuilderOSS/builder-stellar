@@ -129,8 +129,16 @@ export function DaoShell({ children }: { children: ReactNode }) {
               active={isRouteActive(pathname, overview.href, overview.exact)}
               className="dao-workspace-nav__link"
             />
-            <NavLink {...governance} active={isRouteActive(pathname, governance.href)} className="dao-workspace-nav__link" />
-            <NavLink {...treasury} active={isRouteActive(pathname, treasury.href)} className="dao-workspace-nav__link" />
+            <NavLink
+              {...governance}
+              active={isRouteActive(pathname, governance.href)}
+              className="dao-workspace-nav__link"
+            />
+            <NavLink
+              {...treasury}
+              active={isRouteActive(pathname, treasury.href)}
+              className="dao-workspace-nav__link"
+            />
             <NavLink {...members} active={isRouteActive(pathname, members.href)} className="dao-workspace-nav__link" />
             <div className="dao-workspace-nav__group" role="group" aria-labelledby="market-nav-heading">
               <span id="market-nav-heading" className="dao-workspace-nav__group-label">
@@ -160,11 +168,7 @@ export function DaoShell({ children }: { children: ReactNode }) {
                 <LogOut className="dao-exit-button__icon" aria-hidden="true" size={17} />
                 <span className="dao-exit-button__text">Exit to Builder</span>
               </Link>
-              <Link
-                className="brand-lockup"
-                href={`/dao/${daoId}`}
-                aria-label={`${currentNetwork.tokenName} overview`}
-              >
+              <Link className="brand-lockup" href={`/dao/${daoId}`} aria-label={`${currentNetwork.tokenName} overview`}>
                 <DaoImage
                   className="brand-mark"
                   src={currentNetwork.contractImage}
@@ -199,7 +203,9 @@ export function DaoShell({ children }: { children: ReactNode }) {
               </div>
             </details>
             <NavLink {...members} active={isRouteActive(pathname, members.href)} />
-            <details className={`dao-mobile-nav__menu${isRouteActive(pathname, treasury.href) || Boolean(manage && isRouteActive(pathname, manage.href)) ? ' dao-mobile-nav__menu--active' : ''}`}>
+            <details
+              className={`dao-mobile-nav__menu${isRouteActive(pathname, treasury.href) || Boolean(manage && isRouteActive(pathname, manage.href)) ? ' dao-mobile-nav__menu--active' : ''}`}
+            >
               <summary className="dao-mobile-nav__trigger">
                 <MoreHorizontal aria-hidden="true" size={16} strokeWidth={2} />
                 <span>More</span>
