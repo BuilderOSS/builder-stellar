@@ -4,7 +4,16 @@ mode: all
 permission:
   edit: allow
   bash:
-    "git *": allow
+    "git status": allow
+    "git status *": allow
+    "git diff": allow
+    "git diff *": allow
+    "git log *": allow
+    "git show *": allow
+    "git branch --show-current": allow
+    "git rev-parse *": allow
+    "git ls-files *": allow
+    "git remote -v": allow
     "pnpm lint": allow
     "pnpm typecheck": allow
     "pnpm build": allow
