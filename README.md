@@ -93,6 +93,7 @@ configs/               Network and DAO configuration
 - [Manager Redesign](docs/MANAGER_REDESIGN.md)
 - [Marketplace Plan](docs/MARKETPLACE_PLAN.md)
 - [Goldsky Setup](docs/GOLDSKY_SETUP.md)
+- [Agent Workflow](docs/AGENT_WORKFLOW.md)
 - [Mercury notes](docs/MERCURY.md) (historical)
 
 ## Common Commands

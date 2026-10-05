@@ -3,14 +3,9 @@
 import { Plus, X } from 'lucide-react';
 import Link from 'next/link';
 
-import { DaoImage } from '@/components/dao-image';
-import { Text } from '@/components/ui';
-import { daoRoute } from '@/lib/dao-routes';
 import type { DashboardDao } from '@/lib/goldsky-queries';
 
-function daoName(dao: DashboardDao) {
-  return dao.token_name || dao.token_symbol || 'Unnamed DAO';
-}
+import { DashboardDaoWorlds } from './dashboard-dao-worlds';
 
 export function DashboardSidebar({
   myDaos,
@@ -51,33 +46,7 @@ export function DashboardSidebar({
             <span className="label">My DAOs</span>
             <span className="dashboard-sidebar__count">{myDaos.length}</span>
           </div>
-          {myDaosLoading ? (
-            <Text className="dashboard-sidebar__empty">Loading your DAOs...</Text>
-          ) : myDaosError ? (
-            <Text className="dashboard-sidebar__empty dashboard-sidebar__error">
-              Unable to load your DAOs right now.
-            </Text>
-          ) : myDaos.length ? (
-            <nav className="dashboard-sidebar__dao-list" aria-label="Available DAOs">
-              {myDaos.map((dao) => (
-                <Link
-                  key={dao.dao_id}
-                  className="dashboard-sidebar-item dashboard-sidebar-item--dao"
-                  href={daoRoute(dao.dao_id)}
-                  onClick={onClose}
-                >
-                  <DaoImage
-                    className="dashboard-sidebar-item__avatar"
-                    src={dao.contract_image}
-                    alt={`${daoName(dao)} logo`}
-                  />
-                  <span className="dashboard-sidebar-item__name">{daoName(dao)}</span>
-                </Link>
-              ))}
-            </nav>
-          ) : (
-            <Text className="dashboard-sidebar__empty">You haven&apos;t joined a DAO yet.</Text>
-          )}
+          <DashboardDaoWorlds myDaos={myDaos} isLoading={myDaosLoading} hasError={myDaosError} onNavigate={onClose} />
         </div>
 
         <div className="dashboard-sidebar__actions">
