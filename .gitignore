@@ -20,5 +20,5 @@ opencode.json
 .vercel
 .env*.local
 .agents/
-.claude/
+.claude/skills/
 skills-lock.json

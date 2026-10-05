@@ -1,9 +1,10 @@
 # Agent Workflow
 
-This repository provides project-scoped OpenCode agents in `.opencode/agent/`.
-They divide ownership across the contract, indexing, database, services, frontend,
-design, and documentation surfaces so changes follow the same path as the product
-data: contract event to indexer to read model to API to UI.
+This repository provides the same project-scoped agent roster to OpenCode and Claude
+Code. OpenCode definitions live in `.opencode/agent/`; Claude Code definitions live in
+`.claude/agents/`. They divide ownership across the contract, indexing, database,
+services, frontend, design, and documentation surfaces so changes follow the same path
+as the product data: contract event to indexer to read model to API to UI.
 
 ## Roles
 
@@ -33,6 +34,10 @@ Use the project commands to start work with the right ownership and guardrails:
 - `/data-model-change <task>` applies a read-model change with isolation checks.
 - `/frontend-feature <task>` implements a UI feature against documented service contracts.
 - `/docs <task>` retrieves official references or reconciles documentation.
+
+In Claude Code, invoke the same specialist with `@agent-<name>`, for example
+`@agent-contract-reviewer review the governor authorization change`. Claude Code also
+routes to agents from natural-language requests using their descriptions.
 
 ## Required Checks
 
@@ -70,3 +75,4 @@ npx skills add https://github.com/vercel-labs/agent-skills --skill vercel-react-
 
 Use `npx skills add <repository> --list` to review the available skills before adding
 more. Restart OpenCode after changing agents, commands, skills, or configuration.
+Restart Claude Code after changing agents or skills.
