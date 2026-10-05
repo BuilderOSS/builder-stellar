@@ -2254,6 +2254,100 @@ textarea {
   display: none;
 }
 
+.dao-workspace-frame {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  align-items: start;
+  gap: 24px;
+}
+
+.dao-workspace-sidebar {
+  position: sticky;
+  top: 24px;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 16px;
+  background: rgba(12, 14, 17, 0.9);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(18px);
+}
+
+.dao-workspace-sidebar__identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.dao-workspace-sidebar__exit {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 700;
+  gap: 8px;
+  text-decoration: none;
+}
+
+.dao-workspace-sidebar__exit:hover,
+.dao-workspace-sidebar__exit:focus-visible {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text-primary);
+}
+
+.dao-workspace-nav {
+  display: grid;
+  gap: 3px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-default);
+}
+
+.dao-workspace-nav__link {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.dao-workspace-nav__group {
+  display: grid;
+  gap: 3px;
+  padding: 10px 0 4px;
+}
+
+.dao-workspace-nav__group-label {
+  padding: 0 12px 4px;
+  color: var(--text-tertiary);
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dao-workspace-nav__link--nested {
+  padding-left: 24px;
+}
+
+.dao-workspace-main {
+  min-width: 0;
+}
+
+.dao-workspace-header {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.dao-workspace-header__identity {
+  display: none;
+}
+
 .dao-header__identity {
   display: flex;
   align-items: center;
@@ -2425,7 +2519,7 @@ textarea {
     bottom: max(10px, env(safe-area-inset-bottom));
     left: 10px;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr)) min-content;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     overflow: visible;
     padding: 7px;
     border: 1px solid var(--border-strong);
@@ -2442,20 +2536,57 @@ textarea {
     font-size: 0.65rem;
     gap: 3px;
   }
-  .mobile-nav__more {
+  .dao-mobile-nav__menu {
     position: relative;
   }
-  .mobile-nav__more > summary {
-    width: 40px;
+  .dao-mobile-nav__trigger {
+    display: flex;
+    width: 100%;
     min-height: 48px;
-    padding: 0;
+    align-items: center;
+    justify-content: center;
+    padding: 5px 2px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    font-size: 0.65rem;
+    font-weight: 650;
+    gap: 3px;
+    list-style: none;
+    text-align: center;
   }
-  .mobile-nav__more .dashboard-menu__panel {
+  .dao-mobile-nav__trigger::-webkit-details-marker {
+    display: none;
+  }
+  .dao-mobile-nav__trigger:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 3px;
+  }
+  .dao-mobile-nav__menu--active .dao-mobile-nav__trigger,
+  .dao-mobile-nav__menu[open] .dao-mobile-nav__trigger {
+    border-color: var(--border-strong);
+    background: var(--surface-2);
+    color: var(--text-primary);
+  }
+  .dao-mobile-nav__panel {
+    position: absolute;
     top: auto;
     right: 0;
     bottom: calc(100% + 8px);
+    display: grid;
+    min-width: 180px;
+    gap: 4px;
+    padding: 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    background: var(--surface-2);
+    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.28);
   }
-  .mobile-nav__more .nav-link {
+  .dao-mobile-nav__menu:not([open]) .dao-mobile-nav__panel {
+    display: none;
+  }
+  .dao-mobile-nav__panel .nav-link {
     width: 100%;
     flex: initial;
     min-height: 40px;
@@ -2469,6 +2600,31 @@ textarea {
     top: 8px;
     padding: 9px;
     border-radius: 14px;
+  }
+  .dao-workspace-frame {
+    display: block;
+  }
+  .dao-workspace-sidebar {
+    display: none;
+  }
+  .dao-workspace-header {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+  .dao-workspace-header__identity {
+    display: flex;
+  }
+  .dao-workspace-header .dao-exit-button {
+    width: auto;
+    padding: 0 10px;
+  }
+  .dao-workspace-header .dao-exit-button__text {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+    white-space: nowrap;
   }
   .app-header__top {
     grid-template-columns: 1fr;

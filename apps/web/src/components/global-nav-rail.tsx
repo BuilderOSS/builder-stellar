@@ -277,7 +277,7 @@ export function useNavRailItems(): NavRailItem[] {
         {
           id: 'auctions',
           label: 'Auctions',
-          href: `/dao/${daoId}/auction`,
+          href: `/dao/${daoId}/auctions`,
           reachable: true
         },
         {
