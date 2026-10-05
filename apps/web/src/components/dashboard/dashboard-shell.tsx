@@ -9,8 +9,8 @@ import type { DaoConfig } from '@/lib/dao-db';
 import { useDashboardData } from '@/lib/goldsky-queries';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
-import { DashboardFeed } from './dashboard-feed';
 import { DashboardDaoWorlds } from './dashboard-dao-worlds';
+import { DashboardFeed } from './dashboard-feed';
 import { DashboardFooter } from './dashboard-footer';
 import { DashboardHeader } from './dashboard-header';
 
