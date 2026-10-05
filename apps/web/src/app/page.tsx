@@ -6,8 +6,8 @@ import { getAuthSession } from '@/lib/auth/server';
 import { type DaoConfig, getAllDaosFromDatabase, getPendingDaosForLaunchAdmin } from '@/lib/dao-db';
 
 export const metadata: Metadata = {
-  title: 'Stellar DAOs',
-  description: 'Your home for discovering and participating in Stellar DAOs.'
+  title: 'Builder Lobby',
+  description: 'Discover, enter, and launch independent DAO worlds on Stellar.'
 };
 
 export default async function Page() {

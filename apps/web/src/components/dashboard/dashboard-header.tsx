@@ -20,11 +20,11 @@ export function DashboardHeader({ showMenuButton = false, onMenuClick }: Dashboa
           <Menu aria-hidden="true" size={20} />
         </button>
       ) : null}
-      <Link className="brand-lockup" href="/" aria-label="Stellar DAO dashboard">
+      <Link className="brand-lockup" href="/" aria-label="Builder Lobby home">
         <Image className="brand-mark" src="/icon.svg" alt="" aria-hidden="true" width={44} height={44} priority />
         <div className="brand-copy">
-          <p className="brand-name">Stellar DAOs</p>
-          <p className="brand-kicker">Your governance home</p>
+          <p className="brand-name">Builder</p>
+          <p className="brand-kicker">DAO worlds on Stellar</p>
         </div>
       </Link>
       <div className="dashboard-header__actions">
