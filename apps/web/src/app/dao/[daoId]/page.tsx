@@ -1,7 +1,6 @@
 'use client';
 
 import { Activity, ChevronDown, RefreshCw } from 'lucide-react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Stack } from 'styled-system/jsx';
@@ -18,6 +17,7 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { useIsLaunchAdmin } from '@/hooks/useIsLaunchAdmin';
 import { formatActivitySummary } from '@/lib/activity-feed';
 import { useGoldskyActivityFeed, useGoldskyHealth } from '@/lib/goldsky-queries';
+import { ProposalState } from '@/lib/proposal-state';
 import { useTokenInventory } from '@/lib/token-queries';
 
 function formatTimestamp(timestamp: string | number | null) {
@@ -152,6 +152,7 @@ export default function Page() {
   const canLoadMoreTokens = Boolean(tokens && tokens.items.length > tokenLimit);
   const activityItems = activityFeed?.items ?? [];
   const proposalItems = proposals?.items ?? [];
+  const activeProposalItems = proposalItems.filter((item) => item.state === ProposalState.Active);
   const canLoadMoreActivity = Boolean(activityFeed?.hasMore);
   const indexerIsHealthy = goldskyHealth?.status === 'healthy';
   const indexerHealthLabel = goldskyHealthLoading
@@ -173,6 +174,7 @@ export default function Page() {
     auctionLoading;
   const auctionEndTime = auctionData?.auction ? Number(auctionData.auction.end_time) : null;
   const isAuctionEnded = currentTime !== null && auctionEndTime !== null && auctionEndTime <= currentTime;
+  const hasCurrentAuction = auctionData?.status === 'active' && Boolean(auctionData.auction) && !auctionData.paused;
 
   useEffect(() => {
     const updateCurrentTime = () => setCurrentTime(Date.now() / 1000);
@@ -206,11 +208,15 @@ export default function Page() {
 
   return (
     <PageSection
-      title={isLaunchAdmin && config.status === 'pending' ? '⚙️ Admin: Launch Setup' : 'Dashboard'}
+      title={
+        isLaunchAdmin && config.status === 'pending'
+          ? `${config.tokenName} launch setup`
+          : `${config.tokenName} overview`
+      }
       description={
         isLaunchAdmin && config.status === 'pending'
           ? 'Complete the checklist to launch your DAO'
-          : 'Your DAO activity at a glance.'
+          : 'Current work and DAO activity.'
       }
     >
       <div className="dashboard-controls">
@@ -235,156 +241,197 @@ export default function Page() {
         </Button>
       </div>
 
-      {isLaunchAdmin && config.status === 'pending' ? <LaunchChecklist daoId={daoId} config={config} /> : null}
+      {isLaunchAdmin && config.status === 'pending' ? (
+        <section id="launch-checklist" aria-label="Launch setup">
+          <LaunchChecklist daoId={daoId} config={config} />
+        </section>
+      ) : null}
 
-      <div className="dashboard-secondary-grid">
-        {config.auctionContractId ? (
-          <Card className="dashboard-secondary-card" p="5">
-            <div className="dashboard-secondary-card__content">
-              <Heading style={{ fontSize: '1.35rem', margin: 0 }}>Auction</Heading>
-              <div className="dashboard-secondary-card__scroll">
-                {auctionError ? (
-                  <Callout variant="error" title="Auction unavailable" description={auctionError.message} />
-                ) : null}
-                {config.auctionEnabled === false ? (
-                  <Callout
-                    variant="info"
-                    title="Auctions are disabled"
-                    description="Visit Admin > Auctions to configure and enable auctions for this DAO."
-                  />
-                ) : null}
-                {auctionLoading && !auctionData ? (
-                  <div role="status" aria-busy="true">
-                    <span className="sr-only">Loading auction</span>
-                    <div className="dashboard-auction">
-                      <Skeleton style={{ width: '100%', aspectRatio: '1', borderRadius: '16px' }} />
-                      <div className="dashboard-auction__details" style={{ display: 'grid', gap: '10px' }}>
-                        <Skeleton style={{ width: '110px', height: '0.8em' }} />
-                        <Skeleton style={{ width: '150px', height: '1.2em' }} />
-                        <Skeleton style={{ width: '180px', height: '0.9em' }} />
-                        <Skeleton style={{ width: '120px', height: '0.8em' }} />
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-                {auctionData?.status === 'paused' ? (
-                  <Callout
-                    variant="warning"
-                    title="Auctions are paused"
-                    description="Bidding and automatic settlement are currently unavailable."
-                  />
-                ) : null}
-                {auctionData?.status === 'not-launched' ? (
-                  <Callout
-                    variant="info"
-                    title="The first auction has not launched yet"
-                    description="Auctions are configured for this DAO, but the first auction will appear after the auction module is launched."
-                  />
-                ) : null}
-                {auctionData?.auction ? (
-                  <div className="dashboard-auction">
-                    <Link href={`/dao/${daoId}/auctions`}>
-                      <Image
-                        src={`/api/render/${daoId}/${auctionData.auction.token_id}`}
-                        alt={`Token #${auctionData.auction.token_id}`}
-                        width={240}
-                        height={240}
-                        unoptimized
-                      />
-                    </Link>
-                    <div className="dashboard-auction__details">
-                      <div>
-                        <Text className="label" style={{ margin: 0 }}>
-                          Current auction
-                        </Text>
-                        <Heading style={{ fontSize: '1.1rem', margin: '4px 0 0' }}>
-                          Token #{auctionData.auction.token_id}
-                        </Heading>
-                        <Text className="lede" style={{ margin: '8px 0 0' }}>
-                          {auctionData.auction.highest_bid === '0'
-                            ? `Reserve ${formatAuctionAmount(auctionData.config.reserve_price)}`
-                            : `Highest bid ${formatAuctionAmount(auctionData.auction.highest_bid)}`}
-                        </Text>
-                        <Text className="lede" style={{ margin: '4px 0 0', fontSize: '0.84rem' }}>
-                          Ends {formatTimestamp(auctionData.auction.end_time)}
-                        </Text>
-                      </div>
-                      {!auctionData.paused ? (
-                        <Link className="dashboard-auction__action" href={`/dao/${daoId}/auctions`}>
-                          {isAuctionEnded ? 'Settle auction' : 'Place bid'}
-                        </Link>
-                      ) : null}
-                    </div>
-                  </div>
+      <section className="dao-now" aria-labelledby="dao-now-heading">
+        <div className="dao-now__eyebrow">Now in {config.tokenName}</div>
+        <div className="dao-now__body">
+          {isLaunchAdmin && config.status === 'pending' ? (
+            <>
+              <div>
+                <Heading id="dao-now-heading" style={{ fontSize: '1.5rem', margin: 0 }}>
+                  Launch setup is in progress
+                </Heading>
+                <Text className="lede">Complete the remaining setup tasks before this DAO becomes operational.</Text>
+              </div>
+              <a className="dao-now__action" href="#launch-checklist">
+                Review launch checklist
+              </a>
+            </>
+          ) : auctionError && proposalsError ? (
+            <div>
+              <Heading id="dao-now-heading" style={{ fontSize: '1.5rem', margin: 0 }}>
+                Operational status is unavailable
+              </Heading>
+              <Text className="lede">Refresh the overview to try loading governance and auction activity again.</Text>
+            </div>
+          ) : hasCurrentAuction && auctionData?.auction ? (
+            <>
+              <div>
+                <Heading id="dao-now-heading" style={{ fontSize: '1.5rem', margin: 0 }}>
+                  Auction in progress
+                </Heading>
+                <Text className="lede">
+                  Token #{auctionData.auction.token_id} ·{' '}
+                  {auctionData.auction.highest_bid === '0'
+                    ? `Reserve ${formatAuctionAmount(auctionData.config.reserve_price)}`
+                    : `Highest bid ${formatAuctionAmount(auctionData.auction.highest_bid)}`}{' '}
+                  · Ends {formatTimestamp(auctionData.auction.end_time)}
+                </Text>
+                {activeProposalItems.length ? (
+                  <Text className="dao-now__support">
+                    Governance also has {activeProposalItems.length} live proposal
+                    {activeProposalItems.length === 1 ? '' : 's'}.
+                  </Text>
                 ) : null}
               </div>
+              <Link className="dao-now__action" href={`/dao/${daoId}/auctions`}>
+                {isAuctionEnded ? 'Settle auction' : 'Place bid'}
+              </Link>
+            </>
+          ) : activeProposalItems.length ? (
+            <>
+              <div>
+                <Heading id="dao-now-heading" style={{ fontSize: '1.5rem', margin: 0 }}>
+                  Governance is live
+                </Heading>
+                <Text className="lede">
+                  {activeProposalItems.length} proposal{activeProposalItems.length === 1 ? '' : 's'}{' '}
+                  {activeProposalItems.length === 1 ? 'is' : 'are'} currently open for review.
+                </Text>
+                {auctionLoading ? <Text className="dao-now__support">Auction status is still loading.</Text> : null}
+              </div>
+              <Link className="dao-now__action" href={`/dao/${daoId}/proposals`}>
+                Review proposals
+              </Link>
+            </>
+          ) : auctionError ? (
+            <>
+              <div>
+                <Heading id="dao-now-heading" style={{ fontSize: '1.5rem', margin: 0 }}>
+                  Auction status is unavailable
+                </Heading>
+                <Text className="lede">
+                  Governance activity is shown below. The auction module could not be loaded.
+                </Text>
+              </div>
+              <Link className="dao-now__action" href={`/dao/${daoId}/auctions`}>
+                View auctions
+              </Link>
+            </>
+          ) : auctionLoading || proposalsLoading ? (
+            <div role="status" aria-busy="true">
+              <span className="sr-only">Loading current DAO activity</span>
+              <Skeleton style={{ width: '13rem', height: '1.5rem' }} />
+              <Skeleton style={{ width: '22rem', maxWidth: '100%', height: '1rem', marginTop: '10px' }} />
             </div>
-          </Card>
+          ) : (
+            <>
+              <div>
+                <Heading id="dao-now-heading" style={{ fontSize: '1.5rem', margin: 0 }}>
+                  {auctionData?.status === 'paused'
+                    ? 'Auctions are paused'
+                    : config.auctionEnabled === false
+                      ? 'Auctions are disabled'
+                      : auctionData?.status === 'not-launched'
+                        ? 'The first auction has not launched yet'
+                        : 'No live governance or auction activity'}
+                </Heading>
+                <Text className="lede">
+                  {auctionData?.status === 'paused'
+                    ? 'Bidding and automatic settlement are currently unavailable.'
+                    : config.auctionEnabled === false
+                      ? 'Auctions are not enabled for this DAO.'
+                      : auctionData?.status === 'not-launched'
+                        ? 'Auctions are configured for this DAO, but the first auction will appear after the auction module is launched.'
+                        : 'No live proposals or auction are currently shown.'}
+                </Text>
+              </div>
+              {config.auctionContractId ? (
+                <Link className="dao-now__action" href={`/dao/${daoId}/auctions`}>
+                  View auctions
+                </Link>
+              ) : null}
+            </>
+          )}
+        </div>
+        {auctionError ? (
+          <Callout variant="error" title="Auction unavailable" description={auctionError.message} />
         ) : null}
-        <Card className="dashboard-secondary-card" p="5">
-          <div className="dashboard-secondary-card__content">
-            <Heading style={{ fontSize: '1.35rem', margin: 0 }}>Proposal activity</Heading>
-            <div className="dashboard-secondary-card__scroll">
-              {proposalsError ? (
-                <Callout variant="error" title="Proposal activity unavailable" description={proposalsError.message} />
-              ) : null}
-              {proposalsLoading && !proposals ? (
-                <div className="skeleton-list" role="status" aria-busy="true">
-                  <span className="sr-only">Loading proposal activity</span>
-                  {Array.from({ length: 3 }, (_, index) => (
-                    <DashboardRowSkeleton key={index} />
-                  ))}
-                </div>
-              ) : null}
-              {!proposalsLoading && !proposalItems.length ? (
-                <div className="empty-state" role="status">
-                  <Text className="lede" style={{ margin: '0 auto' }}>
-                    Proposal activity will appear here once proposals are indexed.
-                  </Text>
-                </div>
-              ) : null}
-              {proposalItems.length ? (
-                <div className="dashboard-proposal-list proposal-list" role="list" aria-label="Recent proposals">
-                  {proposalItems.map((item) => (
-                    <div key={item.proposalId} role="listitem">
-                      <Link className="proposal-row" href={`/dao/${daoId}/proposals/${item.proposalNumber}`}>
-                        <div className="proposal-row__identity">
-                          <Text className="proposal-row__id mono">#{item.proposalNumber}</Text>
-                          <div className="proposal-row__content">
-                            <Heading className="proposal-row__title">{item.metadata.title}</Heading>
-                            <Text className="proposal-row__date">{formatTimestamp(item.timestamp)}</Text>
-                          </div>
-                        </div>
-                        <div className="proposal-row__outcome">
-                          {item.voteTotals ? (
-                            <div
-                              className="dashboard-vote-totals mono"
-                              aria-label={`For ${formatVoteTotal(item.voteTotals.forVotes)}, against ${formatVoteTotal(item.voteTotals.againstVotes)}, abstain ${formatVoteTotal(item.voteTotals.abstainVotes)}`}
-                            >
-                              <span className="dashboard-vote-totals__for">
-                                {formatVoteTotal(item.voteTotals.forVotes)}
-                              </span>
-                              <span>/</span>
-                              <span className="dashboard-vote-totals__against">
-                                {formatVoteTotal(item.voteTotals.againstVotes)}
-                              </span>
-                              <span>/</span>
-                              <span className="dashboard-vote-totals__abstain">
-                                {formatVoteTotal(item.voteTotals.abstainVotes)}
-                              </span>
-                            </div>
-                          ) : null}
-                          <ProposalStateBadge label={item.stateLabel} />
-                        </div>
-                      </Link>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </div>
+      </section>
+
+      <Card className="dashboard-secondary-card dashboard-governance-card" p="5">
+        <div className="dashboard-secondary-card__content">
+          <div className="section-toolbar">
+            <Heading style={{ fontSize: '1.35rem', margin: 0 }}>Governance</Heading>
+            <Link className="dashboard-section-link" href={`/dao/${daoId}/proposals`}>
+              View all proposals
+            </Link>
           </div>
-        </Card>
-      </div>
+          <div className="dashboard-secondary-card__scroll">
+            {proposalsError ? (
+              <Callout variant="error" title="Proposal activity unavailable" description={proposalsError.message} />
+            ) : null}
+            {proposalsLoading && !proposals ? (
+              <div className="skeleton-list" role="status" aria-busy="true">
+                <span className="sr-only">Loading proposal activity</span>
+                {Array.from({ length: 3 }, (_, index) => (
+                  <DashboardRowSkeleton key={index} />
+                ))}
+              </div>
+            ) : null}
+            {!proposalsLoading && !proposalItems.length ? (
+              <div className="empty-state" role="status">
+                <Text className="lede" style={{ margin: '0 auto' }}>
+                  Proposal activity will appear here once proposals are indexed.
+                </Text>
+              </div>
+            ) : null}
+            {proposalItems.length ? (
+              <div className="dashboard-proposal-list proposal-list" role="list" aria-label="Recent proposals">
+                {proposalItems.map((item) => (
+                  <div key={item.proposalId} role="listitem">
+                    <Link className="proposal-row" href={`/dao/${daoId}/proposals/${item.proposalNumber}`}>
+                      <div className="proposal-row__identity">
+                        <Text className="proposal-row__id mono">#{item.proposalNumber}</Text>
+                        <div className="proposal-row__content">
+                          <Heading className="proposal-row__title">{item.metadata.title}</Heading>
+                          <Text className="proposal-row__date">{formatTimestamp(item.timestamp)}</Text>
+                        </div>
+                      </div>
+                      <div className="proposal-row__outcome">
+                        {item.voteTotals ? (
+                          <div
+                            className="dashboard-vote-totals mono"
+                            aria-label={`For ${formatVoteTotal(item.voteTotals.forVotes)}, against ${formatVoteTotal(item.voteTotals.againstVotes)}, abstain ${formatVoteTotal(item.voteTotals.abstainVotes)}`}
+                          >
+                            <span className="dashboard-vote-totals__for">
+                              {formatVoteTotal(item.voteTotals.forVotes)}
+                            </span>
+                            <span>/</span>
+                            <span className="dashboard-vote-totals__against">
+                              {formatVoteTotal(item.voteTotals.againstVotes)}
+                            </span>
+                            <span>/</span>
+                            <span className="dashboard-vote-totals__abstain">
+                              {formatVoteTotal(item.voteTotals.abstainVotes)}
+                            </span>
+                          </div>
+                        ) : null}
+                        <ProposalStateBadge label={item.stateLabel} />
+                      </div>
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </Card>
 
       <Card className="dashboard-feed-card" p="5">
         <Stack gap="3">

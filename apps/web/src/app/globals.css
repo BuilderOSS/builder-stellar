@@ -1407,6 +1407,70 @@ textarea {
   justify-content: flex-end;
   gap: 8px;
 }
+.dao-now {
+  display: grid;
+  gap: 12px;
+  padding: 24px;
+  border: 1px solid color-mix(in srgb, var(--action) 50%, var(--border-strong));
+  border-radius: 16px;
+  background: linear-gradient(120deg, color-mix(in srgb, var(--action) 14%, var(--surface-1)), var(--surface-1) 56%);
+  box-shadow: inset 3px 0 0 var(--action);
+}
+.dao-now__eyebrow {
+  color: var(--action-hover);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.dao-now__body {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+}
+.dao-now__body .lede {
+  max-width: 64ch;
+  margin: 8px 0 0;
+}
+.dao-now__support {
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+}
+.dao-now__action,
+.dashboard-section-link {
+  display: inline-flex;
+  min-height: 40px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  font-size: 0.84rem;
+  font-weight: 750;
+  text-decoration: none;
+}
+.dao-now__action {
+  padding: 0 14px;
+  background: var(--action);
+  color: white;
+}
+.dao-now__action:hover {
+  background: var(--action-hover);
+  color: white;
+}
+.dao-now__action:focus-visible,
+.dashboard-section-link:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 3px;
+}
+.dashboard-section-link {
+  color: var(--action-hover);
+}
+.dashboard-section-link:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
 .dashboard-sync-status {
   margin: 0;
   color: var(--text-tertiary) !important;
@@ -1650,6 +1714,10 @@ textarea {
 .dashboard-secondary-card {
   height: 31rem;
   min-height: 0;
+}
+.dashboard-governance-card {
+  height: auto;
+  max-height: 38rem;
 }
 .dashboard-secondary-card__content {
   display: grid;
@@ -2456,6 +2524,9 @@ textarea {
   .dashboard-secondary-card {
     height: auto;
   }
+  .dashboard-governance-card {
+    max-height: none;
+  }
   .dashboard-secondary-card__content {
     min-height: 0;
   }
@@ -2493,6 +2564,20 @@ textarea {
   .auction-current__status {
     position: static;
     order: -1;
+  }
+}
+
+@media (max-width: 680px) {
+  .dao-now {
+    padding: 20px;
+  }
+  .dao-now__body {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .dao-now__action {
+    width: 100%;
   }
 }
 
