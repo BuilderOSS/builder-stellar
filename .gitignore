@@ -19,3 +19,6 @@ packages/contracts/counter/src/generated/dist
 opencode.json
 .vercel
 .env*.local
+.agents/
+.claude/
+skills-lock.json
