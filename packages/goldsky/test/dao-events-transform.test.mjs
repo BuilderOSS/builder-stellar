@@ -467,8 +467,8 @@ test('pipeline generator renders the current deployment and scripts', { skip: !e
   assert.match(yaml, /table: decoded_events/);
   assert.match(yaml, /table: activity_feed/);
   assert.match(yaml, /contract_id/);
-  assert.match(yaml, /operation_index/);
-  assert.match(yaml, /event_index/);
+  assert.match(yaml, /CAST\(NULL AS BIGINT\) AS operation_index/);
+  assert.match(yaml, /CAST\(NULL AS BIGINT\) AS event_index/);
   assert.match(yaml, /contract_role/);
   for (const table of ['dao_tokens', 'dao_metadata', 'dao_auctions', 'dao_governors', 'dao_treasuries']) {
     assert.match(yaml, new RegExp(`${table}:`));
