@@ -14,6 +14,7 @@ fn setup() -> (Env, DaoTokenContractClient<'static>, Address) {
 
     let owner = Address::generate(&e);
     let metadata = Address::generate(&e); // Dummy metadata address for tests
+    let minter = Address::generate(&e);
     let contract_id = e.register(
         DaoTokenContract,
         (
@@ -23,6 +24,7 @@ fn setup() -> (Env, DaoTokenContractClient<'static>, Address) {
             String::from_str(&e, "vDAO"),
             metadata,
             Address::generate(&e),
+            minter,
             BytesN::from_array(&e, &[0u8; 32]),
             String::from_str(&e, "0.1.0"),
         ),
@@ -35,6 +37,7 @@ fn setup_no_auth() -> (Env, DaoTokenContractClient<'static>, Address) {
     let e = Env::default();
     let owner = Address::generate(&e);
     let metadata = Address::generate(&e); // Dummy metadata address for tests
+    let minter = Address::generate(&e);
     let contract_id = e.register(
         DaoTokenContract,
         (
@@ -44,6 +47,7 @@ fn setup_no_auth() -> (Env, DaoTokenContractClient<'static>, Address) {
             String::from_str(&e, "vDAO"),
             metadata,
             Address::generate(&e),
+            minter,
             BytesN::from_array(&e, &[0u8; 32]),
             String::from_str(&e, "0.1.0"),
         ),
