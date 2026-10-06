@@ -22,6 +22,7 @@ fn create_token_contract<'a>(env: &Env, owner: &Address) -> Address {
             String::from_str(env, "TEST"),
             Address::generate(env), // metadata address (placeholder)
             Address::generate(env), // manager address (placeholder)
+            Address::generate(env), // minter address (placeholder)
             BytesN::from_array(env, &[0u8; 32]),
             String::from_str(env, "0.1.0"),
         ),
