@@ -40,7 +40,7 @@ pnpm dev
 pnpm local:down
 ```
 
-The web app is available at `http://localhost:5000`. Before starting it, copy
+The web app is available at `http://localhost:4242`. Before starting it, copy
 `apps/web/.env.example` to `apps/web/.env` and set `APP_DATABASE_URL` to the
 read-only PostgreSQL connection used by the Goldsky read model. The dev and
 build hooks generate the Prisma client and select the deployment from the most

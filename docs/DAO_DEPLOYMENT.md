@@ -133,7 +133,7 @@ console.log(dao.governor_contract); // "CB..."
 Or via API route:
 
 ```bash
-curl http://localhost:5000/api/dao/CB.../config
+curl http://localhost:4242/api/dao/CB.../config
 ```
 
 ## DAO Lifecycle States

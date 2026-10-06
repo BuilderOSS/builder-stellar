@@ -1685,13 +1685,21 @@ textarea {
 }
 .dashboard-activity-list {
   display: grid;
+  min-width: 0;
 }
 .dashboard-activity-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
   gap: 20px;
   padding: 14px 0;
   border-top: 1px solid var(--border-default);
+}
+.dashboard-activity-row > div {
+  min-width: 0;
+}
+.dashboard-activity-row > div > p {
+  overflow-wrap: anywhere;
 }
 .dashboard-activity-row[data-first] {
   border-top: 0;
@@ -1701,6 +1709,7 @@ textarea {
   margin: 0;
   font-size: 0.8rem;
   text-align: right;
+  overflow-wrap: anywhere;
 }
 .dashboard-secondary-grid {
   display: grid;
@@ -2620,6 +2629,10 @@ textarea {
     padding: 5px 2px;
     font-size: 0.65rem;
     gap: 3px;
+    line-height: 1.1;
+    text-align: center;
+    text-wrap: balance;
+    white-space: normal;
   }
   .dao-mobile-nav__menu {
     position: relative;
@@ -2660,7 +2673,7 @@ textarea {
     right: 0;
     bottom: calc(100% + 8px);
     display: grid;
-    min-width: 180px;
+    width: min(220px, calc(100vw - 24px));
     gap: 4px;
     padding: 8px;
     border: 1px solid var(--border-strong);
@@ -2716,7 +2729,9 @@ textarea {
     gap: 8px;
   }
   .header-actions {
+    min-width: 0;
     justify-content: flex-end;
+    flex-wrap: wrap;
     padding-top: 8px;
     border-top: 1px solid var(--border-default);
   }
