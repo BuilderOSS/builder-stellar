@@ -190,7 +190,7 @@ function installWasm(packageName) {
 
   const result = runQuiet('stellar', [
     'contract',
-    'install',
+    'upload',
     '--wasm',
     wasmFile,
     '--source-account',
