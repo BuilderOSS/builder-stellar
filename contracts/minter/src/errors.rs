@@ -7,62 +7,38 @@ use soroban_sdk::contracterror;
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub enum MinterError {
     /// Authorization failed - caller is not authorized for this operation
-    AuthFailed = 1,
-
-    /// Token address not set - contract not properly initialized
-    TokenNotSet = 2,
-
-    /// Admin address not set - contract not properly initialized
-    AdminNotSet = 3,
-
-    /// Strategy not found - strategy_id does not exist
-    StrategyNotFound = 4,
-
-    /// Strategy paused - cannot mint with paused strategy
-    StrategyPaused = 5,
-
-    /// Invalid batch size - batch is empty or exceeds maximum
-    InvalidBatchSize = 6,
-
-    /// Cap exceeded - mint would exceed strategy cap
-    CapExceeded = 7,
-
-    /// Rate limit exceeded - too many mints in block
-    RateLimitExceeded = 8,
+    Unauthorized = 1,
 
     /// Invalid amount - amount is zero or invalid
-    InvalidAmount = 9,
+    InvalidAmount = 2,
 
-    /// Invalid configuration - strategy config is invalid
-    InvalidConfig = 10,
+    /// Invalid token ID - token contract does not exist or is invalid
+    InvalidTokenId = 3,
+
+    /// Batch too large - batch exceeds maximum recipients (100)
+    BatchTooLarge = 4,
+
+    /// Merkle root not set - no merkle root configured for this token
+    MerkleRootNotSet = 5,
+
+    /// Allowlist not set - no allowlist configured for this token
+    AllowlistNotSet = 6,
+
+    /// Not in allowlist - address is not in the allowlist
+    NotInAllowlist = 7,
+
+    /// Already claimed - address already claimed from this token
+    AlreadyClaimed = 8,
 
     /// Merkle proof invalid - proof verification failed
-    InvalidProof = 11,
+    MerkleProofInvalid = 9,
 
-    /// Already claimed - address already claimed from this strategy
-    AlreadyClaimed = 12,
+    /// Invalid input - input validation failed
+    InvalidInput = 10,
 
-    /// Not in allowlist - address not in allowlist
-    NotInAllowlist = 13,
+    /// Token contract error - error calling token contract
+    TokenContractError = 11,
 
-    /// Amount mismatch - amount doesn't match allowlist or merkle amount
-    AmountMismatch = 14,
-
-    /// Contract not initialized - contract has not been initialized yet
-    NotInitialized = 15,
-
-    /// Cross-contract call failed - error calling token contract
-    CrossContractFailed = 16,
-
-    /// Strategy already exists - cannot register strategy with duplicate ID
-    StrategyExists = 17,
-
-    /// Invalid strategy type - unknown strategy type
-    InvalidStrategyType = 18,
-
-    /// Recipient list empty - recipients list is empty
-    RecipientsEmpty = 19,
-
-    /// Amounts mismatch - recipients and amounts lists different lengths
-    AmountsMismatch = 20,
+    /// Storage error - error accessing storage
+    StorageError = 12,
 }

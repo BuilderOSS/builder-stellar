@@ -1,13 +1,13 @@
 //! Event definitions and emission helpers for the Minter contract.
 
-use soroban_sdk::{contractevent, Address, Env, String};
+use soroban_sdk::{contractevent, Address, Env};
 
-/// Emitted when tokens are minted via a strategy.
+/// Emitted when tokens are minted.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MintEvent {
     #[topic]
-    pub strategy_id: u32,
+    pub token_id: Address,
     #[topic]
     pub recipient: Address,
     pub amount: u128,
@@ -16,70 +16,34 @@ pub struct MintEvent {
 /// Emitted when a batch mint operation completes.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct BatchMintEvent {
+pub struct MintBatchEvent {
     #[topic]
-    pub strategy_id: u32,
+    pub token_id: Address,
     pub recipient_count: u32,
     pub total_amount: u128,
 }
 
-/// Emitted when a strategy is registered.
+/// Emitted when a merkle root is set.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct StrategyRegistered {
+pub struct MerkleRootSetEvent {
     #[topic]
-    pub strategy_id: u32,
-    pub name: String,
+    pub token_id: Address,
 }
 
-/// Emitted when a strategy is paused.
+/// Emitted when an allowlist is set.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct StrategyPaused {
+pub struct AllowlistSetEvent {
     #[topic]
-    pub strategy_id: u32,
-}
-
-/// Emitted when a strategy is resumed.
-#[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct StrategyResumed {
-    #[topic]
-    pub strategy_id: u32,
-}
-
-/// Emitted when a strategy is updated.
-#[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct StrategyUpdated {
-    #[topic]
-    pub strategy_id: u32,
-}
-
-/// Emitted when admin is transferred.
-#[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AdminTransferred {
-    #[topic]
-    pub old_admin: Address,
-    #[topic]
-    pub new_admin: Address,
-}
-
-/// Emitted when token address is updated.
-#[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TokenUpdated {
-    #[topic]
-    pub old_token: Address,
-    #[topic]
-    pub new_token: Address,
+    pub token_id: Address,
+    pub member_count: u32,
 }
 
 /// Emit a mint event.
-pub fn emit_mint(env: &Env, strategy_id: u32, recipient: &Address, amount: u128) {
+pub fn emit_mint(env: &Env, token_id: &Address, recipient: &Address, amount: u128) {
     MintEvent {
-        strategy_id,
+        token_id: token_id.clone(),
         recipient: recipient.clone(),
         amount,
     }
@@ -87,53 +51,28 @@ pub fn emit_mint(env: &Env, strategy_id: u32, recipient: &Address, amount: u128)
 }
 
 /// Emit a batch mint event.
-pub fn emit_batch_mint(env: &Env, strategy_id: u32, count: u32, total_amount: u128) {
-    BatchMintEvent {
-        strategy_id,
+pub fn emit_mint_batch(env: &Env, token_id: &Address, count: u32, total_amount: u128) {
+    MintBatchEvent {
+        token_id: token_id.clone(),
         recipient_count: count,
         total_amount,
     }
     .publish(env);
 }
 
-/// Emit a strategy registered event.
-pub fn emit_strategy_registered(env: &Env, strategy_id: u32, name: &String) {
-    StrategyRegistered {
-        strategy_id,
-        name: name.clone(),
+/// Emit a merkle root set event.
+pub fn emit_merkle_root_set(env: &Env, token_id: &Address) {
+    MerkleRootSetEvent {
+        token_id: token_id.clone(),
     }
     .publish(env);
 }
 
-/// Emit a strategy paused event.
-pub fn emit_strategy_paused(env: &Env, strategy_id: u32) {
-    StrategyPaused { strategy_id }.publish(env);
-}
-
-/// Emit a strategy resumed event.
-pub fn emit_strategy_resumed(env: &Env, strategy_id: u32) {
-    StrategyResumed { strategy_id }.publish(env);
-}
-
-/// Emit a strategy updated event.
-pub fn emit_strategy_updated(env: &Env, strategy_id: u32) {
-    StrategyUpdated { strategy_id }.publish(env);
-}
-
-/// Emit an admin transferred event.
-pub fn emit_admin_transferred(env: &Env, old_admin: &Address, new_admin: &Address) {
-    AdminTransferred {
-        old_admin: old_admin.clone(),
-        new_admin: new_admin.clone(),
-    }
-    .publish(env);
-}
-
-/// Emit a token updated event.
-pub fn emit_token_updated(env: &Env, old_token: &Address, new_token: &Address) {
-    TokenUpdated {
-        old_token: old_token.clone(),
-        new_token: new_token.clone(),
+/// Emit an allowlist set event.
+pub fn emit_allowlist_set(env: &Env, token_id: &Address, member_count: u32) {
+    AllowlistSetEvent {
+        token_id: token_id.clone(),
+        member_count,
     }
     .publish(env);
 }

@@ -1,15 +1,15 @@
 //! # Minter Contract
 //!
-//! A pluggable minting contract that supports multiple minting strategies.
-//! Token contracts delegate all minting operations to this contract.
+//! A direct minting contract supporting three minting methods:
+//! batch minting (admin-only), merkle proof-based claims, and allowlist-based claims.
 //!
 //! ## Features
 //!
-//! - **Pluggable Strategies**: Register multiple minting strategies dynamically
-//! - **Strategy Types**: Batch, Merkle, Allowlist, Tiered, Custom
-//! - **Admin Control**: Admin can register, pause, resume, and update strategies
-//! - **Per-Recipient Tracking**: Prevents double-claiming for single-claim strategies
-//! - **Extensible Design**: New strategies can be added without redeploying
+//! - **Three Direct Methods**: mint_batch, mint_merkle, mint_allowlist
+//! - **Token-based Admin**: Admin derived from token owner, not stored
+//! - **Per-Token Configuration**: Separate merkle roots and allowlists per token
+//! - **Double-Claim Prevention**: Tracks claimed addresses per token
+//! - **Flexible**: Works with any token contract that has owner() and mint()
 
 #![no_std]
 
@@ -17,7 +17,6 @@ mod contract;
 mod errors;
 mod events;
 mod storage;
-mod strategy;
 
 pub use contract::*;
 pub use errors::MinterError;

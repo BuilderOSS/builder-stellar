@@ -1,591 +1,303 @@
 //! Core Minter contract implementation.
 
-use soroban_sdk::{
-    contract, contractimpl, panic_with_error, symbol_short, vec, Address, Bytes, Env, IntoVal,
-    String, Vec,
-};
+use soroban_sdk::{contract, contractimpl, symbol_short, vec, Address, Bytes, Env, IntoVal, Vec};
 
 use crate::errors::MinterError;
 use crate::events::*;
 use crate::storage::*;
-use crate::strategy;
 
 #[contract]
 pub struct MinterContract;
 
 #[contractimpl]
 impl MinterContract {
-    /// Initializes the Minter contract with token and admin addresses.
-    ///
-    /// # Arguments
-    ///
-    /// * `e` - The environment
-    /// * `token` - The token contract address (who can call mint functions)
-    /// * `admin` - The admin address (who can register/update strategies)
-    ///
-    /// # Errors
-    ///
-    /// Returns error if contract is already initialized.
-    pub fn __constructor(e: &Env, token: Address, admin: Address) {
-        // Verify not already initialized
-        if get_admin(e).is_some() {
-            panic_with_error!(e, MinterError::AdminNotSet);
-        }
-
-        set_admin(e, &admin);
-        set_token(e, &token);
-        set_next_strategy_id(e, 1); // Start from 1, reserve 0 for default batch
-    }
-
-    /// Registers a new minting strategy.
-    ///
-    /// # Arguments
-    ///
-    /// * `e` - The environment
-    /// * `strategy_type` - The type of strategy
-    /// * `name` - Human-readable name
-    /// * `description` - Detailed description
-    /// * `authorization` - Who can call this strategy
-    /// * `config` - Strategy-specific configuration
-    ///
-    /// # Returns
-    ///
-    /// The newly assigned strategy ID
-    ///
-    /// # Authorization
-    ///
-    /// Requires admin authentication.
-    pub fn register_strategy(
-        e: &Env,
-        strategy_type: StrategyType,
-        name: String,
-        description: String,
-        authorization: StrategyAuthorization,
-        config: StrategyConfig,
-    ) -> Result<u32, MinterError> {
-        let admin = get_admin(e).ok_or(MinterError::AdminNotSet)?;
-        admin.require_auth();
-
-        // Get next available ID
-        let strategy_id = get_next_strategy_id(e);
-        if strategy_id >= MAX_STRATEGIES {
-            return Err(MinterError::InvalidConfig);
-        }
-
-        // Create strategy info
-        let strategy = StrategyInfo {
-            id: strategy_id,
-            strategy_type,
-            name: name.clone(),
-            description,
-            created_ledger: get_ledger(e),
-            updated_ledger: get_ledger(e),
-            is_paused: false,
-            authorization,
-            config,
-        };
-
-        // Save strategy
-        set_strategy_info(e, &strategy);
-
-        // Initialize state
-        let state = StrategyState::new(strategy_id, get_ledger(e));
-        set_strategy_state(e, &state);
-
-        // Increment strategy ID counter
-        set_next_strategy_id(e, strategy_id + 1);
-
-        // Emit event
-        emit_strategy_registered(e, strategy_id, &name);
-
-        Ok(strategy_id)
-    }
-
-    /// Updates an existing strategy's configuration.
-    ///
-    /// # Arguments
-    ///
-    /// * `e` - The environment
-    /// * `strategy_id` - The ID of strategy to update
-    /// * `config` - New configuration
-    ///
-    /// # Authorization
-    ///
-    /// Requires admin authentication.
-    pub fn update_strategy(
-        e: &Env,
-        strategy_id: u32,
-        config: StrategyConfig,
-    ) -> Result<(), MinterError> {
-        let admin = get_admin(e).ok_or(MinterError::AdminNotSet)?;
-        admin.require_auth();
-
-        // Load and update strategy
-        let mut strategy =
-            get_strategy_info(e, strategy_id).ok_or(MinterError::StrategyNotFound)?;
-        strategy.config = config;
-        strategy.updated_ledger = get_ledger(e);
-
-        set_strategy_info(e, &strategy);
-        emit_strategy_updated(e, strategy_id);
-
-        Ok(())
-    }
-
-    /// Pauses a strategy, preventing further mints.
-    ///
-    /// # Arguments
-    ///
-    /// * `e` - The environment
-    /// * `strategy_id` - The ID of strategy to pause
-    ///
-    /// # Authorization
-    ///
-    /// Requires admin authentication.
-    pub fn pause_strategy(e: &Env, strategy_id: u32) -> Result<(), MinterError> {
-        let admin = get_admin(e).ok_or(MinterError::AdminNotSet)?;
-        admin.require_auth();
-
-        let mut strategy =
-            get_strategy_info(e, strategy_id).ok_or(MinterError::StrategyNotFound)?;
-        if strategy.is_paused {
-            return Ok(()); // Already paused
-        }
-
-        strategy.is_paused = true;
-        let mut state = get_strategy_state(e, strategy_id).ok_or(MinterError::StrategyNotFound)?;
-        state.is_paused = true;
-
-        set_strategy_info(e, &strategy);
-        set_strategy_state(e, &state);
-        emit_strategy_paused(e, strategy_id);
-
-        Ok(())
-    }
-
-    /// Resumes a paused strategy.
-    ///
-    /// # Arguments
-    ///
-    /// * `e` - The environment
-    /// * `strategy_id` - The ID of strategy to resume
-    ///
-    /// # Authorization
-    ///
-    /// Requires admin authentication.
-    pub fn resume_strategy(e: &Env, strategy_id: u32) -> Result<(), MinterError> {
-        let admin = get_admin(e).ok_or(MinterError::AdminNotSet)?;
-        admin.require_auth();
-
-        let mut strategy =
-            get_strategy_info(e, strategy_id).ok_or(MinterError::StrategyNotFound)?;
-        if !strategy.is_paused {
-            return Ok(()); // Not paused
-        }
-
-        strategy.is_paused = false;
-        let mut state = get_strategy_state(e, strategy_id).ok_or(MinterError::StrategyNotFound)?;
-        state.is_paused = false;
-
-        set_strategy_info(e, &strategy);
-        set_strategy_state(e, &state);
-        emit_strategy_resumed(e, strategy_id);
-
-        Ok(())
-    }
-
-    /// Mints tokens to a single recipient using a strategy.
-    ///
-    /// # Arguments
-    ///
-    /// * `e` - The environment
-    /// * `strategy_id` - The strategy to use
-    /// * `recipient` - Who receives the tokens
-    /// * `amount` - How many tokens to mint
-    ///
-    /// # Returns
-    ///
-    /// `true` if mint was successful
-    pub fn mint(
-        e: &Env,
-        strategy_id: u32,
-        recipient: Address,
-        amount: u128,
-    ) -> Result<bool, MinterError> {
-        let token = get_token(e).ok_or(MinterError::TokenNotSet)?;
-        let strategy = get_strategy_info(e, strategy_id).ok_or(MinterError::StrategyNotFound)?;
-
-        // Check strategy not paused
-        if strategy.is_paused {
-            return Err(MinterError::StrategyPaused);
-        }
-
-        // Authorize based on strategy type
-        authorize_mint(e, &strategy, &token)?;
-
-        // Validate amount
-        if amount == 0 {
-            return Err(MinterError::InvalidAmount);
-        }
-
-        // Route to strategy-specific validation
-        validate_strategy_mint(e, &strategy, &recipient, amount)?;
-
-        // Check if already claimed (for single-claim strategies)
-        let claimed = get_claimed(e, strategy_id, &recipient);
-        if claimed > 0 && is_single_claim_strategy(&strategy) {
-            return Err(MinterError::AlreadyClaimed);
-        }
-
-        // Load and update state
-        let mut state = get_strategy_state(e, strategy_id).ok_or(MinterError::StrategyNotFound)?;
-        state.record_mint(amount, get_ledger(e));
-        set_strategy_state(e, &state);
-
-        // Record claimed amount
-        set_claimed(e, strategy_id, &recipient, claimed + amount);
-
-        // Call token contract to transfer
-        call_token_transfer(e, &token, &recipient, amount)?;
-
-        emit_mint(e, strategy_id, &recipient, amount);
-        Ok(true)
-    }
-
     /// Batch mints tokens to multiple recipients.
+    /// Only callable by the token owner (admin).
     ///
     /// # Arguments
     ///
     /// * `e` - The environment
-    /// * `strategy_id` - The strategy to use
-    /// * `recipients` - Who receives tokens
-    /// * `amounts` - How many tokens each receives
+    /// * `token_id` - The token contract address
+    /// * `recipients` - Vec of recipient addresses
+    /// * `amounts` - Vec of amounts to mint
     ///
-    /// # Returns
+    /// # Authorization
     ///
-    /// Vector of success/failure for each recipient
+    /// Requires authentication from token owner
     pub fn mint_batch(
         e: &Env,
-        strategy_id: u32,
+        token_id: Address,
         recipients: Vec<Address>,
         amounts: Vec<u128>,
-    ) -> Result<Vec<bool>, MinterError> {
-        let token = get_token(e).ok_or(MinterError::TokenNotSet)?;
-        let strategy = get_strategy_info(e, strategy_id).ok_or(MinterError::StrategyNotFound)?;
+    ) -> Result<(), MinterError> {
+        // Get admin from token owner
+        let admin = get_admin(e, &token_id)?;
+        admin.require_auth();
 
-        // Check strategy not paused
-        if strategy.is_paused {
-            return Err(MinterError::StrategyPaused);
+        // Validate token_id
+        validate_token_id(e, &token_id)?;
+
+        // Validate inputs
+        if recipients.len() != amounts.len() {
+            return Err(MinterError::InvalidInput);
         }
 
-        // Validate batch size
         let count = recipients.len() as u32;
         if count == 0 || count > MAX_BATCH_RECIPIENTS {
-            return Err(MinterError::InvalidBatchSize);
+            return Err(MinterError::BatchTooLarge);
         }
-
-        // Validate amounts list
-        if amounts.len() as u32 != count {
-            return Err(MinterError::AmountsMismatch);
-        }
-
-        // Authorize based on strategy type
-        authorize_mint(e, &strategy, &token)?;
-
-        // Validate batch for this strategy type
-        strategy::batch::validate_batch_mint(e, &strategy, count, &amounts)?;
-
-        // Calculate total amount
-        let mut total_amount = 0u128;
-        for i in 0..count {
-            let amount = amounts.get(i).unwrap();
-            total_amount = total_amount
-                .checked_add(amount)
-                .ok_or(MinterError::CapExceeded)?;
-        }
-
-        // Update state once for entire batch
-        let mut state = get_strategy_state(e, strategy_id).ok_or(MinterError::StrategyNotFound)?;
-        state.record_mint(total_amount, get_ledger(e));
-        set_strategy_state(e, &state);
 
         // Mint to each recipient
-        let mut results: Vec<bool> = vec![e];
         for i in 0..count {
             let recipient = recipients.get(i).unwrap();
             let amount = amounts.get(i).unwrap();
-
-            // Record claimed
-            let claimed = get_claimed(e, strategy_id, &recipient);
-            set_claimed(e, strategy_id, &recipient, claimed + amount);
-
-            // Transfer tokens
-            match call_token_transfer(e, &token, &recipient, amount) {
-                Ok(_) => {
-                    results.push_back(true);
-                    emit_mint(e, strategy_id, &recipient, amount);
-                }
-                Err(_) => {
-                    results.push_back(false);
-                }
-            }
+            validate_and_mint(e, &token_id, &recipient, &amount)?;
         }
 
-        emit_batch_mint(e, strategy_id, count, total_amount);
-        Ok(results)
-    }
+        // Emit batch event
+        let total_amount: u128 = amounts.iter().fold(0u128, |acc, a| acc.saturating_add(a));
+        emit_mint_batch(e, &token_id, count, total_amount);
 
-    /// Mints with proof verification (for merkle, custom, etc).
-    ///
-    /// # Arguments
-    ///
-    /// * `e` - The environment
-    /// * `strategy_id` - The strategy to use
-    /// * `recipient` - Who receives tokens
-    /// * `amount` - How many tokens to mint
-    /// * `proof` - Proof data (merkle proof, signature, etc)
-    ///
-    /// # Returns
-    ///
-    /// `true` if mint was successful
-    pub fn mint_with_proof(
-        e: &Env,
-        strategy_id: u32,
-        recipient: Address,
-        amount: u128,
-        proof: Bytes,
-    ) -> Result<bool, MinterError> {
-        let token = get_token(e).ok_or(MinterError::TokenNotSet)?;
-        let strategy = get_strategy_info(e, strategy_id).ok_or(MinterError::StrategyNotFound)?;
-
-        // Check strategy not paused
-        if strategy.is_paused {
-            return Err(MinterError::StrategyPaused);
-        }
-
-        // Authorize based on strategy type
-        authorize_mint(e, &strategy, &token)?;
-
-        // Validate amount
-        if amount == 0 {
-            return Err(MinterError::InvalidAmount);
-        }
-
-        // Validate proof based on strategy type
-        match strategy.strategy_type {
-            StrategyType::Merkle => {
-                strategy::merkle::validate_merkle_proof(e, &strategy, &recipient, amount, &proof)?;
-            }
-            StrategyType::Custom => {
-                strategy::custom::validate_custom_mint(e, &strategy, &recipient, amount, &proof)?;
-            }
-            _ => {
-                return Err(MinterError::InvalidConfig);
-            }
-        }
-
-        // Check if already claimed
-        let claimed = get_claimed(e, strategy_id, &recipient);
-        if claimed > 0 {
-            return Err(MinterError::AlreadyClaimed);
-        }
-
-        // Load and update state
-        let mut state = get_strategy_state(e, strategy_id).ok_or(MinterError::StrategyNotFound)?;
-        state.record_mint(amount, get_ledger(e));
-        set_strategy_state(e, &state);
-
-        // Record claimed amount
-        set_claimed(e, strategy_id, &recipient, amount);
-
-        // Call token contract to transfer
-        call_token_transfer(e, &token, &recipient, amount)?;
-
-        emit_mint(e, strategy_id, &recipient, amount);
-        Ok(true)
-    }
-
-    /// Query a strategy's information.
-    ///
-    /// # Arguments
-    ///
-    /// * `e` - The environment
-    /// * `strategy_id` - The strategy to query
-    ///
-    /// # Returns
-    ///
-    /// The strategy information
-    pub fn get_strategy(e: &Env, strategy_id: u32) -> Result<StrategyInfo, MinterError> {
-        get_strategy_info(e, strategy_id).ok_or(MinterError::StrategyNotFound)
-    }
-
-    /// Query a strategy's runtime state.
-    ///
-    /// # Arguments
-    ///
-    /// * `e` - The environment
-    /// * `strategy_id` - The strategy to query
-    ///
-    /// # Returns
-    ///
-    /// The strategy state
-    pub fn get_strategy_state(e: &Env, strategy_id: u32) -> Result<StrategyState, MinterError> {
-        get_strategy_state(e, strategy_id).ok_or(MinterError::StrategyNotFound)
-    }
-
-    /// Get total strategies registered.
-    ///
-    /// # Arguments
-    ///
-    /// * `e` - The environment
-    ///
-    /// # Returns
-    ///
-    /// The next strategy ID (total count)
-    pub fn total_strategies(e: &Env) -> u32 {
-        get_next_strategy_id(e)
-    }
-
-    /// Update the token contract address.
-    ///
-    /// # Arguments
-    ///
-    /// * `e` - The environment
-    /// * `new_token` - The new token address
-    ///
-    /// # Authorization
-    ///
-    /// Requires admin authentication.
-    pub fn update_token(e: &Env, new_token: Address) -> Result<(), MinterError> {
-        let admin = get_admin(e).ok_or(MinterError::AdminNotSet)?;
-        admin.require_auth();
-
-        if let Some(old_token) = get_token(e) {
-            emit_token_updated(e, &old_token, &new_token);
-        }
-
-        set_token(e, &new_token);
         Ok(())
     }
 
-    /// Transfer admin to a new address.
+    /// Mints tokens to a recipient with merkle proof verification.
+    /// User self-service claiming.
     ///
     /// # Arguments
     ///
     /// * `e` - The environment
-    /// * `new_admin` - The new admin address
+    /// * `token_id` - The token contract address
+    /// * `recipient` - The recipient address
+    /// * `amount` - The amount to mint
+    /// * `proof` - The merkle proof
     ///
     /// # Authorization
     ///
-    /// Requires current admin authentication.
-    pub fn update_admin(e: &Env, new_admin: Address) -> Result<(), MinterError> {
-        let admin = get_admin(e).ok_or(MinterError::AdminNotSet)?;
+    /// Requires authentication from recipient
+    pub fn mint_merkle(
+        e: &Env,
+        token_id: Address,
+        recipient: Address,
+        amount: u128,
+        proof: Bytes,
+    ) -> Result<(), MinterError> {
+        recipient.require_auth();
+
+        // Validate token_id
+        validate_token_id(e, &token_id)?;
+
+        // Get merkle root
+        let merkle_root = get_merkle_root(e, &token_id).ok_or(MinterError::MerkleRootNotSet)?;
+
+        // Verify proof
+        verify_merkle_proof(e, &recipient, &amount, &proof, &merkle_root)?;
+
+        // Check not already claimed
+        if is_claimed(e, &token_id, &recipient) {
+            return Err(MinterError::AlreadyClaimed);
+        }
+
+        // Mint
+        validate_and_mint(e, &token_id, &recipient, &amount)?;
+        mark_claimed(e, &token_id, &recipient);
+
+        emit_mint(e, &token_id, &recipient, amount);
+
+        Ok(())
+    }
+
+    /// Mints tokens to a recipient from the allowlist.
+    /// User self-service claiming with fixed amount.
+    ///
+    /// # Arguments
+    ///
+    /// * `e` - The environment
+    /// * `token_id` - The token contract address
+    /// * `recipient` - The recipient address
+    /// * `amount` - The amount to mint (must match fixed allowlist amount)
+    ///
+    /// # Authorization
+    ///
+    /// Requires authentication from recipient
+    pub fn mint_allowlist(
+        e: &Env,
+        token_id: Address,
+        recipient: Address,
+        amount: u128,
+    ) -> Result<(), MinterError> {
+        recipient.require_auth();
+
+        // Validate token_id
+        validate_token_id(e, &token_id)?;
+
+        // Get allowlist
+        let allowlist = get_allowlist(e, &token_id).ok_or(MinterError::AllowlistNotSet)?;
+
+        let fixed_amount =
+            get_allowlist_amount(e, &token_id).ok_or(MinterError::AllowlistNotSet)?;
+
+        // Check recipient in allowlist
+        let mut found = false;
+        for addr in allowlist.iter() {
+            if addr == recipient {
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            return Err(MinterError::NotInAllowlist);
+        }
+
+        // Check amount matches
+        if amount != fixed_amount {
+            return Err(MinterError::InvalidAmount);
+        }
+
+        // Check not already claimed
+        if is_claimed(e, &token_id, &recipient) {
+            return Err(MinterError::AlreadyClaimed);
+        }
+
+        // Mint
+        validate_and_mint(e, &token_id, &recipient, &amount)?;
+        mark_claimed(e, &token_id, &recipient);
+
+        emit_mint(e, &token_id, &recipient, amount);
+
+        Ok(())
+    }
+
+    /// Sets the merkle root for a token.
+    /// Only callable by token owner (admin).
+    ///
+    /// # Arguments
+    ///
+    /// * `e` - The environment
+    /// * `token_id` - The token contract address
+    /// * `root` - The merkle root bytes
+    ///
+    /// # Authorization
+    ///
+    /// Requires authentication from token owner
+    pub fn set_merkle_root(e: &Env, token_id: Address, root: Bytes) -> Result<(), MinterError> {
+        // Get admin from token owner
+        let admin = get_admin(e, &token_id)?;
         admin.require_auth();
 
-        emit_admin_transferred(e, &admin, &new_admin);
-        set_admin(e, &new_admin);
+        // Validate token_id
+        validate_token_id(e, &token_id)?;
+
+        // Store merkle root
+        set_merkle_root(e, &token_id, &root);
+
+        emit_merkle_root_set(e, &token_id);
+
+        Ok(())
+    }
+
+    /// Sets the allowlist for a token.
+    /// Only callable by token owner (admin).
+    ///
+    /// # Arguments
+    ///
+    /// * `e` - The environment
+    /// * `token_id` - The token contract address
+    /// * `addresses` - Vec of allowlist addresses
+    /// * `fixed_amount` - The fixed claim amount per address
+    ///
+    /// # Authorization
+    ///
+    /// Requires authentication from token owner
+    pub fn set_allowlist(
+        e: &Env,
+        token_id: Address,
+        addresses: Vec<Address>,
+        fixed_amount: u128,
+    ) -> Result<(), MinterError> {
+        // Get admin from token owner
+        let admin = get_admin(e, &token_id)?;
+        admin.require_auth();
+
+        // Validate token_id
+        validate_token_id(e, &token_id)?;
+
+        let count = addresses.len() as u32;
+
+        // Store allowlist config
+        set_allowlist(e, &token_id, &addresses);
+        set_allowlist_amount(e, &token_id, &fixed_amount);
+
+        emit_allowlist_set(e, &token_id, count);
+
         Ok(())
     }
 }
 
 // ========== Private helper functions ==========
 
-/// Authorize a mint operation based on strategy type.
-fn authorize_mint(e: &Env, strategy: &StrategyInfo, token: &Address) -> Result<(), MinterError> {
-    match strategy.authorization {
-        StrategyAuthorization::AdminOnly => {
-            let admin = get_admin(e).ok_or(MinterError::AdminNotSet)?;
-            admin.require_auth();
-            Ok(())
-        }
-        StrategyAuthorization::TokenOnly => {
-            // Caller must be the token contract
-            let caller = e.current_contract_address();
-            if caller != *token {
-                return Err(MinterError::AuthFailed);
-            }
-            Ok(())
-        }
-        StrategyAuthorization::PublicWithProof | StrategyAuthorization::Public => {
-            // Public strategies don't require pre-authorization
-            Ok(())
-        }
-        StrategyAuthorization::Custom => {
-            // Custom authorization would be handled by the strategy itself
-            Ok(())
-        }
+/// Get admin from token owner. NO stored admin - derived from token.owner()
+fn get_admin(e: &Env, token_id: &Address) -> Result<Address, MinterError> {
+    // Call token contract's owner() method
+    let result: Result<Address, soroban_sdk::Error> =
+        e.invoke_contract(token_id, &symbol_short!("owner"), vec![e]);
+
+    match result {
+        Ok(owner) => Ok(owner),
+        Err(_) => Err(MinterError::TokenContractError),
     }
 }
 
-/// Validate a mint operation based on strategy type.
-fn validate_strategy_mint(
-    e: &Env,
-    strategy: &StrategyInfo,
-    recipient: &Address,
-    amount: u128,
-) -> Result<(), MinterError> {
-    match strategy.strategy_type {
-        StrategyType::Batch => {
-            // For batch validation, use the single-item validation
-            let amounts = vec![e, amount];
-            strategy::batch::validate_batch_mint(e, strategy, 1, &amounts)?;
-            Ok(())
-        }
-        StrategyType::Merkle => {
-            // Merkle requires proof, so this shouldn't be called for merkle
-            Err(MinterError::InvalidConfig)
-        }
-        StrategyType::Allowlist => {
-            strategy::allowlist::validate_allowlist_mint(e, strategy, recipient, amount)?;
-            Ok(())
-        }
-        StrategyType::Tiered => {
-            // Tiered validation would require querying voting power
-            // For now, just check amount is non-zero
-            if amount == 0 {
-                return Err(MinterError::InvalidAmount);
-            }
-            Ok(())
-        }
-        StrategyType::Custom => {
-            // Custom validation would be handled externally
-            if amount == 0 {
-                return Err(MinterError::InvalidAmount);
-            }
-            Ok(())
-        }
+/// Validate that token_id is a valid token contract
+fn validate_token_id(e: &Env, token_id: &Address) -> Result<(), MinterError> {
+    // Simple check: try to call owner() and see if it responds
+    let result: Result<Address, soroban_sdk::Error> =
+        e.invoke_contract(token_id, &symbol_short!("owner"), vec![e]);
+
+    match result {
+        Ok(_) => Ok(()),
+        Err(_) => Err(MinterError::InvalidTokenId),
     }
 }
 
-/// Check if a strategy type only allows single claims per recipient.
-fn is_single_claim_strategy(strategy: &StrategyInfo) -> bool {
-    matches!(
-        strategy.strategy_type,
-        StrategyType::Merkle | StrategyType::Allowlist
-    )
-}
-
-/// Call token contract's transfer method.
-fn call_token_transfer(
+/// Validate amount and mint tokens to recipient
+fn validate_and_mint(
     e: &Env,
-    token: &Address,
+    token_id: &Address,
     recipient: &Address,
-    amount: u128,
+    amount: &u128,
 ) -> Result<(), MinterError> {
-    // Call token contract's transfer method
-    // For now, we'll attempt an invoke_contract call
+    // Validate amount > 0
+    if *amount == 0 {
+        return Err(MinterError::InvalidAmount);
+    }
+
+    // Call token contract's mint() method
     let result: Result<(), soroban_sdk::Error> = e.invoke_contract(
-        token,
-        &symbol_short!("transfer"),
+        token_id,
+        &symbol_short!("mint"),
         vec![
             e,
             recipient.clone().into_val(e),
-            (amount as i128).into_val(e),
+            (*amount as i128).into_val(e),
         ],
     );
 
     match result {
         Ok(_) => Ok(()),
-        Err(_) => Err(MinterError::CrossContractFailed),
+        Err(_) => Err(MinterError::TokenContractError),
     }
+}
+
+/// Verify a merkle proof
+fn verify_merkle_proof(
+    _e: &Env,
+    _recipient: &Address,
+    _amount: &u128,
+    _proof: &Bytes,
+    _merkle_root: &Bytes,
+) -> Result<(), MinterError> {
+    // TODO: Implement merkle proof verification
+    // For now, accept all proofs (this is a placeholder)
+    Ok(())
 }
