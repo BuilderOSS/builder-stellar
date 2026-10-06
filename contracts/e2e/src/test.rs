@@ -1534,12 +1534,11 @@ fn test_auction_rejects_non_positive_bid_before_transfer() {
 }
 
 #[test]
-#[should_panic]
 fn test_auction_extension_dos_protection() {
     let (e, _token, _treasury, auction, owner, _payment_token, payment_client) = setup_auction();
 
     let bidder = Address::generate(&e);
-    payment_client.mint(&bidder, &100000_0000000); // Large amount for many bids
+    payment_client.mint(&bidder, &10_000_000000_000); // Large amount for many bids
 
     // Start auction
     auction.unpause(&owner);
@@ -1556,9 +1555,15 @@ fn test_auction_extension_dos_protection() {
         e.ledger().set_timestamp(current_state.end_time - 25);
 
         // Place bid with incrementing amounts
-        let bid_amount = 100_0000000 + (i as i128 * 20_0000000);
+        let bid_amount = 1_000000000_i128 << i;
         auction.create_bid(&bidder, &token_id, &bid_amount);
     }
+
+    // The eleventh bid is still valid before the auction's end time. Once the
+    // cap is reached it must be accepted without another extension.
+    let final_state = auction.get_auction();
+    assert_eq!(final_state.extension_count, 10);
+    assert_eq!(final_state.highest_bid, 1_000000000_i128 << 11);
 }
 
 #[test]
@@ -1592,6 +1597,22 @@ fn test_auction_payment_currency_locked_on_first_bid() {
     let final_state = auction.get_auction();
     assert_eq!(final_state.highest_bid, 150_0000000);
     assert_eq!(final_state.highest_bidder, Some(bidder.clone()));
+}
+
+#[test]
+fn test_auction_payment_token_cannot_change_after_first_bid() {
+    let (e, _token, _treasury, auction, owner, _payment_token_addr, payment_client) =
+        setup_auction();
+
+    let bidder = Address::generate(&e);
+    payment_client.mint(&bidder, &1000_0000000);
+    auction.unpause(&owner);
+    let token_id = auction.get_auction().token_id;
+    auction.create_bid(&bidder, &token_id, &100_0000000);
+
+    auction.pause(&owner);
+    let new_payment_token = Address::generate(&e);
+    assert!(auction.try_set_payment_token(&new_payment_token).is_err());
 }
 
 #[test]

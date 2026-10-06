@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { prisma } from '@/lib/prisma';
 
 /**
@@ -40,12 +41,16 @@ export async function GET() {
       console.error('Failed to check RPC latest ledger:', e);
     }
 
-    // Check 2: Latest event in system (event processing lag)
+    // Check 2: Latest event for this deployment (event processing lag)
     let latestLedger = null;
     let eventProcessingTime = 0;
     try {
       const t1 = Date.now();
-      const result = await prisma.chainDecodedEvent.findFirst({ orderBy: { ledgerSequence: 'desc' } });
+      const result = await prisma.appActivityFeed.findFirst({
+        where: { deploymentId: DEPLOYMENT_ID },
+        orderBy: { ledgerSequence: 'desc' },
+        select: { ledgerSequence: true }
+      });
       latestLedger = result ? Number(result.ledgerSequence) : null;
       eventProcessingTime = Date.now() - t1;
     } catch (e) {
@@ -57,7 +62,7 @@ export async function GET() {
     let daoCheckTime = 0;
     try {
       const t1 = Date.now();
-      daoCount = await prisma.managerDao.count();
+      daoCount = await prisma.managerDao.count({ where: { deploymentId: DEPLOYMENT_ID } });
       daoCheckTime = Date.now() - t1;
     } catch (e) {
       console.error('Failed to count DAOs:', e);
@@ -68,10 +73,19 @@ export async function GET() {
     let activityCheckTime = 0;
     try {
       const t1 = Date.now();
-      const activity = await prisma.appActivityFeed.findMany({ select: { ledgerClosedAt: true } });
+      const activity: Array<{ ledgerClosedAt: string | null }> = await prisma.appActivityFeed.findMany({
+        where: { deploymentId: DEPLOYMENT_ID },
+        select: { ledgerClosedAt: true }
+      });
       const hourAgo = Date.now() - 60 * 60 * 1000;
       recentActivityCount = activity.filter((row) => {
-        const timestamp = Number(row.ledgerClosedAt);
+        const raw = row.ledgerClosedAt ?? '';
+        const numeric = Number(raw);
+        const timestamp = Number.isFinite(numeric)
+          ? numeric < 10_000_000_000
+            ? numeric * 1000
+            : numeric
+          : Date.parse(raw);
         return Number.isFinite(timestamp) && timestamp > hourAgo;
       }).length;
       activityCheckTime = Date.now() - t1;
@@ -120,7 +134,7 @@ export async function GET() {
     return NextResponse.json(
       {
         status: 'error',
-        message: error instanceof Error ? error.message : 'Unknown error',
+        message: 'Health check unavailable',
         timestamp: new Date().toISOString()
       },
       { status: 500 }

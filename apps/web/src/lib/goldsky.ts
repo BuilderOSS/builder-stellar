@@ -40,9 +40,9 @@ function mapProposalList(row: AppProposalList) {
     deadline_ledger: row.voteEndSeconds === null ? null : Number(row.voteEndSeconds),
     eta: row.etaSeconds === null ? null : Number(row.etaSeconds),
     state: row.state,
-    for_votes: Number(row.forVotes),
-    against_votes: Number(row.againstVotes),
-    abstain_votes: Number(row.abstainVotes),
+    for_votes: row.forVotes.toString(),
+    against_votes: row.againstVotes.toString(),
+    abstain_votes: row.abstainVotes.toString(),
     created_timestamp: row.createdAt?.getTime() ? Math.floor(row.createdAt.getTime() / 1000) : null,
     created_ledger: Number(row.createdLedger),
     updated_ledger: row.updatedLedger === null ? null : Number(row.updatedLedger),
@@ -55,9 +55,9 @@ function mapProposalDetail(row: AppProposalDetail) {
   return {
     ...mapProposalList(row),
     vote_summary: {
-      for: Number(row.forVotes),
-      against: Number(row.againstVotes),
-      abstain: Number(row.abstainVotes)
+      for: row.forVotes.toString(),
+      against: row.againstVotes.toString(),
+      abstain: row.abstainVotes.toString()
     },
     votes: Array.isArray(row.votes) ? row.votes : [],
     actions
@@ -391,7 +391,7 @@ export async function getGoldskyTokenInventory(
       ledger: Number(row.eventLedger),
       timestamp: row.eventAt ? Math.floor(row.eventAt.getTime() / 1000) : 0,
       txHash: row.transactionHash,
-      contractId: row.deploymentId
+      contractId: row.contractId
     })),
     total,
     totalSupply: String(total),
@@ -492,7 +492,13 @@ export async function getGoldskyProposalLifecycle(daoId: string, proposalId: str
   const daoIdFromUrl = await getDaoIdFromUrl(daoId);
   const rows = await prisma.governanceProposalLifecycle.findMany({
     where: { deploymentId, daoId: daoIdFromUrl, proposalId },
-    orderBy: { eventLedger: 'asc' }
+    orderBy: [
+      { eventLedger: 'asc' },
+      { transactionIndex: 'asc' },
+      { operationIndex: 'asc' },
+      { eventIndex: 'asc' },
+      { lifecycleEventId: 'asc' }
+    ]
   });
 
   return {
@@ -640,10 +646,9 @@ export async function getGoldskyHealth() {
       lastIngestion: latestEvent?.ingestedAt ?? null,
       generatedAt: new Date().toISOString()
     };
-  } catch (error) {
+  } catch {
     return {
       status: 'unhealthy',
-      error: error instanceof Error ? error.message : 'Unknown error',
       generatedAt: new Date().toISOString()
     };
   }

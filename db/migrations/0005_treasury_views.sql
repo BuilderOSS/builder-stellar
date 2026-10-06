@@ -21,11 +21,10 @@ SELECT
   e.args::jsonb ->> 'executor' AS executor,
   e.args::jsonb ->> 'action_index' AS action_index,
   e.ledger_sequence AS event_ledger,
-  extract(epoch FROM to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000))::bigint AS event_timestamp_seconds,
-  to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS event_at,
+  extract(epoch FROM NULLIF(e.ledger_closed_at, '')::timestamptz)::bigint AS event_timestamp_seconds,
+  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
 WHERE e.contract_role = 'treasury'
   AND e.event_name IN ('execute', 'treasury_call_indexed', 'proposal_call_indexed');
-

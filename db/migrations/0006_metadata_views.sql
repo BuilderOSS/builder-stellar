@@ -18,13 +18,23 @@ SELECT
   (e.topic_0)::integer AS property_id,
   e.args::jsonb ->> 'name' AS name,
   e.ledger_sequence AS event_ledger,
-  extract(epoch FROM to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000))::bigint AS event_timestamp_seconds,
-  to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS event_at,
+  extract(epoch FROM NULLIF(e.ledger_closed_at, '')::timestamptz)::bigint AS event_timestamp_seconds,
+  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
 WHERE e.contract_role = 'metadata'
-  AND e.event_name = 'property_added';
+  AND e.event_name = 'property_added'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM chain.decoded_events reset
+    WHERE reset.deployment_id = e.deployment_id
+      AND reset.contract_id = e.contract_id
+      AND reset.contract_role = 'metadata'
+      AND reset.event_name = 'properties_reset'
+      AND (reset.ledger_sequence, COALESCE(reset.transaction_index, -1), COALESCE(reset.operation_index, -1), COALESCE(reset.event_index, -1), reset.event_id)
+        >= (e.ledger_sequence, COALESCE(e.transaction_index, -1), COALESCE(e.operation_index, -1), COALESCE(e.event_index, -1), e.event_id)
+  );
 
 -- Metadata: Token seeds
 CREATE OR REPLACE VIEW metadata.token_seeds AS
@@ -37,8 +47,8 @@ SELECT
   (e.args::jsonb ->> 'num_properties')::integer AS num_properties,
   e.args::jsonb -> 'selections' AS selections,
   e.ledger_sequence AS event_ledger,
-  extract(epoch FROM to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000))::bigint AS event_timestamp_seconds,
-  to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS event_at,
+  extract(epoch FROM NULLIF(e.ledger_closed_at, '')::timestamptz)::bigint AS event_timestamp_seconds,
+  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
@@ -54,23 +64,31 @@ WITH initialized AS (
     e.contract_id AS metadata_contract,
     e.topic_0 AS token_contract,
     e.args::jsonb ->> 'renderer_base' AS renderer_base,
+    e.args::jsonb ->> 'version' AS version,
+    e.args::jsonb ->> 'owner' AS owner,
+    e.args::jsonb ->> 'project_uri' AS project_uri,
+    e.args::jsonb ->> 'description' AS description,
+    e.args::jsonb ->> 'contract_image' AS contract_image,
     e.ledger_sequence AS init_ledger,
-    to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS init_at,
+    NULLIF(e.ledger_closed_at, '')::timestamptz AS init_at,
     e.transaction_hash AS init_transaction_hash
   FROM chain.decoded_events e
   JOIN manager.event_identity i USING (deployment_id, contract_id)
   WHERE e.contract_role = 'metadata'
     AND e.event_name = 'metadata_initialized'
-  ORDER BY e.deployment_id, e.contract_id, e.ledger_sequence DESC, e.event_id DESC
+  ORDER BY e.deployment_id, e.contract_id, e.ledger_sequence DESC, e.transaction_index DESC NULLS LAST, e.operation_index DESC NULLS LAST, e.event_index DESC NULLS LAST, e.event_id DESC
 ),
 latest_updates AS (
   SELECT DISTINCT ON (e.deployment_id, e.contract_id, e.event_name)
     e.deployment_id,
     e.contract_id,
-    e.event_name,
-    e.args,
-    e.ledger_sequence,
-    e.event_id
+     e.event_name,
+     e.args,
+     e.ledger_sequence,
+     e.transaction_index,
+     e.operation_index,
+     e.event_index,
+     e.event_id
   FROM chain.decoded_events e
   WHERE e.contract_role = 'metadata'
     AND e.event_name IN (
@@ -79,7 +97,7 @@ latest_updates AS (
       'contract_image_updated',
       'renderer_base_updated'
     )
-  ORDER BY e.deployment_id, e.contract_id, e.event_name, e.ledger_sequence DESC, e.event_id DESC
+   ORDER BY e.deployment_id, e.contract_id, e.event_name, e.ledger_sequence DESC, e.transaction_index DESC NULLS LAST, e.operation_index DESC NULLS LAST, e.event_index DESC NULLS LAST, e.event_id DESC
 ),
 updates AS (
   SELECT
@@ -98,9 +116,11 @@ SELECT
   i.metadata_contract,
   i.token_contract,
   COALESCE(u.updated_renderer_base, i.renderer_base) AS renderer_base,
-  u.project_uri,
-  u.description,
-  u.contract_image,
+  i.version,
+  i.owner,
+  COALESCE(u.project_uri, i.project_uri) AS project_uri,
+  COALESCE(u.description, i.description) AS description,
+  COALESCE(u.contract_image, i.contract_image) AS contract_image,
   i.init_ledger,
   i.init_at,
   i.init_transaction_hash

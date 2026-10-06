@@ -104,17 +104,14 @@ pub(crate) fn process_bid(
     auction.highest_bid = amount;
     auction.highest_bidder = Some(bidder.clone());
 
-    // SECURITY: Check if we need to extend, with max extension limit to prevent DoS
+    // After the extension cap, accept bids through the original end time but
+    // do not extend again. Rejecting these valid bids would be unfair.
     let now = e.ledger().timestamp();
     let remaining = auction.end_time.saturating_sub(now);
-    let extended = remaining < config.time_buffer;
+    let extended =
+        remaining < config.time_buffer && auction.extension_count < MAX_AUCTION_EXTENSIONS;
 
     if extended {
-        // SECURITY: Enforce maximum extensions to prevent auction extension DoS
-        if auction.extension_count >= MAX_AUCTION_EXTENSIONS {
-            panic_with_error!(e, AuctionError::MaxExtensionsExceeded);
-        }
-
         // SECURITY: Use checked arithmetic for time extension
         auction.end_time = now
             .checked_add(config.time_buffer)

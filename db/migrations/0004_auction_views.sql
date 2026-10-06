@@ -22,8 +22,8 @@ SELECT
   (e.args::jsonb ->> 'extended')::boolean AS extended,
   (e.args::jsonb ->> 'new_end_time')::bigint AS new_end_seconds,
   e.ledger_sequence AS event_ledger,
-  extract(epoch FROM to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000))::bigint AS event_timestamp_seconds,
-  to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS event_at,
+  extract(epoch FROM NULLIF(e.ledger_closed_at, '')::timestamptz)::bigint AS event_timestamp_seconds,
+  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
@@ -41,8 +41,8 @@ SELECT
   e.topics::jsonb ->> 'bidder' AS bidder,
   (e.args::jsonb ->> 'amount')::numeric(78,0) AS amount,
   e.ledger_sequence AS event_ledger,
-  extract(epoch FROM to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000))::bigint AS event_timestamp_seconds,
-  to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS event_at,
+  extract(epoch FROM NULLIF(e.ledger_closed_at, '')::timestamptz)::bigint AS event_timestamp_seconds,
+  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
@@ -60,8 +60,8 @@ SELECT
   e.args::jsonb ->> 'winner' AS winner,
   (e.args::jsonb ->> 'amount')::numeric(78,0) AS amount,
   e.ledger_sequence AS event_ledger,
-  extract(epoch FROM to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000))::bigint AS event_timestamp_seconds,
-  to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS event_at,
+  extract(epoch FROM NULLIF(e.ledger_closed_at, '')::timestamptz)::bigint AS event_timestamp_seconds,
+  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
@@ -70,17 +70,6 @@ WHERE e.contract_role = 'auction'
 
 -- Auction: Complete auction information
 CREATE OR REPLACE VIEW auction.auctions AS
-WITH config AS (
-  SELECT DISTINCT ON (deployment_id, contract_id)
-    deployment_id,
-    contract_id,
-    (e.args::jsonb ->> 'duration')::bigint AS duration_seconds,
-    (e.args::jsonb ->> 'time_buffer')::bigint AS time_buffer_seconds
-  FROM chain.decoded_events e
-  WHERE e.contract_role = 'auction'
-    AND e.event_name = 'auction_initialized'
-  ORDER BY deployment_id, contract_id, e.ledger_sequence DESC, e.event_id DESC
-)
 SELECT
   e.event_id,
   e.deployment_id,
@@ -89,8 +78,8 @@ SELECT
   (e.topics::jsonb ->> 'token_id')::bigint AS token_id,
   (e.args::jsonb ->> 'start_time')::bigint AS start_seconds,
   (e.args::jsonb ->> 'end_time')::bigint AS end_seconds,
-  c.duration_seconds,
-  c.time_buffer_seconds,
+   c.duration::bigint AS duration_seconds,
+   c.time_buffer::bigint AS time_buffer_seconds,
   (e.args::jsonb ->> 'reserve_price')::numeric(78,0) AS reserve_price,
   e.args::jsonb ->> 'payment_token' AS payment_token,
   EXISTS (
@@ -114,6 +103,22 @@ SELECT
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
-LEFT JOIN config c ON c.deployment_id = e.deployment_id AND c.contract_id = e.contract_id
+LEFT JOIN LATERAL (
+  SELECT
+    (SELECT x.args::jsonb ->> 'duration'
+     FROM chain.decoded_events x
+     WHERE x.deployment_id = e.deployment_id AND x.contract_id = e.contract_id
+       AND x.contract_role = 'auction' AND x.event_name IN ('auction_initialized', 'duration_updated')
+       AND (x.ledger_sequence, COALESCE(x.transaction_index, -1), COALESCE(x.operation_index, -1), COALESCE(x.event_index, -1))
+         <= (e.ledger_sequence, COALESCE(e.transaction_index, -1), COALESCE(e.operation_index, -1), COALESCE(e.event_index, -1))
+     ORDER BY x.ledger_sequence DESC, x.transaction_index DESC NULLS LAST, x.operation_index DESC NULLS LAST, x.event_index DESC NULLS LAST, x.event_id DESC LIMIT 1) AS duration,
+    (SELECT x.args::jsonb ->> 'time_buffer'
+     FROM chain.decoded_events x
+     WHERE x.deployment_id = e.deployment_id AND x.contract_id = e.contract_id
+       AND x.contract_role = 'auction' AND x.event_name IN ('auction_initialized', 'time_buffer_updated')
+       AND (x.ledger_sequence, COALESCE(x.transaction_index, -1), COALESCE(x.operation_index, -1), COALESCE(x.event_index, -1))
+         <= (e.ledger_sequence, COALESCE(e.transaction_index, -1), COALESCE(e.operation_index, -1), COALESCE(e.event_index, -1))
+     ORDER BY x.ledger_sequence DESC, x.transaction_index DESC NULLS LAST, x.operation_index DESC NULLS LAST, x.event_index DESC NULLS LAST, x.event_id DESC LIMIT 1) AS time_buffer
+) c ON true
 WHERE e.contract_role = 'auction'
   AND e.event_name = 'auction_created';

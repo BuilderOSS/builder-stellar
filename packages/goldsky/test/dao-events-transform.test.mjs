@@ -56,6 +56,42 @@ test('preserves the indexed contract role for lifecycle events', () => {
   assert.equal(decoded.event_name, 'paused');
 });
 
+test('preserves Goldsky ordering fields and timestamp strings through the decoder', () => {
+  const decoded = decodeEvent({
+    event_id: 'ordered-event', deployment_id: 'deployment-a', contract_id: 'TOKEN', contract_role: 'token',
+    topics: '[{"symbol":"Transfer"},{"address":"FROM"},{"address":"TO"}]', data: '{"map":[]}',
+    ledger_sequence: 42, transaction_index: 3, operation_index: 7, event_index: 2,
+    ledger_closed_at: '2026-08-21 06:44:42'
+  });
+  assert.equal(decoded.operation_index, 7);
+  assert.equal(decoded.event_index, 2);
+  assert.equal(decoded.ledger_closed_at, '2026-08-21 06:44:42 UTC');
+});
+
+test('ProposalCanceled and ProposalCancelled have the same activity projection', () => {
+  for (const eventName of ['ProposalCanceled', 'ProposalCancelled']) {
+    const activity = buildActivityFeed({ event_id: eventName, deployment_id: 'd', contract_id: 'G', event_name: eventName });
+    assert.equal(activity.kind, 'governance.proposal_cancelled');
+    assert.equal(activity.title, 'Proposal cancelled');
+  }
+});
+
+test('metadata initialization fields and PropertiesReset remain in the decoded payload', () => {
+  const initialized = decodeEvent({
+    event_id: 'metadata-init', deployment_id: 'd', contract_id: 'M', contract_role: 'metadata',
+    topics: '[{"symbol":"MetadataInitialized"},{"address":"TOKEN"}]',
+    data: '{"map":[{"key":{"symbol":"renderer_base"},"val":{"string":"base"}},{"key":{"symbol":"version"},"val":{"string":"1"}},{"key":{"symbol":"owner"},"val":{"address":"OWNER"}},{"key":{"symbol":"project_uri"},"val":{"string":"uri"}},{"key":{"symbol":"description"},"val":{"string":"desc"}},{"key":{"symbol":"contract_image"},"val":{"string":"image"}}]}'
+  });
+  assert.equal(argsOf(initialized).version, '1');
+  assert.equal(argsOf(initialized).owner, 'OWNER');
+  assert.equal(argsOf(initialized).project_uri, 'uri');
+  const reset = decodeEvent({
+    event_id: 'properties-reset', deployment_id: 'd', contract_id: 'M', contract_role: 'metadata',
+    topics: '[{"symbol":"PropertiesReset"}]', data: '{"map":[{"key":{"symbol":"num_properties"},"val":{"u32":3}}]}'
+  });
+  assert.equal(argsOf(reset).num_properties, 3);
+});
+
 test('DaoLaunched uses the token address as the DAO identity topic', () => {
   const decoded = decodeEvent({
     topics: JSON.stringify([
@@ -431,6 +467,8 @@ test('pipeline generator renders the current deployment and scripts', { skip: !e
   assert.match(yaml, /table: decoded_events/);
   assert.match(yaml, /table: activity_feed/);
   assert.match(yaml, /contract_id/);
+  assert.match(yaml, /operation_index/);
+  assert.match(yaml, /event_index/);
   assert.match(yaml, /contract_role/);
   for (const table of ['dao_tokens', 'dao_metadata', 'dao_auctions', 'dao_governors', 'dao_treasuries']) {
     assert.match(yaml, new RegExp(`${table}:`));

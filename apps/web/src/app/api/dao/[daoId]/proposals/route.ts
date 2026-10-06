@@ -1,6 +1,7 @@
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { NextResponse } from 'next/server';
 
+import { parseLimit, parseNonNegativeInteger } from '@/lib/api-pagination';
 import { getDaoNetworkConfigById } from '@/lib/dao-config';
 import { getGoldskyProposalList } from '@/lib/goldsky';
 import { proposalIdToBuffer } from '@/lib/proposal-id';
@@ -37,7 +38,8 @@ async function fetchProposalState(client: InstanceType<typeof GovernorClient>, p
 export async function GET(request: Request, { params }: { params: Promise<{ daoId: string }> }) {
   const url = new URL(request.url);
   const { daoId } = await params;
-  const limit = Math.max(1, Math.min(Number(url.searchParams.get('limit') ?? '24'), 100));
+  const limit = Math.max(1, parseLimit(url.searchParams.get('limit'), 24));
+  const offset = parseNonNegativeInteger(url.searchParams.get('offset'), 0);
   const status = url.searchParams.get('status') ?? undefined;
   const config = await getDaoNetworkConfigById(daoId);
 
@@ -49,7 +51,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
   }
 
   try {
-    const proposalData = await getGoldskyProposalList(daoId, { limit, status });
+    const proposalData = await getGoldskyProposalList(daoId, { limit, offset, status });
 
     const client = new GovernorClient({
       contractId: config.governorContractId,
@@ -87,7 +89,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
     );
 
     return NextResponse.json(
-      { items, generatedAt: new Date().toISOString() },
+      {
+        items,
+        total: proposalData.total,
+        limit: proposalData.limit,
+        offset: proposalData.offset,
+        hasMore: proposalData.hasMore,
+        generatedAt: proposalData.generatedAt
+      },
       { headers: { 'Cache-Control': 'no-store' } }
     );
   } catch (error) {

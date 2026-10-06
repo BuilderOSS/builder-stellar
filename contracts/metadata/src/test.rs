@@ -1,6 +1,9 @@
 #![cfg(test)]
 
-use soroban_sdk::{testutils::Address as _, Address, BytesN, Env, String, Vec};
+use soroban_sdk::{
+    testutils::{Address as _, Ledger},
+    Address, BytesN, Env, String, Vec,
+};
 use token::DaoTokenContract;
 
 use crate::{IpfsGroup, ItemParam, MetadataContract, MetadataContractClient};
@@ -267,6 +270,12 @@ fn test_on_minted() {
     let result = client.on_minted(&token_id);
 
     assert_eq!(result, true);
+    assert!(!client.get_attributes(&token_id).is_empty());
+
+    // Attributes are historical token metadata and must outlive the former
+    // temporary-storage retention window.
+    env.ledger().set_sequence_number(3_000_001);
+    assert!(!client.get_attributes(&token_id).is_empty());
 }
 
 #[test]

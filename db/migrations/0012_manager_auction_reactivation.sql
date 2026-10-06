@@ -29,7 +29,7 @@ WITH created AS (
     e.args::jsonb #>> '{modules,metadata}' AS metadata_contract,
     e.args::jsonb #>> '{modules,marketplace}' AS marketplace_contract,
     e.ledger_sequence AS created_ledger,
-    to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS created_at,
+    NULLIF(e.ledger_closed_at, '')::timestamptz AS created_at,
     e.transaction_hash AS created_tx_hash
   FROM chain.decoded_events e
   WHERE e.contract_role = 'manager'
@@ -40,7 +40,7 @@ WITH created AS (
     e.deployment_id,
     e.topic_0 AS dao_id,
     e.ledger_sequence AS launched_ledger,
-    to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS launched_at,
+    NULLIF(e.ledger_closed_at, '')::timestamptz AS launched_at,
     e.transaction_hash AS launched_tx_hash,
     (e.args::jsonb ->> 'launch_auction')::boolean AS auction_enabled,
     (e.args::jsonb ->> 'launch_marketplace')::boolean AS marketplace_enabled

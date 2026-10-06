@@ -49,6 +49,8 @@ view MetadataConfiguration {
   metadataContract    String    @map("metadata_contract")
   tokenContract       String    @map("token_contract")
   rendererBase        String?   @map("renderer_base")
+  version             String?
+  owner               String?
   projectUri          String?   @map("project_uri")
   description         String?
   contractImage       String?   @map("contract_image")
@@ -112,9 +114,9 @@ view AppProposalList {
   etaSeconds             BigInt?   @map("eta_seconds")
   updatedLedger          BigInt?   @map("updated_ledger")
   updatedAt              DateTime? @map("updated_at")
-  forVotes               BigInt    @map("for_votes")
-  againstVotes           BigInt    @map("against_votes")
-  abstainVotes           BigInt    @map("abstain_votes")
+  forVotes               Decimal   @map("for_votes")
+  againstVotes           Decimal   @map("against_votes")
+  abstainVotes           Decimal   @map("abstain_votes")
 
   @@map("proposal_list")
   @@schema("app")
@@ -143,9 +145,9 @@ view AppProposalDetail {
   etaSeconds             BigInt?   @map("eta_seconds")
   updatedLedger          BigInt?   @map("updated_ledger")
   updatedAt              DateTime? @map("updated_at")
-  forVotes               BigInt    @map("for_votes")
-  againstVotes           BigInt    @map("against_votes")
-  abstainVotes           BigInt    @map("abstain_votes")
+  forVotes               Decimal   @map("for_votes")
+  againstVotes           Decimal   @map("against_votes")
+  abstainVotes           Decimal   @map("abstain_votes")
   actions                Json
   votes                  Json
 
@@ -183,6 +185,9 @@ view GovernanceProposalLifecycle {
   state            String
   etaSeconds       BigInt?   @map("eta_seconds")
   eventLedger      BigInt    @map("event_ledger")
+  transactionIndex BigInt?   @map("transaction_index")
+  operationIndex   BigInt?   @map("operation_index")
+  eventIndex       BigInt?   @map("event_index")
   eventAt          DateTime? @map("event_at")
   transactionHash  String    @map("transaction_hash")
 

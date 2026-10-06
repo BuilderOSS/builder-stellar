@@ -62,21 +62,21 @@ CREATE OR REPLACE VIEW app.proposal_list AS
 SELECT
   row_number() OVER (PARTITION BY p.deployment_id, p.dao_id ORDER BY p.created_ledger, p.created_event_id)::integer AS proposal_number,
   p.*,
-  (SELECT count(*) FROM governance.proposal_votes v
+  (SELECT COALESCE(sum(v.weight), 0)::numeric(78,0) FROM governance.proposal_votes v
     WHERE v.deployment_id = p.deployment_id
       AND v.dao_id = p.dao_id
       AND v.proposal_id = p.proposal_id
-      AND v.support = 1)::bigint AS for_votes,
-  (SELECT count(*) FROM governance.proposal_votes v
+       AND v.support = 1) AS for_votes,
+  (SELECT COALESCE(sum(v.weight), 0)::numeric(78,0) FROM governance.proposal_votes v
     WHERE v.deployment_id = p.deployment_id
       AND v.dao_id = p.dao_id
       AND v.proposal_id = p.proposal_id
-      AND v.support = 0)::bigint AS against_votes,
-  (SELECT count(*) FROM governance.proposal_votes v
+       AND v.support = 0) AS against_votes,
+  (SELECT COALESCE(sum(v.weight), 0)::numeric(78,0) FROM governance.proposal_votes v
     WHERE v.deployment_id = p.deployment_id
       AND v.dao_id = p.dao_id
       AND v.proposal_id = p.proposal_id
-      AND v.support = 2)::bigint AS abstain_votes
+       AND v.support = 2) AS abstain_votes
 FROM governance.proposals p;
 
 -- App: Proposal detail with actions and votes
@@ -125,8 +125,8 @@ SELECT
   e.topic_0 AS wasm_hash,
   (e.args::jsonb ->> 'published_at')::bigint AS published_at,
   e.ledger_sequence AS event_ledger,
-  extract(epoch FROM to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000))::bigint AS event_timestamp_seconds,
-  to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS event_at,
+  extract(epoch FROM NULLIF(e.ledger_closed_at, '')::timestamptz)::bigint AS event_timestamp_seconds,
+  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
   e.transaction_hash,
   false AS revoked,
   NULL::bigint AS revoked_at
@@ -145,10 +145,9 @@ SELECT DISTINCT ON (e.deployment_id)
   e.args::jsonb ->> 'treasury' AS treasury_impl,
   e.args::jsonb ->> 'marketplace' AS marketplace_impl,
   e.ledger_sequence AS updated_ledger,
-  to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS updated_at,
+  NULLIF(e.ledger_closed_at, '')::timestamptz AS updated_at,
   e.transaction_hash
 FROM chain.decoded_events e
 WHERE e.contract_role = 'manager'
   AND e.event_name = 'current_implementations_updated'
 ORDER BY e.deployment_id, e.ledger_sequence DESC, e.event_id DESC;
-
