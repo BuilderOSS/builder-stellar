@@ -82,7 +82,9 @@ export async function GET() {
         const raw = row.ledgerClosedAt ?? '';
         const numeric = Number(raw);
         const timestamp = Number.isFinite(numeric)
-          ? numeric < 10_000_000_000 ? numeric * 1000 : numeric
+          ? numeric < 10_000_000_000
+            ? numeric * 1000
+            : numeric
           : Date.parse(raw);
         return Number.isFinite(timestamp) && timestamp > hourAgo;
       }).length;

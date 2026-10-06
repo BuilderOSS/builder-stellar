@@ -55,9 +55,9 @@ function mapProposalDetail(row: AppProposalDetail) {
   return {
     ...mapProposalList(row),
     vote_summary: {
-       for: row.forVotes.toString(),
-       against: row.againstVotes.toString(),
-       abstain: row.abstainVotes.toString()
+      for: row.forVotes.toString(),
+      against: row.againstVotes.toString(),
+      abstain: row.abstainVotes.toString()
     },
     votes: Array.isArray(row.votes) ? row.votes : [],
     actions

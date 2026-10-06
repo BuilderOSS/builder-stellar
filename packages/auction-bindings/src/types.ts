@@ -252,7 +252,8 @@ export interface MinBidIncrementUpdatedEvent {
   { tag: "Launched"; values: void } |
   { tag: "Manager"; values: void } |
   { tag: "CurrentHash"; values: void } |
-  { tag: "CurrentVersion"; values: void };
+  { tag: "CurrentVersion"; values: void } |
+  { tag: "PaymentTokenLocked"; values: void };
 
 /**
  * Current state of an active auction.

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
-import { getGoldskyActivityFeed } from '@/lib/goldsky';
 import { parseLimit, parseNonNegativeInteger } from '@/lib/api-pagination';
+import { getGoldskyActivityFeed } from '@/lib/goldsky';
 
 export const dynamic = 'force-dynamic';
 
