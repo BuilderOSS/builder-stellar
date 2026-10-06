@@ -101,7 +101,9 @@ function invoke(data) {
     ProposalCancelled: true, ProposalCanceled: true, ProposalExecuted: true,
     AuctionCreated: true, BidPlaced: true,
     AuctionSettled: true, BidRefunded: true, AuctionCancelled: true,
-    DaoCreated: true, DaoLaunched: true
+    DaoCreated: true, DaoLaunched: true,
+    MintEvent: true, MintBatch: true, MerkleRootSet: true, AllowlistSet: true,
+    MerkleClaimEvent: true, AllowlistClaimEvent: true
   };
 
   var kindMap = {
@@ -160,7 +162,13 @@ function invoke(data) {
     ProjectURIUpdated: 'metadata.project_uri_updated',
     DescriptionUpdated: 'metadata.description_updated',
     RendererBaseUpdated: 'metadata.renderer_base_updated',
-    ContractImageUpdated: 'metadata.contract_image_updated'
+    ContractImageUpdated: 'metadata.contract_image_updated',
+    MintEvent: 'minter.mint',
+    MintBatch: 'minter.batch_mint',
+    MerkleRootSet: 'minter.merkle_root_set',
+    AllowlistSet: 'minter.allowlist_set',
+    MerkleClaimEvent: 'minter.merkle_claim',
+    AllowlistClaimEvent: 'minter.allowlist_claim'
   };
 
   var titleMap = {
@@ -219,7 +227,13 @@ function invoke(data) {
     ProjectURIUpdated: 'Project URI updated',
     DescriptionUpdated: 'Description updated',
     RendererBaseUpdated: 'Renderer base updated',
-    ContractImageUpdated: 'Contract image updated'
+    ContractImageUpdated: 'Contract image updated',
+    MintEvent: 'Tokens minted',
+    MintBatch: 'Batch mint completed',
+    MerkleRootSet: 'Merkle root configured',
+    AllowlistSet: 'Allowlist configured',
+    MerkleClaimEvent: 'Merkle claim successful',
+    AllowlistClaimEvent: 'Allowlist claim successful'
   };
 
   var addresses = unique([

@@ -628,6 +628,113 @@ export async function getDashboardData(address: string, params: { limit?: number
 }
 
 /**
+ * Minting History
+ *
+ * Returns all minting operations for a token
+ */
+export async function getGoldskyMintingHistory(
+  daoId: string,
+  params: {
+    limit?: number;
+    offset?: number;
+    kind?: 'mint' | 'batch_mint' | 'merkle_claim' | 'allowlist_claim';
+  } = {}
+) {
+  const { limit = 50, offset = 0, kind } = params;
+  const deploymentId = getDeploymentId();
+  const daoIdFromUrl = await getDaoIdFromUrl(daoId);
+  const where = {
+    deploymentId,
+    daoId: daoIdFromUrl,
+    contractRole: 'minter',
+    ...(kind ? { kind: `minter.${kind}` } : {})
+  };
+
+  const [rows, total] = await Promise.all([
+    prisma.appActivityFeed.findMany({
+      where,
+      orderBy: { ledgerSequence: 'desc' },
+      take: limit,
+      skip: offset
+    }),
+    prisma.appActivityFeed.count({ where })
+  ]);
+
+  return {
+    items: rows.map((row) => ({
+      activity_id: row.activityId,
+      event_name: row.eventName,
+      kind: row.kind,
+      title: row.title,
+      summary: row.summary,
+      actor: row.actor,
+      amount: row.amount,
+      ledger_sequence: Number(row.ledgerSequence),
+      timestamp: row.ledgerClosedAt,
+      transaction_hash: row.transactionHash
+    })),
+    total,
+    limit,
+    offset,
+    hasMore: offset + rows.length < total,
+    generatedAt: new Date().toISOString()
+  };
+}
+
+/**
+ * Minter Claims
+ *
+ * Returns all successful claims (merkle and allowlist) for a token
+ */
+export async function getGoldskyMinterClaims(
+  daoId: string,
+  params: {
+    limit?: number;
+    offset?: number;
+    recipient?: string;
+  } = {}
+) {
+  const { limit = 100, offset = 0, recipient } = params;
+  const deploymentId = getDeploymentId();
+  const daoIdFromUrl = await getDaoIdFromUrl(daoId);
+
+  const where = {
+    deploymentId,
+    daoId: daoIdFromUrl,
+    contractRole: 'minter',
+    kind: { in: ['minter.merkle_claim', 'minter.allowlist_claim'] },
+    ...(recipient ? { actor: { equals: recipient, mode: 'insensitive' as const } } : {})
+  };
+
+  const [rows, total] = await Promise.all([
+    prisma.appActivityFeed.findMany({
+      where,
+      orderBy: { ledgerSequence: 'desc' },
+      take: limit,
+      skip: offset
+    }),
+    prisma.appActivityFeed.count({ where })
+  ]);
+
+  return {
+    items: rows.map((row) => ({
+      claim_id: row.activityId,
+      recipient: row.actor,
+      amount: row.amount,
+      claim_type: row.kind === 'minter.merkle_claim' ? 'merkle' : 'allowlist',
+      transaction_hash: row.transactionHash,
+      ledger_sequence: Number(row.ledgerSequence),
+      timestamp: row.ledgerClosedAt
+    })),
+    total,
+    limit,
+    offset,
+    hasMore: offset + rows.length < total,
+    generatedAt: new Date().toISOString()
+  };
+}
+
+/**
  * Health Check
  *
  * Verifies database connectivity and returns latest indexed ledger

@@ -6,7 +6,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("APP_DATABASE_URL")
-  schemas  = ["app", "auction", "chain", "governance", "manager", "metadata", "token"]
+  schemas  = ["app", "auction", "chain", "governance", "manager", "metadata", "minter", "token"]
 }
 
 view ManagerDao {
@@ -302,4 +302,82 @@ view ChainDecodedEvent {
 
   @@map("decoded_events")
   @@schema("chain")
+}
+
+view MinterMintEvent {
+  eventId          String    @map("event_id")
+  deploymentId     String    @map("deployment_id")
+  daoId            String    @map("dao_id")
+  contractId       String    @map("contract_id")
+  tokenId          String    @map("token_id")
+  recipient        String
+  amount           Decimal
+  eventType        String?   @map("event_type")
+  ledgerSequence   BigInt    @map("ledger_sequence")
+  transactionIndex BigInt?   @map("transaction_index")
+  operationIndex   BigInt?   @map("operation_index")
+  eventIndex       BigInt?   @map("event_index")
+  eventAt          DateTime? @map("event_at")
+  transactionHash  String    @map("transaction_hash")
+
+  @@map("mint_events")
+  @@schema("minter")
+}
+
+view MinterBatchMintEvent {
+  eventId          String    @map("event_id")
+  deploymentId     String    @map("deployment_id")
+  daoId            String    @map("dao_id")
+  contractId       String    @map("contract_id")
+  tokenId          String    @map("token_id")
+  recipientCount   Int       @map("recipient_count")
+  totalAmount      Decimal   @map("total_amount")
+  ledgerSequence   BigInt    @map("ledger_sequence")
+  transactionIndex BigInt?   @map("transaction_index")
+  operationIndex   BigInt?   @map("operation_index")
+  eventIndex       BigInt?   @map("event_index")
+  eventAt          DateTime? @map("event_at")
+  transactionHash  String    @map("transaction_hash")
+
+  @@map("batch_mint_events")
+  @@schema("minter")
+}
+
+view MinterMerkleClaimEvent {
+  eventId          String    @map("event_id")
+  deploymentId     String    @map("deployment_id")
+  daoId            String    @map("dao_id")
+  contractId       String    @map("contract_id")
+  tokenId          String    @map("token_id")
+  recipient        String
+  amount           Decimal
+  proofValid       Boolean   @map("proof_valid")
+  ledgerSequence   BigInt    @map("ledger_sequence")
+  transactionIndex BigInt?   @map("transaction_index")
+  operationIndex   BigInt?   @map("operation_index")
+  eventIndex       BigInt?   @map("event_index")
+  eventAt          DateTime? @map("event_at")
+  transactionHash  String    @map("transaction_hash")
+
+  @@map("merkle_claim_events")
+  @@schema("minter")
+}
+
+view MinterAllowlistClaimEvent {
+  eventId          String    @map("event_id")
+  deploymentId     String    @map("deployment_id")
+  daoId            String    @map("dao_id")
+  contractId       String    @map("contract_id")
+  tokenId          String    @map("token_id")
+  recipient        String
+  amount           Decimal
+  ledgerSequence   BigInt    @map("ledger_sequence")
+  transactionIndex BigInt?   @map("transaction_index")
+  operationIndex   BigInt?   @map("operation_index")
+  eventIndex       BigInt?   @map("event_index")
+  eventAt          DateTime? @map("event_at")
+  transactionHash  String    @map("transaction_hash")
+
+  @@map("allowlist_claim_events")
+  @@schema("minter")
 }

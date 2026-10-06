@@ -210,3 +210,25 @@ export function useDashboardData(address: string) {
     keepPreviousData: false
   });
 }
+
+export function useGoldskyMintingHistory(daoId: string, kind?: string, limit = 50) {
+  return useSWR<GoldskyActivityResponse>(
+    `/api/dao/${encodeURIComponent(daoId)}/activity-feed?contractRole=minter${kind ? `&kind=minter.${kind}` : ''}&limit=${limit}`,
+    fetchJson,
+    { keepPreviousData: true }
+  );
+}
+
+export function useGoldskyMinterClaims(daoId: string, recipient?: string, limit = 100) {
+  const query = new URLSearchParams();
+  query.append('contractRole', 'minter');
+  query.append('kind', 'minter.merkle_claim,minter.allowlist_claim');
+  if (recipient) query.append('actor', recipient);
+  query.append('limit', String(limit));
+
+  return useSWR<GoldskyActivityResponse>(
+    `/api/dao/${encodeURIComponent(daoId)}/activity-feed?${query}`,
+    fetchJson,
+    { keepPreviousData: true }
+  );
+}
