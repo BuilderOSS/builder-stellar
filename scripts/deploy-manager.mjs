@@ -188,19 +188,37 @@ function installWasm(packageName) {
 
   console.log(`Installing ${packageName} WASM (hash: ${hash})...`);
 
-  const result = runQuiet('stellar', [
-    'contract',
-    'upload',
-    '--wasm',
-    wasmFile,
-    '--source-account',
-    identityName,
-    '--network',
-    networkName
-  ]);
+  // Retry up to 3 times with delays between attempts
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    if (attempt > 1) {
+      console.log(`Retry attempt ${attempt}/3, waiting 5 seconds...`);
+      // Wait 5 seconds between retries using busy-wait (compatible with ES modules)
+      const endTime = Date.now() + 5000;
+      while (Date.now() < endTime) {
+        // Busy wait - simple and doesn't require imports
+      }
+    }
 
-  if (!result.ok) {
-    // Check if already installed
+    const result = runQuiet('stellar', [
+      'contract',
+      'upload',
+      '--wasm',
+      wasmFile,
+      '--source-account',
+      identityName,
+      '--network',
+      networkName,
+      '--resource-fee',
+      '10000000'  // 1 XLM in stroops for resource fees
+    ]);
+
+    if (result.ok) {
+      console.log(`Installed ${packageName} WASM: ${hash}`);
+      return hash;
+    }
+
+    // Check if already installed (success case)
     if (
       result.stderr.includes('already exists') ||
       result.stdout.includes(hash)
@@ -208,13 +226,31 @@ function installWasm(packageName) {
       console.log(`WASM already installed: ${hash}`);
       return hash;
     }
-    console.error('Install output:', result.stdout);
-    console.error('Install error:', result.stderr);
-    throw new Error(`Failed to install ${packageName} WASM`);
+
+    // Check if this is a retryable error
+    lastError = result.stderr || result.stdout;
+    if (
+      lastError.includes('TxSorobanInvalid') ||
+      lastError.includes('TxInsufficientFee') ||
+      lastError.includes('timeout') ||
+      lastError.includes('connection')
+    ) {
+      if (attempt < 3) {
+        console.log(`Retryable error detected: ${lastError.split('\n')[0]}`);
+        continue;
+      }
+    } else {
+      // Non-retryable error, fail immediately
+      console.error('Install output:', result.stdout);
+      console.error('Install error:', result.stderr);
+      throw new Error(`Failed to install ${packageName} WASM`);
+    }
   }
 
-  console.log(`Installed ${packageName} WASM: ${hash}`);
-  return hash;
+  // All retries exhausted - log full error and throw
+  console.error('Install error (final attempt output):');
+  console.error('Full error output:', lastError);
+  throw new Error(`Failed to install ${packageName} WASM after 3 attempts`);
 }
 
 function registerImplementation(managerAddress, wasmHash, name, version) {
