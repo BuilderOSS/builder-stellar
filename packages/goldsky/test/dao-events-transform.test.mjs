@@ -838,3 +838,116 @@ test('decodes GovernorChanged event (in treasury)', () => {
   assert.equal(decoded.old_governor, 'OLD_GOV');
   assert.equal(decoded.new_governor, 'NEW_GOV');
 });
+
+// Tests for New Token Events (Batch Minting)
+
+test('decodes BatchMintMany event with correct topic and args', () => {
+  const decoded = decodeEvent({
+    event_id: 'test-batch-mint-many',
+    deployment_id: 'test',
+    contract_id: 'TOKEN',
+    contract_role: 'token',
+    topics: '[{"symbol":"BatchMintMany"},{"address":"MINTER_ADDR"}]',
+    data: '{"map":[{"key":{"symbol":"total_amount"},"val":{"u32":50}},{"key":{"symbol":"recipient_count"},"val":{"u32":5}}]}',
+    transaction_hash: 'tx-1',
+    ledger_sequence: 100
+  });
+
+  assert.ok(decoded);
+  assert.equal(decoded.event_name, 'BatchMintMany');
+  assert.equal(topicsOf(decoded).minter, 'MINTER_ADDR');
+  assert.equal(argsOf(decoded).total_amount, 50);
+  assert.equal(argsOf(decoded).recipient_count, 5);
+
+  const payload = JSON.parse(decoded.payload);
+  assert.equal(payload.total_amount, 50);
+  assert.equal(payload.recipient_count, 5);
+});
+
+test('builds activity feed row from decoded BatchMintMany event', () => {
+  const decodedEvent = {
+    event_id: 'evt-batch-mint-many',
+    deployment_id: 'builder-testnet',
+    contract_id: 'CC6NMFVKCHMRKFA7M333CVEFAVPLXT3XAZHZX6Q4SGNDNTKZEKWTLXT2',
+    contract_role: 'token',
+    event_name: 'BatchMintMany',
+    minter: 'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO',
+    total_amount: '50',
+    recipient_count: '5',
+    topics: '{"minter":"GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO"}',
+    args: '{"total_amount":50,"recipient_count":5}',
+    payload: '{"minter":"GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO","total_amount":50,"recipient_count":5}',
+    ledger_sequence: 4254435,
+    ledger_closed_at: '2026-08-21 06:44:42',
+    transaction_hash: 'tx-batch-mint-many'
+  };
+
+  const activity = buildActivityFeed(decodedEvent);
+
+  assert.ok(activity);
+  assert.equal(activity.kind, 'token.batch_mint_many');
+  assert.equal(activity.title, 'Multi-recipient batch mint completed');
+  assert.match(activity.summary, /Minted 50 tokens to 5 recipients/);
+  assert.equal(activity.event_name, 'BatchMintMany');
+  assert.equal(activity.visibility, 'public');
+});
+
+test('decodes MetadataHookFailed event and assigns token contract role', () => {
+  const decoded = decodeEvent({
+    event_id: 'test-metadata-hook-failed',
+    deployment_id: 'test',
+    contract_id: 'TOKEN',
+    contract_role: 'token',
+    topics: '[{"symbol":"MetadataHookFailed"},{"u32":42}]',
+    data: '{"map":[]}',
+    transaction_hash: 'tx-1',
+    ledger_sequence: 100
+  });
+
+  assert.ok(decoded);
+  assert.equal(decoded.event_name, 'MetadataHookFailed');
+  assert.equal(decoded.contract_role, 'token');
+  assert.equal(topicsOf(decoded).token_id, 42);
+});
+
+test('MetadataHookFailed is correctly assigned to token role even when emitted', () => {
+  const decoded = decodeEvent({
+    event_id: 'test-metadata-hook-failed-role',
+    deployment_id: 'test',
+    contract_id: 'TOKEN_CONTRACT_ADDR',
+    contract_role: 'unknown',
+    topics: '[{"symbol":"MetadataHookFailed"},{"u32":99}]',
+    data: '{"map":[]}',
+    transaction_hash: 'tx-1',
+    ledger_sequence: 100
+  });
+
+  assert.ok(decoded);
+  assert.equal(decoded.contract_role, 'token');
+  assert.equal(topicsOf(decoded).token_id, 99);
+});
+
+test('builds activity feed row from decoded MetadataHookFailed event', () => {
+  const decodedEvent = {
+    event_id: 'evt-metadata-hook-failed',
+    deployment_id: 'builder-testnet',
+    contract_id: 'CC6NMFVKCHMRKFA7M333CVEFAVPLXT3XAZHZX6Q4SGNDNTKZEKWTLXT2',
+    contract_role: 'token',
+    event_name: 'MetadataHookFailed',
+    token_id: '42',
+    topics: '{"token_id":42}',
+    args: '{}',
+    payload: '{"token_id":42}',
+    ledger_sequence: 4254435,
+    ledger_closed_at: '2026-08-21 06:44:42',
+    transaction_hash: 'tx-metadata-hook-failed'
+  };
+
+  const activity = buildActivityFeed(decodedEvent);
+
+  assert.ok(activity);
+  // MetadataHookFailed is not in kindMap, so it defaults to lowercase event name
+  assert.equal(activity.kind, 'contract.metadatahookfailed');
+  assert.equal(activity.token_id, '42');
+  assert.equal(activity.visibility, 'system');
+});

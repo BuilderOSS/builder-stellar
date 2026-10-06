@@ -95,7 +95,7 @@ function invoke(data) {
   var normalizedEventName = normalizeEventName(eventName);
 
   var userFacing = {
-    TokenInitialized: true, Mint: true, MintWithMinter: true, BatchMint: true,
+    TokenInitialized: true, Mint: true, MintWithMinter: true, BatchMint: true, BatchMintMany: true,
     Transfer: true, DelegateChanged: true, DelegateVotesChanged: true,
     ProposalCreated: true, ProposalQueued: true, VoteCast: true,
     ProposalCancelled: true, ProposalCanceled: true, ProposalExecuted: true,
@@ -109,6 +109,7 @@ function invoke(data) {
     Mint: 'token.mint',
     MintWithMinter: 'token.mint',
     BatchMint: 'token.batch_mint',
+    BatchMintMany: 'token.batch_mint_many',
     MintAuthorityChanged: 'token.mint_authority_changed',
     Approve: 'token.approve',
     Transfer: 'token.transfer',
@@ -167,6 +168,7 @@ function invoke(data) {
     Mint: 'Token minted',
     MintWithMinter: 'Token minted',
     BatchMint: 'Batch mint completed',
+    BatchMintMany: 'Multi-recipient batch mint completed',
     MintAuthorityChanged: 'Mint authority changed',
     Approve: 'Token approval granted',
     Transfer: 'Token transferred',
@@ -261,6 +263,7 @@ function invoke(data) {
     Mint: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
     MintWithMinter: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
     BatchMint: function() { return 'Minted ' + (amount || 'batch') + ' tokens'; },
+    BatchMintMany: function() { var totalAmount = pick(data, ['total_amount']); var recipientCount = pick(data, ['recipient_count']); return 'Minted ' + (totalAmount || 'batch') + ' tokens to ' + (recipientCount || 'multiple') + ' recipients'; },
     DelegateChanged: function() { return 'Delegation changed'; },
     DaoCreated: function() { return 'DAO created by ' + (creator || 'unknown'); },
     DaoLaunched: function() { return 'DAO launched for token ' + (tokenAddress || 'unknown'); },

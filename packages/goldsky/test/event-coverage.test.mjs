@@ -22,11 +22,13 @@ const REQUIRED_EVENTS = {
     'Mint',
     'MintWithMinter',
     'BatchMint',
+    'BatchMintMany',
     'MintAuthorityChanged',
     'Transfer',
     'Approve',
     'DelegateChanged',
-    'DelegateVotesChanged'
+    'DelegateVotesChanged',
+    'MetadataHookFailed'
   ],
   governor: [
     'GovernorInitialized',

@@ -77,7 +77,7 @@ function getEventsFromDecoder() {
 // SDK packages also expose inherited OpenZeppelin/ERC events. Those are valid
 // generic envelope events and are deliberately not individually decoded.
 const APP_OWNED_EVENTS = new Set([
-  'TokenInitialized', 'Mint', 'MintWithMinter', 'BatchMint', 'MintAuthorityChanged', 'Transfer', 'Approve', 'DelegateChanged', 'DelegateVotesChanged',
+  'TokenInitialized', 'Mint', 'MintWithMinter', 'BatchMint', 'BatchMintMany', 'MintAuthorityChanged', 'Transfer', 'Approve', 'DelegateChanged', 'DelegateVotesChanged', 'MetadataHookFailed',
   'GovernorInitialized', 'ProposalCreated', 'ProposalQueued', 'VoteCast', 'ProposalCanceled', 'ProposalCancelled', 'ProposalExecuted', 'ProposalExpired',
   'TreasuryChanged', 'TokenContractChanged', 'QueueDelayChanged', 'VotingDelayChanged', 'VotingPeriodChanged', 'ProposalThresholdChanged', 'QuorumBpsChanged', 'GovernorAuthorityChanged',
   'TreasuryInitialized', 'GovernorChanged', 'Execute', 'AuctionInitialized', 'AuctionCreated', 'BidPlaced', 'AuctionSettled', 'DurationUpdated',

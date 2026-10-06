@@ -37,7 +37,20 @@ The Stellar Builder platform is a multi-tenant DAO system where one application 
   - Table population
   - Testing checklist
 
-**Deployment:**
+**Deployment & Handoff:**
+- [CONTRACT_RELEASE_HANDOFF_2026-10-06.md](./CONTRACT_RELEASE_HANDOFF_2026-10-06.md) - Contract consumer handoff
+  - Multi-recipient minting and managed versioning
+  - Goldsky, frontend, and governance upgrade actions
+- [AGENT_HANDOFF_2026-10-06.md](./AGENT_HANDOFF_2026-10-06.md) - Agent implementation tasks
+  - Indexer, database, and frontend workstreams
+  - Detailed requirements for each agent
+- [DATABASE_ENGINEER_ANALYSIS_2026-10-06.md](./DATABASE_ENGINEER_ANALYSIS_2026-10-06.md) - Database schema analysis
+  - New event support validation
+  - Permission verification
+  - Index strategy for future views
+- [DATABASE_ENGINEER_TASK_COMPLETION_2026-10-06.md](./DATABASE_ENGINEER_TASK_COMPLETION_2026-10-06.md) - Task completion summary
+  - Decision: No migrations required
+  - Sign-off on schema readiness
 - [MANAGER_REDESIGN.md](./MANAGER_REDESIGN.md) - Approved Manager storage, upgrade, versioning, and testnet-reset design
 - [MARKETPLACE_PLAN.md](./MARKETPLACE_PLAN.md) - Per-DAO fixed-price primary and secondary marketplace plan
 - [MANAGER_DEPLOYMENT.md](./MANAGER_DEPLOYMENT.md) - Manager setup
@@ -149,6 +162,10 @@ insert           ownership transfer    update status
 | MANAGER_DEPLOYMENT.md | ✅ Current | Sept 2026 |
 | GOLDSKY_SETUP.md | ✅ Current | Sept 2026 |
 | ARCHITECTURE.md | ✅ Current | Sept 2026 |
+| CONTRACT_RELEASE_HANDOFF_2026-10-06.md | ✅ Current | Oct 2026 |
+| AGENT_HANDOFF_2026-10-06.md | ✅ Current | Oct 2026 |
+| DATABASE_ENGINEER_ANALYSIS_2026-10-06.md | ✅ Current | Oct 2026 |
+| DATABASE_ENGINEER_TASK_COMPLETION_2026-10-06.md | ✅ Current | Oct 2026 |
 | mvp-technical-plan.md | ℹ️ Reference | Sept 2026 |
 | STELLAR_INDEXER_COMPARISON.md | ℹ️ Reference | Sept 2026 |
 | DEPLOYMENT.md | ⚠️ Legacy | Sept 2026 |
@@ -172,6 +189,9 @@ insert           ownership transfer    update status
 
 **Understand the database**
 → Read [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md)
+
+**Validate database schema for new features**
+→ See [DATABASE_ENGINEER_ANALYSIS_2026-10-06.md](./DATABASE_ENGINEER_ANALYSIS_2026-10-06.md)
 
 **Update the Goldsky pipeline**
 → Check [GOLDSKY_MULTITENANT_INTEGRATION.md](./GOLDSKY_MULTITENANT_INTEGRATION.md)
@@ -209,4 +229,4 @@ These are preserved for historical reference but the current docs are the source
 
 ---
 
-**Last Updated**: October 3, 2026
+**Last Updated**: October 6, 2026
