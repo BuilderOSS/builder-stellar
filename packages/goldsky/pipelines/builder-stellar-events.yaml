@@ -17,7 +17,7 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_tokens
-    secret_name: DAO_POSTGRES
+    secret_name: STELLAR_BUILDER_POSTGRES
     schema: streamling
     column: contract_id
     sql: |
@@ -31,7 +31,7 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_metadata
-    secret_name: DAO_POSTGRES
+    secret_name: STELLAR_BUILDER_POSTGRES
     schema: streamling
     column: contract_id
     sql: |
@@ -45,7 +45,7 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_auctions
-    secret_name: DAO_POSTGRES
+    secret_name: STELLAR_BUILDER_POSTGRES
     schema: streamling
     column: contract_id
     sql: |
@@ -59,7 +59,7 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_governors
-    secret_name: DAO_POSTGRES
+    secret_name: STELLAR_BUILDER_POSTGRES
     schema: streamling
     column: contract_id
     sql: |
@@ -73,7 +73,7 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_treasuries
-    secret_name: DAO_POSTGRES
+    secret_name: STELLAR_BUILDER_POSTGRES
     schema: streamling
     column: contract_id
     sql: |
@@ -87,7 +87,7 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_marketplaces
-    secret_name: DAO_POSTGRES
+    secret_name: STELLAR_BUILDER_POSTGRES
     schema: streamling
     column: contract_id
     sql: |
@@ -204,6 +204,11 @@ transforms:
           var n = Number(value);
           return isFinite(n) ? n : null;
         }
+        function normalizeTimestamp(value) {
+          var timestamp = toStringOrEmpty(value).trim();
+          if (!timestamp || /^[-+]?\d+(\.\d+)?$/.test(timestamp) || /(?:Z|[+-]\d\d:?\d\d|\sUTC)$/i.test(timestamp)) return timestamp;
+          return timestamp + ' UTC';
+        }
         function toBoolean(value) {
           if (value === null || value === undefined) return null;
           return Boolean(value);
@@ -220,7 +225,7 @@ transforms:
           transaction_successful: toBoolean(data.transaction_successful),
           ledger_sequence: toNumber(data.ledger_sequence),
           ledger_hash: toStringOrEmpty(data.ledger_hash),
-          ledger_closed_at: toStringOrEmpty(data.ledger_closed_at),
+          ledger_closed_at: normalizeTimestamp(data.ledger_closed_at),
           transaction_index: toNumber(data.transaction_index),
           operation_index: toNumber(data.operation_index),
           event_index: toNumber(data.event_index),
@@ -332,6 +337,11 @@ transforms:
           if (value === null || value === undefined) return '';
           return String(value);
         }
+        function normalizeTimestamp(value) {
+          var timestamp = toStringOrEmpty(value).trim();
+          if (!timestamp || /^[-+]?\d+(\.\d+)?$/.test(timestamp) || /(?:Z|[+-]\d\d:?\d\d|\sUTC)$/i.test(timestamp)) return timestamp;
+          return timestamp + ' UTC';
+        }
         function toNumber(value) {
           if (value === null || value === undefined) return null;
           var n = Number(value);
@@ -363,7 +373,7 @@ transforms:
           transaction_successful: toBoolean(data.transaction_successful),
           ledger_sequence: toNumber(data.ledger_sequence),
           ledger_hash: toStringOrEmpty(data.ledger_hash),
-          ledger_closed_at: toStringOrEmpty(data.ledger_closed_at),
+          ledger_closed_at: normalizeTimestamp(data.ledger_closed_at),
           transaction_index: toNumber(data.transaction_index),
           operation_index: toNumber(data.operation_index),
           event_index: toNumber(data.event_index),
@@ -439,6 +449,11 @@ transforms:
           function ensureNumber(val, def) {
             var n = Number(val);
             return isFinite(n) ? n : def;
+          }
+          function normalizeTimestamp(val) {
+            var timestamp = typeof val === 'string' ? val.trim() : '';
+            if (!timestamp || /^[-+]?\d+(\.\d+)?$/.test(timestamp) || /(?:Z|[+-]\d\d:?\d\d|\sUTC)$/i.test(timestamp)) return timestamp;
+            return timestamp + ' UTC';
           }
 
           var topics = ensureString(data.topics, '{}');
@@ -757,7 +772,7 @@ transforms:
           transaction_index: transaction_index,
           operation_index: operation_index,
           event_index: event_index,
-          ledger_closed_at: toString(data.ledger_closed_at),
+          ledger_closed_at: normalizeTimestamp(data.ledger_closed_at),
           transaction_hash: toString(data.transaction_hash)
         };
         } catch (e) {
@@ -772,7 +787,7 @@ sinks:
     from: raw_events
     schema: chain
     table: raw_events
-    secret_name: DAO_POSTGRES
+    secret_name: STELLAR_BUILDER_POSTGRES
     primary_key: event_id
 
   decoded_events_output:
@@ -780,7 +795,7 @@ sinks:
     from: decoded_events
     schema: chain
     table: decoded_events
-    secret_name: DAO_POSTGRES
+    secret_name: STELLAR_BUILDER_POSTGRES
     primary_key: event_id
 
   activity_feed_output:
@@ -788,5 +803,5 @@ sinks:
     from: activity_feed
     schema: app
     table: activity_feed_events
-    secret_name: DAO_POSTGRES
+    secret_name: STELLAR_BUILDER_POSTGRES
     primary_key: activity_id
