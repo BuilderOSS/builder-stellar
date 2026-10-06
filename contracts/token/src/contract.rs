@@ -1,6 +1,6 @@
 use soroban_sdk::{
-    contract, contractimpl, panic_with_error, symbol_short, vec, Address, BytesN, Env, Error,
-    IntoVal, String,
+    contract, contractimpl, contracttype, panic_with_error, symbol_short, vec, Address, BytesN,
+    Env, Error, IntoVal, String, Vec,
 };
 use stellar_access::ownable::{set_owner, Ownable, OwnableStorageKey};
 use stellar_governance::votes::{
@@ -12,7 +12,8 @@ use stellar_tokens::non_fungible::{votes::NonFungibleVotes, Base};
 
 use crate::error::TokenError;
 use crate::events::{
-    emit_batch_mint, emit_mint_authority_changed, emit_token_initialized, emit_token_mint,
+    emit_batch_mint, emit_batch_mint_many, emit_metadata_hook_failed, emit_mint_authority_changed,
+    emit_token_initialized, emit_token_mint,
 };
 use crate::storage::*;
 
@@ -23,6 +24,14 @@ use crate::storage::*;
 /// Each token represents one unit of voting power that can be delegated to any address.
 #[contract]
 pub struct DaoTokenContract;
+
+/// A bounded multi-recipient mint allocation.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BatchMintRecipient {
+    pub to: Address,
+    pub amount: u32,
+}
 
 #[contractimpl]
 impl DaoTokenContract {
@@ -287,6 +296,81 @@ impl DaoTokenContract {
         last_token_id
     }
 
+    /// Mints tokens to multiple recipients in one transaction.
+    ///
+    /// The combined amount is bounded by `MAX_BATCH_MINT`. Each recipient gets
+    /// sequential token IDs, and one `BatchMint` summary event is emitted for
+    /// each allocation. The existing `batch_mint` method remains available for
+    /// callers minting to a single recipient.
+    pub fn batch_mint_many(e: &Env, minter: &Address, recipients: Vec<BatchMintRecipient>) -> u32 {
+        if recipients.is_empty() {
+            panic_with_error!(e, TokenError::InvalidBatchMintAmount);
+        }
+        if recipients.len() > MAX_BATCH_MINT_RECIPIENTS {
+            panic_with_error!(e, TokenError::InvalidBatchMintAmount);
+        }
+
+        minter.require_auth();
+        Self::ensure_mint_authority(e, minter);
+
+        let mut total_amount = 0u32;
+        for recipient in recipients.iter() {
+            if recipient.amount == 0 {
+                panic_with_error!(e, TokenError::InvalidBatchMintAmount);
+            }
+            total_amount = total_amount
+                .checked_add(recipient.amount)
+                .unwrap_or(MAX_BATCH_MINT + 1);
+            if total_amount > MAX_BATCH_MINT {
+                panic_with_error!(e, TokenError::InvalidBatchMintAmount);
+            }
+        }
+
+        // Preflight all checkpoint keys before minting. Total-supply checkpoints
+        // are shared by every recipient, while delegate checkpoints are per
+        // recipient and must account for duplicate allocations.
+        Self::preflight_total_supply_writes(e, total_amount);
+        let mut prepared_recipients: Vec<(Address, u32)> = Vec::new(e);
+        for recipient in recipients.iter() {
+            Self::ensure_self_delegate(e, &recipient.to);
+
+            let mut cumulative_amount = recipient.amount;
+            for prepared in prepared_recipients.iter() {
+                if prepared.0 == recipient.to {
+                    cumulative_amount += prepared.1;
+                }
+            }
+            Self::preflight_delegate_checkpoint_writes(e, &recipient.to, cumulative_amount);
+
+            let mut merged = false;
+            for index in 0..prepared_recipients.len() {
+                let prepared = prepared_recipients.get(index).unwrap();
+                if prepared.0 == recipient.to {
+                    prepared_recipients.set(index, (prepared.0, prepared.1 + recipient.amount));
+                    merged = true;
+                    break;
+                }
+            }
+            if !merged {
+                prepared_recipients.push_back((recipient.to.clone(), recipient.amount));
+            }
+        }
+
+        let mut last_token_id = 0;
+        for recipient in recipients.iter() {
+            for _ in 0..recipient.amount {
+                let token_id = NonFungibleVotes::sequential_mint(e, &recipient.to);
+                Self::call_metadata_hook(e, token_id);
+                last_token_id = token_id;
+            }
+            emit_batch_mint(e, minter, &recipient.to, recipient.amount, last_token_id);
+        }
+
+        emit_batch_mint_many(e, minter, total_amount, recipients.len());
+
+        last_token_id
+    }
+
     /// Returns the number of tokens owned by an account.
     ///
     /// # Arguments
@@ -444,12 +528,17 @@ impl DaoTokenContract {
             .instance()
             .get::<TokenKey, Address>(&TokenKey::Metadata)
         {
-            // Call on_minted hook via cross-contract invocation (ignore result - non-critical)
-            let _ = e.try_invoke_contract::<(), Error>(
+            // The metadata hook is best-effort. Minting remains available if the
+            // optional artwork service is unavailable, but the failure is visible
+            // to indexers and operators instead of being silently discarded.
+            match e.try_invoke_contract::<bool, Error>(
                 &metadata_addr,
                 &symbol_short!("on_minted"),
                 vec![e, token_id.into_val(e)],
-            );
+            ) {
+                Ok(Ok(true)) => {}
+                Ok(Ok(false)) | Ok(Err(_)) | Err(_) => emit_metadata_hook_failed(e, token_id),
+            }
         }
     }
 
@@ -476,6 +565,11 @@ impl DaoTokenContract {
     /// The votes library writes these keys directly when a mint creates a new
     /// ledger checkpoint, so a missing-key write must be preflighted first.
     fn preflight_checkpoint_writes(e: &Env, account: &Address, count: u32) {
+        Self::preflight_total_supply_writes(e, count);
+        Self::preflight_delegate_checkpoint_writes(e, account, count);
+    }
+
+    fn preflight_total_supply_writes(e: &Env, count: u32) {
         let total_supply_index = e
             .storage()
             .instance()
@@ -490,7 +584,9 @@ impl DaoTokenContract {
                 },
             );
         }
+    }
 
+    fn preflight_delegate_checkpoint_writes(e: &Env, account: &Address, count: u32) {
         let delegate_count_key = VotesStorageKey::NumCheckpoints(account.clone());
         let delegate_count = e
             .storage()

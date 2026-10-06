@@ -39,6 +39,18 @@ export interface BatchMintEvent {
 }
 
 /**
+ * Emitted once for a multi-recipient mint operation.
+ */
+export interface BatchMintManyEvent {
+  name: "BatchMintMany";
+  data: {
+    minter: string;
+    total_amount?: number;
+    recipient_count?: number;
+  };
+}
+
+/**
  * Custom event to track minter information during single token mints.
  *
  * OpenZeppelin's standard Mint event doesn't include the minter address, only
@@ -69,6 +81,16 @@ export interface TokenInitializedEvent {
     name?: string;
     symbol?: string;
     version?: string;
+  };
+}
+
+/**
+ * Emitted when the optional metadata hook cannot generate artwork data.
+ */
+export interface MetadataHookFailedEvent {
+  name: "MetadataHookFailed";
+  data: {
+    token_id: number;
   };
 }
 
@@ -111,6 +133,14 @@ export interface MintAuthorityChangedEvent {
   { tag: "Manager"; values: void } |
   { tag: "CurrentHash"; values: void } |
   { tag: "CurrentVersion"; values: void };
+
+/**
+ * A bounded multi-recipient mint allocation.
+ */
+export interface BatchMintRecipient {
+  amount: number;
+  to: string;
+}
 
 /**
  * Event emitted when an account is frozen.
@@ -3999,5 +4029,5 @@ export interface CreateContractWithConstructorHostFnContext {
   { tag: "Wasm"; values: readonly [Uint8Array] } |
   { tag: "StellarAsset"; values: void } |
   { tag: "Account"; values: void };
-    export type ContractEvent = BatchMintEvent | MintWithMinterEvent | TokenInitializedEvent | MintAuthorityChangedEvent | FrozenEvent | UnfrozenEvent | ComplianceConfigChangedEvent | MergeEvent | DepositEvent | RegisterEvent | TransferEvent | WithdrawEvent | AuditorSetEvent | SetSpenderEvent | VerifierSetEvent | RevokeSpenderEvent | SpenderTransferEvent | AddressAsFieldSetEvent | UnderlyingAssetSetEvent | AuditorRotatedEvent | AuditorRegisteredEvent | VerificationKeyUpdatedEvent | VerificationKeyRegisteredEvent | ConsecutiveMintEvent | BurnEvent | SetTokenRoyaltyEvent | SetDefaultRoyaltyEvent | RemoveTokenRoyaltyEvent | MintEvent | ApproveEvent | TransferEvent2 | ApproveForAllEvent | ModuleAddedEvent | ModuleRemovedEvent | MaxBalanceSetEvent | IdBalancePresetEvent | PresetCompletedEvent | SupplyLimitSetEvent | PresetCompletedEvent2 | SupplyCountUpdatedEvent | CountryAllowedEvent | CountryUnallowedEvent | UserAllowedEvent | UserDisallowedEvent | CountryRestrictedEvent | CountryUnrestrictedEvent | LockupPeriodSetEvent | PresetCompletedEvent3 | LockupStatePresetEvent | TimeTransferLimitSetEvent | TimeTransferLimitRemovedEvent | DocumentRemovedEvent | DocumentUpdatedEvent | BurnEvent2 | MintEvent2 | KeyAllowedEvent | KeyRemovedEvent | ClaimRevokedEvent | SignaturesInvalidatedEvent | ClaimAddedEvent | ClaimChangedEvent | ClaimRemovedEvent | ClaimTopicAddedEvent | ClaimTopicRemovedEvent | TrustedIssuerAddedEvent | IssuerTopicsUpdatedEvent | TrustedIssuerRemovedEvent | IdentityStoredEvent | CountryDataAddedEvent | IdentityUnstoredEvent | IdentityRecoveredEvent | CountryDataRemovedEvent | CountryDataModifiedEvent | TokensFrozenEvent | AddressFrozenEvent | ComplianceSetEvent | TokensUnfrozenEvent | RecoverySuccessEvent | IdentityVerifierSetEvent | TokenOnchainIdUpdatedEvent | ClaimTopicsAndIssuersSetEvent | IdentityRegistryStorageSetEvent | TokenBoundEvent | TokenUnboundEvent | DepositEvent2 | WithdrawEvent2 | BurnEvent3 | UserAllowedEvent2 | UserDisallowedEvent2 | UserBlockedEvent | UserUnblockedEvent | MintEvent3 | ApproveEvent2 | TransferEvent3 | MuxedTransferEvent | SetRootEvent | SetClaimedEvent | PausedEvent | UnpausedEvent | DelegateChangedEvent | DelegateVotesChangedEvent | VoteCastEvent | QuorumChangedEvent | ProposalQueuedEvent | ProposalCreatedEvent | ProposalExecutedEvent | ProposalCancelledEvent | MinDelayChangedEvent | OperationExecutedEvent | OperationCancelledEvent | OperationScheduledEvent | RoleGrantedEvent | RoleRevokedEvent | AdminRenouncedEvent | RoleAdminChangedEvent | AdminTransferCompletedEvent | AdminTransferInitiatedEvent | OwnershipTransferEvent | OwnershipRenouncedEvent | OwnershipTransferCompletedEvent;
+    export type ContractEvent = BatchMintEvent | BatchMintManyEvent | MintWithMinterEvent | TokenInitializedEvent | MetadataHookFailedEvent | MintAuthorityChangedEvent | FrozenEvent | UnfrozenEvent | ComplianceConfigChangedEvent | MergeEvent | DepositEvent | RegisterEvent | TransferEvent | WithdrawEvent | AuditorSetEvent | SetSpenderEvent | VerifierSetEvent | RevokeSpenderEvent | SpenderTransferEvent | AddressAsFieldSetEvent | UnderlyingAssetSetEvent | AuditorRotatedEvent | AuditorRegisteredEvent | VerificationKeyUpdatedEvent | VerificationKeyRegisteredEvent | ConsecutiveMintEvent | BurnEvent | SetTokenRoyaltyEvent | SetDefaultRoyaltyEvent | RemoveTokenRoyaltyEvent | MintEvent | ApproveEvent | TransferEvent2 | ApproveForAllEvent | ModuleAddedEvent | ModuleRemovedEvent | MaxBalanceSetEvent | IdBalancePresetEvent | PresetCompletedEvent | SupplyLimitSetEvent | PresetCompletedEvent2 | SupplyCountUpdatedEvent | CountryAllowedEvent | CountryUnallowedEvent | UserAllowedEvent | UserDisallowedEvent | CountryRestrictedEvent | CountryUnrestrictedEvent | LockupPeriodSetEvent | PresetCompletedEvent3 | LockupStatePresetEvent | TimeTransferLimitSetEvent | TimeTransferLimitRemovedEvent | DocumentRemovedEvent | DocumentUpdatedEvent | BurnEvent2 | MintEvent2 | KeyAllowedEvent | KeyRemovedEvent | ClaimRevokedEvent | SignaturesInvalidatedEvent | ClaimAddedEvent | ClaimChangedEvent | ClaimRemovedEvent | ClaimTopicAddedEvent | ClaimTopicRemovedEvent | TrustedIssuerAddedEvent | IssuerTopicsUpdatedEvent | TrustedIssuerRemovedEvent | IdentityStoredEvent | CountryDataAddedEvent | IdentityUnstoredEvent | IdentityRecoveredEvent | CountryDataRemovedEvent | CountryDataModifiedEvent | TokensFrozenEvent | AddressFrozenEvent | ComplianceSetEvent | TokensUnfrozenEvent | RecoverySuccessEvent | IdentityVerifierSetEvent | TokenOnchainIdUpdatedEvent | ClaimTopicsAndIssuersSetEvent | IdentityRegistryStorageSetEvent | TokenBoundEvent | TokenUnboundEvent | DepositEvent2 | WithdrawEvent2 | BurnEvent3 | UserAllowedEvent2 | UserDisallowedEvent2 | UserBlockedEvent | UserUnblockedEvent | MintEvent3 | ApproveEvent2 | TransferEvent3 | MuxedTransferEvent | SetRootEvent | SetClaimedEvent | PausedEvent | UnpausedEvent | DelegateChangedEvent | DelegateVotesChangedEvent | VoteCastEvent | QuorumChangedEvent | ProposalQueuedEvent | ProposalCreatedEvent | ProposalExecutedEvent | ProposalCancelledEvent | MinDelayChangedEvent | OperationExecutedEvent | OperationCancelledEvent | OperationScheduledEvent | RoleGrantedEvent | RoleRevokedEvent | AdminRenouncedEvent | RoleAdminChangedEvent | AdminTransferCompletedEvent | AdminTransferInitiatedEvent | OwnershipTransferEvent | OwnershipRenouncedEvent | OwnershipTransferCompletedEvent;
     

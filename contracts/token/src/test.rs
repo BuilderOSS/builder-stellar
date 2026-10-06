@@ -6,7 +6,7 @@ use soroban_sdk::{
     IntoVal,
 };
 
-use crate::{DaoTokenContract, DaoTokenContractClient};
+use crate::{BatchMintRecipient, DaoTokenContract, DaoTokenContractClient};
 
 fn setup() -> (Env, DaoTokenContractClient<'static>, Address) {
     let e = Env::default();
@@ -267,6 +267,123 @@ fn batch_mint_large_amount() {
     assert_eq!(last_token_id, 19);
     assert_eq!(client.balance(&alice), 20);
     assert_eq!(client.get_votes(&alice), 20);
+}
+
+#[test]
+fn batch_mint_many_distributes_tokens_and_votes() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+    let bob = Address::generate(&e);
+
+    let recipients = soroban_sdk::vec![
+        &e,
+        BatchMintRecipient {
+            to: alice.clone(),
+            amount: 2,
+        },
+        BatchMintRecipient {
+            to: bob.clone(),
+            amount: 3,
+        },
+    ];
+
+    assert_eq!(client.batch_mint_many(&owner, &recipients), 4);
+    assert_eq!(client.balance(&alice), 2);
+    assert_eq!(client.balance(&bob), 3);
+    assert_eq!(client.get_votes(&alice), 2);
+    assert_eq!(client.get_votes(&bob), 3);
+    assert_eq!(client.get_total_supply(), 5);
+}
+
+#[test]
+fn batch_mint_many_handles_duplicate_recipients() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+
+    let recipients = soroban_sdk::vec![
+        &e,
+        BatchMintRecipient {
+            to: alice.clone(),
+            amount: 2,
+        },
+        BatchMintRecipient {
+            to: alice.clone(),
+            amount: 3,
+        },
+    ];
+
+    assert_eq!(client.batch_mint_many(&owner, &recipients), 4);
+    assert_eq!(client.balance(&alice), 5);
+    assert_eq!(client.get_delegate(&alice), Some(alice.clone()));
+    assert_eq!(client.get_votes(&alice), 5);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1101)")]
+fn batch_mint_many_rejects_zero_allocation() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+    let recipients = soroban_sdk::vec![
+        &e,
+        BatchMintRecipient {
+            to: alice,
+            amount: 0,
+        },
+    ];
+
+    client.batch_mint_many(&owner, &recipients);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1101)")]
+fn batch_mint_many_rejects_amount_above_maximum() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+    let bob = Address::generate(&e);
+    let recipients = soroban_sdk::vec![
+        &e,
+        BatchMintRecipient {
+            to: alice,
+            amount: 60,
+        },
+        BatchMintRecipient {
+            to: bob,
+            amount: 41,
+        },
+    ];
+
+    client.batch_mint_many(&owner, &recipients);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1101)")]
+fn batch_mint_many_rejects_too_many_recipients() {
+    let (e, client, owner) = setup();
+    let mut recipients = soroban_sdk::Vec::new(&e);
+    for _ in 0..17 {
+        recipients.push_back(BatchMintRecipient {
+            to: Address::generate(&e),
+            amount: 1,
+        });
+    }
+
+    client.batch_mint_many(&owner, &recipients);
+}
+
+#[test]
+#[should_panic(expected = "Error(Auth, InvalidAction)")]
+fn batch_mint_many_requires_minter_auth() {
+    let (e, client, owner) = setup_no_auth();
+    let alice = Address::generate(&e);
+    let recipients = soroban_sdk::vec![
+        &e,
+        BatchMintRecipient {
+            to: alice,
+            amount: 1,
+        },
+    ];
+
+    client.batch_mint_many(&owner, &recipients);
 }
 
 #[test]

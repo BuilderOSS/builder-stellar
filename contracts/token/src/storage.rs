@@ -12,6 +12,14 @@ use soroban_sdk::{contracttype, Address};
 /// profiling for sequential minting with auto-delegation.
 pub const MAX_BATCH_MINT: u32 = 100;
 
+/// Maximum number of allocations in a multi-recipient mint.
+///
+/// Each allocation adds delegation setup, a summary event, and metadata hook
+/// work on top of the per-token mint cost. Keeping this separate from the token
+/// limit bounds the worst-case resource cost when every token has a different
+/// recipient.
+pub const MAX_BATCH_MINT_RECIPIENTS: u32 = 16;
+
 // TTL constants for delegation storage
 // Delegations should persist long-term as they represent voting power delegation
 

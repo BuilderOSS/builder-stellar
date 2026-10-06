@@ -67,6 +67,8 @@ const missing = required.find(([, value]) => value === undefined || value === nu
 if (missing) throw new Error(`DAO config ${daoConfigPath} must define ${missing[0]}`);
 
 const artworkProperties = daoConfig.metadata.artwork.properties;
+const maxBatchMint = 100;
+const maxBatchMintRecipients = 16;
 if (!Array.isArray(artworkProperties) || artworkProperties.length === 0 || artworkProperties.length > 16) {
   throw new Error('DAO artwork must define between 1 and 16 properties');
 }
@@ -77,6 +79,15 @@ for (const [index, property] of artworkProperties.entries()) {
 }
 if (!Array.isArray(daoConfig.founders) || daoConfig.founders.length !== 3) {
   throw new Error('DAO config must define exactly three founders');
+}
+const founderTotal = daoConfig.founders.reduce((total, founder) => {
+  if (!Number.isInteger(founder.amount) || founder.amount <= 0) {
+    throw new Error('DAO founder amounts must be positive integers');
+  }
+  return total + founder.amount;
+}, 0);
+if (daoConfig.founders.length > maxBatchMintRecipients || founderTotal > maxBatchMint) {
+  throw new Error(`DAO founder allocations must fit batch_mint_many limits (${maxBatchMint} tokens, ${maxBatchMintRecipients} recipients)`);
 }
 
 const marketplaceConfig = daoConfig.marketplace ?? {};
@@ -170,9 +181,11 @@ function loadDaoArtifact() {
   return artifact;
 }
 
-function writeArtifact({ status, addresses, transactions = {}, error }) {
+function writeArtifact({ status, addresses, transactions = {}, error, replaceTransactions = false }) {
   const previous = existsSync(daoArtifactPath) ? loadJson(daoArtifactPath, 'DAO artifact') : {};
-  const allTransactions = { ...(previous.transactions ?? {}), ...transactions };
+  const allTransactions = replaceTransactions
+    ? transactions
+    : { ...(previous.transactions ?? {}), ...transactions };
   const ledgers = Object.values(allTransactions).flatMap((value) => Array.isArray(value) ? value : [value])
     .map((value) => value?.ledger).filter(Number.isFinite);
   const artifact = {
@@ -235,7 +248,7 @@ if (phase === 'create_dao') {
   addresses = addressesFromOutput(output);
   if (!addresses) throw new Error('DAO creation succeeded but DAO addresses could not be parsed');
   transactions.createDao = transaction(output);
-  writeArtifact({ status: 'created', addresses, transactions });
+  writeArtifact({ status: 'created', addresses, transactions, replaceTransactions: true });
   console.log('Create phase complete. Run admin_checklist next.');
   process.exit(0);
 }
@@ -251,17 +264,25 @@ if (phase === 'admin_checklist') {
     writeArtifact({ status, addresses, transactions, error });
 
   try {
+    // A recreated DAO can inherit checkpoints from a previous deployment in the
+    // local artifact. Reconcile the checkpoint before skipping any checklist work.
+    if (invokeView(addresses.token, 'total_supply') === 0 && Object.keys(transactions).some((key) => key !== 'createDao')) {
+      transactions = transactions.createDao ? { createDao: transactions.createDao } : {};
+      checkpoint();
+    }
+
     {
-      const founderMints = transactions.founderMints ?? [];
-      for (let index = founderMints.length; index < daoConfig.founders.length; index += 1) {
-        const founder = daoConfig.founders[index];
-        const output = invoke(addresses.token, 'batch_mint', {
+      const foundersAlreadyMinted = invokeView(addresses.token, 'total_supply') >= founderTotal &&
+        daoConfig.founders.every((founder) => invokeView(addresses.token, 'balance', { account: founder.address }) >= founder.amount);
+      if (!transactions.founderMints && !foundersAlreadyMinted) {
+        const output = invoke(addresses.token, 'batch_mint_many', {
           minter: daoConfig.launchAdmin,
-          to: founder.address,
-          amount: founder.amount
+          recipients: JSON.stringify(daoConfig.founders.map(({ address, amount }) => ({ to: address, amount })))
         });
-        founderMints.push(transaction(output, { address: founder.address, amount: founder.amount }));
-        transactions.founderMints = founderMints;
+        transactions.founderMints = transaction(output, { recipients: daoConfig.founders });
+        checkpoint();
+      } else if (!transactions.founderMints) {
+        transactions.founderMints = { recovered: true, recipients: daoConfig.founders };
         checkpoint();
       }
 

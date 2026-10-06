@@ -71,6 +71,24 @@ pub struct BatchMint {
     pub last_token_id: u32,
 }
 
+/// Emitted once for a multi-recipient mint operation.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BatchMintMany {
+    #[topic]
+    pub minter: Address,
+    pub total_amount: u32,
+    pub recipient_count: u32,
+}
+
+/// Emitted when the optional metadata hook cannot generate artwork data.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MetadataHookFailed {
+    #[topic]
+    pub token_id: u32,
+}
+
 // Note: Transfer, Approve, and standard Mint events are emitted automatically by OpenZeppelin's Base trait
 // We only define custom events here that add additional information or functionality
 
@@ -132,4 +150,17 @@ pub fn emit_batch_mint(e: &Env, minter: &Address, to: &Address, amount: u32, las
         last_token_id,
     }
     .publish(e);
+}
+
+pub fn emit_batch_mint_many(e: &Env, minter: &Address, total_amount: u32, recipient_count: u32) {
+    BatchMintMany {
+        minter: minter.clone(),
+        total_amount,
+        recipient_count,
+    }
+    .publish(e);
+}
+
+pub fn emit_metadata_hook_failed(e: &Env, token_id: u32) {
+    MetadataHookFailed { token_id }.publish(e);
 }
