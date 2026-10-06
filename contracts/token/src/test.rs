@@ -57,6 +57,8 @@ fn mint_defaults_to_self_delegate() {
     let (e, client, owner) = setup();
     let alice = Address::generate(&e);
 
+    assert_eq!(client.version(), String::from_str(&e, "0.1.0"));
+    assert_eq!(client.wasm_hash(), BytesN::from_array(&e, &[0u8; 32]));
     let _token_id = client.mint(&owner, &alice);
 
     assert_eq!(client.balance(&alice), 1);

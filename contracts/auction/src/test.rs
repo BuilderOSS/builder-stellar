@@ -106,6 +106,8 @@ fn test_constructor_initializes_correctly() {
 
     assert!(auction.paused());
     assert_eq!(auction.get_owner(), Some(owner));
+    assert_eq!(auction.version(), String::from_str(&e, "0.1.0"));
+    assert_eq!(auction.wasm_hash(), BytesN::from_array(&e, &[0u8; 32]));
 
     let config = auction.get_config();
     assert_eq!(config.token_contract, token_contract);

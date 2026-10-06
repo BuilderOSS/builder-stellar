@@ -62,6 +62,8 @@ fn test_initialize() {
 
     initialize_metadata(&env, &client, &token, &owner);
 
+    assert_eq!(client.version(), String::from_str(&env, "0.1.0"));
+    assert_eq!(client.wasm_hash(), BytesN::from_array(&env, &[0u8; 32]));
     let settings = client.get_settings();
     assert_eq!(settings.token, token);
     assert_eq!(

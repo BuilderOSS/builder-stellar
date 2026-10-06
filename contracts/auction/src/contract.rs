@@ -69,6 +69,9 @@ pub trait DaoAuctionContractTrait {
     fn set_treasury(e: &Env, treasury: Address);
     fn finalize_ownership(e: &Env, new_owner: Address, launch_auction: bool);
     fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>);
+    fn version(e: &Env) -> String;
+    fn wasm_hash(e: &Env) -> BytesN<32>;
+    fn sync_version(e: &Env);
 }
 
 #[contractimpl(contracttrait)]
@@ -225,8 +228,53 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         if !approved {
             panic!("upgrade not approved");
         }
+        let version: Option<String> = e.invoke_contract(
+            &manager,
+            &Symbol::new(e, "get_implementation_version"),
+            soroban_sdk::vec![e, to_hash.clone().into_val(e)],
+        );
+        let version = version.expect("target version not registered");
         e.storage().instance().set(&DataKey::CurrentHash, &to_hash);
+        e.storage()
+            .instance()
+            .set(&DataKey::CurrentVersion, &version);
         e.deployer().update_current_contract_wasm(to_hash);
+    }
+
+    /// Returns the release version registered for the active auction WASM.
+    fn version(e: &Env) -> String {
+        e.storage()
+            .instance()
+            .get(&DataKey::CurrentVersion)
+            .expect("auction version not set")
+    }
+
+    /// Returns the active auction WASM hash.
+    fn wasm_hash(e: &Env) -> BytesN<32> {
+        e.storage()
+            .instance()
+            .get(&DataKey::CurrentHash)
+            .expect("auction hash not set")
+    }
+
+    fn sync_version(e: &Env) {
+        let owner = ownable::get_owner(e).expect("owner not set");
+        owner.require_auth();
+        let manager: Address = e
+            .storage()
+            .instance()
+            .get(&DataKey::Manager)
+            .expect("manager not set");
+        let current = Self::wasm_hash(e);
+        let version: Option<String> = e.invoke_contract(
+            &manager,
+            &Symbol::new(e, "get_implementation_version"),
+            soroban_sdk::vec![e, current.into_val(e)],
+        );
+        e.storage().instance().set(
+            &DataKey::CurrentVersion,
+            &version.expect("active WASM version not registered"),
+        );
     }
 
     #[when_not_paused]

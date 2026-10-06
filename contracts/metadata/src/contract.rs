@@ -126,10 +126,59 @@ impl MetadataContract {
         if !approved {
             panic!("upgrade not approved");
         }
+        let version: Option<String> = env.invoke_contract(
+            &manager,
+            &Symbol::new(&env, "get_implementation_version"),
+            vec![&env, to_hash.clone().into_val(&env)],
+        );
+        let version = version.expect("target version not registered");
         env.storage()
             .instance()
             .set(&DataKey::CurrentHash, &to_hash);
+        env.storage()
+            .instance()
+            .set(&DataKey::CurrentVersion, &version);
         env.deployer().update_current_contract_wasm(to_hash);
+    }
+
+    /// Returns the release version registered for the active metadata WASM.
+    pub fn version(env: Env) -> String {
+        env.storage()
+            .instance()
+            .get(&DataKey::CurrentVersion)
+            .expect("metadata version not set")
+    }
+
+    /// Returns the active metadata WASM hash.
+    pub fn wasm_hash(env: Env) -> BytesN<32> {
+        env.storage()
+            .instance()
+            .get(&DataKey::CurrentHash)
+            .expect("metadata hash not set")
+    }
+
+    pub fn sync_version(env: Env) {
+        let owner: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Owner)
+            .expect("owner not set");
+        owner.require_auth();
+        let manager: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Manager)
+            .expect("manager not set");
+        let current = Self::wasm_hash(env.clone());
+        let version: Option<String> = env.invoke_contract(
+            &manager,
+            &Symbol::new(&env, "get_implementation_version"),
+            vec![&env, current.into_val(&env)],
+        );
+        env.storage().instance().set(
+            &DataKey::CurrentVersion,
+            &version.expect("active WASM version not registered"),
+        );
     }
 
     /// Add new properties and items

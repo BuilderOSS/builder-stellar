@@ -14,6 +14,17 @@ if (!configPath) {
 }
 
 const config = JSON.parse(readFileSync(configPath, 'utf8'));
+const releaseManifestPath = 'releases/contracts.json';
+if (!existsSync(releaseManifestPath)) {
+  throw new Error(`Contract release manifest not found: ${releaseManifestPath}`);
+}
+const versions = JSON.parse(readFileSync(releaseManifestPath, 'utf8'));
+const contractNames = ['manager', 'token', 'metadata', 'auction', 'governor', 'treasury', 'marketplace'];
+for (const name of contractNames) {
+  if (typeof versions[name] !== 'string' || versions[name].trim() === '') {
+    throw new Error(`Contract release manifest must define a version for ${name}`);
+  }
+}
 const requiredConfig = [
   ['network', config.network],
   ['label', config.label],
@@ -43,6 +54,8 @@ const networkPassphrase = config.networkPassphrase;
 const saltSuffix = process.env.DEPLOY_SALT_SUFFIX?.trim() ?? '';
 const contractBuildDir = 'target/wasm32v1-none/release';
 const deployArtifactPath = `deploys/${config.label}-${networkName}-manager.json`;
+const sourceCommitResult = runQuiet('git', ['rev-parse', 'HEAD']);
+const sourceCommit = sourceCommitResult.ok ? sourceCommitResult.stdout.trim() : null;
 
 async function confirmOverwrite(filePath) {
   if (force || !existsSync(filePath)) {
@@ -204,7 +217,7 @@ function installWasm(packageName) {
   return hash;
 }
 
-function registerImplementation(managerAddress, wasmHash, name) {
+function registerImplementation(managerAddress, wasmHash, name, version) {
   console.log(`Registering implementation ${name}...`);
 
   const result = runQuiet('stellar', [
@@ -223,7 +236,7 @@ function registerImplementation(managerAddress, wasmHash, name) {
     '--name',
     name,
     '--version',
-    '0.1.0'
+    version
   ]);
 
   if (!result.ok) {
@@ -310,6 +323,8 @@ async function writeDeployArtifact(
     },
     manager: managerAddress,
     implementations,
+    versions,
+    sourceCommit,
     deployedAt: new Date().toISOString()
   };
 
@@ -363,14 +378,15 @@ async function main() {
   const managerDeploy = deployIfMissing(
     'manager',
     `dao-manager-${networkName}`,
-    ['--admin', adminAddress, '--current_hash', managerWasmHash, '--version', '0.1.0']
+    ['--admin', adminAddress, '--current_hash', managerWasmHash, '--version', versions.manager]
   );
 
   console.log(`Manager deployed: ${managerDeploy.id}`);
 
-  // Install all 6 implementation WASMs
+  // Install the Manager and all module implementation WASMs.
   console.log('\n=== Installing Implementation WASMs ===\n');
   const implementations = {
+    manager: installWasm('manager'),
     token: installWasm('token'),
     metadata: installWasm('metadata'),
     auction: installWasm('auction'),
@@ -381,27 +397,35 @@ async function main() {
 
   // Register implementations with Manager
   console.log('\n=== Registering Implementations ===\n');
-  registerImplementation(managerDeploy.id, implementations.token, 'Token');
+  if (implementations.manager !== managerWasmHash) {
+    throw new Error('Installed Manager WASM hash does not match deployed Manager WASM hash');
+  }
+  registerImplementation(managerDeploy.id, implementations.manager, 'Manager', versions.manager);
+  registerImplementation(managerDeploy.id, implementations.token, 'Token', versions.token);
   registerImplementation(
     managerDeploy.id,
     implementations.metadata,
-    'Metadata'
+    'Metadata',
+    versions.metadata
   );
-  registerImplementation(managerDeploy.id, implementations.auction, 'Auction');
+  registerImplementation(managerDeploy.id, implementations.auction, 'Auction', versions.auction);
   registerImplementation(
     managerDeploy.id,
     implementations.governor,
-    'Governor'
+    'Governor',
+    versions.governor
   );
   registerImplementation(
     managerDeploy.id,
     implementations.treasury,
-    'Treasury'
+    'Treasury',
+    versions.treasury
   );
   registerImplementation(
     managerDeploy.id,
     implementations.marketplace,
-    'Marketplace'
+    'Marketplace',
+    versions.marketplace
   );
 
   // Set current implementations

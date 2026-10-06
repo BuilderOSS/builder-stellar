@@ -160,6 +160,9 @@ impl ManagerContract {
         if from_impl.revoked || to_impl.revoked {
             return Err(ManagerError::InvalidUpgradePath);
         }
+        if from_impl.name != to_impl.name {
+            return Err(ManagerError::InvalidUpgradePath);
+        }
 
         // Create approval record
         let approval = UpgradeApproval {
@@ -264,9 +267,37 @@ impl ManagerContract {
             .get(&ManagerKey::Implementation(to_hash));
 
         match (from_impl, to_impl) {
-            (Some(from), Some(to)) => !from.revoked && !to.revoked,
+            (Some(from), Some(to)) => !from.revoked && !to.revoked && from.name == to.name,
             _ => false,
         }
+    }
+
+    /// Returns the registered release version for a WASM hash.
+    ///
+    /// Module contracts call this only while applying an approved upgrade, so
+    /// their stored version always corresponds to their active WASM hash.
+    pub fn get_implementation_version(env: Env, wasm_hash: BytesN<32>) -> Option<String> {
+        env.storage()
+            .instance()
+            .get::<ManagerKey, ImplementationVersion>(&ManagerKey::Implementation(wasm_hash))
+            .filter(|implementation| !implementation.revoked)
+            .map(|implementation| implementation.version)
+    }
+
+    /// Returns the active Manager release version.
+    pub fn version(env: Env) -> String {
+        env.storage()
+            .instance()
+            .get(&ManagerKey::CurrentManagerVersion)
+            .expect("manager version not set")
+    }
+
+    /// Returns the active Manager WASM hash.
+    pub fn wasm_hash(env: Env) -> BytesN<32> {
+        env.storage()
+            .instance()
+            .get(&ManagerKey::CurrentManagerWasm)
+            .expect("manager hash not set")
     }
 
     /// Get latest version of an implementation by name.
@@ -337,13 +368,13 @@ impl ManagerContract {
         // Check authorization
         Self::require_admin(&env)?;
 
-        for hash in [
-            &token,
-            &metadata,
-            &auction,
-            &governor,
-            &treasury,
-            &marketplace,
+        for (hash, expected_name) in [
+            (&token, "Token"),
+            (&metadata, "Metadata"),
+            (&auction, "Auction"),
+            (&governor, "Governor"),
+            (&treasury, "Treasury"),
+            (&marketplace, "Marketplace"),
         ] {
             let implementation: ImplementationVersion = env
                 .storage()
@@ -352,6 +383,9 @@ impl ManagerContract {
                 .ok_or(ManagerError::ImplementationNotFound)?;
             if implementation.revoked {
                 return Err(ManagerError::ImplementationNotFound);
+            }
+            if implementation.name != String::from_str(&env, expected_name) {
+                return Err(ManagerError::InvalidImplementationName);
             }
         }
 
@@ -525,6 +559,26 @@ impl ManagerContract {
             .get(&ManagerKey::CurrentMarketplaceWasm)
             .ok_or(ManagerError::CurrentImplementationsNotSet)?;
 
+        let implementation_version = |hash: BytesN<32>, expected_name: &str| {
+            let implementation: ImplementationVersion = env
+                .storage()
+                .instance()
+                .get(&ManagerKey::Implementation(hash))
+                .ok_or(ManagerError::ImplementationNotFound)?;
+            if implementation.revoked
+                || implementation.name != String::from_str(&env, expected_name)
+            {
+                return Err(ManagerError::ImplementationNotFound);
+            }
+            Ok(implementation.version)
+        };
+        let token_version = implementation_version(token_wasm.clone(), "Token")?;
+        let metadata_version = implementation_version(metadata_wasm.clone(), "Metadata")?;
+        let auction_version = implementation_version(auction_wasm.clone(), "Auction")?;
+        let governor_version = implementation_version(governor_wasm.clone(), "Governor")?;
+        let treasury_version = implementation_version(treasury_wasm.clone(), "Treasury")?;
+        let marketplace_version = implementation_version(marketplace_wasm.clone(), "Marketplace")?;
+
         for hash in [
             token_wasm.clone(),
             metadata_wasm.clone(),
@@ -582,7 +636,7 @@ impl ManagerContract {
                 governor_addr.clone(),
                 env.current_contract_address(),
                 treasury_wasm.clone(),
-                String::from_str(&env, "0.1.0"),
+                treasury_version,
             ),
         );
 
@@ -598,7 +652,7 @@ impl ManagerContract {
                 metadata_addr.clone(),
                 env.current_contract_address(),
                 token_wasm.clone(),
-                String::from_str(&env, "0.1.0"),
+                token_version,
             ),
         );
 
@@ -621,7 +675,7 @@ impl ManagerContract {
                 governance.quorum_bps,
                 env.current_contract_address(),
                 governor_wasm.clone(),
-                String::from_str(&env, "0.1.0"),
+                governor_version,
             ),
         );
 
@@ -643,7 +697,7 @@ impl ManagerContract {
                 payment_asset,
                 env.current_contract_address(),
                 auction_wasm.clone(),
-                String::from_str(&env, "0.1.0"),
+                auction_version,
             ),
         );
 
@@ -656,7 +710,7 @@ impl ManagerContract {
                 marketplace_payment_asset,
                 env.current_contract_address(),
                 marketplace_wasm,
-                String::from_str(&env, "0.1.0"),
+                marketplace_version,
                 marketplace_fee_bps,
             ),
         );
@@ -686,7 +740,7 @@ impl ManagerContract {
                     extension: String::from_str(&env, ""),
                 }
                 .into_val(&env),
-                String::from_str(&env, "0.1.0").into_val(&env),
+                metadata_version.into_val(&env),
             ],
         );
 
@@ -991,6 +1045,12 @@ impl ManagerContract {
 
         if to_impl.revoked {
             return Err(ManagerError::ImplementationNotFound);
+        }
+        if to_impl.name != String::from_str(&env, "Manager") {
+            return Err(ManagerError::InvalidUpgradePath);
+        }
+        if !Self::is_upgrade_approved(env.clone(), from_hash.clone(), to_hash.clone()) {
+            return Err(ManagerError::InvalidUpgradePath);
         }
 
         // Update Manager's stored hash and version

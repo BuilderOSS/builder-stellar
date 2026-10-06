@@ -106,8 +106,6 @@ impl DaoGovernorContract {
             .set(&GovernorKey::CurrentVersion, &version);
 
         let name = String::from_str(e, "MvpDaoGovernor");
-        let version = String::from_str(e, "1.0.0");
-
         governor::set_name(e, name.clone());
         governor::set_version(e, version.clone());
         governor::set_token_contract(e, &token_contract);
@@ -161,10 +159,49 @@ impl DaoGovernorContract {
         if !approved {
             panic!("upgrade not approved");
         }
+        let version: Option<String> = e.invoke_contract(
+            &manager,
+            &Symbol::new(e, "get_implementation_version"),
+            vec![e, to_hash.clone().into_val(e)],
+        );
+        let version = version.expect("target version not registered");
         e.storage()
             .instance()
             .set(&GovernorKey::CurrentHash, &to_hash);
+        e.storage()
+            .instance()
+            .set(&GovernorKey::CurrentVersion, &version);
+        governor::set_version(e, version);
         e.deployer().update_current_contract_wasm(to_hash);
+    }
+
+    /// Returns the active governor WASM hash.
+    pub fn wasm_hash(e: &Env) -> BytesN<32> {
+        e.storage()
+            .instance()
+            .get(&GovernorKey::CurrentHash)
+            .expect("governor hash not set")
+    }
+
+    pub fn sync_version(e: &Env) {
+        let owner = stellar_access::ownable::get_owner(e).expect("owner not set");
+        owner.require_auth();
+        let manager: Address = e
+            .storage()
+            .instance()
+            .get(&GovernorKey::Manager)
+            .expect("manager not set");
+        let current = Self::wasm_hash(e);
+        let version: Option<String> = e.invoke_contract(
+            &manager,
+            &Symbol::new(e, "get_implementation_version"),
+            vec![e, current.into_val(e)],
+        );
+        let version = version.expect("active WASM version not registered");
+        e.storage()
+            .instance()
+            .set(&GovernorKey::CurrentVersion, &version);
+        governor::set_version(e, version);
     }
 
     #[only_owner]

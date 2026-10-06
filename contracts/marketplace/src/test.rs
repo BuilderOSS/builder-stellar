@@ -149,6 +149,12 @@ fn constructor_starts_paused_and_stores_config() {
     assert_eq!(config.payment_asset, payment);
     assert_eq!(config.manager, manager);
     assert!(config.paused);
+    let marketplace = crate::contract::MarketplaceContractClient::new(&env, &address);
+    assert_eq!(marketplace.version(), String::from_str(&env, "0.1.0"));
+    assert_eq!(
+        marketplace.wasm_hash(),
+        BytesN::from_array(&env, &[0u8; 32])
+    );
 }
 
 #[test]

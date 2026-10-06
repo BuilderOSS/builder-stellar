@@ -28,10 +28,42 @@ fn setup() -> (Env, ManagerContractClient<'static>, Address) {
 fn test_initialization() {
     let (env, client, admin) = setup();
 
-    // Test passes if contract initializes without panic
-    let _ = env;
+    assert_eq!(client.version(), String::from_str(&env, "0.1.0"));
+    assert_eq!(client.wasm_hash(), BytesN::from_array(&env, &[0u8; 32]));
     let _ = client;
     let _ = admin;
+}
+
+#[test]
+fn implementation_version_is_available_by_hash() {
+    let (env, client, _admin) = setup();
+    let wasm_hash = BytesN::from_array(&env, &[1u8; 32]);
+    let version = String::from_str(&env, "1.2.3");
+
+    client.register_implementation(&String::from_str(&env, "Token"), &version, &wasm_hash);
+
+    assert_eq!(client.get_implementation_version(&wasm_hash), Some(version));
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1005)")]
+fn reject_cross_module_upgrade_approval() {
+    let (env, client, _admin) = setup();
+    let token_hash = BytesN::from_array(&env, &[1u8; 32]);
+    let auction_hash = BytesN::from_array(&env, &[2u8; 32]);
+
+    client.register_implementation(
+        &String::from_str(&env, "Token"),
+        &String::from_str(&env, "1.0.0"),
+        &token_hash,
+    );
+    client.register_implementation(
+        &String::from_str(&env, "Auction"),
+        &String::from_str(&env, "1.0.0"),
+        &auction_hash,
+    );
+
+    client.approve_upgrade(&token_hash, &auction_hash);
 }
 
 #[test]

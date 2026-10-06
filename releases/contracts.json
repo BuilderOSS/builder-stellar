@@ -1,0 +1,9 @@
+{
+  "manager": "0.1.0",
+  "token": "0.1.0",
+  "metadata": "0.1.0",
+  "auction": "0.1.0",
+  "governor": "0.1.0",
+  "treasury": "0.1.0",
+  "marketplace": "0.1.0"
+}

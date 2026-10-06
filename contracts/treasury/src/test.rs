@@ -48,6 +48,11 @@ fn treasury_executes_arbitrary_call_for_governor() {
     let target = TargetContractClient::new(&e, &target_id);
 
     let args: Vec<Val> = vec![&e, 7_u32.into_val(&e)];
+    assert_eq!(treasury.version(), String::from_str(&e, "0.1.0"));
+    assert_eq!(
+        treasury.wasm_hash(),
+        soroban_sdk::BytesN::from_array(&e, &[0u8; 32])
+    );
     treasury.execute(&target.address, &symbol_short!("set_value"), &args);
 
     assert_eq!(target.get_value(), 7);

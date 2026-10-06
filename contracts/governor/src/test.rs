@@ -145,6 +145,8 @@ fn full_governance_flow_executes_treasury_call() {
     let (e, token, _treasury, governor, target, owner) = setup();
     let proposer = Address::generate(&e);
 
+    assert_eq!(governor.version(), String::from_str(&e, "0.1.0"));
+    assert_eq!(governor.wasm_hash(), BytesN::from_array(&e, &[0u8; 32]));
     let token_id = token.mint(&owner, &proposer);
     assert_eq!(token_id, 0);
     assert_eq!(token.get_votes(&proposer), 1);

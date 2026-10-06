@@ -298,8 +298,15 @@ impl MarketplaceContract {
         if !approved {
             panic_with_error!(e, MarketplaceError::Unauthorized);
         }
+        let version: Option<String> = e.invoke_contract(
+            &config.manager,
+            &Symbol::new(e, "get_implementation_version"),
+            vec![e, to_hash.clone().into_val(e)],
+        );
+        let version = version.expect("target version not registered");
         let mut updated = config;
         updated.current_hash = to_hash.clone();
+        updated.version = version;
         storage::set_config(e, &updated);
         MarketplaceUpgraded {
             from_hash,
@@ -307,6 +314,27 @@ impl MarketplaceContract {
         }
         .publish(e);
         e.deployer().update_current_contract_wasm(to_hash);
+    }
+
+    /// Returns the release version registered for the active marketplace WASM.
+    pub fn version(e: &Env) -> String {
+        Self::get_config(e).version
+    }
+
+    /// Returns the active marketplace WASM hash.
+    pub fn wasm_hash(e: &Env) -> BytesN<32> {
+        Self::get_config(e).current_hash
+    }
+
+    pub fn sync_version(e: &Env) {
+        let mut config = Self::require_treasury(e);
+        let version: Option<String> = e.invoke_contract(
+            &config.manager,
+            &Symbol::new(e, "get_implementation_version"),
+            vec![e, config.current_hash.into_val(e)],
+        );
+        config.version = version.expect("active WASM version not registered");
+        storage::set_config(e, &config);
     }
 
     fn require_treasury(e: &Env) -> MarketplaceConfig {

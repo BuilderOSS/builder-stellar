@@ -40,6 +40,9 @@ const managerAddress = managerArtifact.manager;
 if (!managerAddress || !managerArtifact.implementations) {
   throw new Error(`Manager artifact ${managerArtifactPath} must contain manager and implementations`);
 }
+if (!managerArtifact.versions) {
+  throw new Error(`Manager artifact ${managerArtifactPath} must contain release versions`);
+}
 
 const required = [
   ['deployer', daoConfig.deployer],
@@ -191,6 +194,8 @@ function writeArtifact({ status, addresses, transactions = {}, error, replaceTra
   const artifact = {
     ...previous, status, network: networkName, label: networkConfig.label,
     deployer: daoConfig.deployer, nonce: daoConfig.nonce, manager: managerAddress,
+    versions: managerArtifact.versions,
+    sourceCommit: managerArtifact.sourceCommit ?? null,
     addresses: addresses ?? previous.addresses ?? null, config: daoConfig,
     updatedAt: new Date().toISOString()
   };
