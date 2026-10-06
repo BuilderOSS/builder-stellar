@@ -231,7 +231,7 @@ NEXT_PUBLIC_NETWORK=testnet|public|local
 APP_DATABASE_URL=postgres://user:pass@host/db?sslmode=require
 
 # Server Configuration
-APP_URL=http://localhost:5000
+APP_URL=http://localhost:4242
 IRON_PASSWORD=<32+ char secret>
 
 # WalletConnect
