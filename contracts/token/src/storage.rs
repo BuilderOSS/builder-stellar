@@ -60,4 +60,6 @@ pub enum TokenKey {
     Manager,
     CurrentHash,
     CurrentVersion,
+    /// Optional minter contract address for delegated minting
+    Minter,
 }

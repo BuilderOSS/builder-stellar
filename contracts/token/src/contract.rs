@@ -45,6 +45,7 @@ impl DaoTokenContract {
     /// * `symbol` - The short symbol/ticker for the token
     /// * `metadata` - The metadata contract address for artwork generation
     /// * `manager` - The Manager contract address for upgrade validation
+    /// * `minter` - The Minter contract address for delegated minting
     /// * `current_hash` - The WASM hash of this contract implementation
     /// * `version` - The semantic version string (e.g., "0.1.0")
     ///
@@ -59,6 +60,7 @@ impl DaoTokenContract {
         symbol: String,
         metadata: Address,
         manager: Address,
+        minter: Address,
         current_hash: BytesN<32>,
         version: String,
     ) {
@@ -66,6 +68,7 @@ impl DaoTokenContract {
         set_owner(e, &owner);
         e.storage().instance().set(&TokenKey::Metadata, &metadata);
         e.storage().instance().set(&TokenKey::Manager, &manager);
+        e.storage().instance().set(&TokenKey::Minter, &minter);
         e.storage()
             .instance()
             .set(&TokenKey::CurrentHash, &current_hash);
@@ -241,6 +244,11 @@ impl DaoTokenContract {
     /// Returns the metadata contract used for mint hooks.
     pub fn metadata(e: &Env) -> Option<Address> {
         e.storage().instance().get(&TokenKey::Metadata)
+    }
+
+    /// Returns the minter contract used for delegated minting.
+    pub fn minter(e: &Env) -> Option<Address> {
+        e.storage().instance().get(&TokenKey::Minter)
     }
 
     /// Mints a single NFT to the specified address.
