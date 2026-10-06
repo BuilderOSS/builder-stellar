@@ -136,6 +136,14 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA manager GRANT SELECT, INSERT, UPDATE, DELETE 
 ALTER DEFAULT PRIVILEGES IN SCHEMA metadata GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO goldsky_writer;
 ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO goldsky_writer;
 ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT USAGE, SELECT ON SEQUENCES TO goldsky_writer;
+
+-- Goldsky only sinks these three landing tables.  It must not be able to write
+-- application read models or create arbitrary objects in their schemas.
+REVOKE SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA governance, token, auction, treasury, manager, metadata FROM goldsky_writer;
+REVOKE CREATE ON SCHEMA governance, token, auction, treasury, manager, metadata, app FROM goldsky_writer;
+GRANT INSERT, UPDATE, DELETE, SELECT ON chain.raw_events, chain.decoded_events, app.activity_feed_events TO goldsky_writer;
+ALTER DEFAULT PRIVILEGES IN SCHEMA governance, token, auction, treasury, manager, metadata REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLES FROM goldsky_writer;
+ALTER DEFAULT PRIVILEGES IN SCHEMA governance, token, auction, treasury, manager, metadata, app REVOKE USAGE, SELECT, UPDATE ON SEQUENCES FROM goldsky_writer;
 EOF
 
 echo -e "${GREEN}✓ goldsky_writer permissions granted${NC}"
@@ -164,6 +172,21 @@ GRANT SELECT ON ALL TABLES IN SCHEMA manager TO app_server;
 GRANT SELECT ON ALL TABLES IN SCHEMA metadata TO app_server;
 GRANT SELECT ON ALL TABLES IN SCHEMA app TO app_server;
 
+-- app_server is a read-only consumer.  Explicitly revoke object and schema
+-- mutation privileges so a broad SELECT grant can never become a writer grant.
+DO $revoke$
+DECLARE
+  schema_name text;
+BEGIN
+  EXECUTE format('REVOKE CREATE ON DATABASE %I FROM app_server', current_database());
+  FOREACH schema_name IN ARRAY ARRAY['chain', 'governance', 'token', 'auction', 'treasury', 'manager', 'metadata', 'app'] LOOP
+    EXECUTE format('REVOKE CREATE ON SCHEMA %I FROM app_server', schema_name);
+    EXECUTE format('REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA %I FROM app_server', schema_name);
+    EXECUTE format('REVOKE USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA %I FROM app_server', schema_name);
+  END LOOP;
+END
+$revoke$;
+
 -- Grant default privileges for future tables
 ALTER DEFAULT PRIVILEGES IN SCHEMA chain GRANT SELECT ON TABLES TO app_server;
 ALTER DEFAULT PRIVILEGES IN SCHEMA governance GRANT SELECT ON TABLES TO app_server;
@@ -173,6 +196,9 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA treasury GRANT SELECT ON TABLES TO app_server
 ALTER DEFAULT PRIVILEGES IN SCHEMA manager GRANT SELECT ON TABLES TO app_server;
 ALTER DEFAULT PRIVILEGES IN SCHEMA metadata GRANT SELECT ON TABLES TO app_server;
 ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT SELECT ON TABLES TO app_server;
+
+-- Raw landing payloads are not an application read surface.
+REVOKE SELECT ON chain.raw_events, chain.decoded_events FROM app_server;
 EOF
 
 echo -e "${GREEN}✓ app_server permissions granted${NC}"

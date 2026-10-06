@@ -2,7 +2,7 @@
 #
 # Rollback Database Migrations
 #
-# Rolls back all migrations in reverse order (7 → 0).
+# Rolls back all migrations in reverse order (13 → 0).
 # Use ONLY in emergency recovery scenarios.
 #
 # Usage:
@@ -59,17 +59,25 @@ fi
 echo -e "${GREEN}✓ Connection successful${NC}"
 echo ""
 
-# Rollback in reverse order (8 → 0)
+# Resolve artifacts from this script's directory so the command is safe from
+# any working directory.  Every successful step also removes its ledger row.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROLLBACK_FILES=(
-  "db/rollback/0008_decoded_events_indexes_rollback.sql"
-  "db/rollback/0007_app_views_rollback.sql"
-  "db/rollback/0006_metadata_views_rollback.sql"
-  "db/rollback/0005_treasury_views_rollback.sql"
-  "db/rollback/0004_auction_views_rollback.sql"
-  "db/rollback/0003_token_views_rollback.sql"
-  "db/rollback/0002_governance_views_rollback.sql"
-  "db/rollback/0001_manager_views_rollback.sql"
-  "db/rollback/0000_base_tables_rollback.sql"
+  "$SCRIPT_DIR/rollback/0014_event_order_indexes_rollback.sql"
+  "$SCRIPT_DIR/rollback/0013_deterministic_ordering_and_activity_indexes_rollback.sql"
+  "$SCRIPT_DIR/rollback/0012_manager_auction_reactivation_rollback.sql"
+  "$SCRIPT_DIR/rollback/0011_metadata_contract_image_rollback.sql"
+  "$SCRIPT_DIR/rollback/0010_deduplicate_event_identity_rollback.sql"
+  "$SCRIPT_DIR/rollback/0009_manager_view_permissions_rollback.sql"
+  "$SCRIPT_DIR/rollback/0008_decoded_events_indexes_rollback.sql"
+  "$SCRIPT_DIR/rollback/0007_app_views_rollback.sql"
+  "$SCRIPT_DIR/rollback/0006_metadata_views_rollback.sql"
+  "$SCRIPT_DIR/rollback/0005_treasury_views_rollback.sql"
+  "$SCRIPT_DIR/rollback/0004_auction_views_rollback.sql"
+  "$SCRIPT_DIR/rollback/0003_token_views_rollback.sql"
+  "$SCRIPT_DIR/rollback/0002_governance_views_rollback.sql"
+  "$SCRIPT_DIR/rollback/0001_manager_views_rollback.sql"
+  "$SCRIPT_DIR/rollback/0000_base_tables_rollback.sql"
 )
 
 SUCCESS_COUNT=0
@@ -84,13 +92,21 @@ for ROLLBACK_FILE in "${ROLLBACK_FILES[@]}"; do
   STEP_NAME=$(basename "$ROLLBACK_FILE" _rollback.sql)
   echo -e "${YELLOW}→ Rolling back $STEP_NAME...${NC}"
 
-  if psql "$DATABASE_URL" -f "$ROLLBACK_FILE" > /dev/null 2>&1; then
+    if psql -v ON_ERROR_STOP=1 "$DATABASE_URL" <<EOF > /dev/null 2>&1
+BEGIN;
+\\ir $ROLLBACK_FILE
+DELETE FROM public.schema_migrations WHERE version = '$STEP_NAME';
+COMMIT;
+EOF
+    then
     echo -e "${GREEN}✓ $STEP_NAME rolled back${NC}"
     ((SUCCESS_COUNT++))
-  else
-    echo -e "${RED}✗ Failed to rollback $STEP_NAME${NC}"
-    ((FAIL_COUNT++))
-  fi
+   else
+     echo -e "${RED}✗ Failed to rollback $STEP_NAME${NC}"
+     ((FAIL_COUNT++))
+     echo -e "${YELLOW}Stopping before touching older migrations.${NC}"
+     exit 1
+   fi
 done
 
 echo ""

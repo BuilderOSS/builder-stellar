@@ -53,6 +53,10 @@ export type ProposalListItem = {
 
 export type ProposalListResponse = {
   items: ProposalListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
   generatedAt: string;
   message?: string;
 };

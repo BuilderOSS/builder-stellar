@@ -72,6 +72,11 @@ function invoke(data) {
     if (value === null || value === undefined) return '';
     return String(value);
   }
+  function normalizeTimestamp(value) {
+    var timestamp = toStringOrEmpty(value).trim();
+    if (!timestamp || /^[-+]?\d+(\.\d+)?$/.test(timestamp) || /(?:Z|[+-]\d\d:?\d\d|\sUTC)$/i.test(timestamp)) return timestamp;
+    return timestamp + ' UTC';
+  }
   function toNumber(value) {
     if (value === null || value === undefined) return null;
     var n = Number(value);
@@ -103,7 +108,7 @@ function invoke(data) {
     transaction_successful: toBoolean(data.transaction_successful),
     ledger_sequence: toNumber(data.ledger_sequence),
     ledger_hash: toStringOrEmpty(data.ledger_hash),
-    ledger_closed_at: toStringOrEmpty(data.ledger_closed_at),
+    ledger_closed_at: normalizeTimestamp(data.ledger_closed_at),
     transaction_index: toNumber(data.transaction_index),
     operation_index: toNumber(data.operation_index),
     event_index: toNumber(data.event_index),

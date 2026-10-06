@@ -11,6 +11,11 @@ function invoke(data) {
       var n = Number(val);
       return isFinite(n) ? n : def;
     }
+    function normalizeTimestamp(val) {
+      var timestamp = typeof val === 'string' ? val.trim() : '';
+      if (!timestamp || /^[-+]?\d+(\.\d+)?$/.test(timestamp) || /(?:Z|[+-]\d\d:?\d\d|\sUTC)$/i.test(timestamp)) return timestamp;
+      return timestamp + ' UTC';
+    }
 
     var topics = ensureString(data.topics, '{}');
     var args = ensureString(data.args, '{}');
@@ -114,6 +119,7 @@ function invoke(data) {
     ProposalQueued: 'governance.proposal_queued',
     VoteCast: 'governance.vote_cast',
     ProposalCancelled: 'governance.proposal_cancelled',
+     ProposalCanceled: 'governance.proposal_cancelled',
     ProposalExecuted: 'governance.proposal_executed',
     TreasuryChanged: 'governance.treasury_changed',
     TokenContractChanged: 'governance.token_contract_changed',
@@ -171,6 +177,7 @@ function invoke(data) {
     ProposalQueued: 'Proposal queued',
     VoteCast: 'Vote cast',
     ProposalCancelled: 'Proposal cancelled',
+     ProposalCanceled: 'Proposal cancelled',
     ProposalExecuted: 'Proposal executed',
     TreasuryChanged: 'Treasury changed',
     TokenContractChanged: 'Token contract changed',
@@ -326,7 +333,7 @@ function invoke(data) {
     transaction_index: transaction_index,
     operation_index: operation_index,
     event_index: event_index,
-    ledger_closed_at: toString(data.ledger_closed_at),
+    ledger_closed_at: normalizeTimestamp(data.ledger_closed_at),
     transaction_hash: toString(data.transaction_hash)
   };
   } catch (e) {

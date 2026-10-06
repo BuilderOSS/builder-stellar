@@ -7,7 +7,6 @@
 -- WARNING: This will delete all data!
 -- =============================================================================
 
-BEGIN;
 
 -- Drop all schemas in reverse dependency order
 -- App schema first (depends on others)
@@ -41,5 +40,3 @@ BEGIN
 
   RAISE NOTICE 'All schemas dropped successfully';
 END $$;
-
-COMMIT;

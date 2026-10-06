@@ -25,8 +25,8 @@ SELECT
   e.transaction_index,
   e.operation_index,
   e.event_index,
-  extract(epoch FROM to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000))::bigint AS event_timestamp_seconds,
-  to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS event_at,
+  extract(epoch FROM NULLIF(e.ledger_closed_at, '')::timestamptz)::bigint AS event_timestamp_seconds,
+  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
@@ -43,8 +43,8 @@ SELECT DISTINCT ON (e.deployment_id, i.dao_id, e.contract_id, e.args::jsonb ->> 
   (e.args::jsonb ->> 'token_id')::bigint AS token_id,
   e.topics::jsonb ->> 'to' AS owner,
   e.ledger_sequence AS event_ledger,
-  extract(epoch FROM to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000))::bigint AS event_timestamp_seconds,
-  to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS event_at,
+  extract(epoch FROM NULLIF(e.ledger_closed_at, '')::timestamptz)::bigint AS event_timestamp_seconds,
+  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
@@ -66,8 +66,8 @@ SELECT
   e.transaction_index,
   e.operation_index,
   e.event_index,
-  extract(epoch FROM to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000))::bigint AS event_timestamp_seconds,
-  to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS event_at,
+  extract(epoch FROM NULLIF(e.ledger_closed_at, '')::timestamptz)::bigint AS event_timestamp_seconds,
+  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)
@@ -88,8 +88,8 @@ SELECT
   e.transaction_index,
   e.operation_index,
   e.event_index,
-  extract(epoch FROM to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000))::bigint AS event_timestamp_seconds,
-  to_timestamp(NULLIF(e.ledger_closed_at, '')::numeric / 1000) AS event_at,
+  extract(epoch FROM NULLIF(e.ledger_closed_at, '')::timestamptz)::bigint AS event_timestamp_seconds,
+  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.event_identity i USING (deployment_id, contract_id)

@@ -68,6 +68,7 @@ pub enum DataKey {
     Manager,
     CurrentHash,
     CurrentVersion,
+    PaymentTokenLocked,
 }
 
 /// Auction configuration parameters.
@@ -159,6 +160,20 @@ pub fn get_config(e: &Env) -> AuctionConfig {
         .instance()
         .get(&DataKey::Config)
         .unwrap_or_else(|| panic_with_error!(e, AuctionError::NotInitialized))
+}
+
+pub fn is_payment_token_locked(e: &Env) -> bool {
+    e.storage()
+        .instance()
+        .get(&DataKey::PaymentTokenLocked)
+        .unwrap_or(false)
+}
+
+pub fn set_payment_token_locked(e: &Env) {
+    e.storage()
+        .instance()
+        .set(&DataKey::PaymentTokenLocked, &true);
+    e.storage().instance().extend_ttl(LEDGERS_TO_LIVE, MAX_TTL);
 }
 
 pub fn set_config(e: &Env, config: &AuctionConfig) {

@@ -17,7 +17,7 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_tokens
-    secret_name: STELLAR_BUILDER_POSTGRES
+    secret_name: DAO_POSTGRES
     schema: streamling
     column: contract_id
     sql: |
@@ -31,7 +31,7 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_metadata
-    secret_name: STELLAR_BUILDER_POSTGRES
+    secret_name: DAO_POSTGRES
     schema: streamling
     column: contract_id
     sql: |
@@ -45,7 +45,7 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_auctions
-    secret_name: STELLAR_BUILDER_POSTGRES
+    secret_name: DAO_POSTGRES
     schema: streamling
     column: contract_id
     sql: |
@@ -59,7 +59,7 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_governors
-    secret_name: STELLAR_BUILDER_POSTGRES
+    secret_name: DAO_POSTGRES
     schema: streamling
     column: contract_id
     sql: |
@@ -73,7 +73,7 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_treasuries
-    secret_name: STELLAR_BUILDER_POSTGRES
+    secret_name: DAO_POSTGRES
     schema: streamling
     column: contract_id
     sql: |
@@ -87,7 +87,7 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_marketplaces
-    secret_name: STELLAR_BUILDER_POSTGRES
+    secret_name: DAO_POSTGRES
     schema: streamling
     column: contract_id
     sql: |
@@ -132,6 +132,8 @@ transforms:
         ledger_sequence,
         ledger_hash,
         ledger_closed_at,
+        operation_index,
+        event_index,
         _gs_op
       FROM stellar_events
        WHERE ledger_sequence >= 4983407
@@ -541,6 +543,7 @@ transforms:
           ProposalQueued: 'governance.proposal_queued',
           VoteCast: 'governance.vote_cast',
           ProposalCancelled: 'governance.proposal_cancelled',
+           ProposalCanceled: 'governance.proposal_cancelled',
           ProposalExecuted: 'governance.proposal_executed',
           TreasuryChanged: 'governance.treasury_changed',
           TokenContractChanged: 'governance.token_contract_changed',
@@ -598,6 +601,7 @@ transforms:
           ProposalQueued: 'Proposal queued',
           VoteCast: 'Vote cast',
           ProposalCancelled: 'Proposal cancelled',
+           ProposalCanceled: 'Proposal cancelled',
           ProposalExecuted: 'Proposal executed',
           TreasuryChanged: 'Treasury changed',
           TokenContractChanged: 'Token contract changed',
@@ -768,7 +772,7 @@ sinks:
     from: raw_events
     schema: chain
     table: raw_events
-    secret_name: STELLAR_BUILDER_POSTGRES
+    secret_name: DAO_POSTGRES
     primary_key: event_id
 
   decoded_events_output:
@@ -776,7 +780,7 @@ sinks:
     from: decoded_events
     schema: chain
     table: decoded_events
-    secret_name: STELLAR_BUILDER_POSTGRES
+    secret_name: DAO_POSTGRES
     primary_key: event_id
 
   activity_feed_output:
@@ -784,5 +788,5 @@ sinks:
     from: activity_feed
     schema: app
     table: activity_feed_events
-    secret_name: STELLAR_BUILDER_POSTGRES
+    secret_name: DAO_POSTGRES
     primary_key: activity_id

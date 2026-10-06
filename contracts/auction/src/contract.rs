@@ -15,8 +15,9 @@ use crate::{
     },
     helpers::{create_auction, process_bid, refund_bid, settle_auction_internal},
     storage::{
-        get_auction, get_config, is_launched, set_auction, set_config, set_launched, AuctionConfig,
-        AuctionState, DataKey, MAX_BID_INCREMENT_PERCENT, MIN_AUCTION_DURATION, MIN_RESERVE_PRICE,
+        get_auction, get_config, is_launched, is_payment_token_locked, set_auction, set_config,
+        set_launched, set_payment_token_locked, AuctionConfig, AuctionState, DataKey,
+        MAX_BID_INCREMENT_PERCENT, MIN_AUCTION_DURATION, MIN_RESERVE_PRICE,
     },
 };
 
@@ -281,6 +282,10 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
             amount.into_val(e)
         ];
 
+        if !is_payment_token_locked(e) {
+            set_payment_token_locked(e);
+        }
+
         e.invoke_contract::<()>(&config.payment_token, &transfer_symbol, transfer_args);
 
         process_bid(e, &mut auction, &config, &bidder, amount);
@@ -417,6 +422,10 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     #[only_owner]
     #[when_paused]
     fn set_payment_token(e: &Env, payment_token: Address) {
+        if is_payment_token_locked(e) {
+            panic_with_error!(e, AuctionError::InvalidConfig);
+        }
+
         let owner = ownable::get_owner(e).unwrap();
 
         let mut config = get_config(e);
