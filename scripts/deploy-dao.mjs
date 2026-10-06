@@ -5,11 +5,11 @@ const args = process.argv.slice(2);
 const phase = args[0];
 const daoConfigPath = args[1];
 const networkConfigPath = args[2];
-const phases = ['create_dao', 'admin_checklist', 'launch_dao'];
+const phases = ['create_dao', 'admin_checklist', 'launch_dao', 'deploy_minter', 'batch_mint'];
 
 if (!phases.includes(phase) || !daoConfigPath || !networkConfigPath) {
   throw new Error(
-    'Usage: node scripts/deploy-dao.mjs <create_dao|admin_checklist|launch_dao> <dao-config.json> <network-config.json>'
+    'Usage: node scripts/deploy-dao.mjs <create_dao|admin_checklist|launch_dao|deploy_minter|batch_mint> <dao-config.json> <network-config.json>'
   );
 }
 
@@ -182,6 +182,79 @@ function loadDaoArtifact() {
     throw new Error(`DAO artifact ${daoArtifactPath} does not contain DAO addresses`);
   }
   return artifact;
+}
+
+function deployIfMissing(contractName, alias, initArgs = []) {
+  const saltSuffix = process.env.DEPLOY_SALT_SUFFIX?.trim() ?? '';
+  const contractBuildDir = 'target/wasm32v1-none/release';
+
+  function wasmHash(packageName) {
+    const { createHash } = require('node:crypto');
+    const { readFileSync } = require('node:fs');
+    const wasmFile = `${contractBuildDir}/${packageName}.wasm`;
+    return createHash('sha256')
+      .update(readFileSync(wasmFile))
+      .digest('hex');
+  }
+
+  function saltFor(packageName) {
+    const { createHash } = require('node:crypto');
+    const hash = wasmHash(packageName);
+    const seed = saltSuffix
+      ? `dao-minter:${networkConfig.label}:${networkName}:${packageName}:${hash}:${saltSuffix}`
+      : `dao-minter:${networkConfig.label}:${networkName}:${packageName}:${hash}`;
+    return createHash('sha256').update(seed).digest('hex');
+  }
+
+  function contractId(packageName) {
+    const result = runQuiet('stellar', [
+      'contract', 'id', 'wasm',
+      '--salt', saltFor(packageName),
+      '--source-account', identityName,
+      '--network', networkName
+    ]);
+    return result.stdout.trim();
+  }
+
+  const id = contractId(contractName);
+  const exists = runQuiet('stellar', [
+    'contract', 'fetch',
+    '--id', id,
+    '--network', networkName
+  ]);
+
+  let txMetadata = null;
+  if (!exists.ok) {
+    const wasmPath = `${contractBuildDir}/${contractName}.wasm`;
+    const result = runQuiet('stellar', [
+      'contract', 'deploy',
+      '--alias', alias,
+      '--wasm', wasmPath,
+      '--source-account', identityName,
+      '--network', networkName,
+      '--salt', saltFor(contractName),
+      '--', ...initArgs
+    ]);
+
+    if (!result.ok) {
+      console.error('Deploy output:', result.stdout);
+      console.error('Deploy error:', result.stderr);
+      throw new Error(`Failed to deploy ${contractName}`);
+    }
+
+    console.log(result.stdout);
+    console.error(result.stderr);
+
+    const output = result.stdout + result.stderr;
+    const txHashMatch = output.match(/Signing transaction:\s*([a-f0-9]{64})/i);
+
+    txMetadata = { deployedAt: new Date().toISOString() };
+    if (txHashMatch) {
+      txMetadata.txHash = txHashMatch[1];
+    }
+  }
+
+  return { id, txMetadata };
 }
 
 function writeArtifact({ status, addresses, transactions = {}, error, replaceTransactions = false }) {
@@ -392,11 +465,62 @@ if (phase === 'admin_checklist') {
   }
 }
 
-console.log('\n=== Launching DAO (auctions and marketplace enabled) ===\n');
-const launchOutput = invoke(managerAddress, 'launch_dao', {
-  token_address: addresses.token,
-  launch_config: JSON.stringify({ launch_auction: true, launch_marketplace: true })
-});
-transactions.launchDao = transaction(launchOutput);
-writeArtifact({ status: 'operational', addresses, transactions });
-console.log('DAO launch complete. Auctions and marketplace are enabled.');
+if (phase === 'launch_dao') {
+  console.log('\n=== Launching DAO (auctions and marketplace enabled) ===\n');
+  const launchOutput = invoke(managerAddress, 'launch_dao', {
+    token_address: addresses.token,
+    launch_config: JSON.stringify({ launch_auction: true, launch_marketplace: true })
+  });
+  transactions.launchDao = transaction(launchOutput);
+  writeArtifact({ status: 'operational', addresses, transactions });
+  console.log('DAO launch complete. Auctions and marketplace are enabled.');
+  process.exit(0);
+}
+
+if (phase === 'deploy_minter') {
+  console.log('\n=== Deploying Minter Contract ===\n');
+  const minterDeploy = deployIfMissing('minter', `dao-minter-${networkName}`, [
+    '--token', addresses.token,
+    '--admin', daoConfig.launchAdmin
+  ]);
+  addresses.minter = minterDeploy.id;
+  transactions.deployMinter = minterDeploy.txMetadata;
+  writeArtifact({ status: 'operational', addresses, transactions });
+  console.log(`Minter deployed: ${minterDeploy.id}`);
+  console.log('Run batch_mint to execute batch minting.');
+  process.exit(0);
+}
+
+if (phase === 'batch_mint') {
+  console.log('\n=== Executing Batch Mint ===\n');
+  const minterAddress = addresses.minter;
+  if (!minterAddress) {
+    throw new Error('Minter not deployed. Run deploy_minter first.');
+  }
+
+  // Use minter config from DAO config or provide sensible defaults
+  const batchMintConfig = daoConfig.minter?.batch_mint ?? {
+    recipients: [
+      { to: daoConfig.founders[0]?.address || daoConfig.launchAdmin, amount: 100 },
+      { to: daoConfig.founders[1]?.address || daoConfig.launchAdmin, amount: 100 },
+      { to: daoConfig.founders[2]?.address || daoConfig.launchAdmin, amount: 100 }
+    ]
+  };
+
+  console.log('Batch mint recipients:', JSON.stringify(batchMintConfig.recipients, null, 2));
+
+  const output = invoke(minterAddress, 'mint_batch', {
+    token: addresses.token,
+    admin: daoConfig.launchAdmin,
+    recipients: JSON.stringify(batchMintConfig.recipients)
+  });
+
+  transactions.batchMint = transaction(output, {
+    recipients: batchMintConfig.recipients,
+    totalAmount: batchMintConfig.recipients.reduce((sum, r) => sum + r.amount, 0)
+  });
+  writeArtifact({ status: 'operational', addresses, transactions });
+  console.log('Batch mint complete.');
+  console.log('Minted tokens to:', batchMintConfig.recipients.map(r => `${r.to} (${r.amount})`).join(', '));
+  process.exit(0);
+}

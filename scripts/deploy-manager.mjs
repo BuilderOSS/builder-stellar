@@ -19,7 +19,7 @@ if (!existsSync(releaseManifestPath)) {
   throw new Error(`Contract release manifest not found: ${releaseManifestPath}`);
 }
 const versions = JSON.parse(readFileSync(releaseManifestPath, 'utf8'));
-const contractNames = ['manager', 'token', 'metadata', 'auction', 'governor', 'treasury', 'marketplace'];
+const contractNames = ['manager', 'token', 'metadata', 'auction', 'governor', 'treasury', 'marketplace', 'minter'];
 for (const name of contractNames) {
   if (typeof versions[name] !== 'string' || versions[name].trim() === '') {
     throw new Error(`Contract release manifest must define a version for ${name}`);
@@ -393,6 +393,8 @@ async function main() {
       'metadata',
       '-p',
       'marketplace',
+      '-p',
+      'minter',
       '--release',
       '--target',
       'wasm32v1-none'
@@ -428,7 +430,8 @@ async function main() {
     auction: installWasm('auction'),
     governor: installWasm('governor'),
     treasury: installWasm('treasury'),
-    marketplace: installWasm('marketplace')
+    marketplace: installWasm('marketplace'),
+    minter: installWasm('minter')
   };
 
   // Register implementations with Manager
@@ -463,6 +466,7 @@ async function main() {
     'Marketplace',
     versions.marketplace
   );
+  registerImplementation(managerDeploy.id, implementations.minter, 'Minter', versions.minter);
 
   // Set current implementations
   console.log('\n=== Setting Current Implementations ===\n');
@@ -484,6 +488,7 @@ async function main() {
   console.log(`GOVERNOR_WASM=${implementations.governor}`);
   console.log(`TREASURY_WASM=${implementations.treasury}`);
   console.log(`MARKETPLACE_WASM=${implementations.marketplace}`);
+  console.log(`MINTER_WASM=${implementations.minter}`);
 }
 
 await main();
