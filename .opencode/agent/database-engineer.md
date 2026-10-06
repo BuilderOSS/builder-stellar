@@ -1,6 +1,7 @@
 ---
 description: Designs and validates PostgreSQL read models, migrations, permissions, and query performance.
 mode: all
+model: inherit
 permission:
   edit: allow
   bash:

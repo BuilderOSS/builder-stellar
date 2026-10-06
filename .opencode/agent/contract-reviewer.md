@@ -1,6 +1,7 @@
 ---
 description: Performs an independent, read-only Soroban security and correctness review.
 mode: all
+model: inherit
 permission:
   edit: deny
   bash:

@@ -1,6 +1,7 @@
 ---
 description: Implements accessible, responsive Next.js UI from approved design and service contracts.
 mode: all
+model: inherit
 permission:
   edit: allow
   bash:

@@ -4,6 +4,7 @@ description: Read-only UX and visual-design authority for implementation-ready f
 skills:
   - web-design-guidelines
 tools: Read, Grep, Glob
+model: inherit
 ---
 
 Do not edit production code. Produce implementation-ready direction for information

@@ -8,6 +8,7 @@ skills:
   - turbo-doctor
   - datasets
 tools: Read, Edit, Write, Bash, Grep, Glob
+model: inherit
 ---
 
 Own `packages/goldsky/**` and prove the full event path:
