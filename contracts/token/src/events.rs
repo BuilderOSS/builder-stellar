@@ -55,32 +55,6 @@ pub struct MintWithMinter {
     pub token_id: u32,
 }
 
-/// Emitted when multiple tokens are minted in a single batch operation.
-///
-/// Supplements the individual Mint events (emitted per token) with a summary
-/// of the batch operation, including the total amount and final token ID.
-/// Useful for tracking bulk minting operations like initial distribution.
-#[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct BatchMint {
-    #[topic]
-    pub minter: Address,
-    #[topic]
-    pub to: Address,
-    pub amount: u32,
-    pub last_token_id: u32,
-}
-
-/// Emitted once for a multi-recipient mint operation.
-#[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct BatchMintMany {
-    #[topic]
-    pub minter: Address,
-    pub total_amount: u32,
-    pub recipient_count: u32,
-}
-
 /// Emitted when the optional metadata hook cannot generate artwork data.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -138,25 +112,6 @@ pub fn emit_token_mint(e: &Env, minter: &Address, to: &Address, token_id: u32) {
         minter: minter.clone(),
         to: to.clone(),
         token_id,
-    }
-    .publish(e);
-}
-
-pub fn emit_batch_mint(e: &Env, minter: &Address, to: &Address, amount: u32, last_token_id: u32) {
-    BatchMint {
-        minter: minter.clone(),
-        to: to.clone(),
-        amount,
-        last_token_id,
-    }
-    .publish(e);
-}
-
-pub fn emit_batch_mint_many(e: &Env, minter: &Address, total_amount: u32, recipient_count: u32) {
-    BatchMintMany {
-        minter: minter.clone(),
-        total_amount,
-        recipient_count,
     }
     .publish(e);
 }
