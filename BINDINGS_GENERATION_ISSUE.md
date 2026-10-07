@@ -142,7 +142,7 @@ The token bindings use an interface pattern while governor appears to be a class
 
 ## References
 
-- Frontend Builder task: CONTRACT_RELEASE_HANDOFF_2026-10-06
+- Related frontend bindings work is tracked in the generated package sources and build scripts.
 - Bindings definition location: `packages/*/src/client.ts`
 - Build command: `pnpm --filter @builder-stellar/governor-bindings build`
 - Error appears in TypeScript compilation step

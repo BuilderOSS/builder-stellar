@@ -71,4 +71,4 @@ stellar contract fetch --id <TOKEN_ADDRESS> --network <network>
 
 Goldsky and PostgreSQL provide the durable DAO directory and history. Manager stores no permanent DAO registry. For the full storage and versioning policy, see [MANAGER_REDESIGN.md](./MANAGER_REDESIGN.md).
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) and [DEPLOYMENT.md](./DEPLOYMENT.md) for the system model and direct module deployment.
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for the system model and [DAO_DEPLOYMENT.md](./DAO_DEPLOYMENT.md) for DAO deployment.

@@ -371,7 +371,7 @@ The Goldsky indexer populates the `manager.daos` table by:
    - Records finalization timeline
    - Marks DAO ready for operation
 
-See [GOLDSKY_MULTITENANT_INTEGRATION.md](./GOLDSKY_MULTITENANT_INTEGRATION.md) for implementation details.
+See [GOLDSKY_SETUP.md](./GOLDSKY_SETUP.md) and [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md) for indexing and read-model details.
 
 ## Security & Isolation
 
@@ -405,12 +405,7 @@ See [GOLDSKY_MULTITENANT_INTEGRATION.md](./GOLDSKY_MULTITENANT_INTEGRATION.md) f
 - [x] Grant database permissions
 - [x] Update frontend queries
 
-### Phase 2: Integration (Current)
-- [ ] Update Goldsky pipeline to decode events
-- [ ] Update Goldsky pipeline to populate table
-- [ ] Test with deployed DAOs
-
-### Phase 3: Feature Development
+### Phase 2: Feature Development
 - [ ] Build DAO creation UI
 - [ ] Build finalization workflow
 - [ ] Build directory/listing pages
@@ -430,6 +425,6 @@ See [GOLDSKY_MULTITENANT_INTEGRATION.md](./GOLDSKY_MULTITENANT_INTEGRATION.md) f
 ## Related Documentation
 
 - [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md) - Complete schema details
-- [GOLDSKY_MULTITENANT_INTEGRATION.md](./GOLDSKY_MULTITENANT_INTEGRATION.md) - Pipeline updates
+- [GOLDSKY_SETUP.md](./GOLDSKY_SETUP.md) - Pipeline configuration
 - [DAO_DEPLOYMENT.md](./DAO_DEPLOYMENT.md) - Creating and deploying DAOs
 - [MANAGER_DEPLOYMENT.md](./MANAGER_DEPLOYMENT.md) - Manager contract deployment

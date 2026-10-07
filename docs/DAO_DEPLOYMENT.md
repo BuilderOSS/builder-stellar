@@ -457,5 +457,5 @@ return (
 - [MULTITENANT_ARCHITECTURE.md](./MULTITENANT_ARCHITECTURE.md) - Architecture overview
 - [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md) - Database details
 - [MANAGER_DEPLOYMENT.md](./MANAGER_DEPLOYMENT.md) - Manager deployment
-- [GOLDSKY_MULTITENANT_INTEGRATION.md](./GOLDSKY_MULTITENANT_INTEGRATION.md) - Pipeline
+- [GOLDSKY_SETUP.md](./GOLDSKY_SETUP.md) - Pipeline
 - [scripts/deploy-dao.mjs](../scripts/deploy-dao.mjs) - Deployment script

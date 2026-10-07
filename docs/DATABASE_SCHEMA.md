@@ -405,6 +405,6 @@ All would use same `(deployment_id, dao_id)` composite key.
 ## Related Documentation
 
 - [MULTITENANT_ARCHITECTURE.md](./MULTITENANT_ARCHITECTURE.md) - Overall architecture
-- [GOLDSKY_MULTITENANT_INTEGRATION.md](./GOLDSKY_MULTITENANT_INTEGRATION.md) - Pipeline integration
+- [GOLDSKY_SETUP.md](./GOLDSKY_SETUP.md) - Pipeline configuration
 - [db/README.md](../db/README.md) - Migration scripts
 - [db/migrations/0001_goldsky_base.sql](../db/migrations/0001_goldsky_base.sql) - SQL schema
