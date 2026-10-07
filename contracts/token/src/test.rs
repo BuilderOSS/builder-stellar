@@ -14,7 +14,6 @@ fn setup() -> (Env, DaoTokenContractClient<'static>, Address) {
 
     let owner = Address::generate(&e);
     let metadata = Address::generate(&e); // Dummy metadata address for tests
-    let minter = Address::generate(&e);
     let contract_id = e.register(
         DaoTokenContract,
         (
@@ -24,7 +23,7 @@ fn setup() -> (Env, DaoTokenContractClient<'static>, Address) {
             String::from_str(&e, "vDAO"),
             metadata,
             Address::generate(&e),
-            minter,
+            Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
             String::from_str(&e, "0.1.0"),
         ),
@@ -37,7 +36,6 @@ fn setup_no_auth() -> (Env, DaoTokenContractClient<'static>, Address) {
     let e = Env::default();
     let owner = Address::generate(&e);
     let metadata = Address::generate(&e); // Dummy metadata address for tests
-    let minter = Address::generate(&e);
     let contract_id = e.register(
         DaoTokenContract,
         (
@@ -47,7 +45,7 @@ fn setup_no_auth() -> (Env, DaoTokenContractClient<'static>, Address) {
             String::from_str(&e, "vDAO"),
             metadata,
             Address::generate(&e),
-            minter,
+            Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
             String::from_str(&e, "0.1.0"),
         ),
@@ -61,8 +59,6 @@ fn mint_defaults_to_self_delegate() {
     let (e, client, owner) = setup();
     let alice = Address::generate(&e);
 
-    assert_eq!(client.version(), String::from_str(&e, "0.1.0"));
-    assert_eq!(client.wasm_hash(), BytesN::from_array(&e, &[0u8; 32]));
     let _token_id = client.mint(&owner, &alice);
 
     assert_eq!(client.balance(&alice), 1);
@@ -230,4 +226,146 @@ fn explicit_delegation_moves_votes() {
 
     assert_eq!(client.get_delegate(&alice), Some(bob.clone()));
     assert_eq!(client.get_votes(&bob), 1);
+}
+
+#[test]
+fn batch_mint_creates_multiple_tokens() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+
+    let last_token_id = client.batch_mint(&owner, &alice, &10);
+
+    assert_eq!(last_token_id, 9); // 0-9 = 10 tokens
+    assert_eq!(client.balance(&alice), 10);
+    assert_eq!(client.get_delegate(&alice), Some(alice.clone()));
+    assert_eq!(client.get_votes(&alice), 10);
+}
+
+#[test]
+fn batch_mint_returns_correct_last_token_id() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+
+    // Mint some tokens first
+    let _ = client.mint(&owner, &alice);
+    let _ = client.mint(&owner, &alice);
+
+    // Batch mint should continue from token_id 2
+    let last_token_id = client.batch_mint(&owner, &alice, &5);
+
+    assert_eq!(last_token_id, 6); // tokens 2-6 = 5 tokens
+    assert_eq!(client.balance(&alice), 7); // 2 + 5
+}
+
+#[test]
+fn batch_mint_large_amount() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+
+    // Test with 20 to stay within test event budget limits
+    // (Larger amounts emit too many events for test environment)
+    let last_token_id = client.batch_mint(&owner, &alice, &20);
+
+    assert_eq!(last_token_id, 19);
+    assert_eq!(client.balance(&alice), 20);
+    assert_eq!(client.get_votes(&alice), 20);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1101)")]
+fn batch_mint_fails_with_zero_amount() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+
+    let _ = e;
+    client.batch_mint(&owner, &alice, &0);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1101)")]
+fn batch_mint_fails_above_max() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+
+    let _ = e;
+    client.batch_mint(&owner, &alice, &101);
+}
+
+#[test]
+#[should_panic(expected = "HostError: Error(Auth, InvalidAction)")]
+fn batch_mint_requires_minter_auth() {
+    let (e, client, owner) = setup_no_auth();
+    let alice = Address::generate(&e);
+    let other = Address::generate(&e);
+
+    e.mock_auths(&[MockAuth {
+        address: &other,
+        invoke: &MockAuthInvoke {
+            contract: &client.address,
+            fn_name: "batch_mint",
+            args: (&alice, &10u32).into_val(&e),
+            sub_invokes: &[],
+        },
+    }]);
+
+    let _ = owner;
+    client.batch_mint(&owner, &alice, &10);
+}
+
+#[test]
+fn whitelisted_minter_can_batch_mint() {
+    let (e, client, owner) = setup();
+    let bob = Address::generate(&e);
+    let alice = Address::generate(&e);
+
+    client.set_mint_authority(&bob, &true);
+
+    e.mock_auths(&[MockAuth {
+        address: &bob,
+        invoke: &MockAuthInvoke {
+            contract: &client.address,
+            fn_name: "batch_mint",
+            args: (&bob, &alice, &10u32).into_val(&e),
+            sub_invokes: &[],
+        },
+    }]);
+
+    let last_token_id = client.batch_mint(&bob, &alice, &10);
+    assert_eq!(last_token_id, 9);
+    assert_eq!(client.balance(&alice), 10);
+    assert_eq!(client.get_votes(&alice), 10);
+
+    let _ = owner;
+}
+
+#[test]
+fn batch_mint_defaults_to_self_delegate() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+
+    client.batch_mint(&owner, &alice, &5);
+
+    assert_eq!(client.get_delegate(&alice), Some(alice.clone()));
+    assert_eq!(client.get_votes(&alice), 5);
+
+    let _ = e;
+}
+
+#[test]
+fn batch_mint_preserves_existing_delegation() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+    let bob = Address::generate(&e);
+
+    // First mint and delegate
+    client.mint(&owner, &alice);
+    client.delegate(&alice, &bob);
+    assert_eq!(client.get_votes(&bob), 1);
+
+    // Batch mint should preserve delegation
+    client.batch_mint(&owner, &alice, &5);
+
+    assert_eq!(client.balance(&alice), 6);
+    assert_eq!(client.get_delegate(&alice), Some(bob.clone()));
+    assert_eq!(client.get_votes(&bob), 6);
 }

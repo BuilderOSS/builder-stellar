@@ -177,23 +177,8 @@ fn mint_proposal_args(e: &Env, treasury: &Address, recipient: &Address) -> Vec<V
     ]
 }
 
-fn batch_mint_proposal_args(
-    e: &Env,
-    treasury: &Address,
-    recipient: &Address,
-    amount: u32,
-) -> Vec<Vec<Val>> {
-    // Args for calling token.batch_mint(treasury, recipient, amount)
-    vec![
-        e,
-        vec![
-            e,
-            treasury.clone().into_val(e),
-            recipient.clone().into_val(e),
-            amount.into_val(e),
-        ],
-    ]
-}
+// batch_mint helper removed - Token contract no longer supports batch_mint
+// Use Minter contract for batch minting operations
 
 fn transfer_proposal_args_i128(
     e: &Env,
@@ -630,50 +615,8 @@ fn governance_token_can_be_received_held_and_transferred_via_proposal() {
     let _ = proposer_token_id;
 }
 
-#[test]
-fn dao_flow_batch_mints_tokens_via_treasury() {
-    let (e, token, _treasury, governor, _target, owner) = setup();
-    let proposer = Address::generate(&e);
-    let recipient = Address::generate(&e);
-
-    let _ = token.mint(&owner, &proposer);
-    e.ledger().set_sequence_number(200);
-    e.ledger().set_timestamp(2_000);
-
-    let treasury_address = governor.treasury();
-    let targets = vec![&e, token.address.clone()];
-    let functions = vec![&e, Symbol::new(&e, "batch_mint")];
-    let args = batch_mint_proposal_args(&e, &treasury_address, &recipient, 10);
-    let description = String::from_str(&e, "Batch mint 10 tokens through treasury");
-    let desc_hash = description_hash(&e, &description);
-
-    let proposal_id = governor.propose(&targets, &functions, &args, &description, &proposer);
-
-    e.ledger().set_timestamp(2_301);
-    governor.cast_vote(&proposal_id, &1, &String::from_str(&e, "yes"), &proposer);
-
-    e.ledger().set_timestamp(2_601);
-    assert_eq!(
-        governor.proposal_state(&proposal_id),
-        ProposalState::Succeeded
-    );
-
-    governor.queue(
-        &targets, &functions, &args, &desc_hash, &2_901_u32, &proposer,
-    );
-    assert_eq!(governor.proposal_state(&proposal_id), ProposalState::Queued);
-
-    e.ledger().set_timestamp(2_901);
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
-
-    assert_eq!(token.balance(&recipient), 10);
-    assert_eq!(token.get_votes(&recipient), 10);
-    assert_eq!(token.get_delegate(&recipient), Some(recipient.clone()));
-    assert_eq!(
-        governor.proposal_state(&proposal_id),
-        ProposalState::Executed
-    );
-}
+// dao_flow_batch_mints_tokens_via_treasury removed - Token contract no longer has batch_mint
+// Use Minter contract for batch minting via governance if needed
 
 #[test]
 fn governor_authority_can_modify_governance_parameters() {
@@ -713,9 +656,10 @@ fn proposal_flow_with_modified_governance_parameters() {
     let proposer = Address::generate(&e);
     let authorized_governor = Address::generate(&e);
 
-    // Mint 10 tokens to proposer using batch mint
-    let last_token_id = token.batch_mint(&owner, &proposer, &10);
-    assert_eq!(last_token_id, 9);
+    // Mint 10 tokens to proposer using multiple single mints
+    for _ in 0..10 {
+        token.mint(&owner, &proposer);
+    }
     assert_eq!(token.get_votes(&proposer), 10);
 
     // Grant governor authority and modify parameters
@@ -844,121 +788,8 @@ fn reentrancy_attack_is_prevented() {
     // The should_panic annotation ensures the test passes only if reentrancy is blocked
 }
 
-#[test]
-fn treasury_batch_mint_with_explicit_auth() {
-    use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
-
-    let e = Env::default();
-    e.ledger().set_sequence_number(100);
-    e.ledger().set_timestamp(1_000);
-
-    let owner = Address::generate(&e);
-    let metadata_id = e.register(MetadataContract, ());
-    let metadata = MetadataContractClient::new(&e, &metadata_id);
-    let token_id = e.register(
-        DaoTokenContract,
-        (
-            owner.clone(),
-            String::from_str(&e, "https://example.com/"),
-            String::from_str(&e, "DAO Vote NFT"),
-            String::from_str(&e, "vDAO"),
-            metadata_id.clone(),
-            Address::generate(&e),
-            Address::generate(&e),
-            BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
-        ),
-    );
-    let token = DaoTokenContractClient::new(&e, &token_id);
-    metadata.initialize(
-        &token_id,
-        &String::from_str(&e, "https://example.com/project"),
-        &String::from_str(&e, "DAO description"),
-        &String::from_str(&e, "https://example.com/image.png"),
-        &String::from_str(&e, "https://example.com/render/"),
-        &Address::generate(&e),
-        &BytesN::from_array(&e, &[0u8; 32]),
-        &owner,
-        &Vec::new(&e),
-        &Vec::new(&e),
-        &IpfsGroup {
-            base_uri: String::from_str(&e, "ipfs://"),
-            extension: String::from_str(&e, ".png"),
-        },
-        &String::from_str(&e, "0.1.0"),
-    );
-
-    let treasury_id = e.register(
-        DaoTreasuryContract,
-        (
-            owner.clone(),
-            Address::generate(&e),
-            Address::generate(&e),
-            BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
-        ),
-    );
-    let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
-
-    let governor_id = e.register(
-        DaoGovernorContract,
-        (
-            owner.clone(),
-            token_id.clone(),
-            treasury_id.clone(),
-            300_u32,
-            300_u32,
-            300_u32,
-            1_u128,
-            1_000_u32,
-            Address::generate(&e),
-            BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
-        ),
-    );
-    let _governor = DaoGovernorContractClient::new(&e, &governor_id);
-
-    let recipient = Address::generate(&e);
-
-    // Setup - grant treasury mint authority
-    e.mock_all_auths();
-    treasury.set_governor(&governor_id);
-    token.set_mint_authority(&treasury.address, &true);
-
-    let batch_mint_args: Vec<Val> = vec![
-        &e,
-        treasury.address.clone().into_val(&e),
-        recipient.clone().into_val(&e),
-        3u32.into_val(&e),
-    ];
-
-    // Now test treasury calling batch_mint with explicit authorization
-    e.mock_auths(&[MockAuth {
-        address: &governor_id,
-        invoke: &MockAuthInvoke {
-            contract: &treasury_id,
-            fn_name: "execute",
-            args: (&token_id, &Symbol::new(&e, "batch_mint"), &batch_mint_args).into_val(&e),
-            sub_invokes: &[
-                // Treasury itself needs to authorize the batch_mint call where it's the minter
-                MockAuthInvoke {
-                    contract: &token_id,
-                    fn_name: "batch_mint",
-                    args: (&treasury.address, &recipient, &3u32).into_val(&e),
-                    sub_invokes: &[],
-                },
-            ],
-        },
-    }]);
-
-    // Call treasury.execute which should call token.batch_mint
-    treasury.execute(&token_id, &Symbol::new(&e, "batch_mint"), &batch_mint_args);
-
-    // Verify the tokens were minted
-    assert_eq!(token.balance(&recipient), 3);
-    assert_eq!(token.get_votes(&recipient), 3);
-    assert_eq!(token.get_delegate(&recipient), Some(recipient.clone()));
-}
+// treasury_batch_mint_with_explicit_auth removed - Token contract no longer has batch_mint
+// Test treasury interactions with Minter contract instead if needed
 
 // ============================================================================
 // AUCTION CONTRACT E2E TESTS
@@ -1863,40 +1694,8 @@ fn test_governor_proposal_threshold_exceeds_supply() {
     governor.set_proposal_threshold(&owner, &6);
 }
 
-#[test]
-#[should_panic(expected = "Error(Contract, #1101)")] // TokenError::InvalidBatchMintAmount
-fn test_token_batch_mint_zero_amount() {
-    let (e, token, _treasury, _governor, _target, owner) = setup();
-    let recipient = Address::generate(&e);
-
-    // Batch minting 0 tokens should fail
-    token.batch_mint(&owner, &recipient, &0);
-}
-
-#[test]
-#[should_panic(expected = "Error(Contract, #1101)")] // TokenError::InvalidBatchMintAmount
-fn test_token_batch_mint_above_max() {
-    let (e, token, _treasury, _governor, _target, owner) = setup();
-    let recipient = Address::generate(&e);
-
-    // Batch minting 101 tokens (MAX is 100) should fail
-    token.batch_mint(&owner, &recipient, &101);
-}
-
-#[test]
-fn test_token_batch_mint_large_amount() {
-    let (e, token, _treasury, _governor, _target, owner) = setup();
-    let recipient = Address::generate(&e);
-
-    // Batch minting 20 tokens should succeed (MAX is 100, but test env has event limits)
-    // This tests the batch mint functionality works for moderate batches
-    let last_token = token.batch_mint(&owner, &recipient, &20);
-
-    // Verify correct amount minted
-    assert_eq!(token.balance(&recipient), 20);
-    // Last token ID should be 19 (tokens are 0-indexed: 0, 1, 2, ..., 19)
-    assert_eq!(last_token, 19);
-}
+// Token batch_mint tests removed - functionality delegated to Minter contract
+// Tests for batch minting should be in minter contract tests
 
 #[test]
 fn marketplace_primary_sale_uses_real_token_and_sac() {

@@ -12,7 +12,7 @@ use stellar_tokens::non_fungible::{votes::NonFungibleVotes, Base};
 
 use crate::error::TokenError;
 use crate::events::{
-    emit_metadata_hook_failed, emit_mint_authority_changed, emit_token_initialized, emit_token_mint,
+    emit_batch_mint, emit_mint_authority_changed, emit_token_initialized, emit_token_mint,
 };
 use crate::storage::*;
 
@@ -36,7 +36,6 @@ impl DaoTokenContract {
     /// * `symbol` - The short symbol/ticker for the token
     /// * `metadata` - The metadata contract address for artwork generation
     /// * `manager` - The Manager contract address for upgrade validation
-    /// * `minter` - The Minter contract address for delegated minting
     /// * `current_hash` - The WASM hash of this contract implementation
     /// * `version` - The semantic version string (e.g., "0.1.0")
     ///
@@ -93,56 +92,8 @@ impl DaoTokenContract {
         if !approved {
             panic!("upgrade not approved");
         }
-        let version: Option<String> = e.invoke_contract(
-            &manager,
-            &soroban_sdk::Symbol::new(e, "get_implementation_version"),
-            soroban_sdk::vec![e, to_hash.clone().into_val(e)],
-        );
-        let version = version.expect("target version not registered");
         e.storage().instance().set(&TokenKey::CurrentHash, &to_hash);
-        e.storage()
-            .instance()
-            .set(&TokenKey::CurrentVersion, &version);
         e.deployer().update_current_contract_wasm(to_hash);
-    }
-
-    /// Returns the release version registered for the active token WASM.
-    pub fn version(e: &Env) -> String {
-        e.storage()
-            .instance()
-            .get(&TokenKey::CurrentVersion)
-            .expect("token version not set")
-    }
-
-    /// Returns the active token WASM hash.
-    pub fn wasm_hash(e: &Env) -> BytesN<32> {
-        e.storage()
-            .instance()
-            .get(&TokenKey::CurrentHash)
-            .expect("token hash not set")
-    }
-
-    /// Synchronizes the stored release version with the active registered WASM.
-    /// Required once after upgrading a DAO from a release that predates version
-    /// synchronization in its `upgrade` entrypoint.
-    pub fn sync_version(e: &Env) {
-        let owner = stellar_access::ownable::get_owner(e).expect("owner not set");
-        owner.require_auth();
-        let manager: Address = e
-            .storage()
-            .instance()
-            .get(&TokenKey::Manager)
-            .expect("manager not set");
-        let current = Self::wasm_hash(e);
-        let version: Option<String> = e.invoke_contract(
-            &manager,
-            &soroban_sdk::Symbol::new(e, "get_implementation_version"),
-            soroban_sdk::vec![e, current.into_val(e)],
-        );
-        e.storage().instance().set(
-            &TokenKey::CurrentVersion,
-            &version.expect("active WASM version not registered"),
-        );
     }
 
     /// Updates collection metadata during the launch-admin setup window or
@@ -237,11 +188,6 @@ impl DaoTokenContract {
         e.storage().instance().get(&TokenKey::Metadata)
     }
 
-    /// Returns the minter contract used for delegated minting.
-    pub fn minter(e: &Env) -> Option<Address> {
-        e.storage().instance().get(&TokenKey::Minter)
-    }
-
     /// Mints a single NFT to the specified address.
     ///
     /// The token is assigned a sequential ID (starting from 0) and the recipient
@@ -287,6 +233,60 @@ impl DaoTokenContract {
 
         emit_token_mint(e, minter, to, token_id);
         token_id
+    }
+
+    /// Mints multiple NFTs to the same address in a single transaction.
+    ///
+    /// This is more efficient than calling `mint()` multiple times when distributing
+    /// many tokens to one address. All tokens are sequentially numbered and the
+    /// recipient is auto-delegated once (not per token).
+    ///
+    /// # Arguments
+    ///
+    /// * `minter` - The address performing the mint (must be owner or have mint authority)
+    /// * `to` - The address receiving all the newly minted tokens
+    /// * `amount` - Number of tokens to mint (must be between 1 and `MAX_BATCH_MINT`)
+    ///
+    /// # Returns
+    ///
+    /// The ID of the last minted token in the batch.
+    ///
+    /// # Authorization
+    ///
+    /// Requires authentication from `minter` and validates minting authority.
+    ///
+    /// # Panics
+    ///
+    /// Panics with `TokenError::InvalidBatchMintAmount` if `amount` is 0 or exceeds
+    /// `MAX_BATCH_MINT` (100).
+    ///
+    /// # Events
+    ///
+    /// Emits individual `Mint` events for each token (via OpenZeppelin) plus one
+    /// `BatchMint` summary event with the total amount and last token ID.
+    pub fn batch_mint(e: &Env, minter: &Address, to: &Address, amount: u32) -> u32 {
+        if amount == 0 || amount > MAX_BATCH_MINT {
+            panic_with_error!(e, TokenError::InvalidBatchMintAmount);
+        }
+
+        minter.require_auth();
+        Self::ensure_mint_authority(e, minter);
+        Self::ensure_self_delegate(e, to);
+
+        let mut last_token_id = 0;
+
+        Self::preflight_checkpoint_writes(e, to, amount);
+        for _ in 0..amount {
+            let token_id = NonFungibleVotes::sequential_mint(e, to);
+
+            // Generate artwork seed via metadata contract
+            Self::call_metadata_hook(e, token_id);
+
+            last_token_id = token_id;
+        }
+
+        emit_batch_mint(e, minter, to, amount, last_token_id);
+        last_token_id
     }
 
     /// Returns the number of tokens owned by an account.
@@ -446,17 +446,12 @@ impl DaoTokenContract {
             .instance()
             .get::<TokenKey, Address>(&TokenKey::Metadata)
         {
-            // The metadata hook is best-effort. Minting remains available if the
-            // optional artwork service is unavailable, but the failure is visible
-            // to indexers and operators instead of being silently discarded.
-            match e.try_invoke_contract::<bool, Error>(
+            // Call on_minted hook via cross-contract invocation (ignore result - non-critical)
+            let _ = e.try_invoke_contract::<(), Error>(
                 &metadata_addr,
                 &symbol_short!("on_minted"),
                 vec![e, token_id.into_val(e)],
-            ) {
-                Ok(Ok(true)) => {}
-                Ok(Ok(false)) | Ok(Err(_)) | Err(_) => emit_metadata_hook_failed(e, token_id),
-            }
+            );
         }
     }
 
@@ -483,11 +478,6 @@ impl DaoTokenContract {
     /// The votes library writes these keys directly when a mint creates a new
     /// ledger checkpoint, so a missing-key write must be preflighted first.
     fn preflight_checkpoint_writes(e: &Env, account: &Address, count: u32) {
-        Self::preflight_total_supply_writes(e, count);
-        Self::preflight_delegate_checkpoint_writes(e, account, count);
-    }
-
-    fn preflight_total_supply_writes(e: &Env, count: u32) {
         let total_supply_index = e
             .storage()
             .instance()
@@ -502,9 +492,7 @@ impl DaoTokenContract {
                 },
             );
         }
-    }
 
-    fn preflight_delegate_checkpoint_writes(e: &Env, account: &Address, count: u32) {
         let delegate_count_key = VotesStorageKey::NumCheckpoints(account.clone());
         let delegate_count = e
             .storage()
