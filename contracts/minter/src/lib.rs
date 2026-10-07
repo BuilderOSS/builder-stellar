@@ -21,3 +21,6 @@ mod storage;
 pub use contract::*;
 pub use errors::MinterError;
 pub use storage::*;
+
+#[cfg(test)]
+mod test;

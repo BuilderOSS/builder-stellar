@@ -6,11 +6,35 @@ const args = process.argv.slice(2);
 const phase = args[0];
 const daoConfigPath = args[1];
 const networkConfigPath = args[2];
-const phases = ['create_dao', 'admin_checklist', 'launch_dao', 'deploy_minter', 'batch_mint'];
+/**
+ * DAO Deployment Script
+ *
+ * This script deploys a DAO in three phases:
+ *
+ * 1. create_dao: Creates all DAO contracts (Token, Treasury, Governor, Marketplace, Auction, Metadata)
+ *    via the Manager contract. The DAO starts in a paused state with no tokens minted.
+ *
+ * 2. admin_checklist: Performs pre-launch setup including:
+ *    - Grant mint authority to the shared Minter contract
+ *    - Mint founder tokens via Minter.mint_batch (defined in daoConfig.founders)
+ *    - Configure metadata properties for NFT artwork generation
+ *    - Set up marketplace and auction parameters
+ *
+ * 3. launch_dao: Enables auctions and marketplace, making the DAO operational.
+ *    Transfers ownership from launch admin to Treasury for full DAO governance.
+ *
+ * Prerequisites:
+ * - Manager contract must be deployed with a shared Minter (see deploy-manager.mjs)
+ * - Founder tokens are minted in admin_checklist to satisfy launch_dao requirement (total_supply > 0)
+ *
+ * Note: The shared Minter is deployed once with the Manager and reused across all DAOs.
+ */
+
+const phases = ['create_dao', 'admin_checklist', 'launch_dao'];
 
 if (!phases.includes(phase) || !daoConfigPath || !networkConfigPath) {
   throw new Error(
-    'Usage: node scripts/deploy-dao.mjs <create_dao|admin_checklist|launch_dao|deploy_minter|batch_mint> <dao-config.json> <network-config.json>'
+    'Usage: node scripts/deploy-dao.mjs <create_dao|admin_checklist|launch_dao> <dao-config.json> <network-config.json>'
   );
 }
 
@@ -475,50 +499,5 @@ if (phase === 'launch_dao') {
   process.exit(0);
 }
 
-if (phase === 'deploy_minter') {
-  console.log('\n=== Checking Minter ===\n');
-  if (!addresses.minter) {
-    addresses.minter = managerArtifact.minter;
-    if (!addresses.minter) {
-      throw new Error('Manager artifact does not contain shared minter address. Please redeploy the manager.');
-    }
-  }
-  console.log(`Using shared Minter: ${addresses.minter}`);
-  writeArtifact({ status: 'operational', addresses, transactions });
-  console.log('Minter configured. Run batch_mint to execute batch minting.');
-  process.exit(0);
-}
-
-if (phase === 'batch_mint') {
-  console.log('\n=== Executing Batch Mint ===\n');
-  const minterAddress = addresses.minter;
-  if (!minterAddress) {
-    throw new Error('Minter not deployed. Run deploy_minter first.');
-  }
-
-  // Use minter config from DAO config or provide sensible defaults
-  const batchMintConfig = daoConfig.minter?.batch_mint ?? {
-    recipients: [
-      { to: daoConfig.founders[0]?.address || daoConfig.launchAdmin, amount: 100 },
-      { to: daoConfig.founders[1]?.address || daoConfig.launchAdmin, amount: 100 },
-      { to: daoConfig.founders[2]?.address || daoConfig.launchAdmin, amount: 100 }
-    ]
-  };
-
-  console.log('Batch mint recipients:', JSON.stringify(batchMintConfig.recipients, null, 2));
-
-  const output = invoke(minterAddress, 'mint_batch', {
-    token: addresses.token,
-    admin: daoConfig.launchAdmin,
-    recipients: JSON.stringify(batchMintConfig.recipients)
-  });
-
-  transactions.batchMint = transaction(output, {
-    recipients: batchMintConfig.recipients,
-    totalAmount: batchMintConfig.recipients.reduce((sum, r) => sum + r.amount, 0)
-  });
-  writeArtifact({ status: 'operational', addresses, transactions });
-  console.log('Batch mint complete.');
-  console.log('Minted tokens to:', batchMintConfig.recipients.map(r => `${r.to} (${r.amount})`).join(', '));
-  process.exit(0);
-}
+// deploy_minter and batch_mint phases have been removed.
+// Minter is deployed once with the Manager and founder tokens are minted in admin_checklist phase.

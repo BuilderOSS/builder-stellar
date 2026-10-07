@@ -1,0 +1,136 @@
+{
+  "status": "checklist_partial",
+  "network": "testnet",
+  "label": "builder",
+  "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+  "nonce": 1,
+  "manager": "CBTD5KD2MBR6I4HNAI4FDAFDGZ3B2CD4LIOHIR433YJ5V3V7IESJWUIQ",
+  "versions": {
+    "manager": "0.1.0",
+    "token": "0.1.0",
+    "metadata": "0.1.0",
+    "auction": "0.1.0",
+    "governor": "0.1.0",
+    "treasury": "0.1.0",
+    "marketplace": "0.1.0",
+    "minter": "0.1.0"
+  },
+  "sourceCommit": "0ae193c1ffbc4b33ff83838d34b01f6f0d2c4f23",
+  "addresses": {
+    "token": "CCJMGG2M5MUXQD7H2KF2J6AIVJQFJXJI5TOVZRLGB3WVZWOA3TH4WNGA",
+    "metadata": "CDO6HI5TQBJLWNRGKFC6C7LFYEUOFXPUNR5LX3JWRCWHZRTYIPKTWC4Z",
+    "auction": "CCIPZQ2J57R47ONBZSY52BEUK7ZJPN5QI72HV2M2JFPZN4UB2QXMWN6N",
+    "governor": "CCGAVXGHDUNOFYYWRLETU2ZIVMPB6AGDDP63F5IQYO3D62IBYL7JAVRY",
+    "treasury": "CCQMM4HS5RKHUDHP4CGJTTY7CYAR3SRTR7MUMHHOMU3NVUNL6352MSKZ",
+    "marketplace": "CBE3OLBNXJJTYR2DWUL63DBL7R43LUBKN7CSNQMLM3URQEWM3A3MNUC3",
+    "minter": "CDIEI4B57X6SRRBX4AVX4DCTSAWGKFQ7CZQ2QNGX4TDOTUGQPH7WFKGU"
+  },
+  "config": {
+    "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+    "nonce": 1,
+    "token": {
+      "name": "Builder DAO",
+      "symbol": "BUILD",
+      "uri": "https://builder-stellar-web.vercel.app/api/dao/{daoId}/token/"
+    },
+    "metadata": {
+      "projectUri": "https://test-dao-stellar-web.vercel.app",
+      "description": "Unlock the possibilities of collective creation",
+      "contractImage": "https://builder-stellar-web.vercel.app/images/dao-logo.png",
+      "rendererBase": "https://builder-stellar-web.vercel.app/api/render/",
+      "artwork": {
+        "ipfs": {
+          "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+          "extension": ".png"
+        },
+        "properties": [
+          {
+            "name": "0-backgrounds",
+            "items": [
+              "bg-cool",
+              "bg-warm"
+            ]
+          },
+          {
+            "name": "1-bodies",
+            "items": [
+              "body-rust",
+              "body-blue-sky",
+              "body-darkbrown"
+            ]
+          },
+          {
+            "name": "2-accessories",
+            "items": [
+              "accessory-txt-cc2",
+              "accessory-txt-ico",
+              "accessory-flash"
+            ]
+          },
+          {
+            "name": "3-heads",
+            "items": [
+              "head-hotdog",
+              "head-ufo",
+              "head-goldcoin"
+            ]
+          },
+          {
+            "name": "4-glasses",
+            "items": [
+              "glasses-square-teal",
+              "glasses-square-guava",
+              "glasses-square-black-rgb"
+            ]
+          }
+        ]
+      }
+    },
+    "auction": {
+      "enabled": true,
+      "duration": 300,
+      "reservePrice": "1000000000",
+      "timeBuffer": 300,
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+    },
+    "marketplace": {
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      "secondaryFeeBps": 250,
+      "primaryListingCount": 10,
+      "primaryPrice": "10000000000",
+      "primaryListingDuration": 2592000
+    },
+    "governance": {
+      "queueDelay": 300,
+      "votingDelay": 300,
+      "votingPeriod": 300,
+      "quorumBps": 1000,
+      "proposalThresholdBps": 100
+    },
+    "founders": [
+      {
+        "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+        "amount": 10
+      },
+      {
+        "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
+        "amount": 10
+      },
+      {
+        "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
+        "amount": 10
+      }
+    ],
+    "launchAdmin": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO"
+  },
+  "updatedAt": "2026-10-07T14:17:29.822Z",
+  "transactions": {
+    "createDao": {
+      "txHash": "6416457bee4653d082d00cab23f9248a577459768026a1cb3941cf59852903a4",
+      "ledger": 5071807
+    },
+    "grantMinterAuthority": true
+  },
+  "deploymentLedger": 5071807,
+  "error": "Failed to invoke mint_batch"
+}

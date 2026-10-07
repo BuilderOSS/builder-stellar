@@ -1,6 +1,6 @@
 {
   "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
-  "nonce": 0,
+  "nonce": 2,
   "token": {
     "name": "Builder DAO",
     "symbol": "BUILD",
@@ -19,23 +19,42 @@
       "properties": [
         {
           "name": "0-backgrounds",
-          "items": ["bg-cool", "bg-warm"]
+          "items": [
+            "bg-cool",
+            "bg-warm"
+          ]
         },
         {
           "name": "1-bodies",
-          "items": ["body-rust", "body-blue-sky", "body-darkbrown"]
+          "items": [
+            "body-rust",
+            "body-blue-sky",
+            "body-darkbrown"
+          ]
         },
         {
           "name": "2-accessories",
-          "items": ["accessory-txt-cc2", "accessory-txt-ico", "accessory-flash"]
+          "items": [
+            "accessory-txt-cc2",
+            "accessory-txt-ico",
+            "accessory-flash"
+          ]
         },
         {
           "name": "3-heads",
-          "items": ["head-hotdog", "head-ufo", "head-goldcoin"]
+          "items": [
+            "head-hotdog",
+            "head-ufo",
+            "head-goldcoin"
+          ]
         },
         {
           "name": "4-glasses",
-          "items": ["glasses-square-teal", "glasses-square-guava", "glasses-square-black-rgb"]
+          "items": [
+            "glasses-square-teal",
+            "glasses-square-guava",
+            "glasses-square-black-rgb"
+          ]
         }
       ]
     }
@@ -64,15 +83,15 @@
   "founders": [
     {
       "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
-      "amount": 10
+      "amount": 3
     },
     {
       "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
-      "amount": 10
+      "amount": 3
     },
     {
       "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
-      "amount": 10
+      "amount": 3
     }
   ],
   "launchAdmin": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO"

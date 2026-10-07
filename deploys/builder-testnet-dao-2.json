@@ -1,0 +1,143 @@
+{
+  "status": "checklist_partial",
+  "network": "testnet",
+  "label": "builder",
+  "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+  "nonce": 2,
+  "manager": "CBTD5KD2MBR6I4HNAI4FDAFDGZ3B2CD4LIOHIR433YJ5V3V7IESJWUIQ",
+  "versions": {
+    "manager": "0.1.0",
+    "token": "0.1.0",
+    "metadata": "0.1.0",
+    "auction": "0.1.0",
+    "governor": "0.1.0",
+    "treasury": "0.1.0",
+    "marketplace": "0.1.0",
+    "minter": "0.1.0"
+  },
+  "sourceCommit": "0ae193c1ffbc4b33ff83838d34b01f6f0d2c4f23",
+  "addresses": {
+    "token": "CBE36SCOD67TRVEWFROEA5SMTZN7BNL5D5DKRIF74LKYIHYW6CRF3MW3",
+    "metadata": "CCOAZZ3CFSZ5MUJCUUBLA2ZUEKDXWNO4DTFM4FZL27NIGYF55E2ZWDXB",
+    "auction": "CCJY5N4A3G6YHKF4RFU33KA6LQHU4MVTX2NWTSQQG5VE4VC2YNHAKUSP",
+    "governor": "CBX5AFMKUGOQWS47QWY6K36T7ZXAOU6EUYWBRTD43UWAYQMUVV7MH5WQ",
+    "treasury": "CDO6WMGOI6SHXUW6YBHJYHXR3BZDSSP7IH7R5UEXFUKPUR2MEMYNQ2IH",
+    "marketplace": "CBVKRYO6KLRSJBP6Y6P77XO637GRUDBQW6YHQ4VUXYOZEWEIQW6KUJRW",
+    "minter": "CDIEI4B57X6SRRBX4AVX4DCTSAWGKFQ7CZQ2QNGX4TDOTUGQPH7WFKGU"
+  },
+  "config": {
+    "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+    "nonce": 2,
+    "token": {
+      "name": "Builder DAO",
+      "symbol": "BUILD",
+      "uri": "https://builder-stellar-web.vercel.app/api/dao/{daoId}/token/"
+    },
+    "metadata": {
+      "projectUri": "https://test-dao-stellar-web.vercel.app",
+      "description": "Unlock the possibilities of collective creation",
+      "contractImage": "https://builder-stellar-web.vercel.app/images/dao-logo.png",
+      "rendererBase": "https://builder-stellar-web.vercel.app/api/render/",
+      "artwork": {
+        "ipfs": {
+          "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+          "extension": ".png"
+        },
+        "properties": [
+          {
+            "name": "0-backgrounds",
+            "items": [
+              "bg-cool",
+              "bg-warm"
+            ]
+          },
+          {
+            "name": "1-bodies",
+            "items": [
+              "body-rust",
+              "body-blue-sky",
+              "body-darkbrown"
+            ]
+          },
+          {
+            "name": "2-accessories",
+            "items": [
+              "accessory-txt-cc2",
+              "accessory-txt-ico",
+              "accessory-flash"
+            ]
+          },
+          {
+            "name": "3-heads",
+            "items": [
+              "head-hotdog",
+              "head-ufo",
+              "head-goldcoin"
+            ]
+          },
+          {
+            "name": "4-glasses",
+            "items": [
+              "glasses-square-teal",
+              "glasses-square-guava",
+              "glasses-square-black-rgb"
+            ]
+          }
+        ]
+      }
+    },
+    "auction": {
+      "enabled": true,
+      "duration": 300,
+      "reservePrice": "1000000000",
+      "timeBuffer": 300,
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+    },
+    "marketplace": {
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      "secondaryFeeBps": 250,
+      "primaryListingCount": 10,
+      "primaryPrice": "10000000000",
+      "primaryListingDuration": 2592000
+    },
+    "governance": {
+      "queueDelay": 300,
+      "votingDelay": 300,
+      "votingPeriod": 300,
+      "quorumBps": 1000,
+      "proposalThresholdBps": 100
+    },
+    "founders": [
+      {
+        "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+        "amount": 3
+      },
+      {
+        "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
+        "amount": 3
+      },
+      {
+        "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
+        "amount": 3
+      }
+    ],
+    "launchAdmin": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO"
+  },
+  "updatedAt": "2026-10-07T14:18:54.746Z",
+  "transactions": {
+    "createDao": {
+      "txHash": "ad371a1aefce4cd7c5b1701dc2edb64a970461c88b47993e5ecfec333188f22f",
+      "ledger": 5071822
+    },
+    "grantMinterAuthority": true,
+    "founderMints": {
+      "success": true,
+      "count": 9
+    },
+    "addProperties": {
+      "txHash": "3f29c97ebd603931765b76ff770d97e6c3a468f86738009d7173cd3503785749",
+      "ledger": 5071829
+    }
+  },
+  "deploymentLedger": 5071822
+}
