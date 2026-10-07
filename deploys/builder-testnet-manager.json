@@ -1,18 +1,18 @@
 {
   "network": "testnet",
   "label": "builder",
-  "deploymentLedger": 5070742,
+  "deploymentLedger": 5071116,
   "config": {
     "label": "builder",
     "adminAddress": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
     "rpcUrl": "https://soroban-testnet.stellar.org",
     "networkPassphrase": "Test SDF Network ; September 2015"
   },
-  "manager": "CCBIN7KR67B4VTABJ5CTINPAAR25H4HIBQBDRKJNEMDQ3BQYEJJBJ2UF",
-  "minter": "CBDMEXILYI4CSIYUDBMBAFBH5CEGKR65NGATAN2RFXZDEF246WCEMC45",
+  "manager": "CBTD5KD2MBR6I4HNAI4FDAFDGZ3B2CD4LIOHIR433YJ5V3V7IESJWUIQ",
+  "minter": "CDIEI4B57X6SRRBX4AVX4DCTSAWGKFQ7CZQ2QNGX4TDOTUGQPH7WFKGU",
   "implementations": {
     "manager": "f4a057d7c0a58571f990a565f72cd50685e7d5a41c95084853690f4fbd5f53ce",
-    "token": "d89709db942e53fc06808aaac04afd3adf05366e3c4a715f9e44538784d4271e",
+    "token": "305239e7e39b8d7485435edc6d218a9d0704f929a1adb70cbfc02a6528b75501",
     "metadata": "1ca3a92227a334c73190c6e618224d3602d64aea380787cb873940bef3a9fba1",
     "auction": "651c648c330445357d9523dbdbe513af5517ed41f7beb830c92a9955a37f8c91",
     "governor": "4db2ad9b066d6dba1ef909854844b234de9b237827152e0474a19fa4ab95e9aa",
@@ -30,13 +30,6 @@
     "marketplace": "0.1.0",
     "minter": "0.1.0"
   },
-  "sourceCommit": "d35e4515a65d9dd4b66a6598be8e15cdba7cb7a6",
-  "deployedAt": "2026-10-07T12:50:30.556Z",
-  "transactions": {
-    "manager": {
-      "deployedAt": "2026-10-07T12:48:19.099Z",
-      "txHash": "8a835698e45cd4d1ef6c6aa90462a25b8d096b83240fd7cd006783c65030737d",
-      "ledger": 5070742
-    }
-  }
+  "sourceCommit": "0ae193c1ffbc4b33ff83838d34b01f6f0d2c4f23",
+  "deployedAt": "2026-10-07T14:00:00.000Z"
 }

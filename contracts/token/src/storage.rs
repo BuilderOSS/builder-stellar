@@ -5,12 +5,7 @@
 
 use soroban_sdk::{contracttype, Address};
 
-/// Maximum number of tokens that can be minted in a single batch operation.
-///
-/// This limit prevents gas exhaustion and ensures batch minting operations
-/// complete within reasonable transaction limits. Set to 100 based on gas
-/// profiling for sequential minting with auto-delegation.
-pub const MAX_BATCH_MINT: u32 = 100;
+// Batch minting has been moved to the Minter contract
 
 // TTL constants for delegation storage
 // Delegations should persist long-term as they represent voting power delegation

@@ -369,37 +369,21 @@ if (phase === 'admin_checklist') {
 
       // Founder mints must happen BEFORE launch_dao to satisfy minimum supply requirement
       if (!transactions.founderMints) {
-        console.log('Minting founder tokens...');
-        // Mint in small batches to avoid storage footprint and event size limits
-        const maxPerBatch = 5; // Conservative limit to stay within footprint
-        for (const founder of daoConfig.founders) {
-          const fullBatches = Math.floor(founder.amount / maxPerBatch);
-          const remainder = founder.amount % maxPerBatch;
+        console.log('Minting founder tokens via Minter contract...');
+        // Use Minter contract for batch minting
+        const recipients = daoConfig.founders.map(f => f.address);
+        const amounts = daoConfig.founders.map(f => ({ u128: String(f.amount) }));
 
-          // Mint full batches
-          for (let i = 0; i < fullBatches; i++) {
-            const params = {
-              token_id: addresses.token,
-              recipients: JSON.stringify([founder.address]),
-              amounts: JSON.stringify([{ u128: String(maxPerBatch) }])
-            };
-            invoke(addresses.minter, 'mint_batch', params);
-          }
+        const params = {
+          token_id: addresses.token,
+          recipients: JSON.stringify(recipients),
+          amounts: JSON.stringify(amounts)
+        };
 
-          // Mint remainder
-          if (remainder > 0) {
-            const params = {
-              token_id: addresses.token,
-              recipients: JSON.stringify([founder.address]),
-              amounts: JSON.stringify([{ u128: String(remainder) }])
-            };
-            invoke(addresses.minter, 'mint_batch', params);
-          }
+        invoke(addresses.minter, 'mint_batch', params);
 
-          console.log(`Minted ${founder.amount} tokens to ${founder.address}`);
-        }
         transactions.founderMints = { success: true, count: founderTotal };
-        console.log(`Founder tokens minted: ${founderTotal} total`);
+        console.log(`✓ Founder tokens minted: ${founderTotal} total`);
         checkpoint();
       }
 

@@ -10,9 +10,7 @@ use stellar_macros::only_owner;
 use stellar_tokens::non_fungible::{votes::NonFungibleVotes, Base};
 
 use crate::error::TokenError;
-use crate::events::{
-    emit_batch_mint, emit_mint_authority_changed, emit_token_initialized, emit_token_mint,
-};
+use crate::events::{emit_mint_authority_changed, emit_token_initialized, emit_token_mint};
 use crate::storage::*;
 
 /// Main contract for the DAO governance token.
@@ -229,59 +227,6 @@ impl DaoTokenContract {
 
         emit_token_mint(e, minter, to, token_id);
         token_id
-    }
-
-    /// Mints multiple NFTs to the same address in a single transaction.
-    ///
-    /// This is more efficient than calling `mint()` multiple times when distributing
-    /// many tokens to one address. All tokens are sequentially numbered and the
-    /// recipient is auto-delegated once (not per token).
-    ///
-    /// # Arguments
-    ///
-    /// * `minter` - The address performing the mint (must be owner or have mint authority)
-    /// * `to` - The address receiving all the newly minted tokens
-    /// * `amount` - Number of tokens to mint (must be between 1 and `MAX_BATCH_MINT`)
-    ///
-    /// # Returns
-    ///
-    /// The ID of the last minted token in the batch.
-    ///
-    /// # Authorization
-    ///
-    /// Requires authentication from `minter` and validates minting authority.
-    ///
-    /// # Panics
-    ///
-    /// Panics with `TokenError::InvalidBatchMintAmount` if `amount` is 0 or exceeds
-    /// `MAX_BATCH_MINT` (100).
-    ///
-    /// # Events
-    ///
-    /// Emits individual `Mint` events for each token (via OpenZeppelin) plus one
-    /// `BatchMint` summary event with the total amount and last token ID.
-    pub fn batch_mint(e: &Env, minter: &Address, to: &Address, amount: u32) -> u32 {
-        if amount == 0 || amount > MAX_BATCH_MINT {
-            panic_with_error!(e, TokenError::InvalidBatchMintAmount);
-        }
-
-        minter.require_auth();
-        Self::ensure_mint_authority(e, minter);
-        Self::ensure_self_delegate(e, to);
-
-        let mut last_token_id = 0;
-
-        for _ in 0..amount {
-            let token_id = NonFungibleVotes::sequential_mint(e, to);
-
-            // Generate artwork seed via metadata contract
-            Self::call_metadata_hook(e, token_id);
-
-            last_token_id = token_id;
-        }
-
-        emit_batch_mint(e, minter, to, amount, last_token_id);
-        last_token_id
     }
 
     /// Returns the number of tokens owned by an account.
