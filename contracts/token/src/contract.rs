@@ -1,10 +1,11 @@
 use soroban_sdk::{
     contract, contractimpl, panic_with_error, symbol_short, vec, Address, BytesN, Env, Error,
-    IntoVal, String,
+    IntoVal, String, Vec,
 };
 use stellar_access::ownable::{set_owner, Ownable, OwnableStorageKey};
 use stellar_governance::votes::{
-    emit_delegate_changed as emit_library_delegate_changed, get_delegate, Votes, VotesStorageKey,
+    emit_delegate_changed as emit_library_delegate_changed, get_delegate, num_checkpoints,
+    transfer_voting_units, Votes, VotesStorageKey,
 };
 use stellar_macros::only_owner;
 use stellar_tokens::non_fungible::{votes::NonFungibleVotes, Base};
@@ -229,6 +230,110 @@ impl DaoTokenContract {
         token_id
     }
 
+    /// Batch mints multiple NFTs to multiple recipients with optimized checkpoint handling.
+    ///
+    /// This function is designed to efficiently mint many tokens in a single transaction
+    /// by grouping operations per recipient. It addresses two critical inefficiencies:
+    /// 1. Delegation checks are performed once per unique recipient (not per token)
+    /// 2. Voting checkpoints are created once per recipient (not per token)
+    ///
+    /// This optimization is essential for Stellar's storage footprint prediction during
+    /// CLI simulation. Without batching, the second and subsequent mints fail with
+    /// "trying to access contract data key outside of the footprint" errors.
+    ///
+    /// # Arguments
+    ///
+    /// * `minter` - The address performing the mint (must be owner or have mint authority)
+    /// * `recipients` - Vector of addresses receiving tokens
+    /// * `amounts` - Vector of token counts, one per recipient (must match recipients length)
+    ///
+    /// # Returns
+    ///
+    /// A vector of all newly minted token IDs in sequential order.
+    ///
+    /// # Authorization
+    ///
+    /// Requires authentication from `minter` and validates minting authority.
+    ///
+    /// # Panics
+    ///
+    /// Panics with `TokenError::MintAuthorityNotAllowed` if the minter lacks authority.
+    /// Panics with `TokenError::InvalidInput` if recipients/amounts lengths don't match.
+    ///
+    /// # Events
+    ///
+    /// Emits:
+    /// - Standard `Mint` events for each token (via OpenZeppelin)
+    /// - Custom `MintWithMinter` event for each token
+    /// - `DelegateVotesChanged` events per recipient (not per token)
+    ///
+    /// # Storage Impact
+    ///
+    /// Creates checkpoint storage entries once per recipient instead of once per token,
+    /// reducing storage operations from O(total_tokens) to O(unique_recipients).
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// // Mint 10 tokens to Alice and 20 tokens to Bob in one transaction
+    /// let recipients = vec![&env, alice.clone(), bob.clone()];
+    /// let amounts = vec![&env, 10u128, 20u128];
+    /// let token_ids = token.batch_mint(&minter, &recipients, &amounts);
+    /// // Returns 30 token IDs, checkpoint operations = 2 (not 30)
+    /// ```
+    pub fn batch_mint(
+        e: &Env,
+        minter: &Address,
+        recipients: &Vec<Address>,
+        amounts: &Vec<u128>,
+    ) -> Vec<u32> {
+        minter.require_auth();
+        Self::ensure_mint_authority(e, minter);
+
+        // Validate input vectors have matching lengths
+        if recipients.len() != amounts.len() {
+            panic_with_error!(e, TokenError::InvalidInput);
+        }
+
+        let mut token_ids = Vec::new(e);
+        let mut checked_delegates: Vec<Address> = Vec::new(e);
+
+        // Process each recipient
+        for i in 0..recipients.len() {
+            let recipient = recipients.get(i).unwrap();
+            let amount = amounts.get(i).unwrap();
+
+            // Validate amount
+            if amount == 0 {
+                panic_with_error!(e, TokenError::InvalidInput);
+            }
+
+            // Only check/set delegation once per unique recipient
+            if !checked_delegates.contains(&recipient) {
+                Self::ensure_self_delegate(e, &recipient);
+                checked_delegates.push_back(recipient.clone());
+            }
+
+            // Mint all tokens for this recipient using Base::sequential_mint
+            // This bypasses NonFungibleVotes::sequential_mint to avoid per-token checkpoint updates
+            let amount_u32: u32 = amount.try_into().unwrap_or_else(|_| {
+                panic_with_error!(e, TokenError::InvalidInput);
+            });
+
+            for _ in 0..amount_u32 {
+                let token_id = Base::sequential_mint(e, &recipient);
+                Self::call_metadata_hook(e, token_id);
+                emit_token_mint(e, minter, &recipient, token_id);
+                token_ids.push_back(token_id);
+            }
+
+            // Update voting checkpoints ONCE for this recipient's entire batch
+            transfer_voting_units(e, None, Some(&recipient), amount);
+        }
+
+        token_ids
+    }
+
     /// Returns the number of tokens owned by an account.
     ///
     /// # Arguments
@@ -449,6 +554,23 @@ impl DaoTokenContract {
 /// and power for proposals.
 #[contractimpl(contracttrait)]
 impl Votes for DaoTokenContract {}
+
+/// Additional governance query functions for checkpoint inspection.
+#[contractimpl]
+impl DaoTokenContract {
+    /// Returns the number of checkpoints for an account.
+    ///
+    /// # Arguments
+    ///
+    /// * `account` - The address to query
+    ///
+    /// # Returns
+    ///
+    /// The number of checkpoints recorded for this account
+    pub fn num_checkpoints(e: &Env, account: Address) -> u32 {
+        num_checkpoints(e, &account)
+    }
+}
 
 /// Implements the Ownable trait for access control.
 ///

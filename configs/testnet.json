@@ -1,7 +1,0 @@
-{
-  "network": "testnet",
-  "label": "builder",
-  "adminAddress": "GBAGCF3NQVFFTEDANVPD6QRLNW2YPUFLVVF74NMZSDZ4AQSWABM4J3Q",
-  "rpcUrl": "https://soroban-testnet.stellar.org",
-  "networkPassphrase": "Test SDF Network ; September 2015"
-}

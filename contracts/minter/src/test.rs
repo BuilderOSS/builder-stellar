@@ -163,7 +163,7 @@ fn test_mint_batch_too_many_recipients() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #2)")] // InvalidAmount
+#[should_panic(expected = "Error(Contract, #1104)")] // InvalidInput (from Token contract)
 fn test_mint_batch_zero_amount() {
     let env = Env::default();
     env.mock_all_auths();
@@ -510,4 +510,102 @@ fn test_minter_with_contract_as_minter() {
     minter.mint_batch(&token, &recipients, &amounts);
 
     assert_eq!(token_client.balance(&recipient), 10);
+}
+
+#[test]
+fn test_batch_mint_30_tokens_three_founders() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (_admin, token, minter) = setup(&env);
+    let founder1 = Address::generate(&env);
+    let founder2 = Address::generate(&env);
+    let founder3 = Address::generate(&env);
+
+    let token_client = token::DaoTokenContractClient::new(&env, &token);
+    token_client.set_mint_authority(&minter.address, &true);
+
+    // Simulate DAO founder allocation: 3 founders × 10 tokens each = 30 total
+    let recipients = Vec::from_array(&env, [founder1.clone(), founder2.clone(), founder3.clone()]);
+    let amounts = Vec::from_array(&env, [10u128, 10u128, 10u128]);
+
+    // This should work without storage footprint issues due to optimized batch_mint
+    minter.mint_batch(&token, &recipients, &amounts);
+
+    // Verify all tokens were minted correctly
+    assert_eq!(token_client.balance(&founder1), 10);
+    assert_eq!(token_client.balance(&founder2), 10);
+    assert_eq!(token_client.balance(&founder3), 10);
+    assert_eq!(token_client.total_supply(), 30);
+
+    // Verify voting power
+    assert_eq!(token_client.get_votes(&founder1), 10);
+    assert_eq!(token_client.get_votes(&founder2), 10);
+    assert_eq!(token_client.get_votes(&founder3), 10);
+
+    // Verify delegation was set correctly
+    assert_eq!(token_client.get_delegate(&founder1), Some(founder1.clone()));
+    assert_eq!(token_client.get_delegate(&founder2), Some(founder2.clone()));
+    assert_eq!(token_client.get_delegate(&founder3), Some(founder3.clone()));
+
+    // Verify checkpoint efficiency - should have 1 checkpoint per founder, not 10
+    assert_eq!(token_client.num_checkpoints(&founder1), 1);
+    assert_eq!(token_client.num_checkpoints(&founder2), 1);
+    assert_eq!(token_client.num_checkpoints(&founder3), 1);
+}
+
+#[test]
+fn test_batch_mint_large_amounts_single_recipient() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (_admin, token, minter) = setup(&env);
+    let recipient = Address::generate(&env);
+
+    let token_client = token::DaoTokenContractClient::new(&env, &token);
+    token_client.set_mint_authority(&minter.address, &true);
+
+    // Test minting large amount to single recipient (reduced to 25 to avoid budget limits)
+    let recipients = Vec::from_array(&env, [recipient.clone()]);
+    let amounts = Vec::from_array(&env, [25u128]);
+
+    minter.mint_batch(&token, &recipients, &amounts);
+
+    assert_eq!(token_client.balance(&recipient), 25);
+    assert_eq!(token_client.get_votes(&recipient), 25);
+    assert_eq!(token_client.total_supply(), 25);
+
+    // Verify checkpoint efficiency - only 1 checkpoint created, not 25
+    assert_eq!(token_client.num_checkpoints(&recipient), 1);
+}
+
+#[test]
+fn test_batch_mint_preserves_delegation_across_batches() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (_admin, token, minter) = setup(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+
+    let token_client = token::DaoTokenContractClient::new(&env, &token);
+    token_client.set_mint_authority(&minter.address, &true);
+
+    // First batch to alice
+    let recipients1 = Vec::from_array(&env, [alice.clone()]);
+    let amounts1 = Vec::from_array(&env, [5u128]);
+    minter.mint_batch(&token, &recipients1, &amounts1);
+
+    // Alice delegates to Bob
+    token_client.delegate(&alice, &bob);
+    assert_eq!(token_client.get_votes(&bob), 5);
+
+    // Second batch to alice - should preserve delegation to bob
+    let recipients2 = Vec::from_array(&env, [alice.clone()]);
+    let amounts2 = Vec::from_array(&env, [5u128]);
+    minter.mint_batch(&token, &recipients2, &amounts2);
+
+    assert_eq!(token_client.balance(&alice), 10);
+    assert_eq!(token_client.get_delegate(&alice), Some(bob.clone()));
+    assert_eq!(token_client.get_votes(&bob), 10); // All votes go to bob
 }

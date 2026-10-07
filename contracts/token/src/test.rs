@@ -227,4 +227,162 @@ fn explicit_delegation_moves_votes() {
 }
 
 // Batch minting tests removed - functionality moved to Minter contract
+
+#[test]
+fn test_batch_mint_single_recipient() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+
+    e.mock_all_auths();
+
+    let recipients = soroban_sdk::vec![&e, alice.clone()];
+    let amounts = soroban_sdk::vec![&e, 5u128];
+
+    let token_ids = client.batch_mint(&owner, &recipients, &amounts);
+
+    assert_eq!(token_ids.len(), 5);
+    assert_eq!(client.balance(&alice), 5);
+    assert_eq!(client.get_votes(&alice), 5);
+    assert_eq!(client.total_supply(), 5);
+}
+
+#[test]
+fn test_batch_mint_multiple_recipients() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+    let bob = Address::generate(&e);
+    let carol = Address::generate(&e);
+
+    e.mock_all_auths();
+
+    let recipients = soroban_sdk::vec![&e, alice.clone(), bob.clone(), carol.clone()];
+    let amounts = soroban_sdk::vec![&e, 10u128, 15u128, 5u128];
+
+    let token_ids = client.batch_mint(&owner, &recipients, &amounts);
+
+    assert_eq!(token_ids.len(), 30);
+    assert_eq!(client.balance(&alice), 10);
+    assert_eq!(client.balance(&bob), 15);
+    assert_eq!(client.balance(&carol), 5);
+    assert_eq!(client.get_votes(&alice), 10);
+    assert_eq!(client.get_votes(&bob), 15);
+    assert_eq!(client.get_votes(&carol), 5);
+    assert_eq!(client.total_supply(), 30);
+}
+
+#[test]
+fn test_batch_mint_delegation_check_once_per_recipient() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+
+    e.mock_all_auths();
+
+    // Mint first batch - should set delegation
+    let recipients1 = soroban_sdk::vec![&e, alice.clone()];
+    let amounts1 = soroban_sdk::vec![&e, 3u128];
+    client.batch_mint(&owner, &recipients1, &amounts1);
+
+    assert_eq!(client.get_delegate(&alice), Some(alice.clone()));
+    assert_eq!(client.get_votes(&alice), 3);
+
+    // Mint second batch to same recipient - delegation already set, should skip check
+    let recipients2 = soroban_sdk::vec![&e, alice.clone()];
+    let amounts2 = soroban_sdk::vec![&e, 7u128];
+    client.batch_mint(&owner, &recipients2, &amounts2);
+
+    assert_eq!(client.balance(&alice), 10);
+    assert_eq!(client.get_votes(&alice), 10);
+    assert_eq!(client.get_delegate(&alice), Some(alice.clone()));
+}
+
+#[test]
+fn test_batch_mint_preserves_existing_delegation() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+    let bob = Address::generate(&e);
+
+    e.mock_all_auths();
+
+    // Mint one token to alice and delegate to bob
+    client.mint(&owner, &alice);
+    client.delegate(&alice, &bob);
+
+    assert_eq!(client.get_delegate(&alice), Some(bob.clone()));
+    assert_eq!(client.get_votes(&bob), 1);
+
+    // Batch mint more tokens to alice - should preserve delegation to bob
+    let recipients = soroban_sdk::vec![&e, alice.clone()];
+    let amounts = soroban_sdk::vec![&e, 9u128];
+    client.batch_mint(&owner, &recipients, &amounts);
+
+    assert_eq!(client.balance(&alice), 10);
+    assert_eq!(client.get_delegate(&alice), Some(bob.clone()));
+    assert_eq!(client.get_votes(&bob), 10); // All votes still go to bob
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1104)")] // TokenError::InvalidInput
+fn test_batch_mint_mismatched_lengths() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+
+    e.mock_all_auths();
+
+    let recipients = soroban_sdk::vec![&e, alice.clone()];
+    let amounts = soroban_sdk::vec![&e, 5u128, 10u128]; // Mismatch!
+
+    client.batch_mint(&owner, &recipients, &amounts);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1104)")] // TokenError::InvalidInput
+fn test_batch_mint_zero_amount() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+
+    e.mock_all_auths();
+
+    let recipients = soroban_sdk::vec![&e, alice.clone()];
+    let amounts = soroban_sdk::vec![&e, 0u128];
+
+    client.batch_mint(&owner, &recipients, &amounts);
+}
+
+#[test]
+fn test_batch_mint_checkpoint_efficiency() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+
+    e.mock_all_auths();
+
+    // Batch mint 10 tokens
+    let recipients = soroban_sdk::vec![&e, alice.clone()];
+    let amounts = soroban_sdk::vec![&e, 10u128];
+    client.batch_mint(&owner, &recipients, &amounts);
+
+    // Should have created only 1 checkpoint, not 10
+    assert_eq!(client.num_checkpoints(&alice), 1);
+    assert_eq!(client.get_votes(&alice), 10);
+}
+
+#[test]
+fn test_batch_mint_sequential_token_ids() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+    let bob = Address::generate(&e);
+
+    e.mock_all_auths();
+
+    let recipients = soroban_sdk::vec![&e, alice.clone(), bob.clone()];
+    let amounts = soroban_sdk::vec![&e, 3u128, 2u128];
+
+    let token_ids = client.batch_mint(&owner, &recipients, &amounts);
+
+    // Should be sequential: 0,1,2 for alice, then 3,4 for bob
+    assert_eq!(token_ids.get(0), Some(0));
+    assert_eq!(token_ids.get(1), Some(1));
+    assert_eq!(token_ids.get(2), Some(2));
+    assert_eq!(token_ids.get(3), Some(3));
+    assert_eq!(token_ids.get(4), Some(4));
+}
 // See contracts/Minter/tests/ for batch minting tests

@@ -10,4 +10,6 @@ pub enum TokenError {
     OwnerNotSet = 1102,
     /// Minter is not authorized to mint tokens
     MintAuthorityNotAllowed = 1103,
+    /// Invalid input parameters (mismatched lengths, zero amounts, etc.)
+    InvalidInput = 1104,
 }

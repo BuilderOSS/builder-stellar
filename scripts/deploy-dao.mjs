@@ -128,7 +128,7 @@ const listingDuration = marketplaceConfig.primaryListingDuration ?? 30 * 24 * 60
 function invoke(id, method, params = {}) {
   const result = runQuiet('stellar', [
     'contract', 'invoke', '--id', id, '--source-account', identityName,
-    '--network', networkName, '--', method,
+    '--network', networkName, '--resource-fee', '100000000', '--', method,
     ...Object.entries(params).flatMap(([name, value]) => [`--${name}`, typeof value === 'string' ? value : JSON.stringify(value)])
   ], { env: { ...process.env, STELLAR_NO_CACHE: 'true' } });
   if (!result.ok) {
@@ -394,9 +394,17 @@ if (phase === 'admin_checklist') {
       // Founder mints must happen BEFORE launch_dao to satisfy minimum supply requirement
       if (!transactions.founderMints) {
         console.log('Minting founder tokens via Minter contract...');
-        // Use Minter contract for batch minting
+
+        // Use optimized batch_mint that mints all tokens to all founders in a single transaction
+        // This creates checkpoints once per recipient instead of once per token
         const recipients = daoConfig.founders.map(f => f.address);
         const amounts = daoConfig.founders.map(f => ({ u128: String(f.amount) }));
+        const totalMinted = daoConfig.founders.reduce((sum, f) => sum + f.amount, 0);
+
+        console.log(`Minting ${totalMinted} tokens to ${recipients.length} founders in a single batch transaction...`);
+        for (let i = 0; i < daoConfig.founders.length; i++) {
+          console.log(`  Founder ${i + 1}: ${recipients[i]} - ${daoConfig.founders[i].amount} tokens`);
+        }
 
         const params = {
           token_id: addresses.token,
@@ -406,8 +414,8 @@ if (phase === 'admin_checklist') {
 
         invoke(addresses.minter, 'mint_batch', params);
 
-        transactions.founderMints = { success: true, count: founderTotal };
-        console.log(`✓ Founder tokens minted: ${founderTotal} total`);
+        transactions.founderMints = { success: true, count: totalMinted };
+        console.log(`✓ Founder tokens minted: ${totalMinted} total`);
         checkpoint();
       }
 

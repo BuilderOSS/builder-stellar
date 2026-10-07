@@ -1,6 +1,8 @@
 //! Core Minter contract implementation.
 
-use soroban_sdk::{contract, contractimpl, symbol_short, vec, Address, Bytes, Env, IntoVal, Vec};
+use soroban_sdk::{
+    contract, contractimpl, symbol_short, vec, Address, Bytes, Env, IntoVal, Symbol, Vec,
+};
 
 use crate::errors::MinterError;
 use crate::events::*;
@@ -47,18 +49,30 @@ impl MinterContract {
             return Err(MinterError::BatchTooLarge);
         }
 
-        // Mint to each recipient
-        for i in 0..count {
-            let recipient = recipients.get(i).unwrap();
-            let amount = amounts.get(i).unwrap();
-            validate_and_mint(e, &token_id, &recipient, &amount)?;
+        // Call Token's batch_mint() directly instead of looping
+        // This optimizes both delegation checks and checkpoint creation
+        // Token batch_mint signature: batch_mint(minter: &Address, recipients: &Vec<Address>, amounts: &Vec<u128>) -> Vec<u32>
+        let minter = e.current_contract_address();
+        let result: Result<soroban_sdk::Vec<u32>, soroban_sdk::Error> = e.invoke_contract(
+            &token_id,
+            &Symbol::new(e, "batch_mint"),
+            vec![
+                e,
+                minter.into_val(e),
+                recipients.into_val(e),
+                amounts.into_val(e),
+            ],
+        );
+
+        match result {
+            Ok(_) => {
+                // Emit batch event
+                let total_amount: u128 = amounts.iter().fold(0u128, |acc, a| acc.saturating_add(a));
+                emit_mint_batch(e, &token_id, count, total_amount);
+                Ok(())
+            }
+            Err(_) => Err(MinterError::TokenContractError),
         }
-
-        // Emit batch event
-        let total_amount: u128 = amounts.iter().fold(0u128, |acc, a| acc.saturating_add(a));
-        emit_mint_batch(e, &token_id, count, total_amount);
-
-        Ok(())
     }
 
     /// Mints tokens to a recipient with merkle proof verification.

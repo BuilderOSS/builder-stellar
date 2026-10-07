@@ -1,6 +1,7 @@
 {
   "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
-  "nonce": 2,
+  "nonce": 0,
+  "launchAdmin": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
   "token": {
     "name": "Builder DAO",
     "symbol": "BUILD",
@@ -83,15 +84,15 @@
   "founders": [
     {
       "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
-      "amount": 3
+      "amount": 10
     },
     {
       "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
-      "amount": 3
+      "amount": 10
     },
     {
       "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
-      "amount": 3
+      "amount": 10
     }
   ],
   "launchAdmin": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO"
