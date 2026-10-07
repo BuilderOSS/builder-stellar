@@ -50,10 +50,6 @@ pub enum TokenKey {
     /// This contract is called during minting to generate artwork seeds.
     Metadata,
     Manager,
-    /// The Minter contract address for delegated batch minting.
-    ///
-    /// When batch minting is needed, Token delegates to this specialized contract.
-    Minter,
     CurrentHash,
     CurrentVersion,
 }

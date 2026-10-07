@@ -50,7 +50,6 @@ impl DaoTokenContract {
         symbol: String,
         metadata: Address,
         manager: Address,
-        minter: Address,
         current_hash: BytesN<32>,
         version: String,
     ) {
@@ -58,7 +57,6 @@ impl DaoTokenContract {
         set_owner(e, &owner);
         e.storage().instance().set(&TokenKey::Metadata, &metadata);
         e.storage().instance().set(&TokenKey::Manager, &manager);
-        e.storage().instance().set(&TokenKey::Minter, &minter);
         e.storage()
             .instance()
             .set(&TokenKey::CurrentHash, &current_hash);
