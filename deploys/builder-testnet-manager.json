@@ -1,23 +1,24 @@
 {
   "network": "testnet",
   "label": "builder",
-  "deploymentLedger": 5065646,
+  "deploymentLedger": 5070742,
   "config": {
     "label": "builder",
     "adminAddress": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
     "rpcUrl": "https://soroban-testnet.stellar.org",
     "networkPassphrase": "Test SDF Network ; September 2015"
   },
-  "manager": "CBPCNJHFHXOKP33MKRFY2QO6MK7U3Y3M2UKIAJRWYMJJYYL2RRM4CFP3",
+  "manager": "CCBIN7KR67B4VTABJ5CTINPAAR25H4HIBQBDRKJNEMDQ3BQYEJJBJ2UF",
+  "minter": "CBDMEXILYI4CSIYUDBMBAFBH5CEGKR65NGATAN2RFXZDEF246WCEMC45",
   "implementations": {
     "manager": "f4a057d7c0a58571f990a565f72cd50685e7d5a41c95084853690f4fbd5f53ce",
-    "token": "f3f19d2162cadaef4fd2729000c36ff3e21953591df9a20c01548f74832d574d",
+    "token": "d89709db942e53fc06808aaac04afd3adf05366e3c4a715f9e44538784d4271e",
     "metadata": "1ca3a92227a334c73190c6e618224d3602d64aea380787cb873940bef3a9fba1",
     "auction": "651c648c330445357d9523dbdbe513af5517ed41f7beb830c92a9955a37f8c91",
     "governor": "4db2ad9b066d6dba1ef909854844b234de9b237827152e0474a19fa4ab95e9aa",
     "treasury": "14844580a2505e0fc0f7382707dbf895ca57d17b36c8af3023f649dd7561eb0f",
     "marketplace": "0d62414b805eef22180bd0a472ea78d32212cb806744caacb4968a8e4f3ff3a6",
-    "minter": "23aeef41ddb22bed06c18edd69b042ce1bb8845af459c1c5ee5d2fa276922b82"
+    "minter": "352738339cfc786c1c8cf4b7592a26a0724daa87dbbcbce2744c04e2fec238c7"
   },
   "versions": {
     "manager": "0.1.0",
@@ -29,13 +30,13 @@
     "marketplace": "0.1.0",
     "minter": "0.1.0"
   },
-  "sourceCommit": "71c3f36131571f396dd1c507ed427f179513b45e",
-  "deployedAt": "2026-10-07T05:46:09.226Z",
+  "sourceCommit": "d35e4515a65d9dd4b66a6598be8e15cdba7cb7a6",
+  "deployedAt": "2026-10-07T12:50:30.556Z",
   "transactions": {
     "manager": {
-      "deployedAt": "2026-10-07T05:43:37.303Z",
-      "txHash": "4c8dd1573644e6b13c34a65fb1bda9a1640176df6dba034963363bcb416d942e",
-      "ledger": 5065646
+      "deployedAt": "2026-10-07T12:48:19.099Z",
+      "txHash": "8a835698e45cd4d1ef6c6aa90462a25b8d096b83240fd7cd006783c65030737d",
+      "ledger": 5070742
     }
   }
 }

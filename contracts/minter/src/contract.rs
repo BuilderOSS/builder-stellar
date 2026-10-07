@@ -272,21 +272,25 @@ fn validate_and_mint(
         return Err(MinterError::InvalidAmount);
     }
 
-    // Call token contract's mint() method
-    let result: Result<(), soroban_sdk::Error> = e.invoke_contract(
-        token_id,
-        &symbol_short!("mint"),
-        vec![
-            e,
-            recipient.clone().into_val(e),
-            (*amount as i128).into_val(e),
-        ],
-    );
+    // Get the Minter contract's address to use as the minter
+    let minter = e.current_contract_address();
 
-    match result {
-        Ok(_) => Ok(()),
-        Err(_) => Err(MinterError::TokenContractError),
+    // Call token contract's mint() method once for each NFT (sequential minting)
+    // Token mint signature: mint(minter: &Address, to: &Address) -> u32
+    for _ in 0..*amount {
+        let result: Result<u32, soroban_sdk::Error> = e.invoke_contract(
+            token_id,
+            &symbol_short!("mint"),
+            vec![e, minter.into_val(e), recipient.clone().into_val(e)],
+        );
+
+        match result {
+            Ok(_) => {}
+            Err(_) => return Err(MinterError::TokenContractError),
+        }
     }
+
+    Ok(())
 }
 
 /// Verify a merkle proof

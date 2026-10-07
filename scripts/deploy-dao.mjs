@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { enrichTransactionMetadata, runQuiet } from './lib.mjs';
 
 const args = process.argv.slice(2);
@@ -189,8 +190,6 @@ function deployIfMissing(contractName, alias, initArgs = []) {
   const contractBuildDir = 'target/wasm32v1-none/release';
 
   function wasmHash(packageName) {
-    const { createHash } = require('node:crypto');
-    const { readFileSync } = require('node:fs');
     const wasmFile = `${contractBuildDir}/${packageName}.wasm`;
     return createHash('sha256')
       .update(readFileSync(wasmFile))
@@ -198,7 +197,6 @@ function deployIfMissing(contractName, alias, initArgs = []) {
   }
 
   function saltFor(packageName) {
-    const { createHash } = require('node:crypto');
     const hash = wasmHash(packageName);
     const seed = saltSuffix
       ? `dao-minter:${networkConfig.label}:${networkName}:${packageName}:${hash}:${saltSuffix}`
@@ -350,10 +348,58 @@ if (phase === 'admin_checklist') {
     }
 
     {
-      // Founder mints are now handled via the Minter contract in the batch_mint phase
-      // Skip this in admin_checklist
+      // Use shared minter from manager artifact
+      if (!addresses.minter) {
+        addresses.minter = managerArtifact.minter;
+        if (!addresses.minter) {
+          throw new Error('Manager artifact does not contain shared minter address. Please redeploy the manager.');
+        }
+        console.log(`Using shared Minter: ${addresses.minter}`);
+        checkpoint();
+      }
+
+      // Grant mint authority to the Minter contract
+      if (!transactions.grantMinterAuthority) {
+        console.log('Granting mint authority to Minter contract...');
+        invoke(addresses.token, 'set_mint_authority', { authority: addresses.minter, enabled: true });
+        transactions.grantMinterAuthority = true;
+        console.log('Mint authority granted to Minter');
+        checkpoint();
+      }
+
+      // Founder mints must happen BEFORE launch_dao to satisfy minimum supply requirement
       if (!transactions.founderMints) {
-        transactions.founderMints = { skipped: true, reason: 'Use Minter contract via batch_mint phase' };
+        console.log('Minting founder tokens...');
+        // Mint in small batches to avoid storage footprint and event size limits
+        const maxPerBatch = 5; // Conservative limit to stay within footprint
+        for (const founder of daoConfig.founders) {
+          const fullBatches = Math.floor(founder.amount / maxPerBatch);
+          const remainder = founder.amount % maxPerBatch;
+
+          // Mint full batches
+          for (let i = 0; i < fullBatches; i++) {
+            const params = {
+              token_id: addresses.token,
+              recipients: JSON.stringify([founder.address]),
+              amounts: JSON.stringify([{ u128: String(maxPerBatch) }])
+            };
+            invoke(addresses.minter, 'mint_batch', params);
+          }
+
+          // Mint remainder
+          if (remainder > 0) {
+            const params = {
+              token_id: addresses.token,
+              recipients: JSON.stringify([founder.address]),
+              amounts: JSON.stringify([{ u128: String(remainder) }])
+            };
+            invoke(addresses.minter, 'mint_batch', params);
+          }
+
+          console.log(`Minted ${founder.amount} tokens to ${founder.address}`);
+        }
+        transactions.founderMints = { success: true, count: founderTotal };
+        console.log(`Founder tokens minted: ${founderTotal} total`);
         checkpoint();
       }
 
@@ -446,16 +492,16 @@ if (phase === 'launch_dao') {
 }
 
 if (phase === 'deploy_minter') {
-  console.log('\n=== Deploying Minter Contract ===\n');
-  const minterDeploy = deployIfMissing('minter', `dao-minter-${networkName}`, [
-    '--token', addresses.token,
-    '--admin', daoConfig.launchAdmin
-  ]);
-  addresses.minter = minterDeploy.id;
-  transactions.deployMinter = minterDeploy.txMetadata;
+  console.log('\n=== Checking Minter ===\n');
+  if (!addresses.minter) {
+    addresses.minter = managerArtifact.minter;
+    if (!addresses.minter) {
+      throw new Error('Manager artifact does not contain shared minter address. Please redeploy the manager.');
+    }
+  }
+  console.log(`Using shared Minter: ${addresses.minter}`);
   writeArtifact({ status: 'operational', addresses, transactions });
-  console.log(`Minter deployed: ${minterDeploy.id}`);
-  console.log('Run batch_mint to execute batch minting.');
+  console.log('Minter configured. Run batch_mint to execute batch minting.');
   process.exit(0);
 }
 

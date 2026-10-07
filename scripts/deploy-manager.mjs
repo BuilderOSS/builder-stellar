@@ -322,7 +322,8 @@ function setCurrentImplementations(managerAddress, implementations) {
 async function writeDeployArtifact(
   managerAddress,
   implementations,
-  txMetadata
+  txMetadata,
+  minterAddress
 ) {
   if (!(await confirmOverwrite(deployArtifactPath))) {
     console.log(`Skipped writing ${deployArtifactPath}.`);
@@ -356,6 +357,7 @@ async function writeDeployArtifact(
       networkPassphrase
     },
     manager: managerAddress,
+    minter: minterAddress,
     implementations,
     versions,
     sourceCommit,
@@ -470,15 +472,22 @@ async function main() {
   console.log('\n=== Setting Current Implementations ===\n');
   setCurrentImplementations(managerDeploy.id, implementations);
 
+  // Deploy shared Minter instance
+  console.log('\n=== Deploying Shared Minter ===\n');
+  const minterDeploy = deployIfMissing('minter', 'shared-minter', []);
+  console.log(`Shared Minter deployed: ${minterDeploy.id}`);
+
   // Write deployment artifact
   await writeDeployArtifact(
     managerDeploy.id,
     implementations,
-    managerDeploy.txMetadata
+    managerDeploy.txMetadata,
+    minterDeploy.id
   );
 
   console.log(`\n=== Manager Deployment Complete ===`);
   console.log(`MANAGER=${managerDeploy.id}`);
+  console.log(`MINTER=${minterDeploy.id}`);
   console.log(`\nImplementations:`);
   console.log(`TOKEN_WASM=${implementations.token}`);
   console.log(`METADATA_WASM=${implementations.metadata}`);
