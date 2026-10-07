@@ -350,17 +350,10 @@ if (phase === 'admin_checklist') {
     }
 
     {
-      const foundersAlreadyMinted = invokeView(addresses.token, 'total_supply') >= founderTotal &&
-        daoConfig.founders.every((founder) => invokeView(addresses.token, 'balance', { account: founder.address }) >= founder.amount);
-      if (!transactions.founderMints && !foundersAlreadyMinted) {
-        const output = invoke(addresses.token, 'batch_mint_many', {
-          minter: daoConfig.launchAdmin,
-          recipients: JSON.stringify(daoConfig.founders.map(({ address, amount }) => ({ to: address, amount })))
-        });
-        transactions.founderMints = transaction(output, { recipients: daoConfig.founders });
-        checkpoint();
-      } else if (!transactions.founderMints) {
-        transactions.founderMints = { recovered: true, recipients: daoConfig.founders };
+      // Founder mints are now handled via the Minter contract in the batch_mint phase
+      // Skip this in admin_checklist
+      if (!transactions.founderMints) {
+        transactions.founderMints = { skipped: true, reason: 'Use Minter contract via batch_mint phase' };
         checkpoint();
       }
 
@@ -423,40 +416,15 @@ if (phase === 'admin_checklist') {
       }
     }
 
-    const listings = transactions.marketplaceListings ?? [];
-    const expiresAt = listings[0]?.expiresAt ?? Math.floor(Date.now() / 1000) + listingDuration;
-    let nextTokenId = invokeView(addresses.token, 'total_supply');
-    let remainingListings = listingCount - listings.length;
-    if (!transactions.listingMint && remainingListings > 0) {
-      invoke(addresses.token, 'batch_mint', {
-        minter: daoConfig.launchAdmin,
-        to: daoConfig.launchAdmin,
-        amount: remainingListings
-      });
-      transactions.listingMint = { amount: remainingListings };
+    // Marketplace listing tokens would be minted via Minter contract if needed
+    // For now, skip marketplace listing minting in admin_checklist
+    if (!transactions.listingMint) {
+      transactions.listingMint = { skipped: true, reason: 'Use Minter contract for bulk listing token creation' };
       checkpoint();
     }
-    for (let index = listings.length; index < listingCount; index += 1) {
-      const tokenId = nextTokenId + index;
-      invoke(addresses.token, 'approve', {
-        owner: daoConfig.launchAdmin,
-        spender: addresses.marketplace,
-        token_id: tokenId,
-        expiration_ledger: 5100000
-      });
-      const output = invoke(addresses.marketplace, 'list', {
-        token_id: tokenId,
-        seller: daoConfig.launchAdmin,
-        price: String(listingPrice),
-        expires_at: expiresAt
-      });
-      listings.push(transaction(output, { tokenId, price: String(listingPrice), expiresAt }));
-      transactions.marketplaceListings = listings;
-      checkpoint();
-    }
-    transactions.marketplaceListings = listings;
+    transactions.marketplaceListings = transactions.marketplaceListings ?? [];
     checkpoint('checklist_complete');
-    console.log(`Admin checklist complete: ${listingCount} marketplace tokens listed at ${listingPrice} stroops each.`);
+    console.log(`Admin checklist complete.`);
     console.log('Review the artifact and run launch_dao when ready.');
     process.exit(0);
   } catch (error) {
