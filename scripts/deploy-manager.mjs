@@ -208,9 +208,7 @@ function installWasm(packageName) {
       '--source-account',
       identityName,
       '--network',
-      networkName,
-      '--resource-fee',
-      '10000000'  // 1 XLM in stroops for resource fees
+      networkName
     ]);
 
     if (result.ok) {
