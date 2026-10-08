@@ -386,3 +386,37 @@ fn test_batch_mint_sequential_token_ids() {
     assert_eq!(token_ids.get(4), Some(4));
 }
 // See contracts/Minter/tests/ for batch minting tests
+
+#[test]
+fn batch_mint_assigns_contiguous_ids_owners_and_balances() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+    let bob = Address::generate(&e);
+
+    let recipients = soroban_sdk::vec![&e, alice.clone(), bob.clone(), alice.clone()];
+    let amounts = soroban_sdk::vec![&e, 2u128, 3u128, 1u128];
+    let ids = client.batch_mint(&owner, &recipients, &amounts);
+
+    assert_eq!(ids, soroban_sdk::vec![&e, 0u32, 1, 2, 3, 4, 5]);
+    for id in [0u32, 1, 5] {
+        assert_eq!(
+            client.owner_of(&id),
+            if id < 2 || id == 5 {
+                alice.clone()
+            } else {
+                bob.clone()
+            }
+        );
+    }
+    assert_eq!(client.balance(&alice), 3);
+    assert_eq!(client.balance(&bob), 3);
+    assert_eq!(client.total_supply(), 6);
+
+    // Counter advanced by exactly the batch size
+    let next = client.batch_mint(
+        &owner,
+        &soroban_sdk::vec![&e, bob.clone()],
+        &soroban_sdk::vec![&e, 1u128],
+    );
+    assert_eq!(next, soroban_sdk::vec![&e, 6u32]);
+}

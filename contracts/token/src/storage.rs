@@ -23,11 +23,11 @@ pub const DAY_IN_LEDGERS: u32 = 17280; // ~5 seconds per ledger
 /// persists long-term. Set to 1 year for balance between persistence and storage cost.
 pub const DELEGATION_TTL_EXTEND_AMOUNT: u32 = 365 * DAY_IN_LEDGERS; // 1 year
 
-/// Delegation storage TTL threshold for triggering extension (~364 days).
+/// Delegation storage TTL threshold for triggering extension (~30 days).
 ///
 /// When remaining TTL falls below this threshold, the storage entry is extended.
-/// Set to 1 day before expiration to ensure delegations are refreshed during normal use.
-pub const DELEGATION_TTL_THRESHOLD: u32 = DELEGATION_TTL_EXTEND_AMOUNT - DAY_IN_LEDGERS; // ~364 days
+/// A short threshold avoids re-paying rent on nearly every touch.
+pub const DELEGATION_TTL_THRESHOLD: u32 = 30 * DAY_IN_LEDGERS; // ~30 days
 
 /// Storage keys for token-specific instance data.
 ///
@@ -47,4 +47,18 @@ pub enum TokenKey {
     Manager,
     CurrentHash,
     CurrentVersion,
+}
+
+/// Instance TTL (1 year) used for the contract's instance entry
+/// (owner, metadata, manager, sequential token counter, ...).
+pub const INSTANCE_TTL_EXTEND_AMOUNT: u32 = 365 * DAY_IN_LEDGERS;
+
+/// Extend the instance entry when less than ~30 days remain.
+pub const INSTANCE_TTL_THRESHOLD: u32 = 30 * DAY_IN_LEDGERS;
+
+/// Keeps the instance entry alive on state-changing paths.
+pub fn extend_instance_ttl(e: &soroban_sdk::Env) {
+    e.storage()
+        .instance()
+        .extend_ttl(INSTANCE_TTL_THRESHOLD, INSTANCE_TTL_EXTEND_AMOUNT);
 }

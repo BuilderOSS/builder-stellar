@@ -1,6 +1,6 @@
 use soroban_sdk::{
     contract, contractimpl, panic_with_error, symbol_short, vec, Address, BytesN, Env, Error,
-    IntoVal, String, Vec,
+    IntoVal, String, Symbol, Vec,
 };
 use stellar_access::ownable::{set_owner, Ownable, OwnableStorageKey};
 use stellar_governance::votes::{
@@ -8,7 +8,9 @@ use stellar_governance::votes::{
     transfer_voting_units, Votes, VotesStorageKey,
 };
 use stellar_macros::only_owner;
-use stellar_tokens::non_fungible::{votes::NonFungibleVotes, Base};
+use stellar_tokens::non_fungible::{
+    emit_mint, sequential::increment_token_id, votes::NonFungibleVotes, Base, NFTStorageKey,
+};
 
 use crate::error::TokenError;
 use crate::events::{emit_mint_authority_changed, emit_token_initialized, emit_token_mint};
@@ -219,6 +221,7 @@ impl DaoTokenContract {
     pub fn mint(e: &Env, minter: &Address, to: &Address) -> u32 {
         minter.require_auth();
         Self::ensure_mint_authority(e, minter);
+        extend_instance_ttl(e);
         Self::ensure_self_delegate(e, to);
         let token_id = NonFungibleVotes::sequential_mint(e, to);
         // Note: OpenZeppelin's NonFungibleVotes::sequential_mint() automatically emits standard Mint event
@@ -289,24 +292,38 @@ impl DaoTokenContract {
     ) -> Vec<u32> {
         minter.require_auth();
         Self::ensure_mint_authority(e, minter);
+        extend_instance_ttl(e);
 
         // Validate input vectors have matching lengths
         if recipients.len() != amounts.len() {
             panic_with_error!(e, TokenError::InvalidInput);
         }
 
+        // Validate amounts and compute the batch size up front so the whole
+        // ID range is reserved with a single counter write.
+        let mut total: u32 = 0;
+        for amount in amounts.iter() {
+            let amount_u32: u32 = match amount.try_into() {
+                Ok(v) if v > 0 => v,
+                _ => panic_with_error!(e, TokenError::InvalidInput),
+            };
+            total = total
+                .checked_add(amount_u32)
+                .unwrap_or_else(|| panic_with_error!(e, TokenError::InvalidInput));
+        }
+        if total == 0 {
+            panic_with_error!(e, TokenError::InvalidInput);
+        }
+
+        let first_id = increment_token_id(e, total);
+        let mut next_id = first_id;
         let mut token_ids = Vec::new(e);
         let mut checked_delegates: Vec<Address> = Vec::new(e);
 
-        // Process each recipient
         for i in 0..recipients.len() {
             let recipient = recipients.get(i).unwrap();
             let amount = amounts.get(i).unwrap();
-
-            // Validate amount
-            if amount == 0 {
-                panic_with_error!(e, TokenError::InvalidInput);
-            }
+            let amount_u32 = amount as u32;
 
             // Only check/set delegation once per unique recipient
             if !checked_delegates.contains(&recipient) {
@@ -314,22 +331,23 @@ impl DaoTokenContract {
                 checked_delegates.push_back(recipient.clone());
             }
 
-            // Mint all tokens for this recipient using Base::sequential_mint
-            // This bypasses NonFungibleVotes::sequential_mint to avoid per-token checkpoint updates
-            let amount_u32: u32 = amount.try_into().unwrap_or_else(|_| {
-                panic_with_error!(e, TokenError::InvalidInput);
-            });
-
+            // Write ownership per token, but touch balance and voting
+            // checkpoints once per recipient entry.
             for _ in 0..amount_u32 {
-                let token_id = Base::sequential_mint(e, &recipient);
-                Self::call_metadata_hook(e, token_id);
-                emit_token_mint(e, minter, &recipient, token_id);
-                token_ids.push_back(token_id);
+                e.storage()
+                    .persistent()
+                    .set(&NFTStorageKey::Owner(next_id), &recipient);
+                emit_mint(e, &recipient, next_id);
+                emit_token_mint(e, minter, &recipient, next_id);
+                token_ids.push_back(next_id);
+                next_id += 1;
             }
-
-            // Update voting checkpoints ONCE for this recipient's entire batch
+            Base::increase_balance(e, &recipient, amount_u32);
             transfer_voting_units(e, None, Some(&recipient), amount);
         }
+
+        // One metadata call for the whole contiguous ID range.
+        Self::call_metadata_batch_hook(e, first_id, total);
 
         token_ids
     }
@@ -390,6 +408,7 @@ impl DaoTokenContract {
     /// Emits a standard `Transfer` event (via OpenZeppelin) and updates voting
     /// power checkpoints for both sender and receiver delegates.
     pub fn transfer(e: &Env, from: &Address, to: &Address, token_id: u32) {
+        extend_instance_ttl(e);
         Self::ensure_self_delegate(e, to);
         NonFungibleVotes::transfer(e, from, to, token_id);
         // Note: OpenZeppelin's NonFungibleVotes::transfer() automatically emits standard Transfer event
@@ -416,6 +435,7 @@ impl DaoTokenContract {
     /// Emits a standard `Transfer` event (via OpenZeppelin) and updates voting
     /// power checkpoints for both sender and receiver delegates.
     pub fn transfer_from(e: &Env, spender: &Address, from: &Address, to: &Address, token_id: u32) {
+        extend_instance_ttl(e);
         Self::ensure_self_delegate(e, to);
         NonFungibleVotes::transfer_from(e, spender, from, to, token_id);
         // Note: OpenZeppelin's NonFungibleVotes::transfer_from() automatically emits standard Transfer event
@@ -492,6 +512,21 @@ impl DaoTokenContract {
                 &metadata_addr,
                 &symbol_short!("on_minted"),
                 vec![e, token_id.into_val(e)],
+            );
+        }
+    }
+
+    fn call_metadata_batch_hook(e: &Env, first_token_id: u32, count: u32) {
+        if let Some(metadata_addr) = e
+            .storage()
+            .instance()
+            .get::<TokenKey, Address>(&TokenKey::Metadata)
+        {
+            // Non-critical: ignore failures, like the single-token hook.
+            let _ = e.try_invoke_contract::<(), Error>(
+                &metadata_addr,
+                &Symbol::new(e, "on_minted_batch"),
+                vec![e, first_token_id.into_val(e), count.into_val(e)],
             );
         }
     }

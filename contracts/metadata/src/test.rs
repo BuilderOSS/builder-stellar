@@ -281,6 +281,55 @@ fn test_on_minted() {
 }
 
 #[test]
+fn test_on_minted_batch_seeds_every_token_in_range() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let client = create_contract(&env);
+    let owner = Address::generate(&env);
+    let token = create_token_contract(&env, &owner);
+
+    initialize_metadata(&env, &client, &token, &owner);
+
+    let mut names = Vec::new(&env);
+    names.push_back(String::from_str(&env, "Background"));
+    let mut items = Vec::new(&env);
+    for name in ["Cool", "Warm"] {
+        items.push_back(ItemParam {
+            property_id: 0,
+            name: String::from_str(&env, name),
+            is_new_property: true,
+        });
+    }
+    let ipfs_group = IpfsGroup {
+        base_uri: String::from_str(&env, "ipfs://QmTest"),
+        extension: String::from_str(&env, ".png"),
+    };
+    client.add_properties(&names, &items, &ipfs_group);
+
+    assert!(client.on_minted_batch(&10u32, &5u32));
+    for id in 10..15u32 {
+        assert_eq!(client.get_attributes(&id).len(), 2);
+    }
+    assert!(client.try_get_attributes(&9u32).is_err());
+    assert!(client.try_get_attributes(&15u32).is_err());
+}
+
+#[test]
+fn test_on_minted_batch_no_properties_returns_false() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let client = create_contract(&env);
+    let token = Address::generate(&env);
+    let owner = Address::generate(&env);
+
+    initialize_metadata(&env, &client, &token, &owner);
+
+    assert!(!client.on_minted_batch(&1u32, &3u32));
+}
+
+#[test]
 fn test_on_minted_no_properties_returns_false() {
     let env = Env::default();
     env.mock_all_auths();

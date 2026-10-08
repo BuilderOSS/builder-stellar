@@ -256,40 +256,36 @@ impl MetadataContract {
         // Verify caller is token contract
         Self::require_token(&env)?;
 
-        // Get properties
         let properties = get_properties(&env);
-        let num_properties = properties.len();
-
-        if num_properties == 0 {
+        if properties.is_empty() {
             return Ok(false);
         }
 
-        // Generate seed
-        let seed = Self::generate_seed(&env, token_id);
+        Self::seed_token(&env, &properties, token_id);
+        Ok(true)
+    }
 
-        // Build attributes array
-        let mut attr_vec = Vec::new(&env);
-        attr_vec.push_back(num_properties); // First element stores number of properties
+    /// Batch variant of `on_minted` for the contiguous range
+    /// `[first_token_id, first_token_id + count)`.
+    ///
+    /// Authorizes the token and loads the properties once for the whole range
+    /// instead of once per token. Emits one `SeedGenerated` event per token,
+    /// same as `on_minted`.
+    ///
+    /// # Errors
+    ///
+    /// * `OnlyToken` - Only token contract can call this function
+    pub fn on_minted_batch(env: Env, first_token_id: u32, count: u32) -> Result<bool, Error> {
+        Self::require_token(&env)?;
 
-        // Select item for each property using seed
-        for i in 0..num_properties {
-            let property = properties.get(i).unwrap();
-            let num_items = property.items.len();
-
-            // Use a distinct two-byte chunk for each property. The 32-byte
-            // hash supports the contract's maximum of 16 properties.
-            let offset = (i * 2) as u32;
-            let low = seed.get(offset).unwrap_or(0) as u64;
-            let high = seed.get(offset + 1).unwrap_or(0) as u64;
-            let item_index = ((low | (high << 8)) % (num_items as u64)) as u32;
-            attr_vec.push_back(item_index);
+        let properties = get_properties(&env);
+        if properties.is_empty() {
+            return Ok(false);
         }
 
-        // Store attributes
-        set_attributes(&env, token_id, &attr_vec);
-
-        emit_seed_generated(&env, token_id, num_properties, &attr_vec);
-
+        for i in 0..count {
+            Self::seed_token(&env, &properties, first_token_id + i);
+        }
         Ok(true)
     }
 
@@ -518,6 +514,31 @@ impl MetadataContract {
         set_properties(env, &properties);
 
         Ok(())
+    }
+
+    fn seed_token(env: &Env, properties: &Vec<Property>, token_id: u32) {
+        let num_properties = properties.len();
+        let seed = Self::generate_seed(env, token_id);
+
+        // First element stores number of properties
+        let mut attr_vec = Vec::new(env);
+        attr_vec.push_back(num_properties);
+
+        for i in 0..num_properties {
+            let property = properties.get(i).unwrap();
+            let num_items = property.items.len();
+
+            // Use a distinct two-byte chunk for each property. The 32-byte
+            // hash supports the contract's maximum of 16 properties.
+            let offset = (i * 2) as u32;
+            let low = seed.get(offset).unwrap_or(0) as u64;
+            let high = seed.get(offset + 1).unwrap_or(0) as u64;
+            let item_index = ((low | (high << 8)) % (num_items as u64)) as u32;
+            attr_vec.push_back(item_index);
+        }
+
+        set_attributes(env, token_id, &attr_vec);
+        emit_seed_generated(env, token_id, num_properties, &attr_vec);
     }
 
     fn generate_seed(env: &Env, token_id: u32) -> Bytes {

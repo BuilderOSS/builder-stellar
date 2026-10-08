@@ -2,6 +2,7 @@
 
 use soroban_sdk::{
     testutils::{Address as _, Events, MockAuth, MockAuthInvoke},
+    xdr::ToXdr,
     Address, Bytes, BytesN, Env, Event, IntoVal, String, Vec,
 };
 use token::DaoTokenContract;
@@ -378,18 +379,49 @@ fn test_allowlist_requires_recipient_auth() {
 // MERKLE TREE TESTS
 // ============================================================================
 
+fn leaf(env: &Env, recipient: &Address, amount: u128) -> BytesN<32> {
+    let mut data = Bytes::new(env);
+    data.append(&recipient.clone().to_xdr(env));
+    data.extend_from_array(&amount.to_be_bytes());
+    env.crypto().sha256(&data).into()
+}
+
+fn hash_pair(env: &Env, x: &BytesN<32>, y: &BytesN<32>) -> BytesN<32> {
+    let (a, b) = if x.to_array() <= y.to_array() {
+        (x, y)
+    } else {
+        (y, x)
+    };
+    let mut data = Bytes::new(env);
+    data.extend_from_array(&a.to_array());
+    data.extend_from_array(&b.to_array());
+    env.crypto().sha256(&data).into()
+}
+
+/// Builds a two-leaf tree; returns (root, proof for first, proof for second).
+fn two_leaf_tree(
+    env: &Env,
+    a: &Address,
+    a_amount: u128,
+    b: &Address,
+    b_amount: u128,
+) -> (BytesN<32>, Vec<BytesN<32>>, Vec<BytesN<32>>) {
+    let la = leaf(env, a, a_amount);
+    let lb = leaf(env, b, b_amount);
+    (
+        hash_pair(env, &la, &lb),
+        Vec::from_array(env, [lb]),
+        Vec::from_array(env, [la]),
+    )
+}
+
 #[test]
 fn test_set_merkle_root() {
     let env = Env::default();
     env.mock_all_auths();
 
     let (_admin, token, minter) = setup(&env);
-
-    // Set merkle root
-    let root = Bytes::from_array(&env, &[1u8; 32]);
-    minter.set_merkle_root(&token, &root);
-
-    // No way to directly verify the root is set, but the function should not panic
+    minter.set_merkle_root(&token, &BytesN::from_array(&env, &[1u8; 32]));
 }
 
 #[test]
@@ -399,20 +431,20 @@ fn test_mint_merkle_basic() {
 
     let (_admin, token, minter) = setup(&env);
     let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
 
     let token_client = token::DaoTokenContractClient::new(&env, &token);
     token_client.set_mint_authority(&minter.address, &true);
 
-    // Set merkle root (dummy root for testing)
-    let root = Bytes::from_array(&env, &[1u8; 32]);
+    let (root, alice_proof, bob_proof) = two_leaf_tree(&env, &alice, 5, &bob, 3);
     minter.set_merkle_root(&token, &root);
 
-    // Mint with merkle proof (using dummy proof since validation is placeholder)
-    let proof = Bytes::from_array(&env, &[0u8; 32]);
-    minter.mint_merkle(&token, &alice, &5u128, &proof);
+    minter.mint_merkle(&token, &alice, &5u128, &alice_proof);
+    minter.mint_merkle(&token, &bob, &3u128, &bob_proof);
 
-    // Verify tokens were minted
     assert_eq!(token_client.balance(&alice), 5);
+    assert_eq!(token_client.balance(&bob), 3);
+    assert_eq!(token_client.total_supply(), 8);
 }
 
 #[test]
@@ -422,11 +454,13 @@ fn test_merkle_claim_event_shape() {
 
     let (_admin, token, minter) = setup(&env);
     let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
     let token_client = token::DaoTokenContractClient::new(&env, &token);
     token_client.set_mint_authority(&minter.address, &true);
-    minter.set_merkle_root(&token, &Bytes::from_array(&env, &[1u8; 32]));
+    let (root, alice_proof, _) = two_leaf_tree(&env, &alice, 5, &bob, 3);
+    minter.set_merkle_root(&token, &root);
 
-    minter.mint_merkle(&token, &alice, &5u128, &Bytes::from_array(&env, &[0u8; 32]));
+    minter.mint_merkle(&token, &alice, &5u128, &alice_proof);
 
     let events = env.events().all();
     assert_eq!(
@@ -447,16 +481,55 @@ fn test_merkle_failed_claim_emits_no_success_event() {
 
     let (_admin, token, minter) = setup(&env);
     let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
     let token_client = token::DaoTokenContractClient::new(&env, &token);
     token_client.set_mint_authority(&minter.address, &true);
-    minter.set_merkle_root(&token, &Bytes::from_array(&env, &[1u8; 32]));
-    let proof = Bytes::from_array(&env, &[0u8; 32]);
-    minter.mint_merkle(&token, &alice, &5u128, &proof);
+    let (root, alice_proof, _) = two_leaf_tree(&env, &alice, 5, &bob, 3);
+    minter.set_merkle_root(&token, &root);
+    minter.mint_merkle(&token, &alice, &5u128, &alice_proof);
 
     assert!(minter
-        .try_mint_merkle(&token, &alice, &5u128, &proof)
+        .try_mint_merkle(&token, &alice, &5u128, &alice_proof)
         .is_err());
     assert!(env.events().all().events().is_empty());
+}
+
+#[test]
+fn test_mint_merkle_invalid_proof() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (_admin, token, minter) = setup(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let mallory = Address::generate(&env);
+    let token_client = token::DaoTokenContractClient::new(&env, &token);
+    token_client.set_mint_authority(&minter.address, &true);
+    let (root, alice_proof, bob_proof) = two_leaf_tree(&env, &alice, 5, &bob, 3);
+    minter.set_merkle_root(&token, &root);
+
+    // Wrong amount for a valid proof
+    assert!(minter
+        .try_mint_merkle(&token, &alice, &50u128, &alice_proof)
+        .is_err());
+    // Someone else's proof
+    assert!(minter
+        .try_mint_merkle(&token, &mallory, &5u128, &alice_proof)
+        .is_err());
+    // Empty proof
+    assert!(minter
+        .try_mint_merkle(&token, &bob, &3u128, &Vec::new(&env))
+        .is_err());
+    // Bogus sibling
+    let bogus = Vec::from_array(&env, [BytesN::from_array(&env, &[9u8; 32])]);
+    assert!(minter
+        .try_mint_merkle(&token, &bob, &3u128, &bogus)
+        .is_err());
+
+    // Failed attempts don't consume the claim
+    minter.mint_merkle(&token, &bob, &3u128, &bob_proof);
+    assert_eq!(token_client.balance(&bob), 3);
+    assert_eq!(token_client.total_supply(), 3);
 }
 
 #[test]
@@ -471,9 +544,7 @@ fn test_mint_merkle_no_root_set() {
     let token_client = token::DaoTokenContractClient::new(&env, &token);
     token_client.set_mint_authority(&minter.address, &true);
 
-    // Try to mint without setting merkle root
-    let proof = Bytes::from_array(&env, &[0u8; 32]);
-    minter.mint_merkle(&token, &alice, &5u128, &proof);
+    minter.mint_merkle(&token, &alice, &5u128, &Vec::new(&env));
 }
 
 #[test]
@@ -484,20 +555,16 @@ fn test_mint_merkle_double_claim() {
 
     let (_admin, token, minter) = setup(&env);
     let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
 
     let token_client = token::DaoTokenContractClient::new(&env, &token);
     token_client.set_mint_authority(&minter.address, &true);
 
-    // Set merkle root
-    let root = Bytes::from_array(&env, &[1u8; 32]);
+    let (root, alice_proof, _) = two_leaf_tree(&env, &alice, 5, &bob, 3);
     minter.set_merkle_root(&token, &root);
 
-    // First claim
-    let proof = Bytes::from_array(&env, &[0u8; 32]);
-    minter.mint_merkle(&token, &alice, &5u128, &proof);
-
-    // Second claim - should panic
-    minter.mint_merkle(&token, &alice, &5u128, &proof);
+    minter.mint_merkle(&token, &alice, &5u128, &alice_proof);
+    minter.mint_merkle(&token, &alice, &5u128, &alice_proof);
 }
 
 #[test]
@@ -508,20 +575,14 @@ fn test_merkle_requires_recipient_auth() {
     let (_admin, token, minter) = setup(&env);
     let alice = Address::generate(&env);
     let unauthorized = Address::generate(&env);
+    let proof: Vec<BytesN<32>> = Vec::new(&env);
 
-    // Mock auth as unauthorized address
     env.mock_auths(&[MockAuth {
         address: &unauthorized,
         invoke: &MockAuthInvoke {
             contract: &minter.address,
             fn_name: "mint_merkle",
-            args: (
-                token.clone(),
-                alice.clone(),
-                5u128,
-                Bytes::from_array(&env, &[0u8; 32]),
-            )
-                .into_val(&env),
+            args: (token.clone(), alice.clone(), 5u128, proof.clone()).into_val(&env),
             sub_invokes: &[],
         },
     }]);
@@ -529,13 +590,44 @@ fn test_merkle_requires_recipient_auth() {
     let token_client = token::DaoTokenContractClient::new(&env, &token);
     token_client.set_mint_authority(&minter.address, &true);
 
-    // Set merkle root
-    let root = Bytes::from_array(&env, &[1u8; 32]);
-    minter.set_merkle_root(&token, &root);
-
-    // Try to mint for Alice from unauthorized address
-    let proof = Bytes::from_array(&env, &[0u8; 32]);
+    minter.set_merkle_root(&token, &BytesN::from_array(&env, &[1u8; 32]));
     minter.mint_merkle(&token, &alice, &5u128, &proof);
+}
+
+#[test]
+fn test_claim_uses_single_checkpoint() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (_admin, token, minter) = setup(&env);
+    let alice = Address::generate(&env);
+    let token_client = token::DaoTokenContractClient::new(&env, &token);
+    token_client.set_mint_authority(&minter.address, &true);
+
+    minter.set_allowlist(&token, &Vec::from_array(&env, [alice.clone()]), &10u128);
+    minter.mint_allowlist(&token, &alice, &10u128);
+
+    assert_eq!(token_client.balance(&alice), 10);
+    assert_eq!(token_client.num_checkpoints(&alice), 1);
+}
+
+#[test]
+fn test_set_allowlist_replaces_previous_list() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (_admin, token, minter) = setup(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let token_client = token::DaoTokenContractClient::new(&env, &token);
+    token_client.set_mint_authority(&minter.address, &true);
+
+    minter.set_allowlist(&token, &Vec::from_array(&env, [alice.clone()]), &2u128);
+    minter.set_allowlist(&token, &Vec::from_array(&env, [bob.clone()]), &3u128);
+
+    assert!(minter.try_mint_allowlist(&token, &alice, &2u128).is_err());
+    minter.mint_allowlist(&token, &bob, &3u128);
+    assert_eq!(token_client.balance(&bob), 3);
 }
 
 // ============================================================================
@@ -566,10 +658,9 @@ fn test_multiple_mint_methods_together() {
     minter.mint_allowlist(&token, &bob, &10u128);
 
     // 3. Set merkle root and mint for Charlie
-    let root = Bytes::from_array(&env, &[1u8; 32]);
+    let (root, charlie_proof, _) = two_leaf_tree(&env, &charlie, 7, &alice, 1);
     minter.set_merkle_root(&token, &root);
-    let proof = Bytes::from_array(&env, &[0u8; 32]);
-    minter.mint_merkle(&token, &charlie, &7u128, &proof);
+    minter.mint_merkle(&token, &charlie, &7u128, &charlie_proof);
 
     // Verify all mints worked
     assert_eq!(token_client.balance(&alice), 5);

@@ -9,7 +9,7 @@
 //! - **Token-based Admin**: Admin derived from token owner, not stored
 //! - **Per-Token Configuration**: Separate merkle roots and allowlists per token
 //! - **Double-Claim Prevention**: Tracks claimed addresses per token
-//! - **Flexible**: Works with any token contract that has owner() and mint()
+//! - **Flexible**: Works with any token contract that has owner() and batch_mint()
 
 #![no_std]
 

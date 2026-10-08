@@ -30,7 +30,7 @@ fn test_storage_enums_defined() {
 
     // Just verify the enum variants compile
     let _key1 = MinterKey::MerkleRoot(token_id.clone());
-    let _key2 = MinterKey::Allowlist(token_id.clone());
+    let _key2 = MinterKey::AllowlistVersion(token_id.clone());
     let _key3 = MinterKey::AllowlistAmount(token_id.clone());
     let recipient = Address::generate(&Env::default());
     let _key4 = MinterKey::Claimed(token_id, recipient);

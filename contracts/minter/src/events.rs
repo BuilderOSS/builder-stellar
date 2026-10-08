@@ -32,6 +32,9 @@ pub struct MintBatchEvent {
     pub token_id: Address,
     pub recipient_count: u32,
     pub total_amount: u128,
+    /// First token ID of the contiguous minted range
+    /// `[first_token_id, first_token_id + total_amount)`.
+    pub first_token_id: u32,
 }
 
 /// Emitted when a merkle root is set.
@@ -72,11 +75,18 @@ pub fn emit_allowlist_claim(env: &Env, token_id: &Address, recipient: &Address, 
 }
 
 /// Emit a batch mint event.
-pub fn emit_mint_batch(env: &Env, token_id: &Address, count: u32, total_amount: u128) {
+pub fn emit_mint_batch(
+    env: &Env,
+    token_id: &Address,
+    count: u32,
+    total_amount: u128,
+    first_token_id: u32,
+) {
     MintBatchEvent {
         token_id: token_id.clone(),
         recipient_count: count,
         total_amount,
+        first_token_id,
     }
     .publish(env);
 }
