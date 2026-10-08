@@ -9,17 +9,21 @@ import { Grid, Stack } from 'styled-system/jsx';
 import { AdminValueForm } from '@/components/admin/admin-action-forms';
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
 import { AdminSectionNav } from '@/components/admin/admin-section-nav';
-import { AuthorityPanel } from '@/components/admin/authority-panel';
 import { DurationInput } from '@/components/admin/duration-input';
 import { PercentageInput } from '@/components/admin/percentage-input';
 import { PageSection } from '@/components/page-section';
 import { Badge, Button, Callout, Card, Heading, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
-import { treasuryHasAuthority, treasuryIsOwner } from '@/lib/admin-proposals';
+import { treasuryIsOwner } from '@/lib/admin-proposals';
 import { useContractOwner, useGovernorSettings } from '@/lib/admin-queries';
 import { isDaoAdmin } from '@/lib/dao-config';
 import { formatDuration } from '@/lib/format-duration';
-import { useGoldskyGovernorAuthorities } from '@/lib/goldsky-queries';
+import {
+  validateProposalThreshold,
+  validateQuorumBps,
+  validateVotingDelay,
+  validateVotingPeriod
+} from '@/lib/governance-limits';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
@@ -79,22 +83,12 @@ export default function GovernanceAdminPage() {
     config,
     session.address || (config.status === 'pending' ? config.launchAdmin : config.adminAddress)
   );
-  const {
-    data: governorAuthorities,
-    error: authorityError,
-    isLoading: authorityLoading,
-    mutate: refreshAuthorities
-  } = useGoldskyGovernorAuthorities(config.tokenContractId);
   const { data: governorOwner } = useContractOwner(config, 'governor', session.address || undefined);
   const isOwner = isDaoAdmin(config, session.address);
-  const hasGovernanceAccess = Boolean(
-    isOwner || governorAuthorities?.items.some((item) => item.authority === session.address)
-  );
-  const canProposeGovernance = Boolean(
-    session.address &&
-    (treasuryIsOwner(config, governorOwner) ||
-      treasuryHasAuthority(config.treasuryContractId, governorAuthorities?.items))
-  );
+  // The governor owner is the launch admin before launch and the Treasury afterwards.
+  // There is no separate governor-authority role any more.
+  const hasGovernanceAccess = isOwner;
+  const canProposeGovernance = Boolean(session.address && treasuryIsOwner(config, governorOwner));
 
   function proposeSetting(
     type: 'set-voting-delay' | 'set-voting-period' | 'set-proposal-threshold' | 'set-quorum-bps',
@@ -121,7 +115,7 @@ export default function GovernanceAdminPage() {
 
   async function getGovernor() {
     if (!session.address) {
-      throw new Error('Connect a governance authority wallet first.');
+      throw new Error('Connect the governor owner wallet first.');
     }
 
     if (!config.governorContractId) {
@@ -147,12 +141,12 @@ export default function GovernanceAdminPage() {
     run: (governor: GovernorClient) => Promise<string>
   ) {
     if (!hasGovernanceAccess) {
-      setFormMessage('Connect a governance authority wallet first.');
+      setFormMessage('Connect the governor owner wallet first.');
       return;
     }
 
     if (!session.address) {
-      setFormMessage('Connect a governance authority wallet first.');
+      setFormMessage('Connect the governor owner wallet first.');
       return;
     }
 
@@ -172,7 +166,7 @@ export default function GovernanceAdminPage() {
       tx.submitted(`${label} submitted`, hash);
       await waitForConfirmation(hash, config.rpcUrl);
       setFormMessage('');
-      await Promise.all([refreshSettings(), refreshAuthorities()]);
+      await refreshSettings();
       tx.success(`${label} updated`, hash);
     } catch (error) {
       tx.fail(error, `${label} update failed`);
@@ -191,13 +185,19 @@ export default function GovernanceAdminPage() {
       return;
     }
 
+    const delayError = validateVotingDelay(value);
+    if (delayError) {
+      setFormMessage(delayError);
+      return;
+    }
+
     if (!hasGovernanceAccess && canProposeGovernance) {
       proposeSetting('set-voting-delay', String(value), 'voting delay');
       return;
     }
 
     await submitGovernorUpdate('votingDelay', 'Voting delay', async (governor) => {
-      const assembled = await governor.set_voting_delay({ caller: session.address || '', voting_delay: value });
+      const assembled = await governor.set_voting_delay({ voting_delay: value });
       const sent = await assembled.signAndSend();
       return sent.sendTransactionResponse?.hash ?? '';
     });
@@ -212,13 +212,19 @@ export default function GovernanceAdminPage() {
       return;
     }
 
+    const periodError = validateVotingPeriod(value);
+    if (periodError) {
+      setFormMessage(periodError);
+      return;
+    }
+
     if (!hasGovernanceAccess && canProposeGovernance) {
       proposeSetting('set-voting-period', String(value), 'voting period');
       return;
     }
 
     await submitGovernorUpdate('votingPeriod', 'Voting period', async (governor) => {
-      const assembled = await governor.set_voting_period({ caller: session.address || '', voting_period: value });
+      const assembled = await governor.set_voting_period({ voting_period: value });
       const sent = await assembled.signAndSend();
       return sent.sendTransactionResponse?.hash ?? '';
     });
@@ -237,16 +243,19 @@ export default function GovernanceAdminPage() {
       return;
     }
 
+    const thresholdError = validateProposalThreshold(value);
+    if (thresholdError) {
+      setFormMessage(thresholdError);
+      return;
+    }
+
     if (!hasGovernanceAccess && canProposeGovernance) {
       proposeSetting('set-proposal-threshold', value.toString(), 'proposal threshold');
       return;
     }
 
     await submitGovernorUpdate('proposalThreshold', 'Proposal threshold', async (governor) => {
-      const assembled = await governor.set_proposal_threshold({
-        caller: session.address || '',
-        proposal_threshold: value
-      });
+      const assembled = await governor.set_proposal_threshold({ proposal_threshold: value });
       const sent = await assembled.signAndSend();
       return sent.sendTransactionResponse?.hash ?? '';
     });
@@ -261,13 +270,19 @@ export default function GovernanceAdminPage() {
       return;
     }
 
+    const quorumError = validateQuorumBps(value);
+    if (quorumError) {
+      setFormMessage(quorumError);
+      return;
+    }
+
     if (!hasGovernanceAccess && canProposeGovernance) {
       proposeSetting('set-quorum-bps', String(value), 'quorum');
       return;
     }
 
     await submitGovernorUpdate('quorumBps', 'Quorum', async (governor) => {
-      const assembled = await governor.set_quorum_bps({ caller: session.address || '', quorum_bps: value });
+      const assembled = await governor.set_quorum_bps({ quorum_bps: value });
       const sent = await assembled.signAndSend();
       return sent.sendTransactionResponse?.hash ?? '';
     });
@@ -275,12 +290,12 @@ export default function GovernanceAdminPage() {
 
   if (!hasGovernanceAccess && !canProposeGovernance) {
     return (
-      <PageSection title="Governance Admin" description="Governance settings and authority management.">
+      <PageSection title="Governance Admin" description="Governance settings.">
         <Callout
           variant="warning"
           badge="Access restricted"
-          title="Connect a governance authority wallet to continue"
-          description="You can still view the current governor values, but only a governance authority can update them."
+          title="Connect the governor owner wallet to continue"
+          description="You can still view the current governor values, but only the governor owner can update them."
         >
           {settings ? (
             <Stack gap="1">
@@ -356,7 +371,7 @@ export default function GovernanceAdminPage() {
                   value={drafts.votingDelay ?? settings?.votingDelay ?? 0}
                   onChange={(value) => setDrafts((current) => ({ ...current, votingDelay: value }))}
                   disabled={busy}
-                  helperText="Time between proposal creation and when voting begins. Minimum 5 minutes. Example: 1 day gives members time to see new proposals."
+                  helperText="Time between proposal creation and when voting begins. Between 5 minutes and 30 days. Example: 1 day gives members time to see new proposals."
                 />
                 <Stack gap="1">
                   {typeof drafts.votingDelay === 'number' && settings && drafts.votingDelay !== settings.votingDelay ? (
@@ -403,7 +418,7 @@ export default function GovernanceAdminPage() {
                   value={drafts.votingPeriod ?? settings?.votingPeriod ?? 0}
                   onChange={(value) => setDrafts((current) => ({ ...current, votingPeriod: value }))}
                   disabled={busy}
-                  helperText="How long voting remains open after it starts. Minimum 1 day. Longer periods allow more participation. Common: 3-7 days."
+                  helperText="How long voting remains open after it starts. Between 5 minutes and 30 days. Longer periods allow more participation. Common: 3-7 days."
                 />
                 <Stack gap="1">
                   {typeof drafts.votingPeriod === 'number' &&
@@ -464,7 +479,7 @@ export default function GovernanceAdminPage() {
                 <Stack gap="1">
                   <Text className="lede" style={{ margin: 0, fontSize: '0.8rem' }}>
                     {settings ? (
-                      'Minimum voting power required to create a proposal. Higher values prevent spam.'
+                      'Absolute number of votes (at least 1) required to create a proposal. Higher values prevent spam.'
                     ) : (
                       <Skeleton style={{ width: '210px', height: '0.8em' }} />
                     )}
@@ -553,20 +568,6 @@ export default function GovernanceAdminPage() {
               </Stack>
             </Card>
           </Grid>
-
-          <AuthorityPanel
-            title="Governor authorities"
-            badge="Governance"
-            description="Current wallets explicitly allowed to manage governance settings. The owner is always included."
-            items={governorAuthorities?.items ?? []}
-            value=""
-            allowLabel=""
-            revokeLabel=""
-            editable={false}
-            loading={authorityLoading}
-            busy={authorityLoading}
-            emptyLabel={authorityError?.message || 'No governance authorities indexed yet.'}
-          />
         </Stack>
       </PageSection>
     </>

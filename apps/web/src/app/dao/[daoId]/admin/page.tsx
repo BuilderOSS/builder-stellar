@@ -12,7 +12,7 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryHasAuthority, treasuryIsOwner } from '@/lib/admin-proposals';
 import { useContractOwner } from '@/lib/admin-queries';
 import { isDaoAdmin } from '@/lib/dao-config';
-import { useGoldskyGovernorAuthorities, useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
+import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 function SectionCard({
@@ -53,22 +53,17 @@ export default function AdminPage() {
   const { daoId, daoConfig: config } = useDaoContext();
   const session = useAuthSessionStore();
   const { data: mintAuthorities } = useGoldskyMintAuthorities(config.tokenContractId);
-  const { data: governorAuthorities } = useGoldskyGovernorAuthorities(config.tokenContractId);
   const { data: tokenOwner } = useContractOwner(config, 'token', session.address || undefined);
   const { data: governorOwner } = useContractOwner(config, 'governor', session.address || undefined);
   const { data: auctionOwner } = useContractOwner(config, 'auction', session.address || undefined);
 
   const isOwner = isDaoAdmin(config, session.address);
   const hasMintAccess = Boolean(isOwner || mintAuthorities?.items.some((item) => item.authority === session.address));
-  const hasGovernanceAccess = Boolean(
-    isOwner || governorAuthorities?.items.some((item) => item.authority === session.address)
-  );
+  const hasGovernanceAccess = isOwner;
   const canProposeOwnerActions = treasuryIsOwner(config, tokenOwner) || treasuryIsOwner(config, governorOwner);
   const canProposeMint =
     treasuryIsOwner(config, tokenOwner) || treasuryHasAuthority(config.treasuryContractId, mintAuthorities?.items);
-  const canProposeGovernance =
-    treasuryIsOwner(config, governorOwner) ||
-    treasuryHasAuthority(config.treasuryContractId, governorAuthorities?.items);
+  const canProposeGovernance = treasuryIsOwner(config, governorOwner);
   const canProposeAuction = treasuryIsOwner(config, auctionOwner);
   const hasAnyAccess = Boolean(
     isOwner ||
@@ -128,7 +123,7 @@ export default function AdminPage() {
           <SectionCard
             label="Owner"
             title="Authority management"
-            description="Add or remove mint and governance authorities from a single place."
+            description="Add or remove mint authorities from a single place."
             href={`/dao/${daoId}/admin/owner` as Route}
             allowed={isOwner || canProposeOwnerActions}
           />

@@ -60,7 +60,6 @@ export function getProposalActionIdentity(action: ProposalQueuedAction): Proposa
 export function getProposalActionResourceKey(action: ProposalQueuedAction): string {
   switch (action.type) {
     case 'set-mint-authority':
-    case 'set-governor-authority':
       return `${action.type}:${String(action.authority || action.recipient)
         .trim()
         .toUpperCase()}`;
@@ -87,6 +86,11 @@ export function getProposalActionResourceKey(action: ProposalQueuedAction): stri
       return 'auction:duration';
     case 'set-auction-time-buffer':
       return 'auction:time-buffer';
+    case 'create-primary-listing':
+      // Each distinct listing is its own resource; only an identical listing is a duplicate.
+      return `marketplace:create-primary:${String(action.price || '').trim()}:${String(action.expiresAt || '').trim()}`;
+    case 'cancel-primary-listing':
+      return `marketplace:cancel-primary:${String(action.listingId || '').trim()}`;
     default:
       return action.type;
   }

@@ -13,6 +13,7 @@ import { ProposalContextRail } from '@/components/proposal/proposal-context-rail
 import { Badge, Button, Callout, Card, Heading, Input, Skeleton, Text, Textarea } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
+import { MAX_PROPOSAL_ACTIONS, validateProposalActionCount } from '@/lib/governance-limits';
 import { analyzeProposalAction } from '@/lib/proposal-action-identity';
 import { ActionFormProvider, ActionFormWrapper, ProposalActionQueue } from '@/lib/proposal-actions';
 import { buildProposalCallVectors, encodeProposalCallArgs, getProposalActionSummary } from '@/lib/proposal-call';
@@ -59,8 +60,14 @@ export default function ProposalCreatePage() {
   const closeContextRail = useCallback(() => setContextRailOpen(false), []);
 
   const proposalCreationError = eligibility.error?.message;
-  const proposalCreationLocked = !eligibility.eligible;
-  const proposalCreationDisabledMessage = eligibility.message;
+  // Governor propose fails with NotLive until the DAO is launched.
+  const isPendingLaunch = config.status === 'pending';
+  const proposalCreationLocked = !eligibility.eligible || isPendingLaunch;
+  const proposalCreationDisabledMessage = isPendingLaunch
+    ? 'Proposals can only be created after the DAO has been launched.'
+    : eligibility.message;
+  // The Governor accepts at most MAX_PROPOSAL_ACTIONS (20) actions per proposal.
+  const actionCountError = validateProposalActionCount(queuedActions.length);
   const draftFindings = queuedActions.flatMap((action, index) =>
     analyzeProposalAction(action, queuedActions.slice(0, index)).filter((finding) => finding.severity === 'error')
   );
@@ -76,7 +83,7 @@ export default function ProposalCreatePage() {
   };
 
   const handleProceedToStep3 = () => {
-    if (canProceed && queuedActions.length > 0) {
+    if (canProceed && queuedActions.length > 0 && !actionCountError) {
       setStep(session.address, daoId, 3);
     }
   };
@@ -141,7 +148,7 @@ export default function ProposalCreatePage() {
       router.push(proposalId ? daoRoute(daoId, `proposals/${proposalId}`) : daoRoute(daoId, 'proposals'));
     } catch (err: any) {
       console.error('Proposal creation error:', err);
-      txFeedback.fail(err, 'Proposal failed');
+      txFeedback.fail(err, 'Proposal failed', 'governor');
     } finally {
       setTransactionBusy(false);
     }
@@ -287,8 +294,14 @@ export default function ProposalCreatePage() {
                         <Grid columns={{ base: 1, lg: 2 }} gap="6">
                           <Stack gap="4">
                             {!editingState && (
-                              <Button onClick={() => beginCreate(session.address, daoId)}>Add Action</Button>
+                              <Button
+                                onClick={() => beginCreate(session.address, daoId)}
+                                disabled={queuedActions.length >= MAX_PROPOSAL_ACTIONS}
+                              >
+                                Add Action
+                              </Button>
                             )}
+                            {actionCountError ? <Callout variant="error" title={actionCountError} /> : null}
 
                             <ActionFormWrapper daoId={daoId} />
                           </Stack>
@@ -305,7 +318,10 @@ export default function ProposalCreatePage() {
                           <Button variant="outline" onClick={() => setStep(session.address, daoId, 1)}>
                             Back to Details
                           </Button>
-                          <Button onClick={handleProceedToStep3} disabled={!canProceed || queuedActions.length === 0}>
+                          <Button
+                            onClick={handleProceedToStep3}
+                            disabled={!canProceed || queuedActions.length === 0 || Boolean(actionCountError)}
+                          >
                             Continue to Review
                           </Button>
                         </div>
@@ -331,6 +347,10 @@ export default function ProposalCreatePage() {
                         title="Submitting creates an on-chain governance proposal"
                         description="Your wallet will show the final transaction for review. Confirm the target contracts, recipients, and amounts before signing."
                       />
+
+                      {actionCountError ? (
+                        <Callout variant="error" badge="Resolve before submitting" title={actionCountError} />
+                      ) : null}
 
                       {hasBlockingDraftFindings ? (
                         <Callout
@@ -404,7 +424,12 @@ export default function ProposalCreatePage() {
                         </Button>
                         <Button
                           onClick={handleOpenConfirmDialog}
-                          disabled={proposalCreationLocked || transactionBusy || hasBlockingDraftFindings}
+                          disabled={
+                            proposalCreationLocked ||
+                            transactionBusy ||
+                            hasBlockingDraftFindings ||
+                            Boolean(actionCountError)
+                          }
                         >
                           {transactionBusy ? 'Submitting...' : 'Submit Proposal'}
                         </Button>

@@ -6,9 +6,20 @@ import {
   AdminReservePriceForm,
   type AdminValueDraft,
   AdminValueForm,
-  AuthorityProposalActionForm
+  AuthorityProposalActionForm,
+  type CancelPrimaryListingDraft,
+  CancelPrimaryListingForm,
+  type CreatePrimaryListingDraft,
+  CreatePrimaryListingForm
 } from '@/components/admin/admin-action-forms';
 import { decimalToStroops, validateReservePrice } from '@/lib/auction-values';
+import {
+  validateAuctionTimeBuffer,
+  validateProposalThreshold,
+  validateQuorumBps,
+  validateVotingDelay,
+  validateVotingPeriod
+} from '@/lib/governance-limits';
 import { getStellarAddressError, isValidStellarAddress } from '@/lib/validation';
 
 import type { ActionHandler, ValidationResult } from './types';
@@ -36,6 +47,14 @@ function wholeNumber(value: string, label: string): ValidationResult {
   return valid();
 }
 
+/** datetime-local string (local time) -> unix seconds, or null when unparseable. */
+export function parseExpiryToUnixSeconds(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const ms = new Date(trimmed).getTime();
+  return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
+}
+
 function decimalPrice(value: string): ValidationResult {
   const error = validateReservePrice(value);
   if (error) {
@@ -48,10 +67,7 @@ function decimalPrice(value: string): ValidationResult {
   return valid();
 }
 
-function authorityHandler(
-  type: 'set-mint-authority' | 'set-governor-authority',
-  label: string
-): ActionHandler<AdminAuthorityDraft> {
+function authorityHandler(type: 'set-mint-authority', label: string): ActionHandler<AdminAuthorityDraft> {
   return {
     type,
     label,
@@ -73,8 +89,8 @@ function authorityHandler(
       enabled: action.enabled !== false
     }),
     buildCallVector: (data, context) => ({
-      target: type === 'set-mint-authority' ? context.tokenContractId : context.governorContractId,
-      function: type === 'set-mint-authority' ? 'set_mint_authority' : 'set_governor_authority',
+      target: context.tokenContractId,
+      function: 'set_mint_authority',
       args: [data.authority.trim(), data.enabled]
     })
   };
@@ -83,7 +99,8 @@ function authorityHandler(
 function settingHandler(
   type: 'set-voting-delay' | 'set-voting-period' | 'set-proposal-threshold' | 'set-quorum-bps',
   label: string,
-  functionName: string
+  functionName: string,
+  limitCheck: (value: number | bigint) => string | null
 ): ActionHandler<AdminValueDraft> {
   return {
     type,
@@ -92,7 +109,15 @@ function settingHandler(
     group: 'Administration',
     FormComponent: AdminValueForm,
     getDefaultValues: () => ({ value: '' }),
-    validate: (data) => wholeNumber(data.value, label),
+    validate: (data) => {
+      const whole = wholeNumber(data.value, label);
+      if (!whole.valid) return whole;
+      // Contract bounds: timings 300..=2_592_000s, quorum 1..=10_000 bps, threshold >= 1 vote (absolute).
+      const limitError = limitCheck(
+        type === 'set-proposal-threshold' ? BigInt(data.value.trim()) : Number(data.value.trim())
+      );
+      return limitError ? { valid: false, message: limitError, fields: { value: limitError } } : valid();
+    },
     serialize: (data) => ({
       id: crypto.randomUUID(),
       type,
@@ -104,7 +129,8 @@ function settingHandler(
     buildCallVector: (data, context) => ({
       target: context.governorContractId,
       function: functionName,
-      args: [context.treasuryAddress, type === 'set-proposal-threshold' ? data.value.trim() : Number(data.value.trim())]
+      // Governor setters no longer take a caller argument; they run as the Treasury via treasury.execute.
+      args: [type === 'set-proposal-threshold' ? data.value.trim() : Number(data.value.trim())]
     })
   };
 }
@@ -113,7 +139,8 @@ function auctionDurationHandler(
   type: 'set-auction-duration' | 'set-auction-time-buffer',
   label: string,
   functionName: 'set_duration' | 'set_time_buffer',
-  minimum: number
+  minimum: number,
+  limitCheck?: (seconds: number) => string | null
 ): ActionHandler<AdminValueDraft> {
   return {
     type,
@@ -138,6 +165,8 @@ function auctionDurationHandler(
           fields: { value: `${label} must be at least ${minimum} seconds.` }
         };
       }
+      const limitError = limitCheck?.(parsed);
+      if (limitError) return { valid: false, message: limitError, fields: { value: limitError } };
       return valid();
     },
     serialize: (data) => ({
@@ -157,15 +186,24 @@ function auctionDurationHandler(
 }
 
 export const setMintAuthorityHandler = authorityHandler('set-mint-authority', 'Set mint authority');
-export const setGovernorAuthorityHandler = authorityHandler('set-governor-authority', 'Set governor authority');
-export const setVotingDelayHandler = settingHandler('set-voting-delay', 'Voting delay', 'set_voting_delay');
-export const setVotingPeriodHandler = settingHandler('set-voting-period', 'Voting period', 'set_voting_period');
+export const setVotingDelayHandler = settingHandler('set-voting-delay', 'Voting delay', 'set_voting_delay', (value) =>
+  validateVotingDelay(Number(value))
+);
+export const setVotingPeriodHandler = settingHandler(
+  'set-voting-period',
+  'Voting period',
+  'set_voting_period',
+  (value) => validateVotingPeriod(Number(value))
+);
 export const setProposalThresholdHandler = settingHandler(
   'set-proposal-threshold',
   'Proposal threshold',
-  'set_proposal_threshold'
+  'set_proposal_threshold',
+  (value) => validateProposalThreshold(value)
 );
-export const setQuorumBpsHandler = settingHandler('set-quorum-bps', 'Quorum', 'set_quorum_bps');
+export const setQuorumBpsHandler = settingHandler('set-quorum-bps', 'Quorum', 'set_quorum_bps', (value) =>
+  validateQuorumBps(Number(value))
+);
 export const setAuctionDurationHandler = auctionDurationHandler(
   'set-auction-duration',
   'Auction duration',
@@ -176,7 +214,8 @@ export const setAuctionTimeBufferHandler = auctionDurationHandler(
   'set-auction-time-buffer',
   'Auction time buffer',
   'set_time_buffer',
-  60
+  1,
+  validateAuctionTimeBuffer
 );
 
 function emptyAuctionHandler(type: 'pause-auction' | 'unpause-auction', label: string): ActionHandler<EmptyDraft> {
@@ -254,5 +293,63 @@ export const setAuctionPaymentTokenHandler: ActionHandler<AdminPaymentTokenDraft
     target: context.config.auctionContractId,
     function: 'set_payment_token',
     args: [data.paymentToken.trim()]
+  })
+};
+
+// Primary sales are lazy: after launch the Treasury is the marketplace admin, so creating and
+// cancelling primary listings are governance proposal actions executed through treasury.execute.
+export const createPrimaryListingHandler: ActionHandler<CreatePrimaryListingDraft> = {
+  type: 'create-primary-listing',
+  label: 'Create primary listing',
+  description: 'Open a primary sale: the buyer receives a newly minted token',
+  group: 'Administration',
+  FormComponent: CreatePrimaryListingForm,
+  getDefaultValues: () => ({ price: '', expiresAt: '' }),
+  validate: (data) => {
+    const priceError = validateReservePrice(data.price);
+    if (priceError) return { valid: false, message: priceError, fields: { price: priceError } };
+    const expiresAt = parseExpiryToUnixSeconds(data.expiresAt);
+    if (expiresAt === null) {
+      const message = 'Enter a valid expiry date and time.';
+      return { valid: false, message, fields: { expiresAt: message } };
+    }
+    return valid();
+  },
+  serialize: (data) => ({
+    id: crypto.randomUUID(),
+    type: 'create-primary-listing',
+    recipient: '',
+    amount: data.price.trim(),
+    price: data.price.trim(),
+    expiresAt: data.expiresAt.trim()
+  }),
+  deserialize: (action) => ({ price: action.price || action.amount || '', expiresAt: action.expiresAt || '' }),
+  buildCallVector: (data, context) => ({
+    target: context.config.marketplaceContractId,
+    function: 'create_primary_listing',
+    args: [decimalToStroops(data.price)?.toString() ?? '0', String(parseExpiryToUnixSeconds(data.expiresAt) ?? 0)]
+  })
+};
+
+export const cancelPrimaryListingHandler: ActionHandler<CancelPrimaryListingDraft> = {
+  type: 'cancel-primary-listing',
+  label: 'Cancel primary listing',
+  description: 'Cancel an open primary sale listing',
+  group: 'Administration',
+  FormComponent: CancelPrimaryListingForm,
+  getDefaultValues: () => ({ listingId: '' }),
+  validate: (data) => wholeNumber(data.listingId, 'Listing id'),
+  serialize: (data) => ({
+    id: crypto.randomUUID(),
+    type: 'cancel-primary-listing',
+    recipient: '',
+    amount: '',
+    listingId: data.listingId.trim()
+  }),
+  deserialize: (action) => ({ listingId: action.listingId || '' }),
+  buildCallVector: (data, context) => ({
+    target: context.config.marketplaceContractId,
+    function: 'cancel_primary',
+    args: [data.listingId.trim()]
   })
 };

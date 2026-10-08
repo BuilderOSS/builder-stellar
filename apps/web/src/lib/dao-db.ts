@@ -37,6 +37,7 @@ export interface DaoConfig {
   token_contract: string;
   governor_contract: string;
   auction_contract: string | null;
+  marketplace_contract: string | null;
   treasury_contract: string | null;
   metadata_contract: string | null;
   contract_image: string | null;
@@ -193,6 +194,7 @@ function mapDaoConfig(
     token_contract: row.tokenContract,
     governor_contract: row.governorContract,
     auction_contract: row.auctionContract,
+    marketplace_contract: row.marketplaceContract,
     treasury_contract: row.treasuryContract,
     metadata_contract: row.metadataContract,
     contract_image: contractImage,

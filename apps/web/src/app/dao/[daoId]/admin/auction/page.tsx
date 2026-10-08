@@ -25,6 +25,7 @@ import { getTreasuryAssets } from '@/lib/assets-config';
 import { decimalToStroops, formatStroops, validateReservePrice } from '@/lib/auction-values';
 import { isDaoAdmin } from '@/lib/dao-config';
 import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
+import { validateAuctionTimeBuffer } from '@/lib/governance-limits';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
@@ -102,6 +103,9 @@ export default function AuctionAdminPage() {
   const { data: mintAuthorities, error: mintAuthorityError } = useGoldskyMintAuthorities(config.tokenContractId);
   const { data: auctionOwner } = useContractOwner(config, 'auction', session.address || undefined);
   const isOwner = isDaoAdmin(config, session.address);
+  // Before launch the auction cannot be unpaused and the token cannot grant mint authority (NotLive).
+  // Launching through the Manager starts the auction and wires the mint authority.
+  const isPendingLaunch = config.status === 'pending';
   const canProposeAuction = Boolean(session.address && treasuryIsOwner(config, auctionOwner));
   const auctionCanMint = Boolean(
     mintAuthorities?.items.some((item) => item.authority === config.auctionContractId && item.enabled)
@@ -132,7 +136,7 @@ export default function AuctionAdminPage() {
     if (!populatedEnableValues.reservePrice || reserveError)
       nextErrors.reservePrice = reserveError || 'Reserve price is required.';
 
-    const timeBufferError = validateDuration(timeBuffer, 60);
+    const timeBufferError = validateAuctionTimeBuffer(timeBuffer);
     if (!populatedEnableValues.timeBuffer || timeBufferError) {
       nextErrors.timeBuffer = timeBufferError || 'Time buffer is required.';
     }
@@ -749,7 +753,7 @@ export default function AuctionAdminPage() {
               )}
               {data ? (
                 <>
-                  {(data.status === 'not-launched' || data.paused) && !auctionCanMint ? (
+                  {!isPendingLaunch && (data.status === 'not-launched' || data.paused) && !auctionCanMint ? (
                     <Callout
                       variant="warning"
                       title="Auction mint authority is missing."
@@ -780,27 +784,46 @@ export default function AuctionAdminPage() {
                 </>
               ) : (
                 <>
-                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                    {data?.status === 'not-launched' ? (
-                      <Button onClick={() => void updatePaused(false)} disabled={busy || (isOwner && !auctionCanMint)}>
-                        {isOwner ? 'Launch auctions' : 'Create launch proposal'}
-                      </Button>
-                    ) : (
-                      <>
-                        <Button onClick={() => void updatePaused(true)} disabled={busy || data?.paused !== false}>
-                          {isOwner ? 'Pause auctions' : 'Add pause proposal'}
-                        </Button>
+                  {isPendingLaunch ? (
+                    <Callout
+                      variant="info"
+                      title="Auction controls open after launch"
+                      description="Launching the DAO from the launch checklist starts the first auction. The auction cannot be unpaused and mint authority cannot be granted before launch."
+                    />
+                  ) : null}
+                  {!isPendingLaunch ? (
+                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                      {data?.status === 'not-launched' ? (
                         <Button
-                          variant="outline"
                           onClick={() => void updatePaused(false)}
-                          disabled={busy || data?.paused !== true || (isOwner && !auctionCanMint)}
+                          disabled={busy || (isOwner && !auctionCanMint)}
                         >
-                          {isOwner ? 'Resume auctions' : 'Add resume proposal'}
+                          {isOwner ? 'Launch auctions' : 'Create launch proposal'}
                         </Button>
-                      </>
-                    )}
-                  </div>
+                      ) : (
+                        <>
+                          <Button onClick={() => void updatePaused(true)} disabled={busy || data?.paused !== false}>
+                            {isOwner ? 'Pause auctions' : 'Add pause proposal'}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => void updatePaused(false)}
+                            disabled={busy || data?.paused !== true || (isOwner && !auctionCanMint)}
+                          >
+                            {isOwner ? 'Resume auctions' : 'Add resume proposal'}
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  ) : null}
                   <Text className="label">Auction payment token</Text>
+                  {isPendingLaunch ? (
+                    <Callout
+                      variant="warning"
+                      title="Payment asset is fixed at creation"
+                      description="Launch will fail if the auction payment token differs from the one chosen when the DAO was created."
+                    />
+                  ) : null}
                   <Text className="lede" style={{ margin: 0 }}>
                     {data?.config.payment_token
                       ? `${getTreasuryAssets(config.name).find((asset) => asset.contractId === data.config.payment_token)?.code ?? 'Unknown SAC'} · ${data.config.payment_token}`

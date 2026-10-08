@@ -208,7 +208,7 @@ export default function CreateDaoPage() {
           return ['purpose', 'membershipMode'].includes(key);
         }
         if (section === 'governance')
-          return ['votingDelay', 'votingPeriod', 'quorumBps', 'proposalThresholdBps', 'governance'].includes(key);
+          return ['votingDelay', 'votingPeriod', 'quorumBps', 'proposalThreshold', 'governance'].includes(key);
         return false;
       });
       if (!validationResults[section].success && (reviewedSections.has(section) || storedError)) return 'error';

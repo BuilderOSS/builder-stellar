@@ -105,7 +105,11 @@ export default function TokenAdminPage() {
           })
       });
 
-      const assembled = await client.batch_mint({ minter: session.address, to: recipient, amount: mintAmount });
+      const assembled = await client.batch_mint({
+        minter: session.address,
+        recipients: [recipient],
+        amounts: [BigInt(mintAmount)]
+      });
       const sent = await assembled.signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
       const countLabel = mintAmount === 1 ? 'token' : 'tokens';

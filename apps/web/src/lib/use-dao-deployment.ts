@@ -204,7 +204,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         return addresses;
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Failed to create DAO');
-        tx.fail(error, 'DAO creation failed');
+        tx.fail(error, 'DAO creation failed', 'manager');
         setError(error);
         throw error;
       }
@@ -215,7 +215,10 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
   // Launch DAO - called from admin panel after checklist completion
   // This transitions the DAO from 'pending' to 'operational' state
   const launchDao = useCallback(
-    async (tokenAddress: string, launchConfig: { launch_auction: boolean; launch_marketplace: boolean }) => {
+    async (
+      tokenAddress: string,
+      launchConfig: { launch_auction: boolean; launch_marketplace: boolean; enable_minter: boolean }
+    ) => {
       try {
         const config = getDeploymentConfig();
 
@@ -249,7 +252,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         tx.success('DAO launched', hash);
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Failed to launch DAO');
-        tx.fail(error, 'DAO launch failed');
+        tx.fail(error, 'DAO launch failed', 'manager');
         throw error;
       }
     },

@@ -1,12 +1,7 @@
 import { z } from 'zod';
 
-import {
-  getStellarAddressError,
-  isValidHttpUrl,
-  isValidStellarAddress,
-  isValidTokenSymbol,
-  validateDuration
-} from './validation';
+import { validateVotingDelay, validateVotingPeriod } from './governance-limits';
+import { getStellarAddressError, isValidHttpUrl, isValidStellarAddress, isValidTokenSymbol } from './validation';
 
 const addressSchema = z
   .string()
@@ -39,14 +34,18 @@ const governanceSchema = z
   .object({
     votingDelay: z.number().int('Voting delay must be a whole number'),
     votingPeriod: z.number().int('Voting period must be a whole number'),
-    quorumBps: z.number().int().min(0).max(10000),
-    proposalThresholdBps: z.number().int().min(0).max(10000)
+    quorumBps: z.number().int().min(1, 'Quorum must be at least 0.01%').max(10000, 'Quorum cannot exceed 100%'),
+    // Absolute number of votes, not basis points.
+    proposalThreshold: z
+      .number()
+      .int('Proposal threshold must be a whole number')
+      .min(1, 'Proposal threshold must be at least 1 vote')
   })
   .superRefine((governance, context) => {
-    const votingDelayError = validateDuration(governance.votingDelay, 300);
+    const votingDelayError = validateVotingDelay(governance.votingDelay);
     if (votingDelayError) context.addIssue({ code: 'custom', message: votingDelayError, path: ['votingDelay'] });
 
-    const votingPeriodError = validateDuration(governance.votingPeriod, 10 * 60);
+    const votingPeriodError = validateVotingPeriod(governance.votingPeriod);
     if (votingPeriodError) context.addIssue({ code: 'custom', message: votingPeriodError, path: ['votingPeriod'] });
   });
 

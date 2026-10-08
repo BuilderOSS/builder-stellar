@@ -4,12 +4,13 @@ import { batchMintGovernanceTokenHandler } from './actions/batch-mint-governance
 import { mintGovernanceTokenHandler } from './actions/mint-governance-token';
 import { transferSacTokenHandler } from './actions/transfer-sac-token';
 import {
+  cancelPrimaryListingHandler,
+  createPrimaryListingHandler,
   pauseAuctionHandler,
   setAuctionDurationHandler,
   setAuctionPaymentTokenHandler,
   setAuctionReservePriceHandler,
   setAuctionTimeBufferHandler,
-  setGovernorAuthorityHandler,
   setMintAuthorityHandler,
   setProposalThresholdHandler,
   setQuorumBpsHandler,
@@ -28,7 +29,6 @@ const REGISTERED_HANDLERS: ActionHandler[] = [
   batchMintGovernanceTokenHandler,
   transferSacTokenHandler,
   setMintAuthorityHandler,
-  setGovernorAuthorityHandler,
   setVotingDelayHandler,
   setVotingPeriodHandler,
   setProposalThresholdHandler,
@@ -38,7 +38,9 @@ const REGISTERED_HANDLERS: ActionHandler[] = [
   setAuctionReservePriceHandler,
   setAuctionPaymentTokenHandler,
   setAuctionDurationHandler,
-  setAuctionTimeBufferHandler
+  setAuctionTimeBufferHandler,
+  createPrimaryListingHandler,
+  cancelPrimaryListingHandler
 ];
 
 const ACTION_REGISTRY = new Map<ProposalActionType, ActionHandler>(

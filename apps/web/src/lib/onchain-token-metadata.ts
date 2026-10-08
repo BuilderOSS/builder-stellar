@@ -53,6 +53,9 @@ export async function resolveOnchainTokenMetadata(
     publicKey: config.adminAddress
   });
 
+  // NOTE: get_properties()/get_ipfs_data() are O(total collection size) on chain. They still work for
+  // rendering, but for large collections prefer the paginated getters get_items(property_id, start,
+  // limit <= 50) and get_ipfs_group(index).
   const [settingsResponse, attributesResponse, propertiesResponse, ipfsResponse] = await Promise.all([
     metadata.get_settings(),
     metadata.get_attributes({ token_id: tokenId }),

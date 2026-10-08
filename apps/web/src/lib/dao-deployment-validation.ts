@@ -84,9 +84,7 @@ export function validateDeploymentReady(state: CreateDaoStore): DeploymentValida
 
   // Founders validation (optional but warn if high vote threshold with no founders)
   if (!state.founders || state.founders.length === 0) {
-    if (state.governance.proposalThresholdBps < 100) {
-      warnings.push('No founders allocated. Ensure governance parameters are appropriate.');
-    }
+    warnings.push('No founders allocated. Ensure governance parameters are appropriate.');
   }
 
   // Launch admin validation

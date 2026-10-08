@@ -193,14 +193,6 @@ export function useGoldskyMintAuthorities(daoTokenAddress: string) {
   );
 }
 
-export function useGoldskyGovernorAuthorities(daoTokenAddress: string) {
-  return useSWR<GoldskyAuthorityResponse>(
-    `/api/dao/${encodeURIComponent(daoTokenAddress)}/authorities/governor`,
-    fetchJson,
-    { keepPreviousData: true }
-  );
-}
-
 export function useGoldskyHealth(_daoId: string) {
   return useSWR<GoldskyHealthResponse>('/api/goldsky/health', fetchJson, { keepPreviousData: true });
 }

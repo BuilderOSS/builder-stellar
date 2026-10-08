@@ -113,6 +113,8 @@ export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoN
   const isComplete = requiredCompletedCount === requiredItems.length;
   const [isLaunching, setIsLaunching] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
+  // Requires the Manager admin to have registered a platform minter; otherwise launch fails with PlatformMinterNotSet.
+  const [enableMinter, setEnableMinter] = useState(false);
 
   // Get network from config
   const networkName = config.name;
@@ -131,8 +133,9 @@ export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoN
     setLaunchError(null);
 
     try {
-      // Call on-chain launch_dao with all modules enabled
-      await launchDao(daoId, { launch_auction: true, launch_marketplace: true });
+      // Call on-chain launch_dao with all modules enabled. Payment assets are fixed at create_dao and
+      // asserted at launch, so launch fails if the auction/marketplace payment asset was changed in setup.
+      await launchDao(daoId, { launch_auction: true, launch_marketplace: true, enable_minter: enableMinter });
 
       // Wait a bit for transaction to settle, then refresh
       await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -186,6 +189,18 @@ export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoN
               can launch your DAO.
             </Text>
           </Box>
+        )}
+
+        {isComplete && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.875rem' }}>
+            <input
+              type="checkbox"
+              checked={enableMinter}
+              onChange={(event) => setEnableMinter(event.target.checked)}
+              disabled={isLaunching}
+            />
+            Enable the platform minter at launch (requires a platform minter registered by the Manager admin)
+          </label>
         )}
 
         {isComplete && (

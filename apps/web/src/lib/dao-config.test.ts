@@ -18,6 +18,7 @@ const config = (status: DaoNetworkConfig['status']): DaoNetworkConfig => ({
   governorContractId: '',
   treasuryContractId: '',
   auctionContractId: '',
+  marketplaceContractId: '',
   auctionEnabled: null,
   auctionPaused: null,
   status

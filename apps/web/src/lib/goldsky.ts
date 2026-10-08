@@ -165,7 +165,16 @@ export async function getGoldskyActivityFeed(
     ...(contractId ? { contractId } : {}),
     ...(contractRole ? { contractRole } : {}),
     ...(actor ? { actor } : {}),
-    ...(kind ? { kind: { in: kind.split(',').map((value) => value.trim()).filter(Boolean) } } : {})
+    ...(kind
+      ? {
+          kind: {
+            in: kind
+              .split(',')
+              .map((value) => value.trim())
+              .filter(Boolean)
+          }
+        }
+      : {})
   };
   const [rows, total] = await Promise.all([
     prisma.appActivityFeed.findMany({
@@ -448,30 +457,6 @@ export async function getGoldskyMintAuthorities(daoId: string) {
   const deploymentId = getDeploymentId();
   const daoIdFromUrl = await getDaoIdFromUrl(daoId);
   const rows = await prisma.tokenMintAuthority.findMany({
-    where: { deploymentId, daoId: daoIdFromUrl, enabled: true },
-    orderBy: { authority: 'asc' }
-  });
-
-  return {
-    items: rows.map((row) => ({
-      authority: row.authority,
-      enabled: row.enabled,
-      last_updated_ledger: Number(row.eventLedger)
-    })),
-    total: rows.length,
-    generatedAt: new Date().toISOString()
-  };
-}
-
-/**
- * Governor Authorities
- *
- * Returns all addresses with governor authority
- */
-export async function getGoldskyGovernorAuthorities(daoId: string) {
-  const deploymentId = getDeploymentId();
-  const daoIdFromUrl = await getDaoIdFromUrl(daoId);
-  const rows = await prisma.governanceGovernorAuthority.findMany({
     where: { deploymentId, daoId: daoIdFromUrl, enabled: true },
     orderBy: { authority: 'asc' }
   });

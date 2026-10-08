@@ -13,6 +13,7 @@ import { Button, Callout, Card, Heading, Input, ShortId, Skeleton, Text } from '
 import type { NetworkName } from '@/config/networks';
 import { useDaoContext } from '@/contexts/dao-context';
 import { getTreasuryAssets } from '@/lib/assets-config';
+import { usePendingRefund } from '@/lib/auction-refunds';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
@@ -89,6 +90,7 @@ export default function AuctionsPage() {
     fetcher,
     { refreshInterval: 15_000 }
   );
+  const { data: pendingRefund, mutate: refreshPendingRefund } = usePendingRefund(config, session.address);
   const [amount, setAmount] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -105,6 +107,38 @@ export default function AuctionsPage() {
       window.clearInterval(timer);
     };
   }, []);
+
+  const claimRefund = async () => {
+    if (!session.address) return setMessage('Connect a wallet first.');
+    setMessage('');
+    setBusy(true);
+    tx.start('Claiming refund...');
+    try {
+      const client = new AuctionClient({
+        contractId: config.auctionContractId,
+        rpcUrl: config.rpcUrl,
+        networkPassphrase: config.passphrase,
+        publicKey: session.address,
+        signTransaction: async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
+          StellarWalletsKit.signTransaction(xdr, {
+            networkPassphrase: opts?.networkPassphrase ?? config.passphrase,
+            address: opts?.address ?? session.address
+          })
+      });
+      // The bidder signs; the contract pays out their whole deferred balance.
+      const assembled = await client.withdraw_refund({ bidder: session.address });
+      const sent = await assembled.signAndSend();
+      const hash = sent.sendTransactionResponse?.hash ?? '';
+      tx.submitted('Refund claim submitted', hash);
+      await waitForConfirmation(hash, config.rpcUrl);
+      tx.success('Refund claimed', hash);
+      await refreshPendingRefund();
+    } catch (err) {
+      tx.fail(err, 'Refund claim failed', 'auction');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const submit = async (action: 'bid' | 'settle') => {
     if (!session.address || !data) return setMessage('Connect a wallet first.');
@@ -144,7 +178,7 @@ export default function AuctionsPage() {
         setAmount('');
         await mutate();
       } catch (err) {
-        tx.fail(err, 'Bid failed');
+        tx.fail(err, 'Bid failed', 'auction');
       } finally {
         setBusy(false);
       }
@@ -171,7 +205,7 @@ export default function AuctionsPage() {
         tx.success('Auction settled', hash);
         await mutate();
       } catch (err) {
-        tx.fail(err, 'Settlement failed');
+        tx.fail(err, 'Settlement failed', 'auction');
       } finally {
         setBusy(false);
       }
@@ -211,6 +245,17 @@ export default function AuctionsPage() {
               ))}
             </Grid>
           </div>
+        ) : null}
+        {pendingRefund && pendingRefund > 0n ? (
+          <Callout
+            variant="warning"
+            title={`You have a deferred refund of ${formatAmount(pendingRefund)} ${paymentToken}.`}
+            description="A refund for an outbid bid could not be sent to your account automatically, so the auction contract is holding it for you."
+          >
+            <Button onClick={() => void claimRefund()} disabled={busy}>
+              {busy ? 'Claiming...' : 'Claim refund'}
+            </Button>
+          </Callout>
         ) : null}
         {data?.auction ? (
           <>

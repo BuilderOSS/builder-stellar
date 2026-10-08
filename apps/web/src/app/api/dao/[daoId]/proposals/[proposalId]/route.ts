@@ -26,6 +26,8 @@ export async function GET(_request: Request, context: { params: Promise<{ daoId:
         publicKey: config.adminAddress
       });
 
+      // governor.proposal_state is the authoritative state (the DB state is clock/event derived and
+      // approximate: 'expired' can also mean the vote was won but quorum was missed).
       const proposalBuffer = proposalIdToBuffer(proposal.proposal_id);
       const [stateTx, deadlineTx, snapshotTx, proposerTx, votingPeriodTx] = await Promise.all([
         client.proposal_state({ proposal_id: proposalBuffer }),
