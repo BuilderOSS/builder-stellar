@@ -1,7 +1,15 @@
 # DAO Deployment Guide
 
 > **Status**: Versioned redesign reference. Use `MANAGER_REDESIGN.md` and
-> `MARKETPLACE_PLAN.md` for the new six-module deployment baseline.
+> `MARKETPLACE_PLAN.md` for the new six-module deployment baseline, and
+> `SECURITY_MODEL.md` for the setup-window rules.
+>
+> **Script drift**: the contract flow below is verified against the Rust sources
+> at `5136397`. `scripts/deploy-dao.mjs` has not been updated for it: its
+> `admin_checklist` phase calls `token.set_mint_authority` and the Minter before
+> launch (both fail with `NotLive` now), and its `launch_dao` phase passes only
+> `launch_auction` and `launch_marketplace` (`enable_minter` is now required in
+> `LaunchConfig`). Treat the script as pending a rewrite.
 
 This guide covers creating and deploying new DAOs using the multi-tenant system.
 
@@ -73,7 +81,7 @@ Create a JSON file describing the DAO (e.g., `configs/my-dao.json`):
   },
 
   "governance": {
-    "votingDelay": 1,
+    "votingDelay": 300,
     "votingPeriod": 604800,     // 7 days in seconds
     "quorumBps": 4000,          // 40%
     "proposalThresholdBps": 5000 // 50%
@@ -83,21 +91,62 @@ Create a JSON file describing the DAO (e.g., `configs/my-dao.json`):
 }
 ```
 
-### Step 2: Deploy DAO
+Contract-enforced bounds at `create_dao` (violations fail with the listed Manager error):
 
-```bash
-node scripts/deploy-dao.mjs configs/my-dao.json configs/testnet-config.json
-```
+| Field | Bound | Error |
+| --- | --- | --- |
+| `votingDelay`, `votingPeriod`, `queueDelay` | each 300 to 2,592,000 seconds (30 days) | `InvalidGovernanceTiming` (1117) |
+| `quorumBps` | 1 to 10,000 | `InvalidQuorumBps` (1105) |
+| proposal threshold (`GovernanceConfig.proposal_threshold`, an absolute token count, not bps) | at least 1 | `InvalidProposalThreshold` (1120) |
+| `auction.duration` | at least 300 seconds | `InvalidDuration` (1107) |
+| `auction.reservePrice` | at least 1,000 stroops | `InvalidParamBounds` (1103) |
+| `auction.timeBuffer` | 1 to 86,400 seconds | `InvalidTimeBuffer` (1108) |
+| `marketplace.secondaryFeeBps` | at most 10,000 | `InvalidParamBounds` (1103) |
 
-**What it does** (in order):
-1. Creates all 6 contracts, including Marketplace
-2. Initializes contracts
-3. Configures metadata properties
-4. Accepts token ownership
-5. Finalizes DAO
-6. Writes deployment artifact to `deploys/`
+The auction and marketplace payment assets given here are recorded in
+`PendingDao`. `launch_dao` fails if either was changed during setup.
 
-**Artifact**: Saved to `deploys/testnet-my-dao-1.json`
+### Step 2: Create, Configure, Launch
+
+The flow has three on-chain phases.
+
+**1. `create_dao`** (deployer auth). Deploys Token, Metadata, Treasury,
+Governor, Auction and Marketplace at deterministic addresses. All wiring is
+constructor-only: there are no setters for the Treasury, Governor, Token or
+Manager addresses. Every module is in Setup, the launch admin owns it, and the
+Auction and Marketplace are paused. Manager stores `PendingDao` (addresses,
+launch admin, recorded payment assets).
+
+**2. Setup window** (launch admin). Until `launch_dao` succeeds the launch admin can:
+
+- mint founder tokens with `token.mint` / `token.batch_mint`; only the Token
+  owner can mint before launch, and `set_mint_authority` and the Minter contract
+  fail with `NotLive`. Founder amounts are not capped by the contracts, and at
+  least one token must exist at launch;
+- add artwork (`metadata.add_properties`, at most 30 items per call) and update
+  Metadata settings;
+- adjust Auction parameters while it is paused, and Marketplace fee, payment
+  asset and pause state;
+- use the owner-only Governor setters.
+
+The launch admin cannot create proposals, vote, execute, create primary listings,
+or unpause the Auction in this window (`NotLive`).
+
+**3. `launch_dao(token_address, LaunchConfig { launch_auction, launch_marketplace, enable_minter })`**
+(launch admin auth). The Manager checks the launch admin still owns the Token,
+supply is nonzero, and the payment assets match `PendingDao`. It then launches
+every module: ownership moves to the Treasury, the Auction starts if
+`launch_auction`, the Marketplace is left open if `launch_marketplace` (forced
+paused otherwise), and `PendingDao` is deleted. Token mint authority is set to
+Treasury and Marketplace, plus Auction if `launch_auction`, plus the platform
+minter if `enable_minter`.
+
+The platform minter is not chosen by the DAO. The Manager admin registers it
+beforehand with `manager.set_platform_minter(minter)`; `enable_minter: true`
+fails with `PlatformMinterNotSet` (1008) if none is registered.
+
+The script wrapper (see the drift note above) writes the artifact to
+`deploys/testnet-my-dao-1.json`.
 
 ### Step 3: Verify in Database
 
@@ -140,16 +189,16 @@ curl http://localhost:4242/api/dao/CB.../config
 
 ### Pending
 
-DAO has been created but not yet finalized.
+DAO has been created but not yet launched. Every module is in Setup.
 
 **When**: Immediately after `create_dao()`
 
-**Duration**: Setup phase (add properties, accept ownership)
+**Duration**: Setup window (founder mints, artwork, parameters)
 
-**Operations Blocked**:
-- No proposals can be created
-- No votes can be cast
-- Auction not launched unless requested; Marketplace sales are governance-controlled after finalization
+**Operations Blocked** (`NotLive`, 9001):
+- No proposals can be created, voted on, queued or executed
+- `treasury.execute`, the Minter and `token.set_mint_authority` fail
+- The Auction cannot be unpaused and primary listings cannot be created
 
 **Database**:
 ```sql
@@ -167,9 +216,10 @@ DAO is fully configured and ready for operation.
 **Features Enabled**:
 - Proposals can be created
 - Voting is active
-- Auctions run continuously when enabled
-- Marketplace fixed-price sales are available through Governor proposals
-- Treasury controls funds
+- Auctions run continuously when started
+- Primary sales are created by Governor proposals (`create_primary_listing` through `treasury.execute`)
+- Treasury owns every module and controls funds
+- Anyone can call `treasury.execute` for a queued proposal
 
 **Database**:
 ```sql
@@ -203,8 +253,8 @@ Customized per-DAO:
 ```json
 {
   "governance": {
-    "votingDelay": 1,           // Blocks before voting opens
-    "votingPeriod": 604800,     // Duration of voting
+    "votingDelay": 300,         // Seconds before voting opens (300 to 2,592,000)
+    "votingPeriod": 604800,     // Seconds voting is open (300 to 2,592,000)
     "quorumBps": 4000,          // % of tokens needed
     "proposalThresholdBps": 5000 // % needed to propose
   }
@@ -220,8 +270,8 @@ Customized per-DAO:
   "auction": {
     "duration": 86400,          // 24 hours
     "reservePrice": 1000000000, // Minimum bid
-    "timeBuffer": 900,          // Grace period on bids
-    "paymentAsset": "native"    // XLM or SAC
+    "timeBuffer": 900,          // Grace period on bids (1 to 86,400 seconds)
+    "paymentAsset": "native"    // XLM or SAC; fixed at create_dao and checked at launch
   }
 }
 ```
@@ -243,7 +293,7 @@ const pendingDaos = await getAllDaosFromDatabase('pending');
 ```
 
 **Use Cases**:
-- Check which DAOs need finalization
+- Check which DAOs need launch
 - Monitor setup progress
 - Alert on stalled setups
 
@@ -319,7 +369,7 @@ If `launch_dao()` didn't complete:
    cat deploys/testnet-my-dao-1.json | grep finalize
    ```
 
-2. Call launch_dao directly with LaunchConfig:
+2. Call launch_dao directly with LaunchConfig (the source account must be the launch admin):
    ```bash
    stellar contract invoke \
      --id MANAGER_ADDRESS \
@@ -327,13 +377,19 @@ If `launch_dao()` didn't complete:
      --network testnet \
      -- launch_dao \
      --token_address DAO_TOKEN_ADDRESS \
-     --launch_auction true \
-     --launch_marketplace true
+     --launch_config '{"launch_auction": true, "launch_marketplace": true, "enable_minter": false}'
    ```
 
    The LaunchConfig controls:
-   - `launch_auction`: Whether to unpause the Auction (true to enable, false to keep paused)
-   - `launch_marketplace`: Whether to unpause the Marketplace (true to enable, false to keep paused)
+   - `launch_auction`: start the Auction (false leaves it paused until governance starts it)
+   - `launch_marketplace`: leave the Marketplace open (false forces it paused)
+   - `enable_minter`: grant mint authority to the Manager-registered platform minter
+
+   Common failures: `LaunchSupplyZero` (1121, mint a founder token first),
+   `Unauthorized` (1000, the launch admin no longer owns the Token),
+   `PaymentTokenMismatch` / `PaymentAssetMismatch` (a payment asset changed
+   during setup), `PlatformMinterNotSet` (1008). A failed launch changes nothing;
+   retry after fixing the cause.
 
 3. Check status updated:
    ```sql
@@ -378,7 +434,7 @@ cat > configs/example-dao.json << 'EOF'
     "paymentAsset": "native"
   },
   "governance": {
-    "votingDelay": 1,
+    "votingDelay": 300,
     "votingPeriod": 604800,
     "quorumBps": 4000,
     "proposalThresholdBps": 5000
@@ -402,11 +458,8 @@ Output:
 === Adding Metadata Properties ===
 # Configures properties
 
-=== Accepting Token Ownership ===
-# Ownership transfer
-
-=== Finalizing DAO ===
-# Final setup
+=== Launching DAO ===
+# launch_dao
 ```
 
 Artifact written to: `deploys/testnet-example-dao-1.json`

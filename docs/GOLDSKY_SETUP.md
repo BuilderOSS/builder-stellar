@@ -164,8 +164,9 @@ events** across Manager-discovered DAO modules:
 - `ProposalThresholdBpsSet`, `QuorumThresholdBpsSet`
 - `VetoerChanged`, `AdminChanged`, `TreasuryChanged`, `ContractUpgraded`
 
-### Treasury (3 events)
-- `Initialize`, `Execute`, `GovernorChanged`
+### Treasury
+- `Initialize`, `Launched`, `Execute`
+- `Execute` is emitted once per call in a proposal, with topics `(governor, target, proposal_id)` and data `{function, index}`.
 
 ### Auction (12 events)
 - `Initialize`, `AuctionCreated`, `AuctionBid`, `AuctionSettled`, `AuctionExtended`
@@ -178,6 +179,20 @@ Run validation:
 cd packages/goldsky
 pnpm validate
 ```
+
+### Behavior notes for contract events
+
+The event lists above predate the hardened contracts and the per-module event
+sets are defined by the decoders in `packages/goldsky` (see its README for the
+current coverage and schema). Behavior the pipeline must handle:
+
+- Every module emits a `Launched` event at `launch_dao`. Six different structs share the topic name `launched`; identify events by (contract address, event name), not by name alone.
+- Treasury `Execute` is one event per call, keyed by `proposal_id`. `ProposalExecuted` (Governor) is emitted in the same transaction as the `Execute` events, because `treasury.execute` calls `governor.consume`. `governor.execute` always fails, so nothing is emitted from it.
+- Auction emits `RefundDeferred` (failed push, credit stored) and `RefundWithdrawn` (pull); `BidRefunded` only when the push succeeded. An outstanding refund is the sum of deferred amounts minus withdrawn amounts per bidder.
+- Marketplace primary listings are keyed by `listing_id`, secondary listings by `token_id`. `ListingPurchased`, `ListingCancelled` and `ListingExpired` are secondary-only; primary events have their own names.
+- Manager emits `AdminProposed`, `AdminChanged`, `PlatformMinterSet`, and `DaoLaunched` carries `enable_minter`.
+- Metadata `PropertiesReset` reports `old_num_properties`.
+- Contract error codes overlap between contracts, so store errors with the contract id.
 
 ## Data Access
 

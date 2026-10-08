@@ -212,6 +212,40 @@ watch -n 30 'curl -s http://localhost:4242/api/health | jq .'
 
 ---
 
+## Contract Events and Maintenance
+
+Behavior of the hardened contracts that monitoring should account for. Event names are keyed by (contract address, event name): six different structs share the topic name `launched`.
+
+### Events to watch
+
+| Event (contract) | Meaning | Action |
+| --- | --- | --- |
+| `Launched` (each module) | One-shot Setup to Live handoff, emitted by `launch_dao`. Token's `Launched` carries `minters`; Auction's `started`; Marketplace's `opened`. | Expect exactly one per module per DAO; a DAO with `DaoLaunched` but a missing module `Launched` indicates an indexing gap. |
+| `DaoLaunched` (Manager) | Includes `launch_auction`, `launch_marketplace`, `enable_minter`. | Alert on a DAO stuck in setup (no `DaoLaunched`) beyond your expected window. |
+| `RefundDeferred { #token_id, #bidder, amount }` (Auction) | A refund push to the outbid bidder failed and was credited. `amount` is the increment, not the running total. | Informational per event. Outstanding balance per bidder is the sum of `RefundDeferred` minus the sum of `RefundWithdrawn`; alert on balances that stay non-zero for days. |
+| `RefundWithdrawn { #bidder, amount }` (Auction) | Bidder pulled the credit with `withdraw_refund`. | Clears the outstanding balance. |
+| `BidRefunded` (Auction) | Emitted only when the push succeeded. | None. |
+| `Execute { #governor, #target, #proposal_id, function, index }` (Treasury) | Emitted once per call in a proposal; group by `proposal_id`. Old shape was `(governor, target)` with `{function}`. | A `ProposalExecuted` (Governor) without matching `Execute` rows in the same transaction indicates a decoder problem. |
+| `ProposalExecuted` (Governor) | Emitted inside `governor.consume` during `treasury.execute`, same transaction as the `Execute` events. | None. |
+| `PrimaryListingCreated/Purchased/Cancelled/Expired` (Marketplace) | Lazy primary sale lifecycle, keyed by `listing_id`. | Primary and secondary ids are separate keyspaces. |
+| `AdminProposed` / `AdminChanged` / `PlatformMinterSet` (Manager) | Admin handover and platform minter registration. | Alert on any occurrence; these are rare, high-privilege changes. |
+
+A failing action in a proposal reverts the whole `treasury.execute` transaction, so a failed execution produces no events; the proposal stays Queued and is retried until it expires (14 days after its ETA). `governor.execute` always fails with `UseTreasuryExecute` (1508) and should never appear as a successful call.
+
+### Ops task: bump artwork TTL
+
+The network caps entry TTL at about 180 days (about 3,110,400 ledgers). Metadata artwork entries (properties, items, IPFS groups) are extended only when touched, so unread artwork can expire. Someone must periodically call the permissionless `metadata.bump_artwork_ttl(start, limit)` for every DAO:
+
+- Use windows of at most 50 (`limit` above 50 fails with `LimitTooHigh`, 16).
+- The entries are indexed as all items of all properties in order, then the IPFS groups. Start at 0, call with `limit` 50, and set the next `start` to the returned value (`min(start + limit, total)`); stop when the returned value stops advancing, which is the total. Repeat the full sweep well inside the 180-day cap, for example monthly.
+- Module instance TTL (170 days when under 60 days remain) renews on any state-changing call; a DAO with no activity for months needs a touch as well.
+
+Prefer paginated getters (`get_items`, `get_ipfs_group`) over `get_properties`/`get_ipfs_data` in monitoring queries; the latter are O(total).
+
+Error codes are unique only per contract. Key error metrics by (contract id, code), not by code alone. See [SECURITY_MODEL.md](./SECURITY_MODEL.md).
+
+---
+
 ## Alert Thresholds & Actions
 
 | Alert | Threshold | Action |

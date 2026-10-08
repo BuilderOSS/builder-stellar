@@ -34,6 +34,7 @@ The Stellar Builder platform is a multi-tenant DAO system where one application 
 - [GOLDSKY_SETUP.md](./GOLDSKY_SETUP.md) - Pipeline configuration and event coverage
 
 **Deployment:**
+- [SECURITY_MODEL.md](./SECURITY_MODEL.md) - Trust boundaries, setup-window rules, TTL caveats, known limitations
 - [MANAGER_REDESIGN.md](./MANAGER_REDESIGN.md) - Approved Manager storage, upgrade, versioning, and testnet-reset design
 - [MARKETPLACE_PLAN.md](./MARKETPLACE_PLAN.md) - Per-DAO fixed-price primary and secondary marketplace plan
 - [MANAGER_DEPLOYMENT.md](./MANAGER_DEPLOYMENT.md) - Manager setup
@@ -87,10 +88,10 @@ A "DAO" is one organization created by Manager and governed by its own Governor/
 ```
 create_dao()           Pending  →  Operational
     ↓                    ↓
-DaoCreated           configure        launch_dao()
-    ↓                    ↓                 ↓
-Database         properties, metadata  DaoLaunched
-insert           ownership transfer    update status
+DaoCreated        setup window         launch_dao()
+    ↓             (mint, artwork,           ↓
+Database          parameters)          DaoLaunched + Launched per module
+insert                                 ownership moves to Treasury
 ```
 
 ---
@@ -115,12 +116,13 @@ insert           ownership transfer    update status
 - `contracts/treasury/` - Treasury contract
 - `contracts/auction/` - Auction contract
 - `contracts/metadata/` - Metadata contract
+- `contracts/marketplace/` - Marketplace contract
 
 ### Scripts
 
 - `scripts/deploy-manager.mjs` - Deploy manager contract
 - `scripts/deploy-dao.mjs` - Deploy DAO (creates 6 contracts)
-- `scripts/deploy-dao.mjs` - Also configures and finalizes
+- `scripts/deploy-dao.mjs` - Also configures and launches (pending update for the hardened launch flow, see DAO_DEPLOYMENT.md)
 
 ### Configuration
 

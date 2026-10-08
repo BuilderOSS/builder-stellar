@@ -7,7 +7,7 @@ current Manager deployment; it is not a storage-compatible upgrade.
 
 ## Product Boundary
 
-Builder deploys a DAO but does not own it. After finalization, Builder has no
+Builder deploys a DAO but does not own it. After launch, Builder has no
 DAO registry entry, authority, or control over that DAO. The DAO's Treasury
 and Governor control its modules. Builder's Manager remains only the platform
 implementation registry, deployment factory, and upgrade-policy service.
@@ -35,7 +35,8 @@ Goldsky is the durable discovery and history layer. `DaoCreated` and
 
 Only platform-wide state is permanent:
 
-- Manager owner/admin.
+- Manager owner/admin and any pending admin handover.
+- The registered platform minter address.
 - Factory pause state.
 - Registered implementation hashes, semantic versions, publication state, and
   revocation state.
@@ -56,6 +57,8 @@ address:
 PendingDao {
     addresses: DaoAddresses,
     launch_admin: Address,
+    auction_payment_asset: Address,      // recorded at create_dao
+    marketplace_payment_asset: Address,  // recorded at create_dao
 }
 ```
 
@@ -66,15 +69,16 @@ The entry exists only between successful `create_dao` and successful
 
 1. `create_dao` deploys all six deterministic modules and writes `PendingDao`
    atomically.
-2. The launch administrator accepts Token ownership and configures every module
-   in separate retriable transactions, including token metadata and allocations.
-3. `launch_dao` reads this one entry, transfers final authority, emits
-   `DaoLaunched`, and deletes the entry.
+2. The launch administrator (already the owner of every module) configures each
+   module in separate retriable transactions during the setup window, including
+   token metadata and founder allocations.
+3. `launch_dao` reads this one entry, calls `launch` on every module (ownership
+   moves to Treasury), emits `DaoLaunched`, and deletes the entry.
 4. A failed launch rolls back every cross-contract call, leaving the
    pending entry unchanged and available for retry.
 
 The system must remove `DaoCreation`, `DaoCreationStorageParams`,
-`DaoRegistration`, `DaoModules`, `DaoMetadata`, `DaoList`, `DaoCount`,
+`DaoRegistration`, `DaoModules` (events now use `DaoAddresses`), `DaoMetadata`, `DaoList`, `DaoCount`,
 `DaoStatus`, and the associated Manager read APIs. `NonceUsed` is also removed:
 the deterministic deployed Token address already prevents reusing a successful
 creator/nonce pair.
@@ -82,7 +86,7 @@ creator/nonce pair.
 ### Auction Policy
 
 Auction is deployed for every DAO. `launch_auction` controls only whether
-finalization unpauses it.
+`launch_dao` starts it.
 
 The Auction constructor always receives valid, non-optional configuration:
 
@@ -92,49 +96,75 @@ The Auction constructor always receives valid, non-optional configuration:
 - nonzero time buffer;
 - Manager-selected 10% minimum bid increment.
 
-Creation uses safe defaults and the launch administrator can replace the
-payment asset and auction settings before launch. The Auction transfers to
-Treasury at launch, so DAO governance can change its configuration and enable
-it later.
+`create_dao` also rejects a time buffer above 86,400 seconds, a quorum of 0, and
+a proposal threshold of 0, and requires each of voting delay, voting period and
+queue delay to be between 300 seconds and 2,592,000 seconds (30 days).
 
-### Creation and Finalization Validation
+The launch administrator can change auction settings while the Auction is
+paused, but the payment asset chosen at `create_dao` is recorded in
+`PendingDao` and `launch_dao` fails (`PaymentTokenMismatch`) if the Auction's
+asset differs. The Auction is owned by Treasury after launch, so DAO governance
+can change its configuration and start it later.
 
-`create_dao` only validates factory state and implementation availability. It
-deploys modules with safe defaults so the launch administrator can configure
-the DAO after creation.
+### Creation and Launch Validation
+
+`create_dao` validates factory state, implementation availability and the
+initial configuration bounds above. It deploys modules with all wiring passed
+to their constructors, so the launch administrator configures parameters but
+never wires addresses.
 
 Custom module WASMs remain valid: a Manager owner can register any WASM and
 select it as current. A WASM hash cannot prove its contract interface on-chain.
 The registered module role is administrator-attested and deployment/testing is
 the compatibility gate.
 
-`launch_dao` requires:
+`launch_dao(token_address, launch_config)` requires:
 
 - the pending launch administrator's authorization;
-- token total supply > 0 (at least one token minted);
-- launch_admin must be the current token owner.
+- the launch administrator is still the Token owner (`Unauthorized`);
+- token total supply > 0 (`LaunchSupplyZero`);
+- the Auction and Marketplace payment assets still equal the ones recorded in
+  `PendingDao`.
 
-It accepts a `LaunchConfig` struct with launch preferences:
+`LaunchConfig`:
 
 ```rust
 LaunchConfig {
-    launch_auction: bool,     // Whether to unpause Auction
-    launch_marketplace: bool, // Whether to unpause Marketplace
+    launch_auction: bool,     // start the Auction (unpause and create the first auction)
+    launch_marketplace: bool, // leave the Marketplace open; false forces it paused
+    enable_minter: bool,      // grant mint authority to the admin-registered platform minter
 }
 ```
 
-It then:
-- Grants Treasury, Marketplace, and optionally Auction mint authority over tokens;
-- Transfers Token, Governor, Treasury, Auction, and Marketplace ownership to Treasury;
-- Transfers Metadata upgrade authority to Treasury;
-- Conditionally unpauses Auction if `launch_auction` is true;
-- Conditionally unpauses Marketplace if `launch_marketplace` is true;
-- Emits `DaoLaunched` with launch configuration flags; and
-- Deletes `PendingDao`.
+The launch administrator cannot name a minter address. `enable_minter` uses the
+address registered with `set_platform_minter` by the Manager admin and fails with
+`PlatformMinterNotSet` if none is registered.
 
-Use dedicated errors for a revoked current implementation and an incomplete
-launch. Remove unused Manager error variants rather than retaining misleading
-documented failures.
+It then calls the one-shot, Manager-only `launch` on each module, in this order:
+
+1. Token `launch(treasury, minters)` with minters = Treasury, Marketplace, plus
+   Auction if `launch_auction` and the platform minter if `enable_minter`;
+2. Governor `launch(treasury)`, Treasury `launch(treasury)`;
+3. Marketplace `launch(treasury, open, expected_payment_asset)`;
+4. Auction `launch(treasury, start, expected_payment_token)`;
+5. Metadata `launch(treasury)`.
+
+Each `launch` sets the module Live, hands ownership to Treasury (clearing any
+pending two-step transfer), and emits `Launched`. A second call fails with
+`AlreadyLive`, so the Manager has no authority over a launched DAO. `launch_dao`
+then emits `DaoLaunched` (including `launch_auction`, `launch_marketplace`,
+`enable_minter`) and deletes `PendingDao`. Any failure reverts every call.
+
+Removed with this flow: `finalize_ownership` and `finalize_upgrade_authority`,
+the wiring setters, the metadata `initialize` call (now a constructor), and
+`enable_mint_authority_by_manager`.
+
+### Admin and Platform Configuration
+
+The Manager admin has a two-step handover (`propose_admin`, `accept_admin`;
+`get_admin`, `get_pending_admin`; events `AdminProposed`, `AdminChanged`) and
+registers the platform minter with `set_platform_minter` / `get_platform_minter`
+(event `PlatformMinterSet`).
 
 ### Authority and Upgrades
 
@@ -146,17 +176,31 @@ transition.
 Every DAO module exposes a module-local upgrade entrypoint. Its upgrade flow is:
 
 1. A governance proposal selects the target module and target WASM hash.
-2. Governor dispatches every module upgrade through Treasury, including Governor
-   and Treasury upgrades. The resulting `Governor -> Treasury -> Governor` and
-   `Governor -> Treasury -> Treasury` call paths are intentional and must be
-   covered by real-WASM integration tests before interface freeze.
-3. The target module requires the DAO's Treasury/module-owner authority.
+2. Anyone calls `treasury.execute` for the queued proposal. The Treasury calls
+   `governor.consume` (which marks the proposal Executed and returns), then
+   dispatches the actions with Treasury authorization. The Governor is no
+   longer on the call stack at that point.
+3. For a module other than the Treasury, the Treasury invokes the module's
+   `upgrade` as the module owner. For the Treasury's own upgrade the action
+   targets the Treasury; Soroban forbids re-entering a contract that is
+   already on the stack, so the Treasury runs an internal allowlist
+   (`self_dispatch`) instead of `invoke_contract`. That allowlist permits only
+   `upgrade(from, to)` and `sync_version()`; anything else fails with
+   `UnknownSelfCall` or `InvalidSelfCallArgs`.
 4. The target module verifies that `from_hash` equals its locally stored current
    hash.
 5. The target module asks Manager to validate the registered, active, approved
-   transition and obtain the target implementation version.
+   transition and obtain the target implementation version
+   (`common::upgrade::apply`).
 6. The target module writes the target hash and version, emits its module
    upgrade event, and invokes `update_current_contract_wasm(to_hash)` on itself.
+
+`Governor::execute` (the OpenZeppelin trait method) is retained but always fails
+with `UseTreasuryExecute` (1508). There is no `Governor -> Treasury -> Governor`
+call path. A Governor upgrade or owner-setter call is a Treasury action executed
+after `consume` returns. A failing action reverts the whole `execute`
+transaction, including the Executed mark, so the proposal stays Queued and can
+be retried until it expires.
 
 Manager approval is a technical compatibility gate, not permission for Builder
 to execute an upgrade. The DAO proposal and module-owner authorization remain
