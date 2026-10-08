@@ -98,6 +98,7 @@ until the whole range is covered, at least once per ~110 days, otherwise the ren
 
 **Decision (2026-10-08): the web app triggers the bump.** When the artwork renders, the app walks the
 artwork range with `bump_artwork_ttl` in windows of 50 (see §5 for the open UX question).
+The DAO admin dashboard (`/dao/<id>/admin`) now shows an "Artwork expiring: renew" button when artwork is within 45 days of expiry (or "Artwork expired: restore and renew" once expired); it sends the same windowed bump.
 
 ## Operator checklist
 

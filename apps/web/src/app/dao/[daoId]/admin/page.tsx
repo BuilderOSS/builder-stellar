@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Grid, Stack } from 'styled-system/jsx';
 
 import { AdminSectionNav } from '@/components/admin/admin-section-nav';
+import { TtlExpiryPanel } from '@/components/admin/ttl-expiry-panel';
 import { PageSection } from '@/components/page-section';
 import { ProposalDraftPanel } from '@/components/proposal/proposal-draft-panel';
 import { Badge, Card, Heading, ShortId, Text } from '@/components/ui';
@@ -114,6 +115,8 @@ export default function AdminPage() {
             {session.address ? <ShortId value={session.address} label="Connected address" /> : null}
           </Stack>
         </Card>
+
+        <TtlExpiryPanel config={config} />
 
         <AdminSectionNav daoId={daoId} active="" showDraftTray={false} />
 
