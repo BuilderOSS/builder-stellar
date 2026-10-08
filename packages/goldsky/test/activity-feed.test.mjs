@@ -318,9 +318,84 @@ assert.strictEqual(edgeCaseResult.token_id, '', 'Null token_id should default to
 assert.strictEqual(edgeCaseResult.actor, '', 'Undefined actor should default to empty string');
 console.log('✅ Passed\n');
 
+// Test 16: hardened-contract events map to kinds, titles and visibility
+console.log('Test 16: New and changed event kinds, titles and visibility');
+const newEventCases = [
+  ['PrimaryListingPurchased', 'marketplace', 'marketplace.primary_listing_purchased', 'Primary sale completed', 'public'],
+  ['PrimaryListingCancelled', 'marketplace', 'marketplace.primary_listing_cancelled', 'Primary listing cancelled', 'public'],
+  ['PrimaryListingExpired', 'marketplace', 'marketplace.primary_listing_expired', 'Primary listing expired', 'admin'],
+  ['RefundDeferred', 'auction', 'auction.refund_deferred', 'Bid refund deferred', 'public'],
+  ['RefundWithdrawn', 'auction', 'auction.refund_withdrawn', 'Bid refund withdrawn', 'public'],
+  ['AdminProposed', 'manager', 'manager.admin_proposed', 'Manager admin proposed', 'admin'],
+  ['AdminChanged', 'manager', 'manager.admin_changed', 'Manager admin changed', 'admin'],
+  ['PlatformMinterSet', 'manager', 'manager.platform_minter_set', 'Platform minter set', 'admin'],
+  ['Launched', 'token', 'token.launched', 'Token launched', 'admin'],
+  ['Launched', 'auction', 'auction.launched', 'Auction launched', 'admin'],
+  ['Launched', 'marketplace', 'marketplace.launched', 'Marketplace launched', 'admin'],
+  ['Launched', '', 'module.launched', 'Module launched', 'admin'],
+  ['MarketplacePaused', 'marketplace', 'marketplace.paused', 'Marketplace paused', 'admin'],
+  ['AdminProposalCancelled', 'manager', 'manager.admin_proposal_cancelled', 'Manager admin proposal cancelled', 'admin'],
+  ['Upgraded', 'token', 'token.upgraded', 'Token upgraded', 'public'],
+  ['Upgraded', 'governor', 'governor.upgraded', 'Governor upgraded', 'public'],
+  ['Upgraded', 'treasury', 'treasury.upgraded', 'Treasury upgraded', 'public'],
+  ['Upgraded', 'auction', 'auction.upgraded', 'Auction upgraded', 'public'],
+  ['Upgraded', 'marketplace', 'marketplace.upgraded', 'Marketplace upgraded', 'public'],
+  ['Upgraded', 'metadata', 'metadata.upgraded', 'Metadata upgraded', 'public'],
+  ['Upgraded', '', 'module.upgraded', 'Module upgraded', 'public'],
+  ['VersionSynced', 'token', 'token.version_synced', 'Token version synced', 'admin'],
+  ['VersionSynced', 'governor', 'governor.version_synced', 'Governor version synced', 'admin'],
+  ['VersionSynced', 'treasury', 'treasury.version_synced', 'Treasury version synced', 'admin'],
+  ['VersionSynced', 'auction', 'auction.version_synced', 'Auction version synced', 'admin'],
+  ['VersionSynced', 'marketplace', 'marketplace.version_synced', 'Marketplace version synced', 'admin'],
+  ['VersionSynced', 'metadata', 'metadata.version_synced', 'Metadata version synced', 'admin']
+];
+for (const [eventName, role, kind, title, visibility] of newEventCases) {
+  const row = invoke({ event_id: 'n', event_name: eventName, contract_role: role, deployment_id: 'test', contract_id: 'test' });
+  assert.strictEqual(row.kind, kind, `${eventName}/${role} kind`);
+  assert.strictEqual(row.title, title, `${eventName}/${role} title`);
+  assert.strictEqual(row.visibility, visibility, `${eventName}/${role} visibility`);
+}
+for (const removed of ['MarketplaceUpgraded', 'TreasuryChanged', 'TokenContractChanged', 'GovernorAuthorityChanged', 'GovernorChanged', 'TreasuryUpdated']) {
+  assert.strictEqual(invoke({ event_id: 'r', event_name: removed, deployment_id: 'test', contract_id: 'test' }).kind, 'contract.' + removed.toLowerCase(), `${removed} must be unmapped`);
+}
+console.log('✅ Passed\n');
+
+// Test 16b: Upgraded / VersionSynced summaries; identifiers live in topics while args may be {}
+console.log('Test 16b: Upgraded and VersionSynced summaries');
+const upgradedRow = invoke({
+  event_id: 'u', event_name: 'Upgraded', contract_role: 'auction', deployment_id: 'test', contract_id: 'AUC',
+  topics: JSON.stringify({ from_hash: 'aaaaaaaa11112222', to_hash: 'bbbbbbbb33334444' }), args: JSON.stringify({ version: '1.2.0' })
+});
+assert.strictEqual(upgradedRow.summary, 'Contract upgraded to version 1.2.0 (aaaaaaaa -> bbbbbbbb)');
+assert.strictEqual(upgradedRow.visibility, 'public');
+const upgradedNoArgs = invoke({
+  event_id: 'u2', event_name: 'Upgraded', contract_role: 'token', deployment_id: 'test', contract_id: 'TOK',
+  topics: JSON.stringify({ from_hash: 'aaaaaaaa11112222', to_hash: 'bbbbbbbb33334444' }), args: '{}'
+});
+assert.strictEqual(upgradedNoArgs.summary, 'Contract upgraded to version unknown (aaaaaaaa -> bbbbbbbb)');
+const syncedRow = invoke({ event_id: 's', event_name: 'VersionSynced', contract_role: 'metadata', deployment_id: 'test', contract_id: 'MD', topics: '{}', args: JSON.stringify({ version: '1.2.0' }) });
+assert.strictEqual(syncedRow.summary, 'Contract version synced to 1.2.0');
+const cancelRow = invoke({
+  event_id: 'c', event_name: 'AdminProposalCancelled', contract_role: 'manager', deployment_id: 'test', contract_id: 'MGR',
+  topics: JSON.stringify({ current_admin: 'CUR', cancelled_admin: 'CAN' }), args: '{}'
+});
+assert.strictEqual(cancelRow.actor, 'CUR');
+assert.deepStrictEqual(JSON.parse(cancelRow.addresses), ['CUR', 'CAN', 'MGR']);
+console.log('✅ Passed\n');
+
+// Test 17: Execute carries proposal_id from the topics payload and the call index from args
+console.log('Test 17: Execute summary uses topics proposal_id and args index');
+const executeRow = invoke({
+  event_id: 'x', event_name: 'Execute', deployment_id: 'test', contract_id: 'TRE', contract_role: 'treasury',
+  topics: JSON.stringify({ governor: 'GOV', target: 'TGT', proposal_id: 'abc' }), args: JSON.stringify({ function: 'mint', index: 3 })
+});
+assert.strictEqual(executeRow.proposal_id, 'abc');
+assert.strictEqual(executeRow.summary, 'Executed mint on TGT (call 4 of proposal abc)');
+console.log('✅ Passed\n');
+
 // Summary
 console.log('═══════════════════════════════════════');
-console.log('✅ All 15 tests passed!');
+console.log('✅ All 17 tests passed!');
 console.log('═══════════════════════════════════════');
 console.log('\n📊 Test Coverage:');
 console.log('  • Null/undefined input handling');

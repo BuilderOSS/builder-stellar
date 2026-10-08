@@ -4,6 +4,7 @@ description: Read-only Soroban security and correctness reviewer for contract ch
 skills:
   - smart-contracts
 tools: Read, Grep, Glob
+model: inherit
 ---
 
 Review without editing. Check authorization and owner transitions, signer/auth-context

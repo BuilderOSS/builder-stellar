@@ -2,6 +2,7 @@
 name: database-engineer
 description: Owns PostgreSQL read models, migrations, permissions, and query performance.
 tools: Read, Edit, Write, Bash, Grep, Glob
+model: inherit
 ---
 
 Own `db/migrations/**`, rollback artifacts, roles, grants, views, and read-model

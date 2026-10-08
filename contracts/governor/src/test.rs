@@ -9,7 +9,7 @@ use stellar_governance::governor::ProposalState;
 use token::{DaoTokenContract, DaoTokenContractClient};
 use treasury::{DaoTreasuryContract, DaoTreasuryContractClient};
 
-use crate::{DaoGovernorContract, DaoGovernorContractClient};
+use crate::{error::CustomGovernorError, DaoGovernorContract, DaoGovernorContractClient};
 
 #[contract]
 pub struct TargetContract;
@@ -35,25 +35,24 @@ pub struct MaliciousReentrantContract;
 
 #[contractimpl]
 impl MaliciousReentrantContract {
-    /// This function attempts to re-enter the governor's execute() function
+    /// This function attempts to re-enter treasury.execute()
     /// when called during proposal execution
     pub fn attack(
         e: &Env,
-        governor: Address,
+        treasury: Address,
         targets: Vec<Address>,
         functions: Vec<soroban_sdk::Symbol>,
         args: Vec<Vec<Val>>,
         desc_hash: BytesN<32>,
-        executor: Address,
     ) {
         // Store attack parameters
         e.storage()
             .instance()
             .set(&symbol_short!("attacked"), &true);
 
-        // Attempt to re-enter execute() - this should fail because proposal is already marked Executed
-        let governor_client = DaoGovernorContractClient::new(e, &governor);
-        governor_client.execute(&targets, &functions, &args, &desc_hash, &executor);
+        // Attempt to re-enter treasury.execute() - blocked by the host (Treasury is on the stack)
+        let treasury_client = DaoTreasuryContractClient::new(e, &treasury);
+        treasury_client.execute(&targets, &functions, &args, &desc_hash);
     }
 
     pub fn was_attacked(e: &Env) -> bool {
@@ -82,6 +81,7 @@ fn setup() -> (
         DaoTokenContract,
         (
             owner.clone(),
+            Address::generate(&e),
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
@@ -93,11 +93,14 @@ fn setup() -> (
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
 
+    // Wiring is constructor-only: pre-generate the governor address so the
+    // treasury can be constructed with it (mirrors the Manager's predicted addresses).
+    let governor_id = Address::generate(&e);
     let treasury_id = e.register(
         DaoTreasuryContract,
         (
             owner.clone(),
-            Address::generate(&e),
+            governor_id.clone(),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
             String::from_str(&e, "0.1.0"),
@@ -105,7 +108,8 @@ fn setup() -> (
     );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
 
-    let governor_id = e.register(
+    e.register_at(
+        &governor_id,
         DaoGovernorContract,
         (
             owner.clone(),
@@ -126,7 +130,9 @@ fn setup() -> (
     let target_id = e.register(TargetContract, ());
     let target = TargetContractClient::new(&e, &target_id);
 
-    treasury.set_governor(&governor_id);
+    // Proposals only work once launched.
+    governor.launch(&treasury_id);
+    treasury.launch(&treasury_id);
 
     (e, token, treasury, governor, target, owner)
 }
@@ -142,9 +148,11 @@ fn description_hash(e: &Env, description: &String) -> BytesN<32> {
 
 #[test]
 fn full_governance_flow_executes_treasury_call() {
-    let (e, token, _treasury, governor, target, owner) = setup();
+    let (e, token, treasury, governor, target, owner) = setup();
     let proposer = Address::generate(&e);
 
+    assert_eq!(governor.version(), String::from_str(&e, "0.1.0"));
+    assert_eq!(governor.wasm_hash(), BytesN::from_array(&e, &[0u8; 32]));
     let token_id = token.mint(&owner, &proposer);
     assert_eq!(token_id, 0);
     assert_eq!(token.get_votes(&proposer), 1);
@@ -179,7 +187,7 @@ fn full_governance_flow_executes_treasury_call() {
     assert_eq!(governor.proposal_state(&proposal_id), ProposalState::Queued);
 
     e.ledger().set_timestamp(2_901);
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
 
     assert_eq!(target.get_value(), 42);
     assert_eq!(
@@ -207,7 +215,7 @@ fn propose_fails_below_threshold() {
 
 #[test]
 fn execute_accepts_direct_target_calls() {
-    let (e, token, _treasury, governor, target, owner) = setup();
+    let (e, token, treasury, governor, target, owner) = setup();
     let proposer = Address::generate(&e);
 
     let token_id = token.mint(&owner, &proposer);
@@ -230,7 +238,7 @@ fn execute_accepts_direct_target_calls() {
         &targets, &functions, &args, &desc_hash, &2_901_u32, &proposer,
     );
     e.ledger().set_timestamp(2_901);
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
 
     assert_eq!(target.get_value(), 42);
 }
@@ -238,7 +246,7 @@ fn execute_accepts_direct_target_calls() {
 #[test]
 #[should_panic(expected = "#5007")]
 fn execute_fails_before_queue_delay_elapses() {
-    let (e, token, _treasury, governor, target, owner) = setup();
+    let (e, token, treasury, governor, target, owner) = setup();
     let proposer = Address::generate(&e);
 
     let token_id = token.mint(&owner, &proposer);
@@ -261,13 +269,13 @@ fn execute_fails_before_queue_delay_elapses() {
     );
 
     e.ledger().set_timestamp(2_410);
-    let _ = governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
+    let _ = treasury.execute(&targets, &functions, &args, &desc_hash);
 }
 
 #[test]
 #[should_panic(expected = "#5008")]
 fn execute_cannot_run_twice() {
-    let (e, token, _treasury, governor, target, owner) = setup();
+    let (e, token, treasury, governor, target, owner) = setup();
     let proposer = Address::generate(&e);
 
     let token_id = token.mint(&owner, &proposer);
@@ -290,8 +298,8 @@ fn execute_cannot_run_twice() {
         &targets, &functions, &args, &desc_hash, &2_901_u32, &proposer,
     );
     e.ledger().set_timestamp(2_901);
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
 }
 
 #[test]
@@ -304,6 +312,7 @@ fn quorum_uses_total_supply_bps() {
         DaoTokenContract,
         (
             owner.clone(),
+            Address::generate(&e),
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
@@ -354,153 +363,26 @@ fn quorum_uses_total_supply_bps() {
 }
 
 #[test]
-#[should_panic(expected = "HostError: Error(Auth, InvalidAction)")]
-fn set_treasury_requires_owner() {
-    let e = Env::default();
-    let owner = Address::generate(&e);
-    let attacker = Address::generate(&e);
-    let new_treasury = Address::generate(&e);
-    let token_id = e.register(
-        DaoTokenContract,
-        (
-            owner.clone(),
-            String::from_str(&e, "https://example.com/"),
-            String::from_str(&e, "DAO Vote NFT"),
-            String::from_str(&e, "vDAO"),
-            Address::generate(&e),
-            Address::generate(&e),
-            BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
-        ),
-    );
-    let treasury_id = e.register(
-        DaoTreasuryContract,
-        (
-            owner.clone(),
-            Address::generate(&e),
-            Address::generate(&e),
-            BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
-        ),
-    );
-    let governor_id = e.register(
-        DaoGovernorContract,
-        (
-            owner.clone(),
-            token_id,
-            treasury_id,
-            300_u32,
-            300_u32,
-            300_u32,
-            1_u128,
-            1_000_u32,
-            Address::generate(&e),
-            BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
-        ),
-    );
-    let governor = DaoGovernorContractClient::new(&e, &governor_id);
-
-    e.mock_auths(&[MockAuth {
-        address: &attacker,
-        invoke: &MockAuthInvoke {
-            contract: &governor.address,
-            fn_name: "set_treasury",
-            args: (&new_treasury,).into_val(&e),
-            sub_invokes: &[],
-        },
-    }]);
-
-    governor.set_treasury(&new_treasury);
-}
-
-#[test]
-fn owner_can_set_governor_authority() {
-    let (e, _token, _treasury, governor, _target, owner) = setup();
-    let authorized_addr = Address::generate(&e);
-
-    governor.set_governor_authority(&authorized_addr, &true);
-    assert!(governor.governor_authority(&authorized_addr));
-
-    governor.set_governor_authority(&authorized_addr, &false);
-    assert!(!governor.governor_authority(&authorized_addr));
-
-    let _ = owner;
-}
-
-#[test]
-#[should_panic(expected = "HostError: Error(Auth, InvalidAction)")]
-fn set_governor_authority_requires_owner() {
-    let (e, _token, _treasury, governor, _target, _owner) = setup();
-    let attacker = Address::generate(&e);
-    let authorized_addr = Address::generate(&e);
-
-    e.mock_auths(&[MockAuth {
-        address: &attacker,
-        invoke: &MockAuthInvoke {
-            contract: &governor.address,
-            fn_name: "set_governor_authority",
-            args: (&authorized_addr, &true).into_val(&e),
-            sub_invokes: &[],
-        },
-    }]);
-
-    governor.set_governor_authority(&authorized_addr, &true);
-}
-
-#[test]
-fn authorized_governor_can_set_voting_delay() {
-    let (e, _token, _treasury, governor, _target, owner) = setup();
-    let authorized_addr = Address::generate(&e);
-
-    governor.set_governor_authority(&authorized_addr, &true);
-
-    e.mock_auths(&[MockAuth {
-        address: &authorized_addr,
-        invoke: &MockAuthInvoke {
-            contract: &governor.address,
-            fn_name: "set_voting_delay",
-            args: (&authorized_addr, &300u32).into_val(&e),
-            sub_invokes: &[],
-        },
-    }]);
-
-    governor.set_voting_delay(&authorized_addr, &300);
+fn owner_can_set_voting_delay() {
+    let (_e, _token, _treasury, governor, _target, owner) = setup();
+    governor.set_voting_delay(&300);
     assert_eq!(governor.voting_delay(), 300);
 
     let _ = owner;
 }
 
 #[test]
-fn authorized_governor_can_set_voting_period() {
-    let (e, _token, _treasury, governor, _target, owner) = setup();
-    let authorized_addr = Address::generate(&e);
-
-    governor.set_governor_authority(&authorized_addr, &true);
-
-    e.mock_auths(&[MockAuth {
-        address: &authorized_addr,
-        invoke: &MockAuthInvoke {
-            contract: &governor.address,
-            fn_name: "set_voting_period",
-            args: (&authorized_addr, &300u32).into_val(&e),
-            sub_invokes: &[],
-        },
-    }]);
-
-    governor.set_voting_period(&authorized_addr, &300);
+fn owner_can_set_voting_period() {
+    let (_e, _token, _treasury, governor, _target, owner) = setup();
+    governor.set_voting_period(&300);
     assert_eq!(governor.voting_period(), 300);
 
     let _ = owner;
 }
 
 #[test]
-fn authorized_governor_can_set_proposal_threshold() {
+fn owner_can_set_proposal_threshold() {
     let (e, token, _treasury, governor, _target, owner) = setup();
-    let authorized_addr = Address::generate(&e);
-
-    governor.set_governor_authority(&authorized_addr, &true);
-
     // Mint some tokens so total supply > 0 (required for validation)
     let user1 = Address::generate(&e);
     token.mint(&owner, &user1);
@@ -518,73 +400,35 @@ fn authorized_governor_can_set_proposal_threshold() {
     // Advance ledger so checkpoint reflects minted tokens
     e.ledger().set_sequence_number(101);
 
-    e.mock_auths(&[MockAuth {
-        address: &authorized_addr,
-        invoke: &MockAuthInvoke {
-            contract: &governor.address,
-            fn_name: "set_proposal_threshold",
-            args: (&authorized_addr, &5u128).into_val(&e),
-            sub_invokes: &[],
-        },
-    }]);
-
-    governor.set_proposal_threshold(&authorized_addr, &5);
+    governor.set_proposal_threshold(&5);
     assert_eq!(governor.proposal_threshold(), 5);
 
     let _ = owner;
 }
 
 #[test]
-fn authorized_governor_can_set_quorum_bps() {
-    let (e, _token, _treasury, governor, _target, owner) = setup();
-    let authorized_addr = Address::generate(&e);
-
-    governor.set_governor_authority(&authorized_addr, &true);
-
-    e.mock_auths(&[MockAuth {
-        address: &authorized_addr,
-        invoke: &MockAuthInvoke {
-            contract: &governor.address,
-            fn_name: "set_quorum_bps",
-            args: (&authorized_addr, &2000u32).into_val(&e),
-            sub_invokes: &[],
-        },
-    }]);
-
-    governor.set_quorum_bps(&authorized_addr, &2000);
+fn owner_can_set_quorum_bps() {
+    let (_e, _token, _treasury, governor, _target, owner) = setup();
+    governor.set_quorum_bps(&2000);
     assert_eq!(governor.quorum_bps(), 2000);
 
     let _ = owner;
 }
 
 #[test]
-fn authorized_governor_can_set_queue_delay() {
-    let (e, _token, _treasury, governor, _target, owner) = setup();
-    let authorized_addr = Address::generate(&e);
-
-    governor.set_governor_authority(&authorized_addr, &true);
-
+fn owner_can_set_queue_delay() {
+    let (_e, _token, _treasury, governor, _target, owner) = setup();
     // Use the minimum queue delay of 5 minutes (300 seconds)
     let new_queue_delay = 300u32;
 
-    e.mock_auths(&[MockAuth {
-        address: &authorized_addr,
-        invoke: &MockAuthInvoke {
-            contract: &governor.address,
-            fn_name: "set_queue_delay",
-            args: (&authorized_addr, &new_queue_delay).into_val(&e),
-            sub_invokes: &[],
-        },
-    }]);
-
-    governor.set_queue_delay(&authorized_addr, &new_queue_delay);
+    governor.set_queue_delay(&new_queue_delay);
 
     let _ = owner;
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1504)")]
-fn unauthorized_cannot_set_voting_delay() {
+#[should_panic(expected = "HostError: Error(Auth, InvalidAction)")]
+fn non_owner_cannot_set_voting_delay() {
     let (e, _token, _treasury, governor, _target, _owner) = setup();
     let unauthorized = Address::generate(&e);
 
@@ -593,17 +437,17 @@ fn unauthorized_cannot_set_voting_delay() {
         invoke: &MockAuthInvoke {
             contract: &governor.address,
             fn_name: "set_voting_delay",
-            args: (&unauthorized, &20u32).into_val(&e),
+            args: (&20u32,).into_val(&e),
             sub_invokes: &[],
         },
     }]);
 
-    governor.set_voting_delay(&unauthorized, &20);
+    governor.set_voting_delay(&20);
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1504)")]
-fn unauthorized_cannot_set_voting_period() {
+#[should_panic(expected = "HostError: Error(Auth, InvalidAction)")]
+fn non_owner_cannot_set_voting_period() {
     let (e, _token, _treasury, governor, _target, _owner) = setup();
     let unauthorized = Address::generate(&e);
 
@@ -612,17 +456,17 @@ fn unauthorized_cannot_set_voting_period() {
         invoke: &MockAuthInvoke {
             contract: &governor.address,
             fn_name: "set_voting_period",
-            args: (&unauthorized, &200u32).into_val(&e),
+            args: (&200u32,).into_val(&e),
             sub_invokes: &[],
         },
     }]);
 
-    governor.set_voting_period(&unauthorized, &200);
+    governor.set_voting_period(&200);
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1504)")]
-fn unauthorized_cannot_set_proposal_threshold() {
+#[should_panic(expected = "HostError: Error(Auth, InvalidAction)")]
+fn non_owner_cannot_set_proposal_threshold() {
     let (e, _token, _treasury, governor, _target, _owner) = setup();
     let unauthorized = Address::generate(&e);
 
@@ -631,17 +475,17 @@ fn unauthorized_cannot_set_proposal_threshold() {
         invoke: &MockAuthInvoke {
             contract: &governor.address,
             fn_name: "set_proposal_threshold",
-            args: (&unauthorized, &5u128).into_val(&e),
+            args: (&5u128,).into_val(&e),
             sub_invokes: &[],
         },
     }]);
 
-    governor.set_proposal_threshold(&unauthorized, &5);
+    governor.set_proposal_threshold(&5);
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1504)")]
-fn unauthorized_cannot_set_quorum_bps() {
+#[should_panic(expected = "HostError: Error(Auth, InvalidAction)")]
+fn non_owner_cannot_set_quorum_bps() {
     let (e, _token, _treasury, governor, _target, _owner) = setup();
     let unauthorized = Address::generate(&e);
 
@@ -650,17 +494,17 @@ fn unauthorized_cannot_set_quorum_bps() {
         invoke: &MockAuthInvoke {
             contract: &governor.address,
             fn_name: "set_quorum_bps",
-            args: (&unauthorized, &2000u32).into_val(&e),
+            args: (&2000u32,).into_val(&e),
             sub_invokes: &[],
         },
     }]);
 
-    governor.set_quorum_bps(&unauthorized, &2000);
+    governor.set_quorum_bps(&2000);
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1504)")]
-fn unauthorized_cannot_set_queue_delay() {
+#[should_panic(expected = "HostError: Error(Auth, InvalidAction)")]
+fn non_owner_cannot_set_queue_delay() {
     let (e, _token, _treasury, governor, _target, _owner) = setup();
     let unauthorized = Address::generate(&e);
 
@@ -669,34 +513,12 @@ fn unauthorized_cannot_set_queue_delay() {
         invoke: &MockAuthInvoke {
             contract: &governor.address,
             fn_name: "set_queue_delay",
-            args: (&unauthorized, &500u32).into_val(&e),
+            args: (&500u32,).into_val(&e),
             sub_invokes: &[],
         },
     }]);
 
-    governor.set_queue_delay(&unauthorized, &500);
-}
-
-#[test]
-fn owner_has_implicit_governor_authority() {
-    let (e, _token, _treasury, governor, _target, owner) = setup();
-
-    // Owner doesn't need to be explicitly granted authority
-    assert!(governor.governor_authority(&owner));
-
-    // Owner can still modify settings
-    e.mock_auths(&[MockAuth {
-        address: &owner,
-        invoke: &MockAuthInvoke {
-            contract: &governor.address,
-            fn_name: "set_voting_delay",
-            args: (&owner, &300u32).into_val(&e),
-            sub_invokes: &[],
-        },
-    }]);
-
-    governor.set_voting_delay(&owner, &300);
-    assert_eq!(governor.voting_delay(), 300);
+    governor.set_queue_delay(&500);
 }
 
 #[test]
@@ -827,28 +649,28 @@ fn cast_vote_fails_with_zero_weight() {
 #[test]
 #[should_panic(expected = "HostError: Error(Contract, #1501)")]
 fn set_proposal_threshold_zero_fails() {
-    let (_e, _token, _treasury, governor, _target, owner) = setup();
+    let (_e, _token, _treasury, governor, _target, _owner) = setup();
 
     // Try to set threshold to zero (should fail)
-    governor.set_proposal_threshold(&owner, &0);
+    governor.set_proposal_threshold(&0);
 }
 
 #[test]
 #[should_panic(expected = "HostError: Error(Contract, #1502)")]
 fn set_quorum_bps_zero_fails() {
-    let (_e, _token, _treasury, governor, _target, owner) = setup();
+    let (_e, _token, _treasury, governor, _target, _owner) = setup();
 
     // Try to set quorum to zero (should fail)
-    governor.set_quorum_bps(&owner, &0);
+    governor.set_quorum_bps(&0);
 }
 
 #[test]
 #[should_panic(expected = "HostError: Error(Contract, #1502)")]
 fn set_quorum_bps_above_max_fails() {
-    let (_e, _token, _treasury, governor, _target, owner) = setup();
+    let (_e, _token, _treasury, governor, _target, _owner) = setup();
 
     // Try to set quorum above 100% (should fail)
-    governor.set_quorum_bps(&owner, &10_001);
+    governor.set_quorum_bps(&10_001);
 }
 
 #[test]
@@ -916,7 +738,7 @@ fn queued_proposal_expires_after_14_days() {
 
 #[test]
 fn queued_proposal_can_execute_before_expiration() {
-    let (e, token, _treasury, governor, target, owner) = setup();
+    let (e, token, treasury, governor, target, owner) = setup();
     let proposer = Address::generate(&e);
 
     // Mint token to proposer
@@ -955,7 +777,7 @@ fn queued_proposal_can_execute_before_expiration() {
     assert_eq!(governor.proposal_state(&proposal_id), ProposalState::Queued);
 
     // Execute before expiration
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
     assert_eq!(
         governor.proposal_state(&proposal_id),
         ProposalState::Executed
@@ -966,7 +788,7 @@ fn queued_proposal_can_execute_before_expiration() {
 #[test]
 #[should_panic(expected = "HostError: Error(Contract, #5007)")]
 fn expired_proposal_cannot_be_executed() {
-    let (e, token, _treasury, governor, target, owner) = setup();
+    let (e, token, treasury, governor, target, owner) = setup();
     let proposer = Address::generate(&e);
 
     // Mint token to proposer
@@ -1007,7 +829,7 @@ fn expired_proposal_cannot_be_executed() {
     );
 
     // Try to execute expired proposal (should fail with ProposalNotQueued error #5007)
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
 }
 
 #[test]
@@ -1020,7 +842,7 @@ fn execute_prevents_reentrancy_attack() {
     // Additionally, our CEI pattern (Checks-Effects-Interactions) provides defense-in-depth
     // by updating the proposal state to Executed BEFORE making external calls.
     // If platform protection is bypassed, our state check would catch it.
-    let (e, token, _treasury, governor, _target, owner) = setup();
+    let (e, token, treasury, governor, _target, owner) = setup();
     let proposer = Address::generate(&e);
 
     // Register malicious contract
@@ -1049,12 +871,11 @@ fn execute_prevents_reentrancy_attack() {
         &e,
         vec![
             &e,
-            governor.address.clone().into_val(&e),
+            treasury.address.clone().into_val(&e),
             attack_targets.into_val(&e),
             attack_functions.into_val(&e),
             attack_args.into_val(&e),
             attack_desc_hash.into_val(&e),
-            proposer.clone().into_val(&e),
         ],
     ];
 
@@ -1086,12 +907,12 @@ fn execute_prevents_reentrancy_attack() {
     // Execute the proposal
     // The malicious contract's attack() function will be called
     // It will try to re-enter execute(), which should fail with ProposalAlreadyExecuted error #5006
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
 }
 
 #[test]
 fn execute_updates_state_before_external_calls() {
-    let (e, token, _treasury, governor, target, owner) = setup();
+    let (e, token, treasury, governor, target, owner) = setup();
     let proposer = Address::generate(&e);
 
     // Mint token to proposer
@@ -1129,7 +950,7 @@ fn execute_updates_state_before_external_calls() {
     e.ledger().set_timestamp(3_112);
 
     // Execute the proposal
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
 
     // Verify proposal state is Executed (not Queued)
     assert_eq!(
@@ -1139,4 +960,634 @@ fn execute_updates_state_before_external_calls() {
 
     // Verify the target contract function was actually called
     assert_eq!(target.get_value(), 42);
+}
+
+mod upgrade_via_common {
+    use super::*;
+    use common::testutils::{empty_wasm, MockManager, MockManagerClient};
+
+    #[test]
+    fn upgrade_goes_through_common_apply() {
+        let e = Env::default();
+        e.mock_all_auths();
+        let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+        let from = BytesN::from_array(&e, &[1u8; 32]);
+        let to = empty_wasm(&e);
+        let id = e.register(
+            DaoGovernorContract,
+            (
+                Address::generate(&e),
+                Address::generate(&e),
+                Address::generate(&e),
+                300_u32,
+                300_u32,
+                300_u32,
+                1_u128,
+                1_000_u32,
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&e, "0.1.0"),
+            ),
+        );
+        let client = DaoGovernorContractClient::new(&e, &id);
+        mgr.approve(&from, &to);
+        mgr.register(&to, &String::from_str(&e, "0.2.0"));
+        client.upgrade(&from, &to);
+
+        // Contract code is swapped to an empty module; read the stored keys directly.
+        e.as_contract(&id, || {
+            assert_eq!(common::upgrade::current_hash(&e), to);
+            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.2.0"));
+        });
+    }
+
+    #[test]
+    fn upgrade_rejected_when_not_approved() {
+        let e = Env::default();
+        e.mock_all_auths();
+        let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+        let from = BytesN::from_array(&e, &[1u8; 32]);
+        let to = empty_wasm(&e);
+        let id = e.register(
+            DaoGovernorContract,
+            (
+                Address::generate(&e),
+                Address::generate(&e),
+                Address::generate(&e),
+                300_u32,
+                300_u32,
+                300_u32,
+                1_u128,
+                1_000_u32,
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&e, "0.1.0"),
+            ),
+        );
+        let client = DaoGovernorContractClient::new(&e, &id);
+        mgr.register(&to, &String::from_str(&e, "0.2.0"));
+        let r = client.try_upgrade(&from, &to);
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            common::CommonError::UpgradeNotApproved.into()
+        );
+    }
+
+    #[test]
+    fn upgrade_and_sync_version_reject_unauthorized_caller() {
+        let e = Env::default();
+        e.mock_all_auths();
+        let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+        let from = BytesN::from_array(&e, &[1u8; 32]);
+        let to = empty_wasm(&e);
+        let id = e.register(
+            DaoGovernorContract,
+            (
+                Address::generate(&e),
+                Address::generate(&e),
+                Address::generate(&e),
+                300_u32,
+                300_u32,
+                300_u32,
+                1_u128,
+                1_000_u32,
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&e, "0.1.0"),
+            ),
+        );
+        let client = DaoGovernorContractClient::new(&e, &id);
+        mgr.approve(&from, &to);
+        mgr.register(&to, &String::from_str(&e, "0.2.0"));
+        mgr.register(&from, &String::from_str(&e, "0.1.1"));
+        // Drop mock_all_auths: no authorization is provided for any address.
+        e.set_auths(&[]);
+        assert!(client.try_upgrade(&from, &to).is_err());
+        assert!(client.try_sync_version().is_err());
+        e.mock_all_auths();
+        e.as_contract(&id, || {
+            assert_eq!(common::upgrade::current_hash(&e), from);
+            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.1.0"));
+        });
+    }
+
+    #[test]
+    fn upgrade_hash_mismatch_leaves_state_unchanged() {
+        let e = Env::default();
+        e.mock_all_auths();
+        let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+        let from = BytesN::from_array(&e, &[1u8; 32]);
+        let to = empty_wasm(&e);
+        let id = e.register(
+            DaoGovernorContract,
+            (
+                Address::generate(&e),
+                Address::generate(&e),
+                Address::generate(&e),
+                300_u32,
+                300_u32,
+                300_u32,
+                1_u128,
+                1_000_u32,
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&e, "0.1.0"),
+            ),
+        );
+        let client = DaoGovernorContractClient::new(&e, &id);
+        let wrong = BytesN::from_array(&e, &[9u8; 32]);
+        mgr.approve(&wrong, &to);
+        mgr.register(&to, &String::from_str(&e, "0.2.0"));
+        let r = client.try_upgrade(&wrong, &to);
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            common::CommonError::HashMismatch.into()
+        );
+        e.as_contract(&id, || {
+            assert_eq!(common::upgrade::current_hash(&e), from);
+            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.1.0"));
+        });
+    }
+}
+
+fn register_with(
+    e: &Env,
+    manager: &Address,
+    owner: &Address,
+    threshold: u128,
+    quorum_bps: u32,
+    voting_delay: u32,
+) -> DaoGovernorContractClient<'static> {
+    register_with_treasury(
+        e,
+        manager,
+        owner,
+        &Address::generate(e),
+        threshold,
+        quorum_bps,
+        voting_delay,
+    )
+}
+
+fn register_with_treasury(
+    e: &Env,
+    manager: &Address,
+    owner: &Address,
+    treasury: &Address,
+    threshold: u128,
+    quorum_bps: u32,
+    voting_delay: u32,
+) -> DaoGovernorContractClient<'static> {
+    let id = e.register(
+        DaoGovernorContract,
+        (
+            owner.clone(),
+            Address::generate(e),
+            treasury.clone(),
+            voting_delay,
+            300_u32,
+            300_u32,
+            threshold,
+            quorum_bps,
+            manager.clone(),
+            BytesN::from_array(e, &[0u8; 32]),
+            String::from_str(e, "0.1.0"),
+        ),
+    );
+    DaoGovernorContractClient::new(e, &id)
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1502)")]
+fn constructor_rejects_zero_quorum() {
+    let e = Env::default();
+    register_with(
+        &e,
+        &Address::generate(&e),
+        &Address::generate(&e),
+        1,
+        0,
+        300,
+    );
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1502)")]
+fn constructor_rejects_quorum_above_max() {
+    let e = Env::default();
+    register_with(
+        &e,
+        &Address::generate(&e),
+        &Address::generate(&e),
+        1,
+        10_001,
+        300,
+    );
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1501)")]
+fn constructor_rejects_zero_threshold() {
+    let e = Env::default();
+    register_with(
+        &e,
+        &Address::generate(&e),
+        &Address::generate(&e),
+        0,
+        1_000,
+        300,
+    );
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1505)")]
+fn constructor_rejects_short_voting_delay() {
+    let e = Env::default();
+    register_with(
+        &e,
+        &Address::generate(&e),
+        &Address::generate(&e),
+        1,
+        1_000,
+        299,
+    );
+}
+
+#[test]
+fn launch_is_one_shot_and_clears_pending_owner() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let manager = Address::generate(&e);
+    let owner = Address::generate(&e);
+    let attacker = Address::generate(&e);
+    let treasury = Address::generate(&e);
+    let governor = register_with_treasury(&e, &manager, &owner, &treasury, 1, 1_000, 300);
+
+    governor.transfer_ownership(&attacker, &(e.ledger().sequence() + 1_000));
+    governor.launch(&treasury);
+    assert_eq!(governor.get_owner(), Some(treasury.clone()));
+    assert!(governor.try_accept_ownership().is_err());
+    assert_eq!(governor.get_owner(), Some(treasury));
+    let r = governor.try_launch(&attacker);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        common::CommonError::AlreadyLive.into()
+    );
+}
+
+#[test]
+fn launch_rejects_treasury_other_than_wired() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let manager = Address::generate(&e);
+    let governor = register_with(&e, &manager, &Address::generate(&e), 1, 1_000, 300);
+    let r = governor.try_launch(&Address::generate(&e));
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        CustomGovernorError::TreasuryMismatch.into()
+    );
+}
+
+#[test]
+fn proposal_entrypoints_are_not_live_before_launch_and_work_after() {
+    let e = Env::default();
+    e.mock_all_auths();
+    e.ledger().set_sequence_number(100);
+    e.ledger().set_timestamp(1_000);
+    let manager = Address::generate(&e);
+    let owner = Address::generate(&e);
+    let treasury = Address::generate(&e);
+    let governor = register_with_treasury(&e, &manager, &owner, &treasury, 1, 1_000, 300);
+
+    let targets = vec![&e, Address::generate(&e)];
+    let functions = vec![&e, symbol_short!("set_value")];
+    let args: Vec<Vec<Val>> = vec![&e, vec![&e, 1_u32.into_val(&e)]];
+    let description = String::from_str(&e, "d");
+    let desc_hash = BytesN::from_array(&e, &[7u8; 32]);
+    let who = Address::generate(&e);
+    let not_live: soroban_sdk::Error = common::CommonError::NotLive.into();
+
+    assert_eq!(
+        governor
+            .try_propose(&targets, &functions, &args, &description, &who)
+            .err()
+            .unwrap()
+            .unwrap(),
+        not_live
+    );
+    assert_eq!(
+        governor
+            .try_cast_vote(&desc_hash, &1, &description, &who)
+            .err()
+            .unwrap()
+            .unwrap(),
+        not_live
+    );
+    assert_eq!(
+        governor
+            .try_queue(&targets, &functions, &args, &desc_hash, &0, &who)
+            .err()
+            .unwrap()
+            .unwrap(),
+        not_live
+    );
+    assert_eq!(
+        governor
+            .try_consume(&targets, &functions, &args, &desc_hash)
+            .err()
+            .unwrap()
+            .unwrap(),
+        not_live
+    );
+
+    governor.launch(&treasury);
+    // Past the NotLive guard; with no voting power the proposer is rejected for a
+    // different reason.
+    let r = governor.try_propose(&targets, &functions, &args, &description, &who);
+    assert_ne!(
+        r.err().map(|e| e.ok()),
+        Some(Some(not_live)),
+        "propose must pass the live guard after launch"
+    );
+}
+
+#[test]
+fn governor_execute_always_fails_with_use_treasury_execute() {
+    let (e, _token, _treasury, governor, target, _owner) = setup();
+    let targets = vec![&e, target.address.clone()];
+    let functions = vec![&e, symbol_short!("set_value")];
+    let args = proposal_args(&e);
+    let r = governor.try_execute(
+        &targets,
+        &functions,
+        &args,
+        &BytesN::from_array(&e, &[1u8; 32]),
+        &Address::generate(&e),
+    );
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        CustomGovernorError::UseTreasuryExecute.into()
+    );
+}
+
+#[test]
+fn consume_requires_treasury_auth() {
+    let (e, token, treasury, governor, target, owner) = setup();
+    let proposer = Address::generate(&e);
+    token.mint(&owner, &proposer);
+    e.ledger().set_sequence_number(200);
+    e.ledger().set_timestamp(2_000);
+    let targets = vec![&e, target.address.clone()];
+    let functions = vec![&e, symbol_short!("set_value")];
+    let args = proposal_args(&e);
+    let description = String::from_str(&e, "consume auth");
+    let desc_hash = description_hash(&e, &description);
+    let proposal_id = governor.propose(&targets, &functions, &args, &description, &proposer);
+    e.ledger().set_timestamp(2_301);
+    governor.cast_vote(&proposal_id, &1, &String::from_str(&e, "yes"), &proposer);
+    e.ledger().set_timestamp(2_601);
+    governor.queue(
+        &targets, &functions, &args, &desc_hash, &2_901_u32, &proposer,
+    );
+    e.ledger().set_timestamp(2_901);
+
+    // With real auth, nobody but the Treasury (as invoker) can consume.
+    e.set_auths(&[]);
+    assert!(governor
+        .try_consume(&targets, &functions, &args, &desc_hash)
+        .is_err());
+    assert_eq!(governor.proposal_state(&proposal_id), ProposalState::Queued);
+
+    // The Treasury path works with no caller auth at all.
+    treasury.execute(&targets, &functions, &args, &desc_hash);
+    assert_eq!(target.get_value(), 42);
+    assert_eq!(
+        governor.proposal_state(&proposal_id),
+        ProposalState::Executed
+    );
+}
+
+mod unqueued_expiry {
+    use super::*;
+    use stellar_governance::governor::GovernorError;
+
+    // vote_end = 2_000 + 300 (delay) + 300 (period) = 2_600.
+    const EXPIRY: u64 = 2_600 + 1_209_600;
+
+    #[allow(clippy::type_complexity)]
+    fn succeeded(
+        vote: bool,
+    ) -> (
+        Env,
+        DaoGovernorContractClient<'static>,
+        Vec<Address>,
+        Vec<soroban_sdk::Symbol>,
+        Vec<Vec<Val>>,
+        BytesN<32>,
+        BytesN<32>,
+        Address,
+    ) {
+        let (e, token, _treasury, governor, target, owner) = setup();
+        let proposer = Address::generate(&e);
+        token.mint(&owner, &proposer);
+        e.ledger().set_sequence_number(200);
+        e.ledger().set_timestamp(2_000);
+        let targets = vec![&e, target.address.clone()];
+        let functions = vec![&e, symbol_short!("set_value")];
+        let args = proposal_args(&e);
+        let description = String::from_str(&e, "unqueued");
+        let desc_hash = description_hash(&e, &description);
+        let id = governor.propose(&targets, &functions, &args, &description, &proposer);
+        e.ledger().set_timestamp(2_301);
+        if vote {
+            governor.cast_vote(&id, &1, &String::from_str(&e, "yes"), &proposer);
+        }
+        (
+            e, governor, targets, functions, args, desc_hash, id, proposer,
+        )
+    }
+
+    #[test]
+    fn queue_just_before_expiry_works() {
+        let (e, governor, t, f, a, h, id, p) = succeeded(true);
+        e.ledger().set_timestamp(EXPIRY - 1);
+        assert_eq!(governor.proposal_state(&id), ProposalState::Succeeded);
+        governor.queue(&t, &f, &a, &h, &0, &p);
+        assert_eq!(governor.proposal_state(&id), ProposalState::Queued);
+    }
+
+    #[test]
+    fn queue_at_boundary_and_after_fails_and_state_is_expired() {
+        // Boundary choice: `now >= vote_end + 14d` is Expired (same as Queued).
+        for now in [EXPIRY, EXPIRY + 1] {
+            let (e, governor, t, f, a, h, id, p) = succeeded(true);
+            e.ledger().set_timestamp(now);
+            assert_eq!(governor.proposal_state(&id), ProposalState::Expired);
+            let r = governor.try_queue(&t, &f, &a, &h, &0, &p);
+            assert_eq!(
+                r.err().unwrap().unwrap(),
+                GovernorError::ProposalNotSuccessful.into()
+            );
+            let r = governor.try_consume(&t, &f, &a, &h);
+            assert_eq!(
+                r.err().unwrap().unwrap(),
+                GovernorError::ProposalNotQueued.into()
+            );
+        }
+    }
+
+    #[test]
+    fn defeated_proposal_is_unaffected() {
+        let (e, governor, _t, _f, _a, _h, id, _p) = succeeded(false);
+        e.ledger().set_timestamp(EXPIRY + 10);
+        assert_eq!(governor.proposal_state(&id), ProposalState::Defeated);
+    }
+}
+
+#[test]
+fn state_changing_entrypoint_extends_instance_ttl() {
+    use common::testutils::{advance_ledgers, instance_ttl};
+    let (e, _token, _treasury, governor, _target, _owner) = setup();
+    advance_ledgers(&e, 120 * 17_280);
+    let before = instance_ttl(&e, &governor.address);
+    governor.set_voting_delay(&600);
+    let after = instance_ttl(&e, &governor.address);
+    assert!(
+        after > before,
+        "instance TTL not extended: {before} -> {after}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Maximum governance timing (30 days)
+// ---------------------------------------------------------------------------
+
+fn register_timing(
+    e: &Env,
+    voting_delay: u32,
+    voting_period: u32,
+    queue_delay: u32,
+) -> DaoGovernorContractClient<'static> {
+    let id = e.register(
+        DaoGovernorContract,
+        (
+            Address::generate(e),
+            Address::generate(e),
+            Address::generate(e),
+            voting_delay,
+            voting_period,
+            queue_delay,
+            1_u128,
+            1_000_u32,
+            Address::generate(e),
+            BytesN::from_array(e, &[0u8; 32]),
+            String::from_str(e, "0.1.0"),
+        ),
+    );
+    DaoGovernorContractClient::new(e, &id)
+}
+
+#[test]
+fn constructor_accepts_exact_max_timing() {
+    let e = Env::default();
+    let g = register_timing(
+        &e,
+        crate::MAX_VOTING_DELAY,
+        crate::MAX_VOTING_PERIOD,
+        crate::MAX_QUEUE_DELAY,
+    );
+    assert_eq!(g.voting_delay(), 2_592_000);
+    assert_eq!(g.voting_period(), 2_592_000);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1510)")]
+fn constructor_rejects_voting_delay_above_max() {
+    let e = Env::default();
+    register_timing(&e, crate::MAX_VOTING_DELAY + 1, 300, 300);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1511)")]
+fn constructor_rejects_voting_period_above_max() {
+    let e = Env::default();
+    register_timing(&e, 300, crate::MAX_VOTING_PERIOD + 1, 300);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1512)")]
+fn constructor_rejects_queue_delay_above_max() {
+    let e = Env::default();
+    register_timing(&e, 300, 300, crate::MAX_QUEUE_DELAY + 1);
+}
+
+#[test]
+fn setters_accept_exact_max_and_reject_above() {
+    let (_e, _token, _treasury, governor, _target, _owner) = setup();
+
+    governor.set_voting_delay(&crate::MAX_VOTING_DELAY);
+    governor.set_voting_period(&crate::MAX_VOTING_PERIOD);
+    governor.set_queue_delay(&crate::MAX_QUEUE_DELAY);
+    assert_eq!(governor.voting_delay(), crate::MAX_VOTING_DELAY);
+    assert_eq!(governor.voting_period(), crate::MAX_VOTING_PERIOD);
+
+    assert_eq!(
+        governor
+            .try_set_voting_delay(&(crate::MAX_VOTING_DELAY + 1))
+            .err()
+            .unwrap()
+            .unwrap(),
+        CustomGovernorError::VotingDelayTooLong.into()
+    );
+    assert_eq!(
+        governor
+            .try_set_voting_period(&(crate::MAX_VOTING_PERIOD + 1))
+            .err()
+            .unwrap()
+            .unwrap(),
+        CustomGovernorError::VotingPeriodTooLong.into()
+    );
+    assert_eq!(
+        governor
+            .try_set_queue_delay(&(crate::MAX_QUEUE_DELAY + 1))
+            .err()
+            .unwrap()
+            .unwrap(),
+        CustomGovernorError::QueueDelayTooLong.into()
+    );
+    // Rejected calls leave the stored values untouched.
+    assert_eq!(governor.voting_delay(), crate::MAX_VOTING_DELAY);
+    assert_eq!(governor.voting_period(), crate::MAX_VOTING_PERIOD);
+}
+
+#[test]
+fn proposal_with_max_timing_computes_schedule_without_overflow() {
+    let (e, token, _treasury, governor, target, owner) = setup();
+    governor.set_voting_delay(&crate::MAX_VOTING_DELAY);
+    governor.set_voting_period(&crate::MAX_VOTING_PERIOD);
+    governor.set_queue_delay(&crate::MAX_QUEUE_DELAY);
+
+    let proposer = Address::generate(&e);
+    let _ = token.mint(&owner, &proposer);
+    let now = e.ledger().timestamp();
+    e.ledger().set_sequence_number(200);
+
+    let targets = vec![&e, target.address.clone()];
+    let functions = vec![&e, symbol_short!("set_value")];
+    let args = proposal_args(&e);
+    let description = String::from_str(&e, "max timing");
+    let id = governor.propose(&targets, &functions, &args, &description, &proposer);
+
+    let end = now + u64::from(crate::MAX_VOTING_DELAY) + u64::from(crate::MAX_VOTING_PERIOD);
+    assert_eq!(u64::from(governor.proposal_deadline(&id)), end);
+    assert_eq!(governor.proposal_state(&id), ProposalState::Pending);
+
+    // Vote at the start, queue after the end: eta = now + max queue delay.
+    e.ledger()
+        .set_timestamp(now + u64::from(crate::MAX_VOTING_DELAY) + 1);
+    governor.cast_vote(&id, &1, &String::from_str(&e, "yes"), &proposer);
+    e.ledger().set_timestamp(end + 1);
+    let hash = description_hash(&e, &description);
+    governor.queue(&targets, &functions, &args, &hash, &0_u32, &proposer);
+    assert_eq!(governor.proposal_state(&id), ProposalState::Queued);
 }

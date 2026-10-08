@@ -25,6 +25,7 @@ export type DaoNetworkConfig = {
   governorContractId: string;
   treasuryContractId: string;
   auctionContractId: string;
+  marketplaceContractId: string;
   auctionEnabled: boolean | null;
   auctionPaused: boolean | null;
   status: 'pending' | 'operational';
@@ -80,6 +81,7 @@ export async function getDaoNetworkConfigById(daoId: string): Promise<DaoNetwork
     governorContractId: daoConfig.governor_contract,
     treasuryContractId: daoConfig.treasury_contract ?? '',
     auctionContractId: daoConfig.auction_contract ?? '',
+    marketplaceContractId: daoConfig.marketplace_contract ?? '',
     auctionEnabled: daoConfig.auction_enabled,
     auctionPaused: daoConfig.auction_paused,
     status: daoConfig.status

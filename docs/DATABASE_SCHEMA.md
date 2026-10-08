@@ -1,410 +1,123 @@
 # Database Schema
 
-> **Status**: Complete - Ready for Goldsky integration
+PostgreSQL read model for the Goldsky-indexed DAO deployment. Operational
+guide, migrations and scripts: [`db/README.md`](../db/README.md). The Prisma
+models in `apps/web/prisma/schema.prisma` map onto the views marked **Prisma**.
 
-This document describes the PostgreSQL schema for the multi-tenant DAO system indexed by Goldsky.
+## Layers
 
-## Overview
+1. **Landing tables** (written by Goldsky, append-only): `chain.raw_events`,
+   `chain.decoded_events`, `app.activity_feed_events`.
+2. **Views** (everything else): derive all state from `chain.decoded_events`.
 
-The database is designed for:
-- Complete multi-tenant isolation
-- DAO lifecycle tracking (Pending → Operational)
-- Event-driven data population
-- Efficient querying by deployment and DAO
+All rows are scoped by `deployment_id` (`manager:<MANAGER_CONTRACT>`); DAO rows
+by `dao_id` (the DAO token contract address).
 
-**Key Principle**: All data is keyed by `(deployment_id, dao_id)` for complete isolation.
+## Event conventions
 
-## Schema Structure
-
-```
-manager/
-├── daos                    -- DAO registry with metadata
-└── dao_modules (view)      -- Contract addresses by role
-
-chain/
-├── raw_events             -- Raw Goldsky events
-├── decoded_events         -- Parsed events with arguments
-└── event_identity (view)  -- Map contract_id to dao_id
-
-governance/
-├── proposals (view)
-├── proposal_votes (view)
-├── proposal_lifecycle (view)
-└── proposal_actions (view)
-
-token/
-├── transfers (view)
-├── inventory (view)
-└── members (view)
-
-app/
-├── activity_feed_events   -- User-friendly activity log
-└── [activity_feed (view)] -- Aggregated activity
-
-[... other schemas: auction, treasury, metadata ...]
-```
-
-## Tables
-
-### manager.daos
-
-**Purpose**: Primary DAO registry with complete metadata
-
-**Schema**:
-```sql
-CREATE TABLE manager.daos (
-  -- Multi-tenant composite key
-  deployment_id TEXT NOT NULL,
-  dao_id TEXT NOT NULL,
-
-  -- Core Identity
-  token_address TEXT NOT NULL,
-  creator VARCHAR(56),
-
-  -- Manager Contract
-  manager_contract TEXT NOT NULL,
-
-  -- Deployed Contracts (immutable after creation)
-  token_contract TEXT NOT NULL,
-  governor_contract TEXT NOT NULL,
-  auction_contract TEXT,
-  treasury_contract TEXT,
-  metadata_contract TEXT,
-
-  -- Token Metadata (from DaoCreationParams)
-  token_name VARCHAR(255),
-  token_symbol VARCHAR(16),
-  token_description TEXT,
-  token_uri TEXT,
-
-  -- Admin & Configuration
-  admin_address VARCHAR(56),
-
-  -- Lifecycle Status
-  status TEXT NOT NULL DEFAULT 'pending',  -- 'pending' or 'operational'
-
-  -- Blockchain Timeline
-  created_ledger BIGINT NOT NULL,
-  created_at TIMESTAMPTZ,
-  created_tx_hash TEXT,
-
-  finalized_ledger BIGINT,
-  finalized_at TIMESTAMPTZ,
-  finalized_tx_hash TEXT,
-
-  -- Indexing/Tracking
-  indexed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-  PRIMARY KEY (deployment_id, dao_id),
-  CHECK (token_address ~ '^C[A-Z0-9]{55}$'),
-  CHECK (dao_id ~ '^C[A-Z0-9]{55}$'),
-  CHECK (manager_contract ~ '^C[A-Z0-9]{55}$'),
-  CHECK (status IN ('pending', 'operational'))
-);
-```
-
-**Indexes**:
-```sql
-CREATE INDEX idx_manager_daos_deployment
-  ON manager.daos(deployment_id);
-
-CREATE INDEX idx_manager_daos_deployment_status
-  ON manager.daos(deployment_id, status);
-
-CREATE INDEX idx_manager_daos_deployment_created_ledger
-  ON manager.daos(deployment_id, created_ledger DESC);
-
-CREATE INDEX idx_manager_daos_token_address
-  ON manager.daos(deployment_id, token_address);
-
-CREATE INDEX idx_manager_daos_governor_contract
-  ON manager.daos(deployment_id, governor_contract);
-```
-
-**Key Fields**:
-- `deployment_id` + `dao_id` - Composite primary key
-- `status` - 'pending' (created, awaiting finalization) or 'operational' (finalized, ready)
-- `token_name`, `token_symbol`, `token_description` - Token metadata for UI display
-- `admin_address` - launch_admin account (setup administrator)
-- `created_*` - Timeline of creation
-- `finalized_*` - Timeline of finalization (if completed)
-
-### chain.raw_events
-
-**Purpose**: Raw events from Stellar blockchain (Goldsky)
-
-**Immutable**: Triggers prevent updates/deletes
-
-**Contains**: XDR-encoded event data from blockchain
-
-### chain.decoded_events
-
-**Purpose**: Parsed events with structured field extraction
-
-**Immutable**: Triggers prevent updates/deletes
-
-**Contains**: Decoded event arguments in JSON fields (topics, args)
-
-### app.activity_feed_events
-
-**Purpose**: User-friendly activity summaries
-
-**Contains**: Title, summary, visibility, actor, addresses for UI display
+- `event_name` is the on-chain topic 0 symbol in snake_case (`dao_created`,
+  `vote_cast`, `merkle_claim_event`).
+- `topics` is a JSON object of the named topics after the name, e.g.
+  `proposal_created` → `{"proposal_id": "<hex>", "proposer": "G…"}`.
+- `args` is a JSON object of the event data fields.
+- The decoder's topic names are tested against the Rust sources
+  (`packages/goldsky/test/contract-alignment.test.mjs`).
+- Tenant resolution: module contracts via `manager.event_identity`; the shared
+  Minter via its `token_id` topic.
 
 ## Views
 
-### manager.daos (alternative as view)
+### manager
 
-If switching from table to view:
-```sql
-CREATE OR REPLACE VIEW manager.daos AS
-WITH created AS (
-  SELECT DISTINCT ON (deployment_id, topic_0) event_id,
-    deployment_id, contract_id as manager_contract,
-    topic_0 as token_address, topic_1 as creator,
-    args -> 'params' -> 'token_name' as token_name,
-    args -> 'params' -> 'token_symbol' as token_symbol,
-    args -> 'params' -> 'description' as token_description,
-    args -> 'params' -> 'token_uri' as token_uri,
-    args -> 'params' -> 'launch_admin' as admin_address,
-    ledger_sequence as created_ledger,
-    to_timestamp(NULLIF(ledger_closed_at, '')::numeric / 1000) as created_at,
-    transaction_hash as created_tx_hash
-  FROM chain.decoded_events
-  WHERE contract_role = 'manager'
-    AND lower(event_name) IN ('dao_created', 'daocreated')
-  ORDER BY deployment_id, topic_0, ledger_sequence, event_id
-), finalized AS (
-  SELECT DISTINCT ON (deployment_id, topic_0) deployment_id,
-    topic_0 as token_address,
-    ledger_sequence as finalized_ledger,
-    to_timestamp(NULLIF(ledger_closed_at, '')::numeric / 1000) as finalized_at,
-    transaction_hash as finalized_tx_hash
-  FROM chain.decoded_events
-  WHERE contract_role = 'manager'
-    AND lower(event_name) IN ('dao_finalized', 'daofinalized')
-  ORDER BY deployment_id, topic_0, ledger_sequence DESC, event_id DESC
-)
-SELECT
-  c.deployment_id,
-  c.token_address as dao_id,
-  c.token_address,
-  c.creator,
-  c.manager_contract,
-  -- Contracts from creation event args
-  (c.args -> 'params' -> 'modules' ->> 'token') as token_contract,
-  (c.args -> 'params' -> 'modules' ->> 'governor') as governor_contract,
-  (c.args -> 'params' -> 'modules' ->> 'auction') as auction_contract,
-  (c.args -> 'params' -> 'modules' ->> 'treasury') as treasury_contract,
-  (c.args -> 'params' -> 'modules' ->> 'metadata') as metadata_contract,
-  c.token_name,
-  c.token_symbol,
-  c.token_description,
-  c.token_uri,
-  c.admin_address,
-  CASE WHEN f.finalized_ledger IS NOT NULL THEN 'operational'
-       ELSE 'pending' END as status,
-  c.created_ledger,
-  c.created_at,
-  c.created_tx_hash,
-  f.finalized_ledger,
-  f.finalized_at,
-  f.finalized_tx_hash
-FROM created c
-LEFT JOIN finalized f USING (deployment_id, token_address);
-```
+| View | Reads | Notes |
+| --- | --- | --- |
+| `dao_registry` | `dao_created` | one row per DAO: deployer, launch admin, six module contracts, and the six `<module>_wasm_hash` columns from `dao_created.wasm_hashes` |
+| `dao_modules` | registry | one row per module contract |
+| `event_identity` | modules | contract → DAO lookup used by every domain view |
+| `daos` **Prisma** | registry + `dao_launched`, `token_initialized`, metadata, auction `paused`/`unpaused` | `status` pending/operational; `auction_enabled`, `auction_paused`, `token_description` |
+| `module_launches` | each module's `launched` event | one row per DAO module (keyed by emitting contract, since six structs share the name `launched`): `is_live`, `treasury`, `started` (auction), `opened` (marketplace), `minters` (token) |
+| `dao_lifecycle` | `dao_launched` + `module_launches` | per DAO: `is_live` (all six modules launched), `<module>_live`, `launch_auction`, `launch_marketplace`, `minter_enabled`, `auction_started`, `marketplace_opened` |
+| `module_upgrades` | `upgraded`, `version_synced` (every module) | per DAO module: `event_type` (`upgraded`/`version_synced`), `module_role`, `contract_id`, `from_hash`/`to_hash` (NULL for `version_synced`), `version`, `event_seq`, ledger/tx/time |
+| `module_versions` | `module_upgrades` + `dao_registry` | one row per DAO module: `current_hash` (latest `to_hash`, else the `dao_created` hash), `current_version` (latest `upgraded`/`version_synced`, NULL if none), `upgrade_count`, `last_upgraded_*` |
+| `admin_history` | `admin_proposed`, `admin_proposal_cancelled`, `admin_changed`, `platform_minter_set` | deployment-wide; `event_type`, `previous_admin`, `new_admin`, `platform_minter` |
+| `settings` | `manager_initialized` + admin events | current `admin`, `pending_admin` (NULL after an accept or a cancel), `platform_minter` per deployment |
+| `implementations` | `implementation_registered`, `implementation_revoked` | `revoked`, `revoked_at` |
+| `current_implementations` | `current_implementations_updated` | latest default implementation hashes |
 
-### manager.dao_modules (view)
+### token
 
-```sql
-CREATE OR REPLACE VIEW manager.dao_modules AS
-SELECT deployment_id, dao_id, 'token'::text AS module_role, token_contract AS module_contract
-  FROM manager.daos
-UNION ALL SELECT deployment_id, dao_id, 'governor', governor_contract
-  FROM manager.daos WHERE governor_contract IS NOT NULL
-UNION ALL SELECT deployment_id, dao_id, 'auction', auction_contract
-  FROM manager.daos WHERE auction_contract IS NOT NULL
-UNION ALL SELECT deployment_id, dao_id, 'treasury', treasury_contract
-  FROM manager.daos WHERE treasury_contract IS NOT NULL
-UNION ALL SELECT deployment_id, dao_id, 'metadata', metadata_contract
-  FROM manager.daos WHERE metadata_contract IS NOT NULL;
-```
+| View | Reads | Notes |
+| --- | --- | --- |
+| `transfers` | `mint`, `transfer` | `transfer_type`, `from_address` NULL for mints |
+| `mints` | `mint_with_minter` | who performed each mint |
+| `inventory` **Prisma** | transfers | current owner per token |
+| `members` **Prisma** | inventory, `delegate_changed`, `delegate_votes_changed` | owned count, delegate, voting power |
+| `delegations`, `mint_authority_history` | token events | history; `launch_grant` marks grants made by the Manager at launch (`changed_by` = manager); later changes are governance |
+| `mint_authorities` **Prisma** | history | currently enabled authorities (set at launch, then only via governance) |
 
-## Permissions
+### governance
 
-### Goldsky Writer Role
+| View | Reads | Notes |
+| --- | --- | --- |
+| `proposals` | `proposal_created` + lifecycle + votes | `state`: pending, queued, executed, canceled, expired; `eta_seconds` kept after execution. `expired` is computed from the clock: queued and `now >= eta + 14d`, or never queued, `now >= vote_end + 14d` and for > against (quorum is not derivable, so a won-but-quorum-missed proposal also shows expired) |
+| `proposal_votes` **Prisma** | `vote_cast` | `support` 0 against, 1 for, 2 abstain |
+| `proposal_lifecycle` **Prisma** | queued / executed / cancelled | |
+| `proposal_actions` | `proposal_created` | one row per call (parallel arrays unnested) |
+| `proposal_execution_calls` | Treasury `execute` + `proposal_actions` | one row per executed call, ordered by `call_index`, keyed by `proposal_id`; carries `target`, `function`, `args`, tx |
 
-```sql
--- Inserts/updates during event indexing
-GRANT INSERT, UPDATE ON manager.daos TO goldsky_writer;
-GRANT INSERT, UPDATE ON chain.raw_events TO goldsky_writer;
-GRANT INSERT, UPDATE ON chain.decoded_events TO goldsky_writer;
-GRANT INSERT ON app.activity_feed_events TO goldsky_writer;
-```
+Execution: `Treasury.execute` is permissionless; it consumes the proposal on the
+Governor (`proposal_executed`, same tx) and emits one `execute` per call
+(topics governor, target, proposal_id; data function, index). The Governor
+authority role and its views (`governor_authority_*`) were removed together with
+`governor_authority_changed`, `treasury_changed`, `token_contract_changed`
+(Governor) and `governor_changed` (Treasury).
 
-### App Server Role
+`snapshot_ledger` is the vote snapshot ledger; `vote_end_seconds` is the voting
+deadline as a unix timestamp. The governor emits no vote start.
 
-```sql
--- Read-only for application queries
-GRANT SELECT ON manager.daos TO app_server;
-GRANT SELECT ON manager.dao_modules TO app_server;
-GRANT SELECT ON governance.proposals TO app_server;
-GRANT SELECT ON governance.proposal_votes TO app_server;
-GRANT SELECT ON token.transfers TO app_server;
-GRANT SELECT ON token.inventory TO app_server;
-GRANT SELECT ON app.activity_feed_events TO app_server;
--- ... other views ...
-```
+### auction, metadata, treasury, marketplace
 
-## Field Naming Conventions
+| View | Reads |
+| --- | --- |
+| `auction.auctions` **Prisma** | `auction_created` + settlements/cancellations + config at creation time |
+| `auction.bids` **Prisma**, `settlements`, `cancellations` | auction events (`winner` is NULL when no bids; `cancel_auction` also sends the unsold NFT to the treasury, visible in `token.transfers`) |
+| `auction.bid_refunds` | `bid_refunded` (`refund_status` refunded) and `refund_deferred` (`deferred`, amount is the increment) |
+| `auction.refund_withdrawals` | `refund_withdrawn` (topic `bidder`, no token) |
+| `auction.pending_refunds` | per bidder: `deferred_amount`, `withdrawn_amount`, `pending_amount` = sum(deferred) - sum(withdrawn), rows with a positive balance only |
+| `metadata.configuration` **Prisma** | `metadata_initialized` overlaid with the latest `*_updated` events |
+| `metadata.properties` | `property_added` since the latest `properties_reset` |
+| `metadata.token_seeds` | `seed_generated` (again on `regenerate`); `is_current` marks the latest seed per token |
+| `treasury.calls` | `execute`: one row per call with `proposal_id`, `call_index` |
+| `marketplace.primary_listings` | `primary_listing_created` closed by `primary_listing_purchased/cancelled/expired`; keyed by `listing_id`; `token_id` and `buyer` only once purchased; `payment_asset` |
+| `marketplace.secondary_listings` | `secondary_listing_created` closed by `listing_purchased/cancelled/expired`; keyed by `token_id`; `seller`, `fee_bps`, `payment_asset` |
+| `marketplace.purchases` | `listing_purchased` (secondary only) |
+| `marketplace.sales` | primary purchases (`token_id` only exists in `primary_listing_purchased`) plus secondary purchases; `sale_type`, `listing_id` NULL for secondary |
 
-All tables follow consistent naming:
+`marketplace.listings` and its `kind` were replaced by the two listing views.
 
-- **Ledger positions** end in `_ledger` (e.g., `created_ledger`)
-- **Timestamps** end in `_at` (e.g., `created_at`)
-- **Unix seconds** end in `_seconds` (e.g., `event_timestamp_seconds`)
-- **Milliseconds** keep `_milliseconds` suffix
-- **Contract addresses** use full Stellar address format
-- **Accounts** are VARCHAR(56) for Stellar account addresses
+### minter
 
-## Query Examples
+Shared contract; each view resolves `dao_id` from the `token_id` topic and drops
+other tokens.
 
-### Get Single DAO
+| View | Reads |
+| --- | --- |
+| `merkle_claim_events` **Prisma** | `merkle_claim_event` |
+| `allowlist_claim_events` **Prisma** | `allowlist_claim_event` |
+| `batch_mint_events` **Prisma** | `mint_batch_event` |
+| `allocation_updates` | `merkle_root_set_event`, `allowlist_set_event` |
 
-```sql
-SELECT * FROM manager.daos
-WHERE deployment_id = 'manager:ABC...'
-AND dao_id = 'CBGLIC3V...';
-```
+### app
 
-**Result**: All contracts, metadata, status, timeline
+| View | Notes |
+| --- | --- |
+| `activity_feed` **Prisma** | activity rows with `dao_id` resolved (manager events: none; Minter: via token) |
+| `proposal_list` **Prisma**, `proposal_detail` **Prisma** | proposals with vote tallies; detail adds `actions` and `votes` JSON |
+| `indexer_status` **Prisma** | latest ledger / event count / last ingestion, so the app never reads raw events |
 
-### List All DAOs
+## Activity kinds
 
-```sql
-SELECT
-  dao_id, token_name, token_symbol, status, created_at
-FROM manager.daos
-WHERE deployment_id = 'manager:ABC...'
-ORDER BY created_ledger DESC
-LIMIT 100;
-```
-
-**Result**: Latest 100 DAOs
-
-### Find Pending DAOs
-
-```sql
-SELECT dao_id, token_name, created_at
-FROM manager.daos
-WHERE deployment_id = 'manager:ABC...'
-AND status = 'pending'
-ORDER BY created_at ASC;
-```
-
-**Result**: DAOs awaiting finalization (oldest first)
-
-### Find Operational DAOs
-
-```sql
-SELECT dao_id, token_name, token_symbol, finalized_at
-FROM manager.daos
-WHERE deployment_id = 'manager:ABC...'
-AND status = 'operational'
-ORDER BY finalized_at DESC;
-```
-
-**Result**: Live DAOs (newest finalization first)
-
-### Count DAOs by Status
-
-```sql
-SELECT status, COUNT(*) as count
-FROM manager.daos
-WHERE deployment_id = 'manager:ABC...'
-GROUP BY status;
-```
-
-**Result**: Pending and operational counts
-
-## Indexes Strategy
-
-All indexes are composite with `deployment_id` first:
-
-**Equality Lookups**:
-- `(deployment_id, dao_id)` - Get single DAO
-
-**Filtering**:
-- `(deployment_id, status)` - Filter by lifecycle state
-- `(deployment_id, token_address)` - Reverse lookups
-
-**Ordering**:
-- `(deployment_id, created_ledger DESC)` - Newest DAOs first
-
-**Performance**:
-- All queries return in <10ms
-- No full table scans
-- Database-level isolation prevents slow joins
-
-## Migration & Backups
-
-### Initial Setup
-
-```bash
-./db/migrate.sh postgres://user:pass@host/db
-```
-
-### Verification
-
-```sql
--- Check table exists
-\dt manager.daos
-
--- Check indexes
-\di manager.*daos*
-
--- Check permissions
-\dp manager.daos
-```
-
-### Backup Strategy
-
-```bash
-# Full database backup
-pg_dump postgres://user:pass@host/db > backup.sql
-
-# Selective tables
-pg_dump -t "manager.daos" postgres://user:pass@host/db > daos-backup.sql
-
-# Point-in-time recovery
-# Requires WAL archiving enabled
-```
-
-## Future Extensions
-
-Possible additions without schema breaking changes:
-
-1. **manager.dao_settings**
-   - Custom display names, themes, logos
-   - Feature flags per DAO
-
-2. **manager.dao_governance_params**
-   - Cached governance settings
-   - Updated from Governor events
-
-3. **manager.dao_activity**
-   - Materialized activity feed
-   - Pre-computed aggregations
-
-4. **manager.dao_metadata_cache**
-   - Cached metadata from contracts
-   - Reduced on-chain queries
-
-All would use same `(deployment_id, dao_id)` composite key.
-
-## Related Documentation
-
-- [MULTITENANT_ARCHITECTURE.md](./MULTITENANT_ARCHITECTURE.md) - Overall architecture
-- [GOLDSKY_MULTITENANT_INTEGRATION.md](./GOLDSKY_MULTITENANT_INTEGRATION.md) - Pipeline integration
-- [db/README.md](../db/README.md) - Migration scripts
-- [db/migrations/0001_goldsky_base.sql](../db/migrations/0001_goldsky_base.sql) - SQL schema
+`kind` is `<area>.<event>` (`governance.vote_cast`, `minter.merkle_claim`,
+`marketplace.listing_purchased`, …), defined in
+`packages/goldsky/src/activity-feed.script.js`. Events without a mapping get
+`contract.<event_name>` and `system` visibility.

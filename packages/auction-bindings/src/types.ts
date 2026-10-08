@@ -1,4 +1,4 @@
-import {Address, xdr} from '@stellar/stellar-sdk';
+import {Address} from '@stellar/stellar-sdk';
 
     /**
  * Error Enum: AuctionError
@@ -33,29 +33,13 @@ export const AuctionError = {
    */
   1207 : { message: "MinBidNotMet" },
   /**
-   * Invalid configuration parameters (e.g., duration < 5 minutes, zero increment)
+   * Invalid configuration parameters (e.g., duration outside 5 minutes ..= 30 days, zero increment)
    */
   1208 : { message: "InvalidConfig" },
-  /**
-   * Token minting failed
-   */
-  1209 : { message: "MintFailed" },
-  /**
-   * Token or payment transfer failed
-   */
-  1210 : { message: "TransferFailed" },
-  /**
-   * Payment token not configured for SAC bids
-   */
-  1211 : { message: "NoPaymentTokenSet" },
   /**
    * Auction not launched yet
    */
   1212 : { message: "NotLaunched" },
-  /**
-   * Cannot create new auction
-   */
-  1213 : { message: "CannotCreateAuction" },
   /**
    * Unauthorized access
    */
@@ -69,21 +53,39 @@ export const AuctionError = {
    */
   1216 : { message: "InvalidBid" },
   /**
-   * Maximum auction extensions exceeded
-   */
-  1218 : { message: "MaxExtensionsExceeded" },
-  /**
    * Contract not initialized properly
    */
   1219 : { message: "NotInitialized" },
   /**
-   * Token ID exceeds valid range
+   * `launch` treasury differs from the treasury wired at construction
    */
-  1220 : { message: "TokenIdOverflow" },
+  1222 : { message: "TreasuryMismatch" },
   /**
-   * External contract call failed
+   * `launch` expected payment token differs from the configured one
    */
-  1221 : { message: "ExternalCallFailed" }
+  1223 : { message: "PaymentTokenMismatch" },
+  /**
+   * `withdraw_refund` called with no pending refund balance
+   */
+  1224 : { message: "NoPendingRefund" },
+  /**
+   * `set_time_buffer` value outside 1..=86400 seconds
+   */
+  1225 : { message: "InvalidTimeBuffer" }
+}
+
+/**
+ * Emitted once when the Manager launches the auction (Setup -> Live).
+ */
+export interface LaunchedEvent {
+  name: "Launched";
+  data: {
+    treasury: string;
+    /**
+     * Whether the auction was unpaused and the first auction created.
+     */
+    started?: boolean;
+  };
 }
 
 /**
@@ -139,6 +141,19 @@ export interface AuctionSettledEvent {
 }
 
 /**
+ * Emitted when a push refund failed and was credited to `PendingRefund`.
+ * `amount` is the amount added by this event, not the running total.
+ */
+export interface RefundDeferredEvent {
+  name: "RefundDeferred";
+  data: {
+    token_id: bigint;
+    bidder: string;
+    amount?: bigint;
+  };
+}
+
+/**
  * Event: DurationUpdated
  */
 export interface DurationUpdatedEvent {
@@ -150,13 +165,13 @@ export interface DurationUpdatedEvent {
 }
 
 /**
- * Event: TreasuryUpdated
+ * Emitted when a bidder pulls their deferred refund via `withdraw_refund`.
  */
-export interface TreasuryUpdatedEvent {
-  name: "TreasuryUpdated";
+export interface RefundWithdrawnEvent {
+  name: "RefundWithdrawn";
   data: {
-    treasury?: string;
-    changed_by?: string;
+    bidder: string;
+    amount?: bigint;
   };
 }
 
@@ -233,27 +248,6 @@ export interface MinBidIncrementUpdatedEvent {
     changed_by?: string;
   };
 }
-
-/**
- * Storage keys for auction instance data.
- */
- export type DataKey =
-  /**
-   * Auction configuration parameters (duration, reserve price, etc.)
-   */
-  { tag: "Config"; values: void } |
-  /**
-   * Current auction state (token ID, bids, timing, etc.)
-   */
-  { tag: "Auction"; values: void } |
-  /**
-   * Whether the first auction has been launched (prevents re-initialization)
-   */
-  { tag: "Launched"; values: void } |
-  { tag: "Manager"; values: void } |
-  { tag: "CurrentHash"; values: void } |
-  { tag: "CurrentVersion"; values: void } |
-  { tag: "PaymentTokenLocked"; values: void };
 
 /**
  * Current state of an active auction.
@@ -365,163 +359,77 @@ export interface AuctionConfig {
 }
 
 /**
- * Union: UpgradeableStorageKey
+ * Errors shared by all module contracts. Codes live in the 9000 range so
+ * they never collide with module (11xx-13xx, 3, 30) or manager (10xx) codes.
  */
- export type UpgradeableStorageKey =
-  { tag: "SchemaVersion"; values: void };
+export const CommonError = {
+  /**
+   * Operation requires the module to be live (launched).
+   */
+  9001 : { message: "NotLive" },
+  /**
+   * Operation is only valid during setup; the module is already live.
+   */
+  9002 : { message: "AlreadyLive" },
+  /**
+   * Manager address missing from storage.
+   */
+  9003 : { message: "ManagerNotSet" },
+  /**
+   * `CurrentHash` missing from storage.
+   */
+  9004 : { message: "CurrentHashNotSet" },
+  /**
+   * `from_hash` does not equal the stored `CurrentHash`.
+   */
+  9005 : { message: "HashMismatch" },
+  /**
+   * Manager did not approve this upgrade path.
+   */
+  9006 : { message: "UpgradeNotApproved" },
+  /**
+   * Manager has no registry entry for the requested hash.
+   */
+  9007 : { message: "ImplementationNotFound" },
+  /**
+   * Owner missing from storage.
+   */
+  9008 : { message: "OwnerNotSet" },
+  /**
+   * `CurrentVersion` missing from storage.
+   */
+  9009 : { message: "VersionNotSet" },
+  /**
+   * Treasury address missing from storage.
+   */
+  9010 : { message: "TreasuryNotSet" },
+  /**
+   * Governor address missing from storage.
+   */
+  9011 : { message: "GovernorNotSet" }
+}
 
 /**
- * Event emitted when the merkle root is set.
+ * Emitted by `apply`. The emitting contract address is the event's contract id.
  */
-export interface SetRootEvent {
-  name: "SetRoot";
+export interface UpgradedEvent {
+  name: "Upgraded";
   data: {
-    root?: Uint8Array;
+    from_hash: Uint8Array;
+    to_hash: Uint8Array;
+    version?: string;
   };
 }
 
 /**
- * Event emitted when an index is claimed.
+ * Emitted by `sync_version`.
  */
-export interface SetClaimedEvent {
-  name: "SetClaimed";
+export interface VersionSyncedEvent {
+  name: "VersionSynced";
   data: {
-    index?: number;
+    version?: string;
   };
 }
-
-/**
- * Error Enum: MerkleDistributorError
- */
-export const MerkleDistributorError = {
-  /**
-   * The merkle root is not set.
-   */
-  1300 : { message: "RootNotSet" },
-  /**
-   * The provided index was already claimed.
-   */
-  1301 : { message: "IndexAlreadyClaimed" },
-  /**
-   * The proof is invalid.
-   */
-  1302 : { message: "InvalidProof" }
-}
-
-/**
- * Storage keys for the data associated with `MerkleDistributor`
- */
- export type MerkleDistributorStorageKey =
-  /**
-   * The Merkle root of the distribution tree
-   */
-  { tag: "Root"; values: void } |
-  /**
-   * Maps an index to its claimed status
-   */
-  { tag: "Claimed"; values: readonly [number] };
-
-/**
- * Rounding direction for division operations
- */
- export type Rounding =
-  /**
-   * Round toward negative infinity (down)
-   */
-  { tag: "Floor"; values: void } |
-  /**
-   * Round toward positive infinity (up)
-   */
-  { tag: "Ceil"; values: void } |
-  /**
-   * Round toward zero (truncation)
-   */
-  { tag: "Truncate"; values: void };
-
-/**
- * Error Enum: SorobanFixedPointError
- */
-export const SorobanFixedPointError = {
-  /**
-   * Arithmetic overflow occurred
-   */
-  1500 : { message: "Overflow" },
-  /**
-   * Division by zero
-   */
-  1501 : { message: "DivisionByZero" },
-  /**
-   * Base is outside the valid domain (e.g. `ln(x)` for `x <= 0`,
-   * or `powf(x, y)` with non-positive `x` combined with float exponent).
-   */
-  1502 : { message: "InvalidBase" }
-}
-
-/**
- * Error Enum: CryptoError
- */
-export const CryptoError = {
-  /**
-   * The merkle proof length is out of bounds.
-   */
-  1400 : { message: "MerkleProofOutOfBounds" },
-  /**
-   * The index of the leaf is out of bounds.
-   */
-  1401 : { message: "MerkleIndexOutOfBounds" },
-  /**
-   * No data in hasher state.
-   */
-  1402 : { message: "HasherEmptyState" },
-  /**
-   * The point is neither the canonical identity encoding nor a canonical
-   * on-curve point.
-   */
-  1403 : { message: "InvalidPoint" }
-}
-
-/**
- * Event emitted when the contract is paused.
- */
-export interface PausedEvent {
-  name: "Paused";
-  data: {
-
-  };
-}
-
-/**
- * Event emitted when the contract is unpaused.
- */
-export interface UnpausedEvent {
-  name: "Unpaused";
-  data: {
-
-  };
-}
-
-/**
- * Error Enum: PausableError
- */
-export const PausableError = {
-  /**
-   * The operation failed because the contract is paused.
-   */
-  1000 : { message: "EnforcedPause" },
-  /**
-   * The operation failed because the contract is not paused.
-   */
-  1001 : { message: "ExpectedPause" }
-}
-
-/**
- * Storage key for the pausable state
- */
- export type PausableStorageKey =
-  /**
-   * Indicates whether the contract is in paused state.
-   */
-  { tag: "Paused"; values: void };
 
 /**
  * Error Enum: RoleTransferError
@@ -532,120 +440,6 @@ export const RoleTransferError = {
   2202 : { message: "InvalidPendingAccount" },
   2203 : { message: "TransferExpired" }
 }
-
-/**
- * Stores the pending role holder and the explicit deadline for acceptance.
- */
-export interface PendingTransfer {
-  address: string;
-  live_until_ledger: number;
-}
-
-/**
- * Event emitted when a role is granted.
- */
-export interface RoleGrantedEvent {
-  name: "RoleGranted";
-  data: {
-    role: string;
-    account: string;
-    caller?: string;
-  };
-}
-
-/**
- * Event emitted when a role is revoked.
- */
-export interface RoleRevokedEvent {
-  name: "RoleRevoked";
-  data: {
-    role: string;
-    account: string;
-    caller?: string;
-  };
-}
-
-/**
- * Event emitted when the admin role is renounced.
- */
-export interface AdminRenouncedEvent {
-  name: "AdminRenounced";
-  data: {
-    admin: string;
-  };
-}
-
-/**
- * Event emitted when a role admin is changed.
- */
-export interface RoleAdminChangedEvent {
-  name: "RoleAdminChanged";
-  data: {
-    role: string;
-    previous_admin_role?: string;
-    new_admin_role?: string;
-  };
-}
-
-/**
- * Error Enum: AccessControlError
- */
-export const AccessControlError = {
-  2000 : { message: "Unauthorized" },
-  2001 : { message: "AdminNotSet" },
-  2002 : { message: "IndexOutOfBounds" },
-  2003 : { message: "AdminRoleNotFound" },
-  2004 : { message: "RoleCountIsNotZero" },
-  2005 : { message: "RoleNotFound" },
-  2006 : { message: "AdminAlreadySet" },
-  2007 : { message: "RoleNotHeld" },
-  2008 : { message: "RoleIsEmpty" },
-  2009 : { message: "TransferInProgress" },
-  2010 : { message: "MaxRolesExceeded" }
-}
-
-/**
- * Event emitted when an admin transfer is completed.
- */
-export interface AdminTransferCompletedEvent {
-  name: "AdminTransferCompleted";
-  data: {
-    new_admin: string;
-    previous_admin?: string;
-  };
-}
-
-/**
- * Event emitted when an admin transfer is initiated.
- */
-export interface AdminTransferInitiatedEvent {
-  name: "AdminTransferInitiated";
-  data: {
-    current_admin: string;
-    new_admin?: string;
-    live_until_ledger?: number;
-  };
-}
-
-/**
- * Storage key for enumeration of accounts per role.
- */
-export interface RoleAccountKey {
-  index: number;
-  role: string;
-}
-
-/**
- * Storage keys for the data associated with the access control
- */
- export type AccessControlStorageKey =
-  { tag: "ExistingRoles"; values: void } |
-  { tag: "RoleAccounts"; values: readonly [RoleAccountKey] } |
-  { tag: "HasRole"; values: readonly [string, string] } |
-  { tag: "RoleAccountsCount"; values: readonly [string] } |
-  { tag: "RoleAdmin"; values: readonly [string] } |
-  { tag: "Admin"; values: void } |
-  { tag: "PendingAdmin"; values: void };
 
 /**
  * Error Enum: OwnableError
@@ -689,110 +483,37 @@ export interface OwnershipTransferCompletedEvent {
 }
 
 /**
- * Storage keys for `Ownable` utility.
+ * Event emitted when the contract is paused.
  */
- export type OwnableStorageKey =
-  { tag: "Owner"; values: void } |
-  { tag: "PendingOwner"; values: void };
+export interface PausedEvent {
+  name: "Paused";
+  data: {
 
-/**
- * Context of a single authorized call performed by an address.
- *
- * Custom account contracts that implement `__check_auth` special function
- * receive a list of `Context` values corresponding to all the calls that
- * need to be authorized.
- */
- export type Context =
-  /**
-   * Contract invocation.
-   */
-  { tag: "Contract"; values: readonly [ContractContext] } |
-  /**
-   * Contract that has a constructor with no arguments is created.
-   */
-  { tag: "CreateContractHostFn"; values: readonly [CreateContractHostFnContext] } |
-  /**
-   * Contract that has a constructor with 1 or more arguments is created.
-   */
-  { tag: "CreateContractWithCtorHostFn"; values: readonly [CreateContractWithConstructorHostFnContext] };
-
-/**
- * Authorization context of a single contract call.
- *
- * This struct corresponds to a `require_auth_for_args` call for an address
- * from `contract` function with `fn_name` name and `args` arguments.
- */
-export interface ContractContext {
-  args: Array<any>;
-  contract: string;
-  fn_name: string;
+  };
 }
 
 /**
- * Contract executable used for creating a new contract and used in
- * `CreateContractHostFnContext`.
+ * Event emitted when the contract is unpaused.
  */
- export type ContractExecutable =
-  { tag: "Wasm"; values: readonly [Uint8Array] };
+export interface UnpausedEvent {
+  name: "Unpaused";
+  data: {
 
-/**
- * Value of contract node in InvokerContractAuthEntry tree.
- */
-export interface SubContractInvocation {
-  context: ContractContext;
-  sub_invocations: Array<InvokerContractAuthEntry>;
+  };
 }
 
 /**
- * A node in the tree of authorizations performed on behalf of the current
- * contract as invoker of the contracts deeper in the call stack.
- *
- * This is used as an argument of `authorize_as_current_contract` host function.
- *
- * This tree corresponds `require_auth[_for_args]` calls on behalf of the
- * current contract.
+ * Error Enum: PausableError
  */
- export type InvokerContractAuthEntry =
+export const PausableError = {
   /**
-   * Invoke a contract.
+   * The operation failed because the contract is paused.
    */
-  { tag: "Contract"; values: readonly [SubContractInvocation] } |
+  1000 : { message: "EnforcedPause" },
   /**
-   * Create a contract passing 0 arguments to constructor.
+   * The operation failed because the contract is not paused.
    */
-  { tag: "CreateContractHostFn"; values: readonly [CreateContractHostFnContext] } |
-  /**
-   * Create a contract passing 0 or more arguments to constructor.
-   */
-  { tag: "CreateContractWithCtorHostFn"; values: readonly [CreateContractWithConstructorHostFnContext] };
-
-/**
- * Authorization context for `create_contract` host function that creates a
- * new contract on behalf of authorizer address.
- */
-export interface CreateContractHostFnContext {
-  executable: ContractExecutable;
-  salt: Uint8Array;
+  1001 : { message: "ExpectedPause" }
 }
-
-/**
- * Authorization context for `create_contract` host function that creates a
- * new contract on behalf of authorizer address.
- * This is the same as `CreateContractHostFnContext`, but also has
- * contract constructor arguments.
- */
-export interface CreateContractWithConstructorHostFnContext {
-  constructor_args: Array<any>;
-  executable: ContractExecutable;
-  salt: Uint8Array;
-}
-
-/**
- * Union: Executable
- */
- export type Executable =
-  { tag: "Wasm"; values: readonly [Uint8Array] } |
-  { tag: "StellarAsset"; values: void } |
-  { tag: "Account"; values: void };
-    export type ContractEvent = BidPlacedEvent | BidRefundedEvent | AuctionCreatedEvent | AuctionSettledEvent | DurationUpdatedEvent | TreasuryUpdatedEvent | AuctionCancelledEvent | TimeBufferUpdatedEvent | AuctionInitializedEvent | PaymentTokenUpdatedEvent | ReservePriceUpdatedEvent | MinBidIncrementUpdatedEvent | SetRootEvent | SetClaimedEvent | PausedEvent | UnpausedEvent | RoleGrantedEvent | RoleRevokedEvent | AdminRenouncedEvent | RoleAdminChangedEvent | AdminTransferCompletedEvent | AdminTransferInitiatedEvent | OwnershipTransferEvent | OwnershipRenouncedEvent | OwnershipTransferCompletedEvent;
+    export type ContractEvent = LaunchedEvent | BidPlacedEvent | BidRefundedEvent | AuctionCreatedEvent | AuctionSettledEvent | RefundDeferredEvent | DurationUpdatedEvent | RefundWithdrawnEvent | AuctionCancelledEvent | TimeBufferUpdatedEvent | AuctionInitializedEvent | PaymentTokenUpdatedEvent | ReservePriceUpdatedEvent | MinBidIncrementUpdatedEvent | UpgradedEvent | VersionSyncedEvent | OwnershipTransferEvent | OwnershipRenouncedEvent | OwnershipTransferCompletedEvent | PausedEvent | UnpausedEvent;
     

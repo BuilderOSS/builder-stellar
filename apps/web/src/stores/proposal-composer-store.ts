@@ -85,6 +85,45 @@ export const createEmptyDraft = (): ProposalDraft => ({
 
 const emptyDraft = createEmptyDraft();
 
+/**
+ * Drop queued actions (and an in-progress edit) whose type is no longer supported, e.g. a draft saved
+ * before an action type was removed. Returns the cleaned drafts plus how many actions were removed.
+ */
+export function sanitizeDrafts(
+  draftsByWallet: Record<string, Record<string, ProposalDraft>>,
+  isKnownType: (type: string) => boolean
+): { draftsByWallet: Record<string, Record<string, ProposalDraft>>; removed: number } {
+  let removed = 0;
+  const result: Record<string, Record<string, ProposalDraft>> = {};
+  for (const [wallet, drafts] of Object.entries(draftsByWallet ?? {})) {
+    result[wallet] = {};
+    for (const [daoId, draft] of Object.entries(drafts ?? {})) {
+      const queued = Array.isArray(draft.queuedActions) ? draft.queuedActions : [];
+      const kept = queued.filter((action) => action && isKnownType(action.type));
+      let dropped = queued.length - kept.length;
+      let editingState = draft.editingState ?? null;
+      if (editingState && !isKnownType(editingState.actionType)) {
+        editingState = null;
+        dropped += 1;
+      } else if (editingState?.mode === 'edit' && editingState.index !== undefined && dropped > 0) {
+        // Indices shifted; abandon the in-progress edit rather than editing the wrong action.
+        editingState = null;
+      }
+      removed += dropped;
+      result[wallet][daoId] =
+        dropped > 0
+          ? {
+              ...draft,
+              queuedActions: kept,
+              editingState,
+              formMessage: `${dropped} unsupported action${dropped === 1 ? ' was' : 's were'} removed from this draft`
+            }
+          : draft;
+    }
+  }
+  return { draftsByWallet: result, removed };
+}
+
 const memoryStorage = {
   getItem: (_name: string) => null,
   setItem: (_name: string, _value: string) => undefined,
@@ -300,6 +339,13 @@ export const useProposalComposerStore = create<ProposalComposerStore>()(
     {
       name: 'dao.proposal-drafts.v3',
       storage,
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        void import('@/lib/proposal-actions/registry').then(({ isRegisteredActionType }) => {
+          const { draftsByWallet, removed } = sanitizeDrafts(state.draftsByWallet, isRegisteredActionType);
+          if (removed > 0) useProposalComposerStore.setState({ draftsByWallet });
+        });
+      },
       partialize: (state) => ({
         draftsByWallet: Object.fromEntries(
           Object.entries(state.draftsByWallet).map(([address, drafts]) => [

@@ -6,6 +6,7 @@ skills:
   - vercel-composition-patterns
   - web-design-guidelines
 tools: Read, Edit, Write, Bash, Grep, Glob
+model: inherit
 ---
 
 Own pages, components, local UI state, and UI integration in `apps/web/src`. Build from

@@ -1,4 +1,21 @@
+#![allow(clippy::too_many_arguments)] // emit helpers mirror the event fields 1:1
+
 use soroban_sdk::{contractevent, Address, Env, String, Vec};
+
+/// Emitted once when the Manager launches the metadata module (Setup -> Live).
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Launched {
+    #[topic]
+    pub treasury: Address,
+}
+
+pub fn emit_launched(env: &Env, treasury: &Address) {
+    Launched {
+        treasury: treasury.clone(),
+    }
+    .publish(env);
+}
 
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -132,10 +149,11 @@ pub fn emit_project_uri_updated(env: &Env, old_uri: &String, new_uri: &String) {
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PropertiesReset {
-    pub num_properties: u32,
+    /// Number of properties that existed before the reset.
+    pub old_num_properties: u32,
 }
 
-pub fn emit_properties_reset(env: &Env, num_properties: u32) {
-    let event = PropertiesReset { num_properties };
+pub fn emit_properties_reset(env: &Env, old_num_properties: u32) {
+    let event = PropertiesReset { old_num_properties };
     event.publish(env);
 }

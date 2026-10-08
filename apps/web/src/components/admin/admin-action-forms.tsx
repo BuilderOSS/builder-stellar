@@ -13,6 +13,8 @@ export type AdminAuthorityDraft = { authority: string; enabled: boolean };
 export type AdminValueDraft = { value: string };
 export type AdminReservePriceDraft = { reservePrice: string };
 export type AdminPaymentTokenDraft = { paymentToken: string };
+export type CreatePrimaryListingDraft = { price: string; expiresAt: string };
+export type CancelPrimaryListingDraft = { listingId: string };
 
 function ErrorText({ message }: { message?: string }) {
   return message ? <FieldHelperText style={{ color: '#f87171' }}>{message}</FieldHelperText> : null;
@@ -128,6 +130,63 @@ export function AdminPaymentTokenForm({
         disabled={disabled}
         id="admin-payment-token"
       />
+    </Stack>
+  );
+}
+
+export function CreatePrimaryListingForm({
+  value,
+  onChange,
+  disabled,
+  validationErrors
+}: ActionFormProps<CreatePrimaryListingDraft>) {
+  const fields = validationErrors && !validationErrors.valid ? validationErrors.fields : undefined;
+  return (
+    <Stack gap="2">
+      <FieldLabel htmlFor="primary-listing-price">Price (marketplace payment asset)</FieldLabel>
+      <Input
+        id="primary-listing-price"
+        value={value.price}
+        onChange={(event) => onChange({ ...value, price: event.target.value })}
+        inputMode="decimal"
+        placeholder="100"
+        disabled={disabled}
+      />
+      <ErrorText message={fields?.price} />
+      <FieldLabel htmlFor="primary-listing-expires">Expires at</FieldLabel>
+      <Input
+        id="primary-listing-expires"
+        type="datetime-local"
+        value={value.expiresAt}
+        onChange={(event) => onChange({ ...value, expiresAt: event.target.value })}
+        disabled={disabled}
+      />
+      <ErrorText message={fields?.expiresAt} />
+      <FieldHelperText>
+        The buyer receives a newly minted token. The listing is priced in the marketplace payment asset at the time it
+        is created.
+      </FieldHelperText>
+    </Stack>
+  );
+}
+
+export function CancelPrimaryListingForm({
+  value,
+  onChange,
+  disabled,
+  validationErrors
+}: ActionFormProps<CancelPrimaryListingDraft>) {
+  return (
+    <Stack gap="2">
+      <FieldLabel htmlFor="primary-listing-id">Primary listing id</FieldLabel>
+      <Input
+        id="primary-listing-id"
+        value={value.listingId}
+        onChange={(event) => onChange({ listingId: event.target.value })}
+        inputMode="numeric"
+        disabled={disabled}
+      />
+      <ErrorText message={validationErrors && !validationErrors.valid ? validationErrors.fields?.value : undefined} />
     </Stack>
   );
 }

@@ -9,4 +9,4 @@ mod storage;
 mod test;
 
 pub use contract::*;
-pub use storage::{Listing, ListingKind, MarketplaceConfig};
+pub use storage::{Listing, MarketplaceConfig, PrimaryListing};

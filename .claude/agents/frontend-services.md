@@ -5,6 +5,7 @@ skills:
   - dapp
   - data
 tools: Read, Edit, Write, Bash, Grep, Glob
+model: inherit
 ---
 
 Own `apps/web/src/app/api/**`, server data access, Prisma read models, TypeScript

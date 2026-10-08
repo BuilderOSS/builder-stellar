@@ -76,25 +76,30 @@ function resolveStartAt(deployment) {
   return startLedger;
 }
 
-export function buildGoldskyPipelineYaml({ deployment, secretName, templateSource, scriptSource }) {
+export function buildGoldskyPipelineYaml({ deployment, secretName, templateSource, scriptSource, startAt }) {
   const template = templateSource ?? readFileSync(defaultTemplatePath, 'utf8');
   const rawScript = readFileSync(defaultRawScriptPath, 'utf8');
   const decodedScript = readFileSync(defaultDecodedScriptPath, 'utf8');
   const script = scriptSource ?? readFileSync(defaultScriptPath, 'utf8');
   const managerContract = deployment.manager;
+  const minterContract = deployment.minter;
   if (!managerContract) {
     throw new Error('Deployment artifact must define manager');
   }
-  const startAt = resolveStartAt(deployment);
+  if (!minterContract) {
+    throw new Error('Deployment artifact must define minter');
+  }
+  const resolvedStartAt = startAt ?? resolveStartAt(deployment);
 
   return renderTemplate(template, {
     PIPELINE_NAME: 'builder-stellar-events',
     RESOURCE_SIZE: 's',
     DESCRIPTION: `Index Manager ${managerContract} on ${deployment.network} with Goldsky Turbo`,
     DEPLOYMENT_ID: `manager:${managerContract}`,
-    START_AT: startAt,
+    START_AT: resolvedStartAt,
     DATASET_NAME: `stellar_${deployment.network}.events`,
     MANAGER_CONTRACT_ID: managerContract,
+    MINTER_CONTRACT_ID: minterContract,
     RAW_EVENTS_SCRIPT: indentBlock(rawScript, 6),
     DECODED_EVENTS_SCRIPT: indentBlock(decodedScript, 6),
     ACTIVITY_SCRIPT: indentBlock(script, 6),
@@ -103,10 +108,15 @@ export function buildGoldskyPipelineYaml({ deployment, secretName, templateSourc
 }
 
 export function writeGoldskyPipeline({ env = process.env, outputPath = defaultOutputPath } = {}) {
-  const selection = resolveDeploymentSelection(env);
+  const mergedEnv = loadPackageEnv(env);
+  const selection = resolveDeploymentSelection(mergedEnv);
   const deployment = loadDeploymentArtifact(selection);
-  const secretName = resolvePostgresSecretName(env);
-  const yaml = buildGoldskyPipelineYaml({ deployment, secretName });
+  const secretName = resolvePostgresSecretName(mergedEnv);
+  const startAt = mergedEnv.GOLDSKY_START_AT ? Number(mergedEnv.GOLDSKY_START_AT) : undefined;
+  if (startAt !== undefined && !Number.isFinite(startAt)) {
+    throw new Error('GOLDSKY_START_AT must be a finite ledger number');
+  }
+  const yaml = buildGoldskyPipelineYaml({ deployment, secretName, startAt });
 
   mkdirSync(dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, `${yaml.trimEnd()}\n`);

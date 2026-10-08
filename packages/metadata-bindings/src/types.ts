@@ -1,20 +1,47 @@
-import {Address, xdr} from '@stellar/stellar-sdk';
+import {Address} from '@stellar/stellar-sdk';
 
     /**
  * Error Enum: Error
  */
 export const Error = {
-  1 : { message: "AlreadyInitialized" },
-  2 : { message: "OnlyManager" },
   3 : { message: "NotInitialized" },
+  /**
+   * `launch` treasury differs from the treasury wired at construction
+   */
+  4 : { message: "TreasuryMismatch" },
   10 : { message: "OnePropertyAndItemRequired" },
   11 : { message: "PropertyHasNoItems" },
   12 : { message: "TooManyProperties" },
   13 : { message: "InvalidPropertySelected" },
+  /**
+   * `regenerate` called while no properties exist
+   */
+  14 : { message: "NoProperties" },
+  /**
+   * More than `MAX_ITEMS_PER_CALL` items in one `add_properties` call
+   */
+  15 : { message: "TooManyItems" },
+  /**
+   * A paginated/bump `limit` above the allowed cap
+   */
+  16 : { message: "LimitTooHigh" },
   20 : { message: "OnlyToken" },
   21 : { message: "TokenNotMinted" },
-  30 : { message: "Unauthorized" },
-  40 : { message: "InvalidTokenId" }
+  /**
+   * `regenerate` called for a token that already has attributes
+   */
+  22 : { message: "AlreadySeeded" },
+  30 : { message: "Unauthorized" }
+}
+
+/**
+ * Emitted once when the Manager launches the metadata module (Setup -> Live).
+ */
+export interface LaunchedEvent {
+  name: "Launched";
+  data: {
+    treasury: string;
+  };
 }
 
 /**
@@ -46,7 +73,10 @@ export interface SeedGeneratedEvent {
 export interface PropertiesResetEvent {
   name: "PropertiesReset";
   data: {
-    num_properties?: number;
+    /**
+     * Number of properties that existed before the reset.
+     */
+    old_num_properties?: number;
   };
 }
 
@@ -119,20 +149,6 @@ export interface Item {
 }
 
 /**
- * Union: DataKey
- */
- export type DataKey =
-  { tag: "Initialized"; values: void } |
-  { tag: "Settings"; values: void } |
-  { tag: "Properties"; values: void } |
-  { tag: "IpfsData"; values: void } |
-  { tag: "Attributes"; values: readonly [number] } |
-  { tag: "Manager"; values: void } |
-  { tag: "Owner"; values: void } |
-  { tag: "CurrentHash"; values: void } |
-  { tag: "CurrentVersion"; values: void };
-
-/**
  * Struct: Property
  */
 export interface Property {
@@ -169,275 +185,76 @@ export interface ItemParam {
 }
 
 /**
- * Error Enum: RoleTransferError
+ * Errors shared by all module contracts. Codes live in the 9000 range so
+ * they never collide with module (11xx-13xx, 3, 30) or manager (10xx) codes.
  */
-export const RoleTransferError = {
-  2200 : { message: "NoPendingTransfer" },
-  2201 : { message: "InvalidLiveUntilLedger" },
-  2202 : { message: "InvalidPendingAccount" },
-  2203 : { message: "TransferExpired" }
-}
-
-/**
- * Stores the pending role holder and the explicit deadline for acceptance.
- */
-export interface PendingTransfer {
-  address: string;
-  live_until_ledger: number;
-}
-
-/**
- * Event emitted when a role is granted.
- */
-export interface RoleGrantedEvent {
-  name: "RoleGranted";
-  data: {
-    role: string;
-    account: string;
-    caller?: string;
-  };
-}
-
-/**
- * Event emitted when a role is revoked.
- */
-export interface RoleRevokedEvent {
-  name: "RoleRevoked";
-  data: {
-    role: string;
-    account: string;
-    caller?: string;
-  };
-}
-
-/**
- * Event emitted when the admin role is renounced.
- */
-export interface AdminRenouncedEvent {
-  name: "AdminRenounced";
-  data: {
-    admin: string;
-  };
-}
-
-/**
- * Event emitted when a role admin is changed.
- */
-export interface RoleAdminChangedEvent {
-  name: "RoleAdminChanged";
-  data: {
-    role: string;
-    previous_admin_role?: string;
-    new_admin_role?: string;
-  };
-}
-
-/**
- * Error Enum: AccessControlError
- */
-export const AccessControlError = {
-  2000 : { message: "Unauthorized" },
-  2001 : { message: "AdminNotSet" },
-  2002 : { message: "IndexOutOfBounds" },
-  2003 : { message: "AdminRoleNotFound" },
-  2004 : { message: "RoleCountIsNotZero" },
-  2005 : { message: "RoleNotFound" },
-  2006 : { message: "AdminAlreadySet" },
-  2007 : { message: "RoleNotHeld" },
-  2008 : { message: "RoleIsEmpty" },
-  2009 : { message: "TransferInProgress" },
-  2010 : { message: "MaxRolesExceeded" }
-}
-
-/**
- * Event emitted when an admin transfer is completed.
- */
-export interface AdminTransferCompletedEvent {
-  name: "AdminTransferCompleted";
-  data: {
-    new_admin: string;
-    previous_admin?: string;
-  };
-}
-
-/**
- * Event emitted when an admin transfer is initiated.
- */
-export interface AdminTransferInitiatedEvent {
-  name: "AdminTransferInitiated";
-  data: {
-    current_admin: string;
-    new_admin?: string;
-    live_until_ledger?: number;
-  };
-}
-
-/**
- * Storage key for enumeration of accounts per role.
- */
-export interface RoleAccountKey {
-  index: number;
-  role: string;
-}
-
-/**
- * Storage keys for the data associated with the access control
- */
- export type AccessControlStorageKey =
-  { tag: "ExistingRoles"; values: void } |
-  { tag: "RoleAccounts"; values: readonly [RoleAccountKey] } |
-  { tag: "HasRole"; values: readonly [string, string] } |
-  { tag: "RoleAccountsCount"; values: readonly [string] } |
-  { tag: "RoleAdmin"; values: readonly [string] } |
-  { tag: "Admin"; values: void } |
-  { tag: "PendingAdmin"; values: void };
-
-/**
- * Error Enum: OwnableError
- */
-export const OwnableError = {
-  2100 : { message: "OwnerNotSet" },
-  2101 : { message: "TransferInProgress" },
-  2102 : { message: "OwnerAlreadySet" }
-}
-
-/**
- * Event emitted when an ownership transfer is initiated.
- */
-export interface OwnershipTransferEvent {
-  name: "OwnershipTransfer";
-  data: {
-    old_owner?: string;
-    new_owner?: string;
-    live_until_ledger?: number;
-  };
-}
-
-/**
- * Event emitted when ownership is renounced.
- */
-export interface OwnershipRenouncedEvent {
-  name: "OwnershipRenounced";
-  data: {
-    old_owner?: string;
-  };
-}
-
-/**
- * Event emitted when an ownership transfer is completed.
- */
-export interface OwnershipTransferCompletedEvent {
-  name: "OwnershipTransferCompleted";
-  data: {
-    new_owner?: string;
-  };
-}
-
-/**
- * Storage keys for `Ownable` utility.
- */
- export type OwnableStorageKey =
-  { tag: "Owner"; values: void } |
-  { tag: "PendingOwner"; values: void };
-
-/**
- * Context of a single authorized call performed by an address.
- *
- * Custom account contracts that implement `__check_auth` special function
- * receive a list of `Context` values corresponding to all the calls that
- * need to be authorized.
- */
- export type Context =
+export const CommonError = {
   /**
-   * Contract invocation.
+   * Operation requires the module to be live (launched).
    */
-  { tag: "Contract"; values: readonly [ContractContext] } |
+  9001 : { message: "NotLive" },
   /**
-   * Contract that has a constructor with no arguments is created.
+   * Operation is only valid during setup; the module is already live.
    */
-  { tag: "CreateContractHostFn"; values: readonly [CreateContractHostFnContext] } |
+  9002 : { message: "AlreadyLive" },
   /**
-   * Contract that has a constructor with 1 or more arguments is created.
+   * Manager address missing from storage.
    */
-  { tag: "CreateContractWithCtorHostFn"; values: readonly [CreateContractWithConstructorHostFnContext] };
-
-/**
- * Authorization context of a single contract call.
- *
- * This struct corresponds to a `require_auth_for_args` call for an address
- * from `contract` function with `fn_name` name and `args` arguments.
- */
-export interface ContractContext {
-  args: Array<any>;
-  contract: string;
-  fn_name: string;
+  9003 : { message: "ManagerNotSet" },
+  /**
+   * `CurrentHash` missing from storage.
+   */
+  9004 : { message: "CurrentHashNotSet" },
+  /**
+   * `from_hash` does not equal the stored `CurrentHash`.
+   */
+  9005 : { message: "HashMismatch" },
+  /**
+   * Manager did not approve this upgrade path.
+   */
+  9006 : { message: "UpgradeNotApproved" },
+  /**
+   * Manager has no registry entry for the requested hash.
+   */
+  9007 : { message: "ImplementationNotFound" },
+  /**
+   * Owner missing from storage.
+   */
+  9008 : { message: "OwnerNotSet" },
+  /**
+   * `CurrentVersion` missing from storage.
+   */
+  9009 : { message: "VersionNotSet" },
+  /**
+   * Treasury address missing from storage.
+   */
+  9010 : { message: "TreasuryNotSet" },
+  /**
+   * Governor address missing from storage.
+   */
+  9011 : { message: "GovernorNotSet" }
 }
 
 /**
- * Contract executable used for creating a new contract and used in
- * `CreateContractHostFnContext`.
+ * Emitted by `apply`. The emitting contract address is the event's contract id.
  */
- export type ContractExecutable =
-  { tag: "Wasm"; values: readonly [Uint8Array] };
-
-/**
- * Value of contract node in InvokerContractAuthEntry tree.
- */
-export interface SubContractInvocation {
-  context: ContractContext;
-  sub_invocations: Array<InvokerContractAuthEntry>;
+export interface UpgradedEvent {
+  name: "Upgraded";
+  data: {
+    from_hash: Uint8Array;
+    to_hash: Uint8Array;
+    version?: string;
+  };
 }
 
 /**
- * A node in the tree of authorizations performed on behalf of the current
- * contract as invoker of the contracts deeper in the call stack.
- *
- * This is used as an argument of `authorize_as_current_contract` host function.
- *
- * This tree corresponds `require_auth[_for_args]` calls on behalf of the
- * current contract.
+ * Emitted by `sync_version`.
  */
- export type InvokerContractAuthEntry =
-  /**
-   * Invoke a contract.
-   */
-  { tag: "Contract"; values: readonly [SubContractInvocation] } |
-  /**
-   * Create a contract passing 0 arguments to constructor.
-   */
-  { tag: "CreateContractHostFn"; values: readonly [CreateContractHostFnContext] } |
-  /**
-   * Create a contract passing 0 or more arguments to constructor.
-   */
-  { tag: "CreateContractWithCtorHostFn"; values: readonly [CreateContractWithConstructorHostFnContext] };
-
-/**
- * Authorization context for `create_contract` host function that creates a
- * new contract on behalf of authorizer address.
- */
-export interface CreateContractHostFnContext {
-  executable: ContractExecutable;
-  salt: Uint8Array;
+export interface VersionSyncedEvent {
+  name: "VersionSynced";
+  data: {
+    version?: string;
+  };
 }
-
-/**
- * Authorization context for `create_contract` host function that creates a
- * new contract on behalf of authorizer address.
- * This is the same as `CreateContractHostFnContext`, but also has
- * contract constructor arguments.
- */
-export interface CreateContractWithConstructorHostFnContext {
-  constructor_args: Array<any>;
-  executable: ContractExecutable;
-  salt: Uint8Array;
-}
-
-/**
- * Union: Executable
- */
- export type Executable =
-  { tag: "Wasm"; values: readonly [Uint8Array] } |
-  { tag: "StellarAsset"; values: void } |
-  { tag: "Account"; values: void };
-    export type ContractEvent = PropertyAddedEvent | SeedGeneratedEvent | PropertiesResetEvent | ProjectURIUpdatedEvent | DescriptionUpdatedEvent | MetadataInitializedEvent | RendererBaseUpdatedEvent | ContractImageUpdatedEvent | RoleGrantedEvent | RoleRevokedEvent | AdminRenouncedEvent | RoleAdminChangedEvent | AdminTransferCompletedEvent | AdminTransferInitiatedEvent | OwnershipTransferEvent | OwnershipRenouncedEvent | OwnershipTransferCompletedEvent;
+    export type ContractEvent = LaunchedEvent | PropertyAddedEvent | SeedGeneratedEvent | PropertiesResetEvent | ProjectURIUpdatedEvent | DescriptionUpdatedEvent | MetadataInitializedEvent | RendererBaseUpdatedEvent | ContractImageUpdatedEvent | UpgradedEvent | VersionSyncedEvent;
     

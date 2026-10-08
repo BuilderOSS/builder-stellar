@@ -15,12 +15,12 @@ export function ReviewStep({ connectedAddress }: ReviewStepProps) {
 
   const governancePresets: Record<
     string,
-    { votingDelay: number; votingPeriod: number; quorumBps: number; proposalThresholdBps: number }
+    { votingDelay: number; votingPeriod: number; quorumBps: number; proposalThreshold: number }
   > = {
-    testing: { votingDelay: 60, votingPeriod: 300, quorumBps: 1000, proposalThresholdBps: 100 },
-    fast: { votingDelay: 3600, votingPeriod: 86400, quorumBps: 500, proposalThresholdBps: 100 },
-    balanced: { votingDelay: 86400, votingPeriod: 259200, quorumBps: 1000, proposalThresholdBps: 100 },
-    deliberate: { votingDelay: 172800, votingPeriod: 604800, quorumBps: 1500, proposalThresholdBps: 200 }
+    testing: { votingDelay: 300, votingPeriod: 600, quorumBps: 100, proposalThreshold: 1 },
+    fast: { votingDelay: 300, votingPeriod: 3600, quorumBps: 500, proposalThreshold: 1 },
+    balanced: { votingDelay: 86400, votingPeriod: 259200, quorumBps: 1000, proposalThreshold: 1 },
+    deliberate: { votingDelay: 172800, votingPeriod: 604800, quorumBps: 2000, proposalThreshold: 2 }
   };
 
   const getPresetName = () => {
@@ -29,7 +29,7 @@ export function ReviewStep({ connectedAddress }: ReviewStepProps) {
         config.votingDelay === governance.votingDelay &&
         config.votingPeriod === governance.votingPeriod &&
         config.quorumBps === governance.quorumBps &&
-        config.proposalThresholdBps === governance.proposalThresholdBps
+        config.proposalThreshold === governance.proposalThreshold
       ) {
         return name;
       }
@@ -106,7 +106,9 @@ export function ReviewStep({ connectedAddress }: ReviewStepProps) {
           </div>
           <div>
             <p className="text-sm text-text-secondary">Proposal Threshold</p>
-            <p className="font-medium text-text-primary">{(governance.proposalThresholdBps / 100).toFixed(1)}%</p>
+            <p className="font-medium text-text-primary">
+              {governance.proposalThreshold} vote{governance.proposalThreshold === 1 ? '' : 's'}
+            </p>
           </div>
           <div className="col-span-2">
             <p className="text-sm text-text-secondary">Preset</p>

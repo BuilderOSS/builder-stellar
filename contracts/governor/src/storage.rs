@@ -67,10 +67,16 @@ pub const PROPOSAL_EXPIRATION_PERIOD: u64 = 1_209_600; // 14 days in seconds (14
 
 /// Minimum voting delay (5 minutes in seconds).
 ///
-/// Enforces a minimum delay between proposal creation and vote start.
-/// Allows time for delegation changes before snapshot. The default minimum is
+/// Minimum delay between proposal creation and vote start. This is a NOTICE
+/// period only: voting power and total supply are snapshotted at proposal
+/// creation (the ledger before `propose`), so delegation or transfers during
+/// the delay cannot change that proposal's weights. The default minimum is
 /// five minutes.
 pub const MIN_VOTING_DELAY: u32 = 300;
+
+/// Maximum actions per proposal, so a passed proposal always fits the
+/// execution budget of `treasury.execute`.
+pub const MAX_PROPOSAL_ACTIONS: u32 = 20;
 
 /// Minimum voting period (5 minutes in seconds).
 ///
@@ -90,6 +96,16 @@ pub const MIN_VOTING_PERIOD: u32 = 300;
 /// This is the default deployment minimum; callers can select a longer delay.
 pub const MIN_QUEUE_DELAY: u32 = 300; // 5 minutes in seconds
 
+/// Maximum voting delay (30 days in seconds). Bounds governance timing so a
+/// passed proposal cannot freeze governance with an absurd value.
+pub const MAX_VOTING_DELAY: u32 = 2_592_000;
+
+/// Maximum voting period (30 days in seconds).
+pub const MAX_VOTING_PERIOD: u32 = 2_592_000;
+
+/// Maximum queue delay (30 days in seconds).
+pub const MAX_QUEUE_DELAY: u32 = 2_592_000;
+
 /// Storage keys for governor-specific instance data.
 ///
 /// Most governance data (name, version, voting parameters, vote tallies) is stored
@@ -97,16 +113,12 @@ pub const MIN_QUEUE_DELAY: u32 = 300; // 5 minutes in seconds
 /// contract-specific keys for custom functionality.
 #[contracttype]
 pub enum GovernorKey {
-    CurrentHash,
-    CurrentVersion,
     /// Address of the Treasury contract that executes approved proposals.
     Treasury,
     /// Delay (in seconds) between queueing and execution eligibility.
     QueueDelay,
     /// Proposal core data, indexed by proposal ID hash.
     Proposal(BytesN<32>),
-    /// Tracks whether an address has authority to create proposals.
-    GovernorAuthority(Address),
     Manager,
 }
 

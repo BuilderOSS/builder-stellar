@@ -87,14 +87,17 @@ configs/               Network and DAO configuration
 
 ## Documentation
 
+- [Documentation Index](docs/README.md)
 - [Architecture](docs/ARCHITECTURE.md)
-- [Deployment Guide](docs/DEPLOYMENT.md)
+- [Multi-Tenant Architecture](docs/MULTITENANT_ARCHITECTURE.md)
 - [Manager Deployment](docs/MANAGER_DEPLOYMENT.md)
 - [Manager Redesign](docs/MANAGER_REDESIGN.md)
 - [Marketplace Plan](docs/MARKETPLACE_PLAN.md)
 - [Goldsky Setup](docs/GOLDSKY_SETUP.md)
+- [Database Schema](docs/DATABASE_SCHEMA.md)
+- [DAO Deployment](docs/DAO_DEPLOYMENT.md)
+- [Monitoring](docs/MONITORING.md)
 - [Agent Workflow](docs/AGENT_WORKFLOW.md)
-- [Mercury notes](docs/MERCURY.md) (historical)
 
 ## Common Commands
 

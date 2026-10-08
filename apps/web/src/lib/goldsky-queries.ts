@@ -193,14 +193,6 @@ export function useGoldskyMintAuthorities(daoTokenAddress: string) {
   );
 }
 
-export function useGoldskyGovernorAuthorities(daoTokenAddress: string) {
-  return useSWR<GoldskyAuthorityResponse>(
-    `/api/dao/${encodeURIComponent(daoTokenAddress)}/authorities/governor`,
-    fetchJson,
-    { keepPreviousData: true }
-  );
-}
-
 export function useGoldskyHealth(_daoId: string) {
   return useSWR<GoldskyHealthResponse>('/api/goldsky/health', fetchJson, { keepPreviousData: true });
 }
@@ -209,4 +201,23 @@ export function useDashboardData(address: string) {
   return useSWR<DashboardResponse>(address ? `/api/dashboard?wallet=${encodeURIComponent(address)}` : null, fetchJson, {
     keepPreviousData: false
   });
+}
+
+export function useGoldskyMintingHistory(daoId: string, kind?: string, limit = 50) {
+  return useSWR<GoldskyActivityResponse>(
+    `/api/dao/${encodeURIComponent(daoId)}/activity-feed?contractRole=minter${kind ? `&kind=minter.${kind}` : ''}&limit=${limit}`,
+    fetchJson,
+    { keepPreviousData: true }
+  );
+}
+
+export function useGoldskyMinterClaims(daoId: string, recipient?: string, limit = 100) {
+  // Merkle and allowlist claims emit distinct events (minter.merkle_claim /
+  // minter.allowlist_claim); callers filter the Minter feed by `kind`.
+  const actor = recipient ? `&actor=${encodeURIComponent(recipient)}` : '';
+  return useSWR<GoldskyActivityResponse>(
+    `/api/dao/${encodeURIComponent(daoId)}/activity-feed?contractRole=minter${actor}&limit=${limit}`,
+    fetchJson,
+    { keepPreviousData: true }
+  );
 }

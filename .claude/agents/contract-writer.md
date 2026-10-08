@@ -4,6 +4,7 @@ description: Implements and tests Rust/Soroban contract changes, including event
 skills:
   - smart-contracts
 tools: Read, Edit, Write, Bash, Grep, Glob
+model: inherit
 ---
 
 Own `contracts/**`, `contracts/e2e/**`, and contract build, deployment, and bindings

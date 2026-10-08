@@ -6,7 +6,7 @@
 //! only defines custom events that add information not included in the standard events,
 //! such as tracking the minter address and batch minting operations.
 
-use soroban_sdk::{contractevent, Address};
+use soroban_sdk::{contractevent, Address, Vec};
 
 // Standard contract events
 
@@ -55,24 +55,9 @@ pub struct MintWithMinter {
     pub token_id: u32,
 }
 
-/// Emitted when multiple tokens are minted in a single batch operation.
-///
-/// Supplements the individual Mint events (emitted per token) with a summary
-/// of the batch operation, including the total amount and final token ID.
-/// Useful for tracking bulk minting operations like initial distribution.
-#[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct BatchMint {
-    #[topic]
-    pub minter: Address,
-    #[topic]
-    pub to: Address,
-    pub amount: u32,
-    pub last_token_id: u32,
-}
-
 // Note: Transfer, Approve, and standard Mint events are emitted automatically by OpenZeppelin's Base trait
 // We only define custom events here that add additional information or functionality
+// Batch minting functionality has been moved to the Minter contract
 
 // Event helper functions
 
@@ -124,12 +109,19 @@ pub fn emit_token_mint(e: &Env, minter: &Address, to: &Address, token_id: u32) {
     .publish(e);
 }
 
-pub fn emit_batch_mint(e: &Env, minter: &Address, to: &Address, amount: u32, last_token_id: u32) {
-    BatchMint {
-        minter: minter.clone(),
-        to: to.clone(),
-        amount,
-        last_token_id,
+/// Emitted once when the Manager launches the token (Setup -> Live).
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Launched {
+    #[topic]
+    pub treasury: Address,
+    pub minters: Vec<Address>,
+}
+
+pub fn emit_launched(e: &Env, treasury: &Address, minters: &Vec<Address>) {
+    Launched {
+        treasury: treasury.clone(),
+        minters: minters.clone(),
     }
     .publish(e);
 }

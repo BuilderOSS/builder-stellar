@@ -204,7 +204,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         return addresses;
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Failed to create DAO');
-        tx.fail(error, 'DAO creation failed');
+        tx.fail(error, 'DAO creation failed', 'manager');
         setError(error);
         throw error;
       }
@@ -215,7 +215,10 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
   // Launch DAO - called from admin panel after checklist completion
   // This transitions the DAO from 'pending' to 'operational' state
   const launchDao = useCallback(
-    async (tokenAddress: string, launchConfig: { launch_auction: boolean; launch_marketplace: boolean }) => {
+    async (
+      tokenAddress: string,
+      launchConfig: { launch_auction: boolean; launch_marketplace: boolean; enable_minter: boolean }
+    ) => {
       try {
         const config = getDeploymentConfig();
 
@@ -231,9 +234,23 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
             })
         });
 
+        // launch_dao pins the platform minter: the caller must send the minter it saw
+        // (expected_minter) so a Manager admin cannot swap it between signing and execution.
+        // The contract ignores the field when enable_minter is false.
+        let expectedMinter: string | null = null;
+        if (launchConfig.enable_minter) {
+          const minterTx = await managerClient.get_platform_minter();
+          expectedMinter = minterTx.result ?? null;
+          if (!expectedMinter) {
+            throw new Error(
+              'The platform minter is not registered on the Manager (PlatformMinterNotSet): ask the Manager admin to call set_platform_minter, or launch without the minter.'
+            );
+          }
+        }
+
         const assembled = await managerClient.launch_dao({
           token_address: tokenAddress,
-          launch_config: launchConfig
+          launch_config: { ...launchConfig, expected_minter: expectedMinter }
         });
 
         tx.start('Launching DAO...');
@@ -249,7 +266,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         tx.success('DAO launched', hash);
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Failed to launch DAO');
-        tx.fail(error, 'DAO launch failed');
+        tx.fail(error, 'DAO launch failed', 'manager');
         throw error;
       }
     },

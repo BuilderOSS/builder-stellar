@@ -128,26 +128,29 @@ function encodeProposalCallArg(functionName: string, index: number, value: Propo
 
   if (
     functionName === 'set_mint_authority' ||
-    functionName === 'set_governor_authority' ||
     functionName === 'set_voting_delay' ||
     functionName === 'set_voting_period' ||
     functionName === 'set_proposal_threshold' ||
     functionName === 'set_quorum_bps' ||
+    functionName === 'set_queue_delay' ||
     functionName === 'set_duration' ||
     functionName === 'set_time_buffer' ||
     functionName === 'pause' ||
     functionName === 'unpause'
   ) {
     if (functionName === 'set_duration' || functionName === 'set_time_buffer') return encodeU64(value);
-    if (functionName === 'set_mint_authority' || functionName === 'set_governor_authority') {
+    if (functionName === 'set_mint_authority') {
       return index === 0 ? encodeAddress(value) : encodeGeneric(value);
     }
     if (functionName === 'pause' || functionName === 'unpause') return encodeAddress(value);
-    if (functionName === 'set_proposal_threshold') return index === 0 ? encodeAddress(value) : encodeU128(value);
+    // Governor setters take only the new value (no caller argument).
+    if (functionName === 'set_proposal_threshold') return encodeU128(value);
     return encodeU32(value);
   }
 
   if (functionName === 'set_reserve_price') return encodeI128(value);
+  if (functionName === 'create_primary_listing') return index === 0 ? encodeI128(value) : encodeU64(value);
+  if (functionName === 'cancel_primary') return encodeU64(value);
   if (functionName === 'set_payment_token') return encodeAddress(value);
 
   return encodeGeneric(value);
@@ -179,7 +182,6 @@ export function buildMintProposalCall(
 export function getProposalActionLabel(type: ProposalActionType) {
   const labels: Partial<Record<ProposalActionType, string>> = {
     'set-mint-authority': 'Set Mint Authority',
-    'set-governor-authority': 'Set Governor Authority',
     'set-voting-delay': 'Set Voting Delay',
     'set-voting-period': 'Set Voting Period',
     'set-proposal-threshold': 'Set Proposal Threshold',
@@ -189,7 +191,9 @@ export function getProposalActionLabel(type: ProposalActionType) {
     'set-auction-duration': 'Set Auction Duration',
     'set-auction-time-buffer': 'Set Auction Time Buffer',
     'set-auction-reserve-price': 'Set Auction Reserve Price',
-    'set-auction-payment-token': 'Set Auction Payment Token'
+    'set-auction-payment-token': 'Set Auction Payment Token',
+    'create-primary-listing': 'Create Primary Listing',
+    'cancel-primary-listing': 'Cancel Primary Listing'
   };
 
   if (labels[type]) return labels[type]!;
@@ -203,7 +207,7 @@ export function getProposalActionLabel(type: ProposalActionType) {
 }
 
 export function getProposalActionSummary(action: ProposalQueuedAction) {
-  if (action.type === 'set-mint-authority' || action.type === 'set-governor-authority') {
+  if (action.type === 'set-mint-authority') {
     return `${action.enabled === false ? 'Revoke' : 'Grant'} ${getProposalActionLabel(action.type)} for ${action.authority || action.recipient}`;
   }
   if (
@@ -225,6 +229,12 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
   }
   if (action.type === 'set-auction-payment-token') {
     return `${getProposalActionLabel(action.type)} to ${action.paymentToken || action.recipient}`;
+  }
+  if (action.type === 'create-primary-listing') {
+    return `${getProposalActionLabel(action.type)} at ${action.price} (expires ${action.expiresAt})`;
+  }
+  if (action.type === 'cancel-primary-listing') {
+    return `${getProposalActionLabel(action.type)} #${action.listingId}`;
   }
   if (action.type === 'batch-mint-governance-token') {
     return `${getProposalActionLabel(action.type)} to ${action.recipient} for ${action.amount} tokens`;

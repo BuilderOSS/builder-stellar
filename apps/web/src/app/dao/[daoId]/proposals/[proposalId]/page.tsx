@@ -1,6 +1,7 @@
 'use client';
 
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
+import { Client as TreasuryClient } from '@builder-stellar/treasury-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -161,7 +162,7 @@ export default function ProposalDetailPage() {
       void mutate();
       tx.success('Vote cast', hash);
     } catch (err) {
-      tx.fail(err, 'Vote failed');
+      tx.fail(err, 'Vote failed', 'governor');
     } finally {
       setBusy(false);
     }
@@ -207,20 +208,19 @@ export default function ProposalDetailPage() {
       void mutate();
       tx.success('Proposal queued', hash);
     } catch (err) {
-      tx.fail(err, 'Queue failed');
+      tx.fail(err, 'Queue failed', 'governor');
     } finally {
       setBusy(false);
     }
   }
 
+  // Execution goes through Treasury.execute (callable by anyone). Governor.execute always fails with
+  // UseTreasuryExecute (1508). If any call fails the whole transaction reverts and the proposal stays
+  // Queued, so the same action can be retried until the proposal expires.
   async function executeProposal() {
     if (!detail) return;
     if (!session.address) {
       setFormMessage('Connect a wallet first.');
-      return;
-    }
-    if (!config.governorContractId) {
-      setFormMessage('Missing governor contract id.');
       return;
     }
     if (!config.treasuryContractId || !config.tokenContractId) {
@@ -237,19 +237,24 @@ export default function ProposalDetailPage() {
     tx.start('Executing proposal...');
 
     try {
-      const governor = await getGovernor();
+      const treasury = new TreasuryClient({
+        contractId: config.treasuryContractId,
+        rpcUrl: config.rpcUrl,
+        networkPassphrase: config.passphrase,
+        publicKey: session.address,
+        signTransaction: async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
+          StellarWalletsKit.signTransaction(xdr, {
+            networkPassphrase: opts?.networkPassphrase ?? config.passphrase,
+            address: opts?.address ?? session.address
+          })
+      });
 
-      const args = encodeProposalCallArgs(detail.functions, detail.args);
-
-      const executeParams = {
+      const assembled = await treasury.execute({
         targets: detail.targets,
         functions: detail.functions,
-        args,
-        description_hash: descriptionHash(detail.description),
-        executor: session.address
-      };
-
-      const assembled = await governor.execute(executeParams);
+        args: encodeProposalCallArgs(detail.functions, detail.args),
+        description_hash: descriptionHash(detail.description)
+      });
 
       const sent = await assembled.signAndSend();
 
@@ -266,7 +271,7 @@ export default function ProposalDetailPage() {
       void mutate();
       tx.success('Proposal executed', hash);
     } catch (err) {
-      tx.fail(err, 'Execute failed');
+      tx.fail(err, 'Execute failed', 'treasury');
     } finally {
       setBusy(false);
     }

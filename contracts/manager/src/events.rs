@@ -2,7 +2,7 @@
 
 use soroban_sdk::{contractevent, Address, BytesN, Env, String};
 
-use crate::storage::DaoModules;
+use crate::storage::{DaoAddresses, DaoWasmHashes};
 
 #[contractevent]
 pub struct ManagerInitialized {
@@ -10,6 +10,28 @@ pub struct ManagerInitialized {
     pub admin: Address,
     pub version: String,
     pub deployed_at: u64,
+}
+
+#[contractevent]
+pub struct AdminProposed {
+    #[topic]
+    pub current_admin: Address,
+    #[topic]
+    pub proposed_admin: Address,
+}
+
+#[contractevent]
+pub struct AdminChanged {
+    #[topic]
+    pub old_admin: Address,
+    #[topic]
+    pub new_admin: Address,
+}
+
+#[contractevent]
+pub struct PlatformMinterSet {
+    #[topic]
+    pub minter: Address,
 }
 
 #[contractevent]
@@ -43,7 +65,16 @@ pub struct DaoCreated {
     #[topic]
     pub launch_admin: Address,
     pub created_ledger: u64,
-    pub modules: DaoModules,
+    pub modules: DaoAddresses,
+    /// WASM hashes the modules were deployed from.
+    pub wasm_hashes: DaoWasmHashes,
+}
+#[contractevent]
+pub struct AdminProposalCancelled {
+    #[topic]
+    pub current_admin: Address,
+    #[topic]
+    pub cancelled_admin: Address,
 }
 #[contractevent]
 pub struct FactoryPaused {}
@@ -54,9 +85,10 @@ pub struct DaoLaunched {
     #[topic]
     pub token_address: Address,
     pub launched_ledger: u64,
-    pub modules: DaoModules,
+    pub modules: DaoAddresses,
     pub launch_auction: bool,
     pub launch_marketplace: bool,
+    pub enable_minter: bool,
 }
 #[contractevent]
 pub struct CurrentImplementationsUpdated {
@@ -134,7 +166,8 @@ pub fn emit_dao_created(
     deployer: &Address,
     launch_admin: &Address,
     created_ledger: u64,
-    modules: &DaoModules,
+    modules: &DaoAddresses,
+    wasm_hashes: &DaoWasmHashes,
 ) {
     DaoCreated {
         token_address: token_address.clone(),
@@ -142,6 +175,7 @@ pub fn emit_dao_created(
         launch_admin: launch_admin.clone(),
         created_ledger,
         modules: modules.clone(),
+        wasm_hashes: wasm_hashes.clone(),
     }
     .publish(env);
 }
@@ -160,9 +194,10 @@ pub fn emit_dao_launched(
     env: &Env,
     token_address: &Address,
     launched_ledger: u64,
-    modules: &DaoModules,
+    modules: &DaoAddresses,
     launch_auction: bool,
     launch_marketplace: bool,
+    enable_minter: bool,
 ) {
     DaoLaunched {
         token_address: token_address.clone(),
@@ -170,6 +205,7 @@ pub fn emit_dao_launched(
         modules: modules.clone(),
         launch_auction,
         launch_marketplace,
+        enable_minter,
     }
     .publish(env);
 }
@@ -224,6 +260,41 @@ pub fn emit_manager_upgraded(
         from_version: from_version.clone(),
         to_version: to_version.clone(),
         upgraded_at,
+    }
+    .publish(env);
+}
+
+/// Emitted when the admin proposes a successor.
+pub fn emit_admin_proposed(env: &Env, current_admin: &Address, proposed_admin: &Address) {
+    AdminProposed {
+        current_admin: current_admin.clone(),
+        proposed_admin: proposed_admin.clone(),
+    }
+    .publish(env);
+}
+
+/// Emitted when the admin cancels a pending handover.
+pub fn emit_admin_proposal_cancelled(env: &Env, current_admin: &Address, cancelled: &Address) {
+    AdminProposalCancelled {
+        current_admin: current_admin.clone(),
+        cancelled_admin: cancelled.clone(),
+    }
+    .publish(env);
+}
+
+/// Emitted when a proposed admin accepts.
+pub fn emit_admin_changed(env: &Env, old_admin: &Address, new_admin: &Address) {
+    AdminChanged {
+        old_admin: old_admin.clone(),
+        new_admin: new_admin.clone(),
+    }
+    .publish(env);
+}
+
+/// Emitted when the platform minter is set.
+pub fn emit_platform_minter_set(env: &Env, minter: &Address) {
+    PlatformMinterSet {
+        minter: minter.clone(),
     }
     .publish(env);
 }

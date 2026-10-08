@@ -5,12 +5,7 @@
 
 use soroban_sdk::{contracttype, Address};
 
-/// Maximum number of tokens that can be minted in a single batch operation.
-///
-/// This limit prevents gas exhaustion and ensures batch minting operations
-/// complete within reasonable transaction limits. Set to 100 based on gas
-/// profiling for sequential minting with auto-delegation.
-pub const MAX_BATCH_MINT: u32 = 100;
+// Batch minting has been moved to the Minter contract
 
 // TTL constants for delegation storage
 // Delegations should persist long-term as they represent voting power delegation
@@ -21,18 +16,20 @@ pub const MAX_BATCH_MINT: u32 = 100;
 /// ~17,280 ledgers per day. Used for converting time-based TTLs to ledger counts.
 pub const DAY_IN_LEDGERS: u32 = 17280; // ~5 seconds per ledger
 
-/// Delegation storage TTL extension amount (1 year in ledgers).
+/// Delegation storage TTL extension amount (nominally 1 year in ledgers; the
+/// network caps entries at ~180 days, so the effective lifetime is ~180 days
+/// and renews on touch).
 ///
 /// When delegation data is accessed (e.g., during minting, transfer, or voting),
 /// its TTL is automatically extended by this amount to ensure the delegation
 /// persists long-term. Set to 1 year for balance between persistence and storage cost.
 pub const DELEGATION_TTL_EXTEND_AMOUNT: u32 = 365 * DAY_IN_LEDGERS; // 1 year
 
-/// Delegation storage TTL threshold for triggering extension (~364 days).
+/// Delegation storage TTL threshold for triggering extension (~30 days).
 ///
 /// When remaining TTL falls below this threshold, the storage entry is extended.
-/// Set to 1 day before expiration to ensure delegations are refreshed during normal use.
-pub const DELEGATION_TTL_THRESHOLD: u32 = DELEGATION_TTL_EXTEND_AMOUNT - DAY_IN_LEDGERS; // ~364 days
+/// A short threshold avoids re-paying rent on nearly every touch.
+pub const DELEGATION_TTL_THRESHOLD: u32 = 30 * DAY_IN_LEDGERS; // ~30 days
 
 /// Storage keys for token-specific instance data.
 ///
@@ -50,6 +47,12 @@ pub enum TokenKey {
     /// This contract is called during minting to generate artwork seeds.
     Metadata,
     Manager,
-    CurrentHash,
-    CurrentVersion,
+    /// Treasury wired at construction; the only address `launch` accepts.
+    Treasury,
+}
+
+/// Keeps the instance entry alive on state-changing paths (shared policy:
+/// see `common::ttl`).
+pub fn extend_instance_ttl(e: &soroban_sdk::Env) {
+    common::ttl::extend_instance(e);
 }

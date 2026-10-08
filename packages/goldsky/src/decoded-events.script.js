@@ -42,22 +42,52 @@ function invoke(data) {
   var values = rawTopics.map(native);
   var eventName = String(values[0]);
   var topicValues = values.slice(1);
+  // Topic names mirror the on-chain topic order after the event-name symbol.
+  // They are generated from contracts/*/src/events.rs plus the OpenZeppelin
+  // library events our contracts emit; test/contract-alignment.test.mjs fails
+  // if this map drifts. Minter token_id is the DAO token contract Address, not
+  // an NFT number.
   var topicNames = {
-    ProposalCreated: ['proposal_id', 'proposer'], VoteCast: ['voter', 'proposal_id'],
-    ProposalQueued: ['proposal_id'], ProposalCancelled: ['proposal_id'], ProposalCanceled: ['proposal_id'], ProposalExecuted: ['proposal_id'],
-    MintWithMinter: ['minter', 'to'], Mint: ['to'], BatchMint: ['minter', 'to'], Transfer: ['from', 'to'], Approve: ['owner', 'spender'],
-    DelegateChanged: ['delegator'], DelegateVotesChanged: ['delegate'], AuctionCreated: ['token_id'], BidPlaced: ['token_id', 'bidder'],
-    AuctionSettled: ['token_id'], BidRefunded: ['token_id', 'bidder'], AuctionCancelled: ['token_id'], Execute: ['governor', 'target'],
-    TokenInitialized: ['owner'], MintAuthorityChanged: ['authority'], GovernorInitialized: ['owner'], TreasuryChanged: ['old_treasury', 'new_treasury'],
-    TokenContractChanged: ['old_token_contract', 'new_token_contract'], GovernorAuthorityChanged: ['authority'], AuctionInitialized: ['owner'],
-    TreasuryInitialized: ['owner'], GovernorChanged: ['old_governor', 'new_governor'], DaoCreated: ['token_address', 'deployer', 'launch_admin'], DaoLaunched: ['token_address'],
-    ManagerInitialized: ['admin'], SeedGenerated: ['token_id'], MetadataInitialized: ['token'], ProposalExpired: [],
-    ProposalThresholdChanged: ['caller'], QuorumBpsChanged: ['caller'], QueueDelayChanged: ['caller'], VotingDelayChanged: ['caller'], VotingPeriodChanged: ['caller'], DurationUpdated: [], ReservePriceUpdated: [], MinBidIncrementUpdated: [],
-    TimeBufferUpdated: [], PaymentTokenUpdated: [], TreasuryUpdated: [], FactoryPaused: [], FactoryUnpaused: [], UpgradeApproved: [],
-    ImplementationRevoked: [], ImplementationRegistered: [], CurrentImplementationsUpdated: [], PropertyAdded: [],
-    PropertiesReset: [], ProjectURIUpdated: [], DescriptionUpdated: [], RendererBaseUpdated: [], ContractImageUpdated: [], ManagerUpgraded: [],
-    MarketplaceInitialized: ['token'], PrimaryListingCreated: ['token_id'], SecondaryListingCreated: ['token_id'], ListingPurchased: ['token_id', 'buyer'],
-    ListingCancelled: ['token_id'], ListingExpired: ['token_id'], PaymentAssetUpdated: [], SecondaryFeeUpdated: [], MarketplacePaused: [], MarketplaceUnpaused: [], MarketplaceUpgraded: []
+    // Manager
+    ManagerInitialized: ['admin'], ImplementationRegistered: ['wasm_hash'], UpgradeApproved: ['from_hash', 'to_hash'],
+    ImplementationRevoked: ['wasm_hash'], DaoCreated: ['token_address', 'deployer', 'launch_admin'], FactoryPaused: [], FactoryUnpaused: [],
+    DaoLaunched: ['token_address'], CurrentImplementationsUpdated: [], ManagerUpgraded: ['from_hash', 'to_hash'],
+    AdminProposed: ['current_admin', 'proposed_admin'], AdminProposalCancelled: ['current_admin', 'cancelled_admin'], AdminChanged: ['old_admin', 'new_admin'], PlatformMinterSet: ['minter'],
+    // Every module (token, governor, treasury, auction, marketplace, metadata) emits its own
+    // Launched struct with topic `treasury`; the data differs (token minters, auction started,
+    // marketplace opened). The emitting module is identified by contract_id/contract_role.
+    Launched: ['treasury'],
+    // contracts/common/src/upgrade.rs: emitted by EVERY module (token, governor, treasury, auction,
+    // marketplace, metadata); the emitting module is identified by contract_id/contract_role.
+    Upgraded: ['from_hash', 'to_hash'], VersionSynced: [],
+    // Token (custom + OpenZeppelin non-fungible/votes/pausable/ownable)
+    TokenInitialized: ['owner'], MintAuthorityChanged: ['authority'], MintWithMinter: ['minter', 'to'],
+    Mint: ['to'], Transfer: ['from', 'to'], Approve: ['approver', 'token_id'], ApproveForAll: ['owner'],
+    DelegateChanged: ['delegator'], DelegateVotesChanged: ['delegate'],
+    Paused: [], Unpaused: [], OwnershipTransfer: [], OwnershipTransferCompleted: [], OwnershipRenounced: [],
+    // Governor (custom + OpenZeppelin governor)
+    GovernorInitialized: ['owner'], ProposalCreated: ['proposal_id', 'proposer'], VoteCast: ['voter', 'proposal_id'],
+    ProposalQueued: ['proposal_id'], ProposalExecuted: ['proposal_id'], ProposalCancelled: ['proposal_id'],
+    QueueDelayChanged: ['caller'], VotingDelayChanged: ['caller'], VotingPeriodChanged: ['caller'],
+    ProposalThresholdChanged: ['caller'], QuorumBpsChanged: ['caller'],
+    // Treasury
+    TreasuryInitialized: ['owner'], Execute: ['governor', 'target', 'proposal_id'],
+    // Auction
+    AuctionInitialized: ['owner'], AuctionCreated: ['token_id'], BidPlaced: ['token_id', 'bidder'], AuctionSettled: ['token_id'],
+    BidRefunded: ['token_id', 'bidder'], AuctionCancelled: ['token_id'], DurationUpdated: [], ReservePriceUpdated: [],
+    MinBidIncrementUpdated: [], TimeBufferUpdated: [], PaymentTokenUpdated: [],
+    RefundDeferred: ['token_id', 'bidder'], RefundWithdrawn: ['bidder'],
+    // Metadata
+    MetadataInitialized: ['token'], PropertyAdded: ['property_id'], SeedGenerated: ['token_id'], PropertiesReset: [],
+    ProjectURIUpdated: [], DescriptionUpdated: [], RendererBaseUpdated: [], ContractImageUpdated: [],
+    // Minter
+    MerkleClaimEvent: ['token_id', 'recipient'], AllowlistClaimEvent: ['token_id', 'recipient'], MintBatchEvent: ['token_id'],
+    MerkleRootSetEvent: ['token_id'], AllowlistSetEvent: ['token_id'],
+    // Marketplace
+    MarketplaceInitialized: ['token'], PrimaryListingCreated: ['listing_id'], PrimaryListingPurchased: ['listing_id', 'buyer'],
+    PrimaryListingCancelled: ['listing_id'], PrimaryListingExpired: ['listing_id'], SecondaryListingCreated: ['token_id'],
+    ListingPurchased: ['token_id', 'buyer'], ListingCancelled: ['token_id'], ListingExpired: ['token_id'],
+    PaymentAssetUpdated: [], SecondaryFeeUpdated: [], MarketplacePaused: [], MarketplaceUnpaused: []
   };
   var names = topicNames[eventName] || topicNames[toCanonical(eventName)] || [];
   var topics = {};
@@ -126,15 +156,18 @@ function invoke(data) {
   });
     return result;
 
+    // Fallback only: the pipeline normally assigns contract_role from the DAO
+    // module allowlists before decoding. Names mirror the topicNames groups.
     function roleForEvent(name) {
       var canonical = toCanonical(name);
-      if (/^(Dao|Factory|Upgrade|Implementation|CurrentImplementations|Manager)/.test(canonical)) return 'manager';
-      if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue|Veto)/.test(canonical)) return 'governor';
-      if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken)/.test(canonical)) return 'auction';
-      if (/^(Execute|Treasury|GovernorChanged)/.test(canonical)) return 'treasury';
+      if (/^(Manager|Implementation|CurrentImplementations|UpgradeApproved|Dao|Factory|Admin|PlatformMinter)/.test(canonical)) return 'manager';
+      if (/^(MerkleClaim|AllowlistClaim|MintBatch|MerkleRoot|AllowlistSet)/.test(canonical)) return 'minter';
+      if (/^(Marketplace|Listing|Primary|Secondary|PaymentAsset)/.test(canonical)) return 'marketplace';
+      if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue)/.test(canonical)) return 'governor';
+      if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken|Refund)/.test(canonical)) return 'auction';
+      if (/^(Execute|TreasuryInitialized)/.test(canonical)) return 'treasury';
       if (/^(Metadata|Property|Properties|Seed|ProjectURI|Description|RendererBase|ContractImage)/.test(canonical)) return 'metadata';
-      if (/^(Transfer|Mint|BatchMint|Delegate|Approve|MintAuthority|Token|Burn)/.test(canonical)) return 'token';
-      if (/^(Marketplace|Listing|Primary|Secondary|Payment)/.test(canonical)) return 'marketplace';
+      if (/^(Transfer|Mint|Delegate|Approve|Token)/.test(canonical)) return 'token';
       return 'unknown';
     }
   } catch (e) {

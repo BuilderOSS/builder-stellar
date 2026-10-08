@@ -92,8 +92,8 @@ export function formDataToCreationParams(
         voting_delay: formData.governance.votingDelay,
         voting_period: formData.governance.votingPeriod,
         quorum_bps: formData.governance.quorumBps,
-        proposal_threshold: BigInt(formData.governance.proposalThresholdBps),
-        queue_delay: 3600 // Default value
+        proposal_threshold: BigInt(formData.governance.proposalThreshold),
+        queue_delay: 3600 // Default value (contract bound: 300..=2_592_000)
       },
 
       // Marketplace config

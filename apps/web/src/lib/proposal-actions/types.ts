@@ -14,7 +14,6 @@ export type ProposalActionType =
   | 'batch-mint-governance-token'
   | 'transfer-sac-token'
   | 'set-mint-authority'
-  | 'set-governor-authority'
   | 'set-voting-delay'
   | 'set-voting-period'
   | 'set-proposal-threshold'
@@ -24,7 +23,9 @@ export type ProposalActionType =
   | 'set-auction-duration'
   | 'set-auction-time-buffer'
   | 'set-auction-reserve-price'
-  | 'set-auction-payment-token';
+  | 'set-auction-payment-token'
+  | 'create-primary-listing'
+  | 'cancel-primary-listing';
 
 /**
  * Queued action structure (persisted in store)

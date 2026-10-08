@@ -18,6 +18,4 @@ pub enum TreasuryKey {
     /// can update this address if needed.
     Governor,
     Manager,
-    CurrentHash,
-    CurrentVersion,
 }

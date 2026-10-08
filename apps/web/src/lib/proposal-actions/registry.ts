@@ -4,12 +4,13 @@ import { batchMintGovernanceTokenHandler } from './actions/batch-mint-governance
 import { mintGovernanceTokenHandler } from './actions/mint-governance-token';
 import { transferSacTokenHandler } from './actions/transfer-sac-token';
 import {
+  cancelPrimaryListingHandler,
+  createPrimaryListingHandler,
   pauseAuctionHandler,
   setAuctionDurationHandler,
   setAuctionPaymentTokenHandler,
   setAuctionReservePriceHandler,
   setAuctionTimeBufferHandler,
-  setGovernorAuthorityHandler,
   setMintAuthorityHandler,
   setProposalThresholdHandler,
   setQuorumBpsHandler,
@@ -28,7 +29,6 @@ const REGISTERED_HANDLERS: ActionHandler[] = [
   batchMintGovernanceTokenHandler,
   transferSacTokenHandler,
   setMintAuthorityHandler,
-  setGovernorAuthorityHandler,
   setVotingDelayHandler,
   setVotingPeriodHandler,
   setProposalThresholdHandler,
@@ -38,12 +38,19 @@ const REGISTERED_HANDLERS: ActionHandler[] = [
   setAuctionReservePriceHandler,
   setAuctionPaymentTokenHandler,
   setAuctionDurationHandler,
-  setAuctionTimeBufferHandler
+  setAuctionTimeBufferHandler,
+  createPrimaryListingHandler,
+  cancelPrimaryListingHandler
 ];
 
 const ACTION_REGISTRY = new Map<ProposalActionType, ActionHandler>(
   REGISTERED_HANDLERS.map((handler) => [handler.type, handler])
 );
+
+/** True if the action type has a registered handler. */
+export function isRegisteredActionType(type: string): boolean {
+  return ACTION_REGISTRY.has(type as ProposalActionType);
+}
 
 /**
  * Get handler for a specific action type

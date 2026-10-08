@@ -4,11 +4,11 @@ extern crate std;
 
 use soroban_sdk::{
     contract, contractimpl,
-    testutils::{Address as _, Ledger},
-    Address, BytesN, Env, String,
+    testutils::{Address as _, Ledger, MockAuth, MockAuthInvoke},
+    Address, BytesN, Env, IntoVal, String,
 };
 
-use crate::{contract::MarketplaceContract, MarketplaceConfig};
+use crate::{contract::MarketplaceContract, error::MarketplaceError, MarketplaceConfig};
 
 #[contract]
 struct MockToken;
@@ -21,7 +21,19 @@ impl MockToken {
             .set(&soroban_sdk::symbol_short!("next"), &0u32);
     }
 
+    pub fn set_fail_mint(e: &Env, fail: bool) {
+        e.storage()
+            .instance()
+            .set(&soroban_sdk::symbol_short!("fail"), &fail);
+    }
+
     pub fn mint(e: &Env, _minter: Address, to: Address) -> u32 {
+        let fail: bool = e
+            .storage()
+            .instance()
+            .get(&soroban_sdk::symbol_short!("fail"))
+            .unwrap_or(false);
+        assert!(!fail, "mint failed");
         let id: u32 = e
             .storage()
             .instance()
@@ -32,6 +44,13 @@ impl MockToken {
             .set(&soroban_sdk::symbol_short!("next"), &(id + 1));
         e.storage().persistent().set(&id, &to);
         id
+    }
+
+    pub fn total_supply(e: &Env) -> u32 {
+        e.storage()
+            .instance()
+            .get(&soroban_sdk::symbol_short!("next"))
+            .unwrap_or(0)
     }
 
     pub fn owner_of(e: &Env, token_id: u32) -> Address {
@@ -78,11 +97,22 @@ struct Fixture {
     token: MockTokenClient<'static>,
     payment: MockPaymentClient<'static>,
     treasury: Address,
+    launch_admin: Address,
     seller: Address,
     buyer: Address,
 }
 
+/// Fully launched (live, open) marketplace.
 fn fixture() -> Fixture {
+    let fixture = fixture_setup();
+    fixture
+        .marketplace
+        .launch(&fixture.treasury, &true, &fixture.payment.address);
+    fixture
+}
+
+/// Marketplace still in the setup phase (paused, gated by `launch_admin`).
+fn fixture_setup() -> Fixture {
     let env = Env::default();
     env.mock_all_auths();
     env.ledger().set_timestamp(1_000);
@@ -90,6 +120,7 @@ fn fixture() -> Fixture {
     let seller = Address::generate(&env);
     let buyer = Address::generate(&env);
     let manager = Address::generate(&env);
+    let launch_admin = Address::generate(&env);
     let token_id = env.register(MockToken, ());
     let token = MockTokenClient::new(&env, &token_id);
     token.initialize();
@@ -99,6 +130,7 @@ fn fixture() -> Fixture {
         MarketplaceContract,
         (
             token_id,
+            launch_admin.clone(),
             treasury.clone(),
             payment_id,
             manager,
@@ -108,13 +140,13 @@ fn fixture() -> Fixture {
         ),
     );
     let marketplace = crate::contract::MarketplaceContractClient::new(&env, &marketplace_id);
-    marketplace.unpause();
     Fixture {
         env,
         marketplace,
         token,
         payment,
         treasury,
+        launch_admin,
         seller,
         buyer,
     }
@@ -127,10 +159,12 @@ fn constructor_starts_paused_and_stores_config() {
     let treasury = Address::generate(&env);
     let payment = Address::generate(&env);
     let manager = Address::generate(&env);
+    let launch_admin = Address::generate(&env);
     let address = env.register(
         MarketplaceContract,
         (
             token.clone(),
+            launch_admin.clone(),
             treasury.clone(),
             payment.clone(),
             manager.clone(),
@@ -145,51 +179,474 @@ fn constructor_starts_paused_and_stores_config() {
         soroban_sdk::Vec::new(&env),
     );
     assert_eq!(config.token, token);
+    assert_eq!(config.launch_admin, launch_admin);
     assert_eq!(config.treasury, treasury);
     assert_eq!(config.payment_asset, payment);
     assert_eq!(config.manager, manager);
     assert!(config.paused);
+    let marketplace = crate::contract::MarketplaceContractClient::new(&env, &address);
+    assert_eq!(marketplace.version(), String::from_str(&env, "0.1.0"));
+    assert_eq!(
+        marketplace.wasm_hash(),
+        BytesN::from_array(&env, &[0u8; 32])
+    );
 }
 
 #[test]
-fn manager_can_finalize_ownership_and_launch_marketplace() {
-    let fixture = fixture();
-    let new_treasury = Address::generate(&fixture.env);
+fn launch_opens_marketplace_and_is_one_shot() {
+    let fixture = fixture_setup();
+    assert!(fixture.marketplace.get_config().paused);
 
-    fixture.marketplace.pause();
-    fixture.marketplace.finalize_ownership(&new_treasury, &true);
-
-    let config = fixture.marketplace.get_config();
-    assert_eq!(config.treasury, new_treasury);
-    assert!(!config.paused);
-}
-
-#[test]
-fn manager_can_finalize_ownership_without_launching_marketplace() {
-    let fixture = fixture();
-    let new_treasury = Address::generate(&fixture.env);
-
-    fixture.marketplace.pause();
     fixture
         .marketplace
-        .finalize_ownership(&new_treasury, &false);
+        .launch(&fixture.treasury, &true, &fixture.payment.address);
+    assert!(!fixture.marketplace.get_config().paused);
 
-    let config = fixture.marketplace.get_config();
-    assert_eq!(config.treasury, new_treasury);
-    assert!(config.paused);
+    let r = fixture
+        .marketplace
+        .try_launch(&fixture.treasury, &true, &fixture.payment.address);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        common::CommonError::AlreadyLive.into()
+    );
 }
 
 #[test]
-fn primary_listing_can_be_purchased() {
+fn launch_without_open_keeps_marketplace_paused() {
+    let fixture = fixture_setup();
+    fixture
+        .marketplace
+        .launch(&fixture.treasury, &false, &fixture.payment.address);
+    assert!(fixture.marketplace.get_config().paused);
+}
+
+#[test]
+fn launch_rejects_treasury_other_than_wired() {
+    let fixture = fixture_setup();
+    let other = Address::generate(&fixture.env);
+    let r = fixture
+        .marketplace
+        .try_launch(&other, &true, &fixture.payment.address);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        MarketplaceError::TreasuryMismatch.into()
+    );
+}
+
+#[test]
+fn create_primary_listing_before_launch_is_not_live() {
+    let fixture = fixture_setup();
+    let r = fixture.marketplace.try_create_primary_listing(&100, &2_000);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        common::CommonError::NotLive.into()
+    );
+}
+
+#[test]
+fn secondary_list_and_buy_before_launch_are_not_live() {
+    let fixture = fixture_setup();
+    let seller = Address::generate(&fixture.env);
+    let r = fixture.marketplace.try_list(&0, &seller, &100, &2_000);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        common::CommonError::NotLive.into()
+    );
+    let r = fixture.marketplace.try_buy(&0, &seller);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        common::CommonError::NotLive.into()
+    );
+}
+
+#[test]
+fn setters_are_gated_by_launch_admin_then_treasury() {
+    let fixture = fixture_setup();
+    let env = &fixture.env;
+    let mp = &fixture.marketplace;
+
+    // Setup: only launch_admin authorizes; the treasury cannot.
+    env.mock_auths(&[MockAuth {
+        address: &fixture.treasury,
+        invoke: &MockAuthInvoke {
+            contract: &mp.address,
+            fn_name: "set_secondary_fee_bps",
+            args: (500u32,).into_val(env),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(mp.try_set_secondary_fee_bps(&500).is_err());
+    env.mock_auths(&[MockAuth {
+        address: &fixture.launch_admin,
+        invoke: &MockAuthInvoke {
+            contract: &mp.address,
+            fn_name: "set_secondary_fee_bps",
+            args: (500u32,).into_val(env),
+            sub_invokes: &[],
+        },
+    }]);
+    mp.set_secondary_fee_bps(&500);
+    assert_eq!(mp.get_config().default_secondary_fee_bps, 500);
+
+    // Live: the treasury authorizes; launch_admin no longer can.
+    env.mock_all_auths();
+    mp.launch(&fixture.treasury, &true, &fixture.payment.address);
+    env.mock_auths(&[MockAuth {
+        address: &fixture.launch_admin,
+        invoke: &MockAuthInvoke {
+            contract: &mp.address,
+            fn_name: "set_secondary_fee_bps",
+            args: (600u32,).into_val(env),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(mp.try_set_secondary_fee_bps(&600).is_err());
+    env.mock_auths(&[MockAuth {
+        address: &fixture.treasury,
+        invoke: &MockAuthInvoke {
+            contract: &mp.address,
+            fn_name: "set_secondary_fee_bps",
+            args: (600u32,).into_val(env),
+            sub_invokes: &[],
+        },
+    }]);
+    mp.set_secondary_fee_bps(&600);
+    assert_eq!(mp.get_config().default_secondary_fee_bps, 600);
+}
+
+#[test]
+fn primary_listing_mints_lazily_to_buyer_and_pays_treasury() {
     let fixture = fixture();
-    let token_id = fixture.marketplace.mint_and_list(&100, &2_000);
+    let mp = &fixture.marketplace;
+    let id = mp.create_primary_listing(&100, &2_000);
+    assert_eq!(id, 0);
+    // Creating a listing mints nothing and escrows nothing.
+    assert_eq!(fixture.token.total_supply(), 0);
+    assert_eq!(mp.get_primary_listing(&id).unwrap().price, 100);
+
     fixture.payment.mint(&fixture.buyer, &100);
+    let token_id = mp.buy_primary(&id, &fixture.buyer);
 
-    fixture.marketplace.buy(&token_id, &fixture.buyer);
-
+    assert_eq!(fixture.token.total_supply(), 1);
     assert_eq!(fixture.token.owner_of(&token_id), fixture.buyer);
     assert_eq!(fixture.payment.balance(&fixture.treasury), 100);
-    assert!(fixture.marketplace.get_listing(&token_id).is_none());
+    assert_eq!(fixture.payment.balance(&fixture.buyer), 0);
+    assert!(mp.get_primary_listing(&id).is_none());
+    // Single use.
+    assert_eq!(
+        mp.try_buy_primary(&id, &fixture.buyer)
+            .err()
+            .unwrap()
+            .unwrap(),
+        MarketplaceError::ListingNotFound.into()
+    );
+}
+
+#[test]
+fn primary_listing_ids_are_unique_and_increasing() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    assert_eq!(mp.create_primary_listing(&100, &2_000), 0);
+    assert_eq!(mp.create_primary_listing(&100, &2_000), 1);
+    assert_eq!(mp.create_primary_listing(&200, &3_000), 2);
+    assert_eq!(mp.next_listing_id(), 3);
+    assert_eq!(fixture.token.total_supply(), 0);
+    // Cancelling does not recycle ids.
+    mp.cancel_primary(&1);
+    assert_eq!(mp.create_primary_listing(&100, &2_000), 3);
+}
+
+#[test]
+fn expired_primary_listing_cannot_be_bought_and_anyone_can_clear_it() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    let id = mp.create_primary_listing(&100, &2_000);
+    fixture.payment.mint(&fixture.buyer, &100);
+
+    assert_eq!(
+        mp.try_expire_primary(&id).err().unwrap().unwrap(),
+        MarketplaceError::ListingActive.into()
+    );
+    fixture.env.ledger().set_timestamp(2_000);
+    assert_eq!(
+        mp.try_buy_primary(&id, &fixture.buyer)
+            .err()
+            .unwrap()
+            .unwrap(),
+        MarketplaceError::ListingExpired.into()
+    );
+    // No treasury auth needed to clear an expired listing.
+    fixture.env.set_auths(&[]);
+    mp.expire_primary(&id);
+    assert!(mp.get_primary_listing(&id).is_none());
+    assert_eq!(fixture.token.total_supply(), 0);
+}
+
+#[test]
+fn cancelled_primary_listing_cannot_be_bought() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    let id = mp.create_primary_listing(&100, &2_000);
+    mp.cancel_primary(&id);
+    fixture.payment.mint(&fixture.buyer, &100);
+    assert_eq!(
+        mp.try_buy_primary(&id, &fixture.buyer)
+            .err()
+            .unwrap()
+            .unwrap(),
+        MarketplaceError::ListingNotFound.into()
+    );
+    assert_eq!(
+        mp.try_cancel_primary(&id).err().unwrap().unwrap(),
+        MarketplaceError::ListingNotFound.into()
+    );
+}
+
+#[test]
+fn primary_listing_requires_authorization() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    let id = mp.create_primary_listing(&100, &2_000);
+    fixture.payment.mint(&fixture.buyer, &100);
+    fixture.env.set_auths(&[]);
+
+    assert!(mp.try_create_primary_listing(&100, &2_000).is_err());
+    assert!(mp.try_cancel_primary(&id).is_err());
+    assert!(mp.try_buy_primary(&id, &fixture.buyer).is_err());
+    assert!(mp.get_primary_listing(&id).is_some());
+    assert_eq!(fixture.token.total_supply(), 0);
+    assert_eq!(fixture.payment.balance(&fixture.buyer), 100);
+}
+
+#[test]
+fn primary_listing_rejected_while_paused() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    let id = mp.create_primary_listing(&100, &2_000);
+    mp.pause();
+    fixture.payment.mint(&fixture.buyer, &100);
+    assert_eq!(
+        mp.try_create_primary_listing(&100, &2_000)
+            .err()
+            .unwrap()
+            .unwrap(),
+        MarketplaceError::Paused.into()
+    );
+    assert_eq!(
+        mp.try_buy_primary(&id, &fixture.buyer)
+            .err()
+            .unwrap()
+            .unwrap(),
+        MarketplaceError::Paused.into()
+    );
+    let token_id = fixture.token.mint(&fixture.seller, &fixture.seller);
+    assert_eq!(
+        mp.try_list(&token_id, &fixture.seller, &10, &2_000)
+            .err()
+            .unwrap()
+            .unwrap(),
+        MarketplaceError::Paused.into()
+    );
+}
+
+#[test]
+fn buy_is_rejected_while_paused_with_paused_error() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    let token_id = fixture.token.mint(&fixture.seller, &fixture.seller);
+    mp.list(&token_id, &fixture.seller, &100, &2_000);
+    mp.pause();
+    fixture.payment.mint(&fixture.buyer, &100);
+    assert_eq!(
+        mp.try_buy(&token_id, &fixture.buyer)
+            .err()
+            .unwrap()
+            .unwrap(),
+        MarketplaceError::Paused.into()
+    );
+}
+
+#[test]
+fn cancel_and_expire_work_while_paused() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    let p1 = mp.create_primary_listing(&100, &2_000);
+    let t1 = fixture.token.mint(&fixture.seller, &fixture.seller);
+    let t2 = fixture.token.mint(&fixture.seller, &fixture.seller);
+    mp.list(&t1, &fixture.seller, &100, &2_000);
+    mp.list(&t2, &fixture.seller, &100, &2_000);
+    mp.pause();
+
+    mp.cancel_primary(&p1);
+    assert!(mp.get_primary_listing(&p1).is_none());
+    mp.cancel(&t1, &fixture.seller);
+    assert_eq!(fixture.token.owner_of(&t1), fixture.seller);
+    fixture.env.ledger().set_timestamp(2_000);
+    mp.expire(&t2);
+    assert_eq!(fixture.token.owner_of(&t2), fixture.seller);
+}
+
+#[test]
+fn buy_primary_reverts_atomically_when_mint_fails() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    let id = mp.create_primary_listing(&100, &2_000);
+    fixture.payment.mint(&fixture.buyer, &100);
+    fixture.token.set_fail_mint(&true);
+
+    assert!(mp.try_buy_primary(&id, &fixture.buyer).is_err());
+    assert_eq!(fixture.payment.balance(&fixture.buyer), 100);
+    assert_eq!(fixture.payment.balance(&fixture.treasury), 0);
+    assert!(mp.get_primary_listing(&id).is_some());
+    assert_eq!(fixture.token.total_supply(), 0);
+
+    // Recoverable once minting works again.
+    fixture.token.set_fail_mint(&false);
+    mp.buy_primary(&id, &fixture.buyer);
+    assert_eq!(fixture.payment.balance(&fixture.treasury), 100);
+}
+
+#[test]
+fn secondary_expiry_boundary_is_exclusive_for_buy_inclusive_for_expire() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    let token_id = fixture.token.mint(&fixture.seller, &fixture.seller);
+    mp.list(&token_id, &fixture.seller, &100, &2_000);
+    fixture.payment.mint(&fixture.buyer, &100);
+
+    fixture.env.ledger().set_timestamp(1_999);
+    assert_eq!(
+        mp.try_expire(&token_id).err().unwrap().unwrap(),
+        MarketplaceError::ListingActive.into()
+    );
+    fixture.env.ledger().set_timestamp(2_000);
+    assert_eq!(
+        mp.try_buy(&token_id, &fixture.buyer)
+            .err()
+            .unwrap()
+            .unwrap(),
+        MarketplaceError::ListingExpired.into()
+    );
+    mp.expire(&token_id);
+    assert_eq!(fixture.token.owner_of(&token_id), fixture.seller);
+}
+
+#[test]
+fn primary_expiry_boundary_at_exact_timestamp() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    let id = mp.create_primary_listing(&100, &2_000);
+    fixture.env.ledger().set_timestamp(2_000);
+    fixture.payment.mint(&fixture.buyer, &100);
+    assert_eq!(
+        mp.try_buy_primary(&id, &fixture.buyer)
+            .err()
+            .unwrap()
+            .unwrap(),
+        MarketplaceError::ListingExpired.into()
+    );
+    mp.expire_primary(&id);
+}
+
+#[test]
+fn secondary_buy_uses_captured_asset_and_fee_after_config_changes() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    let token_id = fixture.token.mint(&fixture.seller, &fixture.seller);
+    mp.list(&token_id, &fixture.seller, &1_000, &2_000); // fee 250 bps captured
+    let other = fixture.env.register(MockPayment, ());
+
+    mp.set_payment_asset(&other);
+    mp.set_secondary_fee_bps(&1_000);
+
+    fixture.payment.mint(&fixture.buyer, &1_000);
+    mp.buy(&token_id, &fixture.buyer);
+    assert_eq!(fixture.payment.balance(&fixture.treasury), 25);
+    assert_eq!(fixture.payment.balance(&fixture.seller), 975);
+    assert_eq!(
+        MockPaymentClient::new(&fixture.env, &other).balance(&fixture.treasury),
+        0
+    );
+}
+
+#[test]
+fn wrong_address_auth_is_rejected_for_create_cancel_and_buy() {
+    let fixture = fixture();
+    let env = &fixture.env;
+    let mp = &fixture.marketplace;
+    let id = mp.create_primary_listing(&100, &2_000);
+    fixture.payment.mint(&fixture.buyer, &100);
+    let stranger = Address::generate(env);
+
+    env.mock_auths(&[MockAuth {
+        address: &stranger,
+        invoke: &MockAuthInvoke {
+            contract: &mp.address,
+            fn_name: "create_primary_listing",
+            args: (100i128, 2_000u64).into_val(env),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(mp.try_create_primary_listing(&100, &2_000).is_err());
+
+    env.mock_auths(&[MockAuth {
+        address: &stranger,
+        invoke: &MockAuthInvoke {
+            contract: &mp.address,
+            fn_name: "cancel_primary",
+            args: (id,).into_val(env),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(mp.try_cancel_primary(&id).is_err());
+
+    // Valid auth from someone other than the buyer.
+    env.mock_auths(&[MockAuth {
+        address: &stranger,
+        invoke: &MockAuthInvoke {
+            contract: &mp.address,
+            fn_name: "buy_primary",
+            args: (id, &fixture.buyer).into_val(env),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(mp.try_buy_primary(&id, &fixture.buyer).is_err());
+
+    assert!(mp.get_primary_listing(&id).is_some());
+    assert_eq!(fixture.token.total_supply(), 0);
+    assert_eq!(fixture.payment.balance(&fixture.buyer), 100);
+}
+
+#[test]
+fn listing_keeps_payment_asset_captured_at_list_time() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    let new_asset_id = fixture.env.register(MockPayment, ());
+    let new_asset = MockPaymentClient::new(&fixture.env, &new_asset_id);
+
+    let token_id = fixture.token.mint(&fixture.seller, &fixture.seller);
+    mp.list(&token_id, &fixture.seller, &1_000, &2_000);
+    let primary = mp.create_primary_listing(&100, &2_000);
+    assert_eq!(
+        mp.get_listing(&token_id).unwrap().payment_asset,
+        fixture.payment.address
+    );
+
+    mp.set_payment_asset(&new_asset_id);
+
+    // Buyer holds only the OLD asset; both listings still settle in it.
+    fixture.payment.mint(&fixture.buyer, &1_100);
+    mp.buy(&token_id, &fixture.buyer);
+    mp.buy_primary(&primary, &fixture.buyer);
+    assert_eq!(fixture.payment.balance(&fixture.buyer), 0);
+    assert_eq!(fixture.payment.balance(&fixture.treasury), 125);
+    assert_eq!(fixture.payment.balance(&fixture.seller), 975);
+    assert_eq!(new_asset.balance(&fixture.treasury), 0);
+
+    // New listings use the new asset.
+    let token2 = fixture.token.mint(&fixture.seller, &fixture.seller);
+    mp.list(&token2, &fixture.seller, &10, &2_000);
+    assert_eq!(mp.get_listing(&token2).unwrap().payment_asset, new_asset_id);
 }
 
 #[test]
@@ -235,4 +692,208 @@ fn expired_listing_can_be_reclaimed() {
 
     assert_eq!(fixture.token.owner_of(&token_id), fixture.seller);
     assert!(fixture.marketplace.get_listing(&token_id).is_none());
+}
+
+mod upgrade_via_common {
+    use super::*;
+    use common::testutils::{empty_wasm, MockManager, MockManagerClient};
+
+    #[test]
+    fn upgrade_goes_through_common_apply() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let mgr = MockManagerClient::new(&env, &env.register(MockManager, ()));
+        let from = BytesN::from_array(&env, &[1u8; 32]);
+        let to = empty_wasm(&env);
+        let id = env.register(
+            MarketplaceContract,
+            (
+                Address::generate(&env),
+                Address::generate(&env),
+                Address::generate(&env),
+                Address::generate(&env),
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&env, "0.1.0"),
+                250u32,
+            ),
+        );
+        let client = crate::contract::MarketplaceContractClient::new(&env, &id);
+        mgr.approve(&from, &to);
+        mgr.register(&to, &String::from_str(&env, "0.2.0"));
+        client.upgrade(&from, &to);
+
+        // Contract code is swapped to an empty module; read the stored keys directly.
+        env.as_contract(&id, || {
+            assert_eq!(common::upgrade::current_hash(&env), to);
+            assert_eq!(
+                common::upgrade::version(&env),
+                String::from_str(&env, "0.2.0")
+            );
+        });
+    }
+
+    #[test]
+    fn upgrade_rejected_when_not_approved() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let mgr = MockManagerClient::new(&env, &env.register(MockManager, ()));
+        let from = BytesN::from_array(&env, &[1u8; 32]);
+        let to = empty_wasm(&env);
+        let id = env.register(
+            MarketplaceContract,
+            (
+                Address::generate(&env),
+                Address::generate(&env),
+                Address::generate(&env),
+                Address::generate(&env),
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&env, "0.1.0"),
+                250u32,
+            ),
+        );
+        let client = crate::contract::MarketplaceContractClient::new(&env, &id);
+        mgr.register(&to, &String::from_str(&env, "0.2.0"));
+        let r = client.try_upgrade(&from, &to);
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            common::CommonError::UpgradeNotApproved.into()
+        );
+    }
+
+    #[test]
+    fn upgrade_and_sync_version_reject_unauthorized_caller() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let mgr = MockManagerClient::new(&env, &env.register(MockManager, ()));
+        let from = BytesN::from_array(&env, &[1u8; 32]);
+        let to = empty_wasm(&env);
+        let id = env.register(
+            MarketplaceContract,
+            (
+                Address::generate(&env),
+                Address::generate(&env),
+                Address::generate(&env),
+                Address::generate(&env),
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&env, "0.1.0"),
+                250u32,
+            ),
+        );
+        let client = crate::contract::MarketplaceContractClient::new(&env, &id);
+        mgr.approve(&from, &to);
+        mgr.register(&to, &String::from_str(&env, "0.2.0"));
+        mgr.register(&from, &String::from_str(&env, "0.1.1"));
+        // Drop mock_all_auths: no authorization is provided for any address.
+        env.set_auths(&[]);
+        assert!(client.try_upgrade(&from, &to).is_err());
+        assert!(client.try_sync_version().is_err());
+        env.mock_all_auths();
+        env.as_contract(&id, || {
+            assert_eq!(common::upgrade::current_hash(&env), from);
+            assert_eq!(
+                common::upgrade::version(&env),
+                String::from_str(&env, "0.1.0")
+            );
+        });
+    }
+
+    #[test]
+    fn upgrade_hash_mismatch_leaves_state_unchanged() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let mgr = MockManagerClient::new(&env, &env.register(MockManager, ()));
+        let from = BytesN::from_array(&env, &[1u8; 32]);
+        let to = empty_wasm(&env);
+        let id = env.register(
+            MarketplaceContract,
+            (
+                Address::generate(&env),
+                Address::generate(&env),
+                Address::generate(&env),
+                Address::generate(&env),
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&env, "0.1.0"),
+                250u32,
+            ),
+        );
+        let client = crate::contract::MarketplaceContractClient::new(&env, &id);
+        let wrong = BytesN::from_array(&env, &[9u8; 32]);
+        mgr.approve(&wrong, &to);
+        mgr.register(&to, &String::from_str(&env, "0.2.0"));
+        let r = client.try_upgrade(&wrong, &to);
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            common::CommonError::HashMismatch.into()
+        );
+        env.as_contract(&id, || {
+            assert_eq!(common::upgrade::current_hash(&env), from);
+            assert_eq!(
+                common::upgrade::version(&env),
+                String::from_str(&env, "0.1.0")
+            );
+        });
+    }
+}
+
+#[test]
+fn launch_rejects_changed_payment_asset_and_succeeds_when_unchanged() {
+    let fixture = fixture_setup();
+    let mp = &fixture.marketplace;
+    let original = fixture.payment.address.clone();
+    let other = Address::generate(&fixture.env);
+    mp.set_payment_asset(&other);
+    let r = mp.try_launch(&fixture.treasury, &true, &original);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        MarketplaceError::PaymentAssetMismatch.into()
+    );
+    mp.set_payment_asset(&original);
+    mp.launch(&fixture.treasury, &true, &original);
+}
+
+#[test]
+fn launch_without_open_forces_paused_even_if_unpaused_in_setup() {
+    let fixture = fixture_setup();
+    let mp = &fixture.marketplace;
+    mp.unpause();
+    assert!(!mp.get_config().paused);
+    mp.launch(&fixture.treasury, &false, &fixture.payment.address);
+    assert!(mp.get_config().paused);
+}
+
+#[test]
+fn launch_requires_manager_auth() {
+    let fixture = fixture_setup();
+    let env = &fixture.env;
+    let mp = &fixture.marketplace;
+    let asset = fixture.payment.address.clone();
+    env.mock_auths(&[MockAuth {
+        address: &fixture.launch_admin,
+        invoke: &MockAuthInvoke {
+            contract: &mp.address,
+            fn_name: "launch",
+            args: (&fixture.treasury, true, &asset).into_val(env),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(mp.try_launch(&fixture.treasury, &true, &asset).is_err());
+    assert!(mp.get_config().paused);
+}
+
+#[test]
+fn state_changing_entrypoint_extends_instance_ttl() {
+    use common::testutils::{advance_ledgers, instance_ttl};
+    let f = fixture();
+    advance_ledgers(&f.env, 120 * 17_280);
+    let before = instance_ttl(&f.env, &f.marketplace.address);
+    f.marketplace.pause();
+    let after = instance_ttl(&f.env, &f.marketplace.address);
+    assert!(
+        after > before,
+        "instance TTL not extended: {before} -> {after}"
+    );
 }

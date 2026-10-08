@@ -1,7 +1,16 @@
 # DAO Deployment Guide
 
 > **Status**: Versioned redesign reference. Use `MANAGER_REDESIGN.md` and
-> `MARKETPLACE_PLAN.md` for the new six-module deployment baseline.
+> `MARKETPLACE_PLAN.md` for the new six-module deployment baseline, and
+> `SECURITY_MODEL.md` for the setup-window rules.
+>
+> `scripts/deploy-dao.mjs` implements this flow (phases `create_dao`,
+> `admin_checklist`, `launch_dao`). It validates the config against the contract
+> bounds first (`--validate-only` runs just that), mints founders with
+> `token.batch_mint`, adds artwork in batches of <= 30 items, and passes
+> `launch_config` with `enable_minter` from the config's `launch` section. The
+> governance proposal threshold key is `governance.proposalThreshold` (absolute
+> votes).
 
 This guide covers creating and deploying new DAOs using the multi-tenant system.
 
@@ -73,7 +82,7 @@ Create a JSON file describing the DAO (e.g., `configs/my-dao.json`):
   },
 
   "governance": {
-    "votingDelay": 1,
+    "votingDelay": 300,
     "votingPeriod": 604800,     // 7 days in seconds
     "quorumBps": 4000,          // 40%
     "proposalThresholdBps": 5000 // 50%
@@ -83,21 +92,71 @@ Create a JSON file describing the DAO (e.g., `configs/my-dao.json`):
 }
 ```
 
-### Step 2: Deploy DAO
+Contract-enforced bounds at `create_dao` (violations fail with the listed Manager error):
 
-```bash
-node scripts/deploy-dao.mjs configs/my-dao.json configs/testnet-config.json
-```
+| Field | Bound | Error |
+| --- | --- | --- |
+| `votingDelay`, `votingPeriod`, `queueDelay` | each 300 to 2,592,000 seconds (30 days) | `InvalidGovernanceTiming` (1117) |
+| `quorumBps` | 1 to 10,000 | `InvalidQuorumBps` (1105) |
+| proposal threshold (`GovernanceConfig.proposal_threshold`, an absolute token count, not bps) | at least 1 | `InvalidProposalThreshold` (1120) |
+| `auction.duration` | 300 seconds to 2,592,000 seconds (30 days) | `InvalidDuration` (1107) |
+| `auction.reservePrice` | at least 1,000 stroops | `InvalidParamBounds` (1103) |
+| `auction.timeBuffer` | 1 to 86,400 seconds | `InvalidTimeBuffer` (1108) |
+| `marketplace.secondaryFeeBps` | at most 10,000 | `InvalidParamBounds` (1103) |
 
-**What it does** (in order):
-1. Creates all 6 contracts, including Marketplace
-2. Initializes contracts
-3. Configures metadata properties
-4. Accepts token ownership
-5. Finalizes DAO
-6. Writes deployment artifact to `deploys/`
+The auction and marketplace payment assets given here are recorded in
+`PendingDao`. `launch_dao` fails if either was changed during setup.
 
-**Artifact**: Saved to `deploys/testnet-my-dao-1.json`
+### Step 2: Create, Configure, Launch
+
+The flow has three on-chain phases.
+
+**1. `create_dao`** (deployer AND launch admin auth; one signature if they are the same address. `scripts/deploy-dao.mjs` signs with a single stellar CLI identity, so it requires `deployer == launchAdmin` and fails validation otherwise. For different accounts, build with `stellar tx new invoke --build-only`, sign with both accounts using `stellar tx sign`, and submit manually). Deploys Token, Metadata, Treasury,
+Governor, Auction and Marketplace at deterministic addresses. All wiring is
+constructor-only: there are no setters for the Treasury, Governor, Token or
+Manager addresses. Every module is in Setup, the launch admin owns it, and the
+Auction and Marketplace are paused. Manager stores `PendingDao` (addresses,
+launch admin, recorded payment assets).
+
+**2. Setup window** (launch admin). Until `launch_dao` succeeds the launch admin can:
+
+- mint founder tokens with `token.mint` / `token.batch_mint`; only the Token
+  owner can mint before launch, and `set_mint_authority` and the Minter contract
+  fail with `NotLive`. Founder amounts are not capped by the contracts, and at
+  least one token must exist at launch;
+- add artwork (`metadata.add_properties`, at most 30 items per call) and update
+  Metadata settings;
+- adjust Auction parameters while it is paused, and Marketplace fee, payment
+  asset and pause state;
+- use the owner-only Governor setters.
+
+The launch admin cannot create proposals, vote, execute, create primary listings,
+list or buy on the secondary market, or unpause the Auction in this window (`NotLive`).
+
+Founder supply is unconstrained and the minimum governance timings allow a
+majority founder to execute a proposal about 15 minutes after launch; see
+SECURITY_MODEL.md "Known limitations" (founder supply, quorum lock) before choosing
+founder distribution, timings and `quorumBps`.
+
+**3. `launch_dao(token_address, LaunchConfig { launch_auction, launch_marketplace, enable_minter, expected_minter })`**
+(launch admin auth). The Manager checks the launch admin still owns the Token,
+supply is nonzero, and the payment assets match `PendingDao`. It then launches
+every module: ownership moves to the Treasury, the Auction starts if
+`launch_auction`, the Marketplace is left open if `launch_marketplace` (forced
+paused otherwise), and `PendingDao` is deleted. Token mint authority is set to
+Treasury and Marketplace, plus Auction if `launch_auction`, plus the platform
+minter if `enable_minter`.
+
+The platform minter is not chosen by the DAO. The Manager admin registers it
+beforehand with `manager.set_platform_minter(minter)`; `enable_minter: true`
+fails with `PlatformMinterNotSet` (1008) if none is registered. When
+`enable_minter` is true, `LaunchConfig.expected_minter` must be set to the
+minter returned by `manager.get_platform_minter()`, otherwise launch fails with
+`PlatformMinterMismatch` (1010); `scripts/deploy-dao.mjs launch_dao` reads and
+pins it automatically.
+
+The script wrapper writes the artifact to
+`deploys/testnet-my-dao-1.json`.
 
 ### Step 3: Verify in Database
 
@@ -140,16 +199,16 @@ curl http://localhost:4242/api/dao/CB.../config
 
 ### Pending
 
-DAO has been created but not yet finalized.
+DAO has been created but not yet launched. Every module is in Setup.
 
 **When**: Immediately after `create_dao()`
 
-**Duration**: Setup phase (add properties, accept ownership)
+**Duration**: Setup window (founder mints, artwork, parameters)
 
-**Operations Blocked**:
-- No proposals can be created
-- No votes can be cast
-- Auction not launched unless requested; Marketplace sales are governance-controlled after finalization
+**Operations Blocked** (`NotLive`, 9001):
+- No proposals can be created, voted on, queued or executed
+- `treasury.execute`, the Minter and `token.set_mint_authority` fail
+- The Auction cannot be unpaused and primary listings cannot be created
 
 **Database**:
 ```sql
@@ -167,9 +226,10 @@ DAO is fully configured and ready for operation.
 **Features Enabled**:
 - Proposals can be created
 - Voting is active
-- Auctions run continuously when enabled
-- Marketplace fixed-price sales are available through Governor proposals
-- Treasury controls funds
+- Auctions run continuously when started
+- Primary sales are created by Governor proposals (`create_primary_listing` through `treasury.execute`)
+- Treasury owns every module and controls funds
+- Anyone can call `treasury.execute` for a queued proposal
 
 **Database**:
 ```sql
@@ -203,8 +263,8 @@ Customized per-DAO:
 ```json
 {
   "governance": {
-    "votingDelay": 1,           // Blocks before voting opens
-    "votingPeriod": 604800,     // Duration of voting
+    "votingDelay": 300,         // Seconds before voting opens (300 to 2,592,000)
+    "votingPeriod": 604800,     // Seconds voting is open (300 to 2,592,000)
     "quorumBps": 4000,          // % of tokens needed
     "proposalThresholdBps": 5000 // % needed to propose
   }
@@ -220,8 +280,8 @@ Customized per-DAO:
   "auction": {
     "duration": 86400,          // 24 hours
     "reservePrice": 1000000000, // Minimum bid
-    "timeBuffer": 900,          // Grace period on bids
-    "paymentAsset": "native"    // XLM or SAC
+    "timeBuffer": 900,          // Grace period on bids (1 to 86,400 seconds)
+    "paymentAsset": "native"    // XLM or SAC; fixed at create_dao and checked at launch
   }
 }
 ```
@@ -243,7 +303,7 @@ const pendingDaos = await getAllDaosFromDatabase('pending');
 ```
 
 **Use Cases**:
-- Check which DAOs need finalization
+- Check which DAOs need launch
 - Monitor setup progress
 - Alert on stalled setups
 
@@ -319,7 +379,7 @@ If `launch_dao()` didn't complete:
    cat deploys/testnet-my-dao-1.json | grep finalize
    ```
 
-2. Call launch_dao directly with LaunchConfig:
+2. Call launch_dao directly with LaunchConfig (the source account must be the launch admin):
    ```bash
    stellar contract invoke \
      --id MANAGER_ADDRESS \
@@ -327,13 +387,20 @@ If `launch_dao()` didn't complete:
      --network testnet \
      -- launch_dao \
      --token_address DAO_TOKEN_ADDRESS \
-     --launch_auction true \
-     --launch_marketplace true
+     --launch_config '{"launch_auction": true, "launch_marketplace": true, "enable_minter": false, "expected_minter": null}'
    ```
 
    The LaunchConfig controls:
-   - `launch_auction`: Whether to unpause the Auction (true to enable, false to keep paused)
-   - `launch_marketplace`: Whether to unpause the Marketplace (true to enable, false to keep paused)
+   - `launch_auction`: start the Auction (false leaves it paused until governance starts it)
+   - `launch_marketplace`: leave the Marketplace open (false forces it paused)
+   - `enable_minter`: grant mint authority to the Manager-registered platform minter
+   - `expected_minter`: required (the registered minter's address) when `enable_minter` is true; `null` otherwise
+
+   Common failures: `LaunchSupplyZero` (1121, mint a founder token first),
+   `Unauthorized` (1000, the launch admin no longer owns the Token),
+   `PaymentTokenMismatch` / `PaymentAssetMismatch` (a payment asset changed
+   during setup), `PlatformMinterNotSet` (1008). A failed launch changes nothing;
+   retry after fixing the cause.
 
 3. Check status updated:
    ```sql
@@ -378,7 +445,7 @@ cat > configs/example-dao.json << 'EOF'
     "paymentAsset": "native"
   },
   "governance": {
-    "votingDelay": 1,
+    "votingDelay": 300,
     "votingPeriod": 604800,
     "quorumBps": 4000,
     "proposalThresholdBps": 5000
@@ -402,11 +469,8 @@ Output:
 === Adding Metadata Properties ===
 # Configures properties
 
-=== Accepting Token Ownership ===
-# Ownership transfer
-
-=== Finalizing DAO ===
-# Final setup
+=== Launching DAO ===
+# launch_dao
 ```
 
 Artifact written to: `deploys/testnet-example-dao-1.json`
@@ -457,5 +521,20 @@ return (
 - [MULTITENANT_ARCHITECTURE.md](./MULTITENANT_ARCHITECTURE.md) - Architecture overview
 - [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md) - Database details
 - [MANAGER_DEPLOYMENT.md](./MANAGER_DEPLOYMENT.md) - Manager deployment
-- [GOLDSKY_MULTITENANT_INTEGRATION.md](./GOLDSKY_MULTITENANT_INTEGRATION.md) - Pipeline
+- [GOLDSKY_SETUP.md](./GOLDSKY_SETUP.md) - Pipeline
 - [scripts/deploy-dao.mjs](../scripts/deploy-dao.mjs) - Deployment script
+
+## Testnet rehearsal (e2e)
+
+`scripts/e2e-testnet.mjs` drives a complete lifecycle on **testnet only** (it refuses any other network): Manager deploy, `create_dao`, founder setup, `launch_dao`, a two-bidder auction with refund and settlement, a multi-action governance round (`set_quorum_bps` + `create_primary_listing`, executed through `Treasury.execute`) and a primary-sale purchase. It uses the template `configs/e2e-testnet-dao.json` (300s governance/auction minimums, 1 XLM reserve, native SAC); the driver copies it to `.e2e/dao-<nonce>.json` with a per-run timestamp nonce and the resolved identity addresses.
+
+```bash
+stellar contract build                      # WASMs must exist
+node --test scripts/e2e-testnet.test.mjs    # offline helper tests (hash vector, argument encoding)
+node scripts/e2e-testnet.mjs all            # or one phase: preflight|deploy-manager|create-dao|setup|launch|auction|governance|marketplace|report
+node scripts/e2e-testnet.mjs governance --keep-going --state .e2e/state.json
+```
+
+Identities (local `stellar keys` names, override with `E2E_MANAGER_ADMIN`, `E2E_DAO_OWNER`, `E2E_BIDDER_A`, `E2E_BIDDER_B`): `testnet-admin` (Manager admin, second bidder), `testnet-dev` (deployer and launch admin, founder 1), `alice` (founder 2, first bidder, buyer). Keys must already exist and hold > 100 XLM; the driver only reads public addresses.
+
+State and results: `.e2e/state.json` (addresses, tx hashes, proposal id, timestamps; gitignored) makes the run resumable, a finished phase is skipped unless `--redo` is given, and `.e2e/report.json` plus a console table (stellar.expert links) is produced by the `report` phase. A full run takes roughly 35-45 minutes of waiting (voting delay, voting period and queue delay are 300s each, plus the 300s auction). Any FAIL makes the process exit nonzero; `--keep-going` continues with later phases. Not covered: the deferred-refund path (needs a recipient whose token transfer fails, impossible with native XLM) and a second `Manager.launch` (not callable).

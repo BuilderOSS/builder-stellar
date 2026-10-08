@@ -1,0 +1,494 @@
+-- =============================================================================
+-- MANAGER VIEWS
+--
+-- The Manager has no on-chain DAO registry we index from storage. The DAO
+-- registry is a projection of DaoCreated / DaoLaunched events:
+--
+--   manager.dao_registry       one row per DAO, straight from DaoCreated
+--   manager.dao_modules        one row per DAO module contract
+--   manager.event_identity     contract -> DAO lookup used by every domain view
+--   manager.daos               registry + token metadata + launch/auction state
+--   manager.module_launches    one row per DAO module: has its `launched` event been seen
+--   manager.dao_lifecycle      one row per DAO: launch flags + is_live per module
+--   manager.module_upgrades    per-module upgrade / version-sync history (Upgraded, VersionSynced)
+--   manager.module_versions    current wasm hash + version of every DAO module
+--   manager.admin_history      AdminProposed / AdminProposalCancelled / AdminChanged / PlatformMinterSet
+--   manager.settings           current admin, pending admin, platform minter
+--   manager.implementations    registered WASM implementations (+ revocation)
+--   manager.current_implementations  latest default implementation set
+--
+-- A DAO is identified by its token contract address (dao_id). deployment_id
+-- scopes everything to one Manager.
+-- =============================================================================
+
+-- DaoCreated: topics (token_address, deployer, launch_admin);
+-- data { created_ledger, modules { token, metadata, auction, governor, treasury, marketplace },
+--        wasm_hashes { token, metadata, auction, governor, treasury, marketplace } }
+CREATE VIEW manager.dao_registry AS
+SELECT DISTINCT ON (e.deployment_id, e.topic_0)
+  e.deployment_id,
+  e.topic_0                                   AS dao_id,
+  e.topic_0                                   AS token_address,
+  e.topic_1                                   AS deployer,
+  e.topic_2                                   AS launch_admin,
+  e.contract_id                               AS manager_contract,
+  e.args::jsonb #>> '{modules,token}'         AS token_contract,
+  e.args::jsonb #>> '{modules,governor}'      AS governor_contract,
+  e.args::jsonb #>> '{modules,auction}'       AS auction_contract,
+  e.args::jsonb #>> '{modules,treasury}'      AS treasury_contract,
+  e.args::jsonb #>> '{modules,metadata}'      AS metadata_contract,
+  e.args::jsonb #>> '{modules,marketplace}'   AS marketplace_contract,
+  e.args::jsonb #>> '{wasm_hashes,token}'       AS token_wasm_hash,
+  e.args::jsonb #>> '{wasm_hashes,governor}'    AS governor_wasm_hash,
+  e.args::jsonb #>> '{wasm_hashes,auction}'     AS auction_wasm_hash,
+  e.args::jsonb #>> '{wasm_hashes,treasury}'    AS treasury_wasm_hash,
+  e.args::jsonb #>> '{wasm_hashes,metadata}'    AS metadata_wasm_hash,
+  e.args::jsonb #>> '{wasm_hashes,marketplace}' AS marketplace_wasm_hash,
+  e.ledger_sequence                           AS created_ledger,
+  NULLIF(e.ledger_closed_at, '')::timestamptz AS created_at,
+  e.transaction_hash                          AS created_tx_hash,
+  e.ingested_at                               AS indexed_at
+FROM chain.decoded_events e
+WHERE e.contract_role = 'manager'
+  AND e.event_name = 'dao_created'
+ORDER BY e.deployment_id, e.topic_0, e.ledger_sequence, e.transaction_index,
+  e.operation_index, e.event_index, e.event_id;
+
+CREATE VIEW manager.dao_modules AS
+SELECT deployment_id, dao_id, 'token'::text AS module_role, token_contract AS module_contract
+  FROM manager.dao_registry WHERE token_contract IS NOT NULL
+UNION ALL
+SELECT deployment_id, dao_id, 'metadata', metadata_contract
+  FROM manager.dao_registry WHERE metadata_contract IS NOT NULL
+UNION ALL
+SELECT deployment_id, dao_id, 'auction', auction_contract
+  FROM manager.dao_registry WHERE auction_contract IS NOT NULL
+UNION ALL
+SELECT deployment_id, dao_id, 'governor', governor_contract
+  FROM manager.dao_registry WHERE governor_contract IS NOT NULL
+UNION ALL
+SELECT deployment_id, dao_id, 'treasury', treasury_contract
+  FROM manager.dao_registry WHERE treasury_contract IS NOT NULL
+UNION ALL
+SELECT deployment_id, dao_id, 'marketplace', marketplace_contract
+  FROM manager.dao_registry WHERE marketplace_contract IS NOT NULL;
+
+-- Every module contract belongs to exactly one DAO. Domain views join this on
+-- (deployment_id, contract_id) to resolve the tenant; the Manager itself and
+-- the shared Minter are deliberately absent (they are not owned by one DAO).
+CREATE VIEW manager.event_identity AS
+SELECT deployment_id, module_contract AS contract_id, dao_id, module_role, module_contract
+FROM manager.dao_modules;
+
+-- Registry + token metadata + lifecycle state.
+--   status           'pending' until DaoLaunched, then 'operational'
+--   auction_enabled  launch_auction at launch, or true once the auction has been
+--                    unpaused after launch (an initially disabled auction can be
+--                    configured and enabled later)
+--   auction_paused   latest Paused/Unpaused after launch; before any such event
+--                    the auction is paused unless it was launched enabled
+CREATE VIEW manager.daos AS
+WITH launched AS (
+  SELECT DISTINCT ON (e.deployment_id, e.topic_0)
+    e.deployment_id,
+    e.topic_0 AS dao_id,
+    e.ledger_sequence AS launched_ledger,
+    e.transaction_index AS launched_transaction_index,
+    e.operation_index AS launched_operation_index,
+    e.event_index AS launched_event_index,
+    NULLIF(e.ledger_closed_at, '')::timestamptz AS launched_at,
+    e.transaction_hash AS launched_tx_hash,
+    COALESCE((e.args::jsonb ->> 'launch_auction')::boolean, true) AS launch_auction,
+    COALESCE((e.args::jsonb ->> 'launch_marketplace')::boolean, true) AS launch_marketplace
+  FROM chain.decoded_events e
+  WHERE e.contract_role = 'manager'
+    AND e.event_name = 'dao_launched'
+  ORDER BY e.deployment_id, e.topic_0, e.ledger_sequence DESC, e.transaction_index DESC,
+    e.operation_index DESC, e.event_index DESC, e.event_id DESC
+), auction_state AS (
+  SELECT
+    r.deployment_id,
+    r.dao_id,
+    bool_or(e.event_name = 'unpaused') AS reactivated,
+    (array_agg(e.event_name = 'paused' ORDER BY e.ledger_sequence DESC, e.transaction_index DESC NULLS LAST,
+      e.operation_index DESC NULLS LAST, e.event_index DESC NULLS LAST, e.event_id DESC))[1] AS paused
+  FROM manager.dao_registry r
+  JOIN launched l ON l.deployment_id = r.deployment_id AND l.dao_id = r.dao_id
+  JOIN chain.decoded_events e
+    ON e.deployment_id = r.deployment_id
+   AND e.contract_id = r.auction_contract
+  WHERE e.contract_role = 'auction'
+    AND e.event_name IN ('paused', 'unpaused')
+    AND chain.event_position(e.ledger_sequence, e.transaction_index, e.operation_index, e.event_index)
+      > chain.event_position(l.launched_ledger, l.launched_transaction_index, l.launched_operation_index, l.launched_event_index)
+  GROUP BY r.deployment_id, r.dao_id
+), token_init AS (
+  -- TokenInitialized: topic owner; data { uri, name, symbol, version }
+  SELECT DISTINCT ON (e.deployment_id, e.contract_id)
+    e.deployment_id,
+    e.contract_id AS token_contract,
+    e.topic_0 AS admin_address,
+    e.args::jsonb ->> 'name' AS token_name,
+    e.args::jsonb ->> 'symbol' AS token_symbol,
+    e.args::jsonb ->> 'uri' AS token_uri
+  FROM chain.decoded_events e
+  WHERE e.contract_role = 'token'
+    AND e.event_name = 'token_initialized'
+  ORDER BY e.deployment_id, e.contract_id, e.ledger_sequence DESC, e.transaction_index DESC,
+    e.operation_index DESC, e.event_index DESC, e.event_id DESC
+), dao_description AS (
+  -- The DAO description lives in the metadata contract: initial value, then updates.
+  SELECT DISTINCT ON (e.deployment_id, e.contract_id)
+    e.deployment_id,
+    e.contract_id AS metadata_contract,
+    CASE e.event_name
+      WHEN 'description_updated' THEN e.args::jsonb ->> 'new_description'
+      ELSE e.args::jsonb ->> 'description'
+    END AS description
+  FROM chain.decoded_events e
+  WHERE e.contract_role = 'metadata'
+    AND e.event_name IN ('metadata_initialized', 'description_updated')
+  ORDER BY e.deployment_id, e.contract_id, e.ledger_sequence DESC, e.transaction_index DESC,
+    e.operation_index DESC, e.event_index DESC, e.event_id DESC
+)
+SELECT
+  r.deployment_id,
+  r.dao_id,
+  r.token_address,
+  r.deployer,
+  r.launch_admin,
+  r.manager_contract,
+  r.token_contract,
+  r.governor_contract,
+  r.auction_contract,
+  r.treasury_contract,
+  r.metadata_contract,
+  r.marketplace_contract,
+  t.token_name,
+  t.token_symbol,
+  d.description AS token_description,
+  t.token_uri,
+  t.admin_address,
+  CASE WHEN l.dao_id IS NULL THEN 'pending' ELSE 'operational' END AS status,
+  CASE WHEN l.dao_id IS NULL THEN NULL::boolean
+    ELSE l.launch_auction OR COALESCE(a.reactivated, false) END AS auction_enabled,
+  CASE WHEN l.dao_id IS NULL THEN NULL::boolean
+    ELSE l.launch_marketplace END AS marketplace_enabled,
+  CASE WHEN l.dao_id IS NULL THEN NULL::boolean
+    ELSE COALESCE(a.paused, NOT l.launch_auction) END AS auction_paused,
+  r.created_ledger,
+  r.created_at,
+  r.created_tx_hash,
+  l.launched_ledger,
+  l.launched_at,
+  l.launched_tx_hash,
+  r.indexed_at
+FROM manager.dao_registry r
+LEFT JOIN launched l ON l.deployment_id = r.deployment_id AND l.dao_id = r.dao_id
+LEFT JOIN auction_state a ON a.deployment_id = r.deployment_id AND a.dao_id = r.dao_id
+LEFT JOIN token_init t ON t.deployment_id = r.deployment_id AND t.token_contract = r.token_contract
+LEFT JOIN dao_description d ON d.deployment_id = r.deployment_id AND d.metadata_contract = r.metadata_contract;
+
+-- ImplementationRegistered: topic wasm_hash; data { name, version, published_at }
+-- ImplementationRevoked:    topic wasm_hash; data { revoked_at }
+CREATE VIEW manager.implementations AS
+SELECT
+  e.event_id,
+  e.deployment_id,
+  e.contract_id AS manager_contract,
+  e.args::jsonb ->> 'name' AS name,
+  e.args::jsonb ->> 'version' AS version,
+  e.topic_0 AS wasm_hash,
+  (e.args::jsonb ->> 'published_at')::bigint AS published_at,
+  e.ledger_sequence AS event_ledger,
+  extract(epoch FROM NULLIF(e.ledger_closed_at, '')::timestamptz)::bigint AS event_timestamp_seconds,
+  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
+  e.transaction_hash,
+  r.event_id IS NOT NULL AS revoked,
+  (r.args::jsonb ->> 'revoked_at')::bigint AS revoked_at
+FROM chain.decoded_events e
+LEFT JOIN LATERAL (
+  SELECT x.event_id, x.args
+  FROM chain.decoded_events x
+  WHERE x.deployment_id = e.deployment_id
+    AND x.contract_role = 'manager'
+    AND x.event_name = 'implementation_revoked'
+    AND x.topic_0 = e.topic_0
+    AND chain.event_position(x.ledger_sequence, x.transaction_index, x.operation_index, x.event_index)
+      > chain.event_position(e.ledger_sequence, e.transaction_index, e.operation_index, e.event_index)
+  ORDER BY x.ledger_sequence DESC, x.transaction_index DESC NULLS LAST,
+    x.operation_index DESC NULLS LAST, x.event_index DESC NULLS LAST, x.event_id DESC
+  LIMIT 1
+) r ON true
+WHERE e.contract_role = 'manager'
+  AND e.event_name = 'implementation_registered';
+
+-- CurrentImplementationsUpdated: data { token, metadata, auction, governor, treasury, marketplace } (wasm hashes)
+CREATE VIEW manager.current_implementations AS
+SELECT DISTINCT ON (e.deployment_id)
+  e.deployment_id,
+  e.args::jsonb ->> 'token' AS token_impl,
+  e.args::jsonb ->> 'metadata' AS metadata_impl,
+  e.args::jsonb ->> 'auction' AS auction_impl,
+  e.args::jsonb ->> 'governor' AS governor_impl,
+  e.args::jsonb ->> 'treasury' AS treasury_impl,
+  e.args::jsonb ->> 'marketplace' AS marketplace_impl,
+  e.ledger_sequence AS updated_ledger,
+  NULLIF(e.ledger_closed_at, '')::timestamptz AS updated_at,
+  e.transaction_hash
+FROM chain.decoded_events e
+WHERE e.contract_role = 'manager'
+  AND e.event_name = 'current_implementations_updated'
+ORDER BY e.deployment_id, e.ledger_sequence DESC, e.transaction_index DESC,
+  e.operation_index DESC, e.event_index DESC, e.event_id DESC;
+
+-- Every module emits its own `Launched` event when the Manager launches it
+-- (Setup -> Live). Six different structs share the event name `launched`, so
+-- rows are keyed by the emitting contract address, never by name alone:
+--   token        topic treasury; data { minters[] }
+--   auction      topic treasury; data { started }
+--   marketplace  topic treasury; data { opened }
+--   governor / treasury / metadata  topic treasury; no data
+-- Metadata is not guaranteed to be launched through the same path as the
+-- others, so a module without a `launched` row is simply is_live = false.
+CREATE VIEW manager.module_launches AS
+SELECT
+  m.deployment_id,
+  m.dao_id,
+  m.module_role,
+  m.module_contract,
+  l.event_id IS NOT NULL AS is_live,
+  l.topics::jsonb ->> 'treasury' AS treasury,
+  (l.args::jsonb ->> 'started')::boolean AS started,
+  (l.args::jsonb ->> 'opened')::boolean AS opened,
+  l.args::jsonb -> 'minters' AS minters,
+  l.ledger_sequence AS launched_ledger,
+  NULLIF(l.ledger_closed_at, '')::timestamptz AS launched_at,
+  l.transaction_hash AS launched_tx_hash
+FROM manager.dao_modules m
+LEFT JOIN LATERAL (
+  SELECT x.*
+  FROM chain.decoded_events x
+  WHERE x.deployment_id = m.deployment_id
+    AND x.contract_id = m.module_contract
+    AND x.event_name = 'launched'
+    AND x.contract_role = m.module_role
+  ORDER BY x.ledger_sequence, x.transaction_index NULLS LAST, x.operation_index NULLS LAST,
+    x.event_index NULLS LAST, x.event_id
+  LIMIT 1
+) l ON true;
+
+-- One row per DAO: the launch choices recorded by DaoLaunched plus the live
+-- flag of every module. `is_live` is true once all six modules have launched.
+-- `minter_enabled` is DaoLaunched.enable_minter: the admin-registered platform
+-- minter was granted mint authority at launch (see token.mint_authority_history).
+CREATE VIEW manager.dao_lifecycle AS
+WITH launched AS (
+  SELECT DISTINCT ON (e.deployment_id, e.topic_0)
+    e.deployment_id,
+    e.topic_0 AS dao_id,
+    e.ledger_sequence AS launched_ledger,
+    NULLIF(e.ledger_closed_at, '')::timestamptz AS launched_at,
+    e.transaction_hash AS launched_tx_hash,
+    COALESCE((e.args::jsonb ->> 'launch_auction')::boolean, true) AS launch_auction,
+    COALESCE((e.args::jsonb ->> 'launch_marketplace')::boolean, true) AS launch_marketplace,
+    COALESCE((e.args::jsonb ->> 'enable_minter')::boolean, false) AS enable_minter
+  FROM chain.decoded_events e
+  WHERE e.contract_role = 'manager'
+    AND e.event_name = 'dao_launched'
+  ORDER BY e.deployment_id, e.topic_0, e.ledger_sequence DESC, e.transaction_index DESC,
+    e.operation_index DESC, e.event_index DESC, e.event_id DESC
+), modules AS (
+  SELECT
+    deployment_id, dao_id,
+    bool_or(is_live) FILTER (WHERE module_role = 'token') AS token_live,
+    bool_or(is_live) FILTER (WHERE module_role = 'governor') AS governor_live,
+    bool_or(is_live) FILTER (WHERE module_role = 'treasury') AS treasury_live,
+    bool_or(is_live) FILTER (WHERE module_role = 'auction') AS auction_live,
+    bool_or(is_live) FILTER (WHERE module_role = 'marketplace') AS marketplace_live,
+    bool_or(is_live) FILTER (WHERE module_role = 'metadata') AS metadata_live,
+    bool_and(is_live) AS all_live,
+    bool_or(started) FILTER (WHERE module_role = 'auction') AS auction_started,
+    bool_or(opened) FILTER (WHERE module_role = 'marketplace') AS marketplace_opened
+  FROM manager.module_launches
+  GROUP BY deployment_id, dao_id
+)
+SELECT
+  r.deployment_id,
+  r.dao_id,
+  CASE WHEN l.dao_id IS NULL THEN 'pending' ELSE 'operational' END AS status,
+  COALESCE(m.all_live, false) AS is_live,
+  COALESCE(m.token_live, false) AS token_live,
+  COALESCE(m.governor_live, false) AS governor_live,
+  COALESCE(m.treasury_live, false) AS treasury_live,
+  COALESCE(m.auction_live, false) AS auction_live,
+  COALESCE(m.marketplace_live, false) AS marketplace_live,
+  COALESCE(m.metadata_live, false) AS metadata_live,
+  l.launch_auction,
+  l.launch_marketplace,
+  l.enable_minter AS minter_enabled,
+  m.auction_started,
+  m.marketplace_opened,
+  l.launched_ledger,
+  l.launched_at,
+  l.launched_tx_hash
+FROM manager.dao_registry r
+LEFT JOIN launched l ON l.deployment_id = r.deployment_id AND l.dao_id = r.dao_id
+LEFT JOIN modules m ON m.deployment_id = r.deployment_id AND m.dao_id = r.dao_id;
+
+-- Module upgrade history. Every module (token, governor, treasury, auction,
+-- marketplace, metadata) emits, from the shared upgrade flow:
+--   upgraded        topics from_hash, to_hash; data { version }
+--   version_synced  data { version }   (version re-read from the registry; hash unchanged)
+-- Rows are keyed by the emitting contract, resolved to a DAO through
+-- manager.event_identity. `event_type` is 'upgraded' or 'version_synced';
+-- from_hash / to_hash are NULL for version_synced. Order by `event_seq`.
+CREATE VIEW manager.module_upgrades AS
+SELECT
+  e.event_id,
+  e.deployment_id,
+  i.dao_id,
+  i.module_role,
+  e.contract_id,
+  e.event_name AS event_type,
+  e.topics::jsonb ->> 'from_hash' AS from_hash,
+  e.topics::jsonb ->> 'to_hash' AS to_hash,
+  e.args::jsonb ->> 'version' AS version,
+  chain.event_position(e.ledger_sequence, e.transaction_index, e.operation_index, e.event_index) AS event_seq,
+  e.ledger_sequence AS event_ledger,
+  e.transaction_index,
+  e.operation_index,
+  e.event_index,
+  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
+  e.transaction_hash
+FROM chain.decoded_events e
+JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
+WHERE e.contract_role = i.module_role
+  AND e.event_name IN ('upgraded', 'version_synced');
+
+-- Current implementation of every DAO module (one row per module contract).
+--   current_hash     latest Upgraded.to_hash, else the hash from DaoCreated.wasm_hashes
+--   current_version  version of the latest Upgraded / VersionSynced; NULL if none seen
+--   upgrade_count    number of Upgraded events
+--   last_upgraded_*  the latest Upgraded event (NULL if never upgraded)
+CREATE VIEW manager.module_versions AS
+SELECT
+  m.deployment_id,
+  m.dao_id,
+  m.module_role,
+  m.module_contract,
+  COALESCE(u.to_hash,
+    CASE m.module_role
+      WHEN 'token' THEN r.token_wasm_hash
+      WHEN 'governor' THEN r.governor_wasm_hash
+      WHEN 'auction' THEN r.auction_wasm_hash
+      WHEN 'treasury' THEN r.treasury_wasm_hash
+      WHEN 'metadata' THEN r.metadata_wasm_hash
+      WHEN 'marketplace' THEN r.marketplace_wasm_hash
+    END) AS current_hash,
+  v.version AS current_version,
+  v.event_at AS version_updated_at,
+  COALESCE(c.upgrade_count, 0) AS upgrade_count,
+  u.from_hash AS last_upgraded_from_hash,
+  u.event_ledger AS last_upgraded_ledger,
+  u.event_at AS last_upgraded_at,
+  u.transaction_hash AS last_upgraded_tx_hash
+FROM manager.dao_modules m
+JOIN manager.dao_registry r ON r.deployment_id = m.deployment_id AND r.dao_id = m.dao_id
+LEFT JOIN LATERAL (
+  SELECT x.* FROM manager.module_upgrades x
+  WHERE x.deployment_id = m.deployment_id AND x.dao_id = m.dao_id
+    AND x.contract_id = m.module_contract AND x.event_type = 'upgraded'
+  ORDER BY x.event_seq DESC, x.event_id DESC LIMIT 1
+) u ON true
+LEFT JOIN LATERAL (
+  SELECT x.* FROM manager.module_upgrades x
+  WHERE x.deployment_id = m.deployment_id AND x.dao_id = m.dao_id
+    AND x.contract_id = m.module_contract
+  ORDER BY x.event_seq DESC, x.event_id DESC LIMIT 1
+) v ON true
+LEFT JOIN LATERAL (
+  SELECT count(*) AS upgrade_count FROM manager.module_upgrades x
+  WHERE x.deployment_id = m.deployment_id AND x.dao_id = m.dao_id
+    AND x.contract_id = m.module_contract AND x.event_type = 'upgraded'
+) c ON true;
+
+-- Manager admin history, deployment-wide (no DAO).
+--   admin_proposed     topics current_admin, proposed_admin
+--   admin_proposal_cancelled  topics current_admin, cancelled_admin
+--   admin_changed      topics old_admin, new_admin
+--   platform_minter_set  topic minter
+-- previous_admin / new_admin are filled for the two admin events (a proposal
+-- reports current -> proposed; a cancellation reports current -> cancelled);
+-- platform_minter only for platform_minter_set.
+CREATE VIEW manager.admin_history AS
+SELECT
+  e.event_id,
+  e.deployment_id,
+  e.contract_id AS manager_contract,
+  e.event_name AS event_type,
+  COALESCE(e.topics::jsonb ->> 'current_admin', e.topics::jsonb ->> 'old_admin') AS previous_admin,
+  COALESCE(e.topics::jsonb ->> 'proposed_admin', e.topics::jsonb ->> 'cancelled_admin',
+    e.topics::jsonb ->> 'new_admin') AS new_admin,
+  e.topics::jsonb ->> 'minter' AS platform_minter,
+  e.ledger_sequence AS event_ledger,
+  e.transaction_index,
+  e.operation_index,
+  e.event_index,
+  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
+  e.transaction_hash
+FROM chain.decoded_events e
+WHERE e.contract_role = 'manager'
+  AND e.event_name IN ('admin_proposed', 'admin_proposal_cancelled', 'admin_changed', 'platform_minter_set');
+
+-- Current Manager settings: admin (ManagerInitialized, then AdminChanged),
+-- pending admin (an AdminProposed newer than both the last AdminChanged and the
+-- last AdminProposalCancelled; NULL after an accept or a cancel) and the
+-- platform minter. One row per deployment.
+CREATE VIEW manager.settings AS
+WITH ordered AS (
+  SELECT e.*, chain.event_position(e.ledger_sequence, e.transaction_index, e.operation_index, e.event_index) AS pos
+  FROM chain.decoded_events e
+  WHERE e.contract_role = 'manager'
+    AND e.event_name IN ('manager_initialized', 'admin_proposed', 'admin_proposal_cancelled', 'admin_changed', 'platform_minter_set')
+), admin AS (
+  SELECT DISTINCT ON (deployment_id)
+    deployment_id,
+    CASE event_name WHEN 'admin_changed' THEN topics::jsonb ->> 'new_admin' ELSE topics::jsonb ->> 'admin' END AS admin,
+    pos AS admin_pos
+  FROM ordered
+  WHERE event_name IN ('manager_initialized', 'admin_changed')
+  ORDER BY deployment_id, ledger_sequence DESC, transaction_index DESC NULLS LAST,
+    operation_index DESC NULLS LAST, event_index DESC NULLS LAST, event_id DESC
+), proposal AS (
+  SELECT DISTINCT ON (deployment_id)
+    deployment_id, topics::jsonb ->> 'proposed_admin' AS pending_admin, pos AS proposal_pos
+  FROM ordered
+  WHERE event_name = 'admin_proposed'
+  ORDER BY deployment_id, ledger_sequence DESC, transaction_index DESC NULLS LAST,
+    operation_index DESC NULLS LAST, event_index DESC NULLS LAST, event_id DESC
+), cancel AS (
+  SELECT DISTINCT ON (deployment_id) deployment_id, pos AS cancel_pos
+  FROM ordered
+  WHERE event_name = 'admin_proposal_cancelled'
+  ORDER BY deployment_id, ledger_sequence DESC, transaction_index DESC NULLS LAST,
+    operation_index DESC NULLS LAST, event_index DESC NULLS LAST, event_id DESC
+), minter AS (
+  SELECT DISTINCT ON (deployment_id)
+    deployment_id, topics::jsonb ->> 'minter' AS platform_minter
+  FROM ordered
+  WHERE event_name = 'platform_minter_set'
+  ORDER BY deployment_id, ledger_sequence DESC, transaction_index DESC NULLS LAST,
+    operation_index DESC NULLS LAST, event_index DESC NULLS LAST, event_id DESC
+)
+SELECT
+  a.deployment_id,
+  a.admin,
+  CASE WHEN p.proposal_pos > a.admin_pos
+        AND (c.cancel_pos IS NULL OR p.proposal_pos > c.cancel_pos)
+    THEN p.pending_admin END AS pending_admin,
+  m.platform_minter
+FROM admin a
+LEFT JOIN proposal p ON p.deployment_id = a.deployment_id
+LEFT JOIN cancel c ON c.deployment_id = a.deployment_id
+LEFT JOIN minter m ON m.deployment_id = a.deployment_id;

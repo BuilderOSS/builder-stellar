@@ -7,17 +7,10 @@
     "generate": "node scripts/generate-pipeline.mjs",
     "test": "node --test test/*.test.mjs",
     "turbo:validate": "goldsky turbo validate pipelines/builder-stellar-events.yaml",
-    "validate": "node scripts/validate-events.mjs"
+    "validate": "node scripts/validate-events.mjs",
+    "test:db": "TEST_DATABASE_URL=\"${TEST_DATABASE_URL:?set TEST_DATABASE_URL}\" node --test test/read-model.integration.test.mjs"
   },
   "dependencies": {
     "dotenv": "^17.2.1"
-  },
-  "devDependencies": {
-    "@builder-stellar/auction-bindings": "workspace:*",
-    "@builder-stellar/governor-bindings": "workspace:*",
-    "@builder-stellar/manager-bindings": "workspace:*",
-    "@builder-stellar/metadata-bindings": "workspace:*",
-    "@builder-stellar/token-bindings": "workspace:*",
-    "@builder-stellar/treasury-bindings": "workspace:*"
   }
 }

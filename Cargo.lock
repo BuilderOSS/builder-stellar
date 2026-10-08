@@ -184,6 +184,7 @@ checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 name = "auction"
 version = "0.1.0"
 dependencies = [
+ "common",
  "soroban-sdk",
  "stellar-access",
  "stellar-contract-utils",
@@ -293,6 +294,14 @@ dependencies = [
  "num-traits",
  "serde",
  "windows-link",
+]
+
+[[package]]
+name = "common"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+ "stellar-access",
 ]
 
 [[package]]
@@ -408,6 +417,7 @@ name = "dao-e2e"
 version = "0.1.0"
 dependencies = [
  "auction",
+ "common",
  "governor",
  "manager",
  "marketplace",
@@ -755,6 +765,7 @@ dependencies = [
 name = "governor"
 version = "0.1.0"
 dependencies = [
+ "common",
  "soroban-sdk",
  "stellar-access",
  "stellar-governance",
@@ -985,17 +996,21 @@ name = "manager"
 version = "0.1.0"
 dependencies = [
  "auction",
+ "common",
  "governor",
+ "marketplace",
  "metadata",
  "soroban-sdk",
  "stellar-access",
  "token",
+ "treasury",
 ]
 
 [[package]]
 name = "marketplace"
 version = "0.1.0"
 dependencies = [
+ "common",
  "soroban-sdk",
 ]
 
@@ -1009,8 +1024,20 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 name = "metadata"
 version = "0.1.0"
 dependencies = [
+ "common",
  "soroban-sdk",
  "stellar-access",
+ "token",
+]
+
+[[package]]
+name = "minter"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "soroban-sdk",
+ "stellar-access",
+ "stellar-tokens",
  "token",
 ]
 
@@ -1824,6 +1851,7 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 name = "token"
 version = "0.1.0"
 dependencies = [
+ "common",
  "soroban-sdk",
  "stellar-access",
  "stellar-governance",
@@ -1835,9 +1863,9 @@ dependencies = [
 name = "treasury"
 version = "0.1.0"
 dependencies = [
+ "common",
  "soroban-sdk",
  "stellar-access",
- "stellar-macros",
 ]
 
 [[package]]

@@ -8,7 +8,7 @@ use metadata::{IpfsGroup, ItemParam};
 use metadata::{MetadataContract, MetadataContractClient};
 use soroban_sdk::{
     contract, contractimpl, symbol_short,
-    testutils::{Address as _, Ledger},
+    testutils::{Address as _, Ledger, MockAuth, MockAuthInvoke},
     token::{StellarAssetClient, TokenClient},
     vec,
     xdr::AccountFlags,
@@ -42,26 +42,31 @@ pub struct MaliciousReentrantContract;
 
 #[contractimpl]
 impl MaliciousReentrantContract {
-    /// Attempts to re-enter governor.execute() during execution
-    /// This should fail because the proposal state is updated before external calls
+    /// Attempts to re-enter treasury.execute() during execution.
+    /// The host blocks it because the Treasury is on the call stack.
     pub fn reentry(
         e: &Env,
-        governor: Address,
+        treasury: Address,
         targets: Vec<Address>,
         functions: Vec<Symbol>,
         args: Vec<Vec<Val>>,
         desc_hash: BytesN<32>,
-        executor: Address,
     ) {
         // Mark that attack was attempted
         e.storage().instance().set(&symbol_short!("attack"), &1);
 
-        // Try to re-enter execute() - should fail with ProposalAlreadyExecuted
-        let gov_client = DaoGovernorContractClient::new(e, &governor);
-        gov_client.execute(&targets, &functions, &args, &desc_hash, &executor);
+        // Try to re-enter treasury.execute() - the host rejects re-entry
+        let treasury_client = DaoTreasuryContractClient::new(e, &treasury);
+        treasury_client.execute(&targets, &functions, &args, &desc_hash);
 
         // If we get here, the reentrancy attack succeeded (BAD!)
         e.storage().instance().set(&symbol_short!("success"), &true);
+    }
+
+    /// Same marker write as `reentry` but without re-entering the Treasury
+    /// (positive control for the re-entry test).
+    pub fn ping(e: &Env) {
+        e.storage().instance().set(&symbol_short!("attack"), &1u32);
     }
 
     pub fn get_attack_count(e: &Env) -> u32 {
@@ -72,26 +77,88 @@ impl MaliciousReentrantContract {
     }
 }
 
-fn setup() -> (
+/// Target that tries to call `governor.consume` from inside a treasury-dispatched call.
+#[contract]
+pub struct MaliciousConsumeContract;
+
+#[contractimpl]
+impl MaliciousConsumeContract {
+    pub fn attack(
+        e: &Env,
+        governor: Address,
+        targets: Vec<Address>,
+        functions: Vec<Symbol>,
+        args: Vec<Vec<Val>>,
+        desc_hash: BytesN<32>,
+    ) {
+        DaoGovernorContractClient::new(e, &governor)
+            .consume(&targets, &functions, &args, &desc_hash);
+    }
+}
+
+/// Metadata constructor wiring: deploy the metadata contract at a pre-generated
+/// address (the token is constructed with that address first).
+fn register_metadata(e: &Env, metadata_id: &Address, token_id: &Address, owner: &Address) {
+    e.register_at(
+        metadata_id,
+        MetadataContract,
+        (
+            token_id.clone(),
+            String::from_str(e, "https://example.com/project"),
+            String::from_str(e, "DAO description"),
+            String::from_str(e, "https://example.com/image.png"),
+            String::from_str(e, "https://example.com/render/"),
+            Address::generate(e),
+            BytesN::from_array(e, &[0u8; 32]),
+            owner.clone(),
+            Address::generate(e), // treasury (metadata is not launched in these tests)
+            Vec::<String>::new(e),
+            Vec::<ItemParam>::new(e),
+            IpfsGroup {
+                base_uri: String::from_str(e, "ipfs://"),
+                extension: String::from_str(e, ".png"),
+            },
+            String::from_str(e, "0.1.0"),
+        ),
+    );
+}
+
+type Fixture = (
     Env,
     DaoTokenContractClient<'static>,
     DaoTreasuryContractClient<'static>,
     DaoGovernorContractClient<'static>,
     TargetContractClient<'static>,
     Address,
-) {
+);
+
+fn setup() -> Fixture {
     let e = Env::default();
+    let zero = BytesN::from_array(&e, &[0u8; 32]);
+    let mgr = Address::generate(&e);
+    setup_with(e, mgr, zero.clone(), zero)
+}
+
+/// Full launched DAO whose governor/treasury register their upgrade hashes
+/// against `manager` (a mock manager in the upgrade tests).
+fn setup_with(
+    e: Env,
+    manager: Address,
+    governor_hash: BytesN<32>,
+    treasury_hash: BytesN<32>,
+) -> Fixture {
     e.mock_all_auths();
     e.ledger().set_sequence_number(100);
     e.ledger().set_timestamp(1_000);
 
     let owner = Address::generate(&e);
-    let metadata_id = e.register(MetadataContract, ());
-    let metadata = MetadataContractClient::new(&e, &metadata_id);
+    let metadata_id = Address::generate(&e);
+    let treasury_id = Address::generate(&e);
     let token_id = e.register(
         DaoTokenContract,
         (
             owner.clone(),
+            treasury_id.clone(),
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
@@ -102,37 +169,26 @@ fn setup() -> (
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
-    metadata.initialize(
-        &token_id,
-        &String::from_str(&e, "https://example.com/project"),
-        &String::from_str(&e, "DAO description"),
-        &String::from_str(&e, "https://example.com/image.png"),
-        &String::from_str(&e, "https://example.com/render/"),
-        &Address::generate(&e),
-        &BytesN::from_array(&e, &[0u8; 32]),
-        &owner,
-        &Vec::new(&e),
-        &Vec::new(&e),
-        &IpfsGroup {
-            base_uri: String::from_str(&e, "ipfs://"),
-            extension: String::from_str(&e, ".png"),
-        },
-        &String::from_str(&e, "0.1.0"),
-    );
+    register_metadata(&e, &metadata_id, &token_id, &owner);
 
-    let treasury_id = e.register(
+    // Constructor-only wiring: the governor address is pre-generated so the
+    // treasury can be constructed with it (the Manager uses predicted addresses).
+    let governor_id = Address::generate(&e);
+    e.register_at(
+        &treasury_id,
         DaoTreasuryContract,
         (
             owner.clone(),
-            Address::generate(&e),
-            Address::generate(&e),
-            BytesN::from_array(&e, &[0u8; 32]),
+            governor_id.clone(),
+            manager.clone(),
+            treasury_hash,
             String::from_str(&e, "0.1.0"),
         ),
     );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
 
-    let governor_id = e.register(
+    e.register_at(
+        &governor_id,
         DaoGovernorContract,
         (
             owner.clone(),
@@ -143,8 +199,8 @@ fn setup() -> (
             300_u32,
             1_u128,
             1_000_u32,
-            Address::generate(&e),
-            BytesN::from_array(&e, &[0u8; 32]),
+            manager.clone(),
+            governor_hash,
             String::from_str(&e, "0.1.0"),
         ),
     );
@@ -153,8 +209,14 @@ fn setup() -> (
     let target_id = e.register(TargetContract, ());
     let target = TargetContractClient::new(&e, &target_id);
 
-    treasury.set_governor(&governor_id);
-    token.set_mint_authority(&treasury.address, &true);
+    // Launch the token the way the Manager does: the treasury becomes owner and
+    // the canonical minter, and `owner` (the launch admin in these tests) is
+    // registered as an extra launch-time minter so the tests can keep minting
+    // voting power directly.
+    token.launch(&treasury_id, &vec![&e, treasury_id.clone(), owner.clone()]);
+    // Governor and treasury only process proposals once live.
+    governor.launch(&treasury_id);
+    treasury.launch(&treasury_id);
 
     (e, token, treasury, governor, target, owner)
 }
@@ -176,23 +238,8 @@ fn mint_proposal_args(e: &Env, treasury: &Address, recipient: &Address) -> Vec<V
     ]
 }
 
-fn batch_mint_proposal_args(
-    e: &Env,
-    treasury: &Address,
-    recipient: &Address,
-    amount: u32,
-) -> Vec<Vec<Val>> {
-    // Args for calling token.batch_mint(treasury, recipient, amount)
-    vec![
-        e,
-        vec![
-            e,
-            treasury.clone().into_val(e),
-            recipient.clone().into_val(e),
-            amount.into_val(e),
-        ],
-    ]
-}
+// batch_mint helper removed - Token contract no longer supports batch_mint
+// Use Minter contract for batch minting operations
 
 fn transfer_proposal_args_i128(
     e: &Env,
@@ -342,7 +389,7 @@ fn manager_registry_and_predictions_are_creator_scoped() {
 
 #[test]
 fn dao_flow_executes_treasury_call() {
-    let (e, token, _treasury, governor, target, owner) = setup();
+    let (e, token, treasury, governor, target, owner) = setup();
     let proposer = Address::generate(&e);
 
     let token_id = token.mint(&owner, &proposer);
@@ -373,7 +420,9 @@ fn dao_flow_executes_treasury_call() {
     assert_eq!(governor.proposal_state(&proposal_id), ProposalState::Queued);
 
     e.ledger().set_timestamp(2_901);
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
+    // Enforcing mode: only the Treasury's own authorization may reach targets.
+    e.set_auths(&[]);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
 
     assert_eq!(target.get_value(), 42);
     assert_eq!(
@@ -421,7 +470,7 @@ fn transfer_after_snapshot_does_not_change_vote_outcome() {
 
 #[test]
 fn dao_flow_mints_token_via_treasury_execution() {
-    let (e, token, _treasury, governor, _target, owner) = setup();
+    let (e, token, treasury, governor, _target, owner) = setup();
     let proposer = Address::generate(&e);
     let recipient = Address::generate(&e);
 
@@ -453,7 +502,9 @@ fn dao_flow_mints_token_via_treasury_execution() {
     assert_eq!(governor.proposal_state(&proposal_id), ProposalState::Queued);
 
     e.ledger().set_timestamp(2_901);
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
+    // Enforcing mode: only the Treasury's own authorization may reach targets.
+    e.set_auths(&[]);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
 
     assert_eq!(token.balance(&recipient), 1);
     assert_eq!(token.get_delegate(&recipient), Some(recipient.clone()));
@@ -504,7 +555,9 @@ fn sac_classic_asset_without_auth_requirement_can_be_received_held_and_transferr
     assert_eq!(governor.proposal_state(&proposal_id), ProposalState::Queued);
 
     e.ledger().set_timestamp(2_901);
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
+    // Enforcing mode: only the Treasury's own authorization may reach targets.
+    e.set_auths(&[]);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
 
     assert_eq!(asset_client.balance(&treasury.address), 0);
     assert_eq!(asset_client.balance(&target.address), amount);
@@ -571,7 +624,9 @@ fn sac_classic_asset_with_auth_requirement_can_be_received_held_and_transferred_
     assert_eq!(governor.proposal_state(&proposal_id), ProposalState::Queued);
 
     e.ledger().set_timestamp(2_901);
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
+    // Enforcing mode: only the Treasury's own authorization may reach targets.
+    e.set_auths(&[]);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
 
     assert_eq!(asset_client.balance(&treasury.address), 0);
     assert_eq!(asset_client.balance(&target.address), 100);
@@ -617,7 +672,9 @@ fn governance_token_can_be_received_held_and_transferred_via_proposal() {
     assert_eq!(governor.proposal_state(&proposal_id), ProposalState::Queued);
 
     e.ledger().set_timestamp(2_901);
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
+    // Enforcing mode: only the Treasury's own authorization may reach targets.
+    e.set_auths(&[]);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
 
     assert_eq!(token.balance(&treasury.address), 0);
     assert_eq!(token.balance(&target.address), 1);
@@ -629,78 +686,27 @@ fn governance_token_can_be_received_held_and_transferred_via_proposal() {
     let _ = proposer_token_id;
 }
 
-#[test]
-fn dao_flow_batch_mints_tokens_via_treasury() {
-    let (e, token, _treasury, governor, _target, owner) = setup();
-    let proposer = Address::generate(&e);
-    let recipient = Address::generate(&e);
-
-    let _ = token.mint(&owner, &proposer);
-    e.ledger().set_sequence_number(200);
-    e.ledger().set_timestamp(2_000);
-
-    let treasury_address = governor.treasury();
-    let targets = vec![&e, token.address.clone()];
-    let functions = vec![&e, Symbol::new(&e, "batch_mint")];
-    let args = batch_mint_proposal_args(&e, &treasury_address, &recipient, 10);
-    let description = String::from_str(&e, "Batch mint 10 tokens through treasury");
-    let desc_hash = description_hash(&e, &description);
-
-    let proposal_id = governor.propose(&targets, &functions, &args, &description, &proposer);
-
-    e.ledger().set_timestamp(2_301);
-    governor.cast_vote(&proposal_id, &1, &String::from_str(&e, "yes"), &proposer);
-
-    e.ledger().set_timestamp(2_601);
-    assert_eq!(
-        governor.proposal_state(&proposal_id),
-        ProposalState::Succeeded
-    );
-
-    governor.queue(
-        &targets, &functions, &args, &desc_hash, &2_901_u32, &proposer,
-    );
-    assert_eq!(governor.proposal_state(&proposal_id), ProposalState::Queued);
-
-    e.ledger().set_timestamp(2_901);
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
-
-    assert_eq!(token.balance(&recipient), 10);
-    assert_eq!(token.get_votes(&recipient), 10);
-    assert_eq!(token.get_delegate(&recipient), Some(recipient.clone()));
-    assert_eq!(
-        governor.proposal_state(&proposal_id),
-        ProposalState::Executed
-    );
-}
+// dao_flow_batch_mints_tokens_via_treasury removed - Token contract no longer has batch_mint
+// Use Minter contract for batch minting via governance if needed
 
 #[test]
-fn governor_authority_can_modify_governance_parameters() {
-    let (e, token, _treasury, governor, _target, owner) = setup();
-    let authorized_governor = Address::generate(&e);
+fn owner_can_modify_governance_parameters_during_setup() {
+    let (_e, token, _treasury, governor, _target, owner) = setup();
 
-    // Owner grants governor authority
-    governor.set_governor_authority(&authorized_governor, &true);
-    assert!(governor.governor_authority(&authorized_governor));
-
-    // Authorized governor can modify voting delay
-    governor.set_voting_delay(&authorized_governor, &300);
+    governor.set_voting_delay(&300);
     assert_eq!(governor.voting_delay(), 300);
 
-    // Authorized governor can modify voting period
-    governor.set_voting_period(&authorized_governor, &300);
+    governor.set_voting_period(&300);
     assert_eq!(governor.voting_period(), 300);
 
-    // Authorized governor can modify proposal threshold
-    governor.set_proposal_threshold(&authorized_governor, &5);
+    governor.set_proposal_threshold(&5);
     assert_eq!(governor.proposal_threshold(), 5);
 
-    // Authorized governor can modify quorum
-    governor.set_quorum_bps(&authorized_governor, &2000);
+    governor.set_quorum_bps(&2000);
     assert_eq!(governor.quorum_bps(), 2000);
 
-    // Authorized governor can modify queue delay (minimum 300 seconds)
-    governor.set_queue_delay(&authorized_governor, &300);
+    // Queue delay minimum is 300 seconds.
+    governor.set_queue_delay(&300);
 
     let _ = token;
     let _ = owner;
@@ -708,21 +714,20 @@ fn governor_authority_can_modify_governance_parameters() {
 
 #[test]
 fn proposal_flow_with_modified_governance_parameters() {
-    let (e, token, _treasury, governor, target, owner) = setup();
+    let (e, token, treasury, governor, target, owner) = setup();
     let proposer = Address::generate(&e);
-    let authorized_governor = Address::generate(&e);
 
-    // Mint 10 tokens to proposer using batch mint
-    let last_token_id = token.batch_mint(&owner, &proposer, &10);
-    assert_eq!(last_token_id, 9);
+    // Mint 10 tokens to proposer using multiple single mints
+    for _ in 0..10 {
+        token.mint(&owner, &proposer);
+    }
     assert_eq!(token.get_votes(&proposer), 10);
 
-    // Grant governor authority and modify parameters
-    governor.set_governor_authority(&authorized_governor, &true);
-    governor.set_voting_delay(&authorized_governor, &300); // Five-minute delay
-    governor.set_voting_period(&authorized_governor, &300); // Five-minute period
-    governor.set_proposal_threshold(&authorized_governor, &5); // Higher threshold
-    governor.set_quorum_bps(&authorized_governor, &5000); // 50% quorum
+    // The owner (launch admin during setup) tunes parameters
+    governor.set_voting_delay(&300); // Five-minute delay
+    governor.set_voting_period(&300); // Five-minute period
+    governor.set_proposal_threshold(&5); // Higher threshold
+    governor.set_quorum_bps(&5000); // 50% quorum
 
     e.ledger().set_sequence_number(200);
     e.ledger().set_timestamp(2_000);
@@ -752,7 +757,9 @@ fn proposal_flow_with_modified_governance_parameters() {
     );
 
     e.ledger().set_timestamp(2_901);
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
+    // Enforcing mode: only the Treasury's own authorization may reach targets.
+    e.set_auths(&[]);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
 
     assert_eq!(target.get_value(), 42);
     assert_eq!(
@@ -762,7 +769,6 @@ fn proposal_flow_with_modified_governance_parameters() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #5007)")]
 fn reentrancy_attack_is_prevented() {
     // NOTE: Soroban provides built-in reentrancy protection at the platform level
     // When a malicious contract attempts to re-enter during execution,
@@ -770,7 +776,7 @@ fn reentrancy_attack_is_prevented() {
     //
     // Our CEI pattern (updating state before external calls) provides additional protection
     // as a best practice and defense-in-depth strategy.
-    let (e, token, _treasury, governor, _target, owner) = setup();
+    let (e, token, treasury, governor, _target, owner) = setup();
 
     // Register malicious contract
     let malicious_id = e.register(MaliciousReentrantContract, ());
@@ -800,12 +806,11 @@ fn reentrancy_attack_is_prevented() {
         &e,
         vec![
             &e,
-            governor.address.clone().into_val(&e),
+            treasury.address.clone().into_val(&e),
             attack_targets.into_val(&e),
             attack_functions.into_val(&e),
             attack_args.into_val(&e),
             desc_hash.into_val(&e),
-            proposer.clone().into_val(&e),
         ],
     ];
 
@@ -830,139 +835,115 @@ fn reentrancy_attack_is_prevented() {
     assert_eq!(governor.proposal_state(&proposal_id), ProposalState::Queued);
 
     // Execute the proposal - this will trigger the reentrancy attack
-    e.ledger().set_timestamp(2_412); // After ETA
+    e.ledger().set_timestamp(2_901); // At ETA (queued at 2_601 + 300 delay)
 
     // The execution will:
     // 1. Mark proposal as Executed (CEI pattern)
     // 2. Call malicious.reentry()
     // 3. Malicious contract tries to re-enter execute()
     // 4. Soroban blocks reentrancy with Error(Context, InvalidAction)
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
-
-    // If we get here without panic, the test will fail
-    // The should_panic annotation ensures the test passes only if reentrancy is blocked
+    let r = treasury.try_execute(&targets, &functions, &args, &desc_hash);
+    // The host rejects re-entry into the Treasury (it is on the call stack).
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        soroban_sdk::Error::from_type_and_code(
+            soroban_sdk::xdr::ScErrorType::Context,
+            soroban_sdk::xdr::ScErrorCode::InvalidAction
+        )
+    );
+    // Everything reverted: still Queued, and the attacker's state write is gone.
+    assert_eq!(governor.proposal_state(&proposal_id), ProposalState::Queued);
+    assert_eq!(_malicious.get_attack_count(), 0);
 }
 
 #[test]
-fn treasury_batch_mint_with_explicit_auth() {
-    use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
+fn reentrancy_positive_control_same_proposal_without_reentry_executes() {
+    // Identical flow to `reentrancy_attack_is_prevented`, but the action does
+    // not re-enter the Treasury: it must execute, proving the failure above is
+    // caused by the re-entry and not by the proposal plumbing.
+    let (e, token, treasury, governor, _target, owner) = setup();
+    let malicious_id = e.register(MaliciousReentrantContract, ());
+    let malicious = MaliciousReentrantContractClient::new(&e, &malicious_id);
 
-    let e = Env::default();
-    e.ledger().set_sequence_number(100);
-    e.ledger().set_timestamp(1_000);
+    let proposer = Address::generate(&e);
+    token.mint(&owner, &proposer);
 
-    let owner = Address::generate(&e);
-    let metadata_id = e.register(MetadataContract, ());
-    let metadata = MetadataContractClient::new(&e, &metadata_id);
-    let token_id = e.register(
-        DaoTokenContract,
-        (
-            owner.clone(),
-            String::from_str(&e, "https://example.com/"),
-            String::from_str(&e, "DAO Vote NFT"),
-            String::from_str(&e, "vDAO"),
-            metadata_id.clone(),
-            Address::generate(&e),
-            BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
-        ),
+    e.ledger().set_sequence_number(200);
+    e.ledger().set_timestamp(2_000);
+
+    let targets = vec![&e, malicious_id.clone()];
+    let functions = vec![&e, symbol_short!("ping")];
+    let args: Vec<Vec<Val>> = vec![&e, vec![&e]];
+    let description = String::from_str(&e, "Reentrancy positive control");
+    let desc_hash = description_hash(&e, &description);
+
+    let proposal_id = governor.propose(&targets, &functions, &args, &description, &proposer);
+    e.ledger().set_timestamp(2_301);
+    governor.cast_vote(&proposal_id, &1, &String::from_str(&e, "yes"), &proposer);
+    e.ledger().set_timestamp(2_601);
+    assert_eq!(
+        governor.proposal_state(&proposal_id),
+        ProposalState::Succeeded
     );
-    let token = DaoTokenContractClient::new(&e, &token_id);
-    metadata.initialize(
-        &token_id,
-        &String::from_str(&e, "https://example.com/project"),
-        &String::from_str(&e, "DAO description"),
-        &String::from_str(&e, "https://example.com/image.png"),
-        &String::from_str(&e, "https://example.com/render/"),
-        &Address::generate(&e),
-        &BytesN::from_array(&e, &[0u8; 32]),
-        &owner,
-        &Vec::new(&e),
-        &Vec::new(&e),
-        &IpfsGroup {
-            base_uri: String::from_str(&e, "ipfs://"),
-            extension: String::from_str(&e, ".png"),
-        },
-        &String::from_str(&e, "0.1.0"),
+    governor.queue(
+        &targets, &functions, &args, &desc_hash, &2_411_u32, &proposer,
     );
+    e.ledger().set_timestamp(2_901);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
 
-    let treasury_id = e.register(
-        DaoTreasuryContract,
-        (
-            owner.clone(),
-            Address::generate(&e),
-            Address::generate(&e),
-            BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
-        ),
+    assert_eq!(
+        governor.proposal_state(&proposal_id),
+        ProposalState::Executed
     );
-    let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
-
-    let governor_id = e.register(
-        DaoGovernorContract,
-        (
-            owner.clone(),
-            token_id.clone(),
-            treasury_id.clone(),
-            300_u32,
-            300_u32,
-            300_u32,
-            1_u128,
-            1_000_u32,
-            Address::generate(&e),
-            BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
-        ),
-    );
-    let _governor = DaoGovernorContractClient::new(&e, &governor_id);
-
-    let recipient = Address::generate(&e);
-
-    // Setup - grant treasury mint authority
-    e.mock_all_auths();
-    treasury.set_governor(&governor_id);
-    token.set_mint_authority(&treasury.address, &true);
-
-    let batch_mint_args: Vec<Val> = vec![
-        &e,
-        treasury.address.clone().into_val(&e),
-        recipient.clone().into_val(&e),
-        3u32.into_val(&e),
-    ];
-
-    // Now test treasury calling batch_mint with explicit authorization
-    e.mock_auths(&[MockAuth {
-        address: &governor_id,
-        invoke: &MockAuthInvoke {
-            contract: &treasury_id,
-            fn_name: "execute",
-            args: (&token_id, &Symbol::new(&e, "batch_mint"), &batch_mint_args).into_val(&e),
-            sub_invokes: &[
-                // Treasury itself needs to authorize the batch_mint call where it's the minter
-                MockAuthInvoke {
-                    contract: &token_id,
-                    fn_name: "batch_mint",
-                    args: (&treasury.address, &recipient, &3u32).into_val(&e),
-                    sub_invokes: &[],
-                },
-            ],
-        },
-    }]);
-
-    // Call treasury.execute which should call token.batch_mint
-    treasury.execute(&token_id, &Symbol::new(&e, "batch_mint"), &batch_mint_args);
-
-    // Verify the tokens were minted
-    assert_eq!(token.balance(&recipient), 3);
-    assert_eq!(token.get_votes(&recipient), 3);
-    assert_eq!(token.get_delegate(&recipient), Some(recipient.clone()));
+    assert_eq!(malicious.get_attack_count(), 1);
 }
+
+// treasury_batch_mint_with_explicit_auth removed - Token contract no longer has batch_mint
+// Test treasury interactions with Minter contract instead if needed
 
 // ============================================================================
 // AUCTION CONTRACT E2E TESTS
 // ============================================================================
 
-fn setup_auction() -> (
+type AuctionFixture = (
+    Env,
+    DaoTokenContractClient<'static>,
+    DaoTreasuryContractClient<'static>,
+    DaoAuctionContractClient<'static>,
+    Address,                     // owner
+    Address,                     // payment token
+    StellarAssetClient<'static>, // payment token client
+);
+
+/// Auction fixture after the Manager-style launch: owner is the treasury.
+fn setup_auction() -> AuctionFixture {
+    let (e, token, treasury, auction, launch_admin, payment_token, payment_client) =
+        setup_auction_setup_phase();
+    // Launch the token (auction gets mint authority; treasury becomes owner) and
+    // the auction (owner = treasury, still paused) the way the Manager does.
+    // Unpause/pause/setters are therefore exercised as the treasury, which is
+    // returned as `owner`.
+    token.launch(
+        &treasury.address,
+        &vec![&e, treasury.address.clone(), auction.address.clone()],
+    );
+    auction.launch(&treasury.address, &false, &payment_token);
+    let _ = launch_admin;
+    let treasury_address = treasury.address.clone();
+    (
+        e,
+        token,
+        treasury,
+        auction,
+        treasury_address,
+        payment_token,
+        payment_client,
+    )
+}
+
+/// Auction fixture still in the setup phase: owner is the launch admin and the
+/// token and auction are not yet launched.
+fn setup_auction_setup_phase() -> (
     Env,
     DaoTokenContractClient<'static>,
     DaoTreasuryContractClient<'static>,
@@ -976,14 +957,15 @@ fn setup_auction() -> (
     e.ledger().set_timestamp(1_000);
 
     let owner = Address::generate(&e);
-    let metadata_id = e.register(MetadataContract, ());
-    let metadata = MetadataContractClient::new(&e, &metadata_id);
+    let metadata_id = Address::generate(&e);
 
     // Deploy DAO token (NFT)
+    let treasury_id = Address::generate(&e);
     let token_id = e.register(
         DaoTokenContract,
         (
             owner.clone(),
+            treasury_id.clone(),
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
@@ -994,26 +976,11 @@ fn setup_auction() -> (
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
-    metadata.initialize(
-        &token_id,
-        &String::from_str(&e, "https://example.com/project"),
-        &String::from_str(&e, "DAO description"),
-        &String::from_str(&e, "https://example.com/image.png"),
-        &String::from_str(&e, "https://example.com/render/"),
-        &Address::generate(&e),
-        &BytesN::from_array(&e, &[0u8; 32]),
-        &owner,
-        &Vec::new(&e),
-        &Vec::new(&e),
-        &IpfsGroup {
-            base_uri: String::from_str(&e, "ipfs://"),
-            extension: String::from_str(&e, ".png"),
-        },
-        &String::from_str(&e, "0.1.0"),
-    );
+    register_metadata(&e, &metadata_id, &token_id, &owner);
 
-    // Deploy treasury
-    let treasury_id = e.register(
+    // Deploy treasury (the DAO owner after launch)
+    e.register_at(
+        &treasury_id,
         DaoTreasuryContract,
         (
             owner.clone(),
@@ -1051,9 +1018,6 @@ fn setup_auction() -> (
     let auction = DaoAuctionContractClient::new(&e, &auction_id);
 
     e.mock_all_auths();
-
-    // Grant mint authority to auction contract
-    token.set_mint_authority(&auction_id, &true);
 
     (
         e,
@@ -1125,26 +1089,40 @@ fn test_auction_full_lifecycle() {
 }
 
 #[test]
-fn test_pending_auction_finalization_launches_and_hands_off_to_treasury() {
-    let (e, _token, treasury, auction, _owner, _payment_token, _payment_client) = setup_auction();
+fn test_auction_launch_starts_first_auction_and_hands_off_to_treasury() {
+    let (e, token, treasury, auction, launch_admin, payment_token, _payment_client) =
+        setup_auction_setup_phase();
 
-    assert_eq!(auction.get_owner(), Some(_owner.clone()));
-    auction.finalize_ownership(&treasury.address, &true);
+    assert_eq!(auction.get_owner(), Some(launch_admin.clone()));
+    // The token launches first so the auction holds mint authority.
+    token.launch(
+        &treasury.address,
+        &vec![&e, treasury.address.clone(), auction.address.clone()],
+    );
+    auction.launch(&treasury.address, &true, &payment_token);
 
     assert_eq!(auction.get_owner(), Some(treasury.address.clone()));
     assert!(!auction.paused());
     assert_eq!(auction.get_auction().token_id, 0);
-    let _ = e;
 }
 
 #[test]
-fn test_pending_auction_finalization_can_remain_paused() {
-    let (_e, _token, treasury, auction, _owner, _payment_token, _payment_client) = setup_auction();
+fn test_auction_launch_can_remain_paused() {
+    let (_e, _token, treasury, auction, _owner, payment_token, _payment_client) =
+        setup_auction_setup_phase();
 
-    auction.finalize_ownership(&treasury.address, &false);
+    auction.launch(&treasury.address, &false, &payment_token);
 
     assert_eq!(auction.get_owner(), Some(treasury.address));
     assert!(auction.paused());
+}
+
+#[test]
+fn test_auction_cannot_unpause_before_launch() {
+    let (_e, _token, _treasury, auction, launch_admin, _payment_token, _payment_client) =
+        setup_auction_setup_phase();
+    let err = auction.try_unpause(&launch_admin).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(9001));
 }
 
 #[test]
@@ -1411,30 +1389,15 @@ fn test_auction_pause_and_resume() {
 }
 
 #[test]
-fn test_auction_ownership_remains_with_deployer() {
-    let (_e, _token, _treasury, auction, owner, _payment_token, _payment_client) = setup_auction();
+fn test_auction_ownership_remains_with_treasury_after_unpause() {
+    let (_e, _token, treasury, auction, owner, _payment_token, _payment_client) = setup_auction();
 
-    // Initially owned by owner
     assert_eq!(auction.get_owner(), Some(owner.clone()));
+    assert_eq!(owner, treasury.address);
 
-    // Unpause - ownership should remain with original owner
+    // Unpausing never changes ownership.
     auction.unpause(&owner);
-
-    // Ownership should still be with original owner
     assert_eq!(auction.get_owner(), Some(owner.clone()));
-}
-
-#[test]
-fn test_auction_set_treasury() {
-    let (e, _token, _treasury, auction, _owner, _payment_token, _payment_client) = setup_auction();
-
-    let new_treasury = Address::generate(&e);
-
-    // Update treasury while paused
-    auction.set_treasury(&new_treasury);
-
-    let config = auction.get_config();
-    assert_eq!(config.treasury, new_treasury);
 }
 
 #[test]
@@ -1526,7 +1489,7 @@ fn test_auction_payment_token_setter() {
 fn test_auction_rejects_non_positive_bid_before_transfer() {
     let (e, _token, _treasury, auction, owner, _payment_token, payment_client) = setup_auction();
     let bidder = Address::generate(&e);
-    payment_client.mint(&bidder, &1_000_0000000);
+    payment_client.mint(&bidder, &10_000_000_000);
     auction.unpause(&owner);
 
     let token_id = auction.get_auction().token_id;
@@ -1538,7 +1501,7 @@ fn test_auction_extension_dos_protection() {
     let (e, _token, _treasury, auction, owner, _payment_token, payment_client) = setup_auction();
 
     let bidder = Address::generate(&e);
-    payment_client.mint(&bidder, &10_000_000000_000); // Large amount for many bids
+    payment_client.mint(&bidder, &10_000_000_000_000); // Large amount for many bids
 
     // Start auction
     auction.unpause(&owner);
@@ -1617,7 +1580,7 @@ fn test_auction_payment_token_cannot_change_after_first_bid() {
 
 #[test]
 fn test_multi_action_proposal_atomicity() {
-    let (e, token, _treasury, governor, target, owner) = setup();
+    let (e, token, treasury, governor, target, owner) = setup();
 
     // Mint tokens to proposer and voter
     let proposer = Address::generate(&e);
@@ -1664,7 +1627,9 @@ fn test_multi_action_proposal_atomicity() {
     e.ledger().set_timestamp(eta as u64);
 
     // Execute - both actions should execute atomically
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
+    // Enforcing mode: only the Treasury's own authorization may reach targets.
+    e.set_auths(&[]);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
 
     // Verify both actions executed
     // The second set_value(100) should overwrite the first set_value(42)
@@ -1685,14 +1650,14 @@ fn test_governor_treasury_bidirectional_verification() {
     e.ledger().set_timestamp(1_000);
 
     let owner = Address::generate(&e);
-    let metadata_id = e.register(MetadataContract, ());
-    let metadata = MetadataContractClient::new(&e, &metadata_id);
+    let metadata_id = Address::generate(&e);
 
     // Register token
     let token_id = e.register(
         DaoTokenContract,
         (
             owner.clone(),
+            Address::generate(&e),
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
@@ -1702,31 +1667,16 @@ fn test_governor_treasury_bidirectional_verification() {
             String::from_str(&e, "0.1.0"),
         ),
     );
-    metadata.initialize(
-        &token_id,
-        &String::from_str(&e, "https://example.com/project"),
-        &String::from_str(&e, "DAO description"),
-        &String::from_str(&e, "https://example.com/image.png"),
-        &String::from_str(&e, "https://example.com/render/"),
-        &Address::generate(&e),
-        &BytesN::from_array(&e, &[0u8; 32]),
-        &owner,
-        &Vec::new(&e),
-        &Vec::new(&e),
-        &IpfsGroup {
-            base_uri: String::from_str(&e, "ipfs://"),
-            extension: String::from_str(&e, ".png"),
-        },
-        &String::from_str(&e, "0.1.0"),
-    );
+    register_metadata(&e, &metadata_id, &token_id, &owner);
 
-    // Register treasury with a placeholder governor
-    let placeholder_governor = Address::generate(&e);
+    // Constructor-only wiring: treasury is built with the (pre-generated)
+    // governor address, then the governor is registered at that address.
+    let governor_id = Address::generate(&e);
     let treasury_id = e.register(
         DaoTreasuryContract,
         (
             owner.clone(),
-            placeholder_governor.clone(),
+            governor_id.clone(),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
             String::from_str(&e, "0.1.0"),
@@ -1734,8 +1684,8 @@ fn test_governor_treasury_bidirectional_verification() {
     );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
 
-    // Register governor with the treasury
-    let governor_id = e.register(
+    e.register_at(
+        &governor_id,
         DaoGovernorContract,
         (
             owner.clone(),
@@ -1753,26 +1703,35 @@ fn test_governor_treasury_bidirectional_verification() {
     );
     let governor = DaoGovernorContractClient::new(&e, &governor_id);
 
-    // Verify governor knows about treasury
-    assert_eq!(governor.treasury(), treasury_id);
-
-    // Verify initial treasury governor is placeholder
-    assert_eq!(treasury.governor(), placeholder_governor);
-
-    // Update treasury to point to real governor
-    treasury.set_governor(&governor_id);
-
-    // Verify bidirectional link
+    // Verify the bidirectional link comes purely from the constructors
     assert_eq!(treasury.governor(), governor_id);
     assert_eq!(governor.treasury(), treasury_id);
 
-    // Verify treasury can only be called by its governor
-    let target_id = e.register(TargetContract, ());
-    let args = vec![&e, 42_u32.into_val(&e)];
+    // Before launch the treasury refuses to execute.
+    let pre_targets = vec![&e, Address::generate(&e)];
+    let pre_functions = vec![&e, Symbol::new(&e, "set_value")];
+    let pre_args: Vec<Vec<Val>> = vec![&e, vec![&e, 42_u32.into_val(&e)]];
+    let pre_hash = BytesN::from_array(&e, &[7u8; 32]);
+    assert_eq!(
+        treasury
+            .try_execute(&pre_targets, &pre_functions, &pre_args, &pre_hash)
+            .err()
+            .unwrap()
+            .unwrap(),
+        common::CommonError::NotLive.into()
+    );
+    treasury.launch(&treasury_id);
 
-    // This should succeed because governor is calling treasury
-    e.mock_all_auths(); // Reset auths
-    treasury.execute(&target_id, &Symbol::new(&e, "set_value"), &args);
+    // Execution requires the governor's approval: an unknown proposal cannot be
+    // executed through the treasury (the governor is also not launched here).
+    let target_id = e.register(TargetContract, ());
+    let targets = vec![&e, target_id];
+    let functions = vec![&e, Symbol::new(&e, "set_value")];
+    let args: Vec<Vec<Val>> = vec![&e, vec![&e, 42_u32.into_val(&e)]];
+    let desc_hash = BytesN::from_array(&e, &[7u8; 32]);
+    assert!(treasury
+        .try_execute(&targets, &functions, &args, &desc_hash)
+        .is_err());
 }
 
 #[test]
@@ -1814,11 +1773,11 @@ fn test_auction_inconsistent_payment_type_rejection() {
 #[test]
 #[should_panic(expected = "Error(Contract, #1500)")] // CustomGovernorError::InvalidQueueDelay
 fn test_governor_queue_delay_minimum_300() {
-    let (_e, _token, _treasury, governor, _target, owner) = setup();
+    let (_e, _token, _treasury, governor, _target, _owner) = setup();
 
     // Try to set queue_delay below minimum (5 minutes = 300 seconds)
     // This should panic with InvalidQueueDelay error
-    governor.set_queue_delay(&owner, &299);
+    governor.set_queue_delay(&299);
 }
 
 #[test]
@@ -1835,7 +1794,7 @@ fn test_governor_proposal_threshold_cannot_exceed_supply() {
     e.ledger().set_sequence_number(101);
 
     // Setting threshold to 5 (equal to total supply) should succeed
-    governor.set_proposal_threshold(&owner, &5);
+    governor.set_proposal_threshold(&5);
 
     // Verify it was set
     assert_eq!(governor.proposal_threshold(), 5);
@@ -1856,43 +1815,11 @@ fn test_governor_proposal_threshold_exceeds_supply() {
     e.ledger().set_sequence_number(101);
 
     // Setting threshold to 6 (more than total supply of 5) should panic
-    governor.set_proposal_threshold(&owner, &6);
+    governor.set_proposal_threshold(&6);
 }
 
-#[test]
-#[should_panic(expected = "Error(Contract, #1101)")] // TokenError::InvalidBatchMintAmount
-fn test_token_batch_mint_zero_amount() {
-    let (e, token, _treasury, _governor, _target, owner) = setup();
-    let recipient = Address::generate(&e);
-
-    // Batch minting 0 tokens should fail
-    token.batch_mint(&owner, &recipient, &0);
-}
-
-#[test]
-#[should_panic(expected = "Error(Contract, #1101)")] // TokenError::InvalidBatchMintAmount
-fn test_token_batch_mint_above_max() {
-    let (e, token, _treasury, _governor, _target, owner) = setup();
-    let recipient = Address::generate(&e);
-
-    // Batch minting 101 tokens (MAX is 100) should fail
-    token.batch_mint(&owner, &recipient, &101);
-}
-
-#[test]
-fn test_token_batch_mint_large_amount() {
-    let (e, token, _treasury, _governor, _target, owner) = setup();
-    let recipient = Address::generate(&e);
-
-    // Batch minting 20 tokens should succeed (MAX is 100, but test env has event limits)
-    // This tests the batch mint functionality works for moderate batches
-    let last_token = token.batch_mint(&owner, &recipient, &20);
-
-    // Verify correct amount minted
-    assert_eq!(token.balance(&recipient), 20);
-    // Last token ID should be 19 (tokens are 0-indexed: 0, 1, 2, ..., 19)
-    assert_eq!(last_token, 19);
-}
+// Token batch_mint tests removed - functionality delegated to Minter contract
+// Tests for batch minting should be in minter contract tests
 
 #[test]
 fn marketplace_primary_sale_uses_real_token_and_sac() {
@@ -1908,10 +1835,11 @@ fn marketplace_primary_sale_uses_real_token_and_sac() {
     let sac = StellarAssetClient::new(&e, &payment.address());
     sac.mint(&buyer, &100);
 
-    let metadata_id = e.register(MetadataContract, ());
+    let metadata_id = Address::generate(&e);
     let token_id = e.register(
         DaoTokenContract,
         (
+            treasury.clone(),
             treasury.clone(),
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "Marketplace DAO"),
@@ -1922,29 +1850,13 @@ fn marketplace_primary_sale_uses_real_token_and_sac() {
             String::from_str(&e, "0.1.0"),
         ),
     );
-    let metadata = MetadataContractClient::new(&e, &metadata_id);
-    metadata.initialize(
-        &token_id,
-        &String::from_str(&e, "https://example.com/project"),
-        &String::from_str(&e, "Marketplace test DAO"),
-        &String::from_str(&e, "https://example.com/image.png"),
-        &String::from_str(&e, "https://example.com/render/"),
-        &manager,
-        &BytesN::from_array(&e, &[0; 32]),
-        &treasury,
-        &Vec::new(&e),
-        &Vec::new(&e),
-        &IpfsGroup {
-            base_uri: String::from_str(&e, "ipfs://"),
-            extension: String::from_str(&e, ".png"),
-        },
-        &String::from_str(&e, "0.1.0"),
-    );
+    register_metadata(&e, &metadata_id, &token_id, &treasury);
 
     let marketplace_id = e.register(
         MarketplaceContract,
         (
             token_id.clone(),
+            treasury.clone(), // launch_admin (setup-phase param admin)
             treasury.clone(),
             payment.address(),
             manager,
@@ -1955,13 +1867,921 @@ fn marketplace_primary_sale_uses_real_token_and_sac() {
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
     let marketplace = MarketplaceContractClient::new(&e, &marketplace_id);
-    token.set_mint_authority(&marketplace_id, &true);
-    marketplace.unpause();
+    // Manager-style launch: token first (marketplace is a canonical minter),
+    // then the marketplace itself (open).
+    token.launch(
+        &treasury,
+        &vec![&e, treasury.clone(), marketplace_id.clone()],
+    );
+    marketplace.launch(&treasury, &true, &payment.address());
 
-    let token_id = marketplace.mint_and_list(&100, &2_000);
-    marketplace.buy(&token_id, &buyer);
+    let listing_id = marketplace.create_primary_listing(&100, &2_000);
+    let token_id = marketplace.buy_primary(&listing_id, &buyer);
 
     assert_eq!(token.owner_of(&token_id), buyer);
     assert_eq!(sac.balance(&treasury), 100);
-    assert!(marketplace.get_listing(&token_id).is_none());
+}
+
+// ============================================================================
+// TREASURY-AS-EXECUTOR TESTS (H1)
+// ============================================================================
+
+/// Proposes, votes, queues, and advances time to the ETA. Returns
+/// (proposal_id, description_hash). Mints one vote to a fresh proposer.
+#[allow(clippy::too_many_arguments)]
+fn queue_proposal(
+    e: &Env,
+    token: &DaoTokenContractClient,
+    governor: &DaoGovernorContractClient,
+    owner: &Address,
+    targets: &Vec<Address>,
+    functions: &Vec<Symbol>,
+    args: &Vec<Vec<Val>>,
+    description: &str,
+) -> (BytesN<32>, BytesN<32>) {
+    let proposer = Address::generate(e);
+    token.mint(owner, &proposer);
+    e.ledger().set_sequence_number(200);
+    e.ledger().set_timestamp(2_000);
+
+    let description = String::from_str(e, description);
+    let desc_hash = description_hash(e, &description);
+    let proposal_id = governor.propose(targets, functions, args, &description, &proposer);
+    e.ledger().set_timestamp(2_301);
+    governor.cast_vote(&proposal_id, &1, &String::from_str(e, "yes"), &proposer);
+    e.ledger().set_timestamp(2_601);
+    governor.queue(targets, functions, args, &desc_hash, &2_901_u32, &proposer);
+    e.ledger().set_timestamp(2_901);
+    (proposal_id, desc_hash)
+}
+
+/// Missing/incorrect authorization surfaces from the test host's
+/// `try_` clients as `Error(Context, InvalidAction)`.
+fn auth_error() -> soroban_sdk::Error {
+    soroban_sdk::Error::from_type_and_code(
+        soroban_sdk::xdr::ScErrorType::Context,
+        soroban_sdk::xdr::ScErrorCode::InvalidAction,
+    )
+}
+
+#[test]
+fn proposal_sets_governor_quorum_via_treasury_execute() {
+    let (e, token, treasury, governor, _target, owner) = setup();
+    assert_eq!(governor.get_owner(), Some(treasury.address.clone()));
+    assert_eq!(governor.treasury(), treasury.address);
+    assert_eq!(treasury.get_owner(), Some(treasury.address.clone()));
+    assert_eq!(treasury.governor(), governor.address);
+    assert_eq!(governor.quorum_bps(), 1_000);
+
+    let targets = vec![&e, governor.address.clone()];
+    let functions = vec![&e, Symbol::new(&e, "set_quorum_bps")];
+    let args = vec![&e, vec![&e, 2_000_u32.into_val(&e)]];
+    let (id, hash) = queue_proposal(
+        &e, &token, &governor, &owner, &targets, &functions, &args, "quorum",
+    );
+
+    // Enforcing mode: only the Treasury's own authorization may reach targets.
+    e.set_auths(&[]);
+    let executed = treasury.execute(&targets, &functions, &args, &hash);
+    assert_eq!(executed, id);
+    assert_eq!(governor.quorum_bps(), 2_000);
+    assert_eq!(governor.proposal_state(&id), ProposalState::Executed);
+}
+
+#[test]
+fn proposal_upgrades_governor_through_manager_approval() {
+    use common::testutils::{empty_wasm, MockManager, MockManagerClient};
+    let e = Env::default();
+    e.mock_all_auths();
+    let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+    let gov_from = BytesN::from_array(&e, &[1u8; 32]);
+    let to = empty_wasm(&e);
+    mgr.approve(&gov_from, &to);
+    mgr.register(&to, &String::from_str(&e, "0.2.0"));
+    let (e, token, treasury, governor, _target, owner) = setup_with(
+        e.clone(),
+        mgr.address.clone(),
+        gov_from.clone(),
+        BytesN::from_array(&e, &[2u8; 32]),
+    );
+
+    let targets = vec![&e, governor.address.clone()];
+    let functions = vec![&e, Symbol::new(&e, "upgrade")];
+    let args = vec![&e, vec![&e, gov_from.into_val(&e), to.clone().into_val(&e)]];
+    let (_id, hash) = queue_proposal(
+        &e,
+        &token,
+        &governor,
+        &owner,
+        &targets,
+        &functions,
+        &args,
+        "upgrade governor",
+    );
+    // Enforcing mode: only the Treasury's own authorization may reach targets.
+    e.set_auths(&[]);
+    treasury.execute(&targets, &functions, &args, &hash);
+
+    e.as_contract(&governor.address, || {
+        assert_eq!(common::upgrade::current_hash(&e), to);
+        assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.2.0"));
+    });
+}
+
+#[test]
+fn proposal_upgrades_treasury_via_self_dispatch() {
+    use common::testutils::{empty_wasm, MockManager, MockManagerClient};
+    let e = Env::default();
+    e.mock_all_auths();
+    let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+    let treasury_from = BytesN::from_array(&e, &[2u8; 32]);
+    let to = empty_wasm(&e);
+    mgr.approve(&treasury_from, &to);
+    mgr.register(&to, &String::from_str(&e, "0.2.0"));
+    let (e, token, treasury, governor, _target, owner) = setup_with(
+        e.clone(),
+        mgr.address.clone(),
+        BytesN::from_array(&e, &[1u8; 32]),
+        treasury_from.clone(),
+    );
+
+    let targets = vec![&e, treasury.address.clone()];
+    let functions = vec![&e, Symbol::new(&e, "upgrade")];
+    let args = vec![
+        &e,
+        vec![&e, treasury_from.into_val(&e), to.clone().into_val(&e)],
+    ];
+    let (id, hash) = queue_proposal(
+        &e,
+        &token,
+        &governor,
+        &owner,
+        &targets,
+        &functions,
+        &args,
+        "upgrade treasury",
+    );
+    // Enforcing mode: only the Treasury's own authorization may reach targets.
+    e.set_auths(&[]);
+    treasury.execute(&targets, &functions, &args, &hash);
+
+    assert_eq!(governor.proposal_state(&id), ProposalState::Executed);
+    e.as_contract(&treasury.address, || {
+        assert_eq!(common::upgrade::current_hash(&e), to);
+        assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.2.0"));
+    });
+}
+
+#[test]
+fn unknown_self_call_is_rejected_and_proposal_stays_queued() {
+    let (e, token, treasury, governor, _target, owner) = setup();
+    let targets = vec![&e, treasury.address.clone()];
+    let functions = vec![&e, Symbol::new(&e, "transfer_ownership")];
+    let args = vec![&e, Vec::<Val>::new(&e)];
+    let (id, hash) = queue_proposal(
+        &e,
+        &token,
+        &governor,
+        &owner,
+        &targets,
+        &functions,
+        &args,
+        "bad self call",
+    );
+    let r = treasury.try_execute(&targets, &functions, &args, &hash);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        treasury::TreasuryError::UnknownSelfCall.into()
+    );
+    assert_eq!(governor.proposal_state(&id), ProposalState::Queued);
+}
+
+#[test]
+fn proposal_setting_queue_delay_above_max_reverts() {
+    let (e, token, treasury, governor, _target, owner) = setup();
+    let targets = vec![&e, governor.address.clone()];
+    let functions = vec![&e, Symbol::new(&e, "set_queue_delay")];
+
+    // Above the cap: the whole execute reverts and the proposal stays Queued.
+    let too_big = governor::MAX_QUEUE_DELAY + 1;
+    let args = vec![&e, vec![&e, too_big.into_val(&e)]];
+    let (id, hash) = queue_proposal(
+        &e, &token, &governor, &owner, &targets, &functions, &args, "too long",
+    );
+    assert!(treasury
+        .try_execute(&targets, &functions, &args, &hash)
+        .is_err());
+    assert_eq!(governor.proposal_state(&id), ProposalState::Queued);
+}
+
+#[test]
+fn proposal_setting_queue_delay_to_max_succeeds() {
+    let (e, token, treasury, governor, _target, owner) = setup();
+    let targets = vec![&e, governor.address.clone()];
+    let functions = vec![&e, Symbol::new(&e, "set_queue_delay")];
+
+    let max = governor::MAX_QUEUE_DELAY;
+    let args = vec![&e, vec![&e, max.into_val(&e)]];
+    let (id, hash) = queue_proposal(
+        &e, &token, &governor, &owner, &targets, &functions, &args, "at max",
+    );
+    treasury.execute(&targets, &functions, &args, &hash);
+    assert_eq!(governor.proposal_state(&id), ProposalState::Executed);
+}
+
+#[test]
+fn consume_by_non_treasury_fails() {
+    let (e, token, treasury, governor, target, owner) = setup();
+    let targets = vec![&e, target.address.clone()];
+    let functions = vec![&e, symbol_short!("set_value")];
+    let args = proposal_args(&e);
+    let (id, hash) = queue_proposal(
+        &e,
+        &token,
+        &governor,
+        &owner,
+        &targets,
+        &functions,
+        &args,
+        "consume direct",
+    );
+
+    // Real auth: no account can produce the Treasury's authorization.
+    e.set_auths(&[]);
+    assert_eq!(
+        governor
+            .try_consume(&targets, &functions, &args, &hash)
+            .err()
+            .unwrap()
+            .unwrap(),
+        auth_error()
+    );
+    assert_eq!(governor.proposal_state(&id), ProposalState::Queued);
+
+    // The proper path needs no caller auth and still works under real auth.
+    treasury.execute(&targets, &functions, &args, &hash);
+    assert_eq!(target.get_value(), 42);
+}
+
+#[test]
+fn executing_twice_fails_with_already_executed() {
+    let (e, token, treasury, governor, target, owner) = setup();
+    let targets = vec![&e, target.address.clone()];
+    let functions = vec![&e, symbol_short!("set_value")];
+    let args = proposal_args(&e);
+    let (_id, hash) = queue_proposal(
+        &e, &token, &governor, &owner, &targets, &functions, &args, "twice",
+    );
+    // Enforcing mode: only the Treasury's own authorization may reach targets.
+    e.set_auths(&[]);
+    treasury.execute(&targets, &functions, &args, &hash);
+    let r = treasury.try_execute(&targets, &functions, &args, &hash);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        stellar_governance::governor::GovernorError::ProposalAlreadyExecuted.into()
+    );
+}
+
+#[test]
+fn governor_execute_always_fails_with_use_treasury_execute() {
+    let (e, token, _treasury, governor, target, owner) = setup();
+    let targets = vec![&e, target.address.clone()];
+    let functions = vec![&e, symbol_short!("set_value")];
+    let args = proposal_args(&e);
+    let (_id, hash) = queue_proposal(
+        &e,
+        &token,
+        &governor,
+        &owner,
+        &targets,
+        &functions,
+        &args,
+        "gov execute",
+    );
+    let r = governor.try_execute(&targets, &functions, &args, &hash, &owner);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        governor::CustomGovernorError::UseTreasuryExecute.into()
+    );
+    assert_eq!(target.get_value(), 0);
+}
+
+#[test]
+fn failing_call_in_multi_call_proposal_leaves_it_queued_without_partial_effects() {
+    let (e, token, treasury, governor, target, owner) = setup();
+    // Call 1 succeeds (target.set_value(5)); call 2 fails (quorum 0 is invalid).
+    let targets = vec![&e, target.address.clone(), governor.address.clone()];
+    let functions = vec![
+        &e,
+        symbol_short!("set_value"),
+        Symbol::new(&e, "set_quorum_bps"),
+    ];
+    let args = vec![
+        &e,
+        vec![&e, 5_u32.into_val(&e)],
+        vec![&e, 0_u32.into_val(&e)],
+    ];
+    let (id, hash) = queue_proposal(
+        &e, &token, &governor, &owner, &targets, &functions, &args, "partial",
+    );
+    assert!(treasury
+        .try_execute(&targets, &functions, &args, &hash)
+        .is_err());
+    assert_eq!(target.get_value(), 0);
+    assert_eq!(governor.quorum_bps(), 1_000);
+    assert_eq!(governor.proposal_state(&id), ProposalState::Queued);
+}
+
+#[test]
+fn other_contract_cannot_consume_even_with_its_own_auth() {
+    let (e, token, _treasury, governor, target, owner) = setup();
+    let targets = vec![&e, target.address.clone()];
+    let functions = vec![&e, symbol_short!("set_value")];
+    let args = proposal_args(&e);
+    let (id, hash) = queue_proposal(
+        &e,
+        &token,
+        &governor,
+        &owner,
+        &targets,
+        &functions,
+        &args,
+        "wrong caller",
+    );
+    let attacker =
+        MaliciousConsumeContractClient::new(&e, &e.register(MaliciousConsumeContract, ()));
+    e.set_auths(&[]);
+    // The attacker is a valid invoker for itself, but is not the Treasury.
+    let r = attacker.try_attack(&governor.address, &targets, &functions, &args, &hash);
+    assert_eq!(r.err().unwrap().unwrap(), auth_error());
+    assert_eq!(governor.proposal_state(&id), ProposalState::Queued);
+}
+
+#[test]
+fn target_calling_consume_from_inside_execute_is_blocked() {
+    let (e, token, treasury, governor, _target, owner) = setup();
+    let attacker_id = e.register(MaliciousConsumeContract, ());
+    let targets = vec![&e, attacker_id.clone()];
+    let functions = vec![&e, symbol_short!("attack")];
+    // Inner call targets the same proposal tuple (hash filled below is irrelevant:
+    // consume fails on auth before any state lookup matters).
+    let inner_hash = BytesN::from_array(&e, &[5u8; 32]);
+    let args = vec![
+        &e,
+        vec![
+            &e,
+            governor.address.clone().into_val(&e),
+            targets.clone().into_val(&e),
+            functions.clone().into_val(&e),
+            vec![&e, Vec::<Val>::new(&e)].into_val(&e),
+            inner_hash.into_val(&e),
+        ],
+    ];
+    let (id, hash) = queue_proposal(
+        &e,
+        &token,
+        &governor,
+        &owner,
+        &targets,
+        &functions,
+        &args,
+        "inner consume",
+    );
+    e.set_auths(&[]);
+    let r = treasury.try_execute(&targets, &functions, &args, &hash);
+    assert_eq!(r.err().unwrap().unwrap(), auth_error());
+    assert_eq!(governor.proposal_state(&id), ProposalState::Queued);
+}
+
+#[test]
+fn execute_before_eta_fails_and_after_expiry_fails() {
+    let (e, token, treasury, governor, target, owner) = setup();
+    let targets = vec![&e, target.address.clone()];
+    let functions = vec![&e, symbol_short!("set_value")];
+    let args = proposal_args(&e);
+    let (id, hash) = queue_proposal(
+        &e, &token, &governor, &owner, &targets, &functions, &args, "timing",
+    );
+    let not_queued: soroban_sdk::Error =
+        stellar_governance::governor::GovernorError::ProposalNotQueued.into();
+
+    e.ledger().set_timestamp(2_900); // eta is 2_901
+    assert_eq!(
+        treasury
+            .try_execute(&targets, &functions, &args, &hash)
+            .err()
+            .unwrap()
+            .unwrap(),
+        not_queued
+    );
+
+    e.ledger().set_timestamp(2_901 + 1_209_600); // eta + 14 days
+    assert_eq!(governor.proposal_state(&id), ProposalState::Expired);
+    assert_eq!(
+        treasury
+            .try_execute(&targets, &functions, &args, &hash)
+            .err()
+            .unwrap()
+            .unwrap(),
+        not_queued
+    );
+    assert_eq!(target.get_value(), 0);
+}
+
+#[test]
+fn tampered_args_or_hash_are_unknown_proposals() {
+    let (e, token, treasury, governor, target, owner) = setup();
+    let targets = vec![&e, target.address.clone()];
+    let functions = vec![&e, symbol_short!("set_value")];
+    let args = proposal_args(&e);
+    let (_id, hash) = queue_proposal(
+        &e, &token, &governor, &owner, &targets, &functions, &args, "tamper",
+    );
+    let not_found: soroban_sdk::Error =
+        stellar_governance::governor::GovernorError::ProposalNotFound.into();
+    let tampered = vec![&e, vec![&e, 43_u32.into_val(&e)]];
+    assert_eq!(
+        treasury
+            .try_execute(&targets, &functions, &tampered, &hash)
+            .err()
+            .unwrap()
+            .unwrap(),
+        not_found
+    );
+    let wrong_hash = BytesN::from_array(&e, &[0xAAu8; 32]);
+    assert_eq!(
+        treasury
+            .try_execute(&targets, &functions, &args, &wrong_hash)
+            .err()
+            .unwrap()
+            .unwrap(),
+        not_found
+    );
+    assert_eq!(target.get_value(), 0);
+}
+
+#[test]
+fn proposal_syncs_treasury_version_via_self_call() {
+    use common::testutils::{MockManager, MockManagerClient};
+    let e = Env::default();
+    e.mock_all_auths();
+    let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+    let treasury_hash = BytesN::from_array(&e, &[2u8; 32]);
+    mgr.register(&treasury_hash, &String::from_str(&e, "0.1.9"));
+    let (e, token, treasury, governor, _target, owner) = setup_with(
+        e.clone(),
+        mgr.address.clone(),
+        BytesN::from_array(&e, &[1u8; 32]),
+        treasury_hash,
+    );
+    let targets = vec![&e, treasury.address.clone()];
+    let functions = vec![&e, Symbol::new(&e, "sync_version")];
+    let args = vec![&e, Vec::<Val>::new(&e)];
+    let (_id, hash) = queue_proposal(
+        &e, &token, &governor, &owner, &targets, &functions, &args, "sync",
+    );
+    e.set_auths(&[]);
+    treasury.execute(&targets, &functions, &args, &hash);
+    assert_eq!(treasury.version(), String::from_str(&e, "0.1.9"));
+}
+
+#[test]
+fn execute_emits_one_proposal_executed_and_indexed_execute_events() {
+    use soroban_sdk::testutils::Events as _;
+    use soroban_sdk::xdr::{ContractEventBody, ScVal};
+    let (e, token, treasury, governor, target, owner) = setup();
+    let targets = vec![&e, target.address.clone(), target.address.clone()];
+    let functions = vec![&e, symbol_short!("set_value"), symbol_short!("set_value")];
+    let args = vec![
+        &e,
+        vec![&e, 1_u32.into_val(&e)],
+        vec![&e, 1_u32.into_val(&e)],
+    ];
+    let (id, hash) = queue_proposal(
+        &e, &token, &governor, &owner, &targets, &functions, &args, "events",
+    );
+    treasury.execute(&targets, &functions, &args, &hash);
+    let all = e.events().all();
+
+    assert_eq!(all.filter_by_contract(&governor.address).events().len(), 1);
+
+    let evs = all.filter_by_contract(&treasury.address);
+    assert_eq!(evs.events().len(), 2);
+    for ev in evs.events() {
+        let ContractEventBody::V0(body) = &ev.body;
+        // name, governor, target, proposal_id
+        assert_eq!(body.topics.len(), 4);
+        assert_eq!(body.topics[1], ScVal::from(&governor.address));
+        assert_eq!(body.topics[2], ScVal::from(&target.address));
+        assert_eq!(body.topics[3], ScVal::from(&id));
+    }
+    // The two identical calls are told apart by the data `index` field.
+    assert_ne!(evs.events()[0].body, evs.events()[1].body);
+}
+
+#[test]
+fn twenty_action_proposal_executes_and_twenty_one_is_rejected() {
+    let (e, token, treasury, governor, target, owner) = setup();
+    let mut targets = Vec::new(&e);
+    let mut functions = Vec::new(&e);
+    let mut args: Vec<Vec<Val>> = Vec::new(&e);
+    for i in 0..20_u32 {
+        targets.push_back(target.address.clone());
+        functions.push_back(symbol_short!("set_value"));
+        args.push_back(vec![&e, i.into_val(&e)]);
+    }
+    let (id, hash) = queue_proposal(
+        &e, &token, &governor, &owner, &targets, &functions, &args, "twenty",
+    );
+    e.set_auths(&[]);
+    e.cost_estimate().budget().reset_default();
+    treasury.execute(&targets, &functions, &args, &hash);
+    assert_eq!(target.get_value(), 19);
+    assert_eq!(governor.proposal_state(&id), ProposalState::Executed);
+
+    targets.push_back(target.address.clone());
+    functions.push_back(symbol_short!("set_value"));
+    args.push_back(vec![&e, 99_u32.into_val(&e)]);
+    e.mock_all_auths();
+    let proposer = Address::generate(&e);
+    token.mint(&owner, &proposer);
+    e.ledger().set_sequence_number(300);
+    let r = governor.try_propose(
+        &targets,
+        &functions,
+        &args,
+        &String::from_str(&e, "twenty-one"),
+        &proposer,
+    );
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        governor::CustomGovernorError::TooManyActions.into()
+    );
+}
+
+// ============================================================================
+// REAL-AUTH (ENFORCING) TESTS FOR CONTRACT-AUTHORIZED SUB-CALLS
+//
+// Setup runs under mock_all_auths. Every execution step then runs with
+// `mock_auths` for the human callers only (or no auth at all), so the NFT mint,
+// NFT transfers and payment transfers a contract makes on its own behalf are
+// checked by the host against the real authorization rules.
+// ============================================================================
+
+/// Authorize `who` for exactly one invocation (plus the listed sub-invocations).
+fn only_auth(
+    e: &Env,
+    who: &Address,
+    contract: &Address,
+    fn_name: &'static str,
+    args: Vec<Val>,
+    subs: &[MockAuthInvoke],
+) {
+    e.mock_auths(&[MockAuth {
+        address: who,
+        invoke: &MockAuthInvoke {
+            contract,
+            fn_name,
+            args,
+            sub_invokes: subs,
+        },
+    }]);
+}
+
+#[test]
+fn real_auth_auction_mint_bid_refund_and_settle() {
+    let (e, token, treasury, auction, owner, pay, sac) = setup_auction();
+    let b1 = Address::generate(&e);
+    let b2 = Address::generate(&e);
+    sac.mint(&b1, &1000_0000000);
+    sac.mint(&b2, &2000_0000000);
+
+    // unpause -> create_auction -> token.mint(auction, auction), contract-authorized.
+    only_auth(
+        &e,
+        &owner,
+        &auction.address,
+        "unpause",
+        vec![&e, owner.clone().into_val(&e)],
+        &[],
+    );
+    auction.unpause(&owner);
+    let st = auction.get_auction();
+    assert_eq!(token.owner_of(&(st.token_id as u32)), auction.address);
+
+    let bid = |who: &Address, amount: i128| {
+        let tid = auction.get_auction().token_id;
+        only_auth(
+            &e,
+            who,
+            &auction.address,
+            "create_bid",
+            vec![&e, who.into_val(&e), tid.into_val(&e), amount.into_val(&e)],
+            &[MockAuthInvoke {
+                contract: &pay,
+                fn_name: "transfer",
+                args: vec![
+                    &e,
+                    who.into_val(&e),
+                    auction.address.into_val(&e),
+                    amount.into_val(&e),
+                ],
+                sub_invokes: &[],
+            }],
+        );
+        auction.create_bid(who, &tid, &amount);
+    };
+    bid(&b1, 100_0000000);
+    bid(&b2, 110_0000000); // refunds b1 through a contract-authorized SAC transfer
+    assert_eq!(sac.balance(&b1), 1000_0000000);
+
+    // settle_and_create_new is permissionless: no auth at all.
+    e.ledger().set_timestamp(st.end_time + 1);
+    e.set_auths(&[]);
+    auction.settle_and_create_new();
+    assert_eq!(token.owner_of(&(st.token_id as u32)), b2);
+    assert_eq!(sac.balance(&treasury.address), 110_0000000);
+    let next = auction.get_auction();
+    assert_ne!(next.token_id, st.token_id);
+    assert_eq!(token.owner_of(&(next.token_id as u32)), auction.address);
+}
+
+#[test]
+fn real_auth_auction_pause_settle_and_cancel() {
+    let (e, token, treasury, auction, owner, pay, sac) = setup_auction();
+    let b1 = Address::generate(&e);
+    sac.mint(&b1, &1000_0000000);
+
+    only_auth(
+        &e,
+        &owner,
+        &auction.address,
+        "unpause",
+        vec![&e, owner.clone().into_val(&e)],
+        &[],
+    );
+    auction.unpause(&owner);
+    let tid = auction.get_auction().token_id;
+    only_auth(
+        &e,
+        &b1,
+        &auction.address,
+        "create_bid",
+        vec![
+            &e,
+            b1.into_val(&e),
+            tid.into_val(&e),
+            100_0000000_i128.into_val(&e),
+        ],
+        &[MockAuthInvoke {
+            contract: &pay,
+            fn_name: "transfer",
+            args: vec![
+                &e,
+                b1.into_val(&e),
+                auction.address.into_val(&e),
+                100_0000000_i128.into_val(&e),
+            ],
+            sub_invokes: &[],
+        }],
+    );
+    auction.create_bid(&b1, &tid, &100_0000000);
+
+    only_auth(
+        &e,
+        &owner,
+        &auction.address,
+        "pause",
+        vec![&e, owner.clone().into_val(&e)],
+        &[],
+    );
+    auction.pause(&owner);
+
+    // Enforcement is real: without the owner's auth the call is rejected.
+    e.set_auths(&[]);
+    assert!(auction.try_cancel_auction().is_err());
+
+    // cancel_auction: refund (SAC transfer) + NFT to treasury, owner auth only.
+    only_auth(
+        &e,
+        &owner,
+        &auction.address,
+        "cancel_auction",
+        vec![&e],
+        &[],
+    );
+    auction.cancel_auction();
+    assert_eq!(sac.balance(&b1), 1000_0000000);
+    assert_eq!(token.owner_of(&(tid as u32)), treasury.address);
+    assert!(auction.get_auction().settled);
+}
+
+#[test]
+fn real_auth_auction_settle_auction_when_paused_moves_nft_and_payment() {
+    let (e, token, treasury, auction, owner, pay, sac) = setup_auction();
+    let b1 = Address::generate(&e);
+    sac.mint(&b1, &1000_0000000);
+    only_auth(
+        &e,
+        &owner,
+        &auction.address,
+        "unpause",
+        vec![&e, owner.clone().into_val(&e)],
+        &[],
+    );
+    auction.unpause(&owner);
+    let st = auction.get_auction();
+    only_auth(
+        &e,
+        &b1,
+        &auction.address,
+        "create_bid",
+        vec![
+            &e,
+            b1.into_val(&e),
+            st.token_id.into_val(&e),
+            100_0000000_i128.into_val(&e),
+        ],
+        &[MockAuthInvoke {
+            contract: &pay,
+            fn_name: "transfer",
+            args: vec![
+                &e,
+                b1.into_val(&e),
+                auction.address.into_val(&e),
+                100_0000000_i128.into_val(&e),
+            ],
+            sub_invokes: &[],
+        }],
+    );
+    auction.create_bid(&b1, &st.token_id, &100_0000000);
+    only_auth(
+        &e,
+        &owner,
+        &auction.address,
+        "pause",
+        vec![&e, owner.clone().into_val(&e)],
+        &[],
+    );
+    auction.pause(&owner);
+
+    e.set_auths(&[]);
+    auction.settle_auction();
+    assert_eq!(token.owner_of(&(st.token_id as u32)), b1);
+    assert_eq!(sac.balance(&treasury.address), 100_0000000);
+}
+
+#[test]
+fn real_auth_marketplace_primary_and_secondary_flows() {
+    let e = Env::default();
+    e.mock_all_auths();
+    e.ledger().set_timestamp(1_000);
+
+    let treasury = Address::generate(&e);
+    let seller = Address::generate(&e);
+    let buyer = Address::generate(&e);
+    let manager = Address::generate(&e);
+    let payment = e.register_stellar_asset_contract_v2(Address::generate(&e));
+    let pay = payment.address();
+    let sac = StellarAssetClient::new(&e, &pay);
+    sac.mint(&seller, &10_000);
+    sac.mint(&buyer, &10_000);
+
+    let metadata_id = Address::generate(&e);
+    let token_id = e.register(
+        DaoTokenContract,
+        (
+            treasury.clone(),
+            treasury.clone(),
+            String::from_str(&e, "https://example.com/"),
+            String::from_str(&e, "Marketplace DAO"),
+            String::from_str(&e, "MDAO"),
+            metadata_id.clone(),
+            manager.clone(),
+            BytesN::from_array(&e, &[0; 32]),
+            String::from_str(&e, "0.1.0"),
+        ),
+    );
+    register_metadata(&e, &metadata_id, &token_id, &treasury);
+    let marketplace_id = e.register(
+        MarketplaceContract,
+        (
+            token_id.clone(),
+            treasury.clone(),
+            treasury.clone(),
+            pay.clone(),
+            manager,
+            BytesN::from_array(&e, &[0; 32]),
+            String::from_str(&e, "0.1.0"),
+            250u32,
+        ),
+    );
+    let token = DaoTokenContractClient::new(&e, &token_id);
+    let marketplace = MarketplaceContractClient::new(&e, &marketplace_id);
+    token.launch(
+        &treasury,
+        &vec![&e, treasury.clone(), marketplace_id.clone()],
+    );
+    marketplace.launch(&treasury, &true, &pay);
+
+    let pay_sub = |from: &Address, to: &Address, amount: i128| MockAuthInvoke {
+        contract: &pay,
+        fn_name: "transfer",
+        args: vec![&e, from.into_val(&e), to.into_val(&e), amount.into_val(&e)],
+        sub_invokes: &[],
+    };
+
+    // Primary: admin (treasury) lists, buyer pays; the marketplace mints.
+    only_auth(
+        &e,
+        &treasury,
+        &marketplace_id,
+        "create_primary_listing",
+        vec![&e, 100_i128.into_val(&e), 2_000_u64.into_val(&e)],
+        &[],
+    );
+    let listing_id = marketplace.create_primary_listing(&100, &2_000);
+    only_auth(
+        &e,
+        &seller,
+        &marketplace_id,
+        "buy_primary",
+        vec![&e, listing_id.into_val(&e), seller.into_val(&e)],
+        &[pay_sub(&seller, &treasury, 100)],
+    );
+    let nft = marketplace.buy_primary(&listing_id, &seller);
+    assert_eq!(token.owner_of(&nft), seller);
+    assert_eq!(sac.balance(&treasury), 100);
+
+    let list = |who: &Address, price: i128, expires: u64| {
+        let exp_ledger = e.ledger().sequence() + 1_000;
+        only_auth(
+            &e,
+            who,
+            &token_id,
+            "approve",
+            vec![
+                &e,
+                who.into_val(&e),
+                marketplace_id.into_val(&e),
+                nft.into_val(&e),
+                exp_ledger.into_val(&e),
+            ],
+            &[],
+        );
+        token.approve(who, &marketplace_id, &nft, &exp_ledger);
+        only_auth(
+            &e,
+            who,
+            &marketplace_id,
+            "list",
+            vec![
+                &e,
+                nft.into_val(&e),
+                who.into_val(&e),
+                price.into_val(&e),
+                expires.into_val(&e),
+            ],
+            &[],
+        );
+        marketplace.list(&nft, who, &price, &expires);
+        assert_eq!(token.owner_of(&nft), marketplace_id);
+    };
+
+    // list (transfer_from) then buy: fee 2.5% to treasury, rest to seller.
+    list(&seller, 1_000, 5_000);
+    only_auth(
+        &e,
+        &buyer,
+        &marketplace_id,
+        "buy",
+        vec![&e, nft.into_val(&e), buyer.into_val(&e)],
+        &[
+            pay_sub(&buyer, &treasury, 25),
+            pay_sub(&buyer, &seller, 975),
+        ],
+    );
+    marketplace.buy(&nft, &buyer);
+    assert_eq!(token.owner_of(&nft), buyer);
+    assert_eq!(sac.balance(&seller), 10_000 - 100 + 975);
+
+    // list then cancel: NFT returns to the seller.
+    list(&buyer, 1_000, 5_000);
+    only_auth(
+        &e,
+        &buyer,
+        &marketplace_id,
+        "cancel",
+        vec![&e, nft.into_val(&e), buyer.into_val(&e)],
+        &[],
+    );
+    marketplace.cancel(&nft, &buyer);
+    assert_eq!(token.owner_of(&nft), buyer);
+
+    // list then expire (permissionless, no auth).
+    list(&buyer, 1_000, 3_000);
+    e.ledger().set_timestamp(3_001);
+    e.set_auths(&[]);
+    marketplace.expire(&nft);
+    assert_eq!(token.owner_of(&nft), buyer);
 }

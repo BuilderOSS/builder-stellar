@@ -1,6 +1,7 @@
 extern crate std;
 
-use soroban_sdk::{testutils::Address as _, Address, BytesN, Env, String};
+use common::CommonError;
+use soroban_sdk::{testutils::Address as _, vec, Address, BytesN, Env, String};
 use soroban_sdk::{
     testutils::{MockAuth, MockAuthInvoke},
     IntoVal,
@@ -9,8 +10,15 @@ use soroban_sdk::{
 use crate::{DaoTokenContract, DaoTokenContractClient};
 
 fn setup() -> (Env, DaoTokenContractClient<'static>, Address) {
+    let (e, client, owner, _manager) = setup_with_manager();
+    (e, client, owner)
+}
+
+/// Setup-phase token plus the manager address, so tests can drive `launch`.
+fn setup_with_manager() -> (Env, DaoTokenContractClient<'static>, Address, Address) {
     let e = Env::default();
     e.mock_all_auths();
+    let manager = Address::generate(&e);
 
     let owner = Address::generate(&e);
     let metadata = Address::generate(&e); // Dummy metadata address for tests
@@ -18,17 +26,18 @@ fn setup() -> (Env, DaoTokenContractClient<'static>, Address) {
         DaoTokenContract,
         (
             owner.clone(),
+            Address::generate(&e),
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
             metadata,
-            Address::generate(&e),
+            manager.clone(),
             BytesN::from_array(&e, &[0u8; 32]),
             String::from_str(&e, "0.1.0"),
         ),
     );
     let client = DaoTokenContractClient::new(&e, &contract_id);
-    (e, client, owner)
+    (e, client, owner, manager)
 }
 
 fn setup_no_auth() -> (Env, DaoTokenContractClient<'static>, Address) {
@@ -39,6 +48,7 @@ fn setup_no_auth() -> (Env, DaoTokenContractClient<'static>, Address) {
         DaoTokenContract,
         (
             owner.clone(),
+            Address::generate(&e),
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
@@ -107,13 +117,86 @@ fn transfer_to_new_holder_defaults_self_delegate() {
     assert_eq!(client.get_votes(&bob), 1);
 }
 
+/// Treasury wired into the token constructor.
+fn wired_treasury(e: &Env, client: &DaoTokenContractClient) -> Address {
+    e.as_contract(&client.address, || {
+        e.storage()
+            .instance()
+            .get(&crate::storage::TokenKey::Treasury)
+            .unwrap()
+    })
+}
+
+/// Launch with `minters` (the wired treasury is always included, as the
+/// Manager does); returns the treasury address.
+fn launch(e: &Env, client: &DaoTokenContractClient, minters: &[Address]) -> Address {
+    let treasury = wired_treasury(e, client);
+    let mut v = soroban_sdk::Vec::new(e);
+    v.push_back(treasury.clone());
+    for m in minters {
+        v.push_back(m.clone());
+    }
+    client.launch(&treasury, &v);
+    treasury
+}
+
 #[test]
-fn manager_can_finalize_ownership_to_treasury() {
-    let (e, client, _owner) = setup();
-    let treasury = Address::generate(&e);
+fn launch_sets_owner_and_exact_minter_set() {
+    let (e, client, owner, _m) = setup_with_manager();
+    let a = Address::generate(&e);
+    let b = Address::generate(&e);
+    let stranger = Address::generate(&e);
+    let treasury = launch(&e, &client, &[a.clone(), b.clone()]);
 
-    client.finalize_ownership(&treasury);
+    assert_eq!(client.get_owner(), Some(treasury));
+    assert!(client.mint_authority(&a));
+    assert!(client.mint_authority(&b));
+    assert!(!client.mint_authority(&stranger));
+    assert!(!client.mint_authority(&owner));
+}
 
+#[test]
+fn second_launch_panics_already_live() {
+    let (e, client, _owner, _m) = setup_with_manager();
+    launch(&e, &client, &[]);
+    let r = client.try_launch(&Address::generate(&e), &vec![&e, Address::generate(&e)]);
+    assert_eq!(r.err().unwrap().unwrap(), CommonError::AlreadyLive.into());
+}
+
+#[test]
+fn set_mint_authority_before_launch_is_not_live() {
+    let (e, client, _owner, _m) = setup_with_manager();
+    let r = client.try_set_mint_authority(&Address::generate(&e), &true);
+    assert_eq!(r.err().unwrap().unwrap(), CommonError::NotLive.into());
+}
+
+#[test]
+fn set_mint_authority_after_launch_is_owner_gated() {
+    let (e, client, _owner, _m) = setup_with_manager();
+    launch(&e, &client, &[]);
+    let x = Address::generate(&e);
+    client.set_mint_authority(&x, &true);
+    assert!(client.mint_authority(&x));
+}
+
+#[test]
+fn launch_admin_cannot_mint_after_launch() {
+    let (e, client, owner, _m) = setup_with_manager();
+    launch(&e, &client, &[]);
+    let r = client.try_mint(&owner, &Address::generate(&e));
+    assert!(r.is_err());
+}
+
+#[test]
+fn launch_clears_pending_ownership_transfer() {
+    let (e, client, _owner, _m) = setup_with_manager();
+    let attacker = Address::generate(&e);
+    // launch_admin starts a two-step transfer during setup...
+    let live_until = e.ledger().sequence() + 1_000;
+    client.transfer_ownership(&attacker, &live_until);
+    let treasury = launch(&e, &client, &[]);
+    // ...and cannot accept it after launch.
+    assert!(client.try_accept_ownership().is_err());
     assert_eq!(client.get_owner(), Some(treasury));
 }
 
@@ -142,6 +225,7 @@ fn mint_requires_minter_auth() {
 fn owner_can_whitelist_and_remove_minter() {
     let (e, client, owner) = setup();
     let bob = Address::generate(&e);
+    launch(&e, &client, &[]);
 
     client.set_mint_authority(&bob, &true);
     assert!(client.mint_authority(&bob));
@@ -169,7 +253,7 @@ fn whitelisted_minter_can_mint() {
     let bob = Address::generate(&e);
     let alice = Address::generate(&e);
 
-    client.set_mint_authority(&bob, &true);
+    launch(&e, &client, std::slice::from_ref(&bob));
 
     e.mock_auths(&[MockAuth {
         address: &bob,
@@ -194,7 +278,7 @@ fn contract_address_can_be_whitelisted() {
     let treasury = Address::generate(&e);
     let recipient = Address::generate(&e);
 
-    client.set_mint_authority(&treasury, &true);
+    launch(&e, &client, std::slice::from_ref(&treasury));
 
     e.mock_auths(&[MockAuth {
         address: &treasury,
@@ -226,144 +310,454 @@ fn explicit_delegation_moves_votes() {
     assert_eq!(client.get_votes(&bob), 1);
 }
 
+// Batch minting tests removed - functionality moved to Minter contract
+
 #[test]
-fn batch_mint_creates_multiple_tokens() {
+fn test_batch_mint_single_recipient() {
     let (e, client, owner) = setup();
     let alice = Address::generate(&e);
 
-    let last_token_id = client.batch_mint(&owner, &alice, &10);
+    e.mock_all_auths();
 
-    assert_eq!(last_token_id, 9); // 0-9 = 10 tokens
-    assert_eq!(client.balance(&alice), 10);
-    assert_eq!(client.get_delegate(&alice), Some(alice.clone()));
-    assert_eq!(client.get_votes(&alice), 10);
-}
+    let recipients = soroban_sdk::vec![&e, alice.clone()];
+    let amounts = soroban_sdk::vec![&e, 5u128];
 
-#[test]
-fn batch_mint_returns_correct_last_token_id() {
-    let (e, client, owner) = setup();
-    let alice = Address::generate(&e);
+    let token_ids = client.batch_mint(&owner, &recipients, &amounts);
 
-    // Mint some tokens first
-    let _ = client.mint(&owner, &alice);
-    let _ = client.mint(&owner, &alice);
-
-    // Batch mint should continue from token_id 2
-    let last_token_id = client.batch_mint(&owner, &alice, &5);
-
-    assert_eq!(last_token_id, 6); // tokens 2-6 = 5 tokens
-    assert_eq!(client.balance(&alice), 7); // 2 + 5
-}
-
-#[test]
-fn batch_mint_large_amount() {
-    let (e, client, owner) = setup();
-    let alice = Address::generate(&e);
-
-    // Test with 20 to stay within test event budget limits
-    // (Larger amounts emit too many events for test environment)
-    let last_token_id = client.batch_mint(&owner, &alice, &20);
-
-    assert_eq!(last_token_id, 19);
-    assert_eq!(client.balance(&alice), 20);
-    assert_eq!(client.get_votes(&alice), 20);
-}
-
-#[test]
-#[should_panic(expected = "Error(Contract, #1101)")]
-fn batch_mint_fails_with_zero_amount() {
-    let (e, client, owner) = setup();
-    let alice = Address::generate(&e);
-
-    let _ = e;
-    client.batch_mint(&owner, &alice, &0);
-}
-
-#[test]
-#[should_panic(expected = "Error(Contract, #1101)")]
-fn batch_mint_fails_above_max() {
-    let (e, client, owner) = setup();
-    let alice = Address::generate(&e);
-
-    let _ = e;
-    client.batch_mint(&owner, &alice, &101);
-}
-
-#[test]
-#[should_panic(expected = "HostError: Error(Auth, InvalidAction)")]
-fn batch_mint_requires_minter_auth() {
-    let (e, client, owner) = setup_no_auth();
-    let alice = Address::generate(&e);
-    let other = Address::generate(&e);
-
-    e.mock_auths(&[MockAuth {
-        address: &other,
-        invoke: &MockAuthInvoke {
-            contract: &client.address,
-            fn_name: "batch_mint",
-            args: (&alice, &10u32).into_val(&e),
-            sub_invokes: &[],
-        },
-    }]);
-
-    let _ = owner;
-    client.batch_mint(&owner, &alice, &10);
-}
-
-#[test]
-fn whitelisted_minter_can_batch_mint() {
-    let (e, client, owner) = setup();
-    let bob = Address::generate(&e);
-    let alice = Address::generate(&e);
-
-    client.set_mint_authority(&bob, &true);
-
-    e.mock_auths(&[MockAuth {
-        address: &bob,
-        invoke: &MockAuthInvoke {
-            contract: &client.address,
-            fn_name: "batch_mint",
-            args: (&bob, &alice, &10u32).into_val(&e),
-            sub_invokes: &[],
-        },
-    }]);
-
-    let last_token_id = client.batch_mint(&bob, &alice, &10);
-    assert_eq!(last_token_id, 9);
-    assert_eq!(client.balance(&alice), 10);
-    assert_eq!(client.get_votes(&alice), 10);
-
-    let _ = owner;
-}
-
-#[test]
-fn batch_mint_defaults_to_self_delegate() {
-    let (e, client, owner) = setup();
-    let alice = Address::generate(&e);
-
-    client.batch_mint(&owner, &alice, &5);
-
-    assert_eq!(client.get_delegate(&alice), Some(alice.clone()));
+    assert_eq!(token_ids.len(), 5);
+    assert_eq!(client.balance(&alice), 5);
     assert_eq!(client.get_votes(&alice), 5);
-
-    let _ = e;
+    assert_eq!(client.total_supply(), 5);
 }
 
 #[test]
-fn batch_mint_preserves_existing_delegation() {
+fn test_batch_mint_multiple_recipients() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+    let bob = Address::generate(&e);
+    let carol = Address::generate(&e);
+
+    e.mock_all_auths();
+
+    let recipients = soroban_sdk::vec![&e, alice.clone(), bob.clone(), carol.clone()];
+    let amounts = soroban_sdk::vec![&e, 10u128, 15u128, 5u128];
+
+    let token_ids = client.batch_mint(&owner, &recipients, &amounts);
+
+    assert_eq!(token_ids.len(), 30);
+    assert_eq!(client.balance(&alice), 10);
+    assert_eq!(client.balance(&bob), 15);
+    assert_eq!(client.balance(&carol), 5);
+    assert_eq!(client.get_votes(&alice), 10);
+    assert_eq!(client.get_votes(&bob), 15);
+    assert_eq!(client.get_votes(&carol), 5);
+    assert_eq!(client.total_supply(), 30);
+}
+
+#[test]
+fn test_batch_mint_delegation_check_once_per_recipient() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+
+    e.mock_all_auths();
+
+    // Mint first batch - should set delegation
+    let recipients1 = soroban_sdk::vec![&e, alice.clone()];
+    let amounts1 = soroban_sdk::vec![&e, 3u128];
+    client.batch_mint(&owner, &recipients1, &amounts1);
+
+    assert_eq!(client.get_delegate(&alice), Some(alice.clone()));
+    assert_eq!(client.get_votes(&alice), 3);
+
+    // Mint second batch to same recipient - delegation already set, should skip check
+    let recipients2 = soroban_sdk::vec![&e, alice.clone()];
+    let amounts2 = soroban_sdk::vec![&e, 7u128];
+    client.batch_mint(&owner, &recipients2, &amounts2);
+
+    assert_eq!(client.balance(&alice), 10);
+    assert_eq!(client.get_votes(&alice), 10);
+    assert_eq!(client.get_delegate(&alice), Some(alice.clone()));
+}
+
+#[test]
+fn test_batch_mint_preserves_existing_delegation() {
     let (e, client, owner) = setup();
     let alice = Address::generate(&e);
     let bob = Address::generate(&e);
 
-    // First mint and delegate
+    e.mock_all_auths();
+
+    // Mint one token to alice and delegate to bob
     client.mint(&owner, &alice);
     client.delegate(&alice, &bob);
+
+    assert_eq!(client.get_delegate(&alice), Some(bob.clone()));
     assert_eq!(client.get_votes(&bob), 1);
 
-    // Batch mint should preserve delegation
-    client.batch_mint(&owner, &alice, &5);
+    // Batch mint more tokens to alice - should preserve delegation to bob
+    let recipients = soroban_sdk::vec![&e, alice.clone()];
+    let amounts = soroban_sdk::vec![&e, 9u128];
+    client.batch_mint(&owner, &recipients, &amounts);
 
-    assert_eq!(client.balance(&alice), 6);
+    assert_eq!(client.balance(&alice), 10);
     assert_eq!(client.get_delegate(&alice), Some(bob.clone()));
-    assert_eq!(client.get_votes(&bob), 6);
+    assert_eq!(client.get_votes(&bob), 10); // All votes still go to bob
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1104)")] // TokenError::InvalidInput
+fn test_batch_mint_mismatched_lengths() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+
+    e.mock_all_auths();
+
+    let recipients = soroban_sdk::vec![&e, alice.clone()];
+    let amounts = soroban_sdk::vec![&e, 5u128, 10u128]; // Mismatch!
+
+    client.batch_mint(&owner, &recipients, &amounts);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1104)")] // TokenError::InvalidInput
+fn test_batch_mint_zero_amount() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+
+    e.mock_all_auths();
+
+    let recipients = soroban_sdk::vec![&e, alice.clone()];
+    let amounts = soroban_sdk::vec![&e, 0u128];
+
+    client.batch_mint(&owner, &recipients, &amounts);
+}
+
+#[test]
+fn test_batch_mint_checkpoint_efficiency() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+
+    e.mock_all_auths();
+
+    // Batch mint 10 tokens
+    let recipients = soroban_sdk::vec![&e, alice.clone()];
+    let amounts = soroban_sdk::vec![&e, 10u128];
+    client.batch_mint(&owner, &recipients, &amounts);
+
+    // Should have created only 1 checkpoint, not 10
+    assert_eq!(client.num_checkpoints(&alice), 1);
+    assert_eq!(client.get_votes(&alice), 10);
+}
+
+#[test]
+fn test_batch_mint_sequential_token_ids() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+    let bob = Address::generate(&e);
+
+    e.mock_all_auths();
+
+    let recipients = soroban_sdk::vec![&e, alice.clone(), bob.clone()];
+    let amounts = soroban_sdk::vec![&e, 3u128, 2u128];
+
+    let token_ids = client.batch_mint(&owner, &recipients, &amounts);
+
+    // Should be sequential: 0,1,2 for alice, then 3,4 for bob
+    assert_eq!(token_ids.get(0), Some(0));
+    assert_eq!(token_ids.get(1), Some(1));
+    assert_eq!(token_ids.get(2), Some(2));
+    assert_eq!(token_ids.get(3), Some(3));
+    assert_eq!(token_ids.get(4), Some(4));
+}
+// See contracts/Minter/tests/ for batch minting tests
+
+#[test]
+fn batch_mint_assigns_contiguous_ids_owners_and_balances() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+    let bob = Address::generate(&e);
+
+    let recipients = soroban_sdk::vec![&e, alice.clone(), bob.clone(), alice.clone()];
+    let amounts = soroban_sdk::vec![&e, 2u128, 3u128, 1u128];
+    let ids = client.batch_mint(&owner, &recipients, &amounts);
+
+    assert_eq!(ids, soroban_sdk::vec![&e, 0u32, 1, 2, 3, 4, 5]);
+    for id in [0u32, 1, 5] {
+        assert_eq!(
+            client.owner_of(&id),
+            if id < 2 || id == 5 {
+                alice.clone()
+            } else {
+                bob.clone()
+            }
+        );
+    }
+    assert_eq!(client.balance(&alice), 3);
+    assert_eq!(client.balance(&bob), 3);
+    assert_eq!(client.total_supply(), 6);
+
+    // Counter advanced by exactly the batch size
+    let next = client.batch_mint(
+        &owner,
+        &soroban_sdk::vec![&e, bob.clone()],
+        &soroban_sdk::vec![&e, 1u128],
+    );
+    assert_eq!(next, soroban_sdk::vec![&e, 6u32]);
+}
+
+mod upgrade_via_common {
+    use super::*;
+    use common::testutils::{empty_wasm, MockManager, MockManagerClient};
+
+    #[test]
+    fn upgrade_goes_through_common_apply() {
+        let e = Env::default();
+        e.mock_all_auths();
+        let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+        let from = BytesN::from_array(&e, &[1u8; 32]);
+        let to = empty_wasm(&e);
+        let id = e.register(
+            DaoTokenContract,
+            (
+                Address::generate(&e),
+                Address::generate(&e),
+                String::from_str(&e, "https://example.com/"),
+                String::from_str(&e, "DAO Vote NFT"),
+                String::from_str(&e, "vDAO"),
+                Address::generate(&e),
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&e, "0.1.0"),
+            ),
+        );
+        let client = DaoTokenContractClient::new(&e, &id);
+        assert_eq!(client.version(), String::from_str(&e, "0.1.0"));
+        assert_eq!(client.wasm_hash(), from);
+        mgr.register(&from, &String::from_str(&e, "0.1.1"));
+        client.sync_version();
+        assert_eq!(client.version(), String::from_str(&e, "0.1.1"));
+        mgr.approve(&from, &to);
+        mgr.register(&to, &String::from_str(&e, "0.2.0"));
+        client.upgrade(&from, &to);
+
+        // Contract code is swapped to an empty module; read the stored keys directly.
+        e.as_contract(&id, || {
+            assert_eq!(common::upgrade::current_hash(&e), to);
+            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.2.0"));
+        });
+    }
+
+    #[test]
+    fn upgrade_rejected_when_not_approved() {
+        let e = Env::default();
+        e.mock_all_auths();
+        let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+        let from = BytesN::from_array(&e, &[1u8; 32]);
+        let to = empty_wasm(&e);
+        let id = e.register(
+            DaoTokenContract,
+            (
+                Address::generate(&e),
+                Address::generate(&e),
+                String::from_str(&e, "https://example.com/"),
+                String::from_str(&e, "DAO Vote NFT"),
+                String::from_str(&e, "vDAO"),
+                Address::generate(&e),
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&e, "0.1.0"),
+            ),
+        );
+        let client = DaoTokenContractClient::new(&e, &id);
+        assert_eq!(client.version(), String::from_str(&e, "0.1.0"));
+        assert_eq!(client.wasm_hash(), from);
+        mgr.register(&from, &String::from_str(&e, "0.1.1"));
+        client.sync_version();
+        assert_eq!(client.version(), String::from_str(&e, "0.1.1"));
+        mgr.register(&to, &String::from_str(&e, "0.2.0"));
+        let r = client.try_upgrade(&from, &to);
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            common::CommonError::UpgradeNotApproved.into()
+        );
+    }
+
+    #[test]
+    fn upgrade_and_sync_version_reject_unauthorized_caller() {
+        let e = Env::default();
+        e.mock_all_auths();
+        let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+        let from = BytesN::from_array(&e, &[1u8; 32]);
+        let to = empty_wasm(&e);
+        let id = e.register(
+            DaoTokenContract,
+            (
+                Address::generate(&e),
+                Address::generate(&e),
+                String::from_str(&e, "https://example.com/"),
+                String::from_str(&e, "DAO Vote NFT"),
+                String::from_str(&e, "vDAO"),
+                Address::generate(&e),
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&e, "0.1.0"),
+            ),
+        );
+        let client = DaoTokenContractClient::new(&e, &id);
+        mgr.approve(&from, &to);
+        mgr.register(&to, &String::from_str(&e, "0.2.0"));
+        mgr.register(&from, &String::from_str(&e, "0.1.1"));
+        // Drop mock_all_auths: no authorization is provided for any address.
+        e.set_auths(&[]);
+        assert!(client.try_upgrade(&from, &to).is_err());
+        assert!(client.try_sync_version().is_err());
+        e.mock_all_auths();
+        e.as_contract(&id, || {
+            assert_eq!(common::upgrade::current_hash(&e), from);
+            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.1.0"));
+        });
+    }
+
+    #[test]
+    fn upgrade_hash_mismatch_leaves_state_unchanged() {
+        let e = Env::default();
+        e.mock_all_auths();
+        let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+        let from = BytesN::from_array(&e, &[1u8; 32]);
+        let to = empty_wasm(&e);
+        let id = e.register(
+            DaoTokenContract,
+            (
+                Address::generate(&e),
+                Address::generate(&e),
+                String::from_str(&e, "https://example.com/"),
+                String::from_str(&e, "DAO Vote NFT"),
+                String::from_str(&e, "vDAO"),
+                Address::generate(&e),
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&e, "0.1.0"),
+            ),
+        );
+        let client = DaoTokenContractClient::new(&e, &id);
+        let wrong = BytesN::from_array(&e, &[9u8; 32]);
+        mgr.approve(&wrong, &to);
+        mgr.register(&to, &String::from_str(&e, "0.2.0"));
+        let r = client.try_upgrade(&wrong, &to);
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            common::CommonError::HashMismatch.into()
+        );
+        e.as_contract(&id, || {
+            assert_eq!(common::upgrade::current_hash(&e), from);
+            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.1.0"));
+        });
+    }
+
+    #[test]
+    fn version_and_sync_version_work_after_upgrade() {
+        let e = Env::default();
+        e.mock_all_auths();
+        let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+        let from = BytesN::from_array(&e, &[1u8; 32]);
+        let to = empty_wasm(&e);
+        let id = e.register(
+            DaoTokenContract,
+            (
+                Address::generate(&e),
+                Address::generate(&e),
+                String::from_str(&e, "https://example.com/"),
+                String::from_str(&e, "DAO Vote NFT"),
+                String::from_str(&e, "vDAO"),
+                Address::generate(&e),
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&e, "0.1.0"),
+            ),
+        );
+        let client = DaoTokenContractClient::new(&e, &id);
+        mgr.approve(&from, &to);
+        mgr.register(&to, &String::from_str(&e, "0.2.0"));
+        client.upgrade(&from, &to);
+        // The contract code is now an empty module, so call the Rust entrypoints
+        // directly in the contract context against the post-upgrade storage.
+        e.as_contract(&id, || {
+            assert_eq!(DaoTokenContract::version(&e), String::from_str(&e, "0.2.0"));
+            assert_eq!(DaoTokenContract::wasm_hash(&e), to);
+        });
+        mgr.register(&to, &String::from_str(&e, "0.2.1"));
+        e.as_contract(&id, || {
+            DaoTokenContract::sync_version(&e);
+            assert_eq!(DaoTokenContract::version(&e), String::from_str(&e, "0.2.1"));
+        });
+    }
+}
+
+#[test]
+fn launch_rejects_unwired_treasury_and_minters_without_treasury() {
+    let (e, client, _owner, _m) = setup_with_manager();
+    let wired = wired_treasury(&e, &client);
+    let other = Address::generate(&e);
+
+    let r = client.try_launch(&other, &vec![&e, other.clone()]);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        crate::error::TokenError::TreasuryMismatch.into()
+    );
+    let r = client.try_launch(&wired, &vec![&e, other.clone()]);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        crate::error::TokenError::TreasuryNotMinter.into()
+    );
+    assert!(!client.is_live());
+    client.launch(&wired, &vec![&e, wired.clone()]);
+    assert!(client.is_live());
+}
+
+#[test]
+fn launch_requires_manager_auth() {
+    let e = Env::default();
+    let owner = Address::generate(&e);
+    let treasury = Address::generate(&e);
+    let manager = Address::generate(&e);
+    let id = e.register(
+        DaoTokenContract,
+        (
+            owner.clone(),
+            treasury.clone(),
+            String::from_str(&e, "u"),
+            String::from_str(&e, "n"),
+            String::from_str(&e, "s"),
+            Address::generate(&e),
+            manager.clone(),
+            BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
+        ),
+    );
+    let client = DaoTokenContractClient::new(&e, &id);
+    let minters = vec![&e, treasury.clone()];
+    // Only a non-manager address authorizes the call.
+    e.mock_auths(&[MockAuth {
+        address: &owner,
+        invoke: &MockAuthInvoke {
+            contract: &id,
+            fn_name: "launch",
+            args: (&treasury, &minters).into_val(&e),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(client.try_launch(&treasury, &minters).is_err());
+    assert!(!client.is_live());
+    // The manager's own authorization succeeds.
+    e.mock_auths(&[MockAuth {
+        address: &manager,
+        invoke: &MockAuthInvoke {
+            contract: &id,
+            fn_name: "launch",
+            args: (&treasury, &minters).into_val(&e),
+            sub_invokes: &[],
+        },
+    }]);
+    client.launch(&treasury, &minters);
+    assert!(client.is_live());
 }

@@ -1,7 +1,7 @@
--- Rollback: Token views
-DROP VIEW IF EXISTS token.members CASCADE;
-DROP VIEW IF EXISTS token.mint_authorities CASCADE;
-DROP VIEW IF EXISTS token.mint_authority_history CASCADE;
-DROP VIEW IF EXISTS token.delegations CASCADE;
-DROP VIEW IF EXISTS token.inventory CASCADE;
-DROP VIEW IF EXISTS token.transfers CASCADE;
+DROP VIEW IF EXISTS token.members;
+DROP VIEW IF EXISTS token.mint_authorities;
+DROP VIEW IF EXISTS token.mint_authority_history;
+DROP VIEW IF EXISTS token.delegations;
+DROP VIEW IF EXISTS token.inventory;
+DROP VIEW IF EXISTS token.mints;
+DROP VIEW IF EXISTS token.transfers;

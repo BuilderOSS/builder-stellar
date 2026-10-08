@@ -1,6 +1,28 @@
-import {Address, xdr} from '@stellar/stellar-sdk';
+import {Address} from '@stellar/stellar-sdk';
 
     /**
+ * Error Enum: TreasuryError
+ */
+export const TreasuryError = {
+  /**
+   * `launch` treasury argument is not this contract's address
+   */
+  1401 : { message: "TreasuryMismatch" },
+  /**
+   * A proposal targeted the Treasury with a function outside the allowlist
+   */
+  1402 : { message: "UnknownSelfCall" },
+  /**
+   * Malformed arguments for an allowlisted self call
+   */
+  1403 : { message: "InvalidSelfCallArgs" },
+  /**
+   * targets/functions/args lengths differ
+   */
+  1404 : { message: "InvalidProposalLength" }
+}
+
+/**
  * Event: Execute
  */
 export interface ExecuteEvent {
@@ -8,18 +30,22 @@ export interface ExecuteEvent {
   data: {
     governor: string;
     target: string;
+    proposal_id: Uint8Array;
     function?: string;
+    /**
+     * Position of the call within the proposal.
+     */
+    index?: number;
   };
 }
 
 /**
- * Event: GovernorChanged
+ * Emitted once when the Manager launches the treasury (Setup -> Live).
  */
-export interface GovernorChangedEvent {
-  name: "GovernorChanged";
+export interface LaunchedEvent {
+  name: "Launched";
   data: {
-    old_governor: string;
-    new_governor: string;
+    treasury: string;
   };
 }
 
@@ -36,22 +62,77 @@ export interface TreasuryInitializedEvent {
 }
 
 /**
- * Storage keys for treasury-specific instance data.
- *
- * The Treasury maintains minimal state, storing only the Governor address.
- * All other data (ownership) is managed by the Ownable trait.
+ * Errors shared by all module contracts. Codes live in the 9000 range so
+ * they never collide with module (11xx-13xx, 3, 30) or manager (10xx) codes.
  */
- export type TreasuryKey =
+export const CommonError = {
   /**
-   * Address of the Governor contract authorized to execute proposals.
-   *
-   * Only this contract can invoke the `execute()` function. The owner
-   * can update this address if needed.
+   * Operation requires the module to be live (launched).
    */
-  { tag: "Governor"; values: void } |
-  { tag: "Manager"; values: void } |
-  { tag: "CurrentHash"; values: void } |
-  { tag: "CurrentVersion"; values: void };
+  9001 : { message: "NotLive" },
+  /**
+   * Operation is only valid during setup; the module is already live.
+   */
+  9002 : { message: "AlreadyLive" },
+  /**
+   * Manager address missing from storage.
+   */
+  9003 : { message: "ManagerNotSet" },
+  /**
+   * `CurrentHash` missing from storage.
+   */
+  9004 : { message: "CurrentHashNotSet" },
+  /**
+   * `from_hash` does not equal the stored `CurrentHash`.
+   */
+  9005 : { message: "HashMismatch" },
+  /**
+   * Manager did not approve this upgrade path.
+   */
+  9006 : { message: "UpgradeNotApproved" },
+  /**
+   * Manager has no registry entry for the requested hash.
+   */
+  9007 : { message: "ImplementationNotFound" },
+  /**
+   * Owner missing from storage.
+   */
+  9008 : { message: "OwnerNotSet" },
+  /**
+   * `CurrentVersion` missing from storage.
+   */
+  9009 : { message: "VersionNotSet" },
+  /**
+   * Treasury address missing from storage.
+   */
+  9010 : { message: "TreasuryNotSet" },
+  /**
+   * Governor address missing from storage.
+   */
+  9011 : { message: "GovernorNotSet" }
+}
+
+/**
+ * Emitted by `apply`. The emitting contract address is the event's contract id.
+ */
+export interface UpgradedEvent {
+  name: "Upgraded";
+  data: {
+    from_hash: Uint8Array;
+    to_hash: Uint8Array;
+    version?: string;
+  };
+}
+
+/**
+ * Emitted by `sync_version`.
+ */
+export interface VersionSyncedEvent {
+  name: "VersionSynced";
+  data: {
+    version?: string;
+  };
+}
 
 /**
  * Error Enum: RoleTransferError
@@ -62,120 +143,6 @@ export const RoleTransferError = {
   2202 : { message: "InvalidPendingAccount" },
   2203 : { message: "TransferExpired" }
 }
-
-/**
- * Stores the pending role holder and the explicit deadline for acceptance.
- */
-export interface PendingTransfer {
-  address: string;
-  live_until_ledger: number;
-}
-
-/**
- * Event emitted when a role is granted.
- */
-export interface RoleGrantedEvent {
-  name: "RoleGranted";
-  data: {
-    role: string;
-    account: string;
-    caller?: string;
-  };
-}
-
-/**
- * Event emitted when a role is revoked.
- */
-export interface RoleRevokedEvent {
-  name: "RoleRevoked";
-  data: {
-    role: string;
-    account: string;
-    caller?: string;
-  };
-}
-
-/**
- * Event emitted when the admin role is renounced.
- */
-export interface AdminRenouncedEvent {
-  name: "AdminRenounced";
-  data: {
-    admin: string;
-  };
-}
-
-/**
- * Event emitted when a role admin is changed.
- */
-export interface RoleAdminChangedEvent {
-  name: "RoleAdminChanged";
-  data: {
-    role: string;
-    previous_admin_role?: string;
-    new_admin_role?: string;
-  };
-}
-
-/**
- * Error Enum: AccessControlError
- */
-export const AccessControlError = {
-  2000 : { message: "Unauthorized" },
-  2001 : { message: "AdminNotSet" },
-  2002 : { message: "IndexOutOfBounds" },
-  2003 : { message: "AdminRoleNotFound" },
-  2004 : { message: "RoleCountIsNotZero" },
-  2005 : { message: "RoleNotFound" },
-  2006 : { message: "AdminAlreadySet" },
-  2007 : { message: "RoleNotHeld" },
-  2008 : { message: "RoleIsEmpty" },
-  2009 : { message: "TransferInProgress" },
-  2010 : { message: "MaxRolesExceeded" }
-}
-
-/**
- * Event emitted when an admin transfer is completed.
- */
-export interface AdminTransferCompletedEvent {
-  name: "AdminTransferCompleted";
-  data: {
-    new_admin: string;
-    previous_admin?: string;
-  };
-}
-
-/**
- * Event emitted when an admin transfer is initiated.
- */
-export interface AdminTransferInitiatedEvent {
-  name: "AdminTransferInitiated";
-  data: {
-    current_admin: string;
-    new_admin?: string;
-    live_until_ledger?: number;
-  };
-}
-
-/**
- * Storage key for enumeration of accounts per role.
- */
-export interface RoleAccountKey {
-  index: number;
-  role: string;
-}
-
-/**
- * Storage keys for the data associated with the access control
- */
- export type AccessControlStorageKey =
-  { tag: "ExistingRoles"; values: void } |
-  { tag: "RoleAccounts"; values: readonly [RoleAccountKey] } |
-  { tag: "HasRole"; values: readonly [string, string] } |
-  { tag: "RoleAccountsCount"; values: readonly [string] } |
-  { tag: "RoleAdmin"; values: readonly [string] } |
-  { tag: "Admin"; values: void } |
-  { tag: "PendingAdmin"; values: void };
 
 /**
  * Error Enum: OwnableError
@@ -217,112 +184,5 @@ export interface OwnershipTransferCompletedEvent {
     new_owner?: string;
   };
 }
-
-/**
- * Storage keys for `Ownable` utility.
- */
- export type OwnableStorageKey =
-  { tag: "Owner"; values: void } |
-  { tag: "PendingOwner"; values: void };
-
-/**
- * Context of a single authorized call performed by an address.
- *
- * Custom account contracts that implement `__check_auth` special function
- * receive a list of `Context` values corresponding to all the calls that
- * need to be authorized.
- */
- export type Context =
-  /**
-   * Contract invocation.
-   */
-  { tag: "Contract"; values: readonly [ContractContext] } |
-  /**
-   * Contract that has a constructor with no arguments is created.
-   */
-  { tag: "CreateContractHostFn"; values: readonly [CreateContractHostFnContext] } |
-  /**
-   * Contract that has a constructor with 1 or more arguments is created.
-   */
-  { tag: "CreateContractWithCtorHostFn"; values: readonly [CreateContractWithConstructorHostFnContext] };
-
-/**
- * Authorization context of a single contract call.
- *
- * This struct corresponds to a `require_auth_for_args` call for an address
- * from `contract` function with `fn_name` name and `args` arguments.
- */
-export interface ContractContext {
-  args: Array<any>;
-  contract: string;
-  fn_name: string;
-}
-
-/**
- * Contract executable used for creating a new contract and used in
- * `CreateContractHostFnContext`.
- */
- export type ContractExecutable =
-  { tag: "Wasm"; values: readonly [Uint8Array] };
-
-/**
- * Value of contract node in InvokerContractAuthEntry tree.
- */
-export interface SubContractInvocation {
-  context: ContractContext;
-  sub_invocations: Array<InvokerContractAuthEntry>;
-}
-
-/**
- * A node in the tree of authorizations performed on behalf of the current
- * contract as invoker of the contracts deeper in the call stack.
- *
- * This is used as an argument of `authorize_as_current_contract` host function.
- *
- * This tree corresponds `require_auth[_for_args]` calls on behalf of the
- * current contract.
- */
- export type InvokerContractAuthEntry =
-  /**
-   * Invoke a contract.
-   */
-  { tag: "Contract"; values: readonly [SubContractInvocation] } |
-  /**
-   * Create a contract passing 0 arguments to constructor.
-   */
-  { tag: "CreateContractHostFn"; values: readonly [CreateContractHostFnContext] } |
-  /**
-   * Create a contract passing 0 or more arguments to constructor.
-   */
-  { tag: "CreateContractWithCtorHostFn"; values: readonly [CreateContractWithConstructorHostFnContext] };
-
-/**
- * Authorization context for `create_contract` host function that creates a
- * new contract on behalf of authorizer address.
- */
-export interface CreateContractHostFnContext {
-  executable: ContractExecutable;
-  salt: Uint8Array;
-}
-
-/**
- * Authorization context for `create_contract` host function that creates a
- * new contract on behalf of authorizer address.
- * This is the same as `CreateContractHostFnContext`, but also has
- * contract constructor arguments.
- */
-export interface CreateContractWithConstructorHostFnContext {
-  constructor_args: Array<any>;
-  executable: ContractExecutable;
-  salt: Uint8Array;
-}
-
-/**
- * Union: Executable
- */
- export type Executable =
-  { tag: "Wasm"; values: readonly [Uint8Array] } |
-  { tag: "StellarAsset"; values: void } |
-  { tag: "Account"; values: void };
-    export type ContractEvent = ExecuteEvent | GovernorChangedEvent | TreasuryInitializedEvent | RoleGrantedEvent | RoleRevokedEvent | AdminRenouncedEvent | RoleAdminChangedEvent | AdminTransferCompletedEvent | AdminTransferInitiatedEvent | OwnershipTransferEvent | OwnershipRenouncedEvent | OwnershipTransferCompletedEvent;
+    export type ContractEvent = ExecuteEvent | LaunchedEvent | TreasuryInitializedEvent | UpgradedEvent | VersionSyncedEvent | OwnershipTransferEvent | OwnershipRenouncedEvent | OwnershipTransferCompletedEvent;
     

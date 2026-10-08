@@ -93,8 +93,8 @@ type PurposeConfig = {
 type GovernanceConfig = {
   votingDelay: number; // seconds
   votingPeriod: number; // seconds
-  quorumBps: number; // basis points (0-10000)
-  proposalThresholdBps: number; // basis points (0-10000)
+  quorumBps: number; // basis points (1-10000)
+  proposalThreshold: number; // absolute number of votes (>= 1)
 };
 
 /**
@@ -184,7 +184,7 @@ const initialState: CreateDaoState = {
     votingDelay: 86400, // 24 hours
     votingPeriod: 259200, // 3 days
     quorumBps: 1000, // 10%
-    proposalThresholdBps: 100 // 1%
+    proposalThreshold: 1 // votes
   },
   launchAdmin: '',
   busy: false,
@@ -328,7 +328,7 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
     }),
     {
       name: 'dao.create-dao.v4',
-      version: 4,
+      version: 5,
       storage,
       skipHydration: true,
       partialize: (state) => ({
@@ -343,6 +343,11 @@ export const useCreateDaoStore = create<CreateDaoStore>()(
         // Version < 4: Remove old artwork/auction/founders fields
         if (version < 4) {
           // Remove old fields (implicit - just don't restore them)
+        }
+
+        // Version < 5: proposalThresholdBps (basis points) became proposalThreshold (absolute votes).
+        if (version < 5) {
+          delete persisted.governance;
         }
 
         return persisted as CreateDaoState;

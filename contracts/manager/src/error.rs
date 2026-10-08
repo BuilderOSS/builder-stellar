@@ -30,29 +30,29 @@ pub enum ManagerError {
     /// Admin not set
     AdminNotSet = 1006,
 
+    /// No admin handover is pending
+    NoPendingAdmin = 1007,
+
+    /// Platform minter not configured
+    PlatformMinterNotSet = 1008,
+
+    /// An implementation is already registered for this WASM hash
+    ImplementationAlreadyRegistered = 1009,
+
+    /// `enable_minter` requires `expected_minter` to equal the registered platform minter
+    PlatformMinterMismatch = 1010,
+
     // ========================================================================
     // Factory Errors (1100-1199)
     // ========================================================================
-    /// DAO creation failed
-    DaoCreationFailed = 1100,
-
     /// Factory is paused
     FactoryPaused = 1101,
-
-    /// Nonce already used
-    NonceAlreadyUsed = 1102,
 
     /// Invalid parameter bounds
     InvalidParamBounds = 1103,
 
-    /// Founder allocations exceed the configured maximum
-    FoundersExceed99Percent = 1104,
-
     /// Invalid quorum basis points
     InvalidQuorumBps = 1105,
-
-    /// Invalid proposal threshold basis points
-    InvalidProposalThresholdBps = 1106,
 
     /// Invalid duration
     InvalidDuration = 1107,
@@ -60,33 +60,26 @@ pub enum ManagerError {
     /// Invalid time buffer
     InvalidTimeBuffer = 1108,
 
-    /// Deployment failed
-    DeploymentFailed = 1109,
-
-    /// Initialization failed
-    InitializationFailed = 1110,
-
-    /// Invalid payment asset
-    InvalidPaymentAsset = 1111,
-
     /// String too long
     StringTooLong = 1112,
 
     /// String empty
     StringEmpty = 1113,
 
-    /// Invalid founder allocation
-    NoFoundersSpecified = 1114,
-
-    /// Invalid founder allocation
-    InvalidFounderPercentage = 1115,
-    /// Governance timing does not fit the Governor contract's u32 fields
+    /// Governance timing out of range: each of voting delay, voting period and
+    /// queue delay must be within 300 seconds ..= 30 days (2_592_000 seconds)
     InvalidGovernanceTiming = 1117,
-    /// Founder allocations exceed the factory resource limit
-    FounderAllocationTooLarge = 1118,
 
-    /// The auction must remain paused when it is not launched
-    AuctionMustBePaused = 1119,
+    /// Proposal threshold must be at least 1
+    InvalidProposalThreshold = 1120,
+
+    /// Token total supply is zero; mint at least one token before launch
+    LaunchSupplyZero = 1121,
+
+    /// A module of the pending DAO currently runs a revoked or unregistered
+    /// WASM hash; upgrade it (owner `upgrade` to an approved, non-revoked hash)
+    /// before launching
+    PendingDaoUsesRevokedImplementation = 1122,
 
     /// Current implementations not set
     CurrentImplementationsNotSet = 1116,
@@ -94,12 +87,6 @@ pub enum ManagerError {
     // ========================================================================
     // Registry Errors (1200-1299)
     // ========================================================================
-    /// DAO already registered
-    DaoAlreadyRegistered = 1200,
-
     /// DAO not found
     DaoNotFound = 1201,
-
-    /// Invalid pagination parameters
-    InvalidPaginationParams = 1202,
 }

@@ -72,32 +72,22 @@ CREATE ROLE app_server WITH LOGIN PASSWORD 'secure_password';
 GRANT CONNECT ON DATABASE neondb TO app_server;
 ```
 
-#### Run Migrations
+#### Run Migrations and Grants
 
-From project root:
+From project root (see [`db/README.md`](../db/README.md) for the full guide):
 
 ```bash
-cd db
-./migrate.sh "postgres://admin:password@host.neon.tech/neondb?sslmode=require"
+export DATABASE_URL="postgres://admin:password@host.neon.tech/neondb?sslmode=require"
+./db/setup-roles.sh          # once
+./db/migrate.sh
+./db/grant-permissions.sh
 ```
 
-This creates:
-- Schema: `chain`, `manager`, `metadata`, `governance`, `token`, `auction`, `treasury`, `app`
-- Tables: `raw_events`, `decoded_events`, `activity_feed`
-- Views: `proposals`, `members`, proposal lifecycle views
-
-#### Grant Permissions
-
-```sql
--- Goldsky writer (read/write)
-GRANT USAGE ON SCHEMA chain, manager, metadata, governance, token, auction, treasury, app TO goldsky_writer;
-GRANT INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA chain, governance, token, auction, treasury, app TO goldsky_writer;
-GRANT USAGE ON ALL SEQUENCES IN SCHEMA app TO goldsky_writer;
-
--- App reader (read-only)
-GRANT USAGE ON SCHEMA manager, metadata, app, governance, token, auction, treasury TO app_server;
-GRANT SELECT ON ALL TABLES IN SCHEMA manager, metadata, app, governance, token, auction, treasury TO app_server;
-```
+This creates the `chain`, `manager`, `token`, `governance`, `auction`, `metadata`,
+`treasury`, `marketplace`, `minter` and `app` schemas. Goldsky writes only
+`chain.raw_events`, `chain.decoded_events` and `app.activity_feed_events`; every
+other object is a view. `goldsky_writer` gets write access to those three tables
+only, `app_server` is read-only on the view schemas.
 
 ### 3. Generate Pipeline Configuration
 
@@ -174,8 +164,9 @@ events** across Manager-discovered DAO modules:
 - `ProposalThresholdBpsSet`, `QuorumThresholdBpsSet`
 - `VetoerChanged`, `AdminChanged`, `TreasuryChanged`, `ContractUpgraded`
 
-### Treasury (3 events)
-- `Initialize`, `Execute`, `GovernorChanged`
+### Treasury
+- `Initialize`, `Launched`, `Execute`
+- `Execute` is emitted once per call in a proposal, with topics `(governor, target, proposal_id)` and data `{function, index}`.
 
 ### Auction (12 events)
 - `Initialize`, `AuctionCreated`, `AuctionBid`, `AuctionSettled`, `AuctionExtended`
@@ -188,6 +179,20 @@ Run validation:
 cd packages/goldsky
 pnpm validate
 ```
+
+### Behavior notes for contract events
+
+The event lists above predate the hardened contracts and the per-module event
+sets are defined by the decoders in `packages/goldsky` (see its README for the
+current coverage and schema). Behavior the pipeline must handle:
+
+- Every module emits a `Launched` event at `launch_dao`. Six different structs share the topic name `launched`; identify events by (contract address, event name), not by name alone.
+- Treasury `Execute` is one event per call, keyed by `proposal_id`. `ProposalExecuted` (Governor) is emitted in the same transaction as the `Execute` events, because `treasury.execute` calls `governor.consume`. `governor.execute` always fails, so nothing is emitted from it.
+- Auction emits `RefundDeferred` (failed push, credit stored) and `RefundWithdrawn` (pull); `BidRefunded` only when the push succeeded. An outstanding refund is the sum of deferred amounts minus withdrawn amounts per bidder.
+- Marketplace primary listings are keyed by `listing_id`, secondary listings by `token_id`. `ListingPurchased`, `ListingCancelled` and `ListingExpired` are secondary-only; primary events have their own names.
+- Manager emits `AdminProposed`, `AdminChanged`, `PlatformMinterSet`, and `DaoLaunched` carries `enable_minter`.
+- Metadata `PropertiesReset` reports `old_num_properties`.
+- Contract error codes overlap between contracts, so store errors with the contract id.
 
 ## Data Access
 
@@ -280,9 +285,9 @@ When adding new events to contracts:
 
 1. Update `src/decoded-events.script.js` with decoder logic
 2. Update `src/activity-feed.script.js` with summary template
-3. Add database columns if needed (create migration in `db/migrations/`)
-4. Add test in `test/dao-events-transform.test.mjs`
-5. Run tests: `pnpm test && pnpm validate`
+3. Add or update views if the read model needs the event (append a new migration in `db/migrations/`, update `apps/web/prisma/schema.prisma` if the web reads it)
+4. Add the topic order to the decoder's `topicNames` (`pnpm validate` checks it against `contracts/*/src/events.rs`) and a test in `test/dao-events-transform.test.mjs`
+5. Run tests: `pnpm test && pnpm validate`, and `TEST_DATABASE_URL=… ./db/test-migrations.sh` for read-model changes
 6. Redeploy: `pnpm generate && ./scripts/deploy.sh redeploy`
 
 ### Testing

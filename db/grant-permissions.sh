@@ -1,239 +1,58 @@
 #!/bin/bash
 #
-# Grant Database Permissions for Goldsky Roles
+# Grant the pipeline and app roles their (minimal) privileges. Idempotent; run
+# after every ./db/migrate.sh. Create the roles first with ./db/setup-roles.sh.
 #
-# Grants appropriate permissions to goldsky_writer and app_server roles
-# after migrations have created the schemas and tables.
+#   goldsky_writer  writes ONLY the three landing tables
+#   app_server      read-only on the app-facing schemas; no access to chain.*
 #
-# Usage:
 #   ./db/grant-permissions.sh [database_url]
-#   DATABASE_URL=postgres://... ./db/grant-permissions.sh
 #
+set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-set -e  # Exit on error
+require_database "${1:-}"
 
-# Color output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+for role in goldsky_writer app_server; do
+  exists="$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM pg_roles WHERE rolname = '$role'")"
+  [ "$exists" = "1" ] || { echo -e "${RED}✗ role $role does not exist; run ./db/setup-roles.sh${NC}" >&2; exit 1; }
+done
 
-# Get database URL from argument or environment
-DATABASE_URL="${1:-$DATABASE_URL}"
+app_schema_csv="$(IFS=,; echo "${APP_SCHEMAS[*]}")"
+all_schema_csv="$(IFS=,; echo "${SCHEMAS[*]}")"
 
-if [ -z "$DATABASE_URL" ]; then
-  echo -e "${RED}Error: DATABASE_URL not provided${NC}"
-  echo ""
-  echo "Usage:"
-  echo "  ./db/grant-permissions.sh postgres://user:pass@host:5432/dbname"
-  echo "  DATABASE_URL=postgres://... ./db/grant-permissions.sh"
-  exit 1
-fi
+psql -v ON_ERROR_STOP=1 -q "$DATABASE_URL" <<SQL
+-- ---------------------------------------------------------------------------
+-- goldsky_writer: upsert into the landing tables, nothing else.
+-- CREATE on chain/app is required because the Goldsky Postgres sink issues
+-- CREATE TABLE IF NOT EXISTS on startup, which PostgreSQL authorizes before it
+-- checks whether the table exists. The tables themselves are owned by the
+-- migration role, so the writer cannot alter them.
+-- ---------------------------------------------------------------------------
+REVOKE ALL ON ALL TABLES IN SCHEMA $all_schema_csv FROM goldsky_writer;
+GRANT USAGE, CREATE ON SCHEMA chain, app TO goldsky_writer;
+GRANT SELECT, INSERT, UPDATE ON chain.raw_events, chain.decoded_events, app.activity_feed_events TO goldsky_writer;
 
-echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-echo -e "${BLUE}  Grant Database Permissions${NC}"
-echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-echo ""
+-- ---------------------------------------------------------------------------
+-- app_server: read-only. Views read chain.* with their owner's privileges, so
+-- the app never needs (and never gets) access to the raw landing payloads.
+-- ---------------------------------------------------------------------------
+REVOKE ALL ON ALL TABLES IN SCHEMA $all_schema_csv FROM app_server;
+REVOKE ALL ON SCHEMA $all_schema_csv FROM app_server;
+GRANT USAGE ON SCHEMA $app_schema_csv TO app_server;
+GRANT SELECT ON ALL TABLES IN SCHEMA $app_schema_csv TO app_server;
+-- The landing table behind app.activity_feed is not an app read surface either.
+REVOKE SELECT ON app.activity_feed_events FROM app_server;
 
-# Check if psql is installed
-if ! command -v psql &> /dev/null; then
-  echo -e "${RED}Error: psql is not installed${NC}"
-  exit 1
-fi
+-- Views created by future migrations are readable without another grant run.
+ALTER DEFAULT PRIVILEGES IN SCHEMA $app_schema_csv GRANT SELECT ON TABLES TO app_server;
+SQL
 
-# Test database connection
-echo -e "${YELLOW}→ Testing database connection...${NC}"
-if ! psql "$DATABASE_URL" -c "SELECT 1" > /dev/null 2>&1; then
-  echo -e "${RED}✗ Failed to connect to database${NC}"
-  exit 1
-fi
-echo -e "${GREEN}✓ Database connection successful${NC}"
-echo ""
-
-# Check if roles exist
-echo -e "${YELLOW}→ Checking roles...${NC}"
-
-GOLDSKY_EXISTS=$(psql "$DATABASE_URL" -t -c "SELECT COUNT(*) FROM pg_roles WHERE rolname = 'goldsky_writer'" | tr -d ' ')
-APP_EXISTS=$(psql "$DATABASE_URL" -t -c "SELECT COUNT(*) FROM pg_roles WHERE rolname = 'app_server'" | tr -d ' ')
-
-if [ "$GOLDSKY_EXISTS" -eq 0 ]; then
-  echo -e "${RED}✗ goldsky_writer role does not exist${NC}"
-  echo "Run ./db/setup-roles.sh first"
-  exit 1
-fi
-
-if [ "$APP_EXISTS" -eq 0 ]; then
-  echo -e "${RED}✗ app_server role does not exist${NC}"
-  echo "Run ./db/setup-roles.sh first"
-  exit 1
-fi
-
-echo -e "${GREEN}✓ Both roles exist${NC}"
-echo ""
-
-# Check if schemas exist
-echo -e "${YELLOW}→ Checking schemas...${NC}"
-
-SCHEMAS=$(psql "$DATABASE_URL" -t -c "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name IN ('chain', 'governance', 'token', 'auction', 'treasury', 'manager', 'metadata', 'app')" | tr -d ' ')
-
-if [ "$SCHEMAS" -eq 0 ]; then
-  echo -e "${RED}✗ Required schemas do not exist${NC}"
-  echo "Run ./db/migrate.sh first"
-  exit 1
-fi
-
-echo -e "${GREEN}✓ Found $SCHEMAS schemas${NC}"
-echo ""
-
-# Grant permissions
-echo -e "${BLUE}Granting permissions...${NC}"
-echo ""
-
-echo -e "${YELLOW}→ Granting permissions to goldsky_writer...${NC}"
-
-psql "$DATABASE_URL" << 'EOF'
--- Grant schema usage and create permissions
-GRANT USAGE ON SCHEMA chain TO goldsky_writer;
-GRANT USAGE ON SCHEMA governance TO goldsky_writer;
-GRANT USAGE ON SCHEMA token TO goldsky_writer;
-GRANT USAGE ON SCHEMA auction TO goldsky_writer;
-GRANT USAGE ON SCHEMA treasury TO goldsky_writer;
-GRANT USAGE ON SCHEMA manager TO goldsky_writer;
-GRANT USAGE ON SCHEMA metadata TO goldsky_writer;
-GRANT USAGE ON SCHEMA app TO goldsky_writer;
-
--- Grant CREATE permission (needed for Goldsky's CREATE TABLE IF NOT EXISTS)
-GRANT CREATE ON SCHEMA chain TO goldsky_writer;
-GRANT CREATE ON SCHEMA governance TO goldsky_writer;
-GRANT CREATE ON SCHEMA token TO goldsky_writer;
-GRANT CREATE ON SCHEMA auction TO goldsky_writer;
-GRANT CREATE ON SCHEMA treasury TO goldsky_writer;
-GRANT CREATE ON SCHEMA manager TO goldsky_writer;
-GRANT CREATE ON SCHEMA metadata TO goldsky_writer;
-GRANT CREATE ON SCHEMA app TO goldsky_writer;
-
--- Grant table permissions (SELECT, INSERT, UPDATE, DELETE for data writes)
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA chain TO goldsky_writer;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA governance TO goldsky_writer;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA token TO goldsky_writer;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA auction TO goldsky_writer;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA treasury TO goldsky_writer;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA manager TO goldsky_writer;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA metadata TO goldsky_writer;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA app TO goldsky_writer;
-
--- Grant sequence permissions
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA app TO goldsky_writer;
-
--- Grant default privileges for future tables (created by Goldsky with CREATE TABLE IF NOT EXISTS)
-ALTER DEFAULT PRIVILEGES IN SCHEMA chain GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO goldsky_writer;
-ALTER DEFAULT PRIVILEGES IN SCHEMA governance GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO goldsky_writer;
-ALTER DEFAULT PRIVILEGES IN SCHEMA token GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO goldsky_writer;
-ALTER DEFAULT PRIVILEGES IN SCHEMA auction GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO goldsky_writer;
-ALTER DEFAULT PRIVILEGES IN SCHEMA treasury GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO goldsky_writer;
-ALTER DEFAULT PRIVILEGES IN SCHEMA manager GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO goldsky_writer;
-ALTER DEFAULT PRIVILEGES IN SCHEMA metadata GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO goldsky_writer;
-ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO goldsky_writer;
-ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT USAGE, SELECT ON SEQUENCES TO goldsky_writer;
-
--- Goldsky only sinks these three landing tables.  It must not be able to write
--- application read models or create arbitrary objects in their schemas.
-REVOKE SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA governance, token, auction, treasury, manager, metadata FROM goldsky_writer;
-REVOKE CREATE ON SCHEMA governance, token, auction, treasury, manager, metadata, app FROM goldsky_writer;
-GRANT INSERT, UPDATE, DELETE, SELECT ON chain.raw_events, chain.decoded_events, app.activity_feed_events TO goldsky_writer;
-ALTER DEFAULT PRIVILEGES IN SCHEMA governance, token, auction, treasury, manager, metadata REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLES FROM goldsky_writer;
-ALTER DEFAULT PRIVILEGES IN SCHEMA governance, token, auction, treasury, manager, metadata, app REVOKE USAGE, SELECT, UPDATE ON SEQUENCES FROM goldsky_writer;
-EOF
-
-echo -e "${GREEN}✓ goldsky_writer permissions granted${NC}"
-echo ""
-
-echo -e "${YELLOW}→ Granting permissions to app_server (read-only)...${NC}"
-
-psql "$DATABASE_URL" << 'EOF'
--- Grant schema usage
-GRANT USAGE ON SCHEMA chain TO app_server;
-GRANT USAGE ON SCHEMA governance TO app_server;
-GRANT USAGE ON SCHEMA token TO app_server;
-GRANT USAGE ON SCHEMA auction TO app_server;
-GRANT USAGE ON SCHEMA treasury TO app_server;
-GRANT USAGE ON SCHEMA manager TO app_server;
-GRANT USAGE ON SCHEMA metadata TO app_server;
-GRANT USAGE ON SCHEMA app TO app_server;
-
--- Grant SELECT only (read-only access)
-GRANT SELECT ON ALL TABLES IN SCHEMA chain TO app_server;
-GRANT SELECT ON ALL TABLES IN SCHEMA governance TO app_server;
-GRANT SELECT ON ALL TABLES IN SCHEMA token TO app_server;
-GRANT SELECT ON ALL TABLES IN SCHEMA auction TO app_server;
-GRANT SELECT ON ALL TABLES IN SCHEMA treasury TO app_server;
-GRANT SELECT ON ALL TABLES IN SCHEMA manager TO app_server;
-GRANT SELECT ON ALL TABLES IN SCHEMA metadata TO app_server;
-GRANT SELECT ON ALL TABLES IN SCHEMA app TO app_server;
-
--- app_server is a read-only consumer.  Explicitly revoke object and schema
--- mutation privileges so a broad SELECT grant can never become a writer grant.
-DO $revoke$
-DECLARE
-  schema_name text;
-BEGIN
-  EXECUTE format('REVOKE CREATE ON DATABASE %I FROM app_server', current_database());
-  FOREACH schema_name IN ARRAY ARRAY['chain', 'governance', 'token', 'auction', 'treasury', 'manager', 'metadata', 'app'] LOOP
-    EXECUTE format('REVOKE CREATE ON SCHEMA %I FROM app_server', schema_name);
-    EXECUTE format('REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA %I FROM app_server', schema_name);
-    EXECUTE format('REVOKE USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA %I FROM app_server', schema_name);
-  END LOOP;
-END
-$revoke$;
-
--- Grant default privileges for future tables
-ALTER DEFAULT PRIVILEGES IN SCHEMA chain GRANT SELECT ON TABLES TO app_server;
-ALTER DEFAULT PRIVILEGES IN SCHEMA governance GRANT SELECT ON TABLES TO app_server;
-ALTER DEFAULT PRIVILEGES IN SCHEMA token GRANT SELECT ON TABLES TO app_server;
-ALTER DEFAULT PRIVILEGES IN SCHEMA auction GRANT SELECT ON TABLES TO app_server;
-ALTER DEFAULT PRIVILEGES IN SCHEMA treasury GRANT SELECT ON TABLES TO app_server;
-ALTER DEFAULT PRIVILEGES IN SCHEMA manager GRANT SELECT ON TABLES TO app_server;
-ALTER DEFAULT PRIVILEGES IN SCHEMA metadata GRANT SELECT ON TABLES TO app_server;
-ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT SELECT ON TABLES TO app_server;
-
--- Raw landing payloads are not an application read surface.
-REVOKE SELECT ON chain.raw_events, chain.decoded_events FROM app_server;
-EOF
-
-echo -e "${GREEN}✓ app_server permissions granted${NC}"
-echo ""
-
-# Show summary
-echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-echo -e "${GREEN}✓ Permissions granted successfully!${NC}"
-echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-echo ""
-
-echo -e "${YELLOW}Permission summary:${NC}"
-echo ""
-
-psql "$DATABASE_URL" << 'EOF'
-SELECT
-  grantee,
-  table_schema,
-  COUNT(DISTINCT table_name) as table_count,
-  STRING_AGG(DISTINCT privilege_type, ', ' ORDER BY privilege_type) as privileges
+echo -e "${GREEN}✓ Permissions granted${NC}"
+psql "$DATABASE_URL" -c "
+SELECT grantee, table_schema, count(DISTINCT table_name) AS objects,
+       string_agg(DISTINCT privilege_type, ', ' ORDER BY privilege_type) AS privileges
 FROM information_schema.table_privileges
 WHERE grantee IN ('goldsky_writer', 'app_server')
-  AND table_schema IN ('chain', 'governance', 'token', 'auction', 'treasury', 'manager', 'metadata', 'app')
-GROUP BY grantee, table_schema
-ORDER BY grantee, table_schema;
-EOF
-
-echo ""
-echo -e "${CYAN}Next steps:${NC}"
-echo "  1. Test goldsky_writer connection:"
-echo "     psql \"postgres://goldsky_writer:password@host/db\" -c \"SELECT 1\""
-echo ""
-echo "  2. Test app_server connection:"
-echo "     psql \"postgres://app_server:password@host/db\" -c \"SELECT 1\""
-echo ""
-echo "  3. Deploy Goldsky pipeline:"
-echo "     cd packages/goldsky && ./scripts/deploy.sh deploy"
-echo ""
+  AND table_schema IN ($(sql_schema_list))
+GROUP BY grantee, table_schema ORDER BY grantee, table_schema;"

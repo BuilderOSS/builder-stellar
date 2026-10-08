@@ -41,6 +41,8 @@ pub const MIN_RESERVE_PRICE: i128 = 1000;
 /// Prevents unreasonable increment requirements that would make bidding
 /// impossible. A 100% increment (doubling the bid) is the maximum allowed.
 pub const MAX_BID_INCREMENT_PERCENT: u32 = 100;
+/// Upper bound for `set_time_buffer` (one day, in seconds). The lower bound is 1.
+pub const MAX_TIME_BUFFER: u64 = common::MAX_AUCTION_TIME_BUFFER;
 
 /// Denominator for percentage calculations.
 ///
@@ -55,6 +57,9 @@ pub const PERCENT_DENOMINATOR: i128 = 100;
 /// deployments may want longer durations for more competitive bidding.
 pub const MIN_AUCTION_DURATION: u64 = 300; // 5 minutes in seconds
 
+/// Maximum auction duration (30 days in seconds).
+pub const MAX_AUCTION_DURATION: u64 = common::MAX_AUCTION_DURATION;
+
 /// Storage keys for auction instance data.
 #[derive(Clone, Debug)]
 #[contracttype]
@@ -66,9 +71,9 @@ pub enum DataKey {
     /// Whether the first auction has been launched (prevents re-initialization)
     Launched,
     Manager,
-    CurrentHash,
-    CurrentVersion,
     PaymentTokenLocked,
+    /// Persistent: refund owed to a bidder whose push refund failed (i128).
+    PendingRefund(Address),
 }
 
 /// Auction configuration parameters.
@@ -208,4 +213,39 @@ pub fn is_launched(e: &Env) -> bool {
 pub fn set_launched(e: &Env, launched: bool) {
     e.storage().instance().set(&DataKey::Launched, &launched);
     e.storage().instance().extend_ttl(LEDGERS_TO_LIVE, MAX_TTL);
+}
+
+/// Persistent TTL for `PendingRefund` entries (nominally 1 year, capped by the
+/// network at ~180 days, bumped on every touch).
+const PENDING_REFUND_TTL: u32 = 365 * common::ttl::DAY_IN_LEDGERS;
+const PENDING_REFUND_THRESHOLD: u32 = PENDING_REFUND_TTL - common::ttl::DAY_IN_LEDGERS;
+
+pub fn get_pending_refund(e: &Env, bidder: &Address) -> i128 {
+    let key = DataKey::PendingRefund(bidder.clone());
+    let v: Option<i128> = e.storage().persistent().get(&key);
+    if v.is_some() {
+        e.storage()
+            .persistent()
+            .extend_ttl(&key, PENDING_REFUND_THRESHOLD, PENDING_REFUND_TTL);
+    }
+    v.unwrap_or(0)
+}
+
+/// Add `amount` to the bidder's pending refund and return the new total.
+pub fn add_pending_refund(e: &Env, bidder: &Address, amount: i128) -> i128 {
+    let key = DataKey::PendingRefund(bidder.clone());
+    let total = get_pending_refund(e, bidder)
+        .checked_add(amount)
+        .unwrap_or_else(|| panic_with_error!(e, AuctionError::ArithmeticOverflow));
+    e.storage().persistent().set(&key, &total);
+    e.storage()
+        .persistent()
+        .extend_ttl(&key, PENDING_REFUND_THRESHOLD, PENDING_REFUND_TTL);
+    total
+}
+
+pub fn clear_pending_refund(e: &Env, bidder: &Address) {
+    e.storage()
+        .persistent()
+        .remove(&DataKey::PendingRefund(bidder.clone()));
 }

@@ -1,11 +1,12 @@
 use soroban_sdk::{
     auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation},
-    contract, contractimpl, vec, Address, BytesN, Env, IntoVal, String, Symbol, Val, Vec,
+    contract, contractimpl, panic_with_error, vec, Address, BytesN, Env, String, Symbol,
+    TryFromVal, Val, Vec,
 };
-use stellar_access::ownable::{set_owner, Ownable, OwnableStorageKey};
-use stellar_macros::only_owner;
+use stellar_access::ownable::{set_owner, Ownable};
 
-use crate::events::{emit_execute, emit_governor_changed, emit_treasury_initialized};
+use crate::error::TreasuryError;
+use crate::events::{emit_execute, emit_launched, emit_treasury_initialized};
 use crate::storage::*;
 
 /// Main contract for DAO treasury operations.
@@ -18,16 +19,22 @@ pub struct DaoTreasuryContract;
 
 #[contractimpl]
 impl DaoTreasuryContract {
-    pub fn finalize_ownership(e: &Env, new_owner: Address) {
-        let manager: Address = e
-            .storage()
-            .instance()
-            .get(&TreasuryKey::Manager)
-            .expect("manager not set");
+    /// One-shot, Manager-only launch handoff (Setup -> Live).
+    ///
+    /// Sets the owner to `treasury` (which is this contract's own address in the
+    /// Manager flow), clears any pending two-step ownership transfer, marks the
+    /// module live, and emits `Launched`. A second call panics with `AlreadyLive`.
+    pub fn launch(e: &Env, treasury: Address) {
+        let manager = Self::manager(e);
         manager.require_auth();
-        e.storage()
-            .instance()
-            .set(&OwnableStorageKey::Owner, &new_owner);
+        common::lifecycle::mark_live(e);
+        // The treasury is its own owner after launch.
+        if treasury != e.current_contract_address() {
+            soroban_sdk::panic_with_error!(e, TreasuryError::TreasuryMismatch);
+        }
+        common::ownership::handoff_owner(e, &treasury);
+        common::ttl::extend_instance(e);
+        emit_launched(e, &treasury);
     }
 
     /// Initializes the treasury contract with an owner and governor.
@@ -53,71 +60,41 @@ impl DaoTreasuryContract {
             .instance()
             .set(&TreasuryKey::Governor, &governor);
         e.storage().instance().set(&TreasuryKey::Manager, &manager);
-        e.storage()
-            .instance()
-            .set(&TreasuryKey::CurrentHash, &current_hash);
-        e.storage()
-            .instance()
-            .set(&TreasuryKey::CurrentVersion, &version);
+        common::upgrade::init(e, &current_hash, &version);
 
         emit_treasury_initialized(e, &owner, &governor, &version);
     }
 
+    /// Setup-phase upgrade by the launch admin. After launch the owner is the
+    /// Treasury itself, whose auth nobody can produce externally, so this is
+    /// dead after launch; governance upgrades go through `execute` ->
+    /// `self_dispatch("upgrade")`.
     pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
-        let owner = stellar_access::ownable::get_owner(e).expect("owner not set");
-        owner.require_auth();
-        let manager: Address = e
-            .storage()
-            .instance()
-            .get(&TreasuryKey::Manager)
-            .expect("manager not set");
-        let current: BytesN<32> = e
-            .storage()
-            .instance()
-            .get(&TreasuryKey::CurrentHash)
-            .expect("current hash not set");
-        if from_hash != current {
-            panic!("from hash does not match current hash");
-        }
-        let approved: bool = e.invoke_contract(
-            &manager,
-            &Symbol::new(e, "is_upgrade_approved"),
-            vec![e, from_hash.into_val(e), to_hash.clone().into_val(e)],
-        );
-        if !approved {
-            panic!("upgrade not approved");
-        }
-        e.storage()
-            .instance()
-            .set(&TreasuryKey::CurrentHash, &to_hash);
-        e.deployer().update_current_contract_wasm(to_hash);
+        Self::require_owner_auth(e);
+        Self::do_upgrade(e, &from_hash, &to_hash);
     }
 
-    /// Updates the authorized governor contract address.
-    ///
-    /// Only the owner can call this function. This allows replacing a compromised
-    /// or upgraded Governor contract without losing Treasury assets or authority.
-    ///
-    /// # Arguments
-    ///
-    /// * `governor` - The new governor contract address
-    ///
-    /// # Authorization
-    ///
-    /// Requires owner authentication (enforced by `#[only_owner]` macro).
-    ///
-    /// # Events
-    ///
-    /// Emits a `GovernorChanged` event with old and new governor addresses.
-    #[only_owner]
-    pub fn set_governor(e: &Env, governor: Address) {
-        let old_governor = Self::governor(e);
+    pub fn version(e: &Env) -> String {
+        common::upgrade::version(e)
+    }
 
+    pub fn wasm_hash(e: &Env) -> BytesN<32> {
+        common::upgrade::current_hash(e)
+    }
+
+    /// Setup-phase only in practice, see `upgrade`.
+    pub fn sync_version(e: &Env) {
+        Self::require_owner_auth(e);
+        Self::do_sync_version(e);
+    }
+
+    fn manager(e: &Env) -> Address {
         e.storage()
             .instance()
-            .set(&TreasuryKey::Governor, &governor);
-
-        emit_governor_changed(e, &old_governor, &governor);
+            .get(&TreasuryKey::Manager)
+            .unwrap_or_else(|| {
+                soroban_sdk::panic_with_error!(e, common::CommonError::ManagerNotSet)
+            })
     }
 
     /// Returns the address of the authorized governor contract.
@@ -128,73 +105,138 @@ impl DaoTreasuryContract {
     ///
     /// # Panics
     ///
-    /// Panics if the governor is not set (should never happen after initialization).
+    /// Aborts with `CommonError::GovernorNotSet` if the governor is not set (should
+    /// never happen after construction).
     pub fn governor(e: &Env) -> Address {
-        e.storage()
-            .instance()
-            .get(&TreasuryKey::Governor)
-            .expect("governor not set")
+        common::error::require(
+            e,
+            e.storage().instance().get(&TreasuryKey::Governor),
+            common::CommonError::GovernorNotSet,
+        )
     }
 
-    /// Executes an approved proposal action on a target contract.
+    /// Executes a queued proposal. The Treasury is the top-level executor.
     ///
-    /// This is the core function of the Treasury - it receives execution instructions
-    /// from the Governor and invokes the target contract with the Treasury's authority.
-    /// The Treasury authorizes itself as the caller, allowing the target to authenticate
-    /// the action as coming from the DAO.
+    /// Anyone may call this; authority comes from the Governor's approval.
     ///
-    /// # Arguments
+    /// 1. `governor.consume(...)` (a returning call) checks the proposal is
+    ///    Queued, past its ETA and unexpired, marks it Executed, and returns the
+    ///    proposal id. The Governor requires the Treasury's auth, which the
+    ///    Treasury grants for exactly that call. The Governor is no longer on
+    ///    the call stack afterwards, so targets may call the Governor's owner
+    ///    setters (Soroban forbids re-entry).
+    /// 2. Each call is dispatched in order. Calls whose target is this contract
+    ///    go through the internal allowlist `self_dispatch` (never
+    ///    `invoke_contract`, which would be a forbidden re-entry); any other
+    ///    target is invoked with the Treasury authorizing exactly that call.
     ///
-    /// * `target` - The contract address to invoke
-    /// * `function` - The function name to call on the target
-    /// * `args` - The arguments to pass to the function
+    /// Any failing call reverts the whole transaction, including the Executed
+    /// mark, so the proposal stays Queued and can be retried until it expires.
     ///
-    /// # Returns
-    ///
-    /// The return value from the target function invocation.
-    ///
-    /// # Authorization
-    ///
-    /// Requires authentication from the Governor contract. The Treasury then authorizes
-    /// itself when invoking the target, establishing a two-layer authorization chain:
-    /// Governor → Treasury → Target.
-    ///
-    /// # Security
-    ///
-    /// The authorization structure ensures:
-    /// - Only the Governor can trigger executions (prevents direct calls)
-    /// - The Treasury appears as the authenticated caller to targets (DAO authority)
-    /// - Sub-invocations can also use Treasury authority if needed
+    /// Resource impact: one extra cross-contract call (`consume`) and one
+    /// persistent write in the Governor per execution; no new Treasury storage.
     ///
     /// # Events
     ///
-    /// Emits an `Execute` event with the execution details.
-    pub fn execute(e: &Env, target: Address, function: Symbol, args: Vec<Val>) -> Val {
+    /// Emits one `Execute` event per call, carrying the proposal id.
+    pub fn execute(
+        e: &Env,
+        targets: Vec<Address>,
+        functions: Vec<Symbol>,
+        args: Vec<Vec<Val>>,
+        description_hash: BytesN<32>,
+    ) -> BytesN<32> {
+        common::lifecycle::require_live(e);
+        common::ttl::extend_instance(e);
         let governor = Self::governor(e);
-        governor.require_auth();
 
-        // Authorize this Treasury contract as the authorizer of the
-        // immediate target function invocation.
-        //
-        // If deeper downstream invocations require Treasury authorization,
-        // those invocations must also be represented in `sub_invocations`.
-        e.authorize_as_current_contract(vec![
+        // No explicit auth entry: the Governor's `treasury.require_auth()` on this
+        // direct call is satisfied implicitly because the Treasury is the invoker.
+        let proposal_id = common::clients::GovernorConsumeClient::new(e, &governor).consume(
+            &targets,
+            &functions,
+            &args,
+            &description_hash,
+        );
+
+        let this = e.current_contract_address();
+        for i in 0..targets.len() {
+            let (Some(target), Some(function), Some(call_args)) =
+                (targets.get(i), functions.get(i), args.get(i))
+            else {
+                panic_with_error!(e, TreasuryError::InvalidProposalLength);
+            };
+
+            if target == this {
+                Self::self_dispatch(e, &function, &call_args);
+            } else {
+                // If deeper downstream invocations require Treasury
+                // authorization they would need `sub_invocations`; the default
+                // is a single authorized level.
+                e.authorize_as_current_contract(vec![
+                    e,
+                    InvokerContractAuthEntry::Contract(SubContractInvocation {
+                        context: ContractContext {
+                            contract: target.clone(),
+                            fn_name: function.clone(),
+                            args: call_args.clone(),
+                        },
+                        sub_invocations: vec![e],
+                    }),
+                ]);
+                e.invoke_contract::<Val>(&target, &function, call_args);
+            }
+            emit_execute(e, &governor, &target, &function, &proposal_id, i);
+        }
+
+        proposal_id
+    }
+}
+
+impl DaoTreasuryContract {
+    fn require_owner_auth(e: &Env) {
+        let owner = common::error::require(
             e,
-            InvokerContractAuthEntry::Contract(SubContractInvocation {
-                context: ContractContext {
-                    contract: target.clone(),
-                    fn_name: function.clone(),
-                    args: args.clone(),
-                },
-                sub_invocations: vec![e],
-            }),
-        ]);
+            stellar_access::ownable::get_owner(e),
+            common::CommonError::OwnerNotSet,
+        );
+        owner.require_auth();
+    }
 
-        let result = e.invoke_contract::<Val>(&target, &function, args.clone());
+    fn do_upgrade(e: &Env, from_hash: &BytesN<32>, to_hash: &BytesN<32>) {
+        let manager = Self::manager(e);
+        common::upgrade::apply(e, &manager, from_hash, to_hash);
+    }
 
-        emit_execute(e, &governor, &target, &function);
+    fn do_sync_version(e: &Env) {
+        let manager = Self::manager(e);
+        common::upgrade::sync_version(e, &manager);
+    }
 
-        result
+    /// Allowlisted calls a proposal may aim at the Treasury itself. Authorized
+    /// by the proposal (already consumed from the Governor), so no owner auth.
+    fn self_dispatch(e: &Env, function: &Symbol, args: &Vec<Val>) {
+        if *function == Symbol::new(e, "upgrade") {
+            if args.len() != 2 {
+                panic_with_error!(e, TreasuryError::InvalidSelfCallArgs);
+            }
+            let from = Self::arg::<BytesN<32>>(e, args, 0);
+            let to = Self::arg::<BytesN<32>>(e, args, 1);
+            Self::do_upgrade(e, &from, &to);
+        } else if *function == Symbol::new(e, "sync_version") {
+            if !args.is_empty() {
+                panic_with_error!(e, TreasuryError::InvalidSelfCallArgs);
+            }
+            Self::do_sync_version(e);
+        } else {
+            panic_with_error!(e, TreasuryError::UnknownSelfCall);
+        }
+    }
+
+    fn arg<T: TryFromVal<Env, Val>>(e: &Env, args: &Vec<Val>, i: u32) -> T {
+        args.get(i)
+            .and_then(|v| T::try_from_val(e, &v).ok())
+            .unwrap_or_else(|| panic_with_error!(e, TreasuryError::InvalidSelfCallArgs))
     }
 }
 
@@ -205,7 +247,9 @@ impl DaoTreasuryContract {
 /// - `transfer_ownership()` - Transfer ownership to a new address
 /// - `renounce_ownership()` - Remove the owner (use with extreme caution)
 ///
-/// The owner has the ability to change the Governor contract, providing an escape
-/// hatch if the governance system becomes compromised.
+/// After launch the owner is the Treasury itself, so no external account can
+/// satisfy owner auth; the Treasury is administered only via `execute` ->
+/// `self_dispatch`. The impl is kept because the Manager's launch flow and
+/// bindings use `get_owner` and the setup-phase two-step transfer.
 #[contractimpl(contracttrait)]
 impl Ownable for DaoTreasuryContract {}

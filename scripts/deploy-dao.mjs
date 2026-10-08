@@ -5,11 +5,50 @@ const args = process.argv.slice(2);
 const phase = args[0];
 const daoConfigPath = args[1];
 const networkConfigPath = args[2];
-const phases = ['create_dao', 'admin_checklist', 'launch_dao'];
+/**
+ * DAO Deployment Script (hardened-contract flow)
+ *
+ * Usage:
+ *   node scripts/deploy-dao.mjs <create_dao|admin_checklist|launch_dao> <dao-config.json> <network-config.json>
+ *   node scripts/deploy-dao.mjs --validate-only <dao-config.json>      (no network, no artifacts)
+ *
+ * Three phases, each resumable:
+ *
+ * 1. create_dao: Manager.create_dao deploys Token, Treasury, Governor, Metadata, Auction and Marketplace
+ *    in one transaction and wires them through constructors (there are no wiring setters). Governance,
+ *    auction, marketplace and metadata settings from the config are passed as constructor values, and
+ *    the payment assets are recorded by the Manager for launch-time assertion. The launch admin owns
+ *    every module during the setup window.
+ *
+ * 2. admin_checklist (setup window, the launch admin signs directly; no Manager, Minter or Treasury):
+ *    - mint founder tokens with token.batch_mint (the owner may mint before launch; launch_dao
+ *      requires total_supply > 0). Batches are bounded to 16 recipient entries / 100 tokens.
+ *    - add the artwork with metadata.add_properties in batches of <= 30 items (each batch adds its
+ *      own IPFS group). Progress is derived from metadata.ipfs_data_count().
+ *    Not possible before launch: token.set_mint_authority (NotLive), Minter merkle/allowlist
+ *    (Minter requires a Live token), auction.unpause, marketplace primary listings, any governance
+ *    action. Settings are NOT re-applied here: the constructors already hold them.
+ *    Changing auction/marketplace payment assets in setup makes launch_dao fail.
+ *
+ * 3. launch_dao: Manager.launch_dao(token_address, launch_config{launch_auction, launch_marketplace,
+ *    enable_minter, expected_minter}; expected_minter is pinned to get_platform_minter when
+ *    enable_minter is set). It grants mint authority itself (Treasury, Marketplace, Auction if launched,
+ *    and the Manager's registered PlatformMinter if enable_minter), moves ownership of every module
+ *    to the Treasury and deletes the pending state. The Manager has no authority afterwards.
+ *
+ * Prerequisites: Manager deployed with deploy-manager.mjs (which also registers the platform
+ * minter used by enable_minter). create_dao requires auth from BOTH deployer and launchAdmin, so the
+ * config must use the same address for both (enforced by validation). The identity (DEPLOY_IDENTITY, default <network>-admin) must be
+ * the config deployer (create_dao) and launchAdmin (checklist/launch).
+ */
 
-if (!phases.includes(phase) || !daoConfigPath || !networkConfigPath) {
+const phases = ['create_dao', 'admin_checklist', 'launch_dao'];
+const validateOnly = args[0] === '--validate-only';
+
+if (validateOnly ? !args[1] : (!phases.includes(phase) || !daoConfigPath || !networkConfigPath)) {
   throw new Error(
-    'Usage: node scripts/deploy-dao.mjs <create_dao|admin_checklist|launch_dao> <dao-config.json> <network-config.json>'
+    'Usage: node scripts/deploy-dao.mjs <create_dao|admin_checklist|launch_dao> <dao-config.json> <network-config.json>\n' +
+      '       node scripts/deploy-dao.mjs --validate-only <dao-config.json>'
   );
 }
 
@@ -18,7 +57,190 @@ function loadJson(path, label) {
   return JSON.parse(readFileSync(path, 'utf8'));
 }
 
-const daoConfig = loadJson(daoConfigPath, 'DAO config');
+// Contract bounds (contracts/manager/src/contract.rs validate_initial_config, governor/auction constants).
+const LIMITS = {
+  minGovernanceDelay: 300,
+  maxGovernanceDelay: 2_592_000,
+  maxBps: 10_000,
+  minAuctionDuration: 300,
+  minReservePrice: 1000n,
+  maxTimeBuffer: 86_400,
+  maxString: 256,
+  maxArtworkItemsPerCall: 30,
+  maxProperties: 16,
+  maxBatchMintTokens: 100,
+  maxBatchMintRecipients: 16
+};
+const ADDRESS_RE = /^[GC][A-Z2-7]{55}$/;
+const CONTRACT_RE = /^C[A-Z2-7]{55}$/;
+
+function validateDaoConfig(config) {
+  const errors = [];
+  const err = (message) => errors.push(message);
+  const str = (path, value) => {
+    if (typeof value !== 'string' || value.length === 0) err(`${path} must be a non-empty string`);
+    else if (value.length > LIMITS.maxString) err(`${path} must be at most ${LIMITS.maxString} characters`);
+  };
+  const addr = (path, value, re = ADDRESS_RE) => {
+    if (typeof value !== 'string' || !re.test(value)) err(`${path} must be a valid Stellar ${re === CONTRACT_RE ? 'contract (C...)' : 'account/contract (G.../C...)'} address`);
+  };
+  const intRange = (path, value, min, max) => {
+    if (!Number.isInteger(value) || value < min || value > max) err(`${path} must be an integer in ${min}..=${max} (got ${JSON.stringify(value)})`);
+  };
+  const bigint = (path, value, min) => {
+    let parsed = null;
+    try { if (typeof value === 'string' || Number.isSafeInteger(value)) parsed = BigInt(value); } catch { /* invalid */ }
+    if (parsed === null || parsed < min) err(`${path} must be an integer (number or decimal string) >= ${min} (got ${JSON.stringify(value)})`);
+    return parsed;
+  };
+
+  addr('deployer', config.deployer);
+  addr('launchAdmin', config.launchAdmin);
+  if (config.deployer !== config.launchAdmin) {
+    err(
+      'deployer and launchAdmin differ, but create_dao requires authorization from BOTH. ' +
+        'The stellar CLI signs with a single --source-account, so this script only supports deployer == launchAdmin. ' +
+        'Use the same identity/address for both, or build the transaction with `stellar tx new invoke --build-only`, ' +
+        'sign it with both accounts (`stellar tx sign`), and submit it manually.'
+    );
+  }
+  if (!Number.isSafeInteger(config.nonce) || config.nonce < 0) err('nonce must be a non-negative integer');
+  for (const key of ['name', 'symbol', 'uri']) str(`token.${key}`, config.token?.[key]);
+  for (const key of ['projectUri', 'description', 'contractImage', 'rendererBase']) str(`metadata.${key}`, config.metadata?.[key]);
+
+  const gov = config.governance ?? {};
+  if ('proposalThresholdBps' in gov) {
+    err('governance.proposalThresholdBps was renamed: the contract takes an ABSOLUTE vote count, use governance.proposalThreshold (integer >= 1)');
+  }
+  for (const key of ['votingDelay', 'votingPeriod', 'queueDelay']) {
+    intRange(`governance.${key}`, gov[key], LIMITS.minGovernanceDelay, LIMITS.maxGovernanceDelay);
+  }
+  intRange('governance.quorumBps', gov.quorumBps, 1, LIMITS.maxBps);
+  const threshold = bigint('governance.proposalThreshold', gov.proposalThreshold, 1n);
+
+  const auction = config.auction ?? {};
+  if (!(Number.isSafeInteger(auction.duration) && auction.duration >= LIMITS.minAuctionDuration)) err(`auction.duration must be an integer >= ${LIMITS.minAuctionDuration} seconds`);
+  bigint('auction.reservePrice', auction.reservePrice, LIMITS.minReservePrice);
+  intRange('auction.timeBuffer', auction.timeBuffer, 1, LIMITS.maxTimeBuffer);
+  addr('auction.paymentAsset', auction.paymentAsset, CONTRACT_RE);
+
+  const marketplace = config.marketplace ?? {};
+  const marketplaceAsset = marketplace.paymentAsset ?? auction.paymentAsset;
+  addr('marketplace.paymentAsset', marketplaceAsset, CONTRACT_RE);
+  intRange('marketplace.secondaryFeeBps', marketplace.secondaryFeeBps ?? 250, 0, LIMITS.maxBps);
+
+  const launch = config.launch ?? {};
+  for (const key of ['launchAuction', 'launchMarketplace', 'enableMinter']) {
+    if (launch[key] !== undefined && typeof launch[key] !== 'boolean') err(`launch.${key} must be a boolean`);
+  }
+
+  let founderTotal = 0;
+  if (!Array.isArray(config.founders) || config.founders.length === 0) {
+    err('founders must list at least one founder (launch_dao requires total_supply > 0)');
+  } else {
+    for (const [index, founder] of config.founders.entries()) {
+      addr(`founders[${index}].address`, founder?.address);
+      if (!Number.isInteger(founder?.amount) || founder.amount <= 0) err(`founders[${index}].amount must be a positive integer`);
+      else founderTotal += founder.amount;
+    }
+    if (founderTotal > 0xffffffff) err('founder allocation total exceeds u32');
+  }
+  if (threshold !== null && founderTotal > 0 && threshold > BigInt(founderTotal)) {
+    err(`governance.proposalThreshold (${threshold}) exceeds the founder supply (${founderTotal}); nobody could propose at launch`);
+  }
+
+  const properties = config.metadata?.artwork?.properties;
+  str('metadata.artwork.ipfs.baseUri', config.metadata?.artwork?.ipfs?.baseUri);
+  str('metadata.artwork.ipfs.extension', config.metadata?.artwork?.ipfs?.extension);
+  if (!Array.isArray(properties) || properties.length === 0 || properties.length > LIMITS.maxProperties) {
+    err(`metadata.artwork.properties must contain 1..=${LIMITS.maxProperties} properties`);
+  } else {
+    for (const [index, property] of properties.entries()) {
+      str(`metadata.artwork.properties[${index}].name`, property?.name);
+      if (!Array.isArray(property?.items) || property.items.length === 0) err(`metadata.artwork.properties[${index}] needs at least one item`);
+      else property.items.forEach((item, i) => str(`metadata.artwork.properties[${index}].items[${i}]`, item));
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new Error(`Invalid DAO config:\n  - ${errors.join('\n  - ')}`);
+  }
+}
+
+// Founder mint batches: pieces of <= 100 tokens, packed into batches of <= 16 entries / 100 tokens.
+function planFounderBatches(founders) {
+  const pieces = founders.flatMap(({ address, amount }) => {
+    const out = [];
+    for (let left = amount; left > 0; left -= LIMITS.maxBatchMintTokens) out.push({ address, amount: Math.min(left, LIMITS.maxBatchMintTokens) });
+    return out;
+  });
+  const batches = [];
+  let current = { entries: [], total: 0 };
+  for (const piece of pieces) {
+    if (current.entries.length === LIMITS.maxBatchMintRecipients || current.total + piece.amount > LIMITS.maxBatchMintTokens) {
+      batches.push(current);
+      current = { entries: [], total: 0 };
+    }
+    current.entries.push(piece);
+    current.total += piece.amount;
+  }
+  if (current.entries.length > 0) batches.push(current);
+  return batches;
+}
+
+// Artwork add_properties calls of <= 30 items. A property is created by the first call that mentions
+// it (property_id = index into that call's `names`, is_new_property = true); later calls address it by
+// absolute id with is_new_property = false.
+function planArtworkBatches(properties) {
+  const calls = [];
+  let call = { names: [], items: [] };
+  let local = new Map(); // property id -> index in this call's names
+  let created = 0; // properties created by already-closed calls
+  const flush = () => {
+    if (call.items.length === 0) return;
+    created += call.names.length;
+    calls.push(call);
+    call = { names: [], items: [] };
+    local = new Map();
+  };
+  for (const [propertyId, property] of properties.entries()) {
+    for (const item of property.items) {
+      if (call.items.length === LIMITS.maxArtworkItemsPerCall) flush();
+      if (propertyId >= created && !local.has(propertyId)) {
+        local.set(propertyId, call.names.length);
+        call.names.push(property.name);
+      }
+      call.items.push(local.has(propertyId)
+        ? { property_id: local.get(propertyId), name: item, is_new_property: true }
+        : { property_id: propertyId, name: item, is_new_property: false });
+    }
+  }
+  flush();
+  return calls;
+}
+
+const daoConfig = loadJson(validateOnly ? args[1] : daoConfigPath, 'DAO config');
+validateDaoConfig(daoConfig);
+const artworkProperties = daoConfig.metadata.artwork.properties;
+const marketplaceConfig = daoConfig.marketplace ?? {};
+const queueDelay = daoConfig.governance.queueDelay;
+const marketplacePaymentAsset = marketplaceConfig.paymentAsset ?? daoConfig.auction.paymentAsset;
+const launchFlags = {
+  launch_auction: daoConfig.launch?.launchAuction ?? daoConfig.auction.enabled ?? true,
+  launch_marketplace: daoConfig.launch?.launchMarketplace ?? true,
+  enable_minter: daoConfig.launch?.enableMinter ?? false,
+  // Pinned at launch time from get_platform_minter (see launch_dao phase); required when enable_minter.
+  expected_minter: null
+};
+const founderBatches = planFounderBatches(daoConfig.founders);
+const artworkBatches = planArtworkBatches(artworkProperties);
+
+if (validateOnly) {
+  console.log(`DAO config is valid: ${founderBatches.length} founder mint batch(es), ${artworkBatches.length} artwork batch(es).`);
+  console.log(`launch_config: ${JSON.stringify(launchFlags)}`);
+  process.exit(0);
+}
+
 const networkConfig = loadJson(networkConfigPath, 'Network config');
 const networkName = networkConfig.network;
 const identityName = process.env.DEPLOY_IDENTITY?.trim() || `${networkName}-admin`;
@@ -40,51 +262,9 @@ const managerAddress = managerArtifact.manager;
 if (!managerAddress || !managerArtifact.implementations) {
   throw new Error(`Manager artifact ${managerArtifactPath} must contain manager and implementations`);
 }
-
-const required = [
-  ['deployer', daoConfig.deployer],
-  ['nonce', daoConfig.nonce],
-  ['token.name', daoConfig.token?.name],
-  ['token.symbol', daoConfig.token?.symbol],
-  ['token.uri', daoConfig.token?.uri],
-  ['metadata.projectUri', daoConfig.metadata?.projectUri],
-  ['metadata.description', daoConfig.metadata?.description],
-  ['metadata.contractImage', daoConfig.metadata?.contractImage],
-  ['metadata.rendererBase', daoConfig.metadata?.rendererBase],
-  ['metadata.artwork.ipfs.baseUri', daoConfig.metadata?.artwork?.ipfs?.baseUri],
-  ['metadata.artwork.ipfs.extension', daoConfig.metadata?.artwork?.ipfs?.extension],
-  ['auction.duration', daoConfig.auction?.duration],
-  ['auction.reservePrice', daoConfig.auction?.reservePrice],
-  ['auction.timeBuffer', daoConfig.auction?.timeBuffer],
-  ['auction.paymentAsset', daoConfig.auction?.paymentAsset],
-  ['governance.votingDelay', daoConfig.governance?.votingDelay],
-  ['governance.votingPeriod', daoConfig.governance?.votingPeriod],
-  ['governance.quorumBps', daoConfig.governance?.quorumBps],
-  ['governance.proposalThresholdBps', daoConfig.governance?.proposalThresholdBps],
-  ['launchAdmin', daoConfig.launchAdmin]
-];
-const missing = required.find(([, value]) => value === undefined || value === null || value === '');
-if (missing) throw new Error(`DAO config ${daoConfigPath} must define ${missing[0]}`);
-
-const artworkProperties = daoConfig.metadata.artwork.properties;
-if (!Array.isArray(artworkProperties) || artworkProperties.length === 0 || artworkProperties.length > 16) {
-  throw new Error('DAO artwork must define between 1 and 16 properties');
+if (!managerArtifact.versions) {
+  throw new Error(`Manager artifact ${managerArtifactPath} must contain release versions`);
 }
-for (const [index, property] of artworkProperties.entries()) {
-  if (!property.name || !Array.isArray(property.items) || property.items.length === 0) {
-    throw new Error(`DAO artwork property ${index} must define a name and at least one item`);
-  }
-}
-if (!Array.isArray(daoConfig.founders) || daoConfig.founders.length !== 3) {
-  throw new Error('DAO config must define exactly three founders');
-}
-
-const marketplaceConfig = daoConfig.marketplace ?? {};
-const queueDelay = daoConfig.governance.queueDelay ?? 300;
-const marketplacePaymentAsset = marketplaceConfig.paymentAsset ?? daoConfig.auction.paymentAsset;
-const listingCount = marketplaceConfig.primaryListingCount ?? 10;
-const listingPrice = marketplaceConfig.primaryPrice ?? '10000000000';
-const listingDuration = marketplaceConfig.primaryListingDuration ?? 30 * 24 * 60 * 60;
 
 function invoke(id, method, params = {}) {
   const result = runQuiet('stellar', [
@@ -116,9 +296,11 @@ function invokeView(id, method, params = {}) {
       // Fall through to scalar parsing.
     }
   }
-  const value = output.match(/(?:^|\n)"?(true|false|-?\d+)"?\s*$/i)?.[1];
+  const quoted = output.match(/(?:^|\n)"([A-Z0-9]{56})"\s*$/)?.[1];
+  if (quoted) return quoted;
+  const value = output.match(/(?:^|\n)"?(true|false|null|-?\d+)"?\s*$/i)?.[1];
   if (value === undefined) throw new Error(`Could not parse ${method} result: ${output}`);
-  return value === 'true' ? true : value === 'false' ? false : Number(value);
+  return value === 'true' ? true : value === 'false' ? false : value === 'null' ? null : Number(value);
 }
 
 function transaction(output, extra = {}) {
@@ -170,14 +352,18 @@ function loadDaoArtifact() {
   return artifact;
 }
 
-function writeArtifact({ status, addresses, transactions = {}, error }) {
+function writeArtifact({ status, addresses, transactions = {}, error, replaceTransactions = false }) {
   const previous = existsSync(daoArtifactPath) ? loadJson(daoArtifactPath, 'DAO artifact') : {};
-  const allTransactions = { ...(previous.transactions ?? {}), ...transactions };
+  const allTransactions = replaceTransactions
+    ? transactions
+    : { ...(previous.transactions ?? {}), ...transactions };
   const ledgers = Object.values(allTransactions).flatMap((value) => Array.isArray(value) ? value : [value])
     .map((value) => value?.ledger).filter(Number.isFinite);
   const artifact = {
     ...previous, status, network: networkName, label: networkConfig.label,
     deployer: daoConfig.deployer, nonce: daoConfig.nonce, manager: managerAddress,
+    versions: managerArtifact.versions,
+    sourceCommit: managerArtifact.sourceCommit ?? null,
     addresses: addresses ?? previous.addresses ?? null, config: daoConfig,
     updatedAt: new Date().toISOString()
   };
@@ -207,7 +393,7 @@ function initialConfig() {
       voting_delay: u32(daoConfig.governance.votingDelay),
       voting_period: u32(daoConfig.governance.votingPeriod),
       queue_delay: u32(queueDelay),
-      proposal_threshold: u128(daoConfig.governance.proposalThresholdBps),
+      proposal_threshold: u128(daoConfig.governance.proposalThreshold),
       quorum_bps: u32(daoConfig.governance.quorumBps)
     },
     auction: {
@@ -223,19 +409,27 @@ function initialConfig() {
   };
 }
 
+function requireIdentity(label, expected) {
+  const result = runQuiet('stellar', ['keys', 'address', identityName]);
+  if (result.ok && result.stdout.trim() && result.stdout.trim() !== expected) {
+    throw new Error(`Identity ${identityName} is ${result.stdout.trim()}, but ${label} is ${expected}. Set DEPLOY_IDENTITY to the matching key.`);
+  }
+}
+
 let artifact;
 let addresses;
 let transactions = {};
 
 if (phase === 'create_dao') {
-  console.log('\n=== Creating DAO (paused, no members or listings) ===\n');
+  console.log('\n=== Creating DAO (setup window: all modules owned by the launch admin) ===\n');
+  requireIdentity('deployer', daoConfig.deployer);
   const output = invoke(managerAddress, 'create_dao', {
     params: JSON.stringify({ deployer: daoConfig.deployer, nonce: { u64: String(daoConfig.nonce) }, launch_admin: daoConfig.launchAdmin, initial_config: initialConfig() })
   });
   addresses = addressesFromOutput(output);
   if (!addresses) throw new Error('DAO creation succeeded but DAO addresses could not be parsed');
   transactions.createDao = transaction(output);
-  writeArtifact({ status: 'created', addresses, transactions });
+  writeArtifact({ status: 'created', addresses, transactions, replaceTransactions: true });
   console.log('Create phase complete. Run admin_checklist next.');
   process.exit(0);
 }
@@ -245,120 +439,83 @@ addresses = artifact.addresses;
 transactions = { ...(artifact.transactions ?? {}) };
 
 if (phase === 'admin_checklist') {
-  console.log('\n=== Admin Checklist ===\n');
+  console.log('\n=== Admin Checklist (setup window, launch admin signs directly) ===\n');
+  requireIdentity('launchAdmin', daoConfig.launchAdmin);
 
   const checkpoint = (status = 'checklist_partial', error) =>
     writeArtifact({ status, addresses, transactions, error });
 
   try {
-    {
-      const founderMints = transactions.founderMints ?? [];
-      for (let index = founderMints.length; index < daoConfig.founders.length; index += 1) {
-        const founder = daoConfig.founders[index];
-        const output = invoke(addresses.token, 'batch_mint', {
-          minter: daoConfig.launchAdmin,
-          to: founder.address,
-          amount: founder.amount
-        });
-        founderMints.push(transaction(output, { address: founder.address, amount: founder.amount }));
-        transactions.founderMints = founderMints;
-        checkpoint();
-      }
-
-      if (!transactions.addProperties) {
-        const names = artworkProperties.map(({ name }) => name);
-        const items = artworkProperties.flatMap((property, propertyId) => property.items.map((name) => ({ property_id: propertyId, name, is_new_property: true })));
-        transactions.addProperties = invokeView(addresses.metadata, 'properties_count') > 0
-          ? { skipped: true, reason: 'properties already exist' }
-          : transaction(invoke(addresses.metadata, 'add_properties', {
-              names: JSON.stringify(names), items: JSON.stringify(items), ipfs_group: JSON.stringify({ base_uri: daoConfig.metadata.artwork.ipfs.baseUri, extension: daoConfig.metadata.artwork.ipfs.extension })
-            }));
-        checkpoint();
-      }
-
-      for (const [method, name, value] of [
-        ['update_project_uri', 'new_project_uri', daoConfig.metadata.projectUri],
-        ['update_description', 'new_description', daoConfig.metadata.description],
-        ['update_contract_image', 'new_contract_image', daoConfig.metadata.contractImage],
-        ['update_renderer_base', 'new_renderer_base', daoConfig.metadata.rendererBase]
-      ]) {
-        if (!transactions[name]) {
-          transactions[name] = transaction(invoke(addresses.metadata, method, { [name]: value }));
-          checkpoint();
-        }
-      }
-
-      for (const [method, name, value] of [
-        ['set_duration', 'duration', daoConfig.auction.duration],
-        ['set_reserve_price', 'reserve_price', String(daoConfig.auction.reservePrice)],
-        ['set_time_buffer', 'time_buffer', daoConfig.auction.timeBuffer],
-        ['set_payment_token', 'payment_token', daoConfig.auction.paymentAsset]
-      ]) {
-        if (!transactions[name]) {
-          transactions[name] = transaction(invoke(addresses.auction, method, { [name]: value }));
-          checkpoint();
-        }
-      }
-
-      console.log('Governance configuration:', JSON.stringify({ ...daoConfig.governance, queueDelay }, null, 2));
-      console.log('Marketplace configuration:', JSON.stringify({ paymentAsset: marketplacePaymentAsset, secondaryFeeBps: marketplaceConfig.secondaryFeeBps ?? 250 }, null, 2));
-      if (!transactions.setMintAuthority) {
-        invoke(addresses.token, 'set_mint_authority', { authority: addresses.marketplace, enabled: true });
-        transactions.setMintAuthority = true;
-        checkpoint();
-      }
-      if (!transactions.setMarketplacePaymentAsset) {
-        invoke(addresses.marketplace, 'set_payment_asset', { payment_asset: marketplacePaymentAsset });
-        transactions.setMarketplacePaymentAsset = true;
-        checkpoint();
-      }
-      if (!transactions.setSecondaryFeeBps) {
-        invoke(addresses.marketplace, 'set_secondary_fee_bps', { fee_bps: marketplaceConfig.secondaryFeeBps ?? 250 });
-        transactions.setSecondaryFeeBps = true;
-        checkpoint();
-      }
-      if (!transactions.unpauseMarketplace) {
-        if (invokeView(addresses.marketplace, 'get_config').paused) invoke(addresses.marketplace, 'unpause');
-        transactions.unpauseMarketplace = true;
-        checkpoint();
-      }
+    if (invokeView(addresses.token, 'is_live') === true) {
+      throw new Error('Token is already Live: the setup window is closed. Nothing more can be minted by the launch admin.');
     }
 
-    const listings = transactions.marketplaceListings ?? [];
-    const expiresAt = listings[0]?.expiresAt ?? Math.floor(Date.now() / 1000) + listingDuration;
-    let nextTokenId = invokeView(addresses.token, 'total_supply');
-    let remainingListings = listingCount - listings.length;
-    if (!transactions.listingMint && remainingListings > 0) {
-      invoke(addresses.token, 'batch_mint', {
+    // A recreated DAO can inherit checkpoints from a previous deployment in the
+    // local artifact. Reconcile the checkpoint before recording more work.
+    if (invokeView(addresses.token, 'total_supply') === 0 && Object.keys(transactions).some((key) => key !== 'createDao')) {
+      transactions = transactions.createDao ? { createDao: transactions.createDao } : {};
+      checkpoint();
+    }
+
+    // Founder mints: token.batch_mint signed by the launch admin (token owner). Progress is
+    // derived from the on-chain total_supply so a crash between invoke and checkpoint is safe.
+    transactions.founderMintBatches = transactions.founderMintBatches ?? [];
+    let supply = Number(invokeView(addresses.token, 'total_supply'));
+    let cumulative = 0;
+    for (const [index, batch] of founderBatches.entries()) {
+      const start = cumulative;
+      cumulative += batch.total;
+      if (cumulative <= supply) continue;
+      if (supply > start) {
+        throw new Error(`Token total_supply ${supply} is inside founder batch ${index + 1} (${start}..${cumulative}); reconcile manually`);
+      }
+      console.log(`Minting founder batch ${index + 1}/${founderBatches.length} (${batch.total} tokens):`);
+      for (const entry of batch.entries) console.log(`  ${entry.address} x ${entry.amount}`);
+      const output = invoke(addresses.token, 'batch_mint', {
         minter: daoConfig.launchAdmin,
-        to: daoConfig.launchAdmin,
-        amount: remainingListings
+        recipients: batch.entries.map((entry) => entry.address),
+        amounts: batch.entries.map((entry) => ({ u128: String(entry.amount) }))
       });
-      transactions.listingMint = { amount: remainingListings };
+      transactions.founderMintBatches.push(transaction(output, { batch: index + 1, tokens: batch.total }));
+      supply += batch.total;
       checkpoint();
     }
-    for (let index = listings.length; index < listingCount; index += 1) {
-      const tokenId = nextTokenId + index;
-      invoke(addresses.token, 'approve', {
-        owner: daoConfig.launchAdmin,
-        spender: addresses.marketplace,
-        token_id: tokenId,
-        expiration_ledger: 5100000
+    console.log(`Founder tokens minted: total_supply = ${supply}`);
+
+    // Artwork: add_properties by the launch admin, <= 30 items per call. Each applied call appends one
+    // IPFS group, so ipfs_data_count tells how many planned calls are already on chain.
+    transactions.artworkBatches = transactions.artworkBatches ?? [];
+    const applied = Number(invokeView(addresses.metadata, 'ipfs_data_count'));
+    if (applied > artworkBatches.length) {
+      throw new Error(`Metadata already holds ${applied} artwork batches but the config plans ${artworkBatches.length}; reconcile manually`);
+    }
+    for (const [index, call] of artworkBatches.entries()) {
+      if (index < applied) continue;
+      console.log(`Adding artwork batch ${index + 1}/${artworkBatches.length} (${call.items.length} items, ${call.names.length} new properties)`);
+      const output = invoke(addresses.metadata, 'add_properties', {
+        names: call.names,
+        items: call.items,
+        ipfs_group: { base_uri: daoConfig.metadata.artwork.ipfs.baseUri, extension: daoConfig.metadata.artwork.ipfs.extension }
       });
-      const output = invoke(addresses.marketplace, 'list', {
-        token_id: tokenId,
-        seller: daoConfig.launchAdmin,
-        price: String(listingPrice),
-        expires_at: expiresAt
-      });
-      listings.push(transaction(output, { tokenId, price: String(listingPrice), expiresAt }));
-      transactions.marketplaceListings = listings;
+      transactions.artworkBatches.push(transaction(output, { batch: index + 1, items: call.items.length }));
       checkpoint();
     }
-    transactions.marketplaceListings = listings;
+    console.log(`Artwork complete: ${invokeView(addresses.metadata, 'properties_count')} properties`);
+
+    console.log('\nSettings applied at create_dao (constructor values, not re-sent):');
+    console.log(JSON.stringify({
+      governance: daoConfig.governance,
+      auction: daoConfig.auction,
+      marketplace: { paymentAsset: marketplacePaymentAsset, secondaryFeeBps: marketplaceConfig.secondaryFeeBps ?? 250 }
+    }, null, 2));
+    console.log(`launch_config for launch_dao: ${JSON.stringify(launchFlags)}`);
+    console.log('\nNOTES:');
+    console.log('  - Minter merkle roots / allowlists CANNOT be configured now: the Minter requires a Live token. Set them after launch_dao (launch admin is the Treasury afterwards, so use governance or the admin recorded by the Minter).');
+    console.log('  - Mint authority (Treasury, Marketplace, Auction, platform Minter) is granted by launch_dao itself. Do not call token.set_mint_authority now (NotLive).');
+    console.log('  - Do not change auction/marketplace payment assets in setup: launch_dao would fail with PaymentTokenMismatch/PaymentAssetMismatch.');
+
     checkpoint('checklist_complete');
-    console.log(`Admin checklist complete: ${listingCount} marketplace tokens listed at ${listingPrice} stroops each.`);
-    console.log('Review the artifact and run launch_dao when ready.');
+    console.log('\nAdmin checklist complete. Review the artifact and run launch_dao when ready.');
     process.exit(0);
   } catch (error) {
     checkpoint('checklist_partial', error);
@@ -366,11 +523,36 @@ if (phase === 'admin_checklist') {
   }
 }
 
-console.log('\n=== Launching DAO (auctions and marketplace enabled) ===\n');
-const launchOutput = invoke(managerAddress, 'launch_dao', {
-  token_address: addresses.token,
-  launch_config: JSON.stringify({ launch_auction: true, launch_marketplace: true })
-});
-transactions.launchDao = transaction(launchOutput);
-writeArtifact({ status: 'operational', addresses, transactions });
-console.log('DAO launch complete. Auctions and marketplace are enabled.');
+if (phase === 'launch_dao') {
+  console.log('\n=== Launching DAO ===\n');
+  requireIdentity('launchAdmin', daoConfig.launchAdmin);
+
+  // Preflight (read-only) so failures are explained before spending a transaction.
+  const pending = invokeView(managerAddress, 'get_pending_dao', { token_address: addresses.token });
+  if (!pending) throw new Error('Manager has no pending DAO for this token: it is already launched or was never created here.');
+  if (pending.auction_payment_asset !== daoConfig.auction.paymentAsset || pending.marketplace_payment_asset !== marketplacePaymentAsset) {
+    throw new Error('Config payment assets differ from the ones recorded at create_dao; launch_dao would fail with a payment mismatch. Recreate the DAO or restore the original config.');
+  }
+  if (!(Number(invokeView(addresses.token, 'total_supply')) > 0)) {
+    throw new Error('Token total_supply is 0: run admin_checklist first (launch_dao fails with LaunchSupplyZero).');
+  }
+  if (launchFlags.enable_minter) {
+    const minter = invokeView(managerAddress, 'get_platform_minter');
+    if (!minter) throw new Error('enable_minter is set but the Manager has no platform minter (PlatformMinterNotSet). The Manager admin must run set_platform_minter (deploy-manager.mjs does this).');
+    console.log(`Platform minter to be granted mint authority (pinned as expected_minter): ${minter}`);
+    // The Manager reverts with PlatformMinterMismatch if the admin swaps the minter before this
+    // transaction lands, so what the launch admin saw is what gets mint authority.
+    launchFlags.expected_minter = minter;
+  }
+
+  const launchOutput = invoke(managerAddress, 'launch_dao', {
+    token_address: addresses.token,
+    launch_config: launchFlags
+  });
+  transactions.launchDao = transaction(launchOutput);
+  writeArtifact({ status: 'operational', addresses, transactions });
+  console.log(`DAO launched: ${JSON.stringify(launchFlags)}`);
+  console.log('All modules are Live and owned by the Treasury. Further administration is by governance proposal (see scripts/upgrade-contract.mjs for the payload shape).');
+  if (launchFlags.launch_marketplace) console.log('Primary sales: the Treasury must create listings via governance (marketplace.create_primary_listing), buyers call buy_primary.');
+  process.exit(0);
+}

@@ -38,6 +38,7 @@ mod events;
 mod storage;
 
 pub use contract::*;
+pub use error::TreasuryError;
 
 #[cfg(test)]
 mod test;

@@ -2,6 +2,7 @@
 
 import { useRef } from 'react';
 
+import { type ContractName, describeContractError } from '@/lib/contract-errors';
 import type { DaoNetworkName } from '@/lib/dao-config';
 import { getExplorerTxUrl } from '@/lib/explorer-links';
 import { toaster } from '@/lib/toaster';
@@ -69,10 +70,10 @@ export function useTransactionFeedback(network: DaoNetworkName) {
     }
   }
 
-  function fail(error: unknown, fallback: string) {
+  function fail(error: unknown, fallback: string, contract?: ContractName) {
     const payload = {
       title: fallback,
-      description: error instanceof Error ? error.message : fallback,
+      description: describeContractError(error, contract) ?? (error instanceof Error ? error.message : fallback),
       type: 'error' as const,
       duration: Infinity
     };

@@ -1,5 +1,5 @@
 name: builder-stellar-events
-description: Index Manager CAMI673YU3NJYT3VO5GXXPWDSSJPUXAHJR2L6ITUMBQXRTNG2N36QK5K on testnet with Goldsky Turbo
+description: Index Manager CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y on testnet with Goldsky Turbo
 resource_size: s
 use_dedicated_ip: false
 job: false
@@ -8,7 +8,7 @@ sources:
     type: dataset
     dataset_name: stellar_testnet.events
     version: 1.2.0
-    start_at: 4983407
+    start_at: 5090312
 
 transforms:
   # Each DAO-created event contains the five newly deployed module addresses.
@@ -17,13 +17,13 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_tokens
-    secret_name: DAO_POSTGRES
+    secret_name: BUILDER_POSTGRES_SECRET
     schema: streamling
     column: contract_id
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"token"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CAMI673YU3NJYT3VO5GXXPWDSSJPUXAHJR2L6ITUMBQXRTNG2N36QK5K'
+      WHERE contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -31,13 +31,13 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_metadata
-    secret_name: DAO_POSTGRES
+    secret_name: BUILDER_POSTGRES_SECRET
     schema: streamling
     column: contract_id
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"metadata"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CAMI673YU3NJYT3VO5GXXPWDSSJPUXAHJR2L6ITUMBQXRTNG2N36QK5K'
+      WHERE contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -45,13 +45,13 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_auctions
-    secret_name: DAO_POSTGRES
+    secret_name: BUILDER_POSTGRES_SECRET
     schema: streamling
     column: contract_id
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"auction"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CAMI673YU3NJYT3VO5GXXPWDSSJPUXAHJR2L6ITUMBQXRTNG2N36QK5K'
+      WHERE contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -59,13 +59,13 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_governors
-    secret_name: DAO_POSTGRES
+    secret_name: BUILDER_POSTGRES_SECRET
     schema: streamling
     column: contract_id
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"governor"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CAMI673YU3NJYT3VO5GXXPWDSSJPUXAHJR2L6ITUMBQXRTNG2N36QK5K'
+      WHERE contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -73,13 +73,13 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_treasuries
-    secret_name: DAO_POSTGRES
+    secret_name: BUILDER_POSTGRES_SECRET
     schema: streamling
     column: contract_id
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"treasury"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CAMI673YU3NJYT3VO5GXXPWDSSJPUXAHJR2L6ITUMBQXRTNG2N36QK5K'
+      WHERE contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -87,13 +87,13 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_marketplaces
-    secret_name: DAO_POSTGRES
+    secret_name: BUILDER_POSTGRES_SECRET
     schema: streamling
     column: contract_id
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"marketplace"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CAMI673YU3NJYT3VO5GXXPWDSSJPUXAHJR2L6ITUMBQXRTNG2N36QK5K'
+      WHERE contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -102,11 +102,12 @@ transforms:
     primary_key: event_id
     sql: |
       SELECT
-        id AS event_id,
-        'manager:CAMI673YU3NJYT3VO5GXXPWDSSJPUXAHJR2L6ITUMBQXRTNG2N36QK5K' AS deployment_id,
+        concat('manager:CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y:', id) AS event_id,
+        'manager:CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y' AS deployment_id,
         contract_id,
         CASE
-          WHEN contract_id = 'CAMI673YU3NJYT3VO5GXXPWDSSJPUXAHJR2L6ITUMBQXRTNG2N36QK5K' THEN 'manager'
+          WHEN contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y' THEN 'manager'
+          WHEN contract_id = 'CASTKJBMDBZS2M3NGENH7FG4VPCI7FSYVAFKN2E227QSR723KXGKFZKL' THEN 'minter'
           WHEN dynamic_table_check('dao_tokens', contract_id) THEN 'token'
           WHEN dynamic_table_check('dao_metadata', contract_id) THEN 'metadata'
           WHEN dynamic_table_check('dao_auctions', contract_id) THEN 'auction'
@@ -132,13 +133,14 @@ transforms:
         ledger_sequence,
         ledger_hash,
         ledger_closed_at,
-        operation_index,
-        event_index,
+        CAST(NULL AS BIGINT) AS operation_index,
+        CAST(NULL AS BIGINT) AS event_index,
         _gs_op
       FROM stellar_events
-       WHERE ledger_sequence >= 4983407
+       WHERE ledger_sequence >= 5090312
          AND (
-           contract_id = 'CAMI673YU3NJYT3VO5GXXPWDSSJPUXAHJR2L6ITUMBQXRTNG2N36QK5K'
+           contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y'
+           OR contract_id = 'CASTKJBMDBZS2M3NGENH7FG4VPCI7FSYVAFKN2E227QSR723KXGKFZKL'
            OR dynamic_table_check('dao_tokens', contract_id)
            OR dynamic_table_check('dao_metadata', contract_id)
            OR dynamic_table_check('dao_auctions', contract_id)
@@ -204,6 +206,11 @@ transforms:
           var n = Number(value);
           return isFinite(n) ? n : null;
         }
+        function normalizeTimestamp(value) {
+          var timestamp = toStringOrEmpty(value).trim();
+          if (!timestamp || /^[-+]?\d+(\.\d+)?$/.test(timestamp) || /(?:Z|[+-]\d\d:?\d\d|\sUTC)$/i.test(timestamp)) return timestamp;
+          return timestamp + ' UTC';
+        }
         function toBoolean(value) {
           if (value === null || value === undefined) return null;
           return Boolean(value);
@@ -220,7 +227,7 @@ transforms:
           transaction_successful: toBoolean(data.transaction_successful),
           ledger_sequence: toNumber(data.ledger_sequence),
           ledger_hash: toStringOrEmpty(data.ledger_hash),
-          ledger_closed_at: toStringOrEmpty(data.ledger_closed_at),
+          ledger_closed_at: normalizeTimestamp(data.ledger_closed_at),
           transaction_index: toNumber(data.transaction_index),
           operation_index: toNumber(data.operation_index),
           event_index: toNumber(data.event_index),
@@ -302,22 +309,52 @@ transforms:
         var values = rawTopics.map(native);
         var eventName = String(values[0]);
         var topicValues = values.slice(1);
+        // Topic names mirror the on-chain topic order after the event-name symbol.
+        // They are generated from contracts/*/src/events.rs plus the OpenZeppelin
+        // library events our contracts emit; test/contract-alignment.test.mjs fails
+        // if this map drifts. Minter token_id is the DAO token contract Address, not
+        // an NFT number.
         var topicNames = {
-          ProposalCreated: ['proposal_id', 'proposer'], VoteCast: ['voter', 'proposal_id'],
-          ProposalQueued: ['proposal_id'], ProposalCancelled: ['proposal_id'], ProposalCanceled: ['proposal_id'], ProposalExecuted: ['proposal_id'],
-          MintWithMinter: ['minter', 'to'], Mint: ['to'], BatchMint: ['minter', 'to'], Transfer: ['from', 'to'], Approve: ['owner', 'spender'],
-          DelegateChanged: ['delegator'], DelegateVotesChanged: ['delegate'], AuctionCreated: ['token_id'], BidPlaced: ['token_id', 'bidder'],
-          AuctionSettled: ['token_id'], BidRefunded: ['token_id', 'bidder'], AuctionCancelled: ['token_id'], Execute: ['governor', 'target'],
-          TokenInitialized: ['owner'], MintAuthorityChanged: ['authority'], GovernorInitialized: ['owner'], TreasuryChanged: ['old_treasury', 'new_treasury'],
-          TokenContractChanged: ['old_token_contract', 'new_token_contract'], GovernorAuthorityChanged: ['authority'], AuctionInitialized: ['owner'],
-          TreasuryInitialized: ['owner'], GovernorChanged: ['old_governor', 'new_governor'], DaoCreated: ['token_address', 'deployer', 'launch_admin'], DaoLaunched: ['token_address'],
-          ManagerInitialized: ['admin'], SeedGenerated: ['token_id'], MetadataInitialized: ['token'], ProposalExpired: [],
-          ProposalThresholdChanged: ['caller'], QuorumBpsChanged: ['caller'], QueueDelayChanged: ['caller'], VotingDelayChanged: ['caller'], VotingPeriodChanged: ['caller'], DurationUpdated: [], ReservePriceUpdated: [], MinBidIncrementUpdated: [],
-          TimeBufferUpdated: [], PaymentTokenUpdated: [], TreasuryUpdated: [], FactoryPaused: [], FactoryUnpaused: [], UpgradeApproved: [],
-          ImplementationRevoked: [], ImplementationRegistered: [], CurrentImplementationsUpdated: [], PropertyAdded: [],
-          PropertiesReset: [], ProjectURIUpdated: [], DescriptionUpdated: [], RendererBaseUpdated: [], ContractImageUpdated: [], ManagerUpgraded: [],
-          MarketplaceInitialized: ['token'], PrimaryListingCreated: ['token_id'], SecondaryListingCreated: ['token_id'], ListingPurchased: ['token_id', 'buyer'],
-          ListingCancelled: ['token_id'], ListingExpired: ['token_id'], PaymentAssetUpdated: [], SecondaryFeeUpdated: [], MarketplacePaused: [], MarketplaceUnpaused: [], MarketplaceUpgraded: []
+          // Manager
+          ManagerInitialized: ['admin'], ImplementationRegistered: ['wasm_hash'], UpgradeApproved: ['from_hash', 'to_hash'],
+          ImplementationRevoked: ['wasm_hash'], DaoCreated: ['token_address', 'deployer', 'launch_admin'], FactoryPaused: [], FactoryUnpaused: [],
+          DaoLaunched: ['token_address'], CurrentImplementationsUpdated: [], ManagerUpgraded: ['from_hash', 'to_hash'],
+          AdminProposed: ['current_admin', 'proposed_admin'], AdminProposalCancelled: ['current_admin', 'cancelled_admin'], AdminChanged: ['old_admin', 'new_admin'], PlatformMinterSet: ['minter'],
+          // Every module (token, governor, treasury, auction, marketplace, metadata) emits its own
+          // Launched struct with topic `treasury`; the data differs (token minters, auction started,
+          // marketplace opened). The emitting module is identified by contract_id/contract_role.
+          Launched: ['treasury'],
+          // contracts/common/src/upgrade.rs: emitted by EVERY module (token, governor, treasury, auction,
+          // marketplace, metadata); the emitting module is identified by contract_id/contract_role.
+          Upgraded: ['from_hash', 'to_hash'], VersionSynced: [],
+          // Token (custom + OpenZeppelin non-fungible/votes/pausable/ownable)
+          TokenInitialized: ['owner'], MintAuthorityChanged: ['authority'], MintWithMinter: ['minter', 'to'],
+          Mint: ['to'], Transfer: ['from', 'to'], Approve: ['approver', 'token_id'], ApproveForAll: ['owner'],
+          DelegateChanged: ['delegator'], DelegateVotesChanged: ['delegate'],
+          Paused: [], Unpaused: [], OwnershipTransfer: [], OwnershipTransferCompleted: [], OwnershipRenounced: [],
+          // Governor (custom + OpenZeppelin governor)
+          GovernorInitialized: ['owner'], ProposalCreated: ['proposal_id', 'proposer'], VoteCast: ['voter', 'proposal_id'],
+          ProposalQueued: ['proposal_id'], ProposalExecuted: ['proposal_id'], ProposalCancelled: ['proposal_id'],
+          QueueDelayChanged: ['caller'], VotingDelayChanged: ['caller'], VotingPeriodChanged: ['caller'],
+          ProposalThresholdChanged: ['caller'], QuorumBpsChanged: ['caller'],
+          // Treasury
+          TreasuryInitialized: ['owner'], Execute: ['governor', 'target', 'proposal_id'],
+          // Auction
+          AuctionInitialized: ['owner'], AuctionCreated: ['token_id'], BidPlaced: ['token_id', 'bidder'], AuctionSettled: ['token_id'],
+          BidRefunded: ['token_id', 'bidder'], AuctionCancelled: ['token_id'], DurationUpdated: [], ReservePriceUpdated: [],
+          MinBidIncrementUpdated: [], TimeBufferUpdated: [], PaymentTokenUpdated: [],
+          RefundDeferred: ['token_id', 'bidder'], RefundWithdrawn: ['bidder'],
+          // Metadata
+          MetadataInitialized: ['token'], PropertyAdded: ['property_id'], SeedGenerated: ['token_id'], PropertiesReset: [],
+          ProjectURIUpdated: [], DescriptionUpdated: [], RendererBaseUpdated: [], ContractImageUpdated: [],
+          // Minter
+          MerkleClaimEvent: ['token_id', 'recipient'], AllowlistClaimEvent: ['token_id', 'recipient'], MintBatchEvent: ['token_id'],
+          MerkleRootSetEvent: ['token_id'], AllowlistSetEvent: ['token_id'],
+          // Marketplace
+          MarketplaceInitialized: ['token'], PrimaryListingCreated: ['listing_id'], PrimaryListingPurchased: ['listing_id', 'buyer'],
+          PrimaryListingCancelled: ['listing_id'], PrimaryListingExpired: ['listing_id'], SecondaryListingCreated: ['token_id'],
+          ListingPurchased: ['token_id', 'buyer'], ListingCancelled: ['token_id'], ListingExpired: ['token_id'],
+          PaymentAssetUpdated: [], SecondaryFeeUpdated: [], MarketplacePaused: [], MarketplaceUnpaused: []
         };
         var names = topicNames[eventName] || topicNames[toCanonical(eventName)] || [];
         var topics = {};
@@ -331,6 +368,11 @@ transforms:
         function toStringOrEmpty(value) {
           if (value === null || value === undefined) return '';
           return String(value);
+        }
+        function normalizeTimestamp(value) {
+          var timestamp = toStringOrEmpty(value).trim();
+          if (!timestamp || /^[-+]?\d+(\.\d+)?$/.test(timestamp) || /(?:Z|[+-]\d\d:?\d\d|\sUTC)$/i.test(timestamp)) return timestamp;
+          return timestamp + ' UTC';
         }
         function toNumber(value) {
           if (value === null || value === undefined) return null;
@@ -363,7 +405,7 @@ transforms:
           transaction_successful: toBoolean(data.transaction_successful),
           ledger_sequence: toNumber(data.ledger_sequence),
           ledger_hash: toStringOrEmpty(data.ledger_hash),
-          ledger_closed_at: toStringOrEmpty(data.ledger_closed_at),
+          ledger_closed_at: normalizeTimestamp(data.ledger_closed_at),
           transaction_index: toNumber(data.transaction_index),
           operation_index: toNumber(data.operation_index),
           event_index: toNumber(data.event_index),
@@ -381,15 +423,18 @@ transforms:
         });
           return result;
 
+          // Fallback only: the pipeline normally assigns contract_role from the DAO
+          // module allowlists before decoding. Names mirror the topicNames groups.
           function roleForEvent(name) {
             var canonical = toCanonical(name);
-            if (/^(Dao|Factory|Upgrade|Implementation|CurrentImplementations|Manager)/.test(canonical)) return 'manager';
-            if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue|Veto)/.test(canonical)) return 'governor';
-            if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken)/.test(canonical)) return 'auction';
-            if (/^(Execute|Treasury|GovernorChanged)/.test(canonical)) return 'treasury';
+            if (/^(Manager|Implementation|CurrentImplementations|UpgradeApproved|Dao|Factory|Admin|PlatformMinter)/.test(canonical)) return 'manager';
+            if (/^(MerkleClaim|AllowlistClaim|MintBatch|MerkleRoot|AllowlistSet)/.test(canonical)) return 'minter';
+            if (/^(Marketplace|Listing|Primary|Secondary|PaymentAsset)/.test(canonical)) return 'marketplace';
+            if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue)/.test(canonical)) return 'governor';
+            if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken|Refund)/.test(canonical)) return 'auction';
+            if (/^(Execute|TreasuryInitialized)/.test(canonical)) return 'treasury';
             if (/^(Metadata|Property|Properties|Seed|ProjectURI|Description|RendererBase|ContractImage)/.test(canonical)) return 'metadata';
-            if (/^(Transfer|Mint|BatchMint|Delegate|Approve|MintAuthority|Token|Burn)/.test(canonical)) return 'token';
-            if (/^(Marketplace|Listing|Primary|Secondary|Payment)/.test(canonical)) return 'marketplace';
+            if (/^(Transfer|Mint|Delegate|Approve|Token)/.test(canonical)) return 'token';
             return 'unknown';
           }
         } catch (e) {
@@ -439,6 +484,11 @@ transforms:
           function ensureNumber(val, def) {
             var n = Number(val);
             return isFinite(n) ? n : def;
+          }
+          function normalizeTimestamp(val) {
+            var timestamp = typeof val === 'string' ? val.trim() : '';
+            if (!timestamp || /^[-+]?\d+(\.\d+)?$/.test(timestamp) || /(?:Z|[+-]\d\d:?\d\d|\sUTC)$/i.test(timestamp)) return timestamp;
+            return timestamp + ' UTC';
           }
 
           var topics = ensureString(data.topics, '{}');
@@ -519,20 +569,25 @@ transforms:
         var normalizedEventName = normalizeEventName(eventName);
 
         var userFacing = {
-          TokenInitialized: true, Mint: true, MintWithMinter: true, BatchMint: true,
+          TokenInitialized: true, Mint: true, MintWithMinter: true,
           Transfer: true, DelegateChanged: true, DelegateVotesChanged: true,
           ProposalCreated: true, ProposalQueued: true, VoteCast: true,
-          ProposalCancelled: true, ProposalCanceled: true, ProposalExecuted: true,
+          ProposalCancelled: true, ProposalExecuted: true,
           AuctionCreated: true, BidPlaced: true,
           AuctionSettled: true, BidRefunded: true, AuctionCancelled: true,
-          DaoCreated: true, DaoLaunched: true
+          DaoCreated: true, DaoLaunched: true,
+          MerkleClaimEvent: true, AllowlistClaimEvent: true, MintBatchEvent: true,
+          PrimaryListingCreated: true, PrimaryListingPurchased: true, PrimaryListingCancelled: true,
+          SecondaryListingCreated: true, ListingPurchased: true, ListingCancelled: true,
+          RefundDeferred: true, RefundWithdrawn: true,
+          // Contract upgrades are the most security-relevant DAO action: public.
+          Upgraded: true
         };
 
         var kindMap = {
           TokenInitialized: 'token.initialized',
           Mint: 'token.mint',
           MintWithMinter: 'token.mint',
-          BatchMint: 'token.batch_mint',
           MintAuthorityChanged: 'token.mint_authority_changed',
           Approve: 'token.approve',
           Transfer: 'token.transfer',
@@ -543,18 +598,13 @@ transforms:
           ProposalQueued: 'governance.proposal_queued',
           VoteCast: 'governance.vote_cast',
           ProposalCancelled: 'governance.proposal_cancelled',
-           ProposalCanceled: 'governance.proposal_cancelled',
           ProposalExecuted: 'governance.proposal_executed',
-          TreasuryChanged: 'governance.treasury_changed',
-          TokenContractChanged: 'governance.token_contract_changed',
           QueueDelayChanged: 'governance.queue_delay_changed',
           VotingDelayChanged: 'governance.voting_delay_changed',
           VotingPeriodChanged: 'governance.voting_period_changed',
           ProposalThresholdChanged: 'governance.proposal_threshold_changed',
           QuorumBpsChanged: 'governance.quorum_bps_changed',
-          GovernorAuthorityChanged: 'governance.authority_changed',
           TreasuryInitialized: 'treasury.initialized',
-          GovernorChanged: 'treasury.governor_changed',
           Execute: 'treasury.execute',
           AuctionInitialized: 'auction.initialized',
           AuctionCreated: 'auction.created',
@@ -565,13 +615,17 @@ transforms:
           MinBidIncrementUpdated: 'auction.min_bid_increment_updated',
           TimeBufferUpdated: 'auction.time_buffer_updated',
           PaymentTokenUpdated: 'auction.payment_token_updated',
-          TreasuryUpdated: 'auction.treasury_updated',
           BidRefunded: 'auction.bid_refunded',
+          RefundDeferred: 'auction.refund_deferred',
+          RefundWithdrawn: 'auction.refund_withdrawn',
           AuctionCancelled: 'auction.cancelled',
           DaoCreated: 'manager.dao_created',
           DaoLaunched: 'manager.dao_launched',
           FactoryPaused: 'manager.factory_paused',
           FactoryUnpaused: 'manager.factory_unpaused',
+          AdminProposed: 'manager.admin_proposed',
+          AdminChanged: 'manager.admin_changed',
+          PlatformMinterSet: 'manager.platform_minter_set',
           UpgradeApproved: 'manager.upgrade_approved',
           ImplementationRevoked: 'manager.implementation_revoked',
           ImplementationRegistered: 'manager.implementation_registered',
@@ -583,14 +637,36 @@ transforms:
           ProjectURIUpdated: 'metadata.project_uri_updated',
           DescriptionUpdated: 'metadata.description_updated',
           RendererBaseUpdated: 'metadata.renderer_base_updated',
-          ContractImageUpdated: 'metadata.contract_image_updated'
+          ContractImageUpdated: 'metadata.contract_image_updated',
+          MerkleClaimEvent: 'minter.merkle_claim',
+          AllowlistClaimEvent: 'minter.allowlist_claim',
+          MintBatchEvent: 'minter.batch_mint',
+          MerkleRootSetEvent: 'minter.merkle_root_set',
+          AllowlistSetEvent: 'minter.allowlist_set',
+          Paused: 'contract.paused',
+          Unpaused: 'contract.unpaused',
+          ManagerInitialized: 'manager.initialized',
+          ManagerUpgraded: 'manager.upgraded',
+          AdminProposalCancelled: 'manager.admin_proposal_cancelled',
+          MarketplaceInitialized: 'marketplace.initialized',
+          PrimaryListingCreated: 'marketplace.primary_listing_created',
+          PrimaryListingPurchased: 'marketplace.primary_listing_purchased',
+          PrimaryListingCancelled: 'marketplace.primary_listing_cancelled',
+          PrimaryListingExpired: 'marketplace.primary_listing_expired',
+          SecondaryListingCreated: 'marketplace.secondary_listing_created',
+          ListingPurchased: 'marketplace.listing_purchased',
+          ListingCancelled: 'marketplace.listing_cancelled',
+          ListingExpired: 'marketplace.listing_expired',
+          PaymentAssetUpdated: 'marketplace.payment_asset_updated',
+          SecondaryFeeUpdated: 'marketplace.secondary_fee_updated',
+          MarketplacePaused: 'marketplace.paused',
+          MarketplaceUnpaused: 'marketplace.unpaused'
         };
 
         var titleMap = {
           TokenInitialized: 'Token initialized',
           Mint: 'Token minted',
           MintWithMinter: 'Token minted',
-          BatchMint: 'Batch mint completed',
           MintAuthorityChanged: 'Mint authority changed',
           Approve: 'Token approval granted',
           Transfer: 'Token transferred',
@@ -601,18 +677,13 @@ transforms:
           ProposalQueued: 'Proposal queued',
           VoteCast: 'Vote cast',
           ProposalCancelled: 'Proposal cancelled',
-           ProposalCanceled: 'Proposal cancelled',
           ProposalExecuted: 'Proposal executed',
-          TreasuryChanged: 'Treasury changed',
-          TokenContractChanged: 'Token contract changed',
           QueueDelayChanged: 'Queue delay updated',
           VotingDelayChanged: 'Voting delay updated',
           VotingPeriodChanged: 'Voting period updated',
           ProposalThresholdChanged: 'Proposal threshold updated',
           QuorumBpsChanged: 'Quorum updated',
-          GovernorAuthorityChanged: 'Governor authority changed',
           TreasuryInitialized: 'Treasury initialized',
-          GovernorChanged: 'Governor changed',
           Execute: 'Treasury executed call',
           AuctionInitialized: 'Auction initialized',
           AuctionCreated: 'Auction created',
@@ -623,13 +694,17 @@ transforms:
           MinBidIncrementUpdated: 'Minimum bid increment updated',
           TimeBufferUpdated: 'Time buffer updated',
           PaymentTokenUpdated: 'Payment token updated',
-          TreasuryUpdated: 'Treasury updated',
           BidRefunded: 'Bid refunded',
+          RefundDeferred: 'Bid refund deferred',
+          RefundWithdrawn: 'Bid refund withdrawn',
           AuctionCancelled: 'Auction cancelled',
           DaoCreated: 'DAO created',
           DaoLaunched: 'DAO launched',
           FactoryPaused: 'Factory paused',
           FactoryUnpaused: 'Factory unpaused',
+          AdminProposed: 'Manager admin proposed',
+          AdminChanged: 'Manager admin changed',
+          PlatformMinterSet: 'Platform minter set',
           UpgradeApproved: 'Upgrade approved',
           ImplementationRevoked: 'Implementation revoked',
           ImplementationRegistered: 'Implementation registered',
@@ -641,14 +716,64 @@ transforms:
           ProjectURIUpdated: 'Project URI updated',
           DescriptionUpdated: 'Description updated',
           RendererBaseUpdated: 'Renderer base updated',
-          ContractImageUpdated: 'Contract image updated'
+          ContractImageUpdated: 'Contract image updated',
+          MerkleClaimEvent: 'Merkle claim completed',
+          AllowlistClaimEvent: 'Allowlist claim completed',
+          MintBatchEvent: 'Batch mint completed',
+          MerkleRootSetEvent: 'Merkle root configured',
+          AllowlistSetEvent: 'Allowlist configured',
+          Paused: 'Contract paused',
+          Unpaused: 'Contract unpaused',
+          ManagerInitialized: 'Manager initialized',
+          ManagerUpgraded: 'Manager upgraded',
+          AdminProposalCancelled: 'Manager admin proposal cancelled',
+          MarketplaceInitialized: 'Marketplace initialized',
+          PrimaryListingCreated: 'Primary listing created',
+          PrimaryListingPurchased: 'Primary sale completed',
+          PrimaryListingCancelled: 'Primary listing cancelled',
+          PrimaryListingExpired: 'Primary listing expired',
+          SecondaryListingCreated: 'Secondary listing created',
+          ListingPurchased: 'Listing purchased',
+          ListingCancelled: 'Listing cancelled',
+          ListingExpired: 'Listing expired',
+          PaymentAssetUpdated: 'Marketplace payment asset updated',
+          SecondaryFeeUpdated: 'Secondary sale fee updated',
+          MarketplacePaused: 'Marketplace paused',
+          MarketplaceUnpaused: 'Marketplace unpaused'
         };
+
+        // Every module emits its own `Launched` event (same name, different data), so the
+        // kind/title depend on the emitting module's contract_role.
+        var launchRole = ensureString(data.contract_role, '');
+        if (normalizedEventName === 'Launched') {
+          var launchLabels = { token: 'Token', governor: 'Governor', treasury: 'Treasury', auction: 'Auction', marketplace: 'Marketplace', metadata: 'Metadata' };
+          kindMap.Launched = (launchLabels[launchRole] ? launchRole : 'module') + '.launched';
+          titleMap.Launched = (launchLabels[launchRole] || 'Module') + ' launched';
+        }
+        // `Upgraded` / `VersionSynced` come from contracts/common and are emitted by every module.
+        if (normalizedEventName === 'Upgraded' || normalizedEventName === 'VersionSynced') {
+          var upgradeLabels = { token: 'Token', governor: 'Governor', treasury: 'Treasury', auction: 'Auction', marketplace: 'Marketplace', metadata: 'Metadata' };
+          var upgradeRole = upgradeLabels[launchRole] ? launchRole : 'module';
+          var upgradeLabel = upgradeLabels[launchRole] || 'Module';
+          if (normalizedEventName === 'Upgraded') {
+            kindMap.Upgraded = upgradeRole + '.upgraded';
+            titleMap.Upgraded = upgradeLabel + ' upgraded';
+          } else {
+            kindMap.VersionSynced = upgradeRole + '.version_synced';
+            titleMap.VersionSynced = upgradeLabel + ' version synced';
+          }
+        }
 
         var addresses = unique([
           pick(data, ['actor']),
           pick(data, ['proposer']),
           pick(data, ['bidder']),
           pick(data, ['minter']),
+          pick(data, ['current_admin']),
+          pick(data, ['proposed_admin']),
+          pick(data, ['cancelled_admin']),
+          pick(data, ['old_admin']),
+          pick(data, ['new_admin']),
           pick(data, ['owner']),
           pick(data, ['changed_by']),
           pick(data, ['cancelled_by']),
@@ -661,15 +786,20 @@ transforms:
           pick(data, ['token_contract_id']),
           pick(data, ['contract_id']),
           pick(data, ['creator']),
-          pick(data, ['token_address'])
+          pick(data, ['token_address']),
+          pick(data, ['recipient']),
+          pick(data, ['buyer']),
+          pick(data, ['seller'])
         ]);
 
         var proposalId = pick(data, ['proposal_id']);
-        var amount = pick(data, ['amount']);
+        var amount = pick(data, ['amount', 'total_amount', 'price']);
+        var listingId = pick(data, ['listing_id']);
+        var callIndex = pick(data, ['index']);
         var tokenId = pick(data, ['token_id']);
         var func = pick(data, ['function']);
         var target = pick(data, ['target']);
-        var owner = pick(data, ['to', 'owner']);
+        var owner = pick(data, ['to', 'owner', 'recipient']);
         var creator = pick(data, ['creator']);
         var tokenAddress = pick(data, ['token_address']);
         var name = pick(data, ['name']);
@@ -681,10 +811,41 @@ transforms:
           BidPlaced: function() { return 'Bid of ' + (amount || 'unknown') + ' placed on token ' + (tokenId || 'unknown'); },
           AuctionSettled: function() { return 'Auction settled for token ' + (tokenId || 'unknown'); },
           AuctionCreated: function() { return 'Auction created for token ' + (tokenId || 'unknown'); },
-          Execute: function() { return 'Executed ' + (func || 'call') + ' on ' + (target || 'target'); },
+          // One Execute event per call: topics governor/target/proposal_id, data function + index.
+          Execute: function() {
+            return 'Executed ' + (func || 'call') + ' on ' + (target || 'target') +
+              (callIndex !== '' ? ' (call ' + (Number(callIndex) + 1) + (proposalId ? ' of proposal ' + proposalId : '') + ')' : '');
+          },
+          ProposalExecuted: function() { return 'Proposal ' + (proposalId || '') + ' executed'; },
+          BidRefunded: function() { return 'Bid of ' + (amount || 'unknown') + ' refunded for token ' + (tokenId || 'unknown'); },
+          RefundDeferred: function() { return 'Refund of ' + (amount || 'unknown') + ' deferred for token ' + (tokenId || 'unknown') + '; claim it with withdraw_refund'; },
+          RefundWithdrawn: function() { return 'Refund of ' + (amount || 'unknown') + ' withdrawn'; },
+          Launched: function() {
+            var started = pick(data, ['started']);
+            var opened = pick(data, ['opened']);
+            if (launchRole === 'auction') return 'Auction launched' + (started === 'true' ? ' and started' : ' paused');
+            if (launchRole === 'marketplace') return 'Marketplace launched' + (opened === 'true' ? ' and opened' : ' paused');
+            return (titleMap.Launched || 'Module launched');
+          },
+          // Topics from_hash/to_hash, data version. Hashes are shortened to 8 hex chars.
+          Upgraded: function() {
+            function shortHash(h) { return h ? String(h).slice(0, 8) : 'unknown'; }
+            var v = pick(data, ['version']);
+            return 'Contract upgraded to version ' + (v || 'unknown') + ' (' + shortHash(pick(data, ['from_hash'])) + ' -> ' + shortHash(pick(data, ['to_hash'])) + ')';
+          },
+          VersionSynced: function() { return 'Contract version synced to ' + (pick(data, ['version']) || 'unknown'); },
+          AdminProposalCancelled: function() { return 'Admin proposal for ' + (pick(data, ['cancelled_admin']) || 'unknown') + ' cancelled'; },
           Mint: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
           MintWithMinter: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
-          BatchMint: function() { return 'Minted ' + (amount || 'batch') + ' tokens'; },
+          MintBatchEvent: function() { var count = pick(data, ['recipient_count']); return 'Minted ' + (amount || 'tokens') + ' to ' + (count || 'multiple') + ' recipients'; },
+          PrimaryListingCreated: function() { return 'Primary listing ' + (listingId || 'unknown') + ' created at ' + (amount || 'unknown price'); },
+          PrimaryListingPurchased: function() { return 'Primary sale: token ' + (tokenId || 'unknown') + ' bought for ' + (amount || 'unknown price') + ' (listing ' + (listingId || 'unknown') + ')'; },
+          PrimaryListingCancelled: function() { return 'Primary listing ' + (listingId || 'unknown') + ' cancelled'; },
+          PrimaryListingExpired: function() { return 'Primary listing ' + (listingId || 'unknown') + ' expired'; },
+          SecondaryListingCreated: function() { return 'Secondary listing created for token ' + (tokenId || 'unknown') + ' at ' + (amount || 'unknown price'); },
+          ListingPurchased: function() { return 'Token ' + (tokenId || 'unknown') + ' purchased for ' + (amount || 'unknown price'); },
+          MerkleClaimEvent: function() { return 'Claimed ' + (amount || 'tokens') + ' via merkle proof for ' + (owner || 'recipient'); },
+          AllowlistClaimEvent: function() { return 'Claimed ' + (amount || 'tokens') + ' via allowlist for ' + (owner || 'recipient'); },
           DelegateChanged: function() { return 'Delegation changed'; },
           DaoCreated: function() { return 'DAO created by ' + (creator || 'unknown'); },
           DaoLaunched: function() { return 'DAO launched for token ' + (tokenAddress || 'unknown'); },
@@ -751,13 +912,13 @@ transforms:
           proposal_id: toString(proposalId),
           token_id: toString(tokenId),
           amount: toString(amount),
-          actor: toString(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator'])),
+          actor: toString(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'recipient', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator', 'buyer', 'seller', 'current_admin', 'old_admin'])),
           addresses: JSON.stringify(addresses || []),
           ledger_sequence: ledger_sequence,
           transaction_index: transaction_index,
           operation_index: operation_index,
           event_index: event_index,
-          ledger_closed_at: toString(data.ledger_closed_at),
+          ledger_closed_at: normalizeTimestamp(data.ledger_closed_at),
           transaction_hash: toString(data.transaction_hash)
         };
         } catch (e) {
@@ -772,7 +933,7 @@ sinks:
     from: raw_events
     schema: chain
     table: raw_events
-    secret_name: DAO_POSTGRES
+    secret_name: BUILDER_POSTGRES_SECRET
     primary_key: event_id
 
   decoded_events_output:
@@ -780,7 +941,7 @@ sinks:
     from: decoded_events
     schema: chain
     table: decoded_events
-    secret_name: DAO_POSTGRES
+    secret_name: BUILDER_POSTGRES_SECRET
     primary_key: event_id
 
   activity_feed_output:
@@ -788,5 +949,5 @@ sinks:
     from: activity_feed
     schema: app
     table: activity_feed_events
-    secret_name: DAO_POSTGRES
+    secret_name: BUILDER_POSTGRES_SECRET
     primary_key: activity_id

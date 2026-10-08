@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)] // emit helpers mirror the event fields 1:1
+
 //! Event definitions and emission helpers for the Governor contract.
 //!
 //! This module defines events for tracking the complete governance lifecycle including:
@@ -33,24 +35,6 @@ pub struct ProposalQueued {
     #[topic]
     pub proposal_id: BytesN<32>,
     pub eta: u64,
-}
-
-#[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TreasuryChanged {
-    #[topic]
-    pub old_treasury: Address,
-    #[topic]
-    pub new_treasury: Address,
-}
-
-#[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TokenContractChanged {
-    #[topic]
-    pub old_token_contract: Address,
-    #[topic]
-    pub new_token_contract: Address,
 }
 
 #[contractevent]
@@ -98,13 +82,12 @@ pub struct QuorumBpsChanged {
     pub new_value: u32,
 }
 
+/// Emitted once when the Manager launches the governor (Setup -> Live).
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GovernorAuthorityChanged {
+pub struct Launched {
     #[topic]
-    pub authority: Address,
-    pub old_enabled: bool,
-    pub enabled: bool,
+    pub treasury: Address,
 }
 
 // Event helper functions
@@ -134,26 +117,6 @@ pub fn emit_governor_initialized(
         proposal_threshold,
         quorum_bps,
         version: version.clone(),
-    }
-    .publish(e);
-}
-
-pub fn emit_treasury_changed(e: &Env, old_treasury: &Address, new_treasury: &Address) {
-    TreasuryChanged {
-        old_treasury: old_treasury.clone(),
-        new_treasury: new_treasury.clone(),
-    }
-    .publish(e);
-}
-
-pub fn emit_token_contract_changed(
-    e: &Env,
-    old_token_contract: &Address,
-    new_token_contract: &Address,
-) {
-    TokenContractChanged {
-        old_token_contract: old_token_contract.clone(),
-        new_token_contract: new_token_contract.clone(),
     }
     .publish(e);
 }
@@ -208,24 +171,17 @@ pub fn emit_quorum_bps_changed(e: &Env, caller: &Address, old_value: u32, new_va
     .publish(e);
 }
 
-pub fn emit_governor_authority_changed(
-    e: &Env,
-    authority: &Address,
-    old_enabled: bool,
-    enabled: bool,
-) {
-    GovernorAuthorityChanged {
-        authority: authority.clone(),
-        old_enabled,
-        enabled,
-    }
-    .publish(e);
-}
-
 pub fn emit_proposal_queued(e: &Env, proposal_id: &BytesN<32>, eta: u64) {
     ProposalQueued {
         proposal_id: proposal_id.clone(),
         eta,
+    }
+    .publish(e);
+}
+
+pub fn emit_launched(e: &Env, treasury: &Address) {
+    Launched {
+        treasury: treasury.clone(),
     }
     .publish(e);
 }

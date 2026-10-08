@@ -1,18 +1,21 @@
-use soroban_sdk::{
-    contract, contractimpl, panic_with_error, symbol_short, vec, Address, BytesN, Env, Error,
-    IntoVal, String,
-};
-use stellar_access::ownable::{set_owner, Ownable, OwnableStorageKey};
+#![allow(clippy::too_many_arguments)] // constructors take every wired address/param explicitly
+
+use soroban_sdk::{contract, contractimpl, panic_with_error, Address, BytesN, Env, String, Vec};
+use stellar_access::ownable::{set_owner, Ownable};
 use stellar_governance::votes::{
-    emit_delegate_changed as emit_library_delegate_changed, get_delegate, Checkpoint, Votes,
-    VotesStorageKey,
+    emit_delegate_changed as emit_library_delegate_changed, get_delegate, num_checkpoints,
+    transfer_voting_units, Votes, VotesStorageKey,
 };
 use stellar_macros::only_owner;
-use stellar_tokens::non_fungible::{votes::NonFungibleVotes, Base};
+use stellar_tokens::non_fungible::{
+    emit_mint, sequential::increment_token_id, votes::NonFungibleVotes, Base, NFTStorageKey,
+};
+
+use common::clients::MetadataHookClient;
 
 use crate::error::TokenError;
 use crate::events::{
-    emit_batch_mint, emit_mint_authority_changed, emit_token_initialized, emit_token_mint,
+    emit_launched, emit_mint_authority_changed, emit_token_initialized, emit_token_mint,
 };
 use crate::storage::*;
 
@@ -31,6 +34,7 @@ impl DaoTokenContract {
     /// # Arguments
     ///
     /// * `owner` - The address that will own and control the contract
+    /// * `treasury` - The DAO treasury; `launch` must be called with exactly this address
     /// * `uri` - The base URI for token metadata (typically an IPFS or HTTP link)
     /// * `name` - The human-readable name of the token collection
     /// * `symbol` - The short symbol/ticker for the token
@@ -45,6 +49,7 @@ impl DaoTokenContract {
     pub fn __constructor(
         e: &Env,
         owner: Address,
+        treasury: Address,
         uri: String,
         name: String,
         symbol: String,
@@ -57,41 +62,51 @@ impl DaoTokenContract {
         set_owner(e, &owner);
         e.storage().instance().set(&TokenKey::Metadata, &metadata);
         e.storage().instance().set(&TokenKey::Manager, &manager);
-        e.storage()
-            .instance()
-            .set(&TokenKey::CurrentHash, &current_hash);
-        e.storage()
-            .instance()
-            .set(&TokenKey::CurrentVersion, &version);
+        e.storage().instance().set(&TokenKey::Treasury, &treasury);
+        common::upgrade::init(e, &current_hash, &version);
         emit_token_initialized(e, &owner, &uri, &name, &symbol, &version);
     }
 
     pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
-        let owner = stellar_access::ownable::get_owner(e).expect("owner not set");
+        let owner = common::error::require(
+            e,
+            stellar_access::ownable::get_owner(e),
+            common::CommonError::OwnerNotSet,
+        );
         owner.require_auth();
-        let manager: Address = e
-            .storage()
+        let manager = Self::manager(e);
+        common::upgrade::apply(e, &manager, &from_hash, &to_hash);
+    }
+
+    /// Returns the release version registered for the active token WASM.
+    pub fn version(e: &Env) -> String {
+        common::upgrade::version(e)
+    }
+
+    /// Returns the active token WASM hash.
+    pub fn wasm_hash(e: &Env) -> BytesN<32> {
+        common::upgrade::current_hash(e)
+    }
+
+    /// Re-reads the version for the active WASM hash from the Manager registry.
+    pub fn sync_version(e: &Env) {
+        let owner = common::error::require(
+            e,
+            stellar_access::ownable::get_owner(e),
+            common::CommonError::OwnerNotSet,
+        );
+        owner.require_auth();
+        let manager = Self::manager(e);
+        common::upgrade::sync_version(e, &manager);
+    }
+
+    fn manager(e: &Env) -> Address {
+        e.storage()
             .instance()
             .get(&TokenKey::Manager)
-            .expect("manager not set");
-        let current: BytesN<32> = e
-            .storage()
-            .instance()
-            .get(&TokenKey::CurrentHash)
-            .expect("current hash not set");
-        if from_hash != current {
-            panic!("from hash does not match current hash");
-        }
-        let approved: bool = e.invoke_contract(
-            &manager,
-            &soroban_sdk::Symbol::new(e, "is_upgrade_approved"),
-            soroban_sdk::vec![e, from_hash.into_val(e), to_hash.clone().into_val(e)],
-        );
-        if !approved {
-            panic!("upgrade not approved");
-        }
-        e.storage().instance().set(&TokenKey::CurrentHash, &to_hash);
-        e.deployer().update_current_contract_wasm(to_hash);
+            .unwrap_or_else(|| {
+                soroban_sdk::panic_with_error!(e, common::CommonError::ManagerNotSet)
+            })
     }
 
     /// Updates collection metadata during the launch-admin setup window or
@@ -114,15 +129,22 @@ impl DaoTokenContract {
     ///
     /// # Authorization
     ///
-    /// Requires owner authentication (enforced by `#[only_owner]` macro).
+    /// Requires owner authentication (enforced by `#[only_owner]` macro) and a
+    /// live token (`NotLive` before launch).
     ///
     /// # Events
     ///
     /// Emits a `MintAuthorityChanged` event with old and new permission states.
     #[only_owner]
     pub fn set_mint_authority(e: &Env, authority: Address, enabled: bool) {
+        // D5: no mint-authority changes during setup; launch writes the canonical set.
+        common::lifecycle::require_live(e);
         let old_enabled = Self::mint_authority(e, authority.clone());
-        let changed_by = stellar_access::ownable::get_owner(e).expect("owner not set");
+        let changed_by = common::error::require(
+            e,
+            stellar_access::ownable::get_owner(e),
+            common::CommonError::OwnerNotSet,
+        );
 
         e.storage()
             .instance()
@@ -148,37 +170,48 @@ impl DaoTokenContract {
             .unwrap_or(false)
     }
 
-    /// Finalizes DAO setup by moving ownership from the launch administrator
-    /// to the Treasury. This one-time handoff is authorized by the Manager.
-    pub fn finalize_ownership(e: &Env, new_owner: Address) {
-        let manager: Address = e
+    /// One-shot, Manager-only launch handoff (Setup -> Live).
+    ///
+    /// Requires the Manager's authorization and that the token is not yet live.
+    /// Sets the owner to `treasury` (clearing any pending two-step ownership
+    /// transfer), writes `MintAuthority` for exactly `minters`, marks the token
+    /// live, and emits `Launched`. A second call panics with `AlreadyLive`, so
+    /// after launch the Manager has no authority over the token.
+    ///
+    /// # Storage impact
+    ///
+    /// One instance key per minter (the Manager passes at most 4) plus the `Live` flag.
+    pub fn launch(e: &Env, treasury: Address, minters: Vec<Address>) {
+        let manager = Self::manager(e);
+        manager.require_auth();
+        common::lifecycle::mark_live(e);
+        let wired: Address = e
             .storage()
             .instance()
-            .get(&TokenKey::Manager)
-            .expect("manager not set");
-        manager.require_auth();
-        e.storage()
-            .instance()
-            .set(&OwnableStorageKey::Owner, &new_owner);
+            .get(&TokenKey::Treasury)
+            .unwrap_or_else(|| panic_with_error!(e, TokenError::TreasuryMismatch));
+        if treasury != wired {
+            panic_with_error!(e, TokenError::TreasuryMismatch);
+        }
+        if !minters.contains(&treasury) {
+            panic_with_error!(e, TokenError::TreasuryNotMinter);
+        }
+        common::ownership::handoff_owner(e, &treasury);
+        for minter in minters.iter() {
+            let old_enabled = Self::mint_authority(e, minter.clone());
+            e.storage()
+                .instance()
+                .set(&TokenKey::MintAuthority(minter.clone()), &true);
+            emit_mint_authority_changed(e, &minter, old_enabled, true, &manager);
+        }
+        extend_instance_ttl(e);
+        emit_launched(e, &treasury, &minters);
     }
 
-    /// Enables a module's mint authority during manager-controlled finalization.
-    ///
-    /// The Manager uses this for the Auction contract only when auctions are
-    /// enabled. Keeping this separate from owner authorization allows founder
-    /// minting to happen before the Treasury owns the token.
-    pub fn enable_mint_authority_by_manager(e: &Env, authority: Address) {
-        let manager: Address = e
-            .storage()
-            .instance()
-            .get(&TokenKey::Manager)
-            .expect("manager not set");
-        manager.require_auth();
-        let old_enabled = Self::mint_authority(e, authority.clone());
-        e.storage()
-            .instance()
-            .set(&TokenKey::MintAuthority(authority.clone()), &true);
-        emit_mint_authority_changed(e, &authority, old_enabled, true, &manager);
+    /// Whether the token has been launched (Setup -> Live). Used by the Minter
+    /// to refuse setup-window configuration.
+    pub fn is_live(e: &Env) -> bool {
+        common::lifecycle::is_live(e)
     }
 
     /// Returns the metadata contract used for mint hooks.
@@ -221,8 +254,8 @@ impl DaoTokenContract {
     pub fn mint(e: &Env, minter: &Address, to: &Address) -> u32 {
         minter.require_auth();
         Self::ensure_mint_authority(e, minter);
+        extend_instance_ttl(e);
         Self::ensure_self_delegate(e, to);
-        Self::preflight_checkpoint_writes(e, to, 1);
         let token_id = NonFungibleVotes::sequential_mint(e, to);
         // Note: OpenZeppelin's NonFungibleVotes::sequential_mint() automatically emits standard Mint event
 
@@ -233,21 +266,26 @@ impl DaoTokenContract {
         token_id
     }
 
-    /// Mints multiple NFTs to the same address in a single transaction.
+    /// Batch mints multiple NFTs to multiple recipients with optimized checkpoint handling.
     ///
-    /// This is more efficient than calling `mint()` multiple times when distributing
-    /// many tokens to one address. All tokens are sequentially numbered and the
-    /// recipient is auto-delegated once (not per token).
+    /// This function is designed to efficiently mint many tokens in a single transaction
+    /// by grouping operations per recipient. It addresses two critical inefficiencies:
+    /// 1. Delegation checks are performed once per unique recipient (not per token)
+    /// 2. Voting checkpoints are created once per recipient (not per token)
+    ///
+    /// This optimization is essential for Stellar's storage footprint prediction during
+    /// CLI simulation. Without batching, the second and subsequent mints fail with
+    /// "trying to access contract data key outside of the footprint" errors.
     ///
     /// # Arguments
     ///
     /// * `minter` - The address performing the mint (must be owner or have mint authority)
-    /// * `to` - The address receiving all the newly minted tokens
-    /// * `amount` - Number of tokens to mint (must be between 1 and `MAX_BATCH_MINT`)
+    /// * `recipients` - Vector of addresses receiving tokens
+    /// * `amounts` - Vector of token counts, one per recipient (must match recipients length)
     ///
     /// # Returns
     ///
-    /// The ID of the last minted token in the batch.
+    /// A vector of all newly minted token IDs in sequential order.
     ///
     /// # Authorization
     ///
@@ -255,36 +293,96 @@ impl DaoTokenContract {
     ///
     /// # Panics
     ///
-    /// Panics with `TokenError::InvalidBatchMintAmount` if `amount` is 0 or exceeds
-    /// `MAX_BATCH_MINT` (100).
+    /// Panics with `TokenError::MintAuthorityNotAllowed` if the minter lacks authority.
+    /// Panics with `TokenError::InvalidInput` if recipients/amounts lengths don't match.
     ///
     /// # Events
     ///
-    /// Emits individual `Mint` events for each token (via OpenZeppelin) plus one
-    /// `BatchMint` summary event with the total amount and last token ID.
-    pub fn batch_mint(e: &Env, minter: &Address, to: &Address, amount: u32) -> u32 {
-        if amount == 0 || amount > MAX_BATCH_MINT {
-            panic_with_error!(e, TokenError::InvalidBatchMintAmount);
-        }
-
+    /// Emits:
+    /// - Standard `Mint` events for each token (via OpenZeppelin)
+    /// - Custom `MintWithMinter` event for each token
+    /// - `DelegateVotesChanged` events per recipient (not per token)
+    ///
+    /// # Storage Impact
+    ///
+    /// Creates checkpoint storage entries once per recipient instead of once per token,
+    /// reducing storage operations from O(total_tokens) to O(unique_recipients).
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// // Mint 10 tokens to Alice and 20 tokens to Bob in one transaction
+    /// let recipients = vec![&env, alice.clone(), bob.clone()];
+    /// let amounts = vec![&env, 10u128, 20u128];
+    /// let token_ids = token.batch_mint(&minter, &recipients, &amounts);
+    /// // Returns 30 token IDs, checkpoint operations = 2 (not 30)
+    /// ```
+    pub fn batch_mint(
+        e: &Env,
+        minter: &Address,
+        recipients: &Vec<Address>,
+        amounts: &Vec<u128>,
+    ) -> Vec<u32> {
         minter.require_auth();
         Self::ensure_mint_authority(e, minter);
-        Self::ensure_self_delegate(e, to);
+        extend_instance_ttl(e);
 
-        let mut last_token_id = 0;
-
-        Self::preflight_checkpoint_writes(e, to, amount);
-        for _ in 0..amount {
-            let token_id = NonFungibleVotes::sequential_mint(e, to);
-
-            // Generate artwork seed via metadata contract
-            Self::call_metadata_hook(e, token_id);
-
-            last_token_id = token_id;
+        // Validate input vectors have matching lengths
+        if recipients.len() != amounts.len() {
+            panic_with_error!(e, TokenError::InvalidInput);
         }
 
-        emit_batch_mint(e, minter, to, amount, last_token_id);
-        last_token_id
+        // Validate amounts and compute the batch size up front so the whole
+        // ID range is reserved with a single counter write.
+        let mut total: u32 = 0;
+        for amount in amounts.iter() {
+            let amount_u32: u32 = match amount.try_into() {
+                Ok(v) if v > 0 => v,
+                _ => panic_with_error!(e, TokenError::InvalidInput),
+            };
+            total = total
+                .checked_add(amount_u32)
+                .unwrap_or_else(|| panic_with_error!(e, TokenError::InvalidInput));
+        }
+        if total == 0 {
+            panic_with_error!(e, TokenError::InvalidInput);
+        }
+
+        let first_id = increment_token_id(e, total);
+        let mut next_id = first_id;
+        let mut token_ids = Vec::new(e);
+        let mut checked_delegates: Vec<Address> = Vec::new(e);
+
+        for i in 0..recipients.len() {
+            let recipient = recipients.get(i).unwrap();
+            let amount = amounts.get(i).unwrap();
+            let amount_u32 = amount as u32;
+
+            // Only check/set delegation once per unique recipient
+            if !checked_delegates.contains(&recipient) {
+                Self::ensure_self_delegate(e, &recipient);
+                checked_delegates.push_back(recipient.clone());
+            }
+
+            // Write ownership per token, but touch balance and voting
+            // checkpoints once per recipient entry.
+            for _ in 0..amount_u32 {
+                e.storage()
+                    .persistent()
+                    .set(&NFTStorageKey::Owner(next_id), &recipient);
+                emit_mint(e, &recipient, next_id);
+                emit_token_mint(e, minter, &recipient, next_id);
+                token_ids.push_back(next_id);
+                next_id += 1;
+            }
+            Base::increase_balance(e, &recipient, amount_u32);
+            transfer_voting_units(e, None, Some(&recipient), amount);
+        }
+
+        // One metadata call for the whole contiguous ID range.
+        Self::call_metadata_batch_hook(e, first_id, total);
+
+        token_ids
     }
 
     /// Returns the number of tokens owned by an account.
@@ -319,7 +417,11 @@ impl DaoTokenContract {
 
     /// Returns the token contract owner used during the launch setup window.
     pub fn owner(e: &Env) -> Address {
-        stellar_access::ownable::get_owner(e).expect("owner not set")
+        common::error::require(
+            e,
+            stellar_access::ownable::get_owner(e),
+            common::CommonError::OwnerNotSet,
+        )
     }
 
     /// Transfers a token from one address to another.
@@ -343,9 +445,8 @@ impl DaoTokenContract {
     /// Emits a standard `Transfer` event (via OpenZeppelin) and updates voting
     /// power checkpoints for both sender and receiver delegates.
     pub fn transfer(e: &Env, from: &Address, to: &Address, token_id: u32) {
+        extend_instance_ttl(e);
         Self::ensure_self_delegate(e, to);
-        Self::preflight_checkpoint_writes(e, from, 1);
-        Self::preflight_checkpoint_writes(e, to, 1);
         NonFungibleVotes::transfer(e, from, to, token_id);
         // Note: OpenZeppelin's NonFungibleVotes::transfer() automatically emits standard Transfer event
     }
@@ -371,9 +472,8 @@ impl DaoTokenContract {
     /// Emits a standard `Transfer` event (via OpenZeppelin) and updates voting
     /// power checkpoints for both sender and receiver delegates.
     pub fn transfer_from(e: &Env, spender: &Address, from: &Address, to: &Address, token_id: u32) {
+        extend_instance_ttl(e);
         Self::ensure_self_delegate(e, to);
-        Self::preflight_checkpoint_writes(e, from, 1);
-        Self::preflight_checkpoint_writes(e, to, 1);
         NonFungibleVotes::transfer_from(e, spender, from, to, token_id);
         // Note: OpenZeppelin's NonFungibleVotes::transfer_from() automatically emits standard Transfer event
     }
@@ -445,11 +545,19 @@ impl DaoTokenContract {
             .get::<TokenKey, Address>(&TokenKey::Metadata)
         {
             // Call on_minted hook via cross-contract invocation (ignore result - non-critical)
-            let _ = e.try_invoke_contract::<(), Error>(
-                &metadata_addr,
-                &symbol_short!("on_minted"),
-                vec![e, token_id.into_val(e)],
-            );
+            let _ = MetadataHookClient::new(e, &metadata_addr).try_on_minted(&token_id);
+        }
+    }
+
+    fn call_metadata_batch_hook(e: &Env, first_token_id: u32, count: u32) {
+        if let Some(metadata_addr) = e
+            .storage()
+            .instance()
+            .get::<TokenKey, Address>(&TokenKey::Metadata)
+        {
+            // Non-critical: ignore failures, like the single-token hook.
+            let _ = MetadataHookClient::new(e, &metadata_addr)
+                .try_on_minted_batch(&first_token_id, &count);
         }
     }
 
@@ -472,45 +580,6 @@ impl DaoTokenContract {
         Self::extend_delegation_ttl(e, account);
     }
 
-    /// Include the next checkpoint keys in Soroban's transaction footprint.
-    /// The votes library writes these keys directly when a mint creates a new
-    /// ledger checkpoint, so a missing-key write must be preflighted first.
-    fn preflight_checkpoint_writes(e: &Env, account: &Address, count: u32) {
-        let total_supply_index = e
-            .storage()
-            .instance()
-            .get::<VotesStorageKey, u32>(&VotesStorageKey::NumTotalSupplyCheckpoints)
-            .unwrap_or(0);
-        for index in total_supply_index..total_supply_index + count {
-            e.storage().persistent().set(
-                &VotesStorageKey::TotalSupplyCheckpoint(index),
-                &Checkpoint {
-                    ledger: e.ledger().sequence(),
-                    votes: 0,
-                },
-            );
-        }
-
-        let delegate_count_key = VotesStorageKey::NumCheckpoints(account.clone());
-        let delegate_count = e
-            .storage()
-            .persistent()
-            .get::<VotesStorageKey, u32>(&delegate_count_key);
-        let delegate_index = delegate_count.unwrap_or(0);
-        e.storage()
-            .persistent()
-            .set(&delegate_count_key, &delegate_index);
-        for index in delegate_index..delegate_index + count {
-            e.storage().persistent().set(
-                &VotesStorageKey::DelegateCheckpoint(account.clone(), index),
-                &Checkpoint {
-                    ledger: e.ledger().sequence(),
-                    votes: 0,
-                },
-            );
-        }
-    }
-
     /// Validates that an address has permission to mint tokens.
     ///
     /// Minting is allowed for:
@@ -530,7 +599,11 @@ impl DaoTokenContract {
             panic_with_error!(e, TokenError::OwnerNotSet);
         };
 
-        if minter == &owner || Self::mint_authority(e, minter.clone()) {
+        if minter == &owner {
+            return;
+        }
+        // Before launch only the owner (launch_admin) may mint.
+        if common::lifecycle::is_live(e) && Self::mint_authority(e, minter.clone()) {
             return;
         }
 
@@ -550,6 +623,23 @@ impl DaoTokenContract {
 /// and power for proposals.
 #[contractimpl(contracttrait)]
 impl Votes for DaoTokenContract {}
+
+/// Additional governance query functions for checkpoint inspection.
+#[contractimpl]
+impl DaoTokenContract {
+    /// Returns the number of checkpoints for an account.
+    ///
+    /// # Arguments
+    ///
+    /// * `account` - The address to query
+    ///
+    /// # Returns
+    ///
+    /// The number of checkpoints recorded for this account
+    pub fn num_checkpoints(e: &Env, account: Address) -> u32 {
+        num_checkpoints(e, &account)
+    }
+}
 
 /// Implements the Ownable trait for access control.
 ///

@@ -1,28 +1,42 @@
 {
   "network": "testnet",
   "label": "builder",
-  "deploymentLedger": 4983407,
+  "deploymentLedger": 5090312,
   "config": {
     "label": "builder",
     "adminAddress": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
     "rpcUrl": "https://soroban-testnet.stellar.org",
     "networkPassphrase": "Test SDF Network ; September 2015"
   },
-  "manager": "CAMI673YU3NJYT3VO5GXXPWDSSJPUXAHJR2L6ITUMBQXRTNG2N36QK5K",
+  "manager": "CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y",
+  "minter": "CASTKJBMDBZS2M3NGENH7FG4VPCI7FSYVAFKN2E227QSR723KXGKFZKL",
   "implementations": {
-    "token": "f3f19d2162cadaef4fd2729000c36ff3e21953591df9a20c01548f74832d574d",
-    "metadata": "7dc945457fab787a4bb96c1a44aae3f7e9598b2bf4335fa9022b268c3153befa",
-    "auction": "e651c6f84a4eef14bc9cb6e73919371bcf0a1f87ba85a08f1e2127f907b9393e",
-    "governor": "e5bc600980a8450dc00cd8e3b66d07e9472b2cd481853d1b4d269a5c0cea0061",
-    "treasury": "efb18248dbddefa90af35d0e9151b49e61e51bc74676a28b44891f7045f0122d",
-    "marketplace": "1a64e742ea5d37cddb283563e341892e8a16f92613c9016c65fefaf47aa7a451"
+    "manager": "d965d3e67aea18d70a8c8c39fb2775dd668d3aeff94b3d9f3d8854692cc44ae8",
+    "token": "fade7a0b9add39a05bf8309462d756915841e0bf550f540ef07c98c9760852f6",
+    "metadata": "33da64583015eac21f3ed28d89f39a25f48451570a3773810a93ca6b66d0c4a5",
+    "auction": "ff393f7f658fb18e8c78dad9e500fbb545924733ef406e043d8f5b6013d1e1bc",
+    "governor": "e1ce47553f15ec54092ded11bdb132569479abee13dd640f621ec0a0c09cfb27",
+    "treasury": "8a9029904a4cdb6e8f27efe555ee2734a0db2b1091d8560b82da18277d59f3d9",
+    "marketplace": "920477ad7a03579c6d636ef13d66e52f898c1f0259f325ef84650495c3823d53",
+    "minter": "0c98e8463b70d80b6c6304dc59939169186d2a56936ba6db3edcb7d6c4299677"
   },
-  "deployedAt": "2026-10-02T11:31:39.761Z",
+  "versions": {
+    "manager": "0.1.0",
+    "token": "0.1.0",
+    "metadata": "0.1.0",
+    "auction": "0.1.0",
+    "governor": "0.1.0",
+    "treasury": "0.1.0",
+    "marketplace": "0.1.0",
+    "minter": "0.1.0"
+  },
+  "sourceCommit": "85ab6fee6875fcf426f67da591226aebc1cfc840",
+  "deployedAt": "2026-10-08T16:01:08.169Z",
   "transactions": {
     "manager": {
-      "deployedAt": "2026-10-02T11:30:24.124Z",
-      "txHash": "ccb76b31b6767ad07ab3cdb564cd376f88a58cae3fc66b1c7ef6448f1c529e18",
-      "ledger": 4983407
+      "deployedAt": "2026-10-08T15:59:08.282Z",
+      "txHash": "f94d72a1eec656800d441b83c8cf7b02c489f0a6696e06de62880245565b5bcc",
+      "ledger": 5090312
     }
   }
 }

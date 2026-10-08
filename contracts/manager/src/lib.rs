@@ -12,6 +12,7 @@
 //! ## 2. DAO Factory
 //!
 //! - Deploy complete DAOs with all 6 modules atomically
+//! - `create_dao` requires auth from both the deployer and the launch admin
 //! - Deterministic address prediction before deployment
 //! - Founder allocation configuration (fixed NFT counts)
 //! - Governance-owned from initialization
@@ -49,7 +50,7 @@ mod test;
 pub use contract::*;
 pub use error::*;
 pub use storage::{
-    ArtworkIpfsGroup, AuctionConfig, DaoAddresses, DaoCreationParams, DaoModules, GovernanceConfig,
-    ImplementationVersion, InitialDaoConfigValues, LaunchConfig, MarketplaceConfig, PendingDao,
-    UpgradeApproval,
+    ArtworkIpfsGroup, AuctionConfig, DaoAddresses, DaoCreationParams, DaoWasmHashes,
+    GovernanceConfig, ImplementationVersion, InitialDaoConfigValues, LaunchConfig,
+    MarketplaceConfig, PendingDao, UpgradeApproval,
 };

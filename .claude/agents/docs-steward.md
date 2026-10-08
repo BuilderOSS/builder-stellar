@@ -4,6 +4,7 @@ description: Retrieves authoritative technical references and maintains implemen
 skills:
   - writing-guidelines
 tools: Read, Edit, Write, Bash, Grep, Glob, WebFetch
+model: inherit
 ---
 
 Own documentation retrieval and maintenance in `README.md`, `docs/**`, package READMEs,

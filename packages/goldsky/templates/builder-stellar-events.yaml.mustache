@@ -102,11 +102,12 @@ transforms:
     primary_key: event_id
     sql: |
       SELECT
-        id AS event_id,
+        concat('{{DEPLOYMENT_ID}}:', id) AS event_id,
         '{{DEPLOYMENT_ID}}' AS deployment_id,
         contract_id,
         CASE
           WHEN contract_id = '{{MANAGER_CONTRACT_ID}}' THEN 'manager'
+          WHEN contract_id = '{{MINTER_CONTRACT_ID}}' THEN 'minter'
           WHEN dynamic_table_check('dao_tokens', contract_id) THEN 'token'
           WHEN dynamic_table_check('dao_metadata', contract_id) THEN 'metadata'
           WHEN dynamic_table_check('dao_auctions', contract_id) THEN 'auction'
@@ -132,13 +133,14 @@ transforms:
         ledger_sequence,
         ledger_hash,
         ledger_closed_at,
-        operation_index,
-        event_index,
+        CAST(NULL AS BIGINT) AS operation_index,
+        CAST(NULL AS BIGINT) AS event_index,
         _gs_op
       FROM stellar_events
        WHERE ledger_sequence >= {{START_AT}}
          AND (
            contract_id = '{{MANAGER_CONTRACT_ID}}'
+           OR contract_id = '{{MINTER_CONTRACT_ID}}'
            OR dynamic_table_check('dao_tokens', contract_id)
            OR dynamic_table_check('dao_metadata', contract_id)
            OR dynamic_table_check('dao_auctions', contract_id)
