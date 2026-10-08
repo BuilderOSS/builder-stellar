@@ -1328,7 +1328,7 @@ mod real_dao {
 
     /// Acceptance (g): nothing can start before launch.
     #[test]
-    fn auction_unpause_and_marketplace_mint_and_list_are_not_live_before_launch() {
+    fn auction_unpause_and_marketplace_primary_listing_are_not_live_before_launch() {
         let dao = build();
         let not_live: soroban_sdk::Error = CommonError::NotLive.into();
         assert_eq!(
@@ -1341,7 +1341,7 @@ mod real_dao {
         );
         assert_eq!(
             dao.marketplace
-                .try_mint_and_list(&100, &10_000)
+                .try_create_primary_listing(&100, &10_000)
                 .err()
                 .unwrap()
                 .unwrap(),

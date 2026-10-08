@@ -149,10 +149,11 @@ pub fn emit_project_uri_updated(env: &Env, old_uri: &String, new_uri: &String) {
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PropertiesReset {
-    pub num_properties: u32,
+    /// Number of properties that existed before the reset.
+    pub old_num_properties: u32,
 }
 
-pub fn emit_properties_reset(env: &Env, num_properties: u32) {
-    let event = PropertiesReset { num_properties };
+pub fn emit_properties_reset(env: &Env, old_num_properties: u32) {
+    let event = PropertiesReset { old_num_properties };
     event.publish(env);
 }

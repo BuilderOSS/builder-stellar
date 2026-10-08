@@ -21,7 +21,19 @@ impl MockToken {
             .set(&soroban_sdk::symbol_short!("next"), &0u32);
     }
 
+    pub fn set_fail_mint(e: &Env, fail: bool) {
+        e.storage()
+            .instance()
+            .set(&soroban_sdk::symbol_short!("fail"), &fail);
+    }
+
     pub fn mint(e: &Env, _minter: Address, to: Address) -> u32 {
+        let fail: bool = e
+            .storage()
+            .instance()
+            .get(&soroban_sdk::symbol_short!("fail"))
+            .unwrap_or(false);
+        assert!(!fail, "mint failed");
         let id: u32 = e
             .storage()
             .instance()
@@ -32,6 +44,13 @@ impl MockToken {
             .set(&soroban_sdk::symbol_short!("next"), &(id + 1));
         e.storage().persistent().set(&id, &to);
         id
+    }
+
+    pub fn total_supply(e: &Env) -> u32 {
+        e.storage()
+            .instance()
+            .get(&soroban_sdk::symbol_short!("next"))
+            .unwrap_or(0)
     }
 
     pub fn owner_of(e: &Env, token_id: u32) -> Address {
@@ -215,9 +234,9 @@ fn launch_rejects_treasury_other_than_wired() {
 }
 
 #[test]
-fn mint_and_list_before_launch_is_not_live() {
+fn create_primary_listing_before_launch_is_not_live() {
     let fixture = fixture_setup();
-    let r = fixture.marketplace.try_mint_and_list(&100, &2_000);
+    let r = fixture.marketplace.try_create_primary_listing(&100, &2_000);
     assert_eq!(
         r.err().unwrap().unwrap(),
         common::CommonError::NotLive.into()
@@ -280,16 +299,338 @@ fn setters_are_gated_by_launch_admin_then_treasury() {
 }
 
 #[test]
-fn primary_listing_can_be_purchased() {
+fn primary_listing_mints_lazily_to_buyer_and_pays_treasury() {
     let fixture = fixture();
-    let token_id = fixture.marketplace.mint_and_list(&100, &2_000);
+    let mp = &fixture.marketplace;
+    let id = mp.create_primary_listing(&100, &2_000);
+    assert_eq!(id, 0);
+    // Creating a listing mints nothing and escrows nothing.
+    assert_eq!(fixture.token.total_supply(), 0);
+    assert_eq!(mp.get_primary_listing(&id).unwrap().price, 100);
+
     fixture.payment.mint(&fixture.buyer, &100);
+    let token_id = mp.buy_primary(&id, &fixture.buyer);
 
-    fixture.marketplace.buy(&token_id, &fixture.buyer);
-
+    assert_eq!(fixture.token.total_supply(), 1);
     assert_eq!(fixture.token.owner_of(&token_id), fixture.buyer);
     assert_eq!(fixture.payment.balance(&fixture.treasury), 100);
-    assert!(fixture.marketplace.get_listing(&token_id).is_none());
+    assert_eq!(fixture.payment.balance(&fixture.buyer), 0);
+    assert!(mp.get_primary_listing(&id).is_none());
+    // Single use.
+    assert_eq!(
+        mp.try_buy_primary(&id, &fixture.buyer)
+            .err()
+            .unwrap()
+            .unwrap(),
+        MarketplaceError::ListingNotFound.into()
+    );
+}
+
+#[test]
+fn primary_listing_ids_are_unique_and_increasing() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    assert_eq!(mp.create_primary_listing(&100, &2_000), 0);
+    assert_eq!(mp.create_primary_listing(&100, &2_000), 1);
+    assert_eq!(mp.create_primary_listing(&200, &3_000), 2);
+    assert_eq!(mp.next_listing_id(), 3);
+    assert_eq!(fixture.token.total_supply(), 0);
+    // Cancelling does not recycle ids.
+    mp.cancel_primary(&1);
+    assert_eq!(mp.create_primary_listing(&100, &2_000), 3);
+}
+
+#[test]
+fn expired_primary_listing_cannot_be_bought_and_anyone_can_clear_it() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    let id = mp.create_primary_listing(&100, &2_000);
+    fixture.payment.mint(&fixture.buyer, &100);
+
+    assert_eq!(
+        mp.try_expire_primary(&id).err().unwrap().unwrap(),
+        MarketplaceError::ListingActive.into()
+    );
+    fixture.env.ledger().set_timestamp(2_000);
+    assert_eq!(
+        mp.try_buy_primary(&id, &fixture.buyer)
+            .err()
+            .unwrap()
+            .unwrap(),
+        MarketplaceError::ListingExpired.into()
+    );
+    // No treasury auth needed to clear an expired listing.
+    fixture.env.set_auths(&[]);
+    mp.expire_primary(&id);
+    assert!(mp.get_primary_listing(&id).is_none());
+    assert_eq!(fixture.token.total_supply(), 0);
+}
+
+#[test]
+fn cancelled_primary_listing_cannot_be_bought() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    let id = mp.create_primary_listing(&100, &2_000);
+    mp.cancel_primary(&id);
+    fixture.payment.mint(&fixture.buyer, &100);
+    assert_eq!(
+        mp.try_buy_primary(&id, &fixture.buyer)
+            .err()
+            .unwrap()
+            .unwrap(),
+        MarketplaceError::ListingNotFound.into()
+    );
+    assert_eq!(
+        mp.try_cancel_primary(&id).err().unwrap().unwrap(),
+        MarketplaceError::ListingNotFound.into()
+    );
+}
+
+#[test]
+fn primary_listing_requires_authorization() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    let id = mp.create_primary_listing(&100, &2_000);
+    fixture.payment.mint(&fixture.buyer, &100);
+    fixture.env.set_auths(&[]);
+
+    assert!(mp.try_create_primary_listing(&100, &2_000).is_err());
+    assert!(mp.try_cancel_primary(&id).is_err());
+    assert!(mp.try_buy_primary(&id, &fixture.buyer).is_err());
+    assert!(mp.get_primary_listing(&id).is_some());
+    assert_eq!(fixture.token.total_supply(), 0);
+    assert_eq!(fixture.payment.balance(&fixture.buyer), 100);
+}
+
+#[test]
+fn primary_listing_rejected_while_paused() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    let id = mp.create_primary_listing(&100, &2_000);
+    mp.pause();
+    fixture.payment.mint(&fixture.buyer, &100);
+    assert_eq!(
+        mp.try_create_primary_listing(&100, &2_000)
+            .err()
+            .unwrap()
+            .unwrap(),
+        MarketplaceError::Paused.into()
+    );
+    assert_eq!(
+        mp.try_buy_primary(&id, &fixture.buyer)
+            .err()
+            .unwrap()
+            .unwrap(),
+        MarketplaceError::Paused.into()
+    );
+    let token_id = fixture.token.mint(&fixture.seller, &fixture.seller);
+    assert_eq!(
+        mp.try_list(&token_id, &fixture.seller, &10, &2_000)
+            .err()
+            .unwrap()
+            .unwrap(),
+        MarketplaceError::Paused.into()
+    );
+}
+
+#[test]
+fn buy_is_rejected_while_paused_with_paused_error() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    let token_id = fixture.token.mint(&fixture.seller, &fixture.seller);
+    mp.list(&token_id, &fixture.seller, &100, &2_000);
+    mp.pause();
+    fixture.payment.mint(&fixture.buyer, &100);
+    assert_eq!(
+        mp.try_buy(&token_id, &fixture.buyer)
+            .err()
+            .unwrap()
+            .unwrap(),
+        MarketplaceError::Paused.into()
+    );
+}
+
+#[test]
+fn cancel_and_expire_work_while_paused() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    let p1 = mp.create_primary_listing(&100, &2_000);
+    let t1 = fixture.token.mint(&fixture.seller, &fixture.seller);
+    let t2 = fixture.token.mint(&fixture.seller, &fixture.seller);
+    mp.list(&t1, &fixture.seller, &100, &2_000);
+    mp.list(&t2, &fixture.seller, &100, &2_000);
+    mp.pause();
+
+    mp.cancel_primary(&p1);
+    assert!(mp.get_primary_listing(&p1).is_none());
+    mp.cancel(&t1, &fixture.seller);
+    assert_eq!(fixture.token.owner_of(&t1), fixture.seller);
+    fixture.env.ledger().set_timestamp(2_000);
+    mp.expire(&t2);
+    assert_eq!(fixture.token.owner_of(&t2), fixture.seller);
+}
+
+#[test]
+fn buy_primary_reverts_atomically_when_mint_fails() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    let id = mp.create_primary_listing(&100, &2_000);
+    fixture.payment.mint(&fixture.buyer, &100);
+    fixture.token.set_fail_mint(&true);
+
+    assert!(mp.try_buy_primary(&id, &fixture.buyer).is_err());
+    assert_eq!(fixture.payment.balance(&fixture.buyer), 100);
+    assert_eq!(fixture.payment.balance(&fixture.treasury), 0);
+    assert!(mp.get_primary_listing(&id).is_some());
+    assert_eq!(fixture.token.total_supply(), 0);
+
+    // Recoverable once minting works again.
+    fixture.token.set_fail_mint(&false);
+    mp.buy_primary(&id, &fixture.buyer);
+    assert_eq!(fixture.payment.balance(&fixture.treasury), 100);
+}
+
+#[test]
+fn secondary_expiry_boundary_is_exclusive_for_buy_inclusive_for_expire() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    let token_id = fixture.token.mint(&fixture.seller, &fixture.seller);
+    mp.list(&token_id, &fixture.seller, &100, &2_000);
+    fixture.payment.mint(&fixture.buyer, &100);
+
+    fixture.env.ledger().set_timestamp(1_999);
+    assert_eq!(
+        mp.try_expire(&token_id).err().unwrap().unwrap(),
+        MarketplaceError::ListingActive.into()
+    );
+    fixture.env.ledger().set_timestamp(2_000);
+    assert_eq!(
+        mp.try_buy(&token_id, &fixture.buyer)
+            .err()
+            .unwrap()
+            .unwrap(),
+        MarketplaceError::ListingExpired.into()
+    );
+    mp.expire(&token_id);
+    assert_eq!(fixture.token.owner_of(&token_id), fixture.seller);
+}
+
+#[test]
+fn primary_expiry_boundary_at_exact_timestamp() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    let id = mp.create_primary_listing(&100, &2_000);
+    fixture.env.ledger().set_timestamp(2_000);
+    fixture.payment.mint(&fixture.buyer, &100);
+    assert_eq!(
+        mp.try_buy_primary(&id, &fixture.buyer)
+            .err()
+            .unwrap()
+            .unwrap(),
+        MarketplaceError::ListingExpired.into()
+    );
+    mp.expire_primary(&id);
+}
+
+#[test]
+fn secondary_buy_uses_captured_asset_and_fee_after_config_changes() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    let token_id = fixture.token.mint(&fixture.seller, &fixture.seller);
+    mp.list(&token_id, &fixture.seller, &1_000, &2_000); // fee 250 bps captured
+    let other = fixture.env.register(MockPayment, ());
+
+    mp.set_payment_asset(&other);
+    mp.set_secondary_fee_bps(&1_000);
+
+    fixture.payment.mint(&fixture.buyer, &1_000);
+    mp.buy(&token_id, &fixture.buyer);
+    assert_eq!(fixture.payment.balance(&fixture.treasury), 25);
+    assert_eq!(fixture.payment.balance(&fixture.seller), 975);
+    assert_eq!(
+        MockPaymentClient::new(&fixture.env, &other).balance(&fixture.treasury),
+        0
+    );
+}
+
+#[test]
+fn wrong_address_auth_is_rejected_for_create_cancel_and_buy() {
+    let fixture = fixture();
+    let env = &fixture.env;
+    let mp = &fixture.marketplace;
+    let id = mp.create_primary_listing(&100, &2_000);
+    fixture.payment.mint(&fixture.buyer, &100);
+    let stranger = Address::generate(env);
+
+    env.mock_auths(&[MockAuth {
+        address: &stranger,
+        invoke: &MockAuthInvoke {
+            contract: &mp.address,
+            fn_name: "create_primary_listing",
+            args: (100i128, 2_000u64).into_val(env),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(mp.try_create_primary_listing(&100, &2_000).is_err());
+
+    env.mock_auths(&[MockAuth {
+        address: &stranger,
+        invoke: &MockAuthInvoke {
+            contract: &mp.address,
+            fn_name: "cancel_primary",
+            args: (id,).into_val(env),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(mp.try_cancel_primary(&id).is_err());
+
+    // Valid auth from someone other than the buyer.
+    env.mock_auths(&[MockAuth {
+        address: &stranger,
+        invoke: &MockAuthInvoke {
+            contract: &mp.address,
+            fn_name: "buy_primary",
+            args: (id, &fixture.buyer).into_val(env),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(mp.try_buy_primary(&id, &fixture.buyer).is_err());
+
+    assert!(mp.get_primary_listing(&id).is_some());
+    assert_eq!(fixture.token.total_supply(), 0);
+    assert_eq!(fixture.payment.balance(&fixture.buyer), 100);
+}
+
+#[test]
+fn listing_keeps_payment_asset_captured_at_list_time() {
+    let fixture = fixture();
+    let mp = &fixture.marketplace;
+    let new_asset_id = fixture.env.register(MockPayment, ());
+    let new_asset = MockPaymentClient::new(&fixture.env, &new_asset_id);
+
+    let token_id = fixture.token.mint(&fixture.seller, &fixture.seller);
+    mp.list(&token_id, &fixture.seller, &1_000, &2_000);
+    let primary = mp.create_primary_listing(&100, &2_000);
+    assert_eq!(
+        mp.get_listing(&token_id).unwrap().payment_asset,
+        fixture.payment.address
+    );
+
+    mp.set_payment_asset(&new_asset_id);
+
+    // Buyer holds only the OLD asset; both listings still settle in it.
+    fixture.payment.mint(&fixture.buyer, &1_100);
+    mp.buy(&token_id, &fixture.buyer);
+    mp.buy_primary(&primary, &fixture.buyer);
+    assert_eq!(fixture.payment.balance(&fixture.buyer), 0);
+    assert_eq!(fixture.payment.balance(&fixture.treasury), 125);
+    assert_eq!(fixture.payment.balance(&fixture.seller), 975);
+    assert_eq!(new_asset.balance(&fixture.treasury), 0);
+
+    // New listings use the new asset.
+    let token2 = fixture.token.mint(&fixture.seller, &fixture.seller);
+    mp.list(&token2, &fixture.seller, &10, &2_000);
+    assert_eq!(mp.get_listing(&token2).unwrap().payment_asset, new_asset_id);
 }
 
 #[test]

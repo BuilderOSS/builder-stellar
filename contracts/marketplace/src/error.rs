@@ -19,4 +19,6 @@ pub enum MarketplaceError {
     TreasuryMismatch = 1312,
     /// `launch` expected payment asset differs from the configured one
     PaymentAssetMismatch = 1313,
+    /// The marketplace is paused (new listings and purchases are rejected).
+    Paused = 1314,
 }

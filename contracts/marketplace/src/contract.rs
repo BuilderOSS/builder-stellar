@@ -92,30 +92,100 @@ impl MarketplaceContract {
         emit_launched(e, &treasury, open);
     }
 
-    pub fn mint_and_list(e: &Env, price: i128, expires_at: u64) -> u32 {
+    pub fn get_primary_listing(e: &Env, listing_id: u64) -> Option<PrimaryListing> {
+        storage::get_primary_listing(e, listing_id)
+    }
+
+    /// Id the next primary listing will receive.
+    pub fn next_listing_id(e: &Env) -> u64 {
+        storage::peek_next_listing_id(e)
+    }
+
+    /// Create a primary sale listing (treasury-gated, Live, not paused).
+    ///
+    /// Nothing is minted or escrowed: the token is minted straight to the
+    /// buyer inside `buy_primary`. Returns the new listing id.
+    pub fn create_primary_listing(e: &Env, price: i128, expires_at: u64) -> u64 {
         // Nothing holds mint authority before launch.
         common::lifecycle::require_live(e);
         let config = Self::require_admin(e);
         Self::check_open_listing(e, price, expires_at);
 
+        let listing = PrimaryListing {
+            price,
+            expires_at,
+            payment_asset: config.payment_asset,
+        };
+        let listing_id = storage::take_next_listing_id(e);
+        storage::set_primary_listing(e, listing_id, &listing);
+        PrimaryListingCreated {
+            listing_id,
+            price,
+            expires_at,
+            payment_asset: listing.payment_asset,
+        }
+        .publish(e);
+        listing_id
+    }
+
+    /// Buy a primary listing: pays the treasury, mints one token to `buyer`.
+    pub fn buy_primary(e: &Env, listing_id: u64, buyer: Address) -> u32 {
+        let config = Self::get_config(e);
+        if config.paused {
+            panic_with_error!(e, MarketplaceError::Paused);
+        }
+        buyer.require_auth();
+        let listing = Self::load_primary(e, listing_id);
+        if e.ledger().timestamp() >= listing.expires_at {
+            panic_with_error!(e, MarketplaceError::ListingExpired);
+        }
+        // Remove before any external call (single-use listing, no reentrancy window).
+        storage::remove_primary_listing(e, listing_id);
+
+        Self::payment_transfer(
+            e,
+            &listing.payment_asset,
+            &buyer,
+            &config.treasury,
+            listing.price,
+        );
+
         let mint_args = vec![
             e,
             e.current_contract_address().into_val(e),
-            e.current_contract_address().into_val(e),
+            buyer.clone().into_val(e),
         ];
         Self::authorize(e, &config.token, "mint", mint_args.clone(), Vec::new(e));
         let token_id: u32 = e.invoke_contract(&config.token, &Symbol::new(e, "mint"), mint_args);
 
-        let listing = Listing {
-            seller: config.treasury.clone(),
-            price,
-            expires_at,
-            fee_bps: 0,
-            kind: ListingKind::Primary,
-        };
-        storage::set_listing(e, token_id, &listing);
-        events::emit_created(e, token_id, &listing);
+        PrimaryListingPurchased {
+            listing_id,
+            buyer,
+            token_id,
+            price: listing.price,
+            payment_asset: listing.payment_asset,
+        }
+        .publish(e);
         token_id
+    }
+
+    /// Treasury cancels an unsold primary listing (nothing is escrowed).
+    pub fn cancel_primary(e: &Env, listing_id: u64) {
+        common::lifecycle::require_live(e);
+        Self::require_admin(e);
+        Self::load_primary(e, listing_id);
+        storage::remove_primary_listing(e, listing_id);
+        PrimaryListingCancelled { listing_id }.publish(e);
+    }
+
+    /// Anyone may clear an expired primary listing.
+    pub fn expire_primary(e: &Env, listing_id: u64) {
+        let listing = Self::load_primary(e, listing_id);
+        if e.ledger().timestamp() < listing.expires_at {
+            panic_with_error!(e, MarketplaceError::ListingActive);
+        }
+        storage::remove_primary_listing(e, listing_id);
+        PrimaryListingExpired { listing_id }.publish(e);
     }
 
     pub fn list(e: &Env, token_id: u32, seller: Address, price: i128, expires_at: u64) {
@@ -160,16 +230,16 @@ impl MarketplaceContract {
             price,
             expires_at,
             fee_bps: config.default_secondary_fee_bps,
-            kind: ListingKind::Secondary,
+            payment_asset: config.payment_asset.clone(),
         };
         storage::set_listing(e, token_id, &listing);
-        events::emit_created(e, token_id, &listing);
+        events::emit_secondary_created(e, token_id, &listing);
     }
 
     pub fn buy(e: &Env, token_id: u32, buyer: Address) {
         let config = Self::get_config(e);
         if config.paused {
-            panic_with_error!(e, MarketplaceError::Unauthorized);
+            panic_with_error!(e, MarketplaceError::Paused);
         }
         buyer.require_auth();
         let listing = storage::get_listing(e, token_id)
@@ -177,41 +247,26 @@ impl MarketplaceContract {
         if e.ledger().timestamp() >= listing.expires_at {
             panic_with_error!(e, MarketplaceError::ListingExpired);
         }
-        let fee = match &listing.kind {
-            ListingKind::Primary => 0,
-            ListingKind::Secondary => listing
-                .price
-                .checked_mul(listing.fee_bps as i128)
-                .and_then(|value| value.checked_div(10_000))
-                .unwrap_or_else(|| panic_with_error!(e, MarketplaceError::ArithmeticOverflow)),
-        };
+        let fee = listing
+            .price
+            .checked_mul(listing.fee_bps as i128)
+            .and_then(|value| value.checked_div(10_000))
+            .unwrap_or_else(|| panic_with_error!(e, MarketplaceError::ArithmeticOverflow));
         let seller_amount = listing
             .price
             .checked_sub(fee)
             .unwrap_or_else(|| panic_with_error!(e, MarketplaceError::ArithmeticOverflow));
         storage::remove_listing(e, token_id);
 
-        let treasury_amount = if listing.kind == ListingKind::Primary {
-            listing.price
-        } else {
-            fee
-        };
+        // Charged in the asset captured at list time, not the current config asset.
+        Self::payment_transfer(e, &listing.payment_asset, &buyer, &config.treasury, fee);
         Self::payment_transfer(
             e,
-            &config.payment_asset,
+            &listing.payment_asset,
             &buyer,
-            &config.treasury,
-            treasury_amount,
+            &listing.seller,
+            seller_amount,
         );
-        if listing.kind == ListingKind::Secondary {
-            Self::payment_transfer(
-                e,
-                &config.payment_asset,
-                &buyer,
-                &listing.seller,
-                seller_amount,
-            );
-        }
         Self::token_transfer(
             e,
             &config.token,
@@ -225,7 +280,7 @@ impl MarketplaceContract {
             seller: listing.seller,
             price: listing.price,
             fee,
-            payment_asset: config.payment_asset,
+            payment_asset: listing.payment_asset,
         }
         .publish(e);
     }
@@ -255,16 +310,11 @@ impl MarketplaceContract {
         }
         storage::remove_listing(e, token_id);
         let config = Self::get_config(e);
-        let recipient = if listing.kind == ListingKind::Primary {
-            config.treasury
-        } else {
-            listing.seller.clone()
-        };
         Self::token_transfer(
             e,
             &config.token,
             &e.current_contract_address(),
-            &recipient,
+            &listing.seller,
             token_id,
         );
         ListingExpired {
@@ -341,7 +391,7 @@ impl MarketplaceContract {
 
     fn check_open_listing(e: &Env, price: i128, expires_at: u64) {
         if Self::get_config(e).paused {
-            panic_with_error!(e, MarketplaceError::Unauthorized);
+            panic_with_error!(e, MarketplaceError::Paused);
         }
         if price <= 0 {
             panic_with_error!(e, MarketplaceError::InvalidPrice);
@@ -353,6 +403,11 @@ impl MarketplaceContract {
 
     fn load_listing(e: &Env, token_id: u32) -> Listing {
         storage::get_listing(e, token_id)
+            .unwrap_or_else(|| panic_with_error!(e, MarketplaceError::ListingNotFound))
+    }
+
+    fn load_primary(e: &Env, listing_id: u64) -> PrimaryListing {
+        storage::get_primary_listing(e, listing_id)
             .unwrap_or_else(|| panic_with_error!(e, MarketplaceError::ListingNotFound))
     }
 
