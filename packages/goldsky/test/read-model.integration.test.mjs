@@ -85,7 +85,8 @@ function emit(role, contract, name, { topics = [], data = {}, ledger, tx = 0, ev
     operation_type: 'invoke_host_function',
     ledger_sequence: ledger,
     ledger_hash: `lh${ledger}`,
-    ledger_closed_at: `2026-10-01 00:${String(Math.floor(ledger / 60) % 60).padStart(2, '0')}:${String(ledger % 60).padStart(2, '0')}`,
+    // The pipeline writes ledger_closed_at as epoch milliseconds (e.g. "1791475282000"), not ISO text.
+    ledger_closed_at: String(Date.UTC(2026, 9, 1) + ledger * 5000),
     _gs_op: 'i'
   });
 }

@@ -55,6 +55,7 @@ transaction together with its row in `public.schema_migrations` (name + SHA-256)
 | `0008_marketplace_views` | primary listings (by `listing_id`), secondary listings (by `token_id`), purchases, sales |
 | `0009_minter_views` | merkle/allowlist claims, batch mints, allocation updates |
 | `0010_app_views` | activity feed, proposal list/detail, indexer status |
+| `0011_ledger_closed_at_epoch` | reads `ledger_closed_at` as epoch milliseconds via `chain.ledger_closed_at_ts`; recreates the 33 views that cast it (the pipeline writes milliseconds, which broke `manager.daos`) |
 
 Launch model: every module emits its own `launched` event (six different
 structs share the name), so launch state is keyed by the emitting contract
