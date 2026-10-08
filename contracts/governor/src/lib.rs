@@ -41,6 +41,7 @@ mod events;
 mod storage;
 
 pub use contract::*;
+pub use error::CustomGovernorError;
 
 #[cfg(test)]
 mod test;

@@ -22,4 +22,8 @@ pub enum CustomGovernorError {
     InvalidVotingPeriod = 1506,
     /// `launch` treasury differs from the treasury wired at construction
     TreasuryMismatch = 1507,
+    /// `execute` is disabled; call `treasury.execute` instead
+    UseTreasuryExecute = 1508,
+    /// Proposal has more than `MAX_PROPOSAL_ACTIONS` actions
+    TooManyActions = 1509,
 }

@@ -70,6 +70,10 @@ pub const PROPOSAL_EXPIRATION_PERIOD: u64 = 1_209_600; // 14 days in seconds (14
 /// Enforces a minimum delay between proposal creation and vote start.
 /// Allows time for delegation changes before snapshot. The default minimum is
 /// five minutes.
+/// Maximum actions per proposal, so a passed proposal always fits the
+/// execution budget of `treasury.execute`.
+pub const MAX_PROPOSAL_ACTIONS: u32 = 20;
+
 pub const MIN_VOTING_DELAY: u32 = 300;
 
 /// Minimum voting period (5 minutes in seconds).

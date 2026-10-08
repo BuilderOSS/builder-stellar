@@ -1,9 +1,8 @@
 extern crate std;
 
-use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
 use soroban_sdk::{
-    contract, contractimpl, symbol_short, testutils::Address as _, vec, Address, Env, IntoVal,
-    String, Val, Vec,
+    contract, contractimpl, symbol_short, testutils::Address as _, vec, Address, BytesN, Env,
+    IntoVal, String, Symbol, Val, Vec,
 };
 
 use crate::{DaoTreasuryContract, DaoTreasuryContractClient};
@@ -26,77 +25,178 @@ impl TargetContract {
     }
 }
 
-#[test]
-fn treasury_executes_arbitrary_call_for_governor() {
-    let e = Env::default();
-    e.mock_all_auths();
+/// Stand-in for the Governor: `consume` returns a fixed id, or panics when the
+/// `fail` flag is set (models "proposal not queued / already executed").
+#[contract]
+pub struct MockGovernor;
 
-    let owner = Address::generate(&e);
-    let governor = Address::generate(&e);
+#[contractimpl]
+impl MockGovernor {
+    pub fn set_fail(e: &Env, fail: bool) {
+        e.storage().instance().set(&symbol_short!("fail"), &fail);
+    }
+
+    pub fn consume(
+        e: &Env,
+        _targets: Vec<Address>,
+        _functions: Vec<Symbol>,
+        _args: Vec<Vec<Val>>,
+        _description_hash: BytesN<32>,
+    ) -> BytesN<32> {
+        if e.storage()
+            .instance()
+            .get(&symbol_short!("fail"))
+            .unwrap_or(false)
+        {
+            panic!("not queued");
+        }
+        BytesN::from_array(e, &[9u8; 32])
+    }
+}
+
+fn setup_live(
+    e: &Env,
+    manager: Address,
+) -> (
+    DaoTreasuryContractClient<'static>,
+    MockGovernorClient<'static>,
+) {
+    e.mock_all_auths();
+    let governor = MockGovernorClient::new(e, &e.register(MockGovernor, ()));
     let treasury_id = e.register(
         DaoTreasuryContract,
         (
-            owner.clone(),
-            governor.clone(),
-            Address::generate(&e),
-            soroban_sdk::BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
+            Address::generate(e),
+            governor.address.clone(),
+            manager,
+            BytesN::from_array(e, &[1u8; 32]),
+            String::from_str(e, "0.1.0"),
         ),
     );
-    let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
-    // Treasury only executes once launched.
-    e.mock_all_auths();
+    let treasury = DaoTreasuryContractClient::new(e, &treasury_id);
     treasury.launch(&treasury_id);
-    let target_id = e.register(TargetContract, ());
-    let target = TargetContractClient::new(&e, &target_id);
+    (treasury, governor)
+}
 
-    let args: Vec<Val> = vec![&e, 7_u32.into_val(&e)];
+fn desc(e: &Env) -> BytesN<32> {
+    BytesN::from_array(e, &[3u8; 32])
+}
+
+#[test]
+fn treasury_executes_arbitrary_call_after_consume() {
+    let e = Env::default();
+    let (treasury, _gov) = setup_live(&e, Address::generate(&e));
+    let target = TargetContractClient::new(&e, &e.register(TargetContract, ()));
+
     assert_eq!(treasury.version(), String::from_str(&e, "0.1.0"));
-    assert_eq!(
-        treasury.wasm_hash(),
-        soroban_sdk::BytesN::from_array(&e, &[0u8; 32])
+    let id = treasury.execute(
+        &vec![&e, target.address.clone()],
+        &vec![&e, symbol_short!("set_value")],
+        &vec![&e, vec![&e, 7_u32.into_val(&e)]],
+        &desc(&e),
     );
-    treasury.execute(&target.address, &symbol_short!("set_value"), &args);
-
+    assert_eq!(id, BytesN::from_array(&e, &[9u8; 32]));
     assert_eq!(target.get_value(), 7);
 }
 
 #[test]
-#[should_panic(expected = "HostError: Error(Auth, InvalidAction)")]
-fn treasury_rejects_non_governor() {
+fn governor_rejection_reverts_everything() {
     let e = Env::default();
-    let owner = Address::generate(&e);
-    let governor = Address::generate(&e);
-    let attacker = Address::generate(&e);
-    let treasury_id = e.register(
-        DaoTreasuryContract,
-        (
-            owner.clone(),
-            governor.clone(),
-            Address::generate(&e),
-            soroban_sdk::BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
-        ),
+    let (treasury, gov) = setup_live(&e, Address::generate(&e));
+    let target = TargetContractClient::new(&e, &e.register(TargetContract, ()));
+    gov.set_fail(&true);
+    let r = treasury.try_execute(
+        &vec![&e, target.address.clone()],
+        &vec![&e, symbol_short!("set_value")],
+        &vec![&e, vec![&e, 7_u32.into_val(&e)]],
+        &desc(&e),
     );
-    let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
-    // Treasury only executes once launched.
+    assert!(r.is_err());
+    assert_eq!(target.get_value(), 0);
+}
+
+#[test]
+fn self_call_outside_allowlist_is_rejected() {
+    let e = Env::default();
+    let (treasury, _gov) = setup_live(&e, Address::generate(&e));
+    for name in ["transfer_ownership", "execute", "launch", "nope"] {
+        let r = treasury.try_execute(
+            &vec![&e, treasury.address.clone()],
+            &vec![&e, Symbol::new(&e, name)],
+            &vec![&e, Vec::<Val>::new(&e)],
+            &desc(&e),
+        );
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            crate::error::TreasuryError::UnknownSelfCall.into()
+        );
+    }
+}
+
+#[test]
+fn self_call_with_bad_args_is_rejected() {
+    let e = Env::default();
+    let (treasury, _gov) = setup_live(&e, Address::generate(&e));
+    let r = treasury.try_execute(
+        &vec![&e, treasury.address.clone()],
+        &vec![&e, Symbol::new(&e, "upgrade")],
+        &vec![&e, vec![&e, 1_u32.into_val(&e)]],
+        &desc(&e),
+    );
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        crate::error::TreasuryError::InvalidSelfCallArgs.into()
+    );
+}
+
+#[test]
+fn self_dispatch_upgrade_and_sync_version() {
+    use common::testutils::{empty_wasm, MockManager, MockManagerClient};
+    let e = Env::default();
     e.mock_all_auths();
-    treasury.launch(&treasury_id);
-    let target_id = e.register(TargetContract, ());
-    let target = TargetContractClient::new(&e, &target_id);
+    let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+    let (treasury, _gov) = setup_live(&e, mgr.address.clone());
+    let from = BytesN::from_array(&e, &[1u8; 32]);
+    let to = empty_wasm(&e);
+    mgr.approve(&from, &to);
+    mgr.register(&from, &String::from_str(&e, "0.1.5"));
+    mgr.register(&to, &String::from_str(&e, "0.2.0"));
 
-    let args: Vec<Val> = vec![&e, 7_u32.into_val(&e)];
-    e.mock_auths(&[MockAuth {
-        address: &attacker,
-        invoke: &MockAuthInvoke {
-            contract: &treasury.address,
-            fn_name: "execute",
-            args: (&target.address, symbol_short!("set_value"), &args).into_val(&e),
-            sub_invokes: &[],
-        },
-    }]);
+    // sync_version first (uses the registry entry of the current hash).
+    treasury.execute(
+        &vec![&e, treasury.address.clone()],
+        &vec![&e, Symbol::new(&e, "sync_version")],
+        &vec![&e, Vec::<Val>::new(&e)],
+        &desc(&e),
+    );
+    assert_eq!(treasury.version(), String::from_str(&e, "0.1.5"));
 
-    treasury.execute(&target.address, &symbol_short!("set_value"), &args);
+    treasury.execute(
+        &vec![&e, treasury.address.clone()],
+        &vec![&e, Symbol::new(&e, "upgrade")],
+        &vec![&e, vec![&e, from.into_val(&e), to.clone().into_val(&e)]],
+        &desc(&e),
+    );
+    e.as_contract(&treasury.address, || {
+        assert_eq!(common::upgrade::current_hash(&e), to);
+        assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.2.0"));
+    });
+}
+
+#[test]
+fn owner_is_treasury_after_launch_so_owner_fns_need_self_auth() {
+    // Real auth (no mock): the launch admin / strangers cannot administer the
+    // Treasury after launch because owner == the Treasury itself.
+    let e = Env::default();
+    let (treasury, _gov) = setup_live(&e, Address::generate(&e));
+    assert_eq!(treasury.get_owner(), Some(treasury.address.clone()));
+    e.set_auths(&[]);
+    let from = BytesN::from_array(&e, &[1u8; 32]);
+    assert!(treasury.try_upgrade(&from, &from).is_err());
+    assert!(treasury.try_sync_version().is_err());
+    assert!(treasury
+        .try_transfer_ownership(&Address::generate(&e), &1_000)
+        .is_err());
 }
 
 #[test]
@@ -171,9 +271,10 @@ fn execute_before_launch_is_not_live() {
     let treasury = DaoTreasuryContractClient::new(&e, &id);
     let target = e.register(TargetContract, ());
     let r = treasury.try_execute(
-        &target,
-        &symbol_short!("set_value"),
-        &vec![&e, 1_u32.into_val(&e)],
+        &vec![&e, target],
+        &vec![&e, symbol_short!("set_value")],
+        &vec![&e, vec![&e, 1_u32.into_val(&e)]],
+        &BytesN::from_array(&e, &[3u8; 32]),
     );
     assert_eq!(
         r.err().unwrap().unwrap(),

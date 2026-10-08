@@ -3,9 +3,7 @@
 use core::convert::TryInto;
 
 use soroban_sdk::{
-    auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation},
-    contract, contractimpl, panic_with_error, vec, Address, BytesN, Env, IntoVal, String, Symbol,
-    Val, Vec,
+    contract, contractimpl, panic_with_error, Address, BytesN, Env, String, Symbol, Val, Vec,
 };
 use stellar_access::ownable::{set_owner, Ownable};
 use stellar_governance::{
@@ -232,6 +230,49 @@ impl DaoGovernorContract {
         emit_quorum_bps_changed(e, &Self::owner_addr(e), old_value, quorum_bps);
     }
 
+    /// Marks a Queued proposal Executed and returns its id. Only callable by
+    /// the stored Treasury (`treasury.require_auth()`, satisfied when the
+    /// Treasury calls via `authorize_as_current_contract`). Called from
+    /// `treasury.execute`, which then dispatches the actions; if any of them
+    /// fails the whole tx, including this state change, reverts.
+    ///
+    /// Storage: one persistent proposal write (TTL re-extended). Emits the
+    /// existing `ProposalExecuted` event.
+    pub fn consume(
+        e: &Env,
+        targets: Vec<Address>,
+        functions: Vec<Symbol>,
+        args: Vec<Vec<Val>>,
+        description_hash: BytesN<32>,
+    ) -> BytesN<32> {
+        common::lifecycle::require_live(e);
+        Self::treasury(e).require_auth();
+
+        if targets.len() != functions.len() || targets.len() != args.len() {
+            panic_with_error!(e, GovernorError::InvalidProposalLength);
+        }
+
+        let proposal_id =
+            governor::hash_proposal(e, &targets, &functions, &args, &description_hash);
+        let mut proposal = Self::get_proposal(e, &proposal_id);
+
+        match Self::proposal_state_internal(e, &proposal_id, &proposal) {
+            ProposalState::Queued => {}
+            ProposalState::Executed => panic_with_error!(e, GovernorError::ProposalAlreadyExecuted),
+            _ => panic_with_error!(e, GovernorError::ProposalNotQueued),
+        }
+
+        if e.ledger().timestamp() < proposal.eta {
+            panic_with_error!(e, GovernorError::ProposalNotQueued);
+        }
+
+        proposal.state = ProposalState::Executed;
+        Self::set_proposal(e, &proposal_id, &proposal);
+        emit_proposal_executed(e, &proposal_id);
+
+        proposal_id
+    }
+
     pub fn treasury(e: &Env) -> Address {
         e.storage()
             .instance()
@@ -387,6 +428,14 @@ impl DaoGovernorContract {
         };
 
         if participation >= quorum && counts.for_votes > counts.against_votes {
+            // A Succeeded proposal that is never queued expires 14 days after
+            // the vote ends (boundary: `now >= vote_end + period` is Expired).
+            let Some(expiration_time) = end.checked_add(PROPOSAL_EXPIRATION_PERIOD) else {
+                panic_with_error!(e, GovernorError::MathOverflow);
+            };
+            if now >= expiration_time {
+                return ProposalState::Expired;
+            }
             ProposalState::Succeeded
         } else {
             ProposalState::Defeated
@@ -510,6 +559,9 @@ impl Governor for DaoGovernorContract {
         if targets.is_empty() {
             panic_with_error!(e, GovernorError::EmptyProposal);
         }
+        if targets.len() > MAX_PROPOSAL_ACTIONS {
+            panic_with_error!(e, CustomGovernorError::TooManyActions);
+        }
         if targets.len() != functions.len() || targets.len() != args.len() {
             panic_with_error!(e, GovernorError::InvalidProposalLength);
         }
@@ -597,82 +649,18 @@ impl Governor for DaoGovernorContract {
         voter_weight
     }
 
+    /// Always fails. Execution is driven by `treasury.execute`, which calls
+    /// `consume` and then dispatches the actions with the Governor off the call
+    /// stack (Soroban forbids re-entry). Kept only to satisfy the OZ trait.
     fn execute(
         e: &Env,
-        targets: Vec<Address>,
-        functions: Vec<Symbol>,
-        args: Vec<Vec<Val>>,
-        description_hash: BytesN<32>,
-        executor: Address,
+        _targets: Vec<Address>,
+        _functions: Vec<Symbol>,
+        _args: Vec<Vec<Val>>,
+        _description_hash: BytesN<32>,
+        _executor: Address,
     ) -> BytesN<32> {
-        common::lifecycle::require_live(e);
-        executor.require_auth();
-
-        // CHECKS: Validate proposal parameters are consistent
-        if targets.len() != functions.len() || targets.len() != args.len() {
-            panic_with_error!(e, GovernorError::InvalidProposalLength);
-        }
-
-        let proposal_id =
-            governor::hash_proposal(e, &targets, &functions, &args, &description_hash);
-        let mut proposal = Self::get_proposal(e, &proposal_id);
-
-        // CHECKS: Validate proposal state
-        match Self::proposal_state_internal(e, &proposal_id, &proposal) {
-            ProposalState::Queued => {}
-            ProposalState::Executed => panic_with_error!(e, GovernorError::ProposalAlreadyExecuted),
-            _ => panic_with_error!(e, GovernorError::ProposalNotQueued),
-        }
-
-        let now = e.ledger().timestamp();
-        if now < proposal.eta {
-            panic_with_error!(e, GovernorError::ProposalNotQueued);
-        }
-
-        // EFFECTS: Update state BEFORE external calls to prevent reentrancy
-        // This ensures that if any external call attempts to re-enter execute(),
-        // the proposal will already be marked as Executed and the call will fail
-        proposal.state = ProposalState::Executed;
-        Self::set_proposal(e, &proposal_id, &proposal);
-        emit_proposal_executed(e, &proposal_id);
-
-        // INTERACTIONS: Now safe to make external calls
-        // Execute all actions through treasury
-        // Targets and functions are now the actual contracts/functions to call
-        // We wrap them to call treasury.execute(target, function, args)
-        let treasury = Self::treasury(e);
-        let execute_symbol = Symbol::new(e, "execute");
-
-        for i in 0..targets.len() {
-            let target = targets.get(i).unwrap();
-            let function = functions.get(i).unwrap();
-            let call_args = args.get(i).unwrap();
-            let treasury_args = vec![
-                e,
-                target.clone().into_val(e),
-                function.clone().into_val(e),
-                call_args.clone().into_val(e),
-            ];
-
-            // Authorize this contract to call treasury.execute for the approved action.
-            // The treasury contract handles authorizing the final downstream call itself.
-            e.authorize_as_current_contract(vec![
-                e,
-                InvokerContractAuthEntry::Contract(SubContractInvocation {
-                    context: ContractContext {
-                        contract: treasury.clone(),
-                        fn_name: execute_symbol.clone(),
-                        args: treasury_args.clone(),
-                    },
-                    sub_invocations: vec![e],
-                }),
-            ]);
-
-            // Build args for treasury.execute(target, function, args)
-            e.invoke_contract::<Val>(&treasury, &execute_symbol, treasury_args);
-        }
-
-        proposal_id
+        panic_with_error!(e, CustomGovernorError::UseTreasuryExecute)
     }
 
     fn cancel(

@@ -35,25 +35,24 @@ pub struct MaliciousReentrantContract;
 
 #[contractimpl]
 impl MaliciousReentrantContract {
-    /// This function attempts to re-enter the governor's execute() function
+    /// This function attempts to re-enter treasury.execute()
     /// when called during proposal execution
     pub fn attack(
         e: &Env,
-        governor: Address,
+        treasury: Address,
         targets: Vec<Address>,
         functions: Vec<soroban_sdk::Symbol>,
         args: Vec<Vec<Val>>,
         desc_hash: BytesN<32>,
-        executor: Address,
     ) {
         // Store attack parameters
         e.storage()
             .instance()
             .set(&symbol_short!("attacked"), &true);
 
-        // Attempt to re-enter execute() - this should fail because proposal is already marked Executed
-        let governor_client = DaoGovernorContractClient::new(e, &governor);
-        governor_client.execute(&targets, &functions, &args, &desc_hash, &executor);
+        // Attempt to re-enter treasury.execute() - blocked by the host (Treasury is on the stack)
+        let treasury_client = DaoTreasuryContractClient::new(e, &treasury);
+        treasury_client.execute(&targets, &functions, &args, &desc_hash);
     }
 
     pub fn was_attacked(e: &Env) -> bool {
@@ -149,7 +148,7 @@ fn description_hash(e: &Env, description: &String) -> BytesN<32> {
 
 #[test]
 fn full_governance_flow_executes_treasury_call() {
-    let (e, token, _treasury, governor, target, owner) = setup();
+    let (e, token, treasury, governor, target, owner) = setup();
     let proposer = Address::generate(&e);
 
     assert_eq!(governor.version(), String::from_str(&e, "0.1.0"));
@@ -188,7 +187,7 @@ fn full_governance_flow_executes_treasury_call() {
     assert_eq!(governor.proposal_state(&proposal_id), ProposalState::Queued);
 
     e.ledger().set_timestamp(2_901);
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
 
     assert_eq!(target.get_value(), 42);
     assert_eq!(
@@ -216,7 +215,7 @@ fn propose_fails_below_threshold() {
 
 #[test]
 fn execute_accepts_direct_target_calls() {
-    let (e, token, _treasury, governor, target, owner) = setup();
+    let (e, token, treasury, governor, target, owner) = setup();
     let proposer = Address::generate(&e);
 
     let token_id = token.mint(&owner, &proposer);
@@ -239,7 +238,7 @@ fn execute_accepts_direct_target_calls() {
         &targets, &functions, &args, &desc_hash, &2_901_u32, &proposer,
     );
     e.ledger().set_timestamp(2_901);
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
 
     assert_eq!(target.get_value(), 42);
 }
@@ -247,7 +246,7 @@ fn execute_accepts_direct_target_calls() {
 #[test]
 #[should_panic(expected = "#5007")]
 fn execute_fails_before_queue_delay_elapses() {
-    let (e, token, _treasury, governor, target, owner) = setup();
+    let (e, token, treasury, governor, target, owner) = setup();
     let proposer = Address::generate(&e);
 
     let token_id = token.mint(&owner, &proposer);
@@ -270,13 +269,13 @@ fn execute_fails_before_queue_delay_elapses() {
     );
 
     e.ledger().set_timestamp(2_410);
-    let _ = governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
+    let _ = treasury.execute(&targets, &functions, &args, &desc_hash);
 }
 
 #[test]
 #[should_panic(expected = "#5008")]
 fn execute_cannot_run_twice() {
-    let (e, token, _treasury, governor, target, owner) = setup();
+    let (e, token, treasury, governor, target, owner) = setup();
     let proposer = Address::generate(&e);
 
     let token_id = token.mint(&owner, &proposer);
@@ -299,8 +298,8 @@ fn execute_cannot_run_twice() {
         &targets, &functions, &args, &desc_hash, &2_901_u32, &proposer,
     );
     e.ledger().set_timestamp(2_901);
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
 }
 
 #[test]
@@ -739,7 +738,7 @@ fn queued_proposal_expires_after_14_days() {
 
 #[test]
 fn queued_proposal_can_execute_before_expiration() {
-    let (e, token, _treasury, governor, target, owner) = setup();
+    let (e, token, treasury, governor, target, owner) = setup();
     let proposer = Address::generate(&e);
 
     // Mint token to proposer
@@ -778,7 +777,7 @@ fn queued_proposal_can_execute_before_expiration() {
     assert_eq!(governor.proposal_state(&proposal_id), ProposalState::Queued);
 
     // Execute before expiration
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
     assert_eq!(
         governor.proposal_state(&proposal_id),
         ProposalState::Executed
@@ -789,7 +788,7 @@ fn queued_proposal_can_execute_before_expiration() {
 #[test]
 #[should_panic(expected = "HostError: Error(Contract, #5007)")]
 fn expired_proposal_cannot_be_executed() {
-    let (e, token, _treasury, governor, target, owner) = setup();
+    let (e, token, treasury, governor, target, owner) = setup();
     let proposer = Address::generate(&e);
 
     // Mint token to proposer
@@ -830,7 +829,7 @@ fn expired_proposal_cannot_be_executed() {
     );
 
     // Try to execute expired proposal (should fail with ProposalNotQueued error #5007)
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
 }
 
 #[test]
@@ -843,7 +842,7 @@ fn execute_prevents_reentrancy_attack() {
     // Additionally, our CEI pattern (Checks-Effects-Interactions) provides defense-in-depth
     // by updating the proposal state to Executed BEFORE making external calls.
     // If platform protection is bypassed, our state check would catch it.
-    let (e, token, _treasury, governor, _target, owner) = setup();
+    let (e, token, treasury, governor, _target, owner) = setup();
     let proposer = Address::generate(&e);
 
     // Register malicious contract
@@ -872,12 +871,11 @@ fn execute_prevents_reentrancy_attack() {
         &e,
         vec![
             &e,
-            governor.address.clone().into_val(&e),
+            treasury.address.clone().into_val(&e),
             attack_targets.into_val(&e),
             attack_functions.into_val(&e),
             attack_args.into_val(&e),
             attack_desc_hash.into_val(&e),
-            proposer.clone().into_val(&e),
         ],
     ];
 
@@ -909,12 +907,12 @@ fn execute_prevents_reentrancy_attack() {
     // Execute the proposal
     // The malicious contract's attack() function will be called
     // It will try to re-enter execute(), which should fail with ProposalAlreadyExecuted error #5006
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
 }
 
 #[test]
 fn execute_updates_state_before_external_calls() {
-    let (e, token, _treasury, governor, target, owner) = setup();
+    let (e, token, treasury, governor, target, owner) = setup();
     let proposer = Address::generate(&e);
 
     // Mint token to proposer
@@ -952,7 +950,7 @@ fn execute_updates_state_before_external_calls() {
     e.ledger().set_timestamp(3_112);
 
     // Execute the proposal
-    governor.execute(&targets, &functions, &args, &desc_hash, &proposer);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
 
     // Verify proposal state is Executed (not Queued)
     assert_eq!(
@@ -1295,7 +1293,7 @@ fn proposal_entrypoints_are_not_live_before_launch_and_work_after() {
     );
     assert_eq!(
         governor
-            .try_execute(&targets, &functions, &args, &desc_hash, &who)
+            .try_consume(&targets, &functions, &args, &desc_hash)
             .err()
             .unwrap()
             .unwrap(),
@@ -1311,4 +1309,137 @@ fn proposal_entrypoints_are_not_live_before_launch_and_work_after() {
         Some(Some(not_live)),
         "propose must pass the live guard after launch"
     );
+}
+
+#[test]
+fn governor_execute_always_fails_with_use_treasury_execute() {
+    let (e, _token, _treasury, governor, target, _owner) = setup();
+    let targets = vec![&e, target.address.clone()];
+    let functions = vec![&e, symbol_short!("set_value")];
+    let args = proposal_args(&e);
+    let r = governor.try_execute(
+        &targets,
+        &functions,
+        &args,
+        &BytesN::from_array(&e, &[1u8; 32]),
+        &Address::generate(&e),
+    );
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        CustomGovernorError::UseTreasuryExecute.into()
+    );
+}
+
+#[test]
+fn consume_requires_treasury_auth() {
+    let (e, token, treasury, governor, target, owner) = setup();
+    let proposer = Address::generate(&e);
+    token.mint(&owner, &proposer);
+    e.ledger().set_sequence_number(200);
+    e.ledger().set_timestamp(2_000);
+    let targets = vec![&e, target.address.clone()];
+    let functions = vec![&e, symbol_short!("set_value")];
+    let args = proposal_args(&e);
+    let description = String::from_str(&e, "consume auth");
+    let desc_hash = description_hash(&e, &description);
+    let proposal_id = governor.propose(&targets, &functions, &args, &description, &proposer);
+    e.ledger().set_timestamp(2_301);
+    governor.cast_vote(&proposal_id, &1, &String::from_str(&e, "yes"), &proposer);
+    e.ledger().set_timestamp(2_601);
+    governor.queue(
+        &targets, &functions, &args, &desc_hash, &2_901_u32, &proposer,
+    );
+    e.ledger().set_timestamp(2_901);
+
+    // With real auth, nobody but the Treasury (as invoker) can consume.
+    e.set_auths(&[]);
+    assert!(governor
+        .try_consume(&targets, &functions, &args, &desc_hash)
+        .is_err());
+    assert_eq!(governor.proposal_state(&proposal_id), ProposalState::Queued);
+
+    // The Treasury path works with no caller auth at all.
+    treasury.execute(&targets, &functions, &args, &desc_hash);
+    assert_eq!(target.get_value(), 42);
+    assert_eq!(
+        governor.proposal_state(&proposal_id),
+        ProposalState::Executed
+    );
+}
+
+mod unqueued_expiry {
+    use super::*;
+    use stellar_governance::governor::GovernorError;
+
+    // vote_end = 2_000 + 300 (delay) + 300 (period) = 2_600.
+    const EXPIRY: u64 = 2_600 + 1_209_600;
+
+    #[allow(clippy::type_complexity)]
+    fn succeeded(
+        vote: bool,
+    ) -> (
+        Env,
+        DaoGovernorContractClient<'static>,
+        Vec<Address>,
+        Vec<soroban_sdk::Symbol>,
+        Vec<Vec<Val>>,
+        BytesN<32>,
+        BytesN<32>,
+        Address,
+    ) {
+        let (e, token, _treasury, governor, target, owner) = setup();
+        let proposer = Address::generate(&e);
+        token.mint(&owner, &proposer);
+        e.ledger().set_sequence_number(200);
+        e.ledger().set_timestamp(2_000);
+        let targets = vec![&e, target.address.clone()];
+        let functions = vec![&e, symbol_short!("set_value")];
+        let args = proposal_args(&e);
+        let description = String::from_str(&e, "unqueued");
+        let desc_hash = description_hash(&e, &description);
+        let id = governor.propose(&targets, &functions, &args, &description, &proposer);
+        e.ledger().set_timestamp(2_301);
+        if vote {
+            governor.cast_vote(&id, &1, &String::from_str(&e, "yes"), &proposer);
+        }
+        (
+            e, governor, targets, functions, args, desc_hash, id, proposer,
+        )
+    }
+
+    #[test]
+    fn queue_just_before_expiry_works() {
+        let (e, governor, t, f, a, h, id, p) = succeeded(true);
+        e.ledger().set_timestamp(EXPIRY - 1);
+        assert_eq!(governor.proposal_state(&id), ProposalState::Succeeded);
+        governor.queue(&t, &f, &a, &h, &0, &p);
+        assert_eq!(governor.proposal_state(&id), ProposalState::Queued);
+    }
+
+    #[test]
+    fn queue_at_boundary_and_after_fails_and_state_is_expired() {
+        // Boundary choice: `now >= vote_end + 14d` is Expired (same as Queued).
+        for now in [EXPIRY, EXPIRY + 1] {
+            let (e, governor, t, f, a, h, id, p) = succeeded(true);
+            e.ledger().set_timestamp(now);
+            assert_eq!(governor.proposal_state(&id), ProposalState::Expired);
+            let r = governor.try_queue(&t, &f, &a, &h, &0, &p);
+            assert_eq!(
+                r.err().unwrap().unwrap(),
+                GovernorError::ProposalNotSuccessful.into()
+            );
+            let r = governor.try_consume(&t, &f, &a, &h);
+            assert_eq!(
+                r.err().unwrap().unwrap(),
+                GovernorError::ProposalNotQueued.into()
+            );
+        }
+    }
+
+    #[test]
+    fn defeated_proposal_is_unaffected() {
+        let (e, governor, _t, _f, _a, _h, id, _p) = succeeded(false);
+        e.ledger().set_timestamp(EXPIRY + 10);
+        assert_eq!(governor.proposal_state(&id), ProposalState::Defeated);
+    }
 }

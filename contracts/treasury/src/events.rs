@@ -5,7 +5,7 @@
 //! - Launch (Setup -> Live)
 //! - Proposal action executions
 
-use soroban_sdk::{contractevent, Address, String, Symbol};
+use soroban_sdk::{contractevent, Address, BytesN, String, Symbol};
 
 // Standard contract events
 
@@ -33,7 +33,11 @@ pub struct Execute {
     pub governor: Address,
     #[topic]
     pub target: Address,
+    #[topic]
+    pub proposal_id: BytesN<32>,
     pub function: Symbol,
+    /// Position of the call within the proposal.
+    pub index: u32,
 }
 
 // Event helper functions
@@ -56,11 +60,20 @@ pub fn emit_launched(e: &Env, treasury: &Address) {
     .publish(e);
 }
 
-pub fn emit_execute(e: &Env, governor: &Address, target: &Address, function: &Symbol) {
+pub fn emit_execute(
+    e: &Env,
+    governor: &Address,
+    target: &Address,
+    function: &Symbol,
+    proposal_id: &BytesN<32>,
+    index: u32,
+) {
     Execute {
         governor: governor.clone(),
         target: target.clone(),
+        proposal_id: proposal_id.clone(),
         function: function.clone(),
+        index,
     }
     .publish(e);
 }

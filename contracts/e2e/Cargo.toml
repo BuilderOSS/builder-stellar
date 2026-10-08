@@ -20,3 +20,4 @@ treasury = { path = "../treasury", features = ["testutils"] }
 auction = { path = "../auction", features = ["testutils"] }
 marketplace = { path = "../marketplace", features = ["testutils"] }
 stellar-governance = { workspace = true }
+common = { path = "../common", features = ["testutils"] }
