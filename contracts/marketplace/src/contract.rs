@@ -66,19 +66,27 @@ impl MarketplaceContract {
     ///
     /// `treasury` must equal the treasury wired at construction (wiring is
     /// immutable). After this call the param setters are gated by the treasury
-    /// instead of `launch_admin`. When `open` is true the marketplace is
-    /// unpaused. A second call panics with `AlreadyLive`.
-    pub fn launch(e: &Env, treasury: Address, open: bool) {
+    /// instead of `launch_admin`. The marketplace is left unpaused when `open`
+    /// is true and forced paused otherwise. Panics `PaymentAssetMismatch` if the
+    /// payment asset differs from `expected_payment_asset`. A second call panics with `AlreadyLive`.
+    pub fn launch(e: &Env, treasury: Address, open: bool, expected_payment_asset: Address) {
         let mut config = Self::get_config(e);
         config.manager.require_auth();
         common::lifecycle::mark_live(e);
         if treasury != config.treasury {
             panic_with_error!(e, MarketplaceError::TreasuryMismatch);
         }
-        if open && config.paused {
-            config.paused = false;
-            storage::set_config(e, &config);
+        if expected_payment_asset != config.payment_asset {
+            panic_with_error!(e, MarketplaceError::PaymentAssetMismatch);
+        }
+        // `open == false` forces paused even if the launch_admin unpaused in setup.
+        let was_paused = config.paused;
+        config.paused = !open;
+        storage::set_config(e, &config);
+        if was_paused && open {
             MarketplaceUnpaused {}.publish(e);
+        } else if !was_paused && !open {
+            MarketplacePaused {}.publish(e);
         }
         common::ttl::extend_instance(e);
         emit_launched(e, &treasury, open);

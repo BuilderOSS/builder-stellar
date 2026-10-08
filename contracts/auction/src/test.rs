@@ -3,11 +3,12 @@
 extern crate std;
 
 use soroban_sdk::{
-    testutils::{Address as _, Ledger},
-    Address, BytesN, Env, String,
+    testutils::{Address as _, Ledger, MockAuth, MockAuthInvoke},
+    Address, BytesN, Env, IntoVal, String,
 };
 
 use crate::contract::{DaoAuctionContract, DaoAuctionContractClient};
+use crate::error::AuctionError;
 
 fn setup_auction_contract(
     e: &Env,
@@ -302,6 +303,7 @@ fn launch_without_start_is_one_shot_and_clears_pending_owner() {
     let owner = Address::generate(&e);
     let treasury = Address::generate(&e);
     let attacker = Address::generate(&e);
+    let payment_token = Address::generate(&e);
     let id = e.register(
         DaoAuctionContract,
         (
@@ -312,7 +314,7 @@ fn launch_without_start_is_one_shot_and_clears_pending_owner() {
             10_000_000_i128,
             10_u32,
             50_u64,
-            Address::generate(&e),
+            payment_token.clone(),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
             String::from_str(&e, "0.1.0"),
@@ -321,12 +323,12 @@ fn launch_without_start_is_one_shot_and_clears_pending_owner() {
     let auction = DaoAuctionContractClient::new(&e, &id);
 
     auction.transfer_ownership(&attacker, &(e.ledger().sequence() + 1_000));
-    auction.launch(&treasury, &false);
+    auction.launch(&treasury, &false, &payment_token);
     assert_eq!(auction.get_owner(), Some(treasury.clone()));
     assert!(auction.paused());
     assert!(auction.try_accept_ownership().is_err());
     assert_eq!(auction.get_owner(), Some(treasury.clone()));
-    let r = auction.try_launch(&treasury, &true);
+    let r = auction.try_launch(&treasury, &true, &payment_token);
     assert_eq!(
         r.err().unwrap().unwrap(),
         common::CommonError::AlreadyLive.into()
@@ -680,4 +682,37 @@ mod upgrade_via_common {
             assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.1.0"));
         });
     }
+}
+
+#[test]
+fn launch_rejects_changed_payment_token_and_succeeds_when_unchanged() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let (auction, _owner, treasury, _token, _id, original) = setup_with_payment_token(&e);
+    auction.set_payment_token(&Address::generate(&e));
+    let r = auction.try_launch(&treasury, &false, &original);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        AuctionError::PaymentTokenMismatch.into()
+    );
+    auction.set_payment_token(&original);
+    auction.launch(&treasury, &false, &original);
+}
+
+#[test]
+fn launch_requires_manager_auth() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let (auction, owner, treasury, _token, id, payment) = setup_with_payment_token(&e);
+    e.mock_auths(&[MockAuth {
+        address: &owner,
+        invoke: &MockAuthInvoke {
+            contract: &id,
+            fn_name: "launch",
+            args: (&treasury, false, &payment).into_val(&e),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(auction.try_launch(&treasury, &false, &payment).is_err());
+    assert!(auction.paused());
 }

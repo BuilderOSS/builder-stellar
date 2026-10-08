@@ -45,6 +45,8 @@ pub enum TokenKey {
     /// This contract is called during minting to generate artwork seeds.
     Metadata,
     Manager,
+    /// Treasury wired at construction; the only address `launch` accepts.
+    Treasury,
 }
 
 /// Instance TTL (1 year) used for the contract's instance entry

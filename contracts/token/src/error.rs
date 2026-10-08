@@ -12,4 +12,8 @@ pub enum TokenError {
     MintAuthorityNotAllowed = 1103,
     /// Invalid input parameters (mismatched lengths, zero amounts, etc.)
     InvalidInput = 1104,
+    /// `launch` treasury differs from the treasury wired at construction
+    TreasuryMismatch = 1105,
+    /// `launch` minters list does not contain the treasury
+    TreasuryNotMinter = 1106,
 }

@@ -111,6 +111,10 @@ pub struct DaoAddresses {
 pub struct PendingDao {
     pub addresses: DaoAddresses,
     pub launch_admin: Address,
+    /// Auction payment token chosen at create_dao; launch refuses if it changed.
+    pub auction_payment_asset: Address,
+    /// Marketplace payment asset chosen at create_dao; launch refuses if it changed.
+    pub marketplace_payment_asset: Address,
 }
 
 #[contracttype]

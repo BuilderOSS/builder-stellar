@@ -35,6 +35,7 @@ impl DaoTokenContract {
     /// # Arguments
     ///
     /// * `owner` - The address that will own and control the contract
+    /// * `treasury` - The DAO treasury; `launch` must be called with exactly this address
     /// * `uri` - The base URI for token metadata (typically an IPFS or HTTP link)
     /// * `name` - The human-readable name of the token collection
     /// * `symbol` - The short symbol/ticker for the token
@@ -49,6 +50,7 @@ impl DaoTokenContract {
     pub fn __constructor(
         e: &Env,
         owner: Address,
+        treasury: Address,
         uri: String,
         name: String,
         symbol: String,
@@ -61,6 +63,7 @@ impl DaoTokenContract {
         set_owner(e, &owner);
         e.storage().instance().set(&TokenKey::Metadata, &metadata);
         e.storage().instance().set(&TokenKey::Manager, &manager);
+        e.storage().instance().set(&TokenKey::Treasury, &treasury);
         common::upgrade::init(e, &current_hash, &version);
         emit_token_initialized(e, &owner, &uri, &name, &symbol, &version);
     }
@@ -179,6 +182,17 @@ impl DaoTokenContract {
         let manager = Self::manager(e);
         manager.require_auth();
         common::lifecycle::mark_live(e);
+        let wired: Address = e
+            .storage()
+            .instance()
+            .get(&TokenKey::Treasury)
+            .unwrap_or_else(|| panic_with_error!(e, TokenError::TreasuryMismatch));
+        if treasury != wired {
+            panic_with_error!(e, TokenError::TreasuryMismatch);
+        }
+        if !minters.contains(&treasury) {
+            panic_with_error!(e, TokenError::TreasuryNotMinter);
+        }
         common::ownership::handoff_owner(e, &treasury);
         for minter in minters.iter() {
             let old_enabled = Self::mint_authority(e, minter.clone());
@@ -189,6 +203,12 @@ impl DaoTokenContract {
         }
         extend_instance_ttl(e);
         emit_launched(e, &treasury, &minters);
+    }
+
+    /// Whether the token has been launched (Setup -> Live). Used by the Minter
+    /// to refuse setup-window configuration.
+    pub fn is_live(e: &Env) -> bool {
+        common::lifecycle::is_live(e)
     }
 
     /// Returns the metadata contract used for mint hooks.

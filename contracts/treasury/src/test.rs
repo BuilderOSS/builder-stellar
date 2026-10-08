@@ -44,6 +44,9 @@ fn treasury_executes_arbitrary_call_for_governor() {
         ),
     );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
+    // Treasury only executes once launched.
+    e.mock_all_auths();
+    treasury.launch(&treasury_id);
     let target_id = e.register(TargetContract, ());
     let target = TargetContractClient::new(&e, &target_id);
 
@@ -76,6 +79,9 @@ fn treasury_rejects_non_governor() {
         ),
     );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
+    // Treasury only executes once launched.
+    e.mock_all_auths();
+    treasury.launch(&treasury_id);
     let target_id = e.register(TargetContract, ());
     let target = TargetContractClient::new(&e, &target_id);
 
@@ -100,7 +106,6 @@ fn launch_is_one_shot_and_clears_pending_owner() {
     let owner = Address::generate(&e);
     let manager = Address::generate(&e);
     let attacker = Address::generate(&e);
-    let new_treasury = Address::generate(&e);
     let treasury_id = e.register(
         DaoTreasuryContract,
         (
@@ -112,6 +117,7 @@ fn launch_is_one_shot_and_clears_pending_owner() {
         ),
     );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
+    let new_treasury = treasury_id.clone();
 
     treasury.transfer_ownership(&attacker, &(e.ledger().sequence() + 1_000));
     treasury.launch(&new_treasury);
@@ -122,6 +128,56 @@ fn launch_is_one_shot_and_clears_pending_owner() {
     assert_eq!(
         r.err().unwrap().unwrap(),
         common::CommonError::AlreadyLive.into()
+    );
+}
+
+#[test]
+fn launch_rejects_treasury_other_than_self() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let id = e.register(
+        DaoTreasuryContract,
+        (
+            Address::generate(&e),
+            Address::generate(&e),
+            Address::generate(&e),
+            soroban_sdk::BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
+        ),
+    );
+    let treasury = DaoTreasuryContractClient::new(&e, &id);
+    let r = treasury.try_launch(&Address::generate(&e));
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        crate::error::TreasuryError::TreasuryMismatch.into()
+    );
+}
+
+#[test]
+fn execute_before_launch_is_not_live() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let governor = Address::generate(&e);
+    let id = e.register(
+        DaoTreasuryContract,
+        (
+            Address::generate(&e),
+            governor,
+            Address::generate(&e),
+            soroban_sdk::BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
+        ),
+    );
+    let treasury = DaoTreasuryContractClient::new(&e, &id);
+    let target = e.register(TargetContract, ());
+    let r = treasury.try_execute(
+        &target,
+        &symbol_short!("set_value"),
+        &vec![&e, 1_u32.into_val(&e)],
+    );
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        common::CommonError::NotLive.into()
     );
 }
 

@@ -576,6 +576,7 @@ impl ManagerContract {
             token_wasm.clone(),
             (
                 params.launch_admin.clone(),
+                treasury_addr.clone(),
                 token_uri,
                 token_name,
                 token_symbol,
@@ -601,6 +602,7 @@ impl ManagerContract {
                 env.current_contract_address(),
                 metadata_wasm.clone(),
                 params.launch_admin.clone(),
+                treasury_addr.clone(),
                 empty_property_names,
                 empty_items,
                 ArtworkIpfsGroup {
@@ -646,7 +648,7 @@ impl ManagerContract {
                 reserve_price,
                 min_bid_increment,
                 time_buffer,
-                payment_asset,
+                payment_asset.clone(),
                 env.current_contract_address(),
                 auction_wasm.clone(),
                 auction_version,
@@ -662,7 +664,7 @@ impl ManagerContract {
                 token_addr.clone(),
                 params.launch_admin.clone(),
                 treasury_addr.clone(),
-                marketplace_payment_asset,
+                marketplace_payment_asset.clone(),
                 env.current_contract_address(),
                 marketplace_wasm,
                 marketplace_version,
@@ -683,6 +685,8 @@ impl ManagerContract {
         let pending = PendingDao {
             addresses: addresses.clone(),
             launch_admin: params.launch_admin.clone(),
+            auction_payment_asset: payment_asset,
+            marketplace_payment_asset,
         };
         // One persistent entry per pending DAO; no expiry semantics. Archived
         // entries are restorable, so an abandoned creation only costs its creator's rent.
@@ -798,6 +802,7 @@ impl ManagerContract {
                 &env,
                 treasury.clone().into_val(&env),
                 launch_config.launch_marketplace.into_val(&env),
+                pending.marketplace_payment_asset.clone().into_val(&env),
             ],
         );
         let _: () = env.invoke_contract(
@@ -807,6 +812,7 @@ impl ManagerContract {
                 &env,
                 treasury.clone().into_val(&env),
                 launch_config.launch_auction.into_val(&env),
+                pending.auction_payment_asset.clone().into_val(&env),
             ],
         );
         let _: () = env.invoke_contract(

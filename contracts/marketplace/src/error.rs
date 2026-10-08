@@ -17,4 +17,6 @@ pub enum MarketplaceError {
     ArithmeticOverflow = 1311,
     /// `launch` treasury differs from the treasury wired at construction.
     TreasuryMismatch = 1312,
+    /// `launch` expected payment asset differs from the configured one
+    PaymentAssetMismatch = 1313,
 }

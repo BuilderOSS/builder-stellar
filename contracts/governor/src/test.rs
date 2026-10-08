@@ -82,6 +82,7 @@ fn setup() -> (
         DaoTokenContract,
         (
             owner.clone(),
+            Address::generate(&e),
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
@@ -129,6 +130,10 @@ fn setup() -> (
 
     let target_id = e.register(TargetContract, ());
     let target = TargetContractClient::new(&e, &target_id);
+
+    // Proposals only work once launched.
+    governor.launch(&treasury_id);
+    treasury.launch(&treasury_id);
 
     (e, token, treasury, governor, target, owner)
 }
@@ -308,6 +313,7 @@ fn quorum_uses_total_supply_bps() {
         DaoTokenContract,
         (
             owner.clone(),
+            Address::generate(&e),
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
@@ -1241,5 +1247,68 @@ fn launch_rejects_treasury_other_than_wired() {
     assert_eq!(
         r.err().unwrap().unwrap(),
         CustomGovernorError::TreasuryMismatch.into()
+    );
+}
+
+#[test]
+fn proposal_entrypoints_are_not_live_before_launch_and_work_after() {
+    let e = Env::default();
+    e.mock_all_auths();
+    e.ledger().set_sequence_number(100);
+    e.ledger().set_timestamp(1_000);
+    let manager = Address::generate(&e);
+    let owner = Address::generate(&e);
+    let treasury = Address::generate(&e);
+    let governor = register_with_treasury(&e, &manager, &owner, &treasury, 1, 1_000, 300);
+
+    let targets = vec![&e, Address::generate(&e)];
+    let functions = vec![&e, symbol_short!("set_value")];
+    let args: Vec<Vec<Val>> = vec![&e, vec![&e, 1_u32.into_val(&e)]];
+    let description = String::from_str(&e, "d");
+    let desc_hash = BytesN::from_array(&e, &[7u8; 32]);
+    let who = Address::generate(&e);
+    let not_live: soroban_sdk::Error = common::CommonError::NotLive.into();
+
+    assert_eq!(
+        governor
+            .try_propose(&targets, &functions, &args, &description, &who)
+            .err()
+            .unwrap()
+            .unwrap(),
+        not_live
+    );
+    assert_eq!(
+        governor
+            .try_cast_vote(&desc_hash, &1, &description, &who)
+            .err()
+            .unwrap()
+            .unwrap(),
+        not_live
+    );
+    assert_eq!(
+        governor
+            .try_queue(&targets, &functions, &args, &desc_hash, &0, &who)
+            .err()
+            .unwrap()
+            .unwrap(),
+        not_live
+    );
+    assert_eq!(
+        governor
+            .try_execute(&targets, &functions, &args, &desc_hash, &who)
+            .err()
+            .unwrap()
+            .unwrap(),
+        not_live
+    );
+
+    governor.launch(&treasury);
+    // Past the NotLive guard; with no voting power the proposer is rejected for a
+    // different reason.
+    let r = governor.try_propose(&targets, &functions, &args, &description, &who);
+    assert_ne!(
+        r.err().map(|e| e.ok()),
+        Some(Some(not_live)),
+        "propose must pass the live guard after launch"
     );
 }

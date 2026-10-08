@@ -87,6 +87,7 @@ fn register_metadata(e: &Env, metadata_id: &Address, token_id: &Address, owner: 
             Address::generate(e),
             BytesN::from_array(e, &[0u8; 32]),
             owner.clone(),
+            Address::generate(e), // treasury (metadata is not launched in these tests)
             Vec::<String>::new(e),
             Vec::<ItemParam>::new(e),
             IpfsGroup {
@@ -113,10 +114,12 @@ fn setup() -> (
 
     let owner = Address::generate(&e);
     let metadata_id = Address::generate(&e);
+    let treasury_id = Address::generate(&e);
     let token_id = e.register(
         DaoTokenContract,
         (
             owner.clone(),
+            treasury_id.clone(),
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
@@ -132,7 +135,8 @@ fn setup() -> (
     // Constructor-only wiring: the governor address is pre-generated so the
     // treasury can be constructed with it (the Manager uses predicted addresses).
     let governor_id = Address::generate(&e);
-    let treasury_id = e.register(
+    e.register_at(
+        &treasury_id,
         DaoTreasuryContract,
         (
             owner.clone(),
@@ -171,6 +175,9 @@ fn setup() -> (
     // registered as an extra launch-time minter so the tests can keep minting
     // voting power directly.
     token.launch(&treasury_id, &vec![&e, treasury_id.clone(), owner.clone()]);
+    // Governor and treasury only process proposals once live.
+    governor.launch(&treasury_id);
+    treasury.launch(&treasury_id);
 
     (e, token, treasury, governor, target, owner)
 }
@@ -821,7 +828,7 @@ fn setup_auction() -> AuctionFixture {
         &treasury.address,
         &vec![&e, treasury.address.clone(), auction.address.clone()],
     );
-    auction.launch(&treasury.address, &false);
+    auction.launch(&treasury.address, &false, &payment_token);
     let _ = launch_admin;
     let treasury_address = treasury.address.clone();
     (
@@ -854,10 +861,12 @@ fn setup_auction_setup_phase() -> (
     let metadata_id = Address::generate(&e);
 
     // Deploy DAO token (NFT)
+    let treasury_id = Address::generate(&e);
     let token_id = e.register(
         DaoTokenContract,
         (
             owner.clone(),
+            treasury_id.clone(),
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
@@ -871,7 +880,8 @@ fn setup_auction_setup_phase() -> (
     register_metadata(&e, &metadata_id, &token_id, &owner);
 
     // Deploy treasury (the DAO owner after launch)
-    let treasury_id = e.register(
+    e.register_at(
+        &treasury_id,
         DaoTreasuryContract,
         (
             owner.clone(),
@@ -981,7 +991,7 @@ fn test_auction_full_lifecycle() {
 
 #[test]
 fn test_auction_launch_starts_first_auction_and_hands_off_to_treasury() {
-    let (e, token, treasury, auction, launch_admin, _payment_token, _payment_client) =
+    let (e, token, treasury, auction, launch_admin, payment_token, _payment_client) =
         setup_auction_setup_phase();
 
     assert_eq!(auction.get_owner(), Some(launch_admin.clone()));
@@ -990,7 +1000,7 @@ fn test_auction_launch_starts_first_auction_and_hands_off_to_treasury() {
         &treasury.address,
         &vec![&e, treasury.address.clone(), auction.address.clone()],
     );
-    auction.launch(&treasury.address, &true);
+    auction.launch(&treasury.address, &true, &payment_token);
 
     assert_eq!(auction.get_owner(), Some(treasury.address.clone()));
     assert!(!auction.paused());
@@ -999,10 +1009,10 @@ fn test_auction_launch_starts_first_auction_and_hands_off_to_treasury() {
 
 #[test]
 fn test_auction_launch_can_remain_paused() {
-    let (_e, _token, treasury, auction, _owner, _payment_token, _payment_client) =
+    let (_e, _token, treasury, auction, _owner, payment_token, _payment_client) =
         setup_auction_setup_phase();
 
-    auction.launch(&treasury.address, &false);
+    auction.launch(&treasury.address, &false, &payment_token);
 
     assert_eq!(auction.get_owner(), Some(treasury.address));
     assert!(auction.paused());
@@ -1546,6 +1556,7 @@ fn test_governor_treasury_bidirectional_verification() {
         DaoTokenContract,
         (
             owner.clone(),
+            Address::generate(&e),
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
@@ -1594,6 +1605,9 @@ fn test_governor_treasury_bidirectional_verification() {
     // Verify the bidirectional link comes purely from the constructors
     assert_eq!(treasury.governor(), governor_id);
     assert_eq!(governor.treasury(), treasury_id);
+
+    // The treasury only executes once launched.
+    treasury.launch(&treasury_id);
 
     // Verify treasury can only be called by its governor
     let target_id = e.register(TargetContract, ());
@@ -1710,6 +1724,7 @@ fn marketplace_primary_sale_uses_real_token_and_sac() {
         DaoTokenContract,
         (
             treasury.clone(),
+            treasury.clone(),
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "Marketplace DAO"),
             String::from_str(&e, "MDAO"),
@@ -1742,7 +1757,7 @@ fn marketplace_primary_sale_uses_real_token_and_sac() {
         &treasury,
         &vec![&e, treasury.clone(), marketplace_id.clone()],
     );
-    marketplace.launch(&treasury, &true);
+    marketplace.launch(&treasury, &true, &payment.address());
 
     let token_id = marketplace.mint_and_list(&100, &2_000);
     marketplace.buy(&token_id, &buyer);

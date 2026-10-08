@@ -86,7 +86,9 @@ struct Fixture {
 /// Fully launched (live, open) marketplace.
 fn fixture() -> Fixture {
     let fixture = fixture_setup();
-    fixture.marketplace.launch(&fixture.treasury, &true);
+    fixture
+        .marketplace
+        .launch(&fixture.treasury, &true, &fixture.payment.address);
     fixture
 }
 
@@ -176,10 +178,14 @@ fn launch_opens_marketplace_and_is_one_shot() {
     let fixture = fixture_setup();
     assert!(fixture.marketplace.get_config().paused);
 
-    fixture.marketplace.launch(&fixture.treasury, &true);
+    fixture
+        .marketplace
+        .launch(&fixture.treasury, &true, &fixture.payment.address);
     assert!(!fixture.marketplace.get_config().paused);
 
-    let r = fixture.marketplace.try_launch(&fixture.treasury, &true);
+    let r = fixture
+        .marketplace
+        .try_launch(&fixture.treasury, &true, &fixture.payment.address);
     assert_eq!(
         r.err().unwrap().unwrap(),
         common::CommonError::AlreadyLive.into()
@@ -189,7 +195,9 @@ fn launch_opens_marketplace_and_is_one_shot() {
 #[test]
 fn launch_without_open_keeps_marketplace_paused() {
     let fixture = fixture_setup();
-    fixture.marketplace.launch(&fixture.treasury, &false);
+    fixture
+        .marketplace
+        .launch(&fixture.treasury, &false, &fixture.payment.address);
     assert!(fixture.marketplace.get_config().paused);
 }
 
@@ -197,7 +205,9 @@ fn launch_without_open_keeps_marketplace_paused() {
 fn launch_rejects_treasury_other_than_wired() {
     let fixture = fixture_setup();
     let other = Address::generate(&fixture.env);
-    let r = fixture.marketplace.try_launch(&other, &true);
+    let r = fixture
+        .marketplace
+        .try_launch(&other, &true, &fixture.payment.address);
     assert_eq!(
         r.err().unwrap().unwrap(),
         MarketplaceError::TreasuryMismatch.into()
@@ -245,7 +255,7 @@ fn setters_are_gated_by_launch_admin_then_treasury() {
 
     // Live: the treasury authorizes; launch_admin no longer can.
     env.mock_all_auths();
-    mp.launch(&fixture.treasury, &true);
+    mp.launch(&fixture.treasury, &true, &fixture.payment.address);
     env.mock_auths(&[MockAuth {
         address: &fixture.launch_admin,
         invoke: &MockAuthInvoke {
@@ -470,4 +480,49 @@ mod upgrade_via_common {
             );
         });
     }
+}
+
+#[test]
+fn launch_rejects_changed_payment_asset_and_succeeds_when_unchanged() {
+    let fixture = fixture_setup();
+    let mp = &fixture.marketplace;
+    let original = fixture.payment.address.clone();
+    let other = Address::generate(&fixture.env);
+    mp.set_payment_asset(&other);
+    let r = mp.try_launch(&fixture.treasury, &true, &original);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        MarketplaceError::PaymentAssetMismatch.into()
+    );
+    mp.set_payment_asset(&original);
+    mp.launch(&fixture.treasury, &true, &original);
+}
+
+#[test]
+fn launch_without_open_forces_paused_even_if_unpaused_in_setup() {
+    let fixture = fixture_setup();
+    let mp = &fixture.marketplace;
+    mp.unpause();
+    assert!(!mp.get_config().paused);
+    mp.launch(&fixture.treasury, &false, &fixture.payment.address);
+    assert!(mp.get_config().paused);
+}
+
+#[test]
+fn launch_requires_manager_auth() {
+    let fixture = fixture_setup();
+    let env = &fixture.env;
+    let mp = &fixture.marketplace;
+    let asset = fixture.payment.address.clone();
+    env.mock_auths(&[MockAuth {
+        address: &fixture.launch_admin,
+        invoke: &MockAuthInvoke {
+            contract: &mp.address,
+            fn_name: "launch",
+            args: (&fixture.treasury, true, &asset).into_val(env),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(mp.try_launch(&fixture.treasury, &true, &asset).is_err());
+    assert!(mp.get_config().paused);
 }

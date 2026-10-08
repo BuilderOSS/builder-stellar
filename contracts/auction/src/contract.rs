@@ -68,7 +68,7 @@ pub trait DaoAuctionContractTrait {
     fn set_min_bid_increment(e: &Env, min_bid_increment_percent: u32);
     fn set_time_buffer(e: &Env, time_buffer: u64);
     fn set_payment_token(e: &Env, payment_token: Address);
-    fn launch(e: &Env, treasury: Address, start: bool);
+    fn launch(e: &Env, treasury: Address, start: bool, expected_payment_token: Address);
     fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>);
     fn version(e: &Env) -> String;
     fn wasm_hash(e: &Env) -> BytesN<32>;
@@ -122,8 +122,9 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     /// Marks the module live first, then hands ownership to `treasury` (clearing
     /// any pending two-step transfer) and, when `start` is true, unpauses and
     /// creates the first auction (the token must already be live so the auction
-    /// holds mint authority). A second call panics with `AlreadyLive`.
-    fn launch(e: &Env, treasury: Address, start: bool) {
+    /// holds mint authority). Panics `PaymentTokenMismatch` if the configured
+    /// payment token differs from `expected_payment_token`. A second call panics with `AlreadyLive`.
+    fn launch(e: &Env, treasury: Address, start: bool, expected_payment_token: Address) {
         let manager: Address = e
             .storage()
             .instance()
@@ -135,6 +136,11 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         common::lifecycle::mark_live(e);
         if treasury != get_config(e).treasury {
             panic_with_error!(e, AuctionError::TreasuryMismatch);
+        }
+        // The payment token is a tunable setup param; the Manager records the one
+        // chosen at create_dao and launch refuses if the launch_admin changed it.
+        if expected_payment_token != get_config(e).payment_token {
+            panic_with_error!(e, AuctionError::PaymentTokenMismatch);
         }
         common::ownership::handoff_owner(e, &treasury);
         if start {

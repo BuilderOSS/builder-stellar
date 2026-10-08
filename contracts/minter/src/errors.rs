@@ -41,4 +41,8 @@ pub enum MinterError {
 
     /// Storage error - error accessing storage
     StorageError = 12,
+
+    /// Token not live - the token has not been launched yet, so setup-window
+    /// minter configuration and claims are refused
+    TokenNotLive = 13,
 }

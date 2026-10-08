@@ -553,8 +553,8 @@ fn stub_wasm(env: &Env, tag: &str, ctor_arity: usize, init_arity: usize) -> Byte
 /// sets them as the factory defaults.
 fn register_stub_implementations(env: &Env, client: &ManagerContractClient) {
     let specs: [(&str, usize, usize); 6] = [
-        ("Token", 8, 0),
-        ("Metadata", 12, 0),
+        ("Token", 9, 0),
+        ("Metadata", 13, 0),
         ("Auction", 11, 0),
         ("Governor", 11, 0),
         ("Treasury", 5, 0),
@@ -654,7 +654,7 @@ struct MockToggleModule;
 
 #[contractimpl]
 impl MockToggleModule {
-    pub fn launch(_e: Env, _treasury: Address, _flag: bool) {}
+    pub fn launch(_e: Env, _treasury: Address, _flag: bool, _asset: Address) {}
 }
 
 #[test]
@@ -741,6 +741,8 @@ fn test_pending_dao_launches_after_500_unrelated_create_dao() {
             marketplace,
         },
         launch_admin: launch_admin.clone(),
+        auction_payment_asset: Address::generate(&env),
+        marketplace_payment_asset: Address::generate(&env),
     };
     env.as_contract(&client.address, || {
         crate::storage::set_persistent(&env, &ManagerKey::PendingDao(token.clone()), &pending);
@@ -824,7 +826,10 @@ mod real_dao {
     use super::*;
     use crate::error::ManagerError;
     use common::CommonError;
-    use soroban_sdk::{testutils::Ledger, vec, Symbol, Vec};
+    use soroban_sdk::{
+        testutils::{Ledger, MockAuth, MockAuthInvoke},
+        vec, IntoVal, Symbol, Vec,
+    };
 
     pub struct RealDao {
         pub env: Env,
@@ -837,6 +842,7 @@ mod real_dao {
         pub auction: auction::DaoAuctionContractClient<'static>,
         pub marketplace: marketplace::MarketplaceContractClient<'static>,
         pub metadata: metadata::MetadataContractClient<'static>,
+        pub payment: Address,
     }
 
     /// Deploys all six real modules at pre-generated addresses (constructor-only
@@ -868,6 +874,7 @@ mod real_dao {
             token::DaoTokenContract,
             (
                 launch_admin.clone(),
+                addresses.treasury.clone(),
                 String::from_str(&env, "https://example.com/"),
                 String::from_str(&env, "DAO"),
                 String::from_str(&env, "DAO"),
@@ -889,6 +896,7 @@ mod real_dao {
                 manager.clone(),
                 hash.clone(),
                 launch_admin.clone(),
+                addresses.treasury.clone(),
                 Vec::<String>::new(&env),
                 Vec::<soroban_sdk::Val>::new(&env),
                 crate::storage::ArtworkIpfsGroup {
@@ -950,7 +958,7 @@ mod real_dao {
                 addresses.token.clone(),
                 launch_admin.clone(),
                 addresses.treasury.clone(),
-                payment,
+                payment.clone(),
                 manager.clone(),
                 hash.clone(),
                 version.clone(),
@@ -964,6 +972,8 @@ mod real_dao {
         let pending = PendingDao {
             addresses: addresses.clone(),
             launch_admin: launch_admin.clone(),
+            auction_payment_asset: payment.clone(),
+            marketplace_payment_asset: payment.clone(),
         };
         env.as_contract(&manager, || {
             crate::storage::set_persistent(
@@ -983,6 +993,7 @@ mod real_dao {
             addresses,
             launch_admin,
             client,
+            payment,
             env,
         }
     }
@@ -1029,7 +1040,7 @@ mod real_dao {
             (
                 "auction",
                 dao.auction
-                    .try_launch(&attacker, &true)
+                    .try_launch(&attacker, &true, &dao.payment)
                     .err()
                     .unwrap()
                     .unwrap(),
@@ -1037,7 +1048,7 @@ mod real_dao {
             (
                 "marketplace",
                 dao.marketplace
-                    .try_launch(&attacker, &true)
+                    .try_launch(&attacker, &true, &dao.payment)
                     .err()
                     .unwrap()
                     .unwrap(),
@@ -1073,6 +1084,14 @@ mod real_dao {
         let treasury = dao.addresses.treasury.clone();
         let attacker = Address::generate(env);
 
+        // Metadata's upgrade authority is a plain `Owner` instance key.
+        let metadata_owner = || -> Option<Address> {
+            env.as_contract(&dao.addresses.metadata, || {
+                env.storage()
+                    .instance()
+                    .get(&vec![env, Symbol::new(env, "Owner")])
+            })
+        };
         let snapshot = || {
             (
                 dao.token.get_owner(),
@@ -1081,21 +1100,70 @@ mod real_dao {
                 dao.auction.get_owner(),
                 dao.auction.paused(),
                 dao.marketplace.get_config(),
+                {
+                    let c = dao.auction.get_config();
+                    (c.treasury, c.payment_token, c.duration, c.reserve_price)
+                },
+                metadata_owner(),
                 dao.token.mint_authority(&attacker),
                 dao.token.mint_authority(&dao.addresses.auction),
             )
         };
         let before = snapshot();
 
-        // Every previously Manager-gated entrypoint is now `launch`; all reject.
-        let _ = dao
-            .token
-            .try_launch(&attacker, &vec![env, attacker.clone()]);
-        let _ = dao.governor.try_launch(&attacker);
-        let _ = dao.treasury.try_launch(&attacker);
-        let _ = dao.auction.try_launch(&attacker, &false);
-        let _ = dao.marketplace.try_launch(&attacker, &false);
-        let _ = dao.metadata.try_launch(&attacker);
+        // Every previously Manager-gated entrypoint is now `launch`; every call
+        // must be rejected with AlreadyLive (not silently ignored).
+        let rejected: [(&str, Option<soroban_sdk::Error>); 6] = [
+            (
+                "token",
+                dao.token
+                    .try_launch(&attacker, &vec![env, attacker.clone()])
+                    .err()
+                    .and_then(|e| e.ok()),
+            ),
+            (
+                "governor",
+                dao.governor
+                    .try_launch(&attacker)
+                    .err()
+                    .and_then(|e| e.ok()),
+            ),
+            (
+                "treasury",
+                dao.treasury
+                    .try_launch(&attacker)
+                    .err()
+                    .and_then(|e| e.ok()),
+            ),
+            (
+                "auction",
+                dao.auction
+                    .try_launch(&attacker, &false, &dao.payment)
+                    .err()
+                    .and_then(|e| e.ok()),
+            ),
+            (
+                "marketplace",
+                dao.marketplace
+                    .try_launch(&attacker, &false, &dao.payment)
+                    .err()
+                    .and_then(|e| e.ok()),
+            ),
+            (
+                "metadata",
+                dao.metadata
+                    .try_launch(&attacker)
+                    .err()
+                    .and_then(|e| e.ok()),
+            ),
+        ];
+        for (module, err) in rejected {
+            assert_eq!(
+                err,
+                Some(already_live()),
+                "{module} launch must be AlreadyLive"
+            );
+        }
         // The old entrypoints no longer exist at all.
         for (contract, function) in [
             (&dao.addresses.token, "finalize_ownership"),
@@ -1118,7 +1186,8 @@ mod real_dao {
         }
 
         assert_eq!(before, snapshot());
-        assert_eq!(dao.token.get_owner(), Some(treasury));
+        assert_eq!(dao.token.get_owner(), Some(treasury.clone()));
+        assert_eq!(metadata_owner(), Some(treasury));
     }
 
     /// Acceptance (e): wiring setters and the governor authority role are gone.
@@ -1227,6 +1296,7 @@ mod real_dao {
             token::DaoTokenContract,
             (
                 dao.launch_admin.clone(),
+                dao.addresses.treasury.clone(),
                 String::from_str(env, "u"),
                 String::from_str(env, "n"),
                 String::from_str(env, "s"),
@@ -1245,6 +1315,8 @@ mod real_dao {
                 &PendingDao {
                     addresses,
                     launch_admin: dao.launch_admin.clone(),
+                    auction_payment_asset: dao.payment.clone(),
+                    marketplace_payment_asset: dao.payment.clone(),
                 },
             );
         });
@@ -1341,5 +1413,116 @@ mod real_dao {
 
         // Sanity: valid params still succeed.
         client.create_dao(&dao_params(&env, &deployer, 2));
+    }
+
+    /// Item 3: payment assets recorded at create_dao are asserted at launch.
+    #[test]
+    fn launch_dao_rejects_payment_asset_changed_during_setup() {
+        let dao = build();
+        let other = Address::generate(&dao.env);
+
+        // launch_admin swaps the auction payment token in setup.
+        dao.auction.set_payment_token(&other);
+        let r = dao
+            .client
+            .try_launch_dao(&dao.addresses.token, &cfg(true, true, false));
+        assert!(r.is_err());
+        assert!(dao.client.get_pending_dao(&dao.addresses.token).is_some());
+        assert_eq!(dao.token.get_owner(), Some(dao.launch_admin.clone()));
+        dao.auction.set_payment_token(&dao.payment);
+
+        // ...and the marketplace payment asset.
+        dao.marketplace.set_payment_asset(&other);
+        let r = dao
+            .client
+            .try_launch_dao(&dao.addresses.token, &cfg(true, true, false));
+        assert!(r.is_err());
+        assert!(dao.client.get_pending_dao(&dao.addresses.token).is_some());
+        dao.marketplace.set_payment_asset(&dao.payment);
+
+        // Unchanged assets launch fine.
+        dao.client
+            .launch_dao(&dao.addresses.token, &cfg(true, true, false));
+        assert!(dao.client.get_pending_dao(&dao.addresses.token).is_none());
+    }
+
+    /// Item 7: launch_marketplace=false forces paused even if unpaused in setup.
+    #[test]
+    fn launch_without_marketplace_forces_paused() {
+        let dao = build();
+        dao.marketplace.unpause();
+        assert!(!dao.marketplace.get_config().paused);
+        dao.client
+            .launch_dao(&dao.addresses.token, &cfg(true, false, false));
+        assert!(dao.marketplace.get_config().paused);
+    }
+
+    /// Item 5: negative-auth tests WITHOUT mock_all_auths.
+    #[test]
+    fn launch_dao_requires_launch_admin_auth() {
+        let dao = build();
+        let env = &dao.env;
+        let stranger = Address::generate(env);
+        let config = cfg(true, true, false);
+        env.mock_auths(&[MockAuth {
+            address: &stranger,
+            invoke: &MockAuthInvoke {
+                contract: &dao.client.address,
+                fn_name: "launch_dao",
+                args: (dao.addresses.token.clone(), config.clone()).into_val(env),
+                sub_invokes: &[],
+            },
+        }]);
+        assert!(dao
+            .client
+            .try_launch_dao(&dao.addresses.token, &config)
+            .is_err());
+        assert!(dao.client.get_pending_dao(&dao.addresses.token).is_some());
+        assert_eq!(dao.token.get_owner(), Some(dao.launch_admin.clone()));
+    }
+
+    #[test]
+    fn module_launch_requires_manager_auth_for_every_module() {
+        let dao = build();
+        let env = &dao.env;
+        let t = dao.addresses.treasury.clone();
+        let stranger = Address::generate(env);
+        let minters = vec![env, t.clone()];
+
+        // Authorize only a non-manager address for each call, one at a time.
+        macro_rules! only_stranger {
+            ($addr:expr, $fn_name:expr, $args:expr) => {
+                env.mock_auths(&[MockAuth {
+                    address: &stranger,
+                    invoke: &MockAuthInvoke {
+                        contract: $addr,
+                        fn_name: $fn_name,
+                        args: $args.into_val(env),
+                        sub_invokes: &[],
+                    },
+                }]);
+            };
+        }
+        only_stranger!(&dao.addresses.token, "launch", (&t, &minters));
+        assert!(dao.token.try_launch(&t, &minters).is_err());
+        only_stranger!(&dao.addresses.governor, "launch", (&t,));
+        assert!(dao.governor.try_launch(&t).is_err());
+        only_stranger!(&dao.addresses.treasury, "launch", (&t,));
+        assert!(dao.treasury.try_launch(&t).is_err());
+        only_stranger!(&dao.addresses.auction, "launch", (&t, true, &dao.payment));
+        assert!(dao.auction.try_launch(&t, &true, &dao.payment).is_err());
+        only_stranger!(
+            &dao.addresses.marketplace,
+            "launch",
+            (&t, true, &dao.payment)
+        );
+        assert!(dao.marketplace.try_launch(&t, &true, &dao.payment).is_err());
+        only_stranger!(&dao.addresses.metadata, "launch", (&t,));
+        assert!(dao.metadata.try_launch(&t).is_err());
+
+        // None of them went live.
+        env.mock_all_auths();
+        assert!(!dao.token.is_live());
+        assert!(dao.client.get_pending_dao(&dao.addresses.token).is_some());
     }
 }

@@ -25,6 +25,10 @@ impl MetadataContract {
         let manager = Self::manager(&env);
         manager.require_auth();
         common::lifecycle::mark_live(&env);
+        let wired: Option<Address> = env.storage().instance().get(&DataKey::Treasury);
+        if wired != Some(treasury.clone()) {
+            soroban_sdk::panic_with_error!(&env, Error::TreasuryMismatch);
+        }
         env.storage().instance().set(&DataKey::Owner, &treasury);
         common::ttl::extend_instance(&env);
         emit_launched(&env, &treasury);
@@ -40,6 +44,7 @@ impl MetadataContract {
     /// * `contract_image` - Collection image URL
     /// * `renderer_base` - Base URL for image rendering service
     /// * `owner` - Metadata contract owner
+    /// * `treasury` - DAO treasury; `launch` must be called with exactly this address
     ///
     /// # Panics
     ///
@@ -54,6 +59,7 @@ impl MetadataContract {
         manager: Address,
         current_hash: BytesN<32>,
         owner: Address,
+        treasury: Address,
         property_names: Vec<String>,
         items: Vec<ItemParam>,
         ipfs_group: IpfsGroup,
@@ -75,6 +81,7 @@ impl MetadataContract {
         }
         env.storage().instance().set(&DataKey::Manager, &manager);
         env.storage().instance().set(&DataKey::Owner, &owner);
+        env.storage().instance().set(&DataKey::Treasury, &treasury);
         common::upgrade::init(&env, &current_hash, &version);
 
         emit_metadata_initialized(

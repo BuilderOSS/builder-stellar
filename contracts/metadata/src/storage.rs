@@ -28,6 +28,7 @@ pub enum DataKey {
     Attributes(u32), // token_id -> [u16; 16]
     Manager,
     Owner,
+    Treasury,
 }
 
 // Data structures

@@ -26,6 +26,7 @@ fn setup_with_manager() -> (Env, DaoTokenContractClient<'static>, Address, Addre
         DaoTokenContract,
         (
             owner.clone(),
+            Address::generate(&e),
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
@@ -47,6 +48,7 @@ fn setup_no_auth() -> (Env, DaoTokenContractClient<'static>, Address) {
         DaoTokenContract,
         (
             owner.clone(),
+            Address::generate(&e),
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
@@ -115,10 +117,22 @@ fn transfer_to_new_holder_defaults_self_delegate() {
     assert_eq!(client.get_votes(&bob), 1);
 }
 
-/// Launch with `minters`; returns the treasury address.
+/// Treasury wired into the token constructor.
+fn wired_treasury(e: &Env, client: &DaoTokenContractClient) -> Address {
+    e.as_contract(&client.address, || {
+        e.storage()
+            .instance()
+            .get(&crate::storage::TokenKey::Treasury)
+            .unwrap()
+    })
+}
+
+/// Launch with `minters` (the wired treasury is always included, as the
+/// Manager does); returns the treasury address.
 fn launch(e: &Env, client: &DaoTokenContractClient, minters: &[Address]) -> Address {
-    let treasury = Address::generate(e);
+    let treasury = wired_treasury(e, client);
     let mut v = soroban_sdk::Vec::new(e);
+    v.push_back(treasury.clone());
     for m in minters {
         v.push_back(m.clone());
     }
@@ -506,6 +520,7 @@ mod upgrade_via_common {
             DaoTokenContract,
             (
                 Address::generate(&e),
+                Address::generate(&e),
                 String::from_str(&e, "https://example.com/"),
                 String::from_str(&e, "DAO Vote NFT"),
                 String::from_str(&e, "vDAO"),
@@ -543,6 +558,7 @@ mod upgrade_via_common {
             DaoTokenContract,
             (
                 Address::generate(&e),
+                Address::generate(&e),
                 String::from_str(&e, "https://example.com/"),
                 String::from_str(&e, "DAO Vote NFT"),
                 String::from_str(&e, "vDAO"),
@@ -576,6 +592,7 @@ mod upgrade_via_common {
         let id = e.register(
             DaoTokenContract,
             (
+                Address::generate(&e),
                 Address::generate(&e),
                 String::from_str(&e, "https://example.com/"),
                 String::from_str(&e, "DAO Vote NFT"),
@@ -612,6 +629,7 @@ mod upgrade_via_common {
             DaoTokenContract,
             (
                 Address::generate(&e),
+                Address::generate(&e),
                 String::from_str(&e, "https://example.com/"),
                 String::from_str(&e, "DAO Vote NFT"),
                 String::from_str(&e, "vDAO"),
@@ -647,6 +665,7 @@ mod upgrade_via_common {
             DaoTokenContract,
             (
                 Address::generate(&e),
+                Address::generate(&e),
                 String::from_str(&e, "https://example.com/"),
                 String::from_str(&e, "DAO Vote NFT"),
                 String::from_str(&e, "vDAO"),
@@ -672,4 +691,73 @@ mod upgrade_via_common {
             assert_eq!(DaoTokenContract::version(&e), String::from_str(&e, "0.2.1"));
         });
     }
+}
+
+#[test]
+fn launch_rejects_unwired_treasury_and_minters_without_treasury() {
+    let (e, client, _owner, _m) = setup_with_manager();
+    let wired = wired_treasury(&e, &client);
+    let other = Address::generate(&e);
+
+    let r = client.try_launch(&other, &vec![&e, other.clone()]);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        crate::error::TokenError::TreasuryMismatch.into()
+    );
+    let r = client.try_launch(&wired, &vec![&e, other.clone()]);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        crate::error::TokenError::TreasuryNotMinter.into()
+    );
+    assert!(!client.is_live());
+    client.launch(&wired, &vec![&e, wired.clone()]);
+    assert!(client.is_live());
+}
+
+#[test]
+fn launch_requires_manager_auth() {
+    let e = Env::default();
+    let owner = Address::generate(&e);
+    let treasury = Address::generate(&e);
+    let manager = Address::generate(&e);
+    let id = e.register(
+        DaoTokenContract,
+        (
+            owner.clone(),
+            treasury.clone(),
+            String::from_str(&e, "u"),
+            String::from_str(&e, "n"),
+            String::from_str(&e, "s"),
+            Address::generate(&e),
+            manager.clone(),
+            BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
+        ),
+    );
+    let client = DaoTokenContractClient::new(&e, &id);
+    let minters = vec![&e, treasury.clone()];
+    // Only a non-manager address authorizes the call.
+    e.mock_auths(&[MockAuth {
+        address: &owner,
+        invoke: &MockAuthInvoke {
+            contract: &id,
+            fn_name: "launch",
+            args: (&treasury, &minters).into_val(&e),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(client.try_launch(&treasury, &minters).is_err());
+    assert!(!client.is_live());
+    // The manager's own authorization succeeds.
+    e.mock_auths(&[MockAuth {
+        address: &manager,
+        invoke: &MockAuthInvoke {
+            contract: &id,
+            fn_name: "launch",
+            args: (&treasury, &minters).into_val(&e),
+            sub_invokes: &[],
+        },
+    }]);
+    client.launch(&treasury, &minters);
+    assert!(client.is_live());
 }

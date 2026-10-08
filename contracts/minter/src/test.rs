@@ -11,11 +11,27 @@ use crate::{
     events::AllowlistClaimEvent, events::MerkleClaimEvent, MinterContract, MinterContractClient,
 };
 
-fn create_token_contract<'a>(env: &Env, owner: &Address) -> Address {
+/// Fixed treasury address wired into every test token, so tests can launch it.
+fn treasury(env: &Env) -> Address {
+    Address::from_str(
+        env,
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
+    )
+}
+
+/// Launch the token the way the Manager does: treasury becomes owner (admin of
+/// the minter) and `minter` receives mint authority.
+fn launch_token(env: &Env, token: &token::DaoTokenContractClient, minter: &Address) {
+    let t = treasury(env);
+    token.launch(&t, &Vec::from_array(env, [t.clone(), minter.clone()]));
+}
+
+fn create_token_contract(env: &Env, owner: &Address) -> Address {
     env.register(
         DaoTokenContract,
         (
             owner.clone(),
+            treasury(env),
             String::from_str(env, "https://test.com"),
             String::from_str(env, "Test Token"),
             String::from_str(env, "TEST"),
@@ -49,10 +65,7 @@ fn test_mint_batch_single_recipient() {
 
     // Grant mint authority to minter contract
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
 
     // Mint 5 tokens to one recipient
     let recipients = Vec::from_array(&env, [recipient.clone()]);
@@ -76,10 +89,7 @@ fn test_mint_batch_multiple_recipients() {
     let charlie = Address::generate(&env);
 
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
 
     // Mint to multiple recipients
     let recipients = Vec::from_array(&env, [alice.clone(), bob.clone(), charlie.clone()]);
@@ -98,37 +108,31 @@ fn test_mint_batch_multiple_recipients() {
 #[should_panic(expected = "Error(Auth, InvalidAction)")]
 fn test_mint_batch_requires_admin_auth() {
     let env = Env::default();
+    env.mock_all_auths();
 
     let (_admin, token, minter) = setup(&env);
     let recipient = Address::generate(&env);
     let unauthorized = Address::generate(&env);
 
-    // Mock auth as unauthorized address
+    // Launch under full auth first, so the only failing check is the minter's admin auth.
+    let token_client = token::DaoTokenContractClient::new(&env, &token);
+    launch_token(&env, &token_client, &minter.address);
+
+    let recipients = Vec::from_array(&env, [recipient.clone()]);
+    let amounts = Vec::from_array(&env, [5u128]);
+
+    // Now only an unauthorized address signs.
     env.mock_auths(&[MockAuth {
         address: &unauthorized,
         invoke: &MockAuthInvoke {
             contract: &minter.address,
             fn_name: "mint_batch",
-            args: (
-                token.clone(),
-                Vec::from_array(&env, [recipient.clone()]),
-                Vec::from_array(&env, [5u128]),
-            )
-                .into_val(&env),
+            args: (token.clone(), recipients.clone(), amounts.clone()).into_val(&env),
             sub_invokes: &[],
         },
     }]);
 
-    let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
-
-    let recipients = Vec::from_array(&env, [recipient.clone()]);
-    let amounts = Vec::from_array(&env, [5u128]);
-
-    // This should panic because unauthorized is not the admin
+    // Panics with Auth/InvalidAction: the token owner (treasury) did not authorize.
     minter.mint_batch(&token, &recipients, &amounts);
 }
 
@@ -143,10 +147,7 @@ fn test_mint_batch_mismatched_lengths() {
     let bob = Address::generate(&env);
 
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
 
     // Different length arrays should panic
     let recipients = Vec::from_array(&env, [alice, bob]);
@@ -164,10 +165,7 @@ fn test_mint_batch_too_many_recipients() {
     let (_admin, token, minter) = setup(&env);
 
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
 
     // Create 101 recipients (exceeds MAX_BATCH of 100)
     let mut recipients = Vec::new(&env);
@@ -190,10 +188,7 @@ fn test_mint_batch_zero_amount() {
     let recipient = Address::generate(&env);
 
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
 
     // Zero amount should panic
     let recipients = Vec::from_array(&env, [recipient]);
@@ -212,10 +207,7 @@ fn test_mint_batch_preserves_delegation() {
     let bob = Address::generate(&env);
 
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
 
     // Alice delegates to Bob before minting
     token_client.delegate(&alice, &bob);
@@ -244,10 +236,7 @@ fn test_set_and_mint_allowlist() {
     let bob = Address::generate(&env);
 
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
 
     // Set allowlist with fixed amount of 5
     let allowlist_addresses = Vec::from_array(&env, [alice.clone(), bob.clone()]);
@@ -271,10 +260,7 @@ fn test_allowlist_claim_event_shape() {
     let (_admin, token, minter) = setup(&env);
     let alice = Address::generate(&env);
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
     minter.set_allowlist(&token, &Vec::from_array(&env, [alice.clone()]), &5u128);
 
     minter.mint_allowlist(&token, &alice, &5u128);
@@ -299,10 +285,7 @@ fn test_allowlist_failed_claim_emits_no_success_event() {
     let (_admin, token, minter) = setup(&env);
     let alice = Address::generate(&env);
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
     minter.set_allowlist(&token, &Vec::from_array(&env, [alice.clone()]), &5u128);
     minter.mint_allowlist(&token, &alice, &5u128);
 
@@ -321,10 +304,7 @@ fn test_mint_allowlist_not_in_list() {
     let bob = Address::generate(&env);
 
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
 
     // Set allowlist with only Alice
     let allowlist_addresses = Vec::from_array(&env, [alice.clone()]);
@@ -344,10 +324,7 @@ fn test_mint_allowlist_wrong_amount() {
     let alice = Address::generate(&env);
 
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
 
     // Set allowlist with Alice at 5 tokens (fixed amount)
     let allowlist_addresses = Vec::from_array(&env, [alice.clone()]);
@@ -367,10 +344,7 @@ fn test_mint_allowlist_double_claim() {
     let alice = Address::generate(&env);
 
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
 
     // Set allowlist
     let allowlist_addresses = Vec::from_array(&env, [alice.clone()]);
@@ -387,12 +361,17 @@ fn test_mint_allowlist_double_claim() {
 #[should_panic(expected = "Error(Auth, InvalidAction)")]
 fn test_allowlist_requires_recipient_auth() {
     let env = Env::default();
+    env.mock_all_auths();
 
     let (_admin, token, minter) = setup(&env);
     let alice = Address::generate(&env);
     let unauthorized = Address::generate(&env);
 
-    // Mock auth as unauthorized address trying to claim for Alice
+    let token_client = token::DaoTokenContractClient::new(&env, &token);
+    launch_token(&env, &token_client, &minter.address);
+    minter.set_allowlist(&token, &Vec::from_array(&env, [alice.clone()]), &5u128);
+
+    // Now an unauthorized address tries to claim for Alice.
     env.mock_auths(&[MockAuth {
         address: &unauthorized,
         invoke: &MockAuthInvoke {
@@ -403,17 +382,7 @@ fn test_allowlist_requires_recipient_auth() {
         },
     }]);
 
-    let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
-
-    // Set allowlist
-    let allowlist_addresses = Vec::from_array(&env, [alice.clone()]);
-    minter.set_allowlist(&token, &allowlist_addresses, &5u128);
-
-    // Try to mint for Alice from unauthorized address - should panic
+    // Panics with Auth/InvalidAction: Alice (the recipient) did not authorize.
     minter.mint_allowlist(&token, &alice, &5u128);
 }
 
@@ -463,7 +432,72 @@ fn test_set_merkle_root() {
     env.mock_all_auths();
 
     let (_admin, token, minter) = setup(&env);
+    let token_client = token::DaoTokenContractClient::new(&env, &token);
+    launch_token(&env, &token_client, &minter.address);
     minter.set_merkle_root(&token, &BytesN::from_array(&env, &[1u8; 32]));
+}
+
+/// Setup-window configuration must not survive launch: before the token is
+/// live every minter entrypoint refuses with TokenNotLive.
+#[test]
+fn test_setup_window_configuration_is_refused_before_launch() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (_admin, token, minter) = setup(&env);
+    let alice = Address::generate(&env);
+    let not_live = crate::errors::MinterError::TokenNotLive;
+
+    assert_eq!(
+        minter
+            .try_set_merkle_root(&token, &BytesN::from_array(&env, &[1u8; 32]))
+            .err()
+            .unwrap()
+            .unwrap(),
+        not_live
+    );
+    assert_eq!(
+        minter
+            .try_set_allowlist(&token, &Vec::from_array(&env, [alice.clone()]), &5u128)
+            .err()
+            .unwrap()
+            .unwrap(),
+        not_live
+    );
+    assert_eq!(
+        minter
+            .try_mint_merkle(&token, &alice, &5u128, &Vec::new(&env))
+            .err()
+            .unwrap()
+            .unwrap(),
+        not_live
+    );
+    assert_eq!(
+        minter
+            .try_mint_allowlist(&token, &alice, &5u128)
+            .err()
+            .unwrap()
+            .unwrap(),
+        not_live
+    );
+    assert_eq!(
+        minter
+            .try_mint_batch(
+                &token,
+                &Vec::from_array(&env, [alice.clone()]),
+                &Vec::from_array(&env, [1u128])
+            )
+            .err()
+            .unwrap()
+            .unwrap(),
+        not_live
+    );
+
+    // After launch the treasury (token owner) can configure the minter.
+    let token_client = token::DaoTokenContractClient::new(&env, &token);
+    launch_token(&env, &token_client, &minter.address);
+    minter.set_merkle_root(&token, &BytesN::from_array(&env, &[1u8; 32]));
+    minter.set_allowlist(&token, &Vec::from_array(&env, [alice]), &5u128);
 }
 
 #[test]
@@ -476,10 +510,7 @@ fn test_mint_merkle_basic() {
     let bob = Address::generate(&env);
 
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
 
     let (root, alice_proof, bob_proof) = two_leaf_tree(&env, &alice, 5, &bob, 3);
     minter.set_merkle_root(&token, &root);
@@ -501,10 +532,7 @@ fn test_merkle_claim_event_shape() {
     let alice = Address::generate(&env);
     let bob = Address::generate(&env);
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
     let (root, alice_proof, _) = two_leaf_tree(&env, &alice, 5, &bob, 3);
     minter.set_merkle_root(&token, &root);
 
@@ -531,10 +559,7 @@ fn test_merkle_failed_claim_emits_no_success_event() {
     let alice = Address::generate(&env);
     let bob = Address::generate(&env);
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
     let (root, alice_proof, _) = two_leaf_tree(&env, &alice, 5, &bob, 3);
     minter.set_merkle_root(&token, &root);
     minter.mint_merkle(&token, &alice, &5u128, &alice_proof);
@@ -555,10 +580,7 @@ fn test_mint_merkle_invalid_proof() {
     let bob = Address::generate(&env);
     let mallory = Address::generate(&env);
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
     let (root, alice_proof, bob_proof) = two_leaf_tree(&env, &alice, 5, &bob, 3);
     minter.set_merkle_root(&token, &root);
 
@@ -596,10 +618,7 @@ fn test_mint_merkle_no_root_set() {
     let alice = Address::generate(&env);
 
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
 
     minter.mint_merkle(&token, &alice, &5u128, &Vec::new(&env));
 }
@@ -615,10 +634,7 @@ fn test_mint_merkle_double_claim() {
     let bob = Address::generate(&env);
 
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
 
     let (root, alice_proof, _) = two_leaf_tree(&env, &alice, 5, &bob, 3);
     minter.set_merkle_root(&token, &root);
@@ -631,11 +647,16 @@ fn test_mint_merkle_double_claim() {
 #[should_panic(expected = "Error(Auth, InvalidAction)")]
 fn test_merkle_requires_recipient_auth() {
     let env = Env::default();
+    env.mock_all_auths();
 
     let (_admin, token, minter) = setup(&env);
     let alice = Address::generate(&env);
     let unauthorized = Address::generate(&env);
     let proof: Vec<BytesN<32>> = Vec::new(&env);
+
+    let token_client = token::DaoTokenContractClient::new(&env, &token);
+    launch_token(&env, &token_client, &minter.address);
+    minter.set_merkle_root(&token, &BytesN::from_array(&env, &[1u8; 32]));
 
     env.mock_auths(&[MockAuth {
         address: &unauthorized,
@@ -647,13 +668,7 @@ fn test_merkle_requires_recipient_auth() {
         },
     }]);
 
-    let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
-
-    minter.set_merkle_root(&token, &BytesN::from_array(&env, &[1u8; 32]));
+    // Panics with Auth/InvalidAction: Alice (the recipient) did not authorize.
     minter.mint_merkle(&token, &alice, &5u128, &proof);
 }
 
@@ -665,10 +680,7 @@ fn test_claim_uses_single_checkpoint() {
     let (_admin, token, minter) = setup(&env);
     let alice = Address::generate(&env);
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
 
     minter.set_allowlist(&token, &Vec::from_array(&env, [alice.clone()]), &10u128);
     minter.mint_allowlist(&token, &alice, &10u128);
@@ -686,10 +698,7 @@ fn test_set_allowlist_replaces_previous_list() {
     let alice = Address::generate(&env);
     let bob = Address::generate(&env);
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
 
     minter.set_allowlist(&token, &Vec::from_array(&env, [alice.clone()]), &2u128);
     minter.set_allowlist(&token, &Vec::from_array(&env, [bob.clone()]), &3u128);
@@ -714,10 +723,7 @@ fn test_multiple_mint_methods_together() {
     let charlie = Address::generate(&env);
 
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
 
     // 1. Batch mint to Alice
     let recipients = Vec::from_array(&env, [alice.clone()]);
@@ -752,10 +758,7 @@ fn test_minter_with_contract_as_minter() {
     let token_client = token::DaoTokenContractClient::new(&env, &token);
 
     // Grant mint authority to the minter contract itself
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
 
     // Mint batch
     let recipients = Vec::from_array(&env, [recipient.clone()]);
@@ -776,10 +779,7 @@ fn test_batch_mint_30_tokens_three_founders() {
     let founder3 = Address::generate(&env);
 
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
 
     // Simulate DAO founder allocation: 3 founders × 10 tokens each = 30 total
     let recipients = Vec::from_array(&env, [founder1.clone(), founder2.clone(), founder3.clone()]);
@@ -819,10 +819,7 @@ fn test_batch_mint_large_amounts_single_recipient() {
     let recipient = Address::generate(&env);
 
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
 
     // Test minting large amount to single recipient (reduced to 25 to avoid budget limits)
     let recipients = Vec::from_array(&env, [recipient.clone()]);
@@ -848,10 +845,7 @@ fn test_batch_mint_preserves_delegation_across_batches() {
     let bob = Address::generate(&env);
 
     let token_client = token::DaoTokenContractClient::new(&env, &token);
-    token_client.launch(
-        &Address::generate(&env),
-        &Vec::from_array(&env, [minter.address.clone()]),
-    );
+    launch_token(&env, &token_client, &minter.address);
 
     // First batch to alice
     let recipients1 = Vec::from_array(&env, [alice.clone()]);

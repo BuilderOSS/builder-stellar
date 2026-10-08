@@ -35,6 +35,7 @@ fn register_metadata(
             manager.clone(),
             hash.clone(),
             owner.clone(),
+            Address::generate(env), // treasury
             Vec::<String>::new(env),
             Vec::<ItemParam>::new(env),
             IpfsGroup {
@@ -51,6 +52,7 @@ fn create_token_contract(env: &Env, owner: &Address) -> Address {
         DaoTokenContract,
         (
             owner.clone(),
+            Address::generate(env),
             String::from_str(env, "https://test.com"),
             String::from_str(env, "Test Token"),
             String::from_str(env, "TEST"),
@@ -438,7 +440,6 @@ fn launch_is_one_shot_and_moves_upgrade_authority() {
     let client = create_contract(&env);
     let manager = Address::generate(&env);
     let owner = Address::generate(&env);
-    let treasury = Address::generate(&env);
     register_metadata(
         &env,
         &client.address,
@@ -448,6 +449,18 @@ fn launch_is_one_shot_and_moves_upgrade_authority() {
         &owner,
     );
 
+    let wrong = Address::generate(&env);
+    let r = client.try_launch(&wrong);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        crate::error::Error::TreasuryMismatch.into()
+    );
+    let treasury: Address = env.as_contract(&client.address, || {
+        env.storage()
+            .instance()
+            .get(&crate::storage::DataKey::Treasury)
+            .unwrap()
+    });
     client.launch(&treasury);
     env.as_contract(&client.address, || {
         let stored: Address = env

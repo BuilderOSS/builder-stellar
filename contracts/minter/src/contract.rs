@@ -34,6 +34,7 @@ impl MinterContract {
         amounts: Vec<u128>,
     ) -> Result<(), MinterError> {
         // Get admin from token owner (also validates token_id)
+        require_token_live(e, &token_id)?;
         let admin = get_admin(e, &token_id)?;
         admin.require_auth();
 
@@ -42,7 +43,7 @@ impl MinterContract {
             return Err(MinterError::InvalidInput);
         }
 
-        let count = recipients.len() as u32;
+        let count = recipients.len();
         if count == 0 || count > MAX_BATCH_RECIPIENTS {
             return Err(MinterError::BatchTooLarge);
         }
@@ -88,6 +89,7 @@ impl MinterContract {
         proof: Vec<BytesN<32>>,
     ) -> Result<(), MinterError> {
         recipient.require_auth();
+        require_token_live(e, &token_id)?;
 
         let merkle_root = get_merkle_root(e, &token_id).ok_or(MinterError::MerkleRootNotSet)?;
 
@@ -118,6 +120,7 @@ impl MinterContract {
         amount: u128,
     ) -> Result<(), MinterError> {
         recipient.require_auth();
+        require_token_live(e, &token_id)?;
 
         let fixed_amount =
             get_allowlist_amount(e, &token_id).ok_or(MinterError::AllowlistNotSet)?;
@@ -154,6 +157,8 @@ impl MinterContract {
         token_id: Address,
         root: BytesN<32>,
     ) -> Result<(), MinterError> {
+        // Roots set during setup would otherwise survive launch.
+        require_token_live(e, &token_id)?;
         let admin = get_admin(e, &token_id)?;
         admin.require_auth();
 
@@ -180,6 +185,7 @@ impl MinterContract {
         addresses: Vec<Address>,
         fixed_amount: u128,
     ) -> Result<(), MinterError> {
+        require_token_live(e, &token_id)?;
         let admin = get_admin(e, &token_id)?;
         admin.require_auth();
 
@@ -209,6 +215,20 @@ fn get_admin(e: &Env, token_id: &Address) -> Result<Address, MinterError> {
         vec![e],
     ) {
         Ok(Ok(owner)) => Ok(owner),
+        _ => Err(MinterError::InvalidTokenId),
+    }
+}
+
+/// Refuse to operate on a token that has not been launched. A failing call
+/// means `token_id` is not a valid token contract.
+fn require_token_live(e: &Env, token_id: &Address) -> Result<(), MinterError> {
+    match e.try_invoke_contract::<bool, soroban_sdk::Error>(
+        token_id,
+        &Symbol::new(e, "is_live"),
+        vec![e],
+    ) {
+        Ok(Ok(true)) => Ok(()),
+        Ok(Ok(false)) => Err(MinterError::TokenNotLive),
         _ => Err(MinterError::InvalidTokenId),
     }
 }

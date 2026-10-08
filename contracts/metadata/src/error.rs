@@ -8,6 +8,8 @@ pub enum Error {
     AlreadyInitialized = 1,
     OnlyManager = 2,
     NotInitialized = 3,
+    /// `launch` treasury differs from the treasury wired at construction
+    TreasuryMismatch = 4,
 
     // Properties
     OnePropertyAndItemRequired = 10,

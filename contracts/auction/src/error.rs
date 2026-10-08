@@ -46,4 +46,6 @@ pub enum AuctionError {
     ExternalCallFailed = 1221,
     /// `launch` treasury differs from the treasury wired at construction
     TreasuryMismatch = 1222,
+    /// `launch` expected payment token differs from the configured one
+    PaymentTokenMismatch = 1223,
 }
