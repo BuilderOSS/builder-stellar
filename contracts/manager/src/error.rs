@@ -60,7 +60,8 @@ pub enum ManagerError {
     /// String empty
     StringEmpty = 1113,
 
-    /// Governance timing does not fit the Governor contract's u32 fields
+    /// Governance timing out of range: each of voting delay, voting period and
+    /// queue delay must be within 300 seconds ..= 30 days (2_592_000 seconds)
     InvalidGovernanceTiming = 1117,
 
     /// Proposal threshold must be at least 1

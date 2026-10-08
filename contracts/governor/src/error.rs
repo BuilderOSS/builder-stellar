@@ -24,4 +24,10 @@ pub enum CustomGovernorError {
     UseTreasuryExecute = 1508,
     /// Proposal has more than `MAX_PROPOSAL_ACTIONS` actions
     TooManyActions = 1509,
+    /// Voting delay above `MAX_VOTING_DELAY` (30 days)
+    VotingDelayTooLong = 1510,
+    /// Voting period above `MAX_VOTING_PERIOD` (30 days)
+    VotingPeriodTooLong = 1511,
+    /// Queue delay above `MAX_QUEUE_DELAY` (30 days)
+    QueueDelayTooLong = 1512,
 }

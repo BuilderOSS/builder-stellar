@@ -328,17 +328,26 @@ impl DaoGovernorContract {
         if v < MIN_VOTING_DELAY {
             panic_with_error!(e, CustomGovernorError::InvalidVotingDelay);
         }
+        if v > MAX_VOTING_DELAY {
+            panic_with_error!(e, CustomGovernorError::VotingDelayTooLong);
+        }
     }
 
     fn check_voting_period(e: &Env, v: u32) {
         if v < MIN_VOTING_PERIOD {
             panic_with_error!(e, CustomGovernorError::InvalidVotingPeriod);
         }
+        if v > MAX_VOTING_PERIOD {
+            panic_with_error!(e, CustomGovernorError::VotingPeriodTooLong);
+        }
     }
 
     fn check_queue_delay(e: &Env, v: u32) {
         if v < MIN_QUEUE_DELAY {
             panic_with_error!(e, CustomGovernorError::InvalidQueueDelay);
+        }
+        if v > MAX_QUEUE_DELAY {
+            panic_with_error!(e, CustomGovernorError::QueueDelayTooLong);
         }
     }
 

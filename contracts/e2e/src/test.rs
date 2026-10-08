@@ -2009,6 +2009,39 @@ fn unknown_self_call_is_rejected_and_proposal_stays_queued() {
 }
 
 #[test]
+fn proposal_setting_queue_delay_above_max_reverts() {
+    let (e, token, treasury, governor, _target, owner) = setup();
+    let targets = vec![&e, governor.address.clone()];
+    let functions = vec![&e, Symbol::new(&e, "set_queue_delay")];
+
+    // Above the cap: the whole execute reverts and the proposal stays Queued.
+    let too_big = governor::MAX_QUEUE_DELAY + 1;
+    let args = vec![&e, vec![&e, too_big.into_val(&e)]];
+    let (id, hash) = queue_proposal(
+        &e, &token, &governor, &owner, &targets, &functions, &args, "too long",
+    );
+    assert!(treasury
+        .try_execute(&targets, &functions, &args, &hash)
+        .is_err());
+    assert_eq!(governor.proposal_state(&id), ProposalState::Queued);
+}
+
+#[test]
+fn proposal_setting_queue_delay_to_max_succeeds() {
+    let (e, token, treasury, governor, _target, owner) = setup();
+    let targets = vec![&e, governor.address.clone()];
+    let functions = vec![&e, Symbol::new(&e, "set_queue_delay")];
+
+    let max = governor::MAX_QUEUE_DELAY;
+    let args = vec![&e, vec![&e, max.into_val(&e)]];
+    let (id, hash) = queue_proposal(
+        &e, &token, &governor, &owner, &targets, &functions, &args, "at max",
+    );
+    treasury.execute(&targets, &functions, &args, &hash);
+    assert_eq!(governor.proposal_state(&id), ProposalState::Executed);
+}
+
+#[test]
 fn consume_by_non_treasury_fails() {
     let (e, token, treasury, governor, target, owner) = setup();
     let targets = vec![&e, target.address.clone()];

@@ -1457,3 +1457,137 @@ fn state_changing_entrypoint_extends_instance_ttl() {
         "instance TTL not extended: {before} -> {after}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Maximum governance timing (30 days)
+// ---------------------------------------------------------------------------
+
+fn register_timing(
+    e: &Env,
+    voting_delay: u32,
+    voting_period: u32,
+    queue_delay: u32,
+) -> DaoGovernorContractClient<'static> {
+    let id = e.register(
+        DaoGovernorContract,
+        (
+            Address::generate(e),
+            Address::generate(e),
+            Address::generate(e),
+            voting_delay,
+            voting_period,
+            queue_delay,
+            1_u128,
+            1_000_u32,
+            Address::generate(e),
+            BytesN::from_array(e, &[0u8; 32]),
+            String::from_str(e, "0.1.0"),
+        ),
+    );
+    DaoGovernorContractClient::new(e, &id)
+}
+
+#[test]
+fn constructor_accepts_exact_max_timing() {
+    let e = Env::default();
+    let g = register_timing(
+        &e,
+        crate::MAX_VOTING_DELAY,
+        crate::MAX_VOTING_PERIOD,
+        crate::MAX_QUEUE_DELAY,
+    );
+    assert_eq!(g.voting_delay(), 2_592_000);
+    assert_eq!(g.voting_period(), 2_592_000);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1510)")]
+fn constructor_rejects_voting_delay_above_max() {
+    let e = Env::default();
+    register_timing(&e, crate::MAX_VOTING_DELAY + 1, 300, 300);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1511)")]
+fn constructor_rejects_voting_period_above_max() {
+    let e = Env::default();
+    register_timing(&e, 300, crate::MAX_VOTING_PERIOD + 1, 300);
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1512)")]
+fn constructor_rejects_queue_delay_above_max() {
+    let e = Env::default();
+    register_timing(&e, 300, 300, crate::MAX_QUEUE_DELAY + 1);
+}
+
+#[test]
+fn setters_accept_exact_max_and_reject_above() {
+    let (_e, _token, _treasury, governor, _target, _owner) = setup();
+
+    governor.set_voting_delay(&crate::MAX_VOTING_DELAY);
+    governor.set_voting_period(&crate::MAX_VOTING_PERIOD);
+    governor.set_queue_delay(&crate::MAX_QUEUE_DELAY);
+    assert_eq!(governor.voting_delay(), crate::MAX_VOTING_DELAY);
+    assert_eq!(governor.voting_period(), crate::MAX_VOTING_PERIOD);
+
+    assert_eq!(
+        governor
+            .try_set_voting_delay(&(crate::MAX_VOTING_DELAY + 1))
+            .err()
+            .unwrap()
+            .unwrap(),
+        CustomGovernorError::VotingDelayTooLong.into()
+    );
+    assert_eq!(
+        governor
+            .try_set_voting_period(&(crate::MAX_VOTING_PERIOD + 1))
+            .err()
+            .unwrap()
+            .unwrap(),
+        CustomGovernorError::VotingPeriodTooLong.into()
+    );
+    assert_eq!(
+        governor
+            .try_set_queue_delay(&(crate::MAX_QUEUE_DELAY + 1))
+            .err()
+            .unwrap()
+            .unwrap(),
+        CustomGovernorError::QueueDelayTooLong.into()
+    );
+    // Rejected calls leave the stored values untouched.
+    assert_eq!(governor.voting_delay(), crate::MAX_VOTING_DELAY);
+    assert_eq!(governor.voting_period(), crate::MAX_VOTING_PERIOD);
+}
+
+#[test]
+fn proposal_with_max_timing_computes_schedule_without_overflow() {
+    let (e, token, _treasury, governor, target, owner) = setup();
+    governor.set_voting_delay(&crate::MAX_VOTING_DELAY);
+    governor.set_voting_period(&crate::MAX_VOTING_PERIOD);
+    governor.set_queue_delay(&crate::MAX_QUEUE_DELAY);
+
+    let proposer = Address::generate(&e);
+    let _ = token.mint(&owner, &proposer);
+    let now = e.ledger().timestamp();
+    e.ledger().set_sequence_number(200);
+
+    let targets = vec![&e, target.address.clone()];
+    let functions = vec![&e, symbol_short!("set_value")];
+    let args = proposal_args(&e);
+    let description = String::from_str(&e, "max timing");
+    let id = governor.propose(&targets, &functions, &args, &description, &proposer);
+
+    let end = now + u64::from(crate::MAX_VOTING_DELAY) + u64::from(crate::MAX_VOTING_PERIOD);
+    assert_eq!(u64::from(governor.proposal_deadline(&id)), end);
+    assert_eq!(governor.proposal_state(&id), ProposalState::Pending);
+
+    // Vote at the start, queue after the end: eta = now + max queue delay.
+    e.ledger()
+        .set_timestamp(now + u64::from(crate::MAX_VOTING_DELAY) + 1);
+    governor.cast_vote(&id, &1, &String::from_str(&e, "yes"), &proposer);
+    e.ledger().set_timestamp(end + 1);
+    let hash = description_hash(&e, &description);
+    governor.queue(&targets, &functions, &args, &hash, &0_u32, &proposer);
+    assert_eq!(governor.proposal_state(&id), ProposalState::Queued);
+}

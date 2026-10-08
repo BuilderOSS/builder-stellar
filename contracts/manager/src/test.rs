@@ -1415,6 +1415,43 @@ mod real_dao {
         client.create_dao(&dao_params(&env, &deployer, 2));
     }
 
+    /// The manager's local cap must track the governor crate's constants.
+    #[test]
+    fn governance_timing_cap_matches_governor_constants() {
+        assert_eq!(governor::MAX_VOTING_DELAY, 2_592_000);
+        assert_eq!(governor::MAX_VOTING_PERIOD, 2_592_000);
+        assert_eq!(governor::MAX_QUEUE_DELAY, 2_592_000);
+    }
+
+    #[test]
+    fn create_dao_rejects_governance_timing_above_max_and_accepts_max() {
+        let (env, client, _admin) = setup();
+        register_stub_implementations(&env, &client);
+        let deployer = Address::generate(&env);
+        let max = governor::MAX_VOTING_DELAY;
+
+        for field in 0..3u32 {
+            let mut p = dao_params(&env, &deployer, u64::from(field));
+            let g = &mut p.initial_config.governance;
+            match field {
+                0 => g.voting_delay = max + 1,
+                1 => g.voting_period = governor::MAX_VOTING_PERIOD + 1,
+                _ => g.queue_delay = governor::MAX_QUEUE_DELAY + 1,
+            }
+            assert_eq!(
+                client.try_create_dao(&p).err().unwrap().unwrap(),
+                ManagerError::InvalidGovernanceTiming
+            );
+        }
+
+        let mut ok = dao_params(&env, &deployer, 10);
+        let g = &mut ok.initial_config.governance;
+        g.voting_delay = governor::MAX_VOTING_DELAY;
+        g.voting_period = governor::MAX_VOTING_PERIOD;
+        g.queue_delay = governor::MAX_QUEUE_DELAY;
+        client.create_dao(&ok);
+    }
+
     #[test]
     fn create_dao_validates_time_buffer_upper_bound() {
         let (env, client, _admin) = setup();

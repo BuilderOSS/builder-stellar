@@ -27,6 +27,10 @@ const MAX_STRING_LENGTH: u32 = 256;
 const MIN_AUCTION_DURATION: u64 = 300;
 const MIN_RESERVE_PRICE: i128 = 1_000;
 const MIN_GOVERNANCE_DELAY: u64 = 300;
+/// Maximum for each governance timing value (30 days). Must equal the
+/// governor crate's `MAX_*` constants (asserted in tests); the manager does not
+/// depend on the governor crate.
+const MAX_GOVERNANCE_DELAY: u32 = 2_592_000;
 const MAX_BPS: u32 = 10_000;
 
 #[contractimpl]
@@ -1101,6 +1105,9 @@ impl ManagerContract {
         if u64::from(config.governance.voting_delay) < MIN_GOVERNANCE_DELAY
             || u64::from(config.governance.voting_period) < MIN_GOVERNANCE_DELAY
             || u64::from(config.governance.queue_delay) < MIN_GOVERNANCE_DELAY
+            || config.governance.voting_delay > MAX_GOVERNANCE_DELAY
+            || config.governance.voting_period > MAX_GOVERNANCE_DELAY
+            || config.governance.queue_delay > MAX_GOVERNANCE_DELAY
         {
             return Err(ManagerError::InvalidGovernanceTiming);
         }

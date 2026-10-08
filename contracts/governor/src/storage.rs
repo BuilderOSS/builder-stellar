@@ -94,6 +94,16 @@ pub const MIN_VOTING_PERIOD: u32 = 300;
 /// This is the default deployment minimum; callers can select a longer delay.
 pub const MIN_QUEUE_DELAY: u32 = 300; // 5 minutes in seconds
 
+/// Maximum voting delay (30 days in seconds). Bounds governance timing so a
+/// passed proposal cannot freeze governance with an absurd value.
+pub const MAX_VOTING_DELAY: u32 = 2_592_000;
+
+/// Maximum voting period (30 days in seconds).
+pub const MAX_VOTING_PERIOD: u32 = 2_592_000;
+
+/// Maximum queue delay (30 days in seconds).
+pub const MAX_QUEUE_DELAY: u32 = 2_592_000;
+
 /// Storage keys for governor-specific instance data.
 ///
 /// Most governance data (name, version, voting parameters, vote tallies) is stored
