@@ -1,0 +1,55 @@
+{
+  "$comment": "TEMPLATE for scripts/e2e-testnet.mjs (testnet rehearsal). The driver copies this to .e2e/dao-<nonce>.json and overrides deployer/launchAdmin (= E2E DAO_OWNER identity), nonce (timestamp per run), founders (DAO_OWNER x3, BIDDER_A x2) and both payment assets (native XLM SAC, resolved with `stellar contract id asset --asset native`). Governance timings are the contract minimums (300s) and auction.duration is the 300s minimum so a full round runs in ~35 minutes. reservePrice is in stroops (10000000 = 1 XLM; native SAC uses 7 decimals). proposalThreshold is an absolute vote count.",
+  "deployer": "GDQB6R74Q5K4MOCKPB3NLB7SX4BQR7DTXA3BGNKIVMZEXBEKCK4NQPFU",
+  "nonce": 0,
+  "launchAdmin": "GDQB6R74Q5K4MOCKPB3NLB7SX4BQR7DTXA3BGNKIVMZEXBEKCK4NQPFU",
+  "token": {
+    "name": "E2E Rehearsal DAO",
+    "symbol": "E2E",
+    "uri": "https://builder-stellar-web.vercel.app/api/dao/{daoId}/token/"
+  },
+  "metadata": {
+    "projectUri": "https://builder-stellar-web.vercel.app",
+    "description": "Testnet end-to-end rehearsal DAO (disposable)",
+    "contractImage": "https://builder-stellar-web.vercel.app/images/dao-logo.png",
+    "rendererBase": "https://builder-stellar-web.vercel.app/api/render/",
+    "artwork": {
+      "ipfs": {
+        "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+        "extension": ".png"
+      },
+      "properties": [
+        {
+          "name": "0-backgrounds",
+          "items": ["bg-cool", "bg-warm", "bg-gray"]
+        }
+      ]
+    }
+  },
+  "auction": {
+    "duration": 300,
+    "reservePrice": "10000000",
+    "timeBuffer": 60,
+    "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+  },
+  "marketplace": {
+    "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+    "secondaryFeeBps": 250
+  },
+  "governance": {
+    "queueDelay": 300,
+    "votingDelay": 300,
+    "votingPeriod": 300,
+    "quorumBps": 1000,
+    "proposalThreshold": 1
+  },
+  "founders": [
+    { "address": "GDQB6R74Q5K4MOCKPB3NLB7SX4BQR7DTXA3BGNKIVMZEXBEKCK4NQPFU", "amount": 3 },
+    { "address": "GBCHDAHPSQH6OLWFTV5HEEDKATZ3ITBBJXICJSSDFGXIRI6HJXH7RASI", "amount": 2 }
+  ],
+  "launch": {
+    "launchAuction": true,
+    "launchMarketplace": true,
+    "enableMinter": true
+  }
+}

@@ -513,3 +513,18 @@ return (
 - [MANAGER_DEPLOYMENT.md](./MANAGER_DEPLOYMENT.md) - Manager deployment
 - [GOLDSKY_SETUP.md](./GOLDSKY_SETUP.md) - Pipeline
 - [scripts/deploy-dao.mjs](../scripts/deploy-dao.mjs) - Deployment script
+
+## Testnet rehearsal (e2e)
+
+`scripts/e2e-testnet.mjs` drives a complete lifecycle on **testnet only** (it refuses any other network): Manager deploy, `create_dao`, founder setup, `launch_dao`, a two-bidder auction with refund and settlement, a multi-action governance round (`set_quorum_bps` + `create_primary_listing`, executed through `Treasury.execute`) and a primary-sale purchase. It uses the template `configs/e2e-testnet-dao.json` (300s governance/auction minimums, 1 XLM reserve, native SAC); the driver copies it to `.e2e/dao-<nonce>.json` with a per-run timestamp nonce and the resolved identity addresses.
+
+```bash
+stellar contract build                      # WASMs must exist
+node --test scripts/e2e-testnet.test.mjs    # offline helper tests (hash vector, argument encoding)
+node scripts/e2e-testnet.mjs all            # or one phase: preflight|deploy-manager|create-dao|setup|launch|auction|governance|marketplace|report
+node scripts/e2e-testnet.mjs governance --keep-going --state .e2e/state.json
+```
+
+Identities (local `stellar keys` names, override with `E2E_MANAGER_ADMIN`, `E2E_DAO_OWNER`, `E2E_BIDDER_A`, `E2E_BIDDER_B`): `testnet-admin` (Manager admin, second bidder), `testnet-dev` (deployer and launch admin, founder 1), `alice` (founder 2, first bidder, buyer). Keys must already exist and hold > 100 XLM; the driver only reads public addresses.
+
+State and results: `.e2e/state.json` (addresses, tx hashes, proposal id, timestamps; gitignored) makes the run resumable, a finished phase is skipped unless `--redo` is given, and `.e2e/report.json` plus a console table (stellar.expert links) is produced by the `report` phase. A full run takes roughly 35-45 minutes of waiting (voting delay, voting period and queue delay are 300s each, plus the 300s auction). Any FAIL makes the process exit nonzero; `--keep-going` continues with later phases. Not covered: the deferred-refund path (needs a recipient whose token transfer fails, impossible with native XLM) and a second `Manager.launch` (not callable).

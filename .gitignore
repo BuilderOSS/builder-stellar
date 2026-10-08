@@ -24,3 +24,7 @@ opencode.json
 .opencode/
 skills-lock.json
 
+
+# End-to-end testnet rehearsal state/reports (scripts/e2e-testnet.mjs)
+.e2e/
+deploys/e2e-*

@@ -406,38 +406,11 @@ async function main() {
   // Sequence: build -> deploy Manager(admin, current_hash, version) -> upload + register all module
   // implementations (+ Minter) -> set_current_implementations (six DAO modules) -> deploy shared Minter
   // (no constructor) -> set_platform_minter. Each step is idempotent, so re-running resumes.
-  // Build all DAO contracts including manager and metadata.
-  run(
-    'cargo',
-    [
-      'build',
-      '-p',
-      'token',
-      '-p',
-      'governor',
-      '-p',
-      'treasury',
-      '-p',
-      'auction',
-      '-p',
-      'manager',
-      '-p',
-      'metadata',
-      '-p',
-      'marketplace',
-      '-p',
-      'minter',
-      '--release',
-      '--target',
-      'wasm32v1-none'
-    ],
-    {
-      env: {
-        ...process.env,
-        SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2: '0'
-      }
-    }
-  );
+  // Build all deployable contracts with the real deployable build (spec shaking v2 on).
+  // The legacy SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=0 build embeds every unused
+  // library type: WASMs are 2-4x larger (token ~138 KB) and exceed the network's 131072-byte
+  // contract_max_size_bytes, so they cannot even be uploaded. Same command as `pnpm contracts:build`.
+  run('stellar', ['contract', 'build']);
 
   ensureNetwork();
   ensureIdentity();
