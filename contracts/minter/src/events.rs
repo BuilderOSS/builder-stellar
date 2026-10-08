@@ -13,6 +13,28 @@ pub struct MintEvent {
     pub amount: u128,
 }
 
+/// Emitted when a token is claimed through a merkle allocation.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MerkleClaimEvent {
+    #[topic]
+    pub token_id: Address,
+    #[topic]
+    pub recipient: Address,
+    pub amount: u128,
+}
+
+/// Emitted when a token is claimed through an allowlist allocation.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AllowlistClaimEvent {
+    #[topic]
+    pub token_id: Address,
+    #[topic]
+    pub recipient: Address,
+    pub amount: u128,
+}
+
 /// Emitted when a batch mint operation completes.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -43,6 +65,26 @@ pub struct AllowlistSetEvent {
 /// Emit a mint event.
 pub fn emit_mint(env: &Env, token_id: &Address, recipient: &Address, amount: u128) {
     MintEvent {
+        token_id: token_id.clone(),
+        recipient: recipient.clone(),
+        amount,
+    }
+    .publish(env);
+}
+
+/// Emit a merkle claim event.
+pub fn emit_merkle_claim(env: &Env, token_id: &Address, recipient: &Address, amount: u128) {
+    MerkleClaimEvent {
+        token_id: token_id.clone(),
+        recipient: recipient.clone(),
+        amount,
+    }
+    .publish(env);
+}
+
+/// Emit an allowlist claim event.
+pub fn emit_allowlist_claim(env: &Env, token_id: &Address, recipient: &Address, amount: u128) {
+    AllowlistClaimEvent {
         token_id: token_id.clone(),
         recipient: recipient.clone(),
         amount,

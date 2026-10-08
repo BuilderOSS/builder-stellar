@@ -116,7 +116,7 @@ impl MinterContract {
         validate_and_mint(e, &token_id, &recipient, &amount)?;
         mark_claimed(e, &token_id, &recipient);
 
-        emit_mint(e, &token_id, &recipient, amount);
+        emit_merkle_claim(e, &token_id, &recipient, amount);
 
         Ok(())
     }
@@ -177,7 +177,7 @@ impl MinterContract {
         validate_and_mint(e, &token_id, &recipient, &amount)?;
         mark_claimed(e, &token_id, &recipient);
 
-        emit_mint(e, &token_id, &recipient, amount);
+        emit_allowlist_claim(e, &token_id, &recipient, amount);
 
         Ok(())
     }

@@ -1,12 +1,14 @@
 #![cfg(test)]
 
 use soroban_sdk::{
-    testutils::{Address as _, MockAuth, MockAuthInvoke},
-    Address, Bytes, BytesN, Env, IntoVal, String, Vec,
+    testutils::{Address as _, Events, MockAuth, MockAuthInvoke},
+    Address, Bytes, BytesN, Env, Event, IntoVal, String, Vec,
 };
 use token::DaoTokenContract;
 
-use crate::{MinterContract, MinterContractClient};
+use crate::{
+    events::AllowlistClaimEvent, events::MerkleClaimEvent, MinterContract, MinterContractClient,
+};
 
 fn create_token_contract<'a>(env: &Env, owner: &Address) -> Address {
     env.register(
@@ -237,6 +239,47 @@ fn test_set_and_mint_allowlist() {
 }
 
 #[test]
+fn test_allowlist_claim_event_shape() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (_admin, token, minter) = setup(&env);
+    let alice = Address::generate(&env);
+    let token_client = token::DaoTokenContractClient::new(&env, &token);
+    token_client.set_mint_authority(&minter.address, &true);
+    minter.set_allowlist(&token, &Vec::from_array(&env, [alice.clone()]), &5u128);
+
+    minter.mint_allowlist(&token, &alice, &5u128);
+
+    let events = env.events().all();
+    assert_eq!(
+        events.events().last().unwrap(),
+        &AllowlistClaimEvent {
+            token_id: token,
+            recipient: alice,
+            amount: 5,
+        }
+        .to_xdr(&env, &minter.address)
+    );
+}
+
+#[test]
+fn test_allowlist_failed_claim_emits_no_success_event() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (_admin, token, minter) = setup(&env);
+    let alice = Address::generate(&env);
+    let token_client = token::DaoTokenContractClient::new(&env, &token);
+    token_client.set_mint_authority(&minter.address, &true);
+    minter.set_allowlist(&token, &Vec::from_array(&env, [alice.clone()]), &5u128);
+    minter.mint_allowlist(&token, &alice, &5u128);
+
+    assert!(minter.try_mint_allowlist(&token, &alice, &5u128).is_err());
+    assert!(env.events().all().events().is_empty());
+}
+
+#[test]
 #[should_panic(expected = "Error(Contract, #7)")] // NotInAllowlist
 fn test_mint_allowlist_not_in_list() {
     let env = Env::default();
@@ -370,6 +413,50 @@ fn test_mint_merkle_basic() {
 
     // Verify tokens were minted
     assert_eq!(token_client.balance(&alice), 5);
+}
+
+#[test]
+fn test_merkle_claim_event_shape() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (_admin, token, minter) = setup(&env);
+    let alice = Address::generate(&env);
+    let token_client = token::DaoTokenContractClient::new(&env, &token);
+    token_client.set_mint_authority(&minter.address, &true);
+    minter.set_merkle_root(&token, &Bytes::from_array(&env, &[1u8; 32]));
+
+    minter.mint_merkle(&token, &alice, &5u128, &Bytes::from_array(&env, &[0u8; 32]));
+
+    let events = env.events().all();
+    assert_eq!(
+        events.events().last().unwrap(),
+        &MerkleClaimEvent {
+            token_id: token,
+            recipient: alice,
+            amount: 5,
+        }
+        .to_xdr(&env, &minter.address)
+    );
+}
+
+#[test]
+fn test_merkle_failed_claim_emits_no_success_event() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (_admin, token, minter) = setup(&env);
+    let alice = Address::generate(&env);
+    let token_client = token::DaoTokenContractClient::new(&env, &token);
+    token_client.set_mint_authority(&minter.address, &true);
+    minter.set_merkle_root(&token, &Bytes::from_array(&env, &[1u8; 32]));
+    let proof = Bytes::from_array(&env, &[0u8; 32]);
+    minter.mint_merkle(&token, &alice, &5u128, &proof);
+
+    assert!(minter
+        .try_mint_merkle(&token, &alice, &5u128, &proof)
+        .is_err());
+    assert!(env.events().all().events().is_empty());
 }
 
 #[test]
