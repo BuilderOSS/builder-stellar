@@ -456,11 +456,11 @@ test('pipeline generator renders the current deployment and scripts', { skip: !e
   const template = readFileSync(new URL('../templates/builder-stellar-events.yaml.mustache', import.meta.url), 'utf8');
   const activityScript = readFileSync(new URL('../src/activity-feed.script.js', import.meta.url), 'utf8');
 
-  const yaml = buildGoldskyPipelineYaml({ deployment, secretName: 'MY_SECRET', templateSource: template, scriptSource: activityScript });
+  const yaml = buildGoldskyPipelineYaml({ deployment, secretName: 'MY_SECRET', startAt: 4983407, templateSource: template, scriptSource: activityScript });
 
   assert.match(yaml, /name: builder-stellar-events/);
   assert.match(yaml, /dataset_name: stellar_testnet\.events/);
-  assert.match(yaml, new RegExp(`start_at: ${JSON.parse(readFileSync(deploymentFixture, 'utf8')).deploymentLedger}`));
+  assert.match(yaml, new RegExp('start_at: 4983407'));
   assert.match(yaml, new RegExp(`'manager:${deployment.manager}' AS deployment_id`));
   assert.match(yaml, /schema: chain/);
   assert.match(yaml, /table: raw_events/);
@@ -490,7 +490,8 @@ test('writeGoldskyPipeline writes a file from env selection', { skip: !existsSyn
   const result = writeGoldskyPipeline({
     env: {
       MANAGER_DEPLOYMENT_FILE: 'deploys/builder-testnet-manager.json',
-      GOLDSKY_POSTGRES_SECRET: 'MY_SECRET'
+      GOLDSKY_POSTGRES_SECRET: 'MY_SECRET',
+      GOLDSKY_START_AT: '4983407'
     },
     outputPath
   });
@@ -950,4 +951,20 @@ test('builds activity feed row from decoded MetadataHookFailed event', () => {
   assert.equal(activity.kind, 'contract.metadatahookfailed');
   assert.equal(activity.token_id, '42');
   assert.equal(activity.visibility, 'system');
+});
+
+
+test('decodes the Minter events with the exact events.rs topics and payloads', () => {
+  const cases = [
+    ['MintEvent', [{ symbol: 'MintEvent' }, { address: 'TOKEN_CONTRACT' }, { address: 'RECIPIENT' }], { map: [{ key: { symbol: 'amount' }, val: { u128: '7' } }] }, { token_id: 'TOKEN_CONTRACT', recipient: 'RECIPIENT' }],
+    ['MintBatchEvent', [{ symbol: 'MintBatchEvent' }, { address: 'TOKEN_CONTRACT' }], { recipient_count: { u32: 3 }, total_amount: { u128: '9' } }, { token_id: 'TOKEN_CONTRACT' }],
+    ['MerkleRootSetEvent', [{ symbol: 'MerkleRootSetEvent' }, { address: 'TOKEN_CONTRACT' }], { map: [] }, { token_id: 'TOKEN_CONTRACT' }],
+    ['AllowlistSetEvent', [{ symbol: 'AllowlistSetEvent' }, { address: 'TOKEN_CONTRACT' }], { member_count: { u32: 4 } }, { token_id: 'TOKEN_CONTRACT' }]
+  ];
+  for (const [name, topics, data, expectedTopics] of cases) {
+    const decoded = decodeEvent({ event_id: name, contract_role: 'minter', topics: JSON.stringify(topics), data: JSON.stringify(data) });
+    assert.deepEqual(topicsOf(decoded), expectedTopics);
+    assert.equal(decoded.contract_role, 'minter');
+  }
+  assert.deepEqual(argsOf(decodeEvent({ topics: JSON.stringify(cases[0][1]), data: JSON.stringify(cases[0][2]) })), { amount: '7' });
 });

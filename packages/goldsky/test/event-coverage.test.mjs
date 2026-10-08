@@ -17,6 +17,7 @@ const __dirname = dirname(__filename);
 // Core DAO events that must be handled
 // Extracted from our contract Rust source and generated bindings
 const REQUIRED_EVENTS = {
+  minter: ['MintEvent', 'MintBatchEvent', 'MerkleRootSetEvent', 'AllowlistSetEvent'],
   token: [
     'TokenInitialized',
     'Mint',
@@ -129,6 +130,12 @@ function getHandledEvents() {
   return eventNames;
 }
 
+test('decoder handles all required minter events', () => {
+  const handled = getHandledEvents();
+  const missing = REQUIRED_EVENTS.minter.filter(event => !handled.has(event));
+  assert.strictEqual(missing.length, 0, `Missing minter events: ${missing.join(', ')}`);
+});
+
 test('decoder handles all required token events', () => {
   const handled = getHandledEvents();
   const missing = REQUIRED_EVENTS.token.filter(event => !handled.has(event));
@@ -209,6 +216,7 @@ test('decoder handles all required manager events', () => {
 test('all required DAO events are covered', () => {
   const handled = getHandledEvents();
   const allRequired = [
+    ...REQUIRED_EVENTS.minter,
     ...REQUIRED_EVENTS.token,
     ...REQUIRED_EVENTS.governor,
     ...REQUIRED_EVENTS.treasury,

@@ -220,15 +220,11 @@ export function useGoldskyMintingHistory(daoId: string, kind?: string, limit = 5
 }
 
 export function useGoldskyMinterClaims(daoId: string, recipient?: string, limit = 100) {
-  const query = new URLSearchParams();
-  query.append('contractRole', 'minter');
-  query.append('kind', 'minter.merkle_claim,minter.allowlist_claim');
-  if (recipient) query.append('actor', recipient);
-  query.append('limit', String(limit));
-
-  return useSWR<GoldskyActivityResponse>(
-    `/api/dao/${encodeURIComponent(daoId)}/activity-feed?${query}`,
-    fetchJson,
-    { keepPreviousData: true }
-  );
+  // The current Minter ABI emits generic MintEvent for both claim paths, so
+  // claim type cannot be derived safely. Keep the hook dormant until the
+  // contract emits canonical MerkleClaimEvent/AllowlistClaimEvent events.
+  void daoId;
+  void recipient;
+  void limit;
+  return useSWR<GoldskyActivityResponse>(null, fetchJson);
 }

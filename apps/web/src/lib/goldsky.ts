@@ -150,17 +150,21 @@ export async function getGoldskyActivityFeed(
     limit?: number;
     offset?: number;
     contractId?: string;
+    contractRole?: string;
+    actor?: string;
     kind?: string;
   } = {}
 ) {
-  const { limit = 25, offset = 0, contractId, kind } = params;
+  const { limit = 25, offset = 0, contractId, contractRole, actor, kind } = params;
   const deploymentId = getDeploymentId();
   const daoIdFromUrl = await getDaoIdFromUrl(daoId);
   const where = {
     deploymentId,
     daoId: daoIdFromUrl,
     ...(contractId ? { contractId } : {}),
-    ...(kind ? { kind } : {})
+    ...(contractRole ? { contractRole } : {}),
+    ...(actor ? { actor } : {}),
+    ...(kind ? { kind: { in: kind.split(',').map((value) => value.trim()).filter(Boolean) } } : {})
   };
   const [rows, total] = await Promise.all([
     prisma.appActivityFeed.findMany({

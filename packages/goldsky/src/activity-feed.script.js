@@ -102,8 +102,7 @@ function invoke(data) {
     AuctionCreated: true, BidPlaced: true,
     AuctionSettled: true, BidRefunded: true, AuctionCancelled: true,
     DaoCreated: true, DaoLaunched: true,
-    MintEvent: true, MintBatch: true, MerkleRootSet: true, AllowlistSet: true,
-    MerkleClaimEvent: true, AllowlistClaimEvent: true
+    MintEvent: true, MintBatchEvent: true
   };
 
   var kindMap = {
@@ -164,11 +163,9 @@ function invoke(data) {
     RendererBaseUpdated: 'metadata.renderer_base_updated',
     ContractImageUpdated: 'metadata.contract_image_updated',
     MintEvent: 'minter.mint',
-    MintBatch: 'minter.batch_mint',
-    MerkleRootSet: 'minter.merkle_root_set',
-    AllowlistSet: 'minter.allowlist_set',
-    MerkleClaimEvent: 'minter.merkle_claim',
-    AllowlistClaimEvent: 'minter.allowlist_claim'
+    MintBatchEvent: 'minter.batch_mint',
+    MerkleRootSetEvent: 'minter.merkle_root_set',
+    AllowlistSetEvent: 'minter.allowlist_set'
   };
 
   var titleMap = {
@@ -229,11 +226,9 @@ function invoke(data) {
     RendererBaseUpdated: 'Renderer base updated',
     ContractImageUpdated: 'Contract image updated',
     MintEvent: 'Tokens minted',
-    MintBatch: 'Batch mint completed',
-    MerkleRootSet: 'Merkle root configured',
-    AllowlistSet: 'Allowlist configured',
-    MerkleClaimEvent: 'Merkle claim successful',
-    AllowlistClaimEvent: 'Allowlist claim successful'
+    MintBatchEvent: 'Batch mint completed',
+    MerkleRootSetEvent: 'Merkle root configured',
+    AllowlistSetEvent: 'Allowlist configured'
   };
 
   var addresses = unique([
@@ -253,7 +248,8 @@ function invoke(data) {
     pick(data, ['token_contract_id']),
     pick(data, ['contract_id']),
     pick(data, ['creator']),
-    pick(data, ['token_address'])
+    pick(data, ['token_address']),
+    pick(data, ['recipient'])
   ]);
 
   var proposalId = pick(data, ['proposal_id']);
@@ -261,7 +257,7 @@ function invoke(data) {
   var tokenId = pick(data, ['token_id']);
   var func = pick(data, ['function']);
   var target = pick(data, ['target']);
-  var owner = pick(data, ['to', 'owner']);
+  var owner = pick(data, ['to', 'owner', 'recipient']);
   var creator = pick(data, ['creator']);
   var tokenAddress = pick(data, ['token_address']);
   var name = pick(data, ['name']);
@@ -276,6 +272,7 @@ function invoke(data) {
     Execute: function() { return 'Executed ' + (func || 'call') + ' on ' + (target || 'target'); },
     Mint: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
     MintWithMinter: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
+    MintEvent: function() { return 'Minted ' + (amount || 'tokens') + ' to ' + (owner || 'recipient'); },
     BatchMint: function() { return 'Minted ' + (amount || 'batch') + ' tokens'; },
     BatchMintMany: function() { var totalAmount = pick(data, ['total_amount']); var recipientCount = pick(data, ['recipient_count']); return 'Minted ' + (totalAmount || 'batch') + ' tokens to ' + (recipientCount || 'multiple') + ' recipients'; },
     DelegateChanged: function() { return 'Delegation changed'; },
@@ -344,7 +341,7 @@ function invoke(data) {
     proposal_id: toString(proposalId),
     token_id: toString(tokenId),
     amount: toString(amount),
-    actor: toString(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator'])),
+    actor: toString(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'recipient', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator'])),
     addresses: JSON.stringify(addresses || []),
     ledger_sequence: ledger_sequence,
     transaction_index: transaction_index,

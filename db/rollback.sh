@@ -2,7 +2,7 @@
 #
 # Rollback Database Migrations
 #
-# Rolls back all migrations in reverse order (13 → 0).
+# Rolls back all migrations in reverse order (15 → 0).
 # Use ONLY in emergency recovery scenarios.
 #
 # Usage:
@@ -63,6 +63,7 @@ echo ""
 # any working directory.  Every successful step also removes its ledger row.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROLLBACK_FILES=(
+  "$SCRIPT_DIR/rollback/0015_minter_read_models_rollback.sql"
   "$SCRIPT_DIR/rollback/0014_event_order_indexes_rollback.sql"
   "$SCRIPT_DIR/rollback/0013_deterministic_ordering_and_activity_indexes_rollback.sql"
   "$SCRIPT_DIR/rollback/0012_manager_auction_reactivation_rollback.sql"

@@ -75,7 +75,7 @@ echo ""
 # Check if schemas exist
 echo -e "${YELLOW}→ Checking schemas...${NC}"
 
-SCHEMAS=$(psql "$DATABASE_URL" -t -c "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name IN ('chain', 'governance', 'token', 'auction', 'treasury', 'manager', 'metadata', 'app')" | tr -d ' ')
+SCHEMAS=$(psql "$DATABASE_URL" -t -c "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name IN ('chain', 'governance', 'token', 'auction', 'treasury', 'manager', 'metadata', 'minter', 'app')" | tr -d ' ')
 
 if [ "$SCHEMAS" -eq 0 ]; then
   echo -e "${RED}✗ Required schemas do not exist${NC}"
@@ -101,6 +101,7 @@ GRANT USAGE ON SCHEMA auction TO goldsky_writer;
 GRANT USAGE ON SCHEMA treasury TO goldsky_writer;
 GRANT USAGE ON SCHEMA manager TO goldsky_writer;
 GRANT USAGE ON SCHEMA metadata TO goldsky_writer;
+GRANT USAGE ON SCHEMA minter TO goldsky_writer;
 GRANT USAGE ON SCHEMA app TO goldsky_writer;
 
 -- Grant CREATE permission (needed for Goldsky's CREATE TABLE IF NOT EXISTS)
@@ -160,6 +161,7 @@ GRANT USAGE ON SCHEMA auction TO app_server;
 GRANT USAGE ON SCHEMA treasury TO app_server;
 GRANT USAGE ON SCHEMA manager TO app_server;
 GRANT USAGE ON SCHEMA metadata TO app_server;
+GRANT USAGE ON SCHEMA minter TO app_server;
 GRANT USAGE ON SCHEMA app TO app_server;
 
 -- Grant SELECT only (read-only access)
@@ -171,6 +173,7 @@ GRANT SELECT ON ALL TABLES IN SCHEMA treasury TO app_server;
 GRANT SELECT ON ALL TABLES IN SCHEMA manager TO app_server;
 GRANT SELECT ON ALL TABLES IN SCHEMA metadata TO app_server;
 GRANT SELECT ON ALL TABLES IN SCHEMA app TO app_server;
+GRANT SELECT ON ALL TABLES IN SCHEMA minter TO app_server;
 
 -- app_server is a read-only consumer.  Explicitly revoke object and schema
 -- mutation privileges so a broad SELECT grant can never become a writer grant.
@@ -179,7 +182,7 @@ DECLARE
   schema_name text;
 BEGIN
   EXECUTE format('REVOKE CREATE ON DATABASE %I FROM app_server', current_database());
-  FOREACH schema_name IN ARRAY ARRAY['chain', 'governance', 'token', 'auction', 'treasury', 'manager', 'metadata', 'app'] LOOP
+  FOREACH schema_name IN ARRAY ARRAY['chain', 'governance', 'token', 'auction', 'treasury', 'manager', 'metadata', 'minter', 'app'] LOOP
     EXECUTE format('REVOKE CREATE ON SCHEMA %I FROM app_server', schema_name);
     EXECUTE format('REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON ALL TABLES IN SCHEMA %I FROM app_server', schema_name);
     EXECUTE format('REVOKE USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA %I FROM app_server', schema_name);
@@ -195,6 +198,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA auction GRANT SELECT ON TABLES TO app_server;
 ALTER DEFAULT PRIVILEGES IN SCHEMA treasury GRANT SELECT ON TABLES TO app_server;
 ALTER DEFAULT PRIVILEGES IN SCHEMA manager GRANT SELECT ON TABLES TO app_server;
 ALTER DEFAULT PRIVILEGES IN SCHEMA metadata GRANT SELECT ON TABLES TO app_server;
+ALTER DEFAULT PRIVILEGES IN SCHEMA minter GRANT SELECT ON TABLES TO app_server;
 ALTER DEFAULT PRIVILEGES IN SCHEMA app GRANT SELECT ON TABLES TO app_server;
 
 -- Raw landing payloads are not an application read surface.

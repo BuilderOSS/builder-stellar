@@ -1,5 +1,5 @@
 name: builder-stellar-events
-description: Index Manager CAMI673YU3NJYT3VO5GXXPWDSSJPUXAHJR2L6ITUMBQXRTNG2N36QK5K on testnet with Goldsky Turbo
+description: Index Manager CCN27AM3GAFABETQUIEHB4WO6QMBMCW72NCFIRFTJ3SHX45X7BHZU7SW on testnet with Goldsky Turbo
 resource_size: s
 use_dedicated_ip: false
 job: false
@@ -23,7 +23,7 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"token"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CAMI673YU3NJYT3VO5GXXPWDSSJPUXAHJR2L6ITUMBQXRTNG2N36QK5K'
+      WHERE contract_id = 'CCN27AM3GAFABETQUIEHB4WO6QMBMCW72NCFIRFTJ3SHX45X7BHZU7SW'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -37,7 +37,7 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"metadata"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CAMI673YU3NJYT3VO5GXXPWDSSJPUXAHJR2L6ITUMBQXRTNG2N36QK5K'
+      WHERE contract_id = 'CCN27AM3GAFABETQUIEHB4WO6QMBMCW72NCFIRFTJ3SHX45X7BHZU7SW'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -51,7 +51,7 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"auction"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CAMI673YU3NJYT3VO5GXXPWDSSJPUXAHJR2L6ITUMBQXRTNG2N36QK5K'
+      WHERE contract_id = 'CCN27AM3GAFABETQUIEHB4WO6QMBMCW72NCFIRFTJ3SHX45X7BHZU7SW'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -65,7 +65,7 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"governor"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CAMI673YU3NJYT3VO5GXXPWDSSJPUXAHJR2L6ITUMBQXRTNG2N36QK5K'
+      WHERE contract_id = 'CCN27AM3GAFABETQUIEHB4WO6QMBMCW72NCFIRFTJ3SHX45X7BHZU7SW'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -79,7 +79,7 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"treasury"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CAMI673YU3NJYT3VO5GXXPWDSSJPUXAHJR2L6ITUMBQXRTNG2N36QK5K'
+      WHERE contract_id = 'CCN27AM3GAFABETQUIEHB4WO6QMBMCW72NCFIRFTJ3SHX45X7BHZU7SW'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -93,7 +93,7 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"marketplace"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CAMI673YU3NJYT3VO5GXXPWDSSJPUXAHJR2L6ITUMBQXRTNG2N36QK5K'
+      WHERE contract_id = 'CCN27AM3GAFABETQUIEHB4WO6QMBMCW72NCFIRFTJ3SHX45X7BHZU7SW'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -102,11 +102,12 @@ transforms:
     primary_key: event_id
     sql: |
       SELECT
-        id AS event_id,
-        'manager:CAMI673YU3NJYT3VO5GXXPWDSSJPUXAHJR2L6ITUMBQXRTNG2N36QK5K' AS deployment_id,
+        concat('manager:CCN27AM3GAFABETQUIEHB4WO6QMBMCW72NCFIRFTJ3SHX45X7BHZU7SW:', id) AS event_id,
+        'manager:CCN27AM3GAFABETQUIEHB4WO6QMBMCW72NCFIRFTJ3SHX45X7BHZU7SW' AS deployment_id,
         contract_id,
         CASE
-          WHEN contract_id = 'CAMI673YU3NJYT3VO5GXXPWDSSJPUXAHJR2L6ITUMBQXRTNG2N36QK5K' THEN 'manager'
+          WHEN contract_id = 'CCN27AM3GAFABETQUIEHB4WO6QMBMCW72NCFIRFTJ3SHX45X7BHZU7SW' THEN 'manager'
+          WHEN contract_id = 'CDHMZRUDYUGI5MIJMWZENU3XS5KQOEINTEIAVH6RHUMH36JE4H6UJAAU' THEN 'minter'
           WHEN dynamic_table_check('dao_tokens', contract_id) THEN 'token'
           WHEN dynamic_table_check('dao_metadata', contract_id) THEN 'metadata'
           WHEN dynamic_table_check('dao_auctions', contract_id) THEN 'auction'
@@ -138,7 +139,8 @@ transforms:
       FROM stellar_events
        WHERE ledger_sequence >= 4983407
          AND (
-           contract_id = 'CAMI673YU3NJYT3VO5GXXPWDSSJPUXAHJR2L6ITUMBQXRTNG2N36QK5K'
+           contract_id = 'CCN27AM3GAFABETQUIEHB4WO6QMBMCW72NCFIRFTJ3SHX45X7BHZU7SW'
+           OR contract_id = 'CDHMZRUDYUGI5MIJMWZENU3XS5KQOEINTEIAVH6RHUMH36JE4H6UJAAU'
            OR dynamic_table_check('dao_tokens', contract_id)
            OR dynamic_table_check('dao_metadata', contract_id)
            OR dynamic_table_check('dao_auctions', contract_id)
@@ -307,20 +309,23 @@ transforms:
         var values = rawTopics.map(native);
         var eventName = String(values[0]);
         var topicValues = values.slice(1);
+        // Minter mappings mirror contracts/minter/src/events.rs exactly.
+        // token_id is the DAO token contract Address, not an NFT number.
         var topicNames = {
           ProposalCreated: ['proposal_id', 'proposer'], VoteCast: ['voter', 'proposal_id'],
           ProposalQueued: ['proposal_id'], ProposalCancelled: ['proposal_id'], ProposalCanceled: ['proposal_id'], ProposalExecuted: ['proposal_id'],
-          MintWithMinter: ['minter', 'to'], Mint: ['to'], BatchMint: ['minter', 'to'], Transfer: ['from', 'to'], Approve: ['owner', 'spender'],
+          MintWithMinter: ['minter', 'to'], Mint: ['to'], BatchMint: ['minter', 'to'], BatchMintMany: ['minter'], Transfer: ['from', 'to'], Approve: ['owner', 'spender'],
           DelegateChanged: ['delegator'], DelegateVotesChanged: ['delegate'], AuctionCreated: ['token_id'], BidPlaced: ['token_id', 'bidder'],
           AuctionSettled: ['token_id'], BidRefunded: ['token_id', 'bidder'], AuctionCancelled: ['token_id'], Execute: ['governor', 'target'],
           TokenInitialized: ['owner'], MintAuthorityChanged: ['authority'], GovernorInitialized: ['owner'], TreasuryChanged: ['old_treasury', 'new_treasury'],
           TokenContractChanged: ['old_token_contract', 'new_token_contract'], GovernorAuthorityChanged: ['authority'], AuctionInitialized: ['owner'],
           TreasuryInitialized: ['owner'], GovernorChanged: ['old_governor', 'new_governor'], DaoCreated: ['token_address', 'deployer', 'launch_admin'], DaoLaunched: ['token_address'],
-          ManagerInitialized: ['admin'], SeedGenerated: ['token_id'], MetadataInitialized: ['token'], ProposalExpired: [],
+          ManagerInitialized: ['admin'], SeedGenerated: ['token_id'], MetadataInitialized: ['token'], ProposalExpired: [], MetadataHookFailed: ['token_id'],
           ProposalThresholdChanged: ['caller'], QuorumBpsChanged: ['caller'], QueueDelayChanged: ['caller'], VotingDelayChanged: ['caller'], VotingPeriodChanged: ['caller'], DurationUpdated: [], ReservePriceUpdated: [], MinBidIncrementUpdated: [],
           TimeBufferUpdated: [], PaymentTokenUpdated: [], TreasuryUpdated: [], FactoryPaused: [], FactoryUnpaused: [], UpgradeApproved: [],
           ImplementationRevoked: [], ImplementationRegistered: [], CurrentImplementationsUpdated: [], PropertyAdded: [],
           PropertiesReset: [], ProjectURIUpdated: [], DescriptionUpdated: [], RendererBaseUpdated: [], ContractImageUpdated: [], ManagerUpgraded: [],
+          MintEvent: ['token_id', 'recipient'], MintBatchEvent: ['token_id'], MerkleRootSetEvent: ['token_id'], AllowlistSetEvent: ['token_id'],
           MarketplaceInitialized: ['token'], PrimaryListingCreated: ['token_id'], SecondaryListingCreated: ['token_id'], ListingPurchased: ['token_id', 'buyer'],
           ListingCancelled: ['token_id'], ListingExpired: ['token_id'], PaymentAssetUpdated: [], SecondaryFeeUpdated: [], MarketplacePaused: [], MarketplaceUnpaused: [], MarketplaceUpgraded: []
         };
@@ -393,7 +398,10 @@ transforms:
 
           function roleForEvent(name) {
             var canonical = toCanonical(name);
+            // MetadataHookFailed originates from token contract, not metadata
+            if (canonical === 'MetadataHookFailed') return 'token';
             if (/^(Dao|Factory|Upgrade|Implementation|CurrentImplementations|Manager)/.test(canonical)) return 'manager';
+            if (/^(MintEvent|MintBatchEvent|MerkleRootSetEvent|AllowlistSetEvent)/.test(canonical)) return 'minter';
             if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue|Veto)/.test(canonical)) return 'governor';
             if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken)/.test(canonical)) return 'auction';
             if (/^(Execute|Treasury|GovernorChanged)/.test(canonical)) return 'treasury';
@@ -534,13 +542,14 @@ transforms:
         var normalizedEventName = normalizeEventName(eventName);
 
         var userFacing = {
-          TokenInitialized: true, Mint: true, MintWithMinter: true, BatchMint: true,
+          TokenInitialized: true, Mint: true, MintWithMinter: true, BatchMint: true, BatchMintMany: true,
           Transfer: true, DelegateChanged: true, DelegateVotesChanged: true,
           ProposalCreated: true, ProposalQueued: true, VoteCast: true,
           ProposalCancelled: true, ProposalCanceled: true, ProposalExecuted: true,
           AuctionCreated: true, BidPlaced: true,
           AuctionSettled: true, BidRefunded: true, AuctionCancelled: true,
-          DaoCreated: true, DaoLaunched: true
+          DaoCreated: true, DaoLaunched: true,
+          MintEvent: true, MintBatchEvent: true
         };
 
         var kindMap = {
@@ -548,6 +557,7 @@ transforms:
           Mint: 'token.mint',
           MintWithMinter: 'token.mint',
           BatchMint: 'token.batch_mint',
+          BatchMintMany: 'token.batch_mint_many',
           MintAuthorityChanged: 'token.mint_authority_changed',
           Approve: 'token.approve',
           Transfer: 'token.transfer',
@@ -598,7 +608,11 @@ transforms:
           ProjectURIUpdated: 'metadata.project_uri_updated',
           DescriptionUpdated: 'metadata.description_updated',
           RendererBaseUpdated: 'metadata.renderer_base_updated',
-          ContractImageUpdated: 'metadata.contract_image_updated'
+          ContractImageUpdated: 'metadata.contract_image_updated',
+          MintEvent: 'minter.mint',
+          MintBatchEvent: 'minter.batch_mint',
+          MerkleRootSetEvent: 'minter.merkle_root_set',
+          AllowlistSetEvent: 'minter.allowlist_set'
         };
 
         var titleMap = {
@@ -606,6 +620,7 @@ transforms:
           Mint: 'Token minted',
           MintWithMinter: 'Token minted',
           BatchMint: 'Batch mint completed',
+          BatchMintMany: 'Multi-recipient batch mint completed',
           MintAuthorityChanged: 'Mint authority changed',
           Approve: 'Token approval granted',
           Transfer: 'Token transferred',
@@ -656,7 +671,11 @@ transforms:
           ProjectURIUpdated: 'Project URI updated',
           DescriptionUpdated: 'Description updated',
           RendererBaseUpdated: 'Renderer base updated',
-          ContractImageUpdated: 'Contract image updated'
+          ContractImageUpdated: 'Contract image updated',
+          MintEvent: 'Tokens minted',
+          MintBatchEvent: 'Batch mint completed',
+          MerkleRootSetEvent: 'Merkle root configured',
+          AllowlistSetEvent: 'Allowlist configured'
         };
 
         var addresses = unique([
@@ -676,7 +695,8 @@ transforms:
           pick(data, ['token_contract_id']),
           pick(data, ['contract_id']),
           pick(data, ['creator']),
-          pick(data, ['token_address'])
+          pick(data, ['token_address']),
+          pick(data, ['recipient'])
         ]);
 
         var proposalId = pick(data, ['proposal_id']);
@@ -684,7 +704,7 @@ transforms:
         var tokenId = pick(data, ['token_id']);
         var func = pick(data, ['function']);
         var target = pick(data, ['target']);
-        var owner = pick(data, ['to', 'owner']);
+        var owner = pick(data, ['to', 'owner', 'recipient']);
         var creator = pick(data, ['creator']);
         var tokenAddress = pick(data, ['token_address']);
         var name = pick(data, ['name']);
@@ -699,7 +719,9 @@ transforms:
           Execute: function() { return 'Executed ' + (func || 'call') + ' on ' + (target || 'target'); },
           Mint: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
           MintWithMinter: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
+          MintEvent: function() { return 'Minted ' + (amount || 'tokens') + ' to ' + (owner || 'recipient'); },
           BatchMint: function() { return 'Minted ' + (amount || 'batch') + ' tokens'; },
+          BatchMintMany: function() { var totalAmount = pick(data, ['total_amount']); var recipientCount = pick(data, ['recipient_count']); return 'Minted ' + (totalAmount || 'batch') + ' tokens to ' + (recipientCount || 'multiple') + ' recipients'; },
           DelegateChanged: function() { return 'Delegation changed'; },
           DaoCreated: function() { return 'DAO created by ' + (creator || 'unknown'); },
           DaoLaunched: function() { return 'DAO launched for token ' + (tokenAddress || 'unknown'); },
@@ -766,7 +788,7 @@ transforms:
           proposal_id: toString(proposalId),
           token_id: toString(tokenId),
           amount: toString(amount),
-          actor: toString(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator'])),
+          actor: toString(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'recipient', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator'])),
           addresses: JSON.stringify(addresses || []),
           ledger_sequence: ledger_sequence,
           transaction_index: transaction_index,

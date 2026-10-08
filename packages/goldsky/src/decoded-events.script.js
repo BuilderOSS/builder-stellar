@@ -42,6 +42,8 @@ function invoke(data) {
   var values = rawTopics.map(native);
   var eventName = String(values[0]);
   var topicValues = values.slice(1);
+  // Minter mappings mirror contracts/minter/src/events.rs exactly.
+  // token_id is the DAO token contract Address, not an NFT number.
   var topicNames = {
     ProposalCreated: ['proposal_id', 'proposer'], VoteCast: ['voter', 'proposal_id'],
     ProposalQueued: ['proposal_id'], ProposalCancelled: ['proposal_id'], ProposalCanceled: ['proposal_id'], ProposalExecuted: ['proposal_id'],
@@ -56,6 +58,7 @@ function invoke(data) {
     TimeBufferUpdated: [], PaymentTokenUpdated: [], TreasuryUpdated: [], FactoryPaused: [], FactoryUnpaused: [], UpgradeApproved: [],
     ImplementationRevoked: [], ImplementationRegistered: [], CurrentImplementationsUpdated: [], PropertyAdded: [],
     PropertiesReset: [], ProjectURIUpdated: [], DescriptionUpdated: [], RendererBaseUpdated: [], ContractImageUpdated: [], ManagerUpgraded: [],
+    MintEvent: ['token_id', 'recipient'], MintBatchEvent: ['token_id'], MerkleRootSetEvent: ['token_id'], AllowlistSetEvent: ['token_id'],
     MarketplaceInitialized: ['token'], PrimaryListingCreated: ['token_id'], SecondaryListingCreated: ['token_id'], ListingPurchased: ['token_id', 'buyer'],
     ListingCancelled: ['token_id'], ListingExpired: ['token_id'], PaymentAssetUpdated: [], SecondaryFeeUpdated: [], MarketplacePaused: [], MarketplaceUnpaused: [], MarketplaceUpgraded: []
   };
@@ -131,6 +134,7 @@ function invoke(data) {
       // MetadataHookFailed originates from token contract, not metadata
       if (canonical === 'MetadataHookFailed') return 'token';
       if (/^(Dao|Factory|Upgrade|Implementation|CurrentImplementations|Manager)/.test(canonical)) return 'manager';
+      if (/^(MintEvent|MintBatchEvent|MerkleRootSetEvent|AllowlistSetEvent)/.test(canonical)) return 'minter';
       if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue|Veto)/.test(canonical)) return 'governor';
       if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken)/.test(canonical)) return 'auction';
       if (/^(Execute|Treasury|GovernorChanged)/.test(canonical)) return 'treasury';

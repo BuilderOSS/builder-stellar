@@ -71,8 +71,7 @@ Set `MANAGER_DEPLOYMENT_FILE` to the Manager deployment artifact, for example:
 MANAGER_DEPLOYMENT_FILE=deploys/builder-testnet-manager.json
 ```
 
-The artifact supplies the Manager contract address, network, and starting
-ledger. The Manager is the only configured contract input; `DaoCreated` and
+The artifact supplies the Manager and deployment-level Minter contract addresses and network. It should supply the starting ledger; if it does not, set `GOLDSKY_START_AT` explicitly. The Manager is the only configured contract input; `DaoCreated` and
 `DaoRegistered` events discover each DAO's module addresses.
 
 The generator also reads `packages/goldsky/.env` and `packages/goldsky/.env.local` when present.
