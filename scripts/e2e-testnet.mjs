@@ -643,6 +643,9 @@ async function governance(ctx) {
   const g = s.gov;
   const enc = encodeActions(governanceActions(ctx));
   const statePoll = (id) => normalizeState(view(ctx, dao.governor, 'proposal_state', { proposal_id: id }));
+  // Resume-safe ordering: a re-run may find the proposal already past an earlier stage.
+  const STAGES = ['Pending', 'Active', 'Succeeded', 'Queued', 'Executed'];
+  const atLeast = (st, stage) => STAGES.indexOf(st) >= STAGES.indexOf(stage);
 
   // Cheap parse check of the nested Vec<Vec<Val>> encoding before spending a transaction.
   const predicted = view(ctx, dao.governor, 'get_proposal_id', { ...enc, description_hash: g.descriptionHash });
@@ -656,14 +659,14 @@ async function governance(ctx) {
   }
   ctx.check('propose (2 actions) by DAO_OWNER; id matches get_proposal_id', g.proposalId === predicted, g.proposalId);
   const id = g.proposalId;
-  ctx.check('proposal initially Pending/Active', ['Pending', 'Active'].includes(statePoll(id)), String(statePoll(id)));
+  ctx.check('proposal exists and is not Defeated/Canceled/Expired', atLeast(statePoll(id), 'Pending'), String(statePoll(id)));
 
   const delay = Number(view(ctx, dao.governor, 'voting_delay'));
   const period = Number(view(ctx, dao.governor, 'voting_period'));
   const queueDelay = s.config.governance.queueDelay;
   await waitFor('voting delay (proposal -> Active)', async () => {
     const st = statePoll(id);
-    return { done: st === 'Active', note: `state=${st} (voting_delay ${delay}s)` };
+    return { done: atLeast(st, 'Active'), note: `state=${st} (voting_delay ${delay}s)` };
   }, { timeoutS: delay + 900 });
 
   for (const [role, who] of [['DAO_OWNER', owner], ['BIDDER_A', A]]) {
@@ -679,16 +682,16 @@ async function governance(ctx) {
   await waitFor('voting period (Active -> Succeeded)', async () => {
     const st = statePoll(id);
     if (st === 'Defeated') throw new Error('proposal Defeated (quorum/votes insufficient)');
-    return { done: st === 'Succeeded', note: `state=${st} (voting_period ${period}s)` };
+    return { done: atLeast(st, 'Succeeded'), note: `state=${st} (voting_period ${period}s)` };
   }, { timeoutS: period + 900 });
-  ctx.check('proposal Succeeded', statePoll(id) === 'Succeeded');
+  ctx.check('proposal Succeeded (or already Queued/Executed on resume)', atLeast(statePoll(id), 'Succeeded'));
 
   if (!g.steps.queue) {
     const r = write(ctx, dao.governor, 'queue', { ...enc, description_hash: g.descriptionHash, eta: '0', operator: B }, 'BIDDER_B', 'gov.queue');
     g.steps.queue = { tx: r.txHash, at: nowS() };
     ctx.save();
   }
-  ctx.check('proposal Queued after queue()', statePoll(id) === 'Queued', String(statePoll(id)));
+  ctx.check('proposal Queued after queue() (or already Executed on resume)', atLeast(statePoll(id), 'Queued'), String(statePoll(id)));
 
   if (!g.steps.execute) {
     g.nextListingBefore = String(big(view(ctx, dao.marketplace, 'next_listing_id')));
@@ -718,7 +721,7 @@ async function governance(ctx) {
   g.listingId = g.nextListingBefore;
   ctx.save();
   const again = expectFailure(ctx, dao.treasury, 'execute', { ...enc, description_hash: g.descriptionHash }, 'BIDDER_B');
-  ctx.check('second treasury.execute fails (ProposalAlreadyExecuted 5006)', !again.unexpectedSuccess && (again.code === 5006 || /AlreadyExecuted/.test(again.text)), `code ${again.code}`);
+  ctx.check('second treasury.execute fails (ProposalAlreadyExecuted 5008)', !again.unexpectedSuccess && (again.code === 5008 || /AlreadyExecuted/.test(again.text)), `code ${again.code}`);
 }
 
 async function marketplace(ctx) {
