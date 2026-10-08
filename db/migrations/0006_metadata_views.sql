@@ -1,49 +1,50 @@
 -- =============================================================================
--- METADATA VIEWS MIGRATION
+-- METADATA VIEWS
 --
--- Creates views for:
--- - Metadata properties
--- - Metadata token seeds
--- - Metadata configuration
+-- Source events (metadata contract):
+--   metadata_initialized topic token;  data { renderer_base, version, owner, project_uri, description, contract_image }
+--   property_added       topic property_id (u32); data { name }
+--   properties_reset     data { num_properties }   invalidates earlier property_added events
+--   seed_generated       topic token_id (u32);     data { num_properties, selections[] }
+--   project_uri_updated / description_updated / contract_image_updated / renderer_base_updated
+--                        data { old_*, new_* }
 -- =============================================================================
 
-
--- Metadata: Properties
-CREATE OR REPLACE VIEW metadata.properties AS
+-- Properties currently defined (those added after the latest reset).
+CREATE VIEW metadata.properties AS
 SELECT
   e.event_id,
   e.deployment_id,
   i.dao_id,
   e.contract_id AS metadata_contract,
-  (e.topic_0)::integer AS property_id,
+  (e.topics::jsonb ->> 'property_id')::integer AS property_id,
   e.args::jsonb ->> 'name' AS name,
   e.ledger_sequence AS event_ledger,
   extract(epoch FROM NULLIF(e.ledger_closed_at, '')::timestamptz)::bigint AS event_timestamp_seconds,
   NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
-JOIN manager.event_identity i USING (deployment_id, contract_id)
+JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
 WHERE e.contract_role = 'metadata'
   AND e.event_name = 'property_added'
   AND NOT EXISTS (
     SELECT 1
-    FROM chain.decoded_events reset
-    WHERE reset.deployment_id = e.deployment_id
-      AND reset.contract_id = e.contract_id
-      AND reset.contract_role = 'metadata'
-      AND reset.event_name = 'properties_reset'
-      AND (reset.ledger_sequence, COALESCE(reset.transaction_index, -1), COALESCE(reset.operation_index, -1), COALESCE(reset.event_index, -1), reset.event_id)
-        >= (e.ledger_sequence, COALESCE(e.transaction_index, -1), COALESCE(e.operation_index, -1), COALESCE(e.event_index, -1), e.event_id)
+    FROM chain.decoded_events r
+    WHERE r.deployment_id = e.deployment_id
+      AND r.contract_id = e.contract_id
+      AND r.contract_role = 'metadata'
+      AND r.event_name = 'properties_reset'
+      AND chain.event_position(r.ledger_sequence, r.transaction_index, r.operation_index, r.event_index)
+        > chain.event_position(e.ledger_sequence, e.transaction_index, e.operation_index, e.event_index)
   );
 
--- Metadata: Token seeds
-CREATE OR REPLACE VIEW metadata.token_seeds AS
+CREATE VIEW metadata.token_seeds AS
 SELECT
   e.event_id,
   e.deployment_id,
   i.dao_id,
   e.contract_id AS metadata_contract,
-  (e.topic_0)::bigint AS token_id,
+  (e.topics::jsonb ->> 'token_id')::bigint AS token_id,
   (e.args::jsonb ->> 'num_properties')::integer AS num_properties,
   e.args::jsonb -> 'selections' AS selections,
   e.ledger_sequence AS event_ledger,
@@ -51,12 +52,13 @@ SELECT
   NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
-JOIN manager.event_identity i USING (deployment_id, contract_id)
+JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
 WHERE e.contract_role = 'metadata'
   AND e.event_name = 'seed_generated';
 
--- Metadata: Configuration
-CREATE OR REPLACE VIEW metadata.configuration AS
+-- Current configuration: the initial values overlaid with the latest update of
+-- each field.
+CREATE VIEW metadata.configuration AS
 WITH initialized AS (
   SELECT DISTINCT ON (e.deployment_id, e.contract_id)
     e.deployment_id,
@@ -73,41 +75,29 @@ WITH initialized AS (
     NULLIF(e.ledger_closed_at, '')::timestamptz AS init_at,
     e.transaction_hash AS init_transaction_hash
   FROM chain.decoded_events e
-  JOIN manager.event_identity i USING (deployment_id, contract_id)
+  JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
   WHERE e.contract_role = 'metadata'
     AND e.event_name = 'metadata_initialized'
-  ORDER BY e.deployment_id, e.contract_id, e.ledger_sequence DESC, e.transaction_index DESC NULLS LAST, e.operation_index DESC NULLS LAST, e.event_index DESC NULLS LAST, e.event_id DESC
-),
-latest_updates AS (
+  ORDER BY e.deployment_id, e.contract_id, e.ledger_sequence DESC, e.transaction_index DESC NULLS LAST,
+    e.operation_index DESC NULLS LAST, e.event_index DESC NULLS LAST, e.event_id DESC
+), latest_update AS (
   SELECT DISTINCT ON (e.deployment_id, e.contract_id, e.event_name)
-    e.deployment_id,
-    e.contract_id,
-     e.event_name,
-     e.args,
-     e.ledger_sequence,
-     e.transaction_index,
-     e.operation_index,
-     e.event_index,
-     e.event_id
+    e.deployment_id, e.contract_id, e.event_name, e.args
   FROM chain.decoded_events e
   WHERE e.contract_role = 'metadata'
-    AND e.event_name IN (
-      'project_uri_updated',
-      'description_updated',
-      'contract_image_updated',
-      'renderer_base_updated'
-    )
-   ORDER BY e.deployment_id, e.contract_id, e.event_name, e.ledger_sequence DESC, e.transaction_index DESC NULLS LAST, e.operation_index DESC NULLS LAST, e.event_index DESC NULLS LAST, e.event_id DESC
-),
-updates AS (
+    AND e.event_name IN ('project_uri_updated', 'description_updated', 'contract_image_updated', 'renderer_base_updated')
+  ORDER BY e.deployment_id, e.contract_id, e.event_name, e.ledger_sequence DESC,
+    e.transaction_index DESC NULLS LAST, e.operation_index DESC NULLS LAST,
+    e.event_index DESC NULLS LAST, e.event_id DESC
+), updates AS (
   SELECT
     deployment_id,
     contract_id,
     max(args::jsonb ->> 'new_uri') FILTER (WHERE event_name = 'project_uri_updated') AS project_uri,
     max(args::jsonb ->> 'new_description') FILTER (WHERE event_name = 'description_updated') AS description,
     max(args::jsonb ->> 'new_image') FILTER (WHERE event_name = 'contract_image_updated') AS contract_image,
-    max(args::jsonb ->> 'new_base') FILTER (WHERE event_name = 'renderer_base_updated') AS updated_renderer_base
-  FROM latest_updates
+    max(args::jsonb ->> 'new_base') FILTER (WHERE event_name = 'renderer_base_updated') AS renderer_base
+  FROM latest_update
   GROUP BY deployment_id, contract_id
 )
 SELECT
@@ -115,7 +105,7 @@ SELECT
   i.dao_id,
   i.metadata_contract,
   i.token_contract,
-  COALESCE(u.updated_renderer_base, i.renderer_base) AS renderer_base,
+  COALESCE(u.renderer_base, i.renderer_base) AS renderer_base,
   i.version,
   i.owner,
   COALESCE(u.project_uri, i.project_uri) AS project_uri,

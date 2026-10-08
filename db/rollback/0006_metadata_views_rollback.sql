@@ -1,4 +1,3 @@
--- Rollback: Metadata views
-DROP VIEW IF EXISTS metadata.configuration CASCADE;
-DROP VIEW IF EXISTS metadata.token_seeds CASCADE;
-DROP VIEW IF EXISTS metadata.properties CASCADE;
+DROP VIEW IF EXISTS metadata.configuration;
+DROP VIEW IF EXISTS metadata.token_seeds;
+DROP VIEW IF EXISTS metadata.properties;

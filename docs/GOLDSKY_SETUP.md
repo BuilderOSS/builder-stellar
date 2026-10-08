@@ -72,32 +72,22 @@ CREATE ROLE app_server WITH LOGIN PASSWORD 'secure_password';
 GRANT CONNECT ON DATABASE neondb TO app_server;
 ```
 
-#### Run Migrations
+#### Run Migrations and Grants
 
-From project root:
+From project root (see [`db/README.md`](../db/README.md) for the full guide):
 
 ```bash
-cd db
-./migrate.sh "postgres://admin:password@host.neon.tech/neondb?sslmode=require"
+export DATABASE_URL="postgres://admin:password@host.neon.tech/neondb?sslmode=require"
+./db/setup-roles.sh          # once
+./db/migrate.sh
+./db/grant-permissions.sh
 ```
 
-This creates:
-- Schema: `chain`, `manager`, `metadata`, `governance`, `token`, `auction`, `treasury`, `app`
-- Tables: `raw_events`, `decoded_events`, `activity_feed`
-- Views: `proposals`, `members`, proposal lifecycle views
-
-#### Grant Permissions
-
-```sql
--- Goldsky writer (read/write)
-GRANT USAGE ON SCHEMA chain, manager, metadata, governance, token, auction, treasury, app TO goldsky_writer;
-GRANT INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA chain, governance, token, auction, treasury, app TO goldsky_writer;
-GRANT USAGE ON ALL SEQUENCES IN SCHEMA app TO goldsky_writer;
-
--- App reader (read-only)
-GRANT USAGE ON SCHEMA manager, metadata, app, governance, token, auction, treasury TO app_server;
-GRANT SELECT ON ALL TABLES IN SCHEMA manager, metadata, app, governance, token, auction, treasury TO app_server;
-```
+This creates the `chain`, `manager`, `token`, `governance`, `auction`, `metadata`,
+`treasury`, `marketplace`, `minter` and `app` schemas. Goldsky writes only
+`chain.raw_events`, `chain.decoded_events` and `app.activity_feed_events`; every
+other object is a view. `goldsky_writer` gets write access to those three tables
+only, `app_server` is read-only on the view schemas.
 
 ### 3. Generate Pipeline Configuration
 
@@ -280,9 +270,9 @@ When adding new events to contracts:
 
 1. Update `src/decoded-events.script.js` with decoder logic
 2. Update `src/activity-feed.script.js` with summary template
-3. Add database columns if needed (create migration in `db/migrations/`)
-4. Add test in `test/dao-events-transform.test.mjs`
-5. Run tests: `pnpm test && pnpm validate`
+3. Add or update views if the read model needs the event (append a new migration in `db/migrations/`, update `apps/web/prisma/schema.prisma` if the web reads it)
+4. Add the topic order to the decoder's `topicNames` (`pnpm validate` checks it against `contracts/*/src/events.rs`) and a test in `test/dao-events-transform.test.mjs`
+5. Run tests: `pnpm test && pnpm validate`, and `TEST_DATABASE_URL=… ./db/test-migrations.sh` for read-model changes
 6. Redeploy: `pnpm generate && ./scripts/deploy.sh redeploy`
 
 ### Testing

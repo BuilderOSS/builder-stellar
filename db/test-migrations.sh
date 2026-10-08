@@ -1,33 +1,57 @@
 #!/bin/bash
-# Safe, database-free migration integrity checks.  Set DATABASE_URL to also
-# run the optional read-only ledger/permission checks against a test database.
+#
+# Migration integrity checks.
+#
+#   ./db/test-migrations.sh
+#       Static checks only: naming, a rollback for every migration, no
+#       CONCURRENTLY (migrations run in one transaction), no role-dependent SQL.
+#
+#   TEST_DATABASE_URL=postgres://admin@localhost:5432/postgres ./db/test-migrations.sh
+#       Also creates a scratch database on that server, then runs
+#       migrate -> idempotent re-migrate -> rollback -> migrate and the Goldsky
+#       read-model integration test (events through the real pipeline
+#       transforms, then asserts on the views and the Prisma schema), and
+#       finally drops the scratch database. The URL's role needs CREATEDB.
+#
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MIGRATIONS_DIR="$SCRIPT_DIR/migrations"
-ROLLBACK_DIR="$SCRIPT_DIR/rollback"
-
-expected=0
+count=0
 for migration in "$MIGRATIONS_DIR"/*.sql; do
   version="$(basename "$migration" .sql)"
-  [[ "$version" =~ ^[0-9]{4}_ ]] || { echo "bad migration name: $version" >&2; exit 1; }
-  rollback="$ROLLBACK_DIR/${version}_rollback.sql"
-  [[ -f "$rollback" ]] || { echo "missing rollback: $version" >&2; exit 1; }
-  ((expected += 1))
+  [[ "$version" =~ ^[0-9]{4}_[a-z0-9_]+$ ]] || { echo "bad migration name: $version" >&2; exit 1; }
+  [ -f "$ROLLBACK_DIR/${version}_rollback.sql" ] || { echo "missing rollback: $version" >&2; exit 1; }
+  if grep -qi 'CONCURRENTLY' "$migration"; then echo "$version uses CONCURRENTLY; migrations run in a transaction" >&2; exit 1; fi
+  if grep -qiE '(GRANT|REVOKE)[^;]*(app_server|goldsky_writer)' "$migration"; then
+    echo "$version grants to a role; grants belong in grant-permissions.sh" >&2; exit 1
+  fi
+  count=$((count + 1))
 done
+for rollback in "$ROLLBACK_DIR"/*_rollback.sql; do
+  [ -f "$MIGRATIONS_DIR/$(basename "$rollback" _rollback.sql).sql" ] || { echo "orphan rollback: $rollback" >&2; exit 1; }
+done
+echo "✓ static checks passed ($count migrations, a rollback for each)"
 
-grep -q 'checksum TEXT' "$SCRIPT_DIR/migrate.sh"
-grep -q 'checksum_matches' "$SCRIPT_DIR/migrate.sh"
-grep -q 'schema_migrations' "$SCRIPT_DIR/rollback.sh"
-grep -q 'deployment_id.*dao_id' "$MIGRATIONS_DIR/0013_deterministic_ordering_and_activity_indexes.sql"
-grep -q 'idx_activity_feed_deployment_contract_order' "$MIGRATIONS_DIR/0014_event_order_indexes.sql"
-grep -q 'REVOKE.*app_server' "$SCRIPT_DIR/grant-permissions.sh"
+[ -n "${TEST_DATABASE_URL:-}" ] || { echo "(set TEST_DATABASE_URL to also run the database tests)"; exit 0; }
+command -v psql > /dev/null || { echo "psql is required with TEST_DATABASE_URL" >&2; exit 1; }
 
-if [[ -n "${DATABASE_URL:-}" ]]; then
-  command -v psql >/dev/null || { echo "psql is required with DATABASE_URL" >&2; exit 1; }
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -Atc \
-    "SELECT version || ':' || COALESCE(checksum, '<missing>') FROM public.schema_migrations ORDER BY version" \
-    > /dev/null
-fi
+scratch="stellar_migration_test_$$"
+admin_url="$TEST_DATABASE_URL"
+scratch_url="$(echo "$admin_url" | sed -E "s#/[^/?]*(\\?|\$)#/$scratch\\1#")"
+psql -v ON_ERROR_STOP=1 -q "$admin_url" -c "CREATE DATABASE $scratch"
+trap 'psql -q "$admin_url" -c "DROP DATABASE IF EXISTS $scratch WITH (FORCE)" > /dev/null' EXIT
 
-echo "migration static checks passed ($expected migrations, rollback for each)"
+echo "→ migrate"
+bash "$DB_DIR/migrate.sh" "$scratch_url" > /dev/null
+echo "→ migrate again (must be a no-op)"
+bash "$DB_DIR/migrate.sh" "$scratch_url" | grep -q "0 migration(s) applied"
+echo "→ rollback everything"
+bash "$DB_DIR/rollback.sh" --yes "$scratch_url" > /dev/null
+left="$(psql "$scratch_url" -Atc "SELECT count(*) FROM information_schema.schemata WHERE schema_name IN ($(sql_schema_list))")"
+[ "$left" = "0" ] || { echo "rollback left $left schema(s) behind" >&2; exit 1; }
+echo "→ migrate after rollback"
+bash "$DB_DIR/migrate.sh" "$scratch_url" > /dev/null
+
+echo "→ read-model integration test"
+(cd "$DB_DIR/../packages/goldsky" && TEST_DATABASE_URL="$scratch_url" node --test test/read-model.integration.test.mjs)
+echo "✓ database checks passed"

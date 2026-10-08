@@ -68,14 +68,6 @@ test('preserves Goldsky ordering fields and timestamp strings through the decode
   assert.equal(decoded.ledger_closed_at, '2026-08-21 06:44:42 UTC');
 });
 
-test('ProposalCanceled and ProposalCancelled have the same activity projection', () => {
-  for (const eventName of ['ProposalCanceled', 'ProposalCancelled']) {
-    const activity = buildActivityFeed({ event_id: eventName, deployment_id: 'd', contract_id: 'G', event_name: eventName });
-    assert.equal(activity.kind, 'governance.proposal_cancelled');
-    assert.equal(activity.title, 'Proposal cancelled');
-  }
-});
-
 test('metadata initialization fields and PropertiesReset remain in the decoded payload', () => {
   const initialized = decodeEvent({
     event_id: 'metadata-init', deployment_id: 'd', contract_id: 'M', contract_role: 'metadata',
@@ -619,47 +611,25 @@ test('decodes MintAuthorityChanged event', () => {
   assert.equal(argsOf(decoded).changed_by, 'ADMIN_ADDR');
 });
 
-test('decodes BatchMint event with correct topic mapping', () => {
-  const decoded = decodeEvent({
-    event_id: 'test-batch-mint',
-    deployment_id: 'test',
-    contract_id: 'TOKEN',
-    contract_role: 'token',
-    topics: '[{"symbol":"BatchMint"},{"address":"MINTER_ADDR"},{"address":"TO_ADDR"}]',
-    data: '{"map":[{"key":{"symbol":"amount"},"val":{"u32":10}},{"key":{"symbol":"last_token_id"},"val":{"u32":99}}]}',
-    transaction_hash: 'tx-1',
-    ledger_sequence: 100
-  });
-
-  assert.ok(decoded);
-  assert.equal(decoded.event_name, 'BatchMint');
-  assert.equal(topicsOf(decoded).minter, 'MINTER_ADDR');
-  assert.equal(topicsOf(decoded).to, 'TO_ADDR');
-
-  const payload = JSON.parse(decoded.payload);
-  assert.equal(payload.amount, 10);
-  assert.equal(payload.last_token_id, 99);
-});
-
 test('decodes Approve event', () => {
   const decoded = decodeEvent({
     event_id: 'test-approve',
     deployment_id: 'test',
     contract_id: 'TOKEN',
     contract_role: 'token',
-    topics: '[{"symbol":"Approve"},{"address":"OWNER_ADDR"},{"address":"SPENDER_ADDR"}]',
-    data: '{"map":[{"key":{"symbol":"token_id"},"val":{"u32":42}},{"key":{"symbol":"expiration_ledger"},"val":{"u32":1000}}]}',
+    topics: '[{"symbol":"Approve"},{"address":"OWNER_ADDR"},{"u32":7}]',
+    data: '{"map":[{"key":{"symbol":"approved"},"val":{"address":"SPENDER_ADDR"}},{"key":{"symbol":"live_until_ledger"},"val":{"u32":1000}}]}',
     transaction_hash: 'tx-1',
     ledger_sequence: 100
   });
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'Approve');
-  assert.equal(topicsOf(decoded).owner, 'OWNER_ADDR');
+  assert.deepEqual(topicsOf(decoded), { approver: 'OWNER_ADDR', token_id: 7 });
 
   const payload = JSON.parse(decoded.payload);
-  assert.equal(payload.token_id, 42);
-  assert.equal(payload.expiration_ledger, 1000);
+  assert.equal(payload.approved, 'SPENDER_ADDR');
+  assert.equal(payload.live_until_ledger, 1000);
 });
 
 // Tests for New Governance Events
@@ -842,121 +812,8 @@ test('decodes GovernorChanged event (in treasury)', () => {
 
 // Tests for New Token Events (Batch Minting)
 
-test('decodes BatchMintMany event with correct topic and args', () => {
-  const decoded = decodeEvent({
-    event_id: 'test-batch-mint-many',
-    deployment_id: 'test',
-    contract_id: 'TOKEN',
-    contract_role: 'token',
-    topics: '[{"symbol":"BatchMintMany"},{"address":"MINTER_ADDR"}]',
-    data: '{"map":[{"key":{"symbol":"total_amount"},"val":{"u32":50}},{"key":{"symbol":"recipient_count"},"val":{"u32":5}}]}',
-    transaction_hash: 'tx-1',
-    ledger_sequence: 100
-  });
-
-  assert.ok(decoded);
-  assert.equal(decoded.event_name, 'BatchMintMany');
-  assert.equal(topicsOf(decoded).minter, 'MINTER_ADDR');
-  assert.equal(argsOf(decoded).total_amount, 50);
-  assert.equal(argsOf(decoded).recipient_count, 5);
-
-  const payload = JSON.parse(decoded.payload);
-  assert.equal(payload.total_amount, 50);
-  assert.equal(payload.recipient_count, 5);
-});
-
-test('builds activity feed row from decoded BatchMintMany event', () => {
-  const decodedEvent = {
-    event_id: 'evt-batch-mint-many',
-    deployment_id: 'builder-testnet',
-    contract_id: 'CC6NMFVKCHMRKFA7M333CVEFAVPLXT3XAZHZX6Q4SGNDNTKZEKWTLXT2',
-    contract_role: 'token',
-    event_name: 'BatchMintMany',
-    minter: 'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO',
-    total_amount: '50',
-    recipient_count: '5',
-    topics: '{"minter":"GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO"}',
-    args: '{"total_amount":50,"recipient_count":5}',
-    payload: '{"minter":"GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO","total_amount":50,"recipient_count":5}',
-    ledger_sequence: 4254435,
-    ledger_closed_at: '2026-08-21 06:44:42',
-    transaction_hash: 'tx-batch-mint-many'
-  };
-
-  const activity = buildActivityFeed(decodedEvent);
-
-  assert.ok(activity);
-  assert.equal(activity.kind, 'token.batch_mint_many');
-  assert.equal(activity.title, 'Multi-recipient batch mint completed');
-  assert.match(activity.summary, /Minted 50 tokens to 5 recipients/);
-  assert.equal(activity.event_name, 'BatchMintMany');
-  assert.equal(activity.visibility, 'public');
-});
-
-test('decodes MetadataHookFailed event and assigns token contract role', () => {
-  const decoded = decodeEvent({
-    event_id: 'test-metadata-hook-failed',
-    deployment_id: 'test',
-    contract_id: 'TOKEN',
-    contract_role: 'token',
-    topics: '[{"symbol":"MetadataHookFailed"},{"u32":42}]',
-    data: '{"map":[]}',
-    transaction_hash: 'tx-1',
-    ledger_sequence: 100
-  });
-
-  assert.ok(decoded);
-  assert.equal(decoded.event_name, 'MetadataHookFailed');
-  assert.equal(decoded.contract_role, 'token');
-  assert.equal(topicsOf(decoded).token_id, 42);
-});
-
-test('MetadataHookFailed is correctly assigned to token role even when emitted', () => {
-  const decoded = decodeEvent({
-    event_id: 'test-metadata-hook-failed-role',
-    deployment_id: 'test',
-    contract_id: 'TOKEN_CONTRACT_ADDR',
-    contract_role: 'unknown',
-    topics: '[{"symbol":"MetadataHookFailed"},{"u32":99}]',
-    data: '{"map":[]}',
-    transaction_hash: 'tx-1',
-    ledger_sequence: 100
-  });
-
-  assert.ok(decoded);
-  assert.equal(decoded.contract_role, 'token');
-  assert.equal(topicsOf(decoded).token_id, 99);
-});
-
-test('builds activity feed row from decoded MetadataHookFailed event', () => {
-  const decodedEvent = {
-    event_id: 'evt-metadata-hook-failed',
-    deployment_id: 'builder-testnet',
-    contract_id: 'CC6NMFVKCHMRKFA7M333CVEFAVPLXT3XAZHZX6Q4SGNDNTKZEKWTLXT2',
-    contract_role: 'token',
-    event_name: 'MetadataHookFailed',
-    token_id: '42',
-    topics: '{"token_id":42}',
-    args: '{}',
-    payload: '{"token_id":42}',
-    ledger_sequence: 4254435,
-    ledger_closed_at: '2026-08-21 06:44:42',
-    transaction_hash: 'tx-metadata-hook-failed'
-  };
-
-  const activity = buildActivityFeed(decodedEvent);
-
-  assert.ok(activity);
-  // MetadataHookFailed is not in kindMap, so it defaults to lowercase event name
-  assert.equal(activity.kind, 'contract.metadatahookfailed');
-  assert.equal(activity.token_id, '42');
-  assert.equal(activity.visibility, 'system');
-});
-
-
 test('decodes the Minter events with the exact events.rs topics and payloads', () => {
   const cases = [
-    ['MintEvent', [{ symbol: 'MintEvent' }, { address: 'TOKEN_CONTRACT' }, { address: 'RECIPIENT' }], { map: [{ key: { symbol: 'amount' }, val: { u128: '7' } }] }, { token_id: 'TOKEN_CONTRACT', recipient: 'RECIPIENT' }],
     ['MerkleClaimEvent', [{ symbol: 'MerkleClaimEvent' }, { address: 'TOKEN_CONTRACT' }, { address: 'RECIPIENT' }], { map: [{ key: { symbol: 'amount' }, val: { u128: '5' } }] }, { token_id: 'TOKEN_CONTRACT', recipient: 'RECIPIENT' }],
     ['AllowlistClaimEvent', [{ symbol: 'AllowlistClaimEvent' }, { address: 'TOKEN_CONTRACT' }, { address: 'RECIPIENT' }], { map: [{ key: { symbol: 'amount' }, val: { u128: '5' } }] }, { token_id: 'TOKEN_CONTRACT', recipient: 'RECIPIENT' }],
     ['MintBatchEvent', [{ symbol: 'MintBatchEvent' }, { address: 'TOKEN_CONTRACT' }], { recipient_count: { u32: 3 }, total_amount: { u128: '9' } }, { token_id: 'TOKEN_CONTRACT' }],
@@ -968,7 +825,7 @@ test('decodes the Minter events with the exact events.rs topics and payloads', (
     assert.deepEqual(topicsOf(decoded), expectedTopics);
     assert.equal(decoded.contract_role, 'minter');
   }
-  assert.deepEqual(argsOf(decodeEvent({ topics: JSON.stringify(cases[0][1]), data: JSON.stringify(cases[0][2]) })), { amount: '7' });
+  assert.deepEqual(argsOf(decodeEvent({ topics: JSON.stringify(cases[0][1]), data: JSON.stringify(cases[0][2]) })), { amount: '5' });
 });
 
 test('builds distinct activity kinds for Minter claim events', () => {

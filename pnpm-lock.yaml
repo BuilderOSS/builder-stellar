@@ -172,25 +172,6 @@ importers:
       dotenv:
         specifier: ^17.2.1
         version: 17.4.2
-    devDependencies:
-      '@builder-stellar/auction-bindings':
-        specifier: workspace:*
-        version: link:../auction-bindings
-      '@builder-stellar/governor-bindings':
-        specifier: workspace:*
-        version: link:../governor-bindings
-      '@builder-stellar/manager-bindings':
-        specifier: workspace:*
-        version: link:../manager-bindings
-      '@builder-stellar/metadata-bindings':
-        specifier: workspace:*
-        version: link:../metadata-bindings
-      '@builder-stellar/token-bindings':
-        specifier: workspace:*
-        version: link:../token-bindings
-      '@builder-stellar/treasury-bindings':
-        specifier: workspace:*
-        version: link:../treasury-bindings
 
   packages/governor-bindings:
     dependencies:

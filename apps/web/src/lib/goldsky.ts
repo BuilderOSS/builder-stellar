@@ -36,7 +36,8 @@ function mapProposalList(row: AppProposalList) {
     proposer: row.proposer,
     description: row.description,
     snapshot_ledger: row.snapshotLedger === null ? null : Number(row.snapshotLedger),
-    vote_start_timestamp: row.voteStartSeconds === null ? null : Number(row.voteStartSeconds),
+    // The governor does not emit a vote start; callers derive it from the chain.
+    vote_start_timestamp: null as number | null,
     deadline_ledger: row.voteEndSeconds === null ? null : Number(row.voteEndSeconds),
     eta: row.etaSeconds === null ? null : Number(row.etaSeconds),
     state: row.state,
@@ -641,7 +642,7 @@ export async function getGoldskyMintingHistory(
   params: {
     limit?: number;
     offset?: number;
-    kind?: 'mint' | 'batch_mint' | 'merkle_claim' | 'allowlist_claim';
+    kind?: 'batch_mint' | 'merkle_claim' | 'allowlist_claim';
   } = {}
 ) {
   const { limit = 50, offset = 0, kind } = params;
@@ -745,16 +746,13 @@ export async function getGoldskyMinterClaims(
  */
 export async function getGoldskyHealth() {
   try {
-    const [latestEvent, totalEvents] = await Promise.all([
-      prisma.chainRawEvent.findFirst({ orderBy: { ledgerSequence: 'desc' } }),
-      prisma.chainRawEvent.count()
-    ]);
+    const status = await prisma.appIndexerStatus.findFirst({ where: { deploymentId: getDeploymentId() } });
 
     return {
       status: 'healthy',
-      latestLedger: latestEvent ? Number(latestEvent.ledgerSequence) : null,
-      totalEvents,
-      lastIngestion: latestEvent?.ingestedAt ?? null,
+      latestLedger: status ? Number(status.latestLedger) : null,
+      totalEvents: status ? Number(status.eventCount) : 0,
+      lastIngestion: status?.lastIngestedAt ?? null,
       generatedAt: new Date().toISOString()
     };
   } catch {

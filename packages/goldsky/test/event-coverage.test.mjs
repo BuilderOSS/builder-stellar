@@ -17,29 +17,24 @@ const __dirname = dirname(__filename);
 // Core DAO events that must be handled
 // Extracted from our contract Rust source and generated bindings
 const REQUIRED_EVENTS = {
-  minter: ['MintEvent', 'MerkleClaimEvent', 'AllowlistClaimEvent', 'MintBatchEvent', 'MerkleRootSetEvent', 'AllowlistSetEvent'],
+  minter: ['MerkleClaimEvent', 'AllowlistClaimEvent', 'MintBatchEvent', 'MerkleRootSetEvent', 'AllowlistSetEvent'],
   token: [
     'TokenInitialized',
     'Mint',
     'MintWithMinter',
-    'BatchMint',
-    'BatchMintMany',
     'MintAuthorityChanged',
     'Transfer',
     'Approve',
     'DelegateChanged',
-    'DelegateVotesChanged',
-    'MetadataHookFailed'
+    'DelegateVotesChanged'
   ],
   governor: [
     'GovernorInitialized',
     'ProposalCreated',
     'ProposalQueued',
     'VoteCast',
-    'ProposalCanceled', // Note: bindings use 'Cancelled' but events emit 'Canceled'
     'ProposalCancelled',
     'ProposalExecuted',
-    'ProposalExpired',
     'TreasuryChanged',
     'TokenContractChanged',
     'QueueDelayChanged',

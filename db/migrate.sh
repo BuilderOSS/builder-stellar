@@ -1,187 +1,54 @@
 #!/bin/bash
 #
-# Database Migration Runner for Goldsky Schema
+# Apply pending migrations in db/migrations, in order.
 #
-# Usage:
 #   ./db/migrate.sh [database_url]
 #   DATABASE_URL=postgres://... ./db/migrate.sh
 #
-# Environment Variables:
-#   DATABASE_URL - PostgreSQL connection string (required)
+# Each migration runs in one transaction together with its ledger row in
+# public.schema_migrations. The ledger stores a SHA-256 of the file, so an
+# already-applied migration that was edited afterwards aborts the run instead
+# of silently diverging. Migrations are append-only once deployed.
 #
+set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-set -e  # Exit on error
+require_database "${1:-}"
+echo -e "${BLUE}Applying migrations to $(redact_url "$DATABASE_URL")${NC}"
 
-# Color output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-# Get database URL from argument or environment
-DATABASE_URL="${1:-$DATABASE_URL}"
-
-if [ -z "$DATABASE_URL" ]; then
-  echo -e "${RED}Error: DATABASE_URL not provided${NC}"
-  echo ""
-  echo "Usage:"
-  echo "  ./db/migrate.sh postgres://user:pass@host:5432/dbname"
-  echo "  DATABASE_URL=postgres://... ./db/migrate.sh"
-  exit 1
-fi
-
-# Get script directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MIGRATIONS_DIR="$SCRIPT_DIR/migrations"
-
-echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-echo -e "${BLUE}  Goldsky Database Migration Runner${NC}"
-echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-echo ""
-
-# Check if psql is installed
-if ! command -v psql &> /dev/null; then
-  echo -e "${RED}Error: psql is not installed${NC}"
-  echo "Please install PostgreSQL client:"
-  echo "  macOS: brew install postgresql"
-  echo "  Ubuntu: sudo apt-get install postgresql-client"
-  echo "  Windows: https://www.postgresql.org/download/windows/"
-  exit 1
-fi
-
-# Test database connection
-echo -e "${YELLOW}→ Testing database connection...${NC}"
-if ! psql "$DATABASE_URL" -c "SELECT 1" > /dev/null 2>&1; then
-  echo -e "${RED}✗ Failed to connect to database${NC}"
-  echo "Please check your DATABASE_URL"
-  exit 1
-fi
-echo -e "${GREEN}✓ Database connection successful${NC}"
-echo ""
-
-# Create migration tracking table if it doesn't exist.  The checksum is part of
-# the ledger: a migration name alone is not enough to prove that the database
-# was built from the checked-in SQL.
-echo -e "${YELLOW}→ Creating migration tracking table...${NC}"
-psql "$DATABASE_URL" -c "
+psql -v ON_ERROR_STOP=1 -q "$DATABASE_URL" -c "
 CREATE TABLE IF NOT EXISTS public.schema_migrations (
-  version TEXT PRIMARY KEY,
-  checksum TEXT,
-  applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);" > /dev/null
-# Upgrade ledgers created by the old runner without losing their history.
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "
-ALTER TABLE public.schema_migrations
-  ADD COLUMN IF NOT EXISTS checksum TEXT;" > /dev/null
-echo -e "${GREEN}✓ Migration tracking ready${NC}"
-echo ""
+  version    text PRIMARY KEY,
+  checksum   text NOT NULL,
+  applied_at timestamptz NOT NULL DEFAULT now()
+);"
 
-# Calculate a portable SHA-256 checksum for a migration file.
-migration_checksum() {
-  if command -v sha256sum > /dev/null 2>&1; then
-    sha256sum "$1" | cut -d' ' -f1
-  else
-    shasum -a 256 "$1" | cut -d' ' -f1
-  fi
-}
-
-# Function to run a migration
-run_migration() {
-  local file="$1"
-  local version=$(basename "$file" .sql)
-  local checksum
+applied=0
+for file in "$MIGRATIONS_DIR"/*.sql; do
+  version="$(basename "$file" .sql)"
   checksum="$(migration_checksum "$file")"
 
-  echo -e "${YELLOW}→ Checking migration: $version${NC}"
+  recorded="$(psql "$DATABASE_URL" -Atc "SELECT checksum FROM public.schema_migrations WHERE version = '$version'")"
+  if [ -n "$recorded" ]; then
+    if [ "$recorded" != "$checksum" ]; then
+      echo -e "${RED}✗ $version was modified after it was applied (ledger $recorded, file $checksum)${NC}" >&2
+      exit 1
+    fi
+    echo -e "  ${GREEN}✓${NC} $version (already applied)"
+    continue
+  fi
 
-  # Check if migration contains CONCURRENTLY (cannot run in transaction)
-  if grep -q "CONCURRENTLY" "$file"; then
-    echo -e "${BLUE}  ↳ Detected CONCURRENTLY - running outside transaction${NC}"
-    psql -v ON_ERROR_STOP=1 "$DATABASE_URL" << EOF
+  echo -e "  ${YELLOW}→${NC} $version"
+  # One session holds the advisory lock so concurrent runners serialize.
+  psql -v ON_ERROR_STOP=1 -q "$DATABASE_URL" > /dev/null <<SQL
 SELECT pg_advisory_lock(hashtextextended('stellar-builder-migrations', 0));
-SELECT COUNT(*) = 0 AS migration_needed,
-       COALESCE(bool_and(checksum IS NULL OR checksum = '$checksum'), true) AS checksum_matches
-FROM public.schema_migrations
-WHERE version = '$version';
-\gset
-\if :checksum_matches
-\if :migration_needed
-\i $file
-INSERT INTO public.schema_migrations (version, checksum) VALUES ('$version', '$checksum');
-\else
-UPDATE public.schema_migrations SET checksum = '$checksum' WHERE version = '$version' AND checksum IS NULL;
-\echo 'Already applied, skipping'
-\endif
-\else
-\quit 1
-\endif
-SELECT pg_advisory_unlock(hashtextextended('stellar-builder-migrations', 0));
-EOF
-    echo -e "${GREEN}  ✓ Migration check completed for $version${NC}"
-  else
-    # Run migration in a transaction for safety
-    psql -v ON_ERROR_STOP=1 "$DATABASE_URL" << EOF
-SELECT pg_advisory_lock(hashtextextended('stellar-builder-migrations', 0));
-SELECT COUNT(*) = 0 AS migration_needed,
-       COALESCE(bool_and(checksum IS NULL OR checksum = '$checksum'), true) AS checksum_matches
-FROM public.schema_migrations
-WHERE version = '$version';
-\gset
-\if :checksum_matches
-\if :migration_needed
 BEGIN;
-
--- Run the migration
 \i $file
-
--- Record migration
 INSERT INTO public.schema_migrations (version, checksum) VALUES ('$version', '$checksum');
-
 COMMIT;
-\else
-UPDATE public.schema_migrations SET checksum = '$checksum' WHERE version = '$version' AND checksum IS NULL;
-\echo 'Already applied, skipping'
-\endif
-\else
-\quit 1
-\endif
-SELECT pg_advisory_unlock(hashtextextended('stellar-builder-migrations', 0));
-EOF
-    echo -e "${GREEN}  ✓ Migration check completed for $version${NC}"
-  fi
-
-  echo ""
-}
-
-# Run migrations in order
-echo -e "${BLUE}Running migrations...${NC}"
-echo ""
-
-for migration_file in "$MIGRATIONS_DIR"/*.sql; do
-  if [ -f "$migration_file" ]; then
-    run_migration "$migration_file"
-  fi
+SQL
+  applied=$((applied + 1))
 done
 
-# Show final status
-echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-echo -e "${GREEN}✓ All migrations completed successfully!${NC}"
-echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-echo ""
-
-# Show applied migrations
-echo -e "${YELLOW}Applied migrations:${NC}"
-psql "$DATABASE_URL" -c "SELECT version, applied_at FROM public.schema_migrations ORDER BY applied_at"
-echo ""
-
-# Show schema summary
-echo -e "${YELLOW}Schema summary:${NC}"
-psql "$DATABASE_URL" -c "
-SELECT
-  schemaname,
-  COUNT(*) as table_count
-FROM pg_tables
-WHERE schemaname IN ('chain', 'governance', 'token', 'auction', 'treasury', 'manager', 'metadata', 'app')
-GROUP BY schemaname
-ORDER BY schemaname;"
+echo -e "${GREEN}✓ Done: $applied migration(s) applied${NC}"
+echo "Next: ./db/grant-permissions.sh (after ./db/setup-roles.sh on a new database)"

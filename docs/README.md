@@ -104,7 +104,8 @@ insert           ownership transfer    update status
 - `apps/web/prisma/schema.prisma` - Read-only models for indexed database views
 - `apps/web/src/config/networks.ts` - Network configuration
 - `scripts/deploy-dao.mjs` - DAO deployment script
-- `db/migrations/0001_goldsky_base.sql` - Database schema
+- `db/README.md` - Database migrations, scripts and reset runbook
+- `docs/DATABASE_SCHEMA.md` - View catalog
 
 ### Contracts
 

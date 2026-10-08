@@ -6,7 +6,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("APP_DATABASE_URL")
-  schemas  = ["app", "auction", "chain", "governance", "manager", "metadata", "minter", "token"]
+  schemas  = ["app", "auction", "governance", "manager", "metadata", "minter", "token"]
 }
 
 view ManagerDao {
@@ -91,6 +91,16 @@ view AppActivityFeed {
   @@schema("app")
 }
 
+view AppIndexerStatus {
+  deploymentId   String   @map("deployment_id")
+  latestLedger   BigInt   @map("latest_ledger")
+  eventCount     BigInt   @map("event_count")
+  lastIngestedAt DateTime @map("last_ingested_at")
+
+  @@map("indexer_status")
+  @@schema("app")
+}
+
 view AppProposalList {
   proposalNumber         Int       @map("proposal_number")
   createdEventId         String    @map("created_event_id")
@@ -101,7 +111,6 @@ view AppProposalList {
   proposer               String
   description            String?
   snapshotLedger         BigInt?   @map("snapshot_ledger")
-  voteStartSeconds       BigInt?   @map("vote_start_seconds")
   voteEndSeconds         BigInt?   @map("vote_end_seconds")
   actionCount            Int       @map("action_count")
   createdLedger          BigInt    @map("created_ledger")
@@ -132,7 +141,6 @@ view AppProposalDetail {
   proposer               String
   description            String?
   snapshotLedger         BigInt?   @map("snapshot_ledger")
-  voteStartSeconds       BigInt?   @map("vote_start_seconds")
   voteEndSeconds         BigInt?   @map("vote_end_seconds")
   actionCount            Int       @map("action_count")
   createdLedger          BigInt    @map("created_ledger")
@@ -287,43 +295,6 @@ view AuctionBid {
   @@schema("auction")
 }
 
-view ChainRawEvent {
-  eventId        String   @map("event_id")
-  ledgerSequence BigInt   @map("ledger_sequence")
-  ingestedAt     DateTime @map("ingested_at")
-
-  @@map("raw_events")
-  @@schema("chain")
-}
-
-view ChainDecodedEvent {
-  eventId        String @map("event_id")
-  ledgerSequence BigInt @map("ledger_sequence")
-
-  @@map("decoded_events")
-  @@schema("chain")
-}
-
-view MinterMintEvent {
-  eventId          String    @map("event_id")
-  deploymentId     String    @map("deployment_id")
-  daoId            String    @map("dao_id")
-  contractId       String    @map("contract_id")
-  tokenId          String    @map("token_id")
-  recipient        String
-  amount           Decimal
-  eventType        String?   @map("event_type")
-  ledgerSequence   BigInt    @map("ledger_sequence")
-  transactionIndex BigInt?   @map("transaction_index")
-  operationIndex   BigInt?   @map("operation_index")
-  eventIndex       BigInt?   @map("event_index")
-  eventAt          DateTime? @map("event_at")
-  transactionHash  String    @map("transaction_hash")
-
-  @@map("mint_events")
-  @@schema("minter")
-}
-
 view MinterBatchMintEvent {
   eventId          String    @map("event_id")
   deploymentId     String    @map("deployment_id")
@@ -332,6 +303,7 @@ view MinterBatchMintEvent {
   tokenId          String    @map("token_id")
   recipientCount   Int       @map("recipient_count")
   totalAmount      Decimal   @map("total_amount")
+  firstTokenId     BigInt?   @map("first_token_id")
   ledgerSequence   BigInt    @map("ledger_sequence")
   transactionIndex BigInt?   @map("transaction_index")
   operationIndex   BigInt?   @map("operation_index")
@@ -351,7 +323,6 @@ view MinterMerkleClaimEvent {
   tokenId          String    @map("token_id")
   recipient        String
   amount           Decimal
-  proofValid       Boolean   @map("proof_valid")
   ledgerSequence   BigInt    @map("ledger_sequence")
   transactionIndex BigInt?   @map("transaction_index")
   operationIndex   BigInt?   @map("operation_index")

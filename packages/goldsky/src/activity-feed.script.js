@@ -95,22 +95,21 @@ function invoke(data) {
   var normalizedEventName = normalizeEventName(eventName);
 
   var userFacing = {
-    TokenInitialized: true, Mint: true, MintWithMinter: true, BatchMint: true, BatchMintMany: true,
+    TokenInitialized: true, Mint: true, MintWithMinter: true,
     Transfer: true, DelegateChanged: true, DelegateVotesChanged: true,
     ProposalCreated: true, ProposalQueued: true, VoteCast: true,
-    ProposalCancelled: true, ProposalCanceled: true, ProposalExecuted: true,
+    ProposalCancelled: true, ProposalExecuted: true,
     AuctionCreated: true, BidPlaced: true,
     AuctionSettled: true, BidRefunded: true, AuctionCancelled: true,
     DaoCreated: true, DaoLaunched: true,
-    MintEvent: true, MerkleClaimEvent: true, AllowlistClaimEvent: true, MintBatchEvent: true
+    MerkleClaimEvent: true, AllowlistClaimEvent: true, MintBatchEvent: true,
+    PrimaryListingCreated: true, SecondaryListingCreated: true, ListingPurchased: true, ListingCancelled: true
   };
 
   var kindMap = {
     TokenInitialized: 'token.initialized',
     Mint: 'token.mint',
     MintWithMinter: 'token.mint',
-    BatchMint: 'token.batch_mint',
-    BatchMintMany: 'token.batch_mint_many',
     MintAuthorityChanged: 'token.mint_authority_changed',
     Approve: 'token.approve',
     Transfer: 'token.transfer',
@@ -121,7 +120,6 @@ function invoke(data) {
     ProposalQueued: 'governance.proposal_queued',
     VoteCast: 'governance.vote_cast',
     ProposalCancelled: 'governance.proposal_cancelled',
-     ProposalCanceled: 'governance.proposal_cancelled',
     ProposalExecuted: 'governance.proposal_executed',
     TreasuryChanged: 'governance.treasury_changed',
     TokenContractChanged: 'governance.token_contract_changed',
@@ -162,20 +160,32 @@ function invoke(data) {
     DescriptionUpdated: 'metadata.description_updated',
     RendererBaseUpdated: 'metadata.renderer_base_updated',
     ContractImageUpdated: 'metadata.contract_image_updated',
-    MintEvent: 'minter.mint',
     MerkleClaimEvent: 'minter.merkle_claim',
     AllowlistClaimEvent: 'minter.allowlist_claim',
     MintBatchEvent: 'minter.batch_mint',
     MerkleRootSetEvent: 'minter.merkle_root_set',
-    AllowlistSetEvent: 'minter.allowlist_set'
+    AllowlistSetEvent: 'minter.allowlist_set',
+    Paused: 'contract.paused',
+    Unpaused: 'contract.unpaused',
+    ManagerInitialized: 'manager.initialized',
+    ManagerUpgraded: 'manager.upgraded',
+    MarketplaceInitialized: 'marketplace.initialized',
+    PrimaryListingCreated: 'marketplace.primary_listing_created',
+    SecondaryListingCreated: 'marketplace.secondary_listing_created',
+    ListingPurchased: 'marketplace.listing_purchased',
+    ListingCancelled: 'marketplace.listing_cancelled',
+    ListingExpired: 'marketplace.listing_expired',
+    PaymentAssetUpdated: 'marketplace.payment_asset_updated',
+    SecondaryFeeUpdated: 'marketplace.secondary_fee_updated',
+    MarketplacePaused: 'marketplace.paused',
+    MarketplaceUnpaused: 'marketplace.unpaused',
+    MarketplaceUpgraded: 'marketplace.upgraded'
   };
 
   var titleMap = {
     TokenInitialized: 'Token initialized',
     Mint: 'Token minted',
     MintWithMinter: 'Token minted',
-    BatchMint: 'Batch mint completed',
-    BatchMintMany: 'Multi-recipient batch mint completed',
     MintAuthorityChanged: 'Mint authority changed',
     Approve: 'Token approval granted',
     Transfer: 'Token transferred',
@@ -186,7 +196,6 @@ function invoke(data) {
     ProposalQueued: 'Proposal queued',
     VoteCast: 'Vote cast',
     ProposalCancelled: 'Proposal cancelled',
-     ProposalCanceled: 'Proposal cancelled',
     ProposalExecuted: 'Proposal executed',
     TreasuryChanged: 'Treasury changed',
     TokenContractChanged: 'Token contract changed',
@@ -227,12 +236,26 @@ function invoke(data) {
     DescriptionUpdated: 'Description updated',
     RendererBaseUpdated: 'Renderer base updated',
     ContractImageUpdated: 'Contract image updated',
-    MintEvent: 'Tokens minted',
     MerkleClaimEvent: 'Merkle claim completed',
     AllowlistClaimEvent: 'Allowlist claim completed',
     MintBatchEvent: 'Batch mint completed',
     MerkleRootSetEvent: 'Merkle root configured',
-    AllowlistSetEvent: 'Allowlist configured'
+    AllowlistSetEvent: 'Allowlist configured',
+    Paused: 'Contract paused',
+    Unpaused: 'Contract unpaused',
+    ManagerInitialized: 'Manager initialized',
+    ManagerUpgraded: 'Manager upgraded',
+    MarketplaceInitialized: 'Marketplace initialized',
+    PrimaryListingCreated: 'Primary listing created',
+    SecondaryListingCreated: 'Secondary listing created',
+    ListingPurchased: 'Listing purchased',
+    ListingCancelled: 'Listing cancelled',
+    ListingExpired: 'Listing expired',
+    PaymentAssetUpdated: 'Marketplace payment asset updated',
+    SecondaryFeeUpdated: 'Secondary sale fee updated',
+    MarketplacePaused: 'Marketplace paused',
+    MarketplaceUnpaused: 'Marketplace unpaused',
+    MarketplaceUpgraded: 'Marketplace upgraded'
   };
 
   var addresses = unique([
@@ -253,11 +276,13 @@ function invoke(data) {
     pick(data, ['contract_id']),
     pick(data, ['creator']),
     pick(data, ['token_address']),
-    pick(data, ['recipient'])
+    pick(data, ['recipient']),
+    pick(data, ['buyer']),
+    pick(data, ['seller'])
   ]);
 
   var proposalId = pick(data, ['proposal_id']);
-  var amount = pick(data, ['amount']);
+  var amount = pick(data, ['amount', 'total_amount', 'price']);
   var tokenId = pick(data, ['token_id']);
   var func = pick(data, ['function']);
   var target = pick(data, ['target']);
@@ -276,11 +301,12 @@ function invoke(data) {
     Execute: function() { return 'Executed ' + (func || 'call') + ' on ' + (target || 'target'); },
     Mint: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
     MintWithMinter: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
-    MintEvent: function() { return 'Minted ' + (amount || 'tokens') + ' to ' + (owner || 'recipient'); },
+    MintBatchEvent: function() { var count = pick(data, ['recipient_count']); return 'Minted ' + (amount || 'tokens') + ' to ' + (count || 'multiple') + ' recipients'; },
+    PrimaryListingCreated: function() { return 'Primary listing created for token ' + (tokenId || 'unknown') + ' at ' + (amount || 'unknown price'); },
+    SecondaryListingCreated: function() { return 'Secondary listing created for token ' + (tokenId || 'unknown') + ' at ' + (amount || 'unknown price'); },
+    ListingPurchased: function() { return 'Token ' + (tokenId || 'unknown') + ' purchased for ' + (amount || 'unknown price'); },
     MerkleClaimEvent: function() { return 'Claimed ' + (amount || 'tokens') + ' via merkle proof for ' + (owner || 'recipient'); },
     AllowlistClaimEvent: function() { return 'Claimed ' + (amount || 'tokens') + ' via allowlist for ' + (owner || 'recipient'); },
-    BatchMint: function() { return 'Minted ' + (amount || 'batch') + ' tokens'; },
-    BatchMintMany: function() { var totalAmount = pick(data, ['total_amount']); var recipientCount = pick(data, ['recipient_count']); return 'Minted ' + (totalAmount || 'batch') + ' tokens to ' + (recipientCount || 'multiple') + ' recipients'; },
     DelegateChanged: function() { return 'Delegation changed'; },
     DaoCreated: function() { return 'DAO created by ' + (creator || 'unknown'); },
     DaoLaunched: function() { return 'DAO launched for token ' + (tokenAddress || 'unknown'); },
@@ -347,7 +373,7 @@ function invoke(data) {
     proposal_id: toString(proposalId),
     token_id: toString(tokenId),
     amount: toString(amount),
-    actor: toString(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'recipient', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator'])),
+    actor: toString(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'recipient', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator', 'buyer', 'seller'])),
     addresses: JSON.stringify(addresses || []),
     ledger_sequence: ledger_sequence,
     transaction_index: transaction_index,

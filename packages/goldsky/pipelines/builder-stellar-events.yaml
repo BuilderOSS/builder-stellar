@@ -309,25 +309,43 @@ transforms:
         var values = rawTopics.map(native);
         var eventName = String(values[0]);
         var topicValues = values.slice(1);
-        // Minter mappings mirror contracts/minter/src/events.rs exactly.
-        // token_id is the DAO token contract Address, not an NFT number.
+        // Topic names mirror the on-chain topic order after the event-name symbol.
+        // They are generated from contracts/*/src/events.rs plus the OpenZeppelin
+        // library events our contracts emit; test/contract-alignment.test.mjs fails
+        // if this map drifts. Minter token_id is the DAO token contract Address, not
+        // an NFT number.
         var topicNames = {
-          ProposalCreated: ['proposal_id', 'proposer'], VoteCast: ['voter', 'proposal_id'],
-          ProposalQueued: ['proposal_id'], ProposalCancelled: ['proposal_id'], ProposalCanceled: ['proposal_id'], ProposalExecuted: ['proposal_id'],
-          MintWithMinter: ['minter', 'to'], Mint: ['to'], BatchMint: ['minter', 'to'], BatchMintMany: ['minter'], Transfer: ['from', 'to'], Approve: ['owner', 'spender'],
-          DelegateChanged: ['delegator'], DelegateVotesChanged: ['delegate'], AuctionCreated: ['token_id'], BidPlaced: ['token_id', 'bidder'],
-          AuctionSettled: ['token_id'], BidRefunded: ['token_id', 'bidder'], AuctionCancelled: ['token_id'], Execute: ['governor', 'target'],
-          TokenInitialized: ['owner'], MintAuthorityChanged: ['authority'], GovernorInitialized: ['owner'], TreasuryChanged: ['old_treasury', 'new_treasury'],
-          TokenContractChanged: ['old_token_contract', 'new_token_contract'], GovernorAuthorityChanged: ['authority'], AuctionInitialized: ['owner'],
-          TreasuryInitialized: ['owner'], GovernorChanged: ['old_governor', 'new_governor'], DaoCreated: ['token_address', 'deployer', 'launch_admin'], DaoLaunched: ['token_address'],
-          ManagerInitialized: ['admin'], SeedGenerated: ['token_id'], MetadataInitialized: ['token'], ProposalExpired: [], MetadataHookFailed: ['token_id'],
-          ProposalThresholdChanged: ['caller'], QuorumBpsChanged: ['caller'], QueueDelayChanged: ['caller'], VotingDelayChanged: ['caller'], VotingPeriodChanged: ['caller'], DurationUpdated: [], ReservePriceUpdated: [], MinBidIncrementUpdated: [],
-          TimeBufferUpdated: [], PaymentTokenUpdated: [], TreasuryUpdated: [], FactoryPaused: [], FactoryUnpaused: [], UpgradeApproved: ['from_hash', 'to_hash'],
-          ImplementationRevoked: ['wasm_hash'], ImplementationRegistered: ['wasm_hash'], CurrentImplementationsUpdated: [], PropertyAdded: ['property_id'],
-          PropertiesReset: [], ProjectURIUpdated: [], DescriptionUpdated: [], RendererBaseUpdated: [], ContractImageUpdated: [], ManagerUpgraded: ['from_hash', 'to_hash'],
-          MintEvent: ['token_id', 'recipient'], MerkleClaimEvent: ['token_id', 'recipient'], AllowlistClaimEvent: ['token_id', 'recipient'], MintBatchEvent: ['token_id'], MerkleRootSetEvent: ['token_id'], AllowlistSetEvent: ['token_id'],
-          MarketplaceInitialized: ['token'], PrimaryListingCreated: ['token_id'], SecondaryListingCreated: ['token_id'], ListingPurchased: ['token_id', 'buyer'],
-          ListingCancelled: ['token_id'], ListingExpired: ['token_id'], PaymentAssetUpdated: [], SecondaryFeeUpdated: [], MarketplacePaused: [], MarketplaceUnpaused: [], MarketplaceUpgraded: []
+          // Manager
+          ManagerInitialized: ['admin'], ImplementationRegistered: ['wasm_hash'], UpgradeApproved: ['from_hash', 'to_hash'],
+          ImplementationRevoked: ['wasm_hash'], DaoCreated: ['token_address', 'deployer', 'launch_admin'], FactoryPaused: [], FactoryUnpaused: [],
+          DaoLaunched: ['token_address'], CurrentImplementationsUpdated: [], ManagerUpgraded: ['from_hash', 'to_hash'],
+          // Token (custom + OpenZeppelin non-fungible/votes/pausable/ownable)
+          TokenInitialized: ['owner'], MintAuthorityChanged: ['authority'], MintWithMinter: ['minter', 'to'],
+          Mint: ['to'], Transfer: ['from', 'to'], Approve: ['approver', 'token_id'], ApproveForAll: ['owner'],
+          DelegateChanged: ['delegator'], DelegateVotesChanged: ['delegate'],
+          Paused: [], Unpaused: [], OwnershipTransfer: [], OwnershipTransferCompleted: [], OwnershipRenounced: [],
+          // Governor (custom + OpenZeppelin governor)
+          GovernorInitialized: ['owner'], ProposalCreated: ['proposal_id', 'proposer'], VoteCast: ['voter', 'proposal_id'],
+          ProposalQueued: ['proposal_id'], ProposalExecuted: ['proposal_id'], ProposalCancelled: ['proposal_id'],
+          TreasuryChanged: ['old_treasury', 'new_treasury'], TokenContractChanged: ['old_token_contract', 'new_token_contract'],
+          QueueDelayChanged: ['caller'], VotingDelayChanged: ['caller'], VotingPeriodChanged: ['caller'],
+          ProposalThresholdChanged: ['caller'], QuorumBpsChanged: ['caller'], GovernorAuthorityChanged: ['authority'],
+          // Treasury
+          TreasuryInitialized: ['owner'], GovernorChanged: ['old_governor', 'new_governor'], Execute: ['governor', 'target'],
+          // Auction
+          AuctionInitialized: ['owner'], AuctionCreated: ['token_id'], BidPlaced: ['token_id', 'bidder'], AuctionSettled: ['token_id'],
+          BidRefunded: ['token_id', 'bidder'], AuctionCancelled: ['token_id'], DurationUpdated: [], ReservePriceUpdated: [],
+          MinBidIncrementUpdated: [], TimeBufferUpdated: [], PaymentTokenUpdated: [], TreasuryUpdated: [],
+          // Metadata
+          MetadataInitialized: ['token'], PropertyAdded: ['property_id'], SeedGenerated: ['token_id'], PropertiesReset: [],
+          ProjectURIUpdated: [], DescriptionUpdated: [], RendererBaseUpdated: [], ContractImageUpdated: [],
+          // Minter
+          MerkleClaimEvent: ['token_id', 'recipient'], AllowlistClaimEvent: ['token_id', 'recipient'], MintBatchEvent: ['token_id'],
+          MerkleRootSetEvent: ['token_id'], AllowlistSetEvent: ['token_id'],
+          // Marketplace
+          MarketplaceInitialized: ['token'], PrimaryListingCreated: ['token_id'], SecondaryListingCreated: ['token_id'],
+          ListingPurchased: ['token_id', 'buyer'], ListingCancelled: ['token_id'], ListingExpired: ['token_id'],
+          PaymentAssetUpdated: [], SecondaryFeeUpdated: [], MarketplacePaused: [], MarketplaceUnpaused: [], MarketplaceUpgraded: []
         };
         var names = topicNames[eventName] || topicNames[toCanonical(eventName)] || [];
         var topics = {};
@@ -396,18 +414,18 @@ transforms:
         });
           return result;
 
+          // Fallback only: the pipeline normally assigns contract_role from the DAO
+          // module allowlists before decoding. Names mirror the topicNames groups.
           function roleForEvent(name) {
             var canonical = toCanonical(name);
-            // MetadataHookFailed originates from token contract, not metadata
-            if (canonical === 'MetadataHookFailed') return 'token';
-            if (/^(Dao|Factory|Upgrade|Implementation|CurrentImplementations|Manager)/.test(canonical)) return 'manager';
-            if (/^(MintEvent|MerkleClaimEvent|AllowlistClaimEvent|MintBatchEvent|MerkleRootSetEvent|AllowlistSetEvent)/.test(canonical)) return 'minter';
-            if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue|Veto)/.test(canonical)) return 'governor';
-            if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken)/.test(canonical)) return 'auction';
-            if (/^(Execute|Treasury|GovernorChanged)/.test(canonical)) return 'treasury';
+            if (/^(Manager|Implementation|CurrentImplementations|UpgradeApproved|Dao|Factory)/.test(canonical)) return 'manager';
+            if (/^(MerkleClaim|AllowlistClaim|MintBatch|MerkleRoot|AllowlistSet)/.test(canonical)) return 'minter';
+            if (/^(Marketplace|Listing|Primary|Secondary|PaymentAsset)/.test(canonical)) return 'marketplace';
+            if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue|TokenContractChanged|TreasuryChanged)/.test(canonical)) return 'governor';
+            if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken|TreasuryUpdated)/.test(canonical)) return 'auction';
+            if (/^(Execute|TreasuryInitialized)|^GovernorChanged/.test(canonical)) return 'treasury';
             if (/^(Metadata|Property|Properties|Seed|ProjectURI|Description|RendererBase|ContractImage)/.test(canonical)) return 'metadata';
-            if (/^(Transfer|Mint|BatchMint|Delegate|Approve|MintAuthority|Token|Burn)/.test(canonical)) return 'token';
-            if (/^(Marketplace|Listing|Primary|Secondary|Payment)/.test(canonical)) return 'marketplace';
+            if (/^(Transfer|Mint|Delegate|Approve|Token)/.test(canonical)) return 'token';
             return 'unknown';
           }
         } catch (e) {
@@ -542,22 +560,21 @@ transforms:
         var normalizedEventName = normalizeEventName(eventName);
 
         var userFacing = {
-          TokenInitialized: true, Mint: true, MintWithMinter: true, BatchMint: true, BatchMintMany: true,
+          TokenInitialized: true, Mint: true, MintWithMinter: true,
           Transfer: true, DelegateChanged: true, DelegateVotesChanged: true,
           ProposalCreated: true, ProposalQueued: true, VoteCast: true,
-          ProposalCancelled: true, ProposalCanceled: true, ProposalExecuted: true,
+          ProposalCancelled: true, ProposalExecuted: true,
           AuctionCreated: true, BidPlaced: true,
           AuctionSettled: true, BidRefunded: true, AuctionCancelled: true,
           DaoCreated: true, DaoLaunched: true,
-          MintEvent: true, MerkleClaimEvent: true, AllowlistClaimEvent: true, MintBatchEvent: true
+          MerkleClaimEvent: true, AllowlistClaimEvent: true, MintBatchEvent: true,
+          PrimaryListingCreated: true, SecondaryListingCreated: true, ListingPurchased: true, ListingCancelled: true
         };
 
         var kindMap = {
           TokenInitialized: 'token.initialized',
           Mint: 'token.mint',
           MintWithMinter: 'token.mint',
-          BatchMint: 'token.batch_mint',
-          BatchMintMany: 'token.batch_mint_many',
           MintAuthorityChanged: 'token.mint_authority_changed',
           Approve: 'token.approve',
           Transfer: 'token.transfer',
@@ -568,7 +585,6 @@ transforms:
           ProposalQueued: 'governance.proposal_queued',
           VoteCast: 'governance.vote_cast',
           ProposalCancelled: 'governance.proposal_cancelled',
-           ProposalCanceled: 'governance.proposal_cancelled',
           ProposalExecuted: 'governance.proposal_executed',
           TreasuryChanged: 'governance.treasury_changed',
           TokenContractChanged: 'governance.token_contract_changed',
@@ -609,20 +625,32 @@ transforms:
           DescriptionUpdated: 'metadata.description_updated',
           RendererBaseUpdated: 'metadata.renderer_base_updated',
           ContractImageUpdated: 'metadata.contract_image_updated',
-          MintEvent: 'minter.mint',
           MerkleClaimEvent: 'minter.merkle_claim',
           AllowlistClaimEvent: 'minter.allowlist_claim',
           MintBatchEvent: 'minter.batch_mint',
           MerkleRootSetEvent: 'minter.merkle_root_set',
-          AllowlistSetEvent: 'minter.allowlist_set'
+          AllowlistSetEvent: 'minter.allowlist_set',
+          Paused: 'contract.paused',
+          Unpaused: 'contract.unpaused',
+          ManagerInitialized: 'manager.initialized',
+          ManagerUpgraded: 'manager.upgraded',
+          MarketplaceInitialized: 'marketplace.initialized',
+          PrimaryListingCreated: 'marketplace.primary_listing_created',
+          SecondaryListingCreated: 'marketplace.secondary_listing_created',
+          ListingPurchased: 'marketplace.listing_purchased',
+          ListingCancelled: 'marketplace.listing_cancelled',
+          ListingExpired: 'marketplace.listing_expired',
+          PaymentAssetUpdated: 'marketplace.payment_asset_updated',
+          SecondaryFeeUpdated: 'marketplace.secondary_fee_updated',
+          MarketplacePaused: 'marketplace.paused',
+          MarketplaceUnpaused: 'marketplace.unpaused',
+          MarketplaceUpgraded: 'marketplace.upgraded'
         };
 
         var titleMap = {
           TokenInitialized: 'Token initialized',
           Mint: 'Token minted',
           MintWithMinter: 'Token minted',
-          BatchMint: 'Batch mint completed',
-          BatchMintMany: 'Multi-recipient batch mint completed',
           MintAuthorityChanged: 'Mint authority changed',
           Approve: 'Token approval granted',
           Transfer: 'Token transferred',
@@ -633,7 +661,6 @@ transforms:
           ProposalQueued: 'Proposal queued',
           VoteCast: 'Vote cast',
           ProposalCancelled: 'Proposal cancelled',
-           ProposalCanceled: 'Proposal cancelled',
           ProposalExecuted: 'Proposal executed',
           TreasuryChanged: 'Treasury changed',
           TokenContractChanged: 'Token contract changed',
@@ -674,12 +701,26 @@ transforms:
           DescriptionUpdated: 'Description updated',
           RendererBaseUpdated: 'Renderer base updated',
           ContractImageUpdated: 'Contract image updated',
-          MintEvent: 'Tokens minted',
           MerkleClaimEvent: 'Merkle claim completed',
           AllowlistClaimEvent: 'Allowlist claim completed',
           MintBatchEvent: 'Batch mint completed',
           MerkleRootSetEvent: 'Merkle root configured',
-          AllowlistSetEvent: 'Allowlist configured'
+          AllowlistSetEvent: 'Allowlist configured',
+          Paused: 'Contract paused',
+          Unpaused: 'Contract unpaused',
+          ManagerInitialized: 'Manager initialized',
+          ManagerUpgraded: 'Manager upgraded',
+          MarketplaceInitialized: 'Marketplace initialized',
+          PrimaryListingCreated: 'Primary listing created',
+          SecondaryListingCreated: 'Secondary listing created',
+          ListingPurchased: 'Listing purchased',
+          ListingCancelled: 'Listing cancelled',
+          ListingExpired: 'Listing expired',
+          PaymentAssetUpdated: 'Marketplace payment asset updated',
+          SecondaryFeeUpdated: 'Secondary sale fee updated',
+          MarketplacePaused: 'Marketplace paused',
+          MarketplaceUnpaused: 'Marketplace unpaused',
+          MarketplaceUpgraded: 'Marketplace upgraded'
         };
 
         var addresses = unique([
@@ -700,11 +741,13 @@ transforms:
           pick(data, ['contract_id']),
           pick(data, ['creator']),
           pick(data, ['token_address']),
-          pick(data, ['recipient'])
+          pick(data, ['recipient']),
+          pick(data, ['buyer']),
+          pick(data, ['seller'])
         ]);
 
         var proposalId = pick(data, ['proposal_id']);
-        var amount = pick(data, ['amount']);
+        var amount = pick(data, ['amount', 'total_amount', 'price']);
         var tokenId = pick(data, ['token_id']);
         var func = pick(data, ['function']);
         var target = pick(data, ['target']);
@@ -723,11 +766,12 @@ transforms:
           Execute: function() { return 'Executed ' + (func || 'call') + ' on ' + (target || 'target'); },
           Mint: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
           MintWithMinter: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
-          MintEvent: function() { return 'Minted ' + (amount || 'tokens') + ' to ' + (owner || 'recipient'); },
+          MintBatchEvent: function() { var count = pick(data, ['recipient_count']); return 'Minted ' + (amount || 'tokens') + ' to ' + (count || 'multiple') + ' recipients'; },
+          PrimaryListingCreated: function() { return 'Primary listing created for token ' + (tokenId || 'unknown') + ' at ' + (amount || 'unknown price'); },
+          SecondaryListingCreated: function() { return 'Secondary listing created for token ' + (tokenId || 'unknown') + ' at ' + (amount || 'unknown price'); },
+          ListingPurchased: function() { return 'Token ' + (tokenId || 'unknown') + ' purchased for ' + (amount || 'unknown price'); },
           MerkleClaimEvent: function() { return 'Claimed ' + (amount || 'tokens') + ' via merkle proof for ' + (owner || 'recipient'); },
           AllowlistClaimEvent: function() { return 'Claimed ' + (amount || 'tokens') + ' via allowlist for ' + (owner || 'recipient'); },
-          BatchMint: function() { return 'Minted ' + (amount || 'batch') + ' tokens'; },
-          BatchMintMany: function() { var totalAmount = pick(data, ['total_amount']); var recipientCount = pick(data, ['recipient_count']); return 'Minted ' + (totalAmount || 'batch') + ' tokens to ' + (recipientCount || 'multiple') + ' recipients'; },
           DelegateChanged: function() { return 'Delegation changed'; },
           DaoCreated: function() { return 'DAO created by ' + (creator || 'unknown'); },
           DaoLaunched: function() { return 'DAO launched for token ' + (tokenAddress || 'unknown'); },
@@ -794,7 +838,7 @@ transforms:
           proposal_id: toString(proposalId),
           token_id: toString(tokenId),
           amount: toString(amount),
-          actor: toString(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'recipient', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator'])),
+          actor: toString(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'recipient', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator', 'buyer', 'seller'])),
           addresses: JSON.stringify(addresses || []),
           ledger_sequence: ledger_sequence,
           transaction_index: transaction_index,
