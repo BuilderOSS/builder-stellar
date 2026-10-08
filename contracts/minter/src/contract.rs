@@ -1,13 +1,11 @@
 //! Core Minter contract implementation.
 
-use soroban_sdk::{
-    contract, contractimpl, symbol_short, vec, xdr::ToXdr, Address, Bytes, BytesN, Env, IntoVal,
-    Symbol, Vec,
-};
+use soroban_sdk::{contract, contractimpl, vec, xdr::ToXdr, Address, Bytes, BytesN, Env, Vec};
 
 use crate::errors::MinterError;
 use crate::events::*;
 use crate::storage::*;
+use common::clients::NftClient;
 
 #[contract]
 pub struct MinterContract;
@@ -52,16 +50,7 @@ impl MinterContract {
         // This optimizes both delegation checks and checkpoint creation
         // Token batch_mint signature: batch_mint(minter: &Address, recipients: &Vec<Address>, amounts: &Vec<u128>) -> Vec<u32>
         let minter = e.current_contract_address();
-        match e.try_invoke_contract::<Vec<u32>, soroban_sdk::Error>(
-            &token_id,
-            &Symbol::new(e, "batch_mint"),
-            vec![
-                e,
-                minter.into_val(e),
-                recipients.into_val(e),
-                amounts.into_val(e),
-            ],
-        ) {
+        match NftClient::new(e, &token_id).try_batch_mint(&minter, &recipients, &amounts) {
             Ok(Ok(token_ids)) => {
                 let total_amount: u128 = amounts.iter().fold(0u128, |acc, a| acc.saturating_add(a));
                 let first_token_id = token_ids.first().unwrap_or(0);
@@ -93,13 +82,14 @@ impl MinterContract {
 
         let merkle_root = get_merkle_root(e, &token_id).ok_or(MinterError::MerkleRootNotSet)?;
 
-        if is_claimed(e, &token_id, &recipient) {
+        let round = get_merkle_round(e, &token_id);
+        if is_merkle_claimed(e, &token_id, round, &recipient) {
             return Err(MinterError::AlreadyClaimed);
         }
 
         verify_merkle_proof(e, &recipient, amount, &proof, &merkle_root)?;
 
-        mark_claimed(e, &token_id, &recipient);
+        mark_merkle_claimed(e, &token_id, round, &recipient);
         mint_claim(e, &token_id, &recipient, amount)?;
 
         emit_merkle_claim(e, &token_id, &recipient, amount);
@@ -134,11 +124,11 @@ impl MinterContract {
             return Err(MinterError::InvalidAmount);
         }
 
-        if is_claimed(e, &token_id, &recipient) {
+        if is_allowlist_claimed(e, &token_id, version, &recipient) {
             return Err(MinterError::AlreadyClaimed);
         }
 
-        mark_claimed(e, &token_id, &recipient);
+        mark_allowlist_claimed(e, &token_id, version, &recipient);
         mint_claim(e, &token_id, &recipient, amount)?;
 
         emit_allowlist_claim(e, &token_id, &recipient, amount);
@@ -146,7 +136,10 @@ impl MinterContract {
         Ok(())
     }
 
-    /// Sets the merkle root for a token.
+    /// Sets the merkle root for a token and starts a new MERKLE claim round only
+    /// (allowlist claims are unaffected); earlier merkle claimers may claim again
+    /// under the new root. Claim markers are per method, so a recipient can claim
+    /// once on each method per round; admins control both lists.
     /// Only callable by token owner (admin).
     ///
     /// # Authorization
@@ -163,6 +156,7 @@ impl MinterContract {
         admin.require_auth();
 
         set_merkle_root(e, &token_id, &root);
+        bump_merkle_round(e, &token_id);
 
         emit_merkle_root_set(e, &token_id);
 
@@ -174,7 +168,9 @@ impl MinterContract {
     ///
     /// Each address gets its own persistent entry under a fresh version, so the
     /// previous list is invalidated without deleting its entries. Claim markers
-    /// are unaffected.
+    /// are keyed by round; this call starts a new ALLOWLIST round only
+    /// (merkle claims are unaffected), so earlier allowlist claimers may claim
+    /// again under the new list.
     ///
     /// # Authorization
     ///
@@ -209,11 +205,7 @@ impl MinterContract {
 /// Get admin from token owner. NO stored admin - derived from token.owner().
 /// A failing call means `token_id` is not a valid token contract.
 fn get_admin(e: &Env, token_id: &Address) -> Result<Address, MinterError> {
-    match e.try_invoke_contract::<Address, soroban_sdk::Error>(
-        token_id,
-        &symbol_short!("owner"),
-        vec![e],
-    ) {
+    match NftClient::new(e, token_id).try_owner() {
         Ok(Ok(owner)) => Ok(owner),
         _ => Err(MinterError::InvalidTokenId),
     }
@@ -222,11 +214,7 @@ fn get_admin(e: &Env, token_id: &Address) -> Result<Address, MinterError> {
 /// Refuse to operate on a token that has not been launched. A failing call
 /// means `token_id` is not a valid token contract.
 fn require_token_live(e: &Env, token_id: &Address) -> Result<(), MinterError> {
-    match e.try_invoke_contract::<bool, soroban_sdk::Error>(
-        token_id,
-        &Symbol::new(e, "is_live"),
-        vec![e],
-    ) {
+    match NftClient::new(e, token_id).try_is_live() {
         Ok(Ok(true)) => Ok(()),
         Ok(Ok(false)) => Err(MinterError::TokenNotLive),
         _ => Err(MinterError::InvalidTokenId),
@@ -249,16 +237,7 @@ fn mint_claim(
     let recipients = vec![e, recipient.clone()];
     let amounts = vec![e, amount];
 
-    match e.try_invoke_contract::<Vec<u32>, soroban_sdk::Error>(
-        token_id,
-        &Symbol::new(e, "batch_mint"),
-        vec![
-            e,
-            minter.into_val(e),
-            recipients.into_val(e),
-            amounts.into_val(e),
-        ],
-    ) {
+    match NftClient::new(e, token_id).try_batch_mint(&minter, &recipients, &amounts) {
         Ok(Ok(_)) => Ok(()),
         _ => Err(MinterError::TokenContractError),
     }

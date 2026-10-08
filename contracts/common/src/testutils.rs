@@ -1,6 +1,20 @@
 //! Test helpers for modules exercising `upgrade::apply` (feature `testutils`).
 
-use soroban_sdk::{contract, contractimpl, contracttype, Bytes, BytesN, Env, String};
+use soroban_sdk::{
+    contract, contractimpl, contracttype, testutils::storage::Instance as _, testutils::Ledger,
+    Address, Bytes, BytesN, Env, String,
+};
+
+/// Remaining instance TTL (in ledgers) of `contract`.
+pub fn instance_ttl(e: &Env, contract: &Address) -> u32 {
+    e.as_contract(contract, || e.storage().instance().get_ttl())
+}
+
+/// Advance the ledger sequence by `n` ledgers (entries age, nothing expires
+/// as long as `n` stays below the remaining TTL).
+pub fn advance_ledgers(e: &Env, n: u32) {
+    e.ledger().with_mut(|l| l.sequence_number += n);
+}
 
 /// Minimal valid Soroban wasm (env-meta section only). Uploading it yields a
 /// hash that `update_current_contract_wasm` accepts.

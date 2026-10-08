@@ -1415,6 +1415,25 @@ mod real_dao {
         client.create_dao(&dao_params(&env, &deployer, 2));
     }
 
+    #[test]
+    fn create_dao_validates_time_buffer_upper_bound() {
+        let (env, client, _admin) = setup();
+        register_stub_implementations(&env, &client);
+        let deployer = Address::generate(&env);
+
+        for (nonce, bad) in [(0u64, u64::MAX), (1, 86_401), (2, 0)] {
+            let mut p = dao_params(&env, &deployer, nonce);
+            p.initial_config.auction.time_buffer = bad;
+            assert_eq!(
+                client.try_create_dao(&p).err().unwrap().unwrap(),
+                ManagerError::InvalidTimeBuffer
+            );
+        }
+        let mut ok = dao_params(&env, &deployer, 3);
+        ok.initial_config.auction.time_buffer = 86_400;
+        client.create_dao(&ok);
+    }
+
     /// Item 3: payment assets recorded at create_dao are asserted at launch.
     #[test]
     fn launch_dao_rejects_payment_asset_changed_during_setup() {

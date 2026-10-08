@@ -5,8 +5,6 @@ use soroban_sdk::contracterror;
 #[repr(u32)]
 pub enum Error {
     // Initialization
-    AlreadyInitialized = 1,
-    OnlyManager = 2,
     NotInitialized = 3,
     /// `launch` treasury differs from the treasury wired at construction
     TreasuryMismatch = 4,
@@ -31,7 +29,5 @@ pub enum Error {
 
     // Authorization
     Unauthorized = 30,
-
     // Data
-    InvalidTokenId = 40,
 }

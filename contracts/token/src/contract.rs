@@ -1,9 +1,6 @@
 #![allow(clippy::too_many_arguments)] // constructors take every wired address/param explicitly
 
-use soroban_sdk::{
-    contract, contractimpl, panic_with_error, symbol_short, vec, Address, BytesN, Env, Error,
-    IntoVal, String, Symbol, Vec,
-};
+use soroban_sdk::{contract, contractimpl, panic_with_error, Address, BytesN, Env, String, Vec};
 use stellar_access::ownable::{set_owner, Ownable};
 use stellar_governance::votes::{
     emit_delegate_changed as emit_library_delegate_changed, get_delegate, num_checkpoints,
@@ -13,6 +10,8 @@ use stellar_macros::only_owner;
 use stellar_tokens::non_fungible::{
     emit_mint, sequential::increment_token_id, votes::NonFungibleVotes, Base, NFTStorageKey,
 };
+
+use common::clients::MetadataHookClient;
 
 use crate::error::TokenError;
 use crate::events::{
@@ -141,7 +140,11 @@ impl DaoTokenContract {
         // D5: no mint-authority changes during setup; launch writes the canonical set.
         common::lifecycle::require_live(e);
         let old_enabled = Self::mint_authority(e, authority.clone());
-        let changed_by = stellar_access::ownable::get_owner(e).expect("owner not set");
+        let changed_by = common::error::require(
+            e,
+            stellar_access::ownable::get_owner(e),
+            common::CommonError::OwnerNotSet,
+        );
 
         e.storage()
             .instance()
@@ -414,7 +417,11 @@ impl DaoTokenContract {
 
     /// Returns the token contract owner used during the launch setup window.
     pub fn owner(e: &Env) -> Address {
-        stellar_access::ownable::get_owner(e).expect("owner not set")
+        common::error::require(
+            e,
+            stellar_access::ownable::get_owner(e),
+            common::CommonError::OwnerNotSet,
+        )
     }
 
     /// Transfers a token from one address to another.
@@ -538,11 +545,7 @@ impl DaoTokenContract {
             .get::<TokenKey, Address>(&TokenKey::Metadata)
         {
             // Call on_minted hook via cross-contract invocation (ignore result - non-critical)
-            let _ = e.try_invoke_contract::<(), Error>(
-                &metadata_addr,
-                &symbol_short!("on_minted"),
-                vec![e, token_id.into_val(e)],
-            );
+            let _ = MetadataHookClient::new(e, &metadata_addr).try_on_minted(&token_id);
         }
     }
 
@@ -553,11 +556,8 @@ impl DaoTokenContract {
             .get::<TokenKey, Address>(&TokenKey::Metadata)
         {
             // Non-critical: ignore failures, like the single-token hook.
-            let _ = e.try_invoke_contract::<(), Error>(
-                &metadata_addr,
-                &Symbol::new(e, "on_minted_batch"),
-                vec![e, first_token_id.into_val(e), count.into_val(e)],
-            );
+            let _ = MetadataHookClient::new(e, &metadata_addr)
+                .try_on_minted_batch(&first_token_id, &count);
         }
     }
 

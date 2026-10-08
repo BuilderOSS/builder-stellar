@@ -1443,3 +1443,17 @@ mod unqueued_expiry {
         assert_eq!(governor.proposal_state(&id), ProposalState::Defeated);
     }
 }
+
+#[test]
+fn state_changing_entrypoint_extends_instance_ttl() {
+    use common::testutils::{advance_ledgers, instance_ttl};
+    let (e, _token, _treasury, governor, _target, _owner) = setup();
+    advance_ledgers(&e, 120 * 17_280);
+    let before = instance_ttl(&e, &governor.address);
+    governor.set_voting_delay(&600);
+    let after = instance_ttl(&e, &governor.address);
+    assert!(
+        after > before,
+        "instance TTL not extended: {before} -> {after}"
+    );
+}

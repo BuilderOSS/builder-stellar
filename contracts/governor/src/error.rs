@@ -14,8 +14,6 @@ pub enum CustomGovernorError {
     InvalidQuorumBps = 1502,
     /// Owner not set in contract storage
     OwnerNotSet = 1503,
-    /// Caller is not authorized to perform this action
-    UnauthorizedCaller = 1504,
     /// Voting delay below minimum (must be >= 5 minutes)
     InvalidVotingDelay = 1505,
     /// Voting period below minimum (must be >= 5 minutes)

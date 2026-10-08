@@ -8,7 +8,7 @@ use metadata::{IpfsGroup, ItemParam};
 use metadata::{MetadataContract, MetadataContractClient};
 use soroban_sdk::{
     contract, contractimpl, symbol_short,
-    testutils::{Address as _, Ledger},
+    testutils::{Address as _, Ledger, MockAuth, MockAuthInvoke},
     token::{StellarAssetClient, TokenClient},
     vec,
     xdr::AccountFlags,
@@ -2336,4 +2336,371 @@ fn twenty_action_proposal_executes_and_twenty_one_is_rejected() {
         r.err().unwrap().unwrap(),
         governor::CustomGovernorError::TooManyActions.into()
     );
+}
+
+// ============================================================================
+// REAL-AUTH (ENFORCING) TESTS FOR CONTRACT-AUTHORIZED SUB-CALLS
+//
+// Setup runs under mock_all_auths. Every execution step then runs with
+// `mock_auths` for the human callers only (or no auth at all), so the NFT mint,
+// NFT transfers and payment transfers a contract makes on its own behalf are
+// checked by the host against the real authorization rules.
+// ============================================================================
+
+/// Authorize `who` for exactly one invocation (plus the listed sub-invocations).
+fn only_auth(
+    e: &Env,
+    who: &Address,
+    contract: &Address,
+    fn_name: &'static str,
+    args: Vec<Val>,
+    subs: &[MockAuthInvoke],
+) {
+    e.mock_auths(&[MockAuth {
+        address: who,
+        invoke: &MockAuthInvoke {
+            contract,
+            fn_name,
+            args,
+            sub_invokes: subs,
+        },
+    }]);
+}
+
+#[test]
+fn real_auth_auction_mint_bid_refund_and_settle() {
+    let (e, token, treasury, auction, owner, pay, sac) = setup_auction();
+    let b1 = Address::generate(&e);
+    let b2 = Address::generate(&e);
+    sac.mint(&b1, &1000_0000000);
+    sac.mint(&b2, &2000_0000000);
+
+    // unpause -> create_auction -> token.mint(auction, auction), contract-authorized.
+    only_auth(
+        &e,
+        &owner,
+        &auction.address,
+        "unpause",
+        vec![&e, owner.clone().into_val(&e)],
+        &[],
+    );
+    auction.unpause(&owner);
+    let st = auction.get_auction();
+    assert_eq!(token.owner_of(&(st.token_id as u32)), auction.address);
+
+    let bid = |who: &Address, amount: i128| {
+        let tid = auction.get_auction().token_id;
+        only_auth(
+            &e,
+            who,
+            &auction.address,
+            "create_bid",
+            vec![&e, who.into_val(&e), tid.into_val(&e), amount.into_val(&e)],
+            &[MockAuthInvoke {
+                contract: &pay,
+                fn_name: "transfer",
+                args: vec![
+                    &e,
+                    who.into_val(&e),
+                    auction.address.into_val(&e),
+                    amount.into_val(&e),
+                ],
+                sub_invokes: &[],
+            }],
+        );
+        auction.create_bid(who, &tid, &amount);
+    };
+    bid(&b1, 100_0000000);
+    bid(&b2, 110_0000000); // refunds b1 through a contract-authorized SAC transfer
+    assert_eq!(sac.balance(&b1), 1000_0000000);
+
+    // settle_and_create_new is permissionless: no auth at all.
+    e.ledger().set_timestamp(st.end_time + 1);
+    e.set_auths(&[]);
+    auction.settle_and_create_new();
+    assert_eq!(token.owner_of(&(st.token_id as u32)), b2);
+    assert_eq!(sac.balance(&treasury.address), 110_0000000);
+    let next = auction.get_auction();
+    assert_ne!(next.token_id, st.token_id);
+    assert_eq!(token.owner_of(&(next.token_id as u32)), auction.address);
+}
+
+#[test]
+fn real_auth_auction_pause_settle_and_cancel() {
+    let (e, token, treasury, auction, owner, pay, sac) = setup_auction();
+    let b1 = Address::generate(&e);
+    sac.mint(&b1, &1000_0000000);
+
+    only_auth(
+        &e,
+        &owner,
+        &auction.address,
+        "unpause",
+        vec![&e, owner.clone().into_val(&e)],
+        &[],
+    );
+    auction.unpause(&owner);
+    let tid = auction.get_auction().token_id;
+    only_auth(
+        &e,
+        &b1,
+        &auction.address,
+        "create_bid",
+        vec![
+            &e,
+            b1.into_val(&e),
+            tid.into_val(&e),
+            100_0000000_i128.into_val(&e),
+        ],
+        &[MockAuthInvoke {
+            contract: &pay,
+            fn_name: "transfer",
+            args: vec![
+                &e,
+                b1.into_val(&e),
+                auction.address.into_val(&e),
+                100_0000000_i128.into_val(&e),
+            ],
+            sub_invokes: &[],
+        }],
+    );
+    auction.create_bid(&b1, &tid, &100_0000000);
+
+    only_auth(
+        &e,
+        &owner,
+        &auction.address,
+        "pause",
+        vec![&e, owner.clone().into_val(&e)],
+        &[],
+    );
+    auction.pause(&owner);
+
+    // Enforcement is real: without the owner's auth the call is rejected.
+    e.set_auths(&[]);
+    assert!(auction.try_cancel_auction().is_err());
+
+    // cancel_auction: refund (SAC transfer) + NFT to treasury, owner auth only.
+    only_auth(
+        &e,
+        &owner,
+        &auction.address,
+        "cancel_auction",
+        vec![&e],
+        &[],
+    );
+    auction.cancel_auction();
+    assert_eq!(sac.balance(&b1), 1000_0000000);
+    assert_eq!(token.owner_of(&(tid as u32)), treasury.address);
+    assert!(auction.get_auction().settled);
+}
+
+#[test]
+fn real_auth_auction_settle_auction_when_paused_moves_nft_and_payment() {
+    let (e, token, treasury, auction, owner, pay, sac) = setup_auction();
+    let b1 = Address::generate(&e);
+    sac.mint(&b1, &1000_0000000);
+    only_auth(
+        &e,
+        &owner,
+        &auction.address,
+        "unpause",
+        vec![&e, owner.clone().into_val(&e)],
+        &[],
+    );
+    auction.unpause(&owner);
+    let st = auction.get_auction();
+    only_auth(
+        &e,
+        &b1,
+        &auction.address,
+        "create_bid",
+        vec![
+            &e,
+            b1.into_val(&e),
+            st.token_id.into_val(&e),
+            100_0000000_i128.into_val(&e),
+        ],
+        &[MockAuthInvoke {
+            contract: &pay,
+            fn_name: "transfer",
+            args: vec![
+                &e,
+                b1.into_val(&e),
+                auction.address.into_val(&e),
+                100_0000000_i128.into_val(&e),
+            ],
+            sub_invokes: &[],
+        }],
+    );
+    auction.create_bid(&b1, &st.token_id, &100_0000000);
+    only_auth(
+        &e,
+        &owner,
+        &auction.address,
+        "pause",
+        vec![&e, owner.clone().into_val(&e)],
+        &[],
+    );
+    auction.pause(&owner);
+
+    e.set_auths(&[]);
+    auction.settle_auction();
+    assert_eq!(token.owner_of(&(st.token_id as u32)), b1);
+    assert_eq!(sac.balance(&treasury.address), 100_0000000);
+}
+
+#[test]
+fn real_auth_marketplace_primary_and_secondary_flows() {
+    let e = Env::default();
+    e.mock_all_auths();
+    e.ledger().set_timestamp(1_000);
+
+    let treasury = Address::generate(&e);
+    let seller = Address::generate(&e);
+    let buyer = Address::generate(&e);
+    let manager = Address::generate(&e);
+    let payment = e.register_stellar_asset_contract_v2(Address::generate(&e));
+    let pay = payment.address();
+    let sac = StellarAssetClient::new(&e, &pay);
+    sac.mint(&seller, &10_000);
+    sac.mint(&buyer, &10_000);
+
+    let metadata_id = Address::generate(&e);
+    let token_id = e.register(
+        DaoTokenContract,
+        (
+            treasury.clone(),
+            treasury.clone(),
+            String::from_str(&e, "https://example.com/"),
+            String::from_str(&e, "Marketplace DAO"),
+            String::from_str(&e, "MDAO"),
+            metadata_id.clone(),
+            manager.clone(),
+            BytesN::from_array(&e, &[0; 32]),
+            String::from_str(&e, "0.1.0"),
+        ),
+    );
+    register_metadata(&e, &metadata_id, &token_id, &treasury);
+    let marketplace_id = e.register(
+        MarketplaceContract,
+        (
+            token_id.clone(),
+            treasury.clone(),
+            treasury.clone(),
+            pay.clone(),
+            manager,
+            BytesN::from_array(&e, &[0; 32]),
+            String::from_str(&e, "0.1.0"),
+            250u32,
+        ),
+    );
+    let token = DaoTokenContractClient::new(&e, &token_id);
+    let marketplace = MarketplaceContractClient::new(&e, &marketplace_id);
+    token.launch(
+        &treasury,
+        &vec![&e, treasury.clone(), marketplace_id.clone()],
+    );
+    marketplace.launch(&treasury, &true, &pay);
+
+    let pay_sub = |from: &Address, to: &Address, amount: i128| MockAuthInvoke {
+        contract: &pay,
+        fn_name: "transfer",
+        args: vec![&e, from.into_val(&e), to.into_val(&e), amount.into_val(&e)],
+        sub_invokes: &[],
+    };
+
+    // Primary: admin (treasury) lists, buyer pays; the marketplace mints.
+    only_auth(
+        &e,
+        &treasury,
+        &marketplace_id,
+        "create_primary_listing",
+        vec![&e, 100_i128.into_val(&e), 2_000_u64.into_val(&e)],
+        &[],
+    );
+    let listing_id = marketplace.create_primary_listing(&100, &2_000);
+    only_auth(
+        &e,
+        &seller,
+        &marketplace_id,
+        "buy_primary",
+        vec![&e, listing_id.into_val(&e), seller.into_val(&e)],
+        &[pay_sub(&seller, &treasury, 100)],
+    );
+    let nft = marketplace.buy_primary(&listing_id, &seller);
+    assert_eq!(token.owner_of(&nft), seller);
+    assert_eq!(sac.balance(&treasury), 100);
+
+    let list = |who: &Address, price: i128, expires: u64| {
+        let exp_ledger = e.ledger().sequence() + 1_000;
+        only_auth(
+            &e,
+            who,
+            &token_id,
+            "approve",
+            vec![
+                &e,
+                who.into_val(&e),
+                marketplace_id.into_val(&e),
+                nft.into_val(&e),
+                exp_ledger.into_val(&e),
+            ],
+            &[],
+        );
+        token.approve(who, &marketplace_id, &nft, &exp_ledger);
+        only_auth(
+            &e,
+            who,
+            &marketplace_id,
+            "list",
+            vec![
+                &e,
+                nft.into_val(&e),
+                who.into_val(&e),
+                price.into_val(&e),
+                expires.into_val(&e),
+            ],
+            &[],
+        );
+        marketplace.list(&nft, who, &price, &expires);
+        assert_eq!(token.owner_of(&nft), marketplace_id);
+    };
+
+    // list (transfer_from) then buy: fee 2.5% to treasury, rest to seller.
+    list(&seller, 1_000, 5_000);
+    only_auth(
+        &e,
+        &buyer,
+        &marketplace_id,
+        "buy",
+        vec![&e, nft.into_val(&e), buyer.into_val(&e)],
+        &[
+            pay_sub(&buyer, &treasury, 25),
+            pay_sub(&buyer, &seller, 975),
+        ],
+    );
+    marketplace.buy(&nft, &buyer);
+    assert_eq!(token.owner_of(&nft), buyer);
+    assert_eq!(sac.balance(&seller), 10_000 - 100 + 975);
+
+    // list then cancel: NFT returns to the seller.
+    list(&buyer, 1_000, 5_000);
+    only_auth(
+        &e,
+        &buyer,
+        &marketplace_id,
+        "cancel",
+        vec![&e, nft.into_val(&e), buyer.into_val(&e)],
+        &[],
+    );
+    marketplace.cancel(&nft, &buyer);
+    assert_eq!(token.owner_of(&nft), buyer);
+
+    // list then expire (permissionless, no auth).
+    list(&buyer, 1_000, 3_000);
+    e.ledger().set_timestamp(3_001);
+    e.set_auths(&[]);
+    marketplace.expire(&nft);
+    assert_eq!(token.owner_of(&nft), buyer);
 }

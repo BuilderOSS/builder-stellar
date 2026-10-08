@@ -1034,6 +1034,7 @@ dependencies = [
 name = "minter"
 version = "0.1.0"
 dependencies = [
+ "common",
  "soroban-sdk",
  "stellar-access",
  "stellar-tokens",

@@ -867,3 +867,17 @@ fn launch_requires_manager_auth() {
     assert!(mp.try_launch(&fixture.treasury, &true, &asset).is_err());
     assert!(mp.get_config().paused);
 }
+
+#[test]
+fn state_changing_entrypoint_extends_instance_ttl() {
+    use common::testutils::{advance_ledgers, instance_ttl};
+    let f = fixture();
+    advance_ledgers(&f.env, 120 * 17_280);
+    let before = instance_ttl(&f.env, &f.marketplace.address);
+    f.marketplace.pause();
+    let after = instance_ttl(&f.env, &f.marketplace.address);
+    assert!(
+        after > before,
+        "instance TTL not extended: {before} -> {after}"
+    );
+}

@@ -33,7 +33,7 @@ fn test_storage_enums_defined() {
     let _key2 = MinterKey::AllowlistVersion(token_id.clone());
     let _key3 = MinterKey::AllowlistAmount(token_id.clone());
     let recipient = Address::generate(&Env::default());
-    let _key4 = MinterKey::Claimed(token_id, recipient);
+    let _key4 = MinterKey::MerkleClaimed(token_id, 0, recipient);
 }
 
 #[test]
@@ -41,7 +41,6 @@ fn test_errors_defined() {
     use minter::MinterError;
 
     // Just verify errors exist
-    let _err1 = MinterError::Unauthorized;
     let _err2 = MinterError::InvalidAmount;
     let _err3 = MinterError::InvalidTokenId;
     let _err4 = MinterError::BatchTooLarge;

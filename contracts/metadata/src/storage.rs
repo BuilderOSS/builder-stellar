@@ -3,13 +3,14 @@ use soroban_sdk::{contracttype, Address, Env, String, Vec};
 use crate::error::Error;
 
 const DAY_IN_LEDGERS: u32 = 17_280;
+/// Nominal 1 year; the network caps entries at ~180 days (max_entry_ttl) and
+/// the host clamps the request, so the effective lifetime is ~180 days and
+/// renews on touch.
 const METADATA_TTL: u32 = 365 * DAY_IN_LEDGERS;
 const METADATA_TTL_THRESHOLD: u32 = METADATA_TTL - DAY_IN_LEDGERS;
 
 fn extend_instance_ttl(env: &Env) {
-    env.storage()
-        .instance()
-        .extend_ttl(METADATA_TTL_THRESHOLD, METADATA_TTL);
+    common::ttl::extend_instance(env);
 }
 
 fn extend_persistent_ttl(env: &Env, key: &DataKey) {

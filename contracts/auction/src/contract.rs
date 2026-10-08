@@ -1,5 +1,7 @@
 #![allow(clippy::too_many_arguments)] // constructors take every wired address/param explicitly
 
+use common::clients::NftClient;
+use soroban_sdk::token::TokenClient;
 use soroban_sdk::{
     auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation},
     contract, contractimpl, contracttrait, panic_with_error, Address, BytesN, Env, IntoVal, String,
@@ -20,8 +22,8 @@ use crate::{
     storage::{
         clear_pending_refund, get_auction, get_config, get_pending_refund, is_launched,
         is_payment_token_locked, set_auction, set_config, set_launched, set_payment_token_locked,
-        AuctionConfig, AuctionState, DataKey, MAX_BID_INCREMENT_PERCENT, MIN_AUCTION_DURATION,
-        MIN_RESERVE_PRICE,
+        AuctionConfig, AuctionState, DataKey, MAX_BID_INCREMENT_PERCENT, MAX_TIME_BUFFER,
+        MIN_AUCTION_DURATION, MIN_RESERVE_PRICE,
     },
 };
 
@@ -192,6 +194,10 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
             panic_with_error!(e, AuctionError::InvalidConfig);
         }
 
+        if time_buffer == 0 || time_buffer > MAX_TIME_BUFFER {
+            panic_with_error!(e, AuctionError::InvalidTimeBuffer);
+        }
+
         // Set owner
         ownable::set_owner(e, &owner);
 
@@ -310,19 +316,15 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
 
         // Transfer payment tokens from bidder to contract
         // Bidder authorizes this via bidder.require_auth() at function entry
-        let transfer_symbol = Symbol::new(e, "transfer");
-        let transfer_args = soroban_sdk::vec![
-            e,
-            bidder.to_val(),
-            e.current_contract_address().to_val(),
-            amount.into_val(e)
-        ];
-
         if !is_payment_token_locked(e) {
             set_payment_token_locked(e);
         }
 
-        e.invoke_contract::<()>(&config.payment_token, &transfer_symbol, transfer_args);
+        TokenClient::new(e, &config.payment_token).transfer(
+            &bidder,
+            e.current_contract_address(),
+            &amount,
+        );
 
         process_bid(e, &mut auction, &config, &bidder, amount);
     }
@@ -386,10 +388,35 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
 
         let owner = ownable::get_owner(e).unwrap();
 
-        // Mark as settled to prevent further bids
+        // Mark as settled to prevent further bids (before the NFT transfer, CEI)
         let mut cancelled_auction = auction.clone();
         cancelled_auction.settled = true;
         set_auction(e, &cancelled_auction);
+
+        // The minted-but-unsold NFT is held by this contract; hand it to the
+        // Treasury so it is not stranded. The auth entry matches the exact call.
+        let nft_args = soroban_sdk::vec![
+            e,
+            e.current_contract_address().to_val(),
+            config.treasury.to_val(),
+            (auction.token_id as u32).into_val(e)
+        ];
+        e.authorize_as_current_contract(soroban_sdk::vec![
+            e,
+            InvokerContractAuthEntry::Contract(SubContractInvocation {
+                context: ContractContext {
+                    contract: config.token_contract.clone(),
+                    fn_name: Symbol::new(e, "transfer"),
+                    args: nft_args,
+                },
+                sub_invocations: soroban_sdk::vec![e],
+            }),
+        ]);
+        NftClient::new(e, &config.token_contract).transfer(
+            &e.current_contract_address(),
+            &config.treasury,
+            &(auction.token_id as u32),
+        );
 
         emit_auction_cancelled(e, auction.token_id, 0, &owner); // reason: 0 = owner cancelled
     }
@@ -424,7 +451,11 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
                 sub_invocations: soroban_sdk::vec![e],
             }),
         ]);
-        e.invoke_contract::<()>(&config.payment_token, &transfer_symbol, args);
+        TokenClient::new(e, &config.payment_token).transfer(
+            &e.current_contract_address(),
+            &bidder,
+            &amount,
+        );
 
         emit_refund_withdrawn(e, &bidder, amount);
     }
@@ -485,6 +516,9 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     #[only_owner]
     #[when_paused]
     fn set_time_buffer(e: &Env, time_buffer: u64) {
+        if time_buffer == 0 || time_buffer > MAX_TIME_BUFFER {
+            panic_with_error!(e, AuctionError::InvalidTimeBuffer);
+        }
         let owner = ownable::get_owner(e).unwrap();
 
         let mut config = get_config(e);

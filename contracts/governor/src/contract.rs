@@ -170,6 +170,7 @@ impl DaoGovernorContract {
 
     #[only_owner]
     pub fn set_queue_delay(e: &Env, queue_delay: u32) {
+        common::ttl::extend_instance(e);
         Self::check_queue_delay(e, queue_delay);
 
         let old_value = Self::queue_delay(e);
@@ -183,6 +184,7 @@ impl DaoGovernorContract {
 
     #[only_owner]
     pub fn set_voting_delay(e: &Env, voting_delay: u32) {
+        common::ttl::extend_instance(e);
         Self::check_voting_delay(e, voting_delay);
 
         let old_value = Self::voting_delay(e);
@@ -193,6 +195,7 @@ impl DaoGovernorContract {
 
     #[only_owner]
     pub fn set_voting_period(e: &Env, voting_period: u32) {
+        common::ttl::extend_instance(e);
         Self::check_voting_period(e, voting_period);
 
         let old_value = Self::voting_period(e);
@@ -203,6 +206,7 @@ impl DaoGovernorContract {
 
     #[only_owner]
     pub fn set_proposal_threshold(e: &Env, proposal_threshold: u128) {
+        common::ttl::extend_instance(e);
         Self::check_proposal_threshold(e, proposal_threshold);
 
         // Validate threshold doesn't exceed total supply (would lock governance)
@@ -222,6 +226,7 @@ impl DaoGovernorContract {
 
     #[only_owner]
     pub fn set_quorum_bps(e: &Env, quorum_bps: u32) {
+        common::ttl::extend_instance(e);
         Self::check_quorum_bps(e, quorum_bps);
 
         let old_value = Self::quorum_bps(e);
@@ -245,6 +250,7 @@ impl DaoGovernorContract {
         args: Vec<Vec<Val>>,
         description_hash: BytesN<32>,
     ) -> BytesN<32> {
+        common::ttl::extend_instance(e);
         common::lifecycle::require_live(e);
         Self::treasury(e).require_auth();
 
@@ -274,10 +280,11 @@ impl DaoGovernorContract {
     }
 
     pub fn treasury(e: &Env) -> Address {
-        e.storage()
-            .instance()
-            .get(&GovernorKey::Treasury)
-            .expect("treasury not set")
+        common::error::require(
+            e,
+            e.storage().instance().get(&GovernorKey::Treasury),
+            common::CommonError::TreasuryNotSet,
+        )
     }
 
     fn queue_delay(e: &Env) -> u32 {
@@ -491,6 +498,7 @@ impl Governor for DaoGovernorContract {
         _eta: u32,
         _operator: Address,
     ) -> BytesN<32> {
+        common::ttl::extend_instance(e);
         common::lifecycle::require_live(e);
         let proposal_id =
             governor::hash_proposal(e, &targets, &functions, &args, &description_hash);
@@ -543,6 +551,7 @@ impl Governor for DaoGovernorContract {
         description: String,
         proposer: Address,
     ) -> BytesN<32> {
+        common::ttl::extend_instance(e);
         common::lifecycle::require_live(e);
         proposer.require_auth();
 
@@ -626,6 +635,7 @@ impl Governor for DaoGovernorContract {
         reason: String,
         voter: Address,
     ) -> u128 {
+        common::ttl::extend_instance(e);
         common::lifecycle::require_live(e);
         voter.require_auth();
 
@@ -671,6 +681,7 @@ impl Governor for DaoGovernorContract {
         description_hash: BytesN<32>,
         operator: Address,
     ) -> BytesN<32> {
+        common::ttl::extend_instance(e);
         let proposal_id =
             governor::hash_proposal(e, &targets, &functions, &args, &description_hash);
         let mut proposal = Self::get_proposal(e, &proposal_id);

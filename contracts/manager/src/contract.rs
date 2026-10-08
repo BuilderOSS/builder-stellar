@@ -5,9 +5,10 @@
 //! 2. DAO Factory - Atomic deployment of new DAOs
 //! 3. DAO Lifecycle - Deployment and launch handoff
 
-use soroban_sdk::{
-    contract, contractimpl, vec, Address, BytesN, Env, IntoVal, String, Symbol, Val, Vec,
+use common::clients::{
+    AuctionLaunchClient, MarketplaceLaunchClient, NftClient, TreasuryLaunchClient,
 };
+use soroban_sdk::{contract, contractimpl, vec, Address, BytesN, Env, String, Val, Vec};
 
 use crate::error::ManagerError;
 use crate::events::*;
@@ -286,19 +287,25 @@ impl ManagerContract {
     /// Returns the active Manager release version.
     pub fn version(env: Env) -> String {
         extend_instance_ttl(&env);
-        env.storage()
-            .instance()
-            .get(&ManagerKey::CurrentManagerVersion)
-            .expect("manager version not set")
+        common::error::require(
+            &env,
+            env.storage()
+                .instance()
+                .get(&ManagerKey::CurrentManagerVersion),
+            common::CommonError::VersionNotSet,
+        )
     }
 
     /// Returns the active Manager WASM hash.
     pub fn wasm_hash(env: Env) -> BytesN<32> {
         extend_instance_ttl(&env);
-        env.storage()
-            .instance()
-            .get(&ManagerKey::CurrentManagerWasm)
-            .expect("manager hash not set")
+        common::error::require(
+            &env,
+            env.storage()
+                .instance()
+                .get(&ManagerKey::CurrentManagerWasm),
+            common::CommonError::CurrentHashNotSet,
+        )
     }
 
     /// Get latest version of an implementation by name.
@@ -746,23 +753,15 @@ impl ManagerContract {
 
         let addresses = pending.addresses.clone();
         let treasury = addresses.treasury.clone();
-        // NOTE: calls are Symbol-based on purpose. Using the module crates'
-        // generated clients would link their `#[contractimpl]` exports into the
-        // Manager WASM (duplicate `version`/`upgrade`/... symbols). Task #6
-        // replaces these with `contractimport!` clients.
-        let token_owner: Address =
-            env.invoke_contract(&addresses.token, &Symbol::new(&env, "owner"), vec![&env]);
+        // Typed clients (common::clients) rather than the module crates:
+        // linking those would export their functions from the Manager WASM.
+        let nft = NftClient::new(&env, &addresses.token);
         // launch_admin must still be the token owner.
-        if token_owner != pending.launch_admin {
+        if nft.owner() != pending.launch_admin {
             return Err(ManagerError::Unauthorized);
         }
         // At least one token must exist.
-        let total_supply: i128 = env.invoke_contract(
-            &addresses.token,
-            &Symbol::new(&env, "total_supply"),
-            vec![&env],
-        );
-        if total_supply <= 0 {
+        if nft.total_supply() <= 0 {
             return Err(ManagerError::LaunchSupplyZero);
         }
 
@@ -781,45 +780,20 @@ impl ManagerContract {
         // One-shot handoff. The token launches first so the auction holds mint
         // authority when it creates its first auction. After these calls every
         // module is Live and the Manager has no further authority over the DAO.
-        let launch_args = vec![&env, treasury.clone().into_val(&env)];
-        let _: () = env.invoke_contract(
-            &addresses.token,
-            &Symbol::new(&env, "launch"),
-            vec![
-                &env,
-                treasury.clone().into_val(&env),
-                minters.into_val(&env),
-            ],
+        nft.launch(&treasury, &minters);
+        TreasuryLaunchClient::new(&env, &addresses.governor).launch(&treasury);
+        TreasuryLaunchClient::new(&env, &addresses.treasury).launch(&treasury);
+        MarketplaceLaunchClient::new(&env, &addresses.marketplace).launch(
+            &treasury,
+            &launch_config.launch_marketplace,
+            &pending.marketplace_payment_asset,
         );
-        for module in [&addresses.governor, &addresses.treasury] {
-            let _: () =
-                env.invoke_contract(module, &Symbol::new(&env, "launch"), launch_args.clone());
-        }
-        let _: () = env.invoke_contract(
-            &addresses.marketplace,
-            &Symbol::new(&env, "launch"),
-            vec![
-                &env,
-                treasury.clone().into_val(&env),
-                launch_config.launch_marketplace.into_val(&env),
-                pending.marketplace_payment_asset.clone().into_val(&env),
-            ],
+        AuctionLaunchClient::new(&env, &addresses.auction).launch(
+            &treasury,
+            &launch_config.launch_auction,
+            &pending.auction_payment_asset,
         );
-        let _: () = env.invoke_contract(
-            &addresses.auction,
-            &Symbol::new(&env, "launch"),
-            vec![
-                &env,
-                treasury.clone().into_val(&env),
-                launch_config.launch_auction.into_val(&env),
-                pending.auction_payment_asset.clone().into_val(&env),
-            ],
-        );
-        let _: () = env.invoke_contract(
-            &addresses.metadata,
-            &Symbol::new(&env, "launch"),
-            launch_args,
-        );
+        TreasuryLaunchClient::new(&env, &addresses.metadata).launch(&treasury);
 
         // Delete pending DAO state
         remove_persistent(&env, &ManagerKey::PendingDao(token_address.clone()));
@@ -1143,7 +1117,9 @@ impl ManagerContract {
         if config.auction.reserve_price < MIN_RESERVE_PRICE {
             return Err(ManagerError::InvalidParamBounds);
         }
-        if config.auction.time_buffer == 0 {
+        if config.auction.time_buffer == 0
+            || config.auction.time_buffer > common::MAX_AUCTION_TIME_BUFFER
+        {
             return Err(ManagerError::InvalidTimeBuffer);
         }
         if config.marketplace.secondary_fee_bps > MAX_BPS {

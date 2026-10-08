@@ -1,3 +1,5 @@
+use common::clients::NftClient;
+use soroban_sdk::token::TokenClient;
 use soroban_sdk::{
     auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation},
     panic_with_error, Address, Env, IntoVal, Symbol,
@@ -31,7 +33,7 @@ pub(crate) fn create_auction(e: &Env) {
             context: ContractContext {
                 contract: config.token_contract.clone(),
                 fn_name: mint_symbol.clone(),
-                args: mint_args.clone(),
+                args: mint_args,
             },
             sub_invocations: soroban_sdk::vec![e],
         }),
@@ -39,7 +41,8 @@ pub(crate) fn create_auction(e: &Env) {
 
     // SECURITY: Call the mint function - it returns the token ID as u32
     // u32 always fits in u128, so this conversion is safe
-    let token_id_u32: u32 = e.invoke_contract(&config.token_contract, &mint_symbol, mint_args);
+    let token_id_u32: u32 =
+        NftClient::new(e, &config.token_contract).mint(&auction_address, &auction_address);
     let token_id: u128 = token_id_u32 as u128;
 
     let now = e.ledger().timestamp();
@@ -188,7 +191,11 @@ pub(crate) fn settle_auction_internal(e: &Env) {
             }),
         ]);
 
-        e.invoke_contract::<()>(&config.token_contract, &transfer_symbol, nft_transfer_args);
+        NftClient::new(e, &config.token_contract).transfer(
+            &e.current_contract_address(),
+            winner,
+            &(auction.token_id as u32),
+        );
 
         // Transfer proceeds to treasury
         if auction.highest_bid > 0 {
@@ -212,10 +219,10 @@ pub(crate) fn settle_auction_internal(e: &Env) {
                 }),
             ]);
 
-            e.invoke_contract::<()>(
-                &config.payment_token,
-                &transfer_symbol,
-                payment_transfer_args,
+            TokenClient::new(e, &config.payment_token).transfer(
+                &e.current_contract_address(),
+                &config.treasury,
+                &auction.highest_bid,
             );
         }
 
@@ -248,7 +255,11 @@ pub(crate) fn settle_auction_internal(e: &Env) {
             }),
         ]);
 
-        e.invoke_contract::<()>(&config.token_contract, &transfer_symbol, nft_transfer_args);
+        NftClient::new(e, &config.token_contract).transfer(
+            &e.current_contract_address(),
+            &config.treasury,
+            &(auction.token_id as u32),
+        );
 
         emit_auction_settled(e, auction.token_id, &None, 0);
     }
@@ -290,15 +301,15 @@ pub(crate) fn refund_bid(
     // trustline, revoked SAC authorization) block the auction: on failure the
     // amount is credited to PendingRefund and pulled later via withdraw_refund.
     // A failed sub-call rolls back its own writes, so no tokens moved.
-    let result = e.try_invoke_contract::<(), soroban_sdk::Error>(
-        payment_token,
-        &transfer_symbol,
-        refund_args,
+    let result = TokenClient::new(e, payment_token).try_transfer(
+        &e.current_contract_address(),
+        bidder,
+        &amount,
     );
 
     match result {
-        Ok(_) => emit_bid_refunded(e, token_id, bidder, amount),
-        Err(_) => {
+        Ok(Ok(_)) => emit_bid_refunded(e, token_id, bidder, amount),
+        _ => {
             add_pending_refund(e, bidder, amount);
             emit_refund_deferred(e, token_id, bidder, amount);
         }

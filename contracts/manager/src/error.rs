@@ -39,23 +39,14 @@ pub enum ManagerError {
     // ========================================================================
     // Factory Errors (1100-1199)
     // ========================================================================
-    /// DAO creation failed
-    DaoCreationFailed = 1100,
-
     /// Factory is paused
     FactoryPaused = 1101,
 
     /// Invalid parameter bounds
     InvalidParamBounds = 1103,
 
-    /// Founder allocations exceed the configured maximum
-    FoundersExceed99Percent = 1104,
-
     /// Invalid quorum basis points
     InvalidQuorumBps = 1105,
-
-    /// Invalid proposal threshold basis points
-    InvalidProposalThresholdBps = 1106,
 
     /// Invalid duration
     InvalidDuration = 1107,
@@ -63,33 +54,14 @@ pub enum ManagerError {
     /// Invalid time buffer
     InvalidTimeBuffer = 1108,
 
-    /// Deployment failed
-    DeploymentFailed = 1109,
-
-    /// Initialization failed
-    InitializationFailed = 1110,
-
-    /// Invalid payment asset
-    InvalidPaymentAsset = 1111,
-
     /// String too long
     StringTooLong = 1112,
 
     /// String empty
     StringEmpty = 1113,
 
-    /// Invalid founder allocation
-    NoFoundersSpecified = 1114,
-
-    /// Invalid founder allocation
-    InvalidFounderPercentage = 1115,
     /// Governance timing does not fit the Governor contract's u32 fields
     InvalidGovernanceTiming = 1117,
-    /// Founder allocations exceed the factory resource limit
-    FounderAllocationTooLarge = 1118,
-
-    /// The auction must remain paused when it is not launched
-    AuctionMustBePaused = 1119,
 
     /// Proposal threshold must be at least 1
     InvalidProposalThreshold = 1120,

@@ -16,7 +16,9 @@ use soroban_sdk::{contracttype, Address};
 /// ~17,280 ledgers per day. Used for converting time-based TTLs to ledger counts.
 pub const DAY_IN_LEDGERS: u32 = 17280; // ~5 seconds per ledger
 
-/// Delegation storage TTL extension amount (1 year in ledgers).
+/// Delegation storage TTL extension amount (nominally 1 year in ledgers; the
+/// network caps entries at ~180 days, so the effective lifetime is ~180 days
+/// and renews on touch).
 ///
 /// When delegation data is accessed (e.g., during minting, transfer, or voting),
 /// its TTL is automatically extended by this amount to ensure the delegation
@@ -49,16 +51,8 @@ pub enum TokenKey {
     Treasury,
 }
 
-/// Instance TTL (1 year) used for the contract's instance entry
-/// (owner, metadata, manager, sequential token counter, ...).
-pub const INSTANCE_TTL_EXTEND_AMOUNT: u32 = 365 * DAY_IN_LEDGERS;
-
-/// Extend the instance entry when less than ~30 days remain.
-pub const INSTANCE_TTL_THRESHOLD: u32 = 30 * DAY_IN_LEDGERS;
-
-/// Keeps the instance entry alive on state-changing paths.
+/// Keeps the instance entry alive on state-changing paths (shared policy:
+/// see `common::ttl`).
 pub fn extend_instance_ttl(e: &soroban_sdk::Env) {
-    e.storage()
-        .instance()
-        .extend_ttl(INSTANCE_TTL_THRESHOLD, INSTANCE_TTL_EXTEND_AMOUNT);
+    common::ttl::extend_instance(e);
 }

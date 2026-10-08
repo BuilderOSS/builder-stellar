@@ -11,14 +11,14 @@ doctest = false
 [dependencies]
 soroban-sdk = { workspace = true }
 stellar-access = { workspace = true }
+common = { path = "../common" }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
 token = { path = "../token" }
 metadata = { path = "../metadata" }
 auction = { path = "../auction" }
 governor = { path = "../governor" }
-
-[dev-dependencies]
-soroban-sdk = { workspace = true, features = ["testutils"] }
-common = { path = "../common" }
 treasury = { path = "../treasury" }
 marketplace = { path = "../marketplace" }
 

@@ -15,7 +15,8 @@ pub const MAX_PROOF_LEN: u32 = 32;
 /// Approximate number of ledgers in a day (~5 seconds per ledger).
 pub const DAY_IN_LEDGERS: u32 = 17280;
 
-/// TTL extension applied to touched persistent entries (1 year).
+/// TTL extension applied to touched persistent entries (nominally 1 year; the
+/// network caps entries at ~180 days, renewed on touch).
 pub const TTL_EXTEND_AMOUNT: u32 = 365 * DAY_IN_LEDGERS;
 
 /// Extend when remaining TTL drops below this (~30 days).
@@ -32,14 +33,26 @@ pub enum MinterKey {
     AllowlistAmount(Address),
 
     /// Current allowlist version: token_id -> u32. Bumped on every
-    /// `set_allowlist`, which invalidates all entries of older versions.
+    /// `set_allowlist`, which invalidates all entries of older versions. It is
+    /// also the allowlist claim round: `AllowlistClaimed` is keyed by it.
     AllowlistVersion(Address),
 
     /// Allowlist membership: (token_id, version, address) -> true
     Allowlisted(Address, u32, Address),
 
-    /// Claim marker: (token_id, recipient) -> true
-    Claimed(Address, Address),
+    /// Merkle claim round: token_id -> u32 (default 0). Bumped ONLY by
+    /// `set_merkle_root`, so a new root lets earlier claimers claim again while
+    /// a re-claim within the same round stays blocked.
+    MerkleRound(Address),
+
+    /// Merkle claim marker: (token_id, merkle_round, recipient) -> true
+    MerkleClaimed(Address, u32, Address),
+
+    /// Allowlist claim marker: (token_id, allowlist_version, recipient) -> true.
+    /// Markers are per method: a recipient may claim once per method per round
+    /// (this replaces the old single marker shared by both methods; admins
+    /// control both lists).
+    AllowlistClaimed(Address, u32, Address),
 }
 
 fn get<V: soroban_sdk::TryFromVal<Env, soroban_sdk::Val>>(env: &Env, key: &MinterKey) -> Option<V> {
@@ -83,11 +96,37 @@ pub fn is_allowlisted(env: &Env, token_id: &Address, version: u32, recipient: &A
     .unwrap_or(false)
 }
 
-/// Check if a recipient has already claimed.
-pub fn is_claimed(env: &Env, token_id: &Address, recipient: &Address) -> bool {
+/// Current merkle claim round (0 if no root was ever set).
+pub fn get_merkle_round(env: &Env, token_id: &Address) -> u32 {
+    get(env, &MinterKey::MerkleRound(token_id.clone())).unwrap_or(0)
+}
+
+/// Start a new merkle claim round; returns the new round number.
+pub fn bump_merkle_round(env: &Env, token_id: &Address) -> u32 {
+    let round = get_merkle_round(env, token_id).saturating_add(1);
+    set(env, &MinterKey::MerkleRound(token_id.clone()), &round);
+    round
+}
+
+/// Whether `recipient` already claimed via merkle in `round`.
+pub fn is_merkle_claimed(env: &Env, token_id: &Address, round: u32, recipient: &Address) -> bool {
     get::<bool>(
         env,
-        &MinterKey::Claimed(token_id.clone(), recipient.clone()),
+        &MinterKey::MerkleClaimed(token_id.clone(), round, recipient.clone()),
+    )
+    .unwrap_or(false)
+}
+
+/// Whether `recipient` already claimed via allowlist in `round`.
+pub fn is_allowlist_claimed(
+    env: &Env,
+    token_id: &Address,
+    round: u32,
+    recipient: &Address,
+) -> bool {
+    get::<bool>(
+        env,
+        &MinterKey::AllowlistClaimed(token_id.clone(), round, recipient.clone()),
     )
     .unwrap_or(false)
 }
@@ -120,11 +159,20 @@ pub fn add_allowlisted(env: &Env, token_id: &Address, version: u32, recipient: &
     );
 }
 
-/// Mark a recipient as claimed.
-pub fn mark_claimed(env: &Env, token_id: &Address, recipient: &Address) {
+/// Mark a recipient as having claimed via merkle in `round`.
+pub fn mark_merkle_claimed(env: &Env, token_id: &Address, round: u32, recipient: &Address) {
     set(
         env,
-        &MinterKey::Claimed(token_id.clone(), recipient.clone()),
+        &MinterKey::MerkleClaimed(token_id.clone(), round, recipient.clone()),
+        &true,
+    );
+}
+
+/// Mark a recipient as having claimed via allowlist in `round`.
+pub fn mark_allowlist_claimed(env: &Env, token_id: &Address, round: u32, recipient: &Address) {
+    set(
+        env,
+        &MinterKey::AllowlistClaimed(token_id.clone(), round, recipient.clone()),
         &true,
     );
 }

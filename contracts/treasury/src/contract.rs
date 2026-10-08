@@ -1,6 +1,6 @@
 use soroban_sdk::{
     auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation},
-    contract, contractimpl, panic_with_error, vec, Address, BytesN, Env, IntoVal, String, Symbol,
+    contract, contractimpl, panic_with_error, vec, Address, BytesN, Env, String, Symbol,
     TryFromVal, Val, Vec,
 };
 use stellar_access::ownable::{set_owner, Ownable};
@@ -105,12 +105,14 @@ impl DaoTreasuryContract {
     ///
     /// # Panics
     ///
-    /// Panics if the governor is not set (should never happen after initialization).
+    /// Aborts with `CommonError::GovernorNotSet` if the governor is not set (should
+    /// never happen after construction).
     pub fn governor(e: &Env) -> Address {
-        e.storage()
-            .instance()
-            .get(&TreasuryKey::Governor)
-            .expect("governor not set")
+        common::error::require(
+            e,
+            e.storage().instance().get(&TreasuryKey::Governor),
+            common::CommonError::GovernorNotSet,
+        )
     }
 
     /// Executes a queued proposal. The Treasury is the top-level executor.
@@ -148,17 +150,14 @@ impl DaoTreasuryContract {
         common::ttl::extend_instance(e);
         let governor = Self::governor(e);
 
-        let consume_args: Vec<Val> = vec![
-            e,
-            targets.into_val(e),
-            functions.into_val(e),
-            args.into_val(e),
-            description_hash.into_val(e),
-        ];
-        let consume_fn = Symbol::new(e, "consume");
         // No explicit auth entry: the Governor's `treasury.require_auth()` on this
         // direct call is satisfied implicitly because the Treasury is the invoker.
-        let proposal_id: BytesN<32> = e.invoke_contract(&governor, &consume_fn, consume_args);
+        let proposal_id = common::clients::GovernorConsumeClient::new(e, &governor).consume(
+            &targets,
+            &functions,
+            &args,
+            &description_hash,
+        );
 
         let this = e.current_contract_address();
         for i in 0..targets.len() {

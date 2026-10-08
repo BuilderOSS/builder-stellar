@@ -171,6 +171,7 @@ impl MetadataContract {
         items: Vec<ItemParam>,
         ipfs_group: IpfsGroup,
     ) -> Result<(), Error> {
+        common::ttl::extend_instance(&env);
         // Check authorization
         Self::require_owner(&env)?;
 
@@ -190,6 +191,7 @@ impl MetadataContract {
         items: Vec<ItemParam>,
         ipfs_group: IpfsGroup,
     ) -> Result<(), Error> {
+        common::ttl::extend_instance(&env);
         // Check authorization
         Self::require_owner(&env)?;
 
@@ -223,6 +225,7 @@ impl MetadataContract {
     ///
     /// * `OnlyToken` - Only token contract can call this function
     pub fn on_minted(env: Env, token_id: u32) -> Result<bool, Error> {
+        common::ttl::extend_instance(&env);
         // Verify caller is token contract
         Self::require_token(&env)?;
 
@@ -246,15 +249,12 @@ impl MetadataContract {
     /// * `AlreadySeeded` - the token already has attributes
     /// * `NoProperties` - no properties are configured yet
     pub fn regenerate(env: Env, token_id: u32) -> Result<(), Error> {
+        common::ttl::extend_instance(&env);
         Self::require_owner(&env)?;
 
         let settings = get_settings(&env)?;
         let exists = matches!(
-            env.try_invoke_contract::<Address, soroban_sdk::Error>(
-                &settings.token,
-                &soroban_sdk::Symbol::new(&env, "owner_of"),
-                soroban_sdk::vec![&env, soroban_sdk::IntoVal::into_val(&token_id, &env)],
-            ),
+            common::clients::NftClient::new(&env, &settings.token).try_owner_of(&token_id),
             Ok(Ok(_))
         );
         if !exists {
@@ -283,6 +283,7 @@ impl MetadataContract {
     ///
     /// * `OnlyToken` - Only token contract can call this function
     pub fn on_minted_batch(env: Env, first_token_id: u32, count: u32) -> Result<bool, Error> {
+        common::ttl::extend_instance(&env);
         Self::require_token(&env)?;
 
         let num_properties = get_property_count(&env);
@@ -446,6 +447,7 @@ impl MetadataContract {
 
     /// Update contract image
     pub fn update_contract_image(env: Env, new_contract_image: String) -> Result<(), Error> {
+        common::ttl::extend_instance(&env);
         Self::require_owner(&env)?;
 
         let mut settings = get_settings(&env)?;
@@ -461,6 +463,7 @@ impl MetadataContract {
 
     /// Update renderer base URL
     pub fn update_renderer_base(env: Env, new_renderer_base: String) -> Result<(), Error> {
+        common::ttl::extend_instance(&env);
         Self::require_owner(&env)?;
 
         let mut settings = get_settings(&env)?;
@@ -476,6 +479,7 @@ impl MetadataContract {
 
     /// Update description
     pub fn update_description(env: Env, new_description: String) -> Result<(), Error> {
+        common::ttl::extend_instance(&env);
         Self::require_owner(&env)?;
 
         let mut settings = get_settings(&env)?;
@@ -491,6 +495,7 @@ impl MetadataContract {
 
     /// Update project URI
     pub fn update_project_uri(env: Env, new_project_uri: String) -> Result<(), Error> {
+        common::ttl::extend_instance(&env);
         Self::require_owner(&env)?;
 
         let mut settings = get_settings(&env)?;
@@ -644,6 +649,14 @@ impl MetadataContract {
         emit_seed_generated(env, token_id, num_properties, &attr_vec);
     }
 
+    /// Derive the 32-byte artwork seed for `token_id`.
+    ///
+    /// LIMITATION (documented, no mitigation): the seed is
+    /// `keccak256(token_id, ledger sequence, ledger timestamp, host PRNG u64)`.
+    /// Every input is ledger data or the host PRNG, so whoever chooses when the
+    /// mint happens (which ledger/transaction, or whether to submit at all after
+    /// simulating the result) can grind for preferred traits. Treat trait
+    /// outcomes as pseudo-random, not manipulation-resistant.
     fn generate_seed(env: &Env, token_id: u32) -> Bytes {
         // Gather entropy sources
         let sequence = env.ledger().sequence();

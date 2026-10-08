@@ -5,7 +5,6 @@ use soroban_sdk::contracterror;
 #[repr(u32)]
 pub enum MarketplaceError {
     NotInitialized = 1301,
-    Unauthorized = 1302,
     InvalidPrice = 1303,
     InvalidExpiry = 1304,
     ListingExists = 1305,

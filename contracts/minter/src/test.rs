@@ -865,3 +865,143 @@ fn test_batch_mint_preserves_delegation_across_batches() {
     assert_eq!(token_client.get_delegate(&alice), Some(bob.clone()));
     assert_eq!(token_client.get_votes(&bob), 10); // All votes go to bob
 }
+
+// ============================================================================
+// CLAIM ROUNDS
+// ============================================================================
+
+#[test]
+fn test_merkle_reclaim_allowed_after_new_root_but_not_within_round() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (_admin, token, minter) = setup(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let token_client = token::DaoTokenContractClient::new(&env, &token);
+    launch_token(&env, &token_client, &minter.address);
+
+    // Round 1 (first root bumps the default round 0).
+    let (root, alice_proof, _) = two_leaf_tree(&env, &alice, 5, &bob, 3);
+    minter.set_merkle_root(&token, &root);
+    minter.mint_merkle(&token, &alice, &5u128, &alice_proof);
+    assert!(minter
+        .try_mint_merkle(&token, &alice, &5u128, &alice_proof)
+        .is_err());
+    assert_eq!(token_client.balance(&alice), 5);
+
+    // New airdrop including the earlier claimer: round bumps, claim works again.
+    let (root2, alice_proof2, _) = two_leaf_tree(&env, &alice, 7, &bob, 1);
+    minter.set_merkle_root(&token, &root2);
+    minter.mint_merkle(&token, &alice, &7u128, &alice_proof2);
+    assert_eq!(token_client.balance(&alice), 12);
+    // Still blocked within the new round.
+    assert!(minter
+        .try_mint_merkle(&token, &alice, &7u128, &alice_proof2)
+        .is_err());
+}
+
+#[test]
+fn test_allowlist_reclaim_allowed_after_new_allowlist_but_not_within_round() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let (_admin, token, minter) = setup(&env);
+    let alice = Address::generate(&env);
+    let token_client = token::DaoTokenContractClient::new(&env, &token);
+    launch_token(&env, &token_client, &minter.address);
+
+    let list = Vec::from_array(&env, [alice.clone()]);
+    minter.set_allowlist(&token, &list, &5u128);
+    minter.mint_allowlist(&token, &alice, &5u128);
+    assert!(minter.try_mint_allowlist(&token, &alice, &5u128).is_err());
+
+    minter.set_allowlist(&token, &list, &2u128);
+    minter.mint_allowlist(&token, &alice, &2u128);
+    assert_eq!(token_client.balance(&alice), 7);
+    assert!(minter.try_mint_allowlist(&token, &alice, &2u128).is_err());
+}
+
+#[test]
+fn test_set_allowlist_does_not_reopen_merkle_claims() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_admin, token, minter) = setup(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let token_client = token::DaoTokenContractClient::new(&env, &token);
+    launch_token(&env, &token_client, &minter.address);
+
+    let (root, alice_proof, _) = two_leaf_tree(&env, &alice, 5, &bob, 3);
+    minter.set_merkle_root(&token, &root);
+    minter.mint_merkle(&token, &alice, &5u128, &alice_proof);
+
+    minter.set_allowlist(&token, &Vec::from_array(&env, [bob.clone()]), &1u128);
+    assert!(minter
+        .try_mint_merkle(&token, &alice, &5u128, &alice_proof)
+        .is_err());
+    assert_eq!(token_client.balance(&alice), 5);
+}
+
+#[test]
+fn test_set_merkle_root_does_not_reopen_allowlist_claims() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_admin, token, minter) = setup(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let token_client = token::DaoTokenContractClient::new(&env, &token);
+    launch_token(&env, &token_client, &minter.address);
+
+    minter.set_allowlist(&token, &Vec::from_array(&env, [alice.clone()]), &5u128);
+    minter.mint_allowlist(&token, &alice, &5u128);
+
+    let (root, _, _) = two_leaf_tree(&env, &bob, 3, &Address::generate(&env), 1);
+    minter.set_merkle_root(&token, &root);
+    assert!(minter.try_mint_allowlist(&token, &alice, &5u128).is_err());
+    assert_eq!(token_client.balance(&alice), 5);
+}
+
+#[test]
+fn test_recipient_can_claim_once_on_each_method() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_admin, token, minter) = setup(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let token_client = token::DaoTokenContractClient::new(&env, &token);
+    launch_token(&env, &token_client, &minter.address);
+
+    let (root, alice_proof, _) = two_leaf_tree(&env, &alice, 5, &bob, 3);
+    minter.set_merkle_root(&token, &root);
+    minter.set_allowlist(&token, &Vec::from_array(&env, [alice.clone()]), &2u128);
+    minter.mint_merkle(&token, &alice, &5u128, &alice_proof);
+    minter.mint_allowlist(&token, &alice, &2u128);
+    assert_eq!(token_client.balance(&alice), 7);
+    assert!(minter
+        .try_mint_merkle(&token, &alice, &5u128, &alice_proof)
+        .is_err());
+    assert!(minter.try_mint_allowlist(&token, &alice, &2u128).is_err());
+}
+
+#[test]
+fn test_stale_root_proof_rejected_after_set_merkle_root() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_admin, token, minter) = setup(&env);
+    let alice = Address::generate(&env);
+    let bob = Address::generate(&env);
+    let token_client = token::DaoTokenContractClient::new(&env, &token);
+    launch_token(&env, &token_client, &minter.address);
+
+    let (old_root, _, bob_old_proof) = two_leaf_tree(&env, &alice, 5, &bob, 3);
+    minter.set_merkle_root(&token, &old_root);
+    let (new_root, _, _) = two_leaf_tree(&env, &alice, 9, &bob, 1);
+    minter.set_merkle_root(&token, &new_root);
+
+    // Bob never claimed, but his proof is against the superseded root.
+    assert!(minter
+        .try_mint_merkle(&token, &bob, &3u128, &bob_old_proof)
+        .is_err());
+    assert_eq!(token_client.balance(&bob), 0);
+}

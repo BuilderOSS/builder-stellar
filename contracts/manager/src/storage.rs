@@ -4,7 +4,8 @@ use soroban_sdk::{contracttype, Address, BytesN, Env, IntoVal, String, TryFromVa
 
 /// Ledgers per day at 5s per ledger.
 const DAY_IN_LEDGERS: u32 = 17_280;
-/// Persistent and instance entries are extended to ~1 year on touch.
+/// Persistent and instance entries are extended on touch to a nominal 1 year;
+/// the network caps this at ~180 days (max_entry_ttl) and it renews on touch.
 pub const TTL_EXTEND_TO: u32 = 365 * DAY_IN_LEDGERS;
 /// Extension only happens when remaining TTL drops below ~30 days.
 pub const TTL_THRESHOLD: u32 = 30 * DAY_IN_LEDGERS;
@@ -164,9 +165,7 @@ pub fn set_factory_paused(env: &Env, paused: bool) {
 /// The instance entry holds only bounded keys (Admin, FactoryPaused, Current*),
 /// so its size never grows with registrations or DAO creations.
 pub fn extend_instance_ttl(env: &Env) {
-    env.storage()
-        .instance()
-        .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
+    common::ttl::extend_instance(env);
 }
 
 /// Read a persistent entry and extend its TTL when present.

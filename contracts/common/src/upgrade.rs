@@ -8,11 +8,9 @@
 //! string). Cross-contract calls: `manager.is_upgrade_approved` and
 //! `manager.get_implementation_version`, both read-only.
 
-use soroban_sdk::{
-    contracttype, panic_with_error, vec, Address, BytesN, Env, IntoVal, String, Symbol,
-};
+use soroban_sdk::{contracttype, panic_with_error, Address, BytesN, Env, String};
 
-use crate::{error::CommonError, ttl};
+use crate::{clients::ManagerRegistryClient, error::CommonError, ttl};
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -46,19 +44,11 @@ pub fn version(e: &Env) -> String {
 }
 
 fn is_approved(e: &Env, manager: &Address, from: &BytesN<32>, to: &BytesN<32>) -> bool {
-    e.invoke_contract(
-        manager,
-        &Symbol::new(e, "is_upgrade_approved"),
-        vec![e, from.into_val(e), to.into_val(e)],
-    )
+    ManagerRegistryClient::new(e, manager).is_upgrade_approved(from, to)
 }
 
 fn implementation_version(e: &Env, manager: &Address, hash: &BytesN<32>) -> String {
-    let version: Option<String> = e.invoke_contract(
-        manager,
-        &Symbol::new(e, "get_implementation_version"),
-        vec![e, hash.into_val(e)],
-    );
+    let version = ManagerRegistryClient::new(e, manager).get_implementation_version(hash);
     version.unwrap_or_else(|| panic_with_error!(e, CommonError::ImplementationNotFound))
 }
 

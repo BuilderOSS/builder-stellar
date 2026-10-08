@@ -20,34 +20,22 @@ pub enum AuctionError {
     MinBidNotMet = 1207,
     /// Invalid configuration parameters (e.g., duration < 5 minutes, zero increment)
     InvalidConfig = 1208,
-    /// Token minting failed
-    MintFailed = 1209,
-    /// Token or payment transfer failed
-    TransferFailed = 1210,
-    /// Payment token not configured for SAC bids
-    NoPaymentTokenSet = 1211,
     /// Auction not launched yet
     NotLaunched = 1212,
-    /// Cannot create new auction
-    CannotCreateAuction = 1213,
     /// Unauthorized access
     Unauthorized = 1214,
     /// Arithmetic overflow in calculations
     ArithmeticOverflow = 1215,
     /// Invalid bid amount (too low or unreasonable)
     InvalidBid = 1216,
-    /// Maximum auction extensions exceeded
-    MaxExtensionsExceeded = 1218,
     /// Contract not initialized properly
     NotInitialized = 1219,
-    /// Token ID exceeds valid range
-    TokenIdOverflow = 1220,
-    /// External contract call failed
-    ExternalCallFailed = 1221,
     /// `launch` treasury differs from the treasury wired at construction
     TreasuryMismatch = 1222,
     /// `launch` expected payment token differs from the configured one
     PaymentTokenMismatch = 1223,
     /// `withdraw_refund` called with no pending refund balance
     NoPendingRefund = 1224,
+    /// `set_time_buffer` value outside 1..=86400 seconds
+    InvalidTimeBuffer = 1225,
 }

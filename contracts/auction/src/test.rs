@@ -155,6 +155,38 @@ fn test_constructor_rejects_zero_duration() {
     );
 }
 
+fn try_register_with_time_buffer(e: &Env, time_buffer: u64) -> bool {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        e.register(
+            DaoAuctionContract,
+            (
+                Address::generate(e),
+                Address::generate(e),
+                Address::generate(e),
+                300_u64,
+                10_000_000_i128,
+                10_u32,
+                time_buffer,
+                Address::generate(e),
+                Address::generate(e),
+                BytesN::from_array(e, &[0u8; 32]),
+                String::from_str(e, "0.1.0"),
+            ),
+        )
+    }))
+    .is_ok()
+}
+
+#[test]
+fn test_constructor_validates_time_buffer() {
+    let e = Env::default();
+    assert!(!try_register_with_time_buffer(&e, 0));
+    assert!(!try_register_with_time_buffer(&e, 86_401));
+    assert!(!try_register_with_time_buffer(&e, u64::MAX));
+    assert!(try_register_with_time_buffer(&e, 1));
+    assert!(try_register_with_time_buffer(&e, 86_400));
+}
+
 #[test]
 #[should_panic(expected = "Error(Contract, #1208)")] // InvalidConfig
 fn test_constructor_rejects_zero_min_bid_increment() {
@@ -269,6 +301,27 @@ fn test_set_time_buffer_when_paused() {
 
     auction.set_time_buffer(&100);
     assert_eq!(auction.get_config().time_buffer, 100);
+}
+
+#[test]
+fn test_set_time_buffer_bounds() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let (auction, _, _, _, _, _) = setup_auction_contract(&e);
+    auction.set_time_buffer(&1);
+    auction.set_time_buffer(&86_400);
+    assert_eq!(auction.get_config().time_buffer, 86_400);
+    assert!(auction.try_set_time_buffer(&0).is_err());
+    assert!(auction.try_set_time_buffer(&86_401).is_err());
+}
+
+#[test]
+#[should_panic(expected = "Error(Contract, #1225)")] // InvalidTimeBuffer
+fn test_set_time_buffer_zero_rejected() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let (auction, _, _, _, _, _) = setup_auction_contract(&e);
+    auction.set_time_buffer(&0);
 }
 
 #[test]
@@ -741,7 +794,12 @@ mod refunds {
             e.storage().instance().set(&1u32, &id);
             id
         }
-        pub fn transfer(_e: Env, _from: Address, _to: Address, _id: u32) {}
+        pub fn transfer(e: Env, _from: Address, to: Address, id: u32) {
+            e.storage().instance().set(&(2u32, id), &to);
+        }
+        pub fn holder(e: Env, id: u32) -> Option<Address> {
+            e.storage().instance().get(&(2u32, id))
+        }
     }
 
     const T0: u64 = 1_000;
@@ -956,6 +1014,48 @@ mod refunds {
         c.sac.set_authorized(&a, &true);
         c.auction.withdraw_refund(&a);
         c.assert_invariant();
+    }
+
+    fn nft_holder(c: &Ctx, id: u32) -> Option<Address> {
+        let nft = c.auction.get_config().token_contract;
+        MockNftClient::new(&c.e, &nft).holder(&id)
+    }
+
+    #[test]
+    fn cancel_without_bidder_sends_nft_to_treasury() {
+        let c = setup();
+        let id = c.auction.get_auction().token_id as u32;
+        assert_eq!(nft_holder(&c, id), None);
+        c.pause();
+        c.auction.cancel_auction();
+        assert!(c.auction.get_auction().settled);
+        assert_eq!(nft_holder(&c, id), Some(c.treasury.clone()));
+    }
+
+    #[test]
+    fn cancel_with_bidder_refunds_and_sends_nft_to_treasury() {
+        let mut c = setup();
+        let a = c.funded(100_000_000);
+        c.bid(&a, 10_000_000);
+        let id = c.auction.get_auction().token_id as u32;
+        c.pause();
+        c.auction.cancel_auction();
+        assert_eq!(c.token.balance(&a), 100_000_000);
+        assert_eq!(nft_holder(&c, id), Some(c.treasury.clone()));
+        c.assert_invariant();
+    }
+
+    #[test]
+    fn cancel_deferred_refund_still_sends_nft_to_treasury() {
+        let mut c = setup();
+        let a = c.funded(100_000_000);
+        c.bid(&a, 10_000_000);
+        let id = c.auction.get_auction().token_id as u32;
+        c.sac.set_authorized(&a, &false);
+        c.pause();
+        c.auction.cancel_auction();
+        assert_eq!(nft_holder(&c, id), Some(c.treasury.clone()));
+        assert_eq!(c.auction.pending_refund(&a), 10_000_000);
     }
 
     #[test]

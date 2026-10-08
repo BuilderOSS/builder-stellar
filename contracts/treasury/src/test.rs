@@ -406,3 +406,24 @@ mod upgrade_via_common {
         });
     }
 }
+
+#[test]
+fn sync_version_extends_instance_ttl() {
+    use common::testutils::{advance_ledgers, instance_ttl, MockManager, MockManagerClient};
+    let e = Env::default();
+    e.mock_all_auths();
+    let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+    let (treasury, _gov) = setup_live(&e, mgr.address.clone());
+    mgr.register(
+        &BytesN::from_array(&e, &[1u8; 32]),
+        &String::from_str(&e, "0.1.5"),
+    );
+    advance_ledgers(&e, 120 * 17_280);
+    let before = instance_ttl(&e, &treasury.address);
+    treasury.sync_version();
+    let after = instance_ttl(&e, &treasury.address);
+    assert!(
+        after > before,
+        "instance TTL not extended: {before} -> {after}"
+    );
+}

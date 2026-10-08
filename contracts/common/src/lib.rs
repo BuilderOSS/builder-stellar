@@ -7,10 +7,13 @@
 //! - [`upgrade`]: manager-approved WASM upgrade plus `CurrentHash` / `CurrentVersion`.
 //! - [`ownership`]: one-shot owner handoff that also clears a pending two-step transfer.
 //! - [`ttl`]: the single instance-TTL policy.
-//! - [`error`]: typed errors replacing `panic!` strings.
+//! - [`clients`]: typed `#[contractclient]` traits for cross-contract calls (no linked exports).
+//! - [`error`]: typed errors replacing `panic!` strings. Error codes are unique
+//!   per contract only; key on (contract id, code). See README.md for overlaps.
 
 #![no_std]
 
+pub mod clients;
 pub mod error;
 pub mod lifecycle;
 pub mod ownership;
@@ -18,6 +21,10 @@ pub mod ttl;
 pub mod upgrade;
 
 pub use error::CommonError;
+
+/// Upper bound for the auction anti-snipe `time_buffer` (one day, seconds).
+/// Shared by the Auction (constructor and `set_time_buffer`) and the Manager.
+pub const MAX_AUCTION_TIME_BUFFER: u64 = 86_400;
 
 /// WARNING: exports `MockManager` as a `#[contract]`. Enable the `testutils`
 /// feature only through `[dev-dependencies]`. See README.md.

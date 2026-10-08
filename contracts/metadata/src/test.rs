@@ -1160,3 +1160,17 @@ fn m7_regenerate_rejects_valid_auth_from_wrong_address() {
     assert!(client.try_regenerate(&token_id).is_err());
     assert!(client.try_get_attributes(&token_id).is_err());
 }
+
+#[test]
+fn state_changing_entrypoint_extends_instance_ttl() {
+    use common::testutils::{advance_ledgers, instance_ttl};
+    let (env, client, _owner, _token) = setup();
+    advance_ledgers(&env, 120 * 17_280);
+    let before = instance_ttl(&env, &client.address);
+    client.update_description(&String::from_str(&env, "ttl"));
+    let after = instance_ttl(&env, &client.address);
+    assert!(
+        after > before,
+        "instance TTL not extended: {before} -> {after}"
+    );
+}

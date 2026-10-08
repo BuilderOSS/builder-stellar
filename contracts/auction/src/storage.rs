@@ -41,6 +41,8 @@ pub const MIN_RESERVE_PRICE: i128 = 1000;
 /// Prevents unreasonable increment requirements that would make bidding
 /// impossible. A 100% increment (doubling the bid) is the maximum allowed.
 pub const MAX_BID_INCREMENT_PERCENT: u32 = 100;
+/// Upper bound for `set_time_buffer` (one day, in seconds). The lower bound is 1.
+pub const MAX_TIME_BUFFER: u64 = common::MAX_AUCTION_TIME_BUFFER;
 
 /// Denominator for percentage calculations.
 ///
@@ -210,9 +212,10 @@ pub fn set_launched(e: &Env, launched: bool) {
     e.storage().instance().extend_ttl(LEDGERS_TO_LIVE, MAX_TTL);
 }
 
-/// Persistent TTL for `PendingRefund` entries (1 year, bumped on every touch).
-const PENDING_REFUND_TTL: u32 = common::ttl::INSTANCE_TTL_EXTEND_TO;
-const PENDING_REFUND_THRESHOLD: u32 = common::ttl::INSTANCE_TTL_THRESHOLD;
+/// Persistent TTL for `PendingRefund` entries (nominally 1 year, capped by the
+/// network at ~180 days, bumped on every touch).
+const PENDING_REFUND_TTL: u32 = 365 * common::ttl::DAY_IN_LEDGERS;
+const PENDING_REFUND_THRESHOLD: u32 = PENDING_REFUND_TTL - common::ttl::DAY_IN_LEDGERS;
 
 pub fn get_pending_refund(e: &Env, bidder: &Address) -> i128 {
     let key = DataKey::PendingRefund(bidder.clone());

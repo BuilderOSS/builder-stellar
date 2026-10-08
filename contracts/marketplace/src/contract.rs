@@ -6,6 +6,9 @@ use soroban_sdk::{
     Val, Vec,
 };
 
+use common::clients::NftClient;
+use soroban_sdk::token::TokenClient;
+
 use crate::{
     error::MarketplaceError,
     events::{self, *},
@@ -106,6 +109,7 @@ impl MarketplaceContract {
     /// Nothing is minted or escrowed: the token is minted straight to the
     /// buyer inside `buy_primary`. Returns the new listing id.
     pub fn create_primary_listing(e: &Env, price: i128, expires_at: u64) -> u64 {
+        common::ttl::extend_instance(e);
         // Nothing holds mint authority before launch.
         common::lifecycle::require_live(e);
         let config = Self::require_admin(e);
@@ -130,6 +134,7 @@ impl MarketplaceContract {
 
     /// Buy a primary listing: pays the treasury, mints one token to `buyer`.
     pub fn buy_primary(e: &Env, listing_id: u64, buyer: Address) -> u32 {
+        common::ttl::extend_instance(e);
         let config = Self::get_config(e);
         if config.paused {
             panic_with_error!(e, MarketplaceError::Paused);
@@ -150,13 +155,10 @@ impl MarketplaceContract {
             listing.price,
         );
 
-        let mint_args = vec![
-            e,
-            e.current_contract_address().into_val(e),
-            buyer.clone().into_val(e),
-        ];
-        Self::authorize(e, &config.token, "mint", mint_args.clone(), Vec::new(e));
-        let token_id: u32 = e.invoke_contract(&config.token, &Symbol::new(e, "mint"), mint_args);
+        let this = e.current_contract_address();
+        let mint_args = vec![e, this.into_val(e), buyer.clone().into_val(e)];
+        Self::authorize(e, &config.token, "mint", mint_args, Vec::new(e));
+        let token_id = NftClient::new(e, &config.token).mint(&this, &buyer);
 
         PrimaryListingPurchased {
             listing_id,
@@ -171,6 +173,7 @@ impl MarketplaceContract {
 
     /// Treasury cancels an unsold primary listing (nothing is escrowed).
     pub fn cancel_primary(e: &Env, listing_id: u64) {
+        common::ttl::extend_instance(e);
         common::lifecycle::require_live(e);
         Self::require_admin(e);
         Self::load_primary(e, listing_id);
@@ -180,6 +183,7 @@ impl MarketplaceContract {
 
     /// Anyone may clear an expired primary listing.
     pub fn expire_primary(e: &Env, listing_id: u64) {
+        common::ttl::extend_instance(e);
         let listing = Self::load_primary(e, listing_id);
         if e.ledger().timestamp() < listing.expires_at {
             panic_with_error!(e, MarketplaceError::ListingActive);
@@ -189,6 +193,7 @@ impl MarketplaceContract {
     }
 
     pub fn list(e: &Env, token_id: u32, seller: Address, price: i128, expires_at: u64) {
+        common::ttl::extend_instance(e);
         let config = Self::get_config(e);
         Self::check_open_listing(e, price, expires_at);
         seller.require_auth();
@@ -196,11 +201,7 @@ impl MarketplaceContract {
             panic_with_error!(e, MarketplaceError::ListingExists);
         }
 
-        let owner: Address = e.invoke_contract(
-            &config.token,
-            &Symbol::new(e, "owner_of"),
-            vec![e, token_id.into_val(e)],
-        );
+        let owner = NftClient::new(e, &config.token).owner_of(&token_id);
         if owner != seller {
             panic_with_error!(e, MarketplaceError::NotSeller);
         }
@@ -216,13 +217,14 @@ impl MarketplaceContract {
             e,
             &config.token,
             "transfer_from",
-            transfer_args.clone(),
+            transfer_args,
             Vec::new(e),
         );
-        e.invoke_contract::<()>(
-            &config.token,
-            &Symbol::new(e, "transfer_from"),
-            transfer_args,
+        NftClient::new(e, &config.token).transfer_from(
+            &e.current_contract_address(),
+            &seller,
+            &e.current_contract_address(),
+            &token_id,
         );
 
         let listing = Listing {
@@ -237,6 +239,7 @@ impl MarketplaceContract {
     }
 
     pub fn buy(e: &Env, token_id: u32, buyer: Address) {
+        common::ttl::extend_instance(e);
         let config = Self::get_config(e);
         if config.paused {
             panic_with_error!(e, MarketplaceError::Paused);
@@ -286,6 +289,7 @@ impl MarketplaceContract {
     }
 
     pub fn cancel(e: &Env, token_id: u32, seller: Address) {
+        common::ttl::extend_instance(e);
         seller.require_auth();
         let listing = Self::load_listing(e, token_id);
         if listing.seller != seller {
@@ -304,6 +308,7 @@ impl MarketplaceContract {
     }
 
     pub fn expire(e: &Env, token_id: u32) {
+        common::ttl::extend_instance(e);
         let listing = Self::load_listing(e, token_id);
         if e.ledger().timestamp() < listing.expires_at {
             panic_with_error!(e, MarketplaceError::ListingActive);
@@ -325,6 +330,7 @@ impl MarketplaceContract {
     }
 
     pub fn pause(e: &Env) {
+        common::ttl::extend_instance(e);
         let mut config = Self::require_admin(e);
         config.paused = true;
         storage::set_config(e, &config);
@@ -332,6 +338,7 @@ impl MarketplaceContract {
     }
 
     pub fn unpause(e: &Env) {
+        common::ttl::extend_instance(e);
         let mut config = Self::require_admin(e);
         config.paused = false;
         storage::set_config(e, &config);
@@ -339,6 +346,7 @@ impl MarketplaceContract {
     }
 
     pub fn set_secondary_fee_bps(e: &Env, fee_bps: u32) {
+        common::ttl::extend_instance(e);
         let mut config = Self::require_admin(e);
         if fee_bps > MAX_FEE_BPS {
             panic_with_error!(e, MarketplaceError::InvalidFee);
@@ -349,6 +357,7 @@ impl MarketplaceContract {
     }
 
     pub fn set_payment_asset(e: &Env, payment_asset: Address) {
+        common::ttl::extend_instance(e);
         let mut config = Self::require_admin(e);
         config.payment_asset = payment_asset.clone();
         storage::set_config(e, &config);
@@ -433,8 +442,8 @@ impl MarketplaceContract {
 
     fn token_transfer(e: &Env, token: &Address, from: &Address, to: &Address, token_id: u32) {
         let args = vec![e, from.into_val(e), to.into_val(e), token_id.into_val(e)];
-        Self::authorize(e, token, "transfer", args.clone(), Vec::new(e));
-        e.invoke_contract::<()>(token, &Symbol::new(e, "transfer"), args);
+        Self::authorize(e, token, "transfer", args, Vec::new(e));
+        NftClient::new(e, token).transfer(from, to, &token_id);
     }
 
     fn payment_transfer(e: &Env, asset: &Address, from: &Address, to: &Address, amount: i128) {
@@ -442,7 +451,7 @@ impl MarketplaceContract {
             return;
         }
         let args = vec![e, from.into_val(e), to.into_val(e), amount.into_val(e)];
-        Self::authorize(e, asset, "transfer", args.clone(), Vec::new(e));
-        e.invoke_contract::<()>(asset, &Symbol::new(e, "transfer"), args);
+        Self::authorize(e, asset, "transfer", args, Vec::new(e));
+        TokenClient::new(e, asset).transfer(from, to, &amount);
     }
 }

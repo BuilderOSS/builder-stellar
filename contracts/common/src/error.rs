@@ -24,6 +24,10 @@ pub enum CommonError {
     OwnerNotSet = 9008,
     /// `CurrentVersion` missing from storage.
     VersionNotSet = 9009,
+    /// Treasury address missing from storage.
+    TreasuryNotSet = 9010,
+    /// Governor address missing from storage.
+    GovernorNotSet = 9011,
 }
 
 /// Unwrap `v` or abort the invocation with `err`.
