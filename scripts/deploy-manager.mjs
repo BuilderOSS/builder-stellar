@@ -319,6 +319,35 @@ function setCurrentImplementations(managerAddress, implementations) {
   console.log('Current implementations set successfully');
 }
 
+function viewManager(managerAddress, method) {
+  const result = runQuiet('stellar', [
+    'contract', 'invoke', '--id', managerAddress, '--source-account', identityName,
+    '--network', networkName, '--send', 'no', '--', method
+  ]);
+  if (!result.ok) throw new Error(`Failed to query Manager ${method}: ${result.stderr || result.stdout}`);
+  return (result.stdout + result.stderr).replace(/\x1b\[[0-9;]*m/g, '').trim().split('\n').pop().replace(/"/g, '');
+}
+
+// Admin-only. launch_dao(enable_minter = true) grants mint authority to this address; without it
+// launch fails with PlatformMinterNotSet (1008). Idempotent: skipped when already registered.
+function setPlatformMinter(managerAddress, minterAddress) {
+  const current = viewManager(managerAddress, 'get_platform_minter');
+  if (current === minterAddress) {
+    console.log(`Platform minter already set: ${minterAddress}`);
+    return;
+  }
+  console.log(`Setting platform minter ${minterAddress}...`);
+  const result = runQuiet('stellar', [
+    'contract', 'invoke', '--id', managerAddress, '--source-account', identityName,
+    '--network', networkName, '--', 'set_platform_minter', '--minter', minterAddress
+  ]);
+  if (!result.ok) {
+    console.error('set_platform_minter output:', result.stdout);
+    console.error('set_platform_minter error:', result.stderr);
+    throw new Error('Failed to set platform minter');
+  }
+}
+
 async function writeDeployArtifact(
   managerAddress,
   implementations,
@@ -374,6 +403,9 @@ async function writeDeployArtifact(
 }
 
 async function main() {
+  // Sequence: build -> deploy Manager(admin, current_hash, version) -> upload + register all module
+  // implementations (+ Minter) -> set_current_implementations (six DAO modules) -> deploy shared Minter
+  // (no constructor) -> set_platform_minter. Each step is idempotent, so re-running resumes.
   // Build all DAO contracts including manager and metadata.
   run(
     'cargo',
@@ -476,6 +508,10 @@ async function main() {
   console.log('\n=== Deploying Shared Minter ===\n');
   const minterDeploy = deployIfMissing('minter', 'shared-minter', []);
   console.log(`Shared Minter deployed: ${minterDeploy.id}`);
+
+  // Register it as the Manager's platform minter (needed for launch_config.enable_minter).
+  console.log('\n=== Registering Platform Minter ===\n');
+  setPlatformMinter(managerDeploy.id, minterDeploy.id);
 
   // Write deployment artifact
   await writeDeployArtifact(

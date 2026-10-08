@@ -4,12 +4,13 @@
 > `MARKETPLACE_PLAN.md` for the new six-module deployment baseline, and
 > `SECURITY_MODEL.md` for the setup-window rules.
 >
-> **Script drift**: the contract flow below is verified against the Rust sources
-> at `5136397`. `scripts/deploy-dao.mjs` has not been updated for it: its
-> `admin_checklist` phase calls `token.set_mint_authority` and the Minter before
-> launch (both fail with `NotLive` now), and its `launch_dao` phase passes only
-> `launch_auction` and `launch_marketplace` (`enable_minter` is now required in
-> `LaunchConfig`). Treat the script as pending a rewrite.
+> `scripts/deploy-dao.mjs` implements this flow (phases `create_dao`,
+> `admin_checklist`, `launch_dao`). It validates the config against the contract
+> bounds first (`--validate-only` runs just that), mints founders with
+> `token.batch_mint`, adds artwork in batches of <= 30 items, and passes
+> `launch_config` with `enable_minter` from the config's `launch` section. The
+> governance proposal threshold key is `governance.proposalThreshold` (absolute
+> votes).
 
 This guide covers creating and deploying new DAOs using the multi-tenant system.
 
@@ -145,7 +146,7 @@ The platform minter is not chosen by the DAO. The Manager admin registers it
 beforehand with `manager.set_platform_minter(minter)`; `enable_minter: true`
 fails with `PlatformMinterNotSet` (1008) if none is registered.
 
-The script wrapper (see the drift note above) writes the artifact to
+The script wrapper writes the artifact to
 `deploys/testnet-my-dao-1.json`.
 
 ### Step 3: Verify in Database

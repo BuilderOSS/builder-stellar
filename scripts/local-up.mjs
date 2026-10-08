@@ -1,8 +1,10 @@
+import { writeFileSync } from 'node:fs';
 import { run, runQuiet } from './lib.mjs';
 
 const containerName = 'stellar-builder-local';
 const requestedContainerName = 'builder-local';
-const configPath = 'configs/local.json';
+const configPath = 'configs/local-manager.json';
+const identityName = process.env.DEPLOY_IDENTITY?.trim() || 'local-admin';
 
 function ensureContainer() {
   const running = runQuiet('docker', ['inspect', '-f', '{{.State.Running}}', containerName]);
@@ -37,4 +39,23 @@ function ensureContainer() {
 }
 
 ensureContainer();
-run('node', ['scripts/deploy-contracts.mjs', configPath, '--force']);
+
+// Manager config for the local network. The admin is the local identity, so the file is generated.
+runQuiet('stellar', ['keys', 'generate', identityName]);
+const address = runQuiet('stellar', ['keys', 'address', identityName]).stdout.trim();
+if (!address) throw new Error(`Could not resolve address for identity ${identityName}`);
+writeFileSync(configPath, `${JSON.stringify({
+  network: 'local',
+  label: 'builder',
+  adminAddress: address,
+  rpcUrl: 'http://localhost:8000/soroban/rpc',
+  networkPassphrase: 'Standalone Network ; February 2017'
+}, null, 2)}\n`);
+
+// Deploys Manager, registers implementations, sets current implementations and the platform minter.
+run('node', ['scripts/deploy-manager.mjs', configPath, '--force'], {
+  env: { ...process.env, DEPLOY_IDENTITY: identityName }
+});
+console.log('\nLocal Manager is ready. Next: copy configs/testnet-builder-dao.json, set deployer/launchAdmin/founders to the');
+console.log(`${identityName} address (${address}) and a local payment asset contract, then run`);
+console.log(`DEPLOY_IDENTITY=${identityName} node scripts/deploy-dao.mjs create_dao <dao.json> ${configPath}  (then admin_checklist, launch_dao)`);
