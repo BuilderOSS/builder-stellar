@@ -21,17 +21,47 @@ export const CustomGovernorError = {
    */
   1503 : { message: "OwnerNotSet" },
   /**
-   * Caller is not authorized to perform this action
-   */
-  1504 : { message: "UnauthorizedCaller" },
-  /**
    * Voting delay below minimum (must be >= 5 minutes)
    */
   1505 : { message: "InvalidVotingDelay" },
   /**
    * Voting period below minimum (must be >= 5 minutes)
    */
-  1506 : { message: "InvalidVotingPeriod" }
+  1506 : { message: "InvalidVotingPeriod" },
+  /**
+   * `launch` treasury differs from the treasury wired at construction
+   */
+  1507 : { message: "TreasuryMismatch" },
+  /**
+   * `execute` is disabled; call `treasury.execute` instead
+   */
+  1508 : { message: "UseTreasuryExecute" },
+  /**
+   * Proposal has more than `MAX_PROPOSAL_ACTIONS` actions
+   */
+  1509 : { message: "TooManyActions" },
+  /**
+   * Voting delay above `MAX_VOTING_DELAY` (30 days)
+   */
+  1510 : { message: "VotingDelayTooLong" },
+  /**
+   * Voting period above `MAX_VOTING_PERIOD` (30 days)
+   */
+  1511 : { message: "VotingPeriodTooLong" },
+  /**
+   * Queue delay above `MAX_QUEUE_DELAY` (30 days)
+   */
+  1512 : { message: "QueueDelayTooLong" }
+}
+
+/**
+ * Emitted once when the Manager launches the governor (Setup -> Live).
+ */
+export interface LaunchedEvent {
+  name: "Launched";
+  data: {
+    treasury: string;
+  };
 }
 
 /**
@@ -42,17 +72,6 @@ export interface ProposalQueuedEvent {
   data: {
     proposal_id: Uint8Array;
     eta?: bigint;
-  };
-}
-
-/**
- * Event: TreasuryChanged
- */
-export interface TreasuryChangedEvent {
-  name: "TreasuryChanged";
-  data: {
-    old_treasury: string;
-    new_treasury: string;
   };
 }
 
@@ -123,29 +142,6 @@ export interface VotingPeriodChangedEvent {
 }
 
 /**
- * Event: TokenContractChanged
- */
-export interface TokenContractChangedEvent {
-  name: "TokenContractChanged";
-  data: {
-    old_token_contract: string;
-    new_token_contract: string;
-  };
-}
-
-/**
- * Event: GovernorAuthorityChanged
- */
-export interface GovernorAuthorityChangedEvent {
-  name: "GovernorAuthorityChanged";
-  data: {
-    authority: string;
-    old_enabled?: boolean;
-    enabled?: boolean;
-  };
-}
-
-/**
  * Event: ProposalThresholdChanged
  */
 export interface ProposalThresholdChangedEvent {
@@ -158,210 +154,106 @@ export interface ProposalThresholdChangedEvent {
 }
 
 /**
- * Storage keys for governor-specific instance data.
- *
- * Most governance data (name, version, voting parameters, vote tallies) is stored
- * via the stellar_governance library's storage keys. This enum contains only
- * contract-specific keys for custom functionality.
+ * Errors shared by all module contracts. Codes live in the 9000 range so
+ * they never collide with module (11xx-13xx, 3, 30) or manager (10xx) codes.
  */
- export type GovernorKey =
-  { tag: "CurrentHash"; values: void } |
-  { tag: "CurrentVersion"; values: void } |
+export const CommonError = {
   /**
-   * Address of the Treasury contract that executes approved proposals.
+   * Operation requires the module to be live (launched).
    */
-  { tag: "Treasury"; values: void } |
+  9001 : { message: "NotLive" },
   /**
-   * Delay (in seconds) between queueing and execution eligibility.
+   * Operation is only valid during setup; the module is already live.
    */
-  { tag: "QueueDelay"; values: void } |
+  9002 : { message: "AlreadyLive" },
   /**
-   * Proposal core data, indexed by proposal ID hash.
+   * Manager address missing from storage.
    */
-  { tag: "Proposal"; values: readonly [Uint8Array] } |
+  9003 : { message: "ManagerNotSet" },
   /**
-   * Tracks whether an address has authority to create proposals.
+   * `CurrentHash` missing from storage.
    */
-  { tag: "GovernorAuthority"; values: readonly [string] } |
-  { tag: "Manager"; values: void };
-
-/**
- * Core proposal data using timestamps instead of ledger sequences.
- *
- * This structure extends the library's proposal data with timestamp-based voting
- * periods, allowing for more predictable governance timelines. Timestamps are
- * independent of network performance, unlike ledger-based periods which can vary
- * with block production rate.
- */
-export interface ProposalCoreTime {
+  9004 : { message: "CurrentHashNotSet" },
   /**
-   * Estimated Time of Arrival - when proposal becomes executable.
-   *
-   * Set during queueing: `queue_time + queue_delay`. The proposal can be executed
-   * anytime after ETA but before `ETA + PROPOSAL_EXPIRATION_PERIOD`.
+   * `from_hash` does not equal the stored `CurrentHash`.
    */
-  eta: bigint;
+  9005 : { message: "HashMismatch" },
   /**
-   * Address that created the proposal.
+   * Manager did not approve this upgrade path.
    */
-  proposer: string;
+  9006 : { message: "UpgradeNotApproved" },
   /**
-   * Current state in the proposal lifecycle.
+   * Manager has no registry entry for the requested hash.
    */
-  state: ProposalState;
+  9007 : { message: "ImplementationNotFound" },
   /**
-   * Unix timestamp when voting ends.
-   *
-   * Equals vote_start + voting period. Votes cast after this time are rejected.
+   * Owner missing from storage.
    */
-  vote_end: bigint;
+  9008 : { message: "OwnerNotSet" },
   /**
-   * Ledger sequence used for vote power snapshot.
-   *
-   * Voting power is determined by token holdings at this snapshot, preventing
-   * vote manipulation via token transfers during voting.
+   * `CurrentVersion` missing from storage.
    */
-  vote_snapshot: number;
+  9009 : { message: "VersionNotSet" },
   /**
-   * Unix timestamp when voting begins.
-   *
-   * Equals proposal creation time + voting delay. Votes cast before this time
-   * are rejected.
+   * Treasury address missing from storage.
    */
-  vote_start: bigint;
+  9010 : { message: "TreasuryNotSet" },
+  /**
+   * Governor address missing from storage.
+   */
+  9011 : { message: "GovernorNotSet" }
 }
 
 /**
- * Errors that can occur in votes operations.
+ * Error Enum: RoleTransferError
  */
-export const VotesError = {
-  /**
-   * The ledger is in the future
-   */
-  4100 : { message: "FutureLookup" },
-  /**
-   * Arithmetic overflow occurred
-   */
-  4101 : { message: "MathOverflow" },
-  /**
-   * Attempting to transfer more voting units than available
-   */
-  4102 : { message: "InsufficientVotingUnits" },
-  /**
-   * Attempting to delegate to the same delegate that is already set
-   */
-  4103 : { message: "SameDelegate" },
-  /**
-   * A checkpoint that was expected to exist was not found in storage
-   */
-  4104 : { message: "CheckpointNotFound" }
+export const RoleTransferError = {
+  2200 : { message: "NoPendingTransfer" },
+  2201 : { message: "InvalidLiveUntilLedger" },
+  2202 : { message: "InvalidPendingAccount" },
+  2203 : { message: "TransferExpired" }
 }
 
 /**
- * Event emitted when an account changes its delegate.
+ * Error Enum: OwnableError
  */
-export interface DelegateChangedEvent {
-  name: "DelegateChanged";
+export const OwnableError = {
+  2100 : { message: "OwnerNotSet" },
+  2101 : { message: "TransferInProgress" },
+  2102 : { message: "OwnerAlreadySet" }
+}
+
+/**
+ * Event emitted when an ownership transfer is initiated.
+ */
+export interface OwnershipTransferEvent {
+  name: "OwnershipTransfer";
   data: {
-    /**
-     * The account that changed its delegate
-     */
-    delegator: string;
-    /**
-     * The previous delegate (if any)
-     */
-    from_delegate?: string | null;
-    /**
-     * The new delegate
-     */
-    to_delegate?: string;
+    old_owner?: string;
+    new_owner?: string;
+    live_until_ledger?: number;
   };
 }
 
 /**
- * Event emitted when a delegate's voting power changes.
+ * Event emitted when ownership is renounced.
  */
-export interface DelegateVotesChangedEvent {
-  name: "DelegateVotesChanged";
+export interface OwnershipRenouncedEvent {
+  name: "OwnershipRenounced";
   data: {
-    /**
-     * The delegate whose voting power changed
-     */
-    delegate: string;
-    /**
-     * The previous voting power
-     */
-    previous_votes?: bigint;
-    /**
-     * The new voting power
-     */
-    new_votes?: bigint;
+    old_owner?: string;
   };
 }
 
 /**
- * A checkpoint recording voting power at a specific ledger sequence number.
+ * Event emitted when an ownership transfer is completed.
  */
-export interface Checkpoint {
-  /**
-   * The ledger sequence number when this checkpoint was created
-   */
-  ledger: number;
-  /**
-   * The voting power at this ledger sequence number
-   */
-  votes: bigint;
+export interface OwnershipTransferCompletedEvent {
+  name: "OwnershipTransferCompleted";
+  data: {
+    new_owner?: string;
+  };
 }
-
-/**
- * Selects the checkpoint timeline to operate on.
- *
- * Each variant maps to a different set of storage keys so that
- * per-account voting-power history and aggregate total supply history
- * are kept separate.
- */
- export type CheckpointType =
-  /**
-   * The global total supply checkpoint.
-   */
-  { tag: "TotalSupply"; values: void } |
-  /**
-   * A per-account (delegate) voting-power checkpoint.
-   */
-  { tag: "Account"; values: readonly [string] };
-
-/**
- * Storage keys for the votes module.
- *
- * Only delegated voting power counts as votes (i.e., only delegatees can
- * vote), so the storage design tracks delegates and their checkpointed
- * voting power separately from the raw voting units held by each account.
- */
- export type VotesStorageKey =
-  /**
-   * Maps account to its delegate
-   */
-  { tag: "Delegatee"; values: readonly [string] } |
-  /**
-   * Number of checkpoints for a delegate
-   */
-  { tag: "NumCheckpoints"; values: readonly [string] } |
-  /**
-   * Individual checkpoint for a delegate at index
-   */
-  { tag: "DelegateCheckpoint"; values: readonly [string, number] } |
-  /**
-   * Number of total supply checkpoints
-   */
-  { tag: "NumTotalSupplyCheckpoints"; values: void } |
-  /**
-   * Individual total supply checkpoint at index
-   */
-  { tag: "TotalSupplyCheckpoint"; values: readonly [number] } |
-  /**
-   * Voting units held by an account (tracked separately from delegation)
-   */
-  { tag: "VotingUnits"; values: readonly [string] };
 
 /**
  * Event emitted when a vote is cast.
@@ -570,19 +462,6 @@ export interface QuorumChangedEvent {
 }
 
 /**
- * Event emitted when a proposal is queued.
- *
- * Note: renamed from "ProposalQueuedEvent" to avoid a collision with another generated name.
- */
-export interface ProposalQueuedEvent2 {
-  name: "ProposalQueued";
-  data: {
-    proposal_id: Uint8Array;
-    eta?: number;
-  };
-}
-
-/**
  * Event emitted when a proposal is created.
  */
 export interface ProposalCreatedEvent {
@@ -618,534 +497,5 @@ export interface ProposalCancelledEvent {
     proposal_id: Uint8Array;
   };
 }
-
-/**
- * Core proposal data stored on-chain.
- */
-export interface ProposalCore {
-  /**
-   * The address that created the proposal.
-   */
-  proposer: string;
-  /**
-   * The current state of the proposal.
-   */
-  state: ProposalState;
-  /**
-   * The last ledger where voting is active (inclusive).
-   */
-  vote_end: number;
-  /**
-   * The ledger at which voting power is snapshotted. Voting opens on
-   * the next ledger (`vote_snapshot + 1`).
-   */
-  vote_snapshot: number;
-}
-
-/**
- * A quorum checkpoint recording the quorum value at a specific ledger.
- */
-export interface QuorumCheckpoint {
-  /**
-   * The ledger at which this quorum value took effect.
-   */
-  ledger: number;
-  /**
-   * The quorum value.
-   */
-  quorum: bigint;
-}
-
-/**
- * Storage keys for the Governor contract.
- */
- export type GovernorStorageKey =
-  /**
-   * The name of the governor.
-   */
-  { tag: "Name"; values: void } |
-  /**
-   * The version of the governor contract.
-   */
-  { tag: "Version"; values: void } |
-  /**
-   * The voting delay in ledgers.
-   */
-  { tag: "VotingDelay"; values: void } |
-  /**
-   * The voting period in ledgers.
-   */
-  { tag: "VotingPeriod"; values: void } |
-  /**
-   * Minimum voting power required to propose.
-   */
-  { tag: "ProposalThreshold"; values: void } |
-  /**
-   * Proposal data indexed by proposal ID.
-   */
-  { tag: "Proposal"; values: readonly [Uint8Array] } |
-  /**
-   * Number of quorum checkpoints.
-   */
-  { tag: "NumQuorumCheckpoints"; values: void } |
-  /**
-   * Individual quorum checkpoint at index.
-   */
-  { tag: "QuorumCheckpoint"; values: readonly [number] } |
-  /**
-   * Vote tallies for a proposal, indexed by proposal ID.
-   */
-  { tag: "ProposalVote"; values: readonly [Uint8Array] } |
-  /**
-   * Whether an account has voted on a proposal.
-   */
-  { tag: "HasVoted"; values: readonly [Uint8Array, string] } |
-  /**
-   * The address of the token contract that implements the Votes trait.
-   */
-  { tag: "TokenContract"; values: void };
-
-/**
- * Vote tallies for a proposal.
- */
-export interface ProposalVoteCounts {
-  /**
-   * Total voting power cast as abstain.
-   */
-  abstain_votes: bigint;
-  /**
-   * Total voting power cast against the proposal.
-   */
-  against_votes: bigint;
-  /**
-   * Total voting power cast in favor of the proposal.
-   */
-  for_votes: bigint;
-}
-
-/**
- * Errors that can occur in timelock operations.
- */
-export const TimelockError = {
-  /**
-   * The operation is already scheduled
-   */
-  4000 : { message: "OperationAlreadyScheduled" },
-  /**
-   * The delay is less than the minimum required delay
-   */
-  4001 : { message: "InsufficientDelay" },
-  /**
-   * The operation is not in the expected state
-   */
-  4002 : { message: "InvalidOperationState" },
-  /**
-   * A predecessor operation has not been executed yet
-   */
-  4003 : { message: "UnexecutedPredecessor" },
-  /**
-   * The caller is not authorized to perform this action
-   */
-  4004 : { message: "Unauthorized" },
-  /**
-   * The minimum delay has not been set
-   */
-  4005 : { message: "MinDelayNotSet" },
-  /**
-   * The operation has not been scheduled
-   */
-  4006 : { message: "OperationNotScheduled" }
-}
-
-/**
- * Event emitted when the minimum delay is changed.
- */
-export interface MinDelayChangedEvent {
-  name: "MinDelayChanged";
-  data: {
-    old_delay?: number;
-    new_delay?: number;
-  };
-}
-
-/**
- * Event emitted when an operation is executed.
- */
-export interface OperationExecutedEvent {
-  name: "OperationExecuted";
-  data: {
-    id: Uint8Array;
-    target: string;
-    function?: string;
-    args?: Array<any>;
-    predecessor?: Uint8Array;
-    salt?: Uint8Array;
-  };
-}
-
-/**
- * Event emitted when an operation is cancelled.
- */
-export interface OperationCancelledEvent {
-  name: "OperationCancelled";
-  data: {
-    id: Uint8Array;
-  };
-}
-
-/**
- * Event emitted when an operation is scheduled.
- */
-export interface OperationScheduledEvent {
-  name: "OperationScheduled";
-  data: {
-    id: Uint8Array;
-    target: string;
-    function?: string;
-    args?: Array<any>;
-    predecessor?: Uint8Array;
-    salt?: Uint8Array;
-    delay?: number;
-  };
-}
-
-/**
- * Represents a operation to be executed by the timelock.
- *
- * An operation encapsulates all the information needed to invoke a function
- * on a target contract after the timelock delay has passed.
- */
-export interface Operation {
-  /**
-   * The serialized arguments to pass to the function
-   */
-  args: Array<any>;
-  /**
-   * The function name to invoke on the target contract
-   */
-  function_: string;
-  /**
-   * Hash of a predecessor operation that must be executed first.
-   * Use BytesN::<32>::from_array(&[0u8; 32]) for no predecessor.
-   */
-  predecessor: Uint8Array;
-  /**
-   * A salt value for operation uniqueness.
-   * Allows scheduling the same operation multiple times with different IDs.
-   */
-  salt: Uint8Array;
-  /**
-   * The contract address to call
-   */
-  target: string;
-}
-
-/**
- * The state of an operation in the timelock system.
- */
- export type OperationState =
-  /**
-   * Operation has not been scheduled
-   */
-  { tag: "Unset"; values: void } |
-  /**
-   * Operation is scheduled but the delay period has not passed
-   */
-  { tag: "Waiting"; values: void } |
-  /**
-   * Operation is ready to be executed (delay has passed)
-   */
-  { tag: "Ready"; values: void } |
-  /**
-   * Operation has been executed
-   */
-  { tag: "Done"; values: void };
-
-/**
- * Storage keys for the timelock module.
- */
- export type TimelockStorageKey =
-  /**
-   * Minimum delay in ledgers for operations
-   */
-  { tag: "MinDelay"; values: void } |
-  /**
-   * Maps operation ID to the ledger sequence number when it will be in a
-   * [`OperationState::Ready`] state (Note: value is 0 for
-   * [`OperationState::Unset`], 1 for [`OperationState::Done`]).
-   */
-  { tag: "OperationLedger"; values: readonly [Uint8Array] };
-
-/**
- * Error Enum: RoleTransferError
- */
-export const RoleTransferError = {
-  2200 : { message: "NoPendingTransfer" },
-  2201 : { message: "InvalidLiveUntilLedger" },
-  2202 : { message: "InvalidPendingAccount" },
-  2203 : { message: "TransferExpired" }
-}
-
-/**
- * Stores the pending role holder and the explicit deadline for acceptance.
- */
-export interface PendingTransfer {
-  address: string;
-  live_until_ledger: number;
-}
-
-/**
- * Event emitted when a role is granted.
- */
-export interface RoleGrantedEvent {
-  name: "RoleGranted";
-  data: {
-    role: string;
-    account: string;
-    caller?: string;
-  };
-}
-
-/**
- * Event emitted when a role is revoked.
- */
-export interface RoleRevokedEvent {
-  name: "RoleRevoked";
-  data: {
-    role: string;
-    account: string;
-    caller?: string;
-  };
-}
-
-/**
- * Event emitted when the admin role is renounced.
- */
-export interface AdminRenouncedEvent {
-  name: "AdminRenounced";
-  data: {
-    admin: string;
-  };
-}
-
-/**
- * Event emitted when a role admin is changed.
- */
-export interface RoleAdminChangedEvent {
-  name: "RoleAdminChanged";
-  data: {
-    role: string;
-    previous_admin_role?: string;
-    new_admin_role?: string;
-  };
-}
-
-/**
- * Error Enum: AccessControlError
- */
-export const AccessControlError = {
-  2000 : { message: "Unauthorized" },
-  2001 : { message: "AdminNotSet" },
-  2002 : { message: "IndexOutOfBounds" },
-  2003 : { message: "AdminRoleNotFound" },
-  2004 : { message: "RoleCountIsNotZero" },
-  2005 : { message: "RoleNotFound" },
-  2006 : { message: "AdminAlreadySet" },
-  2007 : { message: "RoleNotHeld" },
-  2008 : { message: "RoleIsEmpty" },
-  2009 : { message: "TransferInProgress" },
-  2010 : { message: "MaxRolesExceeded" }
-}
-
-/**
- * Event emitted when an admin transfer is completed.
- */
-export interface AdminTransferCompletedEvent {
-  name: "AdminTransferCompleted";
-  data: {
-    new_admin: string;
-    previous_admin?: string;
-  };
-}
-
-/**
- * Event emitted when an admin transfer is initiated.
- */
-export interface AdminTransferInitiatedEvent {
-  name: "AdminTransferInitiated";
-  data: {
-    current_admin: string;
-    new_admin?: string;
-    live_until_ledger?: number;
-  };
-}
-
-/**
- * Storage key for enumeration of accounts per role.
- */
-export interface RoleAccountKey {
-  index: number;
-  role: string;
-}
-
-/**
- * Storage keys for the data associated with the access control
- */
- export type AccessControlStorageKey =
-  { tag: "ExistingRoles"; values: void } |
-  { tag: "RoleAccounts"; values: readonly [RoleAccountKey] } |
-  { tag: "HasRole"; values: readonly [string, string] } |
-  { tag: "RoleAccountsCount"; values: readonly [string] } |
-  { tag: "RoleAdmin"; values: readonly [string] } |
-  { tag: "Admin"; values: void } |
-  { tag: "PendingAdmin"; values: void };
-
-/**
- * Error Enum: OwnableError
- */
-export const OwnableError = {
-  2100 : { message: "OwnerNotSet" },
-  2101 : { message: "TransferInProgress" },
-  2102 : { message: "OwnerAlreadySet" }
-}
-
-/**
- * Event emitted when an ownership transfer is initiated.
- */
-export interface OwnershipTransferEvent {
-  name: "OwnershipTransfer";
-  data: {
-    old_owner?: string;
-    new_owner?: string;
-    live_until_ledger?: number;
-  };
-}
-
-/**
- * Event emitted when ownership is renounced.
- */
-export interface OwnershipRenouncedEvent {
-  name: "OwnershipRenounced";
-  data: {
-    old_owner?: string;
-  };
-}
-
-/**
- * Event emitted when an ownership transfer is completed.
- */
-export interface OwnershipTransferCompletedEvent {
-  name: "OwnershipTransferCompleted";
-  data: {
-    new_owner?: string;
-  };
-}
-
-/**
- * Storage keys for `Ownable` utility.
- */
- export type OwnableStorageKey =
-  { tag: "Owner"; values: void } |
-  { tag: "PendingOwner"; values: void };
-
-/**
- * Context of a single authorized call performed by an address.
- *
- * Custom account contracts that implement `__check_auth` special function
- * receive a list of `Context` values corresponding to all the calls that
- * need to be authorized.
- */
- export type Context =
-  /**
-   * Contract invocation.
-   */
-  { tag: "Contract"; values: readonly [ContractContext] } |
-  /**
-   * Contract that has a constructor with no arguments is created.
-   */
-  { tag: "CreateContractHostFn"; values: readonly [CreateContractHostFnContext] } |
-  /**
-   * Contract that has a constructor with 1 or more arguments is created.
-   */
-  { tag: "CreateContractWithCtorHostFn"; values: readonly [CreateContractWithConstructorHostFnContext] };
-
-/**
- * Authorization context of a single contract call.
- *
- * This struct corresponds to a `require_auth_for_args` call for an address
- * from `contract` function with `fn_name` name and `args` arguments.
- */
-export interface ContractContext {
-  args: Array<any>;
-  contract: string;
-  fn_name: string;
-}
-
-/**
- * Contract executable used for creating a new contract and used in
- * `CreateContractHostFnContext`.
- */
- export type ContractExecutable =
-  { tag: "Wasm"; values: readonly [Uint8Array] };
-
-/**
- * Value of contract node in InvokerContractAuthEntry tree.
- */
-export interface SubContractInvocation {
-  context: ContractContext;
-  sub_invocations: Array<InvokerContractAuthEntry>;
-}
-
-/**
- * A node in the tree of authorizations performed on behalf of the current
- * contract as invoker of the contracts deeper in the call stack.
- *
- * This is used as an argument of `authorize_as_current_contract` host function.
- *
- * This tree corresponds `require_auth[_for_args]` calls on behalf of the
- * current contract.
- */
- export type InvokerContractAuthEntry =
-  /**
-   * Invoke a contract.
-   */
-  { tag: "Contract"; values: readonly [SubContractInvocation] } |
-  /**
-   * Create a contract passing 0 arguments to constructor.
-   */
-  { tag: "CreateContractHostFn"; values: readonly [CreateContractHostFnContext] } |
-  /**
-   * Create a contract passing 0 or more arguments to constructor.
-   */
-  { tag: "CreateContractWithCtorHostFn"; values: readonly [CreateContractWithConstructorHostFnContext] };
-
-/**
- * Authorization context for `create_contract` host function that creates a
- * new contract on behalf of authorizer address.
- */
-export interface CreateContractHostFnContext {
-  executable: ContractExecutable;
-  salt: Uint8Array;
-}
-
-/**
- * Authorization context for `create_contract` host function that creates a
- * new contract on behalf of authorizer address.
- * This is the same as `CreateContractHostFnContext`, but also has
- * contract constructor arguments.
- */
-export interface CreateContractWithConstructorHostFnContext {
-  constructor_args: Array<any>;
-  executable: ContractExecutable;
-  salt: Uint8Array;
-}
-
-/**
- * Union: Executable
- */
- export type Executable =
-  { tag: "Wasm"; values: readonly [Uint8Array] } |
-  { tag: "StellarAsset"; values: void } |
-  { tag: "Account"; values: void };
-    export type ContractEvent = ProposalQueuedEvent | TreasuryChangedEvent | QuorumBpsChangedEvent | QueueDelayChangedEvent | VotingDelayChangedEvent | GovernorInitializedEvent | VotingPeriodChangedEvent | TokenContractChangedEvent | GovernorAuthorityChangedEvent | ProposalThresholdChangedEvent | DelegateChangedEvent | DelegateVotesChangedEvent | VoteCastEvent | QuorumChangedEvent | ProposalQueuedEvent2 | ProposalCreatedEvent | ProposalExecutedEvent | ProposalCancelledEvent | MinDelayChangedEvent | OperationExecutedEvent | OperationCancelledEvent | OperationScheduledEvent | RoleGrantedEvent | RoleRevokedEvent | AdminRenouncedEvent | RoleAdminChangedEvent | AdminTransferCompletedEvent | AdminTransferInitiatedEvent | OwnershipTransferEvent | OwnershipRenouncedEvent | OwnershipTransferCompletedEvent;
+    export type ContractEvent = LaunchedEvent | ProposalQueuedEvent | QuorumBpsChangedEvent | QueueDelayChangedEvent | VotingDelayChangedEvent | GovernorInitializedEvent | VotingPeriodChangedEvent | ProposalThresholdChangedEvent | OwnershipTransferEvent | OwnershipRenouncedEvent | OwnershipTransferCompletedEvent | VoteCastEvent | QuorumChangedEvent | ProposalCreatedEvent | ProposalExecutedEvent | ProposalCancelledEvent;
     

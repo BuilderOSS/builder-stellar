@@ -1,11 +1,10 @@
-import {Address, xdr} from '@stellar/stellar-sdk';
+import {Address} from '@stellar/stellar-sdk';
 
     /**
  * Error Enum: MarketplaceError
  */
 export const MarketplaceError = {
   1301 : { message: "NotInitialized" },
-  1302 : { message: "Unauthorized" },
   1303 : { message: "InvalidPrice" },
   1304 : { message: "InvalidExpiry" },
   1305 : { message: "ListingExists" },
@@ -14,7 +13,33 @@ export const MarketplaceError = {
   1308 : { message: "ListingActive" },
   1309 : { message: "NotSeller" },
   1310 : { message: "InvalidFee" },
-  1311 : { message: "ArithmeticOverflow" }
+  1311 : { message: "ArithmeticOverflow" },
+  /**
+   * `launch` treasury differs from the treasury wired at construction.
+   */
+  1312 : { message: "TreasuryMismatch" },
+  /**
+   * `launch` expected payment asset differs from the configured one
+   */
+  1313 : { message: "PaymentAssetMismatch" },
+  /**
+   * The marketplace is paused (new listings and purchases are rejected).
+   */
+  1314 : { message: "Paused" }
+}
+
+/**
+ * Emitted once when the Manager launches the marketplace (Setup -> Live).
+ */
+export interface LaunchedEvent {
+  name: "Launched";
+  data: {
+    treasury: string;
+    /**
+     * Whether the marketplace was unpaused at launch.
+     */
+    opened?: boolean;
+  };
 }
 
 /**
@@ -111,11 +136,20 @@ export interface SecondaryFeeUpdatedEvent {
 export interface PrimaryListingCreatedEvent {
   name: "PrimaryListingCreated";
   data: {
-    token_id: number;
-    seller?: string;
+    listing_id: bigint;
     price?: bigint;
     expires_at?: bigint;
-    fee_bps?: number;
+    payment_asset?: string;
+  };
+}
+
+/**
+ * Event: PrimaryListingExpired
+ */
+export interface PrimaryListingExpiredEvent {
+  name: "PrimaryListingExpired";
+  data: {
+    listing_id: bigint;
   };
 }
 
@@ -134,6 +168,30 @@ export interface MarketplaceInitializedEvent {
 }
 
 /**
+ * Event: PrimaryListingCancelled
+ */
+export interface PrimaryListingCancelledEvent {
+  name: "PrimaryListingCancelled";
+  data: {
+    listing_id: bigint;
+  };
+}
+
+/**
+ * Event: PrimaryListingPurchased
+ */
+export interface PrimaryListingPurchasedEvent {
+  name: "PrimaryListingPurchased";
+  data: {
+    listing_id: bigint;
+    buyer: string;
+    token_id?: number;
+    price?: bigint;
+    payment_asset?: string;
+  };
+}
+
+/**
  * Event: SecondaryListingCreated
  */
 export interface SecondaryListingCreatedEvent {
@@ -144,146 +202,101 @@ export interface SecondaryListingCreatedEvent {
     price?: bigint;
     expires_at?: bigint;
     fee_bps?: number;
+    payment_asset?: string;
   };
 }
 
 /**
- * Union: DataKey
- */
- export type DataKey =
-  { tag: "Config"; values: void } |
-  { tag: "Listing"; values: readonly [number] };
-
-/**
- * Struct: Listing
+ * Secondary (escrowed-token) listing, keyed by token id.
  */
 export interface Listing {
   expires_at: bigint;
   fee_bps: number;
-  kind: ListingKind;
+  /**
+   * Asset captured at list time; later `set_payment_asset` calls do not affect it.
+   */
+  payment_asset: string;
   price: bigint;
   seller: string;
 }
 
 /**
- * Union: ListingKind
+ * Primary sale listing, keyed by listing id. No token exists until bought.
  */
- export type ListingKind =
-  { tag: "Primary"; values: void } |
-  { tag: "Secondary"; values: void };
+export interface PrimaryListing {
+  expires_at: bigint;
+  /**
+   * Asset captured at creation time.
+   */
+  payment_asset: string;
+  price: bigint;
+}
 
 /**
  * Struct: MarketplaceConfig
  */
 export interface MarketplaceConfig {
-  current_hash: Uint8Array;
   default_secondary_fee_bps: number;
+  /**
+   * Setup-phase admin of the param setters; replaced by `treasury` once Live.
+   */
+  launch_admin: string;
   manager: string;
   paused: boolean;
   payment_asset: string;
   token: string;
   treasury: string;
-  version: string;
 }
 
 /**
- * Context of a single authorized call performed by an address.
- *
- * Custom account contracts that implement `__check_auth` special function
- * receive a list of `Context` values corresponding to all the calls that
- * need to be authorized.
+ * Errors shared by all module contracts. Codes live in the 9000 range so
+ * they never collide with module (11xx-13xx, 3, 30) or manager (10xx) codes.
  */
- export type Context =
+export const CommonError = {
   /**
-   * Contract invocation.
+   * Operation requires the module to be live (launched).
    */
-  { tag: "Contract"; values: readonly [ContractContext] } |
+  9001 : { message: "NotLive" },
   /**
-   * Contract that has a constructor with no arguments is created.
+   * Operation is only valid during setup; the module is already live.
    */
-  { tag: "CreateContractHostFn"; values: readonly [CreateContractHostFnContext] } |
+  9002 : { message: "AlreadyLive" },
   /**
-   * Contract that has a constructor with 1 or more arguments is created.
+   * Manager address missing from storage.
    */
-  { tag: "CreateContractWithCtorHostFn"; values: readonly [CreateContractWithConstructorHostFnContext] };
-
-/**
- * Authorization context of a single contract call.
- *
- * This struct corresponds to a `require_auth_for_args` call for an address
- * from `contract` function with `fn_name` name and `args` arguments.
- */
-export interface ContractContext {
-  args: Array<any>;
-  contract: string;
-  fn_name: string;
+  9003 : { message: "ManagerNotSet" },
+  /**
+   * `CurrentHash` missing from storage.
+   */
+  9004 : { message: "CurrentHashNotSet" },
+  /**
+   * `from_hash` does not equal the stored `CurrentHash`.
+   */
+  9005 : { message: "HashMismatch" },
+  /**
+   * Manager did not approve this upgrade path.
+   */
+  9006 : { message: "UpgradeNotApproved" },
+  /**
+   * Manager has no registry entry for the requested hash.
+   */
+  9007 : { message: "ImplementationNotFound" },
+  /**
+   * Owner missing from storage.
+   */
+  9008 : { message: "OwnerNotSet" },
+  /**
+   * `CurrentVersion` missing from storage.
+   */
+  9009 : { message: "VersionNotSet" },
+  /**
+   * Treasury address missing from storage.
+   */
+  9010 : { message: "TreasuryNotSet" },
+  /**
+   * Governor address missing from storage.
+   */
+  9011 : { message: "GovernorNotSet" }
 }
-
-/**
- * Contract executable used for creating a new contract and used in
- * `CreateContractHostFnContext`.
- */
- export type ContractExecutable =
-  { tag: "Wasm"; values: readonly [Uint8Array] };
-
-/**
- * Value of contract node in InvokerContractAuthEntry tree.
- */
-export interface SubContractInvocation {
-  context: ContractContext;
-  sub_invocations: Array<InvokerContractAuthEntry>;
-}
-
-/**
- * A node in the tree of authorizations performed on behalf of the current
- * contract as invoker of the contracts deeper in the call stack.
- *
- * This is used as an argument of `authorize_as_current_contract` host function.
- *
- * This tree corresponds `require_auth[_for_args]` calls on behalf of the
- * current contract.
- */
- export type InvokerContractAuthEntry =
-  /**
-   * Invoke a contract.
-   */
-  { tag: "Contract"; values: readonly [SubContractInvocation] } |
-  /**
-   * Create a contract passing 0 arguments to constructor.
-   */
-  { tag: "CreateContractHostFn"; values: readonly [CreateContractHostFnContext] } |
-  /**
-   * Create a contract passing 0 or more arguments to constructor.
-   */
-  { tag: "CreateContractWithCtorHostFn"; values: readonly [CreateContractWithConstructorHostFnContext] };
-
-/**
- * Authorization context for `create_contract` host function that creates a
- * new contract on behalf of authorizer address.
- */
-export interface CreateContractHostFnContext {
-  executable: ContractExecutable;
-  salt: Uint8Array;
-}
-
-/**
- * Authorization context for `create_contract` host function that creates a
- * new contract on behalf of authorizer address.
- * This is the same as `CreateContractHostFnContext`, but also has
- * contract constructor arguments.
- */
-export interface CreateContractWithConstructorHostFnContext {
-  constructor_args: Array<any>;
-  executable: ContractExecutable;
-  salt: Uint8Array;
-}
-
-/**
- * Union: Executable
- */
- export type Executable =
-  { tag: "Wasm"; values: readonly [Uint8Array] } |
-  { tag: "StellarAsset"; values: void } |
-  { tag: "Account"; values: void };
-    export type ContractEvent = ListingExpiredEvent | ListingCancelledEvent | ListingPurchasedEvent | MarketplacePausedEvent | MarketplaceUnpausedEvent | MarketplaceUpgradedEvent | PaymentAssetUpdatedEvent | SecondaryFeeUpdatedEvent | PrimaryListingCreatedEvent | MarketplaceInitializedEvent | SecondaryListingCreatedEvent;
+    export type ContractEvent = LaunchedEvent | ListingExpiredEvent | ListingCancelledEvent | ListingPurchasedEvent | MarketplacePausedEvent | MarketplaceUnpausedEvent | MarketplaceUpgradedEvent | PaymentAssetUpdatedEvent | SecondaryFeeUpdatedEvent | PrimaryListingCreatedEvent | PrimaryListingExpiredEvent | MarketplaceInitializedEvent | PrimaryListingCancelledEvent | PrimaryListingPurchasedEvent | SecondaryListingCreatedEvent;
     

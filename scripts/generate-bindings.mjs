@@ -1,3 +1,5 @@
+// Regenerates packages/*-bindings from the contract WASMs.
+// Usage: pnpm contracts:bindings   (then: pnpm --filter @builder-stellar/<name>-bindings build)
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { run } from './lib.mjs';
 
@@ -55,25 +57,8 @@ function rewritePackageJsonName(outputDir, packageJsonName) {
   writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
 }
 
-function replaceNth(content, search, replacement, targetIndex) {
-  let seen = 0;
-  return content
-    .split(search)
-    .map((segment, index) => {
-      if (index === 0) {
-        return segment;
-      }
-
-      seen += 1;
-      return `${seen === targetIndex ? replacement : search}${segment}`;
-    })
-    .join('');
-}
-
 function patchGeneratedBindings(packageName, outputDir) {
-  // Note: We keep .js extensions as-is for ES module compatibility
   const typesPath = `${outputDir}/src/types.ts`;
-  const clientPath = `${outputDir}/src/client.ts`;
 
   // The SDK generator emits error enums as value-only objects, while clients
   // use them as the error type in Result return values.
@@ -85,43 +70,15 @@ function patchGeneratedBindings(packageName, outputDir) {
     );
     writeFileSync(typesPath, typesContent);
   }
-
-  // Patch types.ts for Point and ComplianceError issues
-  if (packageName === 'token') {
-    let typesContent = readFileSync(typesPath, 'utf8');
-
-    // Add Point type alias with Buffer import
-    typesContent = typesContent.replace(
-      "import {Address, xdr} from '@stellar/stellar-sdk';",
-      "import {Address, xdr} from '@stellar/stellar-sdk';\nimport {Buffer} from 'buffer';\n\ntype Point = Buffer;"
-    );
-
-    // Rename duplicate ComplianceError to ComplianceHookError
-    typesContent = replaceNth(typesContent, 'export const ComplianceError = {', 'export const ComplianceHookError = {', 2);
-
-    writeFileSync(typesPath, typesContent);
-  }
-
-  // Patch client.ts for function parameter (reserved keyword)
-  if (packageName === 'treasury') {
-    let clientContent = readFileSync(clientPath, 'utf8');
-
-    // Rename 'function' parameter to 'function_' (reserved keyword)
-    clientContent = clientContent.replace(
-      /execute\(\s*{\s*target,\s*function,\s*args\s*}:\s*{\s*target:\s*string,\s*function:\s*string,/g,
-      'execute({ target, function_, args }: { target: string, function_: string,'
-    );
-
-    writeFileSync(clientPath, clientContent);
-  }
 }
 
-run('cargo', ['build', '-p', 'token', '-p', 'governor', '-p', 'treasury', '-p', 'auction', '-p', 'manager', '-p', 'metadata', '-p', 'marketplace', '--release', '--target', 'wasm32v1-none'], {
-  env: {
-    ...process.env,
-    SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2: '0'
-  }
-});
+// Build with the same toolchain path that produces the deployable WASM
+// (`stellar contract build`, spec shaking v2 on). The legacy
+// SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=0 build embeds every
+// unused library type (e.g. OpenZeppelin RWA/Governor enums) in the spec, which
+// makes the generator emit duplicate/colliding types and bindings that do not
+// match the deployed contract spec.
+run('stellar', ['contract', 'build']);
 
 for (const contract of contracts) {
   mkdirSync(contract.outputDir, { recursive: true });
@@ -140,3 +97,9 @@ for (const contract of contracts) {
   patchGeneratedBindings(contract.packageName, contract.outputDir);
   rewritePackageJsonName(contract.outputDir, contract.packageJsonName);
 }
+
+// `generate --overwrite` deletes each package's node_modules (the pnpm symlinks
+// to @stellar/stellar-sdk, buffer and typescript). Without relinking, `tsc`
+// fails with "Cannot find module '@stellar/stellar-sdk'" and the cascading
+// "Property 'spec'/'txFromJson' does not exist on type 'Client'" errors.
+run('pnpm', ['install']);

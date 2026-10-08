@@ -8,7 +8,7 @@
     "build": "pnpm --dir apps/web build",
     "lint": "pnpm --dir apps/web lint",
     "typecheck": "pnpm --dir apps/web typecheck",
-    "contracts:build": "SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=0 cargo build -p minter -p token -p governor -p treasury -p auction -p manager -p metadata -p marketplace --release --target wasm32v1-none",
+    "contracts:build": "stellar contract build",
     "contracts:bindings": "node scripts/generate-bindings.mjs",
     "contracts:clean": "cargo clean",
     "contracts:test": "cargo test",
