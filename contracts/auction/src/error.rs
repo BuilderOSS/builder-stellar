@@ -48,4 +48,6 @@ pub enum AuctionError {
     TreasuryMismatch = 1222,
     /// `launch` expected payment token differs from the configured one
     PaymentTokenMismatch = 1223,
+    /// `withdraw_refund` called with no pending refund balance
+    NoPendingRefund = 1224,
 }

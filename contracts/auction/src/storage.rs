@@ -67,6 +67,8 @@ pub enum DataKey {
     Launched,
     Manager,
     PaymentTokenLocked,
+    /// Persistent: refund owed to a bidder whose push refund failed (i128).
+    PendingRefund(Address),
 }
 
 /// Auction configuration parameters.
@@ -206,4 +208,38 @@ pub fn is_launched(e: &Env) -> bool {
 pub fn set_launched(e: &Env, launched: bool) {
     e.storage().instance().set(&DataKey::Launched, &launched);
     e.storage().instance().extend_ttl(LEDGERS_TO_LIVE, MAX_TTL);
+}
+
+/// Persistent TTL for `PendingRefund` entries (1 year, bumped on every touch).
+const PENDING_REFUND_TTL: u32 = common::ttl::INSTANCE_TTL_EXTEND_TO;
+const PENDING_REFUND_THRESHOLD: u32 = common::ttl::INSTANCE_TTL_THRESHOLD;
+
+pub fn get_pending_refund(e: &Env, bidder: &Address) -> i128 {
+    let key = DataKey::PendingRefund(bidder.clone());
+    let v: Option<i128> = e.storage().persistent().get(&key);
+    if v.is_some() {
+        e.storage()
+            .persistent()
+            .extend_ttl(&key, PENDING_REFUND_THRESHOLD, PENDING_REFUND_TTL);
+    }
+    v.unwrap_or(0)
+}
+
+/// Add `amount` to the bidder's pending refund and return the new total.
+pub fn add_pending_refund(e: &Env, bidder: &Address, amount: i128) -> i128 {
+    let key = DataKey::PendingRefund(bidder.clone());
+    let total = get_pending_refund(e, bidder)
+        .checked_add(amount)
+        .unwrap_or_else(|| panic_with_error!(e, AuctionError::ArithmeticOverflow));
+    e.storage().persistent().set(&key, &total);
+    e.storage()
+        .persistent()
+        .extend_ttl(&key, PENDING_REFUND_THRESHOLD, PENDING_REFUND_TTL);
+    total
+}
+
+pub fn clear_pending_refund(e: &Env, bidder: &Address) {
+    e.storage()
+        .persistent()
+        .remove(&DataKey::PendingRefund(bidder.clone()));
 }

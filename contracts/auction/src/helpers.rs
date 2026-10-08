@@ -5,10 +5,13 @@ use soroban_sdk::{
 
 use crate::{
     error::AuctionError,
-    events::{emit_auction_created, emit_auction_settled, emit_bid_placed, emit_bid_refunded},
+    events::{
+        emit_auction_created, emit_auction_settled, emit_bid_placed, emit_bid_refunded,
+        emit_refund_deferred,
+    },
     storage::{
-        get_auction, get_config, set_auction, AuctionConfig, AuctionState, MAX_AUCTION_EXTENSIONS,
-        PERCENT_DENOMINATOR,
+        add_pending_refund, get_auction, get_config, set_auction, AuctionConfig, AuctionState,
+        MAX_AUCTION_EXTENSIONS, PERCENT_DENOMINATOR,
     },
 };
 
@@ -283,7 +286,21 @@ pub(crate) fn refund_bid(
         }),
     ]);
 
-    e.invoke_contract::<()>(payment_token, &transfer_symbol, refund_args);
+    // Push the refund, but never let a recipient that cannot receive (removed
+    // trustline, revoked SAC authorization) block the auction: on failure the
+    // amount is credited to PendingRefund and pulled later via withdraw_refund.
+    // A failed sub-call rolls back its own writes, so no tokens moved.
+    let result = e.try_invoke_contract::<(), soroban_sdk::Error>(
+        payment_token,
+        &transfer_symbol,
+        refund_args,
+    );
 
-    emit_bid_refunded(e, token_id, bidder, amount);
+    match result {
+        Ok(_) => emit_bid_refunded(e, token_id, bidder, amount),
+        Err(_) => {
+            add_pending_refund(e, bidder, amount);
+            emit_refund_deferred(e, token_id, bidder, amount);
+        }
+    }
 }

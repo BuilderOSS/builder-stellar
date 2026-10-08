@@ -113,6 +113,27 @@ pub struct BidRefunded {
     pub amount: i128,
 }
 
+/// Emitted when a push refund failed and was credited to `PendingRefund`.
+/// `amount` is the amount added by this event, not the running total.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RefundDeferred {
+    #[topic]
+    pub token_id: u128,
+    #[topic]
+    pub bidder: Address,
+    pub amount: i128,
+}
+
+/// Emitted when a bidder pulls their deferred refund via `withdraw_refund`.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RefundWithdrawn {
+    #[topic]
+    pub bidder: Address,
+    pub amount: i128,
+}
+
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuctionCancelled {
@@ -260,6 +281,23 @@ pub fn emit_auction_cancelled(e: &Env, token_id: u128, reason: u32, cancelled_by
         token_id,
         reason,
         cancelled_by: cancelled_by.clone(),
+    }
+    .publish(e);
+}
+
+pub fn emit_refund_deferred(e: &Env, token_id: u128, bidder: &Address, amount: i128) {
+    RefundDeferred {
+        token_id,
+        bidder: bidder.clone(),
+        amount,
+    }
+    .publish(e);
+}
+
+pub fn emit_refund_withdrawn(e: &Env, bidder: &Address, amount: i128) {
+    RefundWithdrawn {
+        bidder: bidder.clone(),
+        amount,
     }
     .publish(e);
 }

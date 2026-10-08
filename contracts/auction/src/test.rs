@@ -716,3 +716,428 @@ fn launch_requires_manager_auth() {
     assert!(auction.try_launch(&treasury, &false, &payment).is_err());
     assert!(auction.paused());
 }
+
+// ============================================================================
+// Refund tests (deferred refund / withdraw_refund)
+// ============================================================================
+
+mod refunds {
+    use super::*;
+    use crate::events::{BidRefunded, RefundDeferred, RefundWithdrawn};
+    use soroban_sdk::{
+        contract, contractimpl,
+        testutils::{Events, IssuerFlags},
+        token::{StellarAssetClient, TokenClient},
+    };
+
+    /// Minimal NFT: `mint` returns sequential ids, `transfer` is a no-op.
+    #[contract]
+    struct MockNft;
+
+    #[contractimpl]
+    impl MockNft {
+        pub fn mint(e: Env, _auth: Address, _to: Address) -> u32 {
+            let id: u32 = e.storage().instance().get(&1u32).unwrap_or(0) + 1;
+            e.storage().instance().set(&1u32, &id);
+            id
+        }
+        pub fn transfer(_e: Env, _from: Address, _to: Address, _id: u32) {}
+    }
+
+    const T0: u64 = 1_000;
+
+    struct Ctx {
+        e: Env,
+        auction: DaoAuctionContractClient<'static>,
+        addr: Address,
+        treasury: Address,
+        sac: StellarAssetClient<'static>,
+        token: TokenClient<'static>,
+        /// Bidders whose PendingRefund we expect the contract to hold.
+        bidders: std::vec::Vec<Address>,
+    }
+
+    fn setup() -> Ctx {
+        let e = Env::default();
+        e.mock_all_auths();
+        e.ledger().with_mut(|l| l.timestamp = T0);
+        let admin = Address::generate(&e);
+        let sac_reg = e.register_stellar_asset_contract_v2(admin);
+        // Allow set_authorized(false) to simulate a recipient that cannot receive.
+        sac_reg.issuer().set_flag(IssuerFlags::RevocableFlag);
+        let sac_addr = sac_reg.address();
+        let nft = e.register(MockNft, ());
+        let treasury = Address::generate(&e);
+        let addr = e.register(
+            DaoAuctionContract,
+            (
+                Address::generate(&e),
+                nft,
+                treasury.clone(),
+                300_u64,
+                10_000_000_i128,
+                10_u32,
+                50_u64,
+                sac_addr.clone(),
+                Address::generate(&e),
+                BytesN::from_array(&e, &[0u8; 32]),
+                String::from_str(&e, "0.1.0"),
+            ),
+        );
+        let auction = DaoAuctionContractClient::new(&e, &addr);
+        auction.launch(&treasury, &true, &sac_addr);
+        let sac = StellarAssetClient::new(&e, &sac_addr);
+        let token = TokenClient::new(&e, &sac_addr);
+        Ctx {
+            e,
+            auction,
+            addr,
+            treasury,
+            sac,
+            token,
+            bidders: std::vec::Vec::new(),
+        }
+    }
+
+    impl Ctx {
+        fn funded(&mut self, amount: i128) -> Address {
+            let a = Address::generate(&self.e);
+            self.sac.mint(&a, &amount);
+            self.bidders.push(a.clone());
+            a
+        }
+        fn bid(&self, who: &Address, amount: i128) {
+            let id = self.auction.get_auction().token_id;
+            self.auction.create_bid(who, &id, &amount);
+        }
+        /// contract balance == live highest bid + sum(PendingRefund)
+        fn assert_invariant(&self) {
+            let a = self.auction.get_auction();
+            let live = if !a.settled && a.highest_bidder.is_some() {
+                a.highest_bid
+            } else {
+                0
+            };
+            let pending: i128 = self
+                .bidders
+                .iter()
+                .map(|b| self.auction.pending_refund(b))
+                .sum();
+            assert_eq!(self.token.balance(&self.addr), live + pending);
+        }
+        /// True if the last invocation emitted exactly this event (topics + data).
+        fn emitted<E: soroban_sdk::events::Event>(&self, ev: &E) -> bool {
+            let x = ev.to_xdr(&self.e, &self.addr);
+            self.e.events().all().events().contains(&x)
+        }
+        fn pause(&self) {
+            let owner = self.auction.get_owner().unwrap();
+            self.auction.pause(&owner);
+        }
+    }
+
+    #[test]
+    fn happy_path_no_pending_refund_and_invariant() {
+        let mut c = setup();
+        let a = c.funded(100_000_000);
+        let b = c.funded(100_000_000);
+        c.bid(&a, 10_000_000);
+        c.assert_invariant();
+        c.bid(&b, 12_000_000);
+        // existing refund event preserved, no deferral event
+        let tid = 1u128; // first auction; read before the last invocation would clear events
+        assert!(c.emitted(&BidRefunded {
+            token_id: tid,
+            bidder: a.clone(),
+            amount: 10_000_000
+        }));
+        assert!(!c.emitted(&RefundDeferred {
+            token_id: tid,
+            bidder: a.clone(),
+            amount: 10_000_000
+        }));
+        assert_eq!(c.token.balance(&a), 100_000_000);
+        assert_eq!(c.auction.pending_refund(&a), 0);
+        assert_eq!(c.auction.pending_refund(&b), 0);
+        c.assert_invariant();
+    }
+
+    #[test]
+    fn deferred_refund_then_withdraw() {
+        let mut c = setup();
+        let a = c.funded(100_000_000);
+        let b = c.funded(100_000_000);
+        c.bid(&a, 10_000_000);
+        c.sac.set_authorized(&a, &false);
+
+        // B's higher bid succeeds despite A being unable to receive.
+        c.bid(&b, 12_000_000);
+        let tid = 1u128; // first auction; read before the last invocation would clear events
+        assert!(c.emitted(&RefundDeferred {
+            token_id: tid,
+            bidder: a.clone(),
+            amount: 10_000_000
+        }));
+        assert!(!c.emitted(&BidRefunded {
+            token_id: tid,
+            bidder: a.clone(),
+            amount: 10_000_000
+        }));
+        assert_eq!(c.auction.pending_refund(&a), 10_000_000);
+        assert_eq!(c.auction.get_auction().highest_bidder, Some(b.clone()));
+        c.assert_invariant();
+
+        // Withdraw while still unauthorized reverts and keeps the balance.
+        assert!(c.auction.try_withdraw_refund(&a).is_err());
+        assert_eq!(c.auction.pending_refund(&a), 10_000_000);
+        c.assert_invariant();
+
+        c.sac.set_authorized(&a, &true);
+        c.auction.withdraw_refund(&a);
+        assert_eq!(c.token.balance(&a), 100_000_000);
+        assert_eq!(c.auction.pending_refund(&a), 0);
+        c.assert_invariant();
+
+        assert_eq!(
+            c.auction.try_withdraw_refund(&a).err(),
+            Some(Ok(AuctionError::NoPendingRefund.into()))
+        );
+    }
+
+    #[test]
+    fn consecutive_deferred_refunds_accumulate() {
+        let mut c = setup();
+        let a = c.funded(100_000_000);
+        let b = c.funded(100_000_000);
+        c.bid(&a, 10_000_000);
+        c.sac.set_authorized(&a, &false);
+        c.bid(&b, 12_000_000);
+        assert_eq!(c.auction.pending_refund(&a), 10_000_000);
+        // A (still unauthorized) cannot bid, so re-authorize, rebid, revoke again.
+        c.sac.set_authorized(&a, &true);
+        c.bid(&a, 20_000_000);
+        c.sac.set_authorized(&a, &false);
+        c.bid(&b, 30_000_000);
+        assert_eq!(c.auction.pending_refund(&a), 30_000_000);
+        c.assert_invariant();
+    }
+
+    #[test]
+    fn settle_with_pending_refund_keeps_invariant() {
+        let mut c = setup();
+        let a = c.funded(100_000_000);
+        let b = c.funded(100_000_000);
+        c.bid(&a, 10_000_000);
+        c.sac.set_authorized(&a, &false);
+        c.bid(&b, 12_000_000);
+        c.assert_invariant();
+
+        c.e.ledger().with_mut(|l| l.timestamp = T0 + 10_000);
+        c.auction.settle_and_create_new();
+        assert_eq!(c.token.balance(&c.treasury), 12_000_000);
+        c.assert_invariant();
+
+        c.sac.set_authorized(&a, &true);
+        c.auction.withdraw_refund(&a);
+        c.assert_invariant();
+    }
+
+    #[test]
+    fn cancel_with_deferred_refund_credits_pending() {
+        let mut c = setup();
+        let a = c.funded(100_000_000);
+        c.bid(&a, 10_000_000);
+        c.sac.set_authorized(&a, &false);
+        c.pause();
+        c.auction.cancel_auction();
+        assert!(c.auction.get_auction().settled);
+        assert_eq!(c.auction.pending_refund(&a), 10_000_000);
+        c.assert_invariant();
+        c.sac.set_authorized(&a, &true);
+        c.auction.withdraw_refund(&a);
+        c.assert_invariant();
+    }
+
+    #[test]
+    fn cancel_normal_refund_keeps_invariant() {
+        let mut c = setup();
+        let a = c.funded(100_000_000);
+        c.bid(&a, 10_000_000);
+        c.pause();
+        c.auction.cancel_auction();
+        assert_eq!(c.auction.pending_refund(&a), 0);
+        assert_eq!(c.token.balance(&a), 100_000_000);
+        c.assert_invariant();
+    }
+
+    #[test]
+    fn withdraw_requires_bidder_auth() {
+        let mut c = setup();
+        let a = c.funded(100_000_000);
+        let b = c.funded(100_000_000);
+        c.bid(&a, 10_000_000);
+        c.sac.set_authorized(&a, &false);
+        c.bid(&b, 12_000_000);
+        c.sac.set_authorized(&a, &true);
+
+        // Drop blanket mocking; supply no auth at all.
+        c.e.set_auths(&[]);
+        let r = c.auction.try_withdraw_refund(&a);
+        assert!(r.is_err());
+        assert_eq!(c.auction.pending_refund(&a), 10_000_000);
+
+        // Auth from a different address is not enough.
+        c.e.mock_auths(&[MockAuth {
+            address: &b,
+            invoke: &MockAuthInvoke {
+                contract: &c.addr,
+                fn_name: "withdraw_refund",
+                args: (a.clone(),).into_val(&c.e),
+                sub_invokes: &[],
+            },
+        }]);
+        assert!(c.auction.try_withdraw_refund(&a).is_err());
+    }
+
+    /// Only the bidder's own auth is mocked; the contract's refund sub-call
+    /// auth must come from authorize_as_current_contract.
+    fn bid_real_auth(c: &Ctx, who: &Address, amount: i128) {
+        let id = c.auction.get_auction().token_id;
+        c.e.mock_auths(&[MockAuth {
+            address: who,
+            invoke: &MockAuthInvoke {
+                contract: &c.addr,
+                fn_name: "create_bid",
+                args: (who.clone(), id, amount).into_val(&c.e),
+                sub_invokes: &[MockAuthInvoke {
+                    contract: &c.token.address,
+                    fn_name: "transfer",
+                    args: (who.clone(), c.addr.clone(), amount).into_val(&c.e),
+                    sub_invokes: &[],
+                }],
+            },
+        }]);
+        c.auction.create_bid(who, &id, &amount);
+    }
+
+    #[test]
+    fn real_auth_refund_is_pushed_not_deferred() {
+        let mut c = setup();
+        let a = c.funded(100_000_000);
+        let b = c.funded(100_000_000);
+        bid_real_auth(&c, &a, 10_000_000);
+        bid_real_auth(&c, &b, 12_000_000);
+        let tid = 1u128; // first auction; read before the last invocation would clear events
+        assert!(c.emitted(&BidRefunded {
+            token_id: tid,
+            bidder: a.clone(),
+            amount: 10_000_000
+        }));
+        assert!(!c.emitted(&RefundDeferred {
+            token_id: tid,
+            bidder: a.clone(),
+            amount: 10_000_000
+        }));
+        assert_eq!(c.token.balance(&a), 100_000_000);
+        assert_eq!(c.auction.pending_refund(&a), 0);
+        c.assert_invariant();
+    }
+
+    #[test]
+    fn real_auth_withdraw_transfer_succeeds() {
+        let mut c = setup();
+        let a = c.funded(100_000_000);
+        let b = c.funded(100_000_000);
+        c.bid(&a, 10_000_000);
+        c.sac.set_authorized(&a, &false);
+        c.bid(&b, 12_000_000);
+        c.sac.set_authorized(&a, &true);
+
+        c.e.mock_auths(&[MockAuth {
+            address: &a,
+            invoke: &MockAuthInvoke {
+                contract: &c.addr,
+                fn_name: "withdraw_refund",
+                args: (a.clone(),).into_val(&c.e),
+                sub_invokes: &[],
+            },
+        }]);
+        c.auction.withdraw_refund(&a);
+        assert!(c.emitted(&RefundWithdrawn {
+            bidder: a.clone(),
+            amount: 10_000_000
+        }));
+        assert_eq!(c.token.balance(&a), 100_000_000);
+        assert_eq!(c.auction.pending_refund(&a), 0);
+        c.assert_invariant();
+    }
+
+    #[test]
+    fn self_outbid_while_deferral_pending() {
+        let mut c = setup();
+        let a = c.funded(100_000_000);
+        let b = c.funded(100_000_000);
+        c.bid(&a, 10_000_000);
+        c.sac.set_authorized(&a, &false);
+        c.bid(&b, 12_000_000);
+        c.sac.set_authorized(&a, &true);
+        c.bid(&a, 20_000_000);
+        c.bid(&a, 30_000_000); // A outbids A; push of 20M to A succeeds
+        assert_eq!(c.auction.pending_refund(&a), 10_000_000);
+        assert_eq!(c.token.balance(&c.addr), 40_000_000);
+        c.assert_invariant();
+        c.auction.withdraw_refund(&a);
+        c.assert_invariant();
+    }
+
+    #[test]
+    fn pending_survives_rollover_to_next_auction() {
+        let mut c = setup();
+        let a = c.funded(100_000_000);
+        let b = c.funded(100_000_000);
+        c.bid(&a, 10_000_000);
+        c.sac.set_authorized(&a, &false);
+        c.bid(&b, 12_000_000);
+        let first = c.auction.get_auction().token_id;
+        c.e.ledger().with_mut(|l| l.timestamp = T0 + 10_000);
+        c.auction.settle_and_create_new();
+        assert_eq!(c.auction.get_auction().token_id, first + 1);
+        c.assert_invariant();
+
+        let d = c.funded(100_000_000);
+        c.bid(&d, 10_000_000);
+        c.assert_invariant();
+        c.sac.set_authorized(&a, &true);
+        c.auction.withdraw_refund(&a);
+        assert_eq!(c.token.balance(&a), 100_000_000);
+        c.assert_invariant();
+    }
+
+    #[test]
+    fn cancel_after_multiple_deferrals() {
+        let mut c = setup();
+        let a = c.funded(100_000_000);
+        let b = c.funded(100_000_000);
+        let d = c.funded(100_000_000);
+        c.bid(&a, 10_000_000);
+        c.sac.set_authorized(&a, &false);
+        c.bid(&b, 12_000_000);
+        c.sac.set_authorized(&b, &false);
+        c.bid(&d, 15_000_000);
+        c.assert_invariant();
+        c.sac.set_authorized(&d, &false);
+        c.pause();
+        c.auction.cancel_auction();
+        assert_eq!(c.auction.pending_refund(&a), 10_000_000);
+        assert_eq!(c.auction.pending_refund(&b), 12_000_000);
+        assert_eq!(c.auction.pending_refund(&d), 15_000_000);
+        assert_eq!(c.token.balance(&c.addr), 37_000_000);
+        c.assert_invariant();
+        for x in [&a, &b, &d] {
+            c.sac.set_authorized(x, &true);
+            c.auction.withdraw_refund(x);
+            c.assert_invariant();
+        }
+        assert_eq!(c.token.balance(&c.addr), 0);
+    }
+}

@@ -1,6 +1,7 @@
 #![allow(clippy::too_many_arguments)] // constructors take every wired address/param explicitly
 
 use soroban_sdk::{
+    auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation},
     contract, contractimpl, contracttrait, panic_with_error, Address, BytesN, Env, IntoVal, String,
     Symbol,
 };
@@ -12,14 +13,15 @@ use crate::{
     error::AuctionError,
     events::{
         emit_auction_cancelled, emit_auction_initialized, emit_duration_updated, emit_launched,
-        emit_min_bid_increment_updated, emit_payment_token_updated, emit_reserve_price_updated,
-        emit_time_buffer_updated,
+        emit_min_bid_increment_updated, emit_payment_token_updated, emit_refund_withdrawn,
+        emit_reserve_price_updated, emit_time_buffer_updated,
     },
     helpers::{create_auction, process_bid, refund_bid, settle_auction_internal},
     storage::{
-        get_auction, get_config, is_launched, is_payment_token_locked, set_auction, set_config,
-        set_launched, set_payment_token_locked, AuctionConfig, AuctionState, DataKey,
-        MAX_BID_INCREMENT_PERCENT, MIN_AUCTION_DURATION, MIN_RESERVE_PRICE,
+        clear_pending_refund, get_auction, get_config, get_pending_refund, is_launched,
+        is_payment_token_locked, set_auction, set_config, set_launched, set_payment_token_locked,
+        AuctionConfig, AuctionState, DataKey, MAX_BID_INCREMENT_PERCENT, MIN_AUCTION_DURATION,
+        MIN_RESERVE_PRICE,
     },
 };
 
@@ -61,6 +63,13 @@ pub trait DaoAuctionContractTrait {
 
     /// Cancel current auction (owner only, when paused)
     fn cancel_auction(e: &Env);
+
+    /// Pull a refund whose push failed (bidder auth required). Panics
+    /// `NoPendingRefund` if the balance is zero.
+    fn withdraw_refund(e: &Env, bidder: Address);
+
+    /// Refund credited to `bidder` and not yet withdrawn.
+    fn pending_refund(e: &Env, bidder: Address) -> i128;
 
     // Configuration setters (owner only, when paused)
     fn set_duration(e: &Env, duration: u64);
@@ -383,6 +392,45 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         set_auction(e, &cancelled_auction);
 
         emit_auction_cancelled(e, auction.token_id, 0, &owner); // reason: 0 = owner cancelled
+    }
+
+    fn withdraw_refund(e: &Env, bidder: Address) {
+        bidder.require_auth();
+
+        let amount = get_pending_refund(e, &bidder);
+        if amount <= 0 {
+            panic_with_error!(e, AuctionError::NoPendingRefund);
+        }
+
+        // Effects before interaction; a failing transfer reverts this too.
+        clear_pending_refund(e, &bidder);
+
+        let config = get_config(e);
+        let transfer_symbol = Symbol::new(e, "transfer");
+        let args = soroban_sdk::vec![
+            e,
+            e.current_contract_address().to_val(),
+            bidder.to_val(),
+            amount.into_val(e)
+        ];
+        e.authorize_as_current_contract(soroban_sdk::vec![
+            e,
+            InvokerContractAuthEntry::Contract(SubContractInvocation {
+                context: ContractContext {
+                    contract: config.payment_token.clone(),
+                    fn_name: transfer_symbol.clone(),
+                    args: args.clone(),
+                },
+                sub_invocations: soroban_sdk::vec![e],
+            }),
+        ]);
+        e.invoke_contract::<()>(&config.payment_token, &transfer_symbol, args);
+
+        emit_refund_withdrawn(e, &bidder, amount);
+    }
+
+    fn pending_refund(e: &Env, bidder: Address) -> i128 {
+        get_pending_refund(e, &bidder)
     }
 
     #[only_owner]
