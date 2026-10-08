@@ -283,15 +283,54 @@ fn test_set_payment_token_when_paused() {
 }
 
 #[test]
-fn test_set_treasury_when_paused() {
+fn unpause_before_launch_is_not_live() {
     let e = Env::default();
     e.mock_all_auths();
+    let (auction, owner, _, _, _, _) = setup_with_payment_token(&e);
+    let r = auction.try_unpause(&owner);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        common::CommonError::NotLive.into()
+    );
+    assert!(auction.paused());
+}
 
-    let (auction, _, _, _, _, _) = setup_with_payment_token(&e);
-    let new_treasury = Address::generate(&e);
+#[test]
+fn launch_without_start_is_one_shot_and_clears_pending_owner() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let owner = Address::generate(&e);
+    let treasury = Address::generate(&e);
+    let attacker = Address::generate(&e);
+    let id = e.register(
+        DaoAuctionContract,
+        (
+            owner.clone(),
+            Address::generate(&e),
+            treasury.clone(),
+            300_u64,
+            10_000_000_i128,
+            10_u32,
+            50_u64,
+            Address::generate(&e),
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
+        ),
+    );
+    let auction = DaoAuctionContractClient::new(&e, &id);
 
-    auction.set_treasury(&new_treasury);
-    assert_eq!(auction.get_config().treasury, new_treasury);
+    auction.transfer_ownership(&attacker, &(e.ledger().sequence() + 1_000));
+    auction.launch(&treasury, &false);
+    assert_eq!(auction.get_owner(), Some(treasury.clone()));
+    assert!(auction.paused());
+    assert!(auction.try_accept_ownership().is_err());
+    assert_eq!(auction.get_owner(), Some(treasury.clone()));
+    let r = auction.try_launch(&treasury, &true);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        common::CommonError::AlreadyLive.into()
+    );
 }
 
 // ============================================================================

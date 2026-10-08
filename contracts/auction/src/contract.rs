@@ -1,17 +1,19 @@
+#![allow(clippy::too_many_arguments)] // constructors take every wired address/param explicitly
+
 use soroban_sdk::{
     contract, contractimpl, contracttrait, panic_with_error, Address, BytesN, Env, IntoVal, String,
     Symbol,
 };
-use stellar_access::ownable::{self, Ownable, OwnableStorageKey};
+use stellar_access::ownable::{self, Ownable};
 use stellar_contract_utils::pausable::{self, Pausable};
 use stellar_macros::{only_owner, when_not_paused, when_paused};
 
 use crate::{
     error::AuctionError,
     events::{
-        emit_auction_cancelled, emit_auction_initialized, emit_duration_updated,
+        emit_auction_cancelled, emit_auction_initialized, emit_duration_updated, emit_launched,
         emit_min_bid_increment_updated, emit_payment_token_updated, emit_reserve_price_updated,
-        emit_time_buffer_updated, emit_treasury_updated,
+        emit_time_buffer_updated,
     },
     helpers::{create_auction, process_bid, refund_bid, settle_auction_internal},
     storage::{
@@ -66,8 +68,7 @@ pub trait DaoAuctionContractTrait {
     fn set_min_bid_increment(e: &Env, min_bid_increment_percent: u32);
     fn set_time_buffer(e: &Env, time_buffer: u64);
     fn set_payment_token(e: &Env, payment_token: Address);
-    fn set_treasury(e: &Env, treasury: Address);
-    fn finalize_ownership(e: &Env, new_owner: Address, launch_auction: bool);
+    fn launch(e: &Env, treasury: Address, start: bool);
     fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>);
     fn version(e: &Env) -> String;
     fn wasm_hash(e: &Env) -> BytesN<32>;
@@ -86,6 +87,8 @@ impl Pausable for DaoAuctionContract {
     }
 
     fn unpause(e: &Env, caller: Address) {
+        // Nothing holds mint authority before launch, so unpausing would fail at mint.
+        common::lifecycle::require_live(e);
         caller.require_auth();
         let owner = ownable::get_owner(e).unwrap();
         if caller != owner {
@@ -114,23 +117,35 @@ impl Ownable for DaoAuctionContract {}
 
 #[contractimpl]
 impl DaoAuctionContractTrait for DaoAuctionContract {
-    fn finalize_ownership(e: &Env, new_owner: Address, launch_auction: bool) {
+    /// One-shot, Manager-only launch handoff (Setup -> Live).
+    ///
+    /// Marks the module live first, then hands ownership to `treasury` (clearing
+    /// any pending two-step transfer) and, when `start` is true, unpauses and
+    /// creates the first auction (the token must already be live so the auction
+    /// holds mint authority). A second call panics with `AlreadyLive`.
+    fn launch(e: &Env, treasury: Address, start: bool) {
         let manager: Address = e
             .storage()
             .instance()
             .get(&DataKey::Manager)
-            .expect("manager not set");
+            .unwrap_or_else(|| {
+                soroban_sdk::panic_with_error!(e, common::CommonError::ManagerNotSet)
+            });
         manager.require_auth();
-        if launch_auction && pausable::paused(e) {
+        common::lifecycle::mark_live(e);
+        if treasury != get_config(e).treasury {
+            panic_with_error!(e, AuctionError::TreasuryMismatch);
+        }
+        common::ownership::handoff_owner(e, &treasury);
+        if start {
             pausable::unpause(e);
             if !is_launched(e) {
                 set_launched(e, true);
                 create_auction(e);
             }
         }
-        e.storage()
-            .instance()
-            .set(&OwnableStorageKey::Owner, &new_owner);
+        common::ttl::extend_instance(e);
+        emit_launched(e, &treasury, start);
     }
 
     fn __constructor(
@@ -439,17 +454,5 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         set_config(e, &config);
 
         emit_payment_token_updated(e, &payment_token, &owner);
-    }
-
-    #[only_owner]
-    #[when_paused]
-    fn set_treasury(e: &Env, treasury: Address) {
-        let owner = ownable::get_owner(e).unwrap();
-
-        let mut config = get_config(e);
-        config.treasury = treasury.clone();
-        set_config(e, &config);
-
-        emit_treasury_updated(e, &treasury, &owner);
     }
 }

@@ -1,4 +1,21 @@
+#![allow(clippy::too_many_arguments)] // emit helpers mirror the event fields 1:1
+
 use soroban_sdk::{contractevent, Address, Env, String, Vec};
+
+/// Emitted once when the Manager launches the metadata module (Setup -> Live).
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Launched {
+    #[topic]
+    pub treasury: Address,
+}
+
+pub fn emit_launched(env: &Env, treasury: &Address) {
+    Launched {
+        treasury: treasury.clone(),
+    }
+    .publish(env);
+}
 
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]

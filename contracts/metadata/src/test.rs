@@ -8,11 +8,45 @@ use token::DaoTokenContract;
 
 use crate::{IpfsGroup, ItemParam, MetadataContract, MetadataContractClient};
 
+/// Returns a client for a not-yet-registered address; `initialize_metadata`
+/// (or `register_metadata`) deploys the contract there via its constructor.
 fn create_contract<'a>(env: &Env) -> MetadataContractClient<'a> {
-    MetadataContractClient::new(env, &env.register(MetadataContract, ()))
+    MetadataContractClient::new(env, &Address::generate(env))
 }
 
-fn create_token_contract<'a>(env: &Env, owner: &Address) -> Address {
+#[allow(clippy::too_many_arguments)]
+fn register_metadata(
+    env: &Env,
+    at: &Address,
+    token: &Address,
+    manager: &Address,
+    hash: &BytesN<32>,
+    owner: &Address,
+) {
+    env.register_at(
+        at,
+        MetadataContract,
+        (
+            token.clone(),
+            String::from_str(env, "https://example.com"),
+            String::from_str(env, "Test DAO"),
+            String::from_str(env, "https://example.com/image.png"),
+            String::from_str(env, "https://renderer.example.com/render"),
+            manager.clone(),
+            hash.clone(),
+            owner.clone(),
+            Vec::<String>::new(env),
+            Vec::<ItemParam>::new(env),
+            IpfsGroup {
+                base_uri: String::from_str(env, "ipfs://"),
+                extension: String::from_str(env, ".png"),
+            },
+            String::from_str(env, "0.1.0"),
+        ),
+    );
+}
+
+fn create_token_contract(env: &Env, owner: &Address) -> Address {
     env.register(
         DaoTokenContract,
         (
@@ -34,22 +68,13 @@ fn initialize_metadata<'a>(
     token: &Address,
     owner: &Address,
 ) {
-    client.initialize(
+    register_metadata(
+        env,
+        &client.address,
         token,
-        &String::from_str(env, "https://example.com"),
-        &String::from_str(env, "Test DAO"),
-        &String::from_str(env, "https://example.com/image.png"),
-        &String::from_str(env, "https://renderer.example.com/render"),
         &Address::generate(env),
-        &soroban_sdk::BytesN::from_array(env, &[0; 32]),
+        &BytesN::from_array(env, &[0; 32]),
         owner,
-        &Vec::new(env),
-        &Vec::new(env),
-        &IpfsGroup {
-            base_uri: String::from_str(env, "ipfs://"),
-            extension: String::from_str(env, ".png"),
-        },
-        &String::from_str(env, "0.1.0"),
     );
 }
 
@@ -70,18 +95,6 @@ fn test_initialize() {
         settings.project_uri,
         String::from_str(&env, "https://example.com")
     );
-}
-
-#[test]
-#[should_panic]
-fn test_initialize_twice_fails() {
-    let env = Env::default();
-    let client = create_contract(&env);
-    let token = Address::generate(&env);
-    let owner = Address::generate(&env);
-
-    initialize_metadata(&env, &client, &token, &owner);
-    initialize_metadata(&env, &client, &token, &owner);
 }
 
 #[test]
@@ -271,7 +284,7 @@ fn test_on_minted() {
     let token_id = 1u32;
     let result = client.on_minted(&token_id);
 
-    assert_eq!(result, true);
+    assert!(result);
     assert!(!client.get_attributes(&token_id).is_empty());
 
     // Attributes are historical token metadata and must outlive the former
@@ -343,7 +356,7 @@ fn test_on_minted_no_properties_returns_false() {
     let token_id = 1u32;
     let result = client.on_minted(&token_id);
 
-    assert_eq!(result, false);
+    assert!(!result);
 }
 
 #[test]
@@ -418,6 +431,39 @@ fn test_delete_and_recreate_properties() {
     assert_eq!(property.name, String::from_str(&env, "Body"));
 }
 
+#[test]
+fn launch_is_one_shot_and_moves_upgrade_authority() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let client = create_contract(&env);
+    let manager = Address::generate(&env);
+    let owner = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    register_metadata(
+        &env,
+        &client.address,
+        &Address::generate(&env),
+        &manager,
+        &BytesN::from_array(&env, &[0; 32]),
+        &owner,
+    );
+
+    client.launch(&treasury);
+    env.as_contract(&client.address, || {
+        let stored: Address = env
+            .storage()
+            .instance()
+            .get(&crate::storage::DataKey::Owner)
+            .unwrap();
+        assert_eq!(stored, treasury);
+    });
+    let r = client.try_launch(&owner);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        common::CommonError::AlreadyLive.into()
+    );
+}
+
 mod upgrade_via_common {
     use super::*;
     use common::testutils::{empty_wasm, MockManager, MockManagerClient};
@@ -432,22 +478,13 @@ mod upgrade_via_common {
         let owner = Address::generate(&env);
         let client = create_contract(&env);
         let id = client.address.clone();
-        client.initialize(
+        register_metadata(
+            &env,
+            &client.address,
             &Address::generate(&env),
-            &String::from_str(&env, "https://example.com"),
-            &String::from_str(&env, "Test DAO"),
-            &String::from_str(&env, "https://example.com/image.png"),
-            &String::from_str(&env, "https://renderer.example.com/render"),
             &mgr.address,
             &from,
             &owner,
-            &Vec::new(&env),
-            &Vec::new(&env),
-            &IpfsGroup {
-                base_uri: String::from_str(&env, "ipfs://"),
-                extension: String::from_str(&env, ".png"),
-            },
-            &String::from_str(&env, "0.1.0"),
         );
         mgr.approve(&from, &to);
         mgr.register(&to, &String::from_str(&env, "0.2.0"));
@@ -472,22 +509,13 @@ mod upgrade_via_common {
         let to = empty_wasm(&env);
         let owner = Address::generate(&env);
         let client = create_contract(&env);
-        client.initialize(
+        register_metadata(
+            &env,
+            &client.address,
             &Address::generate(&env),
-            &String::from_str(&env, "https://example.com"),
-            &String::from_str(&env, "Test DAO"),
-            &String::from_str(&env, "https://example.com/image.png"),
-            &String::from_str(&env, "https://renderer.example.com/render"),
             &mgr.address,
             &from,
             &owner,
-            &Vec::new(&env),
-            &Vec::new(&env),
-            &IpfsGroup {
-                base_uri: String::from_str(&env, "ipfs://"),
-                extension: String::from_str(&env, ".png"),
-            },
-            &String::from_str(&env, "0.1.0"),
         );
         mgr.register(&to, &String::from_str(&env, "0.2.0"));
         let r = client.try_upgrade(&from, &to);
@@ -507,22 +535,13 @@ mod upgrade_via_common {
         let owner = Address::generate(&env);
         let client = create_contract(&env);
         let id = client.address.clone();
-        client.initialize(
+        register_metadata(
+            &env,
+            &client.address,
             &Address::generate(&env),
-            &String::from_str(&env, "https://example.com"),
-            &String::from_str(&env, "Test DAO"),
-            &String::from_str(&env, "https://example.com/image.png"),
-            &String::from_str(&env, "https://renderer.example.com/render"),
             &mgr.address,
             &from,
             &owner,
-            &Vec::new(&env),
-            &Vec::new(&env),
-            &IpfsGroup {
-                base_uri: String::from_str(&env, "ipfs://"),
-                extension: String::from_str(&env, ".png"),
-            },
-            &String::from_str(&env, "0.1.0"),
         );
         mgr.approve(&from, &to);
         mgr.register(&to, &String::from_str(&env, "0.2.0"));
@@ -551,22 +570,13 @@ mod upgrade_via_common {
         let owner = Address::generate(&env);
         let client = create_contract(&env);
         let id = client.address.clone();
-        client.initialize(
+        register_metadata(
+            &env,
+            &client.address,
             &Address::generate(&env),
-            &String::from_str(&env, "https://example.com"),
-            &String::from_str(&env, "Test DAO"),
-            &String::from_str(&env, "https://example.com/image.png"),
-            &String::from_str(&env, "https://renderer.example.com/render"),
             &mgr.address,
             &from,
             &owner,
-            &Vec::new(&env),
-            &Vec::new(&env),
-            &IpfsGroup {
-                base_uri: String::from_str(&env, "ipfs://"),
-                extension: String::from_str(&env, ".png"),
-            },
-            &String::from_str(&env, "0.1.0"),
         );
         let wrong = BytesN::from_array(&env, &[9u8; 32]);
         mgr.approve(&wrong, &to);

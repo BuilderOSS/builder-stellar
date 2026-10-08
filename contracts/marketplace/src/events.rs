@@ -11,6 +11,24 @@ pub struct MarketplaceInitialized {
     pub default_secondary_fee_bps: u32,
 }
 
+/// Emitted once when the Manager launches the marketplace (Setup -> Live).
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Launched {
+    #[topic]
+    pub treasury: Address,
+    /// Whether the marketplace was unpaused at launch.
+    pub opened: bool,
+}
+
+pub fn emit_launched(e: &Env, treasury: &Address, opened: bool) {
+    Launched {
+        treasury: treasury.clone(),
+        opened,
+    }
+    .publish(e);
+}
+
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PrimaryListingCreated {

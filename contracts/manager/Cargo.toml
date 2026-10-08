@@ -18,6 +18,9 @@ governor = { path = "../governor" }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
+common = { path = "../common" }
+treasury = { path = "../treasury" }
+marketplace = { path = "../marketplace" }
 
 [features]
 testutils = ["soroban-sdk/testutils"]

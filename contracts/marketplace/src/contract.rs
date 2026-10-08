@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)] // constructors take every wired address/param explicitly
+
 use soroban_sdk::{
     auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation},
     contract, contractimpl, panic_with_error, vec, Address, BytesN, Env, IntoVal, String, Symbol,
@@ -18,6 +20,7 @@ impl MarketplaceContract {
     pub fn __constructor(
         e: &Env,
         token: Address,
+        launch_admin: Address,
         treasury: Address,
         payment_asset: Address,
         manager: Address,
@@ -32,6 +35,7 @@ impl MarketplaceContract {
             e,
             &MarketplaceConfig {
                 token: token.clone(),
+                launch_admin,
                 treasury: treasury.clone(),
                 payment_asset: payment_asset.clone(),
                 default_secondary_fee_bps,
@@ -58,19 +62,32 @@ impl MarketplaceContract {
         storage::get_listing(e, token_id)
     }
 
-    pub fn finalize_ownership(e: &Env, new_treasury: Address, launch_marketplace: bool) {
+    /// One-shot, Manager-only launch handoff (Setup -> Live).
+    ///
+    /// `treasury` must equal the treasury wired at construction (wiring is
+    /// immutable). After this call the param setters are gated by the treasury
+    /// instead of `launch_admin`. When `open` is true the marketplace is
+    /// unpaused. A second call panics with `AlreadyLive`.
+    pub fn launch(e: &Env, treasury: Address, open: bool) {
         let mut config = Self::get_config(e);
         config.manager.require_auth();
-        if launch_marketplace && config.paused {
+        common::lifecycle::mark_live(e);
+        if treasury != config.treasury {
+            panic_with_error!(e, MarketplaceError::TreasuryMismatch);
+        }
+        if open && config.paused {
             config.paused = false;
+            storage::set_config(e, &config);
             MarketplaceUnpaused {}.publish(e);
         }
-        config.treasury = new_treasury;
-        storage::set_config(e, &config);
+        common::ttl::extend_instance(e);
+        emit_launched(e, &treasury, open);
     }
 
     pub fn mint_and_list(e: &Env, price: i128, expires_at: u64) -> u32 {
-        let config = Self::require_treasury(e);
+        // Nothing holds mint authority before launch.
+        common::lifecycle::require_live(e);
+        let config = Self::require_admin(e);
         Self::check_open_listing(e, price, expires_at);
 
         let mint_args = vec![
@@ -250,21 +267,21 @@ impl MarketplaceContract {
     }
 
     pub fn pause(e: &Env) {
-        let mut config = Self::require_treasury(e);
+        let mut config = Self::require_admin(e);
         config.paused = true;
         storage::set_config(e, &config);
         MarketplacePaused {}.publish(e);
     }
 
     pub fn unpause(e: &Env) {
-        let mut config = Self::require_treasury(e);
+        let mut config = Self::require_admin(e);
         config.paused = false;
         storage::set_config(e, &config);
         MarketplaceUnpaused {}.publish(e);
     }
 
     pub fn set_secondary_fee_bps(e: &Env, fee_bps: u32) {
-        let mut config = Self::require_treasury(e);
+        let mut config = Self::require_admin(e);
         if fee_bps > MAX_FEE_BPS {
             panic_with_error!(e, MarketplaceError::InvalidFee);
         }
@@ -274,14 +291,14 @@ impl MarketplaceContract {
     }
 
     pub fn set_payment_asset(e: &Env, payment_asset: Address) {
-        let mut config = Self::require_treasury(e);
+        let mut config = Self::require_admin(e);
         config.payment_asset = payment_asset.clone();
         storage::set_config(e, &config);
         PaymentAssetUpdated { payment_asset }.publish(e);
     }
 
     pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
-        let config = Self::require_treasury(e);
+        let config = Self::require_admin(e);
         MarketplaceUpgraded {
             from_hash: from_hash.clone(),
             to_hash: to_hash.clone(),
@@ -299,13 +316,18 @@ impl MarketplaceContract {
     }
 
     pub fn sync_version(e: &Env) {
-        let config = Self::require_treasury(e);
+        let config = Self::require_admin(e);
         common::upgrade::sync_version(e, &config.manager);
     }
 
-    fn require_treasury(e: &Env) -> MarketplaceConfig {
+    /// Admin gate: `launch_admin` while in setup, the treasury once live.
+    fn require_admin(e: &Env) -> MarketplaceConfig {
         let config = Self::get_config(e);
-        config.treasury.require_auth();
+        if common::lifecycle::is_live(e) {
+            config.treasury.require_auth();
+        } else {
+            config.launch_admin.require_auth();
+        }
         config
     }
 

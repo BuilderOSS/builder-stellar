@@ -586,8 +586,30 @@ impl ManagerContract {
             ),
         );
 
-        // Step 3: Deploy Metadata (no constructor - we'll call initialize separately)
-        metadata_deployer.deploy_v2(metadata_wasm.clone(), ());
+        // Step 3: Deploy Metadata with empty artwork. The launch administrator can
+        // replace the settings and add artwork before launch.
+        let empty_property_names: Vec<String> = Vec::new(&env);
+        let empty_items: Vec<Val> = Vec::new(&env);
+        metadata_deployer.deploy_v2(
+            metadata_wasm.clone(),
+            (
+                token_addr.clone(),
+                project_uri,
+                description,
+                contract_image,
+                renderer_base,
+                env.current_contract_address(),
+                metadata_wasm.clone(),
+                params.launch_admin.clone(),
+                empty_property_names,
+                empty_items,
+                ArtworkIpfsGroup {
+                    base_uri: String::from_str(&env, ""),
+                    extension: String::from_str(&env, ""),
+                },
+                metadata_version,
+            ),
+        );
 
         // Step 4: Deploy and initialize Governor
         // Governor starts with minimum valid timing and permissive thresholds;
@@ -631,47 +653,21 @@ impl ManagerContract {
             ),
         );
 
-        // Marketplace is deployed paused and receives mint authority at finalization.
+        // Marketplace is deployed paused; it is wired to the real (predicted)
+        // treasury and receives mint authority at launch. `launch_admin` gates
+        // its param setters until launch.
         marketplace_deployer.deploy_v2(
             marketplace_wasm.clone(),
             (
                 token_addr.clone(),
                 params.launch_admin.clone(),
+                treasury_addr.clone(),
                 marketplace_payment_asset,
                 env.current_contract_address(),
                 marketplace_wasm,
                 marketplace_version,
                 marketplace_fee_bps,
             ),
-        );
-
-        // Initialize Metadata with empty values. The launch administrator can
-        // replace the settings and add artwork before launch.
-        let empty_property_names: Vec<String> = Vec::new(&env);
-        let empty_items: Vec<Val> = Vec::new(&env);
-        // Using invoke_contract directly since we don't have a Client import
-        let _: () = env.invoke_contract(
-            &metadata_addr,
-            &Symbol::new(&env, "initialize"),
-            vec![
-                &env,
-                token_addr.clone().into_val(&env),
-                project_uri.into_val(&env),
-                description.into_val(&env),
-                contract_image.into_val(&env),
-                renderer_base.into_val(&env),
-                env.current_contract_address().into_val(&env),
-                metadata_wasm.clone().into_val(&env),
-                params.launch_admin.clone().into_val(&env),
-                empty_property_names.into_val(&env),
-                empty_items.into_val(&env),
-                ArtworkIpfsGroup {
-                    base_uri: String::from_str(&env, ""),
-                    extension: String::from_str(&env, ""),
-                }
-                .into_val(&env),
-                metadata_version.into_val(&env),
-            ],
         );
 
         // Create DAO addresses
@@ -717,6 +713,7 @@ impl ManagerContract {
     /// * `launch_config` - Configuration for what to enable at launch
     ///   - `launch_auction` - Whether to unpause the auction
     ///   - `launch_marketplace` - Whether to unpause the marketplace
+    ///   - `enable_minter` - Whether to grant mint authority to the registered PlatformMinter
     ///
     /// # Validation
     ///
@@ -725,13 +722,13 @@ impl ManagerContract {
     ///
     /// # Effects
     ///
-    /// 1. Validates launch preconditions
-    /// 2. Grants Treasury and Marketplace mint authority over tokens
-    /// 3. Optionally grants Auction mint authority if launch_auction is true
-    /// 4. Transfers Token, Governor, Treasury, Marketplace, and Auction ownership to Treasury
-    /// 5. Transfers Metadata upgrade authority to Treasury
-    /// 6. Conditionally unpauses Auction and Marketplace based on launch_config
-    /// 7. Deletes the temporary PendingDao state
+    /// 1. Validates launch preconditions (`Unauthorized`, `LaunchSupplyZero`)
+    /// 2. Calls `token.launch` with minters = [Treasury, Marketplace] + [Auction if
+    ///    launch_auction] + [PlatformMinter if enable_minter; `PlatformMinterNotSet`
+    ///    when unset], then `launch` on Governor, Treasury, Marketplace, Auction, Metadata
+    /// 3. Each module becomes Live: ownership moves to the Treasury and the Manager
+    ///    has no further authority over the DAO (a second launch panics `AlreadyLive`)
+    /// 4. Deletes the temporary PendingDao state
     pub fn launch_dao(
         env: Env,
         token_address: Address,
@@ -743,87 +740,79 @@ impl ManagerContract {
                 .ok_or(ManagerError::DaoNotFound)?;
         pending.launch_admin.require_auth();
 
-        let treasury = pending.addresses.treasury.clone();
-
-        // Validate launch preconditions
-        // Check that launch_admin is the token owner
-        let token_owner: Address = env.invoke_contract(
-            &pending.addresses.token,
-            &Symbol::new(&env, "owner"),
-            vec![&env],
-        );
+        let addresses = pending.addresses.clone();
+        let treasury = addresses.treasury.clone();
+        // NOTE: calls are Symbol-based on purpose. Using the module crates'
+        // generated clients would link their `#[contractimpl]` exports into the
+        // Manager WASM (duplicate `version`/`upgrade`/... symbols). Task #6
+        // replaces these with `contractimport!` clients.
+        let token_owner: Address =
+            env.invoke_contract(&addresses.token, &Symbol::new(&env, "owner"), vec![&env]);
+        // launch_admin must still be the token owner.
         if token_owner != pending.launch_admin {
             return Err(ManagerError::Unauthorized);
         }
-
-        // Check that token total supply > 0
+        // At least one token must exist.
         let total_supply: i128 = env.invoke_contract(
-            &pending.addresses.token,
+            &addresses.token,
             &Symbol::new(&env, "total_supply"),
             vec![&env],
         );
         if total_supply <= 0 {
-            return Err(ManagerError::InvalidVersion); // Reusing error type for now
+            return Err(ManagerError::LaunchSupplyZero);
         }
 
-        // Grant mint authorities to Treasury, Marketplace, and optionally Auction
-        let _: () = env.invoke_contract(
-            &pending.addresses.token,
-            &Symbol::new(&env, "enable_mint_authority_by_manager"),
-            vec![&env, pending.addresses.treasury.clone().into_val(&env)],
-        );
+        // Mint authority is exactly this canonical set; the launch_admin cannot
+        // add to it. The optional minter is the admin-registered PlatformMinter.
+        let mut minters: Vec<Address> = vec![&env, treasury.clone(), addresses.marketplace.clone()];
         if launch_config.launch_auction {
-            let _: () = env.invoke_contract(
-                &pending.addresses.token,
-                &Symbol::new(&env, "enable_mint_authority_by_manager"),
-                vec![&env, pending.addresses.auction.clone().into_val(&env)],
-            );
+            minters.push_back(addresses.auction.clone());
         }
+        if launch_config.enable_minter {
+            let minter: Address = get_persistent(&env, &ManagerKey::PlatformMinter)
+                .ok_or(ManagerError::PlatformMinterNotSet)?;
+            minters.push_back(minter);
+        }
+
+        // One-shot handoff. The token launches first so the auction holds mint
+        // authority when it creates its first auction. After these calls every
+        // module is Live and the Manager has no further authority over the DAO.
+        let launch_args = vec![&env, treasury.clone().into_val(&env)];
         let _: () = env.invoke_contract(
-            &pending.addresses.token,
-            &Symbol::new(&env, "enable_mint_authority_by_manager"),
-            vec![&env, pending.addresses.marketplace.clone().into_val(&env)],
+            &addresses.token,
+            &Symbol::new(&env, "launch"),
+            vec![
+                &env,
+                treasury.clone().into_val(&env),
+                minters.into_val(&env),
+            ],
         );
-
-        // Transfer ownership of modules to Treasury (using finalize_ownership which directly sets owner)
-        for (module, method) in [
-            (pending.addresses.token.clone(), "finalize_ownership"),
-            (pending.addresses.governor.clone(), "finalize_ownership"),
-            (pending.addresses.treasury.clone(), "finalize_ownership"),
-        ] {
-            let _: () = env.invoke_contract(
-                &module,
-                &Symbol::new(&env, method),
-                vec![&env, treasury.clone().into_val(&env)],
-            );
+        for module in [&addresses.governor, &addresses.treasury] {
+            let _: () =
+                env.invoke_contract(module, &Symbol::new(&env, "launch"), launch_args.clone());
         }
-
         let _: () = env.invoke_contract(
-            &pending.addresses.marketplace,
-            &Symbol::new(&env, "finalize_ownership"),
+            &addresses.marketplace,
+            &Symbol::new(&env, "launch"),
             vec![
                 &env,
                 treasury.clone().into_val(&env),
                 launch_config.launch_marketplace.into_val(&env),
             ],
         );
-
-        // Transfer Auction ownership with launch_auction flag
         let _: () = env.invoke_contract(
-            &pending.addresses.auction,
-            &Symbol::new(&env, "finalize_ownership"),
+            &addresses.auction,
+            &Symbol::new(&env, "launch"),
             vec![
                 &env,
                 treasury.clone().into_val(&env),
                 launch_config.launch_auction.into_val(&env),
             ],
         );
-
-        // Transfer Metadata upgrade authority to Treasury
         let _: () = env.invoke_contract(
-            &pending.addresses.metadata,
-            &Symbol::new(&env, "finalize_upgrade_authority"),
-            vec![&env, treasury.clone().into_val(&env)],
+            &addresses.metadata,
+            &Symbol::new(&env, "launch"),
+            launch_args,
         );
 
         // Delete pending DAO state
@@ -837,6 +826,7 @@ impl ManagerContract {
             &pending.addresses,
             launch_config.launch_auction,
             launch_config.launch_marketplace,
+            launch_config.enable_minter,
         );
         Ok(())
     }
@@ -1134,8 +1124,11 @@ impl ManagerContract {
         {
             return Err(ManagerError::InvalidGovernanceTiming);
         }
-        if config.governance.quorum_bps > MAX_BPS {
+        if config.governance.quorum_bps == 0 || config.governance.quorum_bps > MAX_BPS {
             return Err(ManagerError::InvalidQuorumBps);
+        }
+        if config.governance.proposal_threshold == 0 {
+            return Err(ManagerError::InvalidProposalThreshold);
         }
 
         if config.auction.duration < MIN_AUCTION_DURATION {

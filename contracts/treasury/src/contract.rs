@@ -2,10 +2,10 @@ use soroban_sdk::{
     auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation},
     contract, contractimpl, vec, Address, BytesN, Env, String, Symbol, Val, Vec,
 };
-use stellar_access::ownable::{set_owner, Ownable, OwnableStorageKey};
-use stellar_macros::only_owner;
+use stellar_access::ownable::{set_owner, Ownable};
 
-use crate::events::{emit_execute, emit_governor_changed, emit_treasury_initialized};
+use crate::error::TreasuryError;
+use crate::events::{emit_execute, emit_launched, emit_treasury_initialized};
 use crate::storage::*;
 
 /// Main contract for DAO treasury operations.
@@ -18,16 +18,22 @@ pub struct DaoTreasuryContract;
 
 #[contractimpl]
 impl DaoTreasuryContract {
-    pub fn finalize_ownership(e: &Env, new_owner: Address) {
-        let manager: Address = e
-            .storage()
-            .instance()
-            .get(&TreasuryKey::Manager)
-            .expect("manager not set");
+    /// One-shot, Manager-only launch handoff (Setup -> Live).
+    ///
+    /// Sets the owner to `treasury` (which is this contract's own address in the
+    /// Manager flow), clears any pending two-step ownership transfer, marks the
+    /// module live, and emits `Launched`. A second call panics with `AlreadyLive`.
+    pub fn launch(e: &Env, treasury: Address) {
+        let manager = Self::manager(e);
         manager.require_auth();
-        e.storage()
-            .instance()
-            .set(&OwnableStorageKey::Owner, &new_owner);
+        common::lifecycle::mark_live(e);
+        // The treasury is its own owner after launch.
+        if treasury != e.current_contract_address() {
+            soroban_sdk::panic_with_error!(e, TreasuryError::TreasuryMismatch);
+        }
+        common::ownership::handoff_owner(e, &treasury);
+        common::ttl::extend_instance(e);
+        emit_launched(e, &treasury);
     }
 
     /// Initializes the treasury contract with an owner and governor.
@@ -97,33 +103,6 @@ impl DaoTreasuryContract {
             })
     }
 
-    /// Updates the authorized governor contract address.
-    ///
-    /// Only the owner can call this function. This allows replacing a compromised
-    /// or upgraded Governor contract without losing Treasury assets or authority.
-    ///
-    /// # Arguments
-    ///
-    /// * `governor` - The new governor contract address
-    ///
-    /// # Authorization
-    ///
-    /// Requires owner authentication (enforced by `#[only_owner]` macro).
-    ///
-    /// # Events
-    ///
-    /// Emits a `GovernorChanged` event with old and new governor addresses.
-    #[only_owner]
-    pub fn set_governor(e: &Env, governor: Address) {
-        let old_governor = Self::governor(e);
-
-        e.storage()
-            .instance()
-            .set(&TreasuryKey::Governor, &governor);
-
-        emit_governor_changed(e, &old_governor, &governor);
-    }
-
     /// Returns the address of the authorized governor contract.
     ///
     /// # Returns
@@ -174,6 +153,9 @@ impl DaoTreasuryContract {
     ///
     /// Emits an `Execute` event with the execution details.
     pub fn execute(e: &Env, target: Address, function: Symbol, args: Vec<Val>) -> Val {
+        // Setup-window proposals must not be executable after launch, and the
+        // treasury moves no funds before launch.
+        common::lifecycle::require_live(e);
         let governor = Self::governor(e);
         governor.require_auth();
 

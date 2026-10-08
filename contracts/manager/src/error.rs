@@ -91,6 +91,12 @@ pub enum ManagerError {
     /// The auction must remain paused when it is not launched
     AuctionMustBePaused = 1119,
 
+    /// Proposal threshold must be at least 1
+    InvalidProposalThreshold = 1120,
+
+    /// Token total supply is zero; mint at least one token before launch
+    LaunchSupplyZero = 1121,
+
     /// Current implementations not set
     CurrentImplementationsNotSet = 1116,
 

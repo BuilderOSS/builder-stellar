@@ -44,4 +44,6 @@ pub enum AuctionError {
     TokenIdOverflow = 1220,
     /// External contract call failed
     ExternalCallFailed = 1221,
+    /// `launch` treasury differs from the treasury wired at construction
+    TreasuryMismatch = 1222,
 }

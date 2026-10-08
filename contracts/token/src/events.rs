@@ -6,7 +6,7 @@
 //! only defines custom events that add information not included in the standard events,
 //! such as tracking the minter address and batch minting operations.
 
-use soroban_sdk::{contractevent, Address};
+use soroban_sdk::{contractevent, Address, Vec};
 
 // Standard contract events
 
@@ -105,6 +105,23 @@ pub fn emit_token_mint(e: &Env, minter: &Address, to: &Address, token_id: u32) {
         minter: minter.clone(),
         to: to.clone(),
         token_id,
+    }
+    .publish(e);
+}
+
+/// Emitted once when the Manager launches the token (Setup -> Live).
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Launched {
+    #[topic]
+    pub treasury: Address,
+    pub minters: Vec<Address>,
+}
+
+pub fn emit_launched(e: &Env, treasury: &Address, minters: &Vec<Address>) {
+    Launched {
+        treasury: treasury.clone(),
+        minters: minters.clone(),
     }
     .publish(e);
 }

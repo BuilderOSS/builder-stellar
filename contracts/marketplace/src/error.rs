@@ -15,4 +15,6 @@ pub enum MarketplaceError {
     NotSeller = 1309,
     InvalidFee = 1310,
     ArithmeticOverflow = 1311,
+    /// `launch` treasury differs from the treasury wired at construction.
+    TreasuryMismatch = 1312,
 }

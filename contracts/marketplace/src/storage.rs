@@ -27,6 +27,8 @@ pub struct Listing {
 #[contracttype]
 pub struct MarketplaceConfig {
     pub token: Address,
+    /// Setup-phase admin of the param setters; replaced by `treasury` once Live.
+    pub launch_admin: Address,
     pub treasury: Address,
     pub payment_asset: Address,
     pub default_secondary_fee_bps: u32,

@@ -2,7 +2,7 @@
 //!
 //! This module defines events for tracking treasury operations including:
 //! - Contract initialization
-//! - Governor address changes
+//! - Launch (Setup -> Live)
 //! - Proposal action executions
 
 use soroban_sdk::{contractevent, Address, String, Symbol};
@@ -18,13 +18,12 @@ pub struct TreasuryInitialized {
     pub version: String,
 }
 
+/// Emitted once when the Manager launches the treasury (Setup -> Live).
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GovernorChanged {
+pub struct Launched {
     #[topic]
-    pub old_governor: Address,
-    #[topic]
-    pub new_governor: Address,
+    pub treasury: Address,
 }
 
 #[contractevent]
@@ -50,10 +49,9 @@ pub fn emit_treasury_initialized(e: &Env, owner: &Address, governor: &Address, v
     .publish(e);
 }
 
-pub fn emit_governor_changed(e: &Env, old_governor: &Address, new_governor: &Address) {
-    GovernorChanged {
-        old_governor: old_governor.clone(),
-        new_governor: new_governor.clone(),
+pub fn emit_launched(e: &Env, treasury: &Address) {
+    Launched {
+        treasury: treasury.clone(),
     }
     .publish(e);
 }

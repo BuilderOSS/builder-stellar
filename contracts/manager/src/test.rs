@@ -510,7 +510,7 @@ use crate::storage::{
 };
 
 /// Minimal valid Soroban WASM exporting `__constructor(ctor_arity)` and
-/// `initialize(init_arity)`, both returning void. Lets `create_dao` run its real
+/// `initialize(init_arity)` (unused now that every module has a constructor), both returning void. Lets `create_dao` run its real
 /// deploy path without the full module WASMs.
 fn stub_wasm(env: &Env, tag: &str, ctor_arity: usize, init_arity: usize) -> Bytes {
     fn func_type(out: &mut std::vec::Vec<u8>, arity: usize) {
@@ -554,11 +554,11 @@ fn stub_wasm(env: &Env, tag: &str, ctor_arity: usize, init_arity: usize) -> Byte
 fn register_stub_implementations(env: &Env, client: &ManagerContractClient) {
     let specs: [(&str, usize, usize); 6] = [
         ("Token", 8, 0),
-        ("Metadata", 0, 12),
+        ("Metadata", 12, 0),
         ("Auction", 11, 0),
         ("Governor", 11, 0),
         ("Treasury", 5, 0),
-        ("Marketplace", 7, 0),
+        ("Marketplace", 8, 0),
     ];
     let mut hashes = std::vec::Vec::new();
     for (name, ctor, init) in specs {
@@ -626,6 +626,7 @@ fn instance_entry_xdr_len(env: &Env, manager: &Address) -> usize {
 }
 
 /// Mock module used to let `launch_dao` complete for a seeded PendingDao.
+/// Real-module launch behavior is covered by the `real_dao` tests below.
 #[contract]
 struct MockModule;
 
@@ -637,9 +638,15 @@ impl MockModule {
     pub fn total_supply(_e: Env) -> i128 {
         1
     }
-    pub fn enable_mint_authority_by_manager(_e: Env, _who: Address) {}
-    pub fn finalize_ownership(_e: Env, _treasury: Address) {}
-    pub fn finalize_upgrade_authority(_e: Env, _treasury: Address) {}
+    pub fn launch(_e: Env, _treasury: Address, _minters: soroban_sdk::Vec<Address>) {}
+}
+
+#[contract]
+struct MockLaunchModule;
+
+#[contractimpl]
+impl MockLaunchModule {
+    pub fn launch(_e: Env, _treasury: Address) {}
 }
 
 #[contract]
@@ -647,7 +654,7 @@ struct MockToggleModule;
 
 #[contractimpl]
 impl MockToggleModule {
-    pub fn finalize_ownership(_e: Env, _treasury: Address, _flag: bool) {}
+    pub fn launch(_e: Env, _treasury: Address, _flag: bool) {}
 }
 
 #[test]
@@ -716,9 +723,9 @@ fn test_pending_dao_launches_after_500_unrelated_create_dao() {
     // Seed a PendingDao whose modules are mocks so launch_dao can complete.
     let launch_admin = Address::generate(&env);
     let token = env.register(MockModule, ());
-    let governor = env.register(MockModule, ());
-    let treasury = env.register(MockModule, ());
-    let metadata = env.register(MockModule, ());
+    let governor = env.register(MockLaunchModule, ());
+    let treasury = env.register(MockLaunchModule, ());
+    let metadata = env.register(MockLaunchModule, ());
     let auction = env.register(MockToggleModule, ());
     let marketplace = env.register(MockToggleModule, ());
     env.as_contract(&token, || {
@@ -751,6 +758,7 @@ fn test_pending_dao_launches_after_500_unrelated_create_dao() {
         &LaunchConfig {
             launch_auction: true,
             launch_marketplace: true,
+            enable_minter: false,
         },
     );
     assert!(client.get_pending_dao(&token).is_none());
@@ -806,4 +814,532 @@ fn test_set_platform_minter_requires_admin() {
     );
     // No mocked auths: admin auth is not provided.
     ManagerContractClient::new(&env, &id).set_platform_minter(&Address::generate(&env));
+}
+
+// ============================================================================
+// Real-module launch tests (task #1: lifecycle and authority)
+// ============================================================================
+
+mod real_dao {
+    use super::*;
+    use crate::error::ManagerError;
+    use common::CommonError;
+    use soroban_sdk::{testutils::Ledger, vec, Symbol, Vec};
+
+    pub struct RealDao {
+        pub env: Env,
+        pub client: ManagerContractClient<'static>,
+        pub launch_admin: Address,
+        pub addresses: crate::storage::DaoAddresses,
+        pub token: token::DaoTokenContractClient<'static>,
+        pub governor: governor::DaoGovernorContractClient<'static>,
+        pub treasury: treasury::DaoTreasuryContractClient<'static>,
+        pub auction: auction::DaoAuctionContractClient<'static>,
+        pub marketplace: marketplace::MarketplaceContractClient<'static>,
+        pub metadata: metadata::MetadataContractClient<'static>,
+    }
+
+    /// Deploys all six real modules at pre-generated addresses (constructor-only
+    /// wiring, as `create_dao` does with predicted addresses), mints one founder
+    /// token as launch_admin, and seeds the Manager's PendingDao.
+    pub fn build() -> RealDao {
+        let (env, client, _admin) = setup();
+        env.ledger().set_sequence_number(100);
+        env.ledger().set_timestamp(1_000);
+        let manager = client.address.clone();
+        let launch_admin = Address::generate(&env);
+        let hash = BytesN::from_array(&env, &[0u8; 32]);
+        let version = String::from_str(&env, "0.1.0");
+
+        let addresses = crate::storage::DaoAddresses {
+            token: Address::generate(&env),
+            metadata: Address::generate(&env),
+            auction: Address::generate(&env),
+            governor: Address::generate(&env),
+            treasury: Address::generate(&env),
+            marketplace: Address::generate(&env),
+        };
+        let payment = env
+            .register_stellar_asset_contract_v2(Address::generate(&env))
+            .address();
+
+        env.register_at(
+            &addresses.token,
+            token::DaoTokenContract,
+            (
+                launch_admin.clone(),
+                String::from_str(&env, "https://example.com/"),
+                String::from_str(&env, "DAO"),
+                String::from_str(&env, "DAO"),
+                addresses.metadata.clone(),
+                manager.clone(),
+                hash.clone(),
+                version.clone(),
+            ),
+        );
+        env.register_at(
+            &addresses.metadata,
+            metadata::MetadataContract,
+            (
+                addresses.token.clone(),
+                String::from_str(&env, "https://example.com"),
+                String::from_str(&env, "desc"),
+                String::from_str(&env, "https://example.com/i.png"),
+                String::from_str(&env, "https://example.com/r"),
+                manager.clone(),
+                hash.clone(),
+                launch_admin.clone(),
+                Vec::<String>::new(&env),
+                Vec::<soroban_sdk::Val>::new(&env),
+                crate::storage::ArtworkIpfsGroup {
+                    base_uri: String::from_str(&env, ""),
+                    extension: String::from_str(&env, ""),
+                },
+                version.clone(),
+            ),
+        );
+        env.register_at(
+            &addresses.treasury,
+            treasury::DaoTreasuryContract,
+            (
+                launch_admin.clone(),
+                addresses.governor.clone(),
+                manager.clone(),
+                hash.clone(),
+                version.clone(),
+            ),
+        );
+        env.register_at(
+            &addresses.governor,
+            governor::DaoGovernorContract,
+            (
+                launch_admin.clone(),
+                addresses.token.clone(),
+                addresses.treasury.clone(),
+                300_u32,
+                300_u32,
+                300_u32,
+                1_u128,
+                1_000_u32,
+                manager.clone(),
+                hash.clone(),
+                version.clone(),
+            ),
+        );
+        env.register_at(
+            &addresses.auction,
+            auction::DaoAuctionContract,
+            (
+                launch_admin.clone(),
+                addresses.token.clone(),
+                addresses.treasury.clone(),
+                300_u64,
+                10_000_000_i128,
+                10_u32,
+                50_u64,
+                payment.clone(),
+                manager.clone(),
+                hash.clone(),
+                version.clone(),
+            ),
+        );
+        env.register_at(
+            &addresses.marketplace,
+            marketplace::MarketplaceContract,
+            (
+                addresses.token.clone(),
+                launch_admin.clone(),
+                addresses.treasury.clone(),
+                payment,
+                manager.clone(),
+                hash.clone(),
+                version.clone(),
+                250_u32,
+            ),
+        );
+
+        let token = token::DaoTokenContractClient::new(&env, &addresses.token);
+        token.mint(&launch_admin, &launch_admin);
+
+        let pending = PendingDao {
+            addresses: addresses.clone(),
+            launch_admin: launch_admin.clone(),
+        };
+        env.as_contract(&manager, || {
+            crate::storage::set_persistent(
+                &env,
+                &ManagerKey::PendingDao(addresses.token.clone()),
+                &pending,
+            );
+        });
+
+        RealDao {
+            governor: governor::DaoGovernorContractClient::new(&env, &addresses.governor),
+            treasury: treasury::DaoTreasuryContractClient::new(&env, &addresses.treasury),
+            auction: auction::DaoAuctionContractClient::new(&env, &addresses.auction),
+            marketplace: marketplace::MarketplaceContractClient::new(&env, &addresses.marketplace),
+            metadata: metadata::MetadataContractClient::new(&env, &addresses.metadata),
+            token,
+            addresses,
+            launch_admin,
+            client,
+            env,
+        }
+    }
+
+    fn cfg(launch_auction: bool, launch_marketplace: bool, enable_minter: bool) -> LaunchConfig {
+        LaunchConfig {
+            launch_auction,
+            launch_marketplace,
+            enable_minter,
+        }
+    }
+
+    fn already_live() -> soroban_sdk::Error {
+        CommonError::AlreadyLive.into()
+    }
+
+    /// Acceptance (a): a second `launch` on every module panics AlreadyLive.
+    #[test]
+    fn second_launch_panics_already_live_for_all_six_modules() {
+        let dao = build();
+        dao.client
+            .launch_dao(&dao.addresses.token, &cfg(true, true, false));
+
+        let env = &dao.env;
+        let attacker = Address::generate(env);
+        let no_minters = Vec::<Address>::new(env);
+        let results: [(&str, soroban_sdk::Error); 6] = [
+            (
+                "token",
+                dao.token
+                    .try_launch(&attacker, &no_minters)
+                    .err()
+                    .unwrap()
+                    .unwrap(),
+            ),
+            (
+                "governor",
+                dao.governor.try_launch(&attacker).err().unwrap().unwrap(),
+            ),
+            (
+                "treasury",
+                dao.treasury.try_launch(&attacker).err().unwrap().unwrap(),
+            ),
+            (
+                "auction",
+                dao.auction
+                    .try_launch(&attacker, &true)
+                    .err()
+                    .unwrap()
+                    .unwrap(),
+            ),
+            (
+                "marketplace",
+                dao.marketplace
+                    .try_launch(&attacker, &true)
+                    .err()
+                    .unwrap()
+                    .unwrap(),
+            ),
+            (
+                "metadata",
+                dao.metadata.try_launch(&attacker).err().unwrap().unwrap(),
+            ),
+        ];
+        for (module, err) in results {
+            assert_eq!(err, already_live(), "{module} second launch");
+        }
+        // The pending record is gone, so the Manager cannot launch it again either.
+        assert!(dao.client.get_pending_dao(&dao.addresses.token).is_none());
+        assert_eq!(
+            dao.client
+                .try_launch_dao(&dao.addresses.token, &cfg(true, true, false))
+                .err()
+                .unwrap()
+                .unwrap(),
+            ManagerError::DaoNotFound
+        );
+    }
+
+    /// Acceptance (b): with every auth mocked, the Manager (and anyone) cannot
+    /// change owners, mint authority, or pause state of a launched DAO.
+    #[test]
+    fn manager_has_no_authority_after_launch() {
+        let dao = build();
+        dao.client
+            .launch_dao(&dao.addresses.token, &cfg(true, true, false));
+        let env = &dao.env;
+        let treasury = dao.addresses.treasury.clone();
+        let attacker = Address::generate(env);
+
+        let snapshot = || {
+            (
+                dao.token.get_owner(),
+                dao.governor.get_owner(),
+                dao.treasury.get_owner(),
+                dao.auction.get_owner(),
+                dao.auction.paused(),
+                dao.marketplace.get_config(),
+                dao.token.mint_authority(&attacker),
+                dao.token.mint_authority(&dao.addresses.auction),
+            )
+        };
+        let before = snapshot();
+
+        // Every previously Manager-gated entrypoint is now `launch`; all reject.
+        let _ = dao
+            .token
+            .try_launch(&attacker, &vec![env, attacker.clone()]);
+        let _ = dao.governor.try_launch(&attacker);
+        let _ = dao.treasury.try_launch(&attacker);
+        let _ = dao.auction.try_launch(&attacker, &false);
+        let _ = dao.marketplace.try_launch(&attacker, &false);
+        let _ = dao.metadata.try_launch(&attacker);
+        // The old entrypoints no longer exist at all.
+        for (contract, function) in [
+            (&dao.addresses.token, "finalize_ownership"),
+            (&dao.addresses.token, "enable_mint_authority_by_manager"),
+            (&dao.addresses.governor, "finalize_ownership"),
+            (&dao.addresses.treasury, "finalize_ownership"),
+            (&dao.addresses.auction, "finalize_ownership"),
+            (&dao.addresses.marketplace, "finalize_ownership"),
+            (&dao.addresses.metadata, "finalize_upgrade_authority"),
+        ] {
+            assert!(
+                env.try_invoke_contract::<(), soroban_sdk::Error>(
+                    contract,
+                    &Symbol::new(env, function),
+                    vec![env, treasury.to_val()],
+                )
+                .is_err(),
+                "{function} must not exist"
+            );
+        }
+
+        assert_eq!(before, snapshot());
+        assert_eq!(dao.token.get_owner(), Some(treasury));
+    }
+
+    /// Acceptance (e): wiring setters and the governor authority role are gone.
+    /// The Rust clients above no longer expose them (compile-time absence); this
+    /// also asserts at runtime that the exported contract functions do not exist.
+    #[test]
+    fn deleted_setters_are_not_exported_by_any_module() {
+        let dao = build();
+        let env = &dao.env;
+        let who = Address::generate(env);
+        for (contract, function) in [
+            (&dao.addresses.governor, "set_treasury"),
+            (&dao.addresses.governor, "set_token_contract"),
+            (&dao.addresses.governor, "set_governor_authority"),
+            (&dao.addresses.governor, "governor_authority"),
+            (&dao.addresses.treasury, "set_governor"),
+            (&dao.addresses.auction, "set_treasury"),
+            (&dao.addresses.metadata, "initialize"),
+        ] {
+            assert!(
+                env.try_invoke_contract::<(), soroban_sdk::Error>(
+                    contract,
+                    &Symbol::new(env, function),
+                    vec![env, who.to_val()],
+                )
+                .is_err(),
+                "{function} must not exist"
+            );
+        }
+    }
+
+    /// Acceptance (d): exactly the canonical mint set; no PlatformMinter unless enabled.
+    #[test]
+    fn launch_grants_exactly_the_canonical_mint_set() {
+        let dao = build();
+        let minter = Address::generate(&dao.env);
+        dao.client.set_platform_minter(&minter);
+        dao.client
+            .launch_dao(&dao.addresses.token, &cfg(true, true, false));
+
+        let a = &dao.addresses;
+        assert!(dao.token.mint_authority(&a.treasury));
+        assert!(dao.token.mint_authority(&a.marketplace));
+        assert!(dao.token.mint_authority(&a.auction));
+        assert!(!dao.token.mint_authority(&minter));
+        assert!(!dao.token.mint_authority(&dao.launch_admin));
+        assert!(!dao.token.mint_authority(&a.governor));
+        assert_eq!(dao.token.get_owner(), Some(a.treasury.clone()));
+        assert_eq!(dao.governor.get_owner(), Some(a.treasury.clone()));
+        assert_eq!(dao.treasury.get_owner(), Some(a.treasury.clone()));
+        assert_eq!(dao.auction.get_owner(), Some(a.treasury.clone()));
+        assert!(!dao.auction.paused());
+        assert!(!dao.marketplace.get_config().paused);
+        // launch_admin can no longer mint.
+        assert!(dao
+            .token
+            .try_mint(&dao.launch_admin, &dao.launch_admin)
+            .is_err());
+    }
+
+    #[test]
+    fn launch_without_auction_omits_auction_minter_and_stays_paused() {
+        let dao = build();
+        dao.client
+            .launch_dao(&dao.addresses.token, &cfg(false, false, false));
+        let a = &dao.addresses;
+        assert!(!dao.token.mint_authority(&a.auction));
+        assert!(dao.token.mint_authority(&a.treasury));
+        assert!(dao.token.mint_authority(&a.marketplace));
+        assert!(dao.auction.paused());
+        assert!(dao.marketplace.get_config().paused);
+    }
+
+    #[test]
+    fn enable_minter_grants_the_registered_platform_minter() {
+        let dao = build();
+        let minter = Address::generate(&dao.env);
+        dao.client.set_platform_minter(&minter);
+        dao.client
+            .launch_dao(&dao.addresses.token, &cfg(true, true, true));
+        assert!(dao.token.mint_authority(&minter));
+        assert!(!dao.token.mint_authority(&dao.launch_admin));
+    }
+
+    #[test]
+    fn enable_minter_without_platform_minter_fails_and_launches_nothing() {
+        let dao = build();
+        let r = dao
+            .client
+            .try_launch_dao(&dao.addresses.token, &cfg(true, true, true));
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            ManagerError::PlatformMinterNotSet
+        );
+        // Nothing launched: still pending, token still owned by launch_admin.
+        assert!(dao.client.get_pending_dao(&dao.addresses.token).is_some());
+        assert_eq!(dao.token.get_owner(), Some(dao.launch_admin.clone()));
+    }
+
+    #[test]
+    fn launch_with_zero_supply_returns_launch_supply_zero() {
+        let dao = build();
+        // A second DAO's pending record whose token has no supply.
+        let env = &dao.env;
+        let empty_token = env.register(
+            token::DaoTokenContract,
+            (
+                dao.launch_admin.clone(),
+                String::from_str(env, "u"),
+                String::from_str(env, "n"),
+                String::from_str(env, "s"),
+                Address::generate(env),
+                dao.client.address.clone(),
+                BytesN::from_array(env, &[0u8; 32]),
+                String::from_str(env, "0.1.0"),
+            ),
+        );
+        let mut addresses = dao.addresses.clone();
+        addresses.token = empty_token.clone();
+        env.as_contract(&dao.client.address, || {
+            crate::storage::set_persistent(
+                env,
+                &ManagerKey::PendingDao(empty_token.clone()),
+                &PendingDao {
+                    addresses,
+                    launch_admin: dao.launch_admin.clone(),
+                },
+            );
+        });
+        let r = dao
+            .client
+            .try_launch_dao(&empty_token, &cfg(true, true, false));
+        assert_eq!(r.err().unwrap().unwrap(), ManagerError::LaunchSupplyZero);
+    }
+
+    /// Acceptance (g): nothing can start before launch.
+    #[test]
+    fn auction_unpause_and_marketplace_mint_and_list_are_not_live_before_launch() {
+        let dao = build();
+        let not_live: soroban_sdk::Error = CommonError::NotLive.into();
+        assert_eq!(
+            dao.auction
+                .try_unpause(&dao.launch_admin)
+                .err()
+                .unwrap()
+                .unwrap(),
+            not_live
+        );
+        assert_eq!(
+            dao.marketplace
+                .try_mint_and_list(&100, &10_000)
+                .err()
+                .unwrap()
+                .unwrap(),
+            not_live
+        );
+    }
+
+    /// Acceptance (c) with the real token: launch_admin cannot grant mint authority in setup.
+    #[test]
+    fn set_mint_authority_before_launch_is_not_live() {
+        let dao = build();
+        let r = dao
+            .token
+            .try_set_mint_authority(&Address::generate(&dao.env), &true);
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            soroban_sdk::Error::from(CommonError::NotLive)
+        );
+    }
+
+    /// Acceptance (h): a transfer_ownership started in setup cannot be accepted after launch.
+    #[test]
+    fn pending_ownership_transfer_started_in_setup_is_dead_after_launch() {
+        let dao = build();
+        let attacker = Address::generate(&dao.env);
+        let until = dao.env.ledger().sequence() + 1_000;
+        dao.token.transfer_ownership(&attacker, &until);
+        dao.governor.transfer_ownership(&attacker, &until);
+        dao.treasury.transfer_ownership(&attacker, &until);
+        dao.auction.transfer_ownership(&attacker, &until);
+        dao.client
+            .launch_dao(&dao.addresses.token, &cfg(true, true, false));
+
+        assert!(dao.token.try_accept_ownership().is_err());
+        assert!(dao.governor.try_accept_ownership().is_err());
+        assert!(dao.treasury.try_accept_ownership().is_err());
+        assert!(dao.auction.try_accept_ownership().is_err());
+        let t = Some(dao.addresses.treasury.clone());
+        assert_eq!(dao.token.get_owner(), t);
+        assert_eq!(dao.governor.get_owner(), t);
+        assert_eq!(dao.treasury.get_owner(), t);
+        assert_eq!(dao.auction.get_owner(), t);
+    }
+
+    /// Acceptance (f): create_dao rejects zero quorum and zero proposal threshold.
+    #[test]
+    fn create_dao_rejects_zero_quorum_and_zero_threshold() {
+        let (env, client, _admin) = setup();
+        register_stub_implementations(&env, &client);
+        let deployer = Address::generate(&env);
+
+        let mut zero_quorum = dao_params(&env, &deployer, 0);
+        zero_quorum.initial_config.governance.quorum_bps = 0;
+        assert_eq!(
+            client.try_create_dao(&zero_quorum).err().unwrap().unwrap(),
+            ManagerError::InvalidQuorumBps
+        );
+
+        let mut zero_threshold = dao_params(&env, &deployer, 1);
+        zero_threshold.initial_config.governance.proposal_threshold = 0;
+        assert_eq!(
+            client
+                .try_create_dao(&zero_threshold)
+                .err()
+                .unwrap()
+                .unwrap(),
+            ManagerError::InvalidProposalThreshold
+        );
+
+        // Sanity: valid params still succeed.
+        client.create_dao(&dao_params(&env, &deployer, 2));
+    }
 }

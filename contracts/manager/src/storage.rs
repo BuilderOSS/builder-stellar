@@ -80,6 +80,9 @@ pub struct InitialDaoConfigValues {
 pub struct LaunchConfig {
     pub launch_auction: bool,
     pub launch_marketplace: bool,
+    /// Grant mint authority to the Manager-registered PlatformMinter. The
+    /// caller can never name an arbitrary minter address.
+    pub enable_minter: bool,
 }
 
 #[contracttype]

@@ -103,8 +103,6 @@ pub enum GovernorKey {
     QueueDelay,
     /// Proposal core data, indexed by proposal ID hash.
     Proposal(BytesN<32>),
-    /// Tracks whether an address has authority to create proposals.
-    GovernorAuthority(Address),
     Manager,
 }
 

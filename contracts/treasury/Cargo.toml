@@ -12,7 +12,6 @@ doctest = false
 soroban-sdk = { workspace = true }
 common = { path = "../common" }
 stellar-access = { workspace = true }
-stellar-macros = { workspace = true }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }

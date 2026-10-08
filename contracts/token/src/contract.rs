@@ -1,8 +1,10 @@
+#![allow(clippy::too_many_arguments)] // constructors take every wired address/param explicitly
+
 use soroban_sdk::{
     contract, contractimpl, panic_with_error, symbol_short, vec, Address, BytesN, Env, Error,
     IntoVal, String, Symbol, Vec,
 };
-use stellar_access::ownable::{set_owner, Ownable, OwnableStorageKey};
+use stellar_access::ownable::{set_owner, Ownable};
 use stellar_governance::votes::{
     emit_delegate_changed as emit_library_delegate_changed, get_delegate, num_checkpoints,
     transfer_voting_units, Votes, VotesStorageKey,
@@ -13,7 +15,9 @@ use stellar_tokens::non_fungible::{
 };
 
 use crate::error::TokenError;
-use crate::events::{emit_mint_authority_changed, emit_token_initialized, emit_token_mint};
+use crate::events::{
+    emit_launched, emit_mint_authority_changed, emit_token_initialized, emit_token_mint,
+};
 use crate::storage::*;
 
 /// Main contract for the DAO governance token.
@@ -123,13 +127,16 @@ impl DaoTokenContract {
     ///
     /// # Authorization
     ///
-    /// Requires owner authentication (enforced by `#[only_owner]` macro).
+    /// Requires owner authentication (enforced by `#[only_owner]` macro) and a
+    /// live token (`NotLive` before launch).
     ///
     /// # Events
     ///
     /// Emits a `MintAuthorityChanged` event with old and new permission states.
     #[only_owner]
     pub fn set_mint_authority(e: &Env, authority: Address, enabled: bool) {
+        // D5: no mint-authority changes during setup; launch writes the canonical set.
+        common::lifecycle::require_live(e);
         let old_enabled = Self::mint_authority(e, authority.clone());
         let changed_by = stellar_access::ownable::get_owner(e).expect("owner not set");
 
@@ -157,37 +164,31 @@ impl DaoTokenContract {
             .unwrap_or(false)
     }
 
-    /// Finalizes DAO setup by moving ownership from the launch administrator
-    /// to the Treasury. This one-time handoff is authorized by the Manager.
-    pub fn finalize_ownership(e: &Env, new_owner: Address) {
-        let manager: Address = e
-            .storage()
-            .instance()
-            .get(&TokenKey::Manager)
-            .expect("manager not set");
-        manager.require_auth();
-        e.storage()
-            .instance()
-            .set(&OwnableStorageKey::Owner, &new_owner);
-    }
-
-    /// Enables a module's mint authority during manager-controlled finalization.
+    /// One-shot, Manager-only launch handoff (Setup -> Live).
     ///
-    /// The Manager uses this for the Auction contract only when auctions are
-    /// enabled. Keeping this separate from owner authorization allows founder
-    /// minting to happen before the Treasury owns the token.
-    pub fn enable_mint_authority_by_manager(e: &Env, authority: Address) {
-        let manager: Address = e
-            .storage()
-            .instance()
-            .get(&TokenKey::Manager)
-            .expect("manager not set");
+    /// Requires the Manager's authorization and that the token is not yet live.
+    /// Sets the owner to `treasury` (clearing any pending two-step ownership
+    /// transfer), writes `MintAuthority` for exactly `minters`, marks the token
+    /// live, and emits `Launched`. A second call panics with `AlreadyLive`, so
+    /// after launch the Manager has no authority over the token.
+    ///
+    /// # Storage impact
+    ///
+    /// One instance key per minter (the Manager passes at most 4) plus the `Live` flag.
+    pub fn launch(e: &Env, treasury: Address, minters: Vec<Address>) {
+        let manager = Self::manager(e);
         manager.require_auth();
-        let old_enabled = Self::mint_authority(e, authority.clone());
-        e.storage()
-            .instance()
-            .set(&TokenKey::MintAuthority(authority.clone()), &true);
-        emit_mint_authority_changed(e, &authority, old_enabled, true, &manager);
+        common::lifecycle::mark_live(e);
+        common::ownership::handoff_owner(e, &treasury);
+        for minter in minters.iter() {
+            let old_enabled = Self::mint_authority(e, minter.clone());
+            e.storage()
+                .instance()
+                .set(&TokenKey::MintAuthority(minter.clone()), &true);
+            emit_mint_authority_changed(e, &minter, old_enabled, true, &manager);
+        }
+        extend_instance_ttl(e);
+        emit_launched(e, &treasury, &minters);
     }
 
     /// Returns the metadata contract used for mint hooks.
@@ -578,7 +579,11 @@ impl DaoTokenContract {
             panic_with_error!(e, TokenError::OwnerNotSet);
         };
 
-        if minter == &owner || Self::mint_authority(e, minter.clone()) {
+        if minter == &owner {
+            return;
+        }
+        // Before launch only the owner (launch_admin) may mint.
+        if common::lifecycle::is_live(e) && Self::mint_authority(e, minter.clone()) {
             return;
         }
 

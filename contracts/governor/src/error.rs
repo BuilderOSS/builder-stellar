@@ -20,4 +20,6 @@ pub enum CustomGovernorError {
     InvalidVotingDelay = 1505,
     /// Voting period below minimum (must be >= 5 minutes)
     InvalidVotingPeriod = 1506,
+    /// `launch` treasury differs from the treasury wired at construction
+    TreasuryMismatch = 1507,
 }

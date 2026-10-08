@@ -94,35 +94,35 @@ fn treasury_rejects_non_governor() {
 }
 
 #[test]
-#[should_panic(expected = "HostError: Error(Auth, InvalidAction)")]
-fn set_governor_requires_owner() {
+fn launch_is_one_shot_and_clears_pending_owner() {
     let e = Env::default();
+    e.mock_all_auths();
     let owner = Address::generate(&e);
+    let manager = Address::generate(&e);
     let attacker = Address::generate(&e);
-    let new_governor = Address::generate(&e);
+    let new_treasury = Address::generate(&e);
     let treasury_id = e.register(
         DaoTreasuryContract,
         (
             owner.clone(),
             Address::generate(&e),
-            Address::generate(&e),
+            manager,
             soroban_sdk::BytesN::from_array(&e, &[0u8; 32]),
             String::from_str(&e, "0.1.0"),
         ),
     );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
 
-    e.mock_auths(&[MockAuth {
-        address: &attacker,
-        invoke: &MockAuthInvoke {
-            contract: &treasury.address,
-            fn_name: "set_governor",
-            args: (&new_governor,).into_val(&e),
-            sub_invokes: &[],
-        },
-    }]);
-
-    treasury.set_governor(&new_governor);
+    treasury.transfer_ownership(&attacker, &(e.ledger().sequence() + 1_000));
+    treasury.launch(&new_treasury);
+    assert_eq!(treasury.get_owner(), Some(new_treasury.clone()));
+    assert!(treasury.try_accept_ownership().is_err());
+    assert_eq!(treasury.get_owner(), Some(new_treasury.clone()));
+    let r = treasury.try_launch(&attacker);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        common::CommonError::AlreadyLive.into()
+    );
 }
 
 mod upgrade_via_common {

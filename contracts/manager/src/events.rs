@@ -79,6 +79,7 @@ pub struct DaoLaunched {
     pub modules: DaoAddresses,
     pub launch_auction: bool,
     pub launch_marketplace: bool,
+    pub enable_minter: bool,
 }
 #[contractevent]
 pub struct CurrentImplementationsUpdated {
@@ -185,6 +186,7 @@ pub fn emit_dao_launched(
     modules: &DaoAddresses,
     launch_auction: bool,
     launch_marketplace: bool,
+    enable_minter: bool,
 ) {
     DaoLaunched {
         token_address: token_address.clone(),
@@ -192,6 +194,7 @@ pub fn emit_dao_launched(
         modules: modules.clone(),
         launch_auction,
         launch_marketplace,
+        enable_minter,
     }
     .publish(env);
 }

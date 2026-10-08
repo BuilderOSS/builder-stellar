@@ -1,6 +1,7 @@
 extern crate std;
 
-use soroban_sdk::{testutils::Address as _, Address, BytesN, Env, String};
+use common::CommonError;
+use soroban_sdk::{testutils::Address as _, vec, Address, BytesN, Env, String};
 use soroban_sdk::{
     testutils::{MockAuth, MockAuthInvoke},
     IntoVal,
@@ -9,8 +10,15 @@ use soroban_sdk::{
 use crate::{DaoTokenContract, DaoTokenContractClient};
 
 fn setup() -> (Env, DaoTokenContractClient<'static>, Address) {
+    let (e, client, owner, _manager) = setup_with_manager();
+    (e, client, owner)
+}
+
+/// Setup-phase token plus the manager address, so tests can drive `launch`.
+fn setup_with_manager() -> (Env, DaoTokenContractClient<'static>, Address, Address) {
     let e = Env::default();
     e.mock_all_auths();
+    let manager = Address::generate(&e);
 
     let owner = Address::generate(&e);
     let metadata = Address::generate(&e); // Dummy metadata address for tests
@@ -22,13 +30,13 @@ fn setup() -> (Env, DaoTokenContractClient<'static>, Address) {
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
             metadata,
-            Address::generate(&e),
+            manager.clone(),
             BytesN::from_array(&e, &[0u8; 32]),
             String::from_str(&e, "0.1.0"),
         ),
     );
     let client = DaoTokenContractClient::new(&e, &contract_id);
-    (e, client, owner)
+    (e, client, owner, manager)
 }
 
 fn setup_no_auth() -> (Env, DaoTokenContractClient<'static>, Address) {
@@ -107,13 +115,74 @@ fn transfer_to_new_holder_defaults_self_delegate() {
     assert_eq!(client.get_votes(&bob), 1);
 }
 
+/// Launch with `minters`; returns the treasury address.
+fn launch(e: &Env, client: &DaoTokenContractClient, minters: &[Address]) -> Address {
+    let treasury = Address::generate(e);
+    let mut v = soroban_sdk::Vec::new(e);
+    for m in minters {
+        v.push_back(m.clone());
+    }
+    client.launch(&treasury, &v);
+    treasury
+}
+
 #[test]
-fn manager_can_finalize_ownership_to_treasury() {
-    let (e, client, _owner) = setup();
-    let treasury = Address::generate(&e);
+fn launch_sets_owner_and_exact_minter_set() {
+    let (e, client, owner, _m) = setup_with_manager();
+    let a = Address::generate(&e);
+    let b = Address::generate(&e);
+    let stranger = Address::generate(&e);
+    let treasury = launch(&e, &client, &[a.clone(), b.clone()]);
 
-    client.finalize_ownership(&treasury);
+    assert_eq!(client.get_owner(), Some(treasury));
+    assert!(client.mint_authority(&a));
+    assert!(client.mint_authority(&b));
+    assert!(!client.mint_authority(&stranger));
+    assert!(!client.mint_authority(&owner));
+}
 
+#[test]
+fn second_launch_panics_already_live() {
+    let (e, client, _owner, _m) = setup_with_manager();
+    launch(&e, &client, &[]);
+    let r = client.try_launch(&Address::generate(&e), &vec![&e, Address::generate(&e)]);
+    assert_eq!(r.err().unwrap().unwrap(), CommonError::AlreadyLive.into());
+}
+
+#[test]
+fn set_mint_authority_before_launch_is_not_live() {
+    let (e, client, _owner, _m) = setup_with_manager();
+    let r = client.try_set_mint_authority(&Address::generate(&e), &true);
+    assert_eq!(r.err().unwrap().unwrap(), CommonError::NotLive.into());
+}
+
+#[test]
+fn set_mint_authority_after_launch_is_owner_gated() {
+    let (e, client, _owner, _m) = setup_with_manager();
+    launch(&e, &client, &[]);
+    let x = Address::generate(&e);
+    client.set_mint_authority(&x, &true);
+    assert!(client.mint_authority(&x));
+}
+
+#[test]
+fn launch_admin_cannot_mint_after_launch() {
+    let (e, client, owner, _m) = setup_with_manager();
+    launch(&e, &client, &[]);
+    let r = client.try_mint(&owner, &Address::generate(&e));
+    assert!(r.is_err());
+}
+
+#[test]
+fn launch_clears_pending_ownership_transfer() {
+    let (e, client, _owner, _m) = setup_with_manager();
+    let attacker = Address::generate(&e);
+    // launch_admin starts a two-step transfer during setup...
+    let live_until = e.ledger().sequence() + 1_000;
+    client.transfer_ownership(&attacker, &live_until);
+    let treasury = launch(&e, &client, &[]);
+    // ...and cannot accept it after launch.
+    assert!(client.try_accept_ownership().is_err());
     assert_eq!(client.get_owner(), Some(treasury));
 }
 
@@ -142,6 +211,7 @@ fn mint_requires_minter_auth() {
 fn owner_can_whitelist_and_remove_minter() {
     let (e, client, owner) = setup();
     let bob = Address::generate(&e);
+    launch(&e, &client, &[]);
 
     client.set_mint_authority(&bob, &true);
     assert!(client.mint_authority(&bob));
@@ -169,7 +239,7 @@ fn whitelisted_minter_can_mint() {
     let bob = Address::generate(&e);
     let alice = Address::generate(&e);
 
-    client.set_mint_authority(&bob, &true);
+    launch(&e, &client, std::slice::from_ref(&bob));
 
     e.mock_auths(&[MockAuth {
         address: &bob,
@@ -194,7 +264,7 @@ fn contract_address_can_be_whitelisted() {
     let treasury = Address::generate(&e);
     let recipient = Address::generate(&e);
 
-    client.set_mint_authority(&treasury, &true);
+    launch(&e, &client, std::slice::from_ref(&treasury));
 
     e.mock_auths(&[MockAuth {
         address: &treasury,

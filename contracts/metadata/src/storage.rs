@@ -22,7 +22,6 @@ fn extend_persistent_ttl(env: &Env, key: &DataKey) {
 #[derive(Clone)]
 #[contracttype]
 pub enum DataKey {
-    Initialized,
     Settings,
     Properties,
     IpfsData,
@@ -73,23 +72,6 @@ pub struct ItemParam {
 }
 
 // Storage helpers
-
-pub fn is_initialized(env: &Env) -> bool {
-    let initialized = env
-        .storage()
-        .instance()
-        .get(&DataKey::Initialized)
-        .unwrap_or(false);
-    if initialized {
-        extend_instance_ttl(env);
-    }
-    initialized
-}
-
-pub fn set_initialized(env: &Env) {
-    env.storage().instance().set(&DataKey::Initialized, &true);
-    extend_instance_ttl(env);
-}
 
 pub fn get_settings(env: &Env) -> Result<Settings, Error> {
     let settings = env

@@ -301,6 +301,7 @@ name = "common"
 version = "0.1.0"
 dependencies = [
  "soroban-sdk",
+ "stellar-access",
 ]
 
 [[package]]
@@ -994,11 +995,14 @@ name = "manager"
 version = "0.1.0"
 dependencies = [
  "auction",
+ "common",
  "governor",
+ "marketplace",
  "metadata",
  "soroban-sdk",
  "stellar-access",
  "token",
+ "treasury",
 ]
 
 [[package]]
@@ -1860,7 +1864,6 @@ dependencies = [
  "common",
  "soroban-sdk",
  "stellar-access",
- "stellar-macros",
 ]
 
 [[package]]

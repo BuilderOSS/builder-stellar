@@ -72,6 +72,32 @@ impl MaliciousReentrantContract {
     }
 }
 
+/// Metadata constructor wiring: deploy the metadata contract at a pre-generated
+/// address (the token is constructed with that address first).
+fn register_metadata(e: &Env, metadata_id: &Address, token_id: &Address, owner: &Address) {
+    e.register_at(
+        metadata_id,
+        MetadataContract,
+        (
+            token_id.clone(),
+            String::from_str(e, "https://example.com/project"),
+            String::from_str(e, "DAO description"),
+            String::from_str(e, "https://example.com/image.png"),
+            String::from_str(e, "https://example.com/render/"),
+            Address::generate(e),
+            BytesN::from_array(e, &[0u8; 32]),
+            owner.clone(),
+            Vec::<String>::new(e),
+            Vec::<ItemParam>::new(e),
+            IpfsGroup {
+                base_uri: String::from_str(e, "ipfs://"),
+                extension: String::from_str(e, ".png"),
+            },
+            String::from_str(e, "0.1.0"),
+        ),
+    );
+}
+
 fn setup() -> (
     Env,
     DaoTokenContractClient<'static>,
@@ -86,8 +112,7 @@ fn setup() -> (
     e.ledger().set_timestamp(1_000);
 
     let owner = Address::generate(&e);
-    let metadata_id = e.register(MetadataContract, ());
-    let metadata = MetadataContractClient::new(&e, &metadata_id);
+    let metadata_id = Address::generate(&e);
     let token_id = e.register(
         DaoTokenContract,
         (
@@ -102,29 +127,16 @@ fn setup() -> (
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
-    metadata.initialize(
-        &token_id,
-        &String::from_str(&e, "https://example.com/project"),
-        &String::from_str(&e, "DAO description"),
-        &String::from_str(&e, "https://example.com/image.png"),
-        &String::from_str(&e, "https://example.com/render/"),
-        &Address::generate(&e),
-        &BytesN::from_array(&e, &[0u8; 32]),
-        &owner,
-        &Vec::new(&e),
-        &Vec::new(&e),
-        &IpfsGroup {
-            base_uri: String::from_str(&e, "ipfs://"),
-            extension: String::from_str(&e, ".png"),
-        },
-        &String::from_str(&e, "0.1.0"),
-    );
+    register_metadata(&e, &metadata_id, &token_id, &owner);
 
+    // Constructor-only wiring: the governor address is pre-generated so the
+    // treasury can be constructed with it (the Manager uses predicted addresses).
+    let governor_id = Address::generate(&e);
     let treasury_id = e.register(
         DaoTreasuryContract,
         (
             owner.clone(),
-            Address::generate(&e),
+            governor_id.clone(),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
             String::from_str(&e, "0.1.0"),
@@ -132,7 +144,8 @@ fn setup() -> (
     );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
 
-    let governor_id = e.register(
+    e.register_at(
+        &governor_id,
         DaoGovernorContract,
         (
             owner.clone(),
@@ -153,8 +166,11 @@ fn setup() -> (
     let target_id = e.register(TargetContract, ());
     let target = TargetContractClient::new(&e, &target_id);
 
-    treasury.set_governor(&governor_id);
-    token.set_mint_authority(&treasury.address, &true);
+    // Launch the token the way the Manager does: the treasury becomes owner and
+    // the canonical minter, and `owner` (the launch admin in these tests) is
+    // registered as an extra launch-time minter so the tests can keep minting
+    // voting power directly.
+    token.launch(&treasury_id, &vec![&e, treasury_id.clone(), owner.clone()]);
 
     (e, token, treasury, governor, target, owner)
 }
@@ -618,32 +634,23 @@ fn governance_token_can_be_received_held_and_transferred_via_proposal() {
 // Use Minter contract for batch minting via governance if needed
 
 #[test]
-fn governor_authority_can_modify_governance_parameters() {
-    let (e, token, _treasury, governor, _target, owner) = setup();
-    let authorized_governor = Address::generate(&e);
+fn owner_can_modify_governance_parameters_during_setup() {
+    let (_e, token, _treasury, governor, _target, owner) = setup();
 
-    // Owner grants governor authority
-    governor.set_governor_authority(&authorized_governor, &true);
-    assert!(governor.governor_authority(&authorized_governor));
-
-    // Authorized governor can modify voting delay
-    governor.set_voting_delay(&authorized_governor, &300);
+    governor.set_voting_delay(&300);
     assert_eq!(governor.voting_delay(), 300);
 
-    // Authorized governor can modify voting period
-    governor.set_voting_period(&authorized_governor, &300);
+    governor.set_voting_period(&300);
     assert_eq!(governor.voting_period(), 300);
 
-    // Authorized governor can modify proposal threshold
-    governor.set_proposal_threshold(&authorized_governor, &5);
+    governor.set_proposal_threshold(&5);
     assert_eq!(governor.proposal_threshold(), 5);
 
-    // Authorized governor can modify quorum
-    governor.set_quorum_bps(&authorized_governor, &2000);
+    governor.set_quorum_bps(&2000);
     assert_eq!(governor.quorum_bps(), 2000);
 
-    // Authorized governor can modify queue delay (minimum 300 seconds)
-    governor.set_queue_delay(&authorized_governor, &300);
+    // Queue delay minimum is 300 seconds.
+    governor.set_queue_delay(&300);
 
     let _ = token;
     let _ = owner;
@@ -653,7 +660,6 @@ fn governor_authority_can_modify_governance_parameters() {
 fn proposal_flow_with_modified_governance_parameters() {
     let (e, token, _treasury, governor, target, owner) = setup();
     let proposer = Address::generate(&e);
-    let authorized_governor = Address::generate(&e);
 
     // Mint 10 tokens to proposer using multiple single mints
     for _ in 0..10 {
@@ -661,12 +667,11 @@ fn proposal_flow_with_modified_governance_parameters() {
     }
     assert_eq!(token.get_votes(&proposer), 10);
 
-    // Grant governor authority and modify parameters
-    governor.set_governor_authority(&authorized_governor, &true);
-    governor.set_voting_delay(&authorized_governor, &300); // Five-minute delay
-    governor.set_voting_period(&authorized_governor, &300); // Five-minute period
-    governor.set_proposal_threshold(&authorized_governor, &5); // Higher threshold
-    governor.set_quorum_bps(&authorized_governor, &5000); // 50% quorum
+    // The owner (launch admin during setup) tunes parameters
+    governor.set_voting_delay(&300); // Five-minute delay
+    governor.set_voting_period(&300); // Five-minute period
+    governor.set_proposal_threshold(&5); // Higher threshold
+    governor.set_quorum_bps(&5000); // 50% quorum
 
     e.ledger().set_sequence_number(200);
     e.ledger().set_timestamp(2_000);
@@ -794,7 +799,45 @@ fn reentrancy_attack_is_prevented() {
 // AUCTION CONTRACT E2E TESTS
 // ============================================================================
 
-fn setup_auction() -> (
+type AuctionFixture = (
+    Env,
+    DaoTokenContractClient<'static>,
+    DaoTreasuryContractClient<'static>,
+    DaoAuctionContractClient<'static>,
+    Address,                     // owner
+    Address,                     // payment token
+    StellarAssetClient<'static>, // payment token client
+);
+
+/// Auction fixture after the Manager-style launch: owner is the treasury.
+fn setup_auction() -> AuctionFixture {
+    let (e, token, treasury, auction, launch_admin, payment_token, payment_client) =
+        setup_auction_setup_phase();
+    // Launch the token (auction gets mint authority; treasury becomes owner) and
+    // the auction (owner = treasury, still paused) the way the Manager does.
+    // Unpause/pause/setters are therefore exercised as the treasury, which is
+    // returned as `owner`.
+    token.launch(
+        &treasury.address,
+        &vec![&e, treasury.address.clone(), auction.address.clone()],
+    );
+    auction.launch(&treasury.address, &false);
+    let _ = launch_admin;
+    let treasury_address = treasury.address.clone();
+    (
+        e,
+        token,
+        treasury,
+        auction,
+        treasury_address,
+        payment_token,
+        payment_client,
+    )
+}
+
+/// Auction fixture still in the setup phase: owner is the launch admin and the
+/// token and auction are not yet launched.
+fn setup_auction_setup_phase() -> (
     Env,
     DaoTokenContractClient<'static>,
     DaoTreasuryContractClient<'static>,
@@ -808,8 +851,7 @@ fn setup_auction() -> (
     e.ledger().set_timestamp(1_000);
 
     let owner = Address::generate(&e);
-    let metadata_id = e.register(MetadataContract, ());
-    let metadata = MetadataContractClient::new(&e, &metadata_id);
+    let metadata_id = Address::generate(&e);
 
     // Deploy DAO token (NFT)
     let token_id = e.register(
@@ -826,25 +868,9 @@ fn setup_auction() -> (
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
-    metadata.initialize(
-        &token_id,
-        &String::from_str(&e, "https://example.com/project"),
-        &String::from_str(&e, "DAO description"),
-        &String::from_str(&e, "https://example.com/image.png"),
-        &String::from_str(&e, "https://example.com/render/"),
-        &Address::generate(&e),
-        &BytesN::from_array(&e, &[0u8; 32]),
-        &owner,
-        &Vec::new(&e),
-        &Vec::new(&e),
-        &IpfsGroup {
-            base_uri: String::from_str(&e, "ipfs://"),
-            extension: String::from_str(&e, ".png"),
-        },
-        &String::from_str(&e, "0.1.0"),
-    );
+    register_metadata(&e, &metadata_id, &token_id, &owner);
 
-    // Deploy treasury
+    // Deploy treasury (the DAO owner after launch)
     let treasury_id = e.register(
         DaoTreasuryContract,
         (
@@ -883,9 +909,6 @@ fn setup_auction() -> (
     let auction = DaoAuctionContractClient::new(&e, &auction_id);
 
     e.mock_all_auths();
-
-    // Grant mint authority to auction contract
-    token.set_mint_authority(&auction_id, &true);
 
     (
         e,
@@ -957,26 +980,40 @@ fn test_auction_full_lifecycle() {
 }
 
 #[test]
-fn test_pending_auction_finalization_launches_and_hands_off_to_treasury() {
-    let (e, _token, treasury, auction, _owner, _payment_token, _payment_client) = setup_auction();
+fn test_auction_launch_starts_first_auction_and_hands_off_to_treasury() {
+    let (e, token, treasury, auction, launch_admin, _payment_token, _payment_client) =
+        setup_auction_setup_phase();
 
-    assert_eq!(auction.get_owner(), Some(_owner.clone()));
-    auction.finalize_ownership(&treasury.address, &true);
+    assert_eq!(auction.get_owner(), Some(launch_admin.clone()));
+    // The token launches first so the auction holds mint authority.
+    token.launch(
+        &treasury.address,
+        &vec![&e, treasury.address.clone(), auction.address.clone()],
+    );
+    auction.launch(&treasury.address, &true);
 
     assert_eq!(auction.get_owner(), Some(treasury.address.clone()));
     assert!(!auction.paused());
     assert_eq!(auction.get_auction().token_id, 0);
-    let _ = e;
 }
 
 #[test]
-fn test_pending_auction_finalization_can_remain_paused() {
-    let (_e, _token, treasury, auction, _owner, _payment_token, _payment_client) = setup_auction();
+fn test_auction_launch_can_remain_paused() {
+    let (_e, _token, treasury, auction, _owner, _payment_token, _payment_client) =
+        setup_auction_setup_phase();
 
-    auction.finalize_ownership(&treasury.address, &false);
+    auction.launch(&treasury.address, &false);
 
     assert_eq!(auction.get_owner(), Some(treasury.address));
     assert!(auction.paused());
+}
+
+#[test]
+fn test_auction_cannot_unpause_before_launch() {
+    let (_e, _token, _treasury, auction, launch_admin, _payment_token, _payment_client) =
+        setup_auction_setup_phase();
+    let err = auction.try_unpause(&launch_admin).err().unwrap().unwrap();
+    assert_eq!(err, soroban_sdk::Error::from_contract_error(9001));
 }
 
 #[test]
@@ -1243,30 +1280,15 @@ fn test_auction_pause_and_resume() {
 }
 
 #[test]
-fn test_auction_ownership_remains_with_deployer() {
-    let (_e, _token, _treasury, auction, owner, _payment_token, _payment_client) = setup_auction();
+fn test_auction_ownership_remains_with_treasury_after_unpause() {
+    let (_e, _token, treasury, auction, owner, _payment_token, _payment_client) = setup_auction();
 
-    // Initially owned by owner
     assert_eq!(auction.get_owner(), Some(owner.clone()));
+    assert_eq!(owner, treasury.address);
 
-    // Unpause - ownership should remain with original owner
+    // Unpausing never changes ownership.
     auction.unpause(&owner);
-
-    // Ownership should still be with original owner
     assert_eq!(auction.get_owner(), Some(owner.clone()));
-}
-
-#[test]
-fn test_auction_set_treasury() {
-    let (e, _token, _treasury, auction, _owner, _payment_token, _payment_client) = setup_auction();
-
-    let new_treasury = Address::generate(&e);
-
-    // Update treasury while paused
-    auction.set_treasury(&new_treasury);
-
-    let config = auction.get_config();
-    assert_eq!(config.treasury, new_treasury);
 }
 
 #[test]
@@ -1358,7 +1380,7 @@ fn test_auction_payment_token_setter() {
 fn test_auction_rejects_non_positive_bid_before_transfer() {
     let (e, _token, _treasury, auction, owner, _payment_token, payment_client) = setup_auction();
     let bidder = Address::generate(&e);
-    payment_client.mint(&bidder, &1_000_0000000);
+    payment_client.mint(&bidder, &10_000_000_000);
     auction.unpause(&owner);
 
     let token_id = auction.get_auction().token_id;
@@ -1370,7 +1392,7 @@ fn test_auction_extension_dos_protection() {
     let (e, _token, _treasury, auction, owner, _payment_token, payment_client) = setup_auction();
 
     let bidder = Address::generate(&e);
-    payment_client.mint(&bidder, &10_000_000000_000); // Large amount for many bids
+    payment_client.mint(&bidder, &10_000_000_000_000); // Large amount for many bids
 
     // Start auction
     auction.unpause(&owner);
@@ -1517,8 +1539,7 @@ fn test_governor_treasury_bidirectional_verification() {
     e.ledger().set_timestamp(1_000);
 
     let owner = Address::generate(&e);
-    let metadata_id = e.register(MetadataContract, ());
-    let metadata = MetadataContractClient::new(&e, &metadata_id);
+    let metadata_id = Address::generate(&e);
 
     // Register token
     let token_id = e.register(
@@ -1534,31 +1555,16 @@ fn test_governor_treasury_bidirectional_verification() {
             String::from_str(&e, "0.1.0"),
         ),
     );
-    metadata.initialize(
-        &token_id,
-        &String::from_str(&e, "https://example.com/project"),
-        &String::from_str(&e, "DAO description"),
-        &String::from_str(&e, "https://example.com/image.png"),
-        &String::from_str(&e, "https://example.com/render/"),
-        &Address::generate(&e),
-        &BytesN::from_array(&e, &[0u8; 32]),
-        &owner,
-        &Vec::new(&e),
-        &Vec::new(&e),
-        &IpfsGroup {
-            base_uri: String::from_str(&e, "ipfs://"),
-            extension: String::from_str(&e, ".png"),
-        },
-        &String::from_str(&e, "0.1.0"),
-    );
+    register_metadata(&e, &metadata_id, &token_id, &owner);
 
-    // Register treasury with a placeholder governor
-    let placeholder_governor = Address::generate(&e);
+    // Constructor-only wiring: treasury is built with the (pre-generated)
+    // governor address, then the governor is registered at that address.
+    let governor_id = Address::generate(&e);
     let treasury_id = e.register(
         DaoTreasuryContract,
         (
             owner.clone(),
-            placeholder_governor.clone(),
+            governor_id.clone(),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
             String::from_str(&e, "0.1.0"),
@@ -1566,8 +1572,8 @@ fn test_governor_treasury_bidirectional_verification() {
     );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
 
-    // Register governor with the treasury
-    let governor_id = e.register(
+    e.register_at(
+        &governor_id,
         DaoGovernorContract,
         (
             owner.clone(),
@@ -1585,16 +1591,7 @@ fn test_governor_treasury_bidirectional_verification() {
     );
     let governor = DaoGovernorContractClient::new(&e, &governor_id);
 
-    // Verify governor knows about treasury
-    assert_eq!(governor.treasury(), treasury_id);
-
-    // Verify initial treasury governor is placeholder
-    assert_eq!(treasury.governor(), placeholder_governor);
-
-    // Update treasury to point to real governor
-    treasury.set_governor(&governor_id);
-
-    // Verify bidirectional link
+    // Verify the bidirectional link comes purely from the constructors
     assert_eq!(treasury.governor(), governor_id);
     assert_eq!(governor.treasury(), treasury_id);
 
@@ -1646,11 +1643,11 @@ fn test_auction_inconsistent_payment_type_rejection() {
 #[test]
 #[should_panic(expected = "Error(Contract, #1500)")] // CustomGovernorError::InvalidQueueDelay
 fn test_governor_queue_delay_minimum_300() {
-    let (_e, _token, _treasury, governor, _target, owner) = setup();
+    let (_e, _token, _treasury, governor, _target, _owner) = setup();
 
     // Try to set queue_delay below minimum (5 minutes = 300 seconds)
     // This should panic with InvalidQueueDelay error
-    governor.set_queue_delay(&owner, &299);
+    governor.set_queue_delay(&299);
 }
 
 #[test]
@@ -1667,7 +1664,7 @@ fn test_governor_proposal_threshold_cannot_exceed_supply() {
     e.ledger().set_sequence_number(101);
 
     // Setting threshold to 5 (equal to total supply) should succeed
-    governor.set_proposal_threshold(&owner, &5);
+    governor.set_proposal_threshold(&5);
 
     // Verify it was set
     assert_eq!(governor.proposal_threshold(), 5);
@@ -1688,7 +1685,7 @@ fn test_governor_proposal_threshold_exceeds_supply() {
     e.ledger().set_sequence_number(101);
 
     // Setting threshold to 6 (more than total supply of 5) should panic
-    governor.set_proposal_threshold(&owner, &6);
+    governor.set_proposal_threshold(&6);
 }
 
 // Token batch_mint tests removed - functionality delegated to Minter contract
@@ -1708,7 +1705,7 @@ fn marketplace_primary_sale_uses_real_token_and_sac() {
     let sac = StellarAssetClient::new(&e, &payment.address());
     sac.mint(&buyer, &100);
 
-    let metadata_id = e.register(MetadataContract, ());
+    let metadata_id = Address::generate(&e);
     let token_id = e.register(
         DaoTokenContract,
         (
@@ -1722,29 +1719,13 @@ fn marketplace_primary_sale_uses_real_token_and_sac() {
             String::from_str(&e, "0.1.0"),
         ),
     );
-    let metadata = MetadataContractClient::new(&e, &metadata_id);
-    metadata.initialize(
-        &token_id,
-        &String::from_str(&e, "https://example.com/project"),
-        &String::from_str(&e, "Marketplace test DAO"),
-        &String::from_str(&e, "https://example.com/image.png"),
-        &String::from_str(&e, "https://example.com/render/"),
-        &manager,
-        &BytesN::from_array(&e, &[0; 32]),
-        &treasury,
-        &Vec::new(&e),
-        &Vec::new(&e),
-        &IpfsGroup {
-            base_uri: String::from_str(&e, "ipfs://"),
-            extension: String::from_str(&e, ".png"),
-        },
-        &String::from_str(&e, "0.1.0"),
-    );
+    register_metadata(&e, &metadata_id, &token_id, &treasury);
 
     let marketplace_id = e.register(
         MarketplaceContract,
         (
             token_id.clone(),
+            treasury.clone(), // launch_admin (setup-phase param admin)
             treasury.clone(),
             payment.address(),
             manager,
@@ -1755,8 +1736,13 @@ fn marketplace_primary_sale_uses_real_token_and_sac() {
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
     let marketplace = MarketplaceContractClient::new(&e, &marketplace_id);
-    token.set_mint_authority(&marketplace_id, &true);
-    marketplace.unpause();
+    // Manager-style launch: token first (marketplace is a canonical minter),
+    // then the marketplace itself (open).
+    token.launch(
+        &treasury,
+        &vec![&e, treasury.clone(), marketplace_id.clone()],
+    );
+    marketplace.launch(&treasury, &true);
 
     let token_id = marketplace.mint_and_list(&100, &2_000);
     marketplace.buy(&token_id, &buyer);

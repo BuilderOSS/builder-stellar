@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)] // constructors take every wired address/param explicitly
+
 use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, String, Vec};
 
 use crate::error::Error;
@@ -13,14 +15,19 @@ pub struct MetadataContract;
 
 #[contractimpl]
 impl MetadataContract {
-    pub fn finalize_upgrade_authority(env: Env, new_owner: Address) {
-        let manager: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Manager)
-            .expect("manager not set");
+    /// One-shot, Manager-only launch handoff (Setup -> Live).
+    ///
+    /// Moves the upgrade authority (`Owner`) to `treasury`, marks the module
+    /// live, and emits `Launched`. A second call panics with `AlreadyLive`.
+    /// Artwork/settings authority follows the token owner and moves with the
+    /// token's own launch.
+    pub fn launch(env: Env, treasury: Address) {
+        let manager = Self::manager(&env);
         manager.require_auth();
-        env.storage().instance().set(&DataKey::Owner, &new_owner);
+        common::lifecycle::mark_live(&env);
+        env.storage().instance().set(&DataKey::Owner, &treasury);
+        common::ttl::extend_instance(&env);
+        emit_launched(&env, &treasury);
     }
 
     /// Initialize the metadata contract
@@ -34,10 +41,10 @@ impl MetadataContract {
     /// * `renderer_base` - Base URL for image rendering service
     /// * `owner` - Metadata contract owner
     ///
-    /// # Errors
+    /// # Panics
     ///
-    /// * `AlreadyInitialized` - Contract already initialized
-    pub fn initialize(
+    /// Panics with the underlying `Error` when the initial properties are invalid.
+    pub fn __constructor(
         env: Env,
         token: Address,
         project_uri: String,
@@ -51,11 +58,7 @@ impl MetadataContract {
         items: Vec<ItemParam>,
         ipfs_group: IpfsGroup,
         version: String,
-    ) -> Result<(), Error> {
-        if is_initialized(&env) {
-            return Err(Error::AlreadyInitialized);
-        }
-
+    ) {
         let settings = Settings {
             token: token.clone(),
             project_uri: project_uri.clone(),
@@ -65,13 +68,14 @@ impl MetadataContract {
         };
 
         set_settings(&env, &settings);
-        if property_names.len() > 0 || items.len() > 0 {
-            Self::_add_properties(&env, property_names, items, ipfs_group)?;
+        if !property_names.is_empty() || !items.is_empty() {
+            if let Err(err) = Self::_add_properties(&env, property_names, items, ipfs_group) {
+                soroban_sdk::panic_with_error!(&env, err);
+            }
         }
         env.storage().instance().set(&DataKey::Manager, &manager);
         env.storage().instance().set(&DataKey::Owner, &owner);
         common::upgrade::init(&env, &current_hash, &version);
-        set_initialized(&env);
 
         emit_metadata_initialized(
             &env,
@@ -83,8 +87,6 @@ impl MetadataContract {
             &description,
             &contract_image,
         );
-
-        Ok(())
     }
 
     pub fn upgrade(env: Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
@@ -271,7 +273,7 @@ impl MetadataContract {
     /// Get the generated item selections for a minted token.
     pub fn get_attributes(env: Env, token_id: u32) -> Result<Vec<u32>, Error> {
         let attributes = get_attributes(&env, token_id);
-        if attributes.len() == 0 {
+        if attributes.is_empty() {
             return Err(Error::TokenNotMinted);
         }
         Ok(attributes)
@@ -388,10 +390,8 @@ impl MetadataContract {
         let num_new_items = items.len();
 
         // If this is the first time adding metadata
-        if num_stored_properties == 0 {
-            if num_new_properties == 0 || num_new_items == 0 {
-                return Err(Error::OnePropertyAndItemRequired);
-            }
+        if num_stored_properties == 0 && (num_new_properties == 0 || num_new_items == 0) {
+            return Err(Error::OnePropertyAndItemRequired);
         }
 
         // If adding new properties, ensure they will have items
@@ -455,7 +455,7 @@ impl MetadataContract {
         // Validate all newly-added properties have at least one item
         for i in num_stored_properties..properties.len() {
             let property = properties.get(i).unwrap();
-            if property.items.len() == 0 {
+            if property.items.is_empty() {
                 return Err(Error::PropertyHasNoItems);
             }
         }
@@ -479,7 +479,7 @@ impl MetadataContract {
 
             // Use a distinct two-byte chunk for each property. The 32-byte
             // hash supports the contract's maximum of 16 properties.
-            let offset = (i * 2) as u32;
+            let offset = i * 2;
             let low = seed.get(offset).unwrap_or(0) as u64;
             let high = seed.get(offset + 1).unwrap_or(0) as u64;
             let item_index = ((low | (high << 8)) % (num_items as u64)) as u32;

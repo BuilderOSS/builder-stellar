@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)] // emit helpers mirror the event fields 1:1
+
 //! Event definitions and emission helpers for the Auction contract.
 //!
 //! This module defines events for tracking the complete auction lifecycle including:
@@ -91,11 +93,14 @@ pub struct PaymentTokenUpdated {
     pub changed_by: Address,
 }
 
+/// Emitted once when the Manager launches the auction (Setup -> Live).
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TreasuryUpdated {
+pub struct Launched {
+    #[topic]
     pub treasury: Address,
-    pub changed_by: Address,
+    /// Whether the auction was unpaused and the first auction created.
+    pub started: bool,
 }
 
 #[contractevent]
@@ -233,10 +238,10 @@ pub fn emit_payment_token_updated(e: &Env, payment_token: &Address, changed_by: 
     .publish(e);
 }
 
-pub fn emit_treasury_updated(e: &Env, treasury: &Address, changed_by: &Address) {
-    TreasuryUpdated {
+pub fn emit_launched(e: &Env, treasury: &Address, started: bool) {
+    Launched {
         treasury: treasury.clone(),
-        changed_by: changed_by.clone(),
+        started,
     }
     .publish(e);
 }
