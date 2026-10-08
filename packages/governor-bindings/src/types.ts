@@ -205,6 +205,28 @@ export const CommonError = {
 }
 
 /**
+ * Emitted by `apply`. The emitting contract address is the event's contract id.
+ */
+export interface UpgradedEvent {
+  name: "Upgraded";
+  data: {
+    from_hash: Uint8Array;
+    to_hash: Uint8Array;
+    version?: string;
+  };
+}
+
+/**
+ * Emitted by `sync_version`.
+ */
+export interface VersionSyncedEvent {
+  name: "VersionSynced";
+  data: {
+    version?: string;
+  };
+}
+
+/**
  * Error Enum: RoleTransferError
  */
 export const RoleTransferError = {
@@ -497,5 +519,5 @@ export interface ProposalCancelledEvent {
     proposal_id: Uint8Array;
   };
 }
-    export type ContractEvent = LaunchedEvent | ProposalQueuedEvent | QuorumBpsChangedEvent | QueueDelayChangedEvent | VotingDelayChangedEvent | GovernorInitializedEvent | VotingPeriodChangedEvent | ProposalThresholdChangedEvent | OwnershipTransferEvent | OwnershipRenouncedEvent | OwnershipTransferCompletedEvent | VoteCastEvent | QuorumChangedEvent | ProposalCreatedEvent | ProposalExecutedEvent | ProposalCancelledEvent;
+    export type ContractEvent = LaunchedEvent | ProposalQueuedEvent | QuorumBpsChangedEvent | QueueDelayChangedEvent | VotingDelayChangedEvent | GovernorInitializedEvent | VotingPeriodChangedEvent | ProposalThresholdChangedEvent | UpgradedEvent | VersionSyncedEvent | OwnershipTransferEvent | OwnershipRenouncedEvent | OwnershipTransferCompletedEvent | VoteCastEvent | QuorumChangedEvent | ProposalCreatedEvent | ProposalExecutedEvent | ProposalCancelledEvent;
     

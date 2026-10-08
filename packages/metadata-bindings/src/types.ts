@@ -234,5 +234,27 @@ export const CommonError = {
    */
   9011 : { message: "GovernorNotSet" }
 }
-    export type ContractEvent = LaunchedEvent | PropertyAddedEvent | SeedGeneratedEvent | PropertiesResetEvent | ProjectURIUpdatedEvent | DescriptionUpdatedEvent | MetadataInitializedEvent | RendererBaseUpdatedEvent | ContractImageUpdatedEvent;
+
+/**
+ * Emitted by `apply`. The emitting contract address is the event's contract id.
+ */
+export interface UpgradedEvent {
+  name: "Upgraded";
+  data: {
+    from_hash: Uint8Array;
+    to_hash: Uint8Array;
+    version?: string;
+  };
+}
+
+/**
+ * Emitted by `sync_version`.
+ */
+export interface VersionSyncedEvent {
+  name: "VersionSynced";
+  data: {
+    version?: string;
+  };
+}
+    export type ContractEvent = LaunchedEvent | PropertyAddedEvent | SeedGeneratedEvent | PropertiesResetEvent | ProjectURIUpdatedEvent | DescriptionUpdatedEvent | MetadataInitializedEvent | RendererBaseUpdatedEvent | ContractImageUpdatedEvent | UpgradedEvent | VersionSyncedEvent;
     

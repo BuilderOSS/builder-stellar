@@ -139,6 +139,28 @@ export const CommonError = {
 }
 
 /**
+ * Emitted by `apply`. The emitting contract address is the event's contract id.
+ */
+export interface UpgradedEvent {
+  name: "Upgraded";
+  data: {
+    from_hash: Uint8Array;
+    to_hash: Uint8Array;
+    version?: string;
+  };
+}
+
+/**
+ * Emitted by `sync_version`.
+ */
+export interface VersionSyncedEvent {
+  name: "VersionSynced";
+  data: {
+    version?: string;
+  };
+}
+
+/**
  * Error Enum: RoleTransferError
  */
 export const RoleTransferError = {
@@ -361,5 +383,5 @@ export const NonFungibleTokenError = {
    */
   214 : { message: "SymbolMaxLenExceeded" }
 }
-    export type ContractEvent = LaunchedEvent | MintWithMinterEvent | TokenInitializedEvent | MintAuthorityChangedEvent | OwnershipTransferEvent | OwnershipRenouncedEvent | OwnershipTransferCompletedEvent | DelegateChangedEvent | DelegateVotesChangedEvent | MintEvent | ApproveEvent | TransferEvent;
+    export type ContractEvent = LaunchedEvent | MintWithMinterEvent | TokenInitializedEvent | MintAuthorityChangedEvent | UpgradedEvent | VersionSyncedEvent | OwnershipTransferEvent | OwnershipRenouncedEvent | OwnershipTransferCompletedEvent | DelegateChangedEvent | DelegateVotesChangedEvent | MintEvent | ApproveEvent | TransferEvent;
     

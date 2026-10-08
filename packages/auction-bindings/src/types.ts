@@ -33,7 +33,7 @@ export const AuctionError = {
    */
   1207 : { message: "MinBidNotMet" },
   /**
-   * Invalid configuration parameters (e.g., duration < 5 minutes, zero increment)
+   * Invalid configuration parameters (e.g., duration outside 5 minutes ..= 30 days, zero increment)
    */
   1208 : { message: "InvalidConfig" },
   /**
@@ -410,6 +410,28 @@ export const CommonError = {
 }
 
 /**
+ * Emitted by `apply`. The emitting contract address is the event's contract id.
+ */
+export interface UpgradedEvent {
+  name: "Upgraded";
+  data: {
+    from_hash: Uint8Array;
+    to_hash: Uint8Array;
+    version?: string;
+  };
+}
+
+/**
+ * Emitted by `sync_version`.
+ */
+export interface VersionSyncedEvent {
+  name: "VersionSynced";
+  data: {
+    version?: string;
+  };
+}
+
+/**
  * Error Enum: RoleTransferError
  */
 export const RoleTransferError = {
@@ -493,5 +515,5 @@ export const PausableError = {
    */
   1001 : { message: "ExpectedPause" }
 }
-    export type ContractEvent = LaunchedEvent | BidPlacedEvent | BidRefundedEvent | AuctionCreatedEvent | AuctionSettledEvent | RefundDeferredEvent | DurationUpdatedEvent | RefundWithdrawnEvent | AuctionCancelledEvent | TimeBufferUpdatedEvent | AuctionInitializedEvent | PaymentTokenUpdatedEvent | ReservePriceUpdatedEvent | MinBidIncrementUpdatedEvent | OwnershipTransferEvent | OwnershipRenouncedEvent | OwnershipTransferCompletedEvent | PausedEvent | UnpausedEvent;
+    export type ContractEvent = LaunchedEvent | BidPlacedEvent | BidRefundedEvent | AuctionCreatedEvent | AuctionSettledEvent | RefundDeferredEvent | DurationUpdatedEvent | RefundWithdrawnEvent | AuctionCancelledEvent | TimeBufferUpdatedEvent | AuctionInitializedEvent | PaymentTokenUpdatedEvent | ReservePriceUpdatedEvent | MinBidIncrementUpdatedEvent | UpgradedEvent | VersionSyncedEvent | OwnershipTransferEvent | OwnershipRenouncedEvent | OwnershipTransferCompletedEvent | PausedEvent | UnpausedEvent;
     

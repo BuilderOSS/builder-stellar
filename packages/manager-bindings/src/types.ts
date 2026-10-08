@@ -41,6 +41,14 @@ export const ManagerError = {
    */
   1008 : { message: "PlatformMinterNotSet" },
   /**
+   * An implementation is already registered for this WASM hash
+   */
+  1009 : { message: "ImplementationAlreadyRegistered" },
+  /**
+   * `enable_minter` requires `expected_minter` to equal the registered platform minter
+   */
+  1010 : { message: "PlatformMinterMismatch" },
+  /**
    * Factory is paused
    */
   1101 : { message: "FactoryPaused" },
@@ -82,6 +90,12 @@ export const ManagerError = {
    */
   1121 : { message: "LaunchSupplyZero" },
   /**
+   * A module of the pending DAO currently runs a revoked or unregistered
+   * WASM hash; upgrade it (owner `upgrade` to an approved, non-revoked hash)
+   * before launching
+   */
+  1122 : { message: "PendingDaoUsesRevokedImplementation" },
+  /**
    * Current implementations not set
    */
   1116 : { message: "CurrentImplementationsNotSet" },
@@ -104,6 +118,10 @@ export interface DaoCreatedEvent {
     launch_admin: string;
     created_ledger?: bigint;
     modules?: DaoAddresses;
+    /**
+     * WASM hashes the modules were deployed from.
+     */
+    wasm_hashes?: DaoWasmHashes;
   };
 }
 
@@ -224,6 +242,17 @@ export interface ImplementationRevokedEvent {
 }
 
 /**
+ * Event: AdminProposalCancelled
+ */
+export interface AdminProposalCancelledEvent {
+  name: "AdminProposalCancelled";
+  data: {
+    current_admin: string;
+    cancelled_admin: string;
+  };
+}
+
+/**
  * Event: ImplementationRegistered
  */
 export interface ImplementationRegisteredEvent {
@@ -253,6 +282,10 @@ export interface CurrentImplementationsUpdatedEvent {
 
 /**
  * The only factory state retained until the launch administrator finalizes a DAO.
+ *
+ * Module WASM hashes are deliberately NOT stored: `launch_dao` reads each
+ * module's current `wasm_hash()` and checks it against the registry, so a
+ * pre-launch owner `upgrade` is honored and a revoked hash is rejected.
  */
 export interface PendingDao {
   addresses: DaoAddresses;
@@ -288,6 +321,13 @@ export interface LaunchConfig {
    * caller can never name an arbitrary minter address.
    */
   enable_minter: boolean;
+  /**
+   * The platform minter the launch admin saw and approves. Required (and
+   * must equal the registered PlatformMinter) when `enable_minter` is set,
+   * so a Manager admin cannot swap the minter between signing and launch.
+   * Ignored when `enable_minter` is false.
+   */
+  expected_minter: string | null;
   launch_auction: boolean;
   launch_marketplace: boolean;
 }
@@ -300,6 +340,18 @@ export interface AuctionConfig {
   payment_asset: string;
   reserve_price: bigint;
   time_buffer: bigint;
+}
+
+/**
+ * WASM hashes the six modules were deployed from (emitted in `DaoCreated`).
+ */
+export interface DaoWasmHashes {
+  auction: Uint8Array;
+  governor: Uint8Array;
+  marketplace: Uint8Array;
+  metadata: Uint8Array;
+  token: Uint8Array;
+  treasury: Uint8Array;
 }
 
 /**
@@ -408,5 +460,5 @@ export const CommonError = {
    */
   9011 : { message: "GovernorNotSet" }
 }
-    export type ContractEvent = DaoCreatedEvent | DaoLaunchedEvent | AdminChangedEvent | AdminProposedEvent | FactoryPausedEvent | FactoryUnpausedEvent | ManagerUpgradedEvent | UpgradeApprovedEvent | PlatformMinterSetEvent | ManagerInitializedEvent | ImplementationRevokedEvent | ImplementationRegisteredEvent | CurrentImplementationsUpdatedEvent;
+    export type ContractEvent = DaoCreatedEvent | DaoLaunchedEvent | AdminChangedEvent | AdminProposedEvent | FactoryPausedEvent | FactoryUnpausedEvent | ManagerUpgradedEvent | UpgradeApprovedEvent | PlatformMinterSetEvent | ManagerInitializedEvent | ImplementationRevokedEvent | AdminProposalCancelledEvent | ImplementationRegisteredEvent | CurrentImplementationsUpdatedEvent;
     

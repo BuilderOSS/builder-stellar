@@ -100,17 +100,6 @@ export interface MarketplaceUnpausedEvent {
 }
 
 /**
- * Event: MarketplaceUpgraded
- */
-export interface MarketplaceUpgradedEvent {
-  name: "MarketplaceUpgraded";
-  data: {
-    from_hash?: Uint8Array;
-    to_hash?: Uint8Array;
-  };
-}
-
-/**
  * Event: PaymentAssetUpdated
  */
 export interface PaymentAssetUpdatedEvent {
@@ -298,5 +287,27 @@ export const CommonError = {
    */
   9011 : { message: "GovernorNotSet" }
 }
-    export type ContractEvent = LaunchedEvent | ListingExpiredEvent | ListingCancelledEvent | ListingPurchasedEvent | MarketplacePausedEvent | MarketplaceUnpausedEvent | MarketplaceUpgradedEvent | PaymentAssetUpdatedEvent | SecondaryFeeUpdatedEvent | PrimaryListingCreatedEvent | PrimaryListingExpiredEvent | MarketplaceInitializedEvent | PrimaryListingCancelledEvent | PrimaryListingPurchasedEvent | SecondaryListingCreatedEvent;
+
+/**
+ * Emitted by `apply`. The emitting contract address is the event's contract id.
+ */
+export interface UpgradedEvent {
+  name: "Upgraded";
+  data: {
+    from_hash: Uint8Array;
+    to_hash: Uint8Array;
+    version?: string;
+  };
+}
+
+/**
+ * Emitted by `sync_version`.
+ */
+export interface VersionSyncedEvent {
+  name: "VersionSynced";
+  data: {
+    version?: string;
+  };
+}
+    export type ContractEvent = LaunchedEvent | ListingExpiredEvent | ListingCancelledEvent | ListingPurchasedEvent | MarketplacePausedEvent | MarketplaceUnpausedEvent | PaymentAssetUpdatedEvent | SecondaryFeeUpdatedEvent | PrimaryListingCreatedEvent | PrimaryListingExpiredEvent | MarketplaceInitializedEvent | PrimaryListingCancelledEvent | PrimaryListingPurchasedEvent | SecondaryListingCreatedEvent | UpgradedEvent | VersionSyncedEvent;
     

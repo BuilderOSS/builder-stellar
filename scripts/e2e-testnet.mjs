@@ -669,7 +669,7 @@ async function governance(ctx) {
   for (const [role, who] of [['DAO_OWNER', owner], ['BIDDER_A', A]]) {
     const key = `vote_${role}`;
     if (!g.steps[key]) {
-      const r = write(ctx, dao.governor, 'cast_vote', { proposal_id: id, vote_type: '1', reason: '', voter: who }, role, `gov.${key}`);
+      const r = write(ctx, dao.governor, 'cast_vote', { proposal_id: id, vote_type: '1', reason: 'e2e rehearsal vote', voter: who }, role, `gov.${key}`);
       g.steps[key] = { tx: r.txHash, weight: String(r.value) };
       ctx.save();
     }
