@@ -42,7 +42,8 @@ impl ManagerContract {
     /// * `current_hash` - Current Manager WASM hash for upgrade tracking
     /// * `version` - Current Manager version (e.g., "0.1.0")
     pub fn __constructor(env: Env, admin: Address, current_hash: BytesN<32>, version: String) {
-        set_admin(&env, &admin);
+        write_admin(&env, &admin);
+        extend_instance_ttl(&env);
         set_factory_paused(&env, false);
         env.storage()
             .instance()
@@ -99,15 +100,18 @@ impl ManagerContract {
         };
 
         // Store implementation
-        env.storage().instance().set(
+        set_persistent(
+            &env,
             &ManagerKey::Implementation(wasm_hash.clone()),
             &implementation,
         );
 
         // Update latest version for this name
-        env.storage()
-            .instance()
-            .set(&ManagerKey::LatestImplementation(name.clone()), &wasm_hash);
+        set_persistent(
+            &env,
+            &ManagerKey::LatestImplementation(name.clone()),
+            &wasm_hash,
+        );
 
         // Emit event
         emit_implementation_registered(
@@ -145,17 +149,17 @@ impl ManagerContract {
         Self::require_admin(&env)?;
 
         // Validate both implementations exist and are not revoked
-        let from_impl: ImplementationVersion = env
-            .storage()
-            .instance()
-            .get(&ManagerKey::Implementation(from_hash.clone()))
-            .ok_or(ManagerError::ImplementationNotFound)?;
+        let from_impl: ImplementationVersion = get_persistent::<ImplementationVersion>(
+            &env,
+            &ManagerKey::Implementation(from_hash.clone()),
+        )
+        .ok_or(ManagerError::ImplementationNotFound)?;
 
-        let to_impl: ImplementationVersion = env
-            .storage()
-            .instance()
-            .get(&ManagerKey::Implementation(to_hash.clone()))
-            .ok_or(ManagerError::ImplementationNotFound)?;
+        let to_impl: ImplementationVersion = get_persistent::<ImplementationVersion>(
+            &env,
+            &ManagerKey::Implementation(to_hash.clone()),
+        )
+        .ok_or(ManagerError::ImplementationNotFound)?;
 
         if from_impl.revoked || to_impl.revoked {
             return Err(ManagerError::InvalidUpgradePath);
@@ -172,7 +176,8 @@ impl ManagerContract {
         };
 
         // Store approval
-        env.storage().instance().set(
+        set_persistent(
+            &env,
             &ManagerKey::UpgradeApproval(from_hash.clone(), to_hash.clone()),
             &approval,
         );
@@ -203,11 +208,11 @@ impl ManagerContract {
         Self::require_admin(&env)?;
 
         // Get implementation
-        let mut implementation: ImplementationVersion = env
-            .storage()
-            .instance()
-            .get(&ManagerKey::Implementation(wasm_hash.clone()))
-            .ok_or(ManagerError::ImplementationNotFound)?;
+        let mut implementation: ImplementationVersion = get_persistent::<ImplementationVersion>(
+            &env,
+            &ManagerKey::Implementation(wasm_hash.clone()),
+        )
+        .ok_or(ManagerError::ImplementationNotFound)?;
 
         // Check if already revoked
         if implementation.revoked {
@@ -218,7 +223,8 @@ impl ManagerContract {
         implementation.revoked = true;
 
         // Update storage
-        env.storage().instance().set(
+        set_persistent(
+            &env,
             &ManagerKey::Implementation(wasm_hash.clone()),
             &implementation,
         );
@@ -242,29 +248,23 @@ impl ManagerContract {
     /// `true` if upgrade is approved and neither implementation is revoked.
     pub fn is_upgrade_approved(env: Env, from_hash: BytesN<32>, to_hash: BytesN<32>) -> bool {
         // Check if approval exists
-        let approval_exists: bool = env
-            .storage()
-            .instance()
-            .get::<ManagerKey, UpgradeApproval>(&ManagerKey::UpgradeApproval(
-                from_hash.clone(),
-                to_hash.clone(),
-            ))
-            .is_some();
+        extend_instance_ttl(&env);
+        let approval_exists: bool = get_persistent::<UpgradeApproval>(
+            &env,
+            &ManagerKey::UpgradeApproval(from_hash.clone(), to_hash.clone()),
+        )
+        .is_some();
 
         if !approval_exists {
             return false;
         }
 
         // Check both implementations exist and are not revoked
-        let from_impl: Option<ImplementationVersion> = env
-            .storage()
-            .instance()
-            .get(&ManagerKey::Implementation(from_hash));
+        let from_impl: Option<ImplementationVersion> =
+            get_persistent::<ImplementationVersion>(&env, &ManagerKey::Implementation(from_hash));
 
-        let to_impl: Option<ImplementationVersion> = env
-            .storage()
-            .instance()
-            .get(&ManagerKey::Implementation(to_hash));
+        let to_impl: Option<ImplementationVersion> =
+            get_persistent::<ImplementationVersion>(&env, &ManagerKey::Implementation(to_hash));
 
         match (from_impl, to_impl) {
             (Some(from), Some(to)) => !from.revoked && !to.revoked && from.name == to.name,
@@ -277,15 +277,15 @@ impl ManagerContract {
     /// Module contracts call this only while applying an approved upgrade, so
     /// their stored version always corresponds to their active WASM hash.
     pub fn get_implementation_version(env: Env, wasm_hash: BytesN<32>) -> Option<String> {
-        env.storage()
-            .instance()
-            .get::<ManagerKey, ImplementationVersion>(&ManagerKey::Implementation(wasm_hash))
+        extend_instance_ttl(&env);
+        get_persistent::<ImplementationVersion>(&env, &ManagerKey::Implementation(wasm_hash))
             .filter(|implementation| !implementation.revoked)
             .map(|implementation| implementation.version)
     }
 
     /// Returns the active Manager release version.
     pub fn version(env: Env) -> String {
+        extend_instance_ttl(&env);
         env.storage()
             .instance()
             .get(&ManagerKey::CurrentManagerVersion)
@@ -294,6 +294,7 @@ impl ManagerContract {
 
     /// Returns the active Manager WASM hash.
     pub fn wasm_hash(env: Env) -> BytesN<32> {
+        extend_instance_ttl(&env);
         env.storage()
             .instance()
             .get(&ManagerKey::CurrentManagerWasm)
@@ -310,15 +311,12 @@ impl ManagerContract {
     ///
     /// The latest implementation version, or `None` if not found.
     pub fn get_latest_implementation(env: Env, name: String) -> Option<ImplementationVersion> {
-        let wasm_hash: Option<BytesN<32>> = env
-            .storage()
-            .instance()
-            .get(&ManagerKey::LatestImplementation(name));
+        extend_instance_ttl(&env);
+        let wasm_hash: Option<BytesN<32>> =
+            get_persistent(&env, &ManagerKey::LatestImplementation(name));
 
         wasm_hash.and_then(|hash| {
-            env.storage()
-                .instance()
-                .get::<ManagerKey, ImplementationVersion>(&ManagerKey::Implementation(hash))
+            get_persistent::<ImplementationVersion>(&env, &ManagerKey::Implementation(hash))
                 .filter(|implementation| !implementation.revoked)
         })
     }
@@ -333,9 +331,8 @@ impl ManagerContract {
     ///
     /// The implementation version, or `None` if not found.
     pub fn get_implementation(env: Env, wasm_hash: BytesN<32>) -> Option<ImplementationVersion> {
-        env.storage()
-            .instance()
-            .get(&ManagerKey::Implementation(wasm_hash))
+        extend_instance_ttl(&env);
+        get_persistent::<ImplementationVersion>(&env, &ManagerKey::Implementation(wasm_hash))
     }
 
     /// Set the current implementation WASM hashes used by the factory.
@@ -376,14 +373,7 @@ impl ManagerContract {
             (&treasury, "Treasury"),
             (&marketplace, "Marketplace"),
         ] {
-            let implementation: ImplementationVersion = env
-                .storage()
-                .instance()
-                .get(&ManagerKey::Implementation(hash.clone()))
-                .ok_or(ManagerError::ImplementationNotFound)?;
-            if implementation.revoked {
-                return Err(ManagerError::ImplementationNotFound);
-            }
+            let implementation = Self::active_implementation(&env, hash)?;
             if implementation.name != String::from_str(&env, expected_name) {
                 return Err(ManagerError::InvalidImplementationName);
             }
@@ -477,11 +467,11 @@ impl ManagerContract {
     /// # Errors
     ///
     /// * `FactoryPaused` - Factory is paused
-    /// * `NonceAlreadyUsed` - This (creator, nonce) pair was already used
     /// * `CurrentImplementationsNotSet` - Current WASM hashes not configured
     pub fn create_dao(env: Env, params: DaoCreationParams) -> Result<DaoAddresses, ManagerError> {
         // The deployer owns the newly-created modules and must authorize the
         // factory operation and subsequent owner-gated setup calls.
+        extend_instance_ttl(&env);
         params.deployer.require_auth();
 
         // Check factory not paused
@@ -523,79 +513,19 @@ impl ManagerContract {
             params.initial_config.marketplace.secondary_fee_bps,
         );
 
-        // Get current implementation WASM hashes
-        let token_wasm: BytesN<32> = env
-            .storage()
-            .instance()
-            .get(&ManagerKey::CurrentTokenWasm)
-            .ok_or(ManagerError::CurrentImplementationsNotSet)?;
-
-        let metadata_wasm: BytesN<32> = env
-            .storage()
-            .instance()
-            .get(&ManagerKey::CurrentMetadataWasm)
-            .ok_or(ManagerError::CurrentImplementationsNotSet)?;
-
-        let auction_wasm: BytesN<32> = env
-            .storage()
-            .instance()
-            .get(&ManagerKey::CurrentAuctionWasm)
-            .ok_or(ManagerError::CurrentImplementationsNotSet)?;
-
-        let governor_wasm: BytesN<32> = env
-            .storage()
-            .instance()
-            .get(&ManagerKey::CurrentGovernorWasm)
-            .ok_or(ManagerError::CurrentImplementationsNotSet)?;
-
-        let treasury_wasm: BytesN<32> = env
-            .storage()
-            .instance()
-            .get(&ManagerKey::CurrentTreasuryWasm)
-            .ok_or(ManagerError::CurrentImplementationsNotSet)?;
-        let marketplace_wasm: BytesN<32> = env
-            .storage()
-            .instance()
-            .get(&ManagerKey::CurrentMarketplaceWasm)
-            .ok_or(ManagerError::CurrentImplementationsNotSet)?;
-
-        let implementation_version = |hash: BytesN<32>, expected_name: &str| {
-            let implementation: ImplementationVersion = env
-                .storage()
-                .instance()
-                .get(&ManagerKey::Implementation(hash))
-                .ok_or(ManagerError::ImplementationNotFound)?;
-            if implementation.revoked
-                || implementation.name != String::from_str(&env, expected_name)
-            {
-                return Err(ManagerError::ImplementationNotFound);
-            }
-            Ok(implementation.version)
-        };
-        let token_version = implementation_version(token_wasm.clone(), "Token")?;
-        let metadata_version = implementation_version(metadata_wasm.clone(), "Metadata")?;
-        let auction_version = implementation_version(auction_wasm.clone(), "Auction")?;
-        let governor_version = implementation_version(governor_wasm.clone(), "Governor")?;
-        let treasury_version = implementation_version(treasury_wasm.clone(), "Treasury")?;
-        let marketplace_version = implementation_version(marketplace_wasm.clone(), "Marketplace")?;
-
-        for hash in [
-            token_wasm.clone(),
-            metadata_wasm.clone(),
-            auction_wasm.clone(),
-            governor_wasm.clone(),
-            treasury_wasm.clone(),
-            marketplace_wasm.clone(),
-        ] {
-            let implementation: ImplementationVersion = env
-                .storage()
-                .instance()
-                .get(&ManagerKey::Implementation(hash))
-                .ok_or(ManagerError::ImplementationNotFound)?;
-            if implementation.revoked {
-                return Err(ManagerError::ImplementationNotFound);
-            }
-        }
+        // Load current implementation hashes, rejecting unset or revoked ones in one pass.
+        let (token_wasm, token_version) =
+            Self::current_wasm(&env, &ManagerKey::CurrentTokenWasm, "Token")?;
+        let (metadata_wasm, metadata_version) =
+            Self::current_wasm(&env, &ManagerKey::CurrentMetadataWasm, "Metadata")?;
+        let (auction_wasm, auction_version) =
+            Self::current_wasm(&env, &ManagerKey::CurrentAuctionWasm, "Auction")?;
+        let (governor_wasm, governor_version) =
+            Self::current_wasm(&env, &ManagerKey::CurrentGovernorWasm, "Governor")?;
+        let (treasury_wasm, treasury_version) =
+            Self::current_wasm(&env, &ManagerKey::CurrentTreasuryWasm, "Treasury")?;
+        let (marketplace_wasm, marketplace_version) =
+            Self::current_wasm(&env, &ManagerKey::CurrentMarketplaceWasm, "Marketplace")?;
 
         // Generate deterministic salts
         let token_salt = Self::generate_salt(&env, &params.deployer, params.nonce, "token");
@@ -758,18 +688,9 @@ impl ManagerContract {
             addresses: addresses.clone(),
             launch_admin: params.launch_admin.clone(),
         };
-        env.storage()
-            .instance()
-            .set(&ManagerKey::PendingDao(token_addr.clone()), &pending);
-
-        let modules = DaoModules {
-            token: token_addr.clone(),
-            metadata: metadata_addr.clone(),
-            auction: auction_addr.clone(),
-            governor: governor_addr.clone(),
-            treasury: treasury_addr.clone(),
-            marketplace: marketplace_addr,
-        };
+        // One persistent entry per pending DAO; no expiry semantics. Archived
+        // entries are restorable, so an abandoned creation only costs its creator's rent.
+        set_persistent(&env, &ManagerKey::PendingDao(token_addr.clone()), &pending);
 
         // Emit events
         emit_dao_created(
@@ -778,7 +699,7 @@ impl ManagerContract {
             &params.deployer,
             &params.launch_admin,
             env.ledger().sequence() as u64,
-            &modules,
+            &addresses,
         );
 
         Ok(addresses)
@@ -816,11 +737,10 @@ impl ManagerContract {
         token_address: Address,
         launch_config: LaunchConfig,
     ) -> Result<(), ManagerError> {
-        let pending: PendingDao = env
-            .storage()
-            .instance()
-            .get(&ManagerKey::PendingDao(token_address.clone()))
-            .ok_or(ManagerError::DaoNotFound)?;
+        extend_instance_ttl(&env);
+        let pending: PendingDao =
+            get_persistent(&env, &ManagerKey::PendingDao(token_address.clone()))
+                .ok_or(ManagerError::DaoNotFound)?;
         pending.launch_admin.require_auth();
 
         let treasury = pending.addresses.treasury.clone();
@@ -907,24 +827,14 @@ impl ManagerContract {
         );
 
         // Delete pending DAO state
-        env.storage()
-            .instance()
-            .remove(&ManagerKey::PendingDao(token_address.clone()));
+        remove_persistent(&env, &ManagerKey::PendingDao(token_address.clone()));
 
         // Emit launch event
-        let modules = DaoModules {
-            token: pending.addresses.token.clone(),
-            metadata: pending.addresses.metadata.clone(),
-            auction: pending.addresses.auction.clone(),
-            governor: pending.addresses.governor.clone(),
-            treasury: pending.addresses.treasury.clone(),
-            marketplace: pending.addresses.marketplace.clone(),
-        };
         emit_dao_launched(
             &env,
             &token_address,
             env.ledger().sequence() as u64,
-            &modules,
+            &pending.addresses,
             launch_config.launch_auction,
             launch_config.launch_marketplace,
         );
@@ -932,13 +842,8 @@ impl ManagerContract {
     }
 
     pub fn get_pending_dao(env: Env, token_address: Address) -> Option<PendingDao> {
-        env.storage()
-            .instance()
-            .get(&ManagerKey::PendingDao(token_address))
-    }
-
-    pub fn get_dao_creation(env: Env, token_address: Address) -> Option<PendingDao> {
-        Self::get_pending_dao(env, token_address)
+        extend_instance_ttl(&env);
+        get_persistent(&env, &ManagerKey::PendingDao(token_address))
     }
 
     /// Predict DAO addresses without deploying.
@@ -958,6 +863,7 @@ impl ManagerContract {
         creator: Address,
         nonce: u64,
     ) -> Result<DaoAddresses, ManagerError> {
+        extend_instance_ttl(&env);
         // Generate deterministic salts
         let token_salt = Self::generate_salt(&env, &creator, nonce, "token");
         let metadata_salt = Self::generate_salt(&env, &creator, nonce, "metadata");
@@ -1037,11 +943,11 @@ impl ManagerContract {
         }
 
         // Verify to_hash is registered and not revoked
-        let to_impl: ImplementationVersion = env
-            .storage()
-            .instance()
-            .get(&ManagerKey::Implementation(to_hash.clone()))
-            .ok_or(ManagerError::ImplementationNotFound)?;
+        let to_impl: ImplementationVersion = get_persistent::<ImplementationVersion>(
+            &env,
+            &ManagerKey::Implementation(to_hash.clone()),
+        )
+        .ok_or(ManagerError::ImplementationNotFound)?;
 
         if to_impl.revoked {
             return Err(ManagerError::ImplementationNotFound);
@@ -1078,11 +984,99 @@ impl ManagerContract {
     }
 
     // ========================================================================
+    // Admin handover and platform configuration
+    // ========================================================================
+
+    /// Propose a new admin. The handover completes when `accept_admin` is called.
+    ///
+    /// Only callable by the current admin. Overwrites any earlier proposal.
+    pub fn propose_admin(env: Env, new_admin: Address) -> Result<(), ManagerError> {
+        Self::require_admin(&env)?;
+        let current = get_admin(&env).ok_or(ManagerError::AdminNotSet)?;
+        set_persistent(&env, &ManagerKey::PendingAdmin, &new_admin);
+        emit_admin_proposed(&env, &current, &new_admin);
+        Ok(())
+    }
+
+    /// Accept a pending admin handover. Requires the proposed admin's authorization.
+    pub fn accept_admin(env: Env) -> Result<(), ManagerError> {
+        extend_instance_ttl(&env);
+        let pending: Address =
+            get_persistent(&env, &ManagerKey::PendingAdmin).ok_or(ManagerError::NoPendingAdmin)?;
+        pending.require_auth();
+        let old = get_admin(&env).ok_or(ManagerError::AdminNotSet)?;
+        write_admin(&env, &pending);
+        remove_persistent(&env, &ManagerKey::PendingAdmin);
+        emit_admin_changed(&env, &old, &pending);
+        Ok(())
+    }
+
+    /// Current admin.
+    pub fn get_admin(env: Env) -> Option<Address> {
+        extend_instance_ttl(&env);
+        get_admin(&env)
+    }
+
+    /// Pending admin awaiting acceptance, if any.
+    pub fn get_pending_admin(env: Env) -> Option<Address> {
+        extend_instance_ttl(&env);
+        get_persistent(&env, &ManagerKey::PendingAdmin)
+    }
+
+    /// Register the platform minter granted mint authority at launch (admin only).
+    pub fn set_platform_minter(env: Env, minter: Address) -> Result<(), ManagerError> {
+        Self::require_admin(&env)?;
+        set_persistent(&env, &ManagerKey::PlatformMinter, &minter);
+        emit_platform_minter_set(&env, &minter);
+        Ok(())
+    }
+
+    /// The registered platform minter, if any.
+    pub fn get_platform_minter(env: Env) -> Option<Address> {
+        extend_instance_ttl(&env);
+        get_persistent(&env, &ManagerKey::PlatformMinter)
+    }
+
+    // ========================================================================
     // Helper Functions
     // ========================================================================
 
+    /// Load a registered, non-revoked implementation record.
+    fn active_implementation(
+        env: &Env,
+        hash: &BytesN<32>,
+    ) -> Result<ImplementationVersion, ManagerError> {
+        let implementation: ImplementationVersion =
+            get_persistent(env, &ManagerKey::Implementation(hash.clone()))
+                .ok_or(ManagerError::ImplementationNotFound)?;
+        if implementation.revoked {
+            return Err(ManagerError::ImplementationNotFound);
+        }
+        Ok(implementation)
+    }
+
+    /// Load a `Current*Wasm` hash, verify it is an active implementation with the
+    /// expected name, and return it with its registered version.
+    fn current_wasm(
+        env: &Env,
+        key: &ManagerKey,
+        expected_name: &str,
+    ) -> Result<(BytesN<32>, String), ManagerError> {
+        let hash: BytesN<32> = env
+            .storage()
+            .instance()
+            .get(key)
+            .ok_or(ManagerError::CurrentImplementationsNotSet)?;
+        let implementation = Self::active_implementation(env, &hash)?;
+        if implementation.name != String::from_str(env, expected_name) {
+            return Err(ManagerError::ImplementationNotFound);
+        }
+        Ok((hash, implementation.version))
+    }
+
     /// Require caller to be admin.
     fn require_admin(env: &Env) -> Result<(), ManagerError> {
+        extend_instance_ttl(env);
         let admin = get_admin(env).ok_or(ManagerError::AdminNotSet)?;
         admin.require_auth();
         Ok(())

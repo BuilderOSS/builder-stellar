@@ -49,7 +49,7 @@ mod test;
 pub use contract::*;
 pub use error::*;
 pub use storage::{
-    ArtworkIpfsGroup, AuctionConfig, DaoAddresses, DaoCreationParams, DaoModules, GovernanceConfig,
+    ArtworkIpfsGroup, AuctionConfig, DaoAddresses, DaoCreationParams, GovernanceConfig,
     ImplementationVersion, InitialDaoConfigValues, LaunchConfig, MarketplaceConfig, PendingDao,
     UpgradeApproval,
 };

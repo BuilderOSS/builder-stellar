@@ -2,7 +2,12 @@
 
 extern crate std;
 
-use soroban_sdk::{testutils::Address as _, Address, BytesN, Env, String};
+use soroban_sdk::{
+    contract, contractimpl,
+    testutils::Address as _,
+    xdr::{LedgerEntryData, Limits, ScAddress, ScVal, WriteXdr},
+    Address, Bytes, BytesN, Env, String,
+};
 
 use crate::{ManagerContract, ManagerContractClient};
 
@@ -84,7 +89,7 @@ fn test_register_implementation() {
     assert_eq!(impl_data.name, name);
     assert_eq!(impl_data.version, version);
     assert_eq!(impl_data.wasm_hash, wasm_hash);
-    assert_eq!(impl_data.revoked, false);
+    assert!(!impl_data.revoked);
 
     let _ = admin;
 }
@@ -126,7 +131,7 @@ fn test_revoke_implementation() {
     // Verify it's revoked
     let implementation = client.get_implementation(&wasm_hash);
     assert!(implementation.is_some());
-    assert_eq!(implementation.unwrap().revoked, true);
+    assert!(implementation.unwrap().revoked);
 
     let _ = admin;
 }
@@ -493,4 +498,312 @@ fn test_get_latest_implementation_with_revoked() {
     assert!(client.get_latest_implementation(&name).is_none());
 
     let _ = env;
+}
+
+// ============================================================================
+// Storage-growth tests (instance entry must stay bounded)
+// ============================================================================
+
+use crate::storage::{
+    AuctionConfig, DaoCreationParams, GovernanceConfig, InitialDaoConfigValues, LaunchConfig,
+    ManagerKey, MarketplaceConfig, PendingDao,
+};
+
+/// Minimal valid Soroban WASM exporting `__constructor(ctor_arity)` and
+/// `initialize(init_arity)`, both returning void. Lets `create_dao` run its real
+/// deploy path without the full module WASMs.
+fn stub_wasm(env: &Env, tag: &str, ctor_arity: usize, init_arity: usize) -> Bytes {
+    fn func_type(out: &mut std::vec::Vec<u8>, arity: usize) {
+        out.push(0x60);
+        out.push(arity as u8);
+        out.extend(core::iter::repeat_n(0x7e, arity));
+        out.extend([0x01, 0x7e]);
+    }
+    fn section(out: &mut std::vec::Vec<u8>, id: u8, body: &[u8]) {
+        out.push(id);
+        out.push(body.len() as u8);
+        out.extend(body);
+    }
+    let mut m: std::vec::Vec<u8> = std::vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
+    // Env meta: interface version 27 (matches soroban-sdk 27).
+    let mut meta = std::vec![17u8];
+    meta.extend(b"contractenvmetav0");
+    meta.extend([0, 0, 0, 0, 0, 0, 0, 27, 0, 0, 0, 0]);
+    section(&mut m, 0, &meta);
+    let mut types = std::vec![2u8];
+    func_type(&mut types, ctor_arity);
+    func_type(&mut types, init_arity);
+    section(&mut m, 1, &types);
+    section(&mut m, 3, &[2, 0, 1]);
+    let mut exports = std::vec![2u8, 13];
+    exports.extend(b"__constructor");
+    exports.extend([0x00, 0x00, 10]);
+    exports.extend(b"initialize");
+    exports.extend([0x00, 0x01]);
+    section(&mut m, 7, &exports);
+    section(&mut m, 10, &[2, 4, 0, 0x42, 2, 0x0b, 4, 0, 0x42, 2, 0x0b]);
+    // Trailing custom section makes each stub's hash unique even when arities match.
+    let mut tail = std::vec![tag.len() as u8];
+    tail.extend(tag.as_bytes());
+    section(&mut m, 0, &tail);
+    Bytes::from_slice(env, &m)
+}
+
+/// Registers stub implementations matching the current constructor arities and
+/// sets them as the factory defaults.
+fn register_stub_implementations(env: &Env, client: &ManagerContractClient) {
+    let specs: [(&str, usize, usize); 6] = [
+        ("Token", 8, 0),
+        ("Metadata", 0, 12),
+        ("Auction", 11, 0),
+        ("Governor", 11, 0),
+        ("Treasury", 5, 0),
+        ("Marketplace", 7, 0),
+    ];
+    let mut hashes = std::vec::Vec::new();
+    for (name, ctor, init) in specs {
+        let hash = env
+            .deployer()
+            .upload_contract_wasm(stub_wasm(env, name, ctor, init));
+        client.register_implementation(
+            &String::from_str(env, name),
+            &String::from_str(env, "1"),
+            &hash,
+        );
+        hashes.push(hash);
+    }
+    client.set_current_implementations(
+        &hashes[0], &hashes[1], &hashes[2], &hashes[3], &hashes[4], &hashes[5],
+    );
+}
+
+fn dao_params(env: &Env, deployer: &Address, nonce: u64) -> DaoCreationParams {
+    DaoCreationParams {
+        deployer: deployer.clone(),
+        nonce,
+        launch_admin: deployer.clone(),
+        initial_config: InitialDaoConfigValues {
+            token_name: String::from_str(env, "DAO"),
+            token_symbol: String::from_str(env, "DAO"),
+            token_uri: String::from_str(env, "https://example.com/token"),
+            project_uri: String::from_str(env, "https://example.com"),
+            description: String::from_str(env, "Test DAO"),
+            contract_image: String::from_str(env, "https://example.com/image.png"),
+            renderer_base: String::from_str(env, "https://example.com/render"),
+            governance: GovernanceConfig {
+                voting_delay: 300,
+                voting_period: 300,
+                queue_delay: 300,
+                proposal_threshold: 1,
+                quorum_bps: 1000,
+            },
+            auction: AuctionConfig {
+                duration: 300,
+                reserve_price: 1000,
+                time_buffer: 1,
+                payment_asset: Address::generate(env),
+            },
+            marketplace: MarketplaceConfig {
+                payment_asset: Address::generate(env),
+                secondary_fee_bps: 100,
+            },
+        },
+    }
+}
+
+/// XDR length of the Manager contract instance ledger entry.
+fn instance_entry_xdr_len(env: &Env, manager: &Address) -> usize {
+    let target = ScAddress::from(manager);
+    let snapshot = env.to_ledger_snapshot();
+    for (_, (entry, _)) in snapshot.ledger_entries.iter() {
+        if let LedgerEntryData::ContractData(cd) = &entry.data {
+            if cd.contract == target && cd.key == ScVal::LedgerKeyContractInstance {
+                return entry.to_xdr(Limits::none()).unwrap().len();
+            }
+        }
+    }
+    panic!("manager instance entry not found");
+}
+
+/// Mock module used to let `launch_dao` complete for a seeded PendingDao.
+#[contract]
+struct MockModule;
+
+#[contractimpl]
+impl MockModule {
+    pub fn owner(e: Env) -> Address {
+        e.storage().instance().get(&1u32).unwrap()
+    }
+    pub fn total_supply(_e: Env) -> i128 {
+        1
+    }
+    pub fn enable_mint_authority_by_manager(_e: Env, _who: Address) {}
+    pub fn finalize_ownership(_e: Env, _treasury: Address) {}
+    pub fn finalize_upgrade_authority(_e: Env, _treasury: Address) {}
+}
+
+#[contract]
+struct MockToggleModule;
+
+#[contractimpl]
+impl MockToggleModule {
+    pub fn finalize_ownership(_e: Env, _treasury: Address, _flag: bool) {}
+}
+
+#[test]
+fn test_instance_entry_size_constant_across_500_create_dao() {
+    let (env, client, _admin) = setup();
+    register_stub_implementations(&env, &client);
+    let deployer = Address::generate(&env);
+
+    env.cost_estimate().budget().reset_unlimited();
+    client.create_dao(&dao_params(&env, &deployer, 0));
+    let before = instance_entry_xdr_len(&env, &client.address);
+
+    let mut last = None;
+    for nonce in 1..=500u64 {
+        env.cost_estimate().budget().reset_unlimited();
+        last = Some(client.create_dao(&dao_params(&env, &deployer, nonce)));
+    }
+    let after = instance_entry_xdr_len(&env, &client.address);
+    assert_eq!(before, after, "instance entry grew with create_dao calls");
+
+    // Pending entries live in persistent storage and remain readable.
+    let first = client.predict_addresses(&deployer, &0u64);
+    assert!(client.get_pending_dao(&first.token).is_some());
+    assert!(client.get_pending_dao(&last.unwrap().token).is_some());
+}
+
+#[test]
+fn test_registry_reads_work_after_500_registrations() {
+    let (env, client, _admin) = setup();
+    let name = String::from_str(&env, "Token");
+    let base = BytesN::from_array(&env, &[0xAA; 32]);
+    client.register_implementation(&name, &String::from_str(&env, "base"), &base);
+    let before = instance_entry_xdr_len(&env, &client.address);
+
+    let hash_for = |i: u32| {
+        let mut raw = [0u8; 32];
+        raw[..4].copy_from_slice(&i.to_be_bytes());
+        BytesN::from_array(&env, &raw)
+    };
+
+    let mut prev = base.clone();
+    for i in 0..500u32 {
+        env.cost_estimate().budget().reset_unlimited();
+        let next = hash_for(i);
+        client.register_implementation(&name, &String::from_str(&env, "v"), &next);
+        client.approve_upgrade(&prev, &next);
+        prev = next;
+    }
+    assert_eq!(before, instance_entry_xdr_len(&env, &client.address));
+
+    assert!(client.is_upgrade_approved(&base, &hash_for(0)));
+    assert!(client.is_upgrade_approved(&hash_for(498), &hash_for(499)));
+    assert!(!client.is_upgrade_approved(&base, &hash_for(499)));
+    assert_eq!(
+        client.get_latest_implementation(&name).unwrap().wasm_hash,
+        hash_for(499)
+    );
+    assert!(client.get_implementation(&base).is_some());
+}
+
+#[test]
+fn test_pending_dao_launches_after_500_unrelated_create_dao() {
+    let (env, client, _admin) = setup();
+    register_stub_implementations(&env, &client);
+
+    // Seed a PendingDao whose modules are mocks so launch_dao can complete.
+    let launch_admin = Address::generate(&env);
+    let token = env.register(MockModule, ());
+    let governor = env.register(MockModule, ());
+    let treasury = env.register(MockModule, ());
+    let metadata = env.register(MockModule, ());
+    let auction = env.register(MockToggleModule, ());
+    let marketplace = env.register(MockToggleModule, ());
+    env.as_contract(&token, || {
+        env.storage().instance().set(&1u32, &launch_admin);
+    });
+    let pending = PendingDao {
+        addresses: crate::storage::DaoAddresses {
+            token: token.clone(),
+            metadata,
+            auction,
+            governor,
+            treasury,
+            marketplace,
+        },
+        launch_admin: launch_admin.clone(),
+    };
+    env.as_contract(&client.address, || {
+        crate::storage::set_persistent(&env, &ManagerKey::PendingDao(token.clone()), &pending);
+    });
+
+    let deployer = Address::generate(&env);
+    for nonce in 0..500u64 {
+        env.cost_estimate().budget().reset_unlimited();
+        client.create_dao(&dao_params(&env, &deployer, nonce));
+    }
+
+    assert_eq!(client.get_pending_dao(&token), Some(pending));
+    client.launch_dao(
+        &token,
+        &LaunchConfig {
+            launch_auction: true,
+            launch_marketplace: true,
+        },
+    );
+    assert!(client.get_pending_dao(&token).is_none());
+}
+
+// ============================================================================
+// Admin handover and platform minter
+// ============================================================================
+
+#[test]
+fn test_two_step_admin_handover() {
+    let (env, client, admin) = setup();
+    let new_admin = Address::generate(&env);
+    assert_eq!(client.get_admin(), Some(admin));
+
+    client.propose_admin(&new_admin);
+    assert_eq!(client.get_pending_admin(), Some(new_admin.clone()));
+    assert_ne!(client.get_admin(), Some(new_admin.clone()));
+
+    client.accept_admin();
+    assert_eq!(client.get_admin(), Some(new_admin));
+    assert_eq!(client.get_pending_admin(), None);
+}
+
+#[test]
+#[should_panic]
+fn test_accept_admin_without_proposal_fails() {
+    let (_env, client, _admin) = setup();
+    client.accept_admin();
+}
+
+#[test]
+fn test_set_platform_minter() {
+    let (env, client, _admin) = setup();
+    assert_eq!(client.get_platform_minter(), None);
+    let minter = Address::generate(&env);
+    client.set_platform_minter(&minter);
+    assert_eq!(client.get_platform_minter(), Some(minter));
+}
+
+#[test]
+#[should_panic]
+fn test_set_platform_minter_requires_admin() {
+    let env = Env::default();
+    let admin = Address::generate(&env);
+    let id = env.register(
+        ManagerContract,
+        (
+            admin,
+            BytesN::from_array(&env, &[0u8; 32]),
+            String::from_str(&env, "0.1.0"),
+        ),
+    );
+    // No mocked auths: admin auth is not provided.
+    ManagerContractClient::new(&env, &id).set_platform_minter(&Address::generate(&env));
 }

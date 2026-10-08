@@ -30,6 +30,12 @@ pub enum ManagerError {
     /// Admin not set
     AdminNotSet = 1006,
 
+    /// No admin handover is pending
+    NoPendingAdmin = 1007,
+
+    /// Platform minter not configured
+    PlatformMinterNotSet = 1008,
+
     // ========================================================================
     // Factory Errors (1100-1199)
     // ========================================================================
@@ -38,9 +44,6 @@ pub enum ManagerError {
 
     /// Factory is paused
     FactoryPaused = 1101,
-
-    /// Nonce already used
-    NonceAlreadyUsed = 1102,
 
     /// Invalid parameter bounds
     InvalidParamBounds = 1103,
@@ -94,12 +97,6 @@ pub enum ManagerError {
     // ========================================================================
     // Registry Errors (1200-1299)
     // ========================================================================
-    /// DAO already registered
-    DaoAlreadyRegistered = 1200,
-
     /// DAO not found
     DaoNotFound = 1201,
-
-    /// Invalid pagination parameters
-    InvalidPaginationParams = 1202,
 }

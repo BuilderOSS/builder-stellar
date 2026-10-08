@@ -1,6 +1,13 @@
 //! Storage keys and data structures for the Manager contract.
 
-use soroban_sdk::{contracttype, Address, BytesN, Env, String};
+use soroban_sdk::{contracttype, Address, BytesN, Env, IntoVal, String, TryFromVal, Val};
+
+/// Ledgers per day at 5s per ledger.
+const DAY_IN_LEDGERS: u32 = 17_280;
+/// Persistent and instance entries are extended to ~1 year on touch.
+pub const TTL_EXTEND_TO: u32 = 365 * DAY_IN_LEDGERS;
+/// Extension only happens when remaining TTL drops below ~30 days.
+pub const TTL_THRESHOLD: u32 = 30 * DAY_IN_LEDGERS;
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -105,17 +112,6 @@ pub struct PendingDao {
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DaoModules {
-    pub token: Address,
-    pub metadata: Address,
-    pub auction: Address,
-    pub governor: Address,
-    pub treasury: Address,
-    pub marketplace: Address,
-}
-
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ManagerKey {
     Admin,
     FactoryPaused,
@@ -131,13 +127,15 @@ pub enum ManagerKey {
     CurrentManagerWasm,
     CurrentManagerVersion,
     PendingDao(Address),
+    PendingAdmin,
+    PlatformMinter,
 }
 
 pub fn get_admin(env: &Env) -> Option<Address> {
     env.storage().instance().get(&ManagerKey::Admin)
 }
 
-pub fn set_admin(env: &Env, admin: &Address) {
+pub fn write_admin(env: &Env, admin: &Address) {
     env.storage().instance().set(&ManagerKey::Admin, admin);
 }
 
@@ -152,4 +150,37 @@ pub fn set_factory_paused(env: &Env, paused: bool) {
     env.storage()
         .instance()
         .set(&ManagerKey::FactoryPaused, &paused);
+}
+
+/// Extend the Manager instance entry. Called by every entrypoint.
+///
+/// The instance entry holds only bounded keys (Admin, FactoryPaused, Current*),
+/// so its size never grows with registrations or DAO creations.
+pub fn extend_instance_ttl(env: &Env) {
+    env.storage()
+        .instance()
+        .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
+}
+
+/// Read a persistent entry and extend its TTL when present.
+pub fn get_persistent<V: TryFromVal<Env, Val>>(env: &Env, key: &ManagerKey) -> Option<V> {
+    let value = env.storage().persistent().get(key);
+    if value.is_some() {
+        env.storage()
+            .persistent()
+            .extend_ttl(key, TTL_THRESHOLD, TTL_EXTEND_TO);
+    }
+    value
+}
+
+/// Write a persistent entry and extend its TTL.
+pub fn set_persistent<V: IntoVal<Env, Val>>(env: &Env, key: &ManagerKey, value: &V) {
+    env.storage().persistent().set(key, value);
+    env.storage()
+        .persistent()
+        .extend_ttl(key, TTL_THRESHOLD, TTL_EXTEND_TO);
+}
+
+pub fn remove_persistent(env: &Env, key: &ManagerKey) {
+    env.storage().persistent().remove(key);
 }
