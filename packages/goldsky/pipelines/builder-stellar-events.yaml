@@ -1,5 +1,5 @@
 name: builder-stellar-events
-description: Index Manager CCN27AM3GAFABETQUIEHB4WO6QMBMCW72NCFIRFTJ3SHX45X7BHZU7SW on testnet with Goldsky Turbo
+description: Index Manager CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y on testnet with Goldsky Turbo
 resource_size: s
 use_dedicated_ip: false
 job: false
@@ -8,7 +8,7 @@ sources:
     type: dataset
     dataset_name: stellar_testnet.events
     version: 1.2.0
-    start_at: 4983407
+    start_at: 5090312
 
 transforms:
   # Each DAO-created event contains the five newly deployed module addresses.
@@ -23,7 +23,7 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"token"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CCN27AM3GAFABETQUIEHB4WO6QMBMCW72NCFIRFTJ3SHX45X7BHZU7SW'
+      WHERE contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -37,7 +37,7 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"metadata"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CCN27AM3GAFABETQUIEHB4WO6QMBMCW72NCFIRFTJ3SHX45X7BHZU7SW'
+      WHERE contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -51,7 +51,7 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"auction"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CCN27AM3GAFABETQUIEHB4WO6QMBMCW72NCFIRFTJ3SHX45X7BHZU7SW'
+      WHERE contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -65,7 +65,7 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"governor"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CCN27AM3GAFABETQUIEHB4WO6QMBMCW72NCFIRFTJ3SHX45X7BHZU7SW'
+      WHERE contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -79,7 +79,7 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"treasury"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CCN27AM3GAFABETQUIEHB4WO6QMBMCW72NCFIRFTJ3SHX45X7BHZU7SW'
+      WHERE contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -93,7 +93,7 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"marketplace"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CCN27AM3GAFABETQUIEHB4WO6QMBMCW72NCFIRFTJ3SHX45X7BHZU7SW'
+      WHERE contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -102,12 +102,12 @@ transforms:
     primary_key: event_id
     sql: |
       SELECT
-        concat('manager:CCN27AM3GAFABETQUIEHB4WO6QMBMCW72NCFIRFTJ3SHX45X7BHZU7SW:', id) AS event_id,
-        'manager:CCN27AM3GAFABETQUIEHB4WO6QMBMCW72NCFIRFTJ3SHX45X7BHZU7SW' AS deployment_id,
+        concat('manager:CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y:', id) AS event_id,
+        'manager:CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y' AS deployment_id,
         contract_id,
         CASE
-          WHEN contract_id = 'CCN27AM3GAFABETQUIEHB4WO6QMBMCW72NCFIRFTJ3SHX45X7BHZU7SW' THEN 'manager'
-          WHEN contract_id = 'CDHMZRUDYUGI5MIJMWZENU3XS5KQOEINTEIAVH6RHUMH36JE4H6UJAAU' THEN 'minter'
+          WHEN contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y' THEN 'manager'
+          WHEN contract_id = 'CASTKJBMDBZS2M3NGENH7FG4VPCI7FSYVAFKN2E227QSR723KXGKFZKL' THEN 'minter'
           WHEN dynamic_table_check('dao_tokens', contract_id) THEN 'token'
           WHEN dynamic_table_check('dao_metadata', contract_id) THEN 'metadata'
           WHEN dynamic_table_check('dao_auctions', contract_id) THEN 'auction'
@@ -137,10 +137,10 @@ transforms:
         CAST(NULL AS BIGINT) AS event_index,
         _gs_op
       FROM stellar_events
-       WHERE ledger_sequence >= 4983407
+       WHERE ledger_sequence >= 5090312
          AND (
-           contract_id = 'CCN27AM3GAFABETQUIEHB4WO6QMBMCW72NCFIRFTJ3SHX45X7BHZU7SW'
-           OR contract_id = 'CDHMZRUDYUGI5MIJMWZENU3XS5KQOEINTEIAVH6RHUMH36JE4H6UJAAU'
+           contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y'
+           OR contract_id = 'CASTKJBMDBZS2M3NGENH7FG4VPCI7FSYVAFKN2E227QSR723KXGKFZKL'
            OR dynamic_table_check('dao_tokens', contract_id)
            OR dynamic_table_check('dao_metadata', contract_id)
            OR dynamic_table_check('dao_auctions', contract_id)
