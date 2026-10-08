@@ -51,6 +51,13 @@ pub trait MetadataHookApi {
     fn on_minted_batch(e: &Env, first_token_id: u32, count: u32) -> bool;
 }
 
+/// `wasm_hash()` exposed by every DAO module (token, governor, treasury,
+/// auction, marketplace, metadata): the module's currently active WASM hash.
+#[contractclient(name = "WasmHashClient")]
+pub trait WasmHashApi {
+    fn wasm_hash(e: &Env) -> BytesN<32>;
+}
+
 /// Manager registry reads used by the shared upgrade flow.
 #[contractclient(name = "ManagerRegistryClient")]
 pub trait ManagerRegistryApi {

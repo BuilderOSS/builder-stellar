@@ -124,6 +124,10 @@ pub struct DaoAddresses {
 }
 
 /// The only factory state retained until the launch administrator finalizes a DAO.
+///
+/// Module WASM hashes are deliberately NOT stored: `launch_dao` reads each
+/// module's current `wasm_hash()` and checks it against the registry, so a
+/// pre-launch owner `upgrade` is honored and a revoked hash is rejected.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PendingDao {

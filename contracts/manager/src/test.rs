@@ -523,15 +523,6 @@ fn test_cancel_pending_admin() {
 }
 
 #[test]
-fn test_cancel_pending_admin_requires_admin_auth() {
-    let (env, client, admin) = setup();
-    client.propose_admin(&Address::generate(&env));
-    client.cancel_pending_admin();
-    let auths = env.auths();
-    assert_eq!(auths.last().unwrap().0, admin);
-}
-
-#[test]
 #[should_panic]
 fn test_revoke_already_revoked_implementation_fails() {
     let (env, client, _admin) = setup();
@@ -722,6 +713,12 @@ struct MockModule;
 
 #[contractimpl]
 impl MockModule {
+    pub fn wasm_hash(e: Env) -> BytesN<32> {
+        e.storage()
+            .instance()
+            .get(&2u32)
+            .unwrap_or(BytesN::from_array(&e, &[0u8; 32]))
+    }
     pub fn owner(e: Env) -> Address {
         e.storage().instance().get(&1u32).unwrap()
     }
@@ -736,6 +733,12 @@ struct MockLaunchModule;
 
 #[contractimpl]
 impl MockLaunchModule {
+    pub fn wasm_hash(e: Env) -> BytesN<32> {
+        e.storage()
+            .instance()
+            .get(&2u32)
+            .unwrap_or(BytesN::from_array(&e, &[0u8; 32]))
+    }
     pub fn launch(_e: Env, _treasury: Address) {}
 }
 
@@ -744,6 +747,12 @@ struct MockToggleModule;
 
 #[contractimpl]
 impl MockToggleModule {
+    pub fn wasm_hash(e: Env) -> BytesN<32> {
+        e.storage()
+            .instance()
+            .get(&2u32)
+            .unwrap_or(BytesN::from_array(&e, &[0u8; 32]))
+    }
     pub fn launch(_e: Env, _treasury: Address, _flag: bool, _asset: Address) {}
 }
 
@@ -885,6 +894,12 @@ fn test_pending_dao_launches_after_500_unrelated_create_dao() {
     register_stub_implementations(&env, &client);
 
     // Seed a PendingDao whose modules are mocks so launch_dao can complete.
+    // Mocks report the all-zero hash, which must be registered.
+    client.register_implementation(
+        &String::from_str(&env, "Mock"),
+        &String::from_str(&env, "1"),
+        &BytesN::from_array(&env, &[0u8; 32]),
+    );
     let launch_admin = Address::generate(&env);
     let token = env.register(MockModule, ());
     let governor = env.register(MockLaunchModule, ());
@@ -1131,6 +1146,12 @@ mod real_dao {
             ),
         );
 
+        // The modules report the all-zero hash; launch_dao requires it registered.
+        client.register_implementation(
+            &String::from_str(&env, "Mock"),
+            &String::from_str(&env, "0.1.0"),
+            &hash,
+        );
         let token = token::DaoTokenContractClient::new(&env, &addresses.token);
         token.mint(&launch_admin, &launch_admin);
 
@@ -1921,4 +1942,336 @@ fn module_on_revoked_hash_migrates_away_and_syncs() {
             String::from_str(&env, "0.3.0")
         );
     });
+}
+
+// ============================================================================
+// Negative authorization: admin-only registry/governance methods
+// ============================================================================
+
+mod admin_auth {
+    use super::*;
+    use soroban_sdk::{
+        testutils::{MockAuth, MockAuthInvoke},
+        IntoVal, Val, Vec,
+    };
+
+    fn h(env: &Env, n: u8) -> BytesN<32> {
+        BytesN::from_array(env, &[n; 32])
+    }
+
+    /// Runs `call` with no auths, then with only a stranger's auth (both must
+    /// fail), then with the admin's auth (must succeed). `args` must match the call.
+    fn check<T: core::fmt::Debug, E: core::fmt::Debug>(
+        env: &Env,
+        client: &ManagerContractClient,
+        admin: &Address,
+        fn_name: &'static str,
+        args: Vec<Val>,
+        call: impl Fn() -> Result<T, E>,
+    ) {
+        env.mock_auths(&[]);
+        assert!(call().is_err(), "{fn_name} must fail with no auths");
+
+        let stranger = Address::generate(env);
+        for (who, ok) in [(&stranger, false), (admin, true)] {
+            let invoke = MockAuthInvoke {
+                contract: &client.address,
+                fn_name,
+                args: args.clone(),
+                sub_invokes: &[],
+            };
+            env.mock_auths(&[MockAuth {
+                address: who,
+                invoke: &invoke,
+            }]);
+            let r = call();
+            assert_eq!(
+                r.is_ok(),
+                ok,
+                "{fn_name} as {}",
+                if ok { "admin" } else { "stranger" }
+            );
+        }
+    }
+
+    #[test]
+    fn register_implementation_requires_admin_auth() {
+        let (env, client, admin) = setup();
+        let (name, version, hash) = (
+            String::from_str(&env, "Token"),
+            String::from_str(&env, "1"),
+            h(&env, 1),
+        );
+        check(
+            &env,
+            &client,
+            &admin,
+            "register_implementation",
+            (name.clone(), version.clone(), hash.clone()).into_val(&env),
+            || {
+                client
+                    .try_register_implementation(&name, &version, &hash)
+                    .map(|_| ())
+                    .map_err(|_| ())
+            },
+        );
+        assert!(client.get_implementation(&hash).is_some());
+    }
+
+    #[test]
+    fn approve_upgrade_requires_admin_auth() {
+        let (env, client, admin) = setup();
+        let name = String::from_str(&env, "Token");
+        let v = String::from_str(&env, "1");
+        client.register_implementation(&name, &v, &h(&env, 1));
+        client.register_implementation(&name, &v, &h(&env, 2));
+        let (from, to) = (h(&env, 1), h(&env, 2));
+        check(
+            &env,
+            &client,
+            &admin,
+            "approve_upgrade",
+            (from.clone(), to.clone()).into_val(&env),
+            || {
+                client
+                    .try_approve_upgrade(&from, &to)
+                    .map(|_| ())
+                    .map_err(|_| ())
+            },
+        );
+        assert!(client.is_upgrade_approved(&from, &to));
+    }
+
+    #[test]
+    fn revoke_implementation_requires_admin_auth() {
+        let (env, client, admin) = setup();
+        let hash = h(&env, 1);
+        client.register_implementation(
+            &String::from_str(&env, "Token"),
+            &String::from_str(&env, "1"),
+            &hash,
+        );
+        check(
+            &env,
+            &client,
+            &admin,
+            "revoke_implementation",
+            (hash.clone(),).into_val(&env),
+            || {
+                client
+                    .try_revoke_implementation(&hash)
+                    .map(|_| ())
+                    .map_err(|_| ())
+            },
+        );
+        assert!(client.get_implementation(&hash).unwrap().revoked);
+    }
+
+    #[test]
+    fn set_current_implementations_requires_admin_auth() {
+        let (env, client, admin) = setup();
+        let names = [
+            "Token",
+            "Metadata",
+            "Auction",
+            "Governor",
+            "Treasury",
+            "Marketplace",
+        ];
+        for (i, n) in names.iter().enumerate() {
+            client.register_implementation(
+                &String::from_str(&env, n),
+                &String::from_str(&env, "1"),
+                &h(&env, i as u8 + 1),
+            );
+        }
+        let hs: std::vec::Vec<BytesN<32>> = (1..=6).map(|i| h(&env, i)).collect();
+        check(
+            &env,
+            &client,
+            &admin,
+            "set_current_implementations",
+            (
+                hs[0].clone(),
+                hs[1].clone(),
+                hs[2].clone(),
+                hs[3].clone(),
+                hs[4].clone(),
+                hs[5].clone(),
+            )
+                .into_val(&env),
+            || {
+                client
+                    .try_set_current_implementations(&hs[0], &hs[1], &hs[2], &hs[3], &hs[4], &hs[5])
+                    .map(|_| ())
+                    .map_err(|_| ())
+            },
+        );
+    }
+
+    #[test]
+    fn cancel_pending_admin_requires_admin_auth() {
+        let (env, client, admin) = setup();
+        client.propose_admin(&Address::generate(&env));
+        check(
+            &env,
+            &client,
+            &admin,
+            "cancel_pending_admin",
+            ().into_val(&env),
+            || {
+                client
+                    .try_cancel_pending_admin()
+                    .map(|_| ())
+                    .map_err(|_| ())
+            },
+        );
+        assert_eq!(client.get_pending_admin(), None);
+    }
+}
+
+// ============================================================================
+// launch_dao re-checks the registry status of every module's current hash
+// ============================================================================
+
+mod launch_revocation {
+    use super::*;
+    use crate::error::ManagerError;
+
+    const HASH: u8 = 0;
+
+    struct Mocks {
+        token: Address,
+        all: [Address; 6],
+        launch_admin: Address,
+    }
+
+    fn seed(env: &Env, client: &ManagerContractClient) -> Mocks {
+        let launch_admin = Address::generate(env);
+        let token = env.register(MockModule, ());
+        let metadata = env.register(MockLaunchModule, ());
+        let auction = env.register(MockToggleModule, ());
+        let governor = env.register(MockLaunchModule, ());
+        let treasury = env.register(MockLaunchModule, ());
+        let marketplace = env.register(MockToggleModule, ());
+        env.as_contract(&token, || {
+            env.storage().instance().set(&1u32, &launch_admin);
+        });
+        let pending = PendingDao {
+            addresses: crate::storage::DaoAddresses {
+                token: token.clone(),
+                metadata: metadata.clone(),
+                auction: auction.clone(),
+                governor: governor.clone(),
+                treasury: treasury.clone(),
+                marketplace: marketplace.clone(),
+            },
+            launch_admin: launch_admin.clone(),
+            auction_payment_asset: Address::generate(env),
+            marketplace_payment_asset: Address::generate(env),
+        };
+        env.as_contract(&client.address, || {
+            crate::storage::set_persistent(env, &ManagerKey::PendingDao(token.clone()), &pending);
+        });
+        Mocks {
+            all: [
+                token.clone(),
+                metadata,
+                auction,
+                governor,
+                treasury,
+                marketplace,
+            ],
+            token,
+            launch_admin,
+        }
+    }
+
+    fn cfg() -> LaunchConfig {
+        LaunchConfig {
+            launch_auction: true,
+            launch_marketplace: true,
+            enable_minter: false,
+            expected_minter: None,
+        }
+    }
+
+    fn register(env: &Env, client: &ManagerContractClient, n: u8) -> BytesN<32> {
+        let hash = BytesN::from_array(env, &[n; 32]);
+        client.register_implementation(
+            &String::from_str(env, "Token"),
+            &String::from_str(env, "1"),
+            &hash,
+        );
+        hash
+    }
+
+    #[test]
+    fn launch_rejects_revoked_hash_then_succeeds_after_upgrade_to_approved_hash() {
+        let (env, client, _admin) = setup();
+        let old = register(&env, &client, HASH);
+        let new = register(&env, &client, 9);
+        let m = seed(&env, &client);
+        let _ = &m.launch_admin;
+
+        client.revoke_implementation(&old);
+        let r = client.try_launch_dao(&m.token, &cfg());
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            ManagerError::PendingDaoUsesRevokedImplementation
+        );
+        // Nothing launched: the pending record is intact.
+        assert!(client.get_pending_dao(&m.token).is_some());
+
+        // Upgrading only the token is not enough: every module ran the revoked hash.
+        env.as_contract(&m.token, || {
+            env.storage().instance().set(&2u32, &new);
+        });
+        assert_eq!(
+            client
+                .try_launch_dao(&m.token, &cfg())
+                .err()
+                .unwrap()
+                .unwrap(),
+            ManagerError::PendingDaoUsesRevokedImplementation
+        );
+        // Pre-launch upgrade of every module to a non-revoked approved hash.
+        for module in &m.all {
+            env.as_contract(module, || {
+                env.storage().instance().set(&2u32, &new);
+            });
+        }
+        client.launch_dao(&m.token, &cfg());
+        assert!(client.get_pending_dao(&m.token).is_none());
+    }
+
+    #[test]
+    fn launch_rejects_each_module_on_revoked_or_unregistered_hash() {
+        for i in 0..6 {
+            let (env, client, _admin) = setup();
+            let old = register(&env, &client, HASH);
+            let m = seed(&env, &client);
+            // Unregistered current hash on module i.
+            env.as_contract(&m.all[i], || {
+                env.storage()
+                    .instance()
+                    .set(&2u32, &BytesN::from_array(&env, &[77u8; 32]));
+            });
+            let r = client.try_launch_dao(&m.token, &cfg());
+            assert_eq!(
+                r.err().unwrap().unwrap(),
+                ManagerError::PendingDaoUsesRevokedImplementation
+            );
+            // Restoring it to the registered hash allows launch; revoking blocks it again.
+            env.as_contract(&m.all[i], || {
+                env.storage().instance().set(&2u32, &old);
+            });
+            client.revoke_implementation(&old);
+            let r = client.try_launch_dao(&m.token, &cfg());
+            assert_eq!(
+                r.err().unwrap().unwrap(),
+                ManagerError::PendingDaoUsesRevokedImplementation
+            );
+        }
+    }
 }

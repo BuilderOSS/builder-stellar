@@ -6,7 +6,7 @@
 //! 3. DAO Lifecycle - Deployment and launch handoff
 
 use common::clients::{
-    AuctionLaunchClient, MarketplaceLaunchClient, NftClient, TreasuryLaunchClient,
+    AuctionLaunchClient, MarketplaceLaunchClient, NftClient, TreasuryLaunchClient, WasmHashClient,
 };
 use soroban_sdk::{contract, contractimpl, vec, Address, BytesN, Env, String, Val, Vec};
 
@@ -777,6 +777,8 @@ impl ManagerContract {
     ///
     /// - Token total supply must be > 0 (at least one token minted)
     /// - launch_admin must be the current token owner
+    /// - Every module's CURRENT `wasm_hash()` must be registered and not revoked
+    ///   (`PendingDaoUsesRevokedImplementation`); checked before any launch call
     ///
     /// # Effects
     ///
@@ -806,6 +808,26 @@ impl ManagerContract {
         // launch_admin must still be the token owner.
         if nft.owner() != pending.launch_admin {
             return Err(ManagerError::Unauthorized);
+        }
+        // Every module must currently run a registered, non-revoked hash. The
+        // CURRENT hash is read from each module (not the one recorded at
+        // create_dao) so a pre-launch `upgrade` to an approved hash is honored.
+        // Runs before any launch call so a rejection leaves nothing launched.
+        for module in [
+            &addresses.token,
+            &addresses.metadata,
+            &addresses.auction,
+            &addresses.governor,
+            &addresses.treasury,
+            &addresses.marketplace,
+        ] {
+            let current = WasmHashClient::new(&env, module).wasm_hash();
+            let record =
+                get_persistent::<ImplementationVersion>(&env, &ManagerKey::Implementation(current));
+            match record {
+                Some(r) if !r.revoked => {}
+                _ => return Err(ManagerError::PendingDaoUsesRevokedImplementation),
+            }
         }
         // At least one token must exist.
         if nft.total_supply() <= 0 {

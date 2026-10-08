@@ -32,6 +32,7 @@ Before launch, `token.set_mint_authority`, `auction.unpause`, primary listing cr
 
 - `launch_admin` authorization and that `launch_admin` is still the Token owner (`Unauthorized`);
 - Token total supply greater than zero (`LaunchSupplyZero`, 1121);
+- every module's CURRENT `wasm_hash()` is registered and not revoked (`PendingDaoUsesRevokedImplementation`, 1122), checked before any launch call so a rejection launches nothing. The current hash is read from each module rather than stored in `PendingDao`, so a pre-launch owner `upgrade` to an approved, non-revoked hash fixes a pending DAO built on a since-revoked hash; `PendingDao` is unchanged. Revocation never affects the operation of an already-launched DAO;
 - the Auction and Marketplace payment assets equal the ones recorded at `create_dao` (`PaymentTokenMismatch` / `PaymentAssetMismatch`), so a launch admin cannot swap the payment asset during setup without the launch failing;
 - the mint-authority set is fixed by the Manager: Treasury and Marketplace always, Auction if `launch_auction`, and the admin-registered platform minter if `enable_minter` (`PlatformMinterNotSet`, 1008, when none is registered). The launch admin cannot name another minter. When `enable_minter` is set, `LaunchConfig.expected_minter` must be `Some(minter)` and equal the registered platform minter (`PlatformMinterMismatch`, 1010, otherwise, including `None`), so the Manager admin cannot swap the minter between the launch admin's review and the launch transaction.
 
@@ -77,6 +78,10 @@ Revocation: `is_upgrade_approved(from, to)` requires only the TARGET to be non-r
 ## Refund pull fallback
 
 Auction refunds to the previous bidder are pushed on a best-effort basis. If the transfer fails, the amount is credited to a per-bidder balance and `RefundDeferred` is emitted instead of `BidRefunded`; the bid itself is not blocked, so a bidder that cannot receive funds cannot freeze the auction. The bidder collects with `withdraw_refund(bidder)` (`NoPendingRefund`, 1224, when the balance is zero) and `RefundWithdrawn` is emitted. `pending_refund(bidder)` reads the balance. Deferred balances persist until withdrawn, subject to the TTL caveat below.
+
+## Registry caveats
+
+`get_latest_implementation(name)` returns `None` once the latest hash for a name is revoked (there is no fallback pointer). Tooling and indexers must make security decisions with `get_implementation(hash)` and the Manager's `Current*` hashes, never with `get_latest_implementation`. Registry records are write-once: a wrong name/version for a hash cannot be corrected and un-revoking is impossible.
 
 ## Error code namespacing
 

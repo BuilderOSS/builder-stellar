@@ -76,6 +76,11 @@ pub enum ManagerError {
     /// Token total supply is zero; mint at least one token before launch
     LaunchSupplyZero = 1121,
 
+    /// A module of the pending DAO currently runs a revoked or unregistered
+    /// WASM hash; upgrade it (owner `upgrade` to an approved, non-revoked hash)
+    /// before launching
+    PendingDaoUsesRevokedImplementation = 1122,
+
     /// Current implementations not set
     CurrentImplementationsNotSet = 1116,
 

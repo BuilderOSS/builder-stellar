@@ -77,6 +77,8 @@ For a DAO module upgrade:
 
 The module rejects upgrades without owner authorization, without Manager approval, or when `from_hash` does not match the current hash. Revoked or unknown implementations cannot be used. Approving a destination hash alone is not enough; the transition is directional.
 
+Registry notes: `launch_dao` fails with `PendingDaoUsesRevokedImplementation` (1122) if any module of a pending DAO currently runs a revoked or unregistered hash; the launch admin must first `upgrade` that module (owner path, before launch) to an approved, non-revoked hash. `get_latest_implementation(name)` returns `None` after the latest hash is revoked, so deploy tooling must use `get_implementation(hash)` and the `Current*` hashes for security decisions. `scripts/deploy-manager.mjs` verifies each registered record's name and version (before skipping an existing hash and after registering) because records are write-once and cannot be corrected.
+
 ## Artifacts and Verification
 
 Manager deployment artifacts record the network, Manager address, and implementation hashes. DAO artifacts record the creator, nonce, Manager, and creation configuration. Treat these files and the corresponding ledger/hash records as the deployment source of truth.

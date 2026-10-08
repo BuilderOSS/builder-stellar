@@ -242,6 +242,13 @@ The network caps entry TTL at about 180 days (about 3,110,400 ledgers). Metadata
 
 Prefer paginated getters (`get_items`, `get_ipfs_group`) over `get_properties`/`get_ipfs_data` in monitoring queries; the latter are O(total).
 
+### Ops task: registry TTL and Manager caveats
+
+- Manager registry entries (`Implementation`, `UpgradeApproval`, `PendingAdmin`) are persistent and extended only when read; the network caps TTL at about 180 days. Periodically touch them (a read of `get_implementation` / `is_upgrade_approved` extends them) and run `stellar contract restore` for any that were archived. Keep every module able to `sync_version` / `upgrade`, which depends on those entries being live.
+- TOCTOU: `set_current_implementations` can change between a creator signing `create_dao` and its execution. After creation, verify `DaoCreated.wasm_hashes` matches what was intended.
+- Revoking a hash does not affect already-deployed DAOs' operation; it blocks new upgrades to it and `launch_dao` of pending DAOs whose modules still run it (`PendingDaoUsesRevokedImplementation`, 1122).
+- `get_latest_implementation(name)` returns `None` after the latest hash is revoked. Monitoring and tooling must use `get_implementation(hash)` and the `Current*` hashes for security decisions.
+
 Error codes are unique only per contract. Key error metrics by (contract id, code), not by code alone. See [SECURITY_MODEL.md](./SECURITY_MODEL.md).
 
 ---

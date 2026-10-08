@@ -18,6 +18,10 @@ import { runQuiet } from './lib.mjs';
  *   Treasury and Governor self-upgrades use the same payload: Treasury-targeted actions are handled by
  *   its self-dispatch (only `upgrade(from,to)` and `sync_version()` are allowed).
  *
+ * Registry notes: records are write-once (a wrong name/version for a hash can never be fixed or
+ * un-revoked). Use get_implementation(hash) and the Manager's Current* hashes for security decisions,
+ * never get_latest_implementation(name): it returns None once the latest hash is revoked.
+ *
  * Env: DEPLOY_IDENTITY (Manager admin / launch admin key), LEGACY_MANAGER_VERSION (manager only),
  *      PROPOSER (address placed in the printed propose command), UPGRADE_DESCRIPTION (proposal text).
  */

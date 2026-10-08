@@ -290,19 +290,42 @@ function extendCodeTtl(label, hash) {
   }
 }
 
-function registerImplementation(managerAddress, wasmHash, name, version) {
-  // register_implementation rejects an already-registered hash
-  // (ImplementationAlreadyRegistered), so re-runs skip hashes that exist.
-  const existing = runQuiet('stellar', [
+// Registry records are write-once (no rename, re-version or un-revoke), so a wrong
+// name/version for a hash can never be corrected. Verify before and after registering.
+function readImplementation(managerAddress, wasmHash) {
+  const r = runQuiet('stellar', [
     'contract', 'invoke', '--id', managerAddress, '--source-account', identityName,
     '--network', networkName, '--send', 'no', '--', 'get_implementation', '--wasm_hash', wasmHash
   ]);
-  if (existing.ok) {
-    const out = (existing.stdout + existing.stderr).replace(/\x1b\[[0-9;]*m/g, '').trim();
-    if (out.split('\n').pop().trim() !== 'null') {
-      console.log(`Implementation ${name} already registered (${wasmHash}), skipping`);
-      return;
-    }
+  if (!r.ok) return { ok: false };
+  const out = (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, '').trim();
+  const last = out.split('\n').pop().trim();
+  if (last === 'null') return { ok: true, record: null };
+  try {
+    return { ok: true, record: JSON.parse(last) };
+  } catch {
+    throw new Error(`Could not parse get_implementation output for ${wasmHash}: ${last}`);
+  }
+}
+
+function assertImplementationMatches(record, wasmHash, name, version, when) {
+  if (record && record.name === name && record.version === version) return;
+  throw new Error(
+    `Registry record for ${wasmHash} ${when} has name=${record?.name} version=${record?.version}, ` +
+      `expected name=${name} version=${version}. Registration is write-once and un-revoking is ` +
+      'impossible, so this cannot be corrected on this Manager. Do NOT continue: deploy a fresh ' +
+      'Manager (or rebuild the WASM so it has a different hash) and re-run.'
+  );
+}
+
+function registerImplementation(managerAddress, wasmHash, name, version) {
+  // register_implementation rejects an already-registered hash
+  // (ImplementationAlreadyRegistered), so re-runs skip hashes that exist.
+  const existing = readImplementation(managerAddress, wasmHash);
+  if (existing.ok && existing.record) {
+    assertImplementationMatches(existing.record, wasmHash, name, version, 'already on-chain');
+    console.log(`Implementation ${name} already registered (${wasmHash}), skipping`);
+    return;
   }
   console.log(`Registering implementation ${name}...`);
 
@@ -331,8 +354,14 @@ function registerImplementation(managerAddress, wasmHash, name, version) {
     throw new Error(`Failed to register ${name} implementation`);
   }
 
+  const after = readImplementation(managerAddress, wasmHash);
+  if (!after.ok) throw new Error(`Could not read back ${name} implementation ${wasmHash} after registering`);
+  assertImplementationMatches(after.record, wasmHash, name, version, 'after registration');
   console.log(`Registered ${name} implementation`);
 }
+
+// NOTE: security decisions must use get_implementation(hash) and the Current* hashes,
+// never get_latest_implementation(name): it returns None once the latest hash is revoked.
 
 function setCurrentImplementations(managerAddress, implementations) {
   console.log('Setting current implementations...');
