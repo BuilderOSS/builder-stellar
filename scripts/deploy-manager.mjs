@@ -251,7 +251,59 @@ function installWasm(packageName) {
   throw new Error(`Failed to install ${packageName} WASM after 3 attempts`);
 }
 
+// Contract code (WASM) entries are shared by every DAO deployed from the same hash, and rent for
+// extending them is charged to whoever's transaction pushes the TTL up: measured on testnet, extending
+// a 34 KB code entry to 170 days cost ~213 XLM (the first create_dao paid ~223 XLM, the second 2.5 XLM).
+// OPT-IN: set EXTEND_CODE_TTL_DAYS (max 170; the network caps entries at max_entry_ttl, ~180 days) to have
+// the platform operator pre-pay that rent here. Repeat before the code TTL runs out:
+// `stellar contract extend --wasm-hash <hash> --ledgers-to-extend <ledgers>`. Budget accordingly:
+// total rent scales with the sum of WASM sizes (~215 KB for all eight contracts).
+const CODE_TTL_DAYS = Number(process.env.EXTEND_CODE_TTL_DAYS || 0);
+const CODE_TTL_LEDGERS = Math.min(CODE_TTL_DAYS, 170) * 17280;
+
+function extendCodeTtl(label, hash) {
+  if (!(CODE_TTL_DAYS > 0)) {
+    console.log(`Skipping ${label} code TTL extension (set EXTEND_CODE_TTL_DAYS to pre-pay shared code rent)`);
+    return;
+  }
+  const result = runQuiet('stellar', [
+    'contract',
+    'extend',
+    '--wasm-hash',
+    hash,
+    '--ledgers-to-extend',
+    String(CODE_TTL_LEDGERS),
+    '--durability',
+    'persistent',
+    '--source-account',
+    identityName,
+    '--network',
+    networkName
+  ]);
+  if (result.ok) {
+    console.log(`Extended ${label} code TTL to ~${Math.min(CODE_TTL_DAYS, 170)} days (${hash.slice(0, 12)}...)`);
+  } else {
+    console.warn(
+      `WARNING: could not extend ${label} code TTL: ${(result.stderr || result.stdout).trim().split('\n').slice(-2).join(' ')}\n` +
+        '  The contracts still work, but the first DAO creator will pay the code rent.'
+    );
+  }
+}
+
 function registerImplementation(managerAddress, wasmHash, name, version) {
+  // register_implementation rejects an already-registered hash
+  // (ImplementationAlreadyRegistered), so re-runs skip hashes that exist.
+  const existing = runQuiet('stellar', [
+    'contract', 'invoke', '--id', managerAddress, '--source-account', identityName,
+    '--network', networkName, '--send', 'no', '--', 'get_implementation', '--wasm_hash', wasmHash
+  ]);
+  if (existing.ok) {
+    const out = (existing.stdout + existing.stderr).replace(/\x1b\[[0-9;]*m/g, '').trim();
+    if (out.split('\n').pop().trim() !== 'null') {
+      console.log(`Implementation ${name} already registered (${wasmHash}), skipping`);
+      return;
+    }
+  }
   console.log(`Registering implementation ${name}...`);
 
   const result = runQuiet('stellar', [
@@ -472,6 +524,21 @@ async function main() {
     versions.marketplace
   );
   registerImplementation(managerDeploy.id, implementations.minter, 'Minter', versions.minter);
+
+  // Optionally pre-pay the shared contract-code rent (see extendCodeTtl): DAO creators then pay ~2.5 XLM, not ~223.
+  console.log('\n=== Extending Shared Code TTL ===\n');
+  for (const [label, hash] of Object.entries({
+    Manager: implementations.manager,
+    Token: implementations.token,
+    Metadata: implementations.metadata,
+    Auction: implementations.auction,
+    Governor: implementations.governor,
+    Treasury: implementations.treasury,
+    Marketplace: implementations.marketplace,
+    Minter: implementations.minter
+  })) {
+    extendCodeTtl(label, hash);
+  }
 
   // Set current implementations
   console.log('\n=== Setting Current Implementations ===\n');

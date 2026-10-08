@@ -57,6 +57,9 @@ pub const PERCENT_DENOMINATOR: i128 = 100;
 /// deployments may want longer durations for more competitive bidding.
 pub const MIN_AUCTION_DURATION: u64 = 300; // 5 minutes in seconds
 
+/// Maximum auction duration (30 days in seconds).
+pub const MAX_AUCTION_DURATION: u64 = common::MAX_AUCTION_DURATION;
+
 /// Storage keys for auction instance data.
 #[derive(Clone, Debug)]
 #[contracttype]

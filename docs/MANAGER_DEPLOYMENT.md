@@ -50,7 +50,7 @@ The result contains deterministic addresses for all six modules. After launch, v
 
 ## Launch Flow and Platform Configuration
 
-`create_dao` requires authorization from BOTH `params.deployer` and `params.launch_admin` (one signature when they are the same address), so nobody can be named launch admin without consenting. It writes `PendingDao`; the launch admin configures the DAO during the setup window; `launch_dao(token_address, LaunchConfig { launch_auction, launch_marketplace, enable_minter })` then launches every module. Rules enforced by the Manager at launch: launch admin authorization and Token ownership, nonzero Token supply, and unchanged Auction/Marketplace payment assets (recorded at `create_dao`). See [MANAGER_REDESIGN.md](./MANAGER_REDESIGN.md) and [SECURITY_MODEL.md](./SECURITY_MODEL.md).
+`create_dao` requires authorization from BOTH `params.deployer` and `params.launch_admin` (one signature when they are the same address), so nobody can be named launch admin without consenting. It writes `PendingDao`; the launch admin configures the DAO during the setup window; `launch_dao(token_address, LaunchConfig { launch_auction, launch_marketplace, enable_minter, expected_minter })` then launches every module. Rules enforced by the Manager at launch: launch admin authorization and Token ownership, nonzero Token supply, and unchanged Auction/Marketplace payment assets (recorded at `create_dao`). See [MANAGER_REDESIGN.md](./MANAGER_REDESIGN.md) and [SECURITY_MODEL.md](./SECURITY_MODEL.md).
 
 Before any DAO that uses `enable_minter` launches, the Manager admin registers the minter:
 

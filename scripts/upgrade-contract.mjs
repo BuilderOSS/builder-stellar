@@ -108,6 +108,23 @@ if (moduleName !== 'manager') {
   }
 }
 
+function isRegistered(hash) {
+  const r = runQuiet('stellar', [
+    'contract', 'invoke', '--id', managerArtifact.manager, '--source-account', identityName,
+    '--network', networkConfig.network, '--send', 'no', '--', 'get_implementation', '--wasm_hash', hash
+  ]);
+  return r.ok && (r.stdout + r.stderr).trim().split('\n').pop().trim() !== 'null';
+}
+
+function registerOnce(params) {
+  // register_implementation rejects an existing hash (ImplementationAlreadyRegistered).
+  if (isRegistered(params.wasm_hash)) {
+    console.log(`Implementation ${params.name} ${params.wasm_hash} already registered, skipping.`);
+    return;
+  }
+  invoke(managerArtifact.manager, 'register_implementation', params);
+}
+
 function invoke(contractId, method, params) {
   const result = runQuiet('stellar', [
     'contract', 'invoke', '--id', contractId, '--source-account', identityName,
@@ -134,13 +151,13 @@ if (moduleName === 'manager') {
       'Set LEGACY_MANAGER_VERSION to the verified active Manager release before migrating Manager.'
     );
   }
-  invoke(managerArtifact.manager, 'register_implementation', {
+  registerOnce({
     name: 'Manager',
     version: legacyManagerVersion,
     wasm_hash: fromHash
   });
 }
-invoke(managerArtifact.manager, 'register_implementation', {
+registerOnce({
   name: implementationName,
   version: releaseManifest[moduleName],
   wasm_hash: targetHash

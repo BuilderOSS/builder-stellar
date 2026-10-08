@@ -99,7 +99,7 @@ Contract-enforced bounds at `create_dao` (violations fail with the listed Manage
 | `votingDelay`, `votingPeriod`, `queueDelay` | each 300 to 2,592,000 seconds (30 days) | `InvalidGovernanceTiming` (1117) |
 | `quorumBps` | 1 to 10,000 | `InvalidQuorumBps` (1105) |
 | proposal threshold (`GovernanceConfig.proposal_threshold`, an absolute token count, not bps) | at least 1 | `InvalidProposalThreshold` (1120) |
-| `auction.duration` | at least 300 seconds | `InvalidDuration` (1107) |
+| `auction.duration` | 300 seconds to 2,592,000 seconds (30 days) | `InvalidDuration` (1107) |
 | `auction.reservePrice` | at least 1,000 stroops | `InvalidParamBounds` (1103) |
 | `auction.timeBuffer` | 1 to 86,400 seconds | `InvalidTimeBuffer` (1108) |
 | `marketplace.secondaryFeeBps` | at most 10,000 | `InvalidParamBounds` (1103) |
@@ -131,9 +131,14 @@ launch admin, recorded payment assets).
 - use the owner-only Governor setters.
 
 The launch admin cannot create proposals, vote, execute, create primary listings,
-or unpause the Auction in this window (`NotLive`).
+list or buy on the secondary market, or unpause the Auction in this window (`NotLive`).
 
-**3. `launch_dao(token_address, LaunchConfig { launch_auction, launch_marketplace, enable_minter })`**
+Founder supply is unconstrained and the minimum governance timings allow a
+majority founder to execute a proposal about 15 minutes after launch; see
+SECURITY_MODEL.md "Known limitations" (founder supply, quorum lock) before choosing
+founder distribution, timings and `quorumBps`.
+
+**3. `launch_dao(token_address, LaunchConfig { launch_auction, launch_marketplace, enable_minter, expected_minter })`**
 (launch admin auth). The Manager checks the launch admin still owns the Token,
 supply is nonzero, and the payment assets match `PendingDao`. It then launches
 every module: ownership moves to the Treasury, the Auction starts if
@@ -144,7 +149,11 @@ minter if `enable_minter`.
 
 The platform minter is not chosen by the DAO. The Manager admin registers it
 beforehand with `manager.set_platform_minter(minter)`; `enable_minter: true`
-fails with `PlatformMinterNotSet` (1008) if none is registered.
+fails with `PlatformMinterNotSet` (1008) if none is registered. When
+`enable_minter` is true, `LaunchConfig.expected_minter` must be set to the
+minter returned by `manager.get_platform_minter()`, otherwise launch fails with
+`PlatformMinterMismatch` (1010); `scripts/deploy-dao.mjs launch_dao` reads and
+pins it automatically.
 
 The script wrapper writes the artifact to
 `deploys/testnet-my-dao-1.json`.
@@ -378,13 +387,14 @@ If `launch_dao()` didn't complete:
      --network testnet \
      -- launch_dao \
      --token_address DAO_TOKEN_ADDRESS \
-     --launch_config '{"launch_auction": true, "launch_marketplace": true, "enable_minter": false}'
+     --launch_config '{"launch_auction": true, "launch_marketplace": true, "enable_minter": false, "expected_minter": null}'
    ```
 
    The LaunchConfig controls:
    - `launch_auction`: start the Auction (false leaves it paused until governance starts it)
    - `launch_marketplace`: leave the Marketplace open (false forces it paused)
    - `enable_minter`: grant mint authority to the Manager-registered platform minter
+   - `expected_minter`: required (the registered minter's address) when `enable_minter` is true; `null` otherwise
 
    Common failures: `LaunchSupplyZero` (1121, mint a founder token first),
    `Unauthorized` (1000, the launch admin no longer owns the Token),

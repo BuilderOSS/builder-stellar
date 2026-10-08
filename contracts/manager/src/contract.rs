@@ -25,6 +25,8 @@ pub struct ManagerContract;
 /// Maximum string length for implementation names.
 const MAX_STRING_LENGTH: u32 = 256;
 const MIN_AUCTION_DURATION: u64 = 300;
+/// Must equal `common::MAX_AUCTION_DURATION`.
+const MAX_AUCTION_DURATION: u64 = common::MAX_AUCTION_DURATION;
 const MIN_RESERVE_PRICE: i128 = 1_000;
 const MIN_GOVERNANCE_DELAY: u64 = 300;
 /// Maximum for each governance timing value (30 days). Must equal the
@@ -82,6 +84,8 @@ impl ManagerContract {
     /// * `Unauthorized` - Caller is not admin
     /// * `InvalidImplementationName` - Name is empty or too long
     /// * `InvalidVersion` - Version is empty or too long
+    /// * `ImplementationAlreadyRegistered` - A record already exists for this hash
+    ///   (records are immutable: no renaming, re-versioning or un-revoking)
     pub fn register_implementation(
         env: Env,
         name: String,
@@ -94,6 +98,15 @@ impl ManagerContract {
         // Validate inputs
         Self::validate_string(&name)?;
         Self::validate_string(&version)?;
+
+        if get_persistent::<ImplementationVersion>(
+            &env,
+            &ManagerKey::Implementation(wasm_hash.clone()),
+        )
+        .is_some()
+        {
+            return Err(ManagerError::ImplementationAlreadyRegistered);
+        }
 
         // Create implementation record
         let implementation = ImplementationVersion {
@@ -144,7 +157,11 @@ impl ManagerContract {
     /// # Errors
     ///
     /// * `Unauthorized` - Caller is not admin
-    /// * `InvalidUpgradePath` - One or both implementations don't exist or are revoked
+    /// * `ImplementationNotFound` - One or both implementations don't exist
+    /// * `InvalidUpgradePath` - Target is revoked, or the names differ
+    ///
+    /// A revoked SOURCE is allowed on purpose: after revoking a vulnerable
+    /// hash the admin must still be able to approve a migration off it.
     pub fn approve_upgrade(
         env: Env,
         from_hash: BytesN<32>,
@@ -153,7 +170,7 @@ impl ManagerContract {
         // Check authorization
         Self::require_admin(&env)?;
 
-        // Validate both implementations exist and are not revoked
+        // Both implementations must exist; only the target must be active.
         let from_impl: ImplementationVersion = get_persistent::<ImplementationVersion>(
             &env,
             &ManagerKey::Implementation(from_hash.clone()),
@@ -166,7 +183,7 @@ impl ManagerContract {
         )
         .ok_or(ManagerError::ImplementationNotFound)?;
 
-        if from_impl.revoked || to_impl.revoked {
+        if to_impl.revoked {
             return Err(ManagerError::InvalidUpgradePath);
         }
         if from_impl.name != to_impl.name {
@@ -250,7 +267,9 @@ impl ManagerContract {
     ///
     /// # Returns
     ///
-    /// `true` if upgrade is approved and neither implementation is revoked.
+    /// `true` if the path is approved, both hashes are registered under the
+    /// same name and the TARGET is not revoked. A revoked source may still
+    /// migrate away.
     pub fn is_upgrade_approved(env: Env, from_hash: BytesN<32>, to_hash: BytesN<32>) -> bool {
         // Check if approval exists
         extend_instance_ttl(&env);
@@ -272,19 +291,18 @@ impl ManagerContract {
             get_persistent::<ImplementationVersion>(&env, &ManagerKey::Implementation(to_hash));
 
         match (from_impl, to_impl) {
-            (Some(from), Some(to)) => !from.revoked && !to.revoked && from.name == to.name,
+            (Some(from), Some(to)) => !to.revoked && from.name == to.name,
             _ => false,
         }
     }
 
-    /// Returns the registered release version for a WASM hash.
-    ///
-    /// Module contracts call this only while applying an approved upgrade, so
-    /// their stored version always corresponds to their active WASM hash.
+    /// Returns the registered release version for a WASM hash, including
+    /// revoked hashes (a module still running a revoked hash must be able to
+    /// `sync_version`). Callers that must reject revoked targets rely on
+    /// `is_upgrade_approved`, which checks the target is not revoked.
     pub fn get_implementation_version(env: Env, wasm_hash: BytesN<32>) -> Option<String> {
         extend_instance_ttl(&env);
         get_persistent::<ImplementationVersion>(&env, &ManagerKey::Implementation(wasm_hash))
-            .filter(|implementation| !implementation.revoked)
             .map(|implementation| implementation.version)
     }
 
@@ -551,6 +569,15 @@ impl ManagerContract {
         let (marketplace_wasm, marketplace_version) =
             Self::current_wasm(&env, &ManagerKey::CurrentMarketplaceWasm, "Marketplace")?;
 
+        let wasm_hashes = DaoWasmHashes {
+            token: token_wasm.clone(),
+            metadata: metadata_wasm.clone(),
+            auction: auction_wasm.clone(),
+            governor: governor_wasm.clone(),
+            treasury: treasury_wasm.clone(),
+            marketplace: marketplace_wasm.clone(),
+        };
+
         // Generate deterministic salts
         let token_salt = Self::generate_salt(&env, &params.deployer, params.nonce, "token");
         let metadata_salt = Self::generate_salt(&env, &params.deployer, params.nonce, "metadata");
@@ -724,6 +751,7 @@ impl ManagerContract {
             &params.launch_admin,
             env.ledger().sequence() as u64,
             &addresses,
+            &wasm_hashes,
         );
 
         Ok(addresses)
@@ -742,6 +770,8 @@ impl ManagerContract {
     ///   - `launch_auction` - Whether to unpause the auction
     ///   - `launch_marketplace` - Whether to unpause the marketplace
     ///   - `enable_minter` - Whether to grant mint authority to the registered PlatformMinter
+    ///   - `expected_minter` - Required when `enable_minter` is set; must equal the registered
+    ///     PlatformMinter (`PlatformMinterMismatch` otherwise, including when `None`)
     ///
     /// # Validation
     ///
@@ -791,6 +821,11 @@ impl ManagerContract {
         if launch_config.enable_minter {
             let minter: Address = get_persistent(&env, &ManagerKey::PlatformMinter)
                 .ok_or(ManagerError::PlatformMinterNotSet)?;
+            // The launch admin must pin the minter they reviewed; this closes
+            // the window in which the Manager admin swaps it before launch.
+            if launch_config.expected_minter != Some(minter.clone()) {
+                return Err(ManagerError::PlatformMinterMismatch);
+            }
             minters.push_back(minter);
         }
 
@@ -985,6 +1020,17 @@ impl ManagerContract {
         Ok(())
     }
 
+    /// Cancel a pending admin handover (admin only).
+    pub fn cancel_pending_admin(env: Env) -> Result<(), ManagerError> {
+        Self::require_admin(&env)?;
+        let current = get_admin(&env).ok_or(ManagerError::AdminNotSet)?;
+        let pending: Address =
+            get_persistent(&env, &ManagerKey::PendingAdmin).ok_or(ManagerError::NoPendingAdmin)?;
+        remove_persistent(&env, &ManagerKey::PendingAdmin);
+        emit_admin_proposal_cancelled(&env, &current, &pending);
+        Ok(())
+    }
+
     /// Accept a pending admin handover. Requires the proposed admin's authorization.
     pub fn accept_admin(env: Env) -> Result<(), ManagerError> {
         extend_instance_ttl(&env);
@@ -1131,7 +1177,9 @@ impl ManagerContract {
             return Err(ManagerError::InvalidProposalThreshold);
         }
 
-        if config.auction.duration < MIN_AUCTION_DURATION {
+        if config.auction.duration < MIN_AUCTION_DURATION
+            || config.auction.duration > MAX_AUCTION_DURATION
+        {
             return Err(ManagerError::InvalidDuration);
         }
         if config.auction.reserve_price < MIN_RESERVE_PRICE {

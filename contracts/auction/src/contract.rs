@@ -22,8 +22,8 @@ use crate::{
     storage::{
         clear_pending_refund, get_auction, get_config, get_pending_refund, is_launched,
         is_payment_token_locked, set_auction, set_config, set_launched, set_payment_token_locked,
-        AuctionConfig, AuctionState, DataKey, MAX_BID_INCREMENT_PERCENT, MAX_TIME_BUFFER,
-        MIN_AUCTION_DURATION, MIN_RESERVE_PRICE,
+        AuctionConfig, AuctionState, DataKey, MAX_AUCTION_DURATION, MAX_BID_INCREMENT_PERCENT,
+        MAX_TIME_BUFFER, MIN_AUCTION_DURATION, MIN_RESERVE_PRICE,
     },
 };
 
@@ -180,7 +180,9 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         version: String,
     ) {
         // Validate config
-        if duration < MIN_AUCTION_DURATION || min_bid_increment_percent == 0 {
+        if !(MIN_AUCTION_DURATION..=MAX_AUCTION_DURATION).contains(&duration)
+            || min_bid_increment_percent == 0
+        {
             panic_with_error!(e, AuctionError::InvalidConfig);
         }
 
@@ -467,7 +469,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     #[only_owner]
     #[when_paused]
     fn set_duration(e: &Env, duration: u64) {
-        if duration < MIN_AUCTION_DURATION {
+        if !(MIN_AUCTION_DURATION..=MAX_AUCTION_DURATION).contains(&duration) {
             panic_with_error!(e, AuctionError::InvalidConfig);
         }
 

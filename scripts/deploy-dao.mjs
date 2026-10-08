@@ -31,7 +31,8 @@ const networkConfigPath = args[2];
  *    Changing auction/marketplace payment assets in setup makes launch_dao fail.
  *
  * 3. launch_dao: Manager.launch_dao(token_address, launch_config{launch_auction, launch_marketplace,
- *    enable_minter}). It grants mint authority itself (Treasury, Marketplace, Auction if launched,
+ *    enable_minter, expected_minter}; expected_minter is pinned to get_platform_minter when
+ *    enable_minter is set). It grants mint authority itself (Treasury, Marketplace, Auction if launched,
  *    and the Manager's registered PlatformMinter if enable_minter), moves ownership of every module
  *    to the Treasury and deletes the pending state. The Manager has no authority afterwards.
  *
@@ -227,7 +228,9 @@ const marketplacePaymentAsset = marketplaceConfig.paymentAsset ?? daoConfig.auct
 const launchFlags = {
   launch_auction: daoConfig.launch?.launchAuction ?? daoConfig.auction.enabled ?? true,
   launch_marketplace: daoConfig.launch?.launchMarketplace ?? true,
-  enable_minter: daoConfig.launch?.enableMinter ?? false
+  enable_minter: daoConfig.launch?.enableMinter ?? false,
+  // Pinned at launch time from get_platform_minter (see launch_dao phase); required when enable_minter.
+  expected_minter: null
 };
 const founderBatches = planFounderBatches(daoConfig.founders);
 const artworkBatches = planArtworkBatches(artworkProperties);
@@ -266,7 +269,7 @@ if (!managerArtifact.versions) {
 function invoke(id, method, params = {}) {
   const result = runQuiet('stellar', [
     'contract', 'invoke', '--id', id, '--source-account', identityName,
-    '--network', networkName, '--resource-fee', '100000000', '--', method,
+    '--network', networkName, '--', method,
     ...Object.entries(params).flatMap(([name, value]) => [`--${name}`, typeof value === 'string' ? value : JSON.stringify(value)])
   ], { env: { ...process.env, STELLAR_NO_CACHE: 'true' } });
   if (!result.ok) {
@@ -536,7 +539,10 @@ if (phase === 'launch_dao') {
   if (launchFlags.enable_minter) {
     const minter = invokeView(managerAddress, 'get_platform_minter');
     if (!minter) throw new Error('enable_minter is set but the Manager has no platform minter (PlatformMinterNotSet). The Manager admin must run set_platform_minter (deploy-manager.mjs does this).');
-    console.log(`Platform minter to be granted mint authority: ${minter}`);
+    console.log(`Platform minter to be granted mint authority (pinned as expected_minter): ${minter}`);
+    // The Manager reverts with PlatformMinterMismatch if the admin swaps the minter before this
+    // transaction lands, so what the launch admin saw is what gets mint authority.
+    launchFlags.expected_minter = minter;
   }
 
   const launchOutput = invoke(managerAddress, 'launch_dao', {

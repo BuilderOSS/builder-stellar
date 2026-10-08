@@ -194,6 +194,8 @@ impl MarketplaceContract {
 
     pub fn list(e: &Env, token_id: u32, seller: Address, price: i128, expires_at: u64) {
         common::ttl::extend_instance(e);
+        // Setup-window listings could pin a custom asset/fee past launch.
+        common::lifecycle::require_live(e);
         let config = Self::get_config(e);
         Self::check_open_listing(e, price, expires_at);
         seller.require_auth();
@@ -240,6 +242,7 @@ impl MarketplaceContract {
 
     pub fn buy(e: &Env, token_id: u32, buyer: Address) {
         common::ttl::extend_instance(e);
+        common::lifecycle::require_live(e);
         let config = Self::get_config(e);
         if config.paused {
             panic_with_error!(e, MarketplaceError::Paused);
@@ -366,11 +369,6 @@ impl MarketplaceContract {
 
     pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
         let config = Self::require_admin(e);
-        MarketplaceUpgraded {
-            from_hash: from_hash.clone(),
-            to_hash: to_hash.clone(),
-        }
-        .publish(e);
         common::upgrade::apply(e, &config.manager, &from_hash, &to_hash);
     }
 

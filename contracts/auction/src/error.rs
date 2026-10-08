@@ -18,7 +18,7 @@ pub enum AuctionError {
     ReservePriceNotMet = 1206,
     /// Bid doesn't meet minimum increment
     MinBidNotMet = 1207,
-    /// Invalid configuration parameters (e.g., duration < 5 minutes, zero increment)
+    /// Invalid configuration parameters (e.g., duration outside 5 minutes ..= 30 days, zero increment)
     InvalidConfig = 1208,
     /// Auction not launched yet
     NotLaunched = 1212,

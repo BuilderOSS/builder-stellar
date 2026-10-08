@@ -133,6 +133,7 @@ LaunchConfig {
     launch_auction: bool,     // start the Auction (unpause and create the first auction)
     launch_marketplace: bool, // leave the Marketplace open; false forces it paused
     enable_minter: bool,      // grant mint authority to the admin-registered platform minter
+    expected_minter: Option<Address>, // required when enable_minter; must equal the registered minter
 }
 ```
 

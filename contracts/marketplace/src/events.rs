@@ -1,4 +1,4 @@
-use soroban_sdk::{contractevent, Address, BytesN, Env, String};
+use soroban_sdk::{contractevent, Address, Env, String};
 
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -125,13 +125,6 @@ pub struct MarketplacePaused {}
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MarketplaceUnpaused {}
-
-#[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MarketplaceUpgraded {
-    pub from_hash: BytesN<32>,
-    pub to_hash: BytesN<32>,
-}
 
 pub fn emit_marketplace_initialized(
     e: &Env,

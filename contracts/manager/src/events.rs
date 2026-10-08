@@ -2,7 +2,7 @@
 
 use soroban_sdk::{contractevent, Address, BytesN, Env, String};
 
-use crate::storage::DaoAddresses;
+use crate::storage::{DaoAddresses, DaoWasmHashes};
 
 #[contractevent]
 pub struct ManagerInitialized {
@@ -66,6 +66,15 @@ pub struct DaoCreated {
     pub launch_admin: Address,
     pub created_ledger: u64,
     pub modules: DaoAddresses,
+    /// WASM hashes the modules were deployed from.
+    pub wasm_hashes: DaoWasmHashes,
+}
+#[contractevent]
+pub struct AdminProposalCancelled {
+    #[topic]
+    pub current_admin: Address,
+    #[topic]
+    pub cancelled_admin: Address,
 }
 #[contractevent]
 pub struct FactoryPaused {}
@@ -158,6 +167,7 @@ pub fn emit_dao_created(
     launch_admin: &Address,
     created_ledger: u64,
     modules: &DaoAddresses,
+    wasm_hashes: &DaoWasmHashes,
 ) {
     DaoCreated {
         token_address: token_address.clone(),
@@ -165,6 +175,7 @@ pub fn emit_dao_created(
         launch_admin: launch_admin.clone(),
         created_ledger,
         modules: modules.clone(),
+        wasm_hashes: wasm_hashes.clone(),
     }
     .publish(env);
 }
@@ -258,6 +269,15 @@ pub fn emit_admin_proposed(env: &Env, current_admin: &Address, proposed_admin: &
     AdminProposed {
         current_admin: current_admin.clone(),
         proposed_admin: proposed_admin.clone(),
+    }
+    .publish(env);
+}
+
+/// Emitted when the admin cancels a pending handover.
+pub fn emit_admin_proposal_cancelled(env: &Env, current_admin: &Address, cancelled: &Address) {
+    AdminProposalCancelled {
+        current_admin: current_admin.clone(),
+        cancelled_admin: cancelled.clone(),
     }
     .publish(env);
 }

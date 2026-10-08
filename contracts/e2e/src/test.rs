@@ -63,6 +63,12 @@ impl MaliciousReentrantContract {
         e.storage().instance().set(&symbol_short!("success"), &true);
     }
 
+    /// Same marker write as `reentry` but without re-entering the Treasury
+    /// (positive control for the re-entry test).
+    pub fn ping(e: &Env) {
+        e.storage().instance().set(&symbol_short!("attack"), &1u32);
+    }
+
     pub fn get_attack_count(e: &Env) -> u32 {
         e.storage()
             .instance()
@@ -848,6 +854,48 @@ fn reentrancy_attack_is_prevented() {
     // Everything reverted: still Queued, and the attacker's state write is gone.
     assert_eq!(governor.proposal_state(&proposal_id), ProposalState::Queued);
     assert_eq!(_malicious.get_attack_count(), 0);
+}
+
+#[test]
+fn reentrancy_positive_control_same_proposal_without_reentry_executes() {
+    // Identical flow to `reentrancy_attack_is_prevented`, but the action does
+    // not re-enter the Treasury: it must execute, proving the failure above is
+    // caused by the re-entry and not by the proposal plumbing.
+    let (e, token, treasury, governor, _target, owner) = setup();
+    let malicious_id = e.register(MaliciousReentrantContract, ());
+    let malicious = MaliciousReentrantContractClient::new(&e, &malicious_id);
+
+    let proposer = Address::generate(&e);
+    token.mint(&owner, &proposer);
+
+    e.ledger().set_sequence_number(200);
+    e.ledger().set_timestamp(2_000);
+
+    let targets = vec![&e, malicious_id.clone()];
+    let functions = vec![&e, symbol_short!("ping")];
+    let args: Vec<Vec<Val>> = vec![&e, vec![&e]];
+    let description = String::from_str(&e, "Reentrancy positive control");
+    let desc_hash = description_hash(&e, &description);
+
+    let proposal_id = governor.propose(&targets, &functions, &args, &description, &proposer);
+    e.ledger().set_timestamp(2_301);
+    governor.cast_vote(&proposal_id, &1, &String::from_str(&e, "yes"), &proposer);
+    e.ledger().set_timestamp(2_601);
+    assert_eq!(
+        governor.proposal_state(&proposal_id),
+        ProposalState::Succeeded
+    );
+    governor.queue(
+        &targets, &functions, &args, &desc_hash, &2_411_u32, &proposer,
+    );
+    e.ledger().set_timestamp(2_901);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
+
+    assert_eq!(
+        governor.proposal_state(&proposal_id),
+        ProposalState::Executed
+    );
+    assert_eq!(malicious.get_attack_count(), 1);
 }
 
 // treasury_batch_mint_with_explicit_auth removed - Token contract no longer has batch_mint

@@ -423,22 +423,112 @@ fn test_factory_pause_unpause_idempotent() {
 }
 
 #[test]
-fn test_register_same_implementation_twice() {
+fn test_register_same_hash_twice_is_rejected() {
     let (env, client, _admin) = setup();
 
     let name = String::from_str(&env, "Token");
     let wasm_hash = BytesN::from_array(&env, &[1u8; 32]);
 
-    // Register once
     client.register_implementation(&name, &String::from_str(&env, "1"), &wasm_hash);
 
-    // Register again with same version - should succeed (overwrites)
-    client.register_implementation(&name, &String::from_str(&env, "1"), &wasm_hash);
+    // Re-registering (same or different metadata) must not overwrite.
+    for (n, v) in [("Token", "1"), ("Auction", "9")] {
+        let r = client.try_register_implementation(
+            &String::from_str(&env, n),
+            &String::from_str(&env, v),
+            &wasm_hash,
+        );
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            crate::ManagerError::ImplementationAlreadyRegistered
+        );
+    }
 
+    // Revoked records cannot be un-revoked by re-registering.
+    client.revoke_implementation(&wasm_hash);
+    let r = client.try_register_implementation(&name, &String::from_str(&env, "1"), &wasm_hash);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        crate::ManagerError::ImplementationAlreadyRegistered
+    );
     let implementation = client.get_implementation(&wasm_hash).unwrap();
+    assert!(implementation.revoked);
     assert_eq!(implementation.version, String::from_str(&env, "1"));
+}
 
-    let _ = env;
+#[test]
+fn test_revoked_source_can_be_approved_and_migrate_away() {
+    let (env, client, _admin) = setup();
+    let name = String::from_str(&env, "Token");
+    let b = BytesN::from_array(&env, &[2u8; 32]);
+    let c = BytesN::from_array(&env, &[3u8; 32]);
+    client.register_implementation(&name, &String::from_str(&env, "2"), &b);
+    client.register_implementation(&name, &String::from_str(&env, "3"), &c);
+
+    client.revoke_implementation(&b);
+    client.approve_upgrade(&b, &c);
+    assert!(client.is_upgrade_approved(&b, &c));
+    // The revoked version is still readable for sync_version.
+    assert_eq!(
+        client.get_implementation_version(&b),
+        Some(String::from_str(&env, "2"))
+    );
+}
+
+#[test]
+fn test_revoked_target_is_rejected_for_approval_and_for_existing_approval() {
+    let (env, client, _admin) = setup();
+    let name = String::from_str(&env, "Token");
+    let a = BytesN::from_array(&env, &[1u8; 32]);
+    let b = BytesN::from_array(&env, &[2u8; 32]);
+    let c = BytesN::from_array(&env, &[3u8; 32]);
+    client.register_implementation(&name, &String::from_str(&env, "1"), &a);
+    client.register_implementation(&name, &String::from_str(&env, "2"), &b);
+    client.register_implementation(&name, &String::from_str(&env, "3"), &c);
+
+    client.approve_upgrade(&a, &b);
+    client.revoke_implementation(&b);
+    assert!(!client.is_upgrade_approved(&a, &b));
+
+    client.revoke_implementation(&c);
+    let r = client.try_approve_upgrade(&a, &c);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        crate::ManagerError::InvalidUpgradePath
+    );
+}
+
+#[test]
+fn test_cancel_pending_admin() {
+    let (env, client, admin) = setup();
+    let new_admin = Address::generate(&env);
+
+    // Nothing pending.
+    let r = client.try_cancel_pending_admin();
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        crate::ManagerError::NoPendingAdmin
+    );
+
+    client.propose_admin(&new_admin);
+    client.cancel_pending_admin();
+    assert_eq!(client.get_pending_admin(), None);
+    assert_eq!(client.get_admin(), Some(admin));
+    // The cancelled proposal can no longer be accepted.
+    let r = client.try_accept_admin();
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        crate::ManagerError::NoPendingAdmin
+    );
+}
+
+#[test]
+fn test_cancel_pending_admin_requires_admin_auth() {
+    let (env, client, admin) = setup();
+    client.propose_admin(&Address::generate(&env));
+    client.cancel_pending_admin();
+    let auths = env.auths();
+    assert_eq!(auths.last().unwrap().0, admin);
 }
 
 #[test]
@@ -835,6 +925,7 @@ fn test_pending_dao_launches_after_500_unrelated_create_dao() {
             launch_auction: true,
             launch_marketplace: true,
             enable_minter: false,
+            expected_minter: None,
         },
     );
     assert!(client.get_pending_dao(&token).is_none());
@@ -1077,6 +1168,16 @@ mod real_dao {
             launch_auction,
             launch_marketplace,
             enable_minter,
+            expected_minter: None,
+        }
+    }
+
+    fn cfg_pinned(minter: &Address) -> LaunchConfig {
+        LaunchConfig {
+            launch_auction: true,
+            launch_marketplace: true,
+            enable_minter: true,
+            expected_minter: Some(minter.clone()),
         }
     }
 
@@ -1341,9 +1442,47 @@ mod real_dao {
         let minter = Address::generate(&dao.env);
         dao.client.set_platform_minter(&minter);
         dao.client
-            .launch_dao(&dao.addresses.token, &cfg(true, true, true));
+            .launch_dao(&dao.addresses.token, &cfg_pinned(&minter));
         assert!(dao.token.mint_authority(&minter));
         assert!(!dao.token.mint_authority(&dao.launch_admin));
+    }
+
+    #[test]
+    fn enable_minter_requires_the_pinned_minter_to_match() {
+        let dao = build();
+        let minter = Address::generate(&dao.env);
+        dao.client.set_platform_minter(&minter);
+        let token = &dao.addresses.token;
+
+        // None is rejected.
+        let r = dao.client.try_launch_dao(token, &cfg(true, true, true));
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            ManagerError::PlatformMinterMismatch
+        );
+
+        // A stale pin is rejected after the Manager admin swaps the minter.
+        let swapped = Address::generate(&dao.env);
+        dao.client.set_platform_minter(&swapped);
+        let r = dao.client.try_launch_dao(token, &cfg_pinned(&minter));
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            ManagerError::PlatformMinterMismatch
+        );
+        assert!(dao.client.get_pending_dao(token).is_some());
+
+        // The current minter pinned explicitly succeeds.
+        dao.client.launch_dao(token, &cfg_pinned(&swapped));
+        assert!(dao.token.mint_authority(&swapped));
+        assert!(!dao.token.mint_authority(&minter));
+    }
+
+    #[test]
+    fn expected_minter_is_ignored_when_enable_minter_is_false() {
+        let dao = build();
+        let mut config = cfg(true, true, false);
+        config.expected_minter = Some(Address::generate(&dao.env));
+        dao.client.launch_dao(&dao.addresses.token, &config);
     }
 
     #[test]
@@ -1655,4 +1794,131 @@ mod real_dao {
         assert!(!dao.token.is_live());
         assert!(dao.client.get_pending_dao(&dao.addresses.token).is_some());
     }
+}
+
+// ============================================================================
+// Hardening: auction duration bound, DaoCreated hashes, revoked-source migration
+// ============================================================================
+
+#[test]
+fn create_dao_rejects_auction_duration_above_30_days() {
+    let (env, client, _admin) = setup();
+    register_stub_implementations(&env, &client);
+    let deployer = Address::generate(&env);
+
+    let mut params = dao_params(&env, &deployer, 1);
+    params.initial_config.auction.duration = 2_592_001;
+    let r = client.try_create_dao(&params);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        crate::ManagerError::InvalidDuration
+    );
+
+    // The boundary itself is accepted.
+    params.initial_config.auction.duration = 2_592_000;
+    env.cost_estimate().budget().reset_unlimited();
+    client.create_dao(&params);
+}
+
+#[test]
+fn create_dao_emits_dao_created_with_module_wasm_hashes() {
+    use crate::events::DaoCreated;
+    use crate::storage::DaoWasmHashes;
+    use soroban_sdk::{testutils::Events, Event as _};
+
+    let (env, client, _admin) = setup();
+    register_stub_implementations(&env, &client);
+    let deployer = Address::generate(&env);
+    env.cost_estimate().budget().reset_unlimited();
+    let addresses = client.create_dao(&dao_params(&env, &deployer, 7));
+    let emitted = env.events().all();
+
+    let hash_of = |name: &str| {
+        // The stub hashes are the registered "latest" implementation per name.
+        client
+            .get_latest_implementation(&String::from_str(&env, name))
+            .unwrap()
+            .wasm_hash
+    };
+    let expected = DaoCreated {
+        token_address: addresses.token.clone(),
+        deployer: deployer.clone(),
+        launch_admin: deployer.clone(),
+        created_ledger: env.ledger().sequence() as u64,
+        modules: addresses.clone(),
+        wasm_hashes: DaoWasmHashes {
+            token: hash_of("Token"),
+            metadata: hash_of("Metadata"),
+            auction: hash_of("Auction"),
+            governor: hash_of("Governor"),
+            treasury: hash_of("Treasury"),
+            marketplace: hash_of("Marketplace"),
+        },
+    }
+    .to_xdr(&env, &client.address);
+    assert!(emitted.events().contains(&expected));
+}
+
+/// Module on a REVOKED hash can still migrate to an approved active hash, and
+/// can `sync_version`; a revoked TARGET is rejected by the module.
+#[test]
+fn module_on_revoked_hash_migrates_away_and_syncs() {
+    use common::testutils::empty_wasm;
+    use common::CommonError;
+    use marketplace::MarketplaceContractClient;
+
+    let (env, client, _admin) = setup();
+    let name = String::from_str(&env, "Marketplace");
+    let b = BytesN::from_array(&env, &[0xB; 32]);
+    let c = empty_wasm(&env);
+    let bad = BytesN::from_array(&env, &[0xD; 32]);
+    client.register_implementation(&name, &String::from_str(&env, "0.2.0"), &b);
+    client.register_implementation(&name, &String::from_str(&env, "0.3.0"), &c);
+    client.register_implementation(&name, &String::from_str(&env, "0.4.0"), &bad);
+
+    let module = |b: &BytesN<32>| {
+        let id = env.register(
+            marketplace::MarketplaceContract,
+            (
+                Address::generate(&env),
+                Address::generate(&env),
+                Address::generate(&env),
+                Address::generate(&env),
+                client.address.clone(),
+                b.clone(),
+                String::from_str(&env, "stale"),
+                250u32,
+            ),
+        );
+        (id.clone(), MarketplaceContractClient::new(&env, &id))
+    };
+    let (id, m) = module(&b);
+
+    // Vulnerability found in B: revoke it, then approve the emergency migration.
+    client.revoke_implementation(&b);
+    client.approve_upgrade(&b, &bad);
+    client.approve_upgrade(&b, &c);
+    client.revoke_implementation(&bad);
+
+    // sync_version still works for a module whose current hash is revoked.
+    m.sync_version();
+    assert_eq!(m.version(), String::from_str(&env, "0.2.0"));
+
+    // Revoked target is rejected.
+    let r = m.try_upgrade(&b, &bad);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        CommonError::UpgradeNotApproved.into()
+    );
+
+    // Migration off the revoked hash to the active, approved target succeeds.
+    m.upgrade(&b, &c);
+    // The contract code is now an empty module; read the stored keys directly.
+    env.as_contract(&id, || {
+        assert_eq!(common::upgrade::current_hash(&env), c);
+        assert_eq!(
+            common::upgrade::version(&env),
+            String::from_str(&env, "0.3.0")
+        );
+    });
 }

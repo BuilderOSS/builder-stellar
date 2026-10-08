@@ -155,6 +155,42 @@ fn test_constructor_rejects_zero_duration() {
     );
 }
 
+#[test]
+#[should_panic(expected = "Error(Contract, #1208)")] // InvalidConfig
+fn test_constructor_rejects_duration_above_max() {
+    let e = Env::default();
+    e.register(
+        DaoAuctionContract,
+        (
+            Address::generate(&e),
+            Address::generate(&e),
+            Address::generate(&e),
+            2_592_001_u64, // MAX_AUCTION_DURATION + 1
+            10_000_000_i128,
+            10_u32,
+            10_u64,
+            Address::generate(&e),
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
+        ),
+    );
+}
+
+#[test]
+fn test_set_duration_max_boundary_and_above() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let (auction, _, _, _, _, _) = setup_auction_contract(&e);
+    auction.set_duration(&2_592_000);
+    assert_eq!(auction.get_config().duration, 2_592_000);
+    let r = auction.try_set_duration(&2_592_001);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        AuctionError::InvalidConfig.into()
+    );
+}
+
 fn try_register_with_time_buffer(e: &Env, time_buffer: u64) -> bool {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         e.register(

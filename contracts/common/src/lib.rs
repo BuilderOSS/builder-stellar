@@ -26,6 +26,11 @@ pub use error::CommonError;
 /// Shared by the Auction (constructor and `set_time_buffer`) and the Manager.
 pub const MAX_AUCTION_TIME_BUFFER: u64 = 86_400;
 
+/// Upper bound for the auction `duration` (30 days, seconds). Shared by the
+/// Auction (constructor and `set_duration`) and the Manager. There is no
+/// reserve-price cap by design (see docs/SECURITY_MODEL.md).
+pub const MAX_AUCTION_DURATION: u64 = 2_592_000;
+
 /// WARNING: exports `MockManager` as a `#[contract]`. Enable the `testutils`
 /// feature only through `[dev-dependencies]`. See README.md.
 #[cfg(any(test, feature = "testutils"))]

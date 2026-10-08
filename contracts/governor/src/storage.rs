@@ -67,14 +67,16 @@ pub const PROPOSAL_EXPIRATION_PERIOD: u64 = 1_209_600; // 14 days in seconds (14
 
 /// Minimum voting delay (5 minutes in seconds).
 ///
-/// Enforces a minimum delay between proposal creation and vote start.
-/// Allows time for delegation changes before snapshot. The default minimum is
+/// Minimum delay between proposal creation and vote start. This is a NOTICE
+/// period only: voting power and total supply are snapshotted at proposal
+/// creation (the ledger before `propose`), so delegation or transfers during
+/// the delay cannot change that proposal's weights. The default minimum is
 /// five minutes.
+pub const MIN_VOTING_DELAY: u32 = 300;
+
 /// Maximum actions per proposal, so a passed proposal always fits the
 /// execution budget of `treasury.execute`.
 pub const MAX_PROPOSAL_ACTIONS: u32 = 20;
-
-pub const MIN_VOTING_DELAY: u32 = 300;
 
 /// Minimum voting period (5 minutes in seconds).
 ///

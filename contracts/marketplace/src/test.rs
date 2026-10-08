@@ -244,6 +244,22 @@ fn create_primary_listing_before_launch_is_not_live() {
 }
 
 #[test]
+fn secondary_list_and_buy_before_launch_are_not_live() {
+    let fixture = fixture_setup();
+    let seller = Address::generate(&fixture.env);
+    let r = fixture.marketplace.try_list(&0, &seller, &100, &2_000);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        common::CommonError::NotLive.into()
+    );
+    let r = fixture.marketplace.try_buy(&0, &seller);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        common::CommonError::NotLive.into()
+    );
+}
+
+#[test]
 fn setters_are_gated_by_launch_admin_then_treasury() {
     let fixture = fixture_setup();
     let env = &fixture.env;

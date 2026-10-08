@@ -84,6 +84,23 @@ pub struct LaunchConfig {
     /// Grant mint authority to the Manager-registered PlatformMinter. The
     /// caller can never name an arbitrary minter address.
     pub enable_minter: bool,
+    /// The platform minter the launch admin saw and approves. Required (and
+    /// must equal the registered PlatformMinter) when `enable_minter` is set,
+    /// so a Manager admin cannot swap the minter between signing and launch.
+    /// Ignored when `enable_minter` is false.
+    pub expected_minter: Option<Address>,
+}
+
+/// WASM hashes the six modules were deployed from (emitted in `DaoCreated`).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DaoWasmHashes {
+    pub token: BytesN<32>,
+    pub metadata: BytesN<32>,
+    pub auction: BytesN<32>,
+    pub governor: BytesN<32>,
+    pub treasury: BytesN<32>,
+    pub marketplace: BytesN<32>,
 }
 
 #[contracttype]

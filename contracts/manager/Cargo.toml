@@ -14,6 +14,7 @@ stellar-access = { workspace = true }
 common = { path = "../common" }
 
 [dev-dependencies]
+common = { path = "../common", features = ["testutils"] }
 soroban-sdk = { workspace = true, features = ["testutils"] }
 token = { path = "../token" }
 metadata = { path = "../metadata" }

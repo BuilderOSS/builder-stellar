@@ -54,7 +54,7 @@ Marketplace provides lazy primary sales and escrowed holder resale. A primary li
 1. Manager validates creation parameters and the current implementation hashes.
 2. `create_dao` derives deterministic salts and deploys Token, Metadata, Treasury, Governor, Auction, and Marketplace. All cross-module addresses are passed to constructors; there are no wiring setters. The launch admin owns each module and every module is in Setup. `PendingDao` records the addresses, the launch admin, and the Auction and Marketplace payment assets.
 3. In the setup window the launch admin mints founder tokens, adds artwork, and adjusts Auction, Marketplace, and Governor parameters. The Treasury has no authority yet.
-4. `launch_dao(token, LaunchConfig { launch_auction, launch_marketplace, enable_minter })` (launch admin auth) checks Token ownership, nonzero supply, and the recorded payment assets, then calls `launch` on each module. Each module becomes Live, ownership moves to Treasury, and the Manager has no further authority. Token mint authority is the Manager-chosen set.
+4. `launch_dao(token, LaunchConfig { launch_auction, launch_marketplace, enable_minter, expected_minter })` (launch admin auth) checks Token ownership, nonzero supply, and the recorded payment assets, then calls `launch` on each module. Each module becomes Live, ownership moves to Treasury, and the Manager has no further authority. Token mint authority is the Manager-chosen set.
 5. Manager emits `DaoLaunched` and deletes `PendingDao`. Goldsky provides durable DAO discovery.
 
 The platform minter is registered separately by the Manager admin with `set_platform_minter`.

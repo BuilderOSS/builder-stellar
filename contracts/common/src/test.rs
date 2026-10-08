@@ -1,11 +1,14 @@
 extern crate std;
 
-use soroban_sdk::{contract, contractimpl, Address, BytesN, Env, String};
+use soroban_sdk::{
+    contract, contractimpl, testutils::Events as _, Address, BytesN, Env, Event as _, String,
+};
 
 use crate::{
     lifecycle,
     testutils::{empty_wasm, MockManager, MockManagerClient},
-    upgrade, CommonError,
+    upgrade::{self, Upgraded, VersionSynced},
+    CommonError,
 };
 
 #[contract]
@@ -100,6 +103,15 @@ fn upgrade_ok_updates_hash_and_version() {
     mgr.approve(&h(&e, 1), &to);
     mgr.register(&to, &String::from_str(&e, "0.2.0"));
     c.upgrade(&mgr.address, &h(&e, 1), &to);
+    assert_eq!(
+        e.events().all().events().last().unwrap(),
+        &Upgraded {
+            from_hash: h(&e, 1),
+            to_hash: to.clone(),
+            version: String::from_str(&e, "0.2.0"),
+        }
+        .to_xdr(&e, &c.address)
+    );
     // Contract code is replaced; verify the stored keys directly.
     e.as_contract(&c.address, || {
         assert_eq!(upgrade::current_hash(&e), to);
@@ -113,6 +125,13 @@ fn sync_version_reads_registry() {
     assert_eq!(c.version(), String::from_str(&e, "0.1.0"));
     mgr.register(&h(&e, 1), &String::from_str(&e, "0.1.1"));
     assert_eq!(c.sync_version(&mgr.address), String::from_str(&e, "0.1.1"));
+    assert_eq!(
+        e.events().all().events().last().unwrap(),
+        &VersionSynced {
+            version: String::from_str(&e, "0.1.1"),
+        }
+        .to_xdr(&e, &c.address)
+    );
     assert_eq!(c.version(), String::from_str(&e, "0.1.1"));
 }
 

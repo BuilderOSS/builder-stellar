@@ -8,7 +8,7 @@
 //! string). Cross-contract calls: `manager.is_upgrade_approved` and
 //! `manager.get_implementation_version`, both read-only.
 
-use soroban_sdk::{contracttype, panic_with_error, Address, BytesN, Env, String};
+use soroban_sdk::{contractevent, contracttype, panic_with_error, Address, BytesN, Env, String};
 
 use crate::{clients::ManagerRegistryClient, error::CommonError, ttl};
 
@@ -17,6 +17,24 @@ use crate::{clients::ManagerRegistryClient, error::CommonError, ttl};
 pub enum UpgradeKey {
     CurrentHash,
     CurrentVersion,
+}
+
+/// Emitted by `apply`. The emitting contract address is the event's contract id.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Upgraded {
+    #[topic]
+    pub from_hash: BytesN<32>,
+    #[topic]
+    pub to_hash: BytesN<32>,
+    pub version: String,
+}
+
+/// Emitted by `sync_version`.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VersionSynced {
+    pub version: String,
 }
 
 /// Record hash and version at construction time.
@@ -58,6 +76,7 @@ pub fn sync_version(e: &Env, manager: &Address) -> String {
     ttl::extend_instance(e);
     let v = implementation_version(e, manager, &current_hash(e));
     e.storage().instance().set(&UpgradeKey::CurrentVersion, &v);
+    VersionSynced { version: v.clone() }.publish(e);
     v
 }
 
@@ -66,7 +85,11 @@ pub fn sync_version(e: &Env, manager: &Address) -> String {
 /// 1. `from` must equal the stored `CurrentHash`.
 /// 2. `manager.is_upgrade_approved(from, to)` must be true.
 /// 3. Version of `to` is read from the registry.
-/// 4. `CurrentHash` / `CurrentVersion` are updated and the WASM is swapped.
+/// 4. `CurrentHash` / `CurrentVersion` are updated, `Upgraded` is emitted and
+///    the WASM is swapped.
+///
+/// A revoked target is rejected by `is_upgrade_approved`; a revoked `from` may
+/// still migrate away.
 pub fn apply(e: &Env, manager: &Address, from: &BytesN<32>, to: &BytesN<32>) {
     ttl::extend_instance(e);
     if *from != current_hash(e) {
@@ -78,5 +101,11 @@ pub fn apply(e: &Env, manager: &Address, from: &BytesN<32>, to: &BytesN<32>) {
     let v = implementation_version(e, manager, to);
     e.storage().instance().set(&UpgradeKey::CurrentHash, to);
     e.storage().instance().set(&UpgradeKey::CurrentVersion, &v);
+    Upgraded {
+        from_hash: from.clone(),
+        to_hash: to.clone(),
+        version: v,
+    }
+    .publish(e);
     e.deployer().update_current_contract_wasm(to.clone());
 }
