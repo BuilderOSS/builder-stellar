@@ -23,8 +23,8 @@ SELECT
   (e.topics::jsonb ->> 'property_id')::integer AS property_id,
   e.args::jsonb ->> 'name' AS name,
   e.ledger_sequence AS event_ledger,
-  extract(epoch FROM NULLIF(e.ledger_closed_at, '')::timestamptz)::bigint AS event_timestamp_seconds,
-  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
+  extract(epoch FROM chain.ledger_closed_at_ts(e.ledger_closed_at))::bigint AS event_timestamp_seconds,
+  chain.ledger_closed_at_ts(e.ledger_closed_at) AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
@@ -56,8 +56,8 @@ SELECT
       e.operation_index DESC NULLS LAST, e.event_index DESC NULLS LAST, e.event_id DESC
   ) = 1 AS is_current,
   e.ledger_sequence AS event_ledger,
-  extract(epoch FROM NULLIF(e.ledger_closed_at, '')::timestamptz)::bigint AS event_timestamp_seconds,
-  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
+  extract(epoch FROM chain.ledger_closed_at_ts(e.ledger_closed_at))::bigint AS event_timestamp_seconds,
+  chain.ledger_closed_at_ts(e.ledger_closed_at) AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
@@ -80,7 +80,7 @@ WITH initialized AS (
     e.args::jsonb ->> 'description' AS description,
     e.args::jsonb ->> 'contract_image' AS contract_image,
     e.ledger_sequence AS init_ledger,
-    NULLIF(e.ledger_closed_at, '')::timestamptz AS init_at,
+    chain.ledger_closed_at_ts(e.ledger_closed_at) AS init_at,
     e.transaction_hash AS init_transaction_hash
   FROM chain.decoded_events e
   JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id

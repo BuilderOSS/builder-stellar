@@ -31,8 +31,8 @@ SELECT
   e.transaction_index,
   e.operation_index,
   e.event_index,
-  extract(epoch FROM NULLIF(e.ledger_closed_at, '')::timestamptz)::bigint AS event_timestamp_seconds,
-  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
+  extract(epoch FROM chain.ledger_closed_at_ts(e.ledger_closed_at))::bigint AS event_timestamp_seconds,
+  chain.ledger_closed_at_ts(e.ledger_closed_at) AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
@@ -53,7 +53,7 @@ SELECT
   e.transaction_index,
   e.operation_index,
   e.event_index,
-  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
+  chain.ledger_closed_at_ts(e.ledger_closed_at) AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
@@ -91,8 +91,8 @@ SELECT
   e.transaction_index,
   e.operation_index,
   e.event_index,
-  extract(epoch FROM NULLIF(e.ledger_closed_at, '')::timestamptz)::bigint AS event_timestamp_seconds,
-  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
+  extract(epoch FROM chain.ledger_closed_at_ts(e.ledger_closed_at))::bigint AS event_timestamp_seconds,
+  chain.ledger_closed_at_ts(e.ledger_closed_at) AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
@@ -116,8 +116,8 @@ SELECT
   e.transaction_index,
   e.operation_index,
   e.event_index,
-  extract(epoch FROM NULLIF(e.ledger_closed_at, '')::timestamptz)::bigint AS event_timestamp_seconds,
-  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
+  extract(epoch FROM chain.ledger_closed_at_ts(e.ledger_closed_at))::bigint AS event_timestamp_seconds,
+  chain.ledger_closed_at_ts(e.ledger_closed_at) AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id

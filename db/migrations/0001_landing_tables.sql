@@ -25,6 +25,21 @@ CREATE SCHEMA app;
 -- -----------------------------------------------------------------------------
 
 -- Total ordering key for an event inside the chain. Missing indexes sort first.
+-- Goldsky writes ledger_closed_at as epoch milliseconds (for example "1791475282000"); accept epoch
+-- seconds and ISO text too, and NULL for an empty value.
+CREATE FUNCTION chain.ledger_closed_at_ts(raw text)
+RETURNS timestamptz
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT CASE
+    WHEN raw IS NULL OR raw = '' THEN NULL
+    WHEN raw ~ '^[0-9]+$' AND length(raw) >= 13 THEN to_timestamp(raw::bigint / 1000.0)
+    WHEN raw ~ '^[0-9]+$' THEN to_timestamp(raw::bigint)
+    ELSE raw::timestamptz
+  END
+$$;
+
 CREATE FUNCTION chain.event_position(ledger bigint, tx bigint, op bigint, evt bigint)
 RETURNS bigint[]
 LANGUAGE sql IMMUTABLE PARALLEL SAFE

@@ -85,7 +85,8 @@ function emit(role, contract, name, { topics = [], data = {}, ledger, tx = 0, ev
     operation_type: 'invoke_host_function',
     ledger_sequence: ledger,
     ledger_hash: `lh${ledger}`,
-    ledger_closed_at: `2026-10-01 00:${String(Math.floor(ledger / 60) % 60).padStart(2, '0')}:${String(ledger % 60).padStart(2, '0')}`,
+    // The pipeline writes ledger_closed_at as epoch milliseconds (e.g. "1791475282000"), not ISO text.
+    ledger_closed_at: String(Date.UTC(2026, 9, 1) + ledger * 5000),
     _gs_op: 'i'
   });
 }
@@ -295,6 +296,21 @@ test('fixtures use exactly the topics and data fields the contracts emit', () =>
   assert.deepEqual(drift, []);
   assertUniqueEventIds();
   events.length = 0;
+});
+
+test('chain.ledger_closed_at_ts reads epoch milliseconds, epoch seconds, ISO text and empty values', { skip }, () => {
+  // The pipeline writes epoch milliseconds; views depend on this helper for every closed-at timestamp.
+  const got = rows(`SELECT
+      extract(epoch FROM chain.ledger_closed_at_ts('1791475282000'))::bigint AS ms,
+      extract(epoch FROM chain.ledger_closed_at_ts('1791475282'))::bigint AS seconds,
+      extract(epoch FROM chain.ledger_closed_at_ts('2026-10-01 00:00:05+00'))::bigint AS iso,
+      chain.ledger_closed_at_ts('') IS NULL AS empty_is_null,
+      chain.ledger_closed_at_ts(NULL) IS NULL AS null_is_null`)[0];
+  assert.equal(Number(got.ms), 1791475282);
+  assert.equal(Number(got.seconds), 1791475282);
+  assert.equal(Number(got.iso), Date.UTC(2026, 9, 1, 0, 0, 5) / 1000);
+  assert.equal(got.empty_is_null, true);
+  assert.equal(got.null_is_null, true);
 });
 
 test('pipeline transforms load the landing tables', { skip }, () => {

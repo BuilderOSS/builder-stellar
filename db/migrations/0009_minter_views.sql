@@ -33,7 +33,7 @@ SELECT
   e.transaction_index,
   e.operation_index,
   e.event_index,
-  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
+  chain.ledger_closed_at_ts(e.ledger_closed_at) AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.dao_registry r ON r.deployment_id = e.deployment_id AND r.token_address = e.topic_0
@@ -53,7 +53,7 @@ SELECT
   e.transaction_index,
   e.operation_index,
   e.event_index,
-  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
+  chain.ledger_closed_at_ts(e.ledger_closed_at) AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.dao_registry r ON r.deployment_id = e.deployment_id AND r.token_address = e.topic_0
@@ -74,7 +74,7 @@ SELECT
   e.transaction_index,
   e.operation_index,
   e.event_index,
-  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
+  chain.ledger_closed_at_ts(e.ledger_closed_at) AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.dao_registry r ON r.deployment_id = e.deployment_id AND r.token_address = e.topic_0
@@ -95,7 +95,7 @@ SELECT
   e.transaction_index,
   e.operation_index,
   e.event_index,
-  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
+  chain.ledger_closed_at_ts(e.ledger_closed_at) AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.dao_registry r ON r.deployment_id = e.deployment_id AND r.token_address = e.topic_0

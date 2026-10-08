@@ -45,7 +45,7 @@ transaction together with its row in `public.schema_migrations` (name + SHA-256)
 
 | Migration | Contents |
 | --- | --- |
-| `0001_landing_tables` | schemas, helper functions, the 3 landing tables, indexes, triggers |
+| `0001_landing_tables` | schemas, helper functions (incl. `chain.ledger_closed_at_ts`, which reads the pipeline's epoch-millisecond closed-at values), the 3 landing tables, indexes, triggers |
 | `0002_manager_views` | DAO registry, modules, identity, `manager.daos`, per-module launch status and `dao_lifecycle`, module upgrade history and current module versions, admin history/settings (incl. cancelled proposals), implementations |
 | `0003_token_views` | transfers, mints, inventory, delegations, mint authorities, members |
 | `0004_governance_views` | proposals (with computed `expired`), votes, actions, lifecycle, per-proposal execution calls |
