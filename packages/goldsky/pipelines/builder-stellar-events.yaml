@@ -17,7 +17,7 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_tokens
-    secret_name: STELLAR_BUILDER_POSTGRES
+    secret_name: BUILDER_POSTGRES_SECRET
     schema: streamling
     column: contract_id
     sql: |
@@ -31,7 +31,7 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_metadata
-    secret_name: STELLAR_BUILDER_POSTGRES
+    secret_name: BUILDER_POSTGRES_SECRET
     schema: streamling
     column: contract_id
     sql: |
@@ -45,7 +45,7 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_auctions
-    secret_name: STELLAR_BUILDER_POSTGRES
+    secret_name: BUILDER_POSTGRES_SECRET
     schema: streamling
     column: contract_id
     sql: |
@@ -59,7 +59,7 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_governors
-    secret_name: STELLAR_BUILDER_POSTGRES
+    secret_name: BUILDER_POSTGRES_SECRET
     schema: streamling
     column: contract_id
     sql: |
@@ -73,7 +73,7 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_treasuries
-    secret_name: STELLAR_BUILDER_POSTGRES
+    secret_name: BUILDER_POSTGRES_SECRET
     schema: streamling
     column: contract_id
     sql: |
@@ -87,7 +87,7 @@ transforms:
     type: dynamic_table
     backend_type: Postgres
     backend_entity_name: dao_marketplaces
-    secret_name: STELLAR_BUILDER_POSTGRES
+    secret_name: BUILDER_POSTGRES_SECRET
     schema: streamling
     column: contract_id
     sql: |
@@ -933,7 +933,7 @@ sinks:
     from: raw_events
     schema: chain
     table: raw_events
-    secret_name: STELLAR_BUILDER_POSTGRES
+    secret_name: BUILDER_POSTGRES_SECRET
     primary_key: event_id
 
   decoded_events_output:
@@ -941,7 +941,7 @@ sinks:
     from: decoded_events
     schema: chain
     table: decoded_events
-    secret_name: STELLAR_BUILDER_POSTGRES
+    secret_name: BUILDER_POSTGRES_SECRET
     primary_key: event_id
 
   activity_feed_output:
@@ -949,5 +949,5 @@ sinks:
     from: activity_feed
     schema: app
     table: activity_feed_events
-    secret_name: STELLAR_BUILDER_POSTGRES
+    secret_name: BUILDER_POSTGRES_SECRET
     primary_key: activity_id
