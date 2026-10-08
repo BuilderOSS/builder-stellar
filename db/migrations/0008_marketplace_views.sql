@@ -38,7 +38,7 @@ WITH created AS (
     e.transaction_index,
     e.operation_index,
     e.event_index,
-    NULLIF(e.ledger_closed_at, '')::timestamptz AS created_at,
+    chain.ledger_closed_at_ts(e.ledger_closed_at) AS created_at,
     e.transaction_hash AS created_transaction_hash
   FROM chain.decoded_events e
   JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
@@ -66,7 +66,7 @@ SELECT
   c.created_at,
   c.created_transaction_hash,
   x.ledger_sequence AS closed_ledger,
-  NULLIF(x.ledger_closed_at, '')::timestamptz AS closed_at,
+  chain.ledger_closed_at_ts(x.ledger_closed_at) AS closed_at,
   x.transaction_hash AS closed_transaction_hash
 FROM created c
 LEFT JOIN LATERAL (
@@ -101,7 +101,7 @@ WITH created AS (
     e.transaction_index,
     e.operation_index,
     e.event_index,
-    NULLIF(e.ledger_closed_at, '')::timestamptz AS created_at,
+    chain.ledger_closed_at_ts(e.ledger_closed_at) AS created_at,
     e.transaction_hash AS created_transaction_hash
   FROM chain.decoded_events e
   JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
@@ -129,7 +129,7 @@ SELECT
   c.created_at,
   c.created_transaction_hash,
   x.ledger_sequence AS closed_ledger,
-  NULLIF(x.ledger_closed_at, '')::timestamptz AS closed_at,
+  chain.ledger_closed_at_ts(x.ledger_closed_at) AS closed_at,
   NULLIF(x.topic_1, '') AS buyer
 FROM created c
 LEFT JOIN LATERAL (
@@ -165,7 +165,7 @@ SELECT
   e.transaction_index,
   e.operation_index,
   e.event_index,
-  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
+  chain.ledger_closed_at_ts(e.ledger_closed_at) AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
@@ -193,7 +193,7 @@ SELECT
   e.transaction_index,
   e.operation_index,
   e.event_index,
-  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
+  chain.ledger_closed_at_ts(e.ledger_closed_at) AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id

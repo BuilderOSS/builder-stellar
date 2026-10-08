@@ -45,7 +45,7 @@ SELECT DISTINCT ON (e.deployment_id, e.topic_0)
   e.args::jsonb #>> '{wasm_hashes,metadata}'    AS metadata_wasm_hash,
   e.args::jsonb #>> '{wasm_hashes,marketplace}' AS marketplace_wasm_hash,
   e.ledger_sequence                           AS created_ledger,
-  NULLIF(e.ledger_closed_at, '')::timestamptz AS created_at,
+  chain.ledger_closed_at_ts(e.ledger_closed_at) AS created_at,
   e.transaction_hash                          AS created_tx_hash,
   e.ingested_at                               AS indexed_at
 FROM chain.decoded_events e
@@ -96,7 +96,7 @@ WITH launched AS (
     e.transaction_index AS launched_transaction_index,
     e.operation_index AS launched_operation_index,
     e.event_index AS launched_event_index,
-    NULLIF(e.ledger_closed_at, '')::timestamptz AS launched_at,
+    chain.ledger_closed_at_ts(e.ledger_closed_at) AS launched_at,
     e.transaction_hash AS launched_tx_hash,
     COALESCE((e.args::jsonb ->> 'launch_auction')::boolean, true) AS launch_auction,
     COALESCE((e.args::jsonb ->> 'launch_marketplace')::boolean, true) AS launch_marketplace
@@ -201,8 +201,8 @@ SELECT
   e.topic_0 AS wasm_hash,
   (e.args::jsonb ->> 'published_at')::bigint AS published_at,
   e.ledger_sequence AS event_ledger,
-  extract(epoch FROM NULLIF(e.ledger_closed_at, '')::timestamptz)::bigint AS event_timestamp_seconds,
-  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
+  extract(epoch FROM chain.ledger_closed_at_ts(e.ledger_closed_at))::bigint AS event_timestamp_seconds,
+  chain.ledger_closed_at_ts(e.ledger_closed_at) AS event_at,
   e.transaction_hash,
   r.event_id IS NOT NULL AS revoked,
   (r.args::jsonb ->> 'revoked_at')::bigint AS revoked_at
@@ -234,7 +234,7 @@ SELECT DISTINCT ON (e.deployment_id)
   e.args::jsonb ->> 'treasury' AS treasury_impl,
   e.args::jsonb ->> 'marketplace' AS marketplace_impl,
   e.ledger_sequence AS updated_ledger,
-  NULLIF(e.ledger_closed_at, '')::timestamptz AS updated_at,
+  chain.ledger_closed_at_ts(e.ledger_closed_at) AS updated_at,
   e.transaction_hash
 FROM chain.decoded_events e
 WHERE e.contract_role = 'manager'
@@ -263,7 +263,7 @@ SELECT
   (l.args::jsonb ->> 'opened')::boolean AS opened,
   l.args::jsonb -> 'minters' AS minters,
   l.ledger_sequence AS launched_ledger,
-  NULLIF(l.ledger_closed_at, '')::timestamptz AS launched_at,
+  chain.ledger_closed_at_ts(l.ledger_closed_at) AS launched_at,
   l.transaction_hash AS launched_tx_hash
 FROM manager.dao_modules m
 LEFT JOIN LATERAL (
@@ -288,7 +288,7 @@ WITH launched AS (
     e.deployment_id,
     e.topic_0 AS dao_id,
     e.ledger_sequence AS launched_ledger,
-    NULLIF(e.ledger_closed_at, '')::timestamptz AS launched_at,
+    chain.ledger_closed_at_ts(e.ledger_closed_at) AS launched_at,
     e.transaction_hash AS launched_tx_hash,
     COALESCE((e.args::jsonb ->> 'launch_auction')::boolean, true) AS launch_auction,
     COALESCE((e.args::jsonb ->> 'launch_marketplace')::boolean, true) AS launch_marketplace,
@@ -359,7 +359,7 @@ SELECT
   e.transaction_index,
   e.operation_index,
   e.event_index,
-  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
+  chain.ledger_closed_at_ts(e.ledger_closed_at) AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
@@ -435,7 +435,7 @@ SELECT
   e.transaction_index,
   e.operation_index,
   e.event_index,
-  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
+  chain.ledger_closed_at_ts(e.ledger_closed_at) AS event_at,
   e.transaction_hash
 FROM chain.decoded_events e
 WHERE e.contract_role = 'manager'
