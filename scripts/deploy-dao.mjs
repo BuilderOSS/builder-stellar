@@ -36,7 +36,8 @@ const networkConfigPath = args[2];
  *    to the Treasury and deletes the pending state. The Manager has no authority afterwards.
  *
  * Prerequisites: Manager deployed with deploy-manager.mjs (which also registers the platform
- * minter used by enable_minter). The identity (DEPLOY_IDENTITY, default <network>-admin) must be
+ * minter used by enable_minter). create_dao requires auth from BOTH deployer and launchAdmin, so the
+ * config must use the same address for both (enforced by validation). The identity (DEPLOY_IDENTITY, default <network>-admin) must be
  * the config deployer (create_dao) and launchAdmin (checklist/launch).
  */
 
@@ -94,6 +95,14 @@ function validateDaoConfig(config) {
 
   addr('deployer', config.deployer);
   addr('launchAdmin', config.launchAdmin);
+  if (config.deployer !== config.launchAdmin) {
+    err(
+      'deployer and launchAdmin differ, but create_dao requires authorization from BOTH. ' +
+        'The stellar CLI signs with a single --source-account, so this script only supports deployer == launchAdmin. ' +
+        'Use the same identity/address for both, or build the transaction with `stellar tx new invoke --build-only`, ' +
+        'sign it with both accounts (`stellar tx sign`), and submit it manually.'
+    );
+  }
   if (!Number.isSafeInteger(config.nonce) || config.nonce < 0) err('nonce must be a non-negative integer');
   for (const key of ['name', 'symbol', 'uri']) str(`token.${key}`, config.token?.[key]);
   for (const key of ['projectUri', 'description', 'contractImage', 'rendererBase']) str(`metadata.${key}`, config.metadata?.[key]);

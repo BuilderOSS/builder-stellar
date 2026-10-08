@@ -657,6 +657,80 @@ impl MockToggleModule {
     pub fn launch(_e: Env, _treasury: Address, _flag: bool, _asset: Address) {}
 }
 
+/// Provide auth for `create_dao` from exactly the given signers.
+fn mock_create_dao_auth(
+    env: &Env,
+    client: &ManagerContractClient,
+    signers: &[&Address],
+    params: &DaoCreationParams,
+) {
+    use soroban_sdk::{
+        testutils::{MockAuth, MockAuthInvoke},
+        IntoVal,
+    };
+    let invoke = MockAuthInvoke {
+        contract: &client.address,
+        fn_name: "create_dao",
+        args: (params.clone(),).into_val(env),
+        sub_invokes: &[],
+    };
+    let auths: std::vec::Vec<MockAuth> = signers
+        .iter()
+        .map(|a| MockAuth {
+            address: a,
+            invoke: &invoke,
+        })
+        .collect();
+    env.mock_auths(&auths);
+}
+
+fn split_params(env: &Env) -> (Address, Address, DaoCreationParams) {
+    let deployer = Address::generate(env);
+    let admin = Address::generate(env);
+    let mut params = dao_params(env, &deployer, 1);
+    params.launch_admin = admin.clone();
+    (deployer, admin, params)
+}
+
+#[test]
+fn create_dao_fails_with_only_deployer_auth() {
+    let (env, client, _a) = setup();
+    register_stub_implementations(&env, &client);
+    let (deployer, _admin, params) = split_params(&env);
+    mock_create_dao_auth(&env, &client, &[&deployer], &params);
+    assert!(client.try_create_dao(&params).is_err());
+}
+
+#[test]
+fn create_dao_fails_with_only_launch_admin_auth() {
+    let (env, client, _a) = setup();
+    register_stub_implementations(&env, &client);
+    let (_deployer, admin, params) = split_params(&env);
+    mock_create_dao_auth(&env, &client, &[&admin], &params);
+    assert!(client.try_create_dao(&params).is_err());
+}
+
+#[test]
+fn create_dao_succeeds_with_both_auths() {
+    let (env, client, _a) = setup();
+    register_stub_implementations(&env, &client);
+    let (deployer, admin, params) = split_params(&env);
+    mock_create_dao_auth(&env, &client, &[&deployer, &admin], &params);
+    let addrs = client.create_dao(&params);
+    let pending = client.get_pending_dao(&addrs.token).unwrap();
+    assert_eq!(pending.launch_admin, admin);
+}
+
+#[test]
+fn create_dao_succeeds_with_single_auth_when_deployer_is_launch_admin() {
+    let (env, client, _a) = setup();
+    register_stub_implementations(&env, &client);
+    let deployer = Address::generate(&env);
+    let params = dao_params(&env, &deployer, 1);
+    mock_create_dao_auth(&env, &client, &[&deployer], &params);
+    assert!(client.try_create_dao(&params).is_ok());
+}
+
 #[test]
 fn test_instance_entry_size_constant_across_500_create_dao() {
     let (env, client, _admin) = setup();

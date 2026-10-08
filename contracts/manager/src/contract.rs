@@ -471,6 +471,12 @@ impl ManagerContract {
     ///
     /// * `params` - Deployer, deterministic nonce, and launch administrator
     ///
+    /// # Authorization
+    ///
+    /// Requires BOTH `params.deployer` and `params.launch_admin` to authorize
+    /// the call (one signature if they are the same address). Module
+    /// constructors do not require auth.
+    ///
     /// # Returns
     ///
     /// All deployed contract addresses
@@ -484,6 +490,13 @@ impl ManagerContract {
         // factory operation and subsequent owner-gated setup calls.
         extend_instance_ttl(&env);
         params.deployer.require_auth();
+        // The launch admin becomes owner of every module and must consent to
+        // being named (prevents spam/impersonation). Soroban rejects a second
+        // require_auth on the same address within one frame (Auth/ExistingValue),
+        // so only call it when the launch admin differs from the deployer.
+        if params.launch_admin != params.deployer {
+            params.launch_admin.require_auth();
+        }
 
         // Check factory not paused
         if is_factory_paused(&env) {

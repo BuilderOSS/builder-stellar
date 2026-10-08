@@ -111,7 +111,7 @@ The auction and marketplace payment assets given here are recorded in
 
 The flow has three on-chain phases.
 
-**1. `create_dao`** (deployer auth). Deploys Token, Metadata, Treasury,
+**1. `create_dao`** (deployer AND launch admin auth; one signature if they are the same address. `scripts/deploy-dao.mjs` signs with a single stellar CLI identity, so it requires `deployer == launchAdmin` and fails validation otherwise. For different accounts, build with `stellar tx new invoke --build-only`, sign with both accounts using `stellar tx sign`, and submit manually). Deploys Token, Metadata, Treasury,
 Governor, Auction and Marketplace at deterministic addresses. All wiring is
 constructor-only: there are no setters for the Treasury, Governor, Token or
 Manager addresses. Every module is in Setup, the launch admin owns it, and the

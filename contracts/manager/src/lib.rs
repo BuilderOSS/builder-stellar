@@ -12,6 +12,7 @@
 //! ## 2. DAO Factory
 //!
 //! - Deploy complete DAOs with all 6 modules atomically
+//! - `create_dao` requires auth from both the deployer and the launch admin
 //! - Deterministic address prediction before deployment
 //! - Founder allocation configuration (fixed NFT counts)
 //! - Governance-owned from initialization

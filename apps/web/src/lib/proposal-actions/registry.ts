@@ -47,6 +47,11 @@ const ACTION_REGISTRY = new Map<ProposalActionType, ActionHandler>(
   REGISTERED_HANDLERS.map((handler) => [handler.type, handler])
 );
 
+/** True if the action type has a registered handler. */
+export function isRegisteredActionType(type: string): boolean {
+  return ACTION_REGISTRY.has(type as ProposalActionType);
+}
+
 /**
  * Get handler for a specific action type
  * @throws Error if action type not registered

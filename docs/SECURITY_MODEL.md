@@ -7,8 +7,8 @@ Scope: the Soroban contracts at commit `5136397` plus the governance timing caps
 | Role | Holder | Authority |
 | --- | --- | --- |
 | Manager admin | Address set in the Manager constructor; two-step handover via `propose_admin` / `accept_admin` | Registers/revokes implementation WASM hashes, selects current hashes, approves upgrade transitions, pauses `create_dao`, upgrades the Manager, registers the platform minter (`set_platform_minter`) |
-| Deployer | `params.deployer` of `create_dao` | Authorizes `create_dao`; no standing authority afterward |
-| Launch admin | `params.launch_admin` of `create_dao` | Owner of Token, Governor, Treasury, Auction, Metadata and the Marketplace admin during the setup window. Authorizes `launch_dao`. |
+| Deployer | `params.deployer` of `create_dao` | Authorizes `create_dao` (together with the launch admin); no standing authority afterward |
+| Launch admin | `params.launch_admin` of `create_dao` | Owner of Token, Governor, Treasury, Auction, Metadata and the Marketplace admin during the setup window. Must also authorize `create_dao` (prevents naming a non-consenting launch admin); authorizes `launch_dao`. |
 | Treasury | The DAO Treasury contract | Owner of every module (including itself) from launch onward |
 | Anyone | Any account | `treasury.execute` for a Queued proposal, `marketplace.expire_primary`, `metadata.bump_artwork_ttl`, auction bid/settle, token holders' own actions |
 
