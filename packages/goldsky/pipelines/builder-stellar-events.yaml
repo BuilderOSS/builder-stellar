@@ -319,11 +319,14 @@ transforms:
           ManagerInitialized: ['admin'], ImplementationRegistered: ['wasm_hash'], UpgradeApproved: ['from_hash', 'to_hash'],
           ImplementationRevoked: ['wasm_hash'], DaoCreated: ['token_address', 'deployer', 'launch_admin'], FactoryPaused: [], FactoryUnpaused: [],
           DaoLaunched: ['token_address'], CurrentImplementationsUpdated: [], ManagerUpgraded: ['from_hash', 'to_hash'],
-          AdminProposed: ['current_admin', 'proposed_admin'], AdminChanged: ['old_admin', 'new_admin'], PlatformMinterSet: ['minter'],
+          AdminProposed: ['current_admin', 'proposed_admin'], AdminProposalCancelled: ['current_admin', 'cancelled_admin'], AdminChanged: ['old_admin', 'new_admin'], PlatformMinterSet: ['minter'],
           // Every module (token, governor, treasury, auction, marketplace, metadata) emits its own
           // Launched struct with topic `treasury`; the data differs (token minters, auction started,
           // marketplace opened). The emitting module is identified by contract_id/contract_role.
           Launched: ['treasury'],
+          // contracts/common/src/upgrade.rs: emitted by EVERY module (token, governor, treasury, auction,
+          // marketplace, metadata); the emitting module is identified by contract_id/contract_role.
+          Upgraded: ['from_hash', 'to_hash'], VersionSynced: [],
           // Token (custom + OpenZeppelin non-fungible/votes/pausable/ownable)
           TokenInitialized: ['owner'], MintAuthorityChanged: ['authority'], MintWithMinter: ['minter', 'to'],
           Mint: ['to'], Transfer: ['from', 'to'], Approve: ['approver', 'token_id'], ApproveForAll: ['owner'],
@@ -351,7 +354,7 @@ transforms:
           MarketplaceInitialized: ['token'], PrimaryListingCreated: ['listing_id'], PrimaryListingPurchased: ['listing_id', 'buyer'],
           PrimaryListingCancelled: ['listing_id'], PrimaryListingExpired: ['listing_id'], SecondaryListingCreated: ['token_id'],
           ListingPurchased: ['token_id', 'buyer'], ListingCancelled: ['token_id'], ListingExpired: ['token_id'],
-          PaymentAssetUpdated: [], SecondaryFeeUpdated: [], MarketplacePaused: [], MarketplaceUnpaused: [], MarketplaceUpgraded: []
+          PaymentAssetUpdated: [], SecondaryFeeUpdated: [], MarketplacePaused: [], MarketplaceUnpaused: []
         };
         var names = topicNames[eventName] || topicNames[toCanonical(eventName)] || [];
         var topics = {};
@@ -576,7 +579,9 @@ transforms:
           MerkleClaimEvent: true, AllowlistClaimEvent: true, MintBatchEvent: true,
           PrimaryListingCreated: true, PrimaryListingPurchased: true, PrimaryListingCancelled: true,
           SecondaryListingCreated: true, ListingPurchased: true, ListingCancelled: true,
-          RefundDeferred: true, RefundWithdrawn: true
+          RefundDeferred: true, RefundWithdrawn: true,
+          // Contract upgrades are the most security-relevant DAO action: public.
+          Upgraded: true
         };
 
         var kindMap = {
@@ -642,6 +647,7 @@ transforms:
           Unpaused: 'contract.unpaused',
           ManagerInitialized: 'manager.initialized',
           ManagerUpgraded: 'manager.upgraded',
+          AdminProposalCancelled: 'manager.admin_proposal_cancelled',
           MarketplaceInitialized: 'marketplace.initialized',
           PrimaryListingCreated: 'marketplace.primary_listing_created',
           PrimaryListingPurchased: 'marketplace.primary_listing_purchased',
@@ -654,8 +660,7 @@ transforms:
           PaymentAssetUpdated: 'marketplace.payment_asset_updated',
           SecondaryFeeUpdated: 'marketplace.secondary_fee_updated',
           MarketplacePaused: 'marketplace.paused',
-          MarketplaceUnpaused: 'marketplace.unpaused',
-          MarketplaceUpgraded: 'marketplace.upgraded'
+          MarketplaceUnpaused: 'marketplace.unpaused'
         };
 
         var titleMap = {
@@ -721,6 +726,7 @@ transforms:
           Unpaused: 'Contract unpaused',
           ManagerInitialized: 'Manager initialized',
           ManagerUpgraded: 'Manager upgraded',
+          AdminProposalCancelled: 'Manager admin proposal cancelled',
           MarketplaceInitialized: 'Marketplace initialized',
           PrimaryListingCreated: 'Primary listing created',
           PrimaryListingPurchased: 'Primary sale completed',
@@ -733,8 +739,7 @@ transforms:
           PaymentAssetUpdated: 'Marketplace payment asset updated',
           SecondaryFeeUpdated: 'Secondary sale fee updated',
           MarketplacePaused: 'Marketplace paused',
-          MarketplaceUnpaused: 'Marketplace unpaused',
-          MarketplaceUpgraded: 'Marketplace upgraded'
+          MarketplaceUnpaused: 'Marketplace unpaused'
         };
 
         // Every module emits its own `Launched` event (same name, different data), so the
@@ -745,6 +750,19 @@ transforms:
           kindMap.Launched = (launchLabels[launchRole] ? launchRole : 'module') + '.launched';
           titleMap.Launched = (launchLabels[launchRole] || 'Module') + ' launched';
         }
+        // `Upgraded` / `VersionSynced` come from contracts/common and are emitted by every module.
+        if (normalizedEventName === 'Upgraded' || normalizedEventName === 'VersionSynced') {
+          var upgradeLabels = { token: 'Token', governor: 'Governor', treasury: 'Treasury', auction: 'Auction', marketplace: 'Marketplace', metadata: 'Metadata' };
+          var upgradeRole = upgradeLabels[launchRole] ? launchRole : 'module';
+          var upgradeLabel = upgradeLabels[launchRole] || 'Module';
+          if (normalizedEventName === 'Upgraded') {
+            kindMap.Upgraded = upgradeRole + '.upgraded';
+            titleMap.Upgraded = upgradeLabel + ' upgraded';
+          } else {
+            kindMap.VersionSynced = upgradeRole + '.version_synced';
+            titleMap.VersionSynced = upgradeLabel + ' version synced';
+          }
+        }
 
         var addresses = unique([
           pick(data, ['actor']),
@@ -753,6 +771,7 @@ transforms:
           pick(data, ['minter']),
           pick(data, ['current_admin']),
           pick(data, ['proposed_admin']),
+          pick(data, ['cancelled_admin']),
           pick(data, ['old_admin']),
           pick(data, ['new_admin']),
           pick(data, ['owner']),
@@ -808,6 +827,14 @@ transforms:
             if (launchRole === 'marketplace') return 'Marketplace launched' + (opened === 'true' ? ' and opened' : ' paused');
             return (titleMap.Launched || 'Module launched');
           },
+          // Topics from_hash/to_hash, data version. Hashes are shortened to 8 hex chars.
+          Upgraded: function() {
+            function shortHash(h) { return h ? String(h).slice(0, 8) : 'unknown'; }
+            var v = pick(data, ['version']);
+            return 'Contract upgraded to version ' + (v || 'unknown') + ' (' + shortHash(pick(data, ['from_hash'])) + ' -> ' + shortHash(pick(data, ['to_hash'])) + ')';
+          },
+          VersionSynced: function() { return 'Contract version synced to ' + (pick(data, ['version']) || 'unknown'); },
+          AdminProposalCancelled: function() { return 'Admin proposal for ' + (pick(data, ['cancelled_admin']) || 'unknown') + ' cancelled'; },
           Mint: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
           MintWithMinter: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
           MintBatchEvent: function() { var count = pick(data, ['recipient_count']); return 'Minted ' + (amount || 'tokens') + ' to ' + (count || 'multiple') + ' recipients'; },

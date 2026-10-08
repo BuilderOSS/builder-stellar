@@ -31,14 +31,16 @@ by `dao_id` (the DAO token contract address).
 
 | View | Reads | Notes |
 | --- | --- | --- |
-| `dao_registry` | `dao_created` | one row per DAO: deployer, launch admin, six module contracts |
+| `dao_registry` | `dao_created` | one row per DAO: deployer, launch admin, six module contracts, and the six `<module>_wasm_hash` columns from `dao_created.wasm_hashes` |
 | `dao_modules` | registry | one row per module contract |
 | `event_identity` | modules | contract → DAO lookup used by every domain view |
 | `daos` **Prisma** | registry + `dao_launched`, `token_initialized`, metadata, auction `paused`/`unpaused` | `status` pending/operational; `auction_enabled`, `auction_paused`, `token_description` |
 | `module_launches` | each module's `launched` event | one row per DAO module (keyed by emitting contract, since six structs share the name `launched`): `is_live`, `treasury`, `started` (auction), `opened` (marketplace), `minters` (token) |
 | `dao_lifecycle` | `dao_launched` + `module_launches` | per DAO: `is_live` (all six modules launched), `<module>_live`, `launch_auction`, `launch_marketplace`, `minter_enabled`, `auction_started`, `marketplace_opened` |
-| `admin_history` | `admin_proposed`, `admin_changed`, `platform_minter_set` | deployment-wide; `event_type`, `previous_admin`, `new_admin`, `platform_minter` |
-| `settings` | `manager_initialized` + admin events | current `admin`, `pending_admin`, `platform_minter` per deployment |
+| `module_upgrades` | `upgraded`, `version_synced` (every module) | per DAO module: `event_type` (`upgraded`/`version_synced`), `module_role`, `contract_id`, `from_hash`/`to_hash` (NULL for `version_synced`), `version`, `event_seq`, ledger/tx/time |
+| `module_versions` | `module_upgrades` + `dao_registry` | one row per DAO module: `current_hash` (latest `to_hash`, else the `dao_created` hash), `current_version` (latest `upgraded`/`version_synced`, NULL if none), `upgrade_count`, `last_upgraded_*` |
+| `admin_history` | `admin_proposed`, `admin_proposal_cancelled`, `admin_changed`, `platform_minter_set` | deployment-wide; `event_type`, `previous_admin`, `new_admin`, `platform_minter` |
+| `settings` | `manager_initialized` + admin events | current `admin`, `pending_admin` (NULL after an accept or a cancel), `platform_minter` per deployment |
 | `implementations` | `implementation_registered`, `implementation_revoked` | `revoked`, `revoked_at` |
 | `current_implementations` | `current_implementations_updated` | latest default implementation hashes |
 

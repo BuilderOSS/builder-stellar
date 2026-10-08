@@ -105,7 +105,9 @@ function invoke(data) {
     MerkleClaimEvent: true, AllowlistClaimEvent: true, MintBatchEvent: true,
     PrimaryListingCreated: true, PrimaryListingPurchased: true, PrimaryListingCancelled: true,
     SecondaryListingCreated: true, ListingPurchased: true, ListingCancelled: true,
-    RefundDeferred: true, RefundWithdrawn: true
+    RefundDeferred: true, RefundWithdrawn: true,
+    // Contract upgrades are the most security-relevant DAO action: public.
+    Upgraded: true
   };
 
   var kindMap = {
@@ -171,6 +173,7 @@ function invoke(data) {
     Unpaused: 'contract.unpaused',
     ManagerInitialized: 'manager.initialized',
     ManagerUpgraded: 'manager.upgraded',
+    AdminProposalCancelled: 'manager.admin_proposal_cancelled',
     MarketplaceInitialized: 'marketplace.initialized',
     PrimaryListingCreated: 'marketplace.primary_listing_created',
     PrimaryListingPurchased: 'marketplace.primary_listing_purchased',
@@ -183,8 +186,7 @@ function invoke(data) {
     PaymentAssetUpdated: 'marketplace.payment_asset_updated',
     SecondaryFeeUpdated: 'marketplace.secondary_fee_updated',
     MarketplacePaused: 'marketplace.paused',
-    MarketplaceUnpaused: 'marketplace.unpaused',
-    MarketplaceUpgraded: 'marketplace.upgraded'
+    MarketplaceUnpaused: 'marketplace.unpaused'
   };
 
   var titleMap = {
@@ -250,6 +252,7 @@ function invoke(data) {
     Unpaused: 'Contract unpaused',
     ManagerInitialized: 'Manager initialized',
     ManagerUpgraded: 'Manager upgraded',
+    AdminProposalCancelled: 'Manager admin proposal cancelled',
     MarketplaceInitialized: 'Marketplace initialized',
     PrimaryListingCreated: 'Primary listing created',
     PrimaryListingPurchased: 'Primary sale completed',
@@ -262,8 +265,7 @@ function invoke(data) {
     PaymentAssetUpdated: 'Marketplace payment asset updated',
     SecondaryFeeUpdated: 'Secondary sale fee updated',
     MarketplacePaused: 'Marketplace paused',
-    MarketplaceUnpaused: 'Marketplace unpaused',
-    MarketplaceUpgraded: 'Marketplace upgraded'
+    MarketplaceUnpaused: 'Marketplace unpaused'
   };
 
   // Every module emits its own `Launched` event (same name, different data), so the
@@ -274,6 +276,19 @@ function invoke(data) {
     kindMap.Launched = (launchLabels[launchRole] ? launchRole : 'module') + '.launched';
     titleMap.Launched = (launchLabels[launchRole] || 'Module') + ' launched';
   }
+  // `Upgraded` / `VersionSynced` come from contracts/common and are emitted by every module.
+  if (normalizedEventName === 'Upgraded' || normalizedEventName === 'VersionSynced') {
+    var upgradeLabels = { token: 'Token', governor: 'Governor', treasury: 'Treasury', auction: 'Auction', marketplace: 'Marketplace', metadata: 'Metadata' };
+    var upgradeRole = upgradeLabels[launchRole] ? launchRole : 'module';
+    var upgradeLabel = upgradeLabels[launchRole] || 'Module';
+    if (normalizedEventName === 'Upgraded') {
+      kindMap.Upgraded = upgradeRole + '.upgraded';
+      titleMap.Upgraded = upgradeLabel + ' upgraded';
+    } else {
+      kindMap.VersionSynced = upgradeRole + '.version_synced';
+      titleMap.VersionSynced = upgradeLabel + ' version synced';
+    }
+  }
 
   var addresses = unique([
     pick(data, ['actor']),
@@ -282,6 +297,7 @@ function invoke(data) {
     pick(data, ['minter']),
     pick(data, ['current_admin']),
     pick(data, ['proposed_admin']),
+    pick(data, ['cancelled_admin']),
     pick(data, ['old_admin']),
     pick(data, ['new_admin']),
     pick(data, ['owner']),
@@ -337,6 +353,14 @@ function invoke(data) {
       if (launchRole === 'marketplace') return 'Marketplace launched' + (opened === 'true' ? ' and opened' : ' paused');
       return (titleMap.Launched || 'Module launched');
     },
+    // Topics from_hash/to_hash, data version. Hashes are shortened to 8 hex chars.
+    Upgraded: function() {
+      function shortHash(h) { return h ? String(h).slice(0, 8) : 'unknown'; }
+      var v = pick(data, ['version']);
+      return 'Contract upgraded to version ' + (v || 'unknown') + ' (' + shortHash(pick(data, ['from_hash'])) + ' -> ' + shortHash(pick(data, ['to_hash'])) + ')';
+    },
+    VersionSynced: function() { return 'Contract version synced to ' + (pick(data, ['version']) || 'unknown'); },
+    AdminProposalCancelled: function() { return 'Admin proposal for ' + (pick(data, ['cancelled_admin']) || 'unknown') + ' cancelled'; },
     Mint: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
     MintWithMinter: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
     MintBatchEvent: function() { var count = pick(data, ['recipient_count']); return 'Minted ' + (amount || 'tokens') + ' to ' + (count || 'multiple') + ' recipients'; },

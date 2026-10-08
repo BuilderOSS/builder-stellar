@@ -32,6 +32,9 @@ export const LIBRARY_EVENTS = {
   OwnershipRenounced: { topics: [], data: ['old_owner'] }
 };
 
+// Roles that emit the events defined in contracts/common/src/*.rs.
+export const COMMON_EVENT_ROLES = ['token', 'governor', 'treasury', 'auction', 'marketplace', 'metadata'];
+
 /**
  * Parse every #[contractevent] struct into a flat list of { contract, name, topics, data }.
  * Names are NOT unique across contracts: each module emits its own `Launched`
@@ -42,9 +45,20 @@ export const LIBRARY_EVENTS = {
 export function contractEventList() {
   const list = [];
   const contractsDir = join(repoRoot, 'contracts');
+  // The common crate emits events on behalf of every module (Upgraded, VersionSynced).
+  const files = [];
   for (const dir of readdirSync(contractsDir).sort()) {
     const file = join(contractsDir, dir, 'src', 'events.rs');
-    if (!existsSync(file)) continue;
+    if (existsSync(file)) files.push({ contract: dir, file });
+  }
+  const commonSrc = join(contractsDir, 'common', 'src');
+  const commonFiles = existsSync(commonSrc)
+    ? readdirSync(commonSrc).filter((f) => f.endsWith('.rs')).sort().map((f) => join(commonSrc, f))
+    : [];
+  for (const file of commonFiles) {
+    if (/^#\[contractevent/m.test(readFileSync(file, 'utf8'))) files.push({ contract: 'common', file });
+  }
+  for (const { contract: dir, file } of files) {
     const lines = readFileSync(file, 'utf8').split('\n');
     for (let i = 0; i < lines.length; i += 1) {
       if (!/^#\[contractevent/.test(lines[i])) continue;
@@ -63,7 +77,11 @@ export function contractEventList() {
           }
         }
       }
-      list.push({ contract: dir, name, topics, data });
+      if (dir === 'common') {
+        for (const role of COMMON_EVENT_ROLES) list.push({ contract: role, name, topics, data, source: 'common' });
+      } else {
+        list.push({ contract: dir, name, topics, data });
+      }
     }
   }
   return list;

@@ -52,11 +52,14 @@ function invoke(data) {
     ManagerInitialized: ['admin'], ImplementationRegistered: ['wasm_hash'], UpgradeApproved: ['from_hash', 'to_hash'],
     ImplementationRevoked: ['wasm_hash'], DaoCreated: ['token_address', 'deployer', 'launch_admin'], FactoryPaused: [], FactoryUnpaused: [],
     DaoLaunched: ['token_address'], CurrentImplementationsUpdated: [], ManagerUpgraded: ['from_hash', 'to_hash'],
-    AdminProposed: ['current_admin', 'proposed_admin'], AdminChanged: ['old_admin', 'new_admin'], PlatformMinterSet: ['minter'],
+    AdminProposed: ['current_admin', 'proposed_admin'], AdminProposalCancelled: ['current_admin', 'cancelled_admin'], AdminChanged: ['old_admin', 'new_admin'], PlatformMinterSet: ['minter'],
     // Every module (token, governor, treasury, auction, marketplace, metadata) emits its own
     // Launched struct with topic `treasury`; the data differs (token minters, auction started,
     // marketplace opened). The emitting module is identified by contract_id/contract_role.
     Launched: ['treasury'],
+    // contracts/common/src/upgrade.rs: emitted by EVERY module (token, governor, treasury, auction,
+    // marketplace, metadata); the emitting module is identified by contract_id/contract_role.
+    Upgraded: ['from_hash', 'to_hash'], VersionSynced: [],
     // Token (custom + OpenZeppelin non-fungible/votes/pausable/ownable)
     TokenInitialized: ['owner'], MintAuthorityChanged: ['authority'], MintWithMinter: ['minter', 'to'],
     Mint: ['to'], Transfer: ['from', 'to'], Approve: ['approver', 'token_id'], ApproveForAll: ['owner'],
@@ -84,7 +87,7 @@ function invoke(data) {
     MarketplaceInitialized: ['token'], PrimaryListingCreated: ['listing_id'], PrimaryListingPurchased: ['listing_id', 'buyer'],
     PrimaryListingCancelled: ['listing_id'], PrimaryListingExpired: ['listing_id'], SecondaryListingCreated: ['token_id'],
     ListingPurchased: ['token_id', 'buyer'], ListingCancelled: ['token_id'], ListingExpired: ['token_id'],
-    PaymentAssetUpdated: [], SecondaryFeeUpdated: [], MarketplacePaused: [], MarketplaceUnpaused: [], MarketplaceUpgraded: []
+    PaymentAssetUpdated: [], SecondaryFeeUpdated: [], MarketplacePaused: [], MarketplaceUnpaused: []
   };
   var names = topicNames[eventName] || topicNames[toCanonical(eventName)] || [];
   var topics = {};

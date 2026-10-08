@@ -10,7 +10,9 @@
 --   manager.daos               registry + token metadata + launch/auction state
 --   manager.module_launches    one row per DAO module: has its `launched` event been seen
 --   manager.dao_lifecycle      one row per DAO: launch flags + is_live per module
---   manager.admin_history      AdminProposed / AdminChanged / PlatformMinterSet
+--   manager.module_upgrades    per-module upgrade / version-sync history (Upgraded, VersionSynced)
+--   manager.module_versions    current wasm hash + version of every DAO module
+--   manager.admin_history      AdminProposed / AdminProposalCancelled / AdminChanged / PlatformMinterSet
 --   manager.settings           current admin, pending admin, platform minter
 --   manager.implementations    registered WASM implementations (+ revocation)
 --   manager.current_implementations  latest default implementation set
@@ -20,7 +22,8 @@
 -- =============================================================================
 
 -- DaoCreated: topics (token_address, deployer, launch_admin);
--- data { created_ledger, modules { token, metadata, auction, governor, treasury, marketplace } }
+-- data { created_ledger, modules { token, metadata, auction, governor, treasury, marketplace },
+--        wasm_hashes { token, metadata, auction, governor, treasury, marketplace } }
 CREATE VIEW manager.dao_registry AS
 SELECT DISTINCT ON (e.deployment_id, e.topic_0)
   e.deployment_id,
@@ -35,6 +38,12 @@ SELECT DISTINCT ON (e.deployment_id, e.topic_0)
   e.args::jsonb #>> '{modules,treasury}'      AS treasury_contract,
   e.args::jsonb #>> '{modules,metadata}'      AS metadata_contract,
   e.args::jsonb #>> '{modules,marketplace}'   AS marketplace_contract,
+  e.args::jsonb #>> '{wasm_hashes,token}'       AS token_wasm_hash,
+  e.args::jsonb #>> '{wasm_hashes,governor}'    AS governor_wasm_hash,
+  e.args::jsonb #>> '{wasm_hashes,auction}'     AS auction_wasm_hash,
+  e.args::jsonb #>> '{wasm_hashes,treasury}'    AS treasury_wasm_hash,
+  e.args::jsonb #>> '{wasm_hashes,metadata}'    AS metadata_wasm_hash,
+  e.args::jsonb #>> '{wasm_hashes,marketplace}' AS marketplace_wasm_hash,
   e.ledger_sequence                           AS created_ledger,
   NULLIF(e.ledger_closed_at, '')::timestamptz AS created_at,
   e.transaction_hash                          AS created_tx_hash,
@@ -327,12 +336,91 @@ FROM manager.dao_registry r
 LEFT JOIN launched l ON l.deployment_id = r.deployment_id AND l.dao_id = r.dao_id
 LEFT JOIN modules m ON m.deployment_id = r.deployment_id AND m.dao_id = r.dao_id;
 
+-- Module upgrade history. Every module (token, governor, treasury, auction,
+-- marketplace, metadata) emits, from the shared upgrade flow:
+--   upgraded        topics from_hash, to_hash; data { version }
+--   version_synced  data { version }   (version re-read from the registry; hash unchanged)
+-- Rows are keyed by the emitting contract, resolved to a DAO through
+-- manager.event_identity. `event_type` is 'upgraded' or 'version_synced';
+-- from_hash / to_hash are NULL for version_synced. Order by `event_seq`.
+CREATE VIEW manager.module_upgrades AS
+SELECT
+  e.event_id,
+  e.deployment_id,
+  i.dao_id,
+  i.module_role,
+  e.contract_id,
+  e.event_name AS event_type,
+  e.topics::jsonb ->> 'from_hash' AS from_hash,
+  e.topics::jsonb ->> 'to_hash' AS to_hash,
+  e.args::jsonb ->> 'version' AS version,
+  chain.event_position(e.ledger_sequence, e.transaction_index, e.operation_index, e.event_index) AS event_seq,
+  e.ledger_sequence AS event_ledger,
+  e.transaction_index,
+  e.operation_index,
+  e.event_index,
+  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
+  e.transaction_hash
+FROM chain.decoded_events e
+JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
+WHERE e.contract_role = i.module_role
+  AND e.event_name IN ('upgraded', 'version_synced');
+
+-- Current implementation of every DAO module (one row per module contract).
+--   current_hash     latest Upgraded.to_hash, else the hash from DaoCreated.wasm_hashes
+--   current_version  version of the latest Upgraded / VersionSynced; NULL if none seen
+--   upgrade_count    number of Upgraded events
+--   last_upgraded_*  the latest Upgraded event (NULL if never upgraded)
+CREATE VIEW manager.module_versions AS
+SELECT
+  m.deployment_id,
+  m.dao_id,
+  m.module_role,
+  m.module_contract,
+  COALESCE(u.to_hash,
+    CASE m.module_role
+      WHEN 'token' THEN r.token_wasm_hash
+      WHEN 'governor' THEN r.governor_wasm_hash
+      WHEN 'auction' THEN r.auction_wasm_hash
+      WHEN 'treasury' THEN r.treasury_wasm_hash
+      WHEN 'metadata' THEN r.metadata_wasm_hash
+      WHEN 'marketplace' THEN r.marketplace_wasm_hash
+    END) AS current_hash,
+  v.version AS current_version,
+  v.event_at AS version_updated_at,
+  COALESCE(c.upgrade_count, 0) AS upgrade_count,
+  u.from_hash AS last_upgraded_from_hash,
+  u.event_ledger AS last_upgraded_ledger,
+  u.event_at AS last_upgraded_at,
+  u.transaction_hash AS last_upgraded_tx_hash
+FROM manager.dao_modules m
+JOIN manager.dao_registry r ON r.deployment_id = m.deployment_id AND r.dao_id = m.dao_id
+LEFT JOIN LATERAL (
+  SELECT x.* FROM manager.module_upgrades x
+  WHERE x.deployment_id = m.deployment_id AND x.dao_id = m.dao_id
+    AND x.contract_id = m.module_contract AND x.event_type = 'upgraded'
+  ORDER BY x.event_seq DESC, x.event_id DESC LIMIT 1
+) u ON true
+LEFT JOIN LATERAL (
+  SELECT x.* FROM manager.module_upgrades x
+  WHERE x.deployment_id = m.deployment_id AND x.dao_id = m.dao_id
+    AND x.contract_id = m.module_contract
+  ORDER BY x.event_seq DESC, x.event_id DESC LIMIT 1
+) v ON true
+LEFT JOIN LATERAL (
+  SELECT count(*) AS upgrade_count FROM manager.module_upgrades x
+  WHERE x.deployment_id = m.deployment_id AND x.dao_id = m.dao_id
+    AND x.contract_id = m.module_contract AND x.event_type = 'upgraded'
+) c ON true;
+
 -- Manager admin history, deployment-wide (no DAO).
 --   admin_proposed     topics current_admin, proposed_admin
+--   admin_proposal_cancelled  topics current_admin, cancelled_admin
 --   admin_changed      topics old_admin, new_admin
 --   platform_minter_set  topic minter
 -- previous_admin / new_admin are filled for the two admin events (a proposal
--- reports current -> proposed); platform_minter only for platform_minter_set.
+-- reports current -> proposed; a cancellation reports current -> cancelled);
+-- platform_minter only for platform_minter_set.
 CREATE VIEW manager.admin_history AS
 SELECT
   e.event_id,
@@ -340,7 +428,8 @@ SELECT
   e.contract_id AS manager_contract,
   e.event_name AS event_type,
   COALESCE(e.topics::jsonb ->> 'current_admin', e.topics::jsonb ->> 'old_admin') AS previous_admin,
-  COALESCE(e.topics::jsonb ->> 'proposed_admin', e.topics::jsonb ->> 'new_admin') AS new_admin,
+  COALESCE(e.topics::jsonb ->> 'proposed_admin', e.topics::jsonb ->> 'cancelled_admin',
+    e.topics::jsonb ->> 'new_admin') AS new_admin,
   e.topics::jsonb ->> 'minter' AS platform_minter,
   e.ledger_sequence AS event_ledger,
   e.transaction_index,
@@ -350,17 +439,18 @@ SELECT
   e.transaction_hash
 FROM chain.decoded_events e
 WHERE e.contract_role = 'manager'
-  AND e.event_name IN ('admin_proposed', 'admin_changed', 'platform_minter_set');
+  AND e.event_name IN ('admin_proposed', 'admin_proposal_cancelled', 'admin_changed', 'platform_minter_set');
 
 -- Current Manager settings: admin (ManagerInitialized, then AdminChanged),
--- pending admin (an AdminProposed newer than the last AdminChanged) and the
+-- pending admin (an AdminProposed newer than both the last AdminChanged and the
+-- last AdminProposalCancelled; NULL after an accept or a cancel) and the
 -- platform minter. One row per deployment.
 CREATE VIEW manager.settings AS
 WITH ordered AS (
   SELECT e.*, chain.event_position(e.ledger_sequence, e.transaction_index, e.operation_index, e.event_index) AS pos
   FROM chain.decoded_events e
   WHERE e.contract_role = 'manager'
-    AND e.event_name IN ('manager_initialized', 'admin_proposed', 'admin_changed', 'platform_minter_set')
+    AND e.event_name IN ('manager_initialized', 'admin_proposed', 'admin_proposal_cancelled', 'admin_changed', 'platform_minter_set')
 ), admin AS (
   SELECT DISTINCT ON (deployment_id)
     deployment_id,
@@ -377,6 +467,12 @@ WITH ordered AS (
   WHERE event_name = 'admin_proposed'
   ORDER BY deployment_id, ledger_sequence DESC, transaction_index DESC NULLS LAST,
     operation_index DESC NULLS LAST, event_index DESC NULLS LAST, event_id DESC
+), cancel AS (
+  SELECT DISTINCT ON (deployment_id) deployment_id, pos AS cancel_pos
+  FROM ordered
+  WHERE event_name = 'admin_proposal_cancelled'
+  ORDER BY deployment_id, ledger_sequence DESC, transaction_index DESC NULLS LAST,
+    operation_index DESC NULLS LAST, event_index DESC NULLS LAST, event_id DESC
 ), minter AS (
   SELECT DISTINCT ON (deployment_id)
     deployment_id, topics::jsonb ->> 'minter' AS platform_minter
@@ -388,8 +484,11 @@ WITH ordered AS (
 SELECT
   a.deployment_id,
   a.admin,
-  CASE WHEN p.proposal_pos > a.admin_pos THEN p.pending_admin END AS pending_admin,
+  CASE WHEN p.proposal_pos > a.admin_pos
+        AND (c.cancel_pos IS NULL OR p.proposal_pos > c.cancel_pos)
+    THEN p.pending_admin END AS pending_admin,
   m.platform_minter
 FROM admin a
 LEFT JOIN proposal p ON p.deployment_id = a.deployment_id
+LEFT JOIN cancel c ON c.deployment_id = a.deployment_id
 LEFT JOIN minter m ON m.deployment_id = a.deployment_id;

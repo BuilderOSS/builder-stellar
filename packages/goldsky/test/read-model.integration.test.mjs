@@ -60,6 +60,7 @@ const dao = (n) => ({
   token: `CTOK${n}`, metadata: `CMETA${n}`, auction: `CAUC${n}`,
   governor: `CGOV${n}`, treasury: `CTRE${n}`, marketplace: `CMKT${n}`
 });
+const wasmHashes = (n) => dataMap(Object.fromEntries(['token', 'metadata', 'auction', 'governor', 'treasury', 'marketplace'].map((k, i) => [k, bytes(`a${i}${n}`)])));
 const modules = (n) => dataMap(Object.fromEntries(Object.entries(dao(n)).map(([k, v]) => [k, addr(v)])));
 
 const events = [];
@@ -101,8 +102,8 @@ function buildScenario() {
   emit('manager', 'CMANAGER', 'current_implementations_updated', {
     data: { token: bytes('aa'), metadata: bytes('cc'), auction: bytes('dd'), governor: bytes('ee'), treasury: bytes('ff'), marketplace: bytes('11') }, ledger: 103
   });
-  emit('manager', 'CMANAGER', 'dao_created', { topics: [addr('CTOK1'), addr('GDEPLOYER'), addr('GLAUNCH')], data: { created_ledger: u64(110), modules: modules(1) }, ledger: 110 });
-  emit('manager', 'CMANAGER', 'dao_created', { topics: [addr('CTOK2'), addr('GDEPLOYER2'), addr('GLAUNCH2')], data: { created_ledger: u64(111), modules: modules(2) }, ledger: 111 });
+  emit('manager', 'CMANAGER', 'dao_created', { topics: [addr('CTOK1'), addr('GDEPLOYER'), addr('GLAUNCH')], data: { created_ledger: u64(110), modules: modules(1), wasm_hashes: wasmHashes(1) }, ledger: 110 });
+  emit('manager', 'CMANAGER', 'dao_created', { topics: [addr('CTOK2'), addr('GDEPLOYER2'), addr('GLAUNCH2')], data: { created_ledger: u64(111), modules: modules(2), wasm_hashes: wasmHashes(2) }, ledger: 111 });
   emit('token', d1.token, 'token_initialized', { topics: [addr('GOWNER')], data: { uri: str('ipfs://alpha'), name: str('Alpha'), symbol: str('ALP'), version: str('0.1.0') }, ledger: 112 });
   emit('metadata', d1.metadata, 'metadata_initialized', {
     topics: [addr(d1.token)],
@@ -129,6 +130,11 @@ function buildScenario() {
   emit('token', d1.token, 'mint_authority_changed', { topics: [addr(MINTER)], data: { old_enabled: bool(false), enabled: bool(true), changed_by: addr('CMANAGER') }, ledger: 116, evt: 7 });
   emit('manager', 'CMANAGER', 'admin_proposed', { topics: [addr('GADMIN'), addr('GADMIN2')], ledger: 104 });
   emit('manager', 'CMANAGER', 'admin_changed', { topics: [addr('GADMIN'), addr('GADMIN2')], ledger: 105 });
+  // Fixtures for the post-hardening events (assertions on the matching views are reconciled separately).
+  emit('manager', 'CMANAGER', 'admin_proposal_cancelled', { topics: [addr('GADMIN2'), addr('GADMIN3')], ledger: 105, evt: 1 });
+  emit('auction', d1.auction, 'upgraded', { topics: [bytes('a20'), bytes('b20')], data: { version: str('0.2.0') }, ledger: 117 });
+  emit('auction', d1.auction, 'version_synced', { data: { version: str('0.2.1') }, ledger: 118 });
+  emit('token', d1.token, 'version_synced', { data: { version: str('0.1.1') }, ledger: 118, evt: 1 });
   emit('manager', 'CMANAGER', 'platform_minter_set', { topics: [addr(MINTER)], ledger: 106 });
   emit('auction', d1.auction, 'unpaused', { ledger: 130 });
 
@@ -479,14 +485,44 @@ test('launch lifecycle: per-module launches keyed by emitting contract, admin hi
     [
       { event_type: 'admin_proposed', previous_admin: 'GADMIN', new_admin: 'GADMIN2', platform_minter: null },
       { event_type: 'admin_changed', previous_admin: 'GADMIN', new_admin: 'GADMIN2', platform_minter: null },
+      { event_type: 'admin_proposal_cancelled', previous_admin: 'GADMIN2', new_admin: 'GADMIN3', platform_minter: null },
       { event_type: 'platform_minter_set', previous_admin: null, new_admin: null, platform_minter: 'CMINTER' }
     ]
   );
-  const settings = one(`SELECT admin, platform_minter FROM manager.settings`);
+  const settings = one(`SELECT admin, platform_minter, pending_admin FROM manager.settings`);
+  assert.equal(settings.pending_admin, null);
   assert.equal(settings.admin, 'GADMIN2');
   assert.equal(settings.platform_minter, 'CMINTER');
   assert.deepEqual(rows(`SELECT authority, launch_grant, changed_by FROM token.mint_authority_history`), [{ authority: 'CMINTER', launch_grant: true, changed_by: 'CMANAGER' }]);
   assert.deepEqual(rows(`SELECT token_id, is_current FROM metadata.token_seeds`).map((r) => [r.token_id, r.is_current]), [[3, true]]);
+});
+
+test('module upgrades and wasm hashes: keyed by emitting contract, filtered by deployment and DAO', { skip }, () => {
+  assert.deepEqual(
+    one(`SELECT token_wasm_hash, governor_wasm_hash, auction_wasm_hash, treasury_wasm_hash, metadata_wasm_hash, marketplace_wasm_hash FROM manager.dao_registry WHERE dao_id = 'CTOK1'`),
+    { token_wasm_hash: 'a01', metadata_wasm_hash: 'a11', auction_wasm_hash: 'a21', governor_wasm_hash: 'a31', treasury_wasm_hash: 'a41', marketplace_wasm_hash: 'a51' }
+  );
+  assert.deepEqual(
+    rows(`SELECT dao_id, module_role, contract_id, event_type, from_hash, to_hash, version FROM manager.module_upgrades WHERE deployment_id = '${DEPLOYMENT}' ORDER BY event_seq`),
+    [
+      { dao_id: 'CTOK1', module_role: 'auction', contract_id: 'CAUC1', event_type: 'upgraded', from_hash: 'a20', to_hash: 'b20', version: '0.2.0' },
+      { dao_id: 'CTOK1', module_role: 'auction', contract_id: 'CAUC1', event_type: 'version_synced', from_hash: null, to_hash: null, version: '0.2.1' },
+      { dao_id: 'CTOK1', module_role: 'token', contract_id: 'CTOK1', event_type: 'version_synced', from_hash: null, to_hash: null, version: '0.1.1' }
+    ]
+  );
+  assert.deepEqual(
+    one(`SELECT current_hash, current_version, upgrade_count, last_upgraded_from_hash, last_upgraded_ledger FROM manager.module_versions WHERE dao_id = 'CTOK1' AND module_role = 'auction'`),
+    { current_hash: 'b20', current_version: '0.2.1', upgrade_count: 1, last_upgraded_from_hash: 'a20', last_upgraded_ledger: 117 }
+  );
+  assert.deepEqual(
+    one(`SELECT current_hash, current_version, upgrade_count, last_upgraded_from_hash FROM manager.module_versions WHERE dao_id = 'CTOK1' AND module_role = 'token'`),
+    { current_hash: 'a01', current_version: '0.1.1', upgrade_count: 0, last_upgraded_from_hash: null }
+  );
+  assert.equal(one(`SELECT current_version FROM manager.module_versions WHERE dao_id = 'CTOK1' AND module_role = 'governor'`).current_version, null);
+  assert.equal(one(`SELECT count(*)::int AS n FROM manager.module_versions WHERE dao_id = 'CTOK2'`).n, 6);
+  const upgradedFeed = one(`SELECT kind, visibility, summary FROM app.activity_feed WHERE event_name = 'upgraded'`);
+  assert.deepEqual(upgradedFeed, { kind: 'auction.upgraded', visibility: 'public', summary: 'Contract upgraded to version 0.2.0 (a20 -> b20)' });
+  assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'admin_proposal_cancelled'`).kind, 'manager.admin_proposal_cancelled');
 });
 
 test('minter: claims resolve to the DAO by token_id and foreign tokens are dropped', { skip }, () => {

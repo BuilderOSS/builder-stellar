@@ -189,8 +189,19 @@ contract-event parser exposes `contractEventList()` and `contractEventsByContrac
 | `SecondaryListingCreated` | marketplace | `token_id` | `seller`, `price`, `expires_at`, `fee_bps`, `payment_asset` | `payment_asset` added |
 | `ListingPurchased` / `ListingCancelled` / `ListingExpired` | marketplace | `token_id` (+`buyer`) | unchanged | secondary only |
 | `MarketplacePaused` | marketplace | none | none | may be emitted at launch |
+| `Upgraded` | token, governor, treasury, auction, marketplace, metadata (defined once in `contracts/common/src/upgrade.rs`) | `from_hash`, `to_hash` | `version` | new; replaces marketplace-only `MarketplaceUpgraded`; public activity row `<role>.upgraded` ("Contract upgraded to version V (from -> to)", hashes shortened to 8 chars) |
+| `VersionSynced` | same six modules | none | `version` | new; admin activity row `<role>.version_synced` |
+| `AdminProposalCancelled` | manager | `current_admin`, `cancelled_admin` | none | new; admin activity row `manager.admin_proposal_cancelled` |
+| `DaoCreated` | manager | `token_address`, `deployer`, `launch_admin` | `created_ledger`, `modules`, `wasm_hashes` | `wasm_hashes` (struct of six BytesN<32>: token, metadata, auction, governor, treasury, marketplace) decodes to a nested object in `args` |
 | `PropertiesReset` | metadata | none | `old_num_properties` | renamed from `num_properties` |
-| removed | governor `TreasuryChanged`, `TokenContractChanged`, `GovernorAuthorityChanged`; treasury `GovernorChanged`; auction `TreasuryUpdated` | | | no longer emitted or decoded |
+| removed | marketplace `MarketplaceUpgraded`; governor `TreasuryChanged`, `TokenContractChanged`, `GovernorAuthorityChanged`; treasury `GovernorChanged`; auction `TreasuryUpdated` | | | no longer emitted or decoded |
+
+### Common-crate events
+
+The contract-event parser also scans `contracts/common/src/*.rs`. Events defined there are
+emitted by every module, so `contractEventList()` lists each once per emitting role (token,
+governor, treasury, auction, marketplace, metadata; `source: 'common'`). The decoder keys on
+name only: the emitting module is `contract_id` / `contract_role`.
 
 ### Activity feed labels
 

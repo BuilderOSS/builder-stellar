@@ -846,8 +846,60 @@ test('manager admin and platform minter events', () => {
   assert.equal(minter.activity.kind, 'manager.platform_minter_set');
 });
 
+test('Upgraded / VersionSynced decode for every module role; identifiers in topics, version in args', () => {
+  const roles = [['token', 'TOKEN'], ['governor', 'GOV'], ['treasury', 'TRE'], ['auction', 'AUC'], ['marketplace', 'MKT'], ['metadata', 'META']];
+  for (const [role, contract] of roles) {
+    const up = run(role, contract, 'Upgraded', [{ bytes: 'aaaaaaaa11' }, { bytes: 'bbbbbbbb22' }], { version: { string: '1.1.0' } });
+    assert.deepEqual(topicsOf(up.decoded), { from_hash: 'aaaaaaaa11', to_hash: 'bbbbbbbb22' });
+    assert.deepEqual(argsOf(up.decoded), { version: '1.1.0' });
+    assert.equal(up.decoded.contract_id, contract);
+    assert.equal(up.decoded.contract_role, role);
+    assert.equal(up.activity.kind, `${role}.upgraded`);
+    assert.equal(up.activity.visibility, 'public');
+    assert.equal(up.activity.contract_id, contract);
+    assert.equal(up.activity.summary, 'Contract upgraded to version 1.1.0 (aaaaaaaa -> bbbbbbbb)');
+    const sync = run(role, contract, 'VersionSynced', [], { version: { string: '1.1.0' } });
+    assert.deepEqual(topicsOf(sync.decoded), {});
+    assert.deepEqual(argsOf(sync.decoded), { version: '1.1.0' });
+    assert.equal(sync.activity.kind, `${role}.version_synced`);
+    assert.equal(sync.activity.visibility, 'admin');
+  }
+});
+
+test('Upgraded with empty args still produces a summary from the topics (decoded_events keeps topics, args {})', () => {
+  const { decoded, activity } = run('auction', 'AUC', 'Upgraded', [{ bytes: 'aaaaaaaa11' }, { bytes: 'bbbbbbbb22' }], {});
+  assert.deepEqual(argsOf(decoded), {});
+  assert.equal(activity.summary, 'Contract upgraded to version unknown (aaaaaaaa -> bbbbbbbb)');
+});
+
+test('AdminProposalCancelled topics current_admin, cancelled_admin; empty args', () => {
+  const { decoded, activity } = run('manager', 'CMANAGER', 'AdminProposalCancelled', [A('CURRENT'), A('CANCELLED')]);
+  assert.deepEqual(topicsOf(decoded), { current_admin: 'CURRENT', cancelled_admin: 'CANCELLED' });
+  assert.deepEqual(argsOf(decoded), {});
+  assert.equal(activity.kind, 'manager.admin_proposal_cancelled');
+  assert.equal(activity.visibility, 'admin');
+  assert.equal(activity.actor, 'CURRENT');
+  assert.deepEqual(JSON.parse(activity.addresses), ['CURRENT', 'CANCELLED', 'CMANAGER']);
+});
+
+test('DaoCreated decodes the nested wasm_hashes struct (map of six BytesN<32>) beside modules', () => {
+  const hashes = { token: { bytes: 'h1' }, metadata: { bytes: 'h2' }, auction: { bytes: 'h3' }, governor: { bytes: 'h4' }, treasury: { bytes: 'h5' }, marketplace: { bytes: 'h6' } };
+  const { decoded, activity } = run('manager', 'CMANAGER', 'DaoCreated', [A('TOKEN'), A('DEPLOYER'), A('LAUNCH_ADMIN')], {
+    created_ledger: { u64: '11' },
+    modules: dm({ token: A('TOKEN'), governor: A('GOV') }),
+    wasm_hashes: dm(hashes)
+  });
+  assert.deepEqual(topicsOf(decoded), { token_address: 'TOKEN', deployer: 'DEPLOYER', launch_admin: 'LAUNCH_ADMIN' });
+  const args = argsOf(decoded);
+  assert.deepEqual(args.wasm_hashes, { token: 'h1', metadata: 'h2', auction: 'h3', governor: 'h4', treasury: 'h5', marketplace: 'h6' });
+  assert.equal(args.modules.token, 'TOKEN');
+  assert.equal(args.created_ledger, '11');
+  assert.equal(activity.kind, 'manager.dao_created');
+  assert.equal(activity.visibility, 'public');
+});
+
 test('role fallback classifies new events when contract_role is unknown', () => {
-  for (const [name, role] of [['AdminProposed', 'manager'], ['AdminChanged', 'manager'], ['PlatformMinterSet', 'manager'],
+  for (const [name, role] of [['AdminProposed', 'manager'], ['AdminChanged', 'manager'], ['AdminProposalCancelled', 'manager'], ['PlatformMinterSet', 'manager'], ['Upgraded', 'unknown'], ['VersionSynced', 'unknown'],
     ['RefundDeferred', 'auction'], ['RefundWithdrawn', 'auction'], ['PrimaryListingPurchased', 'marketplace'],
     ['PrimaryListingCancelled', 'marketplace'], ['PrimaryListingExpired', 'marketplace'], ['Execute', 'treasury'], ['Launched', 'unknown']]) {
     const decoded = decodeEvent({ topics: JSON.stringify([S(name)]), data: JSON.stringify(dm({})) });

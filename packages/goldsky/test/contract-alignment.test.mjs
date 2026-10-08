@@ -42,6 +42,10 @@ test('topic orders of new and changed events', () => {
   assert.deepEqual(t.AdminChanged, ['old_admin', 'new_admin']);
   assert.deepEqual(t.PlatformMinterSet, ['minter']);
   assert.deepEqual(t.Launched, ['treasury']);
+  assert.deepEqual(t.Upgraded, ['from_hash', 'to_hash']);
+  assert.deepEqual(t.VersionSynced, []);
+  assert.deepEqual(t.AdminProposalCancelled, ['current_admin', 'cancelled_admin']);
+  assert.ok(!('MarketplaceUpgraded' in t));
   assert.deepEqual(t.MintAuthorityChanged, ['authority']);
 });
 
@@ -52,6 +56,12 @@ test('data fields of new and changed events match events.rs', () => {
   assert.deepEqual(e['marketplace:Launched'].data, ['opened']);
   assert.deepEqual(e['treasury:Execute'].data, ['function', 'index']);
   assert.deepEqual(e['manager:DaoLaunched'].data, ['launched_ledger', 'modules', 'launch_auction', 'launch_marketplace', 'enable_minter']);
+  for (const role of ['token', 'governor', 'treasury', 'auction', 'marketplace', 'metadata']) {
+    assert.deepEqual(e[`${role}:Upgraded`].data, ['version'], `${role}:Upgraded`);
+    assert.deepEqual(e[`${role}:VersionSynced`].data, ['version'], `${role}:VersionSynced`);
+  }
+  assert.deepEqual(e['manager:DaoCreated'].data, ['created_ledger', 'modules', 'wasm_hashes']);
+  assert.deepEqual(e['manager:AdminProposalCancelled'].data, []);
   assert.deepEqual(e['metadata:PropertiesReset'].data, ['old_num_properties']);
   assert.deepEqual(e['auction:RefundDeferred'].data, ['amount']);
   assert.deepEqual(e['auction:RefundWithdrawn'].data, ['amount']);

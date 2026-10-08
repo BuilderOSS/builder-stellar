@@ -4,5 +4,6 @@ export const REMOVED_EVENTS = [
   'TokenContractChanged',       // governor set_token_contract removed
   'GovernorAuthorityChanged',   // GovernorAuthority role removed
   'GovernorChanged',            // treasury set_governor removed
-  'TreasuryUpdated'             // auction set_treasury removed
+  'TreasuryUpdated',            // auction set_treasury removed
+  'MarketplaceUpgraded'         // replaced by the common Upgraded event (role marketplace)
 ];
