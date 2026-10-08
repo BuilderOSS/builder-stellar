@@ -180,12 +180,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         };
         set_config(e, &config);
         e.storage().instance().set(&DataKey::Manager, &manager);
-        e.storage()
-            .instance()
-            .set(&DataKey::CurrentHash, &current_hash);
-        e.storage()
-            .instance()
-            .set(&DataKey::CurrentVersion, &version);
+        common::upgrade::init(e, &current_hash, &version);
 
         // Not launched yet
         set_launched(e, false);
@@ -205,76 +200,39 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     }
 
     fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
-        let owner = ownable::get_owner(e).unwrap();
+        let owner =
+            common::error::require(e, ownable::get_owner(e), common::CommonError::OwnerNotSet);
         owner.require_auth();
         let manager: Address = e
             .storage()
             .instance()
             .get(&DataKey::Manager)
-            .expect("manager not set");
-        let current: BytesN<32> = e
-            .storage()
-            .instance()
-            .get(&DataKey::CurrentHash)
-            .expect("current hash not set");
-        if from_hash != current {
-            panic!("from hash does not match current hash");
-        }
-        let approved: bool = e.invoke_contract(
-            &manager,
-            &Symbol::new(e, "is_upgrade_approved"),
-            soroban_sdk::vec![e, from_hash.into_val(e), to_hash.clone().into_val(e)],
-        );
-        if !approved {
-            panic!("upgrade not approved");
-        }
-        let version: Option<String> = e.invoke_contract(
-            &manager,
-            &Symbol::new(e, "get_implementation_version"),
-            soroban_sdk::vec![e, to_hash.clone().into_val(e)],
-        );
-        let version = version.expect("target version not registered");
-        e.storage().instance().set(&DataKey::CurrentHash, &to_hash);
-        e.storage()
-            .instance()
-            .set(&DataKey::CurrentVersion, &version);
-        e.deployer().update_current_contract_wasm(to_hash);
+            .unwrap_or_else(|| {
+                soroban_sdk::panic_with_error!(e, common::CommonError::ManagerNotSet)
+            });
+        common::upgrade::apply(e, &manager, &from_hash, &to_hash);
     }
 
-    /// Returns the release version registered for the active auction WASM.
     fn version(e: &Env) -> String {
-        e.storage()
-            .instance()
-            .get(&DataKey::CurrentVersion)
-            .expect("auction version not set")
+        common::upgrade::version(e)
     }
 
-    /// Returns the active auction WASM hash.
     fn wasm_hash(e: &Env) -> BytesN<32> {
-        e.storage()
-            .instance()
-            .get(&DataKey::CurrentHash)
-            .expect("auction hash not set")
+        common::upgrade::current_hash(e)
     }
 
     fn sync_version(e: &Env) {
-        let owner = ownable::get_owner(e).expect("owner not set");
+        let owner =
+            common::error::require(e, ownable::get_owner(e), common::CommonError::OwnerNotSet);
         owner.require_auth();
         let manager: Address = e
             .storage()
             .instance()
             .get(&DataKey::Manager)
-            .expect("manager not set");
-        let current = Self::wasm_hash(e);
-        let version: Option<String> = e.invoke_contract(
-            &manager,
-            &Symbol::new(e, "get_implementation_version"),
-            soroban_sdk::vec![e, current.into_val(e)],
-        );
-        e.storage().instance().set(
-            &DataKey::CurrentVersion,
-            &version.expect("active WASM version not registered"),
-        );
+            .unwrap_or_else(|| {
+                soroban_sdk::panic_with_error!(e, common::CommonError::ManagerNotSet)
+            });
+        common::upgrade::sync_version(e, &manager);
     }
 
     #[when_not_paused]

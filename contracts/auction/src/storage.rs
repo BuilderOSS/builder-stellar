@@ -66,8 +66,6 @@ pub enum DataKey {
     /// Whether the first auction has been launched (prevents re-initialization)
     Launched,
     Manager,
-    CurrentHash,
-    CurrentVersion,
     PaymentTokenLocked,
 }
 

@@ -1,4 +1,4 @@
-use soroban_sdk::{contracttype, panic_with_error, Address, BytesN, Env, String};
+use soroban_sdk::{contracttype, panic_with_error, Address, Env};
 
 use crate::error::MarketplaceError;
 
@@ -31,8 +31,6 @@ pub struct MarketplaceConfig {
     pub payment_asset: Address,
     pub default_secondary_fee_bps: u32,
     pub manager: Address,
-    pub current_hash: BytesN<32>,
-    pub version: String,
     pub paused: bool,
 }
 

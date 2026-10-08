@@ -36,11 +36,10 @@ impl MarketplaceContract {
                 payment_asset: payment_asset.clone(),
                 default_secondary_fee_bps,
                 manager,
-                current_hash,
-                version: version.clone(),
                 paused: true,
             },
         );
+        common::upgrade::init(e, &current_hash, &version);
         emit_marketplace_initialized(
             e,
             &token,
@@ -283,58 +282,25 @@ impl MarketplaceContract {
 
     pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
         let config = Self::require_treasury(e);
-        if config.current_hash != from_hash {
-            panic_with_error!(e, MarketplaceError::Unauthorized);
-        }
-        let approved: bool = e.invoke_contract(
-            &config.manager,
-            &Symbol::new(e, "is_upgrade_approved"),
-            vec![
-                e,
-                from_hash.clone().into_val(e),
-                to_hash.clone().into_val(e),
-            ],
-        );
-        if !approved {
-            panic_with_error!(e, MarketplaceError::Unauthorized);
-        }
-        let version: Option<String> = e.invoke_contract(
-            &config.manager,
-            &Symbol::new(e, "get_implementation_version"),
-            vec![e, to_hash.clone().into_val(e)],
-        );
-        let version = version.expect("target version not registered");
-        let mut updated = config;
-        updated.current_hash = to_hash.clone();
-        updated.version = version;
-        storage::set_config(e, &updated);
         MarketplaceUpgraded {
-            from_hash,
+            from_hash: from_hash.clone(),
             to_hash: to_hash.clone(),
         }
         .publish(e);
-        e.deployer().update_current_contract_wasm(to_hash);
+        common::upgrade::apply(e, &config.manager, &from_hash, &to_hash);
     }
 
-    /// Returns the release version registered for the active marketplace WASM.
     pub fn version(e: &Env) -> String {
-        Self::get_config(e).version
+        common::upgrade::version(e)
     }
 
-    /// Returns the active marketplace WASM hash.
     pub fn wasm_hash(e: &Env) -> BytesN<32> {
-        Self::get_config(e).current_hash
+        common::upgrade::current_hash(e)
     }
 
     pub fn sync_version(e: &Env) {
-        let mut config = Self::require_treasury(e);
-        let version: Option<String> = e.invoke_contract(
-            &config.manager,
-            &Symbol::new(e, "get_implementation_version"),
-            vec![e, config.current_hash.into_val(e)],
-        );
-        config.version = version.expect("active WASM version not registered");
-        storage::set_config(e, &config);
+        let config = Self::require_treasury(e);
+        common::upgrade::sync_version(e, &config.manager);
     }
 
     fn require_treasury(e: &Env) -> MarketplaceConfig {

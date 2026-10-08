@@ -98,12 +98,7 @@ impl DaoGovernorContract {
 
         set_owner(e, &owner);
         e.storage().instance().set(&GovernorKey::Manager, &manager);
-        e.storage()
-            .instance()
-            .set(&GovernorKey::CurrentHash, &current_hash);
-        e.storage()
-            .instance()
-            .set(&GovernorKey::CurrentVersion, &version);
+        common::upgrade::init(e, &current_hash, &version);
 
         let name = String::from_str(e, "MvpDaoGovernor");
         governor::set_name(e, name.clone());
@@ -136,72 +131,40 @@ impl DaoGovernorContract {
     }
 
     pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
-        let owner = stellar_access::ownable::get_owner(e).expect("owner not set");
+        let owner = common::error::require(
+            e,
+            stellar_access::ownable::get_owner(e),
+            common::CommonError::OwnerNotSet,
+        );
         owner.require_auth();
-        let manager: Address = e
-            .storage()
-            .instance()
-            .get(&GovernorKey::Manager)
-            .expect("manager not set");
-        let current: BytesN<32> = e
-            .storage()
-            .instance()
-            .get(&GovernorKey::CurrentHash)
-            .expect("current hash not set");
-        if from_hash != current {
-            panic!("from hash does not match current hash");
-        }
-        let approved: bool = e.invoke_contract(
-            &manager,
-            &Symbol::new(e, "is_upgrade_approved"),
-            vec![e, from_hash.into_val(e), to_hash.clone().into_val(e)],
-        );
-        if !approved {
-            panic!("upgrade not approved");
-        }
-        let version: Option<String> = e.invoke_contract(
-            &manager,
-            &Symbol::new(e, "get_implementation_version"),
-            vec![e, to_hash.clone().into_val(e)],
-        );
-        let version = version.expect("target version not registered");
-        e.storage()
-            .instance()
-            .set(&GovernorKey::CurrentHash, &to_hash);
-        e.storage()
-            .instance()
-            .set(&GovernorKey::CurrentVersion, &version);
-        governor::set_version(e, version);
-        e.deployer().update_current_contract_wasm(to_hash);
+        let manager = Self::manager(e);
+        common::upgrade::apply(e, &manager, &from_hash, &to_hash);
+        governor::set_version(e, common::upgrade::version(e));
     }
 
-    /// Returns the active governor WASM hash.
     pub fn wasm_hash(e: &Env) -> BytesN<32> {
-        e.storage()
-            .instance()
-            .get(&GovernorKey::CurrentHash)
-            .expect("governor hash not set")
+        common::upgrade::current_hash(e)
     }
 
     pub fn sync_version(e: &Env) {
-        let owner = stellar_access::ownable::get_owner(e).expect("owner not set");
-        owner.require_auth();
-        let manager: Address = e
-            .storage()
-            .instance()
-            .get(&GovernorKey::Manager)
-            .expect("manager not set");
-        let current = Self::wasm_hash(e);
-        let version: Option<String> = e.invoke_contract(
-            &manager,
-            &Symbol::new(e, "get_implementation_version"),
-            vec![e, current.into_val(e)],
+        let owner = common::error::require(
+            e,
+            stellar_access::ownable::get_owner(e),
+            common::CommonError::OwnerNotSet,
         );
-        let version = version.expect("active WASM version not registered");
+        owner.require_auth();
+        let manager = Self::manager(e);
+        let version = common::upgrade::sync_version(e, &manager);
+        governor::set_version(e, version);
+    }
+
+    fn manager(e: &Env) -> Address {
         e.storage()
             .instance()
-            .set(&GovernorKey::CurrentVersion, &version);
-        governor::set_version(e, version);
+            .get(&GovernorKey::Manager)
+            .unwrap_or_else(|| {
+                soroban_sdk::panic_with_error!(e, common::CommonError::ManagerNotSet)
+            })
     }
 
     #[only_owner]

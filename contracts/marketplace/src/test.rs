@@ -242,3 +242,144 @@ fn expired_listing_can_be_reclaimed() {
     assert_eq!(fixture.token.owner_of(&token_id), fixture.seller);
     assert!(fixture.marketplace.get_listing(&token_id).is_none());
 }
+
+mod upgrade_via_common {
+    use super::*;
+    use common::testutils::{empty_wasm, MockManager, MockManagerClient};
+
+    #[test]
+    fn upgrade_goes_through_common_apply() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let mgr = MockManagerClient::new(&env, &env.register(MockManager, ()));
+        let from = BytesN::from_array(&env, &[1u8; 32]);
+        let to = empty_wasm(&env);
+        let id = env.register(
+            MarketplaceContract,
+            (
+                Address::generate(&env),
+                Address::generate(&env),
+                Address::generate(&env),
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&env, "0.1.0"),
+                250u32,
+            ),
+        );
+        let client = crate::contract::MarketplaceContractClient::new(&env, &id);
+        mgr.approve(&from, &to);
+        mgr.register(&to, &String::from_str(&env, "0.2.0"));
+        client.upgrade(&from, &to);
+
+        // Contract code is swapped to an empty module; read the stored keys directly.
+        env.as_contract(&id, || {
+            assert_eq!(common::upgrade::current_hash(&env), to);
+            assert_eq!(
+                common::upgrade::version(&env),
+                String::from_str(&env, "0.2.0")
+            );
+        });
+    }
+
+    #[test]
+    fn upgrade_rejected_when_not_approved() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let mgr = MockManagerClient::new(&env, &env.register(MockManager, ()));
+        let from = BytesN::from_array(&env, &[1u8; 32]);
+        let to = empty_wasm(&env);
+        let id = env.register(
+            MarketplaceContract,
+            (
+                Address::generate(&env),
+                Address::generate(&env),
+                Address::generate(&env),
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&env, "0.1.0"),
+                250u32,
+            ),
+        );
+        let client = crate::contract::MarketplaceContractClient::new(&env, &id);
+        mgr.register(&to, &String::from_str(&env, "0.2.0"));
+        let r = client.try_upgrade(&from, &to);
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            common::CommonError::UpgradeNotApproved.into()
+        );
+    }
+
+    #[test]
+    fn upgrade_and_sync_version_reject_unauthorized_caller() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let mgr = MockManagerClient::new(&env, &env.register(MockManager, ()));
+        let from = BytesN::from_array(&env, &[1u8; 32]);
+        let to = empty_wasm(&env);
+        let id = env.register(
+            MarketplaceContract,
+            (
+                Address::generate(&env),
+                Address::generate(&env),
+                Address::generate(&env),
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&env, "0.1.0"),
+                250u32,
+            ),
+        );
+        let client = crate::contract::MarketplaceContractClient::new(&env, &id);
+        mgr.approve(&from, &to);
+        mgr.register(&to, &String::from_str(&env, "0.2.0"));
+        mgr.register(&from, &String::from_str(&env, "0.1.1"));
+        // Drop mock_all_auths: no authorization is provided for any address.
+        env.set_auths(&[]);
+        assert!(client.try_upgrade(&from, &to).is_err());
+        assert!(client.try_sync_version().is_err());
+        env.mock_all_auths();
+        env.as_contract(&id, || {
+            assert_eq!(common::upgrade::current_hash(&env), from);
+            assert_eq!(
+                common::upgrade::version(&env),
+                String::from_str(&env, "0.1.0")
+            );
+        });
+    }
+
+    #[test]
+    fn upgrade_hash_mismatch_leaves_state_unchanged() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let mgr = MockManagerClient::new(&env, &env.register(MockManager, ()));
+        let from = BytesN::from_array(&env, &[1u8; 32]);
+        let to = empty_wasm(&env);
+        let id = env.register(
+            MarketplaceContract,
+            (
+                Address::generate(&env),
+                Address::generate(&env),
+                Address::generate(&env),
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&env, "0.1.0"),
+                250u32,
+            ),
+        );
+        let client = crate::contract::MarketplaceContractClient::new(&env, &id);
+        let wrong = BytesN::from_array(&env, &[9u8; 32]);
+        mgr.approve(&wrong, &to);
+        mgr.register(&to, &String::from_str(&env, "0.2.0"));
+        let r = client.try_upgrade(&wrong, &to);
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            common::CommonError::HashMismatch.into()
+        );
+        env.as_contract(&id, || {
+            assert_eq!(common::upgrade::current_hash(&env), from);
+            assert_eq!(
+                common::upgrade::version(&env),
+                String::from_str(&env, "0.1.0")
+            );
+        });
+    }
+}

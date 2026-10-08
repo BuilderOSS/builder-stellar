@@ -417,3 +417,171 @@ fn test_delete_and_recreate_properties() {
     let property = client.get_property(&0).unwrap();
     assert_eq!(property.name, String::from_str(&env, "Body"));
 }
+
+mod upgrade_via_common {
+    use super::*;
+    use common::testutils::{empty_wasm, MockManager, MockManagerClient};
+
+    #[test]
+    fn upgrade_goes_through_common_apply() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let mgr = MockManagerClient::new(&env, &env.register(MockManager, ()));
+        let from = BytesN::from_array(&env, &[1u8; 32]);
+        let to = empty_wasm(&env);
+        let owner = Address::generate(&env);
+        let client = create_contract(&env);
+        let id = client.address.clone();
+        client.initialize(
+            &Address::generate(&env),
+            &String::from_str(&env, "https://example.com"),
+            &String::from_str(&env, "Test DAO"),
+            &String::from_str(&env, "https://example.com/image.png"),
+            &String::from_str(&env, "https://renderer.example.com/render"),
+            &mgr.address,
+            &from,
+            &owner,
+            &Vec::new(&env),
+            &Vec::new(&env),
+            &IpfsGroup {
+                base_uri: String::from_str(&env, "ipfs://"),
+                extension: String::from_str(&env, ".png"),
+            },
+            &String::from_str(&env, "0.1.0"),
+        );
+        mgr.approve(&from, &to);
+        mgr.register(&to, &String::from_str(&env, "0.2.0"));
+        client.upgrade(&from, &to);
+
+        // Contract code is swapped to an empty module; read the stored keys directly.
+        env.as_contract(&id, || {
+            assert_eq!(common::upgrade::current_hash(&env), to);
+            assert_eq!(
+                common::upgrade::version(&env),
+                String::from_str(&env, "0.2.0")
+            );
+        });
+    }
+
+    #[test]
+    fn upgrade_rejected_when_not_approved() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let mgr = MockManagerClient::new(&env, &env.register(MockManager, ()));
+        let from = BytesN::from_array(&env, &[1u8; 32]);
+        let to = empty_wasm(&env);
+        let owner = Address::generate(&env);
+        let client = create_contract(&env);
+        client.initialize(
+            &Address::generate(&env),
+            &String::from_str(&env, "https://example.com"),
+            &String::from_str(&env, "Test DAO"),
+            &String::from_str(&env, "https://example.com/image.png"),
+            &String::from_str(&env, "https://renderer.example.com/render"),
+            &mgr.address,
+            &from,
+            &owner,
+            &Vec::new(&env),
+            &Vec::new(&env),
+            &IpfsGroup {
+                base_uri: String::from_str(&env, "ipfs://"),
+                extension: String::from_str(&env, ".png"),
+            },
+            &String::from_str(&env, "0.1.0"),
+        );
+        mgr.register(&to, &String::from_str(&env, "0.2.0"));
+        let r = client.try_upgrade(&from, &to);
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            common::CommonError::UpgradeNotApproved.into()
+        );
+    }
+
+    #[test]
+    fn upgrade_and_sync_version_reject_unauthorized_caller() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let mgr = MockManagerClient::new(&env, &env.register(MockManager, ()));
+        let from = BytesN::from_array(&env, &[1u8; 32]);
+        let to = empty_wasm(&env);
+        let owner = Address::generate(&env);
+        let client = create_contract(&env);
+        let id = client.address.clone();
+        client.initialize(
+            &Address::generate(&env),
+            &String::from_str(&env, "https://example.com"),
+            &String::from_str(&env, "Test DAO"),
+            &String::from_str(&env, "https://example.com/image.png"),
+            &String::from_str(&env, "https://renderer.example.com/render"),
+            &mgr.address,
+            &from,
+            &owner,
+            &Vec::new(&env),
+            &Vec::new(&env),
+            &IpfsGroup {
+                base_uri: String::from_str(&env, "ipfs://"),
+                extension: String::from_str(&env, ".png"),
+            },
+            &String::from_str(&env, "0.1.0"),
+        );
+        mgr.approve(&from, &to);
+        mgr.register(&to, &String::from_str(&env, "0.2.0"));
+        mgr.register(&from, &String::from_str(&env, "0.1.1"));
+        // Drop mock_all_auths: no authorization is provided for any address.
+        env.set_auths(&[]);
+        assert!(client.try_upgrade(&from, &to).is_err());
+        assert!(client.try_sync_version().is_err());
+        env.mock_all_auths();
+        env.as_contract(&id, || {
+            assert_eq!(common::upgrade::current_hash(&env), from);
+            assert_eq!(
+                common::upgrade::version(&env),
+                String::from_str(&env, "0.1.0")
+            );
+        });
+    }
+
+    #[test]
+    fn upgrade_hash_mismatch_leaves_state_unchanged() {
+        let env = Env::default();
+        env.mock_all_auths();
+        let mgr = MockManagerClient::new(&env, &env.register(MockManager, ()));
+        let from = BytesN::from_array(&env, &[1u8; 32]);
+        let to = empty_wasm(&env);
+        let owner = Address::generate(&env);
+        let client = create_contract(&env);
+        let id = client.address.clone();
+        client.initialize(
+            &Address::generate(&env),
+            &String::from_str(&env, "https://example.com"),
+            &String::from_str(&env, "Test DAO"),
+            &String::from_str(&env, "https://example.com/image.png"),
+            &String::from_str(&env, "https://renderer.example.com/render"),
+            &mgr.address,
+            &from,
+            &owner,
+            &Vec::new(&env),
+            &Vec::new(&env),
+            &IpfsGroup {
+                base_uri: String::from_str(&env, "ipfs://"),
+                extension: String::from_str(&env, ".png"),
+            },
+            &String::from_str(&env, "0.1.0"),
+        );
+        let wrong = BytesN::from_array(&env, &[9u8; 32]);
+        mgr.approve(&wrong, &to);
+        mgr.register(&to, &String::from_str(&env, "0.2.0"));
+        let r = client.try_upgrade(&wrong, &to);
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            common::CommonError::HashMismatch.into()
+        );
+        env.as_contract(&id, || {
+            assert_eq!(common::upgrade::current_hash(&env), from);
+            assert_eq!(
+                common::upgrade::version(&env),
+                String::from_str(&env, "0.1.0")
+            );
+        });
+    }
+}

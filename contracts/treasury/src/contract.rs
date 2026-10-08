@@ -1,6 +1,6 @@
 use soroban_sdk::{
     auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation},
-    contract, contractimpl, vec, Address, BytesN, Env, IntoVal, String, Symbol, Val, Vec,
+    contract, contractimpl, vec, Address, BytesN, Env, String, Symbol, Val, Vec,
 };
 use stellar_access::ownable::{set_owner, Ownable, OwnableStorageKey};
 use stellar_macros::only_owner;
@@ -53,89 +53,48 @@ impl DaoTreasuryContract {
             .instance()
             .set(&TreasuryKey::Governor, &governor);
         e.storage().instance().set(&TreasuryKey::Manager, &manager);
-        e.storage()
-            .instance()
-            .set(&TreasuryKey::CurrentHash, &current_hash);
-        e.storage()
-            .instance()
-            .set(&TreasuryKey::CurrentVersion, &version);
+        common::upgrade::init(e, &current_hash, &version);
 
         emit_treasury_initialized(e, &owner, &governor, &version);
     }
 
     pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
-        let owner = stellar_access::ownable::get_owner(e).expect("owner not set");
+        let owner = common::error::require(
+            e,
+            stellar_access::ownable::get_owner(e),
+            common::CommonError::OwnerNotSet,
+        );
         owner.require_auth();
-        let manager: Address = e
-            .storage()
-            .instance()
-            .get(&TreasuryKey::Manager)
-            .expect("manager not set");
-        let current: BytesN<32> = e
-            .storage()
-            .instance()
-            .get(&TreasuryKey::CurrentHash)
-            .expect("current hash not set");
-        if from_hash != current {
-            panic!("from hash does not match current hash");
-        }
-        let approved: bool = e.invoke_contract(
-            &manager,
-            &Symbol::new(e, "is_upgrade_approved"),
-            vec![e, from_hash.into_val(e), to_hash.clone().into_val(e)],
-        );
-        if !approved {
-            panic!("upgrade not approved");
-        }
-        let version: Option<String> = e.invoke_contract(
-            &manager,
-            &Symbol::new(e, "get_implementation_version"),
-            vec![e, to_hash.clone().into_val(e)],
-        );
-        let version = version.expect("target version not registered");
-        e.storage()
-            .instance()
-            .set(&TreasuryKey::CurrentHash, &to_hash);
-        e.storage()
-            .instance()
-            .set(&TreasuryKey::CurrentVersion, &version);
-        e.deployer().update_current_contract_wasm(to_hash);
+        let manager = Self::manager(e);
+        common::upgrade::apply(e, &manager, &from_hash, &to_hash);
     }
 
-    /// Returns the release version registered for the active treasury WASM.
     pub fn version(e: &Env) -> String {
-        e.storage()
-            .instance()
-            .get(&TreasuryKey::CurrentVersion)
-            .expect("treasury version not set")
+        common::upgrade::version(e)
     }
 
-    /// Returns the active treasury WASM hash.
     pub fn wasm_hash(e: &Env) -> BytesN<32> {
-        e.storage()
-            .instance()
-            .get(&TreasuryKey::CurrentHash)
-            .expect("treasury hash not set")
+        common::upgrade::current_hash(e)
     }
 
     pub fn sync_version(e: &Env) {
-        let owner = stellar_access::ownable::get_owner(e).expect("owner not set");
+        let owner = common::error::require(
+            e,
+            stellar_access::ownable::get_owner(e),
+            common::CommonError::OwnerNotSet,
+        );
         owner.require_auth();
-        let manager: Address = e
-            .storage()
+        let manager = Self::manager(e);
+        common::upgrade::sync_version(e, &manager);
+    }
+
+    fn manager(e: &Env) -> Address {
+        e.storage()
             .instance()
             .get(&TreasuryKey::Manager)
-            .expect("manager not set");
-        let current = Self::wasm_hash(e);
-        let version: Option<String> = e.invoke_contract(
-            &manager,
-            &Symbol::new(e, "get_implementation_version"),
-            vec![e, current.into_val(e)],
-        );
-        e.storage().instance().set(
-            &TreasuryKey::CurrentVersion,
-            &version.expect("active WASM version not registered"),
-        );
+            .unwrap_or_else(|| {
+                soroban_sdk::panic_with_error!(e, common::CommonError::ManagerNotSet)
+            })
     }
 
     /// Updates the authorized governor contract address.

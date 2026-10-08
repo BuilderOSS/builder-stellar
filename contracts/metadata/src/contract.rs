@@ -1,6 +1,4 @@
-use soroban_sdk::{
-    contract, contractimpl, vec, Address, Bytes, BytesN, Env, IntoVal, String, Symbol, Vec,
-};
+use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, String, Vec};
 
 use crate::error::Error;
 use crate::events::*;
@@ -72,12 +70,7 @@ impl MetadataContract {
         }
         env.storage().instance().set(&DataKey::Manager, &manager);
         env.storage().instance().set(&DataKey::Owner, &owner);
-        env.storage()
-            .instance()
-            .set(&DataKey::CurrentHash, &current_hash);
-        env.storage()
-            .instance()
-            .set(&DataKey::CurrentVersion, &version);
+        common::upgrade::init(&env, &current_hash, &version);
         set_initialized(&env);
 
         emit_metadata_initialized(
@@ -99,62 +92,20 @@ impl MetadataContract {
             .storage()
             .instance()
             .get(&DataKey::Owner)
-            .expect("owner not set");
+            .unwrap_or_else(|| {
+                soroban_sdk::panic_with_error!(env, common::CommonError::OwnerNotSet)
+            });
         owner.require_auth();
-        let manager: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Manager)
-            .expect("manager not set");
-        let current: BytesN<32> = env
-            .storage()
-            .instance()
-            .get(&DataKey::CurrentHash)
-            .expect("current hash not set");
-        if from_hash != current {
-            panic!("from hash does not match current hash");
-        }
-        let approved: bool = env.invoke_contract(
-            &manager,
-            &Symbol::new(&env, "is_upgrade_approved"),
-            vec![
-                &env,
-                from_hash.into_val(&env),
-                to_hash.clone().into_val(&env),
-            ],
-        );
-        if !approved {
-            panic!("upgrade not approved");
-        }
-        let version: Option<String> = env.invoke_contract(
-            &manager,
-            &Symbol::new(&env, "get_implementation_version"),
-            vec![&env, to_hash.clone().into_val(&env)],
-        );
-        let version = version.expect("target version not registered");
-        env.storage()
-            .instance()
-            .set(&DataKey::CurrentHash, &to_hash);
-        env.storage()
-            .instance()
-            .set(&DataKey::CurrentVersion, &version);
-        env.deployer().update_current_contract_wasm(to_hash);
+        let manager = Self::manager(&env);
+        common::upgrade::apply(&env, &manager, &from_hash, &to_hash);
     }
 
-    /// Returns the release version registered for the active metadata WASM.
     pub fn version(env: Env) -> String {
-        env.storage()
-            .instance()
-            .get(&DataKey::CurrentVersion)
-            .expect("metadata version not set")
+        common::upgrade::version(&env)
     }
 
-    /// Returns the active metadata WASM hash.
     pub fn wasm_hash(env: Env) -> BytesN<32> {
-        env.storage()
-            .instance()
-            .get(&DataKey::CurrentHash)
-            .expect("metadata hash not set")
+        common::upgrade::current_hash(&env)
     }
 
     pub fn sync_version(env: Env) {
@@ -162,23 +113,21 @@ impl MetadataContract {
             .storage()
             .instance()
             .get(&DataKey::Owner)
-            .expect("owner not set");
+            .unwrap_or_else(|| {
+                soroban_sdk::panic_with_error!(env, common::CommonError::OwnerNotSet)
+            });
         owner.require_auth();
-        let manager: Address = env
-            .storage()
+        let manager = Self::manager(&env);
+        common::upgrade::sync_version(&env, &manager);
+    }
+
+    fn manager(env: &Env) -> Address {
+        env.storage()
             .instance()
             .get(&DataKey::Manager)
-            .expect("manager not set");
-        let current = Self::wasm_hash(env.clone());
-        let version: Option<String> = env.invoke_contract(
-            &manager,
-            &Symbol::new(&env, "get_implementation_version"),
-            vec![&env, current.into_val(&env)],
-        );
-        env.storage().instance().set(
-            &DataKey::CurrentVersion,
-            &version.expect("active WASM version not registered"),
-        );
+            .unwrap_or_else(|| {
+                soroban_sdk::panic_with_error!(env, common::CommonError::ManagerNotSet)
+            })
     }
 
     /// Add new properties and items

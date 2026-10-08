@@ -1,19 +1,20 @@
 [package]
-name = "marketplace"
+name = "common"
 version = "0.1.0"
 edition = "2021"
+publish = false
 
 [lib]
-crate-type = ["lib", "cdylib"]
+crate-type = ["rlib"]
 doctest = false
 
 [dependencies]
 soroban-sdk = { workspace = true }
-common = { path = "../common" }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
-common = { path = "../common", features = ["testutils"] }
 
 [features]
+# WARNING: exports MockManager as a #[contract]. Enable ONLY via
+# [dev-dependencies]; never in [dependencies] of a deployable contract.
 testutils = ["soroban-sdk/testutils"]

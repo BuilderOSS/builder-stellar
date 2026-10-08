@@ -420,3 +420,186 @@ fn batch_mint_assigns_contiguous_ids_owners_and_balances() {
     );
     assert_eq!(next, soroban_sdk::vec![&e, 6u32]);
 }
+
+mod upgrade_via_common {
+    use super::*;
+    use common::testutils::{empty_wasm, MockManager, MockManagerClient};
+
+    #[test]
+    fn upgrade_goes_through_common_apply() {
+        let e = Env::default();
+        e.mock_all_auths();
+        let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+        let from = BytesN::from_array(&e, &[1u8; 32]);
+        let to = empty_wasm(&e);
+        let id = e.register(
+            DaoTokenContract,
+            (
+                Address::generate(&e),
+                String::from_str(&e, "https://example.com/"),
+                String::from_str(&e, "DAO Vote NFT"),
+                String::from_str(&e, "vDAO"),
+                Address::generate(&e),
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&e, "0.1.0"),
+            ),
+        );
+        let client = DaoTokenContractClient::new(&e, &id);
+        assert_eq!(client.version(), String::from_str(&e, "0.1.0"));
+        assert_eq!(client.wasm_hash(), from);
+        mgr.register(&from, &String::from_str(&e, "0.1.1"));
+        client.sync_version();
+        assert_eq!(client.version(), String::from_str(&e, "0.1.1"));
+        mgr.approve(&from, &to);
+        mgr.register(&to, &String::from_str(&e, "0.2.0"));
+        client.upgrade(&from, &to);
+
+        // Contract code is swapped to an empty module; read the stored keys directly.
+        e.as_contract(&id, || {
+            assert_eq!(common::upgrade::current_hash(&e), to);
+            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.2.0"));
+        });
+    }
+
+    #[test]
+    fn upgrade_rejected_when_not_approved() {
+        let e = Env::default();
+        e.mock_all_auths();
+        let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+        let from = BytesN::from_array(&e, &[1u8; 32]);
+        let to = empty_wasm(&e);
+        let id = e.register(
+            DaoTokenContract,
+            (
+                Address::generate(&e),
+                String::from_str(&e, "https://example.com/"),
+                String::from_str(&e, "DAO Vote NFT"),
+                String::from_str(&e, "vDAO"),
+                Address::generate(&e),
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&e, "0.1.0"),
+            ),
+        );
+        let client = DaoTokenContractClient::new(&e, &id);
+        assert_eq!(client.version(), String::from_str(&e, "0.1.0"));
+        assert_eq!(client.wasm_hash(), from);
+        mgr.register(&from, &String::from_str(&e, "0.1.1"));
+        client.sync_version();
+        assert_eq!(client.version(), String::from_str(&e, "0.1.1"));
+        mgr.register(&to, &String::from_str(&e, "0.2.0"));
+        let r = client.try_upgrade(&from, &to);
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            common::CommonError::UpgradeNotApproved.into()
+        );
+    }
+
+    #[test]
+    fn upgrade_and_sync_version_reject_unauthorized_caller() {
+        let e = Env::default();
+        e.mock_all_auths();
+        let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+        let from = BytesN::from_array(&e, &[1u8; 32]);
+        let to = empty_wasm(&e);
+        let id = e.register(
+            DaoTokenContract,
+            (
+                Address::generate(&e),
+                String::from_str(&e, "https://example.com/"),
+                String::from_str(&e, "DAO Vote NFT"),
+                String::from_str(&e, "vDAO"),
+                Address::generate(&e),
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&e, "0.1.0"),
+            ),
+        );
+        let client = DaoTokenContractClient::new(&e, &id);
+        mgr.approve(&from, &to);
+        mgr.register(&to, &String::from_str(&e, "0.2.0"));
+        mgr.register(&from, &String::from_str(&e, "0.1.1"));
+        // Drop mock_all_auths: no authorization is provided for any address.
+        e.set_auths(&[]);
+        assert!(client.try_upgrade(&from, &to).is_err());
+        assert!(client.try_sync_version().is_err());
+        e.mock_all_auths();
+        e.as_contract(&id, || {
+            assert_eq!(common::upgrade::current_hash(&e), from);
+            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.1.0"));
+        });
+    }
+
+    #[test]
+    fn upgrade_hash_mismatch_leaves_state_unchanged() {
+        let e = Env::default();
+        e.mock_all_auths();
+        let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+        let from = BytesN::from_array(&e, &[1u8; 32]);
+        let to = empty_wasm(&e);
+        let id = e.register(
+            DaoTokenContract,
+            (
+                Address::generate(&e),
+                String::from_str(&e, "https://example.com/"),
+                String::from_str(&e, "DAO Vote NFT"),
+                String::from_str(&e, "vDAO"),
+                Address::generate(&e),
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&e, "0.1.0"),
+            ),
+        );
+        let client = DaoTokenContractClient::new(&e, &id);
+        let wrong = BytesN::from_array(&e, &[9u8; 32]);
+        mgr.approve(&wrong, &to);
+        mgr.register(&to, &String::from_str(&e, "0.2.0"));
+        let r = client.try_upgrade(&wrong, &to);
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            common::CommonError::HashMismatch.into()
+        );
+        e.as_contract(&id, || {
+            assert_eq!(common::upgrade::current_hash(&e), from);
+            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.1.0"));
+        });
+    }
+
+    #[test]
+    fn version_and_sync_version_work_after_upgrade() {
+        let e = Env::default();
+        e.mock_all_auths();
+        let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+        let from = BytesN::from_array(&e, &[1u8; 32]);
+        let to = empty_wasm(&e);
+        let id = e.register(
+            DaoTokenContract,
+            (
+                Address::generate(&e),
+                String::from_str(&e, "https://example.com/"),
+                String::from_str(&e, "DAO Vote NFT"),
+                String::from_str(&e, "vDAO"),
+                Address::generate(&e),
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&e, "0.1.0"),
+            ),
+        );
+        let client = DaoTokenContractClient::new(&e, &id);
+        mgr.approve(&from, &to);
+        mgr.register(&to, &String::from_str(&e, "0.2.0"));
+        client.upgrade(&from, &to);
+        // The contract code is now an empty module, so call the Rust entrypoints
+        // directly in the contract context against the post-upgrade storage.
+        e.as_contract(&id, || {
+            assert_eq!(DaoTokenContract::version(&e), String::from_str(&e, "0.2.0"));
+            assert_eq!(DaoTokenContract::wasm_hash(&e), to);
+        });
+        mgr.register(&to, &String::from_str(&e, "0.2.1"));
+        e.as_contract(&id, || {
+            DaoTokenContract::sync_version(&e);
+            assert_eq!(DaoTokenContract::version(&e), String::from_str(&e, "0.2.1"));
+        });
+    }
+}

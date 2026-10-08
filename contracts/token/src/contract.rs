@@ -57,41 +57,50 @@ impl DaoTokenContract {
         set_owner(e, &owner);
         e.storage().instance().set(&TokenKey::Metadata, &metadata);
         e.storage().instance().set(&TokenKey::Manager, &manager);
-        e.storage()
-            .instance()
-            .set(&TokenKey::CurrentHash, &current_hash);
-        e.storage()
-            .instance()
-            .set(&TokenKey::CurrentVersion, &version);
+        common::upgrade::init(e, &current_hash, &version);
         emit_token_initialized(e, &owner, &uri, &name, &symbol, &version);
     }
 
     pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
-        let owner = stellar_access::ownable::get_owner(e).expect("owner not set");
+        let owner = common::error::require(
+            e,
+            stellar_access::ownable::get_owner(e),
+            common::CommonError::OwnerNotSet,
+        );
         owner.require_auth();
-        let manager: Address = e
-            .storage()
+        let manager = Self::manager(e);
+        common::upgrade::apply(e, &manager, &from_hash, &to_hash);
+    }
+
+    /// Returns the release version registered for the active token WASM.
+    pub fn version(e: &Env) -> String {
+        common::upgrade::version(e)
+    }
+
+    /// Returns the active token WASM hash.
+    pub fn wasm_hash(e: &Env) -> BytesN<32> {
+        common::upgrade::current_hash(e)
+    }
+
+    /// Re-reads the version for the active WASM hash from the Manager registry.
+    pub fn sync_version(e: &Env) {
+        let owner = common::error::require(
+            e,
+            stellar_access::ownable::get_owner(e),
+            common::CommonError::OwnerNotSet,
+        );
+        owner.require_auth();
+        let manager = Self::manager(e);
+        common::upgrade::sync_version(e, &manager);
+    }
+
+    fn manager(e: &Env) -> Address {
+        e.storage()
             .instance()
             .get(&TokenKey::Manager)
-            .expect("manager not set");
-        let current: BytesN<32> = e
-            .storage()
-            .instance()
-            .get(&TokenKey::CurrentHash)
-            .expect("current hash not set");
-        if from_hash != current {
-            panic!("from hash does not match current hash");
-        }
-        let approved: bool = e.invoke_contract(
-            &manager,
-            &soroban_sdk::Symbol::new(e, "is_upgrade_approved"),
-            soroban_sdk::vec![e, from_hash.into_val(e), to_hash.clone().into_val(e)],
-        );
-        if !approved {
-            panic!("upgrade not approved");
-        }
-        e.storage().instance().set(&TokenKey::CurrentHash, &to_hash);
-        e.deployer().update_current_contract_wasm(to_hash);
+            .unwrap_or_else(|| {
+                soroban_sdk::panic_with_error!(e, common::CommonError::ManagerNotSet)
+            })
     }
 
     /// Updates collection metadata during the launch-admin setup window or

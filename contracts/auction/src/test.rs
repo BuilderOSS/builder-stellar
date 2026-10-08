@@ -494,3 +494,151 @@ fn test_set_min_increment_rejects_high_value() {
 // - Payment currency is locked on first bid
 // - Overflow protection in bid increment calculations
 // - Authorization checks for owner-only functions
+
+mod upgrade_via_common {
+    use super::*;
+    use common::testutils::{empty_wasm, MockManager, MockManagerClient};
+
+    #[test]
+    fn upgrade_goes_through_common_apply() {
+        let e = Env::default();
+        e.mock_all_auths();
+        let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+        let from = BytesN::from_array(&e, &[1u8; 32]);
+        let to = empty_wasm(&e);
+        let id = e.register(
+            DaoAuctionContract,
+            (
+                Address::generate(&e),
+                Address::generate(&e),
+                Address::generate(&e),
+                300_u64,
+                10_000_000_i128,
+                10_u32,
+                50_u64,
+                Address::generate(&e),
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&e, "0.1.0"),
+            ),
+        );
+        let client = DaoAuctionContractClient::new(&e, &id);
+        mgr.approve(&from, &to);
+        mgr.register(&to, &String::from_str(&e, "0.2.0"));
+        client.upgrade(&from, &to);
+
+        // Contract code is swapped to an empty module; read the stored keys directly.
+        e.as_contract(&id, || {
+            assert_eq!(common::upgrade::current_hash(&e), to);
+            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.2.0"));
+        });
+    }
+
+    #[test]
+    fn upgrade_rejected_when_not_approved() {
+        let e = Env::default();
+        e.mock_all_auths();
+        let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+        let from = BytesN::from_array(&e, &[1u8; 32]);
+        let to = empty_wasm(&e);
+        let id = e.register(
+            DaoAuctionContract,
+            (
+                Address::generate(&e),
+                Address::generate(&e),
+                Address::generate(&e),
+                300_u64,
+                10_000_000_i128,
+                10_u32,
+                50_u64,
+                Address::generate(&e),
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&e, "0.1.0"),
+            ),
+        );
+        let client = DaoAuctionContractClient::new(&e, &id);
+        mgr.register(&to, &String::from_str(&e, "0.2.0"));
+        let r = client.try_upgrade(&from, &to);
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            common::CommonError::UpgradeNotApproved.into()
+        );
+    }
+
+    #[test]
+    fn upgrade_and_sync_version_reject_unauthorized_caller() {
+        let e = Env::default();
+        e.mock_all_auths();
+        let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+        let from = BytesN::from_array(&e, &[1u8; 32]);
+        let to = empty_wasm(&e);
+        let id = e.register(
+            DaoAuctionContract,
+            (
+                Address::generate(&e),
+                Address::generate(&e),
+                Address::generate(&e),
+                300_u64,
+                10_000_000_i128,
+                10_u32,
+                50_u64,
+                Address::generate(&e),
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&e, "0.1.0"),
+            ),
+        );
+        let client = DaoAuctionContractClient::new(&e, &id);
+        mgr.approve(&from, &to);
+        mgr.register(&to, &String::from_str(&e, "0.2.0"));
+        mgr.register(&from, &String::from_str(&e, "0.1.1"));
+        // Drop mock_all_auths: no authorization is provided for any address.
+        e.set_auths(&[]);
+        assert!(client.try_upgrade(&from, &to).is_err());
+        assert!(client.try_sync_version().is_err());
+        e.mock_all_auths();
+        e.as_contract(&id, || {
+            assert_eq!(common::upgrade::current_hash(&e), from);
+            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.1.0"));
+        });
+    }
+
+    #[test]
+    fn upgrade_hash_mismatch_leaves_state_unchanged() {
+        let e = Env::default();
+        e.mock_all_auths();
+        let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+        let from = BytesN::from_array(&e, &[1u8; 32]);
+        let to = empty_wasm(&e);
+        let id = e.register(
+            DaoAuctionContract,
+            (
+                Address::generate(&e),
+                Address::generate(&e),
+                Address::generate(&e),
+                300_u64,
+                10_000_000_i128,
+                10_u32,
+                50_u64,
+                Address::generate(&e),
+                mgr.address.clone(),
+                from.clone(),
+                String::from_str(&e, "0.1.0"),
+            ),
+        );
+        let client = DaoAuctionContractClient::new(&e, &id);
+        let wrong = BytesN::from_array(&e, &[9u8; 32]);
+        mgr.approve(&wrong, &to);
+        mgr.register(&to, &String::from_str(&e, "0.2.0"));
+        let r = client.try_upgrade(&wrong, &to);
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            common::CommonError::HashMismatch.into()
+        );
+        e.as_contract(&id, || {
+            assert_eq!(common::upgrade::current_hash(&e), from);
+            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.1.0"));
+        });
+    }
+}
