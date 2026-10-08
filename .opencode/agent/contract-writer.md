@@ -1,7 +1,6 @@
 ---
 description: Implements and tests Rust/Soroban contract changes while managing event and interface impacts.
 mode: all
-model: inherit
 permission:
   edit: allow
   bash:

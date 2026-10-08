@@ -1,7 +1,6 @@
 ---
 description: Retrieves authoritative technical references and maintains project documentation after interface changes.
 mode: all
-model: inherit
 permission:
   edit: allow
   bash:

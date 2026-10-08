@@ -1,7 +1,6 @@
 ---
 description: Creates implementation-ready UX direction, interaction states, and visual acceptance criteria.
 mode: all
-model: inherit
 permission:
   edit: deny
   bash:

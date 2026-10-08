@@ -1,7 +1,6 @@
 ---
 description: Owns Goldsky indexing and proves every contract event reaches the correct read model.
 mode: all
-model: inherit
 permission:
   edit: allow
   bash:

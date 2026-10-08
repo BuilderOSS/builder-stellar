@@ -1,7 +1,6 @@
 ---
 description: Owns Next.js APIs, server data access, bindings, and client query contracts.
 mode: all
-model: inherit
 permission:
   edit: allow
   bash:
