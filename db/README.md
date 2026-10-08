@@ -46,20 +46,26 @@ transaction together with its row in `public.schema_migrations` (name + SHA-256)
 | Migration | Contents |
 | --- | --- |
 | `0001_landing_tables` | schemas, helper functions, the 3 landing tables, indexes, triggers |
-| `0002_manager_views` | DAO registry, modules, identity, lifecycle (`manager.daos`), implementations |
+| `0002_manager_views` | DAO registry, modules, identity, `manager.daos`, per-module launch status and `dao_lifecycle`, admin history/settings, implementations |
 | `0003_token_views` | transfers, mints, inventory, delegations, mint authorities, members |
-| `0004_governance_views` | proposals, votes, actions, lifecycle, governor authorities |
-| `0005_auction_views` | auctions, bids, refunds, settlements, cancellations |
+| `0004_governance_views` | proposals (with computed `expired`), votes, actions, lifecycle, per-proposal execution calls |
+| `0005_auction_views` | auctions, bids, refunds (pushed and deferred), withdrawals, pending refunds, settlements, cancellations |
 | `0006_metadata_views` | properties, token seeds, configuration |
-| `0007_treasury_views` | treasury calls, governor changes |
-| `0008_marketplace_views` | listings, purchases |
+| `0007_treasury_views` | treasury calls (one per executed proposal call) |
+| `0008_marketplace_views` | primary listings (by `listing_id`), secondary listings (by `token_id`), purchases, sales |
 | `0009_minter_views` | merkle/allowlist claims, batch mints, allocation updates |
 | `0010_app_views` | activity feed, proposal list/detail, indexer status |
+
+Launch model: every module emits its own `launched` event (six different
+structs share the name), so launch state is keyed by the emitting contract
+(`manager.module_launches`), never by event name alone.
 
 Rules:
 
 - Migrations are **append-only once deployed**. `migrate.sh` aborts if an applied
   file's checksum changed. Add `0011_…` instead of editing.
+- Pre-release exception: until the first production deploy the migrations are
+  edited in place (reset the database with `reset-database.sh` and redeploy).
 - No `CONCURRENTLY`, no grants. Roles and privileges live in `grant-permissions.sh`.
 - Every migration has a matching `rollback/NNNN_name_rollback.sql`.
 - Views never reference roles or deployment ids; they work for any deployment.

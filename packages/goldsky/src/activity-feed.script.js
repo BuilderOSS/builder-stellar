@@ -103,7 +103,9 @@ function invoke(data) {
     AuctionSettled: true, BidRefunded: true, AuctionCancelled: true,
     DaoCreated: true, DaoLaunched: true,
     MerkleClaimEvent: true, AllowlistClaimEvent: true, MintBatchEvent: true,
-    PrimaryListingCreated: true, SecondaryListingCreated: true, ListingPurchased: true, ListingCancelled: true
+    PrimaryListingCreated: true, PrimaryListingPurchased: true, PrimaryListingCancelled: true,
+    SecondaryListingCreated: true, ListingPurchased: true, ListingCancelled: true,
+    RefundDeferred: true, RefundWithdrawn: true
   };
 
   var kindMap = {
@@ -121,16 +123,12 @@ function invoke(data) {
     VoteCast: 'governance.vote_cast',
     ProposalCancelled: 'governance.proposal_cancelled',
     ProposalExecuted: 'governance.proposal_executed',
-    TreasuryChanged: 'governance.treasury_changed',
-    TokenContractChanged: 'governance.token_contract_changed',
     QueueDelayChanged: 'governance.queue_delay_changed',
     VotingDelayChanged: 'governance.voting_delay_changed',
     VotingPeriodChanged: 'governance.voting_period_changed',
     ProposalThresholdChanged: 'governance.proposal_threshold_changed',
     QuorumBpsChanged: 'governance.quorum_bps_changed',
-    GovernorAuthorityChanged: 'governance.authority_changed',
     TreasuryInitialized: 'treasury.initialized',
-    GovernorChanged: 'treasury.governor_changed',
     Execute: 'treasury.execute',
     AuctionInitialized: 'auction.initialized',
     AuctionCreated: 'auction.created',
@@ -141,13 +139,17 @@ function invoke(data) {
     MinBidIncrementUpdated: 'auction.min_bid_increment_updated',
     TimeBufferUpdated: 'auction.time_buffer_updated',
     PaymentTokenUpdated: 'auction.payment_token_updated',
-    TreasuryUpdated: 'auction.treasury_updated',
     BidRefunded: 'auction.bid_refunded',
+    RefundDeferred: 'auction.refund_deferred',
+    RefundWithdrawn: 'auction.refund_withdrawn',
     AuctionCancelled: 'auction.cancelled',
     DaoCreated: 'manager.dao_created',
     DaoLaunched: 'manager.dao_launched',
     FactoryPaused: 'manager.factory_paused',
     FactoryUnpaused: 'manager.factory_unpaused',
+    AdminProposed: 'manager.admin_proposed',
+    AdminChanged: 'manager.admin_changed',
+    PlatformMinterSet: 'manager.platform_minter_set',
     UpgradeApproved: 'manager.upgrade_approved',
     ImplementationRevoked: 'manager.implementation_revoked',
     ImplementationRegistered: 'manager.implementation_registered',
@@ -171,6 +173,9 @@ function invoke(data) {
     ManagerUpgraded: 'manager.upgraded',
     MarketplaceInitialized: 'marketplace.initialized',
     PrimaryListingCreated: 'marketplace.primary_listing_created',
+    PrimaryListingPurchased: 'marketplace.primary_listing_purchased',
+    PrimaryListingCancelled: 'marketplace.primary_listing_cancelled',
+    PrimaryListingExpired: 'marketplace.primary_listing_expired',
     SecondaryListingCreated: 'marketplace.secondary_listing_created',
     ListingPurchased: 'marketplace.listing_purchased',
     ListingCancelled: 'marketplace.listing_cancelled',
@@ -197,16 +202,12 @@ function invoke(data) {
     VoteCast: 'Vote cast',
     ProposalCancelled: 'Proposal cancelled',
     ProposalExecuted: 'Proposal executed',
-    TreasuryChanged: 'Treasury changed',
-    TokenContractChanged: 'Token contract changed',
     QueueDelayChanged: 'Queue delay updated',
     VotingDelayChanged: 'Voting delay updated',
     VotingPeriodChanged: 'Voting period updated',
     ProposalThresholdChanged: 'Proposal threshold updated',
     QuorumBpsChanged: 'Quorum updated',
-    GovernorAuthorityChanged: 'Governor authority changed',
     TreasuryInitialized: 'Treasury initialized',
-    GovernorChanged: 'Governor changed',
     Execute: 'Treasury executed call',
     AuctionInitialized: 'Auction initialized',
     AuctionCreated: 'Auction created',
@@ -217,13 +218,17 @@ function invoke(data) {
     MinBidIncrementUpdated: 'Minimum bid increment updated',
     TimeBufferUpdated: 'Time buffer updated',
     PaymentTokenUpdated: 'Payment token updated',
-    TreasuryUpdated: 'Treasury updated',
     BidRefunded: 'Bid refunded',
+    RefundDeferred: 'Bid refund deferred',
+    RefundWithdrawn: 'Bid refund withdrawn',
     AuctionCancelled: 'Auction cancelled',
     DaoCreated: 'DAO created',
     DaoLaunched: 'DAO launched',
     FactoryPaused: 'Factory paused',
     FactoryUnpaused: 'Factory unpaused',
+    AdminProposed: 'Manager admin proposed',
+    AdminChanged: 'Manager admin changed',
+    PlatformMinterSet: 'Platform minter set',
     UpgradeApproved: 'Upgrade approved',
     ImplementationRevoked: 'Implementation revoked',
     ImplementationRegistered: 'Implementation registered',
@@ -247,6 +252,9 @@ function invoke(data) {
     ManagerUpgraded: 'Manager upgraded',
     MarketplaceInitialized: 'Marketplace initialized',
     PrimaryListingCreated: 'Primary listing created',
+    PrimaryListingPurchased: 'Primary sale completed',
+    PrimaryListingCancelled: 'Primary listing cancelled',
+    PrimaryListingExpired: 'Primary listing expired',
     SecondaryListingCreated: 'Secondary listing created',
     ListingPurchased: 'Listing purchased',
     ListingCancelled: 'Listing cancelled',
@@ -258,11 +266,24 @@ function invoke(data) {
     MarketplaceUpgraded: 'Marketplace upgraded'
   };
 
+  // Every module emits its own `Launched` event (same name, different data), so the
+  // kind/title depend on the emitting module's contract_role.
+  var launchRole = ensureString(data.contract_role, '');
+  if (normalizedEventName === 'Launched') {
+    var launchLabels = { token: 'Token', governor: 'Governor', treasury: 'Treasury', auction: 'Auction', marketplace: 'Marketplace', metadata: 'Metadata' };
+    kindMap.Launched = (launchLabels[launchRole] ? launchRole : 'module') + '.launched';
+    titleMap.Launched = (launchLabels[launchRole] || 'Module') + ' launched';
+  }
+
   var addresses = unique([
     pick(data, ['actor']),
     pick(data, ['proposer']),
     pick(data, ['bidder']),
     pick(data, ['minter']),
+    pick(data, ['current_admin']),
+    pick(data, ['proposed_admin']),
+    pick(data, ['old_admin']),
+    pick(data, ['new_admin']),
     pick(data, ['owner']),
     pick(data, ['changed_by']),
     pick(data, ['cancelled_by']),
@@ -283,6 +304,8 @@ function invoke(data) {
 
   var proposalId = pick(data, ['proposal_id']);
   var amount = pick(data, ['amount', 'total_amount', 'price']);
+  var listingId = pick(data, ['listing_id']);
+  var callIndex = pick(data, ['index']);
   var tokenId = pick(data, ['token_id']);
   var func = pick(data, ['function']);
   var target = pick(data, ['target']);
@@ -298,11 +321,29 @@ function invoke(data) {
     BidPlaced: function() { return 'Bid of ' + (amount || 'unknown') + ' placed on token ' + (tokenId || 'unknown'); },
     AuctionSettled: function() { return 'Auction settled for token ' + (tokenId || 'unknown'); },
     AuctionCreated: function() { return 'Auction created for token ' + (tokenId || 'unknown'); },
-    Execute: function() { return 'Executed ' + (func || 'call') + ' on ' + (target || 'target'); },
+    // One Execute event per call: topics governor/target/proposal_id, data function + index.
+    Execute: function() {
+      return 'Executed ' + (func || 'call') + ' on ' + (target || 'target') +
+        (callIndex !== '' ? ' (call ' + (Number(callIndex) + 1) + (proposalId ? ' of proposal ' + proposalId : '') + ')' : '');
+    },
+    ProposalExecuted: function() { return 'Proposal ' + (proposalId || '') + ' executed'; },
+    BidRefunded: function() { return 'Bid of ' + (amount || 'unknown') + ' refunded for token ' + (tokenId || 'unknown'); },
+    RefundDeferred: function() { return 'Refund of ' + (amount || 'unknown') + ' deferred for token ' + (tokenId || 'unknown') + '; claim it with withdraw_refund'; },
+    RefundWithdrawn: function() { return 'Refund of ' + (amount || 'unknown') + ' withdrawn'; },
+    Launched: function() {
+      var started = pick(data, ['started']);
+      var opened = pick(data, ['opened']);
+      if (launchRole === 'auction') return 'Auction launched' + (started === 'true' ? ' and started' : ' paused');
+      if (launchRole === 'marketplace') return 'Marketplace launched' + (opened === 'true' ? ' and opened' : ' paused');
+      return (titleMap.Launched || 'Module launched');
+    },
     Mint: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
     MintWithMinter: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
     MintBatchEvent: function() { var count = pick(data, ['recipient_count']); return 'Minted ' + (amount || 'tokens') + ' to ' + (count || 'multiple') + ' recipients'; },
-    PrimaryListingCreated: function() { return 'Primary listing created for token ' + (tokenId || 'unknown') + ' at ' + (amount || 'unknown price'); },
+    PrimaryListingCreated: function() { return 'Primary listing ' + (listingId || 'unknown') + ' created at ' + (amount || 'unknown price'); },
+    PrimaryListingPurchased: function() { return 'Primary sale: token ' + (tokenId || 'unknown') + ' bought for ' + (amount || 'unknown price') + ' (listing ' + (listingId || 'unknown') + ')'; },
+    PrimaryListingCancelled: function() { return 'Primary listing ' + (listingId || 'unknown') + ' cancelled'; },
+    PrimaryListingExpired: function() { return 'Primary listing ' + (listingId || 'unknown') + ' expired'; },
     SecondaryListingCreated: function() { return 'Secondary listing created for token ' + (tokenId || 'unknown') + ' at ' + (amount || 'unknown price'); },
     ListingPurchased: function() { return 'Token ' + (tokenId || 'unknown') + ' purchased for ' + (amount || 'unknown price'); },
     MerkleClaimEvent: function() { return 'Claimed ' + (amount || 'tokens') + ' via merkle proof for ' + (owner || 'recipient'); },
@@ -373,7 +414,7 @@ function invoke(data) {
     proposal_id: toString(proposalId),
     token_id: toString(tokenId),
     amount: toString(amount),
-    actor: toString(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'recipient', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator', 'buyer', 'seller'])),
+    actor: toString(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'recipient', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator', 'buyer', 'seller', 'current_admin', 'old_admin'])),
     addresses: JSON.stringify(addresses || []),
     ledger_sequence: ledger_sequence,
     transaction_index: transaction_index,

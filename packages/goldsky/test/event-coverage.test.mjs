@@ -10,6 +10,8 @@ import assert from 'node:assert';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { contractEventList, LIBRARY_EVENTS } from '../src/contract-events.mjs';
+import { REMOVED_EVENTS } from './removed-events.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -26,7 +28,8 @@ const REQUIRED_EVENTS = {
     'Transfer',
     'Approve',
     'DelegateChanged',
-    'DelegateVotesChanged'
+    'DelegateVotesChanged',
+    'Launched'
   ],
   governor: [
     'GovernorInitialized',
@@ -35,18 +38,16 @@ const REQUIRED_EVENTS = {
     'VoteCast',
     'ProposalCancelled',
     'ProposalExecuted',
-    'TreasuryChanged',
-    'TokenContractChanged',
     'QueueDelayChanged',
     'VotingDelayChanged',
     'VotingPeriodChanged',
     'ProposalThresholdChanged',
     'QuorumBpsChanged',
-    'GovernorAuthorityChanged'
+    'Launched'
   ],
   treasury: [
     'TreasuryInitialized',
-    'GovernorChanged',
+    'Launched',
     'Execute'
   ],
   auction: [
@@ -59,8 +60,10 @@ const REQUIRED_EVENTS = {
     'MinBidIncrementUpdated',
     'TimeBufferUpdated',
     'PaymentTokenUpdated',
-    'TreasuryUpdated',
     'BidRefunded',
+    'RefundDeferred',
+    'RefundWithdrawn',
+    'Launched',
     'AuctionCancelled'
   ],
   metadata: [
@@ -71,11 +74,16 @@ const REQUIRED_EVENTS = {
     'DescriptionUpdated',
     'RendererBaseUpdated',
     'ContractImageUpdated',
-    'SeedGenerated'
+    'SeedGenerated',
+    'Launched'
   ],
   marketplace: [
     'MarketplaceInitialized',
+    'Launched',
     'PrimaryListingCreated',
+    'PrimaryListingPurchased',
+    'PrimaryListingCancelled',
+    'PrimaryListingExpired',
     'SecondaryListingCreated',
     'ListingPurchased',
     'ListingCancelled',
@@ -96,7 +104,10 @@ const REQUIRED_EVENTS = {
     'CurrentImplementationsUpdated',
     'ManagerUpgraded',
     'FactoryPaused',
-    'FactoryUnpaused'
+    'FactoryUnpaused',
+    'AdminProposed',
+    'AdminChanged',
+    'PlatformMinterSet'
   ]
 };
 
@@ -233,4 +244,47 @@ test('all required DAO events are covered', () => {
     0,
     `Missing ${missing.length} DAO events: ${missing.join(', ')}`
   );
+});
+
+test('REQUIRED_EVENTS matches contracts/*/src/events.rs exactly, per contract', () => {
+  const actual = {};
+  for (const { contract, name } of contractEventList()) (actual[contract] ??= []).push(name);
+  for (const contract of Object.keys(actual)) {
+    const required = REQUIRED_EVENTS[contract] ?? [];
+    // REQUIRED_EVENTS may also list OpenZeppelin library events the module publishes.
+    const contractOnly = required.filter((name) => !(name in LIBRARY_EVENTS) || actual[contract].includes(name));
+    assert.deepStrictEqual([...actual[contract]].sort(), [...contractOnly].sort(), `${contract} events drifted from REQUIRED_EVENTS`);
+  }
+  assert.deepStrictEqual(Object.keys(REQUIRED_EVENTS).sort(), Object.keys(actual).sort());
+});
+
+test('every module emits a Launched event (six structs share one name)', () => {
+  const launched = contractEventList().filter((e) => e.name === 'Launched');
+  assert.deepStrictEqual(launched.map((e) => e.contract).sort(), ['auction', 'governor', 'marketplace', 'metadata', 'token', 'treasury']);
+  for (const e of launched) assert.deepStrictEqual(e.topics, ['treasury'], `${e.contract}.Launched topics`);
+  const dataByContract = Object.fromEntries(launched.map((e) => [e.contract, e.data]));
+  assert.deepStrictEqual(dataByContract.token, ['minters']);
+  assert.deepStrictEqual(dataByContract.auction, ['started']);
+  assert.deepStrictEqual(dataByContract.marketplace, ['opened']);
+  for (const c of ['governor', 'treasury', 'metadata']) assert.deepStrictEqual(dataByContract[c], []);
+});
+
+test('removed events are neither emitted by any contract nor decoded', () => {
+  const emitted = new Set(contractEventList().map((e) => e.name));
+  const decoderSource = readFileSync(join(__dirname, '../src/decoded-events.script.js'), 'utf8');
+  const activitySource = readFileSync(join(__dirname, '../src/activity-feed.script.js'), 'utf8');
+  for (const name of REMOVED_EVENTS) {
+    assert.ok(!emitted.has(name), `${name} is emitted by a contract again`);
+    assert.ok(!new RegExp(`\\b${name}\\b`).test(decoderSource), `${name} still in decoder`);
+    assert.ok(!new RegExp(`\\b${name}\\b`).test(activitySource), `${name} still in activity feed`);
+  }
+});
+
+test('checked-in pipeline embeds the current decoder and activity scripts (regenerate after edits)', () => {
+  const yaml = readFileSync(join(__dirname, '../pipelines/builder-stellar-events.yaml'), 'utf8');
+  for (const file of ['raw-events.script.js', 'decoded-events.script.js', 'activity-feed.script.js']) {
+    const script = readFileSync(join(__dirname, '../src', file), 'utf8').trimEnd().split(/\r?\n/)
+      .map((line) => (line.trim() === '' ? '' : `      ${line}`)).join('\n');
+    assert.ok(yaml.includes(script), `pipelines/builder-stellar-events.yaml is stale for ${file}: run pnpm generate`);
+  }
 });

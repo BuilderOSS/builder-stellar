@@ -244,18 +244,6 @@ view TokenMintAuthority {
   @@schema("token")
 }
 
-view GovernanceGovernorAuthority {
-  deploymentId String  @map("deployment_id")
-  daoId        String  @map("dao_id")
-  contractId   String  @map("contract_id")
-  authority    String
-  enabled      Boolean
-  eventLedger  BigInt  @map("event_ledger")
-
-  @@map("governor_authorities")
-  @@schema("governance")
-}
-
 view AuctionAuction {
   eventId           String  @map("event_id")
   deploymentId      String  @map("deployment_id")

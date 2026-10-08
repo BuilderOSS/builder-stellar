@@ -3,7 +3,7 @@
 --
 -- The read surface used by apps/web (see apps/web/prisma/schema.prisma):
 --   app.activity_feed     tenant-resolved activity feed
---   app.proposal_list     proposals with vote tallies
+--   app.proposal_list     proposals with vote tallies (state may be computed 'expired', see governance.proposals)
 --   app.proposal_detail   proposals with actions and votes as JSON
 --   app.indexer_status    ingestion progress, so the app never reads raw events
 -- =============================================================================

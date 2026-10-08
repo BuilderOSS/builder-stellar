@@ -229,6 +229,28 @@ for (const field of numericFields) {
 }
 console.log('✅ Passed\n');
 
+// Test 11: new events keep every column type stable across decoder and activity feed
+console.log('Test 11: Hardened-contract events keep Arrow-safe types');
+const newEventRows = [
+  ['Launched', [{ symbol: 'Launched' }, { address: 'T' }], { map: [{ key: { symbol: 'minters' }, val: { vec: [{ address: 'M' }] } }] }],
+  ['Execute', [{ symbol: 'Execute' }, { address: 'G' }, { address: 'X' }, { bytes: 'ab' }], { map: [{ key: { symbol: 'function' }, val: { symbol: 'f' } }, { key: { symbol: 'index' }, val: { u32: 0 } }] }],
+  ['PrimaryListingPurchased', [{ symbol: 'PrimaryListingPurchased' }, { u64: '1' }, { address: 'B' }], { map: [{ key: { symbol: 'token_id' }, val: { u32: 4 } }] }],
+  ['RefundWithdrawn', [{ symbol: 'RefundWithdrawn' }, { address: 'B' }], { map: [{ key: { symbol: 'amount' }, val: { i128: '5' } }] }]
+];
+const decodedNew = newEventRows.map(([name, topics, data], i) => invokeDecodedEvents({
+  event_id: `n${i}`, deployment_id: 'd', contract_id: 'c', contract_role: 'token', topics: JSON.stringify(topics), data: JSON.stringify(data),
+  ledger_sequence: 1, transaction_index: 0, operation_index: 0, event_index: i, transaction_successful: true
+}));
+const activityNew = decodedNew.map((row) => invokeActivityFeed(row));
+for (const result of decodedNew) {
+  for (const field of ['event_id', 'event_name', 'topics', 'args', 'payload', 'topic_0', 'topic_1', 'topic_2', 'topic_3']) testTypeConsistency(result, field, 'string');
+}
+for (const result of activityNew) {
+  for (const field of stringFields) testTypeConsistency(result, field, 'string');
+  for (const field of numericFields) testTypeConsistency(result, field, 'number');
+}
+console.log('✅ Passed\n');
+
 // ==================== SUMMARY ====================
 console.log('═══════════════════════════════════════');
 console.log('✅ All transform tests passed!');

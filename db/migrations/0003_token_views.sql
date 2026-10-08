@@ -8,6 +8,9 @@
 --   delegate_changed      OpenZeppelin  topic delegator;             data { from_delegate, to_delegate }
 --   delegate_votes_changed OpenZeppelin topic delegate;              data { previous_votes, new_votes }
 --   mint_authority_changed custom       topic authority;             data { old_enabled, enabled, changed_by }
+--                         Emitted once per minter at launch (changed_by = the Manager) and
+--                         afterwards only by the token owner (the Treasury, i.e. governance).
+--   launched               custom       topic treasury;              data { minters[] } (see manager.module_launches)
 --
 -- A mint emits BOTH mint and mint_with_minter. Ownership comes from mint and
 -- transfer; mint_with_minter only attributes who performed the mint.
@@ -96,6 +99,8 @@ JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contrac
 WHERE e.contract_role = 'token'
   AND e.event_name = 'delegate_changed';
 
+-- launch_grant marks the rows emitted by the Manager while launching the DAO
+-- (platform minter / Minter contract); later rows are governance decisions.
 CREATE VIEW token.mint_authority_history AS
 SELECT
   e.event_id,
@@ -106,6 +111,7 @@ SELECT
   (e.args::jsonb ->> 'old_enabled')::boolean AS old_enabled,
   (e.args::jsonb ->> 'enabled')::boolean AS enabled,
   e.args::jsonb ->> 'changed_by' AS changed_by,
+  (e.args::jsonb ->> 'changed_by') = r.manager_contract AS launch_grant,
   e.ledger_sequence AS event_ledger,
   e.transaction_index,
   e.operation_index,
@@ -115,11 +121,13 @@ SELECT
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
+JOIN manager.dao_registry r ON r.deployment_id = i.deployment_id AND r.dao_id = i.dao_id
 WHERE e.contract_role = 'token'
   AND e.event_name = 'mint_authority_changed';
 
 -- Addresses currently allowed to mint (the owner has implicit authority and is
--- not listed here).
+-- not listed here). Mint authority is granted at launch (by the Manager) and
+-- afterwards only through governance; token.set_mint_authority fails before launch.
 CREATE VIEW token.mint_authorities AS
 SELECT
   h.deployment_id,

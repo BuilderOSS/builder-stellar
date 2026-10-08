@@ -141,12 +141,67 @@ PostgreSQL (Neon) destination
 The decoder names the topics of every event the contracts emit (Manager, Token,
 Governor, Treasury, Auction, Metadata, Marketplace, Minter) plus the OpenZeppelin
 library events they publish (NFT transfers/mints, votes, governor lifecycle,
-pausable, ownable). Minter events: `MerkleClaimEvent`, `AllowlistClaimEvent`,
-`MintBatchEvent`, `MerkleRootSetEvent`, `AllowlistSetEvent`.
+pausable, ownable).
 
 `pnpm validate` (and `test/contract-alignment.test.mjs`) parse
 `contracts/*/src/events.rs` and fail if the decoder's `topicNames` differ from the
 real topic order, or if the decoder lists an event nothing emits.
+`test/event-coverage.test.mjs` also pins the per-contract event list
+(`REQUIRED_EVENTS`) and the removed-event list (`test/removed-events.mjs`), and checks
+that the checked-in pipeline embeds the current scripts.
+
+### Decoded shape
+
+`chain.decoded_events` stores `event_name`, `topic_0..3`, `topics` (JSON object keyed by
+topic name) and `args` (JSON object of the data fields). Token identifiers can live in
+`topics` while `args` is `{}`, so consumers (and `activity-feed.script.js`) must search
+topics and args independently. `event_name` is whatever Goldsky emits (snake_case such as
+`launched`, or PascalCase); the decoder normalizes for the topic lookup but stores the raw
+name, so views should compare case/underscore-insensitively.
+
+### Same-named events: `Launched`
+
+Six structs are named `Launched` (token, governor, treasury, auction, marketplace,
+metadata). They share one topic (`treasury`) but differ in data: token `minters`
+(Vec<Address>), auction `started`, marketplace `opened`; governor, treasury and metadata
+have no data. The decoder keys on the name; the emitting module is identified by
+`contract_id` / `contract_role`, so the unique key is (contract, event name). The
+contract-event parser exposes `contractEventList()` and `contractEventsByContract()`
+(`token:Launched`, ...) for this.
+
+### Event changes from the hardened contracts
+
+| Event | Contract | Topics | Data | Change |
+|---|---|---|---|---|
+| `Launched` | every module | `treasury` | token `minters`; auction `started`; marketplace `opened`; others none | new |
+| `MintAuthorityChanged` | token | `authority` | `old_enabled`, `enabled`, `changed_by` | also emitted per minter at launch |
+| `DaoLaunched` | manager | `token_address` | `launched_ledger`, `modules`, `launch_auction`, `launch_marketplace`, `enable_minter` | `enable_minter` added |
+| `AdminProposed` | manager | `current_admin`, `proposed_admin` | none | new |
+| `AdminChanged` | manager | `old_admin`, `new_admin` | none | new |
+| `PlatformMinterSet` | manager | `minter` | none | new |
+| `Execute` | treasury | `governor`, `target`, `proposal_id` | `function`, `index` | `proposal_id` topic and `index` added; one event per call |
+| `ProposalExecuted` | governor | `proposal_id` | none | now emitted inside `consume` (same tx as `Execute`s) |
+| `RefundDeferred` | auction | `token_id`, `bidder` | `amount` (increment) | new |
+| `RefundWithdrawn` | auction | `bidder` | `amount` | new |
+| `PrimaryListingCreated` | marketplace | `listing_id` | `price`, `expires_at`, `payment_asset` | keyed by listing id, no token/seller |
+| `PrimaryListingPurchased` | marketplace | `listing_id`, `buyer` | `token_id`, `price`, `payment_asset` | new (the only place a primary sale's token_id appears) |
+| `PrimaryListingCancelled` / `PrimaryListingExpired` | marketplace | `listing_id` | none | new |
+| `SecondaryListingCreated` | marketplace | `token_id` | `seller`, `price`, `expires_at`, `fee_bps`, `payment_asset` | `payment_asset` added |
+| `ListingPurchased` / `ListingCancelled` / `ListingExpired` | marketplace | `token_id` (+`buyer`) | unchanged | secondary only |
+| `MarketplacePaused` | marketplace | none | none | may be emitted at launch |
+| `PropertiesReset` | metadata | none | `old_num_properties` | renamed from `num_properties` |
+| removed | governor `TreasuryChanged`, `TokenContractChanged`, `GovernorAuthorityChanged`; treasury `GovernorChanged`; auction `TreasuryUpdated` | | | no longer emitted or decoded |
+
+### Activity feed labels
+
+New user-visible (`public`) items: `marketplace.primary_listing_purchased` ("Primary sale:
+token N bought for P (listing L)"), `marketplace.primary_listing_cancelled`,
+`auction.refund_deferred`, `auction.refund_withdrawn`, plus the existing `manager.dao_launched`.
+`Execute` rows are `admin` and read "Executed fn on target (call i of proposal id)".
+Per-module `Launched` rows are `admin` with kind `<role>.launched`; admin changes
+(`manager.admin_proposed`, `manager.admin_changed`, `manager.platform_minter_set`),
+`primary_listing_expired` and `marketplace.paused` are `admin`. `activity_feed_events`
+columns are unchanged; `listing_id` and `index` are only in `topics`/`args`.
 
 ## Data Access Layer
 
@@ -181,7 +236,7 @@ packages/goldsky/
 │   ├── raw-events.script.js        # envelope normalizer
 │   ├── decoded-events.script.js    # XDR-JSON decoder (topicNames)
 │   ├── activity-feed.script.js     # activity feed generator
-│   ├── contract-events.mjs         # event ground truth parsed from contracts/*/src/events.rs
+│   ├── contract-events.mjs         # event ground truth parsed from contracts/*/src/events.rs (keyed by contract + name)
 │   └── pipeline-generator.mjs      # renders the pipeline YAML
 ├── templates/builder-stellar-events.yaml.mustache
 ├── pipelines/builder-stellar-events.yaml   # generated: pnpm generate
@@ -196,13 +251,12 @@ packages/goldsky/
 
 ### Adding New Events
 
-1. Update `src/decoded-events.script.js` with new event handler
-2. Add the event's topics to `topicNames` in `src/decoded-events.script.js` (checked against the contracts)
-2. Update `src/activity-feed.script.js` with kind/title/summary
+1. Add the event's topics to `topicNames` in `src/decoded-events.script.js` (checked against the contracts) and update the role fallback if needed
+2. Update `src/activity-feed.script.js` with kind/title/summary/visibility
 3. Add or update views if the read model needs it (new migration in `db/migrations/`)
-4. Add test in `test/dao-events-transform.test.mjs`
+4. Add a test in `test/dao-events-transform.test.mjs` and update `REQUIRED_EVENTS` in `test/event-coverage.test.mjs` (add removed names to `test/removed-events.mjs`)
 5. Run `pnpm test && pnpm validate`
-6. Regenerate and redeploy: `pnpm generate && ./scripts/deploy.sh redeploy`
+6. Regenerate (`GOLDSKY_START_AT=<ledger> pnpm generate` when the artifact has no ledger) and redeploy: `./scripts/deploy.sh redeploy`. The checked-in pipeline test fails if it is stale.
 
 ## Database Setup
 

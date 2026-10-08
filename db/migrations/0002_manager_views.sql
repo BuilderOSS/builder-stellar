@@ -8,6 +8,10 @@
 --   manager.dao_modules        one row per DAO module contract
 --   manager.event_identity     contract -> DAO lookup used by every domain view
 --   manager.daos               registry + token metadata + launch/auction state
+--   manager.module_launches    one row per DAO module: has its `launched` event been seen
+--   manager.dao_lifecycle      one row per DAO: launch flags + is_live per module
+--   manager.admin_history      AdminProposed / AdminChanged / PlatformMinterSet
+--   manager.settings           current admin, pending admin, platform minter
 --   manager.implementations    registered WASM implementations (+ revocation)
 --   manager.current_implementations  latest default implementation set
 --
@@ -228,3 +232,164 @@ WHERE e.contract_role = 'manager'
   AND e.event_name = 'current_implementations_updated'
 ORDER BY e.deployment_id, e.ledger_sequence DESC, e.transaction_index DESC,
   e.operation_index DESC, e.event_index DESC, e.event_id DESC;
+
+-- Every module emits its own `Launched` event when the Manager launches it
+-- (Setup -> Live). Six different structs share the event name `launched`, so
+-- rows are keyed by the emitting contract address, never by name alone:
+--   token        topic treasury; data { minters[] }
+--   auction      topic treasury; data { started }
+--   marketplace  topic treasury; data { opened }
+--   governor / treasury / metadata  topic treasury; no data
+-- Metadata is not guaranteed to be launched through the same path as the
+-- others, so a module without a `launched` row is simply is_live = false.
+CREATE VIEW manager.module_launches AS
+SELECT
+  m.deployment_id,
+  m.dao_id,
+  m.module_role,
+  m.module_contract,
+  l.event_id IS NOT NULL AS is_live,
+  l.topics::jsonb ->> 'treasury' AS treasury,
+  (l.args::jsonb ->> 'started')::boolean AS started,
+  (l.args::jsonb ->> 'opened')::boolean AS opened,
+  l.args::jsonb -> 'minters' AS minters,
+  l.ledger_sequence AS launched_ledger,
+  NULLIF(l.ledger_closed_at, '')::timestamptz AS launched_at,
+  l.transaction_hash AS launched_tx_hash
+FROM manager.dao_modules m
+LEFT JOIN LATERAL (
+  SELECT x.*
+  FROM chain.decoded_events x
+  WHERE x.deployment_id = m.deployment_id
+    AND x.contract_id = m.module_contract
+    AND x.event_name = 'launched'
+    AND x.contract_role = m.module_role
+  ORDER BY x.ledger_sequence, x.transaction_index NULLS LAST, x.operation_index NULLS LAST,
+    x.event_index NULLS LAST, x.event_id
+  LIMIT 1
+) l ON true;
+
+-- One row per DAO: the launch choices recorded by DaoLaunched plus the live
+-- flag of every module. `is_live` is true once all six modules have launched.
+-- `minter_enabled` is DaoLaunched.enable_minter: the admin-registered platform
+-- minter was granted mint authority at launch (see token.mint_authority_history).
+CREATE VIEW manager.dao_lifecycle AS
+WITH launched AS (
+  SELECT DISTINCT ON (e.deployment_id, e.topic_0)
+    e.deployment_id,
+    e.topic_0 AS dao_id,
+    e.ledger_sequence AS launched_ledger,
+    NULLIF(e.ledger_closed_at, '')::timestamptz AS launched_at,
+    e.transaction_hash AS launched_tx_hash,
+    COALESCE((e.args::jsonb ->> 'launch_auction')::boolean, true) AS launch_auction,
+    COALESCE((e.args::jsonb ->> 'launch_marketplace')::boolean, true) AS launch_marketplace,
+    COALESCE((e.args::jsonb ->> 'enable_minter')::boolean, false) AS enable_minter
+  FROM chain.decoded_events e
+  WHERE e.contract_role = 'manager'
+    AND e.event_name = 'dao_launched'
+  ORDER BY e.deployment_id, e.topic_0, e.ledger_sequence DESC, e.transaction_index DESC,
+    e.operation_index DESC, e.event_index DESC, e.event_id DESC
+), modules AS (
+  SELECT
+    deployment_id, dao_id,
+    bool_or(is_live) FILTER (WHERE module_role = 'token') AS token_live,
+    bool_or(is_live) FILTER (WHERE module_role = 'governor') AS governor_live,
+    bool_or(is_live) FILTER (WHERE module_role = 'treasury') AS treasury_live,
+    bool_or(is_live) FILTER (WHERE module_role = 'auction') AS auction_live,
+    bool_or(is_live) FILTER (WHERE module_role = 'marketplace') AS marketplace_live,
+    bool_or(is_live) FILTER (WHERE module_role = 'metadata') AS metadata_live,
+    bool_and(is_live) AS all_live,
+    bool_or(started) FILTER (WHERE module_role = 'auction') AS auction_started,
+    bool_or(opened) FILTER (WHERE module_role = 'marketplace') AS marketplace_opened
+  FROM manager.module_launches
+  GROUP BY deployment_id, dao_id
+)
+SELECT
+  r.deployment_id,
+  r.dao_id,
+  CASE WHEN l.dao_id IS NULL THEN 'pending' ELSE 'operational' END AS status,
+  COALESCE(m.all_live, false) AS is_live,
+  COALESCE(m.token_live, false) AS token_live,
+  COALESCE(m.governor_live, false) AS governor_live,
+  COALESCE(m.treasury_live, false) AS treasury_live,
+  COALESCE(m.auction_live, false) AS auction_live,
+  COALESCE(m.marketplace_live, false) AS marketplace_live,
+  COALESCE(m.metadata_live, false) AS metadata_live,
+  l.launch_auction,
+  l.launch_marketplace,
+  l.enable_minter AS minter_enabled,
+  m.auction_started,
+  m.marketplace_opened,
+  l.launched_ledger,
+  l.launched_at,
+  l.launched_tx_hash
+FROM manager.dao_registry r
+LEFT JOIN launched l ON l.deployment_id = r.deployment_id AND l.dao_id = r.dao_id
+LEFT JOIN modules m ON m.deployment_id = r.deployment_id AND m.dao_id = r.dao_id;
+
+-- Manager admin history, deployment-wide (no DAO).
+--   admin_proposed     topics current_admin, proposed_admin
+--   admin_changed      topics old_admin, new_admin
+--   platform_minter_set  topic minter
+-- previous_admin / new_admin are filled for the two admin events (a proposal
+-- reports current -> proposed); platform_minter only for platform_minter_set.
+CREATE VIEW manager.admin_history AS
+SELECT
+  e.event_id,
+  e.deployment_id,
+  e.contract_id AS manager_contract,
+  e.event_name AS event_type,
+  COALESCE(e.topics::jsonb ->> 'current_admin', e.topics::jsonb ->> 'old_admin') AS previous_admin,
+  COALESCE(e.topics::jsonb ->> 'proposed_admin', e.topics::jsonb ->> 'new_admin') AS new_admin,
+  e.topics::jsonb ->> 'minter' AS platform_minter,
+  e.ledger_sequence AS event_ledger,
+  e.transaction_index,
+  e.operation_index,
+  e.event_index,
+  NULLIF(e.ledger_closed_at, '')::timestamptz AS event_at,
+  e.transaction_hash
+FROM chain.decoded_events e
+WHERE e.contract_role = 'manager'
+  AND e.event_name IN ('admin_proposed', 'admin_changed', 'platform_minter_set');
+
+-- Current Manager settings: admin (ManagerInitialized, then AdminChanged),
+-- pending admin (an AdminProposed newer than the last AdminChanged) and the
+-- platform minter. One row per deployment.
+CREATE VIEW manager.settings AS
+WITH ordered AS (
+  SELECT e.*, chain.event_position(e.ledger_sequence, e.transaction_index, e.operation_index, e.event_index) AS pos
+  FROM chain.decoded_events e
+  WHERE e.contract_role = 'manager'
+    AND e.event_name IN ('manager_initialized', 'admin_proposed', 'admin_changed', 'platform_minter_set')
+), admin AS (
+  SELECT DISTINCT ON (deployment_id)
+    deployment_id,
+    CASE event_name WHEN 'admin_changed' THEN topics::jsonb ->> 'new_admin' ELSE topics::jsonb ->> 'admin' END AS admin,
+    pos AS admin_pos
+  FROM ordered
+  WHERE event_name IN ('manager_initialized', 'admin_changed')
+  ORDER BY deployment_id, ledger_sequence DESC, transaction_index DESC NULLS LAST,
+    operation_index DESC NULLS LAST, event_index DESC NULLS LAST, event_id DESC
+), proposal AS (
+  SELECT DISTINCT ON (deployment_id)
+    deployment_id, topics::jsonb ->> 'proposed_admin' AS pending_admin, pos AS proposal_pos
+  FROM ordered
+  WHERE event_name = 'admin_proposed'
+  ORDER BY deployment_id, ledger_sequence DESC, transaction_index DESC NULLS LAST,
+    operation_index DESC NULLS LAST, event_index DESC NULLS LAST, event_id DESC
+), minter AS (
+  SELECT DISTINCT ON (deployment_id)
+    deployment_id, topics::jsonb ->> 'minter' AS platform_minter
+  FROM ordered
+  WHERE event_name = 'platform_minter_set'
+  ORDER BY deployment_id, ledger_sequence DESC, transaction_index DESC NULLS LAST,
+    operation_index DESC NULLS LAST, event_index DESC NULLS LAST, event_id DESC
+)
+SELECT
+  a.deployment_id,
+  a.admin,
+  CASE WHEN p.proposal_pos > a.admin_pos THEN p.pending_admin END AS pending_admin,
+  m.platform_minter
+FROM admin a
+LEFT JOIN proposal p ON p.deployment_id = a.deployment_id
+LEFT JOIN minter m ON m.deployment_id = a.deployment_id;

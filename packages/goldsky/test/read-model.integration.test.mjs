@@ -13,7 +13,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { allEvents } from '../src/contract-events.mjs';
+import { allEvents, contractEventsByContract } from '../src/contract-events.mjs';
 
 const DATABASE_URL = process.env.TEST_DATABASE_URL;
 const skip = !DATABASE_URL && 'set TEST_DATABASE_URL to a migrated empty database';
@@ -63,9 +63,9 @@ const dao = (n) => ({
 const modules = (n) => dataMap(Object.fromEntries(Object.entries(dao(n)).map(([k, v]) => [k, addr(v)])));
 
 const events = [];
-const emitted = new Map(); // event name -> { topics, data } as used by the fixtures
+const emitted = new Map(); // `${role}:${event name}` -> { topics, data } as used by the fixtures
 function emit(role, contract, name, { topics = [], data = {}, ledger, tx = 0, evt = 0 }) {
-  emitted.set(name, { topics: topics.length, data: Object.keys(data) });
+  emitted.set(`${role}:${name}`, { topics: topics.length, data: Object.keys(data) });
   const hash = `tx${ledger}-${tx}`;
   events.push({
     // Same shape as pipeline dao_events: event_id is `${deployment}:${dataset id}`;
@@ -114,11 +114,22 @@ function buildScenario() {
     data: { token_contract: addr(d1.token), treasury: addr(d1.treasury), duration: u64(86400), reserve_price: i128(10), min_bid_increment_percent: u32(5), time_buffer: u64(300), payment_token: addr('CXLM'), version: str('0.1.0') },
     ledger: 114
   });
-  emit('token', d1.token, 'mint_authority_changed', { topics: [addr(MINTER)], data: { old_enabled: bool(false), enabled: bool(true), changed_by: addr('GOWNER') }, ledger: 115 });
   emit('manager', 'CMANAGER', 'dao_launched', {
     topics: [addr('CTOK1')],
-    data: { launched_ledger: u64(116), modules: modules(1), launch_auction: bool(false), launch_marketplace: bool(true) }, ledger: 116
+    data: { launched_ledger: u64(116), modules: modules(1), launch_auction: bool(false), launch_marketplace: bool(true), enable_minter: bool(true) }, ledger: 116
   });
+  // Every module emits Launched (topic treasury); six structs share the name, keyed by contract.
+  emit('token', d1.token, 'launched', { topics: [addr(d1.treasury)], data: { minters: vec(addr(MINTER)) }, ledger: 116, evt: 1 });
+  emit('governor', d1.governor, 'launched', { topics: [addr(d1.treasury)], ledger: 116, evt: 2 });
+  emit('treasury', d1.treasury, 'launched', { topics: [addr(d1.treasury)], ledger: 116, evt: 3 });
+  emit('metadata', d1.metadata, 'launched', { topics: [addr(d1.treasury)], ledger: 116, evt: 4 });
+  emit('auction', d1.auction, 'launched', { topics: [addr(d1.treasury)], data: { started: bool(false) }, ledger: 116, evt: 5 });
+  emit('marketplace', d1.marketplace, 'launched', { topics: [addr(d1.treasury)], data: { opened: bool(true) }, ledger: 116, evt: 6 });
+  // Token launch grants each minter (changed_by = manager) in the same transaction as Launched.
+  emit('token', d1.token, 'mint_authority_changed', { topics: [addr(MINTER)], data: { old_enabled: bool(false), enabled: bool(true), changed_by: addr('CMANAGER') }, ledger: 116, evt: 7 });
+  emit('manager', 'CMANAGER', 'admin_proposed', { topics: [addr('GADMIN'), addr('GADMIN2')], ledger: 104 });
+  emit('manager', 'CMANAGER', 'admin_changed', { topics: [addr('GADMIN'), addr('GADMIN2')], ledger: 105 });
+  emit('manager', 'CMANAGER', 'platform_minter_set', { topics: [addr(MINTER)], ledger: 106 });
   emit('auction', d1.auction, 'unpaused', { ledger: 130 });
 
   // --- token: a 6-token batch mint in ONE transaction (18 events, indexes >= 10),
@@ -146,13 +157,13 @@ function buildScenario() {
     data: { token_contract: addr(d1.token), treasury_contract: addr(d1.treasury), voting_delay: u32(1), voting_period: u32(10), queue_delay: u32(1), proposal_threshold: u128(1), quorum_bps: u32(1000), version: str('0.1.0') },
     ledger: 135
   });
-  const created = (id, ledger) => emit('governor', d1.governor, 'proposal_created', {
+  const created = (id, ledger, voteEnd = 1790000000) => emit('governor', d1.governor, 'proposal_created', {
     topics: [bytes(id), addr('GALICE')],
     data: {
       targets: vec(addr(d1.treasury), addr(d1.token)),
       functions: vec(sym('transfer'), sym('mint')),
       args: vec(vec(addr('GBOB'), i128(5)), vec(addr('GBOB'))),
-      vote_snapshot: u32(ledger - 1), vote_end: u32(1790000000), description: str(JSON.stringify({ title: id }))
+      vote_snapshot: u32(ledger - 1), vote_end: u32(voteEnd), description: str(JSON.stringify({ title: id }))
     },
     ledger
   });
@@ -162,11 +173,18 @@ function buildScenario() {
   emit('governor', d1.governor, 'vote_cast', { topics: [addr('GCAROL'), bytes('p1')], data: { vote_type: u32(2), weight: u128(2), reason: str('') }, ledger: 142, evt: 1 });
   emit('governor', d1.governor, 'proposal_queued', { topics: [bytes('p1')], data: { eta: u64(1790000100) }, ledger: 143 });
   emit('governor', d1.governor, 'proposal_executed', { topics: [bytes('p1')], ledger: 144 });
-  emit('treasury', d1.treasury, 'execute', { topics: [addr(d1.governor), addr(d1.token)], data: { function: sym('mint') }, ledger: 144, evt: 1 });
+  // Treasury.execute emits one Execute per call (topics governor, target, proposal_id; data function, index).
+  emit('treasury', d1.treasury, 'execute', { topics: [addr(d1.governor), addr(d1.treasury), bytes('p1')], data: { function: sym('transfer'), index: u32(0) }, ledger: 144, evt: 1 });
+  emit('treasury', d1.treasury, 'execute', { topics: [addr(d1.governor), addr(d1.token), bytes('p1')], data: { function: sym('mint'), index: u32(1) }, ledger: 144, evt: 2 });
   created('p2', 145);
   created('p3', 146);
   emit('governor', d1.governor, 'proposal_cancelled', { topics: [bytes('p3')], ledger: 147 });
-  emit('governor', d1.governor, 'governor_authority_changed', { topics: [addr('GAUTH')], data: { old_enabled: bool(false), enabled: bool(true) }, ledger: 148 });
+  // Clock-dependent state: never queued, for > against, 14 days past vote_end -> expired.
+  created('p4', 148, 1000000000);
+  emit('governor', d1.governor, 'vote_cast', { topics: [addr('GALICE'), bytes('p4')], data: { vote_type: u32(1), weight: u128(5), reason: str('') }, ledger: 148, evt: 1 });
+  // Queued with an eta more than 14 days ago -> expired.
+  created('p5', 149, 1000000000);
+  emit('governor', d1.governor, 'proposal_queued', { topics: [bytes('p5')], data: { eta: u64(1000000100) }, ledger: 149, evt: 1 });
 
   // --- auction -----------------------------------------------------------------
   const auctionCreated = (id, ledger) => emit('auction', d1.auction, 'auction_created', {
@@ -176,33 +194,51 @@ function buildScenario() {
   emit('auction', d1.auction, 'bid_placed', { topics: [u128(7), addr('GBID1')], data: { amount: i128(20), extended: bool(false), new_end_time: u64(2000) }, ledger: 151 });
   emit('auction', d1.auction, 'bid_placed', { topics: [u128(7), addr('GBID2')], data: { amount: i128(30), extended: bool(true), new_end_time: u64(2300) }, ledger: 152 });
   emit('auction', d1.auction, 'bid_refunded', { topics: [u128(7), addr('GBID1')], data: { amount: i128(20) }, ledger: 152, evt: 1 });
+  // A refund whose push failed is credited, then pulled by the bidder.
+  emit('auction', d1.auction, 'bid_placed', { topics: [u128(7), addr('GBID3')], data: { amount: i128(40), extended: bool(false), new_end_time: u64(2300) }, ledger: 153 });
+  emit('auction', d1.auction, 'refund_deferred', { topics: [u128(7), addr('GBID2')], data: { amount: i128(30) }, ledger: 153, evt: 1 });
+  emit('auction', d1.auction, 'refund_withdrawn', { topics: [addr('GBID2')], data: { amount: i128(30) }, ledger: 154 });
   emit('auction', d1.auction, 'auction_settled', { topics: [u128(7)], data: { winner: addr('GBID2'), amount: i128(30) }, ledger: 160 });
   emit('auction', d1.auction, 'duration_updated', { data: { duration: u64(7200), changed_by: addr('GOWNER') }, ledger: 161 });
   auctionCreated(8, 162);
   emit('auction', d1.auction, 'auction_cancelled', { topics: [u128(8)], data: { reason: u32(1), cancelled_by: addr('GOWNER') }, ledger: 163 });
   auctionCreated(9, 164);
   emit('auction', d1.auction, 'auction_settled', { topics: [u128(9)], data: { winner: VOID, amount: i128(0) }, ledger: 165 });
+  // An outstanding deferred refund (never withdrawn) stays in pending_refunds.
+  emit('auction', d1.auction, 'refund_deferred', { topics: [u128(9), addr('GBID4')], data: { amount: i128(7) }, ledger: 166 });
 
   // --- metadata ----------------------------------------------------------------
   emit('metadata', d1.metadata, 'property_added', { topics: [u32(0)], data: { name: str('bg') }, ledger: 170 });
   emit('metadata', d1.metadata, 'property_added', { topics: [u32(1)], data: { name: str('body') }, ledger: 171 });
-  emit('metadata', d1.metadata, 'properties_reset', { data: { num_properties: u32(0) }, ledger: 172 });
+  emit('metadata', d1.metadata, 'properties_reset', { data: { old_num_properties: u32(0) }, ledger: 172 });
   emit('metadata', d1.metadata, 'property_added', { topics: [u32(0)], data: { name: str('bg2') }, ledger: 173 });
   emit('metadata', d1.metadata, 'seed_generated', { topics: [u32(3)], data: { num_properties: u32(1), selections: vec(u32(2)) }, ledger: 173, evt: 1 });
   emit('metadata', d1.metadata, 'description_updated', { data: { old_description: str('Alpha DAO'), new_description: str('Alpha DAO v2') }, ledger: 174 });
   emit('metadata', d1.metadata, 'contract_image_updated', { data: { old_image: str('img0'), new_image: str('img1') }, ledger: 175 });
 
   // --- marketplace -------------------------------------------------------------
-  const listing = (name, id, ledger) => emit('marketplace', d1.marketplace, name, {
-    topics: [u32(id)], data: { seller: addr('GSELLER'), price: i128(100), expires_at: u64(5000), fee_bps: u32(250) }, ledger
+  // Primary listings are keyed by listing_id (u64 topic); the token is minted to the buyer on purchase.
+  const primary = (id, ledger) => emit('marketplace', d1.marketplace, 'primary_listing_created', {
+    topics: [u64(id)], data: { price: i128(100), expires_at: u64(5000), payment_asset: addr('CXLM') }, ledger
   });
-  listing('primary_listing_created', 9, 180);
-  emit('marketplace', d1.marketplace, 'listing_purchased', {
-    topics: [u32(9), addr('GBUYER')], data: { seller: addr('GSELLER'), price: i128(100), fee: i128(2), payment_asset: addr('CXLM') }, ledger: 181
+  primary(1, 180);
+  emit('marketplace', d1.marketplace, 'primary_listing_purchased', {
+    topics: [u64(1), addr('GBUYER')], data: { token_id: u32(9), price: i128(100), payment_asset: addr('CXLM') }, ledger: 181
   });
-  listing('secondary_listing_created', 10, 182);
+  primary(2, 187);
+  emit('marketplace', d1.marketplace, 'primary_listing_cancelled', { topics: [u64(2)], ledger: 188 });
+  primary(3, 189);
+  emit('marketplace', d1.marketplace, 'primary_listing_expired', { topics: [u64(3)], ledger: 189, evt: 1 });
+  const secondary = (id, ledger) => emit('marketplace', d1.marketplace, 'secondary_listing_created', {
+    topics: [u32(id)], data: { seller: addr('GSELLER'), price: i128(100), expires_at: u64(5000), fee_bps: u32(250), payment_asset: addr('CXLM') }, ledger
+  });
+  secondary(10, 182);
   emit('marketplace', d1.marketplace, 'listing_cancelled', { topics: [u32(10)], data: { seller: addr('GSELLER') }, ledger: 183 });
-  listing('secondary_listing_created', 11, 184);
+  secondary(11, 184);
+  secondary(12, 185);
+  emit('marketplace', d1.marketplace, 'listing_purchased', {
+    topics: [u32(12), addr('GBUYER')], data: { seller: addr('GSELLER'), price: i128(100), fee: i128(2), payment_asset: addr('CXLM') }, ledger: 186
+  });
 
   // --- minter (shared contract; tenant = token_id topic) --------------------------
   const claim = (name, token, who, amount, ledger) => emit('minter', MINTER, name, { topics: [addr(token), addr(who)], data: { amount: u128(amount) }, ledger });
@@ -212,6 +248,15 @@ function buildScenario() {
   emit('minter', MINTER, 'mint_batch_event', { topics: [addr('CTOK1')], data: { recipient_count: u32(4), total_amount: u128(8), first_token_id: u32(7) }, ledger: 193 });
   emit('minter', MINTER, 'merkle_root_set_event', { topics: [addr('CTOK1')], ledger: 194 });
   emit('minter', MINTER, 'allowlist_set_event', { topics: [addr('CTOK1')], data: { member_count: u32(4) }, ledger: 195 });
+}
+
+// Event ids must be unique (raw_events_pkey); fail loudly in the fixture, not in Postgres.
+function assertUniqueEventIds() {
+  const seen = new Set();
+  for (const e of events) {
+    assert.ok(!seen.has(e.event_id), `duplicate fixture event id ${e.event_id}`);
+    seen.add(e.event_id);
+  }
 }
 
 function insertRows(table, columns, objects) {
@@ -229,9 +274,12 @@ test('fixtures use exactly the topics and data fields the contracts emit', () =>
   buildScenario();
   const canonical = (name) => name.replace(/(^|_)([a-z])/g, (_, __, c) => c.toUpperCase());
   const truth = allEvents();
+  const byContract = contractEventsByContract();
   const drift = [];
-  for (const [name, used] of emitted) {
-    const expected = truth[canonical(name)];
+  for (const [key, used] of emitted) {
+    const [role, name] = [key.split(':')[0], key.slice(key.indexOf(':') + 1)];
+    // Same-named events (Launched) are looked up by (contract, name); library events by name.
+    const expected = byContract[`${role}:${canonical(name)}`] ?? truth[canonical(name)];
     if (!expected) { drift.push(`${name}: not a contract or library event`); continue; }
     if (used.topics !== expected.topics.length) drift.push(`${name}: fixture has ${used.topics} topics, contract ${expected.topics.length}`);
     if (JSON.stringify([...used.data].sort()) !== JSON.stringify([...expected.data].sort())) {
@@ -239,6 +287,7 @@ test('fixtures use exactly the topics and data fields the contracts emit', () =>
     }
   }
   assert.deepEqual(drift, []);
+  assertUniqueEventIds();
   events.length = 0;
 });
 
@@ -328,7 +377,7 @@ test('token: ownership, mints, members and voting power', { skip }, () => {
 
 test('governance: proposals, votes, lifecycle and authorities', { skip }, () => {
   const proposals = rows(`SELECT proposal_number, proposal_id, proposer, state, eta_seconds, snapshot_ledger, vote_end_seconds, action_count, for_votes, against_votes, abstain_votes FROM app.proposal_list WHERE dao_id = 'CTOK1' ORDER BY proposal_number`);
-  assert.deepEqual(proposals.map((p) => [p.proposal_number, p.proposal_id, p.state]), [[1, 'p1', 'executed'], [2, 'p2', 'pending'], [3, 'p3', 'canceled']]);
+  assert.deepEqual(proposals.map((p) => [p.proposal_number, p.proposal_id, p.state]), [[1, 'p1', 'executed'], [2, 'p2', 'pending'], [3, 'p3', 'canceled'], [4, 'p4', 'expired'], [5, 'p5', 'expired']]);
   const [p1] = proposals;
   assert.equal(p1.proposer, 'GALICE');
   assert.equal(p1.snapshot_ledger, 139);
@@ -342,11 +391,21 @@ test('governance: proposals, votes, lifecycle and authorities', { skip }, () => 
   assert.deepEqual(detail.actions[0].args, ['GBOB', '5']);
   assert.deepEqual(detail.votes.map((v) => [v.voter, v.support, Number(v.weight)]), [['GALICE', 1, 5], ['GBOB', 0, 1], ['GCAROL', 2, 2]]);
 
+  // Treasury.execute emits one Execute per call; both views expose proposal_id and call_index.
   assert.deepEqual(
-    rows(`SELECT authority, source FROM governance.governor_authorities WHERE dao_id = 'CTOK1' ORDER BY authority`),
-    [{ authority: 'CTRE1', source: 'owner' }, { authority: 'GAUTH', source: 'event' }]
+    rows(`SELECT proposal_id, call_index, governor, target, function FROM treasury.calls ORDER BY call_index`),
+    [
+      { proposal_id: 'p1', call_index: 0, governor: 'CGOV1', target: 'CTRE1', function: 'transfer' },
+      { proposal_id: 'p1', call_index: 1, governor: 'CGOV1', target: 'CTOK1', function: 'mint' }
+    ]
   );
-  assert.deepEqual(rows(`SELECT governor, target, function FROM treasury.calls`), [{ governor: 'CGOV1', target: 'CTOK1', function: 'mint' }]);
+  assert.deepEqual(
+    rows(`SELECT proposal_id, call_index, target, function FROM governance.proposal_execution_calls ORDER BY call_index`),
+    [
+      { proposal_id: 'p1', call_index: 0, target: 'CTRE1', function: 'transfer' },
+      { proposal_id: 'p1', call_index: 1, target: 'CTOK1', function: 'mint' }
+    ]
+  );
 });
 
 test('auction: bids, refunds, settlements and per-auction configuration', { skip }, () => {
@@ -358,8 +417,16 @@ test('auction: bids, refunds, settlements and per-auction configuration', { skip
   ]);
   assert.equal(auctions[0].time_buffer_seconds, 300);
   assert.equal(Number(auctions[0].reserve_price), 10);
-  assert.deepEqual(rows(`SELECT bidder, amount, extended FROM auction.bids ORDER BY event_ledger`).map((b) => [b.bidder, Number(b.amount), b.extended]), [['GBID1', 20, false], ['GBID2', 30, true]]);
-  assert.equal(one(`SELECT bidder FROM auction.bid_refunds`).bidder, 'GBID1');
+  assert.deepEqual(rows(`SELECT bidder, amount, extended FROM auction.bids ORDER BY event_ledger`).map((b) => [b.bidder, Number(b.amount), b.extended]), [['GBID1', 20, false], ['GBID2', 30, true], ['GBID3', 40, false]]);
+  assert.deepEqual(
+    rows(`SELECT bidder, refund_status, amount FROM auction.bid_refunds ORDER BY event_ledger, event_index`).map((r) => [r.bidder, r.refund_status, Number(r.amount)]),
+    [['GBID1', 'refunded', 20], ['GBID2', 'deferred', 30], ['GBID4', 'deferred', 7]]
+  );
+  assert.deepEqual(rows(`SELECT bidder, amount FROM auction.refund_withdrawals`).map((r) => [r.bidder, Number(r.amount)]), [['GBID2', 30]]);
+  assert.deepEqual(
+    rows(`SELECT bidder, deferred_amount, withdrawn_amount, pending_amount FROM auction.pending_refunds`).map((r) => [r.bidder, Number(r.deferred_amount), Number(r.withdrawn_amount), Number(r.pending_amount)]),
+    [['GBID4', 7, 0, 7]]
+  );
   assert.deepEqual(rows(`SELECT token_id, winner FROM auction.settlements ORDER BY token_id`), [{ token_id: 7, winner: 'GBID2' }, { token_id: 9, winner: null }]);
 });
 
@@ -376,16 +443,50 @@ test('metadata: properties reset, seeds and configuration overlay', { skip }, ()
   assert.equal(config.owner, 'GOWNER');
 });
 
-test('marketplace: listing status follows purchase, cancel and open', { skip }, () => {
+test('marketplace: primary listings by listing_id, secondary by token_id, sales, purchases', { skip }, () => {
   assert.deepEqual(
-    rows(`SELECT token_id, listing_type, status, buyer FROM marketplace.listings ORDER BY token_id`),
+    rows(`SELECT listing_id, status, token_id, buyer, payment_asset FROM marketplace.primary_listings ORDER BY listing_id`).map((r) => [Number(r.listing_id), r.status, r.token_id, r.buyer, r.payment_asset]),
+    [[1, 'purchased', 9, 'GBUYER', 'CXLM'], [2, 'cancelled', null, null, 'CXLM'], [3, 'expired', null, null, 'CXLM']]
+  );
+  assert.deepEqual(
+    rows(`SELECT token_id, status, buyer, seller, payment_asset FROM marketplace.secondary_listings ORDER BY token_id`),
     [
-      { token_id: 9, listing_type: 'primary', status: 'purchased', buyer: 'GBUYER' },
-      { token_id: 10, listing_type: 'secondary', status: 'cancelled', buyer: null },
-      { token_id: 11, listing_type: 'secondary', status: 'open', buyer: null }
+      { token_id: 10, status: 'cancelled', buyer: null, seller: 'GSELLER', payment_asset: 'CXLM' },
+      { token_id: 11, status: 'open', buyer: null, seller: 'GSELLER', payment_asset: 'CXLM' },
+      { token_id: 12, status: 'purchased', buyer: 'GBUYER', seller: 'GSELLER', payment_asset: 'CXLM' }
     ]
   );
-  assert.equal(Number(one(`SELECT fee FROM marketplace.purchases`).fee), 2);
+  assert.deepEqual(
+    rows(`SELECT sale_type, listing_id, token_id, buyer, seller, price, fee FROM marketplace.sales ORDER BY event_ledger`).map((r) => [r.sale_type, r.listing_id === null ? null : Number(r.listing_id), r.token_id, r.buyer, r.seller, Number(r.price), r.fee === null ? null : Number(r.fee)]),
+    [['primary', 1, 9, 'GBUYER', null, 100, null], ['secondary', null, 12, 'GBUYER', 'GSELLER', 100, 2]]
+  );
+  assert.deepEqual(rows(`SELECT token_id, fee FROM marketplace.purchases`).map((r) => [r.token_id, Number(r.fee)]), [[12, 2]], 'purchases is secondary-only');
+});
+
+test('launch lifecycle: per-module launches keyed by emitting contract, admin history, mint grant', { skip }, () => {
+  assert.deepEqual(
+    rows(`SELECT module_role, module_contract, is_live, treasury, started, opened FROM manager.module_launches WHERE dao_id = 'CTOK1' ORDER BY module_role`),
+    ['auction', 'governor', 'marketplace', 'metadata', 'token', 'treasury'].map((role) => ({
+      module_role: role, module_contract: { auction: 'CAUC1', governor: 'CGOV1', marketplace: 'CMKT1', metadata: 'CMETA1', token: 'CTOK1', treasury: 'CTRE1' }[role],
+      is_live: true, treasury: 'CTRE1', started: role === 'auction' ? false : null, opened: role === 'marketplace' ? true : null
+    }))
+  );
+  assert.deepEqual(one(`SELECT minters FROM manager.module_launches WHERE dao_id = 'CTOK1' AND module_role = 'token'`).minters, ['CMINTER']);
+  const lifecycle = one(`SELECT is_live, launch_auction, launch_marketplace, minter_enabled, auction_started, marketplace_opened FROM manager.dao_lifecycle WHERE dao_id = 'CTOK1'`);
+  assert.deepEqual(lifecycle, { is_live: true, launch_auction: false, launch_marketplace: true, minter_enabled: true, auction_started: false, marketplace_opened: true });
+  assert.deepEqual(
+    rows(`SELECT event_type, previous_admin, new_admin, platform_minter FROM manager.admin_history ORDER BY event_ledger, event_index`),
+    [
+      { event_type: 'admin_proposed', previous_admin: 'GADMIN', new_admin: 'GADMIN2', platform_minter: null },
+      { event_type: 'admin_changed', previous_admin: 'GADMIN', new_admin: 'GADMIN2', platform_minter: null },
+      { event_type: 'platform_minter_set', previous_admin: null, new_admin: null, platform_minter: 'CMINTER' }
+    ]
+  );
+  const settings = one(`SELECT admin, platform_minter FROM manager.settings`);
+  assert.equal(settings.admin, 'GADMIN2');
+  assert.equal(settings.platform_minter, 'CMINTER');
+  assert.deepEqual(rows(`SELECT authority, launch_grant, changed_by FROM token.mint_authority_history`), [{ authority: 'CMINTER', launch_grant: true, changed_by: 'CMANAGER' }]);
+  assert.deepEqual(rows(`SELECT token_id, is_current FROM metadata.token_seeds`).map((r) => [r.token_id, r.is_current]), [[3, true]]);
 });
 
 test('minter: claims resolve to the DAO by token_id and foreign tokens are dropped', { skip }, () => {

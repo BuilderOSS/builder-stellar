@@ -6,9 +6,17 @@
 --                      data { targets[], functions[], args[][], vote_snapshot, vote_end, description }
 --   vote_cast          topics voter, proposal_id; data { vote_type, weight, reason }
 --   proposal_queued    topic proposal_id; data { eta }
---   proposal_executed  topic proposal_id
+--   proposal_executed  topic proposal_id   (emitted inside Governor.consume, same tx as the Treasury calls)
 --   proposal_cancelled topic proposal_id
---   governor_authority_changed topic authority; data { old_enabled, enabled }
+--
+-- Source events (treasury contract):
+--   execute            topics governor, target, proposal_id; data { function, index }
+--                      one event per call of the proposal; Treasury.execute is
+--                      permissionless and consumes the proposal on the Governor first.
+--
+-- The Governor has no authority role any more (GovernorAuthorityChanged is gone);
+-- the Treasury owns the Governor from launch and parameter setters emit
+-- *_changed events with the owner as `caller`.
 --
 -- vote_snapshot is a ledger sequence; vote_end is a unix timestamp in seconds.
 -- vote_type: 0 against, 1 for, 2 abstain.
@@ -86,15 +94,22 @@ LEFT JOIN LATERAL jsonb_array_elements(COALESCE(e.args::jsonb -> 'args', '[]'::j
 WHERE e.contract_role = 'governor'
   AND e.event_name = 'proposal_created';
 
-CREATE VIEW governance.governor_authority_history AS
+-- One row per call the Treasury executed for a proposal (Treasury `execute`),
+-- ordered by call_index. `args` comes from the matching proposal_actions row
+-- (same index) so the UI can show what was executed. A proposal that was
+-- consumed (executed) always has one row per action, all in the same tx.
+CREATE VIEW governance.proposal_execution_calls AS
 SELECT
   e.event_id,
   e.deployment_id,
   i.dao_id,
-  e.contract_id,
-  e.topics::jsonb ->> 'authority' AS authority,
-  (e.args::jsonb ->> 'old_enabled')::boolean AS old_enabled,
-  (e.args::jsonb ->> 'enabled')::boolean AS enabled,
+  e.contract_id AS treasury_contract,
+  e.topics::jsonb ->> 'proposal_id' AS proposal_id,
+  (e.args::jsonb ->> 'index')::integer AS call_index,
+  e.topics::jsonb ->> 'governor' AS governor,
+  e.topics::jsonb ->> 'target' AS target,
+  e.args::jsonb ->> 'function' AS function,
+  a.args AS args,
   e.ledger_sequence AS event_ledger,
   e.transaction_index,
   e.operation_index,
@@ -104,39 +119,24 @@ SELECT
   e.transaction_hash
 FROM chain.decoded_events e
 JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
-WHERE e.contract_role = 'governor'
-  AND e.event_name = 'governor_authority_changed';
+LEFT JOIN governance.proposal_actions a
+  ON a.deployment_id = e.deployment_id
+ AND a.dao_id = i.dao_id
+ AND a.proposal_id = e.topics::jsonb ->> 'proposal_id'
+ AND a.action_index = (e.args::jsonb ->> 'index')::integer
+WHERE e.contract_role = 'treasury'
+  AND e.event_name = 'execute';
 
--- Addresses that may act as governor authority: explicitly enabled ones, plus
--- the Treasury, which owns the Governor from launch onwards.
-CREATE VIEW governance.governor_authorities AS
-WITH latest AS (
-  SELECT DISTINCT ON (h.deployment_id, h.dao_id, h.contract_id, h.authority)
-    h.deployment_id, h.dao_id, h.contract_id, h.authority, h.enabled,
-    h.event_ledger, h.event_at, h.transaction_hash
-  FROM governance.governor_authority_history h
-  ORDER BY h.deployment_id, h.dao_id, h.contract_id, h.authority, h.event_ledger DESC,
-    h.transaction_index DESC NULLS LAST, h.operation_index DESC NULLS LAST,
-    h.event_index DESC NULLS LAST, h.event_id DESC
-)
-SELECT
-  l.deployment_id, l.dao_id, l.contract_id, l.authority, l.enabled,
-  l.event_ledger, l.event_at, l.transaction_hash,
-  'event'::text AS source
-FROM latest l
-JOIN manager.dao_registry r ON r.deployment_id = l.deployment_id AND r.dao_id = l.dao_id
-WHERE l.enabled
-  AND l.authority IS DISTINCT FROM r.treasury_contract
-UNION ALL
-SELECT
-  d.deployment_id, d.dao_id, d.governor_contract, d.treasury_contract, true,
-  d.launched_ledger, d.launched_at, d.launched_tx_hash,
-  'owner'::text
-FROM manager.daos d
-WHERE d.launched_ledger IS NOT NULL
-  AND d.treasury_contract IS NOT NULL;
-
--- Proposal with its latest lifecycle state ('pending' until queued/executed/canceled).
+-- Proposal with its latest lifecycle state.
+--   'pending'   no lifecycle event yet (covers Pending/Active/Succeeded/Defeated on chain)
+--   'queued' / 'executed' / 'canceled'   latest ProposalQueued / ProposalExecuted / ProposalCancelled
+--   'expired'   computed from the clock (the chain reports Expired lazily, with no event):
+--               * queued and now >= eta + 14 days (the Treasury can no longer execute it), or
+--               * never queued, now >= vote_end + 14 days, and for_votes > against_votes.
+--                 Quorum is not derivable from events, so a never-queued proposal that
+--                 won the vote but missed quorum is reported 'expired' here although the
+--                 chain says Defeated; both are terminal.
+-- 14 days = PROPOSAL_EXPIRATION_PERIOD (1_209_600 s) in the Governor contract.
 CREATE VIEW governance.proposals AS
 WITH created AS (
   SELECT
@@ -175,13 +175,30 @@ WITH created AS (
       operation_index DESC NULLS LAST, event_index DESC NULLS LAST, lifecycle_event_id DESC))[1] AS updated_at
   FROM governance.proposal_lifecycle
   GROUP BY deployment_id, dao_id, proposal_id
+), tally AS (
+  SELECT
+    deployment_id, dao_id, proposal_id,
+    COALESCE(sum(weight) FILTER (WHERE support = 1), 0) AS for_votes,
+    COALESCE(sum(weight) FILTER (WHERE support = 0), 0) AS against_votes
+  FROM governance.proposal_votes
+  GROUP BY deployment_id, dao_id, proposal_id
 )
 SELECT
   c.*,
-  COALESCE(l.state, 'pending') AS state,
+  CASE
+    WHEN l.state = 'queued'
+      AND extract(epoch FROM now()) >= l.eta_seconds + 1209600 THEN 'expired'
+    WHEN l.state IS NULL
+      AND c.vote_end_seconds IS NOT NULL
+      AND extract(epoch FROM now()) >= c.vote_end_seconds + 1209600
+      AND COALESCE(t.for_votes, 0) > COALESCE(t.against_votes, 0) THEN 'expired'
+    ELSE COALESCE(l.state, 'pending')
+  END AS state,
   l.eta_seconds,
   l.updated_ledger,
   l.updated_at
 FROM created c
 LEFT JOIN lifecycle l
-  ON l.deployment_id = c.deployment_id AND l.dao_id = c.dao_id AND l.proposal_id = c.proposal_id;
+  ON l.deployment_id = c.deployment_id AND l.dao_id = c.dao_id AND l.proposal_id = c.proposal_id
+LEFT JOIN tally t
+  ON t.deployment_id = c.deployment_id AND t.dao_id = c.dao_id AND t.proposal_id = c.proposal_id;

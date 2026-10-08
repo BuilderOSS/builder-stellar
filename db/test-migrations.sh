@@ -44,7 +44,7 @@ trap 'psql -q "$admin_url" -c "DROP DATABASE IF EXISTS $scratch WITH (FORCE)" > 
 echo "→ migrate"
 bash "$DB_DIR/migrate.sh" "$scratch_url" > /dev/null
 echo "→ migrate again (must be a no-op)"
-bash "$DB_DIR/migrate.sh" "$scratch_url" | grep -q "0 migration(s) applied"
+bash "$DB_DIR/migrate.sh" "$scratch_url" | grep "0 migration(s) applied" > /dev/null
 echo "→ rollback everything"
 bash "$DB_DIR/rollback.sh" --yes "$scratch_url" > /dev/null
 left="$(psql "$scratch_url" -Atc "SELECT count(*) FROM information_schema.schemata WHERE schema_name IN ($(sql_schema_list))")"

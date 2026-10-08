@@ -32,11 +32,17 @@ export const LIBRARY_EVENTS = {
   OwnershipRenounced: { topics: [], data: ['old_owner'] }
 };
 
-/** Parse every #[contractevent] struct into { name: { contract, topics, data } }. */
-export function contractEvents() {
-  const events = {};
+/**
+ * Parse every #[contractevent] struct into a flat list of { contract, name, topics, data }.
+ * Names are NOT unique across contracts: each module emits its own `Launched`
+ * struct (token minters, auction started, marketplace opened, ...). The unique key
+ * is (contract, name); the decoder keys on the event name only, so same-named
+ * events must agree on topics (enforced by contractEvents()).
+ */
+export function contractEventList() {
+  const list = [];
   const contractsDir = join(repoRoot, 'contracts');
-  for (const dir of readdirSync(contractsDir)) {
+  for (const dir of readdirSync(contractsDir).sort()) {
     const file = join(contractsDir, dir, 'src', 'events.rs');
     if (!existsSync(file)) continue;
     const lines = readFileSync(file, 'utf8').split('\n');
@@ -57,11 +63,37 @@ export function contractEvents() {
           }
         }
       }
-      assert.ok(
-        !events[name] || JSON.stringify([events[name].topics, events[name].data]) === JSON.stringify([topics, data]),
-        `${name} is defined with different topics in two contracts`
-      );
-      events[name] = { contract: dir, topics, data };
+      list.push({ contract: dir, name, topics, data });
+    }
+  }
+  return list;
+}
+
+/** (contract, name) -> { contract, name, topics, data }; keys look like `token:Launched`. */
+export function contractEventsByContract() {
+  const events = {};
+  for (const event of contractEventList()) {
+    const key = `${event.contract}:${event.name}`;
+    assert.ok(!events[key], `${key} is defined twice in one contract`);
+    events[key] = event;
+  }
+  return events;
+}
+
+/**
+ * name -> { contract, contracts, topics, data }. Same-named events in different
+ * contracts must share their topic list (the decoder's topicNames is by name);
+ * `data` is the first contract's data fields, `dataByContract` has every variant.
+ */
+export function contractEvents() {
+  const events = {};
+  for (const { contract, name, topics, data } of contractEventList()) {
+    if (events[name]) {
+      assert.deepEqual(events[name].topics, topics, `${name} is defined with different topics in ${events[name].contracts.join(', ')} and ${contract}`);
+      events[name].contracts.push(contract);
+      events[name].dataByContract[contract] = data;
+    } else {
+      events[name] = { contract, contracts: [contract], topics, data, dataByContract: { [contract]: data } };
     }
   }
   return events;
@@ -89,7 +121,7 @@ export function findDecoderDrift() {
   const decoder = decoderTopicNames();
   const problems = [];
   const expected = {
-    ...Object.fromEntries(Object.entries(contractEvents()).map(([name, e]) => [name, { topics: e.topics, source: e.contract }])),
+    ...Object.fromEntries(Object.entries(contractEvents()).map(([name, e]) => [name, { topics: e.topics, source: e.contracts.join('+') }])),
     ...Object.fromEntries(Object.entries(LIBRARY_EVENTS).map(([name, e]) => [name, { topics: e.topics, source: 'library' }]))
   };
   for (const [name, { topics, source }] of Object.entries(expected)) {

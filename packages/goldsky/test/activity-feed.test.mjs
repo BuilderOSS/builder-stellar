@@ -318,9 +318,47 @@ assert.strictEqual(edgeCaseResult.token_id, '', 'Null token_id should default to
 assert.strictEqual(edgeCaseResult.actor, '', 'Undefined actor should default to empty string');
 console.log('✅ Passed\n');
 
+// Test 16: hardened-contract events map to kinds, titles and visibility
+console.log('Test 16: New and changed event kinds, titles and visibility');
+const newEventCases = [
+  ['PrimaryListingPurchased', 'marketplace', 'marketplace.primary_listing_purchased', 'Primary sale completed', 'public'],
+  ['PrimaryListingCancelled', 'marketplace', 'marketplace.primary_listing_cancelled', 'Primary listing cancelled', 'public'],
+  ['PrimaryListingExpired', 'marketplace', 'marketplace.primary_listing_expired', 'Primary listing expired', 'admin'],
+  ['RefundDeferred', 'auction', 'auction.refund_deferred', 'Bid refund deferred', 'public'],
+  ['RefundWithdrawn', 'auction', 'auction.refund_withdrawn', 'Bid refund withdrawn', 'public'],
+  ['AdminProposed', 'manager', 'manager.admin_proposed', 'Manager admin proposed', 'admin'],
+  ['AdminChanged', 'manager', 'manager.admin_changed', 'Manager admin changed', 'admin'],
+  ['PlatformMinterSet', 'manager', 'manager.platform_minter_set', 'Platform minter set', 'admin'],
+  ['Launched', 'token', 'token.launched', 'Token launched', 'admin'],
+  ['Launched', 'auction', 'auction.launched', 'Auction launched', 'admin'],
+  ['Launched', 'marketplace', 'marketplace.launched', 'Marketplace launched', 'admin'],
+  ['Launched', '', 'module.launched', 'Module launched', 'admin'],
+  ['MarketplacePaused', 'marketplace', 'marketplace.paused', 'Marketplace paused', 'admin']
+];
+for (const [eventName, role, kind, title, visibility] of newEventCases) {
+  const row = invoke({ event_id: 'n', event_name: eventName, contract_role: role, deployment_id: 'test', contract_id: 'test' });
+  assert.strictEqual(row.kind, kind, `${eventName}/${role} kind`);
+  assert.strictEqual(row.title, title, `${eventName}/${role} title`);
+  assert.strictEqual(row.visibility, visibility, `${eventName}/${role} visibility`);
+}
+for (const removed of ['TreasuryChanged', 'TokenContractChanged', 'GovernorAuthorityChanged', 'GovernorChanged', 'TreasuryUpdated']) {
+  assert.strictEqual(invoke({ event_id: 'r', event_name: removed, deployment_id: 'test', contract_id: 'test' }).kind, 'contract.' + removed.toLowerCase(), `${removed} must be unmapped`);
+}
+console.log('✅ Passed\n');
+
+// Test 17: Execute carries proposal_id from the topics payload and the call index from args
+console.log('Test 17: Execute summary uses topics proposal_id and args index');
+const executeRow = invoke({
+  event_id: 'x', event_name: 'Execute', deployment_id: 'test', contract_id: 'TRE', contract_role: 'treasury',
+  topics: JSON.stringify({ governor: 'GOV', target: 'TGT', proposal_id: 'abc' }), args: JSON.stringify({ function: 'mint', index: 3 })
+});
+assert.strictEqual(executeRow.proposal_id, 'abc');
+assert.strictEqual(executeRow.summary, 'Executed mint on TGT (call 4 of proposal abc)');
+console.log('✅ Passed\n');
+
 // Summary
 console.log('═══════════════════════════════════════');
-console.log('✅ All 15 tests passed!');
+console.log('✅ All 17 tests passed!');
 console.log('═══════════════════════════════════════');
 console.log('\n📊 Test Coverage:');
 console.log('  • Null/undefined input handling');

@@ -13,6 +13,11 @@
 --                          mints token ids [first_token_id, first_token_id + total_amount)
 --   merkle_root_set_event  topic token_id
 --   allowlist_set_event    topic token_id;             data { member_count }
+--
+-- Claims are tracked per method and per round on chain (a new merkle root or
+-- allowlist opens a new round and earlier claimers may claim again). The events
+-- carry no round number, so these views list every claim event; a recipient may
+-- legitimately appear more than once.
 -- =============================================================================
 
 CREATE VIEW minter.merkle_claim_events AS

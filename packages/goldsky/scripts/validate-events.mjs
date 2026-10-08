@@ -7,12 +7,12 @@
  * publish. The Rust sources are the source of truth, not generated bindings,
  * which can lag behind the contracts.
  */
-import { contractEvents, findDecoderDrift, LIBRARY_EVENTS } from '../src/contract-events.mjs';
+import { contractEventList, findDecoderDrift, LIBRARY_EVENTS } from '../src/contract-events.mjs';
 
 console.log('🔍 Validating Goldsky decoder against contract events...\n');
 
 const byContract = {};
-for (const [name, { contract }] of Object.entries(contractEvents())) {
+for (const { contract, name } of contractEventList()) {
   (byContract[contract] ??= []).push(name);
 }
 for (const [contract, names] of Object.entries(byContract).sort()) {
