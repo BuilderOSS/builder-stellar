@@ -322,10 +322,10 @@ transforms:
           TreasuryInitialized: ['owner'], GovernorChanged: ['old_governor', 'new_governor'], DaoCreated: ['token_address', 'deployer', 'launch_admin'], DaoLaunched: ['token_address'],
           ManagerInitialized: ['admin'], SeedGenerated: ['token_id'], MetadataInitialized: ['token'], ProposalExpired: [], MetadataHookFailed: ['token_id'],
           ProposalThresholdChanged: ['caller'], QuorumBpsChanged: ['caller'], QueueDelayChanged: ['caller'], VotingDelayChanged: ['caller'], VotingPeriodChanged: ['caller'], DurationUpdated: [], ReservePriceUpdated: [], MinBidIncrementUpdated: [],
-          TimeBufferUpdated: [], PaymentTokenUpdated: [], TreasuryUpdated: [], FactoryPaused: [], FactoryUnpaused: [], UpgradeApproved: [],
-          ImplementationRevoked: [], ImplementationRegistered: [], CurrentImplementationsUpdated: [], PropertyAdded: [],
-          PropertiesReset: [], ProjectURIUpdated: [], DescriptionUpdated: [], RendererBaseUpdated: [], ContractImageUpdated: [], ManagerUpgraded: [],
-          MintEvent: ['token_id', 'recipient'], MintBatchEvent: ['token_id'], MerkleRootSetEvent: ['token_id'], AllowlistSetEvent: ['token_id'],
+          TimeBufferUpdated: [], PaymentTokenUpdated: [], TreasuryUpdated: [], FactoryPaused: [], FactoryUnpaused: [], UpgradeApproved: ['from_hash', 'to_hash'],
+          ImplementationRevoked: ['wasm_hash'], ImplementationRegistered: ['wasm_hash'], CurrentImplementationsUpdated: [], PropertyAdded: ['property_id'],
+          PropertiesReset: [], ProjectURIUpdated: [], DescriptionUpdated: [], RendererBaseUpdated: [], ContractImageUpdated: [], ManagerUpgraded: ['from_hash', 'to_hash'],
+          MintEvent: ['token_id', 'recipient'], MerkleClaimEvent: ['token_id', 'recipient'], AllowlistClaimEvent: ['token_id', 'recipient'], MintBatchEvent: ['token_id'], MerkleRootSetEvent: ['token_id'], AllowlistSetEvent: ['token_id'],
           MarketplaceInitialized: ['token'], PrimaryListingCreated: ['token_id'], SecondaryListingCreated: ['token_id'], ListingPurchased: ['token_id', 'buyer'],
           ListingCancelled: ['token_id'], ListingExpired: ['token_id'], PaymentAssetUpdated: [], SecondaryFeeUpdated: [], MarketplacePaused: [], MarketplaceUnpaused: [], MarketplaceUpgraded: []
         };
@@ -401,7 +401,7 @@ transforms:
             // MetadataHookFailed originates from token contract, not metadata
             if (canonical === 'MetadataHookFailed') return 'token';
             if (/^(Dao|Factory|Upgrade|Implementation|CurrentImplementations|Manager)/.test(canonical)) return 'manager';
-            if (/^(MintEvent|MintBatchEvent|MerkleRootSetEvent|AllowlistSetEvent)/.test(canonical)) return 'minter';
+            if (/^(MintEvent|MerkleClaimEvent|AllowlistClaimEvent|MintBatchEvent|MerkleRootSetEvent|AllowlistSetEvent)/.test(canonical)) return 'minter';
             if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue|Veto)/.test(canonical)) return 'governor';
             if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken)/.test(canonical)) return 'auction';
             if (/^(Execute|Treasury|GovernorChanged)/.test(canonical)) return 'treasury';
@@ -549,7 +549,7 @@ transforms:
           AuctionCreated: true, BidPlaced: true,
           AuctionSettled: true, BidRefunded: true, AuctionCancelled: true,
           DaoCreated: true, DaoLaunched: true,
-          MintEvent: true, MintBatchEvent: true
+          MintEvent: true, MerkleClaimEvent: true, AllowlistClaimEvent: true, MintBatchEvent: true
         };
 
         var kindMap = {
@@ -610,6 +610,8 @@ transforms:
           RendererBaseUpdated: 'metadata.renderer_base_updated',
           ContractImageUpdated: 'metadata.contract_image_updated',
           MintEvent: 'minter.mint',
+          MerkleClaimEvent: 'minter.merkle_claim',
+          AllowlistClaimEvent: 'minter.allowlist_claim',
           MintBatchEvent: 'minter.batch_mint',
           MerkleRootSetEvent: 'minter.merkle_root_set',
           AllowlistSetEvent: 'minter.allowlist_set'
@@ -673,6 +675,8 @@ transforms:
           RendererBaseUpdated: 'Renderer base updated',
           ContractImageUpdated: 'Contract image updated',
           MintEvent: 'Tokens minted',
+          MerkleClaimEvent: 'Merkle claim completed',
+          AllowlistClaimEvent: 'Allowlist claim completed',
           MintBatchEvent: 'Batch mint completed',
           MerkleRootSetEvent: 'Merkle root configured',
           AllowlistSetEvent: 'Allowlist configured'
@@ -720,6 +724,8 @@ transforms:
           Mint: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
           MintWithMinter: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
           MintEvent: function() { return 'Minted ' + (amount || 'tokens') + ' to ' + (owner || 'recipient'); },
+          MerkleClaimEvent: function() { return 'Claimed ' + (amount || 'tokens') + ' via merkle proof for ' + (owner || 'recipient'); },
+          AllowlistClaimEvent: function() { return 'Claimed ' + (amount || 'tokens') + ' via allowlist for ' + (owner || 'recipient'); },
           BatchMint: function() { return 'Minted ' + (amount || 'batch') + ' tokens'; },
           BatchMintMany: function() { var totalAmount = pick(data, ['total_amount']); var recipientCount = pick(data, ['recipient_count']); return 'Minted ' + (totalAmount || 'batch') + ' tokens to ' + (recipientCount || 'multiple') + ' recipients'; },
           DelegateChanged: function() { return 'Delegation changed'; },

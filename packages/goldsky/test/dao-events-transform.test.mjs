@@ -957,6 +957,8 @@ test('builds activity feed row from decoded MetadataHookFailed event', () => {
 test('decodes the Minter events with the exact events.rs topics and payloads', () => {
   const cases = [
     ['MintEvent', [{ symbol: 'MintEvent' }, { address: 'TOKEN_CONTRACT' }, { address: 'RECIPIENT' }], { map: [{ key: { symbol: 'amount' }, val: { u128: '7' } }] }, { token_id: 'TOKEN_CONTRACT', recipient: 'RECIPIENT' }],
+    ['MerkleClaimEvent', [{ symbol: 'MerkleClaimEvent' }, { address: 'TOKEN_CONTRACT' }, { address: 'RECIPIENT' }], { map: [{ key: { symbol: 'amount' }, val: { u128: '5' } }] }, { token_id: 'TOKEN_CONTRACT', recipient: 'RECIPIENT' }],
+    ['AllowlistClaimEvent', [{ symbol: 'AllowlistClaimEvent' }, { address: 'TOKEN_CONTRACT' }, { address: 'RECIPIENT' }], { map: [{ key: { symbol: 'amount' }, val: { u128: '5' } }] }, { token_id: 'TOKEN_CONTRACT', recipient: 'RECIPIENT' }],
     ['MintBatchEvent', [{ symbol: 'MintBatchEvent' }, { address: 'TOKEN_CONTRACT' }], { recipient_count: { u32: 3 }, total_amount: { u128: '9' } }, { token_id: 'TOKEN_CONTRACT' }],
     ['MerkleRootSetEvent', [{ symbol: 'MerkleRootSetEvent' }, { address: 'TOKEN_CONTRACT' }], { map: [] }, { token_id: 'TOKEN_CONTRACT' }],
     ['AllowlistSetEvent', [{ symbol: 'AllowlistSetEvent' }, { address: 'TOKEN_CONTRACT' }], { member_count: { u32: 4 } }, { token_id: 'TOKEN_CONTRACT' }]
@@ -967,4 +969,21 @@ test('decodes the Minter events with the exact events.rs topics and payloads', (
     assert.equal(decoded.contract_role, 'minter');
   }
   assert.deepEqual(argsOf(decodeEvent({ topics: JSON.stringify(cases[0][1]), data: JSON.stringify(cases[0][2]) })), { amount: '7' });
+});
+
+test('builds distinct activity kinds for Minter claim events', () => {
+  for (const [name, kind] of [['MerkleClaimEvent', 'minter.merkle_claim'], ['AllowlistClaimEvent', 'minter.allowlist_claim']]) {
+    const decoded = decodeEvent({
+      event_id: name,
+      contract_role: 'minter',
+      topics: JSON.stringify([{ symbol: name }, { address: 'TOKEN_CONTRACT' }, { address: 'RECIPIENT' }]),
+      data: JSON.stringify({ map: [{ key: { symbol: 'amount' }, val: { u128: '5' } }] })
+    });
+    const activity = buildActivityFeed(decoded);
+    assert.equal(activity.kind, kind);
+    assert.equal(activity.token_id, 'TOKEN_CONTRACT');
+    assert.equal(activity.actor, 'RECIPIENT');
+    assert.equal(activity.amount, '5');
+    assert.equal(activity.visibility, 'public');
+  }
 });

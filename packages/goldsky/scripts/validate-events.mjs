@@ -28,7 +28,7 @@ function getEventsFromBindings() {
     metadata: extractEventNames('../../metadata-bindings/src/types.ts'),
     // Minter bindings are not checked in yet; keep this contract-owned list
     // explicit and sourced from contracts/minter/src/events.rs.
-    minter: ['MintEvent', 'MintBatchEvent', 'MerkleRootSetEvent', 'AllowlistSetEvent']
+    minter: ['MintEvent', 'MerkleClaimEvent', 'AllowlistClaimEvent', 'MintBatchEvent', 'MerkleRootSetEvent', 'AllowlistSetEvent']
   };
 
   return events;
@@ -86,7 +86,7 @@ const APP_OWNED_EVENTS = new Set([
   'TreasuryInitialized', 'GovernorChanged', 'Execute', 'AuctionInitialized', 'AuctionCreated', 'BidPlaced', 'AuctionSettled', 'DurationUpdated',
   'ReservePriceUpdated', 'MinBidIncrementUpdated', 'TimeBufferUpdated', 'PaymentTokenUpdated', 'TreasuryUpdated', 'BidRefunded', 'AuctionCancelled',
   'DaoCreated', 'DaoRegistered', 'FactoryPaused', 'FactoryUnpaused', 'UpgradeApproved', 'ImplementationRevoked', 'ImplementationRegistered', 'CurrentImplementationsUpdated',
-  'MintEvent', 'MintBatchEvent', 'MerkleRootSetEvent', 'AllowlistSetEvent',
+  'MintEvent', 'MerkleClaimEvent', 'AllowlistClaimEvent', 'MintBatchEvent', 'MerkleRootSetEvent', 'AllowlistSetEvent',
   'MetadataInitialized', 'PropertyAdded', 'SeedGenerated', 'PropertiesReset', 'ProjectURIUpdated', 'DescriptionUpdated', 'RendererBaseUpdated', 'ContractImageUpdated'
 ]);
 

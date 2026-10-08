@@ -2,17 +2,6 @@
 
 use soroban_sdk::{contractevent, Address, Env};
 
-/// Emitted when tokens are minted.
-#[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MintEvent {
-    #[topic]
-    pub token_id: Address,
-    #[topic]
-    pub recipient: Address,
-    pub amount: u128,
-}
-
 /// Emitted when a token is claimed through a merkle allocation.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -60,16 +49,6 @@ pub struct AllowlistSetEvent {
     #[topic]
     pub token_id: Address,
     pub member_count: u32,
-}
-
-/// Emit a mint event.
-pub fn emit_mint(env: &Env, token_id: &Address, recipient: &Address, amount: u128) {
-    MintEvent {
-        token_id: token_id.clone(),
-        recipient: recipient.clone(),
-        amount,
-    }
-    .publish(env);
 }
 
 /// Emit a merkle claim event.

@@ -102,7 +102,7 @@ function invoke(data) {
     AuctionCreated: true, BidPlaced: true,
     AuctionSettled: true, BidRefunded: true, AuctionCancelled: true,
     DaoCreated: true, DaoLaunched: true,
-    MintEvent: true, MintBatchEvent: true
+    MintEvent: true, MerkleClaimEvent: true, AllowlistClaimEvent: true, MintBatchEvent: true
   };
 
   var kindMap = {
@@ -163,6 +163,8 @@ function invoke(data) {
     RendererBaseUpdated: 'metadata.renderer_base_updated',
     ContractImageUpdated: 'metadata.contract_image_updated',
     MintEvent: 'minter.mint',
+    MerkleClaimEvent: 'minter.merkle_claim',
+    AllowlistClaimEvent: 'minter.allowlist_claim',
     MintBatchEvent: 'minter.batch_mint',
     MerkleRootSetEvent: 'minter.merkle_root_set',
     AllowlistSetEvent: 'minter.allowlist_set'
@@ -226,6 +228,8 @@ function invoke(data) {
     RendererBaseUpdated: 'Renderer base updated',
     ContractImageUpdated: 'Contract image updated',
     MintEvent: 'Tokens minted',
+    MerkleClaimEvent: 'Merkle claim completed',
+    AllowlistClaimEvent: 'Allowlist claim completed',
     MintBatchEvent: 'Batch mint completed',
     MerkleRootSetEvent: 'Merkle root configured',
     AllowlistSetEvent: 'Allowlist configured'
@@ -273,6 +277,8 @@ function invoke(data) {
     Mint: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
     MintWithMinter: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
     MintEvent: function() { return 'Minted ' + (amount || 'tokens') + ' to ' + (owner || 'recipient'); },
+    MerkleClaimEvent: function() { return 'Claimed ' + (amount || 'tokens') + ' via merkle proof for ' + (owner || 'recipient'); },
+    AllowlistClaimEvent: function() { return 'Claimed ' + (amount || 'tokens') + ' via allowlist for ' + (owner || 'recipient'); },
     BatchMint: function() { return 'Minted ' + (amount || 'batch') + ' tokens'; },
     BatchMintMany: function() { var totalAmount = pick(data, ['total_amount']); var recipientCount = pick(data, ['recipient_count']); return 'Minted ' + (totalAmount || 'batch') + ' tokens to ' + (recipientCount || 'multiple') + ' recipients'; },
     DelegateChanged: function() { return 'Delegation changed'; },

@@ -143,7 +143,7 @@ PostgreSQL (Neon) destination
 
 ## Event Coverage
 
-The decoder handles **40 critical DAO events** across 4 contracts:
+The decoder names topics for all app-owned events across the Manager, Token, Governor, Treasury, Auction, Metadata, Marketplace and Minter contracts. Minter events: `MintEvent`, `MerkleClaimEvent`, `AllowlistClaimEvent`, `MintBatchEvent`, `MerkleRootSetEvent`, `AllowlistSetEvent`. Highlights:
 
 - **Token**: 9 events (Mint, Transfer, Delegate, etc.)
 - **Governor**: 16 events (ProposalCreated, VoteCast, parameter changes, etc.)

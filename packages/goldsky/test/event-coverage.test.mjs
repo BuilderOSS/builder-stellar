@@ -17,7 +17,7 @@ const __dirname = dirname(__filename);
 // Core DAO events that must be handled
 // Extracted from our contract Rust source and generated bindings
 const REQUIRED_EVENTS = {
-  minter: ['MintEvent', 'MintBatchEvent', 'MerkleRootSetEvent', 'AllowlistSetEvent'],
+  minter: ['MintEvent', 'MerkleClaimEvent', 'AllowlistClaimEvent', 'MintBatchEvent', 'MerkleRootSetEvent', 'AllowlistSetEvent'],
   token: [
     'TokenInitialized',
     'Mint',

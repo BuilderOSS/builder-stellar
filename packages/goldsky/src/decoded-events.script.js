@@ -55,10 +55,10 @@ function invoke(data) {
     TreasuryInitialized: ['owner'], GovernorChanged: ['old_governor', 'new_governor'], DaoCreated: ['token_address', 'deployer', 'launch_admin'], DaoLaunched: ['token_address'],
     ManagerInitialized: ['admin'], SeedGenerated: ['token_id'], MetadataInitialized: ['token'], ProposalExpired: [], MetadataHookFailed: ['token_id'],
     ProposalThresholdChanged: ['caller'], QuorumBpsChanged: ['caller'], QueueDelayChanged: ['caller'], VotingDelayChanged: ['caller'], VotingPeriodChanged: ['caller'], DurationUpdated: [], ReservePriceUpdated: [], MinBidIncrementUpdated: [],
-    TimeBufferUpdated: [], PaymentTokenUpdated: [], TreasuryUpdated: [], FactoryPaused: [], FactoryUnpaused: [], UpgradeApproved: [],
-    ImplementationRevoked: [], ImplementationRegistered: [], CurrentImplementationsUpdated: [], PropertyAdded: [],
-    PropertiesReset: [], ProjectURIUpdated: [], DescriptionUpdated: [], RendererBaseUpdated: [], ContractImageUpdated: [], ManagerUpgraded: [],
-    MintEvent: ['token_id', 'recipient'], MintBatchEvent: ['token_id'], MerkleRootSetEvent: ['token_id'], AllowlistSetEvent: ['token_id'],
+    TimeBufferUpdated: [], PaymentTokenUpdated: [], TreasuryUpdated: [], FactoryPaused: [], FactoryUnpaused: [], UpgradeApproved: ['from_hash', 'to_hash'],
+    ImplementationRevoked: ['wasm_hash'], ImplementationRegistered: ['wasm_hash'], CurrentImplementationsUpdated: [], PropertyAdded: ['property_id'],
+    PropertiesReset: [], ProjectURIUpdated: [], DescriptionUpdated: [], RendererBaseUpdated: [], ContractImageUpdated: [], ManagerUpgraded: ['from_hash', 'to_hash'],
+    MintEvent: ['token_id', 'recipient'], MerkleClaimEvent: ['token_id', 'recipient'], AllowlistClaimEvent: ['token_id', 'recipient'], MintBatchEvent: ['token_id'], MerkleRootSetEvent: ['token_id'], AllowlistSetEvent: ['token_id'],
     MarketplaceInitialized: ['token'], PrimaryListingCreated: ['token_id'], SecondaryListingCreated: ['token_id'], ListingPurchased: ['token_id', 'buyer'],
     ListingCancelled: ['token_id'], ListingExpired: ['token_id'], PaymentAssetUpdated: [], SecondaryFeeUpdated: [], MarketplacePaused: [], MarketplaceUnpaused: [], MarketplaceUpgraded: []
   };
@@ -134,7 +134,7 @@ function invoke(data) {
       // MetadataHookFailed originates from token contract, not metadata
       if (canonical === 'MetadataHookFailed') return 'token';
       if (/^(Dao|Factory|Upgrade|Implementation|CurrentImplementations|Manager)/.test(canonical)) return 'manager';
-      if (/^(MintEvent|MintBatchEvent|MerkleRootSetEvent|AllowlistSetEvent)/.test(canonical)) return 'minter';
+      if (/^(MintEvent|MerkleClaimEvent|AllowlistClaimEvent|MintBatchEvent|MerkleRootSetEvent|AllowlistSetEvent)/.test(canonical)) return 'minter';
       if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue|Veto)/.test(canonical)) return 'governor';
       if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken)/.test(canonical)) return 'auction';
       if (/^(Execute|Treasury|GovernorChanged)/.test(canonical)) return 'treasury';
