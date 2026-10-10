@@ -2,6 +2,7 @@
 
 import { Client as MetadataClient } from '@builder-stellar/metadata-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
+import NextLink from 'next/link';
 import { useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 
@@ -18,6 +19,7 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { assertAdminCallSupported } from '@/lib/admin-registered-call';
 import { adminReadOptions, useAdminArtwork, useAdminTokenState } from '@/lib/admin-surfaces';
+import { daoAdminRoute } from '@/lib/dao-routes';
 import {
   artworkSettingMethods,
   type ArtworkSettingType,
@@ -30,15 +32,11 @@ import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
-const fields = [
-  { type: 'set-artwork-renderer', key: 'renderer_base', label: 'Renderer URL' },
-  { type: 'set-artwork-project-uri', key: 'project_uri', label: 'Project URL' },
-  { type: 'set-artwork-contract-image', key: 'contract_image', label: 'Collection image URL' },
-  { type: 'set-artwork-description', key: 'description', label: 'Collection description' }
-] as const;
+// The image, description and website live in Community profile; only the renderer stays here.
+const fields = [{ type: 'set-artwork-renderer', key: 'renderer_base', label: 'Renderer URL' }] as const;
 
 export default function ArtworkAdminPage() {
-  const { daoId, daoConfig: config } = useDaoContext();
+  const { daoId, daoConfig: config, routeId } = useDaoContext();
   const session = useAuthSessionStore();
   const token = useAdminTokenState(config, session.address);
   const artwork = useAdminArtwork(config, session.address);
@@ -220,10 +218,11 @@ export default function ArtworkAdminPage() {
             <>
               <Card p="5">
                 <Stack gap="4">
-                  <Heading size="heading">Collection metadata</Heading>
+                  <Heading size="heading">Renderer</Heading>
                   <Text>
-                    These settings are on-chain. Uploading to IPFS alone does not update them. Renderer changes can
-                    affect existing token images.
+                    Where token images are drawn from. Changing it can affect existing token images. The community's
+                    image, description and website are in{' '}
+                    <NextLink href={daoAdminRoute(routeId, '/profile')}>Community profile</NextLink>.
                   </Text>
                   {fields.map(({ type, key, label }) => {
                     const registered = handlers.some((handler) => String(handler.type) === type);
@@ -238,7 +237,7 @@ export default function ArtworkAdminPage() {
                             id={key}
                             name={key}
                             autoComplete="off"
-                            spellCheck={type === 'set-artwork-description'}
+                            spellCheck={false}
                             value={edits[type] ?? artwork.data!.settings[key]}
                             disabled={busy || (!direct && !canPropose)}
                             onChange={(event) => setEdits((current) => ({ ...current, [type]: event.target.value }))}

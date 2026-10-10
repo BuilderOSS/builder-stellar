@@ -29,7 +29,9 @@ const crest = cva({
       sm: { width: '7', height: '7', borderRadius: '8px', fontSize: '0.75rem' },
       md: { width: '10', height: '10', borderRadius: '11px', fontSize: '0.875rem' },
       lg: { width: '14', height: '14', borderRadius: '14px', fontSize: '1.125rem' },
-      xl: { width: '20', height: '20', borderRadius: '20px', fontSize: '1.5rem' }
+      xl: { width: '20', height: '20', borderRadius: '20px', fontSize: '1.5rem' },
+      // Fills its container (e.g. an image editor preview).
+      fill: { width: '100%', height: '100%', borderRadius: 'card', fontSize: '2.5rem' }
     }
   },
   defaultVariants: { size: 'md' }
@@ -55,7 +57,7 @@ export function Crest({
   name: string;
   seed: string;
   src?: string | null;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'fill';
   className?: string;
 }) {
   return (

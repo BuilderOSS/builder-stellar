@@ -28,6 +28,12 @@ const GROUPS: Array<{ title: string; items: ManageItem[] }> = [
     items: [{ key: 'overview', label: 'Overview', meta: 'Your access and pending changes', section: '', exact: true }]
   },
   {
+    title: 'Community',
+    items: [
+      { key: 'profile', label: 'Community profile', meta: 'Name, image, description and website', section: '/profile' }
+    ]
+  },
+  {
     title: 'Membership',
     items: [
       { key: 'token', label: 'Mint tokens', meta: 'Create new membership tokens', section: '/token' },
