@@ -7,17 +7,16 @@ import { Button, ButtonLink, Callout } from '@/components/ui';
 import { configuredCreationNetwork } from '@/lib/create-dao-schema';
 import { getDeploymentConfig, isDeploymentConfigured } from '@/lib/deployment-config';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
-import { creationStorageError, useCreateDaoStore, visibleDraft } from '@/stores/create-dao-store';
+import { creationStorageError, type LocalDaoDraft, useCreateDaoStore, visibleDraft } from '@/stores/create-dao-store';
 
 import { useWorkspaceSync } from './workspace-sync';
 
-export function LocalDrafts() {
+/** Create-DAO drafts saved on this browser for the current wallet and network, newest first. */
+export function useLocalDrafts() {
   useWorkspaceSync();
   const wallet = useAuthSessionStore((s) => s.address);
   const drafts = useCreateDaoStore((s) => s.drafts);
   const [hydrated, setHydrated] = useState(false);
-  const [error, setError] = useState('');
-  const [deleteId, setDeleteId] = useState<string | null>(null);
   const scope = {
     wallet: wallet || null,
     network: configuredCreationNetwork(),
@@ -35,25 +34,44 @@ export function LocalDrafts() {
           (!d.scope.wallet || d.scope.wallet === scope.wallet))
     )
     .sort((a, b) => b.updatedAt - a.updatedAt);
+  return { drafts: visible, hydrated, scope };
+}
+
+export function draftStatus(draft: LocalDaoDraft) {
+  return draft.deployment?.status === 'confirmed'
+    ? 'Created, in setup'
+    : draft.deployment
+      ? 'Creating, needs a check'
+      : 'Draft';
+}
+
+/** Starts a fresh draft, then opens the create form on it. */
+export function NewDraftButton({ hydrated, scope }: Pick<ReturnType<typeof useLocalDrafts>, 'hydrated' | 'scope'>) {
+  return (
+    <ButtonLink
+      href="/create"
+      variant="secondary"
+      size="sm"
+      onClick={() => {
+        if (hydrated) useCreateDaoStore.getState().newDraft(scope);
+      }}
+    >
+      Start another DAO
+    </ButtonLink>
+  );
+}
+
+export function LocalDrafts() {
+  const { drafts: visible, hydrated, scope } = useLocalDrafts();
+  const [error, setError] = useState('');
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   return (
     <section aria-labelledby="local-drafts-heading" className={styles.stack}>
       <div className={styles.header}>
-        <div>
-          <h2 id="local-drafts-heading" className={styles.sectionTitle}>
-            Your drafts
-          </h2>
-          <p className={styles.muted}>Saved on this browser only.</p>
-        </div>
-        <ButtonLink
-          href="/create"
-          variant="secondary"
-          size="sm"
-          onClick={() => {
-            if (hydrated) useCreateDaoStore.getState().newDraft(scope);
-          }}
-        >
-          New draft
-        </ButtonLink>
+        <h2 id="local-drafts-heading" className="sr-only">
+          Your DAO drafts
+        </h2>
+        <NewDraftButton hydrated={hydrated} scope={scope} />
       </div>
       {error || creationStorageError() ? (
         <Callout variant="error" title="Drafts need attention" description={error || creationStorageError()} />
@@ -63,7 +81,9 @@ export function LocalDrafts() {
           Loading drafts…
         </p>
       ) : !visible.length ? (
-        <p className={styles.muted}>No drafts yet. You can start one without connecting a wallet.</p>
+        <p className={styles.muted}>
+          No drafts yet. When you start a DAO, it saves here as you go. You don&apos;t need a wallet to start.
+        </p>
       ) : (
         <div className={styles.list}>
           {visible.map((d) => (
@@ -71,12 +91,7 @@ export function LocalDrafts() {
               <div>
                 <h3>{d.configuration.basicInfo.tokenName || 'Untitled community'}</h3>
                 <p className={styles.muted}>
-                  {d.deployment?.status === 'confirmed'
-                    ? 'Created, in setup'
-                    : d.deployment
-                      ? 'Creating, needs a check'
-                      : 'Draft'}{' '}
-                  · {d.scope.network}
+                  {draftStatus(d)} · {d.scope.network}
                   {d.scope.wallet ? '' : ' · not tied to a wallet'}
                 </p>
                 <p className={styles.muted}>Saved {new Date(d.updatedAt).toLocaleString()}</p>

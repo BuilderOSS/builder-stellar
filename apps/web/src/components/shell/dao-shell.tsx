@@ -2,20 +2,18 @@
 
 import type { LucideIcon } from 'lucide-react';
 import { Gavel, House, Landmark, MoreHorizontal, Settings, Store, Ticket, Users, Vote } from 'lucide-react';
-import NextLink from 'next/link';
 import { usePathname } from 'next/navigation';
 import { type ReactNode, useMemo, useState } from 'react';
 import { css } from 'styled-system/css';
 
 import { DaoContractList } from '@/components/dao-contract-list';
-import { Disclosure, ListRow, Sheet, Tooltip } from '@/components/ui';
+import { Disclosure, ListRow, Sheet } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { useCloseOnNavigate } from '@/hooks/use-close-on-navigate';
 import { useDaoMembership } from '@/hooks/use-dao-membership';
 import { activeNavKey, type DaoNavItem, type DaoNavKey, resolveDaoNav } from '@/lib/dao-nav';
 import { selectHasDraft, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
-import { BrandMark } from './brand-mark';
 import { DaoSwitcher } from './dao-switcher';
 import { NavRail, type ShellNavItem, TabBar } from './nav';
 import { ShellFrame } from './shell-frame';
@@ -41,12 +39,6 @@ const MORE_META: Partial<Record<DaoNavKey, string>> = {
   manage: 'Settings, roles and setup'
 };
 
-const homeMark = css({
-  display: 'grid',
-  placeItems: 'center',
-  borderRadius: '10px',
-  _focusVisible: { outline: '2px solid', outlineColor: 'signal', outlineOffset: '2px' }
-});
 const moreList = css({ display: 'grid', listStyle: 'none', m: '0', p: '0' });
 const moreIcon = css({
   display: 'grid',
@@ -91,21 +83,7 @@ export function DaoShell({ children }: { children: ReactNode }) {
 
   return (
     <ShellFrame
-      rail={
-        <NavRail
-          label={`${name} sections`}
-          top={
-            <Tooltip content="Builder home" placement="right" id="rail-builder-home">
-              <NextLink href="/" className={homeMark} aria-label="Builder home">
-                <BrandMark size={36} />
-              </NextLink>
-            </Tooltip>
-          }
-          items={rail}
-          footerItems={railFooter}
-          activeKey={active}
-        />
-      }
+      rail={<NavRail label={`${name} sections`} items={rail} footerItems={railFooter} activeKey={active} />}
       topStart={
         <DaoSwitcher current={{ id: daoId, name, image: daoConfig.contractImage, seed: daoConfig.tokenContractId }} />
       }

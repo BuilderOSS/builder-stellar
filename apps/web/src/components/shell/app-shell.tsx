@@ -6,10 +6,9 @@ import { usePathname } from 'next/navigation';
 import { type ReactNode, useState } from 'react';
 import { css } from 'styled-system/css';
 
-import { Tooltip } from '@/components/ui';
 import { activeNavKey } from '@/lib/dao-nav';
 
-import { BrandLockup, BrandMark } from './brand-mark';
+import { BrandLockup } from './brand-mark';
 import { NavRail, type ShellNavItem, TabBar } from './nav';
 import { ShellFrame } from './shell-frame';
 import { WalletButton } from './wallet-button';
@@ -22,29 +21,6 @@ const GLOBAL_NAV: ShellNavItem[] = [
 ];
 
 const mobileOnly = css({ display: { base: 'inline-flex', md: 'none' }, textDecoration: 'none' });
-const homeMark = css({
-  display: 'grid',
-  placeItems: 'center',
-  borderRadius: '10px',
-  _focusVisible: { outline: '2px solid', outlineColor: 'signal', outlineOffset: '2px' }
-});
-const createButton = css({
-  display: 'grid',
-  placeItems: 'center',
-  width: '12',
-  height: '12',
-  borderRadius: '14px',
-  bg: 'primary',
-  color: 'primary.fg',
-  transitionProperty: 'background-color, scale',
-  transitionDuration: 'press',
-  transitionTimingFunction: 'out',
-  _active: { scale: '0.96' },
-  '@media (hover: hover) and (pointer: fine)': { _hover: { bg: 'primary.hover' } },
-  _focusVisible: { outline: '2px solid', outlineColor: 'signal', outlineOffset: '2px' },
-  '& svg': { width: '5.5', height: '5.5' }
-});
-
 /** Builder outside a community: Home, Discover, Market and You. */
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -56,22 +32,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       rail={
         <NavRail
           label="Builder"
-          top={
-            <Tooltip content="Builder home" placement="right" id="rail-builder-home">
-              <NextLink href="/" className={homeMark} aria-label="Builder home">
-                <BrandMark size={36} />
-              </NextLink>
-            </Tooltip>
-          }
           items={GLOBAL_NAV}
           activeKey={active}
-          footer={
-            <Tooltip content="Start a DAO" placement="right" id="rail-start-dao">
-              <NextLink href="/create" className={createButton} aria-label="Start a DAO">
-                <Plus aria-hidden="true" strokeWidth={2.25} />
-              </NextLink>
-            </Tooltip>
-          }
+          action={{ label: 'Start a DAO', href: '/create', icon: Plus }}
         />
       }
       topStart={

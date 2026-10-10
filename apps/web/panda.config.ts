@@ -36,6 +36,8 @@ const tokens = defineTokens({
   },
   zIndex: {
     bar: { value: 40 },
+    // The rail floats over the sticky top bar when it widens.
+    rail: { value: 41 },
     overlay: { value: 60 },
     toast: { value: 80 }
   }

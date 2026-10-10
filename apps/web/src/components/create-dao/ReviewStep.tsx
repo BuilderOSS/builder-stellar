@@ -21,8 +21,8 @@ export function ReviewStep({ connectedAddress }: { connectedAddress?: string }) 
   const assets = creationAssets(configuredCreationNetwork());
   const assetName = (id: string) => assets.find((a) => a.contractId === id)?.code ?? id;
   const rows = [
-    ['Name', `${basic.tokenName} · ${basic.tokenSymbol}`],
-    ['About', basic.description],
+    ['Name', [basic.tokenName, basic.tokenSymbol].filter(Boolean).join(' · ') || 'Not set yet'],
+    ['About', basic.description || 'Not set yet'],
     [
       'Auctions',
       auction.enabled

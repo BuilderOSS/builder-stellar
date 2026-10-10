@@ -6,12 +6,12 @@ import type { ZodError } from 'zod';
 
 import { BasicInfoStep, GovernanceStep, MembershipStep, ReviewStep } from '@/components/create-dao';
 import { DeploymentProgress } from '@/components/create-dao/DeploymentProgress';
+import { SectionOutline } from '@/components/create-dao/SectionOutline';
 import styles from '@/components/create-dao/workspace-styles';
 import { useWorkspaceSync } from '@/components/local-workspace/workspace-sync';
-import { Button, Callout, Heading, PageHeader, ProgressSteps } from '@/components/ui';
+import { Button, Callout, PageHeader } from '@/components/ui';
 import {
   configuredCreationNetwork,
-  CREATE_DAO_SECTIONS,
   draftConfigurationSchema,
   sectionSchemas,
   validateCreationAssets
@@ -20,6 +20,26 @@ import { getDeploymentConfig, isDeploymentConfigured } from '@/lib/deployment-co
 import { pollCreatedDao, useDaoDeployment } from '@/lib/use-dao-deployment';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { creationStorageError, useCreateDaoStore } from '@/stores/create-dao-store';
+
+// One long form, read top to bottom. Ids double as anchors for the outline.
+const FORM_SECTIONS = [
+  {
+    id: 'identity',
+    title: 'Identity',
+    description: 'Your name, picture and what the community is about. This is how people find you.'
+  },
+  {
+    id: 'membership',
+    title: 'Membership',
+    description: 'How people join: auctions, the market, and what a token costs.'
+  },
+  { id: 'voting', title: 'Voting', description: 'How proposals pass and how long each stage takes.' },
+  {
+    id: 'review',
+    title: 'Check and create',
+    description: 'Everything above in plain words. Nothing is signed until you press Create.'
+  }
+] as const;
 
 export default function CreateDaoPage() {
   useWorkspaceSync();
@@ -32,7 +52,6 @@ export default function CreateDaoPage() {
   const [busy, setBusy] = useState(false);
   const operation = useRef(false);
   const indexingRequest = useRef<AbortController | null>(null);
-  const heading = useRef<HTMLHeadingElement>(null);
   const configured = isDeploymentConfigured();
   const network = configuredCreationNetwork();
   const deployment = configured ? getDeploymentConfig().managerAddress : 'unconfigured';
@@ -40,7 +59,6 @@ export default function CreateDaoPage() {
   const ready = readyScope === currentScope;
   const { state, deployDao } = useDaoDeployment(session.address, network);
   const draft = store.drafts.find((d) => d.id === store.activeDraftId);
-  const index = CREATE_DAO_SECTIONS.findIndex((s) => s.id === store.section);
   useEffect(() => {
     let canceled = false;
     void (async () => {
@@ -60,9 +78,6 @@ export default function CreateDaoPage() {
       indexingRequest.current?.abort();
     };
   }, [network, deployment, session.address, currentScope]);
-  useEffect(() => {
-    if (ready) heading.current?.focus();
-  }, [store.section, ready]);
 
   const showErrors = (error: ZodError) => {
     store.clearAllValidationErrors();
@@ -74,22 +89,6 @@ export default function CreateDaoPage() {
     requestAnimationFrame(() =>
       document.querySelector<HTMLElement>('[aria-invalid="true"], [data-invalid="true"]')?.focus()
     );
-  };
-  const next = () => {
-    const input =
-      store.section === 'basicInfo'
-        ? store.basicInfo
-        : store.section === 'governance'
-          ? store.governance
-          : { basicInfo: store.basicInfo, auction: store.auction, marketplace: store.marketplace };
-    if (store.section === 'review') return;
-    const parsed = sectionSchemas[store.section].safeParse(input);
-    if (!parsed.success) {
-      showErrors(parsed.error);
-      return;
-    }
-    store.clearAllValidationErrors();
-    store.setSection(CREATE_DAO_SECTIONS[index + 1].id);
   };
   const openSetup = async (token: string) => {
     indexingRequest.current?.abort();
@@ -113,19 +112,13 @@ export default function CreateDaoPage() {
     if (operation.current || !draft) return;
     const parsed = draftConfigurationSchema.safeParse(draft.configuration);
     if (!parsed.success) {
-      const issue = parsed.error.issues[0];
-      const section =
-        issue.path[0] === 'governance'
-          ? 'governance'
-          : issue.path[0] === 'basicInfo' &&
-              ['tokenName', 'tokenSymbol', 'contractImage'].includes(String(issue.path[1]))
-            ? 'basicInfo'
-            : ['tokenUri', 'rendererBase'].includes(String(issue.path[1]))
-              ? 'review'
-              : 'membership';
-      store.setSection(section);
+      // Every section is on the page, so focusing the first invalid field scrolls straight to it.
       showErrors(parsed.error);
-      setPageError('Some configuration fields need attention. Return to the relevant step.');
+      setPageError(
+        parsed.error.issues.length === 1
+          ? 'One field needs attention. We took you to it.'
+          : `${parsed.error.issues.length} fields need attention. We took you to the first one.`
+      );
       return;
     }
     try {
@@ -155,8 +148,20 @@ export default function CreateDaoPage() {
     session.walletNetworkPassphrase !== getDeploymentConfig().networkPassphrase
       ? 'Switch your wallet to this workspace’s network.'
       : '');
+  const complete: Record<(typeof FORM_SECTIONS)[number]['id'], boolean> = {
+    // Description and website are checked with membership's schema but shown under Identity.
+    identity:
+      sectionSchemas.basicInfo.safeParse(store.basicInfo).success &&
+      sectionSchemas.membership.shape.basicInfo.safeParse(store.basicInfo).success,
+    membership:
+      sectionSchemas.membership.shape.auction.safeParse(store.auction).success &&
+      sectionSchemas.membership.shape.marketplace.safeParse(store.marketplace).success,
+    voting: sectionSchemas.governance.safeParse(store.governance).success,
+    review: false
+  };
+  const outline = FORM_SECTIONS.map(({ id, title }) => ({ id, title, complete: complete[id] }));
   return (
-    <div className={styles.workspace}>
+    <div className={styles.createPage}>
       <div>
         <PageHeader
           title="Start a DAO"
@@ -164,7 +169,9 @@ export default function CreateDaoPage() {
             creationStorageError() || (ready ? `Saved on this browser as you go · ${network}` : 'Opening your draft…')
           }
         />
-        {pageError ? <Callout variant="error" title="This needs attention" description={pageError} /> : null}
+        {pageError && (!ready || draft?.deployment) ? (
+          <Callout variant="error" title="This needs attention" description={pageError} />
+        ) : null}
         {!ready ? (
           <p role="status">{pageError ? 'Open Drafts to pick a draft on this network.' : 'Loading your draft…'}</p>
         ) : draft?.deployment ? (
@@ -221,73 +228,71 @@ export default function CreateDaoPage() {
             {walletIssue ? <p className={styles.error}>{walletIssue}</p> : null}
           </>
         ) : (
-          <>
-            <ProgressSteps
-              steps={CREATE_DAO_SECTIONS.map((section) => ({ id: section.id, label: section.title }))}
-              current={Math.max(0, index)}
-              onSelect={(target) => store.setSection(CREATE_DAO_SECTIONS[target].id)}
-              canSelect={() => true}
-            />
-            <section className={styles.panel} aria-labelledby="step-heading">
-              <Heading ref={heading} id="step-heading" tabIndex={-1} as="h2" size="title">
-                {CREATE_DAO_SECTIONS[index]?.title}
-              </Heading>
-              {store.section === 'basicInfo' ? (
-                <BasicInfoStep />
-              ) : store.section === 'membership' ? (
-                <MembershipStep />
-              ) : store.section === 'governance' ? (
-                <GovernanceStep />
-              ) : (
-                <ReviewStep connectedAddress={session.address} />
-              )}
-            </section>
-            <div className={styles.actions}>
-              {index > 0 ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => store.setSection(CREATE_DAO_SECTIONS[index - 1].id)}
+          <div className={styles.formLayout}>
+            <div className={styles.form}>
+              {FORM_SECTIONS.map((section, position) => (
+                <section
+                  key={section.id}
+                  id={section.id}
+                  tabIndex={-1}
+                  aria-labelledby={`${section.id}-heading`}
+                  className={styles.formSection}
                 >
-                  Back
-                </Button>
-              ) : (
-                <Link href={{ pathname: '/drafts' }}>Save for later</Link>
-              )}
-              {store.section !== 'review' ? (
-                <Button type="button" onClick={next}>
-                  Continue
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  onClick={() => void deploy()}
-                  disabled={
-                    busy ||
-                    !authenticated ||
-                    !configured ||
-                    Boolean(walletIssue) ||
-                    Boolean(store.imagePreview) ||
-                    Boolean(creationStorageError())
-                  }
-                >
-                  {busy ? 'Creating…' : 'Create community'}
-                </Button>
-              )}
+                  <div className={styles.formSectionHead}>
+                    <h2 id={`${section.id}-heading`} className={styles.formSectionTitle}>
+                      <span aria-hidden="true">{position + 1}</span>
+                      {section.title}
+                    </h2>
+                    <p className={styles.muted}>{section.description}</p>
+                  </div>
+                  {section.id === 'identity' ? (
+                    <BasicInfoStep />
+                  ) : section.id === 'membership' ? (
+                    <MembershipStep />
+                  ) : section.id === 'voting' ? (
+                    <GovernanceStep />
+                  ) : (
+                    <>
+                      <ReviewStep connectedAddress={session.address} />
+                      {pageError ? (
+                        <Callout variant="error" title="This needs attention" description={pageError} />
+                      ) : null}
+                      <div className={styles.actions}>
+                        <Link href={{ pathname: '/drafts' }}>Save for later</Link>
+                        <Button
+                          type="button"
+                          onClick={() => void deploy()}
+                          disabled={
+                            busy ||
+                            !authenticated ||
+                            !configured ||
+                            Boolean(walletIssue) ||
+                            Boolean(store.imagePreview) ||
+                            Boolean(creationStorageError())
+                          }
+                        >
+                          {busy ? 'Creating…' : 'Create community'}
+                        </Button>
+                      </div>
+                      <p className={styles.muted}>
+                        {!configured
+                          ? "Creating isn't set up on this deployment yet. Your draft is still saved."
+                          : !authenticated
+                            ? 'Connect your wallet when you’re ready to create it.'
+                            : walletIssue ||
+                              (store.imagePreview
+                                ? 'Upload your image (or use the saved one) in Identity first.'
+                                : 'You sign once to create it in Setup. You launch it later, when it’s ready.')}
+                      </p>
+                    </>
+                  )}
+                </section>
+              ))}
             </div>
-            {store.section === 'review' ? (
-              <p className={styles.muted}>
-                {!configured
-                  ? "Creating isn't set up on this deployment yet. Your draft is still saved."
-                  : !authenticated
-                    ? 'Connect your wallet when you’re ready to create it.'
-                    : walletIssue ||
-                      (store.imagePreview
-                        ? 'Upload your image (or use the saved one) in Identity first.'
-                        : 'You sign once to create it in Setup. You launch it later, when it’s ready.')}
-              </p>
-            ) : null}
-          </>
+            <div className={styles.outline}>
+              <SectionOutline sections={outline} />
+            </div>
+          </div>
         )}
       </div>
     </div>

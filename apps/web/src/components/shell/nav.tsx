@@ -3,10 +3,9 @@
 import type { LucideIcon } from 'lucide-react';
 import type { Route } from 'next';
 import NextLink from 'next/link';
-import type { ReactNode } from 'react';
 import { css, cx, sva } from 'styled-system/css';
 
-import { Tooltip } from '@/components/ui';
+import { BrandMark } from './brand-mark';
 
 export type ShellNavItem = {
   key: string;
@@ -52,39 +51,60 @@ function badgeLabel(item: ShellNavItem) {
   return item.badge === true ? `${item.label}, new` : `${item.label}, ${item.badge}`;
 }
 
+const RAIL_OPEN_WIDTH = '232px';
+
 const rail = sva({
-  slots: ['root', 'top', 'list', 'item', 'icon', 'footer', 'separator'],
+  slots: ['root', 'panel', 'list', 'item', 'icon', 'label', 'footer', 'separator', 'brand'],
   base: {
+    // The root holds the 72px column; the panel inside floats over the page when it widens,
+    // so opening the rail never reflows content.
     root: {
-      display: { base: 'none', md: 'flex' },
-      flexDirection: 'column',
-      alignItems: 'center',
-      gap: '2',
+      display: { base: 'none', md: 'block' },
       position: 'sticky',
       top: '0',
       height: '100dvh',
       width: 'rail',
+      zIndex: 'rail'
+    },
+    panel: {
+      position: 'absolute',
+      insetY: '0',
+      left: '0',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '2',
+      width: 'rail',
       py: '4',
+      px: '3',
+      overflowX: 'hidden',
+      overflowY: 'auto',
       bg: 'surface',
       borderRightWidth: '1px',
       borderColor: 'rule',
-      zIndex: 'bar'
+      // Width is the one layout property animated here: the panel is out of flow and holds a
+      // handful of rows, so the cost is tiny and rows keep their real shape as it grows.
+      transitionProperty: 'width, box-shadow',
+      transitionDuration: '160ms',
+      transitionTimingFunction: 'out',
+      transitionDelay: '0ms',
+      // Open on a deliberate hover (pointer devices only) or keyboard focus, never on a tap.
+      '@media (hover: hover) and (pointer: fine)': {
+        '[data-rail]:hover > &': {
+          width: RAIL_OPEN_WIDTH,
+          boxShadow: 'float',
+          transitionDuration: '220ms',
+          transitionDelay: '120ms'
+        }
+      },
+      '[data-rail]:has(:focus-visible) > &': { width: RAIL_OPEN_WIDTH, boxShadow: 'float' },
+      _motionReduce: { transitionDuration: '0ms !important' }
     },
-    top: { display: 'grid', placeItems: 'center', mb: '1' },
-    list: {
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      gap: '1',
-      listStyle: 'none',
-      m: '0',
-      p: '0'
-    },
+    list: { display: 'flex', flexDirection: 'column', gap: '1', listStyle: 'none', m: '0', p: '0' },
     item: {
       position: 'relative',
-      display: 'grid',
-      placeItems: 'center',
-      width: '12',
+      display: 'flex',
+      alignItems: 'center',
+      width: '100%',
       height: '12',
       borderRadius: '14px',
       color: 'ink.muted',
@@ -109,29 +129,69 @@ const rail = sva({
           bg: 'signal'
         }
       },
+      '&[data-tone=primary]': {
+        bg: 'primary',
+        color: 'primary.fg',
+        '@media (hover: hover) and (pointer: fine)': { _hover: { bg: 'primary.hover', color: 'primary.fg' } }
+      },
       '@media (prefers-reduced-motion: reduce)': { _active: { scale: '1' } }
     },
-    icon: { position: 'relative', display: 'inline-flex', '& svg': { width: '5.5', height: '5.5' } },
-    footer: { mt: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1' },
-    separator: { width: '7', height: '1px', bg: 'rule', my: '1' }
+    icon: {
+      position: 'relative',
+      display: 'grid',
+      placeItems: 'center',
+      width: '12',
+      height: '12',
+      flexShrink: '0',
+      '& > svg.lucide': { width: '5.5', height: '5.5' }
+    },
+    // Labels stay in the DOM (they name the links); they fade in once the panel has room.
+    label: {
+      pr: '3',
+      whiteSpace: 'nowrap',
+      textStyle: 'label',
+      fontSize: '0.875rem',
+      opacity: '0',
+      transform: 'translateX(-4px)',
+      transitionProperty: 'opacity, transform',
+      transitionDuration: '100ms',
+      transitionTimingFunction: 'out',
+      '@media (hover: hover) and (pointer: fine)': {
+        '[data-rail]:hover &': {
+          opacity: '1',
+          transform: 'translateX(0)',
+          transitionDuration: '200ms',
+          transitionDelay: '180ms'
+        }
+      },
+      '[data-rail]:has(:focus-visible) &': { opacity: '1', transform: 'translateX(0)' },
+      _motionReduce: { transform: 'none' }
+    },
+    brand: { fontFamily: 'display', fontWeight: '700', fontSize: '1.0625rem', color: 'ink' },
+    footer: { mt: 'auto', display: 'flex', flexDirection: 'column', gap: '1' },
+    separator: { height: '1px', bg: 'rule', my: '1', mx: '2' }
   }
 });
 
-/** Desktop and tablet navigation: icons with tooltips, active item marked in signal blue. */
+/**
+ * Desktop and tablet navigation: a 72px icon rail that widens on hover (or keyboard focus)
+ * to show labels. The active item is marked in signal blue.
+ */
 export function NavRail({
   label,
-  top,
+  homeHref = '/',
   items,
   footerItems = [],
   activeKey,
-  footer
+  action
 }: {
   label: string;
-  top?: ReactNode;
+  homeHref?: string;
   items: ShellNavItem[];
   footerItems?: ShellNavItem[];
   activeKey?: string;
-  footer?: ReactNode;
+  /** One filled action pinned to the bottom, e.g. Start a DAO. */
+  action?: Pick<ShellNavItem, 'label' | 'href' | 'icon'>;
 }) {
   const classes = rail();
   const renderItem = (item: ShellNavItem) => {
@@ -139,35 +199,41 @@ export function NavRail({
     const active = item.key === activeKey;
     return (
       <li key={item.key}>
-        <Tooltip content={item.label} placement="right" id={`rail-${item.key}`}>
-          <NextLink
-            href={item.href as Route}
-            className={classes.item}
-            aria-current={active ? 'page' : undefined}
-            aria-label={badgeLabel(item)}
-          >
-            <span className={classes.icon}>
-              <Icon aria-hidden="true" strokeWidth={active ? 2.25 : 1.75} />
-              <NavBadge value={item.badge} />
-            </span>
-          </NextLink>
-        </Tooltip>
+        <NextLink href={item.href as Route} className={classes.item} aria-current={active ? 'page' : undefined}>
+          <span className={classes.icon}>
+            <Icon aria-hidden="true" strokeWidth={active ? 2.25 : 1.75} />
+            <NavBadge value={item.badge} />
+          </span>
+          <span className={classes.label}>{item.label}</span>
+          {item.badge ? <span className="sr-only">{badgeLabel(item).slice(item.label.length)}</span> : null}
+        </NextLink>
       </li>
     );
   };
 
   return (
-    <nav className={classes.root} aria-label={label}>
-      {top ? (
-        <>
-          <div className={classes.top}>{top}</div>
-          <span className={classes.separator} aria-hidden="true" />
-        </>
-      ) : null}
-      <ul className={classes.list}>{items.map(renderItem)}</ul>
-      <div className={classes.footer}>
-        {footerItems.length ? <ul className={classes.list}>{footerItems.map(renderItem)}</ul> : null}
-        {footer}
+    <nav className={classes.root} aria-label={label} data-rail="">
+      <div className={classes.panel}>
+        <NextLink href={homeHref as Route} className={classes.item}>
+          <span className={classes.icon}>
+            <BrandMark size={36} />
+          </span>
+          <span className={cx(classes.label, classes.brand)}>Builder</span>
+          <span className="sr-only"> home</span>
+        </NextLink>
+        <span className={classes.separator} aria-hidden="true" />
+        <ul className={classes.list}>{items.map(renderItem)}</ul>
+        <div className={classes.footer}>
+          {footerItems.length ? <ul className={classes.list}>{footerItems.map(renderItem)}</ul> : null}
+          {action ? (
+            <NextLink href={action.href as Route} className={classes.item} data-tone="primary">
+              <span className={classes.icon}>
+                <action.icon aria-hidden="true" strokeWidth={2.25} />
+              </span>
+              <span className={classes.label}>{action.label}</span>
+            </NextLink>
+          ) : null}
+        </div>
       </div>
     </nav>
   );

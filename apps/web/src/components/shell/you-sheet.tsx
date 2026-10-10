@@ -15,6 +15,7 @@ import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { daoRoute } from '@/lib/dao-routes';
 import { isWarmInkPreference } from '@/lib/warm-ink-theme';
 
+import { BuilderDaoCredit } from './brand-mark';
 import { formatXlmBalance, useWalletSession } from './wallet-session';
 
 const block = css({ display: 'grid', gap: '3', py: '4', borderBottomWidth: '1px', borderColor: 'rule' });
@@ -215,7 +216,7 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
         <NextLink href={'/privacy' as Route}>Privacy</NextLink>
         <NextLink href={'/terms' as Route}>Terms</NextLink>
         <NextLink href={'/disclaimer' as Route}>Disclaimer</NextLink>
-        <span>Built on Nouns Builder</span>
+        <BuilderDaoCredit />
       </nav>
     </Sheet>
   );

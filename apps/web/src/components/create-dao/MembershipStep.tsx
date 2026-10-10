@@ -1,5 +1,5 @@
 'use client';
-import { DurationInput, Input, Select, Switch, Textarea } from '@/components/ui';
+import { DurationInput, Input, Select, Switch } from '@/components/ui';
 import { configuredCreationNetwork, creationAssets } from '@/lib/create-dao-schema';
 import { MAX_MARKETPLACE_FEE_BPS } from '@/lib/governance-limits';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
@@ -9,7 +9,6 @@ import { PercentField } from './PercentField';
 import styles from './workspace-styles';
 
 export function MembershipStep() {
-  const basic = useCreateDaoStore((s) => s.basicInfo);
   const auction = useCreateDaoStore((s) => s.auction);
   const market = useCreateDaoStore((s) => s.marketplace);
   const errors = useCreateDaoStore((s) => s.validationErrors);
@@ -17,28 +16,6 @@ export function MembershipStep() {
   const assets = creationAssets(configuredCreationNetwork());
   return (
     <div className={styles.stack}>
-      <CreationField id="description" label="Description" hint="12–240 characters">
-        <Textarea
-          id="description"
-          rows={3}
-          maxLength={240}
-          value={basic.description}
-          {...fieldAccessibility('description', errors)}
-          onChange={(e) => {
-            store.updateBasicInfo({ description: e.target.value });
-            store.clearValidationError('description');
-          }}
-        />
-      </CreationField>
-      <CreationField id="projectUri" label="Website">
-        <Input
-          id="projectUri"
-          type="url"
-          value={basic.projectUri}
-          {...fieldAccessibility('projectUri', errors)}
-          onChange={(e) => store.updateBasicInfo({ projectUri: e.target.value })}
-        />
-      </CreationField>
       <div className={styles.group}>
         <Switch
           label="Run auctions"

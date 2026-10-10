@@ -86,7 +86,7 @@ components:
 
 **Memorable thing:** "Our community, our rules, our treasury." Every screen shows whose it is and what you can do in it.
 
-**Lineage:** Builder is built on Nouns Builder. Give it a subtle nod (a noggles-inspired detail in the mark, the 404, the footer credit "Built on Nouns Builder"), never a theme.
+**Lineage:** Builder is built on Nouns Builder. Give it a subtle nod (a noggles-inspired detail in the mark, the 404, the footer credit "Built by Builder DAO", linking to Builder DAO on nouns.build), never a theme.
 
 **Reference:** `docs/design/builder-dusk-preview.html` renders the system on real screens in both themes.
 
@@ -134,7 +134,7 @@ Mobile first. Breakpoints: sm 480, md 768 (rail replaces tab bar), lg 1024, xl 1
 
 - Outside a community: Home, Discover, Market, You. "Start a DAO" is an action, not a tab.
 - Inside a community: Home, Vote, [slot 3], Treasury, More. Slot 3 shows Auction when the community runs auctions, else Market when its marketplace is enabled, else Members.
-- Mobile shows a bottom tab bar. From md the same destinations become a left icon rail with tooltips, and Members and Manage get their own rail items.
+- Mobile shows a bottom tab bar. From md the same destinations become a left icon rail, and Members and Manage get their own rail items. On a deliberate hover (pointer devices, 120ms intent delay) or keyboard focus, the rail widens over the page to 232px and shows labels; it never reflows content and never opens on tap.
 - The community switcher lives in the top bar on every screen.
 
 ### Density rules
@@ -205,3 +205,5 @@ Authority language is correctness, not style, and stays exact:
 |------|----------|-----------|
 | 2026-10-10 | Warm Ink · Dusk system created | /design-consultation: newcomer audience, dark hero, #0085FF signal, First Draft navigation patterns |
 | 2026-10-10 | Art-first community cards, subtle Nouns nod, no module hues | nouns.build review: community art is the strongest brand asset; chrome stays restrained |
+| 2026-10-10 | Create a DAO is one long form with sections, not a stepper | Everything is visible and editable in one pass; an "On this page" outline (lg+) shows progress and jumps between sections; Create validates the whole form and focuses the first problem |
+| 2026-10-10 | Rail expands on hover with labels; marketplace private labels removed | Labels beat tooltips for newcomers; private labels added a field per card with no trading value |

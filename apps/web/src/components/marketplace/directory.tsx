@@ -13,13 +13,9 @@ import {
   Checkbox,
   Chip,
   Crest,
-  Disclosure,
   EmptyState,
   ErrorState,
-  Field,
-  FieldLabel,
   IconButton,
-  Input,
   Pagination,
   SearchInput,
   SegmentedControl,
@@ -188,14 +184,13 @@ export function MarketplaceDirectoryView() {
           <section className={styles.grid} aria-label="Communities">
             {communities.map((community) => {
               const saved = preferences.favorites.includes(community.daoId);
-              const label = preferences.labels[community.daoId];
               return (
                 <article className={card} key={community.daoId}>
                   <div className={cardHead}>
                     <Crest name={community.name} seed={community.tokenContract || community.daoId} size="lg" />
                     <div className={css({ minW: '0', flex: '1' })}>
                       <h2 className={cardName}>{community.name}</h2>
-                      <p className={note}>{[community.symbol, label].filter(Boolean).join(' · ') || 'Community'}</p>
+                      <p className={note}>{community.symbol || 'Community'}</p>
                     </div>
                     <IconButton
                       label={`${saved ? 'Unsave' : 'Save'} ${community.name}`}
@@ -221,19 +216,6 @@ export function MarketplaceDirectoryView() {
                       ))}
                     </div>
                   ) : null}
-                  <Disclosure title="Your private label">
-                    <Field>
-                      <FieldLabel htmlFor={`label-${community.daoId}`}>Only you see this, on this device</FieldLabel>
-                      <Input
-                        id={`label-${community.daoId}`}
-                        maxLength={60}
-                        value={label ?? ''}
-                        onChange={(e) =>
-                          update({ labels: { ...preferences.labels, [community.daoId]: e.target.value } })
-                        }
-                      />
-                    </Field>
-                  </Disclosure>
                   <ButtonLink href={`/dao/${community.daoId}/marketplace` as Route} variant="secondary" block>
                     See what&apos;s for sale
                   </ButtonLink>
@@ -286,8 +268,8 @@ export function MarketplaceDirectoryView() {
           disabled={result.isLoading}
         />
         <p className={note}>
-          Saved communities, labels and your market view stay on this device. Every trade checks the live chain before
-          you sign, so a listing shown here may already be gone.{' '}
+          Saved communities and your market view stay on this device. Every trade checks the live chain before you sign,
+          so a listing shown here may already be gone.{' '}
           <NextLink href="/discover" className={css({ color: 'signal' })}>
             Discover communities
           </NextLink>

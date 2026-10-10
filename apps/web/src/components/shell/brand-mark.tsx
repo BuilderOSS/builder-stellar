@@ -47,3 +47,14 @@ export function BrandLockup({ className }: { className?: string }) {
     </span>
   );
 }
+
+const BUILDER_DAO_URL = 'https://nouns.build/dao/base/0xe8af882f2f5c79580230710ac0e2344070099432';
+
+/** Credit line linking to Builder DAO on nouns.build. Inherits the surrounding text style. */
+export function BuilderDaoCredit({ className }: { className?: string }) {
+  return (
+    <a href={BUILDER_DAO_URL} target="_blank" rel="noopener noreferrer" className={className}>
+      Built by Builder DAO
+    </a>
+  );
+}

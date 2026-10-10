@@ -6,12 +6,14 @@ import { css } from 'styled-system/css';
 import { ActivityList } from '@/components/activity/activity-list';
 import { CommunityCard, type CommunitySummary } from '@/components/community/community-card';
 import { communityGrid, toCommunitySummary } from '@/components/community/community-grid';
-import { LocalDrafts } from '@/components/local-workspace/local-drafts';
+import { BuilderDaoCredit } from '@/components/shell/brand-mark';
 import { useWalletSession } from '@/components/shell/wallet-session';
 import { Button, ButtonLink, Callout, EmptyState, Section, Skeleton } from '@/components/ui';
 import { useHomeDao } from '@/hooks/use-home-dao';
 import type { DaoConfig } from '@/lib/dao-db';
 import { useDashboardData } from '@/lib/goldsky-queries';
+
+import { HomeDrafts } from './home-drafts';
 
 const hero = css({ display: 'grid', gap: '5', py: { base: '6', md: '12' }, maxW: '760px' });
 const heroTitle = css({
@@ -61,7 +63,12 @@ const step = css({
 });
 const stepTitle = css({ textStyle: 'subheading', m: '0' });
 const stepBody = css({ textStyle: 'body', color: 'ink.muted', m: '0' });
-const credit = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
+const credit = css({
+  textStyle: 'caption',
+  color: 'ink.muted',
+  m: '0',
+  '& a': { color: 'ink', _hover: { color: 'signal' } }
+});
 
 function SignedOutHome({ daos }: { daos: DaoConfig[] }) {
   const featured = daos.slice(0, 8).map((dao) => toCommunitySummary(dao));
@@ -122,7 +129,9 @@ function SignedOutHome({ daos }: { daos: DaoConfig[] }) {
         </ol>
       </Section>
 
-      <p className={credit}>Built on Nouns Builder, for communities on Stellar.</p>
+      <p className={credit}>
+        <BuilderDaoCredit />, for communities on Stellar.
+      </p>
     </div>
   );
 }
@@ -231,7 +240,7 @@ function SignedInHome({ daos, pendingDaos }: { daos: DaoConfig[]; pendingDaos: D
         </Section>
       ) : null}
 
-      <LocalDrafts />
+      <HomeDrafts />
     </div>
   );
 }

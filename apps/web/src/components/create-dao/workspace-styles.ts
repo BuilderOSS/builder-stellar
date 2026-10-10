@@ -36,6 +36,36 @@ const nativeControls = {
 
 const styles = {
   workspace: css({ display: 'grid', gap: '6', maxW: '760px', color: 'ink', ...nativeControls }),
+  createPage: css({ display: 'grid', gap: '6', maxW: { base: '760px', lg: '1000px' }, color: 'ink' }),
+  // Long create form: sections stack; from lg an "On this page" outline sits beside them.
+  formLayout: css({
+    display: 'grid',
+    gap: '8',
+    gridTemplateColumns: { base: 'minmax(0, 1fr)', lg: 'minmax(0, 760px) 200px' },
+    alignItems: 'start'
+  }),
+  outline: css({ display: { base: 'none', lg: 'block' }, height: '100%' }),
+  form: css({ display: 'grid', gap: '6', minW: '0' }),
+  formSection: css({
+    display: 'grid',
+    gap: '5',
+    p: { base: '4', md: '6' },
+    bg: 'surface',
+    borderRadius: 'card',
+    boxShadow: 'raised',
+    scrollMarginTop: '84px',
+    outline: 'none',
+    ...nativeControls
+  }),
+  formSectionHead: css({ display: 'grid', gap: '1' }),
+  formSectionTitle: css({
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: '2.5',
+    m: '0',
+    textStyle: 'title',
+    '& > span': { textStyle: 'mono', fontSize: '0.875rem', color: 'ink.muted' }
+  }),
   header: css({ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '4' }),
   actions: css({
     display: 'flex',
@@ -126,7 +156,14 @@ const styles = {
     textStyle: 'body',
     '& input': { width: '4.5', height: '4.5', mt: '0.5', accentColor: 'var(--colors-primary)', flexShrink: '0' }
   }),
-  group: css({ display: 'grid', gap: '4', pt: '5', borderTopWidth: '1px', borderColor: 'rule' }),
+  group: css({
+    display: 'grid',
+    gap: '4',
+    pt: '5',
+    borderTopWidth: '1px',
+    borderColor: 'rule',
+    _first: { pt: '0', borderTopWidth: '0' }
+  }),
   summary: css({
     display: 'grid',
     m: '0',
