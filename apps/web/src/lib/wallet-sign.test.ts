@@ -1,18 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const walletConnect = vi.hoisted(() => ({ selected: false }));
 const kit = vi.hoisted(() => ({
   getAddress: vi.fn(async () => ({ address: 'GWALLET' })),
   getNetwork: vi.fn(async () => ({ network: 'TESTNET', networkPassphrase: 'Test SDF Network ; September 2015' })),
-  signTransaction: vi.fn()
+  signTransaction: vi.fn(),
+  get selectedModule() {
+    return { productId: walletConnect.selected ? 'wallet_connect' : 'freighter' };
+  }
 }));
-const walletConnect = vi.hoisted(() => ({ selected: false }));
 const session = vi.hoisted(() => ({
   walletNetworkPassphrase: 'Test SDF Network ; September 2015',
   walletNetworkIssue: ''
 }));
 
 vi.mock('@creit.tech/stellar-wallets-kit/sdk', () => ({ StellarWalletsKit: kit }));
-vi.mock('@/lib/wallet-kit', () => ({ isWalletConnectSelected: () => walletConnect.selected }));
 vi.mock('@/stores/auth-session-store', () => ({ useAuthSessionStore: { getState: () => session } }));
 
 import { errorMessage } from './transaction-feedback';

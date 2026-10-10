@@ -2,13 +2,21 @@
 
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 
-import { isWalletConnectSelected } from '@/lib/wallet-kit';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 export class WalletNetworkError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'WalletNetworkError';
+  }
+}
+
+/** Whether the connected wallet came through WalletConnect (mobile wallets, Freighter's in-app browser). */
+export function isWalletConnectSelected() {
+  try {
+    return StellarWalletsKit.selectedModule.productId === 'wallet_connect';
+  } catch {
+    return false;
   }
 }
 
