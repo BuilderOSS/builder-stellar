@@ -16,6 +16,7 @@ vi.mock('@builder-stellar/token-bindings', () => ({
     version = mocks.version;
     wasm_hash = mocks.hash;
     admin = mocks.admin;
+    storage_version = async () => ({ result: 1 });
   }
 }));
 vi.mock('@builder-stellar/manager-bindings', () => ({

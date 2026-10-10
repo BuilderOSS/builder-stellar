@@ -67,6 +67,22 @@ export function ModuleVersionCard({
       setBusy(false);
     }
   }
+  function proposeMigrate() {
+    if (!state.data || !canPropose) return;
+    const migrate = getAllActionHandlers().find((item) => String(item.type) === 'migrate-dao-module');
+    if (!migrate) return setMessage('Storage migration is not registered in this build.');
+    const context = { config, session: { address: session.address, kit: StellarWalletsKit } };
+    draft.requestAdd({
+      daoId,
+      action: migrate.serialize({ module }, context),
+      source: `admin/upgrades/${module}/migrate`,
+      metadata: {
+        title: `Migrate ${module} storage`,
+        description: `Run the ${module} storage migration (current storage version ${state.data.storageVersion}). Add it right after an upgrade whose release changes storage; it fails with NothingToMigrate otherwise.`,
+        url: ''
+      }
+    });
+  }
   return (
     <>
       <AdminProposalDraftDialog pending={draft.pending} onCancel={draft.cancel} onResolve={draft.resolve} />
@@ -81,7 +97,9 @@ export function ModuleVersionCard({
             <>
               <ShortId value={state.data.contractId} label="Contract" />
               {state.data.admin ? <ShortId value={state.data.admin} label="Current admin" /> : null}
-              <Text>Current version: {state.data.version}</Text>
+              <Text>
+                Current version: {state.data.version} · Storage version: {state.data.storageVersion}
+              </Text>
               <Text style={{ overflowWrap: 'anywhere' }}>Current WASM hash: {state.data.fromHash}</Text>
               <Badge>
                 {state.data.source
@@ -159,6 +177,11 @@ export function ModuleVersionCard({
               onClick={() => void propose()}
             >
               Review upgrade proposal
+            </Button>
+          ) : null}
+          {canPropose ? (
+            <Button type="button" variant="outline" disabled={busy || !state.data} onClick={proposeMigrate}>
+              Add storage migration to proposal
             </Button>
           ) : null}
           {!handler ? (

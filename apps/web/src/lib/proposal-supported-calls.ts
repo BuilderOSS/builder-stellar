@@ -11,6 +11,13 @@ import { Buffer } from 'buffer';
 import { getTreasuryAssets } from '@/lib/assets-config';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { assertMinterSpec } from '@/lib/minter/client';
+import {
+  type AuthNodeDraft,
+  authNodeSpecValue,
+  isTypedAuthArg,
+  typedAuthArgToScVal,
+  validateAuthNodes
+} from '@/lib/treasury-authorize';
 
 export type ProposalEncodingContext = Pick<
   DaoNetworkConfig,
@@ -89,6 +96,12 @@ function integer(value: unknown): string {
 
 function specValue(value: unknown, type: xdr.ScSpecTypeDef, spec: Spec): unknown {
   const name = type.type;
+  // Val arguments (e.g. AuthNode.args) must carry an explicit type; never guess.
+  if (name === 'scSpecTypeVal') {
+    if (value instanceof xdr.ScVal) return value;
+    if (isTypedAuthArg(value)) return typedAuthArgToScVal(value);
+    throw new Error('Untyped Val argument; submission is disabled.');
+  }
   if (type.type === 'scSpecTypeVec') {
     if (!Array.isArray(value))
       throw new Error('Expected a vector proposal argument (obsolete scalar ABI is unsupported).');
@@ -96,11 +109,18 @@ function specValue(value: unknown, type: xdr.ScSpecTypeDef, spec: Spec): unknown
   }
   if (type.type === 'scSpecTypeUdt') {
     const name = type.udt.name.toString();
+    // A guided AuthNode draft (fnName, typed args) becomes the AuthNode struct.
+    let input = value;
+    if (name === 'AuthNode' && value && typeof value === 'object' && 'fnName' in value) {
+      const error = validateAuthNodes([value as AuthNodeDraft]);
+      if (error) throw new Error(error);
+      input = authNodeSpecValue(value as AuthNodeDraft);
+    }
     const entry = spec.findEntry(name);
-    if (entry.type !== 'scSpecEntryUdtStructV0' || !value || typeof value !== 'object' || Array.isArray(value))
+    if (entry.type !== 'scSpecEntryUdtStructV0' || !input || typeof input !== 'object' || Array.isArray(input))
       throw new Error(`Expected ${name} struct argument.`);
     const fields = entry.udtStructV0.fields;
-    const object = value as Record<string, unknown>;
+    const object = input as Record<string, unknown>;
     const names = fields.map((field) => field.name.toString());
     if (Object.keys(object).length !== fields.length || names.some((field) => !Object.hasOwn(object, field)))
       throw new Error(`Invalid ${name} struct fields.`);
@@ -182,10 +202,13 @@ export function encodeSupportedCall(
       rpcUrl: config.rpcUrl,
       networkPassphrase: config.passphrase
     }).spec;
-    const inputs = spec.getFunc(fn).inputs;
+    // `authorize` is not an entry point: Treasury.execute intercepts it as a
+    // self-call. Its one Vec<AuthNode> argument has check_authorization's shape.
+    const specFn = role === 'treasury' && fn === 'authorize' ? 'check_authorization' : fn;
+    const inputs = spec.getFunc(specFn).inputs;
     if (args.length !== inputs.length) throw new Error(`Unsupported argument count for ${role}.${fn}.`);
     return spec.funcArgsToScVals(
-      fn,
+      specFn,
       Object.fromEntries(inputs.map((input, i) => [input.name.toString(), specValue(args[i], input.type, spec)]))
     );
   }

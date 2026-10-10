@@ -39,6 +39,10 @@ export type ProposalActionType =
   | 'set-artwork-project-uri'
   | 'set-artwork-contract-image'
   | 'upgrade-dao-module'
+  | 'migrate-dao-module'
+  | 'regenerate-token-traits'
+  | 'treasury-authorize'
+  | 'treasury-buy-listing'
   | 'set-merkle-root'
   | 'set-allowlist'
   | 'minter-batch-mint';

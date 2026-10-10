@@ -15,6 +15,7 @@ import { type PendingAdminProposal, useAdminProposalDraft } from '@/lib/use-admi
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import styles from './marketplace.module.css';
+import { TreasuryPurchase } from './treasury-purchase';
 
 export function AdminMarketplaceView({ daoId }: { daoId: string }) {
   const { daoConfig } = useDaoContext();
@@ -172,6 +173,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
             </button>
           </div>
         </section>
+        <TreasuryPurchase daoId={daoId} enabled={enabled} proposal={proposal} />
         <MarketplaceSettings
           daoId={daoId}
           enabled={enabled}

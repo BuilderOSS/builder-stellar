@@ -15,7 +15,12 @@ export function marketplaceGovernanceContext(config: DaoNetworkConfig) {
 export function marketplaceSettingHandlers(config: DaoNetworkConfig) {
   const context = marketplaceGovernanceContext(config);
   return getAllActionHandlers().filter((handler) => {
-    if (handler.type === 'create-primary-listing' || handler.type === 'cancel-primary-listing') return false;
+    if (
+      handler.type === 'create-primary-listing' ||
+      handler.type === 'cancel-primary-listing' ||
+      handler.type === 'treasury-buy-listing'
+    )
+      return false;
     try {
       return (
         Boolean(config.marketplaceContractId) &&

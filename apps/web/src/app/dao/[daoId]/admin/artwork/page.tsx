@@ -9,6 +9,7 @@ import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draf
 import { AdminSurfaceNav as AdminSectionNav } from '@/components/admin/admin-surface-nav';
 import { artworkAppendPlan } from '@/components/admin/artwork-admin-plan';
 import { ArtworkStateInspector } from '@/components/admin/artwork-state-inspector';
+import { UnseededTokens } from '@/components/admin/unseeded-tokens';
 import type { ArtworkPlan } from '@/components/create-dao/artwork-configuration';
 import { ArtworkDirectoryUpload } from '@/components/create-dao/ArtworkDirectoryUpload';
 import { ArtworkSetup } from '@/components/create-dao/ArtworkSetup';
@@ -190,7 +191,7 @@ export default function ArtworkAdminPage() {
             <Callout
               variant="info"
               title="Read-only artwork view"
-              description="Artwork authority follows the current Token admin. Connect that wallet during setup, or prepare a governance proposal after Treasury owns the Token."
+              description="Artwork authority is the Metadata admin: connect the launch admin during setup, or prepare a governance proposal once the Treasury is the admin."
             />
           ) : null}
           {artwork.data && !wired ? (
@@ -204,6 +205,17 @@ export default function ArtworkAdminPage() {
             <div role="status">
               <Callout variant="warning" title={message} />
             </div>
+          ) : null}
+          {artwork.data && wired ? (
+            <UnseededTokens
+              daoId={daoId}
+              config={config}
+              address={session.address}
+              direct={direct}
+              canPropose={canPropose}
+              hasArtwork={artwork.data.properties.length > 0}
+              proposal={proposal}
+            />
           ) : null}
           {artwork.data ? (
             <>

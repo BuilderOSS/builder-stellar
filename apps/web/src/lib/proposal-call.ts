@@ -8,6 +8,7 @@ import type {
   ProposalQueuedAction as RegisteredProposalQueuedAction
 } from '@/lib/proposal-actions/types';
 import { encodeSupportedCall, type ProposalEncodingContext } from '@/lib/proposal-supported-calls';
+import { describeAuthNodes } from '@/lib/treasury-authorize';
 
 export type ProposalCallArg = string | number | boolean | null | ProposalCallArg[] | { [key: string]: ProposalCallArg };
 
@@ -173,6 +174,10 @@ export function getProposalActionLabel(type: ProposalActionType) {
     'set-artwork-project-uri': 'Update Project URI',
     'set-artwork-contract-image': 'Update Collection Image',
     'upgrade-dao-module': 'Upgrade DAO Module',
+    'migrate-dao-module': 'Migrate Module Storage',
+    'regenerate-token-traits': 'Seed Token Traits',
+    'treasury-authorize': 'Authorize Next Action (Treasury)',
+    'treasury-buy-listing': 'Treasury Buys Listing',
     'set-merkle-root': 'Set Minter Merkle Root',
     'set-allowlist': 'Replace Minter Allowlist',
     'minter-batch-mint': 'Minter Batch Allocation'
@@ -198,6 +203,12 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
   if (action.type === 'add-artwork-properties')
     return `${getProposalActionLabel(action.type)}: ${Array.isArray(action.names) ? action.names.length : 0} new properties, ${Array.isArray(action.items) ? action.items.length : 0} ordered items (${action.ipfsGroup?.base_uri ?? 'IPFS reference unavailable'})`;
   if (action.type === 'upgrade-dao-module') return `Upgrade ${action.module}: ${action.fromHash} → ${action.toHash}`;
+  if (action.type === 'migrate-dao-module') return `Migrate ${action.module} storage`;
+  if (action.type === 'regenerate-token-traits') return `Seed traits for token #${action.tokenId}`;
+  if (action.type === 'treasury-authorize')
+    return `Authorize the next action: ${Array.isArray(action.nodes) ? describeAuthNodes(action.nodes).join('; ') : 'no nodes'}`;
+  if (action.type === 'treasury-buy-listing')
+    return `Treasury buys listed token #${action.tokenId} for at most ${action.maxPrice} base units`;
   if (
     action.type === 'set-artwork-renderer' ||
     action.type === 'set-artwork-description' ||

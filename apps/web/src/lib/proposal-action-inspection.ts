@@ -38,18 +38,42 @@ export function inspectProposalAdminCall(
       ]
     };
   }
+  const modules = [
+    ['token', config.tokenContractId],
+    ['governor', config.governorContractId],
+    ['auction', config.auctionContractId],
+    ['treasury', config.treasuryContractId],
+    ['marketplace', config.marketplaceContractId],
+    ['metadata', config.metadataContractId]
+  ];
+  const moduleName = modules.find(([, address]) => address && address === target)?.[0];
+  if (config.treasuryContractId && target === config.treasuryContractId && fn === 'authorize') {
+    // Indexed args are decoded JSON (types are not recoverable), so render the
+    // tree as read; drafts are validated and encoded with explicit types.
+    return {
+      title: 'Authorize the next action (Treasury)',
+      risk: 'High risk: lets the NEXT action of this proposal use the Treasury’s authorization for exactly these nested calls (for example SAC transfers out of the Treasury). Read every node.',
+      fields: authorizeFields(args[0])
+    };
+  }
+  if (fn === 'migrate' && moduleName) {
+    return {
+      title: `Migrate ${moduleName} storage`,
+      risk: 'Runs the module’s storage migration after an upgrade that changed storage. Fails with NothingToMigrate when the storage is current.',
+      fields: []
+    };
+  }
   const metadataCall = !!config.metadataContractId && target === config.metadataContractId;
   if (!metadataCall && fn !== 'upgrade') return null;
   const encoded = encodeSupportedCall(target, fn, args, config);
+  if (metadataCall && fn === 'regenerate') {
+    return {
+      title: `Seed traits for token #${String(scValToNative(encoded[0]!))}`,
+      risk: 'Assigns pseudo-random traits to a token minted without artwork. Fails (AlreadySeeded) if the token already has traits.',
+      fields: [{ label: 'Token ID', value: String(scValToNative(encoded[0]!)) }]
+    };
+  }
   if (fn === 'upgrade') {
-    const modules = [
-      ['token', config.tokenContractId],
-      ['governor', config.governorContractId],
-      ['auction', config.auctionContractId],
-      ['treasury', config.treasuryContractId],
-      ['marketplace', config.marketplaceContractId]
-    ];
-    const moduleName = modules.find(([, address]) => address === target)?.[0];
     if (!moduleName) return null;
     return {
       title: `Upgrade ${moduleName} module`,
@@ -87,4 +111,27 @@ export function inspectProposalAdminCall(
     risk: 'High risk: changes collection metadata or its external renderer/content reference. Authority is Metadata’s own admin (the Treasury after launch).',
     fields: [{ label: `New ${labels[fn]!.toLowerCase()}`, value: scValToNative(encoded[0]!) as string }]
   };
+}
+
+type IndexedAuthNode = { contract?: unknown; fn_name?: unknown; fnName?: unknown; args?: unknown; sub?: unknown };
+function authorizeFields(nodes: unknown): { label: string; value: string }[] {
+  const lines: string[] = [];
+  const walk = (list: unknown, depth: number) => {
+    if (!Array.isArray(list)) return;
+    for (const raw of list as IndexedAuthNode[]) {
+      const args = Array.isArray(raw?.args)
+        ? raw.args.map((arg) =>
+            arg && typeof arg === 'object' && 'type' in arg && 'value' in arg
+              ? `${String((arg as { type: unknown }).type)}:${String((arg as { value: unknown }).value)}`
+              : JSON.stringify(arg, (_, item) => (typeof item === 'bigint' ? item.toString() : item))
+          )
+        : [];
+      lines.push(
+        `${'  '.repeat(depth)}${String(raw?.contract)}.${String(raw?.fn_name ?? raw?.fnName)}(${args.join(', ')})`
+      );
+      walk(raw?.sub, depth + 1);
+    }
+  };
+  walk(nodes, 0);
+  return lines.map((value, index) => ({ label: `Authorized call ${index + 1}`, value }));
 }

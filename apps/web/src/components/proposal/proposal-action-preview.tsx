@@ -127,7 +127,10 @@ export function ProposalActionPreview({ targets, functions, args, tokenContractI
               let supported = true;
               let inspection: ProposalCallInspection | null = null;
               try {
-                encodeSupportedCall(target, functionName, actionArgs, daoConfig);
+                // Indexed authorize trees lose their Val types, so they are
+                // rendered for review rather than re-encoded.
+                if (!(target === daoConfig.treasuryContractId && functionName === 'authorize'))
+                  encodeSupportedCall(target, functionName, actionArgs, daoConfig);
                 inspection = inspectProposalAdminCall(target, functionName, actionArgs, daoConfig);
                 title =
                   inspection?.title ??
