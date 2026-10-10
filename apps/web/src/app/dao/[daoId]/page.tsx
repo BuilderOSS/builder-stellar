@@ -8,6 +8,7 @@ import useSWR from 'swr';
 
 import { DaoContractList } from '@/components/dao-contract-list';
 import { LaunchChecklist } from '@/components/launch-checklist';
+import { LocalHomeDao } from '@/components/local-workspace/home-dao';
 import { PageSection } from '@/components/page-section';
 import { ProposalStateBadge } from '@/components/proposal/proposal-state-badge';
 import type { ProposalListResponse } from '@/components/proposal/types';
@@ -220,6 +221,7 @@ export default function Page() {
       }
     >
       <div className="dashboard-controls">
+        <LocalHomeDao dao={{ id: daoId, name: config.tokenName, network: config.name }} />
         <details className="dashboard-menu">
           <summary className="dashboard-menu__trigger">
             Contracts <ChevronDown aria-hidden="true" size={14} />

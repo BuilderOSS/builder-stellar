@@ -109,7 +109,7 @@ export default function ProposalCreatePage() {
       );
 
       // Encode args and metadata
-      const encodedArgs = encodeProposalCallArgs(functions, args);
+      const encodedArgs = encodeProposalCallArgs(targets, functions, args, config);
       const description = encodeProposalMetadata(metadata);
 
       // Create governor client

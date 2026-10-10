@@ -15,9 +15,21 @@ export type ProposalDraftFinding = {
 
 const ADDRESS_FIELDS = new Set(['recipient', 'authority', 'paymentToken', 'assetContractId']);
 const IGNORED_FIELDS = new Set(['id']);
+const HASH_FIELDS = new Set(['fromHash', 'toHash', 'root']);
+const ARTWORK_STRING_FIELDS = new Set(['names', 'name', 'base_uri', 'extension']);
+const ARTWORK_SETTINGS = new Set([
+  'set-artwork-renderer',
+  'set-artwork-description',
+  'set-artwork-project-uri',
+  'set-artwork-contract-image'
+]);
 
 function normalizeValue(key: string, value: unknown): unknown {
   if (typeof value === 'string') {
+    // Hashes are 32-byte values even when their hex spelling contains only
+    // digits. Artwork strings are exact ABI values, not numeric strings.
+    if (HASH_FIELDS.has(key)) return value.trim().toLowerCase();
+    if (ARTWORK_STRING_FIELDS.has(key)) return value;
     const trimmed = value.trim();
     if (ADDRESS_FIELDS.has(key)) return trimmed.toUpperCase();
     if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) return trimmed.replace(/^(-?)0+(?=\d)/, '$1');
@@ -50,6 +62,7 @@ export function getProposalActionIdentity(action: ProposalQueuedAction): Proposa
   );
 
   const resourceKey = getProposalActionResourceKey(action);
+  if (ARTWORK_SETTINGS.has(action.type)) normalizedArgs.value = action.value;
   return {
     key: `${resourceKey}:${stableStringify(normalizedArgs)}`,
     resourceKey,
@@ -59,18 +72,33 @@ export function getProposalActionIdentity(action: ProposalQueuedAction): Proposa
 
 export function getProposalActionResourceKey(action: ProposalQueuedAction): string {
   switch (action.type) {
+    case 'set-merkle-root':
+    case 'set-allowlist':
+      return `minter:${action.minterContractId}:${action.tokenContractId}:${action.type}`;
+    case 'minter-batch-mint':
+      return `minter:${action.minterContractId}:${action.tokenContractId}:batch:${action.id}`;
     case 'set-mint-authority':
       return `${action.type}:${String(action.authority || action.recipient)
         .trim()
         .toUpperCase()}`;
     case 'set-voting-delay':
     case 'set-voting-period':
+    case 'set-queue-delay':
     case 'set-proposal-threshold':
     case 'set-quorum-bps':
       return action.type;
     case 'pause-auction':
     case 'unpause-auction':
       return 'auction:pause-state';
+    case 'pause-marketplace':
+    case 'unpause-marketplace':
+      return 'marketplace:pause-state';
+    case 'upgrade-dao-module':
+      return `upgrade:${String(action.module).trim().toLowerCase()}`;
+    case 'add-artwork-properties':
+      // Append calls allocate new property/IPFS reference slots in execution
+      // order. Even identical payloads are distinct, non-idempotent batches.
+      return `artwork:append:${action.id}`;
     case 'batch-mint-governance-token':
     case 'mint-governance-token':
       return `mint:${String(action.recipient).trim().toUpperCase()}`;
@@ -102,7 +130,17 @@ export function isHighRiskProposalAction(action: ProposalQueuedAction) {
     action.type.includes('mint') ||
     action.type === 'transfer-sac-token' ||
     action.type === 'pause-auction' ||
-    action.type === 'unpause-auction'
+    action.type === 'unpause-auction' ||
+    action.type === 'pause-marketplace' ||
+    action.type === 'unpause-marketplace' ||
+    action.type === 'set-marketplace-payment-token' ||
+    action.type === 'set-auction-payment-token' ||
+    action.type === 'upgrade-dao-module' ||
+    action.type === 'add-artwork-properties' ||
+    action.type === 'set-merkle-root' ||
+    action.type === 'set-allowlist' ||
+    action.type === 'minter-batch-mint' ||
+    ARTWORK_SETTINGS.has(action.type)
   );
 }
 

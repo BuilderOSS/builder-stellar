@@ -16,7 +16,7 @@ import {
 import type { Route } from 'next';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { type ReactNode } from 'react';
+import { type ReactNode, useEffect, useRef } from 'react';
 
 import { DaoImage } from '@/components/dao-image';
 import { DashboardFooter } from '@/components/dashboard/dashboard-footer';
@@ -24,6 +24,7 @@ import { NetworkIndicator } from '@/components/network-indicator';
 import { ProposalDraftIndicator } from '@/components/proposal/proposal-draft-indicator';
 import { Callout } from '@/components/ui';
 import { WalletControls } from '@/components/wallet-controls';
+import { WarmInkThemeControl } from '@/components/warm-ink-theme';
 import { useDaoContext } from '@/contexts/dao-context';
 import { useGoldskyMember } from '@/lib/goldsky-queries';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
@@ -83,6 +84,19 @@ function hasDaoMembership(member: ReturnType<typeof useGoldskyMember>['data']) {
 
 export function DaoShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const mobileNavRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    mobileNavRef.current?.querySelectorAll('details[open]').forEach((menu) => menu.removeAttribute('open'));
+  }, [pathname]);
+  useEffect(() => {
+    const closeOnOutsidePress = (event: PointerEvent) => {
+      const nav = mobileNavRef.current;
+      if (!nav || nav.contains(event.target as Node)) return;
+      nav.querySelectorAll('details[open]').forEach((menu) => menu.removeAttribute('open'));
+    };
+    document.addEventListener('pointerdown', closeOnOutsidePress);
+    return () => document.removeEventListener('pointerdown', closeOnOutsidePress);
+  }, []);
   const { daoId, daoConfig: currentNetwork } = useDaoContext();
   const session = useAuthSessionStore();
   const { data: memberLookup } = useGoldskyMember(currentNetwork.tokenContractId, session.address);
@@ -94,7 +108,10 @@ export function DaoShell({ children }: { children: ReactNode }) {
     label: 'Manage',
     icon: Settings
   };
-  const navItems = hasDaoMembership(memberLookup) ? [...baseNavItems, adminNavItem] : baseNavItems;
+  const canManage =
+    hasDaoMembership(memberLookup) ||
+    (currentNetwork.status === 'pending' && session.address === currentNetwork.launchAdmin);
+  const navItems = canManage ? [...baseNavItems, adminNavItem] : baseNavItems;
   const [overview, governance, treasury, auctions, members, marketplace] = navItems;
   const manage = navItems.at(-1)?.label === 'Manage' ? navItems.at(-1) : undefined;
   const marketIsActive = isRouteActive(pathname, auctions.href) || isRouteActive(pathname, marketplace.href);
@@ -182,6 +199,9 @@ export function DaoShell({ children }: { children: ReactNode }) {
                 </div>
               </Link>
             </div>
+            <div className="dao-workspace-header__theme">
+              <WarmInkThemeControl />
+            </div>
             <div className="header-actions">
               <NetworkIndicator isConnected={Boolean(session.address)} />
               <ProposalDraftIndicator daoId={daoId} config={currentNetwork} address={session.address} />
@@ -189,10 +209,23 @@ export function DaoShell({ children }: { children: ReactNode }) {
             </div>
           </header>
 
-          <nav className="mobile-nav dao-mobile-nav" aria-label="DAO workspace navigation">
+          <nav
+            ref={mobileNavRef}
+            className="mobile-nav dao-mobile-nav"
+            aria-label="DAO workspace navigation"
+            onKeyDown={(event) => {
+              if (event.key !== 'Escape') return;
+              const menu = (event.target as HTMLElement).closest('details');
+              menu?.removeAttribute('open');
+              menu?.querySelector('summary')?.focus();
+            }}
+          >
             <NavLink {...overview} active={isRouteActive(pathname, overview.href, overview.exact)} />
             <NavLink {...governance} active={isRouteActive(pathname, governance.href)} />
-            <details className={`dao-mobile-nav__menu${marketIsActive ? ' dao-mobile-nav__menu--active' : ''}`}>
+            <details
+              name="dao-mobile-navigation"
+              className={`dao-mobile-nav__menu${marketIsActive ? ' dao-mobile-nav__menu--active' : ''}`}
+            >
               <summary className="dao-mobile-nav__trigger">
                 <Store aria-hidden="true" size={16} strokeWidth={2} />
                 <span>Market</span>
@@ -204,6 +237,7 @@ export function DaoShell({ children }: { children: ReactNode }) {
             </details>
             <NavLink {...members} active={isRouteActive(pathname, members.href)} />
             <details
+              name="dao-mobile-navigation"
               className={`dao-mobile-nav__menu${isRouteActive(pathname, treasury.href) || Boolean(manage && isRouteActive(pathname, manage.href)) ? ' dao-mobile-nav__menu--active' : ''}`}
             >
               <summary className="dao-mobile-nav__trigger">
@@ -219,6 +253,7 @@ export function DaoShell({ children }: { children: ReactNode }) {
 
           <main id="main-content" className="content-shell" tabIndex={-1} aria-busy={walletDisabled || undefined}>
             <div
+              inert={walletDisabled || undefined}
               style={{
                 pointerEvents: walletDisabled ? 'none' : undefined,
                 filter: walletDisabled ? 'saturate(0.6) brightness(0.5)' : undefined,
@@ -238,7 +273,7 @@ export function DaoShell({ children }: { children: ReactNode }) {
                   alignItems: 'flex-start',
                   justifyContent: 'center',
                   padding: '24px 0',
-                  background: 'rgba(8, 9, 11, 0.78)',
+                  background: 'color-mix(in srgb, var(--canvas) 88%, transparent)',
                   backdropFilter: 'blur(3px)',
                   zIndex: 20
                 }}

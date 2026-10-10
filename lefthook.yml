@@ -7,7 +7,7 @@ pre-commit:
     # Lint and fix JavaScript/TypeScript files in web app
     lint-web:
       glob: "apps/web/**/*.{js,jsx,ts,tsx}"
-      run: pnpm --filter @stellar-dao/web lint:fix
+      run: pnpm --filter @builder-stellar/web lint:fix
       stage_fixed: true
 
     # Format Rust contract files

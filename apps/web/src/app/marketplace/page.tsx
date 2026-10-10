@@ -1,18 +1,9 @@
-import type { Metadata } from 'next';
+import { MarketplaceDirectoryView } from '@/components/marketplace/directory';
 
-import { MarketplaceComingSoon } from '@/components/marketplace/marketplace-coming-soon';
-
-export const metadata: Metadata = {
-  title: 'Marketplace | Stellar DAOs',
-  description: 'Discover and trade assets from Stellar DAOs.'
+export const metadata = {
+  title: 'Community Marketplace',
+  description: 'Discover Stellar communities and trade governance NFTs.'
 };
-
 export default function MarketplacePage() {
-  return (
-    <div className="page-shell">
-      <main className="app-frame standalone-page" id="main-content">
-        <MarketplaceComingSoon />
-      </main>
-    </div>
-  );
+  return <MarketplaceDirectoryView />;
 }

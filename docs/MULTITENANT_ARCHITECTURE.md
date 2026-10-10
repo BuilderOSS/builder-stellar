@@ -1,430 +1,61 @@
-# Multi-Tenant Architecture
+# Tenant and read-model boundaries
 
-> **Status**: Phase 2 Complete - Database and frontend infrastructure ready
+One application build selects a Manager deployment. Each DAO is identified by its Token contract address. The identity pair is:
 
-This document describes the multi-tenant DAO architecture where one application instance manages multiple DAOs through a single manager contract.
-
-## Overview
-
-The multi-tenant model separates concerns into two levels:
-
-1. **Deployment Level** - One per application instance
-   - Identified by `deployment_id` = "manager:CONTRACT_ADDRESS"
-   - Constant throughout app lifetime
-   - Filters all database queries for isolation
-
-2. **DAO Level** - Multiple per deployment
-   - Identified by `dao_id` = token contract address
-   - Immutable after creation
-   - Composite key: `(deployment_id, dao_id)`
-
-## Architecture Diagram
-
-```
-┌─ Application Instance ─────────────────────┐
-│                                             │
-│  deployment_id = "manager:CBSKIHNN..."    │
-│  NEXT_PUBLIC_NETWORK = "testnet"          │
-│                                             │
-│  ┌─ DAO 1 ────────────────────┐           │
-│  │ dao_id = "CBGLIC3V..."      │           │
-│  │ token_address = "CBGLIC3V..." │         │
-│  │ status = "operational"       │           │
-│  │ Contracts:                   │           │
-│  │  - Governor, Auction         │           │
-│  │  - Treasury, Metadata        │           │
-│  └──────────────────────────────┘           │
-│                                             │
-│  ┌─ DAO 2 ────────────────────┐           │
-│  │ dao_id = "CBY5K7XM..."      │           │
-│  │ token_address = "CBY5K7XM..." │         │
-│  │ status = "pending"           │           │
-│  │ Contracts:                   │           │
-│  │  - Governor, Auction         │           │
-│  │  - Treasury, Metadata        │           │
-│  └──────────────────────────────┘           │
-│                                             │
-│  ┌─ DAO N ────────────────────┐           │
-│  │ ...                          │           │
-│  └──────────────────────────────┘           │
-│                                             │
-└─────────────────────────────────────────────┘
+```text
+deployment_id = manager:<Manager contract address>
+dao_id        = <DAO Token contract address>
 ```
 
-## Core Concepts
+## Deployment selection
 
-### deployment_id
+[generate-web-deployment.mjs](../scripts/generate-web-deployment.mjs) selects the newest `deploys/*-manager.json` by `deployedAt` and generates `DEPLOYMENT_ID`. This is a build/dev selection, not a user-supplied query parameter. `NEXT_PUBLIC_NETWORK` independently selects network settings; it must match the artifact. The generator does not filter artifacts by that environment variable.
 
-Format: `"manager:CONTRACT_ADDRESS"`
+The Goldsky generator instead uses its explicit `MANAGER_DEPLOYMENT_FILE`. Keep web selection, pipeline artifact, network, and database deployment rows consistent. Do not set a manual `NEXT_PUBLIC_DEPLOYMENT_ID` override.
 
-Example: `"manager:CBSKIHNNVKEJWV3A2OI63BWUC637LR4P2GBV4MPJB5PDOMVUMS6KOMAH"`
+## Database layers
 
-**Properties:**
-- Generated from the most recent `deploys/*-manager.json` artifact by
-  `scripts/generate-web-deployment.mjs`
-- Constant per application instance
-- Never changes during app lifetime
-- Filters all database queries at the database level
-- Prevents data leaks between manager instances
+Goldsky writes `chain.raw_events`, `chain.decoded_events`, and `app.activity_feed_events`. SQL views project state and history. **`manager.daos` is a view**, not a mutable DAO table.
 
-### dao_id
+`DaoCreated` supplies deployer, launch admin, six module addresses, and creation WASM hashes. Token/Metadata events provide descriptive values. `DaoLaunched` derives `pending` versus `operational`; `manager.module_launches` tracks each module's `launched` event by emitting contract. Module upgrades and version syncs overlay creation hashes.
 
-The token contract address of each DAO.
+Module events resolve through `manager.event_identity`. Shared Minter events resolve through their DAO-token `token_id` topic; foreign token events are excluded from DAO views. Details: [database catalog](DATABASE_SCHEMA.md).
 
-Example: `"CBGLIC3VWMWVBX3JCDHQQMVJQCQ2B7YQPG6Q7XWPZC63HFKUVYYTQC2"`
+Manager also retains permanent slug mappings. `manager.daos.slug` is projected
+from `DaoCreated`; layout resolution filters by deployment and maps to canonical
+Token ID. Direct service/API validation still requires its actual documented ID
+format rather than accepting arbitrary aliases.
 
-**Properties:**
-- Token contract address (same as `token_address`)
-- Immutable after DAO creation
-- Primary identifier within a manager
-- Unique within a deployment
-- Composite key with `deployment_id`
+## Query isolation
 
-### Composite Key Pattern
-
-All multi-tenant queries use:
+DAO-scoped queries filter both keys:
 
 ```sql
-WHERE deployment_id = $1 AND dao_id = $2
+SELECT dao_id, token_name, status, launched_at
+FROM manager.daos
+WHERE deployment_id = $1 AND dao_id = $2;
 ```
 
-This ensures:
-- Complete isolation between deployments
-- Complete isolation between DAOs
-- Efficient indexing
-- Database-level security
+Deployment-wide discovery intentionally filters only the deployment. Marketplace listing reads also bind the Marketplace contract and listing event identity. Execution receipts additionally bind Treasury, Governor, proposal ID, and ordered action identities.
 
-## DAO Lifecycle
+These are query/service isolation rules, not a claim of per-DAO PostgreSQL row-level security. The `app_server` role can read view schemas; keys alone do not prevent an incorrectly scoped query. `goldsky_writer` owns ingestion privileges, not application query authorization. See [grants](../db/README.md).
 
-### Creation Phase
+## SQL, Prisma, DTO, and RPC are different interfaces
 
-1. **create_dao(params)**
-    - Manager deploys 6 contracts (Token, Governor, Auction, Treasury, Metadata, Marketplace)
-   - DaoCreated event emitted
-   - Status: **pending**
-   - Contracts owned by launch_admin
-   - Token metadata stored: name, symbol, description, uri
+- SQL uses `launched_ledger`, `launched_at`, `launched_tx_hash`. The DAO DTO maps these to legacy `finalized_*` fields.
+- `marketplace_enabled` records the launch preference; live Marketplace `get_config().paused` is current pause state.
+- `auction_enabled` reflects launch or later unpause; `auction_paused` is current indexed pause state.
+- `indexed_at` on a DAO is its registry ingestion timestamp, not proof that every recent vote/listing has projected.
+- `DaoConfig` is defined in [dao-db.ts](../apps/web/src/lib/dao-db.ts); network/client configuration is adapted in [dao-config.ts](../apps/web/src/lib/dao-config.ts).
 
-2. **Configuration**
-   - add_properties() - Configure NFT metadata properties
-   - Metadata is set up for token rendering
+Member/token list responses now expose bounded pagination, counts, and scoped
+identities. Holder detail labels live versus indexed ownership; mutations recheck
+live ownership. Treasury history reads existing `treasury.calls`, and claim
+history reads indexed Minter events, separate from RPC claim eligibility. These
+new consumers add no writable offchain application tables.
 
-3. **Ownership Transfer**
-   - accept_ownership() - launch_admin accepts token ownership
+The lookup endpoint is `GET /api/dao/<daoId>` and returns `daoId`, `status`, `indexedAt`, not a full configuration response. Proposal detail and marketplace services combine scoped indexed rows with live contract reads. An unavailable read does not justify broadening the tenant query.
 
-### Finalization Phase
+## Local workspaces
 
-4. **launch_dao(token_address)**
-   - Manager validates completion
-    - Checks accepted Token ownership and expected total supply
-    - Grants post-finalization mint authorities
-    - Transfers every module's ownership/upgrade authority to Treasury
-   - Status: **operational**
-    - Auction launches only when requested; otherwise it remains paused for later governance enablement
-    - Marketplace remains available for governance-controlled fixed-price sales
-   - Cannot be repeated (idempotent check)
-
-### Operational Phase
-
-5. **Live DAO**
-   - Proposals can be created
-   - Auctions run continuously
-   - Treasury manages funds
-   - Governance controls all operations
-
-## Database Schema
-
-See [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md) for complete schema details.
-
-**Key Table: manager.daos**
-
-```sql
-CREATE TABLE manager.daos (
-  -- Multi-tenant composite key
-  deployment_id TEXT NOT NULL,
-  dao_id TEXT NOT NULL,
-
-  -- Identity & Ownership
-  token_address TEXT NOT NULL,
-  creator VARCHAR(56),
-  admin_address VARCHAR(56),
-
-  -- Contracts (immutable)
-  manager_contract TEXT NOT NULL,
-  token_contract TEXT NOT NULL,
-  governor_contract TEXT NOT NULL,
-  auction_contract TEXT,
-  treasury_contract TEXT,
-  metadata_contract TEXT,
-
-  -- Token Metadata
-  token_name VARCHAR(255),
-  token_symbol VARCHAR(16),
-  token_description TEXT,
-  token_uri TEXT,
-
-  -- Lifecycle
-  status TEXT DEFAULT 'pending',  -- 'pending' or 'operational'
-
-  -- Blockchain Timeline
-  created_ledger BIGINT NOT NULL,
-  created_at TIMESTAMPTZ,
-  created_tx_hash TEXT,
-
-  finalized_ledger BIGINT,
-  finalized_at TIMESTAMPTZ,
-  finalized_tx_hash TEXT,
-
-  PRIMARY KEY (deployment_id, dao_id)
-);
-```
-
-## Configuration
-
-### Environment Variables
-
-```env
-# Multi-tenant Deployment
-# Generated during the web app predev/prebuild hook from deploys/*-manager.json
-
-# Network Configuration
-NEXT_PUBLIC_NETWORK=testnet  # or 'public', 'local'
-
-# Database Connection
-APP_DATABASE_URL=postgres://user:password@host/database
-```
-
-### Static Network Config
-
-Network-specific settings are stored in `src/config/networks.ts`:
-
-```typescript
-export const NETWORKS = {
-  testnet: {
-    name: 'testnet',
-    rpcUrl: 'https://soroban-testnet.stellar.org',
-    networkPassphrase: 'Test SDF Network ; September 2015',
-    label: 'Testnet',
-  },
-  public: {
-    name: 'public',
-    rpcUrl: 'https://soroban-mainnet.stellar.org',
-    networkPassphrase: 'Public Global Stellar Network ; September 2015',
-    label: 'Public',
-  },
-  local: {
-    name: 'local',
-    rpcUrl: 'http://localhost:8000',
-    networkPassphrase: 'Test SDF Network ; September 2015',
-    label: 'Local',
-  }
-};
-```
-
-**Why Separate?**
-- Network infrastructure never changes
-- Same for all managers in a region
-- Safe to check into version control
-- Used by contract clients and SDK
-
-## Frontend Data Access
-
-### Query Functions
-
-```typescript
-import { getDaoConfigFromDatabase, getAllDaosFromDatabase } from '@/lib/dao-db';
-
-// Get single DAO
-const dao = await getDaoConfigFromDatabase(tokenContractAddress);
-// Returns: all contracts, metadata, status, timeline
-
-// List all DAOs
-const allDaos = await getAllDaosFromDatabase();
-// Returns: array of DAOs, ordered by creation time
-
-// List operational DAOs only
-const operationalDaos = await getAllDaosFromDatabase('operational');
-// Returns: DAOs ready for use
-
-// List pending DAOs only
-const pendingDaos = await getAllDaosFromDatabase('pending');
-// Returns: DAOs awaiting finalization
-```
-
-### DaoConfig Interface
-
-```typescript
-export interface DaoConfig {
-  // Multi-tenant keys
-  deployment_id: string;
-  dao_id: string;
-
-  // Identity
-  token_address: string;
-  creator: string | null;
-  network: NetworkName;
-
-  // Contracts
-  manager_contract: string;
-  token_contract: string;
-  governor_contract: string;
-  auction_contract: string | null;
-  treasury_contract: string | null;
-  metadata_contract: string | null;
-
-  // Token Metadata
-  token_name: string | null;
-  token_symbol: string | null;
-  token_description: string | null;
-  token_uri: string | null;
-
-  // Admin
-  admin_address: string | null;
-  label: string;
-
-  // Lifecycle
-  status: 'pending' | 'operational';
-
-  // Blockchain Timeline
-  created_ledger: number;
-  created_at: string | null;
-  created_tx_hash: string | null;
-  finalized_ledger: number | null;
-  finalized_at: string | null;
-  finalized_tx_hash: string | null;
-
-  indexed_at: string | null;
-}
-```
-
-## React Context
-
-All components under `/dao/[daoId]/*` have access to DAO context:
-
-```typescript
-import { useDaoContext } from '@/contexts/dao-context';
-
-function MyComponent() {
-  const { daoId, daoConfig } = useDaoContext();
-
-  // Use daoId for API calls
-  const proposals = await fetch(`/api/dao/${daoId}/proposals`);
-
-  // Use daoConfig for display
-  return <h1>{daoConfig.token_name}</h1>;
-}
-```
-
-## Query Patterns
-
-### Get Single DAO
-
-```sql
-SELECT * FROM manager.daos
-WHERE deployment_id = 'manager:ABC...'
-AND dao_id = 'CBGLIC3V...'
-```
-
-### List All DAOs in Deployment
-
-```sql
-SELECT * FROM manager.daos
-WHERE deployment_id = 'manager:ABC...'
-ORDER BY created_ledger DESC
-LIMIT 100
-```
-
-### Find Pending DAOs (Awaiting Finalization)
-
-```sql
-SELECT * FROM manager.daos
-WHERE deployment_id = 'manager:ABC...'
-AND status = 'pending'
-ORDER BY created_ledger ASC
-```
-
-### Find DAOs Created in Last 24 Hours
-
-```sql
-SELECT * FROM manager.daos
-WHERE deployment_id = 'manager:ABC...'
-AND created_at > NOW() - INTERVAL '1 day'
-ORDER BY created_at DESC
-```
-
-## Goldsky Pipeline Integration
-
-The Goldsky indexer populates the `manager.daos` table by:
-
-1. **Decoding DaoCreated Events**
-   - Extracts token metadata from DaoCreationParams
-   - Records all 6 contract addresses, including Marketplace
-   - Stores creator and admin addresses
-
-2. **Inserting into manager.daos**
-   - Status: 'pending'
-   - Records blockchain timeline
-   - Stores transaction hashes
-
-3. **Handling DaoLaunched Events**
-   - Updates status to 'operational'
-   - Records finalization timeline
-   - Marks DAO ready for operation
-
-See [GOLDSKY_SETUP.md](./GOLDSKY_SETUP.md) and [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md) for indexing and read-model details.
-
-## Security & Isolation
-
-### Database-Level Isolation
-
-- `deployment_id` primary key ensures managers cannot see each other's data
-- `dao_id` secondary key ensures DAOs cannot see each other's data
-- Queries always filtered by both keys
-- Role-based permissions:
-  - `goldsky_writer` - INSERT/UPDATE for pipeline
-  - `app_server` - SELECT only for application
-
-### Application-Level Isolation
-
-- Generated `apps/web/src/config/deployments.generated.ts` is constant per app instance
-- All API routes include `daoId` parameter
-- Context provider scopes components to single DAO
-- Navigation links include `daoId` for route structure
-
-### Smart Contract Isolation
-
-- Each DAO has independent Governor, Treasury, Auction contracts
-- Module ownership transferred to Treasury after finalization
-- Governance controls module administration
-
-## Migration Path
-
-### Phase 1: Infrastructure ✅
-- [x] Create `manager.daos` table
-- [x] Add composite key indexing
-- [x] Grant database permissions
-- [x] Update frontend queries
-
-### Phase 2: Feature Development
-- [ ] Build DAO creation UI
-- [ ] Build finalization workflow
-- [ ] Build directory/listing pages
-- [ ] Status tracking and management
-
-## Benefits
-
-✅ **Unlimited DAOs** - No configuration changes needed to add DAOs
-✅ **Complete Isolation** - Managers and DAOs cannot see each other's data
-✅ **Automatic Discovery** - New DAOs appear in database immediately after creation
-✅ **Status Tracking** - Pending/Operational lifecycle managed automatically
-✅ **Full Metadata** - Token name, symbol, description all available
-✅ **Efficient** - Indexed queries return instantly
-✅ **Scalable** - No file generation or rebuilds needed
-✅ **Auditable** - Event history immutable in blockchain
-
-## Related Documentation
-
-- [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md) - Complete schema details
-- [GOLDSKY_SETUP.md](./GOLDSKY_SETUP.md) - Pipeline configuration
-- [DAO_DEPLOYMENT.md](./DAO_DEPLOYMENT.md) - Creating and deploying DAOs
-- [MANAGER_DEPLOYMENT.md](./MANAGER_DEPLOYMENT.md) - Manager contract deployment
+Creation drafts, artwork plans, and launch/home preferences use network, Manager, and wallet scope, with guest drafts supported. Proposal drafts use wallet/DAO scope. Marketplace favorites/private labels are browser-local and deployment-scoped, not wallet-private encrypted records. None are shared database rows, on-chain tags, or collaboration permissions. Clearing browser storage removes local data, not contracts or indexed events.

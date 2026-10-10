@@ -6,12 +6,13 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("APP_DATABASE_URL")
-  schemas  = ["app", "auction", "governance", "manager", "metadata", "minter", "token"]
+  schemas  = ["app", "auction", "governance", "manager", "marketplace", "metadata", "minter", "token"]
 }
 
 view ManagerDao {
   deploymentId        String    @map("deployment_id")
   daoId               String    @map("dao_id")
+  slug                String?
   tokenAddress        String    @map("token_address")
   deployer            String?
   launchAdmin         String?   @map("launch_admin")
@@ -41,6 +42,87 @@ view ManagerDao {
 
   @@map("daos")
   @@schema("manager")
+}
+
+// Read-only mappings of existing 0002/0008 views. Never migrate these models.
+view MarketplaceModuleLaunch {
+  deploymentId   String   @map("deployment_id")
+  daoId          String   @map("dao_id")
+  moduleRole     String   @map("module_role")
+  moduleContract String   @map("module_contract")
+  isLive         Boolean  @map("is_live")
+  opened         Boolean?
+  treasury       String?
+
+  @@map("module_launches")
+  @@schema("manager")
+}
+
+view MarketplacePrimaryListing {
+  eventId                String    @map("event_id")
+  deploymentId           String    @map("deployment_id")
+  daoId                  String    @map("dao_id")
+  contractId             String    @map("contract_id")
+  listingId              BigInt    @map("listing_id")
+  price                  Decimal   @db.Decimal(78, 0)
+  expiresAt              BigInt    @map("expires_at")
+  paymentAsset           String    @map("payment_asset")
+  status                 String
+  tokenId                BigInt?   @map("token_id")
+  buyer                  String?
+  createdLedger          BigInt    @map("created_ledger")
+  createdAt              DateTime? @map("created_at")
+  createdTransactionHash String    @map("created_transaction_hash")
+  closedLedger           BigInt?   @map("closed_ledger")
+  closedAt               DateTime? @map("closed_at")
+  closedTransactionHash  String?   @map("closed_transaction_hash")
+
+  @@map("primary_listings")
+  @@schema("marketplace")
+}
+
+view MarketplaceSecondaryListing {
+  eventId                String    @map("event_id")
+  deploymentId           String    @map("deployment_id")
+  daoId                  String    @map("dao_id")
+  contractId             String    @map("contract_id")
+  tokenId                BigInt    @map("token_id")
+  seller                 String
+  price                  Decimal   @db.Decimal(78, 0)
+  expiresAt              BigInt    @map("expires_at")
+  feeBps                 Int       @map("fee_bps")
+  paymentAsset           String    @map("payment_asset")
+  status                 String
+  createdLedger          BigInt    @map("created_ledger")
+  createdAt              DateTime? @map("created_at")
+  createdTransactionHash String    @map("created_transaction_hash")
+  closedLedger           BigInt?   @map("closed_ledger")
+  closedAt               DateTime? @map("closed_at")
+  buyer                  String?
+
+  @@map("secondary_listings")
+  @@schema("marketplace")
+}
+
+view MarketplaceSale {
+  eventId         String    @map("event_id")
+  deploymentId    String    @map("deployment_id")
+  daoId           String    @map("dao_id")
+  contractId      String    @map("contract_id")
+  saleType        String    @map("sale_type")
+  listingId       BigInt?   @map("listing_id")
+  tokenId         BigInt    @map("token_id")
+  buyer           String
+  seller          String?
+  price           Decimal   @db.Decimal(78, 0)
+  fee             Decimal?  @db.Decimal(78, 0)
+  paymentAsset    String    @map("payment_asset")
+  eventLedger     BigInt    @map("event_ledger")
+  eventAt         DateTime? @map("event_at")
+  transactionHash String    @map("transaction_hash")
+
+  @@map("sales")
+  @@schema("marketplace")
 }
 
 view MetadataConfiguration {

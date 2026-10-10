@@ -7,6 +7,10 @@ import { button } from 'styled-system/recipes';
 
 const ButtonBase = styled(ark.button, button);
 
-export function Button({ style, ...props }: ComponentProps<typeof ButtonBase>) {
-  return <ButtonBase {...props} style={style} />;
+export function Button({
+  style,
+  static: isStatic,
+  ...props
+}: ComponentProps<typeof ButtonBase> & { static?: boolean }) {
+  return <ButtonBase {...props} data-static={isStatic ? '' : undefined} style={style} />;
 }

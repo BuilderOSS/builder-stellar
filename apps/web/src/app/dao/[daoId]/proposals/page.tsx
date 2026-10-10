@@ -11,6 +11,7 @@ import { PageSection } from '@/components/page-section';
 import { ProposalStateBadge } from '@/components/proposal/proposal-state-badge';
 import type { ProposalListResponse } from '@/components/proposal/types';
 import { Button, Callout, Heading, Input, Select, Skeleton, Text } from '@/components/ui';
+import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
 import { useProposalEligibility } from '@/lib/proposal-eligibility';
@@ -43,16 +44,16 @@ export default function ProposalsPage() {
   const eligibility = useProposalEligibility(config, session.address);
   const hasDraft = useProposalComposerStore(selectHasDraft(session.address || null, daoId));
   const { data, error, isLoading, mutate } = useSWR<ProposalListResponse>(
-    `/api/dao/${encodeURIComponent(daoId)}/proposals?limit=24`,
-    async (url: string) => {
-      const response = await fetch(url, { cache: 'no-store' });
+    ['proposal-list', DEPLOYMENT_ID, daoId] as const,
+    async ([, , id]: readonly ['proposal-list', string, string]) => {
+      const response = await fetch(`/api/dao/${encodeURIComponent(id)}/proposals?limit=24`, { cache: 'no-store' });
       const json = (await response.json()) as ProposalListResponse;
       if (!response.ok) {
         throw new Error(json.message || 'Proposal list failed');
       }
       return json;
     },
-    { keepPreviousData: true }
+    { keepPreviousData: false, refreshInterval: 10000, revalidateOnFocus: true }
   );
   const items = useMemo(() => data?.items ?? [], [data?.items]);
   const statusOptions = useMemo(

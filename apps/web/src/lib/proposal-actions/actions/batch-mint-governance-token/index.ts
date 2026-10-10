@@ -36,7 +36,7 @@ export const batchMintGovernanceTokenHandler: ActionHandler<BatchMintGovernanceT
   buildCallVector: (data, context) => ({
     target: context.tokenContractId,
     function: 'batch_mint',
-    args: [context.treasuryAddress, data.recipient.trim(), parseInt(data.amount.trim(), 10)]
+    args: [context.treasuryAddress, [data.recipient.trim()], [data.amount.trim()]]
   }),
 
   checkPreconditions: (context) => {

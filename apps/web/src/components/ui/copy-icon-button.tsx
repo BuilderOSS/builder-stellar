@@ -18,6 +18,7 @@ export function CopyIconButton({ copied, onClick, label, compact = false }: Copy
       onClick={onClick}
       aria-label={title}
       title={title}
+      className="warm-ink-icon-action"
       style={{
         appearance: 'none',
         display: 'inline-flex',
@@ -35,7 +36,11 @@ export function CopyIconButton({ copied, onClick, label, compact = false }: Copy
         cursor: 'pointer'
       }}
     >
-      {copied ? <Check size={compact ? 14 : 16} /> : <Copy size={compact ? 14 : 16} />}
+      {copied ? (
+        <Check aria-hidden="true" size={compact ? 14 : 16} strokeWidth={1.5} />
+      ) : (
+        <Copy aria-hidden="true" size={compact ? 14 : 16} strokeWidth={1.5} />
+      )}
     </button>
   );
 }

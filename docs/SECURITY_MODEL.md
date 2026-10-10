@@ -1,6 +1,9 @@
 # Security Model
 
-Scope: the Soroban contracts at commit `5136397` plus the governance timing caps in `contracts/governor`. The Rust sources under `contracts/*/src` are authoritative; this document describes behavior, not intent. It is not an audit.
+Scope: current Rust contract sources and the frontend working-tree interfaces.
+This is an implementation reference, not a security audit or a live deployment
+check. Rust entrypoints/storage and pinned dependencies are authoritative for
+protocol behavior; route handlers and generated ABI adapters define app behavior.
 
 ## Roles
 
@@ -26,7 +29,11 @@ During setup the launch admin can:
 - change Governor parameters through the owner-only setters;
 - upgrade modules along Manager-approved transitions.
 
-Before launch, `token.set_mint_authority`, `auction.unpause`, primary listing creation, secondary `list` and `buy` (so a setup-time listing cannot pin a custom asset or fee past launch; `cancel` and `expire` stay available), all Governor proposal functions, `treasury.execute` and the Minter fail with `NotLive` (9001).
+Before launch, `token.set_mint_authority`, `auction.unpause`, primary listing creation,
+secondary `list`/`buy`, Governor propose/vote/queue/consume, and `treasury.execute`
+require Live state (`NotLive`, 9001). Minter checks the Token and reports its own
+`TokenNotLive` (13). Secondary cancel/expire remain recovery paths; Governor cancel
+has proposer authorization and permits only Pending/Active proposals.
 
 `launch_dao` enforces:
 
@@ -40,7 +47,10 @@ At launch, ownership of each module moves to the Treasury and any pending two-st
 
 ## What the Manager can and cannot do after launch
 
-The Manager has no entrypoint that acts on a launched DAO. Its `launch` calls fail with `AlreadyLive`, it holds no owner or minter role in any module, and it keeps no DAO registry (the `PendingDao` entry is deleted at launch).
+Manager cannot administer a launched DAO: module `launch` calls reject repeats,
+and Manager holds no owner or minter role in its modules. `PendingDao` is deleted,
+but permanent slug mappings remain and support lookup/permissionless TTL renewal.
+These names confer no DAO authority and provide no enumeration API.
 
 It does keep two platform-level effects:
 
@@ -52,7 +62,7 @@ The platform minter chosen by the Manager admin is granted mint authority at lau
 ## Governance execution path
 
 1. Proposal functions (`propose`, `cast_vote`, `queue`) run on the Governor.
-2. Anyone calls `treasury.execute(targets, functions, args, description_hash)`. No caller auth is required; authority comes from the proposal.
+2. Anyone calls `treasury.execute(targets, functions, args, description_hash)`. No caller auth is required by the contract; authority comes from the proposal. Queue is also permissionless. The submitting wallet pays transaction fees. Queue's inherited ETA/operator inputs are ignored; Governor derives ETA from its queue delay.
 3. The Treasury calls `governor.consume(...)`, which requires the Treasury's auth, checks the proposal is Queued and past its ETA, marks it Executed and emits `ProposalExecuted`. The Governor is no longer on the call stack when the actions run, so actions may call the Governor's owner setters.
 4. The Treasury dispatches each action in order, authorizing exactly that call, and emits one `Execute` event per call (topics governor, target, proposal id; data function and index).
 5. Any failing call reverts the whole transaction, including the Executed mark. The proposal stays Queued and can be retried until it expires.
@@ -89,7 +99,11 @@ Error codes are unique only per contract. Examples of overlaps: Auction 1201 and
 
 ## TTL and archival
 
-The network caps entry TTL at about 180 days (about 3,110,400 ledgers); the host clamps longer extensions. Instance TTL (which covers the contract code reference and instance keys such as owner, config, mint authority, lifecycle flag) is extended to 170 days when fewer than 60 days remain, on state-changing calls. A module nobody touches for roughly 170 days can have its instance expire; archived entries can be restored, but the module is unavailable until then.
+The common instance helper requests 170 days when below 60 days. Source comments
+assume a roughly 180-day network cap; this is not a current network-settings
+measurement. Shared code, instances, and persistent keys have separate lifetimes.
+Not every method uses the same extension helper, and simulated reads do not prove
+durable renewal. See [TTL maintenance](TTL_ECONOMICS.md) for source-specific policies.
 
 Persistent per-key entries expire independently of the instance:
 
@@ -97,14 +111,20 @@ Persistent per-key entries expire independently of the instance:
 - Governor proposals are extended to 60 days on access.
 - Pending auction refunds, token ownership and voting checkpoints, marketplace listings, and Manager registry entries are persistent per-key entries with the same cap.
 
-See [MONITORING.md](./MONITORING.md) for the maintenance task.
+The web's explicit artwork-renewal path uses the SDK restoration option and signed
+windows. The shared-code extension script does not restore archived entries.
+Missing instance/property headers can prevent a report from enumerating children;
+do not treat missing persistent rights as safely deleted. Target-network restoration
+behavior and full archived-state recovery are not verified by this document.
+
+See [MONITORING.md](./MONITORING.md) for endpoint semantics and maintenance links.
 
 ## Known limitations
 
 These are behaviors of the current contracts, not planned fixes.
 
 - Metadata seed grinding. The artwork seed is `keccak256(token_id, ledger sequence, ledger timestamp, host PRNG u64)`. Whoever controls when a mint happens, or whether to submit after simulating, can pick preferred traits. Traits are pseudo-random, not manipulation-resistant. `regenerate(token_id)` (owner only) can re-roll a token.
-- Governance parameter bounds. Voting delay, voting period and queue delay must be at least 300 seconds and at most 2,592,000 seconds (30 days); the Manager and Governor both enforce this. Quorum may be as low as 1 bp (the Manager and Governor reject 0 and values above 10,000), and the proposal threshold only needs to be nonzero and not above total supply. A DAO can set parameters that make governance trivially capturable or very slow within those bounds.
+- Governance parameter bounds. Voting delay, voting period and queue delay must be 300–2,592,000 seconds; Manager and Governor enforce this. Quorum is 1–10,000 bps. Initial proposal threshold must be positive; the owner setter rejects a threshold above previous-ledger supply only when that supply is nonzero. The CLI additionally checks threshold against planned founder total. Configuration can still make governance capturable or unattainable within these bounds.
 - Founder minting is unbounded in setup. Before launch the launch admin can mint any number of tokens (`batch_mint` limits only the `u32` total). The 10,000 founder cap described in older documents is not enforced by the contracts. Token distribution at launch is a launch-admin decision that is not constrained on-chain beyond supply being nonzero.
 - Marketplace fee up to 100%. `default_secondary_fee_bps` may be set up to 10,000, and a fee of 10,000 sends the full secondary price to the Treasury. The fee is snapshotted into each listing at listing time.
 - Marketplace expiry is unbounded. `expires_at` need only be in the future; there is no maximum. Escrowed secondary NFTs stay in escrow until `buy`, `cancel` (seller) or `expire` (anyone, after expiry). Primary listings hold no escrow.
@@ -112,12 +132,66 @@ These are behaviors of the current contracts, not planned fixes.
 - Auction `set_time_buffer` and the Manager reject a time buffer above 86,400 seconds, and auction duration is bounded to 300 seconds ..= 2,592,000 seconds (30 days) in the Auction constructor, `set_duration` and the Manager (`InvalidDuration` / `InvalidConfig`). The reserve price has a lower bound only; there is deliberately no upper cap.
 - Voting power is fixed at proposal creation. Votes and total supply are snapshotted at the ledger before `propose`, so the voting delay is a notice period only and cannot change that proposal's weights. Treasury-, Auction- and Marketplace-held NFTs count toward the quorum denominator (total supply at the snapshot) but cannot vote, except through a proposal for the Treasury.
 - Founder supply and early takeover. During setup the launch admin can mint unlimited founder tokens and delegate them; launch only requires `total_supply > 0`. With the minimum governance timings (voting delay, voting period and queue delay of 300 s each) a holder of a majority of voting power can propose, vote, queue and execute roughly 15 minutes after launch (the first proposal needs only the previous ledger's snapshot). There is no cooling-off period, no cap on founder share, and no veto once a proposal is queued. Bidders and holders must inspect founder supply and delegation (Token mints, `DelegateChanged` events, `get_votes` of the launch admin) before bidding; DAO creators should choose longer governance timings. Front ends should display founder share.
-- Quorum lock. `quorum_bps` may be up to 10,000 and the denominator is total supply at the snapshot, which includes NFTs that cannot vote (the live auction NFT, Marketplace-held NFTs, unsold auction NFTs accumulating in the Treasury). A quorum above the voting-capable share (10,000 is always unreachable) makes every future proposal impossible, including the proposal to lower it, which permanently freezes governance, Treasury funds and upgrades. Operators should keep quorum well below the circulating, voting-capable share.
-- Payment assets must be plain, non-regulated Stellar Asset Contracts. Assets with AUTH_REQUIRED, clawback, fee-on-transfer or rebasing behavior can freeze or misprice settlement (bids, refunds, buys, Treasury payouts).
-- Manager admin trust. The Manager admin can change the current implementation hashes used for future DAOs (`set_current_implementations`), and creators cannot pin hashes; a DAO created but not yet launched is exposed to whatever the registry points at until it launches. Creators verify `DaoCreated.wasm_hashes` and should not launch if they differ from the audited set. The admin can also revoke implementations, pause the factory and register the platform minter (pinned by `expected_minter` at launch).
+- Quorum lock. The denominator is total supply at the snapshot, including contract-held NFTs. A quorum above attainable participating voting power can prevent proposals, including a proposal to lower it, and block governance-controlled funds/upgrades. A 100% quorum is not universally impossible, but can be unreachable with unavailable contract-held or nonparticipating voting power.
+- Payment transfers can fail when account/asset authorization is unavailable. The contracts assume ordinary SAC amount semantics; a configured address alone does not establish compatible transfers or readiness. Tests distinguish authorized and unauthorized regulated SAC accounts. The web marketplace narrows assets to its verified XLM/USDC registry and checks relevant trustlines/balances.
+- Manager admin trust. The Manager admin can change implementation defaults for future creation (`set_current_implementations`), and creation parameters cannot pin hashes. Once created, modules retain their deployed hashes unless upgraded; changing defaults does not replace pending modules. Creators inspect `DaoCreated.wasm_hashes`; launch checks current module hashes against the registry. The admin can also revoke implementations, pause the factory, and register the platform minter (pinned by `expected_minter` at launch).
 - No veto once a proposal is queued. Voters and holders cannot cancel a queued proposal; only expiry (14 days after the ETA) stops it.
 - Module upgrades depend on voters verifying opaque WASM hashes. A proposal names `from_hash` and `to_hash`; the chain checks registry approval, not code. Voters must verify the hash against audited, reproducible builds and the `Upgraded` event after execution.
-- Archival assumptions. The design assumes protocol 23+ behavior (archived entries restore automatically on access where footprints allow) plus periodic maintenance: run `metadata.bump_artwork_ttl` and touch modules at least every few months (see MONITORING.md).
-- Proposal ids do not include the proposer. An identical-payload proposal (same targets, functions, args and description) can be front-run and then cancelled by any holder above the proposal threshold; an honest proposer changes the description to get a fresh id.
-- Manager `PendingAdmin` has no expiry. The admin can withdraw a pending handover with `cancel_pending_admin` (admin-only, emits `AdminProposalCancelled`); an unaccepted proposal otherwise stays valid indefinitely.
+- Archival handling is network/SDK-dependent. This reference does not promise automatic restoration for arbitrary calls or prescribe an unverified CLI restore sequence. The app opts into restoration for artwork renewal; maintain code/state before expiry and verify recovery on the target protocol.
+- Proposal IDs do not include the proposer. An eligible holder can front-run an identical payload and become its recorded proposer; cancellation requires that recorded proposer and Pending/Active state. Another holder cannot cancel solely by exceeding the threshold. Changing description produces a different payload ID.
+- Manager `PendingAdmin` has no logical acceptance timeout. The admin can withdraw it with `cancel_pending_admin` (admin-only, emits `AdminProposalCancelled`); its persistent entry is still subject to TTL/archival.
 - The Manager admin is a single address with a two-step handover; there is no timelock or multisig in the contract.
+
+## Application trust boundaries
+
+The app authenticates wallets with SEP-53 message signing and a SEP-10 fallback,
+then uses an encrypted `iron-session` cookie. Wallet connection alone is not an
+authenticated session. Challenge/replay/rate-limit bookkeeping is process-local;
+this reference does not claim a shared distributed replay store. Public DAO reads
+remain scoped to the configured deployment. Trading inventory/readiness derive the
+actor from the session, not a submitted address.
+
+SEP-10 reads current account signers/medium threshold from canonical Horizon and
+verifies their weighted signatures, excluding the server signer and requiring at
+least one positive client weight. Disabled-master/insufficient-threshold proofs
+cannot fall back. Master-key-only unfunded authentication is allowed only on an
+authoritative Horizon account-not-found 404 problem response, not generic 404 or
+network failure. Read/malformed-account failures return 503. Successful key-only
+sign-in does not establish funding or transaction readiness.
+
+Marketplace preparation checks same origin, session network, tenant/module/listing
+identity, live wiring/terms, ownership, and relevant account funds/trustlines. It
+returns unsigned XDR; the server does not sign/submit a trade. The wallet path
+checks account/network/source/expiry and unchanged envelope. Approval and listing
+are separate transactions. A governance change before confirmation can change a
+new listing's captured asset/fee; preflight is not a contract-enforced price lock.
+
+Proposal submission uses target-specific generated specs and explicit registered
+SAC transfer encoding. Unsupported external ABIs, scalar batch-mint shapes, unsafe
+integers, proposal-ID mismatch, or unavailable live state disable submission.
+Execution receipt checks bind Treasury, Governor, proposal and ordered calls; a
+missing indexed receipt is not evidence of failed execution.
+
+Treasury funding prepares a session-owned SAC transfer after scoped wiring,
+simulation and funds/reserve/fee checks; spending Treasury funds still requires
+governance. Holder preparation rechecks current on-chain NFT owner, not merely
+indexed ownership. Delegation applies to the account's owned voting units;
+single-token approval revocation is not collection-wide permission revocation.
+
+Minter claims use current registered Minter, Live/mint authority, method/round and
+recipient-bound proof; restoration-required simulations are rejected. The client
+rechecks reviewed state before signing. Allocation descriptors currently validate
+only and cannot be submitted through the shared governance encoder. This limitation
+must not be confused with implemented claimant signing.
+
+Creation/launch recovery saves finite signed envelopes separately from RPC
+acceptance. Rebroadcast preserves exact bytes/hash; reviewed configuration and
+nonce cannot be silently changed after freezing. Unknown acceptance is not proof
+of failure. Missing older envelopes cannot be safely rebroadcast.
+
+Local drafts, home preferences, artwork plans, and marketplace labels/favorites are
+browser storage, not encrypted shared permissions or on-chain rights. Scope filters
+avoid mixing workspaces but do not secure data from another user of the same browser.
+Clearing storage removes recovery data. Read-only SQL credentials do not imply that
+all server endpoints are side-effect free: uploads and transaction preparation have
+their own boundaries. See [web reference](../apps/web/README.md).

@@ -35,6 +35,6 @@ describe('isDaoAdmin', () => {
 
   it('does not preserve launch-admin access after launch', () => {
     expect(isDaoAdmin(config('operational'), 'GLAUNCH')).toBe(false);
-    expect(isDaoAdmin(config('operational'), 'gowner')).toBe(true);
+    expect(isDaoAdmin(config('operational'), 'gowner')).toBe(false);
   });
 });

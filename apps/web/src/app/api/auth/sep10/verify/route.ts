@@ -5,6 +5,8 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { enforceAuthRateLimit } from '@/lib/auth/rate-limit';
+import { Sep10AccountLookupError, verifySep10AccountProof } from '@/lib/auth/sep10-account';
+import { matchesSep10Transaction } from '@/lib/auth/sep10-proof';
 import {
   AuthError,
   authErrorResponse,
@@ -36,7 +38,7 @@ export async function POST(request: Request) {
 
     const session = await getAuthSession();
     const challenge = session.challenge;
-    if (!challenge || challenge.method !== 'sep10' || challenge.xdr !== body.data.signedTxXdr) {
+    if (!challenge || challenge.method !== 'sep10') {
       throw new AuthError('NO_CHALLENGE', 'SEP-10 authentication challenge is missing or already consumed.');
     }
 
@@ -61,6 +63,9 @@ export async function POST(request: Request) {
     if (challenge.network !== network.name) {
       throw new AuthError('NETWORK_MISMATCH', 'SEP-10 authentication network does not match this deployment.');
     }
+    if (!matchesSep10Transaction(challenge.xdr, body.data.signedTxXdr, network.networkPassphrase)) {
+      throw new AuthError('INVALID_MESSAGE', 'SEP-10 transaction body does not match the issued challenge.');
+    }
 
     const serverKeypair = getSep10ServerKeypair();
     const serverAddress = serverKeypair.publicKey();
@@ -75,19 +80,20 @@ export async function POST(request: Request) {
       throw new AuthError('INVALID_MESSAGE', 'SEP-10 authentication address does not match the challenge.');
     }
 
-    WebAuth.verifyChallengeTxSigners(
-      body.data.signedTxXdr,
+    await verifySep10AccountProof({
+      signedTxXdr: body.data.signedTxXdr,
       serverAddress,
-      network.networkPassphrase,
-      [challenge.address],
-      challenge.homeDomain,
-      challenge.webAuthDomain
-    );
+      accountAddress: parsed.clientAccountID,
+      network,
+      homeDomain: challenge.homeDomain,
+      webAuthDomain: challenge.webAuthDomain
+    });
 
     session.address = parsed.clientAccountID;
     session.network = network.name;
     session.authMethod = 'sep10';
     session.authenticatedAt = Date.now();
+    session.challenge = undefined;
     await session.save();
     consumeAuthChallenge(claimedChallenge);
 
@@ -97,6 +103,11 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     if (claimedChallenge) releaseAuthChallenge(claimedChallenge);
+    if (error instanceof Sep10AccountLookupError)
+      return NextResponse.json(
+        { code: 'ACCOUNT_LOOKUP_UNAVAILABLE', message: error.message },
+        { status: 503, headers: { 'Cache-Control': 'no-store' } }
+      );
     if (error instanceof SyntaxError) {
       return NextResponse.json(
         { code: 'INVALID_MESSAGE', message: 'Invalid SEP-10 authentication proof.' },

@@ -22,38 +22,38 @@ const CALLOUT_STYLES: Record<
   info: {
     badge: 'Info',
     accent: 'var(--focus)',
-    border: 'rgba(73, 166, 255, 0.4)',
-    background: 'rgba(8, 124, 240, 0.08)',
-    badgeBorder: 'rgba(96, 165, 250, 0.32)',
-    badgeBackground: 'rgba(37, 99, 235, 0.22)',
-    badgeColor: '#b9ddff'
+    border: 'var(--accent-edge)',
+    background: 'var(--accent-wash)',
+    badgeBorder: 'var(--accent-edge)',
+    badgeBackground: 'var(--accent-wash)',
+    badgeColor: 'var(--accent)'
   },
   warning: {
     badge: 'Warning',
-    accent: 'rgba(245, 158, 11, 0.74)',
-    border: 'rgba(245, 158, 11, 0.48)',
-    background: 'rgba(41, 28, 8, 0.54)',
-    badgeBorder: 'rgba(245, 158, 11, 0.32)',
-    badgeBackground: 'rgba(245, 158, 11, 0.18)',
-    badgeColor: '#fde68a'
+    accent: 'var(--warning)',
+    border: 'var(--warning-edge)',
+    background: 'var(--warning-wash)',
+    badgeBorder: 'var(--warning-edge)',
+    badgeBackground: 'var(--warning-wash)',
+    badgeColor: 'var(--warning)'
   },
   error: {
     badge: 'Error',
-    accent: 'rgba(248, 113, 113, 0.78)',
-    border: 'rgba(248, 113, 113, 0.52)',
-    background: 'rgba(45, 12, 12, 0.58)',
-    badgeBorder: 'rgba(248, 113, 113, 0.34)',
-    badgeBackground: 'rgba(239, 68, 68, 0.18)',
-    badgeColor: '#fecaca'
+    accent: 'var(--danger)',
+    border: 'var(--danger-edge)',
+    background: 'var(--danger-wash)',
+    badgeBorder: 'var(--danger-edge)',
+    badgeBackground: 'var(--danger-wash)',
+    badgeColor: 'var(--danger)'
   },
   success: {
     badge: 'Success',
-    accent: 'rgba(74, 222, 128, 0.68)',
-    border: 'rgba(74, 222, 128, 0.44)',
-    background: 'rgba(10, 38, 24, 0.54)',
-    badgeBorder: 'rgba(74, 222, 128, 0.3)',
-    badgeBackground: 'rgba(34, 197, 94, 0.18)',
-    badgeColor: '#bbf7d0'
+    accent: 'var(--positive)',
+    border: 'var(--positive-edge)',
+    background: 'var(--positive-wash)',
+    badgeBorder: 'var(--positive-edge)',
+    badgeBackground: 'var(--positive-wash)',
+    badgeColor: 'var(--positive)'
   }
 };
 

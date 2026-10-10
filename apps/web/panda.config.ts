@@ -9,49 +9,52 @@ const button = defineRecipe({
     appearance: 'none',
     borderWidth: '1px',
     borderColor: 'var(--border-strong)',
-    borderRadius: '10px',
+    borderRadius: 'var(--radius-control)',
     cursor: 'pointer',
     display: 'inline-flex',
     flexShrink: '0',
     fontWeight: 'semibold',
     gap: '2',
     justifyContent: 'center',
-    minH: '11',
+    minH: '10',
     outline: '0',
     position: 'relative',
-    px: '5',
-    fontSize: '0.9rem',
+    px: '4',
+    fontSize: '0.875rem',
     letterSpacing: '-0.01em',
-    transitionDuration: '160ms',
-    transitionProperty: 'background-color, border-color, color, box-shadow, transform',
+    transitionDuration: '140ms',
+    transitionTimingFunction: 'cubic-bezier(0.2, 0, 0, 1)',
+    transitionProperty: 'background-color, border-color, color, box-shadow, scale',
     userSelect: 'none',
     verticalAlign: 'middle',
     whiteSpace: 'nowrap',
     shadow: 'none',
-    _hover: {
-      transform: 'translateY(-1px)'
-    },
     _active: {
-      transform: 'translateY(0px) scale(0.99)'
+      scale: '0.96'
     },
     _disabled: {
       opacity: '0.5',
       cursor: 'not-allowed',
-      transform: 'none',
+      scale: '1',
       shadow: 'none'
     },
-    focusVisibleRing: 'outside'
+    _focusVisible: { outline: '2px solid var(--focus)', outlineOffset: '3px' },
+    '&[data-static], &[aria-busy=true]': { scale: '1' },
+    '@media (prefers-reduced-motion: reduce)': { _active: { scale: '1' } },
+    '@media (pointer: coarse)': { minH: '11', minW: '11' },
+    '@media (max-width: 680px)': { minH: '11', minW: '11' },
+    '& svg': { flexShrink: '0', strokeWidth: '2' }
   },
   variants: {
     variant: {
       solid: {
         bg: 'var(--action)',
-        color: 'white',
+        color: 'var(--accent-ink)',
         borderColor: 'var(--action)',
         _hover: { bg: 'var(--action-hover)', borderColor: 'var(--action-hover)' }
       },
       surface: {
-        bg: 'var(--surface-2)',
+        bg: 'var(--surface)',
         borderColor: 'var(--border-default)',
         color: 'var(--text-primary)',
         shadow: 'none',
@@ -73,9 +76,9 @@ const button = defineRecipe({
       }
     },
     size: {
-      sm: { h: '10', minW: '10', textStyle: 'sm', px: '4' },
-      md: { h: '11', minW: '11', textStyle: 'sm', px: '5' },
-      lg: { h: '12', minW: '12', textStyle: 'md', px: '6' }
+      sm: { h: '9', minW: '9', textStyle: 'sm', px: '3' },
+      md: { h: '10', minW: '10', textStyle: 'sm', px: '4' },
+      lg: { h: '12', minW: '12', textStyle: 'md', px: '5' }
     }
   },
   defaultVariants: {
@@ -89,11 +92,11 @@ const card = defineRecipe({
   jsx: ['Card'],
   base: {
     p: '6',
-    borderRadius: '20px',
+    borderRadius: 'var(--radius-panel)',
     borderWidth: '1px',
     borderColor: 'var(--border-default)',
     bg: 'var(--surface-1)',
-    boxShadow: '0 1px 0 rgba(255, 255, 255, 0.025)',
+    boxShadow: 'inset 0 1px 0 var(--float-highlight)',
     color: 'var(--text-primary)'
   }
 });
@@ -113,16 +116,22 @@ const input = defineRecipe({
   base: {
     width: '100%',
     borderWidth: '1px',
-    borderColor: 'var(--border-strong)',
-    borderRadius: '10px',
-    bg: 'var(--surface-0)',
+    borderColor: 'var(--rule)',
+    borderRadius: 'var(--radius-control)',
+    bg: 'var(--surface-raised)',
     color: 'var(--text-primary)',
     px: '4',
-    py: '3',
+    py: '2.5',
     outline: 'none',
     minH: '11',
     shadow: 'none',
     transitionProperty: 'border-color, box-shadow, background-color',
+    transitionDuration: '140ms',
+    transitionTimingFunction: 'cubic-bezier(0.2, 0, 0, 1)',
+    _placeholder: { color: 'var(--muted)', opacity: '0.85' },
+    _hover: { borderColor: 'var(--border-strong)' },
+    _disabled: { opacity: '0.55', cursor: 'not-allowed', bg: 'var(--surface-hover)' },
+    _invalid: { borderColor: 'var(--danger)', outlineColor: 'var(--danger)' },
     _focusVisible: {
       borderColor: 'var(--focus)',
       boxShadow: '0 0 0 3px var(--focus-soft)'
@@ -136,16 +145,21 @@ const select = defineRecipe({
   base: {
     width: '100%',
     borderWidth: '1px',
-    borderColor: 'var(--border-strong)',
-    borderRadius: '10px',
-    bg: 'var(--surface-0)',
+    borderColor: 'var(--rule)',
+    borderRadius: 'var(--radius-control)',
+    bg: 'var(--surface-raised)',
     color: 'var(--text-primary)',
     px: '4',
-    py: '3',
+    py: '2.5',
     outline: 'none',
     minH: '11',
     shadow: 'none',
     transitionProperty: 'border-color, box-shadow, background-color',
+    transitionDuration: '140ms',
+    transitionTimingFunction: 'cubic-bezier(0.2, 0, 0, 1)',
+    _hover: { borderColor: 'var(--border-strong)' },
+    _disabled: { opacity: '0.55', cursor: 'not-allowed', bg: 'var(--surface-hover)' },
+    _invalid: { borderColor: 'var(--danger)' },
     _focusVisible: {
       borderColor: 'var(--focus)',
       boxShadow: '0 0 0 3px var(--focus-soft)'
@@ -159,14 +173,14 @@ const badge = defineRecipe({
   base: {
     display: 'inline-flex',
     alignItems: 'center',
-    borderRadius: '8px',
+    borderRadius: '6px',
     borderWidth: '1px',
     borderColor: 'var(--border-default)',
-    px: '3',
-    py: '1.5',
+    px: '2',
+    py: '1',
     textStyle: 'xs',
     fontWeight: 'semibold',
-    bg: 'var(--surface-2)',
+    bg: 'var(--surface-hover)',
     color: 'var(--text-secondary)',
     letterSpacing: '0.01em'
   }
@@ -210,19 +224,30 @@ export default defineConfig({
       recipes: { button, card, field, input, select, badge, text, heading },
       tokens: {
         colors: {
+          canvas: { value: 'var(--canvas)' },
+          surface: { value: 'var(--surface)' },
+          raised: { value: 'var(--surface-raised)' },
+          ink: { value: 'var(--ink)' },
+          muted: { value: 'var(--muted)' },
+          rule: { value: 'var(--rule)' },
           accent: {
-            50: { value: '#eaf4ff' },
-            100: { value: '#d9ecff' },
-            200: { value: '#b7ddff' },
-            300: { value: '#8eccff' },
-            400: { value: '#5fb3ff' },
-            500: { value: '#0085ff' },
-            600: { value: '#006fe0' },
-            700: { value: '#0057b3' },
-            800: { value: '#00458f' },
-            900: { value: '#00366f' },
-            950: { value: '#00284f' }
+            50: { value: 'var(--accent-wash)' },
+            100: { value: 'var(--accent-wash)' },
+            200: { value: 'var(--accent-edge)' },
+            300: { value: 'var(--accent-edge)' },
+            400: { value: 'var(--accent)' },
+            500: { value: 'var(--accent)' },
+            600: { value: 'var(--accent)' },
+            700: { value: 'var(--accent-strong)' },
+            800: { value: 'var(--accent-strong)' },
+            900: { value: 'var(--ink)' },
+            950: { value: 'var(--ink)' }
           }
+        },
+        fonts: {
+          body: { value: 'var(--font-family-ui)' },
+          heading: { value: 'var(--font-family-ui)' },
+          display: { value: 'var(--font-family-display)' }
         }
       }
     }

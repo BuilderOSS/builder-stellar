@@ -1,22 +1,22 @@
-'use client';
+import { DaoMarketplaceView } from '@/components/marketplace/dao-marketplace';
+import { resolveDaoId } from '@/lib/dao-db';
 
-import { MarketplaceComingSoon } from '@/components/marketplace/marketplace-coming-soon';
-import { useDaoContext } from '@/contexts/dao-context';
-import { daoRoute } from '@/lib/dao-routes';
-
-export default function DaoMarketplacePage() {
-  const { daoId, daoConfig: config } = useDaoContext();
-
+export default async function DaoMarketplacePage({
+  params,
+  searchParams
+}: {
+  params: Promise<{ daoId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const [{ daoId: routeId }, query] = await Promise.all([params, searchParams]);
+  const daoId = await resolveDaoId(routeId);
   return (
-    <section className="page-section" aria-labelledby="marketplace-title">
-      <div className="page-intro">
-        <p className="eyebrow">{config.tokenName}</p>
-        <h1 className="page-title" id="marketplace-title">
-          DAO marketplace
-        </h1>
-        <p className="lede">A dedicated market for this DAO&apos;s tokens and memberships.</p>
-      </div>
-      <MarketplaceComingSoon daoName={config.tokenName} daoHref={daoRoute(daoId)} />
-    </section>
+    <DaoMarketplaceView
+      daoId={daoId}
+      initialKind={typeof query.kind === 'string' ? query.kind : 'all'}
+      initialStatus={typeof query.status === 'string' ? query.status : 'open'}
+      selectedId={typeof query.listing === 'string' ? query.listing : ''}
+      selectedEventId={typeof query.eventId === 'string' ? query.eventId : ''}
+    />
   );
 }

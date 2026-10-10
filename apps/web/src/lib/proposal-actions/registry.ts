@@ -1,24 +1,77 @@
 // src/lib/proposal-actions/registry.ts
 
+import { createElement, Fragment } from 'react';
+
+import { Callout } from '@/components/ui';
+
 import { batchMintGovernanceTokenHandler } from './actions/batch-mint-governance-token';
 import { mintGovernanceTokenHandler } from './actions/mint-governance-token';
 import { transferSacTokenHandler } from './actions/transfer-sac-token';
 import {
+  cancelAuctionHandler,
   cancelPrimaryListingHandler,
   createPrimaryListingHandler,
   pauseAuctionHandler,
+  pauseMarketplaceHandler,
   setAuctionDurationHandler,
+  setAuctionMinBidIncrementHandler,
   setAuctionPaymentTokenHandler,
   setAuctionReservePriceHandler,
   setAuctionTimeBufferHandler,
+  setMarketplacePaymentTokenHandler,
+  setMarketplaceSecondaryFeeHandler,
   setMintAuthorityHandler,
   setProposalThresholdHandler,
+  setQueueDelayHandler,
   setQuorumBpsHandler,
   setVotingDelayHandler,
   setVotingPeriodHandler,
-  unpauseAuctionHandler
+  unpauseAuctionHandler,
+  unpauseMarketplaceHandler
 } from './admin-actions';
+import {
+  addArtworkPropertiesHandler,
+  type ArtworkPropertiesDraft,
+  artworkSettingHandlers
+} from './artwork-admin-actions';
+import { minterAllocationHandlers } from './minter-actions';
+import { moduleUpgradeHandler } from './module-upgrade-actions';
 import type { ActionHandler, ProposalActionType } from './types';
+
+// The shared artwork helper can build destructive resets too. Only append is
+// registered, with an exact literal type so resets never enter composer options.
+const registeredArtworkPropertiesHandler: ActionHandler<ArtworkPropertiesDraft> = {
+  ...addArtworkPropertiesHandler,
+  type: 'add-artwork-properties',
+  serialize: (data) => ({ ...addArtworkPropertiesHandler.serialize(data), type: 'add-artwork-properties' })
+};
+
+const registeredModuleUpgradeHandler: ActionHandler = {
+  ...moduleUpgradeHandler,
+  FormComponent: (props) =>
+    createElement(
+      Fragment,
+      null,
+      createElement(moduleUpgradeHandler.FormComponent, props),
+      props.value?.module === 'metadata'
+        ? createElement(Callout, {
+            variant: 'warning',
+            title: 'Metadata upgrade ownership has no public getter. Upgrade proposals remain blocked.'
+          })
+        : props.validationErrors && !props.validationErrors.valid
+          ? createElement(Callout, { variant: 'warning', title: props.validationErrors.message })
+          : null
+    ),
+  validate: (data, context) =>
+    data.module === 'metadata'
+      ? { valid: false, message: 'Metadata upgrade ownership has no public getter. Upgrade proposals remain blocked.' }
+      : moduleUpgradeHandler.validate(data, context),
+  buildCallVector: (data, context) => {
+    if (data.module === 'metadata')
+      throw new Error('Metadata upgrade authority is unavailable; submission is disabled.');
+    return moduleUpgradeHandler.buildCallVector(data, context);
+  }
+};
 
 /**
  * Explicit registry - all actions registered in one place
@@ -33,14 +86,25 @@ const REGISTERED_HANDLERS: ActionHandler[] = [
   setVotingPeriodHandler,
   setProposalThresholdHandler,
   setQuorumBpsHandler,
+  setQueueDelayHandler,
   pauseAuctionHandler,
   unpauseAuctionHandler,
   setAuctionReservePriceHandler,
   setAuctionPaymentTokenHandler,
   setAuctionDurationHandler,
   setAuctionTimeBufferHandler,
+  setAuctionMinBidIncrementHandler,
+  cancelAuctionHandler,
+  setMarketplacePaymentTokenHandler,
+  setMarketplaceSecondaryFeeHandler,
+  pauseMarketplaceHandler,
+  unpauseMarketplaceHandler,
   createPrimaryListingHandler,
-  cancelPrimaryListingHandler
+  cancelPrimaryListingHandler,
+  registeredArtworkPropertiesHandler,
+  ...artworkSettingHandlers,
+  ...minterAllocationHandlers,
+  registeredModuleUpgradeHandler
 ];
 
 const ACTION_REGISTRY = new Map<ProposalActionType, ActionHandler>(

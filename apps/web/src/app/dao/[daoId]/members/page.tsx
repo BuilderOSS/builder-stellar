@@ -1,101 +1,140 @@
 'use client';
 
-import { Grid, Stack } from 'styled-system/jsx';
+import Link from 'next/link';
+import { useState } from 'react';
 
+import styles from '@/components/member-directory/directory.module.css';
 import { PageSection } from '@/components/page-section';
-import { Badge, Button, Callout, Card, ShortId, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
-import { getDaoAccountRole } from '@/lib/account-role';
-import { useGoldskyMemberList } from '@/lib/goldsky-queries';
+import { useDirectoryMembers } from '@/lib/member-directory/hooks';
+import { memberAddress } from '@/lib/member-directory/validation';
 
 export default function MembersPage() {
-  const { daoTokenAddress, daoConfig: config } = useDaoContext();
-  const { data, error, isLoading, mutate } = useGoldskyMemberList(daoTokenAddress, 100);
-  const rows = data?.items ?? [];
-
+  const { daoId } = useDaoContext();
+  return <MemberDirectory key={daoId} daoId={daoId} />;
+}
+function MemberDirectory({ daoId }: { daoId: string }) {
+  const [page, setPage] = useState(0);
+  const [address, setAddress] = useState('');
+  const [message, setMessage] = useState('');
+  const [lookup, setLookup] = useState('');
+  const { data, error, isLoading, isValidating, mutate } = useDirectoryMembers(daoId, page);
   return (
-    <PageSection title="Members" description="A live view of token holders with non-zero balances.">
-      <Card p="5">
-        <Stack gap="3">
-          <div className="section-toolbar">
-            <Text className="label">Member directory</Text>
-            <Button type="button" variant="outline" size="sm" onClick={() => void mutate()} disabled={isLoading}>
-              {isLoading ? 'Refreshing...' : 'Refresh'}
-            </Button>
-          </div>
-
-          {error ? <Callout variant="error" title="Member directory unavailable" description={error.message} /> : null}
-          {isLoading ? (
-            <div role="status" aria-busy="true" className="members-loading">
-              <span className="sr-only">Loading member balances</span>
-              <div className="members-table-wrap">
-                <table className="members-table">
-                  <tbody>
-                    {Array.from({ length: 6 }, (_, index) => (
-                      <tr key={index}>
-                        <td>
-                          <Skeleton style={{ width: '120px', height: '1em' }} />
-                        </td>
-                        <td>
-                          <Skeleton style={{ width: '70px', height: '1em' }} />
-                        </td>
-                        <td>
-                          <Skeleton style={{ width: '35px', height: '1em' }} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : null}
-          {!isLoading && !rows.length ? (
-            <div className="empty-state" role="status">
-              <Text className="lede" style={{ margin: '0 auto' }}>
-                No token holders are indexed yet.
-              </Text>
-            </div>
-          ) : !isLoading ? (
-            <>
-              <div className="members-table-wrap">
-                <table className="members-table">
+    <PageSection
+      title="Members"
+      description="Token holders and addresses with delegated votes. Owning tokens and having voting power are different."
+    >
+      <div className={styles.row} style={{ marginBottom: 16 }}>
+        <Link href={`/dao/${daoId}/claims`}>View membership claims →</Link>
+      </div>
+      <section className={styles.panel}>
+        <div className={styles.row}>
+          <h2>Member directory</h2>
+          <button type="button" disabled={isValidating} onClick={() => void mutate()}>
+            {isValidating ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
+        <form
+          className={styles.row}
+          onSubmit={(e) => {
+            e.preventDefault();
+            setMessage('');
+            try {
+              setLookup(memberAddress(address));
+            } catch (error) {
+              setLookup('');
+              setMessage((error as Error).message);
+            }
+          }}
+        >
+          <label className={styles.grow}>
+            Find an address
+            <input
+              value={address}
+              onChange={(e) => {
+                setAddress(e.target.value);
+                setLookup('');
+              }}
+              placeholder="Stellar account or contract address"
+              autoCapitalize="none"
+              spellCheck={false}
+            />
+          </label>
+          <button type="submit">Find profile</button>
+        </form>
+        {message ? <p role="alert">{message}</p> : null}
+        {lookup ? (
+          <Link href={`/dao/${daoId}/members/${lookup}`}>
+            Open profile for {lookup.slice(0, 8)}…{lookup.slice(-6)}
+          </Link>
+        ) : null}
+        {error ? <p role="alert">{error.message} No member counts are shown until the request succeeds.</p> : null}
+        {isLoading ? <p role="status">Loading members…</p> : null}
+        {data && !error ? (
+          <>
+            <p className={styles.muted}>
+              {data.total} indexed addresses · sorted by voting power. Delegates can have votes without owning a token.
+            </p>
+            {data.items.length ? (
+              <div className={styles.tableWrap}>
+                <table className={styles.table}>
                   <thead>
                     <tr>
-                      <th scope="col">Address</th>
-                      <th scope="col">Voting power</th>
-                      <th scope="col">Rank</th>
+                      <th>Address</th>
+                      <th>Tokens owned</th>
+                      <th>Voting power</th>
+                      <th>Delegates to</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((row, index) => (
-                      <tr key={row.address}>
+                    {data.items.map((member) => (
+                      <tr key={member.address}>
                         <td>
-                          <ShortId value={row.address} />
+                          <Link title={member.address} href={`/dao/${daoId}/members/${member.address}`}>
+                            {member.address.slice(0, 8)}…{member.address.slice(-6)}
+                          </Link>
                         </td>
-                        <td className="members-table-number">{row.voting_power}</td>
-                        <td className="members-table-number">#{index + 1}</td>
+                        <td>{member.owned_token_count}</td>
+                        <td>{member.voting_power}</td>
+                        <td>
+                          {!member.delegated_to ? (
+                            'Not set'
+                          ) : member.delegated_to === member.address ? (
+                            'Self'
+                          ) : (
+                            <Link title={member.delegated_to} href={`/dao/${daoId}/members/${member.delegated_to}`}>
+                              {member.delegated_to.slice(0, 8)}…{member.delegated_to.slice(-6)}
+                            </Link>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <Grid className="members-card-list" columns={{ base: 1 }} gap="3">
-                {rows.map((row, index) => (
-                  <Card className="interactive-card" key={row.address} p="4">
-                    <Stack gap="2">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
-                        <Badge>#{index + 1}</Badge>
-                        <Badge>Tokens {row.owned_token_count}</Badge>
-                      </div>
-                      <ShortId value={row.address} label={getDaoAccountRole(config, row.address) ?? 'Address'} />
-                    </Stack>
-                  </Card>
-                ))}
-              </Grid>
-            </>
-          ) : null}
-        </Stack>
-      </Card>
+            ) : (
+              <p>No holders or delegates indexed on this page.</p>
+            )}
+            <nav aria-label="Member pages" className={styles.row}>
+              <button type="button" disabled={page === 0 || isValidating} onClick={() => setPage(page - 1)}>
+                Previous
+              </button>
+              <span>
+                Page {page + 1}
+                {data.items.length ? ` · ${data.offset + 1}–${data.offset + data.items.length} of ${data.total}` : ''}
+              </span>
+              <button type="button" disabled={!data.hasMore || isValidating} onClick={() => setPage(page + 1)}>
+                Next
+              </button>
+            </nav>
+          </>
+        ) : null}
+        {error && page > 0 ? (
+          <button type="button" onClick={() => setPage(page - 1)}>
+            Return to previous page
+          </button>
+        ) : null}
+      </section>
     </PageSection>
   );
 }

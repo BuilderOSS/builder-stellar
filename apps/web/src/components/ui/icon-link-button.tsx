@@ -15,6 +15,7 @@ export function IconLinkButton({ href, label, children, compact = false }: IconL
       rel="noreferrer"
       aria-label={label}
       title={label}
+      className="warm-ink-icon-action"
       style={{
         appearance: 'none',
         display: 'inline-flex',

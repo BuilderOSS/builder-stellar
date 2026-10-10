@@ -1,881 +1,250 @@
 'use client';
 
 import { Client as AuctionClient } from '@builder-stellar/auction-bindings';
-import { Client as TokenClient } from '@builder-stellar/token-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 import useSWR from 'swr';
 
-import { AdminPaymentTokenForm, AdminReservePriceForm } from '@/components/admin/admin-action-forms';
+import { AdminReservePriceForm } from '@/components/admin/admin-action-forms';
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
-import { AdminSectionNav } from '@/components/admin/admin-section-nav';
-import { type AuctionAutoPauseAction, AuctionAutoPauseDialog } from '@/components/admin/auction-auto-pause-dialog';
-import {
-  type EnableAuctionsErrors,
-  EnableAuctionsForm,
-  type EnableAuctionsValues
-} from '@/components/admin/enable-auctions-form';
+import { AdminSurfaceNav as AdminSectionNav } from '@/components/admin/admin-surface-nav';
+import { AuctionParameterControls } from '@/components/admin/auction-parameter-controls';
 import { PageSection } from '@/components/page-section';
-import { Badge, Button, Callout, Card, Heading, ShortId, Skeleton, Text } from '@/components/ui';
+import { Badge, Button, Callout, Card, Heading, ShortId, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsOwner } from '@/lib/admin-proposals';
 import { useContractOwner } from '@/lib/admin-queries';
-import { getTreasuryAssets } from '@/lib/assets-config';
-import { decimalToStroops, formatStroops, validateReservePrice } from '@/lib/auction-values';
-import { isDaoAdmin } from '@/lib/dao-config';
-import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
-import { validateAuctionTimeBuffer } from '@/lib/governance-limits';
+import { adminReadOptions, useAdminTokenState } from '@/lib/admin-surfaces';
+import { decimalToStroops, formatStroops } from '@/lib/auction-values';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
-import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
-import { getStellarAddressError, isValidStellarAddress, validateDuration } from '@/lib/validation';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 type AuctionStatus = {
   status: 'not-launched' | 'paused' | 'active';
   paused: boolean;
+  auction: { token_id: string; settled: boolean } | null;
   config: {
     duration: string | number;
     reserve_price: string;
     time_buffer: string | number;
-    payment_token: string | null;
+    payment_token: string;
+    min_bid_increment_percent: number;
   };
 };
-
-const fetcher = async (url: string): Promise<AuctionStatus> => {
+async function fetcher(url: string): Promise<AuctionStatus> {
   const response = await fetch(url, { cache: 'no-store' });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message || 'Auction status unavailable');
-  return {
-    status: payload.status || (payload.paused ? 'paused' : 'active'),
-    paused: Boolean(payload.paused),
-    config: payload.config
-  };
-};
-
-function nonZeroValue(value: string | number | null | undefined) {
-  if (value === null || typeof value === 'undefined' || value === '' || Number(value) <= 0) return '';
-  return String(value);
-}
-
-function nonZeroReserve(value: string | null | undefined) {
-  try {
-    return value && BigInt(value) > 0n ? formatStroops(value) : '';
-  } catch {
-    return '';
-  }
+  return payload;
 }
 
 export default function AuctionAdminPage() {
   const { daoId, daoConfig: config } = useDaoContext();
   const session = useAuthSessionStore();
   const tx = useTransactionFeedback(config.name);
+  const draft = useAdminProposalDraft();
   const [busy, setBusy] = useState(false);
-  const [formMessage, setFormMessage] = useState('');
   const [reservePrice, setReservePrice] = useState('');
-  const [paymentToken, setPaymentToken] = useState('');
-  const [enableValues, setEnableValues] = useState<EnableAuctionsValues>({
-    duration: '',
-    reservePrice: '',
-    timeBuffer: '',
-    paymentToken: ''
-  });
-  const [enableErrors, setEnableErrors] = useState<EnableAuctionsErrors>({});
-  const [autoPauseDialogOpen, setAutoPauseDialogOpen] = useState(false);
-  const [autoPauseAction, setAutoPauseAction] = useState<AuctionAutoPauseAction | null>(null);
-  const proposalDraft = useAdminProposalDraft();
-  const draftStatus = useAdminDraftStatus(daoId, [
-    'set-mint-authority',
-    'set-auction-duration',
-    'set-auction-time-buffer',
-    'set-auction-reserve-price',
-    'set-auction-payment-token',
-    'pause-auction',
-    'unpause-auction'
-  ]);
+  const [message, setMessage] = useState('');
   const { data, error, mutate, isLoading } = useSWR<AuctionStatus>(
-    `/api/dao/${encodeURIComponent(daoId)}/auctions`,
+    config.auctionContractId ? `/api/dao/${encodeURIComponent(daoId)}/auctions` : null,
     fetcher
   );
-  const { data: mintAuthorities, error: mintAuthorityError } = useGoldskyMintAuthorities(config.tokenContractId);
-  const { data: auctionOwner } = useContractOwner(config, 'auction', session.address || undefined);
-  const isOwner = isDaoAdmin(config, session.address);
-  // Before launch the auction cannot be unpaused and the token cannot grant mint authority (NotLive).
-  // Launching through the Manager starts the auction and wires the mint authority.
-  const isPendingLaunch = config.status === 'pending';
-  const canProposeAuction = Boolean(session.address && treasuryIsOwner(config, auctionOwner));
-  const auctionCanMint = Boolean(
-    mintAuthorities?.items.some((item) => item.authority === config.auctionContractId && item.enabled)
-  );
-  const auctionMintAuthorityQueued = draftStatus.actionsInDraft.some(
-    (action) =>
-      action.type === 'set-mint-authority' && action.authority === config.auctionContractId && action.enabled !== false
-  );
+  const token = useAdminTokenState(config, session.address);
+  const owner = useContractOwner(config, 'auction', session.address || config.launchAdmin || config.adminAddress);
+  const direct = Boolean(session.address && owner.data === session.address);
+  const canPropose = Boolean(session.address && token.data?.live && treasuryIsOwner(config, owner.data));
+  const allowed = direct || canPropose;
+  const live = token.data?.live === true;
+  const networkReady =
+    !session.walletNetworkIssue &&
+    (!session.walletNetworkPassphrase || session.walletNetworkPassphrase === config.passphrase);
 
-  const populatedEnableValues: EnableAuctionsValues = {
-    duration: enableValues.duration || nonZeroValue(data?.config.duration),
-    reservePrice: enableValues.reservePrice || nonZeroReserve(data?.config.reserve_price),
-    timeBuffer: enableValues.timeBuffer || nonZeroValue(data?.config.time_buffer),
-    paymentToken: enableValues.paymentToken || data?.config.payment_token || ''
-  };
-
-  function validateEnableValues() {
-    const nextErrors: EnableAuctionsErrors = {};
-    const duration = Number(populatedEnableValues.duration);
-    const timeBuffer = Number(populatedEnableValues.timeBuffer);
-    const reservePrice = decimalToStroops(populatedEnableValues.reservePrice);
-
-    const durationError = validateDuration(duration, 300);
-    if (!populatedEnableValues.duration || durationError)
-      nextErrors.duration = durationError || 'Auction duration is required.';
-
-    const reserveError = validateReservePrice(populatedEnableValues.reservePrice);
-    if (!populatedEnableValues.reservePrice || reserveError)
-      nextErrors.reservePrice = reserveError || 'Reserve price is required.';
-
-    const timeBufferError = validateAuctionTimeBuffer(timeBuffer);
-    if (!populatedEnableValues.timeBuffer || timeBufferError) {
-      nextErrors.timeBuffer = timeBufferError || 'Time buffer is required.';
-    }
-
-    if (!populatedEnableValues.paymentToken) {
-      nextErrors.paymentToken = 'Payment token is required.';
-    } else if (!isValidStellarAddress(populatedEnableValues.paymentToken)) {
-      nextErrors.paymentToken =
-        getStellarAddressError(populatedEnableValues.paymentToken) || 'Invalid payment token address.';
-    }
-
-    setEnableErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0 || reservePrice === null) return null;
-    return { duration, reservePrice, timeBuffer, paymentToken: populatedEnableValues.paymentToken.trim() };
-  }
-
-  function proposalContext() {
-    return { config, session: { address: session.address, kit: StellarWalletsKit } };
-  }
-
-  function buildEnableProposalRequests(values: {
-    duration: number;
-    reservePrice: bigint;
-    timeBuffer: number;
-    paymentToken: string;
-  }) {
-    const context = proposalContext();
-    const durationAction = getActionHandler('set-auction-duration').serialize(
-      { value: String(values.duration) },
-      context
-    );
-    const reserveAction = getActionHandler('set-auction-reserve-price').serialize(
-      { reservePrice: formatStroops(values.reservePrice) },
-      context
-    );
-    const timeBufferAction = getActionHandler('set-auction-time-buffer').serialize(
-      { value: String(values.timeBuffer) },
-      context
-    );
-    const paymentAction = getActionHandler('set-auction-payment-token').serialize(
-      { paymentToken: values.paymentToken },
-      context
-    );
-    const unpauseAction = getActionHandler('unpause-auction').serialize({}, context);
-    const requests = [
-      {
+  async function apply(type: 'pause-auction' | 'unpause-auction' | 'set-auction-reserve-price') {
+    if (!session.address || !data || busy || !allowed || !networkReady) return;
+    if (type !== 'set-auction-reserve-price' && !live) return;
+    if (type === 'set-auction-reserve-price' && !data.paused) return;
+    const handler = getActionHandler(type);
+    const values = type === 'set-auction-reserve-price' ? { reservePrice } : {};
+    const context = { config, session: { address: session.address, kit: StellarWalletsKit } };
+    const validation = handler.validate(values, context);
+    if (!validation.valid) return setMessage(validation.message);
+    if (!direct) {
+      draft.requestAdd({
         daoId,
-        action: durationAction,
-        source: 'admin/auction/set-auction-duration',
+        action: handler.serialize(values, context),
+        source: `admin/auction/${type}`,
         metadata: {
-          title: 'Set auction duration',
-          description: `Set each auction duration to ${values.duration} seconds.`,
+          title: handler.label,
+          description:
+            type === 'set-auction-reserve-price'
+              ? `Set reserve price to ${reservePrice}. Auction must remain paused at execution.`
+              : type === 'pause-auction'
+                ? 'Pause bidding and auction progression.'
+                : 'Resume auction activity; this may create and mint the next auction token.',
           url: ''
         }
-      },
-      {
-        daoId,
-        action: reserveAction,
-        source: 'admin/auction/set-auction-reserve-price',
-        metadata: {
-          title: 'Set auction reserve price',
-          description: `Set the first auction reserve price to ${formatStroops(values.reservePrice)}.`,
-          url: ''
-        }
-      },
-      {
-        daoId,
-        action: timeBufferAction,
-        source: 'admin/auction/set-auction-time-buffer',
-        metadata: {
-          title: 'Set auction time buffer',
-          description: `Set the auction time buffer to ${values.timeBuffer} seconds.`,
-          url: ''
-        }
-      },
-      {
-        daoId,
-        action: paymentAction,
-        source: 'admin/auction/set-auction-payment-token',
-        metadata: {
-          title: 'Set auction payment token',
-          description: `Set the auction payment token to ${values.paymentToken}.`,
-          url: ''
-        }
-      }
-    ];
-
-    if (!auctionCanMint && !auctionMintAuthorityQueued) {
-      requests.push({
-        daoId,
-        action: getActionHandler('set-mint-authority').serialize(
-          { authority: config.auctionContractId, enabled: true },
-          context
-        ),
-        source: 'admin/auction/set-mint-authority',
-        metadata: {
-          title: 'Enable auction mint authority',
-          description: `Allow ${config.auctionContractId} to mint auction tokens.`,
-          url: ''
-        }
-      });
-    }
-
-    requests.push({
-      daoId,
-      action: unpauseAction,
-      source: 'admin/auction/unpause-auction',
-      metadata: {
-        title: 'Enable auctions',
-        description: 'Enable auction activity and create the first auction.',
-        url: ''
-      }
-    });
-    return requests;
-  }
-
-  async function handleEnableAuctions() {
-    if (!session.address) return;
-    const values = validateEnableValues();
-    if (!values) return;
-
-    if (!isOwner && canProposeAuction) {
-      proposalDraft.requestAddBatch({
-        daoId,
-        requests: buildEnableProposalRequests(values),
-        onAdded: () => setFormMessage('Auction setup and enable actions added to the proposal draft.')
-      });
-      return;
-    }
-
-    setBusy(true);
-    setFormMessage('');
-    tx.start('Configuring auctions...');
-    try {
-      const signTransaction = async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
-        StellarWalletsKit.signTransaction(xdr, {
-          networkPassphrase: opts?.networkPassphrase ?? config.passphrase,
-          address: opts?.address ?? session.address
-        });
-      const auctionClient = new AuctionClient({
-        contractId: config.auctionContractId,
-        rpcUrl: config.rpcUrl,
-        networkPassphrase: config.passphrase,
-        publicKey: session.address,
-        signTransaction
-      });
-      const submitAuctionUpdate = async (label: string, assembled: { signAndSend: () => Promise<any> }) => {
-        const sent = await assembled.signAndSend();
-        const hash = sent.sendTransactionResponse?.hash ?? '';
-        tx.submitted(label, hash);
-        await waitForConfirmation(hash, config.rpcUrl);
-        return hash;
-      };
-
-      await submitAuctionUpdate(
-        'Auction duration update submitted',
-        await auctionClient.set_duration({ duration: BigInt(values.duration) })
-      );
-      await submitAuctionUpdate(
-        'Auction reserve price update submitted',
-        await auctionClient.set_reserve_price({ reserve_price: values.reservePrice })
-      );
-      await submitAuctionUpdate(
-        'Auction time buffer update submitted',
-        await auctionClient.set_time_buffer({ time_buffer: BigInt(values.timeBuffer) })
-      );
-      await submitAuctionUpdate(
-        'Auction payment token update submitted',
-        await auctionClient.set_payment_token({ payment_token: values.paymentToken })
-      );
-
-      if (!auctionCanMint) {
-        const tokenClient = new TokenClient({
-          contractId: config.tokenContractId,
-          rpcUrl: config.rpcUrl,
-          networkPassphrase: config.passphrase,
-          publicKey: session.address,
-          signTransaction
-        });
-        await submitAuctionUpdate(
-          'Auction mint authority update submitted',
-          await tokenClient.set_mint_authority({ authority: config.auctionContractId, enabled: true })
-        );
-      }
-
-      const hash = await submitAuctionUpdate(
-        'Auction enable submitted',
-        await auctionClient.unpause({ caller: session.address })
-      );
-      tx.success('Auctions enabled', hash);
-      await mutate();
-      setEnableErrors({});
-    } catch (enableError) {
-      tx.fail(enableError, 'Auction enable failed');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function updatePaused(nextPaused: boolean) {
-    if (!session.address || (!isOwner && !canProposeAuction)) return;
-
-    // Determine action type and messaging based on auction status
-    const isLaunching = data?.status === 'not-launched' && !nextPaused;
-    const isEnabling = config.auctionEnabled === false && !nextPaused;
-    const actionType = nextPaused ? 'pause-auction' : 'unpause-auction';
-    const actionTitle = isEnabling
-      ? 'Enable auctions'
-      : isLaunching
-        ? 'Launch auctions'
-        : nextPaused
-          ? 'Pause auctions'
-          : 'Resume auctions';
-    const actionDescription = isEnabling
-      ? 'Enable auction activity and create the first token.'
-      : isLaunching
-        ? 'Launch auctions and create the first token.'
-        : nextPaused
-          ? 'Pause auction activity.'
-          : 'Resume auction activity.';
-
-    if (!isOwner && canProposeAuction) {
-      if (!nextPaused && !auctionCanMint && !auctionMintAuthorityQueued) {
-        const mintAuthorityHandler = getActionHandler('set-mint-authority');
-        const mintAuthorityAction = mintAuthorityHandler.serialize(
-          { authority: config.auctionContractId, enabled: true },
-          { config, session: { address: session.address, kit: StellarWalletsKit } }
-        );
-        const unpauseHandler = getActionHandler('unpause-auction');
-        const unpauseAction = unpauseHandler.serialize(
-          {},
-          { config, session: { address: session.address, kit: StellarWalletsKit } }
-        );
-
-        proposalDraft.requestAdd({
-          daoId,
-          action: mintAuthorityAction,
-          source: 'admin/auction/set-mint-authority',
-          metadata: {
-            title: 'Enable auction mint authority',
-            description: `Allow ${config.auctionContractId} to mint auction tokens.`,
-            url: ''
-          },
-          onAdded: () => {
-            proposalDraft.requestAdd({
-              daoId,
-              action: unpauseAction,
-              source: 'admin/auction/unpause-auction',
-              metadata: {
-                title: isEnabling ? 'Enable auctions' : 'Resume auctions',
-                description: actionDescription,
-                url: ''
-              },
-              onAdded: () => setFormMessage(`${isEnabling ? 'Enable' : 'Resume'} auctions added to the proposal draft.`)
-            });
-          }
-        });
-        return;
-      }
-
-      const handler = getActionHandler(actionType);
-      const action = handler.serialize({}, { config, session: { address: session.address, kit: StellarWalletsKit } });
-      proposalDraft.requestAdd({
-        daoId,
-        action,
-        source: `admin/auction/${actionType}`,
-        metadata: {
-          title: actionTitle,
-          description: actionDescription,
-          url: ''
-        },
-        onAdded: () => setFormMessage(`${actionTitle} added to the proposal draft.`)
       });
       return;
     }
     setBusy(true);
-    tx.start(
-      isEnabling
-        ? 'Enabling auctions...'
-        : isLaunching
-          ? 'Launching auctions...'
-          : nextPaused
-            ? 'Pausing auctions...'
-            : 'Resuming auctions...'
-    );
+    setMessage('');
+    tx.start(handler.label);
     try {
       const client = new AuctionClient({
-        contractId: config.auctionContractId,
-        rpcUrl: config.rpcUrl,
-        networkPassphrase: config.passphrase,
-        publicKey: session.address,
-        signTransaction: async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
+        ...adminReadOptions(config, config.auctionContractId, session.address),
+        signTransaction: (xdr, opts) =>
           StellarWalletsKit.signTransaction(xdr, {
-            networkPassphrase: opts?.networkPassphrase ?? config.passphrase,
-            address: opts?.address ?? session.address
+            ...opts,
+            address: session.address!,
+            networkPassphrase: config.passphrase
           })
       });
-      const assembled = nextPaused
-        ? await client.pause({ caller: session.address })
-        : await client.unpause({ caller: session.address });
+      const assembled =
+        type === 'pause-auction'
+          ? await client.pause({ caller: session.address })
+          : type === 'unpause-auction'
+            ? await client.unpause({ caller: session.address })
+            : await client.set_reserve_price({ reserve_price: decimalToStroops(reservePrice)! });
       const sent = await assembled.signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
-      const submittedMessage = nextPaused
-        ? 'Auction pause submitted'
-        : isEnabling
-          ? 'Auction enable submitted'
-          : isLaunching
-            ? 'Auction launch submitted'
-            : 'Auction resume submitted';
-      const successMessage = nextPaused
-        ? 'Auctions paused'
-        : isEnabling
-          ? 'Auctions enabled'
-          : isLaunching
-            ? 'Auctions launched'
-            : 'Auctions resumed';
-      tx.submitted(submittedMessage, hash);
+      tx.submitted(`${handler.label} submitted`, hash);
       await waitForConfirmation(hash, config.rpcUrl);
-      tx.success(successMessage, hash);
+      tx.success(`${handler.label} confirmed`, hash);
       await mutate();
-    } catch (updateError) {
-      tx.fail(updateError, 'Auction control failed');
+    } catch (failure) {
+      tx.fail(failure, 'Auction update failed');
     } finally {
       setBusy(false);
     }
-  }
-
-  async function updateReservePrice(skipPauseCheck = false) {
-    if (!session.address || (!isOwner && !canProposeAuction) || !data) return;
-
-    // If auctions are active and not skipping pause check, show confirmation dialog
-    if (!skipPauseCheck && data.paused === false) {
-      setAutoPauseAction('reserve-price');
-      setAutoPauseDialogOpen(true);
-      return;
-    }
-
-    const match = reservePrice.trim().match(/^(\d+)(?:\.(\d{1,7}))?$/);
-    if (!match)
-      return tx.fail(new Error('Enter a valid reserve price with up to 7 decimal places.'), 'Invalid reserve price');
-    const amount = BigInt(match[1]) * 10_000_000n + BigInt((match[2] || '').padEnd(7, '0') || '0');
-    if (amount < 1000n)
-      return tx.fail(new Error('Reserve price must be at least 0.0001 payment tokens.'), 'Invalid reserve price');
-    if (!isOwner && canProposeAuction) {
-      const actions = [];
-      // Add pause action if auctions are active
-      if (data.paused === false) {
-        const pauseHandler = getActionHandler('pause-auction');
-        const pauseAction = pauseHandler.serialize(
-          {},
-          { config, session: { address: session.address, kit: StellarWalletsKit } }
-        );
-        actions.push(pauseAction);
-      }
-      const handler = getActionHandler('set-auction-reserve-price');
-      const action = handler.serialize(
-        { reservePrice: reservePrice.trim() },
-        { config, session: { address: session.address, kit: StellarWalletsKit } }
-      );
-      actions.push(action);
-
-      // Add all actions to draft
-      for (let i = 0; i < actions.length; i++) {
-        proposalDraft.requestAdd({
-          daoId,
-          action: actions[i],
-          source: `admin/auction/${i === 0 && data.paused === false ? 'pause-auction' : 'set-auction-reserve-price'}`,
-          metadata: {
-            title: i === 0 && data.paused === false ? 'Pause auctions' : 'Update auction reserve price',
-            description:
-              i === 0 && data.paused === false
-                ? 'Pause auction activity.'
-                : `Set the next auction reserve price to ${reservePrice.trim()}.`,
-            url: ''
-          },
-          onAdded: () => {
-            if (i === actions.length - 1) {
-              setFormMessage(
-                `${data.paused === false ? 'Pause and update' : 'Update'} reserve price added to the proposal draft.`
-              );
-              setReservePrice('');
-            }
-          }
-        });
-      }
-      return;
-    }
-    setBusy(true);
-    tx.start('Updating reserve price...');
-    try {
-      // If auctions are active, pause them first
-      if (data.paused === false) {
-        const pauseClient = new AuctionClient({
-          contractId: config.auctionContractId,
-          rpcUrl: config.rpcUrl,
-          networkPassphrase: config.passphrase,
-          publicKey: session.address,
-          signTransaction: async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
-            StellarWalletsKit.signTransaction(xdr, {
-              networkPassphrase: opts?.networkPassphrase ?? config.passphrase,
-              address: opts?.address ?? session.address
-            })
-        });
-        tx.start('Pausing auctions...');
-        const pauseAssembled = await pauseClient.pause({ caller: session.address });
-        const pauseSent = await pauseAssembled.signAndSend();
-        const pauseHash = pauseSent.sendTransactionResponse?.hash ?? '';
-        tx.submitted('Auction pause submitted', pauseHash);
-        await waitForConfirmation(pauseHash, config.rpcUrl);
-        tx.submitted('Auctions paused, updating reserve price...', pauseHash);
-      }
-
-      const client = new AuctionClient({
-        contractId: config.auctionContractId,
-        rpcUrl: config.rpcUrl,
-        networkPassphrase: config.passphrase,
-        publicKey: session.address,
-        signTransaction: async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
-          StellarWalletsKit.signTransaction(xdr, {
-            networkPassphrase: opts?.networkPassphrase ?? config.passphrase,
-            address: opts?.address ?? session.address
-          })
-      });
-      const sent = await (await client.set_reserve_price({ reserve_price: amount })).signAndSend();
-      const hash = sent.sendTransactionResponse?.hash ?? '';
-      tx.submitted('Reserve price update submitted', hash);
-      await waitForConfirmation(hash, config.rpcUrl);
-      tx.success('Reserve price updated', hash);
-      setReservePrice('');
-      await mutate();
-    } catch (updateError) {
-      tx.fail(updateError, 'Reserve price update failed');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function updatePaymentToken(skipPauseCheck = false) {
-    if (!session.address || (!isOwner && !canProposeAuction) || !data) return;
-
-    // If auctions are active and not skipping pause check, show confirmation dialog
-    if (!skipPauseCheck && data.paused === false) {
-      setAutoPauseAction('payment-token');
-      setAutoPauseDialogOpen(true);
-      return;
-    }
-
-    const value = paymentToken.trim();
-    if (!value) return tx.fail(new Error('Payment token contract address is required.'), 'Invalid payment token');
-    if (!isValidStellarAddress(value)) {
-      return tx.fail(
-        new Error(getStellarAddressError(value) ?? 'Invalid payment token contract address.'),
-        'Invalid payment token'
-      );
-    }
-    if (!isOwner && canProposeAuction) {
-      const actions = [];
-      // Add pause action if auctions are active
-      if (data.paused === false) {
-        const pauseHandler = getActionHandler('pause-auction');
-        const pauseAction = pauseHandler.serialize(
-          {},
-          { config, session: { address: session.address, kit: StellarWalletsKit } }
-        );
-        actions.push(pauseAction);
-      }
-      const handler = getActionHandler('set-auction-payment-token');
-      const action = handler.serialize(
-        { paymentToken: value },
-        { config, session: { address: session.address, kit: StellarWalletsKit } }
-      );
-      actions.push(action);
-
-      // Add all actions to draft
-      for (let i = 0; i < actions.length; i++) {
-        proposalDraft.requestAdd({
-          daoId,
-          action: actions[i],
-          source: `admin/auction/${i === 0 && data.paused === false ? 'pause-auction' : 'set-auction-payment-token'}`,
-          metadata: {
-            title: i === 0 && data.paused === false ? 'Pause auctions' : 'Update auction payment token',
-            description:
-              i === 0 && data.paused === false
-                ? 'Pause auction activity.'
-                : `Set the auction payment token to ${value}.`,
-            url: ''
-          },
-          onAdded: () => {
-            if (i === actions.length - 1) {
-              setFormMessage(
-                `${data.paused === false ? 'Pause and update' : 'Update'} payment token added to the proposal draft.`
-              );
-              setPaymentToken('');
-            }
-          }
-        });
-      }
-      return;
-    }
-    setBusy(true);
-    tx.start('Updating payment token...');
-    try {
-      // If auctions are active, pause them first
-      if (data.paused === false) {
-        const pauseClient = new AuctionClient({
-          contractId: config.auctionContractId,
-          rpcUrl: config.rpcUrl,
-          networkPassphrase: config.passphrase,
-          publicKey: session.address,
-          signTransaction: async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
-            StellarWalletsKit.signTransaction(xdr, {
-              networkPassphrase: opts?.networkPassphrase ?? config.passphrase,
-              address: opts?.address ?? session.address
-            })
-        });
-        tx.start('Pausing auctions...');
-        const pauseAssembled = await pauseClient.pause({ caller: session.address });
-        const pauseSent = await pauseAssembled.signAndSend();
-        const pauseHash = pauseSent.sendTransactionResponse?.hash ?? '';
-        tx.submitted('Auction pause submitted', pauseHash);
-        await waitForConfirmation(pauseHash, config.rpcUrl);
-        tx.submitted('Auctions paused, updating payment token...', pauseHash);
-      }
-
-      const client = new AuctionClient({
-        contractId: config.auctionContractId,
-        rpcUrl: config.rpcUrl,
-        networkPassphrase: config.passphrase,
-        publicKey: session.address,
-        signTransaction: async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
-          StellarWalletsKit.signTransaction(xdr, {
-            networkPassphrase: opts?.networkPassphrase ?? config.passphrase,
-            address: opts?.address ?? session.address
-          })
-      });
-      const sent = await (await client.set_payment_token({ payment_token: value })).signAndSend();
-      const hash = sent.sendTransactionResponse?.hash ?? '';
-      tx.submitted('Payment token update submitted', hash);
-      await waitForConfirmation(hash, config.rpcUrl);
-      tx.success('Payment token updated', hash);
-      setPaymentToken('');
-      await mutate();
-    } catch (updateError) {
-      tx.fail(updateError, 'Payment token update failed');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (!isOwner && !canProposeAuction) {
-    return (
-      <PageSection title="Auction controls" description="Owner-only auction operations.">
-        <Callout variant="warning" badge="Access restricted" title="Connect the configured owner wallet to continue">
-          <ShortId value={config.adminAddress} label="Owner address" />
-        </Callout>
-      </PageSection>
-    );
   }
 
   return (
     <>
-      <AdminProposalDraftDialog
-        pending={proposalDraft.pending}
-        onCancel={proposalDraft.cancel}
-        onResolve={proposalDraft.resolve}
-      />
-      <AuctionAutoPauseDialog
-        open={autoPauseDialogOpen}
-        action={autoPauseAction ?? 'payment-token'}
-        isLoading={busy}
-        onCancel={() => setAutoPauseDialogOpen(false)}
-        onConfirm={() => {
-          setAutoPauseDialogOpen(false);
-          if (autoPauseAction === 'payment-token') {
-            void updatePaymentToken(true);
-          } else {
-            void updateReservePrice(true);
-          }
-        }}
-      />
+      <AdminProposalDraftDialog pending={draft.pending} onCancel={draft.cancel} onResolve={draft.resolve} />
       <PageSection
         title="Auction controls"
-        description="Pause or resume auction activity for maintenance and emergency operations."
+        description="Review current auction state, update paused parameters, and prepare governance actions."
       >
         <Stack gap="4">
           <AdminSectionNav daoId={daoId} active="/auction" />
-          {error ? <Callout variant="error" title={error.message} /> : null}
-          {formMessage ? <Callout variant="warning" title={formMessage} /> : null}
-          <Card p="5">
-            <Stack gap="4">
-              <div>
-                <Badge>Owner</Badge>
-              </div>
-              <Heading style={{ fontSize: '1.2rem' }}>Auction status</Heading>
-              {isLoading && !data ? (
-                <div role="status" aria-busy="true" className="skeleton-list">
-                  <span className="sr-only">Loading auction controls</span>
-                  <Skeleton style={{ width: '260px', height: '1em' }} />
-                  <Skeleton style={{ width: '100%', height: '1em' }} />
-                  <Skeleton style={{ width: '100%', height: '2.5em' }} />
-                  <Skeleton style={{ width: '100%', height: '1em' }} />
-                  <Skeleton style={{ width: '100%', height: '2.5em' }} />
-                </div>
-              ) : (
-                <Text className="lede" style={{ margin: 0 }}>
-                  {config.auctionEnabled === false
-                    ? 'Auctions are currently disabled. Configure the auction and enable it to create the first auction.'
-                    : data?.status === 'not-launched'
-                      ? 'Auctions have not yet been launched. Click launch to create the first auction.'
-                      : data?.paused
-                        ? 'Bidding and automatic settlement are paused.'
-                        : 'Auctions are active and accepting bids.'}
-                </Text>
-              )}
-              {data ? (
-                <>
-                  {!isPendingLaunch && (data.status === 'not-launched' || data.paused) && !auctionCanMint ? (
-                    <Callout
-                      variant="warning"
-                      title="Auction mint authority is missing."
-                      description={
-                        mintAuthorityError?.message ||
-                        `Grant ${config.auctionContractId} mint authority in Token Admin before ${data.status === 'not-launched' ? 'launching' : 'resuming'}. ${data.status === 'not-launched' ? 'Launching' : 'Resuming'} creates the first auction and mints its token.`
-                      }
-                    />
-                  ) : null}
-                </>
-              ) : null}
-              {config.auctionEnabled === false ? (
-                <>
-                  <Callout
-                    variant="info"
-                    title="Auctions are currently disabled"
-                    description="Configure auction parameters below and enable them. Once enabled, you can pause and resume auctions as needed."
-                  />
-                  <EnableAuctionsForm
-                    value={populatedEnableValues}
-                    onChange={setEnableValues}
-                    onSubmit={() => void handleEnableAuctions()}
-                    network={config.name}
-                    errors={enableErrors}
-                    disabled={busy || !data}
-                    submitLabel={isOwner ? 'Enable auctions' : 'Add setup to proposal'}
-                  />
-                </>
-              ) : (
-                <>
-                  {isPendingLaunch ? (
+          {!config.auctionContractId ? <Callout variant="info" title="No auction module configured" /> : null}
+          {error || owner.error || token.error ? (
+            <Callout
+              variant="error"
+              title="Auction controls could not be loaded"
+              description={(error || owner.error || token.error).message}
+            />
+          ) : null}
+          {isLoading || token.isLoading || owner.isLoading ? (
+            <Text role="status">Loading live auction state…</Text>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy || isLoading}
+            onClick={() => void Promise.all([mutate(), owner.mutate(), token.mutate()])}
+          >
+            Refresh live values
+          </Button>
+          {!allowed ? (
+            <Callout
+              variant="info"
+              title="Read-only auction view"
+              description="Connect the current owner during setup. After launch, Treasury-owned updates go through governance."
+            />
+          ) : null}
+          {message ? (
+            <div role="status">
+              <Callout variant="warning" title={message} />
+            </div>
+          ) : null}
+          {data ? (
+            <>
+              <Card p="5">
+                <Stack gap="3">
+                  <Badge>{live ? (data.paused ? 'Paused' : 'Active') : 'Setup'}</Badge>
+                  <Heading style={{ fontSize: '1.2rem' }}>Current auction</Heading>
+                  {data.auction ? (
+                    <Text>
+                      Token #{data.auction.token_id} · {data.auction.settled ? 'Settled' : 'Unsettled'}
+                    </Text>
+                  ) : (
+                    <Text>No current auction token.</Text>
+                  )}
+                  {!live ? (
                     <Callout
                       variant="info"
-                      title="Auction controls open after launch"
-                      description="Launching the DAO from the launch checklist starts the first auction. The auction cannot be unpaused and mint authority cannot be granted before launch."
+                      title="Launch from the DAO checklist"
+                      description="The Manager starts configured auctions at launch. Pause, resume and cancellation are not setup actions."
                     />
                   ) : null}
-                  {!isPendingLaunch ? (
-                    <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                      {data?.status === 'not-launched' ? (
-                        <Button
-                          onClick={() => void updatePaused(false)}
-                          disabled={busy || (isOwner && !auctionCanMint)}
-                        >
-                          {isOwner ? 'Launch auctions' : 'Create launch proposal'}
-                        </Button>
-                      ) : (
-                        <>
-                          <Button onClick={() => void updatePaused(true)} disabled={busy || data?.paused !== false}>
-                            {isOwner ? 'Pause auctions' : 'Add pause proposal'}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => void updatePaused(false)}
-                            disabled={busy || data?.paused !== true || (isOwner && !auctionCanMint)}
-                          >
-                            {isOwner ? 'Resume auctions' : 'Add resume proposal'}
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  ) : null}
-                  <Text className="label">Auction payment token</Text>
-                  {isPendingLaunch ? (
-                    <Callout
-                      variant="warning"
-                      title="Payment asset is fixed at creation"
-                      description="Launch will fail if the auction payment token differs from the one chosen when the DAO was created."
-                    />
-                  ) : null}
-                  <Text className="lede" style={{ margin: 0 }}>
-                    {data?.config.payment_token
-                      ? `${getTreasuryAssets(config.name).find((asset) => asset.contractId === data.config.payment_token)?.code ?? 'Unknown SAC'} · ${data.config.payment_token}`
-                      : 'Not configured'}
-                    . Changes apply after the next auction is created. If auctions are active, they will be paused
-                    automatically.
-                  </Text>
-                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                    <AdminPaymentTokenForm
-                      value={{ paymentToken }}
-                      onChange={(value) => setPaymentToken(value.paymentToken)}
-                      network={config.name}
-                      disabled={busy}
-                      draftPreview={draftStatus.actionsInDraft.find((a) => a.type === 'set-auction-payment-token')}
-                    />
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                     <Button
-                      variant="outline"
-                      onClick={() => void updatePaymentToken()}
-                      disabled={busy || !paymentToken}
+                      type="button"
+                      disabled={busy || !allowed || !live || data.paused}
+                      onClick={() => void apply('pause-auction')}
                     >
-                      {isOwner ? 'Update payment token' : 'Add payment token proposal'}
+                      {direct ? 'Pause auctions' : 'Propose pause'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={busy || !allowed || !live || !data.paused}
+                      onClick={() => void apply('unpause-auction')}
+                    >
+                      {direct ? 'Resume auctions' : 'Propose resume'}
                     </Button>
                   </div>
-                  <Text className="label">Reserve price for the next auction</Text>
-                  <Text className="lede" style={{ margin: 0 }}>
-                    Current reserve: {data ? formatStroops(data.config.reserve_price) : '—'}{' '}
-                    {data?.config.payment_token
-                      ? (getTreasuryAssets(config.name).find((asset) => asset.contractId === data.config.payment_token)
-                          ?.code ?? 'SAC')
-                      : 'SAC'}{' '}
-                    units. Changes apply after the next auction is created. If auctions are active, they will be paused
-                    automatically.
+                  <Text>
+                    Payment asset: fixed at creation for launch validation; permanently locked by the first auction.
                   </Text>
-                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                    <AdminReservePriceForm
-                      value={{ reservePrice }}
-                      onChange={(value) => setReservePrice(value.reservePrice)}
-                      disabled={busy}
-                      draftPreview={draftStatus.actionsInDraft.find((a) => a.type === 'set-auction-reserve-price')}
-                    />
-                    <Button
-                      variant="outline"
-                      onClick={() => void updateReservePrice()}
-                      disabled={busy || !reservePrice}
-                    >
-                      {isOwner ? 'Update reserve' : 'Add reserve proposal'}
-                    </Button>
-                  </div>
-                </>
-              )}
-            </Stack>
-          </Card>
+                  <ShortId value={data.config.payment_token} label="Payment token" />
+                  <Text>Current reserve: {formatStroops(data.config.reserve_price)} payment-token units.</Text>
+                  <AdminReservePriceForm
+                    value={{ reservePrice }}
+                    onChange={(value) => setReservePrice(value.reservePrice)}
+                    disabled={busy || !allowed || !data.paused}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={busy || !allowed || !data.paused || !reservePrice}
+                    onClick={() => void apply('set-auction-reserve-price')}
+                  >
+                    {direct ? 'Apply reserve price' : 'Add reserve price to proposal'}
+                  </Button>
+                  {!data.paused ? (
+                    <Text>
+                      Pause auctions before changing the reserve or other parameters. These actions do not automatically
+                      resume auctions.
+                    </Text>
+                  ) : null}
+                </Stack>
+              </Card>
+              <AuctionParameterControls
+                daoId={daoId}
+                config={config}
+                paused={data.paused}
+                live={live}
+                owner={direct}
+                canPropose={canPropose}
+                values={{
+                  duration: Number(data.config.duration),
+                  timeBuffer: Number(data.config.time_buffer),
+                  increment: data.config.min_bid_increment_percent
+                }}
+                cancellable={Boolean(data.auction && !data.auction.settled)}
+                busy={busy}
+                onBusyChange={setBusy}
+                refresh={mutate}
+              />
+            </>
+          ) : null}
         </Stack>
       </PageSection>
     </>

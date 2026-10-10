@@ -101,6 +101,24 @@ function getDeploymentNetwork(): NetworkName {
   return network;
 }
 
+const CONTRACT_ID_PATTERN = /^C[A-Z2-7]{55}$/;
+
+/**
+ * Resolve a route segment to the canonical dao_id (token contract address).
+ * Accepts either the contract id itself or the DAO's on-chain slug.
+ *
+ * @throws Error if the value is neither a contract id nor a known slug
+ */
+export async function resolveDaoId(idOrSlug: string): Promise<string> {
+  if (CONTRACT_ID_PATTERN.test(idOrSlug)) return idOrSlug;
+  const row = await prisma.managerDao.findFirst({
+    where: { deploymentId: DEPLOYMENT_ID, slug: idOrSlug },
+    select: { daoId: true }
+  });
+  if (!row) throw new Error(`DAO not found: ${idOrSlug}`);
+  return row.daoId;
+}
+
 /**
  * Get DAO configuration by ID (token contract address)
  *

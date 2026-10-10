@@ -1,97 +1,49 @@
-# Manager Deployment Guide
+# How to deploy Manager
 
-Manager is the platform deployment module. It owns the implementation registry and DAO factory. It deploys six modules per DAO: Token, Metadata, Auction, Governor, Treasury, and Marketplace. It does not retain a permanent DAO registry.
+Manager owns the platform implementation registry and factory. It deploys six modules per DAO, deletes temporary pending setup state at launch, and retains persistent slug mappings. The deployment script also deploys/registers a shared Minter.
 
-## Responsibilities
+## Inputs and commands
 
-- Register and revoke module WASM implementations.
-- Select the current implementation hash and `0.1.0` version for each module.
-- Approve explicit upgrade transitions.
-- Deploy modules at deterministic addresses using creator and nonce salts.
-- Deploy modules with all cross-module wiring passed to their constructors.
-- Keep one temporary `PendingDao` record until launch, then delete it.
-- Run `launch_dao`, the one-shot handoff that makes each module Live and moves ownership to the DAO Treasury.
-- Register the platform minter (`set_platform_minter`) and manage the admin role (`propose_admin` / `accept_admin`).
-- Pause and unpause DAO creation.
-
-## Deploy Manager
+Run from the repository root with a funded identity on the configured network:
 
 ```bash
-pnpm deploy:manager configs/testnet-manager.json --force
+pnpm deploy:manager configs/testnet-manager.json
 ```
 
-The deployment script builds Manager and the six module crates, installs the six implementation WASMs, registers their `0.1.0` hashes, selects current implementations, and writes a versioned Manager artifact under `deploys/`.
+This submits transactions and writes `deploys/<label>-<network>-manager.json`. `--force` bypasses the artifact overwrite prompt; it is not a database reset or proof of a fresh deployment. The script can resume from existing artifacts. `DEPLOY_IDENTITY` overrides the default `<network>-admin` identity; the configuration's `adminAddress` is a public account address, not a secret.
 
-## Create a DAO
+Inputs are [network configuration](../configs/testnet-manager.json), [release versions](../releases/contracts.json), and built contract sources. The script runs `stellar contract build`, uploads eight WASMs (Manager, six modules, Minter), registers their names/versions, selects six current module implementations, deploys the shared Minter, and calls `set_platform_minter`.
 
-Use the repository's DAO template and creation script:
+Registry entries are write-once. The script checks existing/created records against expected name/version. A wrong record cannot be renamed or un-revoked. Optional `EXTEND_CODE_TTL_DAYS` prepays code rent; the default is no opt-in extension. See [TTL maintenance](TTL_ECONOMICS.md).
+
+## Artifacts and consumers
+
+Artifacts contain network, Manager/Minter addresses, implementation hashes, versions, deployment ledger, and transaction metadata. They are deployment records, not live-health reports.
+
+- Web predev/prebuild selects the newest Manager artifact by `deployedAt` and generates a deployment ID. Set the matching `NEXT_PUBLIC_NETWORK` separately.
+- Goldsky uses explicit `MANAGER_DEPLOYMENT_FILE` and the artifact's starting ledger, unless overridden.
+- DAO scripts find the artifact using the network config's label/network.
+
+See [tenant boundaries](MULTITENANT_ARCHITECTURE.md) before keeping multiple network artifacts in one checkout.
+
+## DAO creation and launch
 
 ```bash
-pnpm deploy:dao configs/testnet-builder-dao.json configs/testnet-manager.json
+pnpm deploy:dao --validate-only configs/testnet-builder-dao.json
+pnpm deploy:dao create_dao configs/testnet-builder-dao.json configs/testnet-manager.json
+pnpm deploy:dao admin_checklist configs/testnet-builder-dao.json configs/testnet-manager.json
+pnpm deploy:dao launch_dao configs/testnet-builder-dao.json configs/testnet-manager.json
+pnpm deploy:dao bump_slug_ttl configs/testnet-builder-dao.json configs/testnet-manager.json   # renew the slug registry TTL (permissionless, repeat periodically)
 ```
 
-The configuration contains token, metadata, auction, governance, founder, deployer, and nonce fields. Founder entries are fixed token amounts, not percentages; the contracts do not cap the founder total. The nonce must be unique for the creator.
+These are separate phases. Prediction is `predict_addresses(creator, nonce)`, not `predict`. `create_dao` claims the config's `slug` (4-63 chars of `[a-z0-9-]`, unique per Manager); `create_dao` fails early if it is taken, and each rehearsal run uses a fresh slug. The Manager has a permanent slug registry (`get_dao_by_slug`, `get_slug`) but no DAO list API. See [DAO deployment](DAO_DEPLOYMENT.md) for configuration, signatures, setup, and recovery.
 
-The script predates the hardened launch flow: its setup phase uses `set_mint_authority` and the Minter before launch, which now fail with `NotLive`, and it does not pass `enable_minter`. See the drift note in [DAO_DEPLOYMENT.md](./DAO_DEPLOYMENT.md).
+## Registry and upgrades
 
-Predict addresses before creation:
+Manager admin can register/revoke implementations, select defaults, approve directional upgrades, pause creation, set the platform Minter, and upgrade Manager. Admin handover uses `propose_admin` / `accept_admin`; pending handover can be canceled.
 
-```bash
-stellar contract invoke \
-  --id <MANAGER_ADDRESS> \
-  --source-account <network>-deployer \
-  --network <network> \
-  -- predict \
-  --creator <CREATOR_ADDRESS> \
-  --nonce <NONCE>
-```
+DAO module upgrades require the owner and an approved registered transition with matching source hash. Before launch the launch admin can call directly; afterward a Governor proposal executes through Treasury. Treasury's own upgrade uses self-dispatch. `get_latest_implementation` returns no fallback after revocation; security decisions use the actual current hash and `get_implementation`.
 
-The result contains deterministic addresses for all six modules. After launch, verify each address and confirm that Treasury owns every module, including itself, and that each module reports Live (for example `token.is_live()`).
+[upgrade-contract.mjs](../scripts/upgrade-contract.mjs) uploads/registers/approves implementations. For Live DAOs it writes a proposal payload rather than submitting the Governor proposal. Read its actual argument parsing before use: DAO-module inputs are DAO config, network config, and source hash. Manager upgrades additionally require the verified `LEGACY_MANAGER_VERSION`. Do not treat this script as a read-only proposal preview.
 
-## Launch Flow and Platform Configuration
-
-`create_dao` requires authorization from BOTH `params.deployer` and `params.launch_admin` (one signature when they are the same address), so nobody can be named launch admin without consenting. It writes `PendingDao`; the launch admin configures the DAO during the setup window; `launch_dao(token_address, LaunchConfig { launch_auction, launch_marketplace, enable_minter, expected_minter })` then launches every module. Rules enforced by the Manager at launch: launch admin authorization and Token ownership, nonzero Token supply, and unchanged Auction/Marketplace payment assets (recorded at `create_dao`). See [MANAGER_REDESIGN.md](./MANAGER_REDESIGN.md) and [SECURITY_MODEL.md](./SECURITY_MODEL.md).
-
-Before any DAO that uses `enable_minter` launches, the Manager admin registers the minter:
-
-```bash
-stellar contract invoke --id <MANAGER_ADDRESS> --source-account <admin-identity> --network <network> \
-  -- set_platform_minter --minter <MINTER_ADDRESS>
-```
-
-The launch admin cannot choose the minter. Without a registered minter, `launch_dao` with `enable_minter: true` fails with `PlatformMinterNotSet` (1008). `get_platform_minter` returns the current value.
-
-Admin handover is two-step: the current admin calls `propose_admin(new_admin)` and the new admin calls `accept_admin()`; `get_admin` and `get_pending_admin` read the state.
-
-Creation bounds: voting delay, voting period and queue delay each 300 to 2,592,000 seconds; auction time buffer 1 to 86,400 seconds; quorum 1 to 10,000 bps; proposal threshold at least 1. Out-of-range values are rejected by `create_dao`.
-
-## Upgrade Workflow
-
-For a DAO module upgrade:
-
-1. Build and install the new WASM.
-2. Register its hash with Manager.
-3. Have the Manager owner approve the exact `from_hash -> to_hash` pair.
-4. Create a DAO Governor proposal whose action targets the module's `upgrade` method, pass it through vote and queue, then have anyone call `treasury.execute`. (`governor.execute` always fails with `UseTreasuryExecute`.) Treasury self-upgrades use the same route; calls aimed at the Treasury itself are limited to `upgrade` and `sync_version`.
-5. The target module verifies its current hash, asks Manager to validate the active approved transition and target version, writes the new version/hash, emits an event, and updates its own WASM.
-
-The module rejects upgrades without owner authorization, without Manager approval, or when `from_hash` does not match the current hash. Revoked or unknown implementations cannot be used. Approving a destination hash alone is not enough; the transition is directional.
-
-Registry notes: `launch_dao` fails with `PendingDaoUsesRevokedImplementation` (1122) if any module of a pending DAO currently runs a revoked or unregistered hash; the launch admin must first `upgrade` that module (owner path, before launch) to an approved, non-revoked hash. `get_latest_implementation(name)` returns `None` after the latest hash is revoked, so deploy tooling must use `get_implementation(hash)` and the `Current*` hashes for security decisions. `scripts/deploy-manager.mjs` verifies each registered record's name and version (before skipping an existing hash and after registering) because records are write-once and cannot be corrected.
-
-## Artifacts and Verification
-
-Manager deployment artifacts record the network, Manager address, and implementation hashes. DAO artifacts record the creator, nonce, Manager, and creation configuration. Treat these files and the corresponding ledger/hash records as the deployment source of truth.
-
-Useful checks:
-
-```bash
-stellar contract info --id <MANAGER_ADDRESS> --network <network>
-stellar contract fetch --id <TOKEN_ADDRESS> --network <network>
-```
-
-## Current Scope
-
-Goldsky and PostgreSQL provide the durable DAO directory and history. Manager stores no permanent DAO registry. For the full storage and versioning policy, see [MANAGER_REDESIGN.md](./MANAGER_REDESIGN.md).
-
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for the system model and [DAO_DEPLOYMENT.md](./DAO_DEPLOYMENT.md) for DAO deployment.
+Pending DAO launch checks every module's current registered/non-revoked hash. Revocation does not stop an already-Launched DAO's normal operation or allow Manager to force its upgrade. See [security](SECURITY_MODEL.md).

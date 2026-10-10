@@ -1,158 +1,83 @@
 'use client';
+import { useState } from 'react';
 
+import { Input } from '@/components/ui';
+import { configuredCreationNetwork, creationAssets } from '@/lib/create-dao-schema';
 import { formatDuration } from '@/lib/time-utils';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
-interface ReviewStepProps {
-  connectedAddress?: string;
-}
+import { CreationField, fieldAccessibility } from './CreationField';
+import styles from './workspace.module.css';
 
-export function ReviewStep({ connectedAddress }: ReviewStepProps) {
-  const basicInfo = useCreateDaoStore((s) => s.basicInfo);
-  const purpose = useCreateDaoStore((s) => s.purpose);
+export function ReviewStep({ connectedAddress }: { connectedAddress?: string }) {
+  const [metadataOpen, setMetadataOpen] = useState(false);
+  const basic = useCreateDaoStore((s) => s.basicInfo);
+  const auction = useCreateDaoStore((s) => s.auction);
+  const market = useCreateDaoStore((s) => s.marketplace);
   const governance = useCreateDaoStore((s) => s.governance);
-  const launchAdmin = useCreateDaoStore((s) => s.launchAdmin);
-
-  const governancePresets: Record<
-    string,
-    { votingDelay: number; votingPeriod: number; quorumBps: number; proposalThreshold: number }
-  > = {
-    testing: { votingDelay: 300, votingPeriod: 600, quorumBps: 100, proposalThreshold: 1 },
-    fast: { votingDelay: 300, votingPeriod: 3600, quorumBps: 500, proposalThreshold: 1 },
-    balanced: { votingDelay: 86400, votingPeriod: 259200, quorumBps: 1000, proposalThreshold: 1 },
-    deliberate: { votingDelay: 172800, votingPeriod: 604800, quorumBps: 2000, proposalThreshold: 2 }
-  };
-
-  const getPresetName = () => {
-    for (const [name, config] of Object.entries(governancePresets)) {
-      if (
-        config.votingDelay === governance.votingDelay &&
-        config.votingPeriod === governance.votingPeriod &&
-        config.quorumBps === governance.quorumBps &&
-        config.proposalThreshold === governance.proposalThreshold
-      ) {
-        return name;
-      }
-    }
-    return 'custom';
-  };
-
+  const preview = useCreateDaoStore((s) => s.imagePreview);
+  const errors = useCreateDaoStore((s) => s.validationErrors);
+  const update = useCreateDaoStore((s) => s.updateBasicInfo);
+  const assets = creationAssets(configuredCreationNetwork());
+  const assetName = (id: string) => assets.find((a) => a.contractId === id)?.code ?? id;
+  const rows = [
+    ['Identity', `${basic.tokenName} · ${basic.tokenSymbol}`],
+    ['Description', basic.description],
+    [
+      'Auctions',
+      `${auction.enabled ? 'Selected for launch' : 'Disabled at launch'} · ${auction.reservePrice} ${assetName(auction.paymentAsset)} reserve`
+    ],
+    ['Auction timing', `${formatDuration(auction.duration)} · ${auction.timeBuffer}s extension`],
+    [
+      'Marketplace',
+      `${market.enabled ? 'Selected for launch' : 'Disabled at launch'} · ${assetName(market.paymentAsset)} · ${market.secondaryFeeBps / 100}% fee`
+    ],
+    ['Voting', `${formatDuration(governance.votingDelay)} delay · ${formatDuration(governance.votingPeriod)} voting`],
+    ['Execution queue', formatDuration(governance.queueDelay)],
+    ['Requirements', `${governance.quorumBps / 100}% quorum · ${governance.proposalThreshold} votes to propose`],
+    ['Launch admin', connectedAddress || 'Connect your wallet when ready'],
+    ['Image', preview ? 'Local preview only. Upload it or use the saved image before deployment.' : basic.contractImage]
+  ];
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="space-y-2">
-        <h2 className="text-2xl font-bold">Review Your DAO</h2>
-        <p className="text-text-secondary">
-          Verify all settings before deployment. You can configure artwork, auctions, and marketplace after launch.
-        </p>
-      </div>
-
-      {/* Basic Info Summary */}
-      <div className="rounded-lg border border-border-strong bg-surface-1 p-6 space-y-4">
-        <h3 className="font-semibold text-text-primary">Basic Information</h3>
-        <div className="grid grid-cols-2 gap-6">
-          <div>
-            <p className="text-sm text-text-secondary">DAO Name</p>
-            <p className="font-medium text-text-primary">{basicInfo.tokenName}</p>
+    <div className={styles.stack}>
+      <dl className={styles.summary}>
+        {rows.map(([label, value]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd>{value}</dd>
           </div>
-          <div>
-            <p className="text-sm text-text-secondary">Token Symbol</p>
-            <p className="font-medium text-text-primary">{basicInfo.tokenSymbol}</p>
-          </div>
-          <div className="col-span-2">
-            <p className="text-sm text-text-secondary">Description</p>
-            <p className="text-text-primary">{basicInfo.description}</p>
-          </div>
+        ))}
+      </dl>
+      <p className={styles.muted}>
+        Create deploys contracts in Setup, not a live DAO. Configure artwork and mint founder tokens there. Launch is a
+        separate, signed action.
+      </p>
+      <details
+        open={metadataOpen || Boolean(errors.tokenUri || errors.rendererBase)}
+        onToggle={(event) => setMetadataOpen(event.currentTarget.open)}
+      >
+        <summary>Metadata URLs</summary>
+        <div className={styles.stack} style={{ marginTop: 16 }}>
+          <CreationField id="tokenUri" label="Token metadata URL" hint="Use {daoId} for the predicted token address">
+            <Input
+              id="tokenUri"
+              type="url"
+              value={basic.tokenUri}
+              {...fieldAccessibility('tokenUri', errors)}
+              onChange={(e) => update({ tokenUri: e.target.value })}
+            />
+          </CreationField>
+          <CreationField id="rendererBase" label="Renderer base URL">
+            <Input
+              id="rendererBase"
+              type="url"
+              value={basic.rendererBase}
+              {...fieldAccessibility('rendererBase', errors)}
+              onChange={(e) => update({ rendererBase: e.target.value })}
+            />
+          </CreationField>
         </div>
-      </div>
-
-      {/* Purpose Summary */}
-      <div className="rounded-lg border border-border-strong bg-surface-1 p-6 space-y-4">
-        <h3 className="font-semibold text-text-primary">Purpose & Membership</h3>
-        <div className="space-y-3">
-          <div>
-            <p className="text-sm text-text-secondary">DAO Purpose</p>
-            <p className="text-text-primary">{purpose.purpose}</p>
-          </div>
-          <div>
-            <p className="text-sm text-text-secondary">Membership Model</p>
-            <p className="font-medium text-text-primary capitalize">{purpose.membershipMode}</p>
-            {purpose.membershipMode !== 'founders' && (
-              <p className="text-xs text-text-secondary mt-2">
-                {purpose.membershipMode === 'auctions' &&
-                  'Members will be allocated tokens through recurring auctions.'}
-                {purpose.membershipMode === 'marketplace' && 'Members can trade tokens freely on the marketplace.'}
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Governance Summary */}
-      <div className="rounded-lg border border-border-strong bg-surface-1 p-6 space-y-4">
-        <h3 className="font-semibold text-text-primary">Governance Parameters</h3>
-        <div className="grid grid-cols-2 gap-6">
-          <div>
-            <p className="text-sm text-text-secondary">Voting Delay</p>
-            <p className="font-medium text-text-primary">{formatDuration(governance.votingDelay)}</p>
-          </div>
-          <div>
-            <p className="text-sm text-text-secondary">Voting Period</p>
-            <p className="font-medium text-text-primary">{formatDuration(governance.votingPeriod)}</p>
-          </div>
-          <div>
-            <p className="text-sm text-text-secondary">Quorum</p>
-            <p className="font-medium text-text-primary">{(governance.quorumBps / 100).toFixed(1)}%</p>
-          </div>
-          <div>
-            <p className="text-sm text-text-secondary">Proposal Threshold</p>
-            <p className="font-medium text-text-primary">
-              {governance.proposalThreshold} vote{governance.proposalThreshold === 1 ? '' : 's'}
-            </p>
-          </div>
-          <div className="col-span-2">
-            <p className="text-sm text-text-secondary">Preset</p>
-            <p className="font-medium text-text-primary capitalize">{getPresetName()}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Admin Address */}
-      <div className="rounded-lg border border-border-strong bg-surface-1 p-6 space-y-4">
-        <h3 className="font-semibold text-text-primary">Launch Admin</h3>
-        <div>
-          <p className="text-sm text-text-secondary">Address</p>
-          <p className="font-mono text-sm text-text-primary break-all">{launchAdmin}</p>
-          {launchAdmin === connectedAddress && (
-            <p className="text-xs text-action mt-2">✓ You will be the launch admin</p>
-          )}
-        </div>
-      </div>
-
-      {/* Post-Launch Configuration Note */}
-      <div className="rounded-lg border border-border-action bg-surface-2 p-6 space-y-3">
-        <div className="flex gap-3">
-          <span className="text-lg">ℹ️</span>
-          <div>
-            <h4 className="font-semibold text-text-primary">After Deployment</h4>
-            <p className="text-sm text-text-secondary mt-1">
-              The DAO will be created with these settings. You can then configure artwork, auctions, marketplace, and
-              other features in the admin panel before launching.
-            </p>
-            <p className="text-xs text-text-secondary mt-2 space-y-1">
-              <span className="block">• Setup artwork properties and IPFS metadata</span>
-              <span className="block">• Configure auction parameters</span>
-              <span className="block">• Setup marketplace payment tokens</span>
-              <span className="block">• Allocate founder tokens (if applicable)</span>
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Ready to Deploy Message */}
-      <div className="p-4 rounded-lg bg-action/10 border border-action text-action">
-        <p className="text-sm font-medium">✓ Ready to deploy! Click "Create DAO" to proceed to wallet signing.</p>
-      </div>
+      </details>
     </div>
   );
 }
