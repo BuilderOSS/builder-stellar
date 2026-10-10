@@ -14,6 +14,7 @@ import {
   Skeleton,
   Text
 } from '@/components/ui';
+import { MAX_BATCH_MINT } from '@/lib/batch-mint-budget';
 import { getProposalActionLabel, type ProposalActionType } from '@/lib/proposal-call';
 import type { AssetBalance } from '@/lib/treasury-queries';
 
@@ -181,7 +182,7 @@ export function ProposalActionEditor({
                       placeholder={sacTransfer ? 'Amount to transfer (e.g., 100.5)' : 'Amount to mint'}
                       type="number"
                       min="0.0000001"
-                      max={batchMint ? '20' : undefined}
+                      max={batchMint ? String(MAX_BATCH_MINT) : undefined}
                       step={sacTransfer ? '0.0000001' : '1'}
                       disabled={formDisabled}
                     />
@@ -205,7 +206,7 @@ export function ProposalActionEditor({
                     {sacTransfer
                       ? 'Use a positive decimal number (supports up to 7 decimal places).'
                       : batchMint
-                        ? 'Use a positive whole number up to 20 tokens.'
+                        ? `Use a positive whole number up to ${MAX_BATCH_MINT} tokens.`
                         : 'Use a positive whole number of tokens.'}
                   </FieldHelperText>
                 )}

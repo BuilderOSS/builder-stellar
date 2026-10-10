@@ -25,7 +25,7 @@ export function inspectProposalAdminCall(
           : fn === 'set_allowlist'
             ? 'Replace Minter allowlist'
             : 'Minter batch allocation',
-      risk: 'High risk: changes token allocation. Root/list replacement starts a new round and permits repeat claims; batch mint is immediate on execution. Requires the current Token owner and Live/mint authority checks.',
+      risk: 'High risk: changes token allocation. Root/list replacement starts a new round and permits repeat claims; batch mint is immediate on execution. Requires the current Token admin and Live/mint authority checks.',
       fields: [
         { label: 'DAO Token', value: String(values[0]) },
         ...values.slice(1).map((value, i) => ({
@@ -66,7 +66,7 @@ export function inspectProposalAdminCall(
     const group = scValToNative(encoded[2]!) as { base_uri: string; extension: string };
     return {
       title: `Append artwork: ${names.length} new properties, ${items.length} ordered items`,
-      risk: 'High risk: changes collection artwork. Calls allocate property/IPFS reference slots in order. New-property IDs refer to this call’s names; other IDs refer to existing properties. Authority follows the current Token owner.',
+      risk: 'High risk: changes collection artwork. Calls allocate property/IPFS reference slots in order. New-property IDs refer to this call’s names; other IDs refer to existing properties. Authority is Metadata’s own admin (the Treasury after launch).',
       fields: [
         { label: 'New property names (ordered)', value: JSON.stringify(names) },
         { label: 'Items (ordered; name, property_id, is_new_property)', value: JSON.stringify(items) },
@@ -84,7 +84,7 @@ export function inspectProposalAdminCall(
   if (!labels[fn]) return null;
   return {
     title: `Update ${labels[fn]!.toLowerCase()}`,
-    risk: 'High risk: changes collection metadata or its external renderer/content reference. Authority follows the current Token owner, not Metadata’s upgrade owner.',
+    risk: 'High risk: changes collection metadata or its external renderer/content reference. Authority is Metadata’s own admin (the Treasury after launch).',
     fields: [{ label: `New ${labels[fn]!.toLowerCase()}`, value: scValToNative(encoded[0]!) as string }]
   };
 }

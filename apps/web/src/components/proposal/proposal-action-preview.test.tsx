@@ -45,7 +45,7 @@ describe('proposal admin-call inspector rendering', () => {
     );
     expect(html).toContain('Append artwork: 1 new properties, 2 ordered items');
     expect(html).toContain('High risk');
-    expect(html).toContain('current Token owner');
+    expect(html).toContain('Metadata’s own admin');
     expect(html).toContain('007');
     expect(html).toContain('ipfs://batch');
     expect(html.indexOf('First')).toBeLessThan(html.indexOf('Second'));

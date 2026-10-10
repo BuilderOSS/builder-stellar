@@ -6,6 +6,7 @@ import { Stack } from 'styled-system/jsx';
 
 import { AdminDraftActionPreview } from '@/components/admin/admin-draft-action-preview';
 import { FieldHelperText, FieldLabel, Input } from '@/components/ui';
+import { MAX_BATCH_MINT } from '@/lib/batch-mint-budget';
 
 import type { ActionFormProps, ProposalQueuedAction } from '../../types';
 import type { BatchMintGovernanceTokenData } from './types';
@@ -50,11 +51,11 @@ export function BatchMintGovernanceTokenForm({
           id="amount"
           type="number"
           min="1"
-          max="20"
+          max={MAX_BATCH_MINT}
           step="1"
           value={value.amount}
           onChange={(e) => onChange({ ...value, amount: e.target.value })}
-          placeholder="Number of tokens (1-20)"
+          placeholder={`Number of tokens (1-${MAX_BATCH_MINT})`}
           disabled={disabled}
           aria-invalid={!!(validationErrors && !validationErrors.valid && validationErrors.fields?.amount)}
           aria-describedby={
@@ -68,7 +69,9 @@ export function BatchMintGovernanceTokenForm({
             {validationErrors.fields.amount}
           </FieldHelperText>
         ) : (
-          <FieldHelperText id="amount-helper">Batch mint allows 1-20 tokens in a single action</FieldHelperText>
+          <FieldHelperText id="amount-helper">
+            Batch mint allows 1-{MAX_BATCH_MINT} tokens in a single action (the per-transaction event budget)
+          </FieldHelperText>
         )}
       </Stack>
     </Stack>

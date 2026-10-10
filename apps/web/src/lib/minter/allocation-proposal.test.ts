@@ -15,7 +15,7 @@ const trusted = { ...config, minterContractId: MINTER, minterSpec: spec.entries.
 const drafts: AllocationDraft[] = [
   { type: 'set-merkle-root', root: '0'.repeat(63) + '1' },
   { type: 'set-allowlist', addresses: [ALICE, BOB], amount: '9007199254740993' },
-  { type: 'minter-batch-mint', recipients: [ALICE, BOB], amounts: ['1', '9007199254740993'] }
+  { type: 'minter-batch-mint', recipients: [ALICE, BOB], amounts: ['1', '41'] }
 ];
 
 describe('trusted registered Minter governance allocations', () => {

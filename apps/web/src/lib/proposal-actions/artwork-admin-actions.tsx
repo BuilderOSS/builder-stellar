@@ -100,6 +100,8 @@ export const artworkSettingMethods = {
 export type ArtworkSettingType = keyof typeof artworkSettingMethods;
 export function validateArtworkSetting(value: string, type: ArtworkSettingType): ValidationResult {
   if (!value.trim()) return { valid: false, message: 'Enter a non-empty value.' };
+  // Metadata rejects settings strings over 256 characters (StringTooLong, 7312).
+  if (new TextEncoder().encode(value).length > 256) return { valid: false, message: 'Use at most 256 UTF-8 bytes.' };
   if (type !== 'set-artwork-description') {
     try {
       const url = new URL(value.trim());
@@ -114,7 +116,7 @@ export const artworkSettingHandlers = (Object.keys(artworkSettingMethods) as Art
   (type): PendingAdminHandler<ArtworkSettingDraft, ArtworkSettingType> => ({
     type,
     label: type.replace('set-artwork-', 'Update artwork ').replaceAll('-', ' '),
-    description: 'Update collection metadata through its Token owner.',
+    description: 'Update collection metadata through the Metadata admin (the Treasury after launch).',
     group: 'Artwork',
     FormComponent: ({ value, onChange, disabled }) => (
       <label>

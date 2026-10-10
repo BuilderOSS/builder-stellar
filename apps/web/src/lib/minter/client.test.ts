@@ -43,10 +43,10 @@ describe('Minter exact ABI and identity isolation', () => {
     expect(allocation.map(scValToNative)).toEqual([TOKEN, [ALICE, BOB], 9007199254740993n]);
     const batch = encodeAllocation(
       minterSpec(),
-      { type: 'minter-batch-mint', recipients: [ALICE], amounts: [prepared.amount] },
+      { type: 'minter-batch-mint', recipients: [ALICE], amounts: ['43'] },
       TOKEN
     );
-    expect(batch.map(scValToNative)).toEqual([TOKEN, [ALICE], [9007199254740993n]]);
+    expect(batch.map(scValToNative)).toEqual([TOKEN, [ALICE], [43n]]);
     expect(encodeAllocation(minterSpec(), { type: 'set-merkle-root', root: 'ab'.repeat(32) }, TOKEN)[1].type).toBe(
       'scvBytes'
     );

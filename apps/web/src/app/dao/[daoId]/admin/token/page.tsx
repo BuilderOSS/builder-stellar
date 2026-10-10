@@ -13,7 +13,8 @@ import { Badge, Button, Callout, Card, Heading, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryHasAuthority, treasuryIsAdmin } from '@/lib/admin-proposals';
 import { useContractAdmin } from '@/lib/admin-queries';
-import { useAdminTokenState } from '@/lib/admin-surfaces';
+import { useAdminArtwork, useAdminTokenState } from '@/lib/admin-surfaces';
+import { MAX_BATCH_MINT } from '@/lib/batch-mint-budget';
 import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { BatchMintGovernanceTokenForm } from '@/lib/proposal-actions/actions/batch-mint-governance-token/component';
 import type { BatchMintGovernanceTokenData } from '@/lib/proposal-actions/actions/batch-mint-governance-token/types';
@@ -37,6 +38,10 @@ export default function TokenAdminPage() {
   const { data: mintAuthorities, error, isLoading, mutate } = useGoldskyMintAuthorities(config.tokenContractId);
   const { data: tokenAdmin } = useContractAdmin(config, 'token', session.address || undefined);
   const token = useAdminTokenState(config, session.address);
+  const artwork = useAdminArtwork(config, session.address);
+  // Traits are seeded at mint time; minting before the artwork leaves tokens unseeded.
+  const noArtwork = Boolean(artwork.data && artwork.data.properties.length === 0);
+  const [ackNoArtwork, setAckNoArtwork] = useState(false);
   const isAdmin = Boolean(session.address && token.data?.admin === session.address);
   const hasMintAccess = Boolean(isAdmin || token.data?.mintAuthority);
   const treasuryCanMint =
@@ -67,8 +72,12 @@ export default function TokenAdminPage() {
     }
 
     const mintAmount = Number(amount);
-    if (!Number.isInteger(mintAmount) || mintAmount < 1 || mintAmount > 20) {
-      setFormMessage('Mint amount must be between 1 and 20.');
+    if (!Number.isInteger(mintAmount) || mintAmount < 1 || mintAmount > MAX_BATCH_MINT) {
+      setFormMessage(`Mint amount must be between 1 and ${MAX_BATCH_MINT} per transaction; mint more in several.`);
+      return;
+    }
+    if (noArtwork && !ackNoArtwork) {
+      setFormMessage('Upload the artwork first, or confirm that these tokens will have no traits.');
       return;
     }
 
@@ -167,7 +176,7 @@ export default function TokenAdminPage() {
               <Heading style={{ fontSize: '1.2rem' }}>Mint voting token</Heading>
               <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
                 {hasMintAccess
-                  ? 'Enter a recipient address and mint up to 20 tokens directly to that wallet.'
+                  ? `Enter a recipient address and mint up to ${MAX_BATCH_MINT} tokens per transaction directly to that wallet.`
                   : 'Only a mint authority or the admin can mint from this page.'}
               </Text>
               <BatchMintGovernanceTokenForm
@@ -179,6 +188,25 @@ export default function TokenAdminPage() {
                 disabled={busy || (!hasMintAccess && !canProposeMint)}
                 draftPreview={draftStatus.actionsInDraft.find((a) => a.type === 'batch-mint-governance-token')}
               />
+              {noArtwork ? (
+                <>
+                  <Callout
+                    variant="error"
+                    title="Upload the artwork first"
+                    description="This DAO has no artwork properties yet. Tokens minted now get no traits and need metadata.regenerate later."
+                  />
+                  <label htmlFor="ack-no-artwork">
+                    <input
+                      id="ack-no-artwork"
+                      type="checkbox"
+                      checked={ackNoArtwork}
+                      disabled={busy}
+                      onChange={(event) => setAckNoArtwork(event.target.checked)}
+                    />{' '}
+                    I understand these tokens will be minted without traits.
+                  </label>
+                </>
+              ) : null}
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <Button type="button" onClick={handleMint} disabled={busy || (!hasMintAccess && !canProposeMint)}>
                   {busy ? 'Preparing…' : hasMintAccess ? 'Mint to recipient' : 'Create mint proposal'}

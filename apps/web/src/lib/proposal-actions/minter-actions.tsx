@@ -16,7 +16,7 @@ export const minterAllocationHandlers: ActionHandler<ScopedDraft>[] = (
         ? 'Replace Minter allowlist'
         : 'Minter batch allocation',
   description:
-    'Prepare allocations in Claims Admin after current registration, Token ownership, Live state and mint authority are verified.',
+    'Prepare allocations in Claims Admin after current registration, Token admin, Live state and mint authority are verified.',
   group: 'Allocations',
   FormComponent: ({ value }) => (
     <>

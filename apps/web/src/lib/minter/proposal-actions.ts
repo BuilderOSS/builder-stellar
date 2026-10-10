@@ -3,6 +3,8 @@
 import { StrKey } from '@stellar/stellar-sdk';
 import type { Spec } from '@stellar/stellar-sdk/contract';
 
+import { BATCH_MINT_LIMIT_TEXT, batchMintFits, MAX_BATCH_RECIPIENTS } from '@/lib/batch-mint-budget';
+
 import { assertMinterSpec } from './client';
 import { claimAmount, hashBytes } from './proof';
 import type { ClaimState } from './types';
@@ -18,9 +20,12 @@ export function validateAllocation(draft: AllocationDraft) {
     return;
   }
   const addresses = draft.type === 'set-allowlist' ? draft.addresses : draft.recipients;
-  // The contract limits batch mint to 100. The frontend also caps allowlist input
-  // at 100 to bound review size/resource budgets; it is not a contract limit.
-  if (!addresses.length || addresses.length > 100) throw new Error('Use 1–100 recipients per reviewed allocation.');
+  // Minter mint_batch takes at most MAX_BATCH_RECIPIENTS entries and the whole
+  // batch must fit the Token's event budget. The allowlist cap of 100 bounds
+  // review size; it is not a contract limit.
+  const maxRecipients = draft.type === 'set-allowlist' ? 100 : MAX_BATCH_RECIPIENTS;
+  if (!addresses.length || addresses.length > maxRecipients)
+    throw new Error(`Use 1–${maxRecipients} recipients per reviewed allocation.`);
   if (new Set(addresses).size !== addresses.length)
     throw new Error('Duplicate recipients are not supported in this review.');
   for (const address of addresses)
@@ -31,7 +36,11 @@ export function validateAllocation(draft: AllocationDraft) {
     if (draft.amounts.length !== addresses.length)
       throw new Error('Recipients and amounts must have identical lengths.');
     draft.amounts.forEach(claimAmount);
-    // The Token contract returns u32 IDs; simulation must still enforce supply/batch budgets.
+    const total = draft.amounts.reduce((sum, amount) => sum + BigInt(amount), 0n);
+    if (!batchMintFits(total, addresses.length))
+      throw new Error(
+        `This batch does not fit one transaction (${BATCH_MINT_LIMIT_TEXT}). Split it into several allocations.`
+      );
   }
 }
 

@@ -144,7 +144,7 @@ describe('Metadata and module upgrade registry integration', () => {
     )!;
     expect(inspected.fields[0]?.value).toBe('["007"]');
     expect(inspected.fields[1]?.value).toContain(' 01 ');
-    expect(inspected.risk).toContain('current Token owner');
+    expect(inspected.risk).toContain('Metadata’s own admin');
   });
 
   it('encodes every metadata setting as String and accepts legitimate admin calls without invented caller fields', () => {

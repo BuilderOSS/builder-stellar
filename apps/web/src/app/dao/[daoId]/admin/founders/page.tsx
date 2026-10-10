@@ -13,6 +13,7 @@ import { PageSection } from '@/components/page-section';
 import { Button, Callout, Card, Heading, Input, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { adminReadOptions, useAdminArtwork, useAdminTokenState } from '@/lib/admin-surfaces';
+import { BATCH_MINT_LIMIT_TEXT, MAX_BATCH_MINT, MAX_BATCH_RECIPIENTS } from '@/lib/batch-mint-budget';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { confirmCreationTransaction, DefinitiveTransactionFailure } from '@/lib/use-dao-deployment';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
@@ -28,6 +29,10 @@ export default function FoundersAdminPage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [receipt, setReceipt] = useState('');
+  // The Metadata hook seeds traits at mint time and seeds nothing without
+  // artwork; the contract cannot block such a mint, so require an explicit ack.
+  const [ackNoArtwork, setAckNoArtwork] = useState(false);
+  const noArtwork = !artwork.data?.properties.length;
   const allowed = Boolean(
     token.data && !token.data.live && token.data.admin === session.address && session.authStatus === 'authenticated'
   );
@@ -59,6 +64,8 @@ export default function FoundersAdminPage() {
           return;
         }
         if (!review) throw new Error('Review the founder allocation before signing.');
+        if (noArtwork && !ackNoArtwork)
+          throw new Error('Upload the artwork first, or confirm that these tokens will have no traits.');
         const values = founderMintValues(rows);
         const current = await token.mutate();
         if (!current || current.live || current.admin !== session.address)
@@ -136,8 +143,9 @@ export default function FoundersAdminPage() {
           <Stack gap="3">
             <Heading style={{ fontSize: '1.2rem' }}>Founder tokens</Heading>
             <Text>
-              Current total supply: {token.data?.supply.toString() ?? 'Unavailable'}. Founder mints are ordinary voting
-              NFTs, not a vesting schedule or ongoing founder reward.
+              Current voting supply: {token.data?.supply.toString() ?? 'Unavailable'} (tokens held by the Treasury,
+              Auction and Marketplace carry no votes). Founder mints are ordinary voting NFTs, not a vesting schedule or
+              ongoing founder reward. Each transaction mints {BATCH_MINT_LIMIT_TEXT}.
             </Text>
             <Button
               type="button"
@@ -166,12 +174,12 @@ export default function FoundersAdminPage() {
                   />
                 ) : null}
                 <Callout
-                  variant="warning"
-                  title="Configure artwork before minting"
+                  variant={noArtwork ? 'error' : 'warning'}
+                  title={noArtwork ? 'Upload the artwork first' : 'Configure artwork before minting'}
                   description={
-                    artwork.data?.properties.length
-                      ? 'Artwork properties exist. Refresh and confirm all planned batches are finished before minting.'
-                      : 'No artwork properties are confirmed, or the artwork read is unavailable. Tokens minted now will not receive artwork seeds from this setup.'
+                    noArtwork
+                      ? 'No artwork properties are confirmed (or the artwork read is unavailable). Tokens minted now get no traits; they can only be seeded later with metadata.regenerate (directly during setup, by governance proposal after launch).'
+                      : 'Artwork properties exist. Refresh and confirm all planned batches are finished before minting: traits are seeded at mint time.'
                   }
                 />
                 <Link href={`/dao/${daoId}/admin/artwork`}>Review artwork setup</Link>
@@ -203,7 +211,7 @@ export default function FoundersAdminPage() {
                         autoComplete="off"
                         type="number"
                         min={1}
-                        max={20}
+                        max={MAX_BATCH_MINT}
                         step={1}
                         value={row.amount}
                         disabled={busy || review || !allowed}
@@ -227,7 +235,7 @@ export default function FoundersAdminPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={busy || review || !allowed || rows.length >= 20}
+                  disabled={busy || review || !allowed || rows.length >= MAX_BATCH_RECIPIENTS}
                   onClick={() => setRows((current) => [...current, { recipient: '', amount: '1' }])}
                 >
                   Add founder recipient
@@ -238,7 +246,23 @@ export default function FoundersAdminPage() {
                       Review: {rows.map((row) => `${row.amount} to ${row.recipient}`).join('; ')}. Minting is not
                       reversible.
                     </Text>
-                    <Button type="button" disabled={busy || !allowed || !networkReady} onClick={() => void mint()}>
+                    {noArtwork ? (
+                      <label htmlFor="ack-no-artwork">
+                        <input
+                          id="ack-no-artwork"
+                          type="checkbox"
+                          checked={ackNoArtwork}
+                          disabled={busy}
+                          onChange={(event) => setAckNoArtwork(event.target.checked)}
+                        />{' '}
+                        I understand these tokens will be minted without traits.
+                      </label>
+                    ) : null}
+                    <Button
+                      type="button"
+                      disabled={busy || !allowed || !networkReady || (noArtwork && !ackNoArtwork)}
+                      onClick={() => void mint()}
+                    >
                       {busy ? 'Checking mint…' : 'Sign founder allocation'}
                     </Button>
                     <Button type="button" variant="plain" disabled={busy} onClick={() => setReview(false)}>

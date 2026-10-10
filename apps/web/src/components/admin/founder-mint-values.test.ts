@@ -14,7 +14,7 @@ describe('setup founder recipient vectors', () => {
       ])
     ).toEqual({ recipients: [a, b], amounts: [3n, 17n], total: 20n });
   });
-  it.each(['0', '-1', '1.5', '21', 'NaN', ''])('rejects invalid amount %s', (amount) => {
+  it.each(['0', '-1', '1.5', '44', 'NaN', ''])('rejects invalid amount %s', (amount) => {
     expect(() => founderMintValues([{ recipient: a, amount }])).toThrow(/amount/);
   });
   it('rejects invalid, duplicate and empty recipients', () => {
@@ -27,12 +27,13 @@ describe('setup founder recipient vectors', () => {
     ).toThrow(/duplicate/);
     expect(() => founderMintValues([])).toThrow();
   });
-  it('caps the total token count rather than just each row', () => {
+  it('applies the event budget to the whole transaction, not just each row', () => {
+    expect(founderMintValues([{ recipient: a, amount: '43' }]).total).toBe(43n);
     expect(() =>
       founderMintValues([
-        { recipient: a, amount: '20' },
+        { recipient: a, amount: '42' },
         { recipient: b, amount: '1' }
       ])
-    ).toThrow(/at most 20/);
+    ).toThrow(/does not fit one transaction.*2 transactions/);
   });
 });
