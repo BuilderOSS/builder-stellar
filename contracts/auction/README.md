@@ -1,56 +1,28 @@
-# Auction Contract
+# Auction contract
 
-Perpetual NFT auctions for the DAO. Each auction sells one governance NFT, sends the winning payment to the treasury, and can create the next auction after settlement.
+Continuous English auctions for one governance NFT at a time. Payment uses a configured Stellar Asset Contract (SAC); native XLM is used through its native SAC address, not a separate raw-XLM path.
 
-## Behavior
+## Constructor and launch
 
-- Payment uses the configured SAC token. Native XLM is not supported.
-- The first bid must meet `reserve_price`; later bids must meet the configured percentage increment.
-- A bid inside `time_buffer` extends the auction, up to the extension limit.
-- The contract starts paused. The owner unpauses it to launch the first auction.
-- Anyone can call `settle_and_create_new` after an auction ends.
-- Configuration changes are owner-only and require the contract to be paused.
+The constructor receives owner, Token, Treasury, duration, reserve price, bid increment, time buffer, payment SAC, Manager, current hash, and version. All wiring is fixed at construction; there is no `set_treasury`.
 
-## Constructor
+The module starts paused in Setup. Manager-only `launch(treasury, start, expected_payment_token)` sets Live, validates wiring/asset, and transfers ownership to Treasury. `start=true` mints/opens the first auction. Otherwise governance must grant Auction Token mint authority and unpause when starting it later.
 
-```text
-__constructor(
-  owner,
-  token_contract,
-  treasury,
-  duration,
-  reserve_price,
-  min_bid_increment_percent,
-  time_buffer,
-  payment_token
-)
-```
+## Interface and bounds
 
-`payment_token` must be `Some(Address)`. The minimum auction duration is 300 seconds. The reserve price must be at least 1,000 stroops, and the bid increment must be between 1% and 100%.
+- `create_bid(bidder, token_id: u128, amount: i128)` requires bidder auth and minimum bid/reserve rules.
+- `settle_and_create_new()` settles after the deadline and starts the next auction; `settle_auction()` settles while paused without a next auction.
+- `cancel_auction()` is owner-only while paused. Unsold/canceled NFTs go to Treasury.
+- `pause(caller)` / `unpause(caller)` require owner authorization; unpause requires Live state.
+- `get_auction()` / `get_config()` read state; the former requires an auction to have started.
+- `pending_refund(bidder)` reads deferred credit; `withdraw_refund(bidder)` requires bidder auth.
+- Paused owner setters: `set_duration`, `set_reserve_price`, `set_min_bid_increment`, `set_time_buffer`, `set_payment_token`.
+- Shared upgrade interface: `upgrade(from_hash, to_hash)`, `sync_version`, `version`, `wasm_hash`.
 
-## Main Methods
+Duration is 300–2,592,000 seconds, reserve at least 1,000 base units, increment 1–100%, and time buffer 1–86,400 seconds. Late bids extend the deadline subject to an extension-count cap. The payment token locks after the first bid; pausing does not unlock it.
 
-- `pause(caller)` / `unpause(caller)` - stop or resume auction operations.
-- `create_bid(bidder, token_id, amount)` - place a bid using the configured SAC token.
-- `settle_and_create_new()` - settle the current auction and start the next one.
-- `settle_auction()` - settle without creating another auction.
-- `cancel_auction()` - cancel the active auction under the contract's cancellation rules.
-- `get_auction()` / `get_config()` - read current state and configuration.
-
-Configuration setters are `set_duration`, `set_reserve_price`, `set_min_bid_increment`, `set_time_buffer`, `set_payment_token`, and `set_treasury`.
-
-## Related Contracts
-
-```text
-Auction -> Token       mint the NFT
-Auction -> Treasury    deliver auction proceeds
-```
+Outbid refunds push best-effort. A failed push credits persistent pending refund and emits `RefundDeferred`; withdrawal emits `RefundWithdrawn`. `BidRefunded` means a successful push, not a deferred credit. Settlement proceeds go to Treasury. Deferred credit has its own TTL; see [maintenance](../../docs/TTL_ECONOMICS.md).
 
 ## Tests
 
-From the repository root:
-
-```bash
-pnpm dao:test:unit
-pnpm dao:test:e2e
-```
+`cargo test -p auction`; `cargo test -p dao-e2e`. [Implementation](src/contract.rs), [helpers](src/helpers.rs), [events](src/events.rs), and [storage](src/storage.rs) define the exact behavior.

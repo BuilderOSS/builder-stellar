@@ -1,7 +1,15 @@
 # common
 
 Library-only crate shared by the DAO module contracts (`lifecycle`, `upgrade`,
-`ttl`, `error`). It exports no `#[contract]` in normal builds.
+`ownership`, `ttl`, `clients`, `error`). It exports no `#[contract]` in normal builds.
+
+`ownership::handoff_owner` clears pending ownership transfers at launch.
+`upgrade::apply` checks current hash and Manager approval, stores registry-derived
+version/hash, and emits shared `Upgraded`; `sync_version` emits `VersionSynced`.
+The instance helper requests 170 days when below 60 days. Per-key storage has
+separate policies; see [TTL maintenance](../../docs/TTL_ECONOMICS.md).
+
+Run `cargo test -p common` from the repository root.
 
 ## `testutils` feature
 
