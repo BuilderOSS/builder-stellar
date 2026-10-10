@@ -24,15 +24,20 @@ Metadata supports at most 16 properties and 30 items per addition. Paginated get
 
 ## Existing artwork administration
 
-The admin page verifies Metadata's wired Token and reads Token ownership for
-artwork-setting authority. Setup owners can update settings directly; after launch
+The admin page verifies Metadata's wired Token and reads Metadata's own `admin()`
+for artwork-setting authority. The setup (launch) admin can update settings directly; after launch
 registered renderer/project/image/description and append actions enter a governance
 draft. A 50-item inspector pages through property/IPFS references. Append batches
 capture the current property count and must be reviewed for ordering changes before
 execution. Destructive resets are not registered in the composer.
 
-Artwork authority is not proof of Metadata's separate upgrade-owner state. Its
-upgrade proposal remains blocked without a public owner getter. See
+**Upload the artwork before minting.** Traits are seeded at mint time and a token
+minted while no properties exist gets none; the contracts cannot block such a mint.
+The setup checklist lists artwork first, and the founder/token mint pages warn and
+require explicit confirmation while no artwork exists. Tokens without traits are
+listed on the artwork page and can be seeded with `metadata.regenerate` (directly
+during setup, by a proposal after launch). Metadata upgrades and `migrate` go
+through the same module-upgrade proposals as other modules. See
 [admin artwork](../apps/web/src/app/dao/[daoId]/admin/artwork/page.tsx),
 [registered actions](../apps/web/src/lib/proposal-actions/registry.ts), and
 [web capability reference](../apps/web/README.md).

@@ -22,15 +22,15 @@ re-verified against the code (evidence in §6).
 | 7 Metadata, Minter | Done | 256-char settings cap, own admin; Minter instance TTL, token errors propagate |
 | 8 Manager | Done | Slug claimed at launch, `update_pending_slug`, pause blocks launch, `set_latest_implementation`, `_ledger` fields |
 | 9 Events | Done | `<Module>Launched`; `changed_by` everywhere; module `AdminChanged` shares the Manager's shape (`old_admin`, `new_admin`) |
-| 10 Downstream | Done except the web app | Bindings regenerated; Goldsky decoder/activity feed; database views (migrations edited in place); deploy scripts. Web: only `contract-errors.ts`, the rest is in [FRONTEND_HANDOVER.md](./FRONTEND_HANDOVER.md) |
+| 10 Downstream | Done | Bindings regenerated; Goldsky decoder/activity feed; database views (migrations edited in place); deploy scripts; web app (merged with the Warm Ink revamp on `feat/merge-frontend-update`: admin model, marketplace bounds, batch budget, slug claim flow, `authorize` actions, regenerate, indexed governance settings) |
 | 11 Docs and tests | Done | All docs and READMEs updated; 440 contract tests, 75 indexer tests, database suite (migrate, rollback, read model, Prisma alignment) pass |
 
-Not done: web app changes (handover doc) and the testnet redeploy (deferred until the frontend is updated).
+Testnet was redeployed fresh (Manager `CDFQIOSA…PD5W`, Builder DAO slug `builder`); the web app is updated and the temporary frontend handover doc has been removed.
 
 Deviations from the plan below:
 - §2.6: the authorization trees are carried by ordinary `authorize` actions aimed at the Treasury, not a new proposal field, so the Governor and the proposal id hashing are unchanged while voters still approve the trees.
 - §3: blocks were assigned as planned; the Token, Auction and Marketplace error enums are now re-exported for integrators.
-- `metadata.configuration.owner` keeps its column name (holding the current admin) until the web's Prisma model is updated; see the handover.
+- `metadata.configuration.owner` was renamed to `admin` together with the web's Prisma model.
 
 ## 1. Decisions
 

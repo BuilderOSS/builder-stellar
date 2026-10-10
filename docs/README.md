@@ -25,7 +25,6 @@ These pages describe the current repository source, including the frontend worki
 - [Database view catalog](DATABASE_SCHEMA.md)
 - [Security and authority model](SECURITY_MODEL.md): admin model, voting supply, batch budget, error codes
 - [Contract review fixes](CONTRACT_REVIEW_FIX_PLAN.md): review findings and how each was fixed
-- [Frontend handover](FRONTEND_HANDOVER.md): **temporary**; web changes required by the contract, indexer and database changes, deleted once the frontend is updated
 - [Warm Ink and frontend direction](BRAND_AND_FRONTEND_DIRECTION.md)
 - [Agent workflow and acceptance checks](AGENT_WORKFLOW.md)
 - Contracts: [Manager](../contracts/manager/README.md), [Token](../contracts/token/README.md), [Metadata](../contracts/metadata/README.md), [Auction](../contracts/auction/README.md), [Governor](../contracts/governor/README.md), [Treasury](../contracts/treasury/README.md), [Marketplace](../contracts/marketplace/README.md), [Minter](../contracts/minter/README.md)
