@@ -16,6 +16,7 @@ import {
   Section,
   Skeleton
 } from '@/components/ui';
+import { card, muted, title } from '@/components/ui/panel-styles';
 import { useDaoContext } from '@/contexts/dao-context';
 import { findAsset } from '@/lib/assets-config';
 import { decimalToStroops } from '@/lib/auction-values';
@@ -27,7 +28,6 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import { FundTreasury } from './fund-treasury';
 import { TransferProposal } from './transfer-proposal';
-import { card, muted, title } from './treasury-styles';
 
 const layout = css({
   display: 'grid',

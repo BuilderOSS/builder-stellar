@@ -5,6 +5,7 @@ import { useRef, useState } from 'react';
 import { css } from 'styled-system/css';
 
 import { Address, Amount, AmountInput, Button, Callout, Disclosure, Field, FieldLabel, Select } from '@/components/ui';
+import { card, fact, facts, fields, muted, review, reviewTitle, title } from '@/components/ui/panel-styles';
 import { getTreasuryAssets } from '@/lib/assets-config';
 import { decimalToStroops, formatStroops } from '@/lib/auction-values';
 import { getDeploymentConfig } from '@/lib/deployment-config';
@@ -19,8 +20,6 @@ import type { TreasuryPrepared, TreasuryScope } from '@/lib/treasury-service/typ
 import { assertTreasuryIdentity, fundingSchema } from '@/lib/treasury-service/values';
 import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
-
-import { card, fact, facts, fields, muted, review, reviewTitle, title } from './treasury-styles';
 
 const buttons = css({ display: 'flex', gap: '2' });
 

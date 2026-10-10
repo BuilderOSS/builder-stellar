@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { css } from 'styled-system/css';
 
 import { Button, Callout } from '@/components/ui';
+import { card, muted, review, reviewTitle, title } from '@/components/ui/panel-styles';
 import { useDaoContext } from '@/contexts/dao-context';
 import { getTreasuryAssets } from '@/lib/assets-config';
 import { daoRoute } from '@/lib/dao-routes';
@@ -16,8 +17,6 @@ import type { ActionHandler, ValidationResult } from '@/lib/proposal-actions/typ
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { selectDraft, useProposalComposerStore } from '@/stores/proposal-composer-store';
-
-import { card, muted, review, reviewTitle, title } from './treasury-styles';
 
 const buttons = css({ display: 'flex', justifyContent: 'flex-end', gap: '2' });
 
