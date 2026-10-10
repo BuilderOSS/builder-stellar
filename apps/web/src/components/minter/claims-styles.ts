@@ -41,9 +41,11 @@ const controls = {
 } as const;
 
 const styles = {
-  surface: css({ display: 'grid', gap: '6', ...controls }),
+  surface: css({ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '6', ...controls }),
   panel: css({
     display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1fr)',
+    minW: '0',
     alignContent: 'start',
     gap: '3',
     p: { base: '4', md: '6' },

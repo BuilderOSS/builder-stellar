@@ -5,6 +5,9 @@ import { PageSection } from '@/components/page-section';
 import { ButtonLink, Callout } from '@/components/ui';
 import { type DaoConfig, getAllDaosFromDatabase } from '@/lib/dao-db';
 
+// Communities change as they launch; never serve a build-time snapshot.
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'Discover communities',
   description: 'Find a community on Stellar to join, bid in, or vote with.'
