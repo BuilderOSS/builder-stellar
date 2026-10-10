@@ -32,7 +32,7 @@ export function DeploymentProgress({
         {confirmed
           ? record.confirmedBy === 'manager-state'
             ? 'The pending DAO is verified on this Manager. The saved transaction status may be unavailable. Complete Setup before Launch.'
-            : 'Contracts are deployed. Mint founder tokens and complete Setup before Launch.'
+            : 'Contracts are deployed. Upload the artwork, then mint founder tokens, and complete Setup before Launch.'
           : record.hash
             ? record.status === 'signed'
               ? 'Signed envelope saved. RPC acceptance is not confirmed. Check its hash or explicitly rebroadcast these same bytes while valid.'

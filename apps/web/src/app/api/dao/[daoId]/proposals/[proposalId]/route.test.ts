@@ -19,7 +19,7 @@ const indexed = (dao: string) => ({
     proposal_number: 1,
     description: 'Proposal',
     proposer: `${dao}-proposer`,
-    deadline_ledger: 5000,
+    vote_end_timestamp: 5000,
     snapshot_ledger: 20,
     eta: 6000,
     vote_start_timestamp: null,

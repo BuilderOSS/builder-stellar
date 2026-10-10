@@ -18,7 +18,7 @@ export async function GET(_request: Request, context: { params: Promise<{ daoId:
     const { proposal } = await getGoldskyProposalDetail(daoId, proposalId);
     const live = await readProposalChainState(config, proposal.proposal_id).catch(() => null);
     const state = live?.state ?? proposalStateFromLabel(proposal.state);
-    const deadline = live?.core?.voteEnd ?? live?.deadline ?? Number(proposal.deadline_ledger ?? 0);
+    const deadline = live?.core?.voteEnd ?? live?.deadline ?? Number(proposal.vote_end_timestamp ?? 0);
     const eta = live?.core?.eta ?? Number(proposal.eta ?? 0);
     const voteStart = live?.core?.voteStart ?? Number(proposal.vote_start_timestamp ?? 0);
     const metadata = parseProposalMetadata(proposal.description ?? '');
@@ -49,7 +49,7 @@ export async function GET(_request: Request, context: { params: Promise<{ daoId:
         description: proposal.description,
         title: metadata.title,
         metadata,
-        // Do not call inherited proposal_proposer: it may use a different OZ storage key.
+        // The indexed proposer (proposal_created); no extra RPC read needed.
         proposer: proposal.proposer,
         vote_end: deadline,
         vote_snapshot: live?.core?.snapshot ?? live?.snapshot ?? Number(proposal.snapshot_ledger ?? 0),
@@ -67,7 +67,13 @@ export async function GET(_request: Request, context: { params: Promise<{ daoId:
         state,
         stateSource: live?.stateSource ?? 'indexed',
         label: proposalStateLabel(state),
-        quorumVotes: live?.quorumVotes ?? null,
+        quorumVotes: live?.quorumVotes ?? proposal.quorum_votes ?? null,
+        quorumSource:
+          live?.quorumVotes !== undefined && live?.quorumVotes !== null
+            ? 'chain'
+            : proposal.quorum_votes
+              ? 'indexed'
+              : 'unavailable',
         ledger: Number(proposal.created_ledger ?? 0),
         timestamp: Number(proposal.created_timestamp ?? 0),
         for_votes: String(proposal.vote_summary?.for ?? 0),

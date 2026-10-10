@@ -1,10 +1,8 @@
-import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { NextResponse } from 'next/server';
 
 import { parseLimit, parseNonNegativeInteger } from '@/lib/api-pagination';
-import { getDaoNetworkConfigById, readSource } from '@/lib/dao-config';
+import { getDaoNetworkConfigById } from '@/lib/dao-config';
 import { getGoldskyProposalList } from '@/lib/goldsky';
-import { proposalIdToBuffer } from '@/lib/proposal-id';
 import { parseProposalMetadata, type ProposalMetadata } from '@/lib/proposal-metadata';
 import {
   type ProposalState as ProposalStateValue,
@@ -29,12 +27,6 @@ type ProposalListItem = {
   } | null;
 };
 
-async function fetchProposalState(client: InstanceType<typeof GovernorClient>, proposalId: string) {
-  const proposalBuffer = proposalIdToBuffer(proposalId);
-  const stateTx = await client.proposal_state({ proposal_id: proposalBuffer });
-  return stateTx.result;
-}
-
 export async function GET(request: Request, { params }: { params: Promise<{ daoId: string }> }) {
   const url = new URL(request.url);
   const { daoId } = await params;
@@ -53,40 +45,29 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
   try {
     const proposalData = await getGoldskyProposalList(daoId, { limit, offset, status });
 
-    const client = new GovernorClient({
-      contractId: config.governorContractId,
-      rpcUrl: config.rpcUrl,
-      networkPassphrase: config.passphrase,
-      publicKey: readSource(config.launchAdmin)
-    });
-
-    const items = await Promise.all(
-      proposalData.items.map(async (proposal: any): Promise<ProposalListItem> => {
-        const metadata = parseProposalMetadata(proposal.description ?? '');
-        let state: ProposalStateValue | null = null;
-        try {
-          state = await fetchProposalState(client, proposal.proposal_id);
-        } catch {
-          state = proposalStateFromLabel(proposal.state);
+    // The indexed state mirrors Governor.proposal_state (computed from
+    // ProposalScheduled windows, quorum and lifecycle events), so the list needs
+    // no per-proposal RPC read. Detail pages still recheck live state.
+    const items = proposalData.items.map((proposal: any): ProposalListItem => {
+      const metadata = parseProposalMetadata(proposal.description ?? '');
+      const state: ProposalStateValue | null = proposalStateFromLabel(proposal.state);
+      return {
+        proposalId: proposal.proposal_id,
+        proposalNumber: Number(proposal.proposal_number),
+        metadata,
+        state,
+        stateLabel: state === null ? (proposal.state ?? 'Unknown') : proposalStateLabel(state),
+        ledger: Number(proposal.created_ledger ?? 0),
+        timestamp: Number(proposal.created_timestamp ?? 0),
+        txHash: '',
+        contractId: config.governorContractId,
+        voteTotals: {
+          forVotes: String(proposal.for_votes ?? 0),
+          againstVotes: String(proposal.against_votes ?? 0),
+          abstainVotes: String(proposal.abstain_votes ?? 0)
         }
-        return {
-          proposalId: proposal.proposal_id,
-          proposalNumber: Number(proposal.proposal_number),
-          metadata,
-          state,
-          stateLabel: state === null ? (proposal.state ?? 'Unknown') : proposalStateLabel(state),
-          ledger: Number(proposal.created_ledger ?? 0),
-          timestamp: Number(proposal.created_timestamp ?? 0),
-          txHash: '',
-          contractId: config.governorContractId,
-          voteTotals: {
-            forVotes: String(proposal.for_votes ?? 0),
-            againstVotes: String(proposal.against_votes ?? 0),
-            abstainVotes: String(proposal.abstain_votes ?? 0)
-          }
-        };
-      })
-    );
+      };
+    });
 
     return NextResponse.json(
       {

@@ -49,7 +49,7 @@ export interface DaoConfig {
   token_uri: string | null;
 
   // Admin & Configuration
-  admin_address: string | null; // launch_admin
+  admin_address: string | null; // current admin: launch admin in setup, the Treasury after launch
   label: string; // Display name (may be empty)
 
   // Lifecycle State
@@ -111,12 +111,21 @@ const CONTRACT_ID_PATTERN = /^C[A-Z2-7]{55}$/;
  */
 export async function resolveDaoId(idOrSlug: string): Promise<string> {
   if (CONTRACT_ID_PATTERN.test(idOrSlug)) return idOrSlug;
-  const row = await prisma.managerDao.findFirst({
-    where: { deploymentId: DEPLOYMENT_ID, slug: idOrSlug },
+  // A claimed slug is unique and permanent (claimed at launch). Several pending
+  // DAOs may request the same slug, so a request only resolves when unambiguous.
+  const claimed = await prisma.managerDao.findFirst({
+    where: { deploymentId: DEPLOYMENT_ID, claimedSlug: idOrSlug },
     select: { daoId: true }
   });
-  if (!row) throw new Error(`DAO not found: ${idOrSlug}`);
-  return row.daoId;
+  if (claimed) return claimed.daoId;
+  const requested = await prisma.managerDao.findMany({
+    where: { deploymentId: DEPLOYMENT_ID, slugClaimed: false, requestedSlug: idOrSlug },
+    select: { daoId: true },
+    orderBy: { createdLedger: 'asc' },
+    take: 2
+  });
+  if (requested.length !== 1) throw new Error(`DAO not found: ${idOrSlug}`);
+  return requested[0].daoId;
 }
 
 /**

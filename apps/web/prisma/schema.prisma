@@ -12,7 +12,11 @@ datasource db {
 view ManagerDao {
   deploymentId        String    @map("deployment_id")
   daoId               String    @map("dao_id")
+  /** Claimed slug once launched, else the latest request (not unique among pending DAOs). */
   slug                String?
+  slugClaimed         Boolean   @map("slug_claimed")
+  requestedSlug       String?   @map("requested_slug")
+  claimedSlug         String?   @map("claimed_slug")
   tokenAddress        String    @map("token_address")
   deployer            String?
   launchAdmin         String?   @map("launch_admin")
@@ -27,6 +31,7 @@ view ManagerDao {
   tokenSymbol         String?   @map("token_symbol")
   tokenDescription    String?   @map("token_description")
   tokenUri            String?   @map("token_uri")
+  /** Current admin: the launch admin during setup, the Treasury (a contract) after launch. */
   adminAddress        String?   @map("admin_address")
   status              String
   auctionEnabled      Boolean?  @map("auction_enabled")
@@ -132,7 +137,7 @@ view MetadataConfiguration {
   tokenContract       String    @map("token_contract")
   rendererBase        String?   @map("renderer_base")
   version             String?
-  owner               String?
+  admin               String?
   projectUri          String?   @map("project_uri")
   description         String?
   contractImage       String?   @map("contract_image")
@@ -193,7 +198,9 @@ view AppProposalList {
   proposer               String
   description            String?
   snapshotLedger         BigInt?   @map("snapshot_ledger")
+  voteStartSeconds       BigInt?   @map("vote_start_seconds")
   voteEndSeconds         BigInt?   @map("vote_end_seconds")
+  quorumVotes            Decimal?  @map("quorum_votes")
   actionCount            Int       @map("action_count")
   createdLedger          BigInt    @map("created_ledger")
   transactionIndex       BigInt?   @map("transaction_index")
@@ -223,7 +230,9 @@ view AppProposalDetail {
   proposer               String
   description            String?
   snapshotLedger         BigInt?   @map("snapshot_ledger")
+  voteStartSeconds       BigInt?   @map("vote_start_seconds")
   voteEndSeconds         BigInt?   @map("vote_end_seconds")
+  quorumVotes            Decimal?  @map("quorum_votes")
   actionCount            Int       @map("action_count")
   createdLedger          BigInt    @map("created_ledger")
   transactionIndex       BigInt?   @map("transaction_index")
@@ -421,4 +430,62 @@ view MinterAllowlistClaimEvent {
 
   @@map("allowlist_claim_events")
   @@schema("minter")
+}
+
+view ManagerDaoSlug {
+  deploymentId  String    @map("deployment_id")
+  daoId         String    @map("dao_id")
+  requestedSlug String?   @map("requested_slug")
+  claimedSlug   String?   @map("claimed_slug")
+  claimedLedger BigInt?   @map("claimed_ledger")
+  claimedAt     DateTime? @map("claimed_at")
+
+  @@map("dao_slugs")
+  @@schema("manager")
+}
+
+view ManagerModuleAdmin {
+  deploymentId     String    @map("deployment_id")
+  daoId            String    @map("dao_id")
+  moduleRole       String    @map("module_role")
+  moduleContract   String    @map("module_contract")
+  admin            String?
+  handedToTreasury Boolean   @map("handed_to_treasury")
+  changedLedger    BigInt?   @map("changed_ledger")
+  changedAt        DateTime? @map("changed_at")
+  changedTxHash    String?   @map("changed_tx_hash")
+
+  @@map("module_admins")
+  @@schema("manager")
+}
+
+view TokenSupply {
+  deploymentId     String @map("deployment_id")
+  daoId            String @map("dao_id")
+  contractId       String @map("contract_id")
+  mintedSupply     BigInt @map("minted_supply")
+  systemHeldSupply BigInt @map("system_held_supply")
+  votingSupply     BigInt @map("voting_supply")
+
+  @@map("supply")
+  @@schema("token")
+}
+
+view GovernanceSettings {
+  deploymentId        String    @map("deployment_id")
+  daoId               String    @map("dao_id")
+  governorContract    String    @map("governor_contract")
+  admin               String?
+  votingDelaySeconds  BigInt?   @map("voting_delay_seconds")
+  votingPeriodSeconds BigInt?   @map("voting_period_seconds")
+  queueDelaySeconds   BigInt?   @map("queue_delay_seconds")
+  proposalThreshold   Decimal?  @map("proposal_threshold")
+  quorumBps           Int?      @map("quorum_bps")
+  version             String?
+  initLedger          BigInt    @map("init_ledger")
+  initAt              DateTime? @map("init_at")
+  updatedLedger       BigInt?   @map("updated_ledger")
+
+  @@map("settings")
+  @@schema("governance")
 }

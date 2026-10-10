@@ -14,9 +14,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
   const contractRole = url.searchParams.get('contractRole') ?? undefined;
   const actor = url.searchParams.get('actor') ?? undefined;
   const kind = url.searchParams.get('kind') ?? undefined;
+  const visibility = url.searchParams.get('visibility') === 'all' ? 'all' : 'public';
 
   try {
-    const payload = await getGoldskyActivityFeed(daoId, { limit, offset, contractId, contractRole, actor, kind });
+    const payload = await getGoldskyActivityFeed(daoId, {
+      limit,
+      offset,
+      contractId,
+      contractRole,
+      actor,
+      kind,
+      visibility
+    });
     return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     return NextResponse.json(

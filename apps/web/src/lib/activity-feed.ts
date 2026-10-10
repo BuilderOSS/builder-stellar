@@ -61,6 +61,15 @@ export function formatActivitySummary(item: ActivityItem) {
     }
     case 'seedgenerated':
       return `Seed generated for ${token}`;
+    case 'mintbatchwithminter':
+    case 'seedsgenerated': {
+      // One event per batch_mint for the id range [first_token_id, first_token_id + count).
+      const first = Number(firstValue(topics.first_token_id, args.first_token_id));
+      const count = Number(firstValue(args.count));
+      if (!Number.isFinite(first) || !Number.isFinite(count) || count < 1) return item.summary;
+      const range = count === 1 ? `token ${first}` : `${count} tokens (${first}–${first + count - 1})`;
+      return eventName === 'seedsgenerated' ? `Seeds generated for ${range}` : `Minted ${range}`;
+    }
     case 'batchmint':
       return `Minted ${firstValue(item.amount, args.amount) ?? 'a batch of'} tokens`;
     default:

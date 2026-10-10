@@ -104,8 +104,8 @@ FROM seeds s
 JOIN manager.event_identity i ON i.deployment_id = s.deployment_id AND i.contract_id = s.contract_id;
 
 -- Current configuration: the initial values overlaid with the latest update of
--- each field. `owner` is the metadata module's current admin (the launch admin,
--- then the Treasury); the column keeps the name the web app's Prisma model reads.
+-- each field. `admin` is the metadata module's current admin (the launch admin,
+-- then the Treasury).
 CREATE VIEW metadata.configuration AS
 WITH initialized AS (
   SELECT DISTINCT ON (e.deployment_id, e.contract_id)
@@ -155,7 +155,7 @@ SELECT
   i.token_contract,
   COALESCE(u.renderer_base, i.renderer_base) AS renderer_base,
   i.version,
-  COALESCE(a.admin, i.initial_admin) AS owner,
+  COALESCE(a.admin, i.initial_admin) AS admin,
   COALESCE(u.project_uri, i.project_uri) AS project_uri,
   COALESCE(u.description, i.description) AS description,
   COALESCE(u.contract_image, i.contract_image) AS contract_image,

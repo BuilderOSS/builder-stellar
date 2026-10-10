@@ -16,7 +16,8 @@ vi.mock('@/lib/dao-config', async (importOriginal) => ({
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     tokenMember: { findMany: mocks.list, count: mocks.count, findFirst: mocks.member },
-    tokenInventory: { findMany: mocks.tokens, count: mocks.supply }
+    tokenInventory: { findMany: mocks.tokens, count: mocks.supply },
+    tokenSupply: { findFirst: async () => null }
   }
 }));
 

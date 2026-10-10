@@ -56,14 +56,16 @@ export async function directoryTokens(
   daoId: string,
   page: { limit: number; offset: number },
   input?: string
-): Promise<DirectoryPage<OwnedToken> & { totalSupply: string }> {
+): Promise<DirectoryPage<OwnedToken> & { totalSupply: string; votingSupply: string | null }> {
   const owner = input === undefined ? undefined : memberAddress(input);
   const { deploymentId, daoId: token } = await directoryScope(daoId);
   const where = { deploymentId, daoId: token, contractId: token, ...(owner ? { owner } : {}) };
-  const [rows, total, supply] = await Promise.all([
+  const [rows, total, supply, supplyRow] = await Promise.all([
     prisma.tokenInventory.findMany({ where, orderBy: { tokenId: 'desc' }, take: page.limit, skip: page.offset }),
     prisma.tokenInventory.count({ where }),
-    prisma.tokenInventory.count({ where: { deploymentId, daoId: token, contractId: token } })
+    prisma.tokenInventory.count({ where: { deploymentId, daoId: token, contractId: token } }),
+    // Minted vs voting: tokens held by the Treasury, Auction and Marketplace carry no votes.
+    prisma.tokenSupply.findFirst({ where: { deploymentId, daoId: token } })
   ]);
   return {
     deploymentId,
@@ -78,6 +80,7 @@ export async function directoryTokens(
     })),
     total,
     totalSupply: String(supply),
+    votingSupply: supplyRow ? supplyRow.votingSupply.toString() : null,
     ...page,
     hasMore: page.offset + rows.length < total,
     generatedAt: new Date().toISOString()

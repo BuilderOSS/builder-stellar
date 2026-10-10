@@ -134,12 +134,12 @@ export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoN
         <div>
           <h2 id="launch-title">Setup → Launch</h2>
           <p className={styles.muted}>
-            Launch hands control to the DAO treasury and starts only the modules selected below. Payment assets stay
-            fixed.
+            Upload the artwork before minting founder tokens: traits are assigned at mint time, and tokens minted
+            without artwork get none. Launch hands every module's admin to the DAO treasury and starts only the modules
+            selected below. Payment assets stay fixed.
           </p>
         </div>
         <div className={styles.links}>
-          <Link href={`/dao/${daoId}/admin/founders`}>Mint founder tokens</Link>
           <Button
             type="button"
             variant="plain"
@@ -147,8 +147,9 @@ export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoN
             aria-controls="artwork-setup-panel"
             onClick={() => setArtworkOpen((open) => !open)}
           >
-            Set up artwork
+            1. Set up artwork
           </Button>
+          <Link href={`/dao/${daoId}/admin/founders`}>2. Mint founder tokens (after the artwork)</Link>
           <Link href={`/dao/${daoId}/admin/auction`}>Review auction settings</Link>
           <Link href={`/dao/${daoId}/admin/marketplace`}>Review marketplace settings</Link>
         </div>
@@ -163,9 +164,10 @@ export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoN
           <>
             <dl className={styles.summary}>
               <div>
-                <dt>Live token supply</dt>
+                <dt>Voting supply</dt>
                 <dd>
-                  {data.supply.toString()} {data.supply > 0n ? '· Ready' : '· Founder mint required'}
+                  {data.supply.toString()}{' '}
+                  {data.supply > 0n ? '· Ready' : '· Founder mint required (tokens held by DAO contracts do not count)'}
                 </dd>
               </div>
               <div>

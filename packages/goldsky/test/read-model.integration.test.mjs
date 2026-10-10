@@ -547,7 +547,7 @@ test('metadata: properties reset, seeds and configuration overlay', { skip }, ()
   assert.equal(config.project_uri, 'ipfs://p0');
   assert.equal(config.description, 'Alpha DAO v2');
   assert.equal(config.contract_image, 'img1');
-  assert.equal(config.owner, 'CTRE1', 'owner is the current metadata admin: the treasury after launch');
+  assert.equal(config.admin, 'CTRE1', 'the current metadata admin: the treasury after launch');
 });
 
 test('marketplace: primary listings by listing_id, secondary by token_id, sales, purchases', { skip }, () => {
