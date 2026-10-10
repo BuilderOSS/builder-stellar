@@ -8,6 +8,12 @@ import type { PendingAdminProposal } from '@/lib/use-admin-proposal-draft';
 
 const summaryBox = css({ display: 'grid', gap: '1.5', p: '3.5', borderRadius: 'control', bg: 'raised' });
 const summaryText = css({ textStyle: 'body', fontWeight: '600', color: 'ink', m: '0' });
+const FINDING_TITLE = {
+  'high-risk': 'High-risk change',
+  duplicate: 'Already in your draft',
+  conflict: 'Clashes with another change',
+  order: 'Check the order'
+} as const;
 const note = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
 
 /** Review a change before it joins the local proposal draft. Nothing is signed here. */
@@ -70,7 +76,7 @@ export function AdminProposalDraftDialog({
             <Callout
               key={`${finding.kind}-${index}`}
               variant={finding.severity === 'error' ? 'error' : 'warning'}
-              title={finding.kind === 'high-risk' ? 'High-risk change' : finding.kind}
+              title={FINDING_TITLE[finding.kind]}
               description={finding.message}
             />
           ))}

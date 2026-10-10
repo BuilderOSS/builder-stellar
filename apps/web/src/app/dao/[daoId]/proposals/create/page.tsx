@@ -121,10 +121,13 @@ export default function ProposalCreatePage() {
     : eligibility.message;
   // The Governor accepts at most MAX_PROPOSAL_ACTIONS (20) actions per proposal.
   const actionCountError = validateProposalActionCount(queuedActions.length);
-  const draftFindings = queuedActions.flatMap((action, index) =>
-    analyzeProposalAction(action, queuedActions.slice(0, index)).filter((finding) => finding.severity === 'error')
+  const allDraftFindings = queuedActions.flatMap((action, index) =>
+    analyzeProposalAction(action, queuedActions.slice(0, index))
   );
+  const draftFindings = allDraftFindings.filter((finding) => finding.severity === 'error');
   const hasBlockingDraftFindings = draftFindings.length > 0;
+  // Ordering problems still submit, but the vote would fail at execution, so say so before signing.
+  const orderWarnings = [...new Set(allDraftFindings.filter((f) => f.kind === 'order').map((f) => f.message))];
 
   // Metadata validation
   const metadataValidation = validateProposalMetadataDraft(metadata);
@@ -361,6 +364,14 @@ export default function ProposalCreatePage() {
                         description="Go back and remove or replace the flagged action."
                       />
                     ) : null}
+                    {orderWarnings.map((message) => (
+                      <Callout
+                        key={message}
+                        variant="warning"
+                        title="Check the order of actions"
+                        description={message}
+                      />
+                    ))}
                     <section className={review} aria-label="Proposal preview">
                       <h2 className={reviewTitle}>{metadata.title}</h2>
                       <p className={reviewBody}>{metadata.description}</p>

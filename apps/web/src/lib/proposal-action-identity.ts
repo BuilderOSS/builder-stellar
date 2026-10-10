@@ -8,7 +8,7 @@ export type ProposalActionIdentity = {
 
 export type ProposalDraftFinding = {
   severity: 'warning' | 'error';
-  kind: 'duplicate' | 'conflict' | 'high-risk';
+  kind: 'duplicate' | 'conflict' | 'high-risk' | 'order';
   message: string;
   existingActionIndexes: number[];
 };
@@ -144,9 +144,62 @@ export function isHighRiskProposalAction(action: ProposalQueuedAction) {
   );
 }
 
+const PAUSE_TOGGLES = new Set(['pause-auction', 'unpause-auction', 'pause-marketplace', 'unpause-marketplace']);
+/** Auction calls the contract only accepts while auctions are paused. */
+const NEEDS_PAUSED_AUCTION = new Set([
+  'set-auction-reserve-price',
+  'set-auction-payment-token',
+  'set-auction-duration',
+  'set-auction-time-buffer',
+  'set-auction-min-bid-increment',
+  'cancel-auction'
+]);
+
+/** Index of the nearest earlier action that pauses or resumes the same module, or -1. */
+function lastToggleIndex(resourceKey: string, existing: ProposalQueuedAction[]) {
+  for (let index = existing.length - 1; index >= 0; index -= 1) {
+    if (getProposalActionResourceKey(existing[index]) === resourceKey) return index;
+  }
+  return -1;
+}
+
 export function analyzeProposalAction(action: ProposalQueuedAction, existing: ProposalQueuedAction[]) {
   const identity = getProposalActionIdentity(action);
   const findings: ProposalDraftFinding[] = [];
+
+  // Pausing and resuming are ordered steps, not competing values: "pause → change → resume" is one
+  // valid proposal. Only the same step twice in a row (with nothing undoing it in between) repeats.
+  if (PAUSE_TOGGLES.has(action.type)) {
+    const previous = lastToggleIndex(identity.resourceKey, existing);
+    if (previous >= 0 && existing[previous].type === action.type)
+      findings.push({
+        severity: 'error',
+        kind: 'duplicate',
+        message: action.type.startsWith('pause')
+          ? 'This already pauses at this point in the draft.'
+          : 'This already resumes at this point in the draft.',
+        existingActionIndexes: [previous]
+      });
+    if (isHighRiskProposalAction(action))
+      findings.push({
+        severity: 'warning',
+        kind: 'high-risk',
+        message: 'This action can change DAO control, treasury behavior, or token balances.',
+        existingActionIndexes: []
+      });
+    return findings;
+  }
+
+  if (NEEDS_PAUSED_AUCTION.has(action.type)) {
+    const previous = lastToggleIndex('auction:pause-state', existing);
+    if (previous >= 0 && existing[previous].type === 'unpause-auction')
+      findings.push({
+        severity: 'warning',
+        kind: 'order',
+        message: 'This runs after auctions resume, but it needs them paused. Move it before the resume step.',
+        existingActionIndexes: [previous]
+      });
+  }
 
   existing.forEach((candidate, index) => {
     const candidateIdentity = getProposalActionIdentity(candidate);
