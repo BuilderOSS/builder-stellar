@@ -13,6 +13,7 @@ These pages describe the current repository source, including the frontend worki
 
 - [Deploy Manager](MANAGER_DEPLOYMENT.md)
 - [Create, configure, and launch a DAO](DAO_DEPLOYMENT.md)
+- [Upgrade DAO contracts (step-by-step runbook)](CONTRACT_UPGRADES.md)
 - [Set up Goldsky](GOLDSKY_SETUP.md) and [package reference](../packages/goldsky/README.md)
 - [Database migrations, roles, and reset](../db/README.md)
 - [Bindings generation](../BINDINGS_GENERATION_ISSUE.md)

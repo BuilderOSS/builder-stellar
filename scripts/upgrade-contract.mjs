@@ -73,18 +73,19 @@ function keccak256(input) {
   return out.toString('hex');
 }
 
-const [moduleName, firstConfigPath, secondConfigPath, fromHash] = process.argv.slice(2);
+const USAGE = [
+  'Usage:',
+  '  node scripts/upgrade-contract.mjs manager <network-config.json> <from-wasm-hash>',
+  '  node scripts/upgrade-contract.mjs <token|metadata|auction|governor|treasury|marketplace> <dao-config.json> <network-config.json> <from-wasm-hash>',
+  'See docs/CONTRACT_UPGRADES.md.'
+].join('\n');
 const moduleNames = ['manager', 'token', 'metadata', 'auction', 'governor', 'treasury', 'marketplace'];
-
-if (!moduleNames.includes(moduleName) || !firstConfigPath || !fromHash) {
-  throw new Error(
-    'Usage: node scripts/upgrade-contract.mjs <manager|token|metadata|auction|governor|treasury|marketplace> <network-config.json> [dao-config.json] <from-wasm-hash>'
-  );
-}
-
-const networkConfigPath = moduleName === 'manager' ? firstConfigPath : secondConfigPath;
-const daoConfigPath = moduleName === 'manager' ? null : firstConfigPath;
-if (!networkConfigPath) throw new Error('A network config is required for module upgrades');
+const [moduleName, ...rest] = process.argv.slice(2);
+if (!moduleNames.includes(moduleName)) throw new Error(USAGE);
+// Manager: <network-config> <from-hash>. DAO modules: <dao-config> <network-config> <from-hash>.
+const [daoConfigPath, networkConfigPath, fromHash] =
+  moduleName === 'manager' ? [null, rest[0], rest[1]] : [rest[0], rest[1], rest[2]];
+if (!networkConfigPath || !fromHash || (moduleName !== 'manager' && !daoConfigPath)) throw new Error(USAGE);
 
 const networkConfig = JSON.parse(readFileSync(networkConfigPath, 'utf8'));
 const releaseManifest = JSON.parse(readFileSync('releases/contracts.json', 'utf8'));
