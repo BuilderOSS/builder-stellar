@@ -3012,12 +3012,12 @@ fn full_factory_flow_create_setup_launch_with_slug() {
 // Review fixes: batch size under network limits, nested Treasury auth, error codes
 // ============================================================================
 
-/// `common::MAX_BATCH_MINT` must fit one transaction with full 16-trait
-/// artwork: every token emits OpenZeppelin `Mint`, `MintWithMinter` and the
-/// metadata `SeedGenerated`, against the default (mainnet-like) resource
-/// limits and a mainnet-like `max_entry_ttl`.
-#[test]
-fn full_batch_mint_with_sixteen_trait_artwork_fits_one_transaction() {
+/// Mints `recipients` new recipients x `tokens_each` tokens in one
+/// `batch_mint` against real metadata with 16 traits (the maximum, so the
+/// largest seed event), under the default (mainnet-like) resource limits,
+/// including the 16 KiB contract-event limit, and a mainnet-like
+/// `max_entry_ttl`. Returns the contract-event bytes used.
+fn batch_mint_with_sixteen_trait_artwork(recipients: u32, tokens_each: u32) -> u32 {
     let (e, token, _treasury, _governor, _target, owner) = setup();
     e.ledger().with_mut(|l| l.max_entry_ttl = 3_110_400);
     let metadata = MetadataContractClient::new(&e, &token.metadata().unwrap());
@@ -3041,21 +3041,50 @@ fn full_batch_mint_with_sixteen_trait_artwork_fits_one_transaction() {
     );
     assert_eq!(metadata.properties_count(), 16);
 
-    let alice = Address::generate(&e);
-    let bob = Address::generate(&e);
-    let half = (common::MAX_BATCH_MINT / 2) as u128;
-    let rest = common::MAX_BATCH_MINT as u128 - half;
+    let mut to = Vec::new(&e);
+    let mut amounts = Vec::new(&e);
+    for _ in 0..recipients {
+        to.push_back(Address::generate(&e));
+        amounts.push_back(tokens_each as u128);
+    }
     e.cost_estimate().budget().reset_default();
-    let ids = token.batch_mint(
-        &owner,
-        &vec![&e, alice.clone(), bob.clone()],
-        &vec![&e, half, rest],
-    );
-    assert_eq!(ids.len(), common::MAX_BATCH_MINT);
+    let ids = token.batch_mint(&owner, &to, &amounts);
+    let events_bytes = e.cost_estimate().resources().contract_events_size_bytes;
+    assert_eq!(ids.len(), recipients * tokens_each);
     // The hook seeded every token (it is not allowed to fail silently here).
     for id in ids.iter() {
         assert_eq!(metadata.get_attributes(&id).len(), 17);
     }
+    events_bytes
+}
+
+/// The largest batches `common::batch_mint_fits` allows fit one transaction
+/// with ~15% of the event limit to spare: all tokens to one recipient, one
+/// token each to the most recipients, and a mixed batch at the budget edge.
+#[test]
+fn batches_at_the_event_budget_fit_one_transaction() {
+    const LIMIT: u32 = 16_384;
+    let shapes = [
+        (1, common::MAX_BATCH_MINT),
+        (common::MAX_BATCH_RECIPIENTS, 1),
+        (5, 7), // 35 tokens over 5 recipients: 12,750 of 13,500 budget
+    ];
+    for (recipients, tokens_each) in shapes {
+        assert!(common::batch_mint_fits(
+            recipients * tokens_each,
+            recipients
+        ));
+        let used = batch_mint_with_sixteen_trait_artwork(recipients, tokens_each);
+        assert!(
+            used <= LIMIT * 90 / 100,
+            "{recipients} x {tokens_each}: {used} event bytes"
+        );
+    }
+    // The estimate is conservative: actual usage stays under the budget.
+    assert!(
+        batch_mint_with_sixteen_trait_artwork(1, common::MAX_BATCH_MINT)
+            <= common::BATCH_MINT_EVENT_BUDGET
+    );
 }
 
 /// A proposal can make the Treasury buy a marketplace listing: the purchase

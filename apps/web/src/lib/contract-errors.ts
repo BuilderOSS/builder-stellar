@@ -73,7 +73,7 @@ const ERRORS: Record<number, string> = {
   7202: 'Invalid token input.',
   7203: 'Treasury mismatch.',
   7204: 'The treasury is not a minter.',
-  7205: 'Too many tokens in one batch: mint at most 20 per transaction.',
+  7205: 'Batch too large for one transaction: mint at most 43 tokens to one recipient, fewer when spread over several (18 recipients with one token each).',
   // metadata
   7301: 'Metadata is not initialized.',
   7302: 'Treasury mismatch.',
@@ -144,7 +144,7 @@ const ERRORS: Record<number, string> = {
   // minter
   7801: 'Invalid amount.',
   7802: 'Invalid token contract.',
-  7803: 'Batch too large: at most 20 recipients per transaction.',
+  7803: 'Batch too large: at most 18 recipients per transaction.',
   7804: 'Merkle root is not set.',
   7805: 'Allowlist is not set.',
   7806: 'Address is not in the allowlist.',

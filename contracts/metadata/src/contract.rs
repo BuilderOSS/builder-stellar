@@ -241,7 +241,8 @@ impl MetadataContract {
         }
 
         let counts = Self::item_counts(&env, num_properties);
-        Self::seed_token(&env, &counts, token_id);
+        let selections = Self::seed_token(&env, &counts, token_id);
+        emit_seed_generated(&env, token_id, num_properties, &selections);
         Ok(true)
     }
 
@@ -273,7 +274,8 @@ impl MetadataContract {
             return Err(Error::NoProperties);
         }
         let counts = Self::item_counts(&env, num_properties);
-        Self::seed_token(&env, &counts, token_id);
+        let selections = Self::seed_token(&env, &counts, token_id);
+        emit_seed_generated(&env, token_id, num_properties, &selections);
         Ok(())
     }
 
@@ -281,8 +283,8 @@ impl MetadataContract {
     /// `[first_token_id, first_token_id + count)`.
     ///
     /// Authorizes the token and loads the properties once for the whole range
-    /// instead of once per token. Emits one `SeedGenerated` event per token,
-    /// same as `on_minted`.
+    /// instead of once per token. Emits a single `SeedsGenerated` event for
+    /// the whole range rather than one `SeedGenerated` per token.
     ///
     /// # Errors
     ///
@@ -297,9 +299,11 @@ impl MetadataContract {
         }
 
         let counts = Self::item_counts(&env, num_properties);
+        let mut selections = Vec::new(&env);
         for i in 0..count {
-            Self::seed_token(&env, &counts, first_token_id + i);
+            selections.push_back(Self::seed_token(&env, &counts, first_token_id + i));
         }
+        emit_seeds_generated(&env, first_token_id, count, num_properties, &selections);
         Ok(true)
     }
 
@@ -634,7 +638,9 @@ impl MetadataContract {
         counts
     }
 
-    fn seed_token(env: &Env, counts: &Vec<u32>, token_id: u32) {
+    /// Derives and stores `token_id`'s attributes and returns them
+    /// (`[num_properties, idx...]`). Callers emit the seed event.
+    fn seed_token(env: &Env, counts: &Vec<u32>, token_id: u32) -> Vec<u32> {
         let num_properties = counts.len();
         let seed = Self::generate_seed(env, token_id);
 
@@ -655,7 +661,7 @@ impl MetadataContract {
         }
 
         set_attributes(env, token_id, &attr_vec);
-        emit_seed_generated(env, token_id, num_properties, &attr_vec);
+        attr_vec
     }
 
     /// Derive the 32-byte artwork seed for `token_id`.

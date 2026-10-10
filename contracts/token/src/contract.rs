@@ -13,7 +13,8 @@ use common::clients::MetadataHookClient;
 
 use crate::error::TokenError;
 use crate::events::{
-    emit_launched, emit_mint_authority_changed, emit_token_initialized, emit_token_mint,
+    emit_launched, emit_mint_authority_changed, emit_token_batch_mint, emit_token_initialized,
+    emit_token_mint,
 };
 use crate::storage::*;
 
@@ -201,13 +202,17 @@ impl DaoTokenContract {
     }
 
     /// Mints `amounts[i]` sequential tokens to each `recipients[i]` in one call
-    /// (same authority rules as `mint`). At most `common::MAX_BATCH_MINT`
-    /// tokens in total (`BatchTooLarge`), which also bounds the metadata hook.
+    /// (same authority rules as `mint`). The batch must fit the event budget
+    /// (`common::batch_mint_fits`, `BatchTooLarge`): at most
+    /// `common::MAX_BATCH_MINT` tokens to one recipient, or
+    /// `common::MAX_BATCH_RECIPIENTS` recipients of one token each. Each new
+    /// recipient adds delegation events on top of the per-token cost. The cap
+    /// also bounds the metadata hook.
     ///
     /// Delegation, balance and vote checkpoints are touched once per recipient
     /// entry rather than once per token, which keeps the footprint small.
-    /// Emits OpenZeppelin `Mint` and `MintWithMinter` per token. Returns every
-    /// new token id in order.
+    /// Emits OpenZeppelin `Mint` per token and one `MintBatchWithMinter` for
+    /// the whole range. Returns every new token id in order.
     pub fn batch_mint(
         e: &Env,
         minter: &Address,
@@ -237,7 +242,7 @@ impl DaoTokenContract {
         if total == 0 {
             panic_with_error!(e, TokenError::InvalidInput);
         }
-        if total > common::MAX_BATCH_MINT {
+        if !common::batch_mint_fits(total, recipients.len()) {
             panic_with_error!(e, TokenError::BatchTooLarge);
         }
 
@@ -262,7 +267,6 @@ impl DaoTokenContract {
                 e.storage().persistent().set(&key, &recipient);
                 common::ttl::extend_persistent(e, &key);
                 emit_mint(e, &recipient, next_id);
-                emit_token_mint(e, minter, &recipient, next_id);
                 token_ids.push_back(next_id);
                 next_id += 1;
             }
@@ -273,6 +277,7 @@ impl DaoTokenContract {
         }
 
         Self::call_metadata_batch_hook(e, first_id, total);
+        emit_token_batch_mint(e, minter, first_id, total);
         token_ids
     }
 

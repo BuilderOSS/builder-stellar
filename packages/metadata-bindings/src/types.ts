@@ -78,6 +78,23 @@ export interface SeedGeneratedEvent {
 }
 
 /**
+ * Emitted once by `on_minted_batch` for the contiguous range
+ * `[first_token_id, first_token_id + count)`, instead of one
+ * `SeedGenerated` per token (keeps large batches under the per-transaction
+ * event size limit). `selections[i]` belongs to token `first_token_id + i`
+ * and has the same shape as `SeedGenerated.selections`.
+ */
+export interface SeedsGeneratedEvent {
+  name: "SeedsGenerated";
+  data: {
+    first_token_id: number;
+    count?: number;
+    num_properties?: number;
+    selections?: Array<Array<number>>;
+  };
+}
+
+/**
  * Event: PropertiesReset
  */
 export interface PropertiesResetEvent {
@@ -308,5 +325,5 @@ export interface VersionSyncedEvent {
     version?: string;
   };
 }
-    export type ContractEvent = PropertyAddedEvent | SeedGeneratedEvent | PropertiesResetEvent | MetadataLaunchedEvent | ProjectURIUpdatedEvent | DescriptionUpdatedEvent | MetadataInitializedEvent | RendererBaseUpdatedEvent | ContractImageUpdatedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VersionSyncedEvent;
+    export type ContractEvent = PropertyAddedEvent | SeedGeneratedEvent | SeedsGeneratedEvent | PropertiesResetEvent | MetadataLaunchedEvent | ProjectURIUpdatedEvent | DescriptionUpdatedEvent | MetadataInitializedEvent | RendererBaseUpdatedEvent | ContractImageUpdatedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VersionSyncedEvent;
     

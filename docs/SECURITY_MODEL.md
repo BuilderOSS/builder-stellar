@@ -112,7 +112,9 @@ Refunds to an outbid bidder are pushed; if the push fails, the amount is credite
 
 ## Batch minting
 
-`batch_mint` mints at most `common::MAX_BATCH_MINT` (20) tokens per call (`BatchTooLarge`, 7205). A transaction may publish at most 16 KiB of contract events and each minted token emits about 630 bytes (OpenZeppelin `Mint`, `MintWithMinter`, metadata `SeedGenerated`), so batches above ~26 tokens fail on the network. The cap also bounds the metadata seeding hook, whose failure (including budget exhaustion) cannot be caught. Larger founder allocations are minted in several calls.
+A transaction may publish at most 16 KiB of contract events. A `batch_mint` emits OpenZeppelin `Mint` per token, one `MintBatchWithMinter` for the id range and one metadata `SeedsGenerated` carrying every token's selections, plus OpenZeppelin delegation events for each recipient without a delegate. Measured worst case (16-trait artwork, all recipients new): ~376 bytes per call, ~288 per token, ~436 per recipient.
+
+Each call must satisfy `common::batch_mint_fits`: `300 × tokens + 450 × recipient entries ≤ 13,500` estimated bytes (`BatchTooLarge`, 7205), about 85% of the limit. That allows up to `MAX_BATCH_MINT` = 43 tokens to one recipient, `MAX_BATCH_RECIPIENTS` = 18 recipients with one token each, or mixes such as 35 tokens over 5 recipients. Entries are counted as new recipients even when they repeat or already delegate. Storage writes (2 per token, ~5 per new recipient, limit 200) and CPU stay well below their limits. The budget also bounds the metadata seeding hook, whose failure (including budget exhaustion) cannot be caught. The e2e suite mints batches at the budget edge against real 16-trait metadata; re-measure there if events change. Larger allocations are minted in several calls.
 
 ## Error codes
 

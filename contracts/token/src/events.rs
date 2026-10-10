@@ -2,7 +2,7 @@
 //!
 //! Standard NFT lifecycle events (Transfer, Mint, Approve) and vote events
 //! (DelegateChanged, DelegateVotesChanged) come from OpenZeppelin. The events
-//! below add what those lack: the minter of each token, mint-authority changes
+//! below add what those lack: the minter of each token or batch, mint-authority changes
 //! and the launch handoff. Admin changes are `common::admin::AdminChanged`.
 
 use soroban_sdk::{contractevent, Address, Env, String, Vec};
@@ -30,8 +30,9 @@ pub struct MintAuthorityChanged {
     pub changed_by: Address,
 }
 
-/// Emitted for every minted token, next to OpenZeppelin's `Mint`, to record
-/// who performed the mint (admin, auction, marketplace, minter).
+/// Emitted for every token minted by `mint`, next to OpenZeppelin's `Mint`, to
+/// record who performed the mint (admin, auction, marketplace, minter).
+/// `batch_mint` emits `MintBatchWithMinter` instead.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MintWithMinter {
@@ -40,6 +41,19 @@ pub struct MintWithMinter {
     #[topic]
     pub to: Address,
     pub token_id: u32,
+}
+
+/// Emitted once per `batch_mint` call for the contiguous range
+/// `[first_token_id, first_token_id + count)`, instead of one
+/// `MintWithMinter` per token (keeps large batches under the per-transaction
+/// event size limit). Recipients come from OpenZeppelin's per-token `Mint`.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MintBatchWithMinter {
+    #[topic]
+    pub minter: Address,
+    pub first_token_id: u32,
+    pub count: u32,
 }
 
 /// Emitted once when the Manager launches the token (Setup -> Live).
@@ -90,6 +104,15 @@ pub fn emit_token_mint(e: &Env, minter: &Address, to: &Address, token_id: u32) {
         minter: minter.clone(),
         to: to.clone(),
         token_id,
+    }
+    .publish(e);
+}
+
+pub fn emit_token_batch_mint(e: &Env, minter: &Address, first_token_id: u32, count: u32) {
+    MintBatchWithMinter {
+        minter: minter.clone(),
+        first_token_id,
+        count,
     }
     .publish(e);
 }

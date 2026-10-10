@@ -32,7 +32,7 @@ Every module stores its admin with `common::admin`: the launch admin during setu
 
 ### Token
 
-The NFT governance token supports ownership and transfers, delegation with checkpointed voting power, batch minting (at most 20 tokens per call), minter authorization, and a Metadata mint hook. Tokens held by the DAO's Treasury, Auction and Marketplace carry no votes: their voting units leave the supply, so the Governor's quorum is computed from the voting-capable supply only. Before launch only the admin (the launch admin) can mint. At launch the Manager sets the mint-authority set to Treasury and Marketplace, plus Auction and the platform minter when requested. `set_mint_authority` is available only after launch, to the admin (Treasury).
+The NFT governance token supports ownership and transfers, delegation with checkpointed voting power, batch minting (within a per-call event budget: up to 43 tokens to one recipient, or 18 recipients with one token each), minter authorization, and a Metadata mint hook. Tokens held by the DAO's Treasury, Auction and Marketplace carry no votes: their voting units leave the supply, so the Governor's quorum is computed from the voting-capable supply only. Before launch only the admin (the launch admin) can mint. At launch the Manager sets the mint-authority set to Treasury and Marketplace, plus Auction and the platform minter when requested. `set_mint_authority` is available only after launch, to the admin (Treasury).
 
 ### Metadata
 

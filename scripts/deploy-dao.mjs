@@ -23,7 +23,9 @@ const networkConfigPath = args[2];
  * 2. admin_checklist (setup window, the launch admin signs directly; no Manager, Minter or Treasury):
  *    - mint founder tokens with token.batch_mint (the admin may mint before launch; launch_dao
  *      requires a nonzero voting supply, i.e. founders other than the Treasury/Auction/Marketplace).
- *      Batches are bounded to 20 tokens per call (common::MAX_BATCH_MINT: the 16 KiB event limit).
+ *      Each call must fit the token's event budget (common::batch_mint_fits, 16 KiB event limit):
+ *      300 bytes per token + 450 per recipient <= 13,500, i.e. up to 43 tokens to one founder or
+ *      18 founders with one token each.
  *    - add the artwork with metadata.add_properties in batches of <= 30 items (each batch adds its
  *      own IPFS group). Progress is derived from metadata.ipfs_data_count().
  *    Not possible before launch: token.set_mint_authority (NotLive), Minter merkle/allowlist
@@ -77,9 +79,15 @@ const LIMITS = {
   maxString: 256,
   maxArtworkItemsPerCall: 30,
   maxProperties: 16,
-  maxBatchMintTokens: 20, // common::MAX_BATCH_MINT
-  maxBatchMintRecipients: 20
+  // common::batch_mint_fits: estimated event bytes per batch_mint call.
+  batchMintEventBudget: 13_500, // common::BATCH_MINT_EVENT_BUDGET
+  batchMintBytesPerToken: 300, // common::BATCH_MINT_BYTES_PER_TOKEN
+  batchMintBytesPerRecipient: 450 // common::BATCH_MINT_BYTES_PER_RECIPIENT
 };
+const batchMintCost = (tokens, recipients) =>
+  tokens * LIMITS.batchMintBytesPerToken + recipients * LIMITS.batchMintBytesPerRecipient;
+// common::MAX_BATCH_MINT: the most tokens one call can mint to a single recipient (43).
+const MAX_BATCH_MINT_TOKENS = Math.floor((LIMITS.batchMintEventBudget - LIMITS.batchMintBytesPerRecipient) / LIMITS.batchMintBytesPerToken);
 const ADDRESS_RE = /^[GC][A-Z2-7]{55}$/;
 const CONTRACT_RE = /^C[A-Z2-7]{55}$/;
 
@@ -181,16 +189,18 @@ function validateDaoConfig(config) {
 }
 
 // Founder mint batches: pieces of <= 20 tokens, packed into batches of <= 20 entries / 20 tokens.
+// Packs founder allocations into batch_mint calls that each fit common::batch_mint_fits. A founder
+// above MAX_BATCH_MINT_TOKENS is split across calls.
 function planFounderBatches(founders) {
   const pieces = founders.flatMap(({ address, amount }) => {
     const out = [];
-    for (let left = amount; left > 0; left -= LIMITS.maxBatchMintTokens) out.push({ address, amount: Math.min(left, LIMITS.maxBatchMintTokens) });
+    for (let left = amount; left > 0; left -= MAX_BATCH_MINT_TOKENS) out.push({ address, amount: Math.min(left, MAX_BATCH_MINT_TOKENS) });
     return out;
   });
   const batches = [];
   let current = { entries: [], total: 0 };
   for (const piece of pieces) {
-    if (current.entries.length === LIMITS.maxBatchMintRecipients || current.total + piece.amount > LIMITS.maxBatchMintTokens) {
+    if (batchMintCost(current.total + piece.amount, current.entries.length + 1) > LIMITS.batchMintEventBudget) {
       batches.push(current);
       current = { entries: [], total: 0 };
     }

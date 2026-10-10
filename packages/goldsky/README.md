@@ -197,6 +197,8 @@ share topics (enforced by `contractEvents()`). Each module's launch event has it
 | `ProposalExecuted` | governor | `proposal_id` | none | now emitted inside `consume` (same tx as `Execute`s) |
 | `RefundDeferred` | auction | `token_id`, `bidder` | `amount` (increment) | new |
 | `RefundWithdrawn` | auction | `bidder` | `amount` | new |
+| `MintBatchWithMinter` | token | `minter` | `first_token_id`, `count` | new; one per `batch_mint` instead of `MintWithMinter` per token (single `mint` still emits `MintWithMinter`) |
+| `SeedsGenerated` | metadata | `first_token_id` | `count`, `num_properties`, `selections` (one `[num_properties, idx...]` per token) | new; one per batch instead of `SeedGenerated` per token (`on_minted` / `regenerate` still emit `SeedGenerated`) |
 | `PrimaryListingCreated` | marketplace | `listing_id` | `price`, `expires_at`, `payment_asset` | keyed by listing id, no token/seller |
 | `PrimaryListingPurchased` | marketplace | `listing_id`, `buyer` | `token_id`, `price`, `payment_asset` | new (the only place a primary sale's token_id appears) |
 | `PrimaryListingCancelled` / `PrimaryListingExpired` | marketplace | `listing_id` | none | new |
@@ -227,7 +229,8 @@ existing `manager.dao_launched`.
 Per-module launch rows are `admin` with kind `<role>.launched`; module `AdminChanged` rows are
 `<role>.admin_changed` ("Token admin handed to the Treasury"), `Migrated` rows
 `<role>.migrated`, `ProposalScheduled` `governance.proposal_scheduled` (admin, it accompanies
-`ProposalCreated`); Manager admin changes
+`ProposalCreated`); a batch mint is one public `token.batch_mint` row ("Minted 5 tokens (30-34) by
+minter") plus one admin `metadata.seeds_generated` row, not one row per token; Manager admin changes
 (`manager.admin_proposed`, `manager.admin_changed`, `manager.platform_minter_set`),
 `primary_listing_expired` and `marketplace.paused` are `admin`. `activity_feed_events`
 columns are unchanged; `listing_id` and `index` are only in `topics`/`args`.

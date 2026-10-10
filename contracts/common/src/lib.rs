@@ -52,12 +52,37 @@ pub const MAX_FEE_BPS: u32 = 2_500;
 /// Maximum length of a configurable string (names, URIs, descriptions).
 pub const MAX_STRING_LENGTH: u32 = 256;
 
-/// Maximum number of tokens one `batch_mint` call may create. Each token emits
-/// OpenZeppelin `Mint`, `MintWithMinter` and the metadata hook's
-/// `SeedGenerated`, and a transaction may publish at most 16 KiB of contract
-/// events, so this bounds a batch (with full 16-trait artwork) to fit in one
-/// transaction. The e2e suite mints a full batch against real metadata.
-pub const MAX_BATCH_MINT: u32 = 20;
+/// Contract-event budget for one `batch_mint` call, in estimated bytes.
+///
+/// A transaction may publish at most 16 KiB of contract events. A batch emits
+/// OpenZeppelin `Mint` per token, one `MintBatchWithMinter` and one metadata
+/// `SeedsGenerated`, plus OpenZeppelin delegation events for each recipient
+/// that has no delegate yet. Measured worst case (16-trait artwork, every
+/// recipient new): ~376 bytes per call, ~288 per token, ~436 per recipient.
+/// The per-unit estimates below round those up, and the budget leaves ~15%
+/// of the limit spare. The e2e suite mints batches at the edge of the budget
+/// against real metadata; re-measure there if events change.
+pub const BATCH_MINT_EVENT_BUDGET: u32 = 13_500;
+/// Estimated event bytes per minted token (see `BATCH_MINT_EVENT_BUDGET`).
+pub const BATCH_MINT_BYTES_PER_TOKEN: u32 = 300;
+/// Estimated event bytes per recipient entry (see `BATCH_MINT_EVENT_BUDGET`).
+pub const BATCH_MINT_BYTES_PER_RECIPIENT: u32 = 450;
+
+/// Most tokens one `batch_mint` call can create (all to one recipient): 43.
+pub const MAX_BATCH_MINT: u32 =
+    (BATCH_MINT_EVENT_BUDGET - BATCH_MINT_BYTES_PER_RECIPIENT) / BATCH_MINT_BYTES_PER_TOKEN;
+/// Most recipient entries one `batch_mint` call can take (one token each): 18.
+pub const MAX_BATCH_RECIPIENTS: u32 =
+    BATCH_MINT_EVENT_BUDGET / (BATCH_MINT_BYTES_PER_TOKEN + BATCH_MINT_BYTES_PER_RECIPIENT);
+
+/// Whether a batch of `tokens` tokens over `recipients` recipient entries fits
+/// `BATCH_MINT_EVENT_BUDGET`. Entries are counted as new recipients even when
+/// an address repeats or already has a delegate (conservative).
+pub fn batch_mint_fits(tokens: u32, recipients: u32) -> bool {
+    let cost = (tokens as u64) * (BATCH_MINT_BYTES_PER_TOKEN as u64)
+        + (recipients as u64) * (BATCH_MINT_BYTES_PER_RECIPIENT as u64);
+    cost <= BATCH_MINT_EVENT_BUDGET as u64
+}
 
 /// WARNING: exports `MockManager` as a `#[contract]`. Enable the `testutils`
 /// feature only through `[dev-dependencies]`. See README.md.

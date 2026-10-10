@@ -149,14 +149,15 @@ function buildScenario() {
   emit('manager', 'CMANAGER', 'platform_minter_set', { topics: [addr(MINTER)], ledger: 106 });
   emit('auction', d1.auction, 'unpaused', { ledger: 130 });
 
-  // --- token: a 6-token batch mint in ONE transaction (18 events, indexes >= 10),
-  // each mint bumping GALICE's voting power. The last event must win even though
-  // 'event-9' sorts after 'event-17' as text.
+  // --- token: a 6-token batch mint in ONE transaction (13 events, indexes >= 10),
+  // each mint bumping GALICE's voting power, then one mint_batch_with_minter for
+  // the range. The last event must win even though 'event-9' sorts after
+  // 'event-11' as text.
   for (let k = 0; k < 6; k += 1) {
-    emit('token', d1.token, 'mint', { topics: [addr('GALICE')], data: { token_id: u32(k + 1) }, ledger: 120, tx: 3, evt: 3 * k });
-    emit('token', d1.token, 'mint_with_minter', { topics: [addr(MINTER), addr('GALICE')], data: { token_id: u32(k + 1) }, ledger: 120, tx: 3, evt: 3 * k + 1 });
-    emit('token', d1.token, 'delegate_votes_changed', { topics: [addr('GALICE')], data: { previous_votes: u128(k), new_votes: u128(k + 1) }, ledger: 120, tx: 3, evt: 3 * k + 2 });
+    emit('token', d1.token, 'mint', { topics: [addr('GALICE')], data: { token_id: u32(k + 1) }, ledger: 120, tx: 3, evt: 2 * k });
+    emit('token', d1.token, 'delegate_votes_changed', { topics: [addr('GALICE')], data: { previous_votes: u128(k), new_votes: u128(k + 1) }, ledger: 120, tx: 3, evt: 2 * k + 1 });
   }
+  emit('token', d1.token, 'mint_batch_with_minter', { topics: [addr(MINTER)], data: { first_token_id: u32(1), count: u32(6) }, ledger: 120, tx: 3, evt: 12 });
   emit('token', d1.token, 'transfer', { topics: [addr('GALICE'), addr('GBOB')], data: { token_id: u32(1) }, ledger: 121, evt: 0 });
   emit('token', d1.token, 'delegate_votes_changed', { topics: [addr('GALICE')], data: { previous_votes: u128(6), new_votes: u128(5) }, ledger: 121, evt: 1 });
   emit('token', d1.token, 'delegate_changed', { topics: [addr('GBOB')], data: { from_delegate: VOID, to_delegate: addr('GBOB') }, ledger: 121, evt: 2 });
@@ -254,6 +255,9 @@ function buildScenario() {
   emit('metadata', d1.metadata, 'properties_reset', { data: { old_num_properties: u32(0) }, ledger: 172 });
   emit('metadata', d1.metadata, 'property_added', { topics: [u32(0)], data: { name: str('bg2') }, ledger: 173 });
   emit('metadata', d1.metadata, 'seed_generated', { topics: [u32(3)], data: { num_properties: u32(1), selections: vec(u32(2)) }, ledger: 173, evt: 1 });
+  // A batch seeds tokens 4 and 5 in one event; a later seed for 5 becomes current.
+  emit('metadata', d1.metadata, 'seeds_generated', { topics: [u32(4)], data: { count: u32(2), num_properties: u32(1), selections: vec(vec(u32(1), u32(0)), vec(u32(1), u32(1))) }, ledger: 173, evt: 2 });
+  emit('metadata', d1.metadata, 'seed_generated', { topics: [u32(5)], data: { num_properties: u32(1), selections: vec(u32(1), u32(0)) }, ledger: 176 });
   emit('metadata', d1.metadata, 'description_updated', { data: { old_description: str('Alpha DAO'), new_description: str('Alpha DAO v2') }, ledger: 174 });
   emit('metadata', d1.metadata, 'contract_image_updated', { data: { old_image: str('img0'), new_image: str('img1') }, ledger: 175 });
 
@@ -363,8 +367,8 @@ test('pipeline transforms load the landing tables', { skip }, () => {
 });
 
 test('landing tables fill operation/event positions from the event id and stay immutable', { skip }, () => {
-  const row = one(`SELECT operation_index, event_index FROM chain.decoded_events WHERE event_id = '${DEPLOYMENT}:120-tx120-3-op-0-event-17'`);
-  assert.deepEqual(row, { operation_index: 0, event_index: 17 });
+  const row = one(`SELECT operation_index, event_index FROM chain.decoded_events WHERE event_id = '${DEPLOYMENT}:120-tx120-3-op-0-event-12'`);
+  assert.deepEqual(row, { operation_index: 0, event_index: 12 });
   assert.throws(() => psql(`UPDATE chain.decoded_events SET event_name = 'x' WHERE event_id = '${decoded[0].event_id}'`), /immutable/);
   assert.throws(() => psql(`DELETE FROM chain.raw_events WHERE event_id = '${events[0].event_id}'`), /immutable/);
   // Replaying an identical row (pipeline restart) is accepted.
@@ -429,11 +433,16 @@ test('manager: registry, lifecycle and implementations', { skip }, () => {
 
 test('token: ownership, mints, members and voting power', { skip }, () => {
   const inventory = rows(`SELECT token_id, owner FROM token.inventory WHERE dao_id = 'CTOK1' ORDER BY token_id`);
-  assert.equal(inventory.length, 6, 'a mint is counted once although it emits mint and mint_with_minter');
+  assert.equal(inventory.length, 6, 'a mint is counted once although a minter event accompanies it');
   assert.equal(inventory[0].owner, 'GBOB', 'transfer moves token 1');
   assert.equal(inventory[1].owner, 'CTRE1', 'token 2 was moved to the treasury');
   assert.ok(inventory.slice(2).every((r) => r.owner === 'GALICE'));
-  assert.equal(one(`SELECT count(*)::int AS n FROM token.mints WHERE minter = 'CMINTER'`).n, 6);
+  // The batch event expands to one row per token, with each token's recipient.
+  assert.deepEqual(
+    rows(`SELECT token_id, minter, recipient FROM token.mints WHERE dao_id = 'CTOK1' ORDER BY token_id`).map((r) => [r.token_id, r.minter, r.recipient]),
+    [1, 2, 3, 4, 5, 6].map((id) => [id, 'CMINTER', 'GALICE'])
+  );
+  assert.equal(new Set(rows(`SELECT event_id FROM token.mints`).map((r) => r.event_id)).size, 6, 'batch rows take each mint event id');
   assert.equal(one(`SELECT count(*)::int AS n FROM token.transfers WHERE transfer_type = 'transfer'`).n, 2);
 
   const members = rows(`SELECT address, owned_token_count, voting_power, delegated_to FROM token.members ORDER BY address`);
@@ -516,7 +525,11 @@ test('auction: bids, refunds, settlements and per-auction configuration', { skip
 
 test('metadata: properties reset, seeds and configuration overlay', { skip }, () => {
   assert.deepEqual(rows(`SELECT property_id, name FROM metadata.properties`), [{ property_id: 0, name: 'bg2' }]);
-  assert.deepEqual(one(`SELECT token_id, num_properties, selections FROM metadata.token_seeds`), { token_id: 3, num_properties: 1, selections: [2] });
+  assert.deepEqual(rows(`SELECT token_id, num_properties, selections FROM metadata.token_seeds WHERE is_current ORDER BY token_id`), [
+    { token_id: 3, num_properties: 1, selections: [2] },
+    { token_id: 4, num_properties: 1, selections: [1, 0] },
+    { token_id: 5, num_properties: 1, selections: [1, 0] }
+  ]);
   const config = one(`SELECT * FROM metadata.configuration`);
   assert.equal(config.dao_id, 'CTOK1');
   assert.equal(config.token_contract, 'CTOK1');
@@ -581,7 +594,10 @@ test('launch lifecycle: per-module launches keyed by emitting contract, admin hi
   assert.equal(settings.admin, 'GADMIN2');
   assert.equal(settings.platform_minter, 'CMINTER');
   assert.deepEqual(rows(`SELECT authority, launch_grant, changed_by FROM token.mint_authority_history`), [{ authority: 'CMINTER', launch_grant: true, changed_by: 'CMANAGER' }]);
-  assert.deepEqual(rows(`SELECT token_id, is_current FROM metadata.token_seeds`).map((r) => [r.token_id, r.is_current]), [[3, true]]);
+  assert.deepEqual(
+    rows(`SELECT token_id, is_current, selections FROM metadata.token_seeds ORDER BY token_id, event_ledger`).map((r) => [r.token_id, r.is_current, r.selections]),
+    [[3, true, [2]], [4, true, [1, 0]], [5, false, [1, 1]], [5, true, [1, 0]]]
+  );
 });
 
 test('module upgrades and wasm hashes: keyed by emitting contract, filtered by deployment and DAO', { skip }, () => {

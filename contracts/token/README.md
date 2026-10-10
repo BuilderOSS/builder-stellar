@@ -21,7 +21,7 @@ mint_authority(authority: Address) -> bool
 
 Before launch only the admin (launch admin) can mint. `set_mint_authority` requires Live state and the admin (the Treasury, i.e. a proposal). Launch grants Treasury and Marketplace authority, plus Auction if started and the platform Minter if enabled. Mint authorities are persistent per-address entries.
 
-`batch_mint` mints at most 20 tokens per call (`common::MAX_BATCH_MINT`, `BatchTooLarge`): each token emits about 630 bytes of events (OpenZeppelin `Mint`, `MintWithMinter`, metadata `SeedGenerated`) and a transaction may publish 16 KiB. Mint larger founder allocations in several calls. Amounts must be positive with matching vector lengths (`InvalidInput`). Balance, delegation and checkpoint work is done once per recipient entry. Configure artwork before founder minting when initial traits matter.
+`batch_mint` must fit the per-call event budget (`common::batch_mint_fits`, `BatchTooLarge`): `300 × tokens + 450 × recipients ≤ 13,500`, i.e. up to 43 tokens to one recipient (`common::MAX_BATCH_MINT`) or 18 recipients with one token each (`common::MAX_BATCH_RECIPIENTS`), because a transaction may publish 16 KiB of events. It emits OpenZeppelin `Mint` per token and one `MintBatchWithMinter { minter, first_token_id, count }` for the range; single `mint` emits `MintWithMinter` per token. Mint larger founder allocations in several calls. Amounts must be positive with matching vector lengths (`InvalidInput`). Balance, delegation and checkpoint work is done once per recipient entry. Configure artwork before founder minting when initial traits matter.
 
 A first-time recipient without a delegate is self-delegated. Transfers move voting units between delegates and preserve an existing recipient delegation.
 

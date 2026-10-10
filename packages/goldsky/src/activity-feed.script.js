@@ -95,7 +95,7 @@ function invoke(data) {
   var normalizedEventName = normalizeEventName(eventName);
 
   var userFacing = {
-    TokenInitialized: true, Mint: true, MintWithMinter: true,
+    TokenInitialized: true, Mint: true, MintWithMinter: true, MintBatchWithMinter: true,
     Transfer: true, DelegateChanged: true, DelegateVotesChanged: true,
     ProposalCreated: true, ProposalQueued: true, VoteCast: true,
     ProposalCancelled: true, ProposalExecuted: true,
@@ -114,6 +114,7 @@ function invoke(data) {
     TokenInitialized: 'token.initialized',
     Mint: 'token.mint',
     MintWithMinter: 'token.mint',
+    MintBatchWithMinter: 'token.batch_mint',
     MintAuthorityChanged: 'token.mint_authority_changed',
     Approve: 'token.approve',
     Transfer: 'token.transfer',
@@ -169,6 +170,7 @@ function invoke(data) {
     MetadataInitialized: 'metadata.initialized',
     PropertyAdded: 'metadata.property_added',
     SeedGenerated: 'metadata.seed_generated',
+    SeedsGenerated: 'metadata.seeds_generated',
     PropertiesReset: 'metadata.properties_reset',
     ProjectURIUpdated: 'metadata.project_uri_updated',
     DescriptionUpdated: 'metadata.description_updated',
@@ -203,6 +205,7 @@ function invoke(data) {
     TokenInitialized: 'Token initialized',
     Mint: 'Token minted',
     MintWithMinter: 'Token minted',
+    MintBatchWithMinter: 'Tokens batch minted',
     MintAuthorityChanged: 'Mint authority changed',
     Approve: 'Token approval granted',
     Transfer: 'Token transferred',
@@ -258,6 +261,7 @@ function invoke(data) {
     MetadataInitialized: 'Metadata initialized',
     PropertyAdded: 'Property added',
     SeedGenerated: 'Seed generated',
+    SeedsGenerated: 'Seeds generated',
     PropertiesReset: 'Properties reset',
     ProjectURIUpdated: 'Project URI updated',
     DescriptionUpdated: 'Description updated',
@@ -346,6 +350,16 @@ function invoke(data) {
   var tokenAddress = pick(data, ['token_address']);
   var name = pick(data, ['name']);
 
+  function describeRange() {
+    var firstRaw = pick(data, ['first_token_id']);
+    var countRaw = pick(data, ['count']);
+    var first = Number(firstRaw);
+    var count = Number(countRaw);
+    if (!firstRaw || !countRaw || !isFinite(first) || !isFinite(count) || count < 1) return 'tokens';
+    if (count === 1) return '1 token (' + first + ')';
+    return count + ' tokens (' + first + '-' + (first + count - 1) + ')';
+  }
+
   var summaryFunctions = {
     ProposalQueued: function() { return 'Proposal ' + (proposalId || '') + ' queued'; },
     ProposalCreated: function() { return 'Proposal created'; },
@@ -377,6 +391,8 @@ function invoke(data) {
     AdminProposalCancelled: function() { return 'Admin proposal for ' + (pick(data, ['cancelled_admin']) || 'unknown') + ' cancelled'; },
     Mint: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
     MintWithMinter: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
+    // One event per batch_mint: the range [first_token_id, first_token_id + count).
+    MintBatchWithMinter: function() { return 'Minted ' + describeRange() + ' by ' + (pick(data, ['minter']) || 'minter'); },
     MintBatchEvent: function() { var count = pick(data, ['recipient_count']); return 'Minted ' + (amount || 'tokens') + ' to ' + (count || 'multiple') + ' recipients'; },
     PrimaryListingCreated: function() { return 'Primary listing ' + (listingId || 'unknown') + ' created at ' + (amount || 'unknown price'); },
     PrimaryListingPurchased: function() { return 'Primary sale: token ' + (tokenId || 'unknown') + ' bought for ' + (amount || 'unknown price') + ' (listing ' + (listingId || 'unknown') + ')'; },
@@ -391,6 +407,7 @@ function invoke(data) {
     DaoLaunched: function() { return 'DAO launched for token ' + (tokenAddress || 'unknown'); },
     ImplementationRegistered: function() { return 'Implementation "' + (name || 'unknown') + '" registered'; },
     SeedGenerated: function() { return 'Seed generated for token ' + (tokenId || 'unknown'); },
+    SeedsGenerated: function() { return 'Seeds generated for ' + describeRange(); },
     PropertyAdded: function() { return 'Property "' + (name || 'unknown') + '" added'; }
   };
 

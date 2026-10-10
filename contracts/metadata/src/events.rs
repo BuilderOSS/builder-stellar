@@ -86,6 +86,37 @@ pub fn emit_seed_generated(env: &Env, token_id: u32, num_properties: u32, select
     event.publish(env);
 }
 
+/// Emitted once by `on_minted_batch` for the contiguous range
+/// `[first_token_id, first_token_id + count)`, instead of one
+/// `SeedGenerated` per token (keeps large batches under the per-transaction
+/// event size limit). `selections[i]` belongs to token `first_token_id + i`
+/// and has the same shape as `SeedGenerated.selections`.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SeedsGenerated {
+    #[topic]
+    pub first_token_id: u32,
+    pub count: u32,
+    pub num_properties: u32,
+    pub selections: Vec<Vec<u32>>,
+}
+
+pub fn emit_seeds_generated(
+    env: &Env,
+    first_token_id: u32,
+    count: u32,
+    num_properties: u32,
+    selections: &Vec<Vec<u32>>,
+) {
+    let event = SeedsGenerated {
+        first_token_id,
+        count,
+        num_properties,
+        selections: selections.clone(),
+    };
+    event.publish(env);
+}
+
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContractImageUpdated {

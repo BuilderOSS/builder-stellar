@@ -843,34 +843,89 @@ mod voting_supply {
 }
 
 #[test]
-fn batch_mint_is_capped_at_max_batch_mint() {
+fn batch_mint_respects_the_event_budget() {
     let (e, client, owner) = setup();
     let alice = Address::generate(&e);
     let bob = Address::generate(&e);
     let max = common::MAX_BATCH_MINT as u128;
+    let too_large = |r: Result<_, Result<soroban_sdk::Error, _>>| {
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            crate::error::TokenError::BatchTooLarge.into()
+        )
+    };
 
     let ids = client.batch_mint(&owner, &vec![&e, alice.clone()], &vec![&e, max]);
     assert_eq!(ids.len(), common::MAX_BATCH_MINT);
+    too_large(client.try_batch_mint(&owner, &vec![&e, alice.clone()], &vec![&e, max + 1]));
 
-    let r = client.try_batch_mint(
+    // A second recipient costs more than one token, so the cap drops.
+    too_large(client.try_batch_mint(
         &owner,
         &vec![&e, alice.clone(), bob.clone()],
-        &vec![&e, max, 1u128],
-    );
-    assert_eq!(
-        r.err().unwrap().unwrap(),
-        crate::error::TokenError::BatchTooLarge.into()
-    );
+        &vec![&e, max - 1, 1u128],
+    ));
+
+    // The recipient cap with one token each.
+    let mut recipients = soroban_sdk::Vec::new(&e);
+    let mut amounts = soroban_sdk::Vec::new(&e);
+    for _ in 0..common::MAX_BATCH_RECIPIENTS {
+        recipients.push_back(Address::generate(&e));
+        amounts.push_back(1u128);
+    }
+    let ids = client.batch_mint(&owner, &recipients, &amounts);
+    assert_eq!(ids.len(), common::MAX_BATCH_RECIPIENTS);
+    recipients.push_back(Address::generate(&e));
+    amounts.push_back(1u128);
+    too_large(client.try_batch_mint(&owner, &recipients, &amounts));
+
     // u32 overflow of the running total is reported the same way.
-    let r = client.try_batch_mint(
+    too_large(client.try_batch_mint(
         &owner,
         &vec![&e, alice.clone(), bob.clone()],
         &vec![&e, u32::MAX as u128, 1u128],
+    ));
+}
+
+#[test]
+fn batch_mint_emits_one_minter_event_for_the_range() {
+    use crate::events::MintBatchWithMinter;
+    use soroban_sdk::testutils::Events as _;
+    use soroban_sdk::xdr::{ContractEventBody, ScSymbol, ScVal};
+    use soroban_sdk::Event as _;
+
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+    let bob = Address::generate(&e);
+    client.mint(&owner, &alice);
+    client.batch_mint(
+        &owner,
+        &vec![&e, alice.clone(), bob.clone()],
+        &vec![&e, 2u128, 3u128],
     );
-    assert_eq!(
-        r.err().unwrap().unwrap(),
-        crate::error::TokenError::BatchTooLarge.into()
-    );
+
+    let events = e.events().all();
+    let events = events.events();
+    let named = |name: &str| {
+        let sym = ScVal::Symbol(ScSymbol(name.try_into().unwrap()));
+        events
+            .iter()
+            .filter(|ev| match &ev.body {
+                ContractEventBody::V0(b) => b.topics.first() == Some(&sym),
+            })
+            .count()
+    };
+    assert_eq!(named("mint"), 5);
+    assert_eq!(named("mint_with_minter"), 0);
+    assert_eq!(named("mint_batch_with_minter"), 1);
+    assert!(events.contains(
+        &MintBatchWithMinter {
+            minter: owner.clone(),
+            first_token_id: 1,
+            count: 5,
+        }
+        .to_xdr(&e, &client.address)
+    ));
 }
 
 #[test]

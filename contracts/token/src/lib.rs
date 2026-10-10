@@ -14,7 +14,8 @@
 //! - **Auto-Delegation**: New token holders are automatically self-delegated for better UX
 //! - **Checkpoint System**: Voting power is tracked via historical checkpoints for proposals
 //! - **Mint Authority**: The admin grants/revokes minting permissions once live
-//! - **Batch Minting**: Up to `common::MAX_BATCH_MINT` (100) tokens per call
+//! - **Batch Minting**: Up to `common::MAX_BATCH_MINT` (43) tokens per call, fewer
+//!   when spread over several recipients (`common::batch_mint_fits`)
 //!
 //! ## Usage
 //!

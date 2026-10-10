@@ -11,7 +11,7 @@ Library-only crate shared by the DAO module contracts and the Manager. It export
 | `clients` | Typed `#[contractclient]` traits for cross-contract calls (no linked exports). |
 | `error` | `CommonError` (7001-7013) and `error::codes`, the error-code block of every crate. |
 
-The crate root also holds the parameter bounds the Manager and each module validate against: governance timing (300 s ..= 30 days), auction duration and time buffer, `MIN_RESERVE_PRICE`, `BPS_DENOMINATOR`, `MAX_FEE_BPS` (2,500 = 25%), `MAX_STRING_LENGTH` (256) and `MAX_BATCH_MINT` (20 tokens per `batch_mint`, bounded by the 16 KiB per-transaction event limit).
+The crate root also holds the parameter bounds the Manager and each module validate against: governance timing (300 s ..= 30 days), auction duration and time buffer, `MIN_RESERVE_PRICE`, `BPS_DENOMINATOR`, `MAX_FEE_BPS` (2,500 = 25%), `MAX_STRING_LENGTH` (256) and the `batch_mint` event budget: `batch_mint_fits(tokens, recipients)` checks `BATCH_MINT_BYTES_PER_TOKEN` (300) × tokens + `BATCH_MINT_BYTES_PER_RECIPIENT` (450) × recipients ≤ `BATCH_MINT_EVENT_BUDGET` (13,500), about 85% of the 16 KiB per-transaction event limit; `MAX_BATCH_MINT` (43, one recipient) and `MAX_BATCH_RECIPIENTS` (18, one token each) are derived from it.
 
 ## Migrations
 

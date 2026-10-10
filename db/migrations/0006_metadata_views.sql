@@ -42,28 +42,66 @@ WHERE e.contract_role = 'metadata'
         > chain.event_position(e.ledger_sequence, e.transaction_index, e.operation_index, e.event_index)
   );
 
+-- Artwork seed per token: seed_generated (single mint and regenerate) and
+-- seeds_generated (one per batch_mint, selections[i] belongs to token
+-- first_token_id + i). Batch rows share their source event_id. is_current
+-- marks the latest seed per token across both.
 CREATE VIEW metadata.token_seeds AS
+WITH seeds AS (
+  SELECT
+    e.event_id,
+    e.deployment_id,
+    e.contract_id,
+    (e.topics::jsonb ->> 'token_id')::bigint AS token_id,
+    (e.args::jsonb ->> 'num_properties')::integer AS num_properties,
+    e.args::jsonb -> 'selections' AS selections,
+    e.ledger_sequence,
+    e.transaction_index,
+    e.operation_index,
+    e.event_index,
+    e.ledger_closed_at,
+    e.transaction_hash
+  FROM chain.decoded_events e
+  WHERE e.contract_role = 'metadata'
+    AND e.event_name = 'seed_generated'
+  UNION ALL
+  SELECT
+    e.event_id,
+    e.deployment_id,
+    e.contract_id,
+    (e.topics::jsonb ->> 'first_token_id')::bigint + s.ord - 1 AS token_id,
+    (e.args::jsonb ->> 'num_properties')::integer AS num_properties,
+    s.selection AS selections,
+    e.ledger_sequence,
+    e.transaction_index,
+    e.operation_index,
+    e.event_index,
+    e.ledger_closed_at,
+    e.transaction_hash
+  FROM chain.decoded_events e
+  CROSS JOIN LATERAL jsonb_array_elements(e.args::jsonb -> 'selections') WITH ORDINALITY AS s(selection, ord)
+  WHERE e.contract_role = 'metadata'
+    AND e.event_name = 'seeds_generated'
+)
 SELECT
-  e.event_id,
-  e.deployment_id,
+  s.event_id,
+  s.deployment_id,
   i.dao_id,
-  e.contract_id AS metadata_contract,
-  (e.topics::jsonb ->> 'token_id')::bigint AS token_id,
-  (e.args::jsonb ->> 'num_properties')::integer AS num_properties,
-  e.args::jsonb -> 'selections' AS selections,
+  s.contract_id AS metadata_contract,
+  s.token_id,
+  s.num_properties,
+  s.selections,
   row_number() OVER (
-    PARTITION BY e.deployment_id, e.contract_id, e.topics::jsonb ->> 'token_id'
-    ORDER BY e.ledger_sequence DESC, e.transaction_index DESC NULLS LAST,
-      e.operation_index DESC NULLS LAST, e.event_index DESC NULLS LAST, e.event_id DESC
+    PARTITION BY s.deployment_id, s.contract_id, s.token_id
+    ORDER BY s.ledger_sequence DESC, s.transaction_index DESC NULLS LAST,
+      s.operation_index DESC NULLS LAST, s.event_index DESC NULLS LAST, s.event_id DESC
   ) = 1 AS is_current,
-  e.ledger_sequence AS event_ledger,
-  extract(epoch FROM chain.ledger_closed_at_ts(e.ledger_closed_at))::bigint AS event_timestamp_seconds,
-  chain.ledger_closed_at_ts(e.ledger_closed_at) AS event_at,
-  e.transaction_hash
-FROM chain.decoded_events e
-JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
-WHERE e.contract_role = 'metadata'
-  AND e.event_name = 'seed_generated';
+  s.ledger_sequence AS event_ledger,
+  extract(epoch FROM chain.ledger_closed_at_ts(s.ledger_closed_at))::bigint AS event_timestamp_seconds,
+  chain.ledger_closed_at_ts(s.ledger_closed_at) AS event_at,
+  s.transaction_hash
+FROM seeds s
+JOIN manager.event_identity i ON i.deployment_id = s.deployment_id AND i.contract_id = s.contract_id;
 
 -- Current configuration: the initial values overlaid with the latest update of
 -- each field. `owner` is the metadata module's current admin (the launch admin,

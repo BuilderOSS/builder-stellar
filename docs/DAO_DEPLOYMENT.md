@@ -122,8 +122,9 @@ assets). The slug is only requested here: `launch_dao` claims it.
 
 **2. Setup window** (launch admin). Until `launch_dao` succeeds the launch admin can:
 
-- mint founder tokens with `token.mint` / `token.batch_mint` (at most 20 tokens
-  per call; the script batches automatically); only the token admin can mint
+- mint founder tokens with `token.mint` / `token.batch_mint` (each call must
+  fit the event budget: up to 43 tokens to one founder or 18 founders with one
+  token each; the script packs batches automatically); only the token admin can mint
   before launch, and `set_mint_authority` and the Minter contract fail with
   `NotLive`. Founder amounts are not capped by the contracts, and at least one
   token must be held by someone other than the Treasury, Auction or Marketplace

@@ -14,7 +14,7 @@ fn test_contract_compiles() {
 #[test]
 fn test_constants_defined() {
     use minter::MAX_BATCH_RECIPIENTS;
-    assert_eq!(MAX_BATCH_RECIPIENTS, common::MAX_BATCH_MINT);
+    assert_eq!(MAX_BATCH_RECIPIENTS, common::MAX_BATCH_RECIPIENTS);
 }
 
 #[test]

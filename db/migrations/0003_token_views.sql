@@ -4,7 +4,8 @@
 -- Source events (token contract):
 --   mint                  OpenZeppelin  topic to;                    data { token_id }
 --   transfer              OpenZeppelin  topics from, to;             data { token_id }
---   mint_with_minter      custom        topics minter, to;           data { token_id }
+--   mint_with_minter      custom        topics minter, to;           data { token_id }  (single mint)
+--   mint_batch_with_minter custom       topic minter;                data { first_token_id, count }  (batch_mint)
 --   delegate_changed      OpenZeppelin  topic delegator;             data { from_delegate, to_delegate }
 --   delegate_votes_changed OpenZeppelin topic delegate;              data { previous_votes, new_votes }
 --   mint_authority_changed custom       topic authority;             data { old_enabled, enabled, changed_by }
@@ -12,8 +13,10 @@
 --                         afterwards only by the token admin (the Treasury, i.e. governance).
 --   token_launched         custom       topic treasury;              data { minters[] } (see manager.module_launches)
 --
--- A mint emits BOTH mint and mint_with_minter. Ownership comes from mint and
--- transfer; mint_with_minter only attributes who performed the mint.
+-- Every minted token emits mint. A single mint also emits mint_with_minter; a
+-- batch_mint emits one mint_batch_with_minter for the whole id range
+-- [first_token_id, first_token_id + count). Ownership comes from mint and
+-- transfer; the minter events only attribute who performed the mint.
 --
 -- Voting supply: tokens held by the DAO's Treasury, Auction and Marketplace carry
 -- no votes. Moving a token into one of them emits no delegate_votes_changed for
@@ -44,7 +47,9 @@ JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contrac
 WHERE e.contract_role = 'token'
   AND e.event_name IN ('mint', 'transfer');
 
--- Who performed each mint (owner, auction, minter contract, ...).
+-- Who performed each mint (admin, auction, minter contract, ...), one row per
+-- token. Batch rows expand mint_batch_with_minter over its id range and take
+-- the recipient and event identity from each token's own mint event.
 CREATE VIEW token.mints AS
 SELECT
   e.event_id,
@@ -63,7 +68,34 @@ SELECT
 FROM chain.decoded_events e
 JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
 WHERE e.contract_role = 'token'
-  AND e.event_name = 'mint_with_minter';
+  AND e.event_name = 'mint_with_minter'
+UNION ALL
+SELECT
+  m.event_id,
+  m.deployment_id,
+  m.dao_id,
+  m.contract_id,
+  m.token_id,
+  b.topics::jsonb ->> 'minter' AS minter,
+  m.to_address AS recipient,
+  m.event_ledger,
+  m.transaction_index,
+  m.operation_index,
+  m.event_index,
+  m.event_at,
+  m.transaction_hash
+FROM chain.decoded_events b
+CROSS JOIN LATERAL generate_series(
+  (b.args::jsonb ->> 'first_token_id')::bigint,
+  (b.args::jsonb ->> 'first_token_id')::bigint + (b.args::jsonb ->> 'count')::bigint - 1
+) AS g(token_id)
+JOIN token.transfers m
+  ON m.deployment_id = b.deployment_id
+  AND m.contract_id = b.contract_id
+  AND m.token_id = g.token_id
+  AND m.transfer_type = 'mint'
+WHERE b.contract_role = 'token'
+  AND b.event_name = 'mint_batch_with_minter';
 
 -- Current owner of each token.
 CREATE VIEW token.inventory AS

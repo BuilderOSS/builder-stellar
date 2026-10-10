@@ -52,7 +52,7 @@ by `dao_id` (the DAO token contract address).
 | View | Reads | Notes |
 | --- | --- | --- |
 | `transfers` | `mint`, `transfer` | `transfer_type`, `from_address` NULL for mints |
-| `mints` | `mint_with_minter` | who performed each mint |
+| `mints` | `mint_with_minter` (single mint) and `mint_batch_with_minter` (one per `batch_mint`, expanded over its id range and joined to each token's `mint` for the recipient and event id) | who performed each mint, one row per token |
 | `inventory` **Prisma** | transfers | current owner per token |
 | `members` **Prisma** | inventory, `delegate_changed`, `delegate_votes_changed` | owned count, delegate, voting power |
 | `delegations`, `mint_authority_history` | token events | history; `launch_grant` marks grants made by the Manager at launch (`changed_by` = manager); later changes are governance |
@@ -98,7 +98,7 @@ and for > against) until `vote_end + 14d` and expired after, or defeated.
 | `auction.pending_refunds` | per bidder: `deferred_amount`, `withdrawn_amount`, `pending_amount` = sum(deferred) - sum(withdrawn), rows with a positive balance only |
 | `metadata.configuration` **Prisma** | `metadata_initialized` overlaid with the latest `*_updated` events; `owner` is the metadata module's current admin from `manager.module_admins` (column name kept for the Prisma model) |
 | `metadata.properties` | `property_added` since the latest `properties_reset` |
-| `metadata.token_seeds` | `seed_generated` (again on `regenerate`); `is_current` marks the latest seed per token |
+| `metadata.token_seeds` | `seed_generated` (single mint and `regenerate`) and `seeds_generated` (one per batch, `selections[i]` is token `first_token_id + i`; batch rows share the event id); `is_current` marks the latest seed per token across both |
 | `treasury.calls` | `execute`: one row per action with `proposal_id`, `call_index` (`authorize` actions appear with function `authorize`) |
 | `marketplace.primary_listings` | `primary_listing_created` closed by `primary_listing_purchased/cancelled/expired`; keyed by `listing_id`; `token_id` and `buyer` only once purchased; `payment_asset` |
 | `marketplace.secondary_listings` | `secondary_listing_created` closed by `listing_purchased/cancelled/expired`; keyed by `token_id`; `seller`, `fee_bps`, `payment_asset` |

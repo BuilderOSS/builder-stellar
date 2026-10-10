@@ -63,7 +63,7 @@ function invoke(data) {
     // marketplace, metadata); the emitting module is identified by contract_id/contract_role.
     Upgraded: ['from_hash', 'to_hash'], VersionSynced: [], Migrated: [],
     // Token (custom + OpenZeppelin non-fungible/votes/pausable)
-    TokenInitialized: ['admin'], MintAuthorityChanged: ['authority'], MintWithMinter: ['minter', 'to'],
+    TokenInitialized: ['admin'], MintAuthorityChanged: ['authority'], MintWithMinter: ['minter', 'to'], MintBatchWithMinter: ['minter'],
     Mint: ['to'], Transfer: ['from', 'to'], Approve: ['approver', 'token_id'], ApproveForAll: ['owner'],
     DelegateChanged: ['delegator'], DelegateVotesChanged: ['delegate'],
     Paused: [], Unpaused: [],
@@ -81,7 +81,7 @@ function invoke(data) {
     MinBidIncrementUpdated: [], TimeBufferUpdated: [], PaymentTokenUpdated: [],
     RefundDeferred: ['token_id', 'bidder'], RefundWithdrawn: ['bidder'],
     // Metadata
-    MetadataInitialized: ['token'], PropertyAdded: ['property_id'], SeedGenerated: ['token_id'], PropertiesReset: [],
+    MetadataInitialized: ['token'], PropertyAdded: ['property_id'], SeedGenerated: ['token_id'], SeedsGenerated: ['first_token_id'], PropertiesReset: [],
     ProjectURIUpdated: [], DescriptionUpdated: [], RendererBaseUpdated: [], ContractImageUpdated: [],
     // Minter
     MerkleClaimEvent: ['token_id', 'recipient'], AllowlistClaimEvent: ['token_id', 'recipient'], MintBatchEvent: ['token_id'],
@@ -164,6 +164,7 @@ function invoke(data) {
     // module allowlists before decoding. Names mirror the topicNames groups.
     function roleForEvent(name) {
       var canonical = toCanonical(name);
+      if (canonical === 'MintBatchWithMinter') return 'token';
       if (/^(Manager|Implementation|CurrentImplementations|LatestImplementation|UpgradeApproved|Dao|Factory|Admin|PlatformMinter|PendingSlug|SlugClaimed)/.test(canonical)) return 'manager';
       if (/^(MerkleClaim|AllowlistClaim|MintBatch|MerkleRoot|AllowlistSet)/.test(canonical)) return 'minter';
       if (/^(Marketplace|Listing|Primary|Secondary|PaymentAsset)/.test(canonical)) return 'marketplace';

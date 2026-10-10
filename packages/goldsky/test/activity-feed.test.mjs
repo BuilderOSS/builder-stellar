@@ -207,6 +207,21 @@ const topicOnlyEvents = [
   }
 ];
 
+// Batch events produce one feed row for the whole range.
+const batchMint = invoke({
+  event_id: 'batch', event_name: 'MintBatchWithMinter', deployment_id: 'test', contract_id: 'test',
+  topics: JSON.stringify({ minter: 'GMINTER' }), args: JSON.stringify({ first_token_id: 30, count: 5 })
+});
+assert.strictEqual(batchMint.kind, 'token.batch_mint');
+assert.strictEqual(batchMint.visibility, 'public');
+assert.strictEqual(batchMint.summary, 'Minted 5 tokens (30-34) by GMINTER');
+const seeds = invoke({
+  event_id: 'seeds', event_name: 'SeedsGenerated', deployment_id: 'test', contract_id: 'test',
+  topics: JSON.stringify({ first_token_id: 30 }), args: JSON.stringify({ count: 1, num_properties: 2, selections: [[2, 0, 1]] })
+});
+assert.strictEqual(seeds.kind, 'metadata.seeds_generated');
+assert.strictEqual(seeds.summary, 'Seeds generated for 1 token (30)');
+
 for (const event of topicOnlyEvents) {
   const result = invoke({
     event_id: event.event_name,

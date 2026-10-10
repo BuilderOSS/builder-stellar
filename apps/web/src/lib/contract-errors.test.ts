@@ -25,7 +25,8 @@ describe('contract error mapping', () => {
     expect(getContractErrorMessage('manager', 7108)).toContain('platform minter');
     expect(getContractErrorMessage('manager', 7123)).toContain('slug');
     expect(getContractErrorMessage('metadata', 7308)).toContain('30');
-    expect(getContractErrorMessage('token', 7205)).toContain('20');
+    expect(getContractErrorMessage('token', 7205)).toContain('43');
+    expect(getContractErrorMessage('minter', 7803)).toContain('18');
     expect(getContractErrorMessage('minter', 7810)).toContain('TokenNotLive');
   });
 

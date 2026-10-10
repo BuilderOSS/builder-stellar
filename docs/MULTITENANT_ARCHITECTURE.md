@@ -110,7 +110,7 @@ This ensures:
    - Metadata is set up for token rendering
 
 3. **Founder mint**
-   - token.batch_mint() - launch_admin mints founder tokens (at most 20 per call)
+   - token.batch_mint() - launch_admin mints founder tokens (up to 43 per call, fewer across several recipients)
 
 ### Finalization Phase
 

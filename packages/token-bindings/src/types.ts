@@ -21,7 +21,7 @@ export const TokenError = {
    */
   7204 : { message: "TreasuryNotMinter" },
   /**
-   * `batch_mint` total exceeds `common::MAX_BATCH_MINT`
+   * `batch_mint` exceeds the event budget (`common::batch_mint_fits`)
    */
   7205 : { message: "BatchTooLarge" }
 }
@@ -38,8 +38,9 @@ export interface TokenLaunchedEvent {
 }
 
 /**
- * Emitted for every minted token, next to OpenZeppelin's `Mint`, to record
- * who performed the mint (admin, auction, marketplace, minter).
+ * Emitted for every token minted by `mint`, next to OpenZeppelin's `Mint`, to
+ * record who performed the mint (admin, auction, marketplace, minter).
+ * `batch_mint` emits `MintBatchWithMinter` instead.
  */
 export interface MintWithMinterEvent {
   name: "MintWithMinter";
@@ -61,6 +62,21 @@ export interface TokenInitializedEvent {
     name?: string;
     symbol?: string;
     version?: string;
+  };
+}
+
+/**
+ * Emitted once per `batch_mint` call for the contiguous range
+ * `[first_token_id, first_token_id + count)`, instead of one
+ * `MintWithMinter` per token (keeps large batches under the per-transaction
+ * event size limit). Recipients come from OpenZeppelin's per-token `Mint`.
+ */
+export interface MintBatchWithMinterEvent {
+  name: "MintBatchWithMinter";
+  data: {
+    minter: string;
+    first_token_id?: number;
+    count?: number;
   };
 }
 
@@ -354,5 +370,5 @@ export const NonFungibleTokenError = {
    */
   214 : { message: "SymbolMaxLenExceeded" }
 }
-    export type ContractEvent = TokenLaunchedEvent | MintWithMinterEvent | TokenInitializedEvent | MintAuthorityChangedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VersionSyncedEvent | DelegateChangedEvent | DelegateVotesChangedEvent | MintEvent | ApproveEvent | TransferEvent;
+    export type ContractEvent = TokenLaunchedEvent | MintWithMinterEvent | TokenInitializedEvent | MintBatchWithMinterEvent | MintAuthorityChangedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VersionSyncedEvent | DelegateChangedEvent | DelegateVotesChangedEvent | MintEvent | ApproveEvent | TransferEvent;
     

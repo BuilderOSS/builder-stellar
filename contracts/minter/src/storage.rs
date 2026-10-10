@@ -8,9 +8,10 @@
 
 use soroban_sdk::{contracttype, Address, BytesN, Env};
 
-/// Maximum number of recipients in a single batch mint. The token caps the
-/// total number of tokens per call at `common::MAX_BATCH_MINT` as well.
-pub const MAX_BATCH_RECIPIENTS: u32 = common::MAX_BATCH_MINT;
+/// Maximum number of recipients in a single batch mint (one token each). The
+/// token additionally requires the whole batch to fit its event budget
+/// (`common::batch_mint_fits`).
+pub const MAX_BATCH_RECIPIENTS: u32 = common::MAX_BATCH_RECIPIENTS;
 
 /// Maximum merkle proof depth (supports 2^32 leaves).
 pub const MAX_PROOF_LEN: u32 = 32;

@@ -1,11 +1,12 @@
 #![cfg(test)]
 
 use soroban_sdk::{
-    testutils::{Address as _, Ledger},
-    Address, BytesN, Env, String, Vec,
+    testutils::{Address as _, Events as _, Ledger},
+    Address, BytesN, Env, Event as _, String, Vec,
 };
 use token::DaoTokenContract;
 
+use crate::events::SeedsGenerated;
 use crate::{IpfsGroup, ItemParam, MetadataContract, MetadataContractClient};
 
 /// Returns a client for a not-yet-registered address; `initialize_metadata`
@@ -325,9 +326,28 @@ fn test_on_minted_batch_seeds_every_token_in_range() {
     client.add_properties(&names, &items, &ipfs_group);
 
     assert!(client.on_minted_batch(&10u32, &5u32));
+
+    // One `SeedsGenerated` for the range, carrying exactly the stored
+    // attributes in token order (no per-token `SeedGenerated`).
+    let events = env.events().all();
+    let events = events.events();
+    let mut selections = Vec::new(&env);
     for id in 10..15u32 {
-        assert_eq!(client.get_attributes(&id).len(), 2);
+        let attrs = client.get_attributes(&id);
+        assert_eq!(attrs.len(), 2);
+        selections.push_back(attrs);
     }
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        events[0],
+        SeedsGenerated {
+            first_token_id: 10,
+            count: 5,
+            num_properties: 1,
+            selections,
+        }
+        .to_xdr(&env, &client.address)
+    );
     assert!(client.try_get_attributes(&9u32).is_err());
     assert!(client.try_get_attributes(&15u32).is_err());
 }

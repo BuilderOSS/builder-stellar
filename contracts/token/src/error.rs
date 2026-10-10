@@ -13,6 +13,6 @@ pub enum TokenError {
     TreasuryMismatch = 7203,
     /// `launch` minters list does not contain the treasury
     TreasuryNotMinter = 7204,
-    /// `batch_mint` total exceeds `common::MAX_BATCH_MINT`
+    /// `batch_mint` exceeds the event budget (`common::batch_mint_fits`)
     BatchTooLarge = 7205,
 }

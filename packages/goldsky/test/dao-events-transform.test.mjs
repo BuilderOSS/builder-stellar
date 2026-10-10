@@ -552,6 +552,40 @@ test('MintWithMinter correctly extracts minter and to from 2 topics', () => {
   assert.equal(argsOf(decoded).token_id, 42);
 });
 
+test('MintBatchWithMinter and SeedsGenerated decode the batch range', () => {
+  const batch = decodeEvent({
+    event_id: 'test-mint-batch',
+    deployment_id: 'test',
+    contract_id: 'TOKEN',
+    topics: '[{"symbol":"mint_batch_with_minter"},{"address":"MINTER_ADDR"}]',
+    data: '{"map":[{"key":{"symbol":"count"},"val":{"u32":3}},{"key":{"symbol":"first_token_id"},"val":{"u32":7}}]}',
+    transaction_hash: 'tx-1',
+    ledger_sequence: 100
+  });
+  assert.ok(batch);
+  assert.equal(batch.event_name, 'mint_batch_with_minter');
+  // The fallback role must not confuse it with the Minter's MintBatchEvent.
+  assert.equal(batch.contract_role, 'token');
+  assert.equal(topicsOf(batch).minter, 'MINTER_ADDR');
+  assert.equal(argsOf(batch).first_token_id, 7);
+  assert.equal(argsOf(batch).count, 3);
+
+  const seeds = decodeEvent({
+    event_id: 'test-seeds',
+    deployment_id: 'test',
+    contract_id: 'METADATA',
+    topics: '[{"symbol":"seeds_generated"},{"u32":7}]',
+    data: '{"map":[{"key":{"symbol":"count"},"val":{"u32":2}},{"key":{"symbol":"num_properties"},"val":{"u32":1}},{"key":{"symbol":"selections"},"val":{"vec":[{"vec":[{"u32":1},{"u32":0}]},{"vec":[{"u32":1},{"u32":1}]}]}}]}',
+    transaction_hash: 'tx-1',
+    ledger_sequence: 100
+  });
+  assert.ok(seeds);
+  assert.equal(seeds.event_name, 'seeds_generated');
+  assert.equal(seeds.contract_role, 'metadata');
+  assert.equal(topicsOf(seeds).first_token_id, 7);
+  assert.deepEqual(argsOf(seeds).selections, [[1, 0], [1, 1]]);
+});
+
 test('Execute event carries governor, target and proposal_id topics and function + index data', () => {
   const decoded = decodeEvent({
     event_id: 'test-execute',

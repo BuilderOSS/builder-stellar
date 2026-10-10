@@ -14,7 +14,7 @@ re-verified against the code (evidence in §6).
 | PR | Status | Notes |
 |---|---|---|
 | 1 `common` | Done | `admin`, `ttl` (instance + persistent policy), `upgrade` (`StorageVersion`, `migrate`), shared bounds, `error::codes` |
-| 2 Token | Done | Voting-supply exclusion, `MAX_BATCH_MINT` = **20** (measured: ~630 bytes of events per token against the 16 KiB per-transaction limit, so batches fail above ~26), persistent mint authorities |
+| 2 Token | Done | Voting-supply exclusion, batch event budget (`common::batch_mint_fits`; batch-level `MintBatchWithMinter` / `SeedsGenerated` replace per-token events, so a call mints up to 43 tokens to one recipient or 18 recipients × 1, measured against the 16 KiB event limit; was 20 with per-token events), persistent mint authorities |
 | 3 Governor | Done | `proposal_proposer`, `ProposalScheduled`, `ZeroVotingWeight` / `ProposalNotReady`, proposal TTL 120 days (threshold 30) |
 | 4 Treasury | Done | Nested authorization implemented as `authorize` actions (see §2.6 note), `check_authorization`, `migrate` self call |
 | 5 Auction | Done | `end_time` check on both settle paths; `Launched` flag replaced by deriving from auction state |
@@ -157,7 +157,7 @@ Owners follow `docs/AGENT_WORKFLOW.md`. Every contract PR goes through `contract
 
 ### PR 2: Token
 - §2.1 voting-supply exclusion (constructor takes `auction`, `marketplace`).
-- `batch_mint` capped at `MAX_BATCH_MINT = 100` (the documented limit). This also bounds the metadata hook's budget (L4).
+- `batch_mint` capped by an event budget (`common::batch_mint_fits`: 43 tokens to one recipient, 18 recipients × 1), with one batch-level minter event and one batch-level seed event. This also bounds the metadata hook's budget (L4).
 - Each `NFTStorageKey::Owner` write gets a TTL extension.
 - `MintAuthority(Address)` moves from instance to persistent storage, with a TTL extension on read.
 - Move to `common::admin`. No renounce.

@@ -29,10 +29,10 @@ Authoritative references: [SECURITY_MODEL.md](./SECURITY_MODEL.md), [DATABASE_SC
 - `total_supply()` / `get_total_supply()` now return the **voting supply**: tokens held by the Treasury, Auction and Marketplace carry no votes and are excluded. Show minted supply and voting supply separately where it matters (indexed view `token.supply`).
 - The Treasury, Auction and Marketplace never have votes or delegates. Member lists must not imply voting power from token counts (`token.members.voting_power` is 0 for them).
 - A listed token's vote leaves its holder's delegate until the token returns or is bought. Consider telling sellers this when they list.
-- `batch_mint` mints **at most 20 tokens per call** (`BatchTooLarge`, 7205); larger batches always failed on the network (16 KiB event limit). Chunk founder/admin mints into calls of ≤20 tokens:
-  - `src/app/dao/[daoId]/admin/token/page.tsx:108` (`client.batch_mint`)
-  - `src/lib/proposal-actions/actions/batch-mint-governance-token/index.ts`, `src/lib/proposal-call.ts:113`, `src/components/proposal/proposal-action-preview.tsx:64` (proposal actions: one action per ≤20 tokens, at most 20 actions per proposal)
-- Minter `mint_batch` accepts at most 20 recipients and is bound by the same 20-token total.
+- Each `batch_mint` call must fit an **event budget** (`BatchTooLarge`, 7205; the 16 KiB per-transaction event limit): `300 × tokens + 450 × recipient entries ≤ 13,500`. That is up to **43 tokens to one recipient**, **18 recipients with one token each**, or mixes (e.g. 35 tokens over 5 recipients). Validate with the same formula and chunk larger mints into several calls (`scripts/deploy-dao.mjs` `planFounderBatches` is a reference packer):
+  - `src/app/dao/[daoId]/admin/token/page.tsx:108` (`client.batch_mint`; the helper text at line 149 still says "up to 20 tokens")
+  - `src/lib/proposal-actions/actions/batch-mint-governance-token/index.ts`, `validator.ts:51` and `component.tsx:71` ("1-20 tokens"), `src/components/proposal/proposal-action-editor.tsx:208`, `src/lib/proposal-call.ts:113`, `src/components/proposal/proposal-action-preview.tsx:64` (proposal actions: one action per fitting chunk, at most 20 actions per proposal)
+- Minter `mint_batch` accepts at most 18 recipients and the whole batch must fit the same budget.
 
 ### Manager
 
@@ -104,6 +104,7 @@ The Prisma schema still matches the database (the integration test enforces it),
 If the web parses events or activity kinds directly:
 
 - The shared `Launched` event is replaced by `TokenLaunched`, `GovernorLaunched`, `TreasuryLaunched`, `AuctionLaunched`, `MarketplaceLaunched`, `MetadataLaunched` (activity kinds `<module>.launched` are unchanged).
+- Batch mints emit one `MintBatchWithMinter { minter, first_token_id, count }` (activity kind `token.batch_mint`, public: "Minted 5 tokens (30-34) by …") and one metadata `SeedsGenerated` (`metadata.seeds_generated`, admin) instead of per-token `MintWithMinter` / `SeedGenerated` rows. Single mints and `regenerate` still emit the per-token events. `token.mints` and `metadata.token_seeds` still have one row per token (columns unchanged); batch seed rows share their source `event_id`.
 - New activity kinds: `<module>.admin_changed` (launch handoff), `<module>.migrated`, `governance.proposal_scheduled` (admin visibility; it accompanies `proposal_created`), `manager.slug_claimed` (public), `manager.pending_slug_updated`, `manager.latest_implementation_set`.
 - OpenZeppelin `OwnershipTransfer*` events are gone.
 
@@ -111,7 +112,7 @@ If the web parses events or activity kinds directly:
 
 - [ ] `pnpm lint`, `pnpm typecheck`, `pnpm --dir apps/web test` and `pnpm build` pass.
 - [ ] `TEST_DATABASE_URL=… ./db/test-migrations.sh` passes (it checks the Prisma schema against the views).
-- [ ] Create → setup → launch works against a fresh local or testnet deployment, including a `SlugTaken` rename and founder batches above 20 tokens.
+- [ ] Create → setup → launch works against a fresh local or testnet deployment, including a `SlugTaken` rename and founder allocations that need several batch calls.
 - [ ] Marketplace list/buy pass the seller and buyer bounds; settle buttons respect the auction end time.
 - [ ] Proposal pages show the new states, quorum from `quorum_votes`, and readable `authorize` actions.
 - [ ] **This file (`docs/FRONTEND_HANDOVER.md`) is deleted, and its links are removed from `README.md` and `docs/README.md`.**

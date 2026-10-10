@@ -50,6 +50,8 @@ test('topic orders of new and changed events', () => {
   assert.deepEqual(t.VersionSynced, []);
   assert.deepEqual(t.Migrated, []);
   assert.deepEqual(t.ProposalScheduled, ['proposal_id']);
+  assert.deepEqual(t.MintBatchWithMinter, ['minter']);
+  assert.deepEqual(t.SeedsGenerated, ['first_token_id']);
   assert.deepEqual(t.SlugClaimed, ['token_address', 'slug']);
   assert.deepEqual(t.PendingSlugUpdated, ['token_address']);
   assert.deepEqual(t.LatestImplementationSet, ['name', 'wasm_hash']);

@@ -309,7 +309,7 @@ export interface AuctionState {
 /**
  * Auction configuration parameters.
  *
- * These settings control the behavior of all auctions. The owner can modify
+ * These settings control the behavior of all auctions. The admin can modify
  * them when the contract is paused, but changes only apply to future auctions,
  * not the currently active one.
  */
