@@ -15,6 +15,7 @@ import {
   Section,
   Skeleton
 } from '@/components/ui';
+import { useDaoContext } from '@/contexts/dao-context';
 import { shortAddress } from '@/lib/activity-feed';
 import { getTreasuryAssets } from '@/lib/assets-config';
 import { useAuctionHistory } from '@/lib/auction-history/hooks';
@@ -36,6 +37,7 @@ const tokenThumb = css({
 
 /** Past auctions: who won each token and for how much. */
 export function AuctionHistory({ config, daoId }: { config: DaoNetworkConfig; daoId: string }) {
+  const { routeId } = useDaoContext();
   const [page, setPage] = useState(0);
   const { data, error, isLoading, mutate } = useAuctionHistory(config, daoId, page);
   return (
@@ -65,7 +67,7 @@ export function AuctionHistory({ config, daoId }: { config: DaoNetworkConfig; da
             return (
               <ListRow
                 key={item.eventId}
-                href={daoRoute(daoId, `token/${item.tokenId}`)}
+                href={daoRoute(routeId, `token/${item.tokenId}`)}
                 media={
                   item.winningBidder ? (
                     <Avatar address={item.winningBidder} />

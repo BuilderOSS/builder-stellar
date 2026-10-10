@@ -13,6 +13,8 @@ import { cached } from './server-cache';
 
 export type DaoNetworkConfig = {
   name: NetworkName;
+  /** Permanent URL slug once launched (claimed); null before launch. */
+  slug?: string | null;
   label: string;
   rpcUrl: string;
   passphrase: string;
@@ -104,6 +106,7 @@ async function loadDaoNetworkConfig(daoId: string): Promise<DaoNetworkConfig> {
     ...minter,
     name: daoConfig.network,
     label: daoConfig.label || '',
+    slug: daoConfig.slug ?? null,
     rpcUrl: networkConfig.rpcUrl,
     passphrase: networkConfig.networkPassphrase,
     // Token metadata now comes from database (populated by Goldsky)

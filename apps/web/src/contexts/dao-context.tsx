@@ -3,12 +3,19 @@
 import { createContext, type ReactNode, useContext } from 'react';
 
 import type { DaoNetworkConfig } from '@/lib/dao-config';
+import { daoRouteId } from '@/lib/dao-routes';
 
 interface DaoContextValue {
   /**
    * URL parameter for this DAO (e.g., "testnet/builder" or "builder")
    */
   daoId: string;
+
+  /**
+   * The id to put in links: the claimed slug once launched, otherwise the token address.
+   * Use it with daoRoute(); keep daoId for data lookups.
+   */
+  routeId: string;
 
   /**
    * Token contract address - this is the dao_id used in database queries
@@ -35,6 +42,7 @@ export function DaoProvider({ daoId, daoConfig, children }: DaoProviderProps) {
     <DaoContext.Provider
       value={{
         daoId,
+        routeId: daoRouteId({ daoId, slug: daoConfig.slug }),
         daoTokenAddress: daoConfig.tokenContractId,
         daoConfig
       }}

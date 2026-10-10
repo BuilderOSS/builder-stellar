@@ -21,6 +21,7 @@ import {
   Select,
   Skeleton
 } from '@/components/ui';
+import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
 import { marketplaceAssetLabel, marketplaceDisplayAmount } from '@/lib/marketplace/asset-label';
 import { useDaoMarketplace, useMarketplaceListing } from '@/lib/marketplace/hooks';
@@ -66,6 +67,7 @@ export function DaoMarketplaceView({
   selectedId?: string;
   selectedEventId?: string;
 }) {
+  const { routeId } = useDaoContext();
   const [kind, setKind] = useState(['primary', 'secondary'].includes(initialKind) ? initialKind : 'all');
   const [status, setStatus] = useState(
     ['all', 'open', 'purchased', 'cancelled', 'expired'].includes(initialStatus) ? initialStatus : 'open'
@@ -94,7 +96,7 @@ export function DaoMarketplaceView({
         title="Market"
         description="Buy a new token straight from the community, or a resale from a member. New sales fund the treasury."
         actions={
-          <ButtonLink href={daoRoute(daoId, 'admin/marketplace')} variant="ghost">
+          <ButtonLink href={daoRoute(routeId, 'admin/marketplace')} variant="ghost">
             Market settings
           </ButtonLink>
         }

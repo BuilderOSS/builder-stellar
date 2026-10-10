@@ -16,6 +16,7 @@ const mock = vi.hoisted(() => ({
 vi.mock('@/contexts/dao-context', () => {
   const value = {
     daoId: 'dao-a',
+    routeId: 'dao-a',
     daoConfig: {
       name: 'testnet',
       treasuryContractId: 'treasury-a',

@@ -11,6 +11,8 @@ import { daoRoute } from '@/lib/dao-routes';
 
 export type CommunitySummary = {
   id: string;
+  /** What links use: the claimed slug once launched; falls back to `id`. */
+  routeId?: string;
   name: string;
   symbol?: string | null;
   description?: string | null;
@@ -111,7 +113,7 @@ export function CommunityCard({ community }: { community: CommunitySummary }) {
   const ended = Boolean(live && now !== null && endsAt <= now);
 
   return (
-    <NextLink href={daoRoute(community.id)} className={classes.root}>
+    <NextLink href={daoRoute(community.routeId ?? community.id)} className={classes.root}>
       <div className={classes.art}>
         {live ? (
           // eslint-disable-next-line @next/next/no-img-element

@@ -6,6 +6,7 @@ import { css } from 'styled-system/css';
 
 import { ProposalActionConfirmDialog } from '@/components/proposal/proposal-action-confirm-dialog';
 import { Button, Chip, Text } from '@/components/ui';
+import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
 import { ProposalActionQueue } from '@/lib/proposal-actions';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
@@ -18,6 +19,7 @@ const buttons = css({ display: 'flex', flexWrap: 'wrap', gap: '2' });
 
 /** Changes collected from Manage that will go up for a vote together. */
 export function ProposalDraftPanel({ daoId }: { daoId: string }) {
+  const { routeId } = useDaoContext();
   const address = useAuthSessionStore((state) => state.address);
   const draft = useProposalComposerStore(selectDraft(address || null, daoId));
   const hasDraft = useProposalComposerStore(selectHasDraft(address || null, daoId));
@@ -44,7 +46,7 @@ export function ProposalDraftPanel({ daoId }: { daoId: string }) {
           <Text size="sm">These changes go up for a vote together. Add a title and reason, then submit.</Text>
           <ProposalActionQueue daoId={daoId} editable={false} />
           <div className={buttons}>
-            <Button onClick={() => router.push(daoRoute(daoId, 'proposals/create'))}>Continue to proposal</Button>
+            <Button onClick={() => router.push(daoRoute(routeId, 'proposals/create'))}>Continue to proposal</Button>
             <Button variant="ghost" onClick={() => setConfirmClear(true)}>
               Discard draft
             </Button>

@@ -89,6 +89,7 @@ export default function AuctionsPage() {
 }
 
 function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: string }) {
+  const { routeId } = useDaoContext();
   const session = useAuthSessionStore();
   const tx = useTransactionFeedback(config.name);
   const { data, error, isLoading, mutate } = useCurrentAuction(config, daoId);
@@ -336,7 +337,7 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
 
             {auction.highest_bidder ? (
               <ListRow
-                href={daoRoute(daoId, `members/${auction.highest_bidder}`)}
+                href={daoRoute(routeId, `members/${auction.highest_bidder}`)}
                 media={<Avatar address={auction.highest_bidder} yours={auction.highest_bidder === session.address} />}
                 title={
                   auction.highest_bidder === session.address ? "You're winning" : shortAddress(auction.highest_bidder)
@@ -419,7 +420,7 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
                   {data.bids.map((bid) => (
                     <ListRow
                       key={bid.event_id}
-                      href={daoRoute(daoId, `members/${bid.bidder}`)}
+                      href={daoRoute(routeId, `members/${bid.bidder}`)}
                       media={<Avatar address={bid.bidder} size="sm" yours={bid.bidder === session.address} />}
                       title={bid.bidder === session.address ? 'You' : shortAddress(bid.bidder)}
                       meta={bid.timestamp ? relativeTime(bid.timestamp) : undefined}

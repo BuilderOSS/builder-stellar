@@ -84,7 +84,7 @@ const referenceTrigger = css({
 });
 
 export default function ProposalCreatePage() {
-  const { daoId } = useDaoContext();
+  const { daoId, routeId } = useDaoContext();
   const router = useRouter();
   const session = useAuthSessionStore();
   const { daoConfig: config } = useDaoContext();
@@ -198,7 +198,7 @@ export default function ProposalCreatePage() {
 
       // Reset store and navigate
       reset(session.address, daoId);
-      router.push(proposalId ? daoRoute(daoId, `proposals/${proposalId}`) : daoRoute(daoId, 'proposals'));
+      router.push(proposalId ? daoRoute(routeId, `proposals/${proposalId}`) : daoRoute(routeId, 'proposals'));
     } catch (err: any) {
       console.error('Proposal creation error:', err);
       txFeedback.fail(err, 'Proposal failed', 'governor');
@@ -217,7 +217,7 @@ export default function ProposalCreatePage() {
     <>
       <div className={layout}>
         <div className={mainColumn}>
-          <ButtonLink href={daoRoute(daoId, 'proposals')} variant="ghost" size="sm" className={back}>
+          <ButtonLink href={daoRoute(routeId, 'proposals')} variant="ghost" size="sm" className={back}>
             <ChevronLeft aria-hidden="true" />
             All votes
           </ButtonLink>

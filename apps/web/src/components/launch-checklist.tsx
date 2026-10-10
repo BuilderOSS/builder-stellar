@@ -9,6 +9,7 @@ import { launchReadinessIssues, readLaunchReadiness } from '@/components/create-
 import { SlugRename } from '@/components/create-dao/SlugRename';
 import styles from '@/components/create-dao/workspace-styles';
 import { Button, Callout } from '@/components/ui';
+import { useDaoContext } from '@/contexts/dao-context';
 import { parseContractErrorCode } from '@/lib/contract-errors';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { getDeploymentConfig } from '@/lib/deployment-config';
@@ -18,6 +19,7 @@ import { useCreateDaoStore } from '@/stores/create-dao-store';
 import { assertPreferencesSaved, preferenceScopeKey, useLocalPreferencesStore } from '@/stores/local-preferences-store';
 
 export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoNetworkConfig }) {
+  const { routeId } = useDaoContext();
   const router = useRouter();
   const session = useAuthSessionStore();
   const [error, setError] = useState('');
@@ -154,9 +156,9 @@ export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoN
           >
             1. Set up artwork
           </Button>
-          <Link href={`/dao/${daoId}/admin/founders`}>2. Mint founder tokens (after the artwork)</Link>
-          <Link href={`/dao/${daoId}/admin/auction`}>Review auction settings</Link>
-          <Link href={`/dao/${daoId}/admin/marketplace`}>Review marketplace settings</Link>
+          <Link href={`/dao/${routeId}/admin/founders`}>2. Mint founder tokens (after the artwork)</Link>
+          <Link href={`/dao/${routeId}/admin/auction`}>Review auction settings</Link>
+          <Link href={`/dao/${routeId}/admin/marketplace`}>Review marketplace settings</Link>
         </div>
         {artworkOpen ? (
           <section id="artwork-setup-panel" aria-label="Artwork setup">

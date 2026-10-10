@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { css, sva } from 'styled-system/css';
 
 import { ButtonLink, Chip, Countdown, Skeleton } from '@/components/ui';
+import { useDaoContext } from '@/contexts/dao-context';
 import { formatAuctionAmount } from '@/lib/auction-history/state';
 import { daoRoute } from '@/lib/dao-routes';
 import { useTokenMetadata } from '@/lib/token-queries';
@@ -128,6 +129,7 @@ export function NowCard({
   assetCode: string;
   now: number | null;
 }) {
+  const { routeId } = useDaoContext();
   if (isLaunchSetup) {
     return (
       <Shell
@@ -186,7 +188,9 @@ export function NowCard({
             </div>
           </div>
         }
-        action={<ButtonLink href={daoRoute(daoId, 'auctions')}>{ended ? 'Settle auction' : 'Place a bid'}</ButtonLink>}
+        action={
+          <ButtonLink href={daoRoute(routeId, 'auctions')}>{ended ? 'Settle auction' : 'Place a bid'}</ButtonLink>
+        }
       />
     );
   }
@@ -197,7 +201,7 @@ export function NowCard({
         meta={<Chip tone="live">Voting open</Chip>}
         title={`${activeProposals} proposal${activeProposals === 1 ? ' needs' : 's need'} votes`}
         text="Members decide together. Read what's proposed and cast your vote before it closes."
-        action={<ButtonLink href={daoRoute(daoId, 'proposals')}>Go vote</ButtonLink>}
+        action={<ButtonLink href={daoRoute(routeId, 'proposals')}>Go vote</ButtonLink>}
       />
     );
   }
@@ -220,7 +224,7 @@ export function NowCard({
         title="The auction didn't load"
         text="Votes and activity are below. The auction is temporarily unavailable."
         action={
-          <ButtonLink href={daoRoute(daoId, 'auctions')} variant="secondary">
+          <ButtonLink href={daoRoute(routeId, 'auctions')} variant="secondary">
             View auction
           </ButtonLink>
         }
@@ -243,11 +247,11 @@ export function NowCard({
       text={quiet.text}
       action={
         hasAuctionModule ? (
-          <ButtonLink href={daoRoute(daoId, 'auctions')} variant="secondary">
+          <ButtonLink href={daoRoute(routeId, 'auctions')} variant="secondary">
             View auction
           </ButtonLink>
         ) : (
-          <ButtonLink href={daoRoute(daoId, 'proposals')} variant="secondary">
+          <ButtonLink href={daoRoute(routeId, 'proposals')} variant="secondary">
             See past votes
           </ButtonLink>
         )

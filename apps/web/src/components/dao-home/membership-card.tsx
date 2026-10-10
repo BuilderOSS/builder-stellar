@@ -3,6 +3,7 @@
 import { css, sva } from 'styled-system/css';
 
 import { Avatar, ButtonLink, Chip, Skeleton } from '@/components/ui';
+import { useDaoContext } from '@/contexts/dao-context';
 import { useDaoMembership } from '@/hooks/use-dao-membership';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { hasAuction, hasMarketplace } from '@/lib/dao-nav';
@@ -37,7 +38,8 @@ const card = sva({
 /**
  * "This is yours": the viewer's stake in the community, or how to get one.
  */
-export function MembershipCard({ config, daoId }: { config: DaoNetworkConfig; daoId: string }) {
+export function MembershipCard({ config }: { config: DaoNetworkConfig }) {
+  const { routeId } = useDaoContext();
   const membership = useDaoMembership(config);
   const classes = card({ yours: membership.isMember });
 
@@ -73,7 +75,7 @@ export function MembershipCard({ config, daoId }: { config: DaoNetworkConfig; da
           Members hold a token. Each token is a vote on how the community and its treasury move.
         </p>
         {way ? (
-          <ButtonLink href={daoRoute(daoId, way === 'auction' ? 'auctions' : 'marketplace')} variant="secondary">
+          <ButtonLink href={daoRoute(routeId, way === 'auction' ? 'auctions' : 'marketplace')} variant="secondary">
             {way === 'auction' ? 'Bid in the auction' : 'Find a token on the market'}
           </ButtonLink>
         ) : null}
@@ -107,7 +109,7 @@ export function MembershipCard({ config, daoId }: { config: DaoNetworkConfig; da
         <span className={classes.label}>{delegated ? 'Your votes go to a delegate' : 'You vote for yourself'}</span>
         {delegated ? <Chip>Delegated</Chip> : null}
       </div>
-      <ButtonLink href={daoRoute(daoId, `members/${membership.address}`)} variant="secondary">
+      <ButtonLink href={daoRoute(routeId, `members/${membership.address}`)} variant="secondary">
         Tokens and delegation
       </ButtonLink>
     </section>

@@ -43,6 +43,7 @@ const footerLinks = css({
 });
 
 function MembershipBlock({ config, daoId }: { config: DaoNetworkConfig; daoId: string }) {
+  const routeId = useOptionalDaoContext()?.routeId ?? daoId;
   const { member, isMember, isLoading, isLaunchAdmin, tokenCount, votingPower } = useDaoMembership(config);
 
   return (
@@ -70,7 +71,7 @@ function MembershipBlock({ config, daoId }: { config: DaoNetworkConfig; daoId: s
             </span>
           </div>
           <NextLink
-            href={daoRoute(daoId, `members/${member.address}`)}
+            href={daoRoute(routeId, `members/${member.address}`)}
             className={css({ textStyle: 'label', color: 'signal' })}
           >
             View your tokens and delegation

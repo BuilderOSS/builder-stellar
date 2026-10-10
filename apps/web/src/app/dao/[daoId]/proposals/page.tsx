@@ -31,7 +31,7 @@ const skeletons = css({ display: 'grid', gap: '3' });
 const OPEN_STATES = new Set<ProposalState>([ProposalState.Active, ProposalState.Pending]);
 
 export default function ProposalsPage() {
-  const { daoId, daoConfig: config } = useDaoContext();
+  const { daoId, daoConfig: config, routeId } = useDaoContext();
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
   const router = useRouter();
@@ -71,7 +71,7 @@ export default function ProposalsPage() {
   const createDisabled = !hasDraft && !eligibility.eligible;
   const canShowProposalAction = Boolean(session.address) || !hasDraft;
   const createDisabledMessage = createDisabled ? eligibility.message : undefined;
-  const href = (proposalNumber: number) => daoRoute(daoId, `proposals/${proposalNumber}`);
+  const href = (proposalNumber: number) => daoRoute(routeId, `proposals/${proposalNumber}`);
 
   return (
     <PageSection
@@ -79,7 +79,7 @@ export default function ProposalsPage() {
       description="Members propose changes and decide together. Each token is one vote."
       actions={
         canShowProposalAction ? (
-          <Button onClick={() => router.push(daoRoute(daoId, 'proposals/create'))} disabled={createDisabled}>
+          <Button onClick={() => router.push(daoRoute(routeId, 'proposals/create'))} disabled={createDisabled}>
             <Plus aria-hidden="true" />
             {hasDraft ? 'Continue your proposal' : 'New proposal'}
           </Button>

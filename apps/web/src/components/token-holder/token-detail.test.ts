@@ -14,6 +14,7 @@ vi.mock('swr', () => ({
 vi.mock('@/contexts/dao-context', () => {
   const value = {
     daoId: 'dao-a',
+    routeId: 'dao-a',
     daoConfig: { tokenName: 'Actual DAO', tokenDescription: 'Actual description' }
   };
   return { useDaoContext: () => value, useOptionalDaoContext: () => value };

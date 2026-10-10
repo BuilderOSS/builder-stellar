@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { css } from 'styled-system/css';
 
 import { Button, Chip, Disclosure } from '@/components/ui';
+import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
 import { ProposalActionQueue } from '@/lib/proposal-actions';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
@@ -27,6 +28,7 @@ const title = css({ textStyle: 'subheading', fontSize: '0.9375rem', m: '0' });
 
 /** Changes waiting to go up for a vote, shown above every Manage page. */
 export function ManageDraftTray({ daoId }: { daoId: string }) {
+  const { routeId } = useDaoContext();
   const router = useRouter();
   const address = useAuthSessionStore((state) => state.address);
   const draft = useProposalComposerStore(selectDraft(address || null, daoId));
@@ -40,7 +42,7 @@ export function ManageDraftTray({ daoId }: { daoId: string }) {
           <Chip tone="live">{count}</Chip>
           <p className={title}>{count === 1 ? 'change' : 'changes'} waiting for a vote</p>
         </div>
-        <Button size="sm" onClick={() => router.push(daoRoute(daoId, 'proposals/create'))}>
+        <Button size="sm" onClick={() => router.push(daoRoute(routeId, 'proposals/create'))}>
           Review and propose
         </Button>
       </div>

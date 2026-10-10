@@ -54,6 +54,7 @@ export default function MemberProfilePage() {
 }
 
 function Profile({ daoId, address }: { daoId: string; address: string | null }) {
+  const { routeId } = useDaoContext();
   const [tokenPage, setTokenPage] = useState(0);
   const viewer = useAuthSessionStore((state) => state.address);
   const profile = useDirectoryMember(daoId, address);
@@ -63,7 +64,7 @@ function Profile({ daoId, address }: { daoId: string; address: string | null }) 
 
   return (
     <div className={page}>
-      <ButtonLink href={daoRoute(daoId, 'members')} variant="ghost" size="sm" className={back}>
+      <ButtonLink href={daoRoute(routeId, 'members')} variant="ghost" size="sm" className={back}>
         <ChevronLeft aria-hidden="true" />
         Members
       </ButtonLink>
@@ -121,7 +122,7 @@ function Profile({ daoId, address }: { daoId: string; address: string | null }) 
             </div>
           ) : (
             <ListRow
-              href={daoRoute(daoId, `members/${member.delegated_to}`)}
+              href={daoRoute(routeId, `members/${member.delegated_to}`)}
               media={<Avatar address={member.delegated_to} size="sm" />}
               title={shortAddress(member.delegated_to)}
               meta="Their votes go to this delegate"

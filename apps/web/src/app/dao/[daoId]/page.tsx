@@ -66,7 +66,7 @@ const more = css({ display: 'flex', justifyContent: 'center', pt: '2' });
 const listSkeleton = css({ display: 'grid', gap: '3' });
 
 export default function Page() {
-  const { daoId, daoConfig: config } = useDaoContext();
+  const { daoId, daoConfig: config, routeId } = useDaoContext();
   const isLaunchAdmin = useIsLaunchAdmin(config.launchAdmin);
   const isLaunchSetup = isLaunchAdmin && config.status === 'pending';
   const [activityLimit, setActivityLimit] = useState(ACTIVITY_PAGE_SIZE);
@@ -177,7 +177,7 @@ export default function Page() {
           <Section
             title="Votes"
             action={
-              <ButtonLink href={daoRoute(daoId, 'proposals')} variant="ghost" size="sm">
+              <ButtonLink href={daoRoute(routeId, 'proposals')} variant="ghost" size="sm">
                 See all
               </ButtonLink>
             }
@@ -196,7 +196,7 @@ export default function Page() {
                   <ProposalRow
                     key={item.proposalId}
                     item={item}
-                    href={daoRoute(daoId, `proposals/${item.proposalNumber}`)}
+                    href={daoRoute(routeId, `proposals/${item.proposalNumber}`)}
                   />
                 ))}
               </div>
@@ -240,7 +240,7 @@ export default function Page() {
         </div>
 
         <aside className={sideColumn} aria-label="Membership">
-          <MembershipCard config={config} daoId={daoId} />
+          <MembershipCard config={config} />
 
           <Section title="Tokens" level={3}>
             {tokens.error ? (

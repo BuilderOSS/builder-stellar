@@ -18,7 +18,7 @@ import styles from './marketplace-styles';
 import { TreasuryPurchase } from './treasury-purchase';
 
 export function AdminMarketplaceView({ daoId }: { daoId: string }) {
-  const { daoConfig } = useDaoContext();
+  const { daoConfig, routeId } = useDaoContext();
   const proposal = useAdminProposalDraft();
   const { data, error, isLoading } = useDaoMarketplace(daoId, 'kind=primary&status=open');
   const address = useAuthSessionStore((s) => s.address);
@@ -74,7 +74,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
   return (
     <div className={styles.scoped}>
       <div className={styles.stack}>
-        <Link href={`/dao/${daoId}/marketplace`}>← Community marketplace</Link>
+        <Link href={`/dao/${routeId}/marketplace`}>← Community marketplace</Link>
         <section className={styles.hero}>
           <p className={styles.eyebrow}>Governance administration</p>
           <h1>Manage the marketplace</h1>
@@ -218,7 +218,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
             onCancel={proposal.cancel}
             onResolve={(resolution) => {
               proposal.resolve(resolution);
-              router.push(`/dao/${daoId}/proposals/create`);
+              router.push(`/dao/${routeId}/proposals/create`);
             }}
           />
         ) : null}
@@ -237,7 +237,7 @@ function MarketplaceSettings({
   enabled: boolean;
   onQueue: (handler: ActionHandler, draft: unknown) => void;
 }) {
-  const { daoConfig } = useDaoContext();
+  const { daoConfig, routeId } = useDaoContext();
   const handlers = marketplaceSettingHandlers(daoConfig);
   return (
     <section className={styles.panel}>
@@ -263,7 +263,7 @@ function MarketplaceSettings({
             intentionally unavailable.
           </p>
         )}
-        <Link href={`/dao/${daoId}/proposals`}>View governance proposals</Link>
+        <Link href={`/dao/${routeId}/proposals`}>View governance proposals</Link>
       </div>
     </section>
   );

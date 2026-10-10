@@ -26,6 +26,8 @@ export interface DaoConfig {
 
   // Core Identity
   token_address: string; // Same as dao_id
+  /** The DAO's permanent URL slug once launched; null while it is only requested. */
+  slug?: string | null;
   creator: string | null; // Account that deployed this DAO
   launch_admin: string | null;
 
@@ -220,6 +222,8 @@ function mapDaoConfig(
     deployment_id: row.deploymentId,
     dao_id: row.daoId,
     token_address: row.tokenAddress,
+    // Only a claimed slug is stable: a requested one can be taken by a DAO that launches first.
+    slug: row.slugClaimed ? row.claimedSlug : null,
     creator: row.deployer,
     launch_admin: row.launchAdmin,
     network,

@@ -3,7 +3,7 @@
 import type { LucideIcon } from 'lucide-react';
 import { Gavel, House, Landmark, MoreHorizontal, Settings, Store, Ticket, Users, Vote } from 'lucide-react';
 import { usePathname } from 'next/navigation';
-import { type ReactNode, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { css } from 'styled-system/css';
 
 import { DaoContractList } from '@/components/dao-contract-list';
@@ -12,6 +12,7 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { useCloseOnNavigate } from '@/hooks/use-close-on-navigate';
 import { useDaoMembership } from '@/hooks/use-dao-membership';
 import { activeNavKey, type DaoNavItem, type DaoNavKey, resolveDaoNav } from '@/lib/dao-nav';
+import { canonicalDaoUrl } from '@/lib/dao-routes';
 import { selectHasDraft, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
 import { DaoSwitcher } from './dao-switcher';
@@ -58,16 +59,21 @@ function toShellItem(item: DaoNavItem, badge?: boolean): ShellNavItem {
 /** Builder inside a community: Home, Vote, slot 3, Treasury, More. */
 export function DaoShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { daoId, daoConfig } = useDaoContext();
+  const { daoId, routeId, daoConfig } = useDaoContext();
   const membership = useDaoMembership(daoConfig);
   const hasDraft = useProposalComposerStore(selectHasDraft(membership.address || null, daoId));
   const [youOpen, setYouOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   useCloseOnNavigate(() => setMoreOpen(false));
 
-  // Links reuse the URL's own segment (a slug or the contract id) so the
-  // active tab matches however the community was opened.
-  const routeId = decodeURIComponent(pathname.split('/')[2] || daoId);
+  // Links always use the canonical id (claimed slug, else address). If the community was opened by
+  // another id, swap the address bar in place: no navigation, refetch, scroll jump or extra history entry.
+  useEffect(() => {
+    const next = canonicalDaoUrl(window.location, routeId);
+    if (next) window.history.replaceState(null, '', next);
+  }, [pathname, routeId]);
+  // Match tabs against the canonical path, so the active tab is right even before the swap lands.
+  const canonicalPath = canonicalDaoUrl({ pathname }, routeId) ?? pathname;
   const nav = useMemo(
     () => resolveDaoNav(routeId, daoConfig, { canManage: membership.canManage }),
     [daoConfig, routeId, membership.canManage]
@@ -77,7 +83,7 @@ export function DaoShell({ children }: { children: ReactNode }) {
   const rail = nav.rail.map(decorate);
   const railFooter = nav.railFooter.map(decorate);
   const allItems = [...rail, ...railFooter];
-  const active = activeNavKey(pathname, allItems)?.key;
+  const active = activeNavKey(canonicalPath, allItems)?.key;
   const moreActive = nav.more.some((item) => item.key === active);
   const name = daoConfig.tokenName || 'Community';
 

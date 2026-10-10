@@ -41,7 +41,7 @@ function AccessChip({ access }: { access: Access }) {
 const access = (direct: boolean, vote: boolean): Access => (direct ? 'direct' : vote ? 'vote' : 'read');
 
 export default function AdminPage() {
-  const { daoId, daoConfig: config } = useDaoContext();
+  const { daoId, daoConfig: config, routeId } = useDaoContext();
   const session = useAuthSessionStore();
   const { data: mintAuthorities } = useGoldskyMintAuthorities(config.tokenContractId);
   const { data: tokenAdmin } = useContractAdmin(config, 'token', session.address || undefined);
@@ -72,49 +72,49 @@ export default function AdminPage() {
       key: 'token',
       title: 'Mint tokens',
       meta: 'Create new membership tokens',
-      href: daoAdminRoute(daoId, '/token'),
+      href: daoAdminRoute(routeId, '/token'),
       access: access(hasMintAccess, canProposeMint)
     },
     {
       key: 'founders',
       title: 'Founder tokens',
       meta: 'Tokens for the founding team, before launch',
-      href: daoAdminRoute(daoId, '/founders'),
+      href: daoAdminRoute(routeId, '/founders'),
       access: 'open'
     },
     {
       key: 'artwork',
       title: 'Artwork',
       meta: 'The art every token is drawn from',
-      href: daoAdminRoute(daoId, '/artwork'),
+      href: daoAdminRoute(routeId, '/artwork'),
       access: 'open'
     },
     {
       key: 'governance',
       title: 'Voting rules',
       meta: 'Timing, quorum and who can propose',
-      href: daoAdminRoute(daoId, '/governance'),
+      href: daoAdminRoute(routeId, '/governance'),
       access: access(hasGovernanceAccess, canProposeGovernance)
     },
     {
       key: 'owner',
       title: 'Who can mint',
       meta: 'Accounts allowed to mint tokens',
-      href: daoAdminRoute(daoId, '/owner'),
+      href: daoAdminRoute(routeId, '/owner'),
       access: access(isAdmin, canProposeAdminActions)
     },
     {
       key: 'auction',
       title: 'Auction',
       meta: 'Pause, pricing and timing',
-      href: daoAdminRoute(daoId, '/auction'),
+      href: daoAdminRoute(routeId, '/auction'),
       access: access(isAdmin, canProposeAuction)
     },
     {
       key: 'upgrades',
       title: 'Contract versions',
       meta: 'Review and propose upgrades',
-      href: daoAdminRoute(daoId, '/upgrades'),
+      href: daoAdminRoute(routeId, '/upgrades'),
       access: 'open'
     }
   ];

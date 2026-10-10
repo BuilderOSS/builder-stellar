@@ -19,7 +19,7 @@ import { selectDraft, useProposalComposerStore } from '@/stores/proposal-compose
 import styles from './claims-styles';
 
 export function AllocationDraftForm({ state }: { state?: ClaimState }) {
-  const { daoId, daoConfig: config } = useDaoContext();
+  const { daoId, daoConfig: config, routeId } = useDaoContext();
   const session = useAuthSessionStore();
   const proposal = useProposalActions();
   const router = useRouter();
@@ -193,7 +193,7 @@ export function AllocationDraftForm({ state }: { state?: ClaimState }) {
               )
                 throw new Error('Proposal action limit reached.');
               proposal.resolve(resolution);
-              router.push(daoRoute(daoId, 'proposals/create'));
+              router.push(daoRoute(routeId, 'proposals/create'));
             } catch (error) {
               setResult(error instanceof Error ? error.message : 'Unable to add allocation.');
               proposal.cancel();

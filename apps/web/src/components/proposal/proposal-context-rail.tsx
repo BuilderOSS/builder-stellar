@@ -160,6 +160,7 @@ function MemberPanel({ daoTokenAddress }: { daoTokenAddress: string }) {
 }
 
 function HistoryPanel({ daoId }: { daoId: string }) {
+  const { routeId } = useDaoContext();
   const { data, error, isLoading } = useSWR<ProposalListResponse>(
     `/api/dao/${encodeURIComponent(daoId)}/proposals?limit=8`,
     fetchJson,
@@ -174,7 +175,7 @@ function HistoryPanel({ daoId }: { daoId: string }) {
             {data.items.map((proposal) => (
               <ListRow
                 key={proposal.proposalId}
-                href={daoRoute(daoId, `proposals/${proposal.proposalNumber}`)}
+                href={daoRoute(routeId, `proposals/${proposal.proposalNumber}`)}
                 title={proposal.metadata.title || 'Untitled proposal'}
                 meta={`#${proposal.proposalNumber}`}
                 trailing={<ProposalStateBadge label={proposal.stateLabel} />}

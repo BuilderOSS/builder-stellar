@@ -33,7 +33,7 @@ export function TransferProposal() {
 }
 
 function TransferProposalForm() {
-  const { daoId, daoConfig } = useDaoContext();
+  const { daoId, daoConfig, routeId } = useDaoContext();
   const context = useActionFormContext();
   const session = useAuthSessionStore();
   const router = useRouter();
@@ -116,7 +116,7 @@ function TransferProposalForm() {
                   url: ''
                 },
                 source: 'Treasury',
-                onAdded: () => router.push(daoRoute(daoId, 'proposals/create'))
+                onAdded: () => router.push(daoRoute(routeId, 'proposals/create'))
               });
             } catch (error) {
               setMessage(error instanceof Error ? error.message : 'Unable to prepare proposal.');

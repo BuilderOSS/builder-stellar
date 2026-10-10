@@ -59,7 +59,7 @@ const ownerText = css({ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace
 
 /** A membership token: its art first, then name and who holds it. */
 export function TokenCard({ tokenId, owner }: { tokenId: number; owner: string }) {
-  const { daoId, daoConfig } = useDaoContext();
+  const { daoId, daoConfig, routeId } = useDaoContext();
   const viewer = useAuthSessionStore((state) => state.address);
   const { data, error, isLoading } = useTokenMetadata(daoId, tokenId);
   const role = getDaoAccountRole(daoConfig, owner);
@@ -77,7 +77,7 @@ export function TokenCard({ tokenId, owner }: { tokenId: number; owner: string }
   }
 
   return (
-    <NextLink href={daoRoute(daoId, `token/${tokenId}`)} className={classes.root}>
+    <NextLink href={daoRoute(routeId, `token/${tokenId}`)} className={classes.root}>
       <div className={classes.art}>
         {data && !error ? <Image src={data.image} alt="" width={240} height={240} unoptimized /> : null}
       </div>

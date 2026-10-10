@@ -86,7 +86,7 @@ export function TreasuryWorkspace() {
 }
 
 function ScopedTreasuryWorkspace() {
-  const { daoId, daoConfig: config } = useDaoContext();
+  const { daoId, daoConfig: config, routeId } = useDaoContext();
   const [page, setPage] = useState(0);
   const [refreshError, setRefreshError] = useState('');
   const balances = useTreasuryBalances(config);
@@ -203,7 +203,7 @@ function ScopedTreasuryWorkspace() {
                     </div>
                     <Address value={call.target} label="Contract" compact />
                     <Address value={call.transactionHash} label="Transaction" compact />
-                    <NextLink href={daoRoute(daoId, `proposals/${call.proposalId}`)} className={link}>
+                    <NextLink href={daoRoute(routeId, `proposals/${call.proposalId}`)} className={link}>
                       View proposal
                     </NextLink>
                   </li>

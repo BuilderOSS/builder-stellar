@@ -5,12 +5,14 @@ import { css } from 'styled-system/css';
 
 import { Button, EmptyState, SearchInput, Select } from '@/components/ui';
 import type { DaoConfig } from '@/lib/dao-db';
+import { daoRouteId } from '@/lib/dao-routes';
 
 import { CommunityCard, type CommunitySummary } from './community-card';
 
 export function toCommunitySummary(dao: DaoConfig, yours?: string): CommunitySummary {
   return {
     id: dao.dao_id,
+    routeId: daoRouteId({ daoId: dao.dao_id, slug: dao.slug }),
     name: dao.token_name || dao.label || dao.token_symbol || 'Unnamed community',
     symbol: dao.token_symbol,
     description: dao.token_description,

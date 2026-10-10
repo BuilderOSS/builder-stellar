@@ -127,7 +127,7 @@ const main = css({ display: 'grid', gap: '8', minW: '0', lg: { gridArea: 'main' 
 const summaryCard = css({ p: '5', borderRadius: 'card', bg: 'surface', boxShadow: 'raised' });
 
 export default function ProposalDetailPage() {
-  const { daoId, daoConfig: config } = useDaoContext();
+  const { daoId, daoConfig: config, routeId } = useDaoContext();
   const params = useParams<{ proposalId: string }>();
   const proposalId = params.proposalId;
   const session = useAuthSessionStore();
@@ -515,7 +515,7 @@ export default function ProposalDetailPage() {
 
   return (
     <div className={page}>
-      <ButtonLink href={daoRoute(daoId, 'proposals')} variant="ghost" size="sm" className={back}>
+      <ButtonLink href={daoRoute(routeId, 'proposals')} variant="ghost" size="sm" className={back}>
         <ChevronLeft aria-hidden="true" />
         All votes
       </ButtonLink>

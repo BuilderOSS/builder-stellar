@@ -18,7 +18,7 @@ import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 export default function FoundersAdminPage() {
-  const { daoId, daoConfig: config } = useDaoContext();
+  const { daoConfig: config, routeId } = useDaoContext();
   const session = useAuthSessionStore();
   const token = useAdminTokenState(config, session.address);
   const artwork = useAdminArtwork(config, session.address);
@@ -160,7 +160,7 @@ export default function FoundersAdminPage() {
                   title="Setup is complete"
                   description="After launch, mint additional tokens through the current mint authority or a Treasury governance proposal."
                 />
-                <Link href={`/dao/${daoId}/admin/token`}>Open Token Admin</Link>
+                <Link href={`/dao/${routeId}/admin/token`}>Open Token Admin</Link>
               </>
             ) : (
               <>
@@ -180,7 +180,7 @@ export default function FoundersAdminPage() {
                       : 'Artwork properties exist. Refresh and confirm all planned batches are finished before minting: traits are seeded at mint time.'
                   }
                 />
-                <Link href={`/dao/${daoId}/admin/artwork`}>Review artwork setup</Link>
+                <Link href={`/dao/${routeId}/admin/artwork`}>Review artwork setup</Link>
                 {rows.map((row, index) => (
                   <Stack gap="2" key={index}>
                     <label htmlFor={`founder-${index}`}>

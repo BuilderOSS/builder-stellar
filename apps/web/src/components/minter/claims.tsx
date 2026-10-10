@@ -21,7 +21,7 @@ import { AllocationDraftForm } from './allocation-draft';
 import styles from './claims-styles';
 
 export function Claims({ admin = false }: { admin?: boolean }) {
-  const { daoId, daoConfig: config } = useDaoContext();
+  const { daoConfig: config, routeId } = useDaoContext();
   const session = useAuthSessionStore();
   const address = session.authStatus === 'authenticated' ? session.address : null;
   const current = useCurrentClaims(config.tokenContractId, address);
@@ -48,7 +48,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
     !session.walletNetworkIssue &&
     session.walletNetworkPassphrase === config.passphrase
   );
-  const base = `/dao/${encodeURIComponent(daoId)}`;
+  const base = `/dao/${encodeURIComponent(routeId)}`;
 
   async function prepare(method: ClaimAction['method']) {
     if (!allowed || !data || lock.current || hash) return;

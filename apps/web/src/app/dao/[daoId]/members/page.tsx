@@ -46,7 +46,7 @@ export default function MembersPage() {
 }
 
 function MemberDirectory({ daoId }: { daoId: string }) {
-  const { daoConfig } = useDaoContext();
+  const { daoConfig, routeId } = useDaoContext();
   const viewer = useAuthSessionStore((state) => state.address);
   // Tokens held by these DAO contracts carry no votes and never delegate.
   const systemHolders: Record<string, string> = {
@@ -102,7 +102,7 @@ function MemberDirectory({ daoId }: { daoId: string }) {
       </form>
       {lookup ? (
         <ListRow
-          href={daoRoute(daoId, `members/${lookup}`)}
+          href={daoRoute(routeId, `members/${lookup}`)}
           media={<Avatar address={lookup} />}
           title={shortAddress(lookup)}
           meta="Open their profile"
@@ -168,7 +168,7 @@ function MemberDirectory({ daoId }: { daoId: string }) {
                   <ListRow
                     key={member.address}
                     as="li"
-                    href={daoRoute(daoId, `members/${member.address}`)}
+                    href={daoRoute(routeId, `members/${member.address}`)}
                     media={<Avatar address={member.address} yours={isViewer} />}
                     title={
                       <span title={member.address}>

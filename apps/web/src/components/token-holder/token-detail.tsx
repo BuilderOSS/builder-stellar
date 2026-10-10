@@ -54,7 +54,7 @@ const link = css({
 const back = css({ justifySelf: 'start', ml: '-3', mb: '2' });
 
 export function HolderTokenDetail({ tokenId }: { tokenId: number }) {
-  const { daoId, daoConfig: config } = useDaoContext();
+  const { daoId, daoConfig: config, routeId } = useDaoContext();
   const viewer = useAuthSessionStore((state) => state.address);
   const { data, error, isLoading, isValidating, mutate } = useSWR(['token-holder', DEPLOYMENT_ID, daoId, tokenId], () =>
     directoryFetch<HolderDetail>(`/api/dao/${encodeURIComponent(daoId)}/tokens/${tokenId}`)
@@ -65,7 +65,7 @@ export function HolderTokenDetail({ tokenId }: { tokenId: number }) {
 
   return (
     <div>
-      <ButtonLink href={daoRoute(daoId)} variant="ghost" size="sm" className={back}>
+      <ButtonLink href={daoRoute(routeId)} variant="ghost" size="sm" className={back}>
         <ChevronLeft aria-hidden="true" />
         {config.tokenName || 'Community'}
       </ButtonLink>
@@ -109,7 +109,7 @@ export function HolderTokenDetail({ tokenId }: { tokenId: number }) {
               </div>
               {owner ? (
                 <>
-                  <NextLink href={daoRoute(daoId, `members/${owner}`)} className={ownerRow} title={owner}>
+                  <NextLink href={daoRoute(routeId, `members/${owner}`)} className={ownerRow} title={owner}>
                     <Avatar address={owner} size="lg" yours={owner === viewer} />
                     <div>
                       <p className={ownerName}>{owner === viewer ? 'You' : shortAddress(owner)}</p>
