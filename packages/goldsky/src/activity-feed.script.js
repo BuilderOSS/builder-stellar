@@ -132,6 +132,7 @@ function invoke(data) {
     VotingPeriodChanged: 'governance.voting_period_changed',
     ProposalThresholdChanged: 'governance.proposal_threshold_changed',
     QuorumBpsChanged: 'governance.quorum_bps_changed',
+    QuorumChanged: 'governance.quorum_changed',
     TreasuryInitialized: 'treasury.initialized',
     TokenLaunched: 'token.launched',
     GovernorLaunched: 'governor.launched',
@@ -223,6 +224,7 @@ function invoke(data) {
     VotingPeriodChanged: 'Voting period updated',
     ProposalThresholdChanged: 'Proposal threshold updated',
     QuorumBpsChanged: 'Quorum updated',
+    QuorumChanged: 'Quorum set',
     TreasuryInitialized: 'Treasury initialized',
     TokenLaunched: 'Token launched',
     GovernorLaunched: 'Governor launched',
@@ -299,7 +301,8 @@ function invoke(data) {
   var moduleLabels = { token: 'Token', governor: 'Governor', treasury: 'Treasury', auction: 'Auction', marketplace: 'Marketplace', metadata: 'Metadata' };
   var moduleRole = moduleLabels[emitterRole] ? emitterRole : 'module';
   var moduleLabel = moduleLabels[emitterRole] || 'Module';
-  var commonEvents = { Upgraded: ['upgraded', 'upgraded'], VersionSynced: ['version_synced', 'version synced'], Migrated: ['migrated', 'storage migrated'] };
+  // OpenZeppelin Paused/Unpaused (auction) are keyed by the emitting module too.
+  var commonEvents = { Upgraded: ['upgraded', 'upgraded'], VersionSynced: ['version_synced', 'version synced'], Migrated: ['migrated', 'storage migrated'], Paused: ['paused', 'paused'], Unpaused: ['unpaused', 'unpaused'] };
   if (commonEvents[normalizedEventName]) {
     kindMap[normalizedEventName] = moduleRole + '.' + commonEvents[normalizedEventName][0];
     titleMap[normalizedEventName] = moduleLabel + ' ' + commonEvents[normalizedEventName][1];
@@ -407,6 +410,7 @@ function invoke(data) {
     DaoLaunched: function() { return 'DAO launched for token ' + (tokenAddress || 'unknown'); },
     ImplementationRegistered: function() { return 'Implementation "' + (name || 'unknown') + '" registered'; },
     SeedGenerated: function() { return 'Seed generated for token ' + (tokenId || 'unknown'); },
+    QuorumChanged: function() { return 'Quorum set to ' + (pick(data, ['new_quorum']) || '?') + ' bps'; },
     SeedsGenerated: function() { return 'Seeds generated for ' + describeRange(); },
     PropertyAdded: function() { return 'Property "' + (name || 'unknown') + '" added'; }
   };

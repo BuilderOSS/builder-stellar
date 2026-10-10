@@ -18,6 +18,16 @@
 --                      one event per call of the proposal; Treasury.execute is
 --                      permissionless and consumes the proposal on the Governor first.
 --
+-- Governor configuration (governance.settings):
+--   governor_initialized topic admin; data { token_contract, treasury_contract, voting_delay,
+--                        voting_period, queue_delay, proposal_threshold, quorum_bps, version }
+--   quorum_changed       OpenZeppelin; data { old_quorum, new_quorum }: duplicates the
+--                        constructor quorum and every quorum_bps_changed (not read here)
+--   voting_delay_changed / voting_period_changed / queue_delay_changed /
+--   proposal_threshold_changed / quorum_bps_changed
+--                        topic changed_by; data { old_value, new_value }
+--   admin_changed        topics old_admin, new_admin (launch handoff to the Treasury)
+--
 -- The Treasury is the Governor's admin from launch; parameter setters emit
 -- *_changed events with the admin as `changed_by`.
 --
@@ -217,3 +227,73 @@ LEFT JOIN lifecycle l
   ON l.deployment_id = c.deployment_id AND l.dao_id = c.dao_id AND l.proposal_id = c.proposal_id
 LEFT JOIN tally t
   ON t.deployment_id = c.deployment_id AND t.dao_id = c.dao_id AND t.proposal_id = c.proposal_id;
+
+-- Current Governor configuration per DAO: the constructor values overlaid with
+-- the latest *_changed event of each parameter. Durations are seconds;
+-- proposal_threshold is an absolute vote count; quorum_bps is basis points of
+-- the voting supply at each proposal's snapshot.
+CREATE VIEW governance.settings AS
+WITH initialized AS (
+  SELECT DISTINCT ON (e.deployment_id, e.contract_id)
+    e.deployment_id,
+    e.contract_id,
+    e.topic_0 AS initial_admin,
+    (e.args::jsonb ->> 'voting_delay')::bigint AS voting_delay,
+    (e.args::jsonb ->> 'voting_period')::bigint AS voting_period,
+    (e.args::jsonb ->> 'queue_delay')::bigint AS queue_delay,
+    (e.args::jsonb ->> 'proposal_threshold')::numeric AS proposal_threshold,
+    (e.args::jsonb ->> 'quorum_bps')::integer AS quorum_bps,
+    e.args::jsonb ->> 'version' AS version,
+    e.ledger_sequence AS init_ledger,
+    chain.ledger_closed_at_ts(e.ledger_closed_at) AS init_at
+  FROM chain.decoded_events e
+  WHERE e.contract_role = 'governor'
+    AND e.event_name = 'governor_initialized'
+  ORDER BY e.deployment_id, e.contract_id, e.ledger_sequence DESC, e.event_id DESC
+), latest AS (
+  -- Latest value per (governor, event): new_value for the setters, new_admin
+  -- for the launch handoff.
+  SELECT DISTINCT ON (e.deployment_id, e.contract_id, e.event_name)
+    e.deployment_id,
+    e.contract_id,
+    e.event_name,
+    COALESCE(e.args::jsonb ->> 'new_value', e.topics::jsonb ->> 'new_admin') AS value,
+    e.ledger_sequence
+  FROM chain.decoded_events e
+  WHERE e.contract_role = 'governor'
+    AND e.event_name IN ('voting_delay_changed', 'voting_period_changed', 'queue_delay_changed',
+      'proposal_threshold_changed', 'quorum_bps_changed', 'admin_changed')
+  ORDER BY e.deployment_id, e.contract_id, e.event_name, e.ledger_sequence DESC,
+    e.transaction_index DESC NULLS LAST, e.operation_index DESC NULLS LAST,
+    e.event_index DESC NULLS LAST, e.event_id DESC
+), overlay AS (
+  SELECT
+    deployment_id,
+    contract_id,
+    max(value) FILTER (WHERE event_name = 'voting_delay_changed') AS voting_delay,
+    max(value) FILTER (WHERE event_name = 'voting_period_changed') AS voting_period,
+    max(value) FILTER (WHERE event_name = 'queue_delay_changed') AS queue_delay,
+    max(value) FILTER (WHERE event_name = 'proposal_threshold_changed') AS proposal_threshold,
+    max(value) FILTER (WHERE event_name = 'quorum_bps_changed') AS quorum_bps,
+    max(value) FILTER (WHERE event_name = 'admin_changed') AS admin,
+    max(ledger_sequence) FILTER (WHERE event_name <> 'admin_changed') AS updated_ledger
+  FROM latest
+  GROUP BY deployment_id, contract_id
+)
+SELECT
+  i.deployment_id,
+  ident.dao_id,
+  i.contract_id AS governor_contract,
+  COALESCE(o.admin, i.initial_admin) AS admin,
+  COALESCE(o.voting_delay::bigint, i.voting_delay) AS voting_delay_seconds,
+  COALESCE(o.voting_period::bigint, i.voting_period) AS voting_period_seconds,
+  COALESCE(o.queue_delay::bigint, i.queue_delay) AS queue_delay_seconds,
+  COALESCE(o.proposal_threshold::numeric, i.proposal_threshold) AS proposal_threshold,
+  COALESCE(o.quorum_bps::integer, i.quorum_bps) AS quorum_bps,
+  i.version,
+  i.init_ledger,
+  i.init_at,
+  o.updated_ledger
+FROM initialized i
+JOIN manager.event_identity ident ON ident.deployment_id = i.deployment_id AND ident.contract_id = i.contract_id
+LEFT JOIN overlay o ON o.deployment_id = i.deployment_id AND o.contract_id = i.contract_id;

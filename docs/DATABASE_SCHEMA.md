@@ -35,7 +35,7 @@ by `dao_id` (the DAO token contract address).
 | `dao_slugs` | `dao_created`, `pending_slug_updated`, `slug_claimed` | per DAO: `requested_slug` (latest request, not unique), `claimed_slug` (unique and permanent, set by `launch_dao`; NULL while pending), `claimed_ledger`, `claimed_at` |
 | `dao_modules` | registry | one row per module contract |
 | `event_identity` | modules | contract → DAO lookup used by every domain view |
-| `daos` **Prisma** | registry + `dao_slugs`, `dao_launched`, `token_initialized`, metadata, auction `paused`/`unpaused` | `status` pending/operational; `slug` (claimed slug once launched, else the requested one), `slug_claimed`, `requested_slug`, `claimed_slug`; `auction_enabled`, `auction_paused`, `token_description`; `admin_address` is the launch admin from `token_initialized` |
+| `daos` **Prisma** | registry + `dao_slugs`, `dao_launched`, `token_initialized`, metadata, auction `paused`/`unpaused` | `status` pending/operational; `slug` (claimed slug once launched, else the requested one), `slug_claimed`, `requested_slug`, `claimed_slug`; `auction_enabled`, `auction_paused`, `token_description`; `admin_address` is the DAO's current admin: the token's latest `admin_changed` (the Treasury after launch), else the launch admin |
 | `module_launches` | each module's `<module>_launched` event (`token_launched`, `governor_launched`, …) | one row per DAO module: `is_live`, `treasury`, `started` (auction), `opened` (marketplace), `minters` (token) |
 | `module_admins` | module `admin_changed` + `dao_registry` | one row per DAO module: current `admin` (the launch admin, then the Treasury), `handed_to_treasury`, `changed_*` |
 | `dao_lifecycle` | `dao_launched` + `module_launches` | per DAO: `is_live` (all six modules launched), `<module>_live`, `launch_auction`, `launch_marketplace`, `minter_enabled`, `auction_started`, `marketplace_opened` |
@@ -71,6 +71,7 @@ in `inventory` and `members` (with `voting_power` 0) but never emit
 | `proposal_votes` **Prisma** | `vote_cast` | `support` 0 against, 1 for, 2 abstain |
 | `proposal_lifecycle` **Prisma** | queued / executed / cancelled | |
 | `proposal_actions` | `proposal_created` | one row per call (parallel arrays unnested) |
+| `settings` | `governor_initialized` + `voting_delay_changed` / `voting_period_changed` / `queue_delay_changed` / `proposal_threshold_changed` / `quorum_bps_changed` + `admin_changed` | current Governor configuration per DAO: `admin`, `voting_delay_seconds`, `voting_period_seconds`, `queue_delay_seconds`, `proposal_threshold` (absolute votes), `quorum_bps` (of the voting supply at each snapshot), `version`, `updated_ledger` |
 | `proposal_execution_calls` | Treasury `execute` + `proposal_actions` | one row per executed call, ordered by `call_index`, keyed by `proposal_id`; carries `target`, `function`, `args`, tx |
 
 Execution: `Treasury.execute` is permissionless; it consumes the proposal on the

@@ -33,6 +33,10 @@ Authoritative references: [SECURITY_MODEL.md](./SECURITY_MODEL.md), [DATABASE_SC
   - `src/app/dao/[daoId]/admin/token/page.tsx:108` (`client.batch_mint`; the helper text at line 149 still says "up to 20 tokens")
   - `src/lib/proposal-actions/actions/batch-mint-governance-token/index.ts`, `validator.ts:51` and `component.tsx:71` ("1-20 tokens"), `src/components/proposal/proposal-action-editor.tsx:208`, `src/lib/proposal-call.ts:113`, `src/components/proposal/proposal-action-preview.tsx:64` (proposal actions: one action per fitting chunk, at most 20 actions per proposal)
 - Minter `mint_batch` accepts at most 18 recipients and the whole batch must fit the same budget.
+- **Artwork before minting.** The Metadata hook seeds a token's traits when it is minted and seeds nothing while no artwork properties exist; the contracts cannot block such a mint. The frontend must enforce the order:
+  - Create flow (`src/lib/use-dao-deployment.ts`): keep "add artwork" before "mint founder allocations" and do not mint if adding artwork failed or `metadata.properties_count()` is 0.
+  - Admin token page (`src/app/dao/[daoId]/admin/token/page.tsx`) and any setup checklist (`src/components/launch-checklist.tsx`): when `properties_count()` is 0, show a prominent warning ("Upload the artwork first: tokens minted now get no traits") and require explicit confirmation before minting; list the artwork step before the founder-mint step.
+  - Recovery: tokens without traits (`metadata.get_attributes(id)` fails or is empty, or no `metadata.token_seeds` row) can be seeded with `metadata.regenerate(token_id)`. During setup the launch admin calls it directly; after launch it is a governance proposal action (Treasury is the metadata admin). Offer it from the admin page for unseeded tokens.
 
 ### Manager
 
@@ -92,6 +96,8 @@ The Prisma schema still matches the database (the integration test enforces it),
 | `manager.daos` | new columns `slug` (claimed slug once launched, else the latest requested slug), `slug_claimed`, `requested_slug`, `claimed_slug`. `ManagerDao` has no slug field today | add the fields; resolve DAO pages by `slug` only where `slug_claimed` is true, or handle duplicate requested slugs among pending DAOs |
 | `manager.dao_slugs` (new) | requested vs claimed slug per DAO | use for slug availability and pending-DAO UI |
 | `app.proposal_list`, `app.proposal_detail`, `governance.proposals` | new columns `vote_start_seconds`, `quorum_votes`; `state` now has `active`, `succeeded` and `defeated` in addition to `pending`, `queued`, `executed`, `canceled`, `expired`. `expired` no longer covers "won but missed quorum" (that is `defeated`) | add the fields to `AppProposalList` / `AppProposalDetail`; update state labels, filters and badges |
+| `manager.daos.admin_address` | now the DAO's **current** admin (the Treasury after launch, the launch admin before); it was the creation-time admin | use `manager.module_admins` for per-module admins |
+| `governance.settings` (new) | current Governor configuration: `voting_delay_seconds`, `voting_period_seconds`, `queue_delay_seconds`, `proposal_threshold`, `quorum_bps`, `admin` | show governance parameters from the DB instead of RPC reads |
 | `token.supply` (new) | `minted_supply`, `system_held_supply`, `voting_supply` per DAO | show voting supply / quorum context |
 | `manager.module_admins` (new) | current admin per module, `handed_to_treasury` | authority UI |
 | `manager.module_versions` | new `storage_version` | admin/upgrade dashboard |
@@ -105,6 +111,7 @@ If the web parses events or activity kinds directly:
 
 - The shared `Launched` event is replaced by `TokenLaunched`, `GovernorLaunched`, `TreasuryLaunched`, `AuctionLaunched`, `MarketplaceLaunched`, `MetadataLaunched` (activity kinds `<module>.launched` are unchanged).
 - Batch mints emit one `MintBatchWithMinter { minter, first_token_id, count }` (activity kind `token.batch_mint`, public: "Minted 5 tokens (30-34) by …") and one metadata `SeedsGenerated` (`metadata.seeds_generated`, admin) instead of per-token `MintWithMinter` / `SeedGenerated` rows. Single mints and `regenerate` still emit the per-token events. `token.mints` and `metadata.token_seeds` still have one row per token (columns unchanged); batch seed rows share their source `event_id`.
+- OpenZeppelin `QuorumChanged` is `governance.quorum_changed` (admin) and the Auction's `Paused` / `Unpaused` are `auction.paused` / `auction.unpaused` (they were `contract.*`). No event falls back to `contract.*` any more.
 - New activity kinds: `<module>.admin_changed` (launch handoff), `<module>.migrated`, `governance.proposal_scheduled` (admin visibility; it accompanies `proposal_created`), `manager.slug_claimed` (public), `manager.pending_slug_updated`, `manager.latest_implementation_set`.
 - OpenZeppelin `OwnershipTransfer*` events are gone.
 
@@ -112,6 +119,7 @@ If the web parses events or activity kinds directly:
 
 - [ ] `pnpm lint`, `pnpm typecheck`, `pnpm --dir apps/web test` and `pnpm build` pass.
 - [ ] `TEST_DATABASE_URL=… ./db/test-migrations.sh` passes (it checks the Prisma schema against the views).
+- [ ] Admin pages warn before minting while no artwork is configured, and unseeded tokens can be regenerated.
 - [ ] Create → setup → launch works against a fresh local or testnet deployment, including a `SlugTaken` rename and founder allocations that need several batch calls.
 - [ ] Marketplace list/buy pass the seller and buyer bounds; settle buttons respect the auction end time.
 - [ ] Proposal pages show the new states, quorum from `quorum_votes`, and readable `authorize` actions.

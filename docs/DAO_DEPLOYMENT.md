@@ -122,6 +122,13 @@ assets). The slug is only requested here: `launch_dao` claims it.
 
 **2. Setup window** (launch admin). Until `launch_dao` succeeds the launch admin can:
 
+- add artwork (`metadata.add_properties`, at most 30 items per call) **before
+  minting**: the Metadata hook seeds a token's traits when it is minted and
+  seeds nothing while no properties exist. A token minted without traits can be
+  seeded later with `metadata.regenerate(token_id)` (metadata admin: the launch
+  admin now, governance after launch). `deploy-dao.mjs admin_checklist` adds the
+  artwork, then mints founders, then verifies every founder token has traits and
+  regenerates any that do not;
 - mint founder tokens with `token.mint` / `token.batch_mint` (each call must
   fit the event budget: up to 43 tokens to one founder or 18 founders with one
   token each; the script packs batches automatically); only the token admin can mint
@@ -129,8 +136,7 @@ assets). The slug is only requested here: `launch_dao` claims it.
   `NotLive`. Founder amounts are not capped by the contracts, and at least one
   token must be held by someone other than the Treasury, Auction or Marketplace
   at launch (tokens those contracts hold carry no votes);
-- add artwork (`metadata.add_properties`, at most 30 items per call) and update
-  Metadata settings;
+- update Metadata settings;
 - adjust Auction parameters while it is paused, and Marketplace fee, payment
   asset and pause state;
 - use the admin-only Governor setters;

@@ -21,13 +21,16 @@ const networkConfigPath = args[2];
  *    the admin of every module during the setup window.
  *
  * 2. admin_checklist (setup window, the launch admin signs directly; no Manager, Minter or Treasury):
- *    - mint founder tokens with token.batch_mint (the admin may mint before launch; launch_dao
+ *    - FIRST add the artwork with metadata.add_properties in batches of <= 30 items (each batch adds
+ *      its own IPFS group). Progress is derived from metadata.ipfs_data_count(). Artwork must exist
+ *      before minting: the metadata hook seeds traits at mint time and seeds nothing without it.
+ *    - THEN mint founder tokens with token.batch_mint (the admin may mint before launch; launch_dao
  *      requires a nonzero voting supply, i.e. founders other than the Treasury/Auction/Marketplace).
  *      Each call must fit the token's event budget (common::batch_mint_fits, 16 KiB event limit):
  *      300 bytes per token + 450 per recipient <= 13,500, i.e. up to 43 tokens to one founder or
- *      18 founders with one token each.
- *    - add the artwork with metadata.add_properties in batches of <= 30 items (each batch adds its
- *      own IPFS group). Progress is derived from metadata.ipfs_data_count().
+ *      18 founders with one token each. Progress is derived from token ownership (owner_of).
+ *    - verify every founder token has traits and seed any that do not with metadata.regenerate
+ *      (safety net for tokens minted before the artwork).
  *    Not possible before launch: token.set_mint_authority (NotLive), Minter merkle/allowlist
  *    (Minter requires a Live token), auction.unpause, marketplace primary listings, any governance
  *    action. Settings are NOT re-applied here: the constructors already hold them.
@@ -188,7 +191,6 @@ function validateDaoConfig(config) {
   }
 }
 
-// Founder mint batches: pieces of <= 20 tokens, packed into batches of <= 20 entries / 20 tokens.
 // Packs founder allocations into batch_mint calls that each fit common::batch_mint_fits. A founder
 // above MAX_BATCH_MINT_TOKENS is split across calls.
 function planFounderBatches(founders) {
@@ -301,6 +303,26 @@ function invoke(id, method, params = {}) {
     throw new Error(`Failed to invoke ${method}`);
   }
   return result.stdout + result.stderr;
+}
+
+// True when the token id exists (owner_of succeeds).
+function tokenExists(tokenId) {
+  try {
+    invokeView(addresses.token, 'owner_of', { token_id: String(tokenId) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// True when the token has stored attributes (get_attributes fails or is empty otherwise).
+function isSeeded(tokenId) {
+  try {
+    const attributes = invokeView(addresses.metadata, 'get_attributes', { token_id: String(tokenId) });
+    return Array.isArray(attributes) && attributes.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 function invokeView(id, method, params = {}) {
@@ -499,35 +521,10 @@ if (phase === 'admin_checklist') {
 
     // A recreated DAO can inherit checkpoints from a previous deployment in the
     // local artifact. Reconcile the checkpoint before recording more work.
-    if (invokeView(addresses.token, 'total_supply') === 0 && Object.keys(transactions).some((key) => key !== 'createDao')) {
+    if (!tokenExists(0) && Number(invokeView(addresses.metadata, 'ipfs_data_count')) === 0 && Object.keys(transactions).some((key) => key !== 'createDao')) {
       transactions = transactions.createDao ? { createDao: transactions.createDao } : {};
       checkpoint();
     }
-
-    // Founder mints: token.batch_mint signed by the launch admin (token owner). Progress is
-    // derived from the on-chain total_supply so a crash between invoke and checkpoint is safe.
-    transactions.founderMintBatches = transactions.founderMintBatches ?? [];
-    let supply = Number(invokeView(addresses.token, 'total_supply'));
-    let cumulative = 0;
-    for (const [index, batch] of founderBatches.entries()) {
-      const start = cumulative;
-      cumulative += batch.total;
-      if (cumulative <= supply) continue;
-      if (supply > start) {
-        throw new Error(`Token total_supply ${supply} is inside founder batch ${index + 1} (${start}..${cumulative}); reconcile manually`);
-      }
-      console.log(`Minting founder batch ${index + 1}/${founderBatches.length} (${batch.total} tokens):`);
-      for (const entry of batch.entries) console.log(`  ${entry.address} x ${entry.amount}`);
-      const output = invoke(addresses.token, 'batch_mint', {
-        minter: daoConfig.launchAdmin,
-        recipients: batch.entries.map((entry) => entry.address),
-        amounts: batch.entries.map((entry) => ({ u128: String(entry.amount) }))
-      });
-      transactions.founderMintBatches.push(transaction(output, { batch: index + 1, tokens: batch.total }));
-      supply += batch.total;
-      checkpoint();
-    }
-    console.log(`Founder tokens minted: total_supply = ${supply}`);
 
     // Artwork: add_properties by the launch admin, <= 30 items per call. Each applied call appends one
     // IPFS group, so ipfs_data_count tells how many planned calls are already on chain.
@@ -548,6 +545,58 @@ if (phase === 'admin_checklist') {
       checkpoint();
     }
     console.log(`Artwork complete: ${invokeView(addresses.metadata, 'properties_count')} properties`);
+
+    // Founder mints come AFTER the artwork: the metadata hook seeds traits at mint time and seeds
+    // nothing while no properties exist. token.batch_mint is signed by the launch admin (token
+    // admin). Token ids are sequential from 0 in the setup window and a batch is atomic, so a batch
+    // is on chain iff its last token exists (total_supply is the voting supply and would miss
+    // founders held by the Treasury/Auction/Marketplace).
+    const propertiesCount = Number(invokeView(addresses.metadata, 'properties_count'));
+    if (propertiesCount === 0) {
+      console.warn('WARNING: no artwork properties are configured, so founder tokens will have no traits until metadata.regenerate is called.');
+    }
+    transactions.founderMintBatches = transactions.founderMintBatches ?? [];
+    let cumulative = 0;
+    for (const [index, batch] of founderBatches.entries()) {
+      const start = cumulative;
+      cumulative += batch.total;
+      if (tokenExists(cumulative - 1)) continue;
+      if (tokenExists(start)) {
+        throw new Error(`Founder batch ${index + 1} (tokens ${start}..${cumulative - 1}) is partially on chain; reconcile manually`);
+      }
+      console.log(`Minting founder batch ${index + 1}/${founderBatches.length} (${batch.total} tokens):`);
+      for (const entry of batch.entries) console.log(`  ${entry.address} x ${entry.amount}`);
+      const output = invoke(addresses.token, 'batch_mint', {
+        minter: daoConfig.launchAdmin,
+        recipients: batch.entries.map((entry) => entry.address),
+        amounts: batch.entries.map((entry) => ({ u128: String(entry.amount) }))
+      });
+      transactions.founderMintBatches.push(transaction(output, { batch: index + 1, tokens: batch.total }));
+      checkpoint();
+    }
+    console.log(`Founder tokens minted: ${cumulative} tokens, voting supply = ${invokeView(addresses.token, 'total_supply')}`);
+
+    // Safety net: every founder token must have traits. A batch is seeded atomically with its mint,
+    // so checking its first token is enough; an unseeded batch (minted before the artwork, e.g. by an
+    // earlier run of this script) is fixed with metadata.regenerate per token (launch admin is the
+    // metadata admin during setup).
+    if (propertiesCount > 0) {
+      transactions.regenerated = transactions.regenerated ?? [];
+      let first = 0;
+      for (const batch of founderBatches) {
+        if (!isSeeded(first)) {
+          for (let id = first; id < first + batch.total; id += 1) {
+            if (isSeeded(id)) continue;
+            console.log(`Seeding founder token ${id} (minted without traits): metadata.regenerate`);
+            const output = invoke(addresses.metadata, 'regenerate', { token_id: String(id) });
+            transactions.regenerated.push(transaction(output, { tokenId: id }));
+            checkpoint();
+          }
+        }
+        first += batch.total;
+      }
+      console.log(`Founder traits verified for tokens 0..${cumulative - 1}`);
+    }
 
     console.log('\nSettings applied at create_dao (constructor values, not re-sent):');
     console.log(JSON.stringify({

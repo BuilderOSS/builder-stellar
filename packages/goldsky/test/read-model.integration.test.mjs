@@ -179,6 +179,9 @@ function buildScenario() {
     data: { token_contract: addr(d1.token), treasury_contract: addr(d1.treasury), voting_delay: u32(1), voting_period: u32(10), queue_delay: u32(1), proposal_threshold: u128(1), quorum_bps: u32(1000), version: str('0.1.0') },
     ledger: 135
   });
+  // OpenZeppelin's duplicate quorum event at construction, then one governed update.
+  emit('governor', d1.governor, 'quorum_changed', { data: { old_quorum: u128(0), new_quorum: u128(1000) }, ledger: 135, evt: 1 });
+  emit('governor', d1.governor, 'voting_period_changed', { topics: [addr(d1.treasury)], data: { old_value: u32(10), new_value: u32(20) }, ledger: 136 });
   // proposal_created + proposal_scheduled (same transaction). States are computed
   // from the clock, so windows are placed far in the past/future or relative to now.
   const created = (id, ledger, { voteStart = 1000000000, voteEnd = 1000000300, quorum = 1 } = {}) => {
@@ -404,7 +407,8 @@ test('manager: registry, lifecycle and implementations', { skip }, () => {
   assert.equal(a.token_name, 'Alpha');
   assert.equal(a.token_symbol, 'ALP');
   assert.equal(a.token_uri, 'ipfs://alpha');
-  assert.equal(a.admin_address, 'GOWNER');
+  assert.equal(a.admin_address, 'CTRE1', 'the current admin: the Treasury after the launch handoff');
+  assert.equal(one(`SELECT admin_address FROM manager.daos WHERE dao_id = 'CTOK2'`).admin_address, 'GLAUNCH2', 'a pending DAO keeps its launch admin');
   assert.equal(a.token_description, 'Alpha DAO v2', 'description follows metadata updates');
   assert.equal(a.status, 'operational');
   assert.equal(a.launched_ledger, 116);
@@ -464,6 +468,12 @@ test('token: ownership, mints, members and voting power', { skip }, () => {
 });
 
 test('governance: proposals, votes, lifecycle and authorities', { skip }, () => {
+  assert.deepEqual(
+    one(`SELECT dao_id, admin, voting_delay_seconds, voting_period_seconds, queue_delay_seconds, proposal_threshold, quorum_bps, version FROM governance.settings`),
+    { dao_id: 'CTOK1', admin: 'CTRE1', voting_delay_seconds: 1, voting_period_seconds: 20, queue_delay_seconds: 1, proposal_threshold: 1, quorum_bps: 1000, version: '0.1.0' },
+    'constructor values overlaid with the latest setter events'
+  );
+  assert.equal(one(`SELECT kind, summary FROM app.activity_feed WHERE event_name = 'quorum_changed'`).kind, 'governance.quorum_changed');
   const proposals = rows(`SELECT proposal_number, proposal_id, proposer, state, eta_seconds, snapshot_ledger, vote_start_seconds, vote_end_seconds, quorum_votes, action_count, for_votes, against_votes, abstain_votes FROM app.proposal_list WHERE dao_id = 'CTOK1' ORDER BY proposal_number`);
   assert.deepEqual(proposals.map((p) => [p.proposal_number, p.proposal_id, p.state]), [
     [1, 'p1', 'executed'], [2, 'p2', 'active'], [3, 'p3', 'canceled'], [4, 'p4', 'expired'],
@@ -662,7 +672,8 @@ test('activity feed: tenant resolution and kinds', { skip }, () => {
   assert.equal(one(`SELECT amount FROM app.activity_feed WHERE kind = 'minter.batch_mint'`).amount, '8');
   assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'proposal_cancelled'`).kind, 'governance.proposal_cancelled');
   assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'listing_purchased'`).kind, 'marketplace.listing_purchased');
-  assert.deepEqual(rows(`SELECT DISTINCT kind FROM app.activity_feed WHERE kind LIKE 'contract.%'`), [{ kind: 'contract.unpaused' }]);
+  assert.deepEqual(rows(`SELECT DISTINCT kind FROM app.activity_feed WHERE kind LIKE 'contract.%'`), [], 'every event has a module- or contract-specific kind');
+  assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'unpaused'`).kind, 'auction.unpaused');
 });
 
 test('indexer status exposes progress without raw events', { skip }, () => {

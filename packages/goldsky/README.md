@@ -229,7 +229,9 @@ existing `manager.dao_launched`.
 Per-module launch rows are `admin` with kind `<role>.launched`; module `AdminChanged` rows are
 `<role>.admin_changed` ("Token admin handed to the Treasury"), `Migrated` rows
 `<role>.migrated`, `ProposalScheduled` `governance.proposal_scheduled` (admin, it accompanies
-`ProposalCreated`); a batch mint is one public `token.batch_mint` row ("Minted 5 tokens (30-34) by
+`ProposalCreated`); OpenZeppelin `QuorumChanged` is `governance.quorum_changed` (admin; it
+duplicates the constructor quorum and every `QuorumBpsChanged`); OpenZeppelin `Paused` / `Unpaused`
+from the Auction are `auction.paused` / `auction.unpaused`; a batch mint is one public `token.batch_mint` row ("Minted 5 tokens (30-34) by
 minter") plus one admin `metadata.seeds_generated` row, not one row per token; Manager admin changes
 (`manager.admin_proposed`, `manager.admin_changed`, `manager.platform_minter_set`),
 `primary_listing_expired` and `marketplace.paused` are `admin`. `activity_feed_events`

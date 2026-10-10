@@ -187,6 +187,18 @@ WITH launched AS (
     AND e.event_name = 'token_initialized'
   ORDER BY e.deployment_id, e.contract_id, e.ledger_sequence DESC, e.transaction_index DESC,
     e.operation_index DESC, e.event_index DESC, e.event_id DESC
+), token_admin AS (
+  -- Current token admin: the latest module admin_changed (the launch handoff to
+  -- the Treasury), else the constructor admin from token_initialized.
+  SELECT DISTINCT ON (e.deployment_id, e.contract_id)
+    e.deployment_id,
+    e.contract_id AS token_contract,
+    e.topics::jsonb ->> 'new_admin' AS admin
+  FROM chain.decoded_events e
+  WHERE e.contract_role = 'token'
+    AND e.event_name = 'admin_changed'
+  ORDER BY e.deployment_id, e.contract_id, e.ledger_sequence DESC, e.transaction_index DESC NULLS LAST,
+    e.operation_index DESC NULLS LAST, e.event_index DESC NULLS LAST, e.event_id DESC
 ), dao_description AS (
   -- The DAO description lives in the metadata contract: initial value, then updates.
   SELECT DISTINCT ON (e.deployment_id, e.contract_id)
@@ -223,7 +235,8 @@ SELECT
   t.token_symbol,
   d.description AS token_description,
   t.token_uri,
-  t.admin_address,
+  -- The DAO's current admin (launch admin during setup, the Treasury after launch).
+  COALESCE(ta.admin, t.admin_address, r.launch_admin) AS admin_address,
   CASE WHEN l.dao_id IS NULL THEN 'pending' ELSE 'operational' END AS status,
   CASE WHEN l.dao_id IS NULL THEN NULL::boolean
     ELSE l.launch_auction OR COALESCE(a.reactivated, false) END AS auction_enabled,
@@ -243,6 +256,7 @@ LEFT JOIN manager.dao_slugs s ON s.deployment_id = r.deployment_id AND s.dao_id 
 LEFT JOIN launched l ON l.deployment_id = r.deployment_id AND l.dao_id = r.dao_id
 LEFT JOIN auction_state a ON a.deployment_id = r.deployment_id AND a.dao_id = r.dao_id
 LEFT JOIN token_init t ON t.deployment_id = r.deployment_id AND t.token_contract = r.token_contract
+LEFT JOIN token_admin ta ON ta.deployment_id = r.deployment_id AND ta.token_contract = r.token_contract
 LEFT JOIN dao_description d ON d.deployment_id = r.deployment_id AND d.metadata_contract = r.metadata_contract;
 
 -- ImplementationRegistered: topic wasm_hash; data { name, version, published_ledger }

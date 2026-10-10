@@ -72,7 +72,7 @@ function invoke(data) {
     VoteCast: ['voter', 'proposal_id'],
     ProposalQueued: ['proposal_id'], ProposalExecuted: ['proposal_id'], ProposalCancelled: ['proposal_id'],
     QueueDelayChanged: ['changed_by'], VotingDelayChanged: ['changed_by'], VotingPeriodChanged: ['changed_by'],
-    ProposalThresholdChanged: ['changed_by'], QuorumBpsChanged: ['changed_by'],
+    ProposalThresholdChanged: ['changed_by'], QuorumBpsChanged: ['changed_by'], QuorumChanged: [],
     // Treasury
     TreasuryInitialized: ['admin'], Execute: ['governor', 'target', 'proposal_id'],
     // Auction

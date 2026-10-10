@@ -25,6 +25,9 @@ export const LIBRARY_EVENTS = {
   VoteCast: { topics: ['voter', 'proposal_id'], data: ['vote_type', 'weight', 'reason'] },
   ProposalExecuted: { topics: ['proposal_id'], data: [] },
   ProposalCancelled: { topics: ['proposal_id'], data: [] },
+  // Emitted by governor::set_quorum: once at construction (the initial quorum) and on every
+  // set_quorum_bps next to our QuorumBpsChanged.
+  QuorumChanged: { topics: [], data: ['old_quorum', 'new_quorum'] },
   Paused: { topics: [], data: [] },
   Unpaused: { topics: [], data: [] }
 };
