@@ -517,7 +517,7 @@ export default function ProposalDetailPage() {
     <div className={page}>
       <ButtonLink href={daoRoute(routeId, 'proposals')} variant="ghost" size="sm" className={back}>
         <ChevronLeft aria-hidden="true" />
-        All votes
+        All proposals
       </ButtonLink>
 
       {errorMessage ? <Callout variant="error" title="This proposal didn't load" description={errorMessage} /> : null}

@@ -133,7 +133,7 @@ Mobile first. Breakpoints: sm 480, md 768 (rail replaces tab bar), lg 1024, xl 1
 ### Navigation
 
 - Outside a community: Home, Discover, Market, You. "Start a DAO" is an action, not a tab.
-- Inside a community: Home, Vote, [slot 3], Treasury, More. Slot 3 shows Auction when the community runs auctions, else Market when its marketplace is enabled, else Members.
+- Inside a community: Home, Proposals, [slot 3], Treasury, More. Slot 3 shows Auction when the community runs auctions, else Market when its marketplace is enabled, else Members.
 - Mobile shows a bottom tab bar. From md the same destinations become a left icon rail, and Members and Manage get their own rail items. On a deliberate hover (pointer devices, 120ms intent delay) or keyboard focus, the rail widens over the page to 232px and shows labels; it never reflows content and never opens on tap.
 - The community switcher lives in the top bar on every screen.
 
@@ -189,7 +189,7 @@ All primitives live in `apps/web/src/components/ui` and are styled with Panda re
 
 ## Voice
 
-Warm, plain, specific. Say "Vote", "Treasury", "Members", "Your membership". Explain consequences: "2,400 XLM moves to mira.xlm after a 2-day safety delay." Name the outcome on buttons: "Cast 3 votes For", "Place 200 XLM bid". Sentence case. No em dashes in UI copy. Communities are "communities" in copy; "DAO" is the technical noun.
+Warm, plain, specific. Say "Proposals", "Treasury", "Members", "Your membership". A proposal is what members vote on; "vote" is the act, never the page. Explain consequences: "2,400 XLM moves to mira.xlm after a 2-day safety delay." Name the outcome on buttons: "Cast 3 votes For", "Place 200 XLM bid". Sentence case. No em dashes in UI copy. Communities are "communities" in copy; "DAO" is the technical noun.
 
 Authority language is correctness, not style, and stays exact:
 

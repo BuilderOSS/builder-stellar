@@ -75,8 +75,8 @@ export default function ProposalsPage() {
 
   return (
     <PageSection
-      title="Vote"
-      description="Members propose changes and decide together. Each token is one vote."
+      title="Proposals"
+      description="Members propose changes, then vote on each one together. Each token is one vote."
       actions={
         canShowProposalAction ? (
           <Button onClick={() => router.push(daoRoute(routeId, 'proposals/create'))} disabled={createDisabled}>

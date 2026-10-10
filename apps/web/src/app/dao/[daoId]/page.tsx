@@ -175,7 +175,7 @@ export default function Page() {
       <div className={columns}>
         <div className={mainColumn}>
           <Section
-            title="Votes"
+            title="Proposals"
             action={
               <ButtonLink href={daoRoute(routeId, 'proposals')} variant="ghost" size="sm">
                 See all

@@ -51,7 +51,7 @@ export function resolveSlot3(config: NavCapabilities): DaoNav['slot3'] {
 export function resolveDaoNav(daoId: string, config: NavCapabilities, { canManage }: { canManage: boolean }): DaoNav {
   const items: Record<DaoNavKey, DaoNavItem> = {
     home: { key: 'home', label: 'Home', href: daoRoute(daoId), exact: true },
-    vote: { key: 'vote', label: 'Vote', href: daoRoute(daoId, 'proposals') },
+    vote: { key: 'vote', label: 'Proposals', href: daoRoute(daoId, 'proposals') },
     auction: { key: 'auction', label: 'Auction', href: daoRoute(daoId, 'auctions') },
     market: { key: 'market', label: 'Market', href: daoRoute(daoId, 'marketplace') },
     treasury: { key: 'treasury', label: 'Treasury', href: daoRoute(daoId, 'treasury') },

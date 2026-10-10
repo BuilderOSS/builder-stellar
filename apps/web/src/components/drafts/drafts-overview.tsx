@@ -46,7 +46,7 @@ export function DraftsOverview() {
             ))}
           </div>
         ) : (
-          <p className={note}>No proposal drafts. Start one from a community&apos;s Vote page.</p>
+          <p className={note}>No proposal drafts. Start one from a community&apos;s Proposals page.</p>
         )}
       </Section>
 

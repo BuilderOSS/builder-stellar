@@ -226,7 +226,7 @@ export default function ProposalCreatePage() {
           <div className={topRow}>
             <ButtonLink href={daoRoute(routeId, 'proposals')} variant="ghost" size="sm" className={back}>
               <ChevronLeft aria-hidden="true" />
-              All votes
+              All proposals
             </ButtonLink>
             {hasDraft && session.address ? (
               <Button variant="ghost" size="sm" disabled={transactionBusy} onClick={() => setDiscardOpen(true)}>

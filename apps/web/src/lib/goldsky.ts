@@ -595,6 +595,15 @@ export async function getDashboardData(address: string, params: { limit?: number
     })
   ]);
   const daoById = new Map(myDaoCandidates.map((row) => [row.daoId, row]));
+  // Collection images live on the metadata configuration, not the manager row.
+  const images = new Map(
+    (
+      await prisma.metadataConfiguration.findMany({
+        where: { deploymentId, daoId: { in: myDaos.map((row) => row.daoId) } },
+        select: { daoId: true, contractImage: true }
+      })
+    ).map((item) => [item.daoId, item.contractImage])
+  );
 
   return {
     myDaos: myDaos.map((row) => ({
@@ -604,6 +613,7 @@ export async function getDashboardData(address: string, params: { limit?: number
       token_name: row.tokenName,
       token_symbol: row.tokenSymbol,
       token_description: row.tokenDescription,
+      contract_image: images.get(row.daoId) ?? null,
       status: row.status
     })),
     feed: {
