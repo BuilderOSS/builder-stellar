@@ -57,6 +57,24 @@ const styles = {
     outline: 'none',
     ...nativeControls
   }),
+  // A section that has just unlocked rises into place once; sections present on load never animate.
+  formSectionEnter: css({
+    transitionProperty: 'opacity, transform',
+    transitionDuration: '240ms',
+    transitionTimingFunction: 'out',
+    '@starting-style': { opacity: '0', transform: 'translateY(8px)' },
+    _motionReduce: { transitionProperty: 'opacity', '@starting-style': { transform: 'none' } }
+  }),
+  continueRow: css({
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: '3',
+    pt: '4',
+    borderTopWidth: '1px',
+    borderColor: 'rule'
+  }),
   formSectionHead: css({ display: 'grid', gap: '1' }),
   formSectionTitle: css({
     display: 'flex',
@@ -118,7 +136,18 @@ const styles = {
   label: css({ textStyle: 'label', color: 'ink' }),
   sectionTitle: css({ textStyle: 'heading', m: '0' }),
   muted: css({ textStyle: 'caption', fontSize: '0.875rem', color: 'ink.muted', m: '0' }),
-  error: css({ textStyle: 'caption', fontSize: '0.875rem', color: 'danger', fontWeight: '600', m: '0' }),
+  error: css({
+    textStyle: 'caption',
+    fontSize: '0.875rem',
+    color: 'danger',
+    fontWeight: '600',
+    m: '0',
+    // Errors fade in where they will sit; nothing slides, so a correction never feels like a jolt.
+    transitionProperty: 'opacity',
+    transitionDuration: 'fast',
+    transitionTimingFunction: 'ease',
+    '@starting-style': { opacity: '0' }
+  }),
   image: css({
     position: 'relative',
     display: 'block',

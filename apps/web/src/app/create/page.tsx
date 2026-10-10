@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { type FocusEvent, type FormEvent, useEffect, useRef, useState } from 'react';
 import type { ZodError } from 'zod';
 
 import { BasicInfoStep, GovernanceStep, MembershipStep, ReviewStep } from '@/components/create-dao';
@@ -11,40 +11,20 @@ import styles from '@/components/create-dao/workspace-styles';
 import { DiscardDraftDialog } from '@/components/drafts/discard-draft-dialog';
 import { useWorkspaceSync } from '@/components/local-workspace/workspace-sync';
 import { Button, Callout, PageHeader } from '@/components/ui';
+import { configuredCreationNetwork, draftConfigurationSchema, validateCreationAssets } from '@/lib/create-dao-schema';
 import {
-  configuredCreationNetwork,
-  draftConfigurationSchema,
-  sectionSchemas,
-  validateCreationAssets
-} from '@/lib/create-dao-schema';
+  errorsFromZod,
+  type FieldError,
+  FORM_SECTIONS,
+  type FormSectionId,
+  sectionOfKey,
+  unlockedCount,
+  validateSection
+} from '@/lib/create-dao-sections';
 import { getDeploymentConfig, isDeploymentConfigured } from '@/lib/deployment-config';
 import { pollCreatedDao, useDaoDeployment } from '@/lib/use-dao-deployment';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { creationStorageError, useCreateDaoStore } from '@/stores/create-dao-store';
-
-// One long form, read top to bottom. Ids double as anchors for the outline.
-const FORM_SECTIONS = [
-  {
-    id: 'identity',
-    title: 'Identity',
-    description: 'Your name, picture and what the community is about. This is how people find you.'
-  },
-  {
-    id: 'membership',
-    title: 'Membership',
-    description: 'Pick how people become members. Fine-tune prices and timings later.'
-  },
-  {
-    id: 'voting',
-    title: 'Voting',
-    description: 'Pick a pace for decisions. The exact rules are in Advanced settings.'
-  },
-  {
-    id: 'review',
-    title: 'Check and create',
-    description: 'Everything above in plain words. Nothing is signed until you press Create.'
-  }
-] as const;
 
 export default function CreateDaoPage() {
   useWorkspaceSync();
@@ -56,6 +36,12 @@ export default function CreateDaoPage() {
   const [indexingMessage, setIndexingMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
+  // Fields the person has left at least once; only these show errors before Continue is pressed.
+  const touched = useRef(new Set<string>());
+  // The section that just unlocked, so only it plays the entrance (never on load or resume).
+  const [entering, setEntering] = useState<FormSectionId | null>(null);
+  const [attention, setAttention] = useState<{ section: FormSectionId; count: number } | null>(null);
+  const [checking, setChecking] = useState(false);
   const operation = useRef(false);
   const indexingRequest = useRef<AbortController | null>(null);
   const configured = isDeploymentConfigured();
@@ -85,21 +71,109 @@ export default function CreateDaoPage() {
     };
   }, [network, deployment, session.address, currentScope]);
 
-  const showErrors = (error: ZodError) => {
-    store.clearAllValidationErrors();
-    for (const issue of error.issues) {
-      const parts = issue.path.map(String);
-      const key = ['basicInfo', 'governance'].includes(parts[0]) ? parts.slice(1).join('.') : parts.join('.');
-      store.setValidationError(key, issue.message);
-    }
-    // A field inside Advanced settings mounts a frame or two after its panel opens; keep looking briefly.
+  // A field inside Advanced settings mounts a frame or two after its panel opens; keep looking briefly.
+  const focusFirstInvalid = (scope: ParentNode = document) => {
     let frames = 0;
     const focusFirst = () => {
-      const field = document.querySelector<HTMLElement>('[aria-invalid="true"], [data-invalid="true"]');
+      const field = scope.querySelector<HTMLElement>('[aria-invalid="true"], [data-invalid="true"]');
       if (field) field.focus();
       else if (++frames < 10) requestAnimationFrame(focusFirst);
     };
     requestAnimationFrame(focusFirst);
+  };
+  const showErrors = (error: ZodError) => {
+    store.clearAllValidationErrors();
+    for (const { key, message } of errorsFromZod(error)) store.setValidationError(key, message);
+    focusFirstInvalid();
+  };
+  /** Set or clear errors for some keys of one section, from the latest store values. */
+  const applySectionErrors = (section: FormSectionId, keys: Iterable<string>, extra: FieldError[] = []) => {
+    const state = useCreateDaoStore.getState();
+    const errors = [...validateSection(section, state), ...extra];
+    for (const key of keys) {
+      const found = errors.find((error) => error.key === key);
+      if (found) state.setValidationError(key, found.message);
+      else state.clearValidationError(key);
+    }
+    return errors;
+  };
+  /** The validated field an event came from: the nearest element whose id is a known field key. */
+  const fieldKeyOf = (target: EventTarget | null) => {
+    for (let node = target as HTMLElement | null; node; node = node.parentElement) {
+      if (node.id && sectionOfKey(node.id)) return node.id;
+      if (node.tagName === 'SECTION') return null;
+    }
+    return null;
+  };
+  // Check a field when it is first left; after that, re-check it on every change.
+  const onFieldBlur = (section: FormSectionId) => (event: FocusEvent<HTMLElement>) => {
+    const key = fieldKeyOf(event.target);
+    if (!key || sectionOfKey(key) !== section) return;
+    // Moving between the parts of one field (days → hours) isn't leaving it.
+    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) {
+      if (fieldKeyOf(event.relatedTarget) === key) return;
+    }
+    touched.current.add(key);
+    applySectionErrors(section, [key]);
+  };
+  const onFieldInput = (section: FormSectionId) => (event: FormEvent<HTMLElement>) => {
+    const key = fieldKeyOf(event.target);
+    if (!key || sectionOfKey(key) !== section) return;
+    // Fields clear their own error as they change, so go by "left once" rather than "has an error".
+    if (touched.current.has(key)) applySectionErrors(section, [key]);
+    if (attention?.section === section) setAttention(null);
+  };
+  const continueFrom = async (index: number) => {
+    const section = FORM_SECTIONS[index];
+    const next = FORM_SECTIONS[index + 1];
+    if (!next) return;
+    const state = useCreateDaoStore.getState();
+    const extra: FieldError[] = [];
+    if (section.id === 'identity') {
+      if (state.imagePreview)
+        extra.push({
+          key: 'contractImage',
+          message: 'Upload your image, or keep the default, before continuing.'
+        });
+      const slug = state.basicInfo.slug;
+      if (slug && !validateSection('identity', state).some((error) => error.key === 'slug')) {
+        setChecking(true);
+        try {
+          const response = await fetch(`/api/slugs/${encodeURIComponent(slug)}`, { cache: 'no-store' });
+          const status = (await response.json()) as { claimedBy?: string | null };
+          if (status.claimedBy)
+            extra.push({ key: 'slug', message: 'A launched DAO already owns this link. Pick another.' });
+        } catch {
+          // If the check can't run, Create still fails safely on a taken slug; don't block on a network blip.
+        } finally {
+          setChecking(false);
+        }
+      }
+    }
+    const errors = validateSection(section.id, state);
+    const all = [...errors, ...extra.filter((e) => !errors.some((other) => other.key === e.key))];
+    const keys = new Set([...all.map((error) => error.key), ...touched.current]);
+    for (const key of all.map((error) => error.key)) touched.current.add(key);
+    applySectionErrors(
+      section.id,
+      [...keys].filter((key) => sectionOfKey(key) === section.id),
+      extra
+    );
+    if (all.length) {
+      setAttention({ section: section.id, count: all.length });
+      focusFirstInvalid(document.getElementById(section.id) ?? document);
+      return;
+    }
+    setAttention(null);
+    state.setSection(next.stored);
+    setEntering(next.id);
+    requestAnimationFrame(() => {
+      const target = document.getElementById(next.id);
+      if (!target) return;
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+      document.getElementById(`${next.id}-heading`)?.focus({ preventScroll: true });
+    });
   };
   const openSetup = async (token: string) => {
     indexingRequest.current?.abort();
@@ -159,18 +233,13 @@ export default function CreateDaoPage() {
     session.walletNetworkPassphrase !== getDeploymentConfig().networkPassphrase
       ? 'Switch your wallet to this workspace’s network.'
       : '');
-  const complete: Record<(typeof FORM_SECTIONS)[number]['id'], boolean> = {
-    // Description and website are checked with membership's schema but shown under Identity.
-    identity:
-      sectionSchemas.basicInfo.safeParse(store.basicInfo).success &&
-      sectionSchemas.membership.shape.basicInfo.safeParse(store.basicInfo).success,
-    membership:
-      sectionSchemas.membership.shape.auction.safeParse(store.auction).success &&
-      sectionSchemas.membership.shape.marketplace.safeParse(store.marketplace).success,
-    voting: sectionSchemas.governance.safeParse(store.governance).success,
-    review: false
-  };
-  const outline = FORM_SECTIONS.map(({ id, title }) => ({ id, title, complete: complete[id] }));
+  const unlocked = unlockedCount(store.section);
+  const outline = FORM_SECTIONS.map(({ id, title }, index) => ({
+    id,
+    title,
+    complete: id !== 'review' && validateSection(id, store).length === 0,
+    locked: index >= unlocked
+  }));
   return (
     <div className={styles.createPage}>
       <DiscardDraftDialog
@@ -256,16 +325,19 @@ export default function CreateDaoPage() {
         ) : (
           <div className={styles.formLayout}>
             <div className={styles.form}>
-              {FORM_SECTIONS.map((section, position) => (
+              {FORM_SECTIONS.slice(0, unlocked).map((section, position) => (
                 <section
                   key={section.id}
                   id={section.id}
                   tabIndex={-1}
                   aria-labelledby={`${section.id}-heading`}
-                  className={styles.formSection}
+                  className={`${styles.formSection}${entering === section.id ? ` ${styles.formSectionEnter}` : ''}`}
+                  onBlur={onFieldBlur(section.id)}
+                  // onChange (not onInput) so this runs after the field's own handler has saved the value.
+                  onChange={onFieldInput(section.id)}
                 >
                   <div className={styles.formSectionHead}>
-                    <h2 id={`${section.id}-heading`} className={styles.formSectionTitle}>
+                    <h2 id={`${section.id}-heading`} tabIndex={-1} className={styles.formSectionTitle}>
                       <span aria-hidden="true">{position + 1}</span>
                       {section.title}
                     </h2>
@@ -277,7 +349,23 @@ export default function CreateDaoPage() {
                     <MembershipStep />
                   ) : section.id === 'voting' ? (
                     <GovernanceStep />
-                  ) : (
+                  ) : null}
+                  {section.id !== 'review' && position === unlocked - 1 ? (
+                    <div className={styles.continueRow}>
+                      {attention?.section === section.id ? (
+                        <p className={styles.error} role="alert">
+                          {attention.count === 1 ? '1 thing needs' : `${attention.count} things need`} attention
+                        </p>
+                      ) : (
+                        <p className={styles.muted}>Next: {FORM_SECTIONS[position + 1].title}</p>
+                      )}
+                      <Button type="button" loading={checking} onClick={() => void continueFrom(position)}>
+                        Continue to{' '}
+                        {position + 1 === FORM_SECTIONS.length - 1 ? 'review' : FORM_SECTIONS[position + 1].title}
+                      </Button>
+                    </div>
+                  ) : null}
+                  {section.id !== 'review' ? null : (
                     <>
                       <ReviewStep connectedAddress={session.address} />
                       {pageError ? (

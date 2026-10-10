@@ -1,9 +1,9 @@
 'use client';
-import { Check } from 'lucide-react';
+import { Check, Lock } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { css } from 'styled-system/css';
 
-export type OutlineSection = { id: string; title: string; complete: boolean };
+export type OutlineSection = { id: string; title: string; complete: boolean; locked?: boolean };
 
 /** Distance from the viewport top where a section counts as "being read" (top bar + breathing room). */
 const READING_LINE = 140;
@@ -26,7 +26,8 @@ const link = css({
   transitionTimingFunction: 'ease',
   '@media (hover: hover) and (pointer: fine)': { _hover: { bg: 'hover', color: 'ink' } },
   '&[aria-current]': { color: 'ink', bg: 'hover' },
-  _focusVisible: { outline: '2px solid', outlineColor: 'signal', outlineOffset: '2px' }
+  _focusVisible: { outline: '2px solid', outlineColor: 'signal', outlineOffset: '2px' },
+  '&[aria-disabled=true]': { color: 'ink.faint', cursor: 'default', _hover: { bg: 'transparent', color: 'ink.faint' } }
 });
 // Number and check share one slot; the check cross-fades in when a section is complete.
 const marker = css({
@@ -90,30 +91,40 @@ export function SectionOutline({ sections }: { sections: OutlineSection[] }) {
       <ol className={list}>
         {sections.map((section, index) => (
           <li key={section.id}>
-            <a
-              href={`#${section.id}`}
-              className={link}
-              aria-current={active === section.id ? 'location' : undefined}
-              onClick={(event) => {
-                const target = document.getElementById(section.id);
-                if (!target) return;
-                event.preventDefault();
-                const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-                target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
-                // Move focus with the reader so keyboard and screen-reader users land in the section too.
-                target.focus({ preventScroll: true });
-                history.replaceState(null, '', `#${section.id}`);
-              }}
-            >
-              <span className={marker} data-complete={section.complete ? '' : undefined}>
-                <span data-part="number" aria-hidden="true">
-                  {index + 1}
+            {section.locked ? (
+              <span className={link} aria-disabled="true">
+                <span className={marker}>
+                  <Lock aria-hidden="true" size={14} strokeWidth={1.75} />
                 </span>
-                <Check data-part="check" size={16} strokeWidth={2} aria-hidden="true" />
+                {section.title}
+                <span className="sr-only"> (finish the section before it first)</span>
               </span>
-              {section.title}
-              {section.complete ? <span className="sr-only"> (done)</span> : null}
-            </a>
+            ) : (
+              <a
+                href={`#${section.id}`}
+                className={link}
+                aria-current={active === section.id ? 'location' : undefined}
+                onClick={(event) => {
+                  const target = document.getElementById(section.id);
+                  if (!target) return;
+                  event.preventDefault();
+                  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                  target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+                  // Move focus with the reader so keyboard and screen-reader users land in the section too.
+                  target.focus({ preventScroll: true });
+                  history.replaceState(null, '', `#${section.id}`);
+                }}
+              >
+                <span className={marker} data-complete={section.complete ? '' : undefined}>
+                  <span data-part="number" aria-hidden="true">
+                    {index + 1}
+                  </span>
+                  <Check data-part="check" size={16} strokeWidth={2} aria-hidden="true" />
+                </span>
+                {section.title}
+                {section.complete ? <span className="sr-only"> (done)</span> : null}
+              </a>
+            )}
           </li>
         ))}
       </ol>
