@@ -5,7 +5,6 @@ on:
     branches:
       - dev
       - main
-      - 'feat/**'
   pull_request:
     branches:
       - dev
@@ -42,14 +41,11 @@ jobs:
       - name: Run Clippy linting
         run: cargo clippy --all-targets --all-features -- -D warnings -A clippy::too_many_arguments -A clippy::upper_case_acronyms
 
-      - name: Run unit tests
-        run: cargo test -p token -p governor -p treasury -p auction
+      - name: Build all modules
+        run: cargo build --release --target wasm32v1-none -p token -p metadata -p auction -p governor -p treasury -p marketplace -p manager
 
-      - name: Build module WASMs for E2E
-        run: cargo build --release --target wasm32v1-none -p token -p metadata -p auction -p governor -p treasury -p marketplace
-
-      - name: Run E2E tests
-        run: cargo test -p dao-e2e
+      - name: Run all tests
+        run: cargo test
 
   typescript-checks:
     name: TypeScript Checks
@@ -70,8 +66,22 @@ jobs:
           node-version: '23'
           cache: 'pnpm'
 
+      - name: Cache node_modules
+        id: node-modules-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+          key: node-modules-${{ runner.os }}-node23-${{ hashFiles('pnpm-lock.yaml') }}
+
       - name: Install dependencies
+        if: steps.node-modules-cache.outputs.cache-hit != 'true'
         run: pnpm install --frozen-lockfile
+
+      - name: Generate web clients and styles
+        run: pnpm --dir apps/web codegen
 
       - name: Run ESLint
         run: pnpm --dir apps/web lint
@@ -79,28 +89,20 @@ jobs:
       - name: Run TypeScript type checking
         run: pnpm --dir apps/web typecheck
 
+      - name: Run web tests
+        run: pnpm --dir apps/web test
+
       - name: Run Goldsky tests
         run: pnpm --dir packages/goldsky test
 
   build:
-    name: Build All
+    name: Build Web
     runs-on: ubuntu-latest
     needs: [rust-checks, typescript-checks]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Add wasm32v1-none target
-        run: rustup target add wasm32v1-none
-
-      - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -113,14 +115,19 @@ jobs:
           node-version: '23'
           cache: 'pnpm'
 
+      - name: Cache node_modules
+        id: node-modules-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            apps/*/node_modules
+            packages/*/node_modules
+          key: node-modules-${{ runner.os }}-node23-${{ hashFiles('pnpm-lock.yaml') }}
+
       - name: Install dependencies
+        if: steps.node-modules-cache.outputs.cache-hit != 'true'
         run: pnpm install --frozen-lockfile
-
-      - name: Build Rust contracts
-        run: pnpm dao:build
-
-      - name: Generate TypeScript bindings
-        run: pnpm dao:bindings
 
       - name: Build Next.js app
         run: pnpm build
