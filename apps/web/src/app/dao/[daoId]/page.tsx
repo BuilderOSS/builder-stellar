@@ -6,6 +6,7 @@ import { css } from 'styled-system/css';
 import useSWR from 'swr';
 
 import { ActivityList } from '@/components/activity/activity-list';
+import { ContractUpdatesNotice } from '@/components/admin/contract-updates-notice';
 import { DaoContractList } from '@/components/dao-contract-list';
 import { MembershipCard } from '@/components/dao-home/membership-card';
 import { type HomeAuction, NowCard } from '@/components/dao-home/now-card';
@@ -26,6 +27,7 @@ import {
   Text
 } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
+import { useDaoMembership } from '@/hooks/use-dao-membership';
 import { useIsLaunchAdmin } from '@/hooks/useIsLaunchAdmin';
 import { getTreasuryAssets } from '@/lib/assets-config';
 import { daoRoute } from '@/lib/dao-routes';
@@ -68,6 +70,8 @@ export default function Page() {
   const { daoId, daoConfig: config, routeId } = useDaoContext();
   const isLaunchAdmin = useIsLaunchAdmin(config.launchAdmin);
   const isLaunchSetup = isLaunchAdmin && config.status === 'pending';
+  // Members of a launched community can propose contract updates; setup surfaces them in the checklist.
+  const membership = useDaoMembership(config);
   const [activityLimit, setActivityLimit] = useState(ACTIVITY_PAGE_SIZE);
   const [tokenLimit, setTokenLimit] = useState(TOKEN_PAGE_SIZE);
   const [refreshing, setRefreshing] = useState(false);
@@ -164,6 +168,8 @@ export default function Page() {
         assetCode={assetCode}
         now={now}
       />
+
+      {config.status !== 'pending' ? <ContractUpdatesNotice enabled={membership.isMember} /> : null}
 
       <div className={columns}>
         <div className={mainColumn}>

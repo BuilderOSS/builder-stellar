@@ -70,7 +70,14 @@ const GROUPS: Array<{ title: string; items: ManageItem[] }> = [
   },
   {
     title: 'System',
-    items: [{ key: 'upgrades', label: 'Contract versions', meta: 'Review and propose upgrades', section: '/upgrades' }]
+    items: [
+      {
+        key: 'upgrades',
+        label: 'Contract upgrades',
+        meta: 'Keep contracts on their latest release',
+        section: '/upgrades'
+      }
+    ]
   }
 ];
 

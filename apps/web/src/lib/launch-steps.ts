@@ -3,7 +3,7 @@ import type { LaunchReadiness } from '@/components/create-dao/launch-readiness';
 export type StepStatus = 'done' | 'todo' | 'blocked' | 'loading';
 
 export type LaunchStep = {
-  id: 'artwork' | 'founders' | 'slug';
+  id: 'artwork' | 'founders' | 'slug' | 'contracts';
   title: string;
   status: StepStatus;
   /** One line under the title: what's there, or what to do. */
@@ -39,11 +39,14 @@ const plural = (n: number | bigint, one: string, many: string) => `${n} ${n === 
 export function buildLaunchPlan({
   readiness,
   artwork,
-  launchAdmin
+  launchAdmin,
+  withdrawnContracts = 0
 }: {
   readiness: LaunchReadiness | undefined;
   artwork: ArtworkState;
   launchAdmin: string;
+  /** Modules still on a revoked release: the Manager refuses to launch until they're updated. */
+  withdrawnContracts?: number;
 }): LaunchPlan {
   if (readiness?.live)
     return {
@@ -89,6 +92,14 @@ export function buildLaunchPlan({
       detail: `Another community launched first with "${readiness.pending.slug}".`
     });
 
+  if (withdrawnContracts > 0)
+    required.push({
+      id: 'contracts',
+      title: 'Upgrade your contracts',
+      status: 'blocked',
+      detail: `${plural(withdrawnContracts, 'contract is', 'contracts are')} on a withdrawn version. Launch is blocked until they're upgraded.`
+    });
+
   const blockers: LaunchBlocker[] = [];
   if (readiness) {
     if (!readiness.pending || readiness.pending.launch_admin !== launchAdmin)
@@ -112,21 +123,24 @@ export function buildLaunchPlan({
       });
   }
 
-  const counted = required.filter((step) => step.id !== 'slug');
+  // Fix-up steps (link, contracts) only appear when there is a problem; they don't count as progress.
+  const counted = required.filter((step) => step.id !== 'slug' && step.id !== 'contracts');
   const doneCount = counted.filter((step) => step.status === 'done').length;
   const firstOpen = required.find((step) => step.status !== 'done');
   const canLaunch = Boolean(readiness) && !firstOpen && blockers.length === 0;
   const launchHint = !readiness
     ? 'Checking your setup…'
-    : firstOpen?.id === 'slug'
-      ? 'Pick a new link first.'
-      : firstOpen?.id === 'founders'
-        ? 'Mint founder tokens first.'
-        : firstOpen?.id === 'artwork'
-          ? 'Add your artwork first.'
-          : blockers.length
-            ? 'Fix the problem above first.'
-            : '';
+    : firstOpen?.id === 'contracts'
+      ? 'Upgrade your contracts first.'
+      : firstOpen?.id === 'slug'
+        ? 'Pick a new link first.'
+        : firstOpen?.id === 'founders'
+          ? 'Mint founder tokens first.'
+          : firstOpen?.id === 'artwork'
+            ? 'Add your artwork first.'
+            : blockers.length
+              ? 'Fix the problem above first.'
+              : '';
 
   return { live: false, required, blockers, doneCount, totalCount: counted.length, canLaunch, launchHint };
 }
