@@ -68,6 +68,8 @@ pub struct DaoCreated {
     pub modules: DaoAddresses,
     /// WASM hashes the modules were deployed from.
     pub wasm_hashes: DaoWasmHashes,
+    /// Unique slug claimed for this DAO.
+    pub slug: String,
 }
 #[contractevent]
 pub struct AdminProposalCancelled {
@@ -168,6 +170,7 @@ pub fn emit_dao_created(
     created_ledger: u64,
     modules: &DaoAddresses,
     wasm_hashes: &DaoWasmHashes,
+    slug: &String,
 ) {
     DaoCreated {
         token_address: token_address.clone(),
@@ -176,6 +179,7 @@ pub fn emit_dao_created(
         created_ledger,
         modules: modules.clone(),
         wasm_hashes: wasm_hashes.clone(),
+        slug: slug.clone(),
     }
     .publish(env);
 }

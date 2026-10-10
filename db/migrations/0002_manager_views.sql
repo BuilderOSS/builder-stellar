@@ -23,7 +23,11 @@
 
 -- DaoCreated: topics (token_address, deployer, launch_admin);
 -- data { created_ledger, modules { token, metadata, auction, governor, treasury, marketplace },
---        wasm_hashes { token, metadata, auction, governor, treasury, marketplace } }
+--        wasm_hashes { token, metadata, auction, governor, treasury, marketplace }, slug }
+--
+-- slug is the DAO's human-friendly identifier. The Manager enforces uniqueness
+-- on-chain (SlugTaken), so (deployment_id, slug) is unique; it is NULL only for
+-- DaoCreated events emitted before slugs existed.
 CREATE VIEW manager.dao_registry AS
 SELECT DISTINCT ON (e.deployment_id, e.topic_0)
   e.deployment_id,
@@ -31,6 +35,7 @@ SELECT DISTINCT ON (e.deployment_id, e.topic_0)
   e.topic_0                                   AS token_address,
   e.topic_1                                   AS deployer,
   e.topic_2                                   AS launch_admin,
+  e.args::jsonb ->> 'slug'                    AS slug,
   e.contract_id                               AS manager_contract,
   e.args::jsonb #>> '{modules,token}'         AS token_contract,
   e.args::jsonb #>> '{modules,governor}'      AS governor_contract,
@@ -154,6 +159,7 @@ WITH launched AS (
 SELECT
   r.deployment_id,
   r.dao_id,
+  r.slug,
   r.token_address,
   r.deployer,
   r.launch_admin,

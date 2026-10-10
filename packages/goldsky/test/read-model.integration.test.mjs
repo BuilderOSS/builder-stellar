@@ -103,8 +103,8 @@ function buildScenario() {
   emit('manager', 'CMANAGER', 'current_implementations_updated', {
     data: { token: bytes('aa'), metadata: bytes('cc'), auction: bytes('dd'), governor: bytes('ee'), treasury: bytes('ff'), marketplace: bytes('11') }, ledger: 103
   });
-  emit('manager', 'CMANAGER', 'dao_created', { topics: [addr('CTOK1'), addr('GDEPLOYER'), addr('GLAUNCH')], data: { created_ledger: u64(110), modules: modules(1), wasm_hashes: wasmHashes(1) }, ledger: 110 });
-  emit('manager', 'CMANAGER', 'dao_created', { topics: [addr('CTOK2'), addr('GDEPLOYER2'), addr('GLAUNCH2')], data: { created_ledger: u64(111), modules: modules(2), wasm_hashes: wasmHashes(2) }, ledger: 111 });
+  emit('manager', 'CMANAGER', 'dao_created', { topics: [addr('CTOK1'), addr('GDEPLOYER'), addr('GLAUNCH')], data: { created_ledger: u64(110), modules: modules(1), wasm_hashes: wasmHashes(1), slug: str('dao-one') }, ledger: 110 });
+  emit('manager', 'CMANAGER', 'dao_created', { topics: [addr('CTOK2'), addr('GDEPLOYER2'), addr('GLAUNCH2')], data: { created_ledger: u64(111), modules: modules(2), wasm_hashes: wasmHashes(2), slug: str('dao-two') }, ledger: 111 });
   emit('token', d1.token, 'token_initialized', { topics: [addr('GOWNER')], data: { uri: str('ipfs://alpha'), name: str('Alpha'), symbol: str('ALP'), version: str('0.1.0') }, ledger: 112 });
   emit('metadata', d1.metadata, 'metadata_initialized', {
     topics: [addr(d1.token)],
@@ -347,6 +347,8 @@ test('manager: registry, lifecycle and implementations', { skip }, () => {
   assert.equal(a.dao_id, 'CTOK1');
   assert.equal(a.deployer, 'GDEPLOYER');
   assert.equal(a.launch_admin, 'GLAUNCH');
+  assert.equal(a.slug, 'dao-one');
+  assert.equal(b.slug, 'dao-two');
   assert.deepEqual(
     [a.token_contract, a.governor_contract, a.auction_contract, a.treasury_contract, a.metadata_contract, a.marketplace_contract],
     ['CTOK1', 'CGOV1', 'CAUC1', 'CTRE1', 'CMETA1', 'CMKT1']

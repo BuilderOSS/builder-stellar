@@ -9,7 +9,7 @@ const networkConfigPath = args[2];
  * DAO Deployment Script (hardened-contract flow)
  *
  * Usage:
- *   node scripts/deploy-dao.mjs <create_dao|admin_checklist|launch_dao> <dao-config.json> <network-config.json>
+ *   node scripts/deploy-dao.mjs <create_dao|admin_checklist|launch_dao|bump_slug_ttl> <dao-config.json> <network-config.json>
  *   node scripts/deploy-dao.mjs --validate-only <dao-config.json>      (no network, no artifacts)
  *
  * Three phases, each resumable:
@@ -36,18 +36,23 @@ const networkConfigPath = args[2];
  *    and the Manager's registered PlatformMinter if enable_minter), moves ownership of every module
  *    to the Treasury and deletes the pending state. The Manager has no authority afterwards.
  *
+ * Slug: `slug` in the config is claimed permanently by create_dao (unique per Manager; 4-63 chars of
+ * [a-z0-9-]). create_dao pre-checks that it is free and verifies the registration afterwards. The slug
+ * registry entries expire unless renewed: run the permissionless `bump_slug_ttl` phase periodically
+ * (the network caps each extension at ~180 days). It needs no auth beyond paying the fee.
+ *
  * Prerequisites: Manager deployed with deploy-manager.mjs (which also registers the platform
  * minter used by enable_minter). create_dao requires auth from BOTH deployer and launchAdmin, so the
  * config must use the same address for both (enforced by validation). The identity (DEPLOY_IDENTITY, default <network>-admin) must be
  * the config deployer (create_dao) and launchAdmin (checklist/launch).
  */
 
-const phases = ['create_dao', 'admin_checklist', 'launch_dao'];
+const phases = ['create_dao', 'admin_checklist', 'launch_dao', 'bump_slug_ttl'];
 const validateOnly = args[0] === '--validate-only';
 
 if (validateOnly ? !args[1] : (!phases.includes(phase) || !daoConfigPath || !networkConfigPath)) {
   throw new Error(
-    'Usage: node scripts/deploy-dao.mjs <create_dao|admin_checklist|launch_dao> <dao-config.json> <network-config.json>\n' +
+    'Usage: node scripts/deploy-dao.mjs <create_dao|admin_checklist|launch_dao|bump_slug_ttl> <dao-config.json> <network-config.json>\n' +
       '       node scripts/deploy-dao.mjs --validate-only <dao-config.json>'
   );
 }
@@ -106,6 +111,10 @@ function validateDaoConfig(config) {
   }
   if (!Number.isSafeInteger(config.nonce) || config.nonce < 0) err('nonce must be a non-negative integer');
   for (const key of ['name', 'symbol', 'uri']) str(`token.${key}`, config.token?.[key]);
+  str('slug', config.slug);
+  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(config.slug) || config.slug.length < 4 || config.slug.length > 63) {
+    err('slug must be 4-63 chars of lowercase letters, numbers and single hyphens');
+  }
   for (const key of ['projectUri', 'description', 'contractImage', 'rendererBase']) str(`metadata.${key}`, config.metadata?.[key]);
 
   const gov = config.governance ?? {};
@@ -389,6 +398,7 @@ function initialConfig() {
     description: daoConfig.metadata.description,
     contract_image: daoConfig.metadata.contractImage,
     renderer_base: daoConfig.metadata.rendererBase,
+    slug: daoConfig.slug,
     governance: {
       voting_delay: u32(daoConfig.governance.votingDelay),
       voting_period: u32(daoConfig.governance.votingPeriod),
@@ -420,14 +430,32 @@ let artifact;
 let addresses;
 let transactions = {};
 
+if (phase === 'bump_slug_ttl') {
+  console.log(`\n=== Renewing slug "${daoConfig.slug}" storage TTL ===\n`);
+  invoke(managerAddress, 'bump_slug_ttl', { slug: daoConfig.slug });
+  console.log('Slug TTL renewed.');
+  process.exit(0);
+}
+
 if (phase === 'create_dao') {
   console.log('\n=== Creating DAO (setup window: all modules owned by the launch admin) ===\n');
   requireIdentity('deployer', daoConfig.deployer);
+  // Fail before spending fees if the slug is taken (SlugNotFound / #1202 means it is free).
+  let claimedBy = null;
+  try {
+    claimedBy = invokeView(managerAddress, 'get_dao_by_slug', { slug: daoConfig.slug });
+  } catch (e) {
+    if (!/SlugNotFound|#1202/.test(String(e.message))) throw e;
+  }
+  if (claimedBy) throw new Error(`Slug "${daoConfig.slug}" is already registered to ${claimedBy}; choose another slug in the DAO config`);
   const output = invoke(managerAddress, 'create_dao', {
     params: JSON.stringify({ deployer: daoConfig.deployer, nonce: { u64: String(daoConfig.nonce) }, launch_admin: daoConfig.launchAdmin, initial_config: initialConfig() })
   });
   addresses = addressesFromOutput(output);
   if (!addresses) throw new Error('DAO creation succeeded but DAO addresses could not be parsed');
+  const registered = invokeView(managerAddress, 'get_dao_by_slug', { slug: daoConfig.slug });
+  if (registered !== addresses.token) throw new Error(`Slug "${daoConfig.slug}" resolves to ${registered}, expected ${addresses.token}`);
+  console.log(`Slug "${daoConfig.slug}" registered to ${addresses.token}`);
   transactions.createDao = transaction(output);
   writeArtifact({ status: 'created', addresses, transactions, replaceTransactions: true });
   console.log('Create phase complete. Run admin_checklist next.');

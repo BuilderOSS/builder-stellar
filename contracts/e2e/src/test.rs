@@ -2785,3 +2785,170 @@ fn real_auth_marketplace_primary_and_secondary_flows() {
     marketplace.expire(&nft);
     assert_eq!(token.owner_of(&nft), buyer);
 }
+
+// ---------------------------------------------------------------------------
+// Full factory flow with the real compiled WASM modules
+// ---------------------------------------------------------------------------
+
+/// Upload a compiled module WASM. Build first: `cargo build --release --target
+/// wasm32v1-none -p token -p metadata -p auction -p governor -p treasury -p marketplace`
+/// (or `stellar contract build`).
+fn upload_module_wasm(e: &Env, name: &str) -> BytesN<32> {
+    let path = std::format!(
+        "{}/../../target/wasm32v1-none/release/{name}.wasm",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let bytes = std::fs::read(&path).unwrap_or_else(|err| {
+        panic!("missing {path} ({err}); build the contract WASMs before running dao-e2e")
+    });
+    e.deployer()
+        .upload_contract_wasm(soroban_sdk::Bytes::from_slice(e, &bytes))
+}
+
+fn slug_params(
+    e: &Env,
+    deployer: &Address,
+    nonce: u64,
+    slug: &str,
+    asset: &Address,
+) -> manager::DaoCreationParams {
+    manager::DaoCreationParams {
+        deployer: deployer.clone(),
+        nonce,
+        launch_admin: deployer.clone(),
+        initial_config: manager::InitialDaoConfigValues {
+            token_name: String::from_str(e, "Flow DAO"),
+            token_symbol: String::from_str(e, "FLOW"),
+            token_uri: String::from_str(e, "https://example.com/token/"),
+            project_uri: String::from_str(e, "https://example.com"),
+            description: String::from_str(e, "Full factory flow"),
+            contract_image: String::from_str(e, "https://example.com/image.png"),
+            renderer_base: String::from_str(e, "https://example.com/render/"),
+            slug: String::from_str(e, slug),
+            governance: manager::GovernanceConfig {
+                voting_delay: 300,
+                voting_period: 300,
+                queue_delay: 300,
+                proposal_threshold: 1,
+                quorum_bps: 1000,
+            },
+            auction: manager::AuctionConfig {
+                duration: 300,
+                reserve_price: 10_000_000,
+                time_buffer: 60,
+                payment_asset: asset.clone(),
+            },
+            marketplace: manager::MarketplaceConfig {
+                payment_asset: asset.clone(),
+                secondary_fee_bps: 250,
+            },
+        },
+    }
+}
+
+/// Manager.create_dao -> setup window (founder mint + artwork, launch admin
+/// signs directly) -> Manager.launch_dao, all against the real WASM modules.
+#[test]
+fn full_factory_flow_create_setup_launch_with_slug() {
+    let e = Env::default();
+    e.mock_all_auths();
+    e.ledger().set_sequence_number(100);
+    e.ledger().set_timestamp(1_000);
+    e.cost_estimate().budget().reset_unlimited();
+
+    let admin = Address::generate(&e);
+    let manager_id = e.register(
+        ManagerContract,
+        (
+            admin,
+            BytesN::from_array(&e, &[0; 32]),
+            String::from_str(&e, "0.1.0"),
+        ),
+    );
+    let manager = ManagerContractClient::new(&e, &manager_id);
+
+    let mut hashes = std::vec::Vec::new();
+    for (registry_name, wasm_name) in [
+        ("Token", "token"),
+        ("Metadata", "metadata"),
+        ("Auction", "auction"),
+        ("Governor", "governor"),
+        ("Treasury", "treasury"),
+        ("Marketplace", "marketplace"),
+    ] {
+        let hash = upload_module_wasm(&e, wasm_name);
+        manager.register_implementation(
+            &String::from_str(&e, registry_name),
+            &String::from_str(&e, "0.1.0"),
+            &hash,
+        );
+        hashes.push(hash);
+    }
+    manager.set_current_implementations(
+        &hashes[0], &hashes[1], &hashes[2], &hashes[3], &hashes[4], &hashes[5],
+    );
+
+    let deployer = Address::generate(&e);
+    let asset = e
+        .register_stellar_asset_contract_v2(Address::generate(&e))
+        .address();
+
+    // 1. create_dao claims the slug and leaves a pending DAO.
+    let slug = String::from_str(&e, "flow-dao");
+    let dao = manager.create_dao(&slug_params(&e, &deployer, 1, "flow-dao", &asset));
+    assert!(manager.get_pending_dao(&dao.token).is_some());
+    assert_eq!(manager.get_dao_by_slug(&slug), dao.token);
+    assert_eq!(manager.get_slug(&dao.token), Some(slug.clone()));
+
+    // A second DAO cannot claim the same slug, even from another deployer/nonce.
+    let other = Address::generate(&e);
+    assert_eq!(
+        manager.try_create_dao(&slug_params(&e, &other, 2, "flow-dao", &asset)),
+        Err(Ok(manager::ManagerError::SlugTaken))
+    );
+
+    // 2. Setup window: the launch admin owns every module and signs directly.
+    let token = DaoTokenContractClient::new(&e, &dao.token);
+    assert!(!token.is_live());
+    assert_eq!(token.owner(), deployer);
+    token.mint(&deployer, &deployer);
+    assert_eq!(token.total_supply(), 1);
+
+    let metadata = MetadataContractClient::new(&e, &dao.metadata);
+    metadata.add_properties(
+        &vec![&e, String::from_str(&e, "Background")],
+        &vec![
+            &e,
+            ItemParam {
+                property_id: 0,
+                name: String::from_str(&e, "Blue"),
+                is_new_property: true,
+            },
+        ],
+        &IpfsGroup {
+            base_uri: String::from_str(&e, "ipfs://art"),
+            extension: String::from_str(&e, ".png"),
+        },
+    );
+    assert_eq!(metadata.properties_count(), 1);
+
+    // 3. launch_dao hands every module to the Treasury and clears the pending DAO.
+    manager.launch_dao(
+        &dao.token,
+        &manager::LaunchConfig {
+            launch_auction: true,
+            launch_marketplace: true,
+            enable_minter: false,
+            expected_minter: None,
+        },
+    );
+    assert!(manager.get_pending_dao(&dao.token).is_none());
+    assert!(token.is_live());
+    assert_eq!(token.owner(), dao.treasury);
+
+    // The slug registry is permanent: it outlives the pending record, and its
+    // TTL can be renewed by anyone.
+    manager.bump_slug_ttl(&slug);
+    assert_eq!(manager.get_dao_by_slug(&slug), dao.token);
+    assert_eq!(manager.get_slug(&dao.token), Some(slug));
+}

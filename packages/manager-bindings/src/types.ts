@@ -96,13 +96,26 @@ export const ManagerError = {
    */
   1122 : { message: "PendingDaoUsesRevokedImplementation" },
   /**
+   * Slug is not 4-63 chars of `[a-z0-9-]` without a leading, trailing or
+   * doubled hyphen
+   */
+  1118 : { message: "InvalidSlug" },
+  /**
+   * Slug is already claimed by another DAO
+   */
+  1119 : { message: "SlugTaken" },
+  /**
    * Current implementations not set
    */
   1116 : { message: "CurrentImplementationsNotSet" },
   /**
    * DAO not found
    */
-  1201 : { message: "DaoNotFound" }
+  1201 : { message: "DaoNotFound" },
+  /**
+   * No DAO is registered under this slug
+   */
+  1202 : { message: "SlugNotFound" }
 }
 
 export type ManagerError = typeof ManagerError[keyof typeof ManagerError];
@@ -122,6 +135,10 @@ export interface DaoCreatedEvent {
      * WASM hashes the modules were deployed from.
      */
     wasm_hashes?: DaoWasmHashes;
+    /**
+     * Unique slug claimed for this DAO.
+     */
+    slug?: string;
   };
 }
 
@@ -405,6 +422,10 @@ export interface InitialDaoConfigValues {
   marketplace: MarketplaceConfig;
   project_uri: string;
   renderer_base: string;
+  /**
+   * Unique, permanent, human-friendly DAO identifier (`[a-z0-9-]`, 4-63 chars).
+   */
+  slug: string;
   token_name: string;
   token_symbol: string;
   token_uri: string;

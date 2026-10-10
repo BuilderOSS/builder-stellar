@@ -45,6 +45,9 @@ jobs:
       - name: Run unit tests
         run: cargo test -p token -p governor -p treasury -p auction
 
+      - name: Build module WASMs for E2E
+        run: cargo build --release --target wasm32v1-none -p token -p metadata -p auction -p governor -p treasury -p marketplace
+
       - name: Run E2E tests
         run: cargo test -p dao-e2e
 

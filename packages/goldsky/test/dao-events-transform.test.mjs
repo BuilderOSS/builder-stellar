@@ -887,13 +887,15 @@ test('DaoCreated decodes the nested wasm_hashes struct (map of six BytesN<32>) b
   const { decoded, activity } = run('manager', 'CMANAGER', 'DaoCreated', [A('TOKEN'), A('DEPLOYER'), A('LAUNCH_ADMIN')], {
     created_ledger: { u64: '11' },
     modules: dm({ token: A('TOKEN'), governor: A('GOV') }),
-    wasm_hashes: dm(hashes)
+    wasm_hashes: dm(hashes),
+    slug: { string: 'my-dao' }
   });
   assert.deepEqual(topicsOf(decoded), { token_address: 'TOKEN', deployer: 'DEPLOYER', launch_admin: 'LAUNCH_ADMIN' });
   const args = argsOf(decoded);
   assert.deepEqual(args.wasm_hashes, { token: 'h1', metadata: 'h2', auction: 'h3', governor: 'h4', treasury: 'h5', marketplace: 'h6' });
   assert.equal(args.modules.token, 'TOKEN');
   assert.equal(args.created_ledger, '11');
+  assert.equal(args.slug, 'my-dao');
   assert.equal(activity.kind, 'manager.dao_created');
   assert.equal(activity.visibility, 'public');
 });

@@ -71,6 +71,8 @@ pub struct InitialDaoConfigValues {
     pub description: String,
     pub contract_image: String,
     pub renderer_base: String,
+    /// Unique, permanent, human-friendly DAO identifier (`[a-z0-9-]`, 4-63 chars).
+    pub slug: String,
     pub governance: GovernanceConfig,
     pub auction: AuctionConfig,
     pub marketplace: MarketplaceConfig,
@@ -158,6 +160,10 @@ pub enum ManagerKey {
     PendingDao(Address),
     PendingAdmin,
     PlatformMinter,
+    /// slug -> token address. Permanent; renewed via `bump_slug_ttl`.
+    SlugToDao(String),
+    /// token address -> slug. Permanent; renewed via `bump_slug_ttl`.
+    DaoSlug(Address),
 }
 
 pub fn get_admin(env: &Env) -> Option<Address> {
@@ -210,4 +216,18 @@ pub fn set_persistent<V: IntoVal<Env, Val>>(env: &Env, key: &ManagerKey, value: 
 
 pub fn remove_persistent(env: &Env, key: &ManagerKey) {
     env.storage().persistent().remove(key);
+}
+
+/// Extend a persistent entry's TTL without reading it. No-op when absent.
+pub fn bump_persistent(env: &Env, key: &ManagerKey) {
+    if env.storage().persistent().has(key) {
+        env.storage()
+            .persistent()
+            .extend_ttl(key, TTL_THRESHOLD, TTL_EXTEND_TO);
+    }
+}
+
+/// Whether a live persistent entry exists. Does not extend TTL.
+pub fn has_persistent(env: &Env, key: &ManagerKey) -> bool {
+    env.storage().persistent().has(key)
 }

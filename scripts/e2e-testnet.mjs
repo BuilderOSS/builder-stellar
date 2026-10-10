@@ -361,6 +361,8 @@ function prepareConfigs(ctx) {
     deployer: owner,
     launchAdmin: owner,
     nonce: s.nonce,
+    // Slugs are claimed permanently per Manager, so every rehearsal run needs a fresh one.
+    slug: `e2e-${s.nonce}`,
     founders: [{ address: owner, amount: 3 }, { address: ctx.id('BIDDER_A'), amount: 2 }],
     auction: { ...template.auction, paymentAsset: sac },
     marketplace: { ...template.marketplace, paymentAsset: sac },
@@ -482,6 +484,7 @@ async function createDao(ctx) {
     ctx.check('pending payment assets == native SAC', pending.auction_payment_asset === s.nativeSac && pending.marketplace_payment_asset === s.nativeSac);
   }
   ctx.check('token.is_live == false', view(ctx, dao.token, 'is_live') === false);
+  ctx.check('manager.get_dao_by_slug resolves the slug to the token', view(ctx, s.manager, 'get_dao_by_slug', { slug: s.config.slug }) === dao.token, s.config.slug);
 
   // Pre-launch guards: each simulation must fail with CommonError::NotLive (9001). Nothing is submitted.
   const owner = ctx.id('DAO_OWNER');
@@ -530,6 +533,9 @@ async function launch(ctx) {
     ctx.check(`token.mint_authority(${label}) == ${expected}`, view(ctx, dao.token, 'mint_authority', { authority: addr }) === expected);
   }
   ctx.check('manager.get_pending_dao is gone', view(ctx, s.manager, 'get_pending_dao', { token_address: dao.token }) === null);
+  ctx.check('slug still resolves after launch (registry is permanent)', view(ctx, s.manager, 'get_dao_by_slug', { slug: s.config.slug }) === dao.token, s.config.slug);
+  runScript(ctx, 'deploy-dao.mjs', ['bump_slug_ttl', s.daoConfigPath, s.networkConfigPath], 'DAO_OWNER');
+  ctx.check('deploy-dao.mjs bump_slug_ttl succeeds (permissionless renewal)', true, s.config.slug);
   ctx.check('governor.get_owner == treasury', view(ctx, dao.governor, 'get_owner') === dao.treasury);
   ctx.check('auction.get_owner == treasury', view(ctx, dao.auction, 'get_owner') === dao.treasury);
   ctx.check('treasury.governor == governor', view(ctx, dao.treasury, 'governor') === dao.governor);

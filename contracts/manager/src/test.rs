@@ -312,6 +312,7 @@ fn test_create_dao_when_paused_fails() {
             description: String::from_str(&env, "Test DAO"),
             contract_image: String::from_str(&env, "https://example.com/image.png"),
             renderer_base: String::from_str(&env, "https://example.com/render"),
+            slug: String::from_str(&env, "dao-one"),
             governance: crate::storage::GovernanceConfig {
                 voting_delay: 1,
                 voting_period: 1,
@@ -658,6 +659,26 @@ fn register_stub_implementations(env: &Env, client: &ManagerContractClient) {
     );
 }
 
+/// Unique per-nonce slug ("dao-<nonce>") so tests can create many DAOs.
+fn slug_for_nonce(env: &Env, nonce: u64) -> String {
+    let mut digits = [0u8; 20];
+    let mut n = nonce;
+    let mut i = digits.len();
+    loop {
+        i -= 1;
+        digits[i] = b'0' + (n % 10) as u8;
+        n /= 10;
+        if n == 0 {
+            break;
+        }
+    }
+    let mut buf = [0u8; 24];
+    buf[..4].copy_from_slice(b"dao-");
+    let d = &digits[i..];
+    buf[4..4 + d.len()].copy_from_slice(d);
+    String::from_bytes(env, &buf[..4 + d.len()])
+}
+
 fn dao_params(env: &Env, deployer: &Address, nonce: u64) -> DaoCreationParams {
     DaoCreationParams {
         deployer: deployer.clone(),
@@ -671,6 +692,7 @@ fn dao_params(env: &Env, deployer: &Address, nonce: u64) -> DaoCreationParams {
             description: String::from_str(env, "Test DAO"),
             contract_image: String::from_str(env, "https://example.com/image.png"),
             renderer_base: String::from_str(env, "https://example.com/render"),
+            slug: slug_for_nonce(env, nonce),
             governance: GovernanceConfig {
                 voting_delay: 300,
                 voting_period: 300,
@@ -851,7 +873,13 @@ fn test_instance_entry_size_constant_across_500_create_dao() {
     // Pending entries live in persistent storage and remain readable.
     let first = client.predict_addresses(&deployer, &0u64);
     assert!(client.get_pending_dao(&first.token).is_some());
-    assert!(client.get_pending_dao(&last.unwrap().token).is_some());
+    let last = last.unwrap();
+    assert!(client.get_pending_dao(&last.token).is_some());
+    // Every DAO owns a distinct slug; first and last resolve both ways.
+    for dao in [&first, &last] {
+        let slug = client.get_slug(&dao.token).expect("slug registered");
+        assert_eq!(client.get_dao_by_slug(&slug), dao.token);
+    }
 }
 
 #[test]
@@ -1875,6 +1903,7 @@ fn create_dao_emits_dao_created_with_module_wasm_hashes() {
             treasury: hash_of("Treasury"),
             marketplace: hash_of("Marketplace"),
         },
+        slug: String::from_str(&env, "dao-7"),
     }
     .to_xdr(&env, &client.address);
     assert!(emitted.events().contains(&expected));
@@ -2274,4 +2303,100 @@ mod launch_revocation {
             );
         }
     }
+}
+
+// ============================================================================
+// Slug registry
+// ============================================================================
+
+fn params_with_slug(env: &Env, nonce: u64, slug: &str) -> DaoCreationParams {
+    let deployer = Address::generate(env);
+    let mut p = dao_params(env, &deployer, nonce);
+    p.initial_config.slug = String::from_str(env, slug);
+    p
+}
+
+#[test]
+fn slug_is_registered_and_resolves_both_ways() {
+    let (env, client, _a) = setup();
+    register_stub_implementations(&env, &client);
+    env.mock_all_auths();
+    let addrs = client.create_dao(&params_with_slug(&env, 1, "nouns-builders"));
+    let slug = String::from_str(&env, "nouns-builders");
+    assert_eq!(client.get_dao_by_slug(&slug), addrs.token);
+    assert_eq!(client.get_slug(&addrs.token), Some(slug));
+}
+
+#[test]
+fn duplicate_slug_is_rejected() {
+    let (env, client, _a) = setup();
+    register_stub_implementations(&env, &client);
+    env.mock_all_auths();
+    client.create_dao(&params_with_slug(&env, 1, "taken"));
+    assert_eq!(
+        client.try_create_dao(&params_with_slug(&env, 2, "taken")),
+        Err(Ok(crate::ManagerError::SlugTaken))
+    );
+}
+
+#[test]
+fn invalid_slugs_are_rejected() {
+    let (env, client, _a) = setup();
+    register_stub_implementations(&env, &client);
+    env.mock_all_auths();
+    for bad in [
+        "abc",
+        "-abc",
+        "abc-",
+        "a--b",
+        "Abc",
+        "ab_c",
+        "ab c",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    ] {
+        assert_eq!(
+            client.try_create_dao(&params_with_slug(&env, 1, bad)),
+            Err(Ok(crate::ManagerError::InvalidSlug)),
+            "{bad}"
+        );
+    }
+    client.create_dao(&params_with_slug(&env, 1, "a-b-1"));
+    client.create_dao(&params_with_slug(&env, 2, "abcd"));
+    client.create_dao(&params_with_slug(
+        &env,
+        3,
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    ));
+}
+
+#[test]
+fn unknown_slug_is_not_found_and_bump_requires_registration() {
+    let (env, client, _a) = setup();
+    let slug = String::from_str(&env, "nope");
+    assert_eq!(
+        client.try_get_dao_by_slug(&slug),
+        Err(Ok(crate::ManagerError::SlugNotFound))
+    );
+    assert_eq!(
+        client.try_bump_slug_ttl(&slug),
+        Err(Ok(crate::ManagerError::SlugNotFound))
+    );
+}
+
+#[test]
+fn slug_survives_ttl_bump_past_original_expiry() {
+    use soroban_sdk::testutils::Ledger;
+    let (env, client, _a) = setup();
+    register_stub_implementations(&env, &client);
+    env.mock_all_auths();
+    let addrs = client.create_dao(&params_with_slug(&env, 1, "durable"));
+    let slug = String::from_str(&env, "durable");
+    let step = 100 * 17_280;
+    for _ in 0..3 {
+        env.ledger().with_mut(|l| l.sequence_number += step);
+        client.bump_slug_ttl(&slug); // permissionless, no auth
+        client.get_pending_dao(&addrs.token);
+    }
+    assert_eq!(client.get_dao_by_slug(&slug), addrs.token);
+    assert_eq!(client.get_slug(&addrs.token), Some(slug));
 }

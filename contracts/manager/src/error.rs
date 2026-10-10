@@ -81,6 +81,13 @@ pub enum ManagerError {
     /// before launching
     PendingDaoUsesRevokedImplementation = 1122,
 
+    /// Slug is not 4-63 chars of `[a-z0-9-]` without a leading, trailing or
+    /// doubled hyphen
+    InvalidSlug = 1118,
+
+    /// Slug is already claimed by another DAO
+    SlugTaken = 1119,
+
     /// Current implementations not set
     CurrentImplementationsNotSet = 1116,
 
@@ -89,4 +96,7 @@ pub enum ManagerError {
     // ========================================================================
     /// DAO not found
     DaoNotFound = 1201,
+
+    /// No DAO is registered under this slug
+    SlugNotFound = 1202,
 }

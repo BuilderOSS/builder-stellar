@@ -34,6 +34,10 @@ const MIN_GOVERNANCE_DELAY: u64 = 300;
 /// depend on the governor crate.
 const MAX_GOVERNANCE_DELAY: u32 = 2_592_000;
 const MAX_BPS: u32 = 10_000;
+/// Min 4 so only meaningful slugs are used; max 63 is the DNS label limit
+/// (leaves room for `<slug>.example.com` subdomains later).
+const MIN_SLUG_LENGTH: u32 = 4;
+const MAX_SLUG_LENGTH: u32 = 63;
 
 #[contractimpl]
 impl ManagerContract {
@@ -523,6 +527,10 @@ impl ManagerContract {
 
         // Validate and extract configuration
         Self::validate_initial_config(&params.initial_config)?;
+        let slug = params.initial_config.slug.clone();
+        if has_persistent(&env, &ManagerKey::SlugToDao(slug.clone())) {
+            return Err(ManagerError::SlugTaken);
+        }
         let (
             token_name,
             token_symbol,
@@ -742,6 +750,9 @@ impl ManagerContract {
         // One persistent entry per pending DAO; no expiry semantics. Archived
         // entries are restorable, so an abandoned creation only costs its creator's rent.
         set_persistent(&env, &ManagerKey::PendingDao(token_addr.clone()), &pending);
+        // Permanent slug registry (never removed at launch); renewed via `bump_slug_ttl`.
+        set_persistent(&env, &ManagerKey::SlugToDao(slug.clone()), &token_addr);
+        set_persistent(&env, &ManagerKey::DaoSlug(token_addr.clone()), &slug);
 
         // Emit events
         emit_dao_created(
@@ -752,6 +763,7 @@ impl ManagerContract {
             env.ledger().sequence() as u64,
             &addresses,
             &wasm_hashes,
+            &slug,
         );
 
         Ok(addresses)
@@ -888,6 +900,46 @@ impl ManagerContract {
     pub fn get_pending_dao(env: Env, token_address: Address) -> Option<PendingDao> {
         extend_instance_ttl(&env);
         get_persistent(&env, &ManagerKey::PendingDao(token_address))
+    }
+
+    /// Token address registered under `slug`.
+    ///
+    /// Plain read: does not extend TTL (renewal is explicit via `bump_slug_ttl`).
+    pub fn get_dao_by_slug(env: Env, slug: String) -> Result<Address, ManagerError> {
+        extend_instance_ttl(&env);
+        env.storage()
+            .persistent()
+            .get(&ManagerKey::SlugToDao(slug))
+            .ok_or(ManagerError::SlugNotFound)
+    }
+
+    /// Slug registered for a DAO's token address, if any.
+    pub fn get_slug(env: Env, token_address: Address) -> Option<String> {
+        extend_instance_ttl(&env);
+        env.storage()
+            .persistent()
+            .get(&ManagerKey::DaoSlug(token_address))
+    }
+
+    /// Permissionless TTL renewal for a DAO's slug registry entries.
+    ///
+    /// Anyone (DAO operators, the platform admin) can pay to keep a slug live.
+    /// The network clamps `extend_to` to its max entry TTL (~180 days), so call
+    /// this periodically. Archived entries must be restored first.
+    ///
+    /// # Errors
+    ///
+    /// * `SlugNotFound` - no DAO is registered under this slug
+    pub fn bump_slug_ttl(env: Env, slug: String) -> Result<(), ManagerError> {
+        extend_instance_ttl(&env);
+        let token: Address = env
+            .storage()
+            .persistent()
+            .get(&ManagerKey::SlugToDao(slug.clone()))
+            .ok_or(ManagerError::SlugNotFound)?;
+        bump_persistent(&env, &ManagerKey::SlugToDao(slug));
+        bump_persistent(&env, &ManagerKey::DaoSlug(token));
+        Ok(())
     }
 
     /// Predict DAO addresses without deploying.
@@ -1170,6 +1222,32 @@ impl ManagerContract {
         Ok(())
     }
 
+    // TODO(pricing): before production, decide whether slugs should cost something
+    // (ENS-style length-tiered rent, admin-managed reserve for brands). Today the
+    // only cost is the create fee plus rent, which does not scale with a slug's value.
+    fn validate_slug(slug: &String) -> Result<(), ManagerError> {
+        let len = slug.len();
+        if !(MIN_SLUG_LENGTH..=MAX_SLUG_LENGTH).contains(&len) {
+            return Err(ManagerError::InvalidSlug);
+        }
+        let mut buf = [0u8; MAX_SLUG_LENGTH as usize];
+        let bytes = &mut buf[..len as usize];
+        slug.copy_into_slice(bytes);
+        let mut prev_hyphen = true; // rejects a leading hyphen
+        for &b in bytes.iter() {
+            let hyphen = b == b'-';
+            if !(b.is_ascii_lowercase() || b.is_ascii_digit() || hyphen) || (hyphen && prev_hyphen)
+            {
+                return Err(ManagerError::InvalidSlug);
+            }
+            prev_hyphen = hyphen;
+        }
+        if prev_hyphen {
+            return Err(ManagerError::InvalidSlug); // trailing hyphen
+        }
+        Ok(())
+    }
+
     fn validate_initial_config(config: &InitialDaoConfigValues) -> Result<(), ManagerError> {
         for value in [
             &config.token_name,
@@ -1182,6 +1260,7 @@ impl ManagerContract {
         ] {
             Self::validate_string(value)?;
         }
+        Self::validate_slug(&config.slug)?;
 
         if u64::from(config.governance.voting_delay) < MIN_GOVERNANCE_DELAY
             || u64::from(config.governance.voting_period) < MIN_GOVERNANCE_DELAY

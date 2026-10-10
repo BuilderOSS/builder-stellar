@@ -60,7 +60,7 @@ test('data fields of new and changed events match events.rs', () => {
     assert.deepEqual(e[`${role}:Upgraded`].data, ['version'], `${role}:Upgraded`);
     assert.deepEqual(e[`${role}:VersionSynced`].data, ['version'], `${role}:VersionSynced`);
   }
-  assert.deepEqual(e['manager:DaoCreated'].data, ['created_ledger', 'modules', 'wasm_hashes']);
+  assert.deepEqual(e['manager:DaoCreated'].data, ['created_ledger', 'modules', 'wasm_hashes', 'slug']);
   assert.deepEqual(e['manager:AdminProposalCancelled'].data, []);
   assert.deepEqual(e['metadata:PropertiesReset'].data, ['old_num_properties']);
   assert.deepEqual(e['auction:RefundDeferred'].data, ['amount']);
