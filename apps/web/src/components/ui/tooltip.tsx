@@ -3,6 +3,7 @@
 import { Portal } from '@ark-ui/react/portal';
 import { Tooltip as ArkTooltip } from '@ark-ui/react/tooltip';
 import type { ReactNode } from 'react';
+import { useId } from 'react';
 import { css } from 'styled-system/css';
 
 const content = css({
@@ -39,10 +40,12 @@ export function Tooltip({
   /** Stable id for tooltips in persistent chrome (avoids SSR id drift). */
   id?: string;
 }) {
+  // Ark needs a defined id; passing undefined would override its own default.
+  const fallbackId = useId();
   if (disabled) return <>{children}</>;
   return (
     <ArkTooltip.Root
-      id={id}
+      id={id ?? fallbackId}
       openDelay={400}
       closeDelay={80}
       positioning={{ placement, gutter: 8 }}

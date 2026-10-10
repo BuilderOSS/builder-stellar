@@ -2,6 +2,7 @@
 
 import { SegmentGroup } from '@ark-ui/react/segment-group';
 import type { ReactNode } from 'react';
+import { useId } from 'react';
 import { sva } from 'styled-system/css';
 
 const segmented = sva({
@@ -97,10 +98,12 @@ export function SegmentedControl({
   /** Stable id for server-rendered pages, so Ark's generated ids hydrate identically. */
   id?: string;
 }) {
+  // Ark needs a defined id; passing undefined would override its own default.
+  const fallbackId = useId();
   const classes = segmented({ fill });
   return (
     <SegmentGroup.Root
-      id={id}
+      id={id ?? fallbackId}
       className={classes.root}
       value={value}
       onValueChange={(details) => {
