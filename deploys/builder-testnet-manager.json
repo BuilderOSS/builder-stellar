@@ -12,7 +12,7 @@
   "minter": "CC5TEMQCHDJ2MNR25NZVFNSAHKAHD43MVU47PZIAPCT5ODLYVEJWYB6R",
   "implementations": {
     "manager": "e5c3ec1f67e587446e6883c20a3e1b55a8e73c6119c35bf9d1cd4e8c7d22b402",
-    "token": "3e44c30029436c92b2ee8a8c1c896a211e376eec217d841e29f9523acf9b9311",
+    "token": "c5a5c73888cb08cb88b76ea3b9f8156100aa8f755cb872cf2043ab7100b4067c",
     "metadata": "e1aec5e86af009148e323f2707a2a6ab67c2f15e4b71a548d712286b692420a2",
     "auction": "1ba75578710683325476e5ad404b649d17e1cf7afdc1eb17d38815d34c07f107",
     "governor": "5d14e140701fa9ac7e07695d371166a481d575bcb595b9cceafce94177925b40",
@@ -22,7 +22,7 @@
   },
   "versions": {
     "manager": "0.1.0",
-    "token": "0.1.0",
+    "token": "0.2.0",
     "metadata": "0.1.0",
     "auction": "0.1.0",
     "governor": "0.1.0",
@@ -38,5 +38,26 @@
       "txHash": "10e667f203142603307d727d88dc81a934a7e6ee60139174603c8883567e1ea8",
       "ledger": 5117938
     }
-  }
+  },
+  "upgrades": [
+    {
+      "module": "token",
+      "from": "3e44c30029436c92b2ee8a8c1c896a211e376eec217d841e29f9523acf9b9311",
+      "to": "c5a5c73888cb08cb88b76ea3b9f8156100aa8f755cb872cf2043ab7100b4067c",
+      "version": "0.2.0",
+      "registeredLedger": 5124999,
+      "latestAndCurrentSet": true,
+      "date": "2026-10-10",
+      "daos": [
+        {
+          "dao": "CDK3TSVJRME7EW2U35JGBHTO3XXDX6UZ4MFTZIXVWBSKUL4QTR7CZTR6",
+          "proposal": "bee0582d7a0d6e40409bab4bd4aa0e339099bc5bb290add2684d5b1d3397881d",
+          "proposeTx": "11da7625f8b503cff12e1ae6cea2f74ae198a505ebc51ba37c2b097a1d6e76e3",
+          "voteTx": "61b3f920f0445b58893c6b05116c7aa6f42e729b58f04c4e2f7f55d5616c36df",
+          "queueTx": "7b0a164915e90c6e22130793f9690cb9e917bb6b307498d27bc30b1163567fd2",
+          "executeTx": "438a0809bf104294d215b7cade074c484e3b39ea00c94eaca615bdb9156fa251"
+        }
+      ]
+    }
+  ]
 }
