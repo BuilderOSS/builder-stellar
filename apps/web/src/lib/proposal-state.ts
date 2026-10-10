@@ -40,25 +40,22 @@ export function proposalActionMode(state: ProposalState | null | undefined): Pro
   }
 }
 
-export function proposalStateBadgeStyle(label: string) {
+export type ProposalStateTone = 'live' | 'success' | 'warning' | 'danger' | 'neutral';
+
+/** Chip tone for a proposal state label (always shown with its word). */
+export function proposalStateTone(label: string): ProposalStateTone {
   switch (label) {
     case 'Pending':
-      return { background: '#dbeafe', color: '#1d4ed8' };
     case 'Active':
-      return { background: '#dbeafe', color: '#1d4ed8' };
-    case 'Defeated':
-      return { background: '#fee2e2', color: '#991b1b' };
+      return 'live';
     case 'Succeeded':
-      return { background: '#dcfce7', color: '#166534' };
-    case 'Queued':
-      return { background: '#fef3c7', color: '#92400e' };
-    case 'Expired':
-      return { background: '#f3f4f6', color: '#4b5563' };
     case 'Executed':
-      return { background: '#dcfce7', color: '#166534' };
-    case 'Canceled':
-      return { background: '#f3f4f6', color: '#4b5563' };
+      return 'success';
+    case 'Queued':
+      return 'warning';
+    case 'Defeated':
+      return 'danger';
     default:
-      return { background: '#f3f4f6', color: '#374151' };
+      return 'neutral';
   }
 }

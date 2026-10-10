@@ -95,7 +95,7 @@ export function DaoShell({ children }: { children: ReactNode }) {
         <NavRail
           label={`${name} sections`}
           top={
-            <Tooltip content="Builder home" placement="right">
+            <Tooltip content="Builder home" placement="right" id="rail-builder-home">
               <NextLink href="/" className={homeMark} aria-label="Builder home">
                 <BrandMark size={36} />
               </NextLink>

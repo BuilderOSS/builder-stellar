@@ -1,38 +1,13 @@
 import { ArrowUpRight } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Grid, HStack, Stack } from 'styled-system/jsx';
+import { css } from 'styled-system/css';
 
-import { Card, Heading, IconLinkButton, ShortId, Text } from '@/components/ui';
+import { Address, Countdown, Disclosure, Section } from '@/components/ui';
 import type { DaoNetworkName } from '@/lib/dao-config';
 import { getExplorerLedgerUrl } from '@/lib/explorer-links';
 import { ProposalState } from '@/lib/proposal-state';
 
-import { ProposalStateBadge } from './proposal-state-badge';
 import type { ProposalDetail } from './types';
-
-type ProposalOverviewProps = {
-  detail: ProposalDetail;
-  network: DaoNetworkName;
-};
-
-type ProposalLifecyclePanelProps = {
-  detail: ProposalDetail;
-  now: number;
-  actionSlot?: ReactNode;
-};
-
-function formatCountdown(target: number, now: number) {
-  if (!target) return '—';
-  const delta = Math.max(0, target - Math.floor(now / 1000));
-  const days = Math.floor(delta / 86400);
-  const hours = Math.floor((delta % 86400) / 3600);
-  const minutes = Math.floor((delta % 3600) / 60);
-  const seconds = delta % 60;
-
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
-}
 
 function formatDateTime(timestamp: number) {
   if (!timestamp) return '—';
@@ -49,197 +24,180 @@ function hasValidTimestamp(value: number) {
   return Number.isFinite(value) && value > 0;
 }
 
-function getLifecycleSummary(detail: ProposalDetail, now: number) {
+type Lifecycle = { label: string; headline: ReactNode; subline: string };
+
+function getLifecycleSummary(detail: ProposalDetail, now: number): Lifecycle {
   switch (detail.state) {
     case ProposalState.Pending:
-      const startTime = detail.vote_start;
       return {
-        eyebrow: 'Voting starts',
-        headline: hasValidTimestamp(startTime)
-          ? `Voting starts in ${formatCountdown(startTime, now)}`
-          : 'Voting has not started yet',
-        subline: hasValidTimestamp(startTime)
-          ? `Opens ${formatDateTime(startTime)}`
-          : 'Waiting for the voting schedule to become available.'
+        label: 'Voting opens soon',
+        headline: hasValidTimestamp(detail.vote_start) ? (
+          <>
+            Opens in <Countdown endsAt={detail.vote_start} endedLabel="a moment" />
+          </>
+        ) : (
+          'Voting has not started yet'
+        ),
+        subline: hasValidTimestamp(detail.vote_start)
+          ? `Opens ${formatDateTime(detail.vote_start)}`
+          : 'Waiting for the voting schedule.'
       };
     case ProposalState.Active:
       return {
-        eyebrow: 'Voting ends',
-        headline: hasValidTimestamp(detail.vote_end)
-          ? `Voting ends in ${formatCountdown(detail.vote_end, now)}`
-          : 'Voting is active',
+        label: 'Voting open',
+        headline: hasValidTimestamp(detail.vote_end) ? (
+          <>
+            <Countdown endsAt={detail.vote_end} endedLabel="Closing" /> left to vote
+          </>
+        ) : (
+          'Voting is open'
+        ),
         subline: hasValidTimestamp(detail.vote_end)
           ? `Closes ${formatDateTime(detail.vote_end)}`
-          : 'Voting end time is not available.'
+          : 'The closing time is unavailable.'
       };
     case ProposalState.Succeeded:
       if (detail.expiresAt && now >= detail.expiresAt * 1000)
         return {
-          eyebrow: 'Queue window closed',
-          headline: 'Refreshing proposal state',
-          subline: 'The deadline to queue this proposal has passed. Queueing is disabled.'
+          label: 'Queue window closed',
+          headline: 'Checking the latest state',
+          subline: 'The deadline to queue this proposal has passed.'
         };
       return {
-        eyebrow: 'Ready to queue',
-        headline: `Voting ended ${formatDateTime(detail.vote_end)}`,
-        subline: 'This proposal can now be queued for execution.'
+        label: 'Passed',
+        headline: 'The vote passed',
+        subline: 'Next, anyone can queue it. A short safety delay follows before it can run.'
       };
     case ProposalState.Queued:
       if (!detail.eta)
         return {
-          eyebrow: 'Queued',
-          headline: 'Execution timing unavailable',
-          subline: 'Waiting for the indexed ETA or chain storage to become available.'
+          label: 'Queued',
+          headline: 'Waiting for its execution time',
+          subline: 'The execution time is not available yet.'
         };
       if (detail.expiresAt && now >= detail.expiresAt * 1000)
         return {
-          eyebrow: 'Execution window closed',
-          headline: 'Refreshing proposal state',
-          subline: 'The execution window has expired. Execution is disabled.'
+          label: 'Execution window closed',
+          headline: 'Checking the latest state',
+          subline: 'The window to execute this proposal has passed.'
         };
       if (hasValidTimestamp(detail.eta) && detail.eta > Math.floor(now / 1000)) {
         return {
-          eyebrow: 'Execution scheduled',
-          headline: `Executable in ${formatCountdown(detail.eta, now)}`,
-          subline: `ETA ${formatDateTime(detail.eta)}`
+          label: 'Safety delay',
+          headline: (
+            <>
+              Can run in <Countdown endsAt={detail.eta} endedLabel="a moment" />
+            </>
+          ),
+          subline: `Ready ${formatDateTime(detail.eta)}`
         };
       }
-
       return {
-        eyebrow: 'Ready to execute',
-        headline: 'Ready to execute now',
-        subline: detail.eta ? `ETA was ${formatDateTime(detail.eta)}` : 'The queued proposal can now be executed.'
+        label: 'Ready',
+        headline: 'Ready to execute',
+        subline: 'The safety delay is over. Anyone can run it now.'
       };
     case ProposalState.Defeated:
       return {
-        eyebrow: 'Finalized',
-        headline: 'Proposal defeated',
-        subline: hasValidTimestamp(detail.vote_end)
-          ? `Voting ended ${formatDateTime(detail.vote_end)}`
-          : 'No further action is available.'
+        label: 'Closed',
+        headline: "The vote didn't pass",
+        subline: hasValidTimestamp(detail.vote_end) ? `Voting closed ${formatDateTime(detail.vote_end)}` : 'Closed.'
       };
     case ProposalState.Canceled:
-      return {
-        eyebrow: 'Finalized',
-        headline: 'Proposal canceled',
-        subline: 'This proposal was canceled and is no longer actionable.'
-      };
+      return { label: 'Closed', headline: 'Canceled', subline: 'The proposer withdrew this proposal.' };
     case ProposalState.Expired:
-      return {
-        eyebrow: 'Finalized',
-        headline: 'Proposal expired',
-        subline: 'This proposal expired before it could be completed.'
-      };
+      return { label: 'Closed', headline: 'Expired', subline: 'It passed, but was not executed in time.' };
     case ProposalState.Executed:
-      return {
-        eyebrow: 'Finalized',
-        headline: 'Proposal executed',
-        subline: 'Execution has completed. No further action is available.'
-      };
+      return { label: 'Done', headline: 'Executed', subline: 'Every action in this proposal has run.' };
     default:
-      return {
-        eyebrow: 'Timeline',
-        headline: 'Not available',
-        subline: 'Timeline information is unavailable.'
-      };
+      return { label: 'Status', headline: 'Status unavailable', subline: 'Try refreshing in a moment.' };
   }
 }
 
-export function ProposalOverview({ detail, network }: ProposalOverviewProps) {
+const body = css({
+  textStyle: 'body',
+  fontSize: '1rem',
+  lineHeight: '1.7',
+  color: 'ink',
+  m: '0',
+  whiteSpace: 'pre-wrap',
+  overflowWrap: 'anywhere'
+});
+const link = css({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '1',
+  color: 'signal',
+  textStyle: 'label',
+  overflowWrap: 'anywhere',
+  '& svg': { width: '4', height: '4', flexShrink: '0' }
+});
+const facts = css({ display: 'grid', gap: '3' });
+const fact = css({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '3' });
+const factLabel = css({ textStyle: 'caption', color: 'ink.muted' });
+
+export function ProposalOverview({ detail, network }: { detail: ProposalDetail; network: DaoNetworkName }) {
   return (
-    <Stack gap="3">
-      <Card p="5">
-        <Stack gap="3">
-          <div>
-            <ProposalStateBadge label={detail.label} />
-          </div>
-          <Stack gap="1">
-            <Text className="label">Proposed by</Text>
-            <ShortId value={detail.proposer} />
-          </Stack>
-        </Stack>
-      </Card>
-
-      <Grid columns={{ base: 1, lg: 3 }} gap="3">
-        <Card p="4" style={{ border: '1px solid rgba(160, 194, 225, 0.18)' }}>
-          <HStack gap="2" justify="space-between">
-            <div style={{ minWidth: 0 }}>
-              <Text className="label">Snapshot</Text>
-              <Text className="lede" style={{ margin: 0, fontSize: '1rem' }}>
-                Ledger #{detail.vote_snapshot}
-              </Text>
-            </div>
-            <IconLinkButton href={getExplorerLedgerUrl(network, detail.vote_snapshot)} label="Open in Stellar Expert">
-              <ArrowUpRight size={12} />
-            </IconLinkButton>
-          </HStack>
-        </Card>
-        <Card p="4" style={{ border: '1px solid rgba(160, 194, 225, 0.18)' }}>
-          <Stack gap="1">
-            <Text className="label">Proposer</Text>
-            <ShortId value={detail.proposer} />
-          </Stack>
-        </Card>
-        <Card p="4" style={{ border: '1px solid rgba(160, 194, 225, 0.18)' }}>
-          <ShortId value={detail.proposalId} label="Proposal id" />
-        </Card>
-      </Grid>
-
-      <Card p="4" style={{ border: '1px solid rgba(160, 194, 225, 0.18)', background: 'rgba(157, 179, 203, 0.06)' }}>
-        <Stack gap="3">
-          <Stack gap="1">
-            <Text className="label">Description</Text>
-            <Text
-              className="lede"
-              style={{
-                lineHeight: 1.65,
-                margin: 0,
-                overflowWrap: 'anywhere',
-                whiteSpace: 'pre-wrap'
-              }}
+    <Section title="The proposal">
+      <p className={body}>{detail.metadata.description || 'No description was given.'}</p>
+      {detail.metadata.url ? (
+        <a href={detail.metadata.url} target="_blank" rel="noreferrer" className={link}>
+          {detail.metadata.url}
+          <ArrowUpRight aria-hidden="true" />
+        </a>
+      ) : null}
+      <Disclosure title="Technical details">
+        <div className={facts}>
+          <Address value={detail.proposer} label="Proposed by" />
+          <Address value={detail.proposalId} label="Proposal id" />
+          <div className={fact}>
+            <span className={factLabel}>Voting power snapshot</span>
+            <a
+              href={getExplorerLedgerUrl(network, detail.vote_snapshot)}
+              target="_blank"
+              rel="noreferrer"
+              className={link}
             >
-              {detail.metadata.description || 'No description provided.'}
-            </Text>
-          </Stack>
-          {detail.metadata.url ? (
-            <Stack gap="1">
-              <Text className="label">Reference link</Text>
-              <a
-                href={detail.metadata.url}
-                target="_blank"
-                rel="noreferrer"
-                style={{ color: 'inherit', overflowWrap: 'anywhere' }}
-              >
-                {detail.metadata.url}
-              </a>
-            </Stack>
-          ) : null}
-        </Stack>
-      </Card>
-    </Stack>
+              Ledger {detail.vote_snapshot}
+              <ArrowUpRight aria-hidden="true" />
+            </a>
+          </div>
+        </div>
+      </Disclosure>
+    </Section>
   );
 }
 
-export function ProposalLifecyclePanel({ detail, now, actionSlot }: ProposalLifecyclePanelProps) {
-  const lifecycle = getLifecycleSummary(detail, now);
+const panel = css({ display: 'grid', gap: '4', p: '5', borderRadius: 'card', bg: 'surface', boxShadow: 'raised' });
+const label = css({ textStyle: 'label', color: 'ink.muted', m: '0' });
+const headline = css({ textStyle: 'title', fontSize: '1.375rem', m: '0', fontVariantNumeric: 'tabular-nums' });
+const subline = css({ textStyle: 'caption', color: 'ink.muted', m: '0', mt: '1' });
+const slot = css({ borderTopWidth: '1px', borderColor: 'rule', pt: '4' });
 
+/** Where the proposal is in its life, and the one action available now. */
+export function ProposalLifecyclePanel({
+  detail,
+  now,
+  actionSlot
+}: {
+  detail: ProposalDetail;
+  now: number;
+  actionSlot?: ReactNode;
+}) {
+  const lifecycle = getLifecycleSummary(detail, now);
   return (
-    <Card p="5" style={{ background: 'rgba(157, 179, 203, 0.08)', border: '1px solid rgba(157, 179, 203, 0.18)' }}>
-      <Stack gap="4">
-        <Stack gap="1">
-          <Text className="label">{lifecycle.eyebrow}</Text>
-          <Heading style={{ fontSize: '1.35rem' }}>{lifecycle.headline}</Heading>
-          <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-            {lifecycle.subline}
-          </Text>
-          {detail.stateSource === 'indexed' ? (
-            <Text>Indexed state only; chain state is unavailable. Actions are disabled until refreshed.</Text>
-          ) : null}
-        </Stack>
-        {actionSlot ? (
-          <div style={{ borderTop: '1px solid rgba(160, 194, 225, 0.18)', paddingTop: '16px' }}>{actionSlot}</div>
+    <section className={panel} aria-labelledby="proposal-lifecycle">
+      <div>
+        <p className={label}>{lifecycle.label}</p>
+        <h2 id="proposal-lifecycle" className={headline}>
+          {lifecycle.headline}
+        </h2>
+        <p className={subline}>{lifecycle.subline}</p>
+        {detail.stateSource === 'indexed' ? (
+          <p className={subline}>Live chain state is unavailable, so actions are paused until it refreshes.</p>
         ) : null}
-      </Stack>
-    </Card>
+      </div>
+      {actionSlot ? <div className={slot}>{actionSlot}</div> : null}
+    </section>
   );
 }

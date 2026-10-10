@@ -139,7 +139,7 @@ export function NavRail({
     const active = item.key === activeKey;
     return (
       <li key={item.key}>
-        <Tooltip content={item.label} placement="right">
+        <Tooltip content={item.label} placement="right" id={`rail-${item.key}`}>
           <NextLink
             href={item.href as Route}
             className={classes.item}

@@ -1,626 +1,303 @@
 'use client';
 
-import { Activity, ChevronDown, RefreshCw } from 'lucide-react';
-import type { Route } from 'next';
-import Link from 'next/link';
+import { RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Stack } from 'styled-system/jsx';
+import { css } from 'styled-system/css';
 import useSWR from 'swr';
 
+import { ActivityList } from '@/components/activity/activity-list';
 import { DaoContractList } from '@/components/dao-contract-list';
+import { MembershipCard } from '@/components/dao-home/membership-card';
+import { type HomeAuction, NowCard } from '@/components/dao-home/now-card';
 import { LaunchChecklist } from '@/components/launch-checklist';
-import { LocalHomeDao } from '@/components/local-workspace/home-dao';
-import { PageSection } from '@/components/page-section';
-import { ProposalStateBadge } from '@/components/proposal/proposal-state-badge';
+import { ProposalRow } from '@/components/proposal/proposal-row';
 import type { ProposalListResponse } from '@/components/proposal/types';
 import { TokenCard } from '@/components/token/token-card';
-import { Button, Callout, Card, Heading, Skeleton, Text } from '@/components/ui';
+import {
+  Button,
+  ButtonLink,
+  Callout,
+  Chip,
+  Crest,
+  CrestStripe,
+  Disclosure,
+  EmptyState,
+  Section,
+  Skeleton,
+  Text
+} from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { useIsLaunchAdmin } from '@/hooks/useIsLaunchAdmin';
-import { formatActivity, relativeTime } from '@/lib/activity-feed';
+import { getTreasuryAssets } from '@/lib/assets-config';
+import { daoRoute } from '@/lib/dao-routes';
 import { useGoldskyActivityFeed, useGoldskyHealth } from '@/lib/goldsky-queries';
 import { ProposalState } from '@/lib/proposal-state';
 import { useTokenInventory } from '@/lib/token-queries';
 
-function formatTimestamp(timestamp: string | number | null) {
-  if (timestamp === null || timestamp === '') return '—';
-
-  const numericTimestamp = Number(timestamp);
-  const date = Number.isFinite(numericTimestamp)
-    ? new Date(numericTimestamp > 1_000_000_000_000 ? numericTimestamp : numericTimestamp * 1000)
-    : new Date(timestamp);
-
-  if (Number.isNaN(date.getTime())) return '—';
-
-  try {
-    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
-  } catch {
-    return String(timestamp);
-  }
-}
-
-type AuctionData = {
-  status: 'active' | 'disabled' | 'not-launched' | 'paused';
-  auction: {
-    token_id: string;
-    start_time: string;
-    end_time: string;
-    highest_bid: string;
-    highest_bidder: string | null;
-    settled: boolean;
-  } | null;
-  config: { reserve_price: string; min_bid_increment_percent: number; payment_token: string | null };
-  paused: boolean;
-};
-
-function DashboardRowSkeleton() {
-  return (
-    <div className="skeleton-row">
-      <Skeleton style={{ width: '42px', height: '1em' }} />
-      <div style={{ flex: 1, display: 'grid', gap: '8px' }}>
-        <Skeleton style={{ width: '62%', height: '1em' }} />
-        <Skeleton style={{ width: '34%', height: '0.8em' }} />
-      </div>
-      <Skeleton style={{ width: '74px', height: '1em' }} />
-    </div>
-  );
-}
-
-function ActivityRowSkeleton() {
-  return (
-    <div className="dashboard-activity-row">
-      <div style={{ flex: 1, display: 'grid', gap: '8px' }}>
-        <Skeleton style={{ width: '48%', height: '1em' }} />
-        <Skeleton style={{ width: '78%', height: '0.9em' }} />
-      </div>
-      <Skeleton style={{ width: '150px', height: '0.8em' }} />
-    </div>
-  );
-}
-
 async function fetchJson<T>(url: string) {
   const response = await fetch(url, { cache: 'no-store' });
   const json = (await response.json()) as T & { message?: string };
-  if (!response.ok) throw new Error(json.message || 'Dashboard data unavailable');
+  if (!response.ok) throw new Error(json.message || 'Community data unavailable');
   return json;
-}
-
-function formatVoteTotal(value: string) {
-  try {
-    return new Intl.NumberFormat().format(BigInt(value));
-  } catch {
-    return '—';
-  }
-}
-
-function formatAuctionAmount(value: string | undefined) {
-  if (!value) return '0';
-  const raw = BigInt(value);
-  const whole = raw / 10_000_000n;
-  const fraction = (raw % 10_000_000n).toString().padStart(7, '0').replace(/0+$/, '');
-  return fraction ? `${whole}.${fraction}` : whole.toString();
 }
 
 const ACTIVITY_PAGE_SIZE = 10;
 const TOKEN_PAGE_SIZE = 8;
+const PROPOSAL_PREVIEW = 5;
+
+const intro = css({ display: 'grid', gap: '3', mb: { base: '5', md: '7' } });
+const introRow = css({ display: 'flex', alignItems: 'center', gap: '4' });
+const name = css({ textStyle: 'display', fontSize: { base: '1.875rem', md: '2.5rem' }, m: '0' });
+const description = css({ textStyle: 'body', color: 'ink.muted', m: '0', maxW: '62ch' });
+const columns = css({
+  display: 'grid',
+  gap: { base: '8', lg: '10' },
+  mt: { base: '8', md: '10' },
+  lg: { gridTemplateColumns: 'minmax(0, 1fr) 340px', alignItems: 'start' }
+});
+const mainColumn = css({ display: 'grid', gap: { base: '8', md: '10' }, minW: '0' });
+const sideColumn = css({ display: 'grid', gap: '6', minW: '0', lg: { position: 'sticky', top: '20' } });
+const tokenGrid = css({
+  display: 'grid',
+  gap: '4',
+  gridTemplateColumns: { base: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))', lg: 'repeat(2, 1fr)' }
+});
+const more = css({ display: 'flex', justifyContent: 'center', pt: '2' });
+const listSkeleton = css({ display: 'grid', gap: '3' });
 
 export default function Page() {
   const { daoId, daoConfig: config } = useDaoContext();
   const isLaunchAdmin = useIsLaunchAdmin(config.launchAdmin);
+  const isLaunchSetup = isLaunchAdmin && config.status === 'pending';
   const [activityLimit, setActivityLimit] = useState(ACTIVITY_PAGE_SIZE);
   const [tokenLimit, setTokenLimit] = useState(TOKEN_PAGE_SIZE);
-  const [refreshingDashboard, setRefreshingDashboard] = useState(false);
-  const [currentTime, setCurrentTime] = useState<number | null>(null);
-  const {
-    data: goldskyHealth,
-    error: goldskyHealthError,
-    isLoading: goldskyHealthLoading,
-    isValidating: goldskyHealthRefreshing,
-    mutate: refreshHealth
-  } = useGoldskyHealth(daoId);
-  const {
-    data: activityFeed,
-    error: activityError,
-    isLoading: activityLoading,
-    isValidating: activityRefreshing,
-    mutate: refreshFeed
-  } = useGoldskyActivityFeed(daoId, activityLimit);
-  const {
-    data: tokens,
-    error: tokenError,
-    isLoading: tokenLoading,
-    isValidating: tokenRefreshing,
-    mutate: refreshTokens
-  } = useTokenInventory(daoId);
-  const {
-    data: proposals,
-    error: proposalsError,
-    isLoading: proposalsLoading,
-    mutate: refreshProposals
-  } = useSWR<ProposalListResponse>(`/api/dao/${encodeURIComponent(daoId)}/proposals?limit=24`, fetchJson, {
-    keepPreviousData: true
-  });
-  const {
-    data: auctionData,
-    error: auctionError,
-    isLoading: auctionLoading,
-    mutate: refreshAuction
-  } = useSWR<AuctionData>(
+  const [refreshing, setRefreshing] = useState(false);
+  const [now, setNow] = useState<number | null>(null);
+
+  const health = useGoldskyHealth(daoId);
+  const activity = useGoldskyActivityFeed(daoId, activityLimit);
+  const tokens = useTokenInventory(daoId);
+  const proposals = useSWR<ProposalListResponse>(
+    `/api/dao/${encodeURIComponent(daoId)}/proposals?limit=24`,
+    fetchJson,
+    { keepPreviousData: true }
+  );
+  const auction = useSWR<HomeAuction>(
     config.auctionContractId ? `/api/dao/${encodeURIComponent(daoId)}/auctions` : null,
     fetchJson,
     { refreshInterval: 15_000 }
   );
-  const tokenItems = tokens?.items.slice(0, tokenLimit) ?? [];
-  const canLoadMoreTokens = Boolean(tokens && tokens.items.length > tokenLimit);
-  const activityItems = activityFeed?.items ?? [];
-  const proposalItems = proposals?.items ?? [];
-  const activeProposalItems = proposalItems.filter((item) => item.state === ProposalState.Active);
-  const canLoadMoreActivity = Boolean(activityFeed?.hasMore);
-  const indexerIsHealthy = goldskyHealth?.status === 'healthy';
-  const indexerHealthLabel = goldskyHealthLoading
-    ? 'Checking indexer health'
-    : goldskyHealthError
-      ? 'Indexer health unavailable'
-      : indexerIsHealthy
-        ? 'Indexer healthy'
-        : 'Indexer needs attention';
-  const isDashboardRefreshing =
-    refreshingDashboard ||
-    goldskyHealthLoading ||
-    goldskyHealthRefreshing ||
-    activityLoading ||
-    activityRefreshing ||
-    tokenLoading ||
-    tokenRefreshing ||
-    proposalsLoading ||
-    auctionLoading;
-  const auctionEndTime = auctionData?.auction ? Number(auctionData.auction.end_time) : null;
-  const isAuctionEnded = currentTime !== null && auctionEndTime !== null && auctionEndTime <= currentTime;
-  const hasCurrentAuction = auctionData?.status === 'active' && Boolean(auctionData.auction) && !auctionData.paused;
 
   useEffect(() => {
-    const updateCurrentTime = () => setCurrentTime(Date.now() / 1000);
-    updateCurrentTime();
-    const timer = window.setInterval(updateCurrentTime, 30_000);
+    const update = () => setNow(Date.now() / 1000);
+    update();
+    const timer = window.setInterval(update, 30_000);
     return () => window.clearInterval(timer);
   }, []);
 
-  async function refreshDashboard() {
-    if (isDashboardRefreshing) return;
-    setRefreshingDashboard(true);
+  const proposalItems = proposals.data?.items ?? [];
+  const activeCount = proposalItems.filter((item) => item.state === ProposalState.Active).length;
+  // Open votes first, then most recent.
+  const proposalPreview = [...proposalItems]
+    .sort((a, b) => Number(b.state === ProposalState.Active) - Number(a.state === ProposalState.Active))
+    .slice(0, PROPOSAL_PREVIEW);
+  const tokenItems = tokens.data?.items.slice(0, tokenLimit) ?? [];
+  const assetCode =
+    getTreasuryAssets(config.name).find((item) => item.contractId === auction.data?.config.payment_token)?.code ??
+    'XLM';
+  const indexerHealthy = health.data?.status === 'healthy';
+
+  async function refreshAll() {
+    if (refreshing) return;
+    setRefreshing(true);
     try {
-      await Promise.all([refreshHealth(), refreshFeed(), refreshTokens(), refreshProposals(), refreshAuction()]);
+      await Promise.all([health.mutate(), activity.mutate(), tokens.mutate(), proposals.mutate(), auction.mutate()]);
     } finally {
-      setRefreshingDashboard(false);
+      setRefreshing(false);
     }
   }
 
-  // Show launch_admin mode or regular dashboard
   if (config.status === 'pending' && !isLaunchAdmin) {
     return (
-      <PageSection title={config.tokenName} description="DAO is launching soon">
+      <div className={intro}>
+        <div className={introRow}>
+          <Crest name={config.tokenName} seed={config.tokenContractId} src={config.contractImage} size="lg" />
+          <h1 className={name}>{config.tokenName}</h1>
+        </div>
         <Callout
-          variant="info"
-          title="DAO Launch in Progress"
-          description="This DAO is being set up by its launch administrator. Check back soon to explore this community."
+          title="This community is still being set up"
+          description="Its founder is finishing setup. Once it launches you can bid, join and vote here."
         />
-      </PageSection>
+      </div>
     );
   }
 
   return (
-    <PageSection
-      title={
-        isLaunchAdmin && config.status === 'pending'
-          ? `${config.tokenName} launch setup`
-          : `${config.tokenName} overview`
-      }
-      description={
-        isLaunchAdmin && config.status === 'pending'
-          ? 'Complete the checklist to launch your DAO'
-          : 'Current work and DAO activity.'
-      }
-    >
-      <div className="dashboard-controls">
-        <LocalHomeDao dao={{ id: daoId, name: config.tokenName, network: config.name }} />
-        <details className="dashboard-menu">
-          <summary className="dashboard-menu__trigger">
-            Contracts <ChevronDown aria-hidden="true" size={14} />
-          </summary>
-          <div className="dashboard-menu__panel dashboard-contract-menu">
-            <Text className="label">Contracts</Text>
-            <DaoContractList config={config} />
+    <>
+      <header className={intro}>
+        <div className={introRow}>
+          <Crest name={config.tokenName} seed={config.tokenContractId} src={config.contractImage} size="lg" />
+          <div className={css({ display: 'grid', gap: '2', minW: '0' })}>
+            <CrestStripe seed={config.tokenContractId} />
+            <h1 className={name}>{config.tokenName}</h1>
           </div>
-        </details>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => void refreshDashboard()}
-          disabled={isDashboardRefreshing}
-        >
-          <RefreshCw aria-hidden="true" className={isDashboardRefreshing ? 'is-spinning' : undefined} size={15} />
-          {isDashboardRefreshing ? 'Refreshing…' : 'Refresh dashboard'}
-        </Button>
-      </div>
+        </div>
+        {config.tokenDescription ? <p className={description}>{config.tokenDescription}</p> : null}
+        {isLaunchSetup ? (
+          <div>
+            <Chip tone="yours">You are the launch admin</Chip>
+          </div>
+        ) : null}
+      </header>
 
-      {isLaunchAdmin && config.status === 'pending' ? (
-        <section id="launch-checklist" aria-label="Launch setup">
+      <NowCard
+        daoId={daoId}
+        name={config.tokenName}
+        isLaunchSetup={isLaunchSetup}
+        auction={auction.data}
+        auctionLoading={auction.isLoading}
+        auctionError={auction.error}
+        proposalsLoading={proposals.isLoading}
+        proposalsError={proposals.error}
+        activeProposals={activeCount}
+        hasAuctionModule={Boolean(config.auctionContractId)}
+        auctionEnabled={config.auctionEnabled}
+        assetCode={assetCode}
+        now={now}
+      />
+
+      {isLaunchSetup ? (
+        <section id="launch-checklist" aria-label="Launch setup" className={css({ mt: '8' })}>
           <LaunchChecklist daoId={daoId} config={config} />
         </section>
       ) : null}
 
-      <section className="dao-now" aria-labelledby="dao-now-heading">
-        <div className="dao-now__eyebrow">Now in {config.tokenName}</div>
-        <div className="dao-now__body">
-          {isLaunchAdmin && config.status === 'pending' ? (
-            <>
+      <div className={columns}>
+        <div className={mainColumn}>
+          <Section
+            title="Votes"
+            action={
+              <ButtonLink href={daoRoute(daoId, 'proposals')} variant="ghost" size="sm">
+                See all
+              </ButtonLink>
+            }
+          >
+            {proposals.error ? (
+              <Callout variant="error" title="Votes didn't load" description={proposals.error.message} />
+            ) : proposals.isLoading && !proposals.data ? (
+              <div className={listSkeleton} role="status" aria-busy="true">
+                <span className="sr-only">Loading votes</span>
+                <Skeleton className={css({ height: '16' })} />
+                <Skeleton className={css({ height: '16' })} />
+              </div>
+            ) : proposalPreview.length ? (
               <div>
-                <Heading id="dao-now-heading" style={{ fontSize: '1.5rem', margin: 0 }}>
-                  Launch setup is in progress
-                </Heading>
-                <Text className="lede">Complete the remaining setup tasks before this DAO becomes operational.</Text>
-              </div>
-              <a className="dao-now__action" href="#launch-checklist">
-                Review launch checklist
-              </a>
-            </>
-          ) : auctionError && proposalsError ? (
-            <div>
-              <Heading id="dao-now-heading" style={{ fontSize: '1.5rem', margin: 0 }}>
-                Operational status is unavailable
-              </Heading>
-              <Text className="lede">Refresh the overview to try loading governance and auction activity again.</Text>
-            </div>
-          ) : hasCurrentAuction && auctionData?.auction ? (
-            <>
-              <div>
-                <Heading id="dao-now-heading" style={{ fontSize: '1.5rem', margin: 0 }}>
-                  Auction in progress
-                </Heading>
-                <Text className="lede">
-                  Token #{auctionData.auction.token_id} ·{' '}
-                  {auctionData.auction.highest_bid === '0'
-                    ? `Reserve ${formatAuctionAmount(auctionData.config.reserve_price)}`
-                    : `Highest bid ${formatAuctionAmount(auctionData.auction.highest_bid)}`}{' '}
-                  · Ends {formatTimestamp(auctionData.auction.end_time)}
-                </Text>
-                {activeProposalItems.length ? (
-                  <Text className="dao-now__support">
-                    Governance also has {activeProposalItems.length} live proposal
-                    {activeProposalItems.length === 1 ? '' : 's'}.
-                  </Text>
-                ) : null}
-              </div>
-              <Link className="dao-now__action" href={`/dao/${daoId}/auctions`}>
-                {isAuctionEnded ? 'Settle auction' : 'Place bid'}
-              </Link>
-            </>
-          ) : activeProposalItems.length ? (
-            <>
-              <div>
-                <Heading id="dao-now-heading" style={{ fontSize: '1.5rem', margin: 0 }}>
-                  Governance is live
-                </Heading>
-                <Text className="lede">
-                  {activeProposalItems.length} proposal{activeProposalItems.length === 1 ? '' : 's'}{' '}
-                  {activeProposalItems.length === 1 ? 'is' : 'are'} currently open for review.
-                </Text>
-                {auctionLoading ? <Text className="dao-now__support">Auction status is still loading.</Text> : null}
-              </div>
-              <Link className="dao-now__action" href={`/dao/${daoId}/proposals`}>
-                Review proposals
-              </Link>
-            </>
-          ) : auctionError ? (
-            <>
-              <div>
-                <Heading id="dao-now-heading" style={{ fontSize: '1.5rem', margin: 0 }}>
-                  Auction status is unavailable
-                </Heading>
-                <Text className="lede">
-                  Governance activity is shown below. The auction module could not be loaded.
-                </Text>
-              </div>
-              <Link className="dao-now__action" href={`/dao/${daoId}/auctions`}>
-                View auctions
-              </Link>
-            </>
-          ) : auctionLoading || proposalsLoading ? (
-            <div role="status" aria-busy="true">
-              <span className="sr-only">Loading current DAO activity</span>
-              <Skeleton style={{ width: '13rem', height: '1.5rem' }} />
-              <Skeleton style={{ width: '22rem', maxWidth: '100%', height: '1rem', marginTop: '10px' }} />
-            </div>
-          ) : (
-            <>
-              <div>
-                <Heading id="dao-now-heading" style={{ fontSize: '1.5rem', margin: 0 }}>
-                  {auctionData?.status === 'paused'
-                    ? 'Auctions are paused'
-                    : config.auctionEnabled === false
-                      ? 'Auctions are disabled'
-                      : auctionData?.status === 'not-launched'
-                        ? 'The first auction has not launched yet'
-                        : 'No live governance or auction activity'}
-                </Heading>
-                <Text className="lede">
-                  {auctionData?.status === 'paused'
-                    ? 'Bidding and automatic settlement are currently unavailable.'
-                    : config.auctionEnabled === false
-                      ? 'Auctions are not enabled for this DAO.'
-                      : auctionData?.status === 'not-launched'
-                        ? 'Auctions are configured for this DAO, but the first auction will appear after the auction module is launched.'
-                        : 'No live proposals or auction are currently shown.'}
-                </Text>
-              </div>
-              {config.auctionContractId ? (
-                <Link className="dao-now__action" href={`/dao/${daoId}/auctions`}>
-                  View auctions
-                </Link>
-              ) : null}
-            </>
-          )}
-        </div>
-        {auctionError ? (
-          <Callout variant="error" title="Auction unavailable" description={auctionError.message} />
-        ) : null}
-      </section>
-
-      <Card className="dashboard-secondary-card dashboard-governance-card" p="5">
-        <div className="dashboard-secondary-card__content">
-          <div className="section-toolbar">
-            <Heading style={{ fontSize: '1.35rem', margin: 0 }}>Governance</Heading>
-            <Link className="dashboard-section-link" href={`/dao/${daoId}/proposals`}>
-              View all proposals
-            </Link>
-          </div>
-          <div className="dashboard-secondary-card__scroll">
-            {proposalsError ? (
-              <Callout variant="error" title="Proposal activity unavailable" description={proposalsError.message} />
-            ) : null}
-            {proposalsLoading && !proposals ? (
-              <div className="skeleton-list" role="status" aria-busy="true">
-                <span className="sr-only">Loading proposal activity</span>
-                {Array.from({ length: 3 }, (_, index) => (
-                  <DashboardRowSkeleton key={index} />
-                ))}
-              </div>
-            ) : null}
-            {!proposalsLoading && !proposalItems.length ? (
-              <div className="empty-state" role="status">
-                <Text className="lede" style={{ margin: '0 auto' }}>
-                  Proposal activity will appear here once proposals are indexed.
-                </Text>
-              </div>
-            ) : null}
-            {proposalItems.length ? (
-              <div className="dashboard-proposal-list proposal-list" role="list" aria-label="Recent proposals">
-                {proposalItems.map((item) => (
-                  <div key={item.proposalId} role="listitem">
-                    <Link className="proposal-row" href={`/dao/${daoId}/proposals/${item.proposalNumber}`}>
-                      <div className="proposal-row__identity">
-                        <Text className="proposal-row__id mono">#{item.proposalNumber}</Text>
-                        <div className="proposal-row__content">
-                          <Heading className="proposal-row__title">{item.metadata.title}</Heading>
-                          <Text className="proposal-row__date">{formatTimestamp(item.timestamp)}</Text>
-                        </div>
-                      </div>
-                      <div className="proposal-row__outcome">
-                        {item.voteTotals ? (
-                          <div
-                            className="dashboard-vote-totals mono"
-                            aria-label={`For ${formatVoteTotal(item.voteTotals.forVotes)}, against ${formatVoteTotal(item.voteTotals.againstVotes)}, abstain ${formatVoteTotal(item.voteTotals.abstainVotes)}`}
-                          >
-                            <span className="dashboard-vote-totals__for">
-                              {formatVoteTotal(item.voteTotals.forVotes)}
-                            </span>
-                            <span>/</span>
-                            <span className="dashboard-vote-totals__against">
-                              {formatVoteTotal(item.voteTotals.againstVotes)}
-                            </span>
-                            <span>/</span>
-                            <span className="dashboard-vote-totals__abstain">
-                              {formatVoteTotal(item.voteTotals.abstainVotes)}
-                            </span>
-                          </div>
-                        ) : null}
-                        <ProposalStateBadge label={item.stateLabel} />
-                      </div>
-                    </Link>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </Card>
-
-      <Card className="dashboard-feed-card" p="5">
-        <Stack gap="3">
-          <div className="section-toolbar">
-            <Heading style={{ fontSize: '1.35rem', margin: 0 }}>Activity feed</Heading>
-            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <details className="dashboard-health-menu">
-                <summary
-                  className="dashboard-health-trigger"
-                  aria-label={`${indexerHealthLabel}. View indexer health`}
-                  title={indexerHealthLabel}
-                >
-                  <Activity aria-hidden="true" size={16} />
-                  <span
-                    className={`dashboard-health-dot${indexerIsHealthy ? ' dashboard-health-dot--healthy' : ''}`}
-                    aria-hidden="true"
+                {proposalPreview.map((item) => (
+                  <ProposalRow
+                    key={item.proposalId}
+                    item={item}
+                    href={daoRoute(daoId, `proposals/${item.proposalNumber}`)}
                   />
-                </summary>
-                <div className="dashboard-health-panel">
-                  <div className="dashboard-health-panel__heading">
-                    <Text className="label">Indexer health</Text>
-                  </div>
-                  <Text className="lede" style={{ margin: 0, fontSize: '0.84rem' }}>
-                    {indexerHealthLabel}
-                  </Text>
-                  {goldskyHealthError ? (
-                    <Text className="lede" style={{ margin: 0, fontSize: '0.8rem' }}>
-                      {goldskyHealthError.message}
-                    </Text>
-                  ) : null}
-                  {goldskyHealth ? (
-                    <div className="dashboard-health-program">
-                      <Text style={{ margin: 0, fontWeight: 700 }}>Indexer status</Text>
-                      <Text className="lede" style={{ margin: 0, fontSize: '0.78rem' }}>
-                        {goldskyHealth.latestLedger ? `Ledger ${goldskyHealth.latestLedger}` : 'No ledger data'} |{' '}
-                        {goldskyHealth.totalEvents ?? 0} indexed events
-                      </Text>
-                    </div>
-                  ) : null}
-                </div>
-              </details>
-            </div>
-          </div>
-          {activityError ? (
-            <Callout variant="error" title="Activity feed unavailable" description={activityError.message} />
-          ) : null}
-          {activityLoading && !activityFeed ? (
-            <div className="skeleton-list" role="status" aria-busy="true">
-              <span className="sr-only">Loading activity feed</span>
-              {Array.from({ length: 5 }, (_, index) => (
-                <ActivityRowSkeleton key={index} />
-              ))}
-            </div>
-          ) : null}
-          {!activityLoading && !activityItems.length ? (
-            <div className="empty-state" role="status">
-              <Text className="lede" style={{ margin: '0 auto' }}>
-                Nothing has happened yet. Proposals, votes, auctions and sales will appear here.
-              </Text>
-            </div>
-          ) : null}
-          {activityItems.length ? (
-            <>
-              <div className="dashboard-activity-scroll">
-                <div className="dashboard-activity-list">
-                  {activityItems.map((item, index) => {
-                    const row = formatActivity(item, daoId);
-                    const content = (
-                      <>
-                        <div>
-                          <Text className="activity-category">{row.category}</Text>
-                          <Text style={{ margin: '2px 0 0', fontWeight: 600 }}>{row.title}</Text>
-                          {row.detail ? (
-                            <Text className="lede" style={{ margin: '2px 0 0', fontSize: '0.88rem' }}>
-                              {row.detail}
-                            </Text>
-                          ) : null}
-                        </div>
-                        <time className="lede dashboard-activity-meta" title={formatTimestamp(item.timestamp)}>
-                          {relativeTime(item.timestamp)}
-                        </time>
-                      </>
-                    );
-                    return row.href ? (
-                      <Link
-                        className="dashboard-activity-row dashboard-activity-row--link"
-                        data-first={index === 0 ? 'true' : undefined}
-                        key={item.activity_id}
-                        href={row.href as Route}
-                      >
-                        {content}
-                      </Link>
-                    ) : (
-                      <div
-                        className="dashboard-activity-row"
-                        data-first={index === 0 ? 'true' : undefined}
-                        key={item.activity_id}
-                      >
-                        {content}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-              {canLoadMoreActivity ? (
-                <div style={{ display: 'flex', justifyContent: 'center', paddingTop: '8px' }}>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setActivityLimit((current) => current + ACTIVITY_PAGE_SIZE)}
-                    disabled={activityLoading}
-                  >
-                    Show more activity
-                  </Button>
-                </div>
-              ) : null}
-            </>
-          ) : null}
-        </Stack>
-      </Card>
-
-      <Card className="dashboard-membership-card" p="5">
-        <div className="dashboard-membership-card__content">
-          <Heading style={{ fontSize: '1.35rem', margin: 0 }}>Membership</Heading>
-          <div className="dashboard-membership-card__scroll">
-            {tokenError ? (
-              <Callout variant="error" title="Token inventory unavailable" description={tokenError.message} />
-            ) : null}
-            {tokenLoading && !tokens ? (
-              <div className="token-inventory-grid" role="status" aria-busy="true">
-                <span className="sr-only">Loading token inventory</span>
-                {Array.from({ length: 4 }, (_, index) => (
-                  <Card key={index} p="3" className="membership-token-card" style={{ overflow: 'hidden' }}>
-                    <Skeleton style={{ width: '100%', aspectRatio: '1', borderRadius: '10px' }} />
-                    <Skeleton style={{ width: '70%', height: '1.1em', marginTop: '12px' }} />
-                    <Skeleton style={{ width: '86%', height: '0.8em', marginTop: '10px' }} />
-                  </Card>
                 ))}
               </div>
-            ) : null}
-            {!tokenLoading && !tokens?.items.length ? (
-              <div className="empty-state" role="status">
-                <Text className="lede" style={{ margin: '0 auto' }}>
-                  No tokens have been indexed yet. Refresh after the first mint is confirmed.
-                </Text>
+            ) : (
+              <EmptyState title="No proposals yet">
+                When a member proposes something, everyone with a token can vote on it here.
+              </EmptyState>
+            )}
+          </Section>
+
+          <Section title="What's happening">
+            {activity.error ? (
+              <Callout variant="error" title="Activity didn't load" description={activity.error.message} />
+            ) : activity.isLoading && !activity.data ? (
+              <div className={listSkeleton} role="status" aria-busy="true">
+                <span className="sr-only">Loading activity</span>
+                {Array.from({ length: 4 }, (_, index) => (
+                  <Skeleton key={index} className={css({ height: '12' })} />
+                ))}
               </div>
-            ) : null}
-            {tokens?.items.length ? (
+            ) : activity.data?.items.length ? (
               <>
-                <div className="token-inventory-grid">
+                <ActivityList items={activity.data.items} daoIdFor={() => daoId} />
+                {activity.data.hasMore ? (
+                  <div className={more}>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setActivityLimit((current) => current + ACTIVITY_PAGE_SIZE)}
+                      disabled={activity.isLoading}
+                    >
+                      Show more
+                    </Button>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <EmptyState title="Nothing yet">Proposals, votes, bids and sales show up here as they happen.</EmptyState>
+            )}
+          </Section>
+        </div>
+
+        <aside className={sideColumn} aria-label="Membership">
+          <MembershipCard config={config} daoId={daoId} />
+
+          <Section title="Tokens" level={3}>
+            {tokens.error ? (
+              <Callout variant="error" title="Tokens didn't load" description={tokens.error.message} />
+            ) : tokens.isLoading && !tokens.data ? (
+              <div className={tokenGrid} role="status" aria-busy="true">
+                <span className="sr-only">Loading tokens</span>
+                {Array.from({ length: 4 }, (_, index) => (
+                  <Skeleton key={index} className={css({ aspectRatio: '1', borderRadius: 'card' })} />
+                ))}
+              </div>
+            ) : tokens.data?.items.length ? (
+              <>
+                <div className={tokenGrid}>
                   {tokenItems.map((token) => (
                     <TokenCard key={token.tokenId} tokenId={token.tokenId} owner={token.owner} />
                   ))}
                 </div>
-                {canLoadMoreTokens ? (
-                  <div style={{ display: 'flex', justifyContent: 'center', paddingTop: '8px' }}>
+                {tokens.data.items.length > tokenLimit ? (
+                  <div className={more}>
                     <Button
-                      type="button"
-                      variant="outline"
+                      variant="secondary"
                       size="sm"
                       onClick={() => setTokenLimit((current) => current + TOKEN_PAGE_SIZE)}
-                      disabled={tokenLoading}
                     >
                       Show more tokens
                     </Button>
                   </div>
                 ) : null}
               </>
-            ) : null}
+            ) : (
+              <Text size="sm">No tokens yet. They appear here once the first one is minted.</Text>
+            )}
+          </Section>
+        </aside>
+      </div>
+
+      <div className={css({ mt: '12' })}>
+        <Disclosure title="Technical details">
+          <DaoContractList config={config} />
+          <Text size="sm">
+            {health.isLoading
+              ? 'Checking the indexer…'
+              : health.error
+                ? `Indexer status unavailable: ${health.error.message}`
+                : indexerHealthy
+                  ? `Indexer healthy${health.data?.latestLedger ? ` · ledger ${health.data.latestLedger}` : ''}`
+                  : 'The indexer needs attention; recent activity may be delayed.'}
+          </Text>
+          <div>
+            <Button variant="secondary" size="sm" onClick={() => void refreshAll()} loading={refreshing}>
+              {refreshing ? null : <RefreshCw aria-hidden="true" />}
+              Refresh everything
+            </Button>
           </div>
-        </div>
-        <style jsx>{`
-          .token-inventory-grid {
-            display: grid;
-            gap: 18px;
-            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-          }
-          @media (min-width: 768px) {
-            .token-inventory-grid {
-              gap: 20px;
-              grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-            }
-          }
-        `}</style>
-      </Card>
-    </PageSection>
+        </Disclosure>
+      </div>
+    </>
   );
 }

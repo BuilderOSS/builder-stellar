@@ -1,11 +1,22 @@
 'use client';
 
-import { Button, Callout } from '@/components/ui';
+import { Button, ButtonLink, ErrorState } from '@/components/ui';
 
-export default function Error({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
+export default function Error({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
-    <Callout variant="error" title="Unable to load this DAO">
-      <Button onClick={reset}>Try again</Button>
-    </Callout>
+    <ErrorState
+      title="This part of the community didn't load"
+      cause={error.message ? `${error.message}${error.digest ? ` (ref ${error.digest})` : ''}` : undefined}
+      actions={
+        <>
+          <Button variant="secondary" onClick={reset}>
+            Try again
+          </Button>
+          <ButtonLink href="/" variant="ghost">
+            Go to Builder home
+          </ButtonLink>
+        </>
+      }
+    />
   );
 }

@@ -57,7 +57,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <NavRail
           label="Builder"
           top={
-            <Tooltip content="Builder home" placement="right">
+            <Tooltip content="Builder home" placement="right" id="rail-builder-home">
               <NextLink href="/" className={homeMark} aria-label="Builder home">
                 <BrandMark size={36} />
               </NextLink>
@@ -66,7 +66,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           items={GLOBAL_NAV}
           activeKey={active}
           footer={
-            <Tooltip content="Start a DAO" placement="right">
+            <Tooltip content="Start a DAO" placement="right" id="rail-start-dao">
               <NextLink href="/create" className={createButton} aria-label="Start a DAO">
                 <Plus aria-hidden="true" strokeWidth={2.25} />
               </NextLink>

@@ -29,16 +29,26 @@ export function Tooltip({
   content: label,
   children,
   placement = 'top',
-  disabled
+  disabled,
+  id
 }: {
   content: ReactNode;
   children: ReactNode;
   placement?: 'top' | 'right' | 'bottom' | 'left';
   disabled?: boolean;
+  /** Stable id for tooltips in persistent chrome (avoids SSR id drift). */
+  id?: string;
 }) {
   if (disabled) return <>{children}</>;
   return (
-    <ArkTooltip.Root openDelay={400} closeDelay={80} positioning={{ placement, gutter: 8 }} lazyMount unmountOnExit>
+    <ArkTooltip.Root
+      id={id}
+      openDelay={400}
+      closeDelay={80}
+      positioning={{ placement, gutter: 8 }}
+      lazyMount
+      unmountOnExit
+    >
       <ArkTooltip.Trigger asChild>{children}</ArkTooltip.Trigger>
       <Portal>
         <ArkTooltip.Positioner>
