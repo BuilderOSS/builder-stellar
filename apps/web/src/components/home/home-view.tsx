@@ -179,6 +179,7 @@ function SignedInHome({ daos, pendingDaos }: { daos: DaoConfig[]; pendingDaos: D
       ) : null}
 
       <Section
+        id="your-communities"
         title="Your communities"
         action={
           <ButtonLink href="/create" variant="ghost" size="sm">

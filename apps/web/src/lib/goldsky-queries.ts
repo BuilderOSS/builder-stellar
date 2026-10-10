@@ -98,6 +98,8 @@ export type GoldskyHealthResponse = {
 
 export type DashboardDao = {
   dao_id: string;
+  /** Claimed URL slug, once launched. */
+  slug?: string | null;
   token_name: string | null;
   token_symbol: string | null;
   token_description: string | null;

@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { css } from 'styled-system/css';
 
-import { ProposalActionConfirmDialog } from '@/components/proposal/proposal-action-confirm-dialog';
+import { DiscardDraftDialog } from '@/components/drafts/discard-draft-dialog';
 import { Button, Chip, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
@@ -57,14 +57,10 @@ export function ProposalDraftPanel({ daoId }: { daoId: string }) {
           Changes you make here that need a vote collect in a draft, so members can approve them in one proposal.
         </Text>
       )}
-      <ProposalActionConfirmDialog
+      <DiscardDraftDialog
         open={confirmClear}
-        title="Discard this draft?"
-        message="Every change in it and any proposal details you wrote are removed from this browser."
-        confirmLabel="Discard draft"
-        tone="danger"
-        busy={false}
-        onConfirm={() => {
+        title={draft.metadata.title.trim() || 'Untitled proposal'}
+        onDiscard={() => {
           reset(address, daoId);
           setConfirmClear(false);
         }}

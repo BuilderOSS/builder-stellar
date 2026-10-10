@@ -8,6 +8,7 @@ import { BasicInfoStep, GovernanceStep, MembershipStep, ReviewStep } from '@/com
 import { DeploymentProgress } from '@/components/create-dao/DeploymentProgress';
 import { SectionOutline } from '@/components/create-dao/SectionOutline';
 import styles from '@/components/create-dao/workspace-styles';
+import { DiscardDraftDialog } from '@/components/drafts/discard-draft-dialog';
 import { useWorkspaceSync } from '@/components/local-workspace/workspace-sync';
 import { Button, Callout, PageHeader } from '@/components/ui';
 import {
@@ -54,6 +55,7 @@ export default function CreateDaoPage() {
   const [pageError, setPageError] = useState('');
   const [indexingMessage, setIndexingMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
   const operation = useRef(false);
   const indexingRequest = useRef<AbortController | null>(null);
   const configured = isDeploymentConfigured();
@@ -171,6 +173,21 @@ export default function CreateDaoPage() {
   const outline = FORM_SECTIONS.map(({ id, title }) => ({ id, title, complete: complete[id] }));
   return (
     <div className={styles.createPage}>
+      <DiscardDraftDialog
+        open={discardOpen}
+        title={store.basicInfo.tokenName.trim() || 'Untitled DAO'}
+        onCancel={() => setDiscardOpen(false)}
+        onDiscard={() => {
+          setDiscardOpen(false);
+          if (!draft) return;
+          try {
+            useCreateDaoStore.getState().deleteDraft(draft.id);
+            router.push('/');
+          } catch (failure) {
+            setPageError((failure as Error).message);
+          }
+        }}
+      />
       <div>
         <PageHeader
           title="Start a DAO"
@@ -267,7 +284,12 @@ export default function CreateDaoPage() {
                         <Callout variant="error" title="This needs attention" description={pageError} />
                       ) : null}
                       <div className={styles.actions}>
-                        <Link href={{ pathname: '/drafts' }}>Save for later</Link>
+                        <div className={styles.links}>
+                          <Link href={{ pathname: '/drafts' }}>Save for later</Link>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => setDiscardOpen(true)}>
+                            Discard draft
+                          </Button>
+                        </div>
                         <Button
                           type="button"
                           onClick={() => void deploy()}

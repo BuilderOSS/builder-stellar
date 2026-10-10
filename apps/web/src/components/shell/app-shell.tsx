@@ -6,12 +6,16 @@ import { usePathname } from 'next/navigation';
 import { type ReactNode, useState } from 'react';
 import { css } from 'styled-system/css';
 
+import { useHomeDao } from '@/hooks/use-home-dao';
 import { activeNavKey } from '@/lib/dao-nav';
+import { daoRoute, daoRouteId } from '@/lib/dao-routes';
+import { useDashboardData } from '@/lib/goldsky-queries';
 
 import { BrandLockup } from './brand-mark';
-import { NavRail, type ShellNavItem, TabBar } from './nav';
+import { NavRail, type RailCommunity, type ShellNavItem, TabBar } from './nav';
 import { ShellFrame } from './shell-frame';
 import { WalletButton } from './wallet-button';
+import { useWalletSession } from './wallet-session';
 import { YouSheet } from './you-sheet';
 
 const GLOBAL_NAV: ShellNavItem[] = [
@@ -26,6 +30,19 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [youOpen, setYouOpen] = useState(false);
   const active = activeNavKey(pathname, GLOBAL_NAV)?.key;
+  const wallet = useWalletSession();
+  const { home } = useHomeDao();
+  // Same request as Home's "Your communities", so it is shared rather than repeated.
+  const { data } = useDashboardData(wallet.isAuthenticated ? wallet.address : '');
+  const communities: RailCommunity[] = (data?.myDaos ?? [])
+    .map((dao) => ({
+      key: dao.dao_id,
+      label: dao.token_name || dao.token_symbol || 'Unnamed community',
+      href: daoRoute(daoRouteId({ daoId: dao.dao_id, slug: dao.slug })),
+      seed: dao.dao_id,
+      image: dao.contract_image
+    }))
+    .sort((a, b) => (a.key === home?.id ? -1 : b.key === home?.id ? 1 : 0));
 
   return (
     <ShellFrame
@@ -35,6 +52,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           items={GLOBAL_NAV}
           activeKey={active}
           action={{ label: 'Start a DAO', href: '/create', icon: Plus }}
+          communities={communities}
+          communitiesHref="/#your-communities"
         />
       }
       topStart={

@@ -4,11 +4,12 @@
 
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
-import { BookOpen, ChevronLeft, Plus } from 'lucide-react';
+import { BookOpen, ChevronLeft, Plus, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useRef, useState } from 'react';
 import { css } from 'styled-system/css';
 
+import { DiscardDraftDialog } from '@/components/drafts/discard-draft-dialog';
 import { ProposalActionConfirmDialog } from '@/components/proposal/proposal-action-confirm-dialog';
 import { ProposalContextRail } from '@/components/proposal/proposal-context-rail';
 import {
@@ -52,7 +53,8 @@ const layout = css({
   xl: { gridTemplateColumns: 'minmax(0, 1fr) 380px' }
 });
 const mainColumn = css({ display: 'grid', gap: '2', minW: '0', maxW: '720px' });
-const back = css({ justifySelf: 'start', ml: '-3' });
+const back = css({ ml: '-3' });
+const topRow = css({ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '2' });
 const stack = css({ display: 'grid', gap: '5' });
 const actions = css({ display: 'flex', justifyContent: 'space-between', gap: '2', pt: '2' });
 const hint = css({ textStyle: 'body', color: 'ink.muted', m: '0' });
@@ -109,6 +111,7 @@ export default function ProposalCreatePage() {
 
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [contextRailOpen, setContextRailOpen] = useState(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
   const contextTriggerRef = useRef<HTMLButtonElement>(null);
   const closeContextRail = useCallback(() => setContextRailOpen(false), []);
 
@@ -220,10 +223,28 @@ export default function ProposalCreatePage() {
     <>
       <div className={layout}>
         <div className={mainColumn}>
-          <ButtonLink href={daoRoute(routeId, 'proposals')} variant="ghost" size="sm" className={back}>
-            <ChevronLeft aria-hidden="true" />
-            All votes
-          </ButtonLink>
+          <div className={topRow}>
+            <ButtonLink href={daoRoute(routeId, 'proposals')} variant="ghost" size="sm" className={back}>
+              <ChevronLeft aria-hidden="true" />
+              All votes
+            </ButtonLink>
+            {hasDraft && session.address ? (
+              <Button variant="ghost" size="sm" disabled={transactionBusy} onClick={() => setDiscardOpen(true)}>
+                <Trash2 aria-hidden="true" />
+                Discard draft
+              </Button>
+            ) : null}
+          </div>
+          <DiscardDraftDialog
+            open={discardOpen}
+            title={draft.metadata.title.trim() || 'Untitled proposal'}
+            onCancel={() => setDiscardOpen(false)}
+            onDiscard={() => {
+              setDiscardOpen(false);
+              reset(session.address, daoId);
+              router.push(daoRoute(routeId, 'proposals'));
+            }}
+          />
           <PageHeader
             title={hasDraft ? 'Your proposal' : 'New proposal'}
             meta="Say what you want to change and why, add what happens if it passes, then sign. Drafts save on this browser."

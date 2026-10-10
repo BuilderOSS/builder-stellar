@@ -67,7 +67,8 @@ export function Dialog({
   children,
   footer,
   role = 'dialog',
-  closeOnInteractOutside = true
+  closeOnInteractOutside = true,
+  initialFocusEl
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -77,6 +78,8 @@ export function Dialog({
   footer?: ReactNode;
   role?: 'dialog' | 'alertdialog';
   closeOnInteractOutside?: boolean;
+  /** Element to focus on open, e.g. the safe choice in a destructive confirm. */
+  initialFocusEl?: () => HTMLElement | null;
 }) {
   const classes = dialog();
   return (
@@ -85,6 +88,7 @@ export function Dialog({
       onOpenChange={(details) => onOpenChange(details.open)}
       role={role}
       closeOnInteractOutside={closeOnInteractOutside}
+      initialFocusEl={initialFocusEl}
       lazyMount
       unmountOnExit
     >

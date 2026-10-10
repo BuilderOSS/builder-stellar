@@ -1,10 +1,12 @@
 'use client';
 
-import { FileText, Home, LogOut, Moon, Settings, Sun, SunMoon, Wallet } from 'lucide-react';
+import { Home, LogOut, Moon, Settings, Sun, SunMoon, Wallet } from 'lucide-react';
 import type { Route } from 'next';
 import NextLink from 'next/link';
 import { css } from 'styled-system/css';
 
+import { DraftRow } from '@/components/drafts/draft-row';
+import { useAllDrafts } from '@/components/drafts/use-all-drafts';
 import { Address, Avatar, Button, Chip, ListRow, SegmentedControl, Sheet, Skeleton, Text } from '@/components/ui';
 import { setThemePreference, useThemePreference } from '@/components/warm-ink-theme';
 import { useOptionalDaoContext } from '@/contexts/dao-context';
@@ -24,6 +26,13 @@ const stat = css({ display: 'flex', justifyContent: 'space-between', alignItems:
 const statLabel = css({ textStyle: 'caption', color: 'ink.muted' });
 const statValue = css({ textStyle: 'body', fontWeight: '600', fontVariantNumeric: 'tabular-nums' });
 const heading = css({ textStyle: 'label', color: 'ink.muted', m: '0' });
+const allLink = css({
+  textStyle: 'caption',
+  fontWeight: '600',
+  color: 'signal',
+  textDecoration: 'none',
+  _hover: { textDecoration: 'underline' }
+});
 const dot = css({
   width: '2',
   height: '2',
@@ -32,15 +41,48 @@ const dot = css({
   '&[data-issue]': { bg: 'warning' }
 });
 const networkRow = css({ display: 'flex', alignItems: 'center', gap: '2', textStyle: 'caption', color: 'ink.muted' });
+const footerRow = css({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '3' });
 const footerLinks = css({
   display: 'flex',
   flexWrap: 'wrap',
-  gap: '4',
-  pt: '4',
+  columnGap: '4',
+  rowGap: '1',
   textStyle: 'caption',
   color: 'ink.muted',
   '& a': { color: 'inherit', textDecoration: 'none', _hover: { color: 'ink' } }
 });
+
+const DRAFTS_SHOWN = 3;
+
+/** Your latest drafts, each with a discard, and a way to see them all. */
+function YouDrafts() {
+  const { items, hydrated, discard } = useAllDrafts();
+  return (
+    <section className={block} aria-labelledby="you-drafts-title">
+      <div className={css({ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '3' })}>
+        <h3 id="you-drafts-title" className={heading}>
+          Drafts
+        </h3>
+        {items.length ? (
+          <NextLink href={'/drafts' as Route} className={allLink}>
+            {items.length > DRAFTS_SHOWN ? `All ${items.length}` : 'All drafts'}
+          </NextLink>
+        ) : null}
+      </div>
+      {!hydrated ? (
+        <Skeleton className={css({ height: '10' })} />
+      ) : items.length ? (
+        <div>
+          {items.slice(0, DRAFTS_SHOWN).map((item) => (
+            <DraftRow key={`${item.kind}:${item.id}`} item={item} onDiscard={discard} />
+          ))}
+        </div>
+      ) : (
+        <p className={statLabel}>No drafts. Start a DAO or a proposal and it saves here as you go.</p>
+      )}
+    </section>
+  );
+}
 
 function MembershipBlock({ config, daoId }: { config: DaoNetworkConfig; daoId: string }) {
   const routeId = useOptionalDaoContext()?.routeId ?? daoId;
@@ -97,7 +139,51 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
   const isHome = Boolean(dao && home?.id === dao.daoId);
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} title="You" hideTitle>
+    <Sheet
+      open={open}
+      onOpenChange={onOpenChange}
+      title="You"
+      hideTitle
+      footerLayout="stack"
+      footer={
+        <>
+          <SegmentedControl
+            fill
+            label="Appearance"
+            value={preference}
+            onValueChange={(next) => {
+              if (isWarmInkPreference(next)) setThemePreference(next);
+            }}
+            options={[
+              { value: 'dark', label: 'Dark', icon: <Moon aria-hidden="true" /> },
+              { value: 'light', label: 'Light', icon: <Sun aria-hidden="true" /> },
+              { value: 'system', label: 'System', icon: <SunMoon aria-hidden="true" /> }
+            ]}
+          />
+          <div className={footerRow}>
+            <nav className={footerLinks} aria-label="Legal">
+              <NextLink href={'/privacy' as Route}>Privacy</NextLink>
+              <NextLink href={'/terms' as Route}>Terms</NextLink>
+              <NextLink href={'/disclaimer' as Route}>Disclaimer</NextLink>
+              <BuilderDaoCredit />
+            </nav>
+            {wallet.isAuthenticated ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  await wallet.disconnect();
+                  onOpenChange(false);
+                }}
+              >
+                <LogOut aria-hidden="true" />
+                Disconnect
+              </Button>
+            ) : null}
+          </div>
+        </>
+      }
+    >
       {wallet.isAuthenticated ? (
         <section className={block} aria-label="Wallet">
           <div className={identity}>
@@ -141,84 +227,44 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
 
       {dao ? <MembershipBlock config={dao.daoConfig} daoId={dao.daoId} /> : null}
 
-      <section className={block} aria-label="Places">
-        {dao ? (
-          <ListRow
-            media={<Home aria-hidden="true" />}
-            title={isHome ? 'Your home community' : 'Make this your home community'}
-            meta="Opens first on this browser"
-            trailing={
-              <Button
-                variant="secondary"
-                size="sm"
-                aria-pressed={isHome}
-                onClick={() => setHome(isHome ? null : { id: dao.daoId, name: dao.daoConfig.tokenName })}
-              >
-                {isHome ? 'Remove' : 'Set home'}
-              </Button>
-            }
-          />
-        ) : home ? (
-          <ListRow
-            href={daoRoute(home.id)}
-            media={<Home aria-hidden="true" />}
-            title={home.name}
-            meta="Home community"
-          />
-        ) : null}
-        <ListRow
-          href="/drafts"
-          media={<FileText aria-hidden="true" />}
-          title="Drafts"
-          meta="Communities you started on this browser"
-        />
-        {dao ? (
-          <ListRow
-            href={daoRoute(dao.daoId, 'admin')}
-            media={<Settings aria-hidden="true" />}
-            title="Manage"
-            meta="Settings, roles and setup"
-          />
-        ) : null}
-      </section>
-
-      <section className={block} aria-label="Appearance">
-        <h3 className={heading}>Appearance</h3>
-        <SegmentedControl
-          label="Appearance"
-          value={preference}
-          onValueChange={(next) => {
-            if (isWarmInkPreference(next)) setThemePreference(next);
-          }}
-          options={[
-            { value: 'dark', label: 'Dark', icon: <Moon aria-hidden="true" /> },
-            { value: 'light', label: 'Light', icon: <Sun aria-hidden="true" /> },
-            { value: 'system', label: 'System', icon: <SunMoon aria-hidden="true" /> }
-          ]}
-        />
-      </section>
-
-      {wallet.isAuthenticated ? (
-        <div className={css({ pt: '4' })}>
-          <Button
-            variant="ghost"
-            onClick={async () => {
-              await wallet.disconnect();
-              onOpenChange(false);
-            }}
-          >
-            <LogOut aria-hidden="true" />
-            Disconnect
-          </Button>
-        </div>
+      {dao || home ? (
+        <section className={block} aria-label="Places">
+          {dao ? (
+            <ListRow
+              media={<Home aria-hidden="true" />}
+              title={isHome ? 'Your home community' : 'Make this your home community'}
+              meta="Opens first on this browser"
+              trailing={
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  aria-pressed={isHome}
+                  onClick={() => setHome(isHome ? null : { id: dao.daoId, name: dao.daoConfig.tokenName })}
+                >
+                  {isHome ? 'Remove' : 'Set home'}
+                </Button>
+              }
+            />
+          ) : home ? (
+            <ListRow
+              href={daoRoute(home.id)}
+              media={<Home aria-hidden="true" />}
+              title={home.name}
+              meta="Home community"
+            />
+          ) : null}
+          {dao ? (
+            <ListRow
+              href={daoRoute(dao.daoId, 'admin')}
+              media={<Settings aria-hidden="true" />}
+              title="Manage"
+              meta="Settings, roles and setup"
+            />
+          ) : null}
+        </section>
       ) : null}
 
-      <nav className={footerLinks} aria-label="Legal">
-        <NextLink href={'/privacy' as Route}>Privacy</NextLink>
-        <NextLink href={'/terms' as Route}>Terms</NextLink>
-        <NextLink href={'/disclaimer' as Route}>Disclaimer</NextLink>
-        <BuilderDaoCredit />
-      </nav>
+      <YouDrafts />
     </Sheet>
   );
 }

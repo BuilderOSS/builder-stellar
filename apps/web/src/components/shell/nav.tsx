@@ -1,9 +1,12 @@
 'use client';
 
 import type { LucideIcon } from 'lucide-react';
+import { LayoutGrid } from 'lucide-react';
 import type { Route } from 'next';
 import NextLink from 'next/link';
 import { css, cx, sva } from 'styled-system/css';
+
+import { Crest } from '@/components/ui';
 
 import { BrandMark } from './brand-mark';
 
@@ -54,7 +57,7 @@ function badgeLabel(item: ShellNavItem) {
 const RAIL_OPEN_WIDTH = '232px';
 
 const rail = sva({
-  slots: ['root', 'panel', 'list', 'item', 'icon', 'label', 'footer', 'separator', 'brand'],
+  slots: ['root', 'panel', 'list', 'item', 'icon', 'label', 'footer', 'separator', 'brand', 'groupLabel'],
   base: {
     // The root holds the 72px column; the panel inside floats over the page when it widens,
     // so opening the rail never reflows content.
@@ -169,7 +172,16 @@ const rail = sva({
     },
     brand: { fontFamily: 'display', fontWeight: '700', fontSize: '1.0625rem', color: 'ink' },
     footer: { mt: 'auto', display: 'flex', flexDirection: 'column', gap: '1' },
-    separator: { height: '1px', bg: 'rule', my: '1', mx: '2' }
+    separator: { height: '1px', bg: 'rule', my: '1', mx: '2' },
+    // Group caption; it shares the label fade, so it only reads while the rail is open.
+    groupLabel: {
+      textStyle: 'caption',
+      fontWeight: '600',
+      color: 'ink.muted',
+      pl: '3',
+      minH: '5',
+      lineHeight: '1.25rem'
+    }
   }
 });
 
@@ -177,13 +189,18 @@ const rail = sva({
  * Desktop and tablet navigation: a 72px icon rail that widens on hover (or keyboard focus)
  * to show labels. The active item is marked in signal blue.
  */
+export type RailCommunity = { key: string; label: string; href: string; seed: string; image?: string | null };
+export const RAIL_COMMUNITY_LIMIT = 5;
+
 export function NavRail({
   label,
   homeHref = '/',
   items,
   footerItems = [],
   activeKey,
-  action
+  action,
+  communities = [],
+  communitiesHref = '/'
 }: {
   label: string;
   homeHref?: string;
@@ -192,6 +209,10 @@ export function NavRail({
   activeKey?: string;
   /** One filled action pinned to the bottom, e.g. Start a DAO. */
   action?: Pick<ShellNavItem, 'label' | 'href' | 'icon'>;
+  /** Shortcuts to the viewer's own communities, shown as crests under the main items. */
+  communities?: RailCommunity[];
+  /** Where "All your communities" goes when there are more than fit. */
+  communitiesHref?: string;
 }) {
   const classes = rail();
   const renderItem = (item: ShellNavItem) => {
@@ -223,6 +244,36 @@ export function NavRail({
         </NextLink>
         <span className={classes.separator} aria-hidden="true" />
         <ul className={classes.list}>{items.map(renderItem)}</ul>
+        {communities.length ? (
+          <>
+            <span className={classes.separator} aria-hidden="true" />
+            <span className={cx(classes.label, classes.groupLabel)} id="rail-communities-label">
+              Yours
+            </span>
+            <ul className={classes.list} aria-labelledby="rail-communities-label">
+              {communities.slice(0, RAIL_COMMUNITY_LIMIT).map((community) => (
+                <li key={community.key}>
+                  <NextLink href={community.href as Route} className={classes.item}>
+                    <span className={classes.icon}>
+                      <Crest name={community.label} seed={community.seed} src={community.image} size="sm" />
+                    </span>
+                    <span className={classes.label}>{community.label}</span>
+                  </NextLink>
+                </li>
+              ))}
+              {communities.length > RAIL_COMMUNITY_LIMIT ? (
+                <li>
+                  <NextLink href={communitiesHref as Route} className={classes.item}>
+                    <span className={classes.icon}>
+                      <LayoutGrid aria-hidden="true" strokeWidth={1.75} />
+                    </span>
+                    <span className={classes.label}>All your communities</span>
+                  </NextLink>
+                </li>
+              ) : null}
+            </ul>
+          </>
+        ) : null}
         <div className={classes.footer}>
           {footerItems.length ? <ul className={classes.list}>{footerItems.map(renderItem)}</ul> : null}
           {action ? (

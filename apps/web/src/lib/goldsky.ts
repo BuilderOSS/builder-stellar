@@ -599,6 +599,8 @@ export async function getDashboardData(address: string, params: { limit?: number
   return {
     myDaos: myDaos.map((row) => ({
       dao_id: row.daoId,
+      // Only a claimed slug is permanent; pending DAOs link by address.
+      slug: row.slugClaimed ? row.claimedSlug : null,
       token_name: row.tokenName,
       token_symbol: row.tokenSymbol,
       token_description: row.tokenDescription,

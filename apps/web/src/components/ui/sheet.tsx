@@ -88,7 +88,24 @@ const sheet = sva({
       borderColor: 'rule',
       '& > *': { flex: '1' }
     }
-  }
+  },
+  variants: {
+    footerLayout: {
+      // Default: equal-width buttons in a row (Cancel · Confirm).
+      row: {},
+      // Settings that belong at the bottom of a panel, stacked and left as their natural width.
+      stack: {
+        footer: {
+          flexDirection: 'column',
+          alignItems: 'stretch',
+          gap: '3',
+          pb: 'calc(token(spacing.3) + env(safe-area-inset-bottom))',
+          '& > *': { flex: 'none' }
+        }
+      }
+    }
+  },
+  defaultVariants: { footerLayout: 'row' }
 });
 
 /**
@@ -103,6 +120,7 @@ export function Sheet({
   hideTitle = false,
   children,
   footer,
+  footerLayout = 'row',
   trigger
 }: {
   open?: boolean;
@@ -113,10 +131,12 @@ export function Sheet({
   hideTitle?: boolean;
   children: ReactNode;
   footer?: ReactNode;
+  /** `stack` pins a column of controls to the bottom (e.g. settings); `row` for paired buttons. */
+  footerLayout?: 'row' | 'stack';
   /** Optional trigger element (rendered via Dialog.Trigger asChild). */
   trigger?: ReactNode;
 }) {
-  const classes = sheet();
+  const classes = sheet({ footerLayout });
   return (
     <Dialog.Root
       open={open}

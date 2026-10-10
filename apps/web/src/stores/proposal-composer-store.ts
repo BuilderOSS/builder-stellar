@@ -378,12 +378,16 @@ export const selectDraft = (address: string | null, daoId: string) => (state: Pr
   return state.draftsByWallet[normalizeWalletAddress(address)]?.[daoId] ?? emptyDraft;
 };
 
-export const selectHasDraft = (address: string | null, daoId: string) => (state: ProposalComposerStore) => {
-  if (!address) return false;
-  const draft = state.draftsByWallet[normalizeWalletAddress(address)]?.[daoId];
+/** Whether someone has started this draft: any action, an action being edited, or any proposal text. */
+export function proposalDraftHasContent(draft: ProposalDraft | undefined) {
   return Boolean(
     draft && (draft.queuedActions.length > 0 || draft.editingState || Object.values(draft.metadata).some(Boolean))
   );
+}
+
+export const selectHasDraft = (address: string | null, daoId: string) => (state: ProposalComposerStore) => {
+  if (!address) return false;
+  return proposalDraftHasContent(state.draftsByWallet[normalizeWalletAddress(address)]?.[daoId]);
 };
 
 export const selectCanProceedToStep2 = (address: string | null, daoId: string) => (state: ProposalComposerStore) => {

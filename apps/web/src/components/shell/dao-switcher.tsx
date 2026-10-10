@@ -7,7 +7,7 @@ import { css } from 'styled-system/css';
 import { Button, ButtonLink, Chip, Crest, EmptyState, ListRow, Sheet, Skeleton } from '@/components/ui';
 import { useCloseOnNavigate } from '@/hooks/use-close-on-navigate';
 import { useHomeDao } from '@/hooks/use-home-dao';
-import { daoRoute } from '@/lib/dao-routes';
+import { daoRoute, daoRouteId } from '@/lib/dao-routes';
 import { type DashboardDao, useDashboardData } from '@/lib/goldsky-queries';
 
 import { useWalletSession } from './wallet-session';
@@ -130,7 +130,7 @@ export function DaoSwitcher({
                   <ListRow
                     key={dao.dao_id}
                     as="li"
-                    href={daoRoute(dao.dao_id)}
+                    href={daoRoute(daoRouteId({ daoId: dao.dao_id, slug: dao.slug }))}
                     media={<Crest name={daoName(dao)} seed={dao.dao_id} src={dao.contract_image} />}
                     title={daoName(dao)}
                     meta={dao.status === 'pending' ? 'In setup' : dao.token_symbol || undefined}

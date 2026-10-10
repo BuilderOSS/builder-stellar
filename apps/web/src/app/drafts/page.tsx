@@ -1,15 +1,15 @@
 'use client';
 
-import { LocalDrafts } from '@/components/local-workspace/local-drafts';
+import { DraftsOverview } from '@/components/drafts/drafts-overview';
 import { PageSection } from '@/components/page-section';
 
 export default function DraftsPage() {
   return (
     <PageSection
       title="Drafts"
-      description="Communities you started on this browser. They aren't shared or synced; clearing browser data removes them."
+      description="Proposals and DAOs you started on this browser. They aren't shared or synced; clearing browser data removes them."
     >
-      <LocalDrafts />
+      <DraftsOverview />
     </PageSection>
   );
 }
