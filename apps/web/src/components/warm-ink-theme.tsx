@@ -4,7 +4,12 @@ import { Monitor } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useEffect, useSyncExternalStore } from 'react';
 
-import { isWarmInkPreference, WARM_INK_THEME_KEY, type WarmInkPreference } from '@/lib/warm-ink-theme';
+import {
+  isWarmInkPreference,
+  WARM_INK_DEFAULT_PREFERENCE,
+  WARM_INK_THEME_KEY,
+  type WarmInkPreference
+} from '@/lib/warm-ink-theme';
 
 const THEME_EVENT = 'builder:warm-ink-theme';
 
@@ -15,7 +20,7 @@ function subscribe(listener: () => void) {
 
 function getPreference(): WarmInkPreference {
   const preference = document.documentElement.dataset.themePreference;
-  return isWarmInkPreference(preference) ? preference : 'system';
+  return isWarmInkPreference(preference) ? preference : WARM_INK_DEFAULT_PREFERENCE;
 }
 
 function applyTheme(preference: WarmInkPreference) {
@@ -39,7 +44,7 @@ function applyTheme(preference: WarmInkPreference) {
 }
 
 export function WarmInkThemeControl() {
-  const preference = useSyncExternalStore(subscribe, getPreference, () => 'system' as const);
+  const preference = useSyncExternalStore(subscribe, getPreference, () => WARM_INK_DEFAULT_PREFERENCE);
   return (
     <label className="warm-ink-theme-control">
       <Monitor size={16} strokeWidth={1.5} aria-hidden="true" />
@@ -77,7 +82,7 @@ export function WarmInkThemeRuntime() {
     };
     const onStorage = (event: StorageEvent) => {
       if (event.key !== WARM_INK_THEME_KEY && event.key !== null) return;
-      applyTheme(isWarmInkPreference(event.newValue) ? event.newValue : 'system');
+      applyTheme(isWarmInkPreference(event.newValue) ? event.newValue : WARM_INK_DEFAULT_PREFERENCE);
     };
     applyTheme(getPreference());
     media.addEventListener('change', onSystemChange);

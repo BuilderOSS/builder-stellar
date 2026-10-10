@@ -3,7 +3,7 @@ import { useState } from 'react';
 
 import { Input } from '@/components/ui';
 import { configuredCreationNetwork, creationAssets } from '@/lib/create-dao-schema';
-import { formatDuration } from '@/lib/time-utils';
+import { formatDuration } from '@/lib/duration';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
 import { CreationField, fieldAccessibility } from './CreationField';

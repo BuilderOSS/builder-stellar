@@ -6,7 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 
 const state = vi.hoisted(() => ({ config: {} as DaoNetworkConfig }));
-vi.mock('@/contexts/dao-context', () => ({ useDaoContext: () => ({ daoConfig: state.config }) }));
+vi.mock('@/contexts/dao-context', () => ({
+  useDaoContext: () => ({ daoConfig: state.config }),
+  useOptionalDaoContext: () => ({ daoConfig: state.config })
+}));
 import { ProposalActionPreview } from './proposal-action-preview';
 
 const contract = (byte: number) => StrKey.encodeContract(new Uint8Array(32).fill(byte));

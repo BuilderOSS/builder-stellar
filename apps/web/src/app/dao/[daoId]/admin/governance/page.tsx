@@ -16,7 +16,7 @@ import { Badge, Button, Callout, Card, Heading, Skeleton, Text } from '@/compone
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { useContractAdmin, useGovernorSettings } from '@/lib/admin-queries';
-import { formatDuration } from '@/lib/format-duration';
+import { formatDuration } from '@/lib/duration';
 import {
   validateProposalThreshold,
   validateQueueDelay,

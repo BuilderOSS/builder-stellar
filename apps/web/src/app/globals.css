@@ -1,34 +1,35 @@
+/*
+ * Legacy variable aliases. Warm Ink · Dusk tokens live in panda.config.ts
+ * (see DESIGN.md); these names keep not-yet-migrated screens on the new
+ * palette. Delete this block once no stylesheet or component references them.
+ */
 :root {
   color-scheme: light;
-  /* Warm Ink, reference palette C. Keep the source values intact. */
-  --canvas: #efede8;
-  --surface: #f8f6f2;
-  --surface-raised: #fdfcf9;
-  --surface-hover: #f2f0ea;
-  --ink: #23201c;
-  --muted: #5c564d;
-  --faint: #8d867a;
-  --rule: #d9d5cd;
-  --accent: #33584b;
-  --accent-strong: #2a4a3e;
-  --accent-ink: #f9faf7;
-  --accent-wash: rgba(51, 88, 75, 0.09);
-  --accent-edge: rgba(51, 88, 75, 0.34);
-  --warm: #b45f3d;
-  --positive: #2e7458;
-  --warning: #96591b;
-  --danger: #a43d3d;
-  --float-shadow:
-    0 1px 2px rgba(30, 26, 18, 0.05), 0 8px 24px rgba(30, 26, 18, 0.07), 0 28px 64px rgba(30, 26, 18, 0.1);
-  --float-edge: rgba(30, 26, 18, 0.08);
-  --float-highlight: rgba(255, 255, 255, 0.7);
-  --font-family-ui:
-    var(--font-ui, 'Inter'), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-family-display: var(--font-instrument, 'Instrument Serif'), Georgia, 'Times New Roman', serif;
-  --ease-ui: cubic-bezier(0.2, 0, 0, 1);
-  --radius-control: 8px;
-  --radius-panel: 14px;
-  /* Accessible secondary copy uses muted; faint is decorative, not small text. */
+  --canvas: var(--colors-canvas);
+  --surface: var(--colors-surface);
+  --surface-raised: var(--colors-raised);
+  --surface-hover: var(--colors-hover);
+  --ink: var(--colors-ink);
+  --muted: var(--colors-ink-muted);
+  --faint: var(--colors-ink-faint);
+  --rule: var(--colors-rule);
+  --accent: var(--colors-signal);
+  --accent-strong: var(--colors-primary-hover);
+  --accent-ink: var(--colors-primary-fg);
+  --accent-wash: var(--colors-signal-wash);
+  --accent-edge: var(--colors-signal-edge);
+  --warm: var(--colors-brass);
+  --positive: var(--colors-success);
+  --warning: var(--colors-warning);
+  --danger: var(--colors-danger);
+  --float-shadow: var(--shadows-float);
+  --float-edge: var(--colors-rule);
+  --float-highlight: transparent;
+  --font-family-ui: var(--fonts-body);
+  --font-family-display: var(--fonts-display);
+  --ease-ui: var(--easings-out);
+  --radius-control: var(--radii-control);
+  --radius-panel: var(--radii-card);
   --surface-0: var(--canvas);
   --surface-1: var(--surface);
   --surface-2: var(--surface-raised);
@@ -37,23 +38,23 @@
   --text-secondary: var(--muted);
   --text-tertiary: var(--muted);
   --border-default: var(--rule);
-  --border-strong: color-mix(in srgb, var(--rule) 72%, var(--muted));
-  --action: var(--accent);
-  --action-hover: var(--accent-strong);
-  --focus: var(--accent);
-  --focus-soft: var(--accent-wash);
+  --border-strong: var(--colors-rule-strong);
+  --action: var(--colors-primary);
+  --action-hover: var(--colors-primary-hover);
+  --focus: var(--colors-signal);
+  --focus-soft: var(--colors-signal-wash);
   --negative: var(--danger);
-  --positive-wash: color-mix(in srgb, var(--positive) 10%, transparent);
-  --warning-wash: color-mix(in srgb, var(--warning) 10%, transparent);
-  --danger-wash: color-mix(in srgb, var(--danger) 10%, transparent);
-  --positive-edge: color-mix(in srgb, var(--positive) 34%, transparent);
-  --warning-edge: color-mix(in srgb, var(--warning) 34%, transparent);
-  --danger-edge: color-mix(in srgb, var(--danger) 34%, transparent);
-  --skeleton: color-mix(in srgb, var(--ink) 7%, transparent);
+  --positive-wash: var(--colors-success-wash);
+  --warning-wash: var(--colors-warning-wash);
+  --danger-wash: var(--colors-danger-wash);
+  --positive-edge: var(--colors-success-edge);
+  --warning-edge: var(--colors-warning-edge);
+  --danger-edge: var(--colors-danger-edge);
+  --skeleton: var(--colors-skeleton);
   --skeleton-highlight: color-mix(in srgb, var(--ink) 12%, transparent);
   --overlay-opacity: 0.48;
-  --content-width: 1240px;
-  --page-gutter: clamp(16px, 4vw, 48px);
+  --content-width: var(--sizes-content);
+  --page-gutter: clamp(16px, 4vw, 40px);
 
   /* Compatibility aliases for legacy scale-based component styles. */
   --accent-1: var(--surface);
@@ -105,27 +106,7 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --canvas: #0b0a09;
-  --surface: #151210;
-  --surface-raised: #1c1916;
-  --surface-hover: #221e1a;
-  --ink: #ece7e0;
-  --muted: #aba094;
-  --faint: #7a7065;
-  --rule: #29241f;
-  --accent: #78b69b;
-  --accent-strong: #97c9b2;
-  --accent-ink: #0c1712;
-  --accent-wash: rgba(120, 182, 155, 0.11);
-  --accent-edge: rgba(120, 182, 155, 0.36);
-  --warm: #c49a7c;
-  --positive: #63b891;
-  --warning: #d3a25a;
-  --danger: #de7e8f;
-  --float-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 32px rgba(0, 0, 0, 0.34), 0 36px 88px rgba(8, 4, 0, 0.5);
-  --float-edge: rgba(200, 230, 210, 0.06);
-  --float-highlight: rgba(255, 255, 255, 0.04);
-  --overlay-opacity: 0.74;
+  --overlay-opacity: 0.66;
 }
 
 * {

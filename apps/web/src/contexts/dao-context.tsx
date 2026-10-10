@@ -51,3 +51,8 @@ export function useDaoContext(): DaoContextValue {
   }
   return context;
 }
+
+/** DAO context when rendered inside a DAO route, otherwise null. */
+export function useOptionalDaoContext(): DaoContextValue | null {
+  return useContext(DaoContext);
+}

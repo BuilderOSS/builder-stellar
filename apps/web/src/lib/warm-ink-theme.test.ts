@@ -24,13 +24,14 @@ describe('Warm Ink first paint', () => {
     expect(boot('light', true)).toEqual({ themePreference: 'light', theme: 'light' });
     expect(boot('dark', false)).toEqual({ themePreference: 'dark', theme: 'dark' });
   });
-  it('resolves system and missing preferences', () => {
+  it('resolves system preferences and defaults first visits to dark', () => {
     expect(boot('system', true)).toEqual({ themePreference: 'system', theme: 'dark' });
-    expect(boot(null, false)).toEqual({ themePreference: 'system', theme: 'light' });
+    expect(boot('system', false)).toEqual({ themePreference: 'system', theme: 'light' });
+    expect(boot(null, false)).toEqual({ themePreference: 'dark', theme: 'dark' });
   });
   it('ignores invalid stored values and survives denied storage', () => {
-    expect(boot('invalid', true).theme).toBe('dark');
-    expect(boot(null, true, true).theme).toBe('dark');
+    expect(boot('invalid', false).theme).toBe('dark');
+    expect(boot(null, false, true).theme).toBe('dark');
   });
   it('only accepts documented preference values', () => {
     expect(['light', 'dark', 'system'].every(isWarmInkPreference)).toBe(true);

@@ -13,8 +13,8 @@ const mock = vi.hoisted(() => ({
   >,
   historyHook: vi.fn()
 }));
-vi.mock('@/contexts/dao-context', () => ({
-  useDaoContext: () => ({
+vi.mock('@/contexts/dao-context', () => {
+  const value = {
     daoId: 'dao-a',
     daoConfig: {
       name: 'testnet',
@@ -22,8 +22,9 @@ vi.mock('@/contexts/dao-context', () => ({
       governorContractId: 'governor-a',
       tokenContractId: 'dao-a'
     }
-  })
-}));
+  };
+  return { useDaoContext: () => value, useOptionalDaoContext: () => value };
+});
 vi.mock('@/stores/auth-session-store', () => ({
   useAuthSessionStore: (selector: (state: unknown) => unknown) => selector({ address: '', authStatus: 'disconnected' })
 }));
