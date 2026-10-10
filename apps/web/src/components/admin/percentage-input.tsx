@@ -71,7 +71,7 @@ export function PercentageInput({
           disabled={disabled}
           placeholder="0.00"
         />
-        <Text style={{ fontSize: '0.875rem', color: '#6b7280', margin: 0 }}>
+        <Text size="sm" tone="muted">
           {percentageValue}% ({bps} basis points)
         </Text>
       </Stack>

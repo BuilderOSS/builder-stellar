@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { button } from 'styled-system/recipes';
 
 type IconLinkButtonProps = {
   href: string;
@@ -7,6 +8,7 @@ type IconLinkButtonProps = {
   compact?: boolean;
 };
 
+/** External icon link (explorer, docs). Opens in a new tab. */
 export function IconLinkButton({ href, label, children, compact = false }: IconLinkButtonProps) {
   return (
     <a
@@ -15,24 +17,7 @@ export function IconLinkButton({ href, label, children, compact = false }: IconL
       rel="noreferrer"
       aria-label={label}
       title={label}
-      className="warm-ink-icon-action"
-      style={{
-        appearance: 'none',
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: compact ? '2rem' : '2.75rem',
-        height: compact ? '2rem' : '2.75rem',
-        minWidth: compact ? '2rem' : '2.75rem',
-        minHeight: compact ? '2rem' : '2.75rem',
-        padding: 0,
-        borderRadius: compact ? '8px' : '10px',
-        border: '1px solid var(--border-default)',
-        background: 'var(--surface-2)',
-        color: 'var(--text-secondary)',
-        cursor: 'pointer',
-        textDecoration: 'none'
-      }}
+      className={button({ variant: 'ghost', size: compact ? 'sm' : 'md', iconOnly: true })}
     >
       {children}
     </a>

@@ -1,33 +1,28 @@
-import { Stack } from 'styled-system/jsx';
+import { Check, Minus, X } from 'lucide-react';
+import { css } from 'styled-system/css';
 
-import { Button, Callout, Card, Input, Skeleton, Text } from '@/components/ui';
+import {
+  Button,
+  Callout,
+  Chip,
+  ChoiceGroup,
+  Field,
+  FieldHelperText,
+  FieldLabel,
+  Skeleton,
+  Textarea
+} from '@/components/ui';
 
 const VOTE_OPTIONS = [
-  { label: 'For', value: 1 },
-  { label: 'Against', value: 0 },
-  { label: 'Abstain', value: 2 }
-];
+  { label: 'For', value: 1, tone: 'success', icon: Check },
+  { label: 'Against', value: 0, tone: 'danger', icon: X },
+  { label: 'Abstain', value: 2, tone: 'neutral', icon: Minus }
+] as const;
 
-const VOTE_STYLES: Record<number, { border: string; background: string; color: string; accent: string }> = {
-  1: {
-    border: 'rgba(74, 222, 128, 0.52)',
-    background: 'rgba(10, 38, 24, 0.72)',
-    color: '#dcfce7',
-    accent: 'rgba(74, 222, 128, 0.82)'
-  },
-  0: {
-    border: 'rgba(248, 113, 113, 0.52)',
-    background: 'rgba(45, 12, 12, 0.72)',
-    color: '#fee2e2',
-    accent: 'rgba(248, 113, 113, 0.82)'
-  },
-  2: {
-    border: 'rgba(148, 163, 184, 0.48)',
-    background: 'rgba(30, 41, 59, 0.72)',
-    color: '#e2e8f0',
-    accent: 'rgba(148, 163, 184, 0.8)'
-  }
-};
+const forIcon = css({ color: 'success' });
+const againstIcon = css({ color: 'danger' });
+const abstainIcon = css({ color: 'ink.muted' });
+const ICON_CLASS: Record<number, string> = { 1: forIcon, 0: againstIcon, 2: abstainIcon };
 
 type CurrentVote = {
   label: string;
@@ -49,6 +44,16 @@ type ProposalVotePanelProps = {
   currentVote: CurrentVote | null;
 };
 
+const stack = css({ display: 'grid', gap: '4' });
+const power = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
+const powerValue = css({ color: 'ink', fontWeight: '600', fontVariantNumeric: 'tabular-nums' });
+const voted = css({ display: 'grid', gap: '2', p: '3.5', borderRadius: 'control', bg: 'brass.wash' });
+const votedReason = css({ textStyle: 'body', color: 'ink', m: '0', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' });
+
+/**
+ * Cast a vote: three visible, keyboard-friendly choices, an optional reason
+ * members will see, and a button that names exactly what you're doing.
+ */
 export function ProposalVotePanel({
   canVote,
   busy,
@@ -63,111 +68,76 @@ export function ProposalVotePanel({
   onVote,
   currentVote
 }: ProposalVotePanelProps) {
-  const selectedOption =
-    selectedVoteType === null ? null : (VOTE_OPTIONS.find((option) => option.value === selectedVoteType) ?? null);
-  const selectedVoteStyle = selectedVoteType === null ? null : (VOTE_STYLES[selectedVoteType] ?? null);
+  const selected = VOTE_OPTIONS.find((option) => option.value === selectedVoteType) ?? null;
+  const votes = votingPower ?? '0';
+
+  if (currentVote) {
+    return (
+      <div className={voted}>
+        <div>
+          <Chip tone="yours">You voted {currentVote.label}</Chip>
+        </div>
+        <p className={votedReason}>{currentVote.reason || 'No reason given.'}</p>
+      </div>
+    );
+  }
 
   return (
-    <Stack gap="3">
-      <Text className="label">Your vote</Text>
-      <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+    <div className={stack}>
+      <p className={power}>
         {votingPowerLoading ? (
-          <Skeleton className="skeleton--inline" style={{ width: '220px', height: '1em' }} />
+          <Skeleton className={css({ display: 'inline-block', width: '40', height: '4' })} />
+        ) : votingPowerError ? (
+          votingPowerError
         ) : (
-          votingPowerError || `Voting power at snapshot: ${votingPower ?? '0'}`
+          <>
+            You have <span className={powerValue}>{votes}</span> {votes === '1' ? 'vote' : 'votes'} on this proposal
+          </>
         )}
-      </Text>
-      {currentVote ? (
-        <Card p="4">
-          <Stack gap="2">
-            <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-              You already voted {currentVote.label}.
-            </Text>
-            <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-              {currentVote.reason || 'No reason provided'}
-            </Text>
-          </Stack>
-        </Card>
-      ) : null}
+      </p>
 
-      {unavailableReason && !currentVote ? <Callout variant="warning" title={unavailableReason} /> : null}
+      {unavailableReason ? <Callout variant="warning" title={unavailableReason} /> : null}
 
-      {!currentVote && canVote ? (
+      {canVote ? (
         <>
-          <Input
-            value={voteReason}
-            onChange={(event) => onVoteReasonChange(event.target.value)}
-            placeholder="Vote reason"
+          <ChoiceGroup
+            label="Your vote"
+            name="proposal-vote-type"
+            value={selectedVoteType === null ? null : String(selectedVoteType)}
+            onValueChange={(value) => onSelectedVoteTypeChange(Number(value))}
             disabled={busy}
+            options={VOTE_OPTIONS.map((option) => ({
+              value: String(option.value),
+              label: option.label,
+              tone: option.tone,
+              icon: <option.icon aria-hidden="true" className={ICON_CLASS[option.value]} strokeWidth={2.5} />
+            }))}
           />
-          <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
-            <legend
-              style={{ color: 'rgba(176,201,229,0.88)', fontSize: '0.9rem', fontWeight: 500, marginBottom: '8px' }}
-            >
-              Select your vote
-            </legend>
-            <div role="radiogroup" aria-label="Vote type" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-              {VOTE_OPTIONS.map((option) => {
-                const selected = selectedVoteType === option.value;
-                const style = VOTE_STYLES[option.value];
-                return (
-                  <label
-                    key={option.value}
-                    style={{
-                      borderRadius: '8px',
-                      border: selected ? `1px solid ${style.border}` : '1px solid rgba(160, 194, 225, 0.28)',
-                      background: selected ? style.background : 'transparent',
-                      color: selected ? style.color : 'inherit',
-                      cursor: busy ? 'not-allowed' : 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      minHeight: '36px',
-                      padding: '0 12px',
-                      opacity: busy ? 0.7 : 1
-                    }}
-                  >
-                    <input
-                      type="radio"
-                      name="proposal-vote-type"
-                      value={option.value}
-                      checked={selected}
-                      onChange={() => onSelectedVoteTypeChange(option.value)}
-                      disabled={busy}
-                      style={{ inlineSize: 1, blockSize: 1, opacity: 0, margin: 0, pointerEvents: 'none' }}
-                    />
-                    {option.label}
-                  </label>
-                );
-              })}
-            </div>
-          </fieldset>
-          {selectedOption && selectedVoteStyle ? (
-            <Card
-              p="3"
-              style={{
-                borderColor: selectedVoteStyle.border,
-                background: `linear-gradient(180deg, ${selectedVoteStyle.background} 0%, rgba(9, 9, 10, 0.76) 100%)`
-              }}
-            >
-              <Stack gap="1">
-                <Text className="lede" style={{ margin: 0, fontSize: '0.84rem', color: selectedVoteStyle.color }}>
-                  {selectedOption.label} · {votingPower ?? '0'} voting power
-                </Text>
-              </Stack>
-            </Card>
-          ) : null}
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Button
-              type="button"
-              onClick={() => (selectedVoteType !== null ? onVote(selectedVoteType) : undefined)}
-              disabled={busy || selectedVoteType === null}
-            >
-              {busy ? 'Submitting...' : 'Submit vote'}
-            </Button>
-          </div>
+          <Field>
+            <FieldLabel htmlFor="vote-reason">Why? (optional)</FieldLabel>
+            <Textarea
+              id="vote-reason"
+              rows={2}
+              value={voteReason}
+              onChange={(event) => onVoteReasonChange(event.target.value)}
+              disabled={busy}
+            />
+            <FieldHelperText>Members see your reason next to your vote.</FieldHelperText>
+          </Field>
+          <Button
+            block
+            onClick={() => (selectedVoteType !== null ? onVote(selectedVoteType) : undefined)}
+            disabled={selectedVoteType === null}
+            loading={busy}
+          >
+            {busy
+              ? 'Casting your vote'
+              : selected
+                ? `Cast ${votes} ${votes === '1' ? 'vote' : 'votes'} ${selected.label}`
+                : 'Choose For, Against or Abstain'}
+          </Button>
         </>
       ) : null}
-    </Stack>
+    </div>
   );
 }

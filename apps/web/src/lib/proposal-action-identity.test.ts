@@ -37,11 +37,38 @@ describe('proposal action identity', () => {
     expect(findings.some((finding) => finding.kind === 'conflict')).toBe(true);
   });
 
-  it('finds pause and unpause as a conflict', () => {
-    const existing = action({ type: 'pause-auction' });
-    const findings = analyzeProposalAction(action({ id: 'new', type: 'unpause-auction' }), [existing]);
+  it('allows pause → changes → resume as one ordered proposal', () => {
+    const draft = [
+      action({ id: 'p', type: 'pause-auction' }),
+      action({ id: 'r', type: 'set-auction-reserve-price', reservePrice: '5' })
+    ];
+    const resume = analyzeProposalAction(action({ id: 'u', type: 'unpause-auction' }), draft);
+    expect(resume.some((finding) => finding.severity === 'error')).toBe(false);
+    // And pausing again later is a fresh step, not a repeat.
+    const again = analyzeProposalAction(action({ id: 'p2', type: 'pause-auction' }), [
+      ...draft,
+      action({ id: 'u', type: 'unpause-auction' })
+    ]);
+    expect(again.some((finding) => finding.severity === 'error')).toBe(false);
+  });
 
-    expect(findings.some((finding) => finding.kind === 'conflict')).toBe(true);
+  it('flags the same pause step twice in a row', () => {
+    const findings = analyzeProposalAction(action({ id: 'new', type: 'pause-auction' }), [
+      action({ type: 'pause-auction' })
+    ]);
+    expect(findings.some((finding) => finding.kind === 'duplicate')).toBe(true);
+  });
+
+  it('warns when an auction setting runs after auctions resume', () => {
+    const late = analyzeProposalAction(action({ id: 'd', type: 'set-auction-duration', value: '600' }), [
+      action({ id: 'p', type: 'pause-auction' }),
+      action({ id: 'u', type: 'unpause-auction' })
+    ]);
+    expect(late.some((finding) => finding.kind === 'order' && finding.severity === 'warning')).toBe(true);
+    const inside = analyzeProposalAction(action({ id: 'd', type: 'set-auction-duration', value: '600' }), [
+      action({ id: 'p', type: 'pause-auction' })
+    ]);
+    expect(inside.some((finding) => finding.kind === 'order')).toBe(false);
   });
 
   it('uses per-module upgrade resources and exact leading-zero/case-normalized WASM hashes', () => {

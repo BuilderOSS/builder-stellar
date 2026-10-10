@@ -1,18 +1,23 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { css } from 'styled-system/css';
 import { useSWRConfig } from 'swr';
 
-import styles from '@/components/member-directory/directory.module.css';
+import { Address, Button, ChoiceGroup, Disclosure, Field, FieldHelperText, FieldLabel, Input } from '@/components/ui';
+import { card, muted, review as reviewBox, reviewTitle, title } from '@/components/ui/panel-styles';
+
+const form = css({ display: 'grid', gap: '4' });
+const buttons = css({ display: 'flex', justifyContent: 'flex-end', gap: '2' });
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
-import { getExplorerTxUrl } from '@/lib/explorer-links';
 import { directoryFetch } from '@/lib/member-directory/hooks';
 import { holderTokenId, memberAddress } from '@/lib/member-directory/validation';
 import { currentTokenHolder } from '@/lib/token-holder/read';
 import { assertHolderEnvelope, assertHolderSignedEnvelope, assertHolderWallet } from '@/lib/token-holder/transaction';
 import type { HolderAction, HolderPrepared } from '@/lib/token-holder/types';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
+import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 export function HolderControls({
@@ -152,7 +157,7 @@ export function HolderControls({
       )
         throw new Error('Your account changed. Authenticate again.');
       setMessage('Waiting for your wallet signature…');
-      const signed = await StellarWalletsKit.signTransaction(prepared.xdr, {
+      const signed = await signWithWallet(prepared.xdr, {
         address: prepared.address,
         networkPassphrase: config.passphrase
       });
@@ -189,55 +194,49 @@ export function HolderControls({
     }
   }
   return (
-    <section className={styles.panel} aria-labelledby="holder-controls-title">
-      <h2 id="holder-controls-title">Holder controls</h2>
-      <p className={styles.muted}>
-        These actions belong to the token holder, not the DAO administrator. Each needs your review and a wallet
-        signature.
-      </p>
+    <section className={card} aria-labelledby="holder-controls-title">
+      <div>
+        <h2 id="holder-controls-title" className={title}>
+          Your token
+        </h2>
+        <p className={muted}>Only the holder can do these. Each one asks your wallet to sign.</p>
+      </div>
       {!allowed ? (
-        <p>
+        <p className={muted} role="status">
           {session.walletNetworkIssue ||
             (session.authStatus !== 'authenticated'
-              ? 'Connect and authenticate your wallet using the wallet control.'
+              ? 'Connect your wallet to manage a token you hold.'
               : session.walletNetworkPassphrase !== config.passphrase
-                ? 'Switch your wallet to this DAO’s network.'
+                ? 'Switch your wallet to this community’s network.'
                 : !liveOwner
-                  ? 'Live ownership must be available before using these controls.'
-                  : 'Only the current holder can use these controls.')}
+                  ? 'Live ownership has to load before you can act.'
+                  : 'Only the current holder can do this.')}
         </p>
       ) : null}
-      <div className={styles.row}>
-        {(['transfer', 'approve', 'revoke', 'delegate'] as const).map((action) => (
-          <button
-            type="button"
-            key={action}
-            aria-pressed={kind === action}
-            disabled={busy || Boolean(hash)}
-            onClick={() => {
-              setKind(action);
-              clearReview();
-            }}
-          >
-            {action === 'transfer'
-              ? 'Transfer'
-              : action === 'approve'
-                ? 'Approve a spender'
-                : action === 'revoke'
-                  ? 'Revoke approval'
-                  : 'Delegate votes'}
-          </button>
-        ))}
-      </div>
-      <div className={styles.form}>
+      <ChoiceGroup
+        label="What do you want to do?"
+        name="holder-action"
+        value={kind}
+        disabled={busy || Boolean(hash)}
+        onValueChange={(value) => {
+          setKind(value as typeof kind);
+          clearReview();
+        }}
+        options={[
+          { value: 'transfer', label: 'Send', description: 'Give this token to someone' },
+          { value: 'delegate', label: 'Delegate votes', description: 'Let someone vote with your tokens' },
+          { value: 'approve', label: 'Approve', description: 'Let an app move this token' },
+          { value: 'revoke', label: 'Revoke', description: 'Remove that approval' }
+        ]}
+      />
+      <div className={form}>
         {kind !== 'revoke' ? (
-          <label>
-            {kind === 'delegate'
-              ? 'Delegate address (all your owned tokens)'
-              : kind === 'approve'
-                ? 'Spender address'
-                : 'Recipient address'}
-            <input
+          <Field>
+            <FieldLabel htmlFor="holder-destination">
+              {kind === 'delegate' ? 'Delegate address' : kind === 'approve' ? 'Spender address' : 'Recipient address'}
+            </FieldLabel>
+            <Input
+              id="holder-destination"
               value={destination}
               onChange={(e) => {
                 setDestination(e.target.value);
@@ -246,108 +245,107 @@ export function HolderControls({
               disabled={busy || Boolean(hash)}
               autoCapitalize="none"
               spellCheck={false}
+              placeholder="G… or C…"
             />
-          </label>
+            {kind === 'delegate' ? (
+              <FieldHelperText>
+                Applies to every token you hold here, not just this one. You keep the tokens; only votes move.
+              </FieldHelperText>
+            ) : null}
+          </Field>
         ) : (
-          <p>
-            Revoke this token’s single-token approval immediately. No approval getter is available in the current
-            binding, so the current spender is not displayed. Collection-wide operator permissions are not changed.
+          <p className={muted}>
+            Removes this token’s single-token approval right away. The current spender isn’t shown because the contract
+            doesn’t expose it. Collection-wide operator permissions don’t change.
           </p>
         )}
         {kind === 'approve' ? (
-          <div className={styles.form}>
-            <label>
-              Expiry ledger (not a date or duration)
-              <input
-                inputMode="numeric"
-                value={expiry}
-                onChange={(e) => {
-                  setExpiry(e.target.value);
-                  clearReview();
-                }}
-                disabled={busy || Boolean(hash)}
-              />
-              <span className={styles.muted}>
-                Choose a future ledger within the network’s temporary-storage lifetime. Simulation checks the limit. A
-                spender can transfer your token until this approval expires or you revoke it.
-              </span>
-            </label>
-            <button type="button" disabled={!allowed || busy || Boolean(hash)} onClick={useShortApproval}>
-              Use a short approval (120 ledgers)
-            </button>
-          </div>
+          <Field>
+            <FieldLabel htmlFor="holder-expiry">Approval ends at ledger</FieldLabel>
+            <Input
+              id="holder-expiry"
+              inputMode="numeric"
+              value={expiry}
+              onChange={(e) => {
+                setExpiry(e.target.value);
+                clearReview();
+              }}
+              disabled={busy || Boolean(hash)}
+            />
+            <FieldHelperText>
+              A ledger number, not a date. The spender can move your token until then or until you revoke it.
+            </FieldHelperText>
+            <div>
+              <Button variant="ghost" size="sm" disabled={!allowed || busy || Boolean(hash)} onClick={useShortApproval}>
+                Use a short approval (about 10 minutes)
+              </Button>
+            </div>
+          </Field>
         ) : null}
         {kind === 'delegate' ? (
-          <>
-            <p>
-              Delegation applies to all tokens you own in this DAO, not just this token. It changes who can vote with
-              their voting units, not who owns them.
-            </p>
-            <button
-              type="button"
+          <div>
+            <Button
+              variant="ghost"
+              size="sm"
               disabled={!allowed || busy || Boolean(hash)}
               onClick={() => {
                 setDestination(session.address);
                 clearReview();
               }}
             >
-              Use my address to reclaim my votes
-            </button>
-          </>
+              Vote for myself again
+            </Button>
+          </div>
         ) : null}
-        {!hash ? (
-          <button type="button" disabled={!allowed || busy} onClick={prepare}>
-            {busy ? 'Please wait…' : 'Review and simulate'}
-          </button>
+        {!hash && !review ? (
+          <Button block variant="secondary" disabled={!allowed} loading={busy} onClick={prepare}>
+            {busy ? 'Checking' : 'Review'}
+          </Button>
         ) : null}
       </div>
       {review ? (
-        <div className={styles.notice} aria-label="Transaction review">
-          <p>{review.prepared.summary}</p>
-          <p>
-            Network: {config.label || config.name} · Fee: {review.prepared.fee} stroops (10,000,000 stroops = 1 XLM)
+        <div className={reviewBox} aria-label="Transaction review">
+          <p className={reviewTitle}>{review.prepared.summary}</p>
+          <p className={muted}>
+            Network fee: {review.prepared.fee} stroops (10,000,000 stroops = 1 XLM). Nothing is signed until you press
+            Sign.
           </p>
-          <p className={styles.address}>Signer: {review.prepared.address}</p>
-          <p className={styles.address}>Token contract: {review.prepared.tokenContractId}</p>
-          <p>No signature or submission happens until you choose the button below.</p>
-          <div className={styles.row}>
-            <button type="button" disabled={!allowed || busy} onClick={sign}>
-              Sign and submit
-            </button>
-            <button type="button" disabled={busy} onClick={clearReview}>
-              Cancel review
-            </button>
+          <Disclosure title="Technical details">
+            <Address value={review.prepared.address} label="Signer" />
+            <Address value={review.prepared.tokenContractId} label="Token contract" />
+          </Disclosure>
+          <div className={buttons}>
+            <Button variant="ghost" disabled={busy} onClick={clearReview}>
+              Cancel
+            </Button>
+            <Button disabled={!allowed} loading={busy} onClick={sign}>
+              Sign and send
+            </Button>
           </div>
         </div>
       ) : null}
       {message ? (
-        <p role="status" aria-live="polite">
+        <p className={muted} role="status" aria-live="polite">
           {message}
         </p>
       ) : null}
       {hash ? (
-        <div className={styles.notice}>
-          <p className={styles.address}>Transaction: {hash}</p>
-          {config.name !== 'local' ? (
-            <a href={getExplorerTxUrl(config.name, hash)} target="_blank" rel="noreferrer">
-              View transaction ↗
-            </a>
-          ) : null}
+        <div className={reviewBox}>
+          <Address value={hash} label="Transaction" />
           {confirmed ? (
-            <button
-              type="button"
+            <Button
+              variant="secondary"
               onClick={() => {
                 setHash('');
                 setConfirmed(false);
                 clearReview();
               }}
             >
-              Start another action
-            </button>
+              Do something else
+            </Button>
           ) : (
-            <p>
-              Do not resubmit while confirmation is uncertain. Check the transaction hash or refresh this page after
-              checking the chain.
+            <p className={muted}>
+              Don’t send it again while it’s confirming. Check the transaction, or refresh after it lands.
             </p>
           )}
         </div>

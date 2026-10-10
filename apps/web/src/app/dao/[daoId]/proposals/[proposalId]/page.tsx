@@ -2,27 +2,28 @@
 
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { Client as TreasuryClient } from '@builder-stellar/treasury-bindings';
-import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { Buffer } from 'buffer';
-import Link from 'next/link';
+import { ChevronLeft, RefreshCw } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
-import { Stack } from 'styled-system/jsx';
+import { css } from 'styled-system/css';
 import useSWR from 'swr';
 
-import { PageSection } from '@/components/page-section';
 import { ProposalActionPreview } from '@/components/proposal/proposal-action-preview';
 import { ProposalExecutePanel } from '@/components/proposal/proposal-execute-panel';
 import { ProposalExecutionReceipt } from '@/components/proposal/proposal-execution-receipt';
 import { ProposalLifecyclePanel, ProposalOverview } from '@/components/proposal/proposal-overview';
 import { ProposalQueuePanel } from '@/components/proposal/proposal-queue-panel';
+import { ProposalStateBadge } from '@/components/proposal/proposal-state-badge';
 import { ProposalVoteHistory } from '@/components/proposal/proposal-vote-history';
 import { ProposalVotePanel } from '@/components/proposal/proposal-vote-panel';
 import { ProposalVoteSummary } from '@/components/proposal/proposal-vote-summary';
 import type { ProposalDetail, ProposalVoteItem } from '@/components/proposal/types';
-import { Button, Callout, Card, Skeleton } from '@/components/ui';
+import { Avatar, Button, ButtonLink, Callout, ConfirmAction, Skeleton } from '@/components/ui';
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
+import { shortAddress } from '@/lib/activity-feed';
+import { daoRoute } from '@/lib/dao-routes';
 import { keccak256Bytes } from '@/lib/keccak';
 import { proposalActionAvailability } from '@/lib/proposal-availability';
 import { encodeProposalCallArgs, proposalCallId } from '@/lib/proposal-call';
@@ -35,6 +36,7 @@ import { proposalActionMode, ProposalState } from '@/lib/proposal-state';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useVotingPower } from '@/lib/voting-power';
+import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 type ProposalPageData = {
@@ -96,8 +98,36 @@ async function fetchProposalPageData([, , daoId, proposalId]: readonly [
   };
 }
 
+const page = css({ display: 'grid', gap: '5' });
+const back = css({ justifySelf: 'start', ml: '-3' });
+const loading = css({ display: 'grid', gap: '4' });
+const header = css({ display: 'grid', gap: '3' });
+const title = css({ textStyle: 'title', fontSize: { base: '1.625rem', md: '2.125rem' }, m: '0', textWrap: 'balance' });
+const byline = css({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '2',
+  textStyle: 'caption',
+  color: 'ink.muted',
+  m: '0'
+});
+const layout = css({
+  display: 'grid',
+  gap: '8',
+  mt: '2',
+  lg: { gridTemplateColumns: 'minmax(0, 1fr) 360px', gridTemplateAreas: '"main side"', alignItems: 'start' }
+});
+const side = css({
+  display: 'grid',
+  gap: '4',
+  minW: '0',
+  lg: { gridArea: 'side', position: 'sticky', top: '20' }
+});
+const main = css({ display: 'grid', gap: '8', minW: '0', lg: { gridArea: 'main' } });
+const summaryCard = css({ p: '5', borderRadius: 'card', bg: 'surface', boxShadow: 'raised' });
+
 export default function ProposalDetailPage() {
-  const { daoId, daoConfig: config } = useDaoContext();
+  const { daoId, daoConfig: config, routeId } = useDaoContext();
   const params = useParams<{ proposalId: string }>();
   const proposalId = params.proposalId;
   const session = useAuthSessionStore();
@@ -105,6 +135,7 @@ export default function ProposalDetailPage() {
   const [selectedVoteType, setSelectedVoteType] = useState<number | null>(null);
   const [formMessage, setFormMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [justVoted, setJustVoted] = useState(false);
   const tx = useTransactionFeedback(config.name);
   const [now, setNow] = useState(() => Date.now());
   const [executionResult, setExecutionResult] = useState<{
@@ -233,7 +264,7 @@ export default function ProposalDetailPage() {
       networkPassphrase: config.passphrase,
       publicKey: session.address,
       signTransaction: async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
-        StellarWalletsKit.signTransaction(xdr, {
+        signWithWallet(xdr, {
           networkPassphrase: opts?.networkPassphrase ?? config.passphrase,
           address: opts?.address ?? session.address
         })
@@ -275,6 +306,7 @@ export default function ProposalDetailPage() {
       setVoteReason('');
       setSelectedVoteType(null);
       await Promise.all([mutate(), refreshHasVoted()]);
+      setJustVoted(true);
       tx.success('Vote cast', hash);
     } catch (err) {
       tx.fail(err, 'Vote failed', 'governor');
@@ -356,7 +388,7 @@ export default function ProposalDetailPage() {
         networkPassphrase: config.passphrase,
         publicKey: session.address,
         signTransaction: async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
-          StellarWalletsKit.signTransaction(xdr, {
+          signWithWallet(xdr, {
             networkPassphrase: opts?.networkPassphrase ?? config.passphrase,
             address: opts?.address ?? session.address
           })
@@ -479,71 +511,84 @@ export default function ProposalDetailPage() {
       />
     ) : null;
 
-  return (
-    <PageSection
-      title={
-        detail
-          ? `Proposal #${detail.proposalNumber}: ${detail.metadata.title}`
-          : `Proposal ${shortenProposalId(proposalId)}`
-      }
-      description="Live vote state, indexed votes, and proposal actions for the selected governance item."
-    >
-      <Stack gap="4">
-        {errorMessage ? <Callout variant="error" title={errorMessage} /> : null}
-        {isLoading && !detail ? (
-          <div className="proposal-detail-layout" role="status" aria-busy="true">
-            <span className="sr-only">Loading proposal</span>
-            <div className="proposal-detail-main">
-              <Card p="5">
-                <Stack gap="3">
-                  <Skeleton style={{ width: '42%', height: '1.5em' }} />
-                  <Skeleton style={{ width: '72%', height: '0.9em' }} />
-                  <Skeleton style={{ width: '100%', height: '96px' }} />
-                </Stack>
-              </Card>
-              <Card p="5">
-                <Stack gap="3">
-                  <Skeleton style={{ width: '130px', height: '1.1em' }} />
-                  <Skeleton style={{ width: '100%', height: '1em' }} />
-                  <Skeleton style={{ width: '84%', height: '1em' }} />
-                  <Skeleton style={{ width: '68%', height: '1em' }} />
-                </Stack>
-              </Card>
-              <Card p="5">
-                <Stack gap="3">
-                  <Skeleton style={{ width: '120px', height: '1.1em' }} />
-                  {Array.from({ length: 3 }, (_, index) => (
-                    <Skeleton key={index} style={{ width: '100%', height: '2.2em' }} />
-                  ))}
-                </Stack>
-              </Card>
-            </div>
-            <aside className="proposal-detail-sidebar">
-              <Card p="5">
-                <Stack gap="3">
-                  <Skeleton style={{ width: '60%', height: '1.1em' }} />
-                  <Skeleton style={{ width: '100%', height: '4em' }} />
-                  <Skeleton style={{ width: '100%', height: '8em' }} />
-                  <Skeleton style={{ width: '110px', height: '2.4em' }} />
-                </Stack>
-              </Card>
-            </aside>
-          </div>
-        ) : null}
+  const voters = votes.map((vote) => vote.voter);
 
-        {detail ? (
-          <div className="proposal-detail-layout">
-            <div className="proposal-detail-main">
-              <ProposalOverview detail={detail} network={config.name} />
+  return (
+    <div className={page}>
+      <ButtonLink href={daoRoute(routeId, 'proposals')} variant="ghost" size="sm" className={back}>
+        <ChevronLeft aria-hidden="true" />
+        All proposals
+      </ButtonLink>
+
+      {errorMessage ? <Callout variant="error" title="This proposal didn't load" description={errorMessage} /> : null}
+
+      {isLoading && !detail ? (
+        <div className={loading} role="status" aria-busy="true">
+          <span className="sr-only">Loading proposal</span>
+          <Skeleton className={css({ width: '28', height: '6' })} />
+          <Skeleton className={css({ width: '80%', height: '9' })} />
+          <Skeleton className={css({ height: '40', borderRadius: 'card' })} />
+          <Skeleton className={css({ height: '24' })} />
+        </div>
+      ) : null}
+
+      {detail ? (
+        <>
+          <header className={header}>
+            <div className={css({ display: 'flex', flexWrap: 'wrap', gap: '2', alignItems: 'center' })}>
+              <ProposalStateBadge label={detail.label} />
+              <span className={css({ textStyle: 'mono', color: 'ink.muted' })}>Proposal {detail.proposalNumber}</span>
+            </div>
+            <h1 className={title}>{detail.metadata.title || `Proposal ${shortenProposalId(proposalId)}`}</h1>
+            <p className={byline}>
+              <Avatar address={detail.proposer} size="xs" />
+              {detail.proposer === session.address
+                ? 'You proposed this'
+                : `Proposed by ${shortAddress(detail.proposer)}`}
+            </p>
+          </header>
+
+          <div className={layout}>
+            <aside className={side} aria-label="Status and voting">
+              {formMessage ? <Callout variant="warning" title={formMessage} /> : null}
+              <ProposalLifecyclePanel detail={detail} now={now} actionSlot={actionPanel} />
+              <section className={summaryCard} aria-label="Results so far">
+                <ProposalVoteSummary
+                  totals={{ for: detail.for_votes, against: detail.against_votes, abstain: detail.abstain_votes }}
+                  quorumVotes={detail.quorumVotes}
+                  voters={voters}
+                  viewer={session.address}
+                  celebrateViewer={justVoted}
+                />
+              </section>
+              {detail.proposer === session.address &&
+              (detail.state === ProposalState.Pending || detail.state === ProposalState.Active) ? (
+                <ConfirmAction
+                  trigger={
+                    <Button variant="danger" block disabled={busy || actionsDisabled || !availability.cancel}>
+                      Cancel proposal
+                    </Button>
+                  }
+                  title="Cancel this proposal?"
+                  description="Voting stops and it can't be reopened. You'd need to propose it again."
+                  confirmLabel="Cancel proposal"
+                  busy={busy}
+                  onConfirm={() => cancelProposal()}
+                />
+              ) : null}
+            </aside>
+
+            <div className={main}>
               {encodingError ? <Callout variant="warning" title={encodingError} /> : null}
               {receipt ? <ProposalExecutionReceipt receipt={receipt} /> : null}
-              {receiptError ? <Callout variant="warning" title={`Execution confirmed; ${receiptError}`} /> : null}
+              {receiptError ? <Callout variant="warning" title={`Executed. ${receiptError}`} /> : null}
               {!receipt && detail.executionReceiptStatus === 'pending' ? (
-                <Callout title="Execution receipt not indexed yet. The ordered receipt will appear after indexing catches up." />
+                <Callout title="Executed. The receipt will show here once it's indexed." />
               ) : null}
               {!receipt && detail.executionReceiptStatus === 'unavailable' ? (
-                <Callout variant="warning" title="Proposal executed; the indexed execution receipt is unavailable." />
+                <Callout variant="warning" title="Executed. The receipt isn't available from the indexer." />
               ) : null}
+              <ProposalOverview detail={detail} network={config.name} />
               <ProposalActionPreview
                 targets={detail.targets}
                 functions={detail.functions}
@@ -554,36 +599,19 @@ export default function ProposalDetailPage() {
                 votes={votes}
                 voteLabelForSupport={voteLabelForSupport}
                 formatTimestamp={formatTimestamp}
+                viewer={session.address}
               />
-              {data?.votesError ? <Callout variant="warning" title={data.votesError} /> : null}
-            </div>
-            <aside className="proposal-detail-sidebar" aria-label="Proposal status and voting">
-              {formMessage ? <Callout variant="warning" title={formMessage} /> : null}
-              <ProposalLifecyclePanel detail={detail} now={now} actionSlot={actionPanel} />
-              {detail.proposer === session.address &&
-              (detail.state === ProposalState.Pending || detail.state === ProposalState.Active) ? (
-                <Button
-                  disabled={busy || actionsDisabled || !availability.cancel}
-                  onClick={() => void cancelProposal()}
-                >
-                  Cancel proposal
+              {data?.votesError ? <Callout variant="warning" title="Vote history didn't load" /> : null}
+              <div>
+                <Button variant="ghost" size="sm" onClick={() => void mutate()} loading={isLoading}>
+                  {isLoading ? null : <RefreshCw aria-hidden="true" />}
+                  Refresh
                 </Button>
-              ) : null}
-              <ProposalVoteSummary
-                totals={{ for: detail.for_votes, against: detail.against_votes, abstain: detail.abstain_votes }}
-                quorumVotes={detail.quorumVotes}
-              />
-              <Button type="button" variant="outline" size="sm" onClick={() => void mutate()} disabled={isLoading}>
-                {isLoading ? 'Refreshing...' : 'Refresh proposal'}
-              </Button>
-            </aside>
+              </div>
+            </div>
           </div>
-        ) : null}
-
-        <Link href={`/dao/${daoId}/proposals`} style={{ color: 'inherit' }}>
-          Back to proposals
-        </Link>
-      </Stack>
-    </PageSection>
+        </>
+      ) : null}
+    </div>
   );
 }

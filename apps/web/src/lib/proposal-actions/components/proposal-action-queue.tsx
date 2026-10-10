@@ -3,10 +3,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Stack } from 'styled-system/jsx';
+import { css } from 'styled-system/css';
 
 import { ProposalActionConfirmDialog } from '@/components/proposal/proposal-action-confirm-dialog';
-import { Badge, Button, Card, Text } from '@/components/ui';
+import { Button, Chip } from '@/components/ui';
 import { getProposalActionSummary } from '@/lib/proposal-call';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { normalizeWalletAddress, useProposalComposerStore } from '@/stores/proposal-composer-store';
@@ -20,6 +20,34 @@ type ConfirmDialogState = {
   confirmLabel: string;
   onConfirm: () => void;
 } | null;
+
+const empty = css({ textStyle: 'body', color: 'ink.muted', m: '0' });
+const list = css({ display: 'grid', listStyle: 'none', m: '0', p: '0' });
+const item = css({
+  display: 'grid',
+  gridTemplateColumns: 'auto minmax(0, 1fr)',
+  gap: '3',
+  py: '3.5',
+  borderBottomWidth: '1px',
+  borderColor: 'rule',
+  _last: { borderBottomWidth: '0' },
+  md: { gridTemplateColumns: 'auto minmax(0, 1fr) auto', alignItems: 'center' }
+});
+const number = css({
+  display: 'grid',
+  placeItems: 'center',
+  width: '7',
+  height: '7',
+  borderRadius: 'full',
+  bg: 'hover',
+  textStyle: 'micro',
+  color: 'ink.muted',
+  '[data-editing] > &': { bg: 'signal.wash', color: 'signal' }
+});
+const body = css({ minW: '0' });
+const label = css({ textStyle: 'body', fontWeight: '600', m: '0' });
+const summary = css({ textStyle: 'caption', color: 'ink.muted', m: '0', mt: '0.5', overflowWrap: 'anywhere' });
+const buttons = css({ display: 'flex', gap: '1', gridColumn: { base: '2', md: 'auto' } });
 
 export function ProposalActionQueue({ daoId, editable = true }: { daoId: string; editable?: boolean }) {
   const address = useAuthSessionStore((state) => state.address);
@@ -54,7 +82,7 @@ export function ProposalActionQueue({ daoId, editable = true }: { daoId: string;
     setConfirmDialog({
       open: true,
       title: 'Remove action?',
-      message: `Are you sure you want to remove this ${actionLabel} action?`,
+      message: `This ${actionLabel} action comes out of the proposal.`,
       confirmLabel: 'Remove',
       onConfirm: () => {
         removeAction(address, daoId, index);
@@ -64,50 +92,39 @@ export function ProposalActionQueue({ daoId, editable = true }: { daoId: string;
   };
 
   if (queuedActions.length === 0) {
-    return (
-      <Card p="4">
-        <Text style={{ color: 'var(--gray-11)' }}>No actions queued yet. Add an action above to get started.</Text>
-      </Card>
-    );
+    return <p className={empty}>No actions yet. Add one above.</p>;
   }
 
   return (
-    <Stack gap="3">
-      {queuedActions.map((action, index) => {
-        const handler = getActionHandler(action.type);
-        const isEditing = editingIndex === index;
-
-        return (
-          <Card
-            key={action.id}
-            p="4"
-            style={{
-              border: isEditing ? '2px solid var(--accent-9)' : undefined
-            }}
-          >
-            <Stack gap="3">
-              <div>
-                {isEditing && <Badge style={{ marginBottom: '8px' }}>Currently editing</Badge>}
-                <Text style={{ fontWeight: 600, marginBottom: '4px' }}>{handler.label}</Text>
-                <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)' }}>
-                  {getProposalActionSummary(action)}
-                </Text>
+    <div>
+      <ol className={list}>
+        {queuedActions.map((action, index) => {
+          const handler = getActionHandler(action.type);
+          const isEditing = editingIndex === index;
+          return (
+            <li key={action.id} className={item} data-editing={isEditing ? '' : undefined}>
+              <span className={number} aria-hidden="true">
+                {index + 1}
+              </span>
+              <div className={body}>
+                <p className={label}>
+                  {handler.label}
+                  {isEditing ? (
+                    <span className={css({ ml: '2' })}>
+                      <Chip tone="live">Editing</Chip>
+                    </span>
+                  ) : null}
+                </p>
+                <p className={summary}>{getProposalActionSummary(action)}</p>
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div className={buttons}>
                 {editable ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleEdit(index)}
-                    disabled={isEditing}
-                  >
-                    {isEditing ? 'Editing' : 'Edit'}
+                  <Button variant="ghost" size="sm" onClick={() => handleEdit(index)} disabled={isEditing}>
+                    Edit
                   </Button>
                 ) : null}
                 <Button
-                  type="button"
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
                   onClick={() => handleRemove(index, handler.label)}
                   disabled={editable && isEditing}
@@ -115,19 +132,20 @@ export function ProposalActionQueue({ daoId, editable = true }: { daoId: string;
                   Remove
                 </Button>
               </div>
-            </Stack>
-          </Card>
-        );
-      })}
+            </li>
+          );
+        })}
+      </ol>
       <ProposalActionConfirmDialog
         open={confirmDialog?.open ?? false}
         title={confirmDialog?.title ?? ''}
         message={confirmDialog?.message ?? ''}
         confirmLabel={confirmDialog?.confirmLabel ?? 'Confirm'}
+        tone={confirmDialog?.confirmLabel === 'Remove' ? 'danger' : 'primary'}
         busy={false}
         onConfirm={confirmDialog?.onConfirm ?? (() => {})}
         onCancel={() => setConfirmDialog(null)}
       />
-    </Stack>
+    </div>
   );
 }

@@ -1,29 +1,47 @@
 import '../../styled-system/styles.css';
 import './globals.css';
 
-import type { Metadata } from 'next';
-import { Instrument_Serif, Inter } from 'next/font/google';
+import type { Metadata, Viewport } from 'next';
+import { Bricolage_Grotesque, Figtree, JetBrains_Mono } from 'next/font/google';
 import type { ReactNode } from 'react';
 
 import { AppToaster } from '@/components/app-toaster';
+import { GlobalShell } from '@/components/shell/app-shell';
+import { WalletSessionProvider } from '@/components/shell/wallet-session';
 import { WarmInkThemeRuntime } from '@/components/warm-ink-theme';
 import { warmInkBootScript } from '@/lib/warm-ink-theme';
 
-const instrument = Instrument_Serif({
+// Fetched by Next at build time and self-hosted; no runtime font CDN.
+const display = Bricolage_Grotesque({
   subsets: ['latin'],
-  weight: '400',
-  style: ['normal', 'italic'],
   display: 'swap',
-  variable: '--font-instrument'
+  axes: ['opsz'],
+  variable: '--font-display'
 });
-// Pretendard requires an approved local asset or dependency. Inter is fetched
-// by Next at build time and self-hosted, not a runtime CDN or a named fallback.
-const interfaceFont = Inter({ subsets: ['latin'], display: 'swap', variable: '--font-ui' });
-const daoConfig = { tokenName: 'DAO', tokenDescription: 'Stellar DAO' };
+const ui = Figtree({ subsets: ['latin'], display: 'swap', variable: '--font-ui' });
+const mono = JetBrains_Mono({ subsets: ['latin'], display: 'swap', variable: '--font-mono' });
 
 export const metadata: Metadata = {
-  title: daoConfig.tokenName,
-  description: daoConfig.tokenDescription
+  title: { default: 'Builder', template: '%s · Builder' },
+  description: 'Start a community with your people, vote on what happens next, and see where the shared treasury goes.',
+  applicationName: 'Builder',
+  openGraph: {
+    title: 'Builder',
+    description: 'Your community. Your rules. Your treasury.',
+    siteName: 'Builder',
+    type: 'website'
+  }
+};
+
+export const viewport: Viewport = {
+  // Browser chrome can't read CSS variables; these mirror colors.canvas.
+  /* eslint-disable no-restricted-syntax */
+  themeColor: [
+    { media: '(prefers-color-scheme: dark)', color: '#15120F' },
+    { media: '(prefers-color-scheme: light)', color: '#F3EFE8' }
+  ],
+  /* eslint-enable no-restricted-syntax */
+  viewportFit: 'cover'
 };
 
 export default function RootLayout({
@@ -34,16 +52,18 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${instrument.variable} ${interfaceFont.variable}`}
-      data-palette="c"
+      className={`${display.variable} ${ui.variable} ${mono.variable}`}
+      data-theme="dark"
       suppressHydrationWarning
     >
       <head>
-        <meta name="color-scheme" content="light dark" />
+        <meta name="color-scheme" content="dark light" />
         <script dangerouslySetInnerHTML={{ __html: warmInkBootScript }} />
       </head>
       <body>
-        {children}
+        <WalletSessionProvider>
+          <GlobalShell>{children}</GlobalShell>
+        </WalletSessionProvider>
         <WarmInkThemeRuntime />
         <AppToaster />
       </body>

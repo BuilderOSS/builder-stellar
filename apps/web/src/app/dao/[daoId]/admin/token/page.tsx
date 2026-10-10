@@ -3,10 +3,10 @@
 import { Client as TokenClient } from '@builder-stellar/token-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { useState } from 'react';
+import { css } from 'styled-system/css';
 import { Stack } from 'styled-system/jsx';
 
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
-import { AdminSurfaceNav as AdminSectionNav } from '@/components/admin/admin-surface-nav';
 import { AuthorityPanel } from '@/components/admin/authority-panel';
 import { PageSection } from '@/components/page-section';
 import { Badge, Button, Callout, Card, Heading, Text } from '@/components/ui';
@@ -23,6 +23,7 @@ import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
+import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 export default function TokenAdminPage() {
@@ -129,7 +130,7 @@ export default function TokenAdminPage() {
         networkPassphrase: config.passphrase,
         publicKey: session.address,
         signTransaction: async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
-          StellarWalletsKit.signTransaction(xdr, {
+          signWithWallet(xdr, {
             networkPassphrase: opts?.networkPassphrase ?? config.passphrase,
             address: opts?.address ?? session.address
           })
@@ -164,17 +165,15 @@ export default function TokenAdminPage() {
         onCancel={proposalDraft.cancel}
         onResolve={proposalDraft.resolve}
       />
-      <PageSection title="Token Admin" description="Mint tokens and review the current mint-authority set.">
+      <PageSection title="Mint tokens" description="Create new membership tokens and see who is allowed to mint.">
         <Stack gap="4">
-          <AdminSectionNav daoId={daoId} active="/token" />
-
           <Card p="5">
             <Stack gap="3">
               <div>
                 <Badge>{hasMintAccess ? 'Mint enabled' : 'Read only'}</Badge>
               </div>
-              <Heading style={{ fontSize: '1.2rem' }}>Mint voting token</Heading>
-              <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+              <Heading size="heading">Mint voting token</Heading>
+              <Text size="sm">
                 {hasMintAccess
                   ? `Enter a recipient address and mint up to ${MAX_BATCH_MINT} tokens per transaction directly to that wallet.`
                   : 'Only a mint authority or the admin can mint from this page.'}
@@ -207,11 +206,11 @@ export default function TokenAdminPage() {
                   </label>
                 </>
               ) : null}
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <div className={css({ display: 'flex', gap: '2', flexWrap: 'wrap' })}>
                 <Button type="button" onClick={handleMint} disabled={busy || (!hasMintAccess && !canProposeMint)}>
                   {busy ? 'Preparing…' : hasMintAccess ? 'Mint to recipient' : 'Create mint proposal'}
                 </Button>
-                <Button type="button" variant="outline" onClick={() => void mutate()} disabled={isLoading}>
+                <Button type="button" variant="secondary" onClick={() => void mutate()} disabled={isLoading}>
                   {isLoading ? 'Refreshing...' : 'Refresh authorities'}
                 </Button>
               </div>

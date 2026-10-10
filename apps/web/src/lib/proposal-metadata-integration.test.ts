@@ -42,6 +42,7 @@ const config: DaoNetworkConfig = {
   contractImage: '',
   auctionEnabled: true,
   auctionPaused: false,
+  marketplaceEnabled: null,
   status: 'operational'
 };
 const context: FormContext = { config, session: { address: null, kit: null } };

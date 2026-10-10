@@ -1,106 +1,83 @@
+import { CircleAlert, CircleCheck, Info, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Stack } from 'styled-system/jsx';
-
-import { Badge } from './badge';
-import { Card } from './card';
-import { Text } from './text';
+import { sva } from 'styled-system/css';
 
 type CalloutVariant = 'info' | 'warning' | 'error' | 'success';
 
-const CALLOUT_STYLES: Record<
-  CalloutVariant,
-  {
-    badge: string;
-    accent: string;
-    border: string;
-    background: string;
-    badgeBorder: string;
-    badgeBackground: string;
-    badgeColor: string;
-  }
-> = {
-  info: {
-    badge: 'Info',
-    accent: 'var(--focus)',
-    border: 'var(--accent-edge)',
-    background: 'var(--accent-wash)',
-    badgeBorder: 'var(--accent-edge)',
-    badgeBackground: 'var(--accent-wash)',
-    badgeColor: 'var(--accent)'
+const callout = sva({
+  slots: ['root', 'icon', 'body', 'title', 'description', 'label'],
+  base: {
+    root: {
+      display: 'grid',
+      gridTemplateColumns: 'auto minmax(0, 1fr)',
+      gap: '3',
+      p: '4',
+      borderRadius: 'card',
+      color: 'ink'
+    },
+    icon: { width: '5', height: '5', mt: '0.5', flexShrink: '0' },
+    body: { display: 'grid', gap: '1', minW: '0' },
+    title: { textStyle: 'subheading', fontSize: '0.9375rem', color: 'ink', margin: '0' },
+    description: { textStyle: 'caption', fontSize: '0.875rem', color: 'ink.muted', margin: '0' },
+    label: { textStyle: 'micro', color: 'ink.muted' }
   },
-  warning: {
-    badge: 'Warning',
-    accent: 'var(--warning)',
-    border: 'var(--warning-edge)',
-    background: 'var(--warning-wash)',
-    badgeBorder: 'var(--warning-edge)',
-    badgeBackground: 'var(--warning-wash)',
-    badgeColor: 'var(--warning)'
+  variants: {
+    variant: {
+      info: { root: { bg: 'signal.wash' }, icon: { color: 'signal' } },
+      success: { root: { bg: 'success.wash' }, icon: { color: 'success' } },
+      warning: { root: { bg: 'warning.wash' }, icon: { color: 'warning' } },
+      error: { root: { bg: 'danger.wash' }, icon: { color: 'danger' } }
+    }
   },
-  error: {
-    badge: 'Error',
-    accent: 'var(--danger)',
-    border: 'var(--danger-edge)',
-    background: 'var(--danger-wash)',
-    badgeBorder: 'var(--danger-edge)',
-    badgeBackground: 'var(--danger-wash)',
-    badgeColor: 'var(--danger)'
-  },
-  success: {
-    badge: 'Success',
-    accent: 'var(--positive)',
-    border: 'var(--positive-edge)',
-    background: 'var(--positive-wash)',
-    badgeBorder: 'var(--positive-edge)',
-    badgeBackground: 'var(--positive-wash)',
-    badgeColor: 'var(--positive)'
-  }
+  defaultVariants: { variant: 'info' }
+});
+
+const ICONS: Record<CalloutVariant, typeof Info> = {
+  info: Info,
+  success: CircleCheck,
+  warning: TriangleAlert,
+  error: CircleAlert
 };
 
+const LABELS: Record<CalloutVariant, string> = {
+  info: 'Note',
+  success: 'Done',
+  warning: 'Warning',
+  error: 'Error'
+};
+
+/**
+ * Inline status message. State is carried by icon, tint and an accessible
+ * label, never by colour alone.
+ */
 export function Callout({
   variant = 'info',
   title,
   description,
   children,
-  badge
+  badge,
+  role
 }: {
   variant?: CalloutVariant;
   title: ReactNode;
   description?: ReactNode;
   children?: ReactNode;
+  /** Optional visible label above the title (e.g. "Deferred refund"). */
   badge?: ReactNode;
+  role?: 'status' | 'alert';
 }) {
-  const style = CALLOUT_STYLES[variant];
+  const classes = callout({ variant });
+  const Icon = ICONS[variant];
 
   return (
-    <Card
-      p="4"
-      style={{
-        borderColor: style.border,
-        background: style.background,
-        boxShadow: `inset 3px 0 0 ${style.accent}`
-      }}
-    >
-      <Stack gap="2">
-        <div>
-          <Badge
-            style={{
-              borderColor: style.badgeBorder,
-              background: style.badgeBackground,
-              color: style.badgeColor
-            }}
-          >
-            {badge ?? style.badge}
-          </Badge>
-        </div>
-        <Text style={{ margin: 0, color: 'var(--text-primary)', fontWeight: 700 }}>{title}</Text>
-        {description ? (
-          <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-            {description}
-          </Text>
-        ) : null}
+    <div className={classes.root} role={role}>
+      <Icon className={classes.icon} aria-hidden="true" strokeWidth={2} />
+      <div className={classes.body}>
+        {badge ? <span className={classes.label}>{badge}</span> : <span className="sr-only">{LABELS[variant]}: </span>}
+        <p className={classes.title}>{title}</p>
+        {description ? <div className={classes.description}>{description}</div> : null}
         {children}
-      </Stack>
-    </Card>
+      </div>
+    </div>
   );
 }

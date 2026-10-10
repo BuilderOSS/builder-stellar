@@ -2,7 +2,10 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { css } from 'styled-system/css';
 
+import { Button, Callout } from '@/components/ui';
+import { card, muted, review, reviewTitle, title } from '@/components/ui/panel-styles';
 import { useDaoContext } from '@/contexts/dao-context';
 import { getTreasuryAssets } from '@/lib/assets-config';
 import { daoRoute } from '@/lib/dao-routes';
@@ -15,7 +18,7 @@ import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { selectDraft, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
-import styles from './treasury.module.css';
+const buttons = css({ display: 'flex', justifyContent: 'flex-end', gap: '2' });
 
 const handler: ActionHandler<TransferSacTokenData> = getActionHandler('transfer-sac-token');
 
@@ -30,7 +33,7 @@ export function TransferProposal() {
 }
 
 function TransferProposalForm() {
-  const { daoId, daoConfig } = useDaoContext();
+  const { daoId, daoConfig, routeId } = useDaoContext();
   const context = useActionFormContext();
   const session = useAuthSessionStore();
   const router = useRouter();
@@ -65,21 +68,21 @@ function TransferProposalForm() {
   }
 
   return (
-    <section className={`${styles.panel} ${styles.stack}`} aria-labelledby="treasury-proposal-title">
+    <section className={card} aria-labelledby="treasury-proposal-title">
       <div>
-        <p className={styles.label}>Governance</p>
-        <h2 id="treasury-proposal-title">Propose a transfer</h2>
+        <h2 id="treasury-proposal-title" className={title}>
+          Propose a payout
+        </h2>
+        <p className={muted}>
+          Ask members to send treasury funds to someone. Nothing moves until the vote passes and it is executed.
+        </p>
       </div>
-      <p className={styles.muted}>
-        Add the registered SAC transfer action to your existing proposal queue. Funds leave the treasury only after
-        voting, queueing and execution—not when you create this local draft.
-      </p>
       {!allowed ? (
-        <p role="status">
+        <p className={muted} role="status">
           {session.walletNetworkIssue ||
             (daoConfig.status === 'pending'
-              ? 'Launch the community before proposing transfers.'
-              : 'Authenticate your wallet to prepare a proposal.')}
+              ? 'Payouts can be proposed once the community launches.'
+              : 'Connect your wallet to propose a payout.')}
         </p>
       ) : null}
       <Form
@@ -94,14 +97,11 @@ function TransferProposalForm() {
         validationErrors={validation}
         network={daoConfig.name}
       />
-      {message ? (
-        <p role="alert" className={styles.error}>
-          {message}
-        </p>
-      ) : null}
+      {message ? <Callout variant="error" title={message} role="alert" /> : null}
       {!proposal.pending ? (
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          block
           disabled={!allowed || context.balancesLoading || Boolean(context.balancesError)}
           onClick={() => {
             try {
@@ -116,40 +116,38 @@ function TransferProposalForm() {
                   url: ''
                 },
                 source: 'Treasury',
-                onAdded: () => router.push(daoRoute(daoId, 'proposals/create'))
+                onAdded: () => router.push(daoRoute(routeId, 'proposals/create'))
               });
             } catch (error) {
               setMessage(error instanceof Error ? error.message : 'Unable to prepare proposal.');
             }
           }}
         >
-          Review transfer proposal
-        </button>
+          Review payout
+        </Button>
       ) : (
-        <div className={`${styles.notice} ${styles.stack}`} role="region" aria-label="Review treasury proposal draft">
-          <h3>Review proposal action</h3>
-          <p>{proposal.pending.metadata.description}</p>
-          <p className={styles.address}>Treasury authority: {daoConfig.treasuryContractId}</p>
+        <div className={review} role="region" aria-label="Review payout proposal">
+          <h3 className={reviewTitle}>{proposal.pending.metadata.description}</h3>
           {proposal.pending.summaries.map((summary) => (
-            <p key={summary}>{summary}</p>
+            <p key={summary} className={muted}>
+              {summary}
+            </p>
           ))}
           {proposal.pending.findings.map((finding, index) => (
-            <p key={index}>{finding.message}</p>
+            <Callout key={index} variant={finding.severity === 'error' ? 'error' : 'warning'} title={finding.message} />
           ))}
-          <p className={styles.muted}>
-            No signature will be requested. Existing proposal metadata and actions are preserved. Recipient account
-            trustlines and available balances will be checked during execution.
+          <p className={muted}>
+            Nothing is signed now. It joins your proposal draft with anything already in it. The recipient&apos;s
+            trustline and the treasury balance are checked when it runs.
           </p>
-          <div className={styles.row}>
-            <button type="button" onClick={proposal.cancel}>
+          <div className={buttons}>
+            <Button variant="ghost" onClick={proposal.cancel}>
               Cancel
-            </button>
+            </Button>
             {!proposal.pending.findings.some(
               (finding) => finding.severity === 'error' || finding.kind === 'duplicate' || finding.kind === 'conflict'
             ) ? (
-              <button
-                type="button"
-                className={styles.primary}
+              <Button
                 disabled={!allowed}
                 onClick={() => {
                   try {
@@ -160,8 +158,8 @@ function TransferProposalForm() {
                   }
                 }}
               >
-                Add to queue & open composer
-              </button>
+                Add to proposal
+              </Button>
             ) : null}
           </div>
         </div>

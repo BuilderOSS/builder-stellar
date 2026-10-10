@@ -1,13 +1,11 @@
 'use client';
 
 import { Client as TokenClient } from '@builder-stellar/token-bindings';
-import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { TransactionBuilder } from '@stellar/stellar-sdk';
 import Link from 'next/link';
 import { useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 
-import { AdminSurfaceNav as AdminSectionNav } from '@/components/admin/admin-surface-nav';
 import { type FounderMintRow, founderMintValues } from '@/components/admin/founder-mint-values';
 import { PageSection } from '@/components/page-section';
 import { Button, Callout, Card, Heading, Input, Text } from '@/components/ui';
@@ -16,10 +14,11 @@ import { adminReadOptions, useAdminArtwork, useAdminTokenState } from '@/lib/adm
 import { BATCH_MINT_LIMIT_TEXT, MAX_BATCH_MINT, MAX_BATCH_RECIPIENTS } from '@/lib/batch-mint-budget';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { confirmCreationTransaction, DefinitiveTransactionFailure } from '@/lib/use-dao-deployment';
+import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 export default function FoundersAdminPage() {
-  const { daoId, daoConfig: config } = useDaoContext();
+  const { daoConfig: config, routeId } = useDaoContext();
   const session = useAuthSessionStore();
   const token = useAdminTokenState(config, session.address);
   const artwork = useAdminArtwork(config, session.address);
@@ -84,7 +83,7 @@ export default function FoundersAdminPage() {
                 throw new Error('Wallet changed. Reconnect the setup admin on the DAO network.');
             };
             checkWallet();
-            const signed = await StellarWalletsKit.signTransaction(xdr, {
+            const signed = await signWithWallet(xdr, {
               ...opts,
               address: session.address!,
               networkPassphrase: config.passphrase
@@ -130,18 +129,17 @@ export default function FoundersAdminPage() {
 
   return (
     <PageSection
-      title="Founder allocation"
-      description="Mint the setup allocation as recipient and amount vectors in one Token batch_mint transaction."
+      title="Founder tokens"
+      description="Mint tokens for the founding team before launch, all in one transaction."
     >
       <Stack gap="4">
-        <AdminSectionNav daoId={daoId} active="/founders" />
         {token.isLoading ? <Text role="status">Checking setup admin rights and supply…</Text> : null}
         {token.error ? (
           <Callout variant="error" title="Token state unavailable" description={token.error.message} />
         ) : null}
         <Card p="5">
           <Stack gap="3">
-            <Heading style={{ fontSize: '1.2rem' }}>Founder tokens</Heading>
+            <Heading size="heading">Founder tokens</Heading>
             <Text>
               Current voting supply: {token.data?.supply.toString() ?? 'Unavailable'} (tokens held by the Treasury,
               Auction and Marketplace carry no votes). Founder mints are ordinary voting NFTs, not a vesting schedule or
@@ -149,7 +147,7 @@ export default function FoundersAdminPage() {
             </Text>
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               disabled={busy}
               onClick={() => void Promise.all([token.mutate(), artwork.mutate()])}
             >
@@ -162,7 +160,7 @@ export default function FoundersAdminPage() {
                   title="Setup is complete"
                   description="After launch, mint additional tokens through the current mint authority or a Treasury governance proposal."
                 />
-                <Link href={`/dao/${daoId}/admin/token`}>Open Token Admin</Link>
+                <Link href={`/dao/${routeId}/admin/token`}>Open Token Admin</Link>
               </>
             ) : (
               <>
@@ -182,7 +180,7 @@ export default function FoundersAdminPage() {
                       : 'Artwork properties exist. Refresh and confirm all planned batches are finished before minting: traits are seeded at mint time.'
                   }
                 />
-                <Link href={`/dao/${daoId}/admin/artwork`}>Review artwork setup</Link>
+                <Link href={`/dao/${routeId}/admin/artwork`}>Review artwork setup</Link>
                 {rows.map((row, index) => (
                   <Stack gap="2" key={index}>
                     <label htmlFor={`founder-${index}`}>
@@ -224,7 +222,7 @@ export default function FoundersAdminPage() {
                     </label>
                     <Button
                       type="button"
-                      variant="plain"
+                      variant="ghost"
                       disabled={busy || review || !allowed || rows.length === 1}
                       onClick={() => setRows((current) => current.filter((_, id) => id !== index))}
                     >
@@ -234,7 +232,7 @@ export default function FoundersAdminPage() {
                 ))}
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="secondary"
                   disabled={busy || review || !allowed || rows.length >= MAX_BATCH_RECIPIENTS}
                   onClick={() => setRows((current) => [...current, { recipient: '', amount: '1' }])}
                 >
@@ -242,7 +240,7 @@ export default function FoundersAdminPage() {
                 </Button>
                 {review ? (
                   <>
-                    <Text style={{ overflowWrap: 'anywhere' }}>
+                    <Text overflowWrap="anywhere">
                       Review: {rows.map((row) => `${row.amount} to ${row.recipient}`).join('; ')}. Minting is not
                       reversible.
                     </Text>
@@ -265,7 +263,7 @@ export default function FoundersAdminPage() {
                     >
                       {busy ? 'Checking mint…' : 'Sign founder allocation'}
                     </Button>
-                    <Button type="button" variant="plain" disabled={busy} onClick={() => setReview(false)}>
+                    <Button type="button" variant="ghost" disabled={busy} onClick={() => setReview(false)}>
                       Edit allocation
                     </Button>
                   </>
@@ -286,15 +284,15 @@ export default function FoundersAdminPage() {
                     Review allocation
                   </Button>
                 )}
-                <Button type="button" variant="outline" disabled={busy || !allowed} onClick={() => void mint(true)}>
+                <Button type="button" variant="secondary" disabled={busy || !allowed} onClick={() => void mint(true)}>
                   Check saved mint transaction
                 </Button>
                 {receipt ? (
                   <>
-                    <Text style={{ overflowWrap: 'anywhere' }}>Confirmed founder mint: {receipt}</Text>
+                    <Text overflowWrap="anywhere">Confirmed founder mint: {receipt}</Text>
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="secondary"
                       disabled={busy}
                       onClick={() => {
                         localStorage.removeItem(receiptKey);

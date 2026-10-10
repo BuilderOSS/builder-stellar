@@ -1,88 +1,239 @@
-import { defineConfig, defineRecipe } from '@pandacss/dev';
+import { defineConfig, defineRecipe, defineSemanticTokens, defineTextStyles, defineTokens } from '@pandacss/dev';
 import { preset as presetPanda } from '@pandacss/preset-panda';
+
+// Warm Ink · Dusk. DESIGN.md is the specification; these values must match it.
+// `base` is the light theme, `_dark` the hero theme. The boot script in
+// src/lib/warm-ink-theme.ts sets [data-theme] before first paint.
+
+const tokens = defineTokens({
+  fonts: {
+    body: { value: 'var(--font-ui), ui-sans-serif, system-ui, sans-serif' },
+    heading: { value: 'var(--font-display), var(--font-ui), ui-sans-serif, sans-serif' },
+    display: { value: 'var(--font-display), var(--font-ui), ui-sans-serif, sans-serif' },
+    mono: { value: 'var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace' }
+  },
+  radii: {
+    control: { value: '10px' },
+    card: { value: '16px' },
+    sheet: { value: '24px' }
+  },
+  easings: {
+    out: { value: 'cubic-bezier(0.23, 1, 0.32, 1)' },
+    inOut: { value: 'cubic-bezier(0.77, 0, 0.175, 1)' },
+    drawer: { value: 'cubic-bezier(0.32, 0.72, 0, 1)' }
+  },
+  durations: {
+    fast: { value: '150ms' },
+    press: { value: '160ms' },
+    pop: { value: '180ms' },
+    sheet: { value: '240ms' }
+  },
+  sizes: {
+    rail: { value: '72px' },
+    tabbar: { value: '64px' },
+    content: { value: '1120px' },
+    touch: { value: '44px' }
+  },
+  zIndex: {
+    bar: { value: 40 },
+    // The rail floats over the sticky top bar when it widens.
+    rail: { value: 41 },
+    overlay: { value: 60 },
+    toast: { value: 80 }
+  }
+});
+
+const semanticTokens = defineSemanticTokens({
+  colors: {
+    canvas: { value: { base: '#F3EFE8', _dark: '#15120F' } },
+    surface: { value: { base: '#FBF8F3', _dark: '#1D1915' } },
+    raised: { value: { base: '#FFFFFF', _dark: '#26211C' } },
+    hover: { value: { base: '#F1ECE4', _dark: '#2E2822' } },
+    rule: {
+      DEFAULT: { value: { base: '#DDD6CB', _dark: '#3A322A' } },
+      strong: { value: { base: '#C9C0B2', _dark: '#4A4036' } }
+    },
+    ink: {
+      DEFAULT: { value: { base: '#221E19', _dark: '#F3EDE5' } },
+      muted: { value: { base: '#5E564C', _dark: '#B6AA9C' } },
+      faint: { value: { base: '#8E8578', _dark: '#857A6D' } }
+    },
+    signal: {
+      DEFAULT: { value: { base: '#0068D6', _dark: '#0085FF' } },
+      wash: { value: { base: 'rgba(0, 104, 214, 0.10)', _dark: 'rgba(0, 133, 255, 0.14)' } },
+      edge: { value: { base: 'rgba(0, 104, 214, 0.36)', _dark: 'rgba(0, 133, 255, 0.42)' } }
+    },
+    primary: {
+      DEFAULT: { value: { base: '#0068D6', _dark: '#0070E0' } },
+      hover: { value: { base: '#0059B8', _dark: '#0062C4' } },
+      fg: { value: '#FFFFFF' }
+    },
+    brass: {
+      DEFAULT: { value: { base: '#9A6A22', _dark: '#D9A35A' } },
+      wash: { value: { base: 'rgba(154, 106, 34, 0.12)', _dark: 'rgba(217, 163, 90, 0.14)' } },
+      edge: { value: { base: 'rgba(154, 106, 34, 0.34)', _dark: 'rgba(217, 163, 90, 0.36)' } }
+    },
+    success: {
+      DEFAULT: { value: { base: '#2E7A57', _dark: '#4FBA8B' } },
+      wash: { value: { base: 'rgba(46, 122, 87, 0.10)', _dark: 'rgba(79, 186, 139, 0.12)' } },
+      edge: { value: { base: 'rgba(46, 122, 87, 0.34)', _dark: 'rgba(79, 186, 139, 0.36)' } }
+    },
+    warning: {
+      DEFAULT: { value: { base: '#8F5A12', _dark: '#E2A94F' } },
+      wash: { value: { base: 'rgba(143, 90, 18, 0.10)', _dark: 'rgba(226, 169, 79, 0.12)' } },
+      edge: { value: { base: 'rgba(143, 90, 18, 0.34)', _dark: 'rgba(226, 169, 79, 0.36)' } }
+    },
+    danger: {
+      DEFAULT: { value: { base: '#B23A48', _dark: '#EF7B87' } },
+      wash: { value: { base: 'rgba(178, 58, 72, 0.10)', _dark: 'rgba(239, 123, 135, 0.12)' } },
+      edge: { value: { base: 'rgba(178, 58, 72, 0.34)', _dark: 'rgba(239, 123, 135, 0.36)' } }
+    },
+    scrim: { value: { base: 'rgba(34, 30, 25, 0.42)', _dark: 'rgba(5, 4, 3, 0.66)' } },
+    skeleton: { value: { base: 'rgba(34, 30, 25, 0.07)', _dark: 'rgba(243, 237, 229, 0.07)' } },
+    imageEdge: { value: { base: 'rgba(0, 0, 0, 0.10)', _dark: 'rgba(255, 255, 255, 0.10)' } }
+  },
+  shadows: {
+    float: {
+      value: {
+        base: '0 1px 2px rgba(40, 30, 20, 0.06), 0 8px 24px rgba(40, 30, 20, 0.08)',
+        _dark: '0 1px 2px rgba(0, 0, 0, 0.40), 0 12px 32px rgba(0, 0, 0, 0.35)'
+      }
+    },
+    raised: {
+      value: {
+        base: '0 1px 2px rgba(40, 30, 20, 0.05)',
+        _dark: '0 1px 2px rgba(0, 0, 0, 0.30)'
+      }
+    }
+  }
+});
+
+const textStyles = defineTextStyles({
+  display: {
+    value: {
+      fontFamily: 'display',
+      fontWeight: '700',
+      fontSize: 'clamp(2rem, 5vw, 3rem)',
+      lineHeight: '1.04',
+      letterSpacing: '-0.02em'
+    }
+  },
+  title: {
+    value: {
+      fontFamily: 'display',
+      fontWeight: '600',
+      fontSize: '1.5rem',
+      lineHeight: '1.15',
+      letterSpacing: '-0.015em'
+    }
+  },
+  heading: {
+    value: {
+      fontFamily: 'display',
+      fontWeight: '600',
+      fontSize: '1.25rem',
+      lineHeight: '1.2',
+      letterSpacing: '-0.01em'
+    }
+  },
+  subheading: {
+    value: { fontFamily: 'body', fontWeight: '600', fontSize: '1.0625rem', lineHeight: '1.35' }
+  },
+  body: { value: { fontFamily: 'body', fontWeight: '400', fontSize: '0.9375rem', lineHeight: '1.5' } },
+  label: { value: { fontFamily: 'body', fontWeight: '600', fontSize: '0.8125rem', lineHeight: '1.35' } },
+  caption: { value: { fontFamily: 'body', fontWeight: '400', fontSize: '0.8125rem', lineHeight: '1.4' } },
+  micro: { value: { fontFamily: 'body', fontWeight: '600', fontSize: '0.75rem', lineHeight: '1.3' } },
+  mono: {
+    value: { fontFamily: 'mono', fontSize: '0.8125rem', fontVariantNumeric: 'tabular-nums', letterSpacing: '0' }
+  }
+});
+
+const pressable = {
+  transitionProperty: 'background-color, border-color, color, box-shadow, scale',
+  transitionDuration: 'press',
+  transitionTimingFunction: 'out',
+  _active: { scale: '0.96' },
+  '&[data-static], &[aria-busy=true], &:disabled': { scale: '1' },
+  '@media (prefers-reduced-motion: reduce)': { _active: { scale: '1' } }
+} as const;
 
 const button = defineRecipe({
   className: 'button',
   jsx: ['Button'],
   base: {
+    ...pressable,
     alignItems: 'center',
     appearance: 'none',
     borderWidth: '1px',
-    borderColor: 'var(--border-strong)',
-    borderRadius: 'var(--radius-control)',
+    borderColor: 'transparent',
+    borderRadius: 'control',
     cursor: 'pointer',
     display: 'inline-flex',
     flexShrink: '0',
-    fontWeight: 'semibold',
+    fontFamily: 'body',
+    fontWeight: '600',
     gap: '2',
     justifyContent: 'center',
-    minH: '10',
+    minH: 'touch',
     outline: '0',
     position: 'relative',
     px: '4',
-    fontSize: '0.875rem',
-    letterSpacing: '-0.01em',
-    transitionDuration: '140ms',
-    transitionTimingFunction: 'cubic-bezier(0.2, 0, 0, 1)',
-    transitionProperty: 'background-color, border-color, color, box-shadow, scale',
+    fontSize: '0.9375rem',
     userSelect: 'none',
     verticalAlign: 'middle',
     whiteSpace: 'nowrap',
-    shadow: 'none',
-    _active: {
-      scale: '0.96'
-    },
-    _disabled: {
-      opacity: '0.5',
-      cursor: 'not-allowed',
-      scale: '1',
-      shadow: 'none'
-    },
-    _focusVisible: { outline: '2px solid var(--focus)', outlineOffset: '3px' },
-    '&[data-static], &[aria-busy=true]': { scale: '1' },
-    '@media (prefers-reduced-motion: reduce)': { _active: { scale: '1' } },
-    '@media (pointer: coarse)': { minH: '11', minW: '11' },
-    '@media (max-width: 680px)': { minH: '11', minW: '11' },
-    '& svg': { flexShrink: '0', strokeWidth: '2' }
+    textDecoration: 'none',
+    _disabled: { opacity: '0.5', cursor: 'not-allowed' },
+    _focusVisible: { outline: '2px solid', outlineColor: 'signal', outlineOffset: '2px' },
+    '& svg': { flexShrink: '0', width: '1.125em', height: '1.125em' }
   },
   variants: {
     variant: {
-      solid: {
-        bg: 'var(--action)',
-        color: 'var(--accent-ink)',
-        borderColor: 'var(--action)',
-        _hover: { bg: 'var(--action-hover)', borderColor: 'var(--action-hover)' }
+      primary: {
+        bg: 'primary',
+        color: 'primary.fg',
+        '@media (hover: hover) and (pointer: fine)': { _hover: { bg: 'primary.hover' } }
       },
-      surface: {
-        bg: 'var(--surface)',
-        borderColor: 'var(--border-default)',
-        color: 'var(--text-primary)',
-        shadow: 'none',
-        _hover: { bg: 'var(--surface-3)', borderColor: 'var(--border-strong)' }
+      secondary: {
+        bg: 'raised',
+        color: 'ink',
+        borderColor: 'rule',
+        '@media (hover: hover) and (pointer: fine)': { _hover: { bg: 'hover', borderColor: 'rule.strong' } }
       },
-      outline: {
-        borderColor: 'var(--border-strong)',
-        color: 'var(--text-primary)',
+      ghost: {
         bg: 'transparent',
-        shadow: 'none',
-        _hover: { bg: 'var(--surface-2)', borderColor: 'var(--text-tertiary)' }
+        color: 'ink.muted',
+        '@media (hover: hover) and (pointer: fine)': { _hover: { bg: 'hover', color: 'ink' } }
       },
-      plain: {
-        color: 'var(--text-secondary)',
+      link: {
         bg: 'transparent',
-        shadow: 'none',
-        borderColor: 'transparent',
-        _hover: { bg: 'var(--surface-2)', color: 'var(--text-primary)' }
+        color: 'signal',
+        px: '0',
+        minH: 'auto',
+        '@media (hover: hover) and (pointer: fine)': { _hover: { textDecoration: 'underline' } }
+      },
+      danger: {
+        bg: 'transparent',
+        color: 'danger',
+        borderColor: 'danger.edge',
+        '@media (hover: hover) and (pointer: fine)': { _hover: { bg: 'danger.wash' } }
       }
     },
     size: {
-      sm: { h: '9', minW: '9', textStyle: 'sm', px: '3' },
-      md: { h: '10', minW: '10', textStyle: 'sm', px: '4' },
-      lg: { h: '12', minW: '12', textStyle: 'md', px: '5' }
+      sm: { minH: '9', px: '3', fontSize: '0.875rem', '@media (pointer: coarse)': { minH: 'touch' } },
+      md: { minH: 'touch', px: '4' },
+      lg: { minH: '12', px: '5', fontSize: '1rem' }
+    },
+    iconOnly: {
+      true: { px: '0', minW: 'touch', aspectRatio: '1' }
+    },
+    block: {
+      true: { width: '100%' }
     }
   },
+  compoundVariants: [{ size: 'sm', iconOnly: true, css: { minW: '9', '@media (pointer: coarse)': { minW: 'touch' } } }],
   defaultVariants: {
-    variant: 'solid',
+    variant: 'primary',
     size: 'md'
   }
 });
@@ -91,14 +242,21 @@ const card = defineRecipe({
   className: 'card',
   jsx: ['Card'],
   base: {
-    p: '6',
-    borderRadius: 'var(--radius-panel)',
-    borderWidth: '1px',
-    borderColor: 'var(--border-default)',
-    bg: 'var(--surface-1)',
-    boxShadow: 'inset 0 1px 0 var(--float-highlight)',
-    color: 'var(--text-primary)'
-  }
+    p: { base: '4', md: '5' },
+    borderRadius: 'card',
+    bg: 'surface',
+    color: 'ink',
+    boxShadow: 'raised'
+  },
+  variants: {
+    tone: {
+      surface: {},
+      raised: { bg: 'raised' },
+      yours: { bg: 'surface', boxShadow: 'inset 0 0 0 1px token(colors.brass.edge)' },
+      flat: { boxShadow: 'none', bg: 'transparent', p: '0' }
+    }
+  },
+  defaultVariants: { tone: 'surface' }
 });
 
 const field = defineRecipe({
@@ -106,66 +264,36 @@ const field = defineRecipe({
   jsx: ['Field'],
   base: {
     display: 'grid',
-    gap: '8px'
+    gap: '1.5'
   }
 });
 
-const input = defineRecipe({
-  className: 'input',
-  jsx: ['Input'],
-  base: {
-    width: '100%',
-    borderWidth: '1px',
-    borderColor: 'var(--rule)',
-    borderRadius: 'var(--radius-control)',
-    bg: 'var(--surface-raised)',
-    color: 'var(--text-primary)',
-    px: '4',
-    py: '2.5',
-    outline: 'none',
-    minH: '11',
-    shadow: 'none',
-    transitionProperty: 'border-color, box-shadow, background-color',
-    transitionDuration: '140ms',
-    transitionTimingFunction: 'cubic-bezier(0.2, 0, 0, 1)',
-    _placeholder: { color: 'var(--muted)', opacity: '0.85' },
-    _hover: { borderColor: 'var(--border-strong)' },
-    _disabled: { opacity: '0.55', cursor: 'not-allowed', bg: 'var(--surface-hover)' },
-    _invalid: { borderColor: 'var(--danger)', outlineColor: 'var(--danger)' },
-    _focusVisible: {
-      borderColor: 'var(--focus)',
-      boxShadow: '0 0 0 3px var(--focus-soft)'
-    }
-  }
-});
+const control = {
+  width: '100%',
+  borderWidth: '1px',
+  borderColor: 'rule',
+  borderRadius: 'control',
+  bg: 'raised',
+  color: 'ink',
+  fontFamily: 'body',
+  fontSize: '0.9375rem',
+  px: '3.5',
+  py: '2.5',
+  outline: 'none',
+  minH: 'touch',
+  transitionProperty: 'border-color, box-shadow, background-color',
+  transitionDuration: 'fast',
+  transitionTimingFunction: 'out',
+  _placeholder: { color: 'ink.faint' },
+  _hover: { borderColor: 'rule.strong' },
+  _disabled: { opacity: '0.55', cursor: 'not-allowed', bg: 'hover' },
+  _invalid: { borderColor: 'danger' },
+  _focusVisible: { borderColor: 'signal', boxShadow: '0 0 0 3px token(colors.signal.wash)' }
+} as const;
 
-const select = defineRecipe({
-  className: 'select',
-  jsx: ['Select'],
-  base: {
-    width: '100%',
-    borderWidth: '1px',
-    borderColor: 'var(--rule)',
-    borderRadius: 'var(--radius-control)',
-    bg: 'var(--surface-raised)',
-    color: 'var(--text-primary)',
-    px: '4',
-    py: '2.5',
-    outline: 'none',
-    minH: '11',
-    shadow: 'none',
-    transitionProperty: 'border-color, box-shadow, background-color',
-    transitionDuration: '140ms',
-    transitionTimingFunction: 'cubic-bezier(0.2, 0, 0, 1)',
-    _hover: { borderColor: 'var(--border-strong)' },
-    _disabled: { opacity: '0.55', cursor: 'not-allowed', bg: 'var(--surface-hover)' },
-    _invalid: { borderColor: 'var(--danger)' },
-    _focusVisible: {
-      borderColor: 'var(--focus)',
-      boxShadow: '0 0 0 3px var(--focus-soft)'
-    }
-  }
-});
+const input = defineRecipe({ className: 'input', jsx: ['Input'], base: control });
+
+const select = defineRecipe({ className: 'select', jsx: ['Select'], base: { ...control, pr: '9' } });
 
 const badge = defineRecipe({
   className: 'badge',
@@ -173,37 +301,72 @@ const badge = defineRecipe({
   base: {
     display: 'inline-flex',
     alignItems: 'center',
-    borderRadius: '6px',
-    borderWidth: '1px',
-    borderColor: 'var(--border-default)',
-    px: '2',
-    py: '1',
-    textStyle: 'xs',
-    fontWeight: 'semibold',
-    bg: 'var(--surface-hover)',
-    color: 'var(--text-secondary)',
-    letterSpacing: '0.01em'
-  }
+    gap: '1.5',
+    borderRadius: 'full',
+    px: '2.5',
+    py: '0.5',
+    minH: '6',
+    textStyle: 'micro',
+    whiteSpace: 'nowrap',
+    bg: 'hover',
+    color: 'ink.muted',
+    '& svg': { width: '0.875rem', height: '0.875rem', flexShrink: '0' }
+  },
+  variants: {
+    tone: {
+      neutral: {},
+      live: { bg: 'signal.wash', color: 'signal' },
+      yours: { bg: 'brass.wash', color: 'brass' },
+      success: { bg: 'success.wash', color: 'success' },
+      warning: { bg: 'warning.wash', color: 'warning' },
+      danger: { bg: 'danger.wash', color: 'danger' },
+      outline: { bg: 'transparent', boxShadow: 'inset 0 0 0 1px token(colors.rule)' }
+    }
+  },
+  defaultVariants: { tone: 'neutral' }
 });
 
 const text = defineRecipe({
   className: 'text',
   jsx: ['Text'],
   base: {
-    color: 'var(--text-secondary)',
-    lineHeight: '1.55'
-  }
+    color: 'ink.muted',
+    textStyle: 'body',
+    margin: '0'
+  },
+  variants: {
+    tone: {
+      muted: {},
+      default: { color: 'ink' },
+      faint: { color: 'ink.faint' },
+      danger: { color: 'danger' }
+    },
+    size: {
+      md: {},
+      sm: { textStyle: 'caption' },
+      lg: { fontSize: '1.0625rem' }
+    }
+  },
+  defaultVariants: { tone: 'muted', size: 'md' }
 });
 
 const heading = defineRecipe({
   className: 'heading',
   jsx: ['Heading'],
   base: {
-    color: 'var(--text-primary)',
-    fontWeight: 'bold',
-    lineHeight: '1.1',
-    letterSpacing: '-0.035em'
-  }
+    color: 'ink',
+    margin: '0',
+    textWrap: 'balance'
+  },
+  variants: {
+    size: {
+      display: { textStyle: 'display' },
+      title: { textStyle: 'title' },
+      heading: { textStyle: 'heading' },
+      subheading: { textStyle: 'subheading' }
+    }
+  },
+  defaultVariants: { size: 'heading' }
 });
 
 export default defineConfig({
@@ -213,41 +376,45 @@ export default defineConfig({
   jsxFramework: 'react',
   preflight: true,
   minify: true,
-  hash: true,
+  // Keep class names hashed but CSS variables readable so legacy globals.css
+  // aliases (--canvas, --accent, ...) can point at the token variables.
+  hash: { className: true, cssVar: false },
   strictPropertyValues: true,
   presets: [presetPanda],
+  conditions: {
+    extend: {
+      dark: '[data-theme=dark] &',
+      light: '[data-theme=light] &'
+    }
+  },
   staticCss: {
     recipes: '*'
   },
   theme: {
     extend: {
+      breakpoints: { sm: '480px' },
       recipes: { button, card, field, input, select, badge, text, heading },
-      tokens: {
-        colors: {
-          canvas: { value: 'var(--canvas)' },
-          surface: { value: 'var(--surface)' },
-          raised: { value: 'var(--surface-raised)' },
-          ink: { value: 'var(--ink)' },
-          muted: { value: 'var(--muted)' },
-          rule: { value: 'var(--rule)' },
-          accent: {
-            50: { value: 'var(--accent-wash)' },
-            100: { value: 'var(--accent-wash)' },
-            200: { value: 'var(--accent-edge)' },
-            300: { value: 'var(--accent-edge)' },
-            400: { value: 'var(--accent)' },
-            500: { value: 'var(--accent)' },
-            600: { value: 'var(--accent)' },
-            700: { value: 'var(--accent-strong)' },
-            800: { value: 'var(--accent-strong)' },
-            900: { value: 'var(--ink)' },
-            950: { value: 'var(--ink)' }
-          }
+      tokens,
+      semanticTokens,
+      textStyles,
+      keyframes: {
+        fadeIn: { from: { opacity: '0' }, to: { opacity: '1' } },
+        fadeOut: { from: { opacity: '1' }, to: { opacity: '0' } },
+        sheetUpIn: { from: { transform: 'translateY(100%)' }, to: { transform: 'translateY(0)' } },
+        sheetUpOut: { from: { transform: 'translateY(0)' }, to: { transform: 'translateY(100%)' } },
+        sheetLeftIn: { from: { transform: 'translateX(100%)' }, to: { transform: 'translateX(0)' } },
+        sheetLeftOut: { from: { transform: 'translateX(0)' }, to: { transform: 'translateX(100%)' } },
+        popIn: {
+          from: { opacity: '0', transform: 'scale(0.96)' },
+          to: { opacity: '1', transform: 'scale(1)' }
         },
-        fonts: {
-          body: { value: 'var(--font-family-ui)' },
-          heading: { value: 'var(--font-family-ui)' },
-          display: { value: 'var(--font-family-display)' }
+        popOut: {
+          from: { opacity: '1', transform: 'scale(1)' },
+          to: { opacity: '0', transform: 'scale(0.98)' }
+        },
+        voteLand: {
+          from: { opacity: '0', transform: 'translateY(-10px) scale(0.9)' },
+          to: { opacity: '1', transform: 'translateY(0) scale(1)' }
         }
       }
     }

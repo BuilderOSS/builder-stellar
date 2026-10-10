@@ -73,9 +73,7 @@ export function AuctionPaymentTokenSelect({
           {assetLabel(selectedAsset)} · {selectedAsset.contractId}
         </FieldHelperText>
       ) : null}
-      {error || customError ? (
-        <FieldHelperText style={{ color: 'var(--negative)' }}>{error || customError}</FieldHelperText>
-      ) : null}
+      {error || customError ? <FieldHelperText tone="error">{error || customError}</FieldHelperText> : null}
     </Stack>
   );
 }

@@ -1,4 +1,4 @@
-import { Text } from '@/components/ui';
+import { CodeBlock, Text } from '@/components/ui';
 import type { ActionFormProps, ActionHandler } from '@/lib/proposal-actions/types';
 import { type AuthNodeDraft, describeAuthNodes, validateAuthNodes } from '@/lib/treasury-authorize';
 
@@ -6,9 +6,7 @@ const invalid = (message: string) => ({ valid: false as const, message });
 const valid = () => ({ valid: true as const });
 
 function Readonly({ lines }: { lines: string[] }) {
-  return (
-    <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{lines.join('\n') || 'Nothing configured.'}</pre>
-  );
+  return <CodeBlock>{lines.join('\n') || 'Nothing configured.'}</CodeBlock>;
 }
 
 export type TreasuryAuthorizeDraft = { nodes: AuthNodeDraft[] };

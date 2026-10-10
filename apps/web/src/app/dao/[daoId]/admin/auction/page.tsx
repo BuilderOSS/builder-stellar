@@ -1,26 +1,21 @@
 'use client';
 
-import { Client as AuctionClient } from '@builder-stellar/auction-bindings';
-import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
+import { RefreshCw } from 'lucide-react';
 import { useState } from 'react';
-import { Stack } from 'styled-system/jsx';
+import { css } from 'styled-system/css';
 import useSWR from 'swr';
 
-import { AdminReservePriceForm } from '@/components/admin/admin-action-forms';
-import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
-import { AdminSurfaceNav as AdminSectionNav } from '@/components/admin/admin-surface-nav';
-import { AuctionParameterControls } from '@/components/admin/auction-parameter-controls';
+import { AuctionSettingsBuilder } from '@/components/admin/auction-settings-builder';
 import { PageSection } from '@/components/page-section';
-import { Badge, Button, Callout, Card, Heading, ShortId, Text } from '@/components/ui';
+import { Address, Callout, Chip, IconButton, Skeleton } from '@/components/ui';
+import { card, fact, facts, muted, title } from '@/components/ui/panel-styles';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { useContractAdmin } from '@/lib/admin-queries';
-import { adminReadOptions, useAdminTokenState } from '@/lib/admin-surfaces';
-import { decimalToStroops, formatStroops } from '@/lib/auction-values';
-import { getActionHandler } from '@/lib/proposal-actions/registry';
-import { waitForConfirmation } from '@/lib/transaction-confirmation';
-import { useTransactionFeedback } from '@/lib/transaction-feedback';
-import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
+import { useAdminTokenState } from '@/lib/admin-surfaces';
+import { getTreasuryAssets } from '@/lib/assets-config';
+import { formatStroops } from '@/lib/auction-values';
+import { formatDuration } from '@/lib/duration';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 type AuctionStatus = {
@@ -42,14 +37,15 @@ async function fetcher(url: string): Promise<AuctionStatus> {
   return payload;
 }
 
+const page = css({ display: 'grid', gap: '5' });
+const cardHead = css({ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '3' });
+const factLabel = css({ textStyle: 'caption', color: 'ink.muted' });
+const factValue = css({ textStyle: 'body', fontWeight: '600', color: 'ink', textAlign: 'right', minW: '0' });
+
 export default function AuctionAdminPage() {
   const { daoId, daoConfig: config } = useDaoContext();
   const session = useAuthSessionStore();
-  const tx = useTransactionFeedback(config.name);
-  const draft = useAdminProposalDraft();
   const [busy, setBusy] = useState(false);
-  const [reservePrice, setReservePrice] = useState('');
-  const [message, setMessage] = useState('');
   const { data, error, mutate, isLoading } = useSWR<AuctionStatus>(
     config.auctionContractId ? `/api/dao/${encodeURIComponent(daoId)}/auctions` : null,
     fetcher
@@ -58,195 +54,119 @@ export default function AuctionAdminPage() {
   const admin = useContractAdmin(config, 'auction', session.address || config.launchAdmin);
   const direct = Boolean(session.address && admin.data === session.address);
   const canPropose = Boolean(session.address && token.data?.live && treasuryIsAdmin(config, admin.data));
-  const allowed = direct || canPropose;
   const live = token.data?.live === true;
-  const networkReady =
-    !session.walletNetworkIssue &&
-    (!session.walletNetworkPassphrase || session.walletNetworkPassphrase === config.passphrase);
-
-  async function apply(type: 'pause-auction' | 'unpause-auction' | 'set-auction-reserve-price') {
-    if (!session.address || !data || busy || !allowed || !networkReady) return;
-    if (type !== 'set-auction-reserve-price' && !live) return;
-    if (type === 'set-auction-reserve-price' && !data.paused) return;
-    const handler = getActionHandler(type);
-    const values = type === 'set-auction-reserve-price' ? { reservePrice } : {};
-    const context = { config, session: { address: session.address, kit: StellarWalletsKit } };
-    const validation = handler.validate(values, context);
-    if (!validation.valid) return setMessage(validation.message);
-    if (!direct) {
-      draft.requestAdd({
-        daoId,
-        action: handler.serialize(values, context),
-        source: `admin/auction/${type}`,
-        metadata: {
-          title: handler.label,
-          description:
-            type === 'set-auction-reserve-price'
-              ? `Set reserve price to ${reservePrice}. Auction must remain paused at execution.`
-              : type === 'pause-auction'
-                ? 'Pause bidding and auction progression.'
-                : 'Resume auction activity; this may create and mint the next auction token.',
-          url: ''
-        }
-      });
-      return;
-    }
-    setBusy(true);
-    setMessage('');
-    tx.start(handler.label);
-    try {
-      const client = new AuctionClient({
-        ...adminReadOptions(config, config.auctionContractId, session.address),
-        signTransaction: (xdr, opts) =>
-          StellarWalletsKit.signTransaction(xdr, {
-            ...opts,
-            address: session.address!,
-            networkPassphrase: config.passphrase
-          })
-      });
-      const assembled =
-        type === 'pause-auction'
-          ? await client.pause({ caller: session.address })
-          : type === 'unpause-auction'
-            ? await client.unpause({ caller: session.address })
-            : await client.set_reserve_price({ reserve_price: decimalToStroops(reservePrice)! });
-      const sent = await assembled.signAndSend();
-      const hash = sent.sendTransactionResponse?.hash ?? '';
-      tx.submitted(`${handler.label} submitted`, hash);
-      await waitForConfirmation(hash, config.rpcUrl);
-      tx.success(`${handler.label} confirmed`, hash);
-      await mutate();
-    } catch (failure) {
-      tx.fail(failure, 'Auction update failed');
-    } finally {
-      setBusy(false);
-    }
-  }
+  const loading = isLoading || token.isLoading || admin.isLoading;
+  const loadError = error || admin.error || token.error;
+  const assetCode =
+    getTreasuryAssets(config.name).find((asset) => asset.contractId === data?.config.payment_token)?.code ?? '';
+  const state = !live ? 'Not launched yet' : data?.paused ? 'Paused' : 'Running';
+  const long = (seconds: number) => formatDuration(seconds, { style: 'long' });
 
   return (
-    <>
-      <AdminProposalDraftDialog pending={draft.pending} onCancel={draft.cancel} onResolve={draft.resolve} />
-      <PageSection
-        title="Auction controls"
-        description="Review current auction state, update paused parameters, and prepare governance actions."
-      >
-        <Stack gap="4">
-          <AdminSectionNav daoId={daoId} active="/auction" />
-          {!config.auctionContractId ? <Callout variant="info" title="No auction module configured" /> : null}
-          {error || admin.error || token.error ? (
-            <Callout
-              variant="error"
-              title="Auction controls could not be loaded"
-              description={(error || admin.error || token.error).message}
-            />
-          ) : null}
-          {isLoading || token.isLoading || admin.isLoading ? (
-            <Text role="status">Loading live auction state…</Text>
-          ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            disabled={busy || isLoading}
-            onClick={() => void Promise.all([mutate(), admin.mutate(), token.mutate()])}
-          >
-            Refresh live values
-          </Button>
-          {!allowed ? (
-            <Callout
-              variant="info"
-              title="Read-only auction view"
-              description="Connect the current admin during setup. After launch, Treasury-administered updates go through governance."
-            />
-          ) : null}
-          {message ? (
-            <div role="status">
-              <Callout variant="warning" title={message} />
-            </div>
-          ) : null}
-          {data ? (
-            <>
-              <Card p="5">
-                <Stack gap="3">
-                  <Badge>{live ? (data.paused ? 'Paused' : 'Active') : 'Setup'}</Badge>
-                  <Heading style={{ fontSize: '1.2rem' }}>Current auction</Heading>
-                  {data.auction ? (
-                    <Text>
-                      Token #{data.auction.token_id} · {data.auction.settled ? 'Settled' : 'Unsettled'}
-                    </Text>
-                  ) : (
-                    <Text>No current auction token.</Text>
-                  )}
-                  {!live ? (
-                    <Callout
-                      variant="info"
-                      title="Launch from the DAO checklist"
-                      description="The Manager starts configured auctions at launch. Pause, resume and cancellation are not setup actions."
-                    />
-                  ) : null}
-                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                    <Button
-                      type="button"
-                      disabled={busy || !allowed || !live || data.paused}
-                      onClick={() => void apply('pause-auction')}
-                    >
-                      {direct ? 'Pause auctions' : 'Propose pause'}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={busy || !allowed || !live || !data.paused}
-                      onClick={() => void apply('unpause-auction')}
-                    >
-                      {direct ? 'Resume auctions' : 'Propose resume'}
-                    </Button>
-                  </div>
-                  <Text>
-                    Payment asset: fixed at creation for launch validation; permanently locked by the first auction.
-                  </Text>
-                  <ShortId value={data.config.payment_token} label="Payment token" />
-                  <Text>Current reserve: {formatStroops(data.config.reserve_price)} payment-token units.</Text>
-                  <AdminReservePriceForm
-                    value={{ reservePrice }}
-                    onChange={(value) => setReservePrice(value.reservePrice)}
-                    disabled={busy || !allowed || !data.paused}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={busy || !allowed || !data.paused || !reservePrice}
-                    onClick={() => void apply('set-auction-reserve-price')}
+    <PageSection
+      title="Auction"
+      description="See how auctions run now and change their settings. After launch, changes go to a vote."
+    >
+      <div className={page}>
+        {!config.auctionContractId ? <Callout variant="info" title="This community has no auction" /> : null}
+        {loadError ? (
+          <Callout variant="error" title="Auction settings didn't load" description={loadError.message} />
+        ) : null}
+        {!loading && !direct && !canPropose && config.auctionContractId ? (
+          <Callout
+            variant="info"
+            title="Read only"
+            description={
+              live
+                ? 'Members who can propose can change these by vote. Connect a member wallet to build a proposal.'
+                : 'During setup, only the launch admin can change these. Connect that wallet.'
+            }
+          />
+        ) : null}
+
+        {loading && !data ? <Skeleton className={css({ height: '40', borderRadius: 'card' })} /> : null}
+
+        {data ? (
+          <>
+            <section className={card} aria-labelledby="auction-now-title">
+              <div className={cardHead}>
+                <div>
+                  <h2 id="auction-now-title" className={title}>
+                    Auction now
+                  </h2>
+                  <p className={muted}>
+                    {data.auction
+                      ? `Token #${data.auction.token_id} · ${data.auction.settled ? 'settled' : 'not settled yet'}`
+                      : 'No auction has started yet.'}
+                  </p>
+                </div>
+                <div className={css({ display: 'flex', alignItems: 'center', gap: '1' })}>
+                  <Chip tone={state === 'Running' ? 'live' : state === 'Paused' ? 'warning' : 'neutral'}>{state}</Chip>
+                  <IconButton
+                    label="Refresh"
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => void Promise.all([mutate(), admin.mutate(), token.mutate()])}
                   >
-                    {direct ? 'Apply reserve price' : 'Add reserve price to proposal'}
-                  </Button>
-                  {!data.paused ? (
-                    <Text>
-                      Pause auctions before changing the reserve or other parameters. These actions do not automatically
-                      resume auctions.
-                    </Text>
-                  ) : null}
-                </Stack>
-              </Card>
-              <AuctionParameterControls
-                daoId={daoId}
-                config={config}
-                paused={data.paused}
-                live={live}
-                admin={direct}
-                canPropose={canPropose}
-                values={{
-                  duration: Number(data.config.duration),
-                  timeBuffer: Number(data.config.time_buffer),
-                  increment: data.config.min_bid_increment_percent
-                }}
-                cancellable={Boolean(data.auction && !data.auction.settled)}
-                busy={busy}
-                onBusyChange={setBusy}
-                refresh={mutate}
-              />
-            </>
-          ) : null}
-        </Stack>
-      </PageSection>
-    </>
+                    <RefreshCw aria-hidden="true" />
+                  </IconButton>
+                </div>
+              </div>
+              <dl className={facts}>
+                <div className={fact}>
+                  <dt className={factLabel}>Starting price</dt>
+                  <dd className={factValue}>
+                    {formatStroops(data.config.reserve_price)}
+                    {assetCode ? ` ${assetCode}` : ''}
+                  </dd>
+                </div>
+                <div className={fact}>
+                  <dt className={factLabel}>Each auction runs for</dt>
+                  <dd className={factValue}>{long(Number(data.config.duration))}</dd>
+                </div>
+                <div className={fact}>
+                  <dt className={factLabel}>A late bid adds</dt>
+                  <dd className={factValue}>{long(Number(data.config.time_buffer))}</dd>
+                </div>
+                <div className={fact}>
+                  <dt className={factLabel}>Minimum bid increase</dt>
+                  <dd className={factValue}>{data.config.min_bid_increment_percent}%</dd>
+                </div>
+                <div className={fact}>
+                  <dt className={factLabel}>Paid in</dt>
+                  <dd className={factValue}>
+                    <Address value={data.config.payment_token} label={assetCode || 'Payment asset'} />
+                  </dd>
+                </div>
+              </dl>
+              <p className={muted}>The payment asset is fixed once the first auction starts.</p>
+            </section>
+
+            <AuctionSettingsBuilder
+              key={`${data.paused}-${data.config.reserve_price}-${data.config.duration}-${data.config.time_buffer}-${data.config.min_bid_increment_percent}`}
+              daoId={daoId}
+              config={config}
+              live={live}
+              paused={data.paused}
+              current={{
+                reservePrice: String(data.config.reserve_price),
+                duration: Number(data.config.duration),
+                timeBuffer: Number(data.config.time_buffer),
+                minBidIncrement: data.config.min_bid_increment_percent
+              }}
+              assetCode={assetCode}
+              currentTokenId={data.auction?.token_id}
+              cancellable={Boolean(live && data.auction && !data.auction.settled)}
+              direct={direct}
+              canPropose={canPropose}
+              busy={busy}
+              onBusyChange={setBusy}
+              refresh={mutate}
+            />
+          </>
+        ) : null}
+      </div>
+    </PageSection>
   );
 }

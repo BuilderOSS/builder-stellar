@@ -21,6 +21,7 @@ const config = (status: DaoNetworkConfig['status']): DaoNetworkConfig => ({
   marketplaceContractId: '',
   auctionEnabled: null,
   auctionPaused: null,
+  marketplaceEnabled: null,
   status
 });
 

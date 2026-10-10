@@ -13,6 +13,8 @@ import { cached } from './server-cache';
 
 export type DaoNetworkConfig = {
   name: NetworkName;
+  /** Permanent URL slug once launched (claimed); null before launch. */
+  slug?: string | null;
   label: string;
   rpcUrl: string;
   passphrase: string;
@@ -38,6 +40,8 @@ export type DaoNetworkConfig = {
   minterSpec?: string[];
   auctionEnabled: boolean | null;
   auctionPaused: boolean | null;
+  /** Indexed launch choice; null while pending or unknown. */
+  marketplaceEnabled: boolean | null;
   status: 'pending' | 'operational';
 };
 
@@ -102,6 +106,7 @@ async function loadDaoNetworkConfig(daoId: string): Promise<DaoNetworkConfig> {
     ...minter,
     name: daoConfig.network,
     label: daoConfig.label || '',
+    slug: daoConfig.slug ?? null,
     rpcUrl: networkConfig.rpcUrl,
     passphrase: networkConfig.networkPassphrase,
     // Token metadata now comes from database (populated by Goldsky)
@@ -120,6 +125,7 @@ async function loadDaoNetworkConfig(daoId: string): Promise<DaoNetworkConfig> {
     marketplaceContractId: daoConfig.marketplace_contract ?? '',
     auctionEnabled: daoConfig.auction_enabled,
     auctionPaused: daoConfig.auction_paused,
+    marketplaceEnabled: daoConfig.marketplace_enabled,
     status: daoConfig.status
   };
 }

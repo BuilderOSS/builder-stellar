@@ -37,3 +37,44 @@ export function clampDurationParts(parts: DurationParts): DurationParts {
     seconds: Math.min(59, normalizePart(parts.seconds))
   };
 }
+
+const UNITS = [
+  { short: 'd', long: 'day', size: 86400 },
+  { short: 'h', long: 'hour', size: 3600 },
+  { short: 'm', long: 'minute', size: 60 },
+  { short: 's', long: 'second', size: 1 }
+] as const;
+
+/**
+ * Human duration for settings and summaries: "2d 4h", "45m", "30s".
+ * `long` spells units out ("2 days 4 hours"). At most `maxUnits` units.
+ */
+export function formatDuration(
+  totalSeconds: number,
+  { style = 'short', maxUnits = 2 }: { style?: 'short' | 'long'; maxUnits?: number } = {}
+): string {
+  if (!Number.isFinite(totalSeconds)) return '—';
+  let remaining = normalizePart(totalSeconds);
+  if (remaining === 0) return style === 'long' ? '0 seconds' : '0s';
+
+  const parts: string[] = [];
+  for (const unit of UNITS) {
+    if (parts.length >= maxUnits) break;
+    const value = Math.floor(remaining / unit.size);
+    if (value > 0) {
+      parts.push(style === 'long' ? `${value} ${unit.long}${value === 1 ? '' : 's'}` : `${value}${unit.short}`);
+      remaining %= unit.size;
+    }
+  }
+  return parts.join(' ');
+}
+
+/** Live countdown text: "2d 4h", "4h 12m", "12m 05s", "45s". */
+export function formatCountdown(totalSeconds: number): string {
+  if (!Number.isFinite(totalSeconds)) return '—';
+  const { days, hours, minutes, seconds } = splitDuration(totalSeconds);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${String(minutes).padStart(2, '0')}m`;
+  if (minutes > 0) return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
+  return `${seconds}s`;
+}

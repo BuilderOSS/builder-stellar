@@ -1,3 +1,5 @@
+import { css } from 'styled-system/css';
+
 import { Button } from '@/components/ui';
 
 type ProposalQueuePanelProps = {
@@ -6,12 +8,15 @@ type ProposalQueuePanelProps = {
   onQueue: () => void;
 };
 
+const note = css({ textStyle: 'caption', color: 'ink.muted', m: '0', mt: '2' });
+
 export function ProposalQueuePanel({ busy, disabled, onQueue }: ProposalQueuePanelProps) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-      <Button type="button" onClick={onQueue} disabled={busy || disabled}>
-        {busy ? 'Queueing...' : 'Queue proposal'}
+    <div>
+      <Button block onClick={onQueue} disabled={disabled} loading={busy}>
+        {busy ? 'Queueing' : 'Queue for execution'}
       </Button>
+      <p className={note}>Anyone can do this once the vote passes. Your wallet pays the network fee.</p>
     </div>
   );
 }

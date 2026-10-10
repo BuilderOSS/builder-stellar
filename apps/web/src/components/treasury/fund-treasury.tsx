@@ -2,11 +2,13 @@
 
 import { Asset } from '@stellar/stellar-sdk';
 import { useRef, useState } from 'react';
+import { css } from 'styled-system/css';
 
+import { Address, Amount, AmountInput, Button, Callout, Disclosure, Field, FieldLabel, Select } from '@/components/ui';
+import { card, fact, facts, fields, muted, review, reviewTitle, title } from '@/components/ui/panel-styles';
 import { getTreasuryAssets } from '@/lib/assets-config';
 import { decimalToStroops, formatStroops } from '@/lib/auction-values';
 import { getDeploymentConfig } from '@/lib/deployment-config';
-import { getExplorerTxUrl } from '@/lib/explorer-links';
 import {
   assertMarketplaceTransaction,
   assertMarketplaceWallet,
@@ -16,9 +18,10 @@ import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { treasuryFetch, useTreasuryFundingReadiness } from '@/lib/treasury-service/hooks';
 import type { TreasuryPrepared, TreasuryScope } from '@/lib/treasury-service/types';
 import { assertTreasuryIdentity, fundingSchema } from '@/lib/treasury-service/values';
+import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
-import styles from './treasury.module.css';
+const buttons = css({ display: 'flex', gap: '2' });
 
 export function FundTreasury({ scope, onConfirmed }: { scope: TreasuryScope; onConfirmed: () => void }) {
   const session = useAuthSessionStore();
@@ -27,7 +30,7 @@ export function FundTreasury({ scope, onConfirmed }: { scope: TreasuryScope; onC
   const [amount, setAmount] = useState('');
   const [prepared, setPrepared] = useState<TreasuryPrepared | null>(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('Check your balance, review the destination and fee, then explicitly sign.');
+  const [message, setMessage] = useState('Enter an amount and check it. Nothing is sent until you sign.');
   const [hash, setHash] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const inFlight = useRef(false);
@@ -120,7 +123,7 @@ export function FundTreasury({ scope, onConfirmed }: { scope: TreasuryScope; onC
       const unsigned = TransactionBuilder.fromXDR(terms.xdr, terms.networkPassphrase);
       assertMarketplaceTransaction(unsigned, terms.address);
       setMessage('Waiting for your wallet signature…');
-      const signed = await StellarWalletsKit.signTransaction(terms.xdr, {
+      const signed = await signWithWallet(terms.xdr, {
         address: terms.address,
         networkPassphrase: terms.networkPassphrase
       });
@@ -160,25 +163,25 @@ export function FundTreasury({ scope, onConfirmed }: { scope: TreasuryScope; onC
   }
 
   return (
-    <section className={`${styles.panel} ${styles.stack}`} aria-labelledby="fund-treasury-title">
+    <section className={card} aria-labelledby="fund-treasury-title">
       <div>
-        <p className={styles.label}>Contribute</p>
-        <h2 id="fund-treasury-title">Fund treasury</h2>
+        <h2 id="fund-treasury-title" className={title}>
+          Add funds
+        </h2>
+        <p className={muted}>
+          Send XLM or USDC from your wallet to the treasury. It becomes the community&apos;s, spent only by vote.
+        </p>
       </div>
-      <p className={styles.muted}>
-        Transfer supported SAC assets from your wallet. This is a contribution, not a deposit you can withdraw directly.
-        No treasury trustline is needed for its contract address.
-      </p>
-      <p className={styles.label}>{network.label}</p>
       {!allowed ? (
-        <p role="status">
-          {session.walletNetworkIssue || 'Connect and authenticate using the wallet control to contribute.'}
+        <p className={muted} role="status">
+          {session.walletNetworkIssue || 'Connect your wallet to add funds.'}
         </p>
       ) : null}
-      <div className={styles.fields}>
-        <label>
-          Asset
-          <select
+      <div className={fields}>
+        <Field>
+          <FieldLabel htmlFor="fund-asset">Asset</FieldLabel>
+          <Select
+            id="fund-asset"
             value={code}
             disabled={busy || Boolean(hash)}
             onChange={(event) => {
@@ -189,14 +192,14 @@ export function FundTreasury({ scope, onConfirmed }: { scope: TreasuryScope; onC
             {supported.map((asset) => (
               <option key={asset.code}>{asset.code}</option>
             ))}
-          </select>
-        </label>
-        <label>
-          Amount
-          <input
-            inputMode="decimal"
-            autoComplete="off"
-            placeholder="0.0000000"
+          </Select>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="fund-amount">Amount</FieldLabel>
+          <AmountInput
+            id="fund-amount"
+            unit={code}
+            placeholder="0.00"
             maxLength={60}
             value={amount}
             disabled={busy || Boolean(hash)}
@@ -205,82 +208,78 @@ export function FundTreasury({ scope, onConfirmed }: { scope: TreasuryScope; onC
               changed();
             }}
           />
-        </label>
+        </Field>
       </div>
-      {readiness.isLoading ? <p role="status">Verifying wallet balance…</p> : null}
-      {readiness.error ? (
-        <p className={styles.error} role="alert">
-          Wallet readiness unavailable: {readiness.error.message}
+      {readiness.isLoading ? (
+        <p className={muted} role="status">
+          Checking your wallet balance…
         </p>
       ) : null}
+      {readiness.error ? (
+        <Callout variant="error" title="We couldn't check your wallet" description={readiness.error.message} />
+      ) : null}
       {readiness.data && !readiness.error ? (
-        <div className={`${styles.notice} ${styles.stack}`}>
-          <p className={styles.muted}>
-            Wallet balance: {formatStroops(readiness.data.account.balance)} {code}
-          </p>
-          <p>
-            Spendable:{' '}
-            <strong>
-              {formatStroops(readiness.data.account.available)} {code}
-            </strong>
-          </p>
-          <p className={styles.muted}>
-            XLM above reserve and selling liabilities: {formatStroops(readiness.data.account.nativeAvailable)} XLM
-          </p>
-          <p className={styles.muted}>
+        <div className={facts}>
+          <div className={fact}>
+            <span className={muted}>You can send</span>
+            <Amount value={formatStroops(readiness.data.account.available)} unit={code} />
+          </div>
+          <div className={fact}>
+            <span className={muted}>In your wallet</span>
+            <Amount value={formatStroops(readiness.data.account.balance)} unit={code} />
+          </div>
+          <div className={fact}>
+            <span className={muted}>XLM free for fees</span>
+            <Amount value={formatStroops(readiness.data.account.nativeAvailable)} unit="XLM" />
+          </div>
+          <p className={muted}>
             {code === 'XLM'
-              ? 'Native XLM needs no trustline.'
+              ? 'XLM needs no trustline.'
               : readiness.data.account.trustline
                 ? readiness.data.account.authorized
-                  ? 'Your USDC trustline is authorized.'
-                  : 'Your USDC trustline is not authorized by the issuer.'
+                  ? 'Your USDC trustline is ready.'
+                  : "Your USDC trustline isn't authorized by the issuer yet."
                 : 'Add a USDC trustline in your wallet, then refresh.'}
           </p>
-          <button
-            type="button"
-            disabled={busy || readiness.isValidating}
-            onClick={() => void readiness.mutate().catch(() => {})}
-          >
-            Refresh wallet readiness
-          </button>
+          <div>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy || readiness.isValidating}
+              onClick={() => void readiness.mutate().catch(() => {})}
+            >
+              Refresh balance
+            </Button>
+          </div>
         </div>
       ) : null}
-      <p role="status" aria-live="polite">
+      <p className={muted} role="status" aria-live="polite">
         {message}
       </p>
       {prepared ? (
-        <div className={`${styles.notice} ${styles.stack}`}>
-          <h3>Review contribution</h3>
-          <p>
-            Send{' '}
-            <strong>
-              {prepared.amount} {prepared.assetCode}
-            </strong>{' '}
-            on {network.label}
-          </p>
-          <p>
-            Maximum prepared network fee: <strong>{formatStroops(prepared.fee)} XLM</strong>
-          </p>
-          <p className={styles.address}>From: {prepared.address}</p>
-          <p className={styles.address}>Treasury: {prepared.treasuryContractId}</p>
-          <p className={styles.address}>Asset SAC: {prepared.assetContractId}</p>
-          <p className={styles.muted}>The wallet must sign these exact terms. Review expires after three minutes.</p>
+        <div className={review}>
+          <h3 className={reviewTitle}>
+            Send {prepared.amount} {prepared.assetCode} to the treasury
+          </h3>
+          <div className={fact}>
+            <span className={muted}>Network fee, at most</span>
+            <Amount value={formatStroops(prepared.fee)} unit="XLM" />
+          </div>
+          <Disclosure title="Technical details">
+            <Address value={prepared.address} label="From" />
+            <Address value={prepared.treasuryContractId} label="Treasury" />
+            <Address value={prepared.assetContractId} label="Asset contract" />
+          </Disclosure>
+          <p className={muted}>Your wallet must sign exactly this. The review expires after three minutes.</p>
         </div>
-      ) : (
-        <p className={styles.address}>Destination treasury: {scope.treasuryContractId}</p>
-      )}
+      ) : null}
       {hash ? (
-        <div className={`${styles.notice} ${styles.stack}`}>
-          <p className={styles.address}>Transaction: {hash}</p>
-          {network.name !== 'local' ? (
-            <a href={getExplorerTxUrl(network.name, hash)} target="_blank" rel="noreferrer">
-              View transaction ↗
-            </a>
-          ) : null}
+        <div className={review}>
+          <Address value={hash} label="Transaction" />
           {!confirmed ? (
-            <button
-              type="button"
-              disabled={busy}
+            <Button
+              variant="secondary"
+              loading={busy}
               onClick={async () => {
                 if (inFlight.current) return;
                 inFlight.current = true;
@@ -297,33 +296,33 @@ export function FundTreasury({ scope, onConfirmed }: { scope: TreasuryScope; onC
                 }
               }}
             >
-              Check confirmation (no new transfer)
-            </button>
+              Check confirmation (sends nothing new)
+            </Button>
           ) : (
-            <p>Contribution confirmed.</p>
+            <Callout variant="success" title="Thank you. Your contribution is in the treasury." />
           )}
         </div>
       ) : (
-        <div className={styles.row}>
-          <button
-            type="button"
-            className={styles.primary}
-            disabled={!allowed || busy || !scope.treasuryContractId}
+        <div className={buttons}>
+          <Button
+            block
+            disabled={!allowed || !scope.treasuryContractId}
+            loading={busy}
             onClick={prepared ? sign : prepare}
           >
-            {busy ? 'Please wait…' : prepared ? 'Sign and submit contribution' : 'Check balances and simulate'}
-          </button>
+            {busy ? 'One moment' : prepared ? 'Sign and send' : 'Check amount'}
+          </Button>
           {prepared ? (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
               disabled={busy}
               onClick={() => {
                 setPrepared(null);
                 setMessage('Review cancelled. Nothing was signed.');
               }}
             >
-              Cancel review
-            </button>
+              Cancel
+            </Button>
           ) : null}
         </div>
       )}

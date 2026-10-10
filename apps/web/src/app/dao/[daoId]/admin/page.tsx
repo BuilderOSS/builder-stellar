@@ -1,54 +1,50 @@
 'use client';
 
-import type { Route } from 'next';
-import Link from 'next/link';
-import { Grid, Stack } from 'styled-system/jsx';
+import { css } from 'styled-system/css';
 
-import { AdminSurfaceNav as AdminSectionNav } from '@/components/admin/admin-surface-nav';
 import { TtlExpiryPanel } from '@/components/admin/ttl-expiry-panel';
 import { PageSection } from '@/components/page-section';
 import { ProposalDraftPanel } from '@/components/proposal/proposal-draft-panel';
-import { Badge, Card, Heading, ShortId, Text } from '@/components/ui';
+import { Avatar, Chip, Disclosure, ListRow, Section } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryHasAuthority, treasuryIsAdmin } from '@/lib/admin-proposals';
 import { useContractAdmin } from '@/lib/admin-queries';
 import { useAdminTokenState } from '@/lib/admin-surfaces';
+import { daoAdminRoute } from '@/lib/dao-routes';
 import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
-function SectionCard({
-  title,
-  description,
-  href,
-  allowed,
-  label
-}: {
-  title: string;
-  description: string;
-  href: Route;
-  allowed: boolean;
-  label: string;
-}) {
-  return (
-    <Card p="5" style={{ opacity: allowed ? 1 : 0.72 }}>
-      <Stack gap="3">
-        <div>
-          <Badge>{label}</Badge>
-        </div>
-        <Heading style={{ fontSize: '1.2rem' }}>{title}</Heading>
-        <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-          {description}
-        </Text>
-        <Link href={href} style={{ color: 'inherit', textDecoration: 'none' }}>
-          <Badge>{allowed ? 'Open section' : 'View section'}</Badge>
-        </Link>
-      </Stack>
-    </Card>
-  );
+const accessCard = css({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: '4',
+  p: '5',
+  borderRadius: 'card',
+  bg: 'surface',
+  boxShadow: 'raised'
+});
+const accessTitle = css({ textStyle: 'heading', m: '0' });
+const muted = css({ textStyle: 'caption', color: 'ink.muted', m: '0', mt: '0.5' });
+const chips = css({ display: 'flex', flexWrap: 'wrap', gap: '1.5' });
+
+type Access = 'direct' | 'vote' | 'read' | 'open';
+
+/** Manage sections the launch checklist depends on. */
+const REQUIRED_FOR_LAUNCH = new Set(['artwork', 'founders']);
+
+function AccessChip({ access }: { access: Access }) {
+  if (access === 'direct') return <Chip tone="yours">You can change this</Chip>;
+  if (access === 'vote') return <Chip tone="live">Needs a vote</Chip>;
+  if (access === 'read') return <Chip>Read only</Chip>;
+  return null;
 }
 
+const access = (direct: boolean, vote: boolean): Access => (direct ? 'direct' : vote ? 'vote' : 'read');
+
 export default function AdminPage() {
-  const { daoId, daoConfig: config } = useDaoContext();
+  const { daoId, daoConfig: config, routeId } = useDaoContext();
   const session = useAuthSessionStore();
   const { data: mintAuthorities } = useGoldskyMintAuthorities(config.tokenContractId);
   const { data: tokenAdmin } = useContractAdmin(config, 'token', session.address || undefined);
@@ -74,104 +70,120 @@ export default function AdminPage() {
     canProposeAuction
   );
 
+  const sections: Array<{ key: string; title: string; meta: string; href: string; access: Access }> = [
+    {
+      key: 'token',
+      title: 'Mint tokens',
+      meta: 'Create new membership tokens',
+      href: daoAdminRoute(routeId, '/token'),
+      access: access(hasMintAccess, canProposeMint)
+    },
+    {
+      key: 'founders',
+      title: 'Founder tokens',
+      meta: 'Tokens for the founding team, before launch',
+      href: daoAdminRoute(routeId, '/founders'),
+      access: 'open'
+    },
+    {
+      key: 'artwork',
+      title: 'Artwork',
+      meta: 'The art every token is drawn from',
+      href: daoAdminRoute(routeId, '/artwork'),
+      access: 'open'
+    },
+    {
+      key: 'governance',
+      title: 'Voting rules',
+      meta: 'Timing, quorum and who can propose',
+      href: daoAdminRoute(routeId, '/governance'),
+      access: access(hasGovernanceAccess, canProposeGovernance)
+    },
+    {
+      key: 'owner',
+      title: 'Who can mint',
+      meta: 'Accounts allowed to mint tokens',
+      href: daoAdminRoute(routeId, '/owner'),
+      access: access(isAdmin, canProposeAdminActions)
+    },
+    {
+      key: 'auction',
+      title: 'Auction',
+      meta: 'Pause, pricing and timing',
+      href: daoAdminRoute(routeId, '/auction'),
+      access: access(isAdmin, canProposeAuction)
+    },
+    {
+      key: 'upgrades',
+      title: 'Contract versions',
+      meta: 'Review and propose upgrades',
+      href: daoAdminRoute(routeId, '/upgrades'),
+      access: 'open'
+    }
+  ];
+
   return (
     <PageSection
-      title="Admin dashboard"
-      description="Role-aware entry point for admin, token, and governance operations."
+      title="Manage"
+      description={`Change how ${config.tokenName || 'this community'} works. ${
+        config.status === 'pending'
+          ? 'In Setup, the launch admin makes changes directly.'
+          : 'After launch, most changes go up for a vote.'
+      }`}
     >
-      <Stack gap="4">
-        <Card p="5">
-          <Stack gap="3">
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: '10px',
-                alignItems: 'center',
-                justifyContent: 'space-between'
-              }}
-            >
-              <div>
-                <Badge>Connected wallet</Badge>
-                <Heading style={{ fontSize: '1.2rem', marginTop: '10px' }}>Access summary</Heading>
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {isAdmin ? <Badge>Admin</Badge> : null}
-                {hasMintAccess ? <Badge>Token Admin</Badge> : null}
-                {hasGovernanceAccess ? <Badge>Governance Admin</Badge> : null}
-                {!isAdmin && canProposeMint ? <Badge>Mint proposals</Badge> : null}
-                {!isAdmin && canProposeGovernance ? <Badge>Governance proposals</Badge> : null}
-                {!hasAnyAccess ? <Badge>Read only</Badge> : null}
-              </div>
-            </div>
-
-            <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+      <section className={accessCard} aria-labelledby="access-title">
+        <div className={css({ display: 'flex', alignItems: 'center', gap: '3', minW: '0' })}>
+          {session.address ? <Avatar address={session.address} size="lg" yours={hasAnyAccess} /> : null}
+          <div className={css({ minW: '0' })}>
+            <h2 id="access-title" className={accessTitle}>
+              {session.address ? 'Your access' : 'Connect to see your access'}
+            </h2>
+            <p className={muted}>
               {session.address
-                ? 'Choose a section below. Each section checks current on-chain authority before offering actions.'
-                : 'Connect a wallet to see your available admin sections.'}
-            </Text>
-            {session.address ? <ShortId value={session.address} label="Connected address" /> : null}
-          </Stack>
-        </Card>
+                ? 'Each section checks your live permissions before offering a change.'
+                : 'Sections stay readable without a wallet.'}
+            </p>
+          </div>
+        </div>
+        <div className={chips}>
+          {isAdmin ? <Chip tone="yours">Admin</Chip> : null}
+          {hasMintAccess ? <Chip tone="yours">Can mint</Chip> : null}
+          {hasGovernanceAccess ? <Chip tone="yours">Can change voting rules</Chip> : null}
+          {!isAdmin && canProposeMint ? <Chip tone="live">Mint by vote</Chip> : null}
+          {!isAdmin && canProposeGovernance ? <Chip tone="live">Rules by vote</Chip> : null}
+          {session.address && !hasAnyAccess ? <Chip>Read only</Chip> : null}
+        </div>
+      </section>
 
+      <ProposalDraftPanel daoId={daoId} />
+
+      <Section title="Sections">
+        <div>
+          {sections.map((section) => (
+            <ListRow
+              key={section.key}
+              href={section.href}
+              title={section.title}
+              meta={section.meta}
+              trailing={
+                config.status === 'pending' ? (
+                  REQUIRED_FOR_LAUNCH.has(section.key) ? (
+                    <Chip tone="warning">Required for launch</Chip>
+                  ) : (
+                    <Chip>Optional before launch</Chip>
+                  )
+                ) : (
+                  <AccessChip access={section.access} />
+                )
+              }
+            />
+          ))}
+        </div>
+      </Section>
+
+      <Disclosure title="Storage renewal">
         <TtlExpiryPanel config={config} />
-
-        <AdminSectionNav daoId={daoId} active="" showDraftTray={false} />
-
-        <ProposalDraftPanel daoId={daoId} />
-
-        <Grid columns={{ base: 1, lg: 3 }} gap="4">
-          <SectionCard
-            label="Admin"
-            title="Authority management"
-            description="Add or remove mint authorities from a single place."
-            href={`/dao/${daoId}/admin/owner` as Route}
-            allowed={isAdmin || canProposeAdminActions}
-          />
-          <SectionCard
-            label="Token Admin"
-            title="Mint tokens"
-            description="Mint voting tokens and review the current mint authority set."
-            href={`/dao/${daoId}/admin/token` as Route}
-            allowed={hasMintAccess || canProposeMint}
-          />
-          <SectionCard
-            label="Governance Admin"
-            title="Update governor settings"
-            description="Edit voting timings, queue delay, proposal threshold and quorum individually or prepare a governance draft."
-            href={`/dao/${daoId}/admin/governance` as Route}
-            allowed={hasGovernanceAccess || canProposeGovernance}
-          />
-          <SectionCard
-            label="Admin"
-            title="Auction controls"
-            description="Pause or resume auction activity for emergency and maintenance operations."
-            href={`/dao/${daoId}/admin/auction` as Route}
-            allowed={isAdmin || canProposeAuction}
-          />
-          <SectionCard
-            label="Artwork"
-            title="Artwork and metadata"
-            description="Read properties and IPFS references, install setup artwork, and prepare metadata updates."
-            href={`/dao/${daoId}/admin/artwork` as Route}
-            allowed={true}
-          />
-          <SectionCard
-            label="Setup"
-            title="Founder allocation"
-            description="Review setup supply and mint founder recipient and amount vectors before launch."
-            href={`/dao/${daoId}/admin/founders` as Route}
-            allowed={true}
-          />
-          <SectionCard
-            label="Code"
-            title="Module versions"
-            description="Read active WASM hashes and check Manager-approved upgrade transitions."
-            href={`/dao/${daoId}/admin/upgrades` as Route}
-            allowed={true}
-          />
-        </Grid>
-      </Stack>
+      </Disclosure>
     </PageSection>
   );
 }

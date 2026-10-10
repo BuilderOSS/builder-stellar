@@ -2,6 +2,7 @@
 
 import { Client as MetadataClient } from '@builder-stellar/metadata-bindings';
 import { useState } from 'react';
+import { css } from 'styled-system/css';
 import { Stack } from 'styled-system/jsx';
 import useSWR from 'swr';
 
@@ -52,8 +53,8 @@ export function ArtworkStateInspector({
   );
   return (
     <Card p="5">
-      <Stack gap="3" style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
-        <Heading style={{ fontSize: '1.2rem' }}>On-chain properties and IPFS references</Heading>
+      <Stack gap="3" className={css({ minWidth: '0', overflowWrap: 'anywhere' })}>
+        <Heading size="heading">On-chain properties and IPFS references</Heading>
         <Text>
           {propertyCount} properties · {groupCount} IPFS groups
         </Text>
@@ -63,7 +64,7 @@ export function ArtworkStateInspector({
             <select
               name="artwork-property"
               autoComplete="off"
-              style={{ color: 'var(--text-primary)', background: 'var(--surface-2)', minHeight: 44 }}
+              className={css({ color: 'ink', bg: 'raised', minHeight: '44px' })}
               value={selected}
               onChange={(event) => {
                 setProperty(Number(event.target.value));
@@ -92,10 +93,10 @@ export function ArtworkStateInspector({
           ))}
         </ol>
         {propertyCount ? (
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <div className={css({ display: 'flex', gap: '3', flexWrap: 'wrap' })}>
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               disabled={!page || data.isLoading}
               onClick={() => setPage((current) => current - 1)}
             >
@@ -103,7 +104,7 @@ export function ArtworkStateInspector({
             </Button>
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               disabled={data.isLoading || (page + 1) * 50 >= (data.data?.count ?? 0)}
               onClick={() => setPage((current) => current + 1)}
             >
@@ -129,7 +130,7 @@ export function ArtworkStateInspector({
                 }}
               />
             </label>
-            <Text style={{ overflowWrap: 'anywhere' }}>
+            <Text overflowWrap="anywhere">
               {data.data?.ipfs ? `${data.data.ipfs.base_uri} · ${data.data.ipfs.extension}` : 'No IPFS group found.'}
             </Text>
           </>

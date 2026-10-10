@@ -1,6 +1,5 @@
 'use client';
 import { Client as MetadataClient } from '@builder-stellar/metadata-bindings';
-import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { TransactionBuilder } from '@stellar/stellar-sdk';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -10,6 +9,7 @@ import { getDeploymentConfig } from '@/lib/deployment-config';
 import { STARTER_COLLECTIONS } from '@/lib/starter-collections';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { confirmCreationTransaction, DefinitiveTransactionFailure } from '@/lib/use-dao-deployment';
+import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { assertArtworkSaved, useLocalArtworkStore } from '@/stores/local-artwork-store';
 import { preferenceScopeKey } from '@/stores/local-preferences-store';
@@ -17,7 +17,7 @@ import { preferenceScopeKey } from '@/stores/local-preferences-store';
 import { artworkBatches, type ArtworkPlan } from './artwork-configuration';
 import { ArtworkDirectoryUpload } from './ArtworkDirectoryUpload';
 import { ArtworkPreviewCanvas } from './ArtworkPreviewCanvas';
-import styles from './workspace.module.css';
+import styles from './workspace-styles';
 
 export function ArtworkSetup({ daoId, config }: { daoId: string; config: DaoNetworkConfig }) {
   const session = useAuthSessionStore();
@@ -95,7 +95,7 @@ export function ArtworkSetup({ daoId, config }: { daoId: string; config: DaoNetw
           signTransaction: async (xdr, opts) => {
             checkWallet();
             assertArtworkSaved();
-            const signed = await StellarWalletsKit.signTransaction(xdr, {
+            const signed = await signWithWallet(xdr, {
               ...opts,
               address: session.address,
               networkPassphrase: config.passphrase
@@ -172,7 +172,7 @@ export function ArtworkSetup({ daoId, config }: { daoId: string; config: DaoNetw
           <Button
             key={collection.id}
             type="button"
-            variant="outline"
+            variant="secondary"
             disabled={started || busy}
             onClick={() =>
               choose({
@@ -193,13 +193,13 @@ export function ArtworkSetup({ daoId, config }: { daoId: string; config: DaoNetw
           <div className={styles.columns}>
             <ol>
               {plan.properties.map((property, index) => (
-                <li key={property.name} style={{ marginBottom: 12 }}>
+                <li key={property.name}>
                   {property.name} · {property.items.length} items
                   <div className={styles.links}>
                     <Button
                       size="sm"
                       type="button"
-                      variant="plain"
+                      variant="ghost"
                       disabled={started || busy || !index}
                       aria-label={`Move ${property.name} earlier`}
                       onClick={() => {
@@ -213,7 +213,7 @@ export function ArtworkSetup({ daoId, config }: { daoId: string; config: DaoNetw
                     <Button
                       size="sm"
                       type="button"
-                      variant="plain"
+                      variant="ghost"
                       disabled={started || busy || index === plan.properties.length - 1}
                       aria-label={`Move ${property.name} later`}
                       onClick={() => {

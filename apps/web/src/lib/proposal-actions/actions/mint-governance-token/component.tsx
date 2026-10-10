@@ -33,7 +33,7 @@ export function MintGovernanceTokenForm({
           }
         />
         {validationErrors && !validationErrors.valid && validationErrors.fields?.recipient ? (
-          <FieldHelperText id="recipient-error" style={{ color: '#f87171' }}>
+          <FieldHelperText id="recipient-error" tone="error">
             {validationErrors.fields.recipient}
           </FieldHelperText>
         ) : (
@@ -57,7 +57,7 @@ export function MintGovernanceTokenForm({
           }
         />
         {validationErrors && !validationErrors.valid && validationErrors.fields?.amount ? (
-          <FieldHelperText id="amount-error" style={{ color: '#f87171' }}>
+          <FieldHelperText id="amount-error" tone="error">
             {validationErrors.fields.amount}
           </FieldHelperText>
         ) : (

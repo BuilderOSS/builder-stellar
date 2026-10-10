@@ -2,6 +2,7 @@
 
 'use client';
 
+import { css } from 'styled-system/css';
 import { Stack } from 'styled-system/jsx';
 
 import { Button, FieldHelperText, FieldLabel, Input, Select, Skeleton } from '@/components/ui';
@@ -60,17 +61,17 @@ export function TransferSacTokenForm({
           ))}
         </Select>
         {validationErrors && !validationErrors.valid && validationErrors.fields?.assetCode ? (
-          <FieldHelperText id="asset-code-error" style={{ color: '#f87171' }}>
+          <FieldHelperText id="asset-code-error" tone="error">
             {validationErrors.fields.assetCode}
           </FieldHelperText>
         ) : (
-          <FieldHelperText>Choose which SAC token to transfer</FieldHelperText>
+          <FieldHelperText>Which asset the treasury sends</FieldHelperText>
         )}
         {balanceDisplay && (
           <FieldHelperText>
             <strong>Treasury balance:</strong>{' '}
             {balancesLoading ? (
-              <Skeleton className="skeleton--inline" style={{ width: '90px', height: '1em' }} />
+              <Skeleton className={css({ display: 'inline-block', width: '22', height: '1em' })} />
             ) : (
               balanceDisplay
             )}
@@ -97,7 +98,7 @@ export function TransferSacTokenForm({
           }
         />
         {validationErrors && !validationErrors.valid && validationErrors.fields?.recipient ? (
-          <FieldHelperText id="recipient-error" style={{ color: '#f87171' }}>
+          <FieldHelperText id="recipient-error" tone="error">
             {validationErrors.fields.recipient}
           </FieldHelperText>
         ) : (
@@ -107,8 +108,8 @@ export function TransferSacTokenForm({
 
       <Stack gap="2">
         <FieldLabel htmlFor="amount">Amount</FieldLabel>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <div style={{ flex: 1 }}>
+        <div className={css({ display: 'flex', gap: '2' })}>
+          <div className={css({ flex: '1', minW: '0' })}>
             <Input
               id="amount"
               type="text"
@@ -128,17 +129,16 @@ export function TransferSacTokenForm({
           {value.assetCode && selectedBalance && (
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               onClick={handleMaxClick}
               disabled={disabled || balancesLoading || !!balancesError}
-              style={{ whiteSpace: 'nowrap' }}
             >
               Max
             </Button>
           )}
         </div>
         {validationErrors && !validationErrors.valid && validationErrors.fields?.amount ? (
-          <FieldHelperText id="amount-error" style={{ color: '#f87171' }}>
+          <FieldHelperText id="amount-error" tone="error">
             {validationErrors.fields.amount}
           </FieldHelperText>
         ) : (

@@ -1,11 +1,11 @@
 import { Client as MetadataClient } from '@builder-stellar/metadata-bindings';
-import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import useSWR from 'swr';
 
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { type ArtworkBumpWindow, expectedNextStart } from '@/lib/ttl-expiry';
 import { DAO_MODULES, type DaoModuleAddresses, readDaoTtlReport } from '@/lib/ttl-expiry-rpc';
+import { signWithWallet } from '@/lib/wallet-sign';
 
 export function moduleAddressesFromConfig(config: DaoNetworkConfig): DaoModuleAddresses {
   return {
@@ -62,7 +62,7 @@ export async function sendArtworkBumpWindow(
     networkPassphrase: config.passphrase,
     publicKey,
     signTransaction: async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
-      StellarWalletsKit.signTransaction(xdr, {
+      signWithWallet(xdr, {
         networkPassphrase: opts?.networkPassphrase ?? config.passphrase,
         address: opts?.address ?? publicKey
       })

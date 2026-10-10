@@ -1,6 +1,6 @@
 import type { IpfsGroup, ItemParam } from '@builder-stellar/metadata-bindings';
 
-import { Input, Text } from '@/components/ui';
+import { CodeBlock, Input, Text } from '@/components/ui';
 import type {
   ActionFormProps,
   ActionHandler,
@@ -59,7 +59,7 @@ function PropertiesForm({ value }: ActionFormProps<ArtworkPropertiesDraft>) {
       <Text>
         Prepare structured artwork batches in Artwork Admin. Property IDs and IPFS references must be reviewed together.
       </Text>
-      <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(value, null, 2)}</pre>
+      <CodeBlock>{JSON.stringify(value, null, 2)}</CodeBlock>
     </>
   );
 }

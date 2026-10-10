@@ -2,7 +2,6 @@
 
 import { Grid, Stack } from 'styled-system/jsx';
 
-import { AdminSurfaceNav as AdminSectionNav } from '@/components/admin/admin-surface-nav';
 import { ModuleVersionCard } from '@/components/admin/module-version-card';
 import { PageSection } from '@/components/page-section';
 import { Callout } from '@/components/ui';
@@ -13,11 +12,10 @@ export default function ModuleVersionsPage() {
   const { daoId, daoConfig: config } = useDaoContext();
   return (
     <PageSection
-      title="Module versions and upgrades"
-      description="Compare current code hashes with the Manager registry and check approved transitions."
+      title="Contract versions"
+      description="Compare each contract with the approved versions, and propose an upgrade when one is available."
     >
       <Stack gap="4">
-        <AdminSectionNav daoId={daoId} active="/upgrades" />
         <Callout
           variant="info"
           title="Approval is not an automatic upgrade"

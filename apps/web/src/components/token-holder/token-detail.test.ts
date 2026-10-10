@@ -11,12 +11,14 @@ const mocks = vi.hoisted(() => ({
 vi.mock('swr', () => ({
   default: () => ({ data: mocks.data, error: undefined, isLoading: false, isValidating: false, mutate: vi.fn() })
 }));
-vi.mock('@/contexts/dao-context', () => ({
-  useDaoContext: () => ({
+vi.mock('@/contexts/dao-context', () => {
+  const value = {
     daoId: 'dao-a',
+    routeId: 'dao-a',
     daoConfig: { tokenName: 'Actual DAO', tokenDescription: 'Actual description' }
-  })
-}));
+  };
+  return { useDaoContext: () => value, useOptionalDaoContext: () => value };
+});
 vi.mock('./holder-controls', () => ({
   HolderControls: (props: unknown) => {
     mocks.controls(props);

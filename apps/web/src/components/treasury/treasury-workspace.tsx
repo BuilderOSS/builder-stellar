@@ -1,13 +1,26 @@
 'use client';
 
-import Link from 'next/link';
+import { RefreshCw } from 'lucide-react';
+import NextLink from 'next/link';
 import { useState } from 'react';
+import { css } from 'styled-system/css';
 
+import {
+  Address,
+  Amount,
+  Callout,
+  Disclosure,
+  EmptyState,
+  IconButton,
+  Pagination,
+  Section,
+  Skeleton
+} from '@/components/ui';
+import { card, muted, title } from '@/components/ui/panel-styles';
 import { useDaoContext } from '@/contexts/dao-context';
 import { findAsset } from '@/lib/assets-config';
 import { decimalToStroops } from '@/lib/auction-values';
 import { daoRoute } from '@/lib/dao-routes';
-import { getExplorerTxUrl } from '@/lib/explorer-links';
 import { useTreasuryBalances } from '@/lib/treasury-queries';
 import { clientTreasuryScope, useTreasuryHistory } from '@/lib/treasury-service/hooks';
 import { displayTreasuryBalance } from '@/lib/treasury-service/values';
@@ -15,7 +28,52 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import { FundTreasury } from './fund-treasury';
 import { TransferProposal } from './transfer-proposal';
-import styles from './treasury.module.css';
+
+const layout = css({
+  display: 'grid',
+  gap: '8',
+  lg: { gridTemplateColumns: 'minmax(0, 1fr) 380px', alignItems: 'start' }
+});
+const mainColumn = css({ display: 'grid', gap: '8', minW: '0' });
+const sideColumn = css({ display: 'grid', gap: '5', minW: '0', lg: { position: 'sticky', top: '20' } });
+const head = css({ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '3' });
+const assetRow = css({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '3',
+  py: '3.5',
+  borderBottomWidth: '1px',
+  borderColor: 'rule',
+  _last: { borderBottomWidth: '0' }
+});
+const assetIcon = css({
+  display: 'grid',
+  placeItems: 'center',
+  width: '10',
+  height: '10',
+  borderRadius: 'full',
+  bg: 'brass.wash',
+  color: 'brass',
+  fontFamily: 'display',
+  fontWeight: '700'
+});
+const assetName = css({ textStyle: 'body', fontWeight: '600', m: '0' });
+const assetBalance = css({
+  textStyle: 'title',
+  fontSize: { base: '1.125rem', md: '1.375rem' },
+  m: '0',
+  textAlign: 'right'
+});
+const historyList = css({ display: 'grid', listStyle: 'none', m: '0', p: '0' });
+const historyItem = css({
+  display: 'grid',
+  gap: '2',
+  py: '4',
+  borderBottomWidth: '1px',
+  borderColor: 'rule',
+  _last: { borderBottomWidth: '0' }
+});
+const link = css({ textStyle: 'label', color: 'signal', justifySelf: 'start' });
 
 export function TreasuryWorkspace() {
   const { daoId, daoConfig: config } = useDaoContext();
@@ -28,7 +86,7 @@ export function TreasuryWorkspace() {
 }
 
 function ScopedTreasuryWorkspace() {
-  const { daoId, daoConfig: config } = useDaoContext();
+  const { daoId, daoConfig: config, routeId } = useDaoContext();
   const [page, setPage] = useState(0);
   const [refreshError, setRefreshError] = useState('');
   const balances = useTreasuryBalances(config);
@@ -47,143 +105,130 @@ function ScopedTreasuryWorkspace() {
   }
 
   return (
-    <div className={styles.workspace}>
-      <div className={styles.columns}>
-        <section className={`${styles.panel} ${styles.stack}`} aria-labelledby="treasury-balances-title">
-          <div className={styles.row}>
+    <div className={layout}>
+      <div className={mainColumn}>
+        <section className={card} aria-labelledby="treasury-balances-title">
+          <div className={head}>
             <div>
-              <p className={styles.label}>
-                Contract-held assets · {config.name === 'public' ? 'Mainnet' : config.name}
-              </p>
-              <h2 id="treasury-balances-title">
-                {funded === undefined ? 'Asset balances' : `${funded} funded asset${funded === 1 ? '' : 's'}`}
+              <h2 id="treasury-balances-title" className={title}>
+                What the community holds
               </h2>
+              <p className={muted}>
+                {funded === undefined ? 'Live balances' : `${funded} funded asset${funded === 1 ? '' : 's'}`}
+              </p>
             </div>
-            <button type="button" disabled={refreshing} onClick={refresh}>
-              {refreshing ? 'Refreshing…' : 'Refresh treasury'}
-            </button>
+            <IconButton label="Refresh treasury" variant="secondary" loading={refreshing} onClick={refresh}>
+              {refreshing ? null : <RefreshCw aria-hidden="true" />}
+            </IconButton>
           </div>
-          <div className={styles.notice}>
-            <p className={styles.label}>Treasury contract</p>
-            <p className={styles.address}>{config.treasuryContractId || 'Treasury not configured'}</p>
-          </div>
-          <p className={styles.muted}>
-            Balances are live SAC reads, shown exactly to seven decimal places. Execution history is indexed separately
-            and may lag. Contributions are not part of this execution-only history.
-          </p>
-          {refreshError ? (
-            <p role="alert" className={styles.error}>
-              {refreshError}
-            </p>
-          ) : null}
+          {refreshError ? <Callout variant="warning" title={refreshError} role="alert" /> : null}
           {balances.error ? (
-            <p role="alert" className={styles.error}>
-              Balances unavailable: {balances.error.message}. No zero balance is inferred.
-            </p>
+            <Callout
+              variant="error"
+              role="alert"
+              title="Balances unavailable"
+              description={`${balances.error.message}. We won't show a balance we couldn't read.`}
+            />
           ) : null}
           {balances.isLoading && !balances.data ? (
-            <p role="status" aria-busy="true">
-              Loading treasury balances…
-            </p>
-          ) : null}
-          {!config.treasuryContractId ? <p role="status">This community has no configured treasury.</p> : null}
-          {knownBalances?.map((asset) => (
-            <div className={styles.asset} key={`${asset.assetCode}:${asset.assetIssuer || 'native'}`}>
-              <div>
-                <h3>{findAsset(config.name, asset.assetCode)?.name ?? asset.assetCode}</h3>
-                <p className={styles.muted}>
-                  {asset.assetCode}
-                  {asset.isNative ? ' · native SAC' : ''}
-                </p>
-              </div>
-              <p className={styles.balance}>
-                {displayTreasuryBalance(asset.balance)} <span className={styles.muted}>{asset.assetCode}</span>
-              </p>
+            <div className={css({ display: 'grid', gap: '2' })} role="status" aria-busy="true">
+              <span className="sr-only">Loading balances</span>
+              <Skeleton className={css({ height: '14' })} />
+              <Skeleton className={css({ height: '14' })} />
             </div>
-          ))}
-          {knownBalances?.length === 0 ? (
-            <p role="status">No configured assets are available for this network.</p>
           ) : null}
+          {!config.treasuryContractId ? (
+            <EmptyState title="No treasury">This community doesn&apos;t have a treasury set up.</EmptyState>
+          ) : null}
+          {knownBalances?.length ? (
+            <div>
+              {knownBalances.map((asset) => (
+                <div className={assetRow} key={`${asset.assetCode}:${asset.assetIssuer || 'native'}`}>
+                  <span className={assetIcon} aria-hidden="true">
+                    {asset.assetCode.slice(0, 1)}
+                  </span>
+                  <div className={css({ minW: '0', flex: '1' })}>
+                    <p className={assetName}>{findAsset(config.name, asset.assetCode)?.name ?? asset.assetCode}</p>
+                    <p className={muted}>{asset.assetCode}</p>
+                  </div>
+                  <p className={assetBalance}>
+                    <Amount value={displayTreasuryBalance(asset.balance)} unit={asset.assetCode} />
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {knownBalances?.length === 0 ? <p className={muted}>No assets are set up on this network.</p> : null}
+          <Disclosure title="Technical details">
+            {config.treasuryContractId ? <Address value={config.treasuryContractId} label="Treasury contract" /> : null}
+            <p className={muted}>
+              Balances are read live from the chain, exact to seven decimals. Payout history comes from the indexer and
+              can lag a little. Contributions don&apos;t appear in payout history.
+            </p>
+          </Disclosure>
         </section>
-        <div className={styles.stack}>
-          {config.treasuryContractId ? (
-            <FundTreasury key={`${address}:${authStatus}`} scope={scope} onConfirmed={refresh} />
+
+        <Section title="Payouts" description="Money that left the treasury after a vote, newest first">
+          {history.error ? (
+            <Callout
+              variant="error"
+              role="alert"
+              title="Execution history unavailable"
+              description={history.error.message}
+            />
           ) : null}
-          {config.treasuryContractId ? <TransferProposal key={`${address}:${authStatus}`} /> : null}
-        </div>
-      </div>
-      <section className={`${styles.panel} ${styles.stack}`} aria-labelledby="treasury-history-title">
-        <div className={styles.row}>
-          <div>
-            <p className={styles.label}>Execution receipts</p>
-            <h2 id="treasury-history-title">Treasury execution history</h2>
-          </div>
-          <p className={styles.muted}>Newest calls first · Page {page + 1}</p>
-        </div>
-        {history.error ? (
-          <p role="alert" className={styles.error}>
-            Execution history unavailable: {history.error.message}
-          </p>
-        ) : null}
-        {history.isLoading ? (
-          <p role="status" aria-busy="true">
-            Loading scoped execution receipts…
-          </p>
-        ) : null}
-        {history.data && !history.error ? (
-          <>
-            {!history.data.calls.length ? (
-              <p role="status">
-                {page === 0 ? 'No indexed treasury executions yet.' : 'No more executions on this page.'}
-              </p>
+          {history.isLoading ? (
+            <div className={css({ display: 'grid', gap: '2' })} role="status" aria-busy="true">
+              <span className="sr-only">Loading payouts</span>
+              <Skeleton className={css({ height: '16' })} />
+            </div>
+          ) : null}
+          {history.data && !history.error ? (
+            !history.data.calls.length ? (
+              <EmptyState title={page === 0 ? 'No payouts yet' : 'Nothing more here'}>
+                {page === 0 ? 'When members vote to spend treasury funds, each payout shows up here.' : undefined}
+              </EmptyState>
             ) : (
-              <ol className={styles.history}>
+              <ol className={historyList}>
                 {history.data.calls.map((call) => (
-                  <li key={call.eventId}>
-                    <div className={styles.row}>
-                      <h3>
-                        Call {call.index + 1} · {call.function}
-                      </h3>
-                      <p className={styles.muted}>
+                  <li key={call.eventId} className={historyItem}>
+                    <div className={head}>
+                      <p className={assetName}>
+                        Step {call.index + 1}: {call.function}
+                      </p>
+                      <span className={muted}>
                         Ledger {call.ledger}
                         {call.at ? ` · ${new Date(call.at).toLocaleDateString()}` : ''}
-                      </p>
+                      </span>
                     </div>
-                    <p className={styles.address}>Target: {call.target}</p>
-                    <div className={styles.row}>
-                      <Link href={daoRoute(daoId, `proposals/${call.proposalId}`)}>
-                        Proposal & full execution receipt ↗
-                      </Link>
-                      {config.name !== 'local' ? (
-                        <a href={getExplorerTxUrl(config.name, call.transactionHash)} target="_blank" rel="noreferrer">
-                          Transaction ↗
-                        </a>
-                      ) : null}
-                    </div>
-                    <p className={styles.address}>Transaction: {call.transactionHash}</p>
+                    <Address value={call.target} label="Contract" compact />
+                    <Address value={call.transactionHash} label="Transaction" compact />
+                    <NextLink href={daoRoute(routeId, `proposals/${call.proposalId}`)} className={link}>
+                      View proposal
+                    </NextLink>
                   </li>
                 ))}
               </ol>
-            )}
-          </>
-        ) : null}
-        <nav className={styles.row} aria-label="Treasury execution history pages">
-          <button
-            type="button"
-            disabled={page === 0 || history.isLoading}
-            onClick={() => setPage((current) => current - 1)}
-          >
-            Previous
-          </button>
-          <button
-            type="button"
-            disabled={!history.data?.hasMore || Boolean(history.error) || history.isLoading}
-            onClick={() => setPage((current) => current + 1)}
-          >
-            Next
-          </button>
-        </nav>
-      </section>
+            )
+          ) : null}
+          <Pagination
+            label="Treasury execution history pages"
+            page={page + 1}
+            hasPrevious={page > 0}
+            hasNext={Boolean(history.data?.hasMore) && !history.error}
+            onPrevious={() => setPage((current) => current - 1)}
+            onNext={() => setPage((current) => current + 1)}
+            disabled={history.isLoading}
+          />
+        </Section>
+      </div>
+
+      {config.treasuryContractId ? (
+        <div className={sideColumn}>
+          <FundTreasury key={`fund:${address}:${authStatus}`} scope={scope} onConfirmed={refresh} />
+          <TransferProposal key={`transfer:${address}:${authStatus}`} />
+        </div>
+      ) : null}
     </div>
   );
 }

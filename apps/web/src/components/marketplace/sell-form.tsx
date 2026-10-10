@@ -8,7 +8,7 @@ import { useMarketplaceInventory, useMarketplaceReadiness } from '@/lib/marketpl
 import type { DaoMarketplace, MarketplaceAction } from '@/lib/marketplace/types';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
-import styles from './marketplace.module.css';
+import styles from './marketplace-styles';
 import { TradeReview } from './trade-review';
 
 export function SellForm({ data }: { data: DaoMarketplace }) {
@@ -58,34 +58,37 @@ export function SellForm({ data }: { data: DaoMarketplace }) {
     <section className={styles.panel} aria-labelledby="sell-title">
       <div className={styles.stack}>
         <div>
-          <p className={styles.eyebrow}>Secondary marketplace</p>
           <h2 id="sell-title">Sell a token you own</h2>
-          <p>
-            Two separate transactions: approve this token, then transfer it into marketplace escrow. An approval alone
-            is not a listing.
+          <p className={styles.muted}>
+            Two quick signatures: first allow the market to hold your token, then list it. Allowing alone doesn&apos;t
+            list it.
           </p>
-          <p>
-            While a token is listed, its vote leaves your delegate (escrowed tokens carry no votes). It returns when you
-            cancel, or moves to the buyer when the token sells.
+          <p className={styles.muted}>
+            While it&apos;s listed the market holds it, so its vote pauses. You get it back if you cancel; the buyer
+            gets it if it sells.
           </p>
         </div>
         {!enabled ? (
           <p className={styles.notice}>
             {auth !== 'authenticated'
-              ? 'Connect and authenticate your wallet to view inventory and sell.'
+              ? 'Connect your wallet to see your tokens and sell one.'
               : !supportedAsset
-                ? 'This interface supports pricing with verified XLM or USDC SAC assets only. Unknown token decimals are not inferred.'
-                : 'New listings are unavailable while the marketplace is paused or not launched.'}
+                ? 'Selling here works with XLM or USDC prices only.'
+                : "New listings are paused while the market is paused or hasn't opened."}
           </p>
         ) : null}
         {inventory.error ? <p role="alert">{inventory.error.message}</p> : null}
-        {inventory.isLoading ? <p role="status">Loading your indexed inventory…</p> : null}
+        {inventory.isLoading ? (
+          <p className={styles.muted} role="status">
+            Loading your tokens…
+          </p>
+        ) : null}
         {inventory.data && !inventory.data.tokenIds.length ? (
-          <p>No owned tokens indexed on this page. Recently purchased tokens may take a few seconds to appear.</p>
+          <p className={styles.muted}>No tokens here. One you just bought can take a few seconds to show up.</p>
         ) : null}
         <div className={styles.formGrid}>
           <label>
-            Owned token
+            Your token
             <select
               value={tokenId}
               disabled={auth !== 'authenticated'}
@@ -113,7 +116,7 @@ export function SellForm({ data }: { data: DaoMarketplace }) {
             />
           </label>
           <label>
-            Expires at (your local time)
+            Listing ends (your time)
             <input
               type="datetime-local"
               value={expiresAt}
@@ -132,7 +135,7 @@ export function SellForm({ data }: { data: DaoMarketplace }) {
                 setTokenId('');
               }}
             >
-              Previous inventory
+              Previous
             </button>
             <button
               type="button"
@@ -142,47 +145,46 @@ export function SellForm({ data }: { data: DaoMarketplace }) {
                 setTokenId('');
               }}
             >
-              More owned tokens
+              More tokens
             </button>
           </div>
         ) : null}
-        <p>
-          Fee at listing time: <strong>{config.feeBps} bps</strong>
-          {proceeds ? ` · Seller receives ${proceeds} ${asset}` : ''}. The listing transaction carries this fee and
-          payment asset as your limits: if governance changes either before confirmation, the listing fails and you can
-          review the new terms.
+        <p className={styles.muted}>
+          Market fee: <strong>{(config.feeBps / 100).toLocaleString()}%</strong>
+          {proceeds ? ` · you receive ${proceeds} ${asset}` : ''}. If the community changes the fee or price asset
+          before your listing confirms, it fails safely and you can review the new terms.
         </p>
-        <p className={styles.address}>Payment SAC: {config.paymentAsset}</p>
+        <p className={styles.address}>Price asset contract: {config.paymentAsset}</p>
         {readiness.data?.issues.map((issue) => (
           <p key={issue}>{issue}</p>
         ))}
         {readiness.data?.canAddTrustline ? (
           <button type="button" onClick={() => setAction({ action: 'trustline', paymentAsset: config.paymentAsset })}>
-            Review adding USDC trustline
+            Add a USDC trustline
           </button>
         ) : null}
         <div className={styles.row}>
           <button type="button" disabled={!enabled || !tokenId} onClick={() => review('approve')}>
-            1. Review token approval
+            1. Allow the market
           </button>
           <button
             type="button"
             className={styles.primary}
+            data-variant="primary"
             disabled={!enabled || !tokenId}
             onClick={() => review('list')}
           >
-            2. Review escrow listing
+            2. List it
           </button>
         </div>
         {approved === tokenId && tokenId ? (
           <p className={styles.notice}>
-            Approval confirmed for token #{tokenId}. It is limited to 120 ledgers from preparation, not a clock timer;
-            review escrow next. Simulation checks that the approval is still active.
+            The market can now hold #{tokenId} for about 10 minutes. List it next; we check the permission is still
+            active first.
           </p>
         ) : (
           <p className={styles.muted}>
-            If approval is already active, you can review step 2 directly. Simulation will reject missing or expired
-            approval.
+            Already allowed it recently? Go straight to step 2. We&apos;ll tell you if the permission expired.
           </p>
         )}
         {tokenId ? (
@@ -191,7 +193,7 @@ export function SellForm({ data }: { data: DaoMarketplace }) {
             disabled={auth !== 'authenticated'}
             onClick={() => setAction({ action: 'revoke', tokenId })}
           >
-            Review revoking an unused approval
+            Take back an unused permission
           </button>
         ) : null}
         {message ? <p role="alert">{message}</p> : null}

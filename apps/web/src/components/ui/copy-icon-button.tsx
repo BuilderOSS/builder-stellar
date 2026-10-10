@@ -2,6 +2,8 @@
 
 import { Check, Copy } from 'lucide-react';
 
+import { IconButton } from './button';
+
 type CopyIconButtonProps = {
   copied: boolean;
   onClick: () => void;
@@ -10,37 +12,9 @@ type CopyIconButtonProps = {
 };
 
 export function CopyIconButton({ copied, onClick, label, compact = false }: CopyIconButtonProps) {
-  const title = copied ? 'Copied' : (label ?? 'Copy');
-
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={title}
-      title={title}
-      className="warm-ink-icon-action"
-      style={{
-        appearance: 'none',
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: compact ? '2rem' : '2.75rem',
-        height: compact ? '2rem' : '2.75rem',
-        minWidth: compact ? '2rem' : '2.75rem',
-        minHeight: compact ? '2rem' : '2.75rem',
-        padding: 0,
-        borderRadius: compact ? '8px' : '10px',
-        border: '1px solid var(--border-default)',
-        background: 'var(--surface-2)',
-        color: 'var(--text-secondary)',
-        cursor: 'pointer'
-      }}
-    >
-      {copied ? (
-        <Check aria-hidden="true" size={compact ? 14 : 16} strokeWidth={1.5} />
-      ) : (
-        <Copy aria-hidden="true" size={compact ? 14 : 16} strokeWidth={1.5} />
-      )}
-    </button>
+    <IconButton label={copied ? 'Copied' : (label ?? 'Copy')} size={compact ? 'sm' : 'md'} onClick={onClick}>
+      {copied ? <Check aria-hidden="true" strokeWidth={2} /> : <Copy aria-hidden="true" strokeWidth={1.75} />}
+    </IconButton>
   );
 }

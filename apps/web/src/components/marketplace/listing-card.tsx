@@ -11,7 +11,7 @@ import { useMarketplaceReadiness } from '@/lib/marketplace/hooks';
 import type { MarketplaceAction, MarketplaceCommunity, MarketplaceListing } from '@/lib/marketplace/types';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
-import styles from './marketplace.module.css';
+import styles from './marketplace-styles';
 import { TradeReview } from './trade-review';
 
 export function ListingCard({
@@ -61,21 +61,28 @@ export function ListingCard({
         <span className={styles.status}>{status}</span>
       </div>
       <div className={styles.tokenArt} aria-hidden="true">
-        {listing.kind === 'primary' ? <span>✦</span> : <span>#{listing.tokenId}</span>}
+        {listing.kind === 'primary' ? (
+          <span>New</span>
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={`/api/render/${encodeURIComponent(community.daoId)}/${listing.tokenId}`} alt="" loading="lazy" />
+        )}
       </div>
       <p className={styles.eyebrow}>{community.name}</p>
-      <h3>{listing.kind === 'primary' ? `Primary listing #${listing.id}` : `Token #${listing.tokenId}`}</h3>
+      <h3>
+        {listing.kind === 'primary' ? `New token · listing ${listing.id}` : `${community.name} #${listing.tokenId}`}
+      </h3>
       <p className={styles.price}>
         {marketplaceDisplayAmount(network, listing.paymentAsset, listing.price)} <span>{asset}</span>
       </p>
       <p className={styles.muted}>
         {listing.kind === 'primary'
-          ? 'Minted to the buyer · proceeds to Treasury'
-          : `${listing.feeBps} bps fee · deducted from seller proceeds`}
+          ? 'Minted to you · the money goes to the treasury'
+          : `${(listing.feeBps / 100).toLocaleString()}% market fee, paid by the seller`}
       </p>
       {trading ? (
         <button type="button" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
-          {expanded ? 'Hide details' : 'View details & trade'}
+          {expanded ? 'Hide details' : 'Details'}
         </button>
       ) : (
         <Link
@@ -90,7 +97,7 @@ export function ListingCard({
           <dl className={styles.details}>
             <dt>Expires</dt>
             <dd>{new Date(Number(listing.expiresAt) * 1000).toLocaleString()}</dd>
-            <dt>Payment SAC (snapshotted)</dt>
+            <dt>Price asset contract</dt>
             <dd className={styles.address}>{listing.paymentAsset}</dd>
             <dt>Created</dt>
             <dd>{listing.createdAt ? new Date(listing.createdAt).toLocaleString() : 'Timestamp not indexed'}</dd>
@@ -153,15 +160,13 @@ export function ListingCard({
           {listing.status === 'open' ? (
             <>
               {!['XLM', 'USDC'].includes(asset) ? (
-                <p>
-                  Purchases here support verified XLM and USDC SAC assets only. This listing can still be cancelled or
-                  recovered after expiry.
-                </p>
+                <p>You can buy with XLM or USDC here. This listing can still be canceled, or cleared after it ends.</p>
               ) : null}
               <div className={styles.row}>
                 <button
                   type="button"
                   className={styles.primary}
+                  data-variant="primary"
                   onClick={() => trade('buy')}
                   disabled={
                     listing.seller === address ||
@@ -170,11 +175,11 @@ export function ListingCard({
                     (listing.kind === 'secondary' && sellerProceeds === null)
                   }
                 >
-                  Review purchase
+                  Buy
                 </button>
                 {listing.kind === 'secondary' && listing.seller === address ? (
                   <button type="button" onClick={() => trade('cancel')}>
-                    Cancel & recover token
+                    Cancel listing
                   </button>
                 ) : null}
               </div>
@@ -183,15 +188,15 @@ export function ListingCard({
           {listing.status === 'awaiting-expiry' ? (
             <>
               <p>
-                Expired by time, but still indexed as open. Clear the listing to recover escrow (secondary) or remove
-                the unsold offer (primary).
+                This listing has ended but hasn't been cleared. Clearing returns a resale token to its seller, or
+                removes an unsold new listing.
               </p>
               <button type="button" onClick={() => trade('expire')}>
-                Review expiry recovery
+                Clear ended listing
               </button>
             </>
           ) : null}
-          <Link href={`/dao/${community.daoId}/marketplace?status=all`}>Community listing and sales history</Link>
+          <Link href={`/dao/${community.daoId}/marketplace?status=all`}>All listings and sales</Link>
         </div>
       ) : null}
       {action ? (

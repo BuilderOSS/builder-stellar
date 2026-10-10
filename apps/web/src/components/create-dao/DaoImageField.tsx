@@ -6,7 +6,7 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { DEFAULT_DAO_IMAGE_URL, LOCAL_DEFAULT_DAO_IMAGE_URL, useCreateDaoStore } from '@/stores/create-dao-store';
 
 import { prepareDaoImage, uploadDaoImage } from './dao-image-upload';
-import styles from './workspace.module.css';
+import styles from './workspace-styles';
 
 export function DaoImageField() {
   const input = useRef<HTMLInputElement>(null);
@@ -55,7 +55,7 @@ export function DaoImageField() {
     }
   };
   return (
-    <div className={styles.stack} style={{ gap: 8 }}>
+    <div className={styles.stack}>
       <button
         id="contractImage"
         type="button"
@@ -93,7 +93,7 @@ export function DaoImageField() {
           <Button
             size="sm"
             type="button"
-            variant="outline"
+            variant="secondary"
             disabled={busy || !address || auth !== 'authenticated'}
             onClick={() => void upload()}
           >
@@ -102,7 +102,7 @@ export function DaoImageField() {
           <Button
             size="sm"
             type="button"
-            variant="plain"
+            variant="ghost"
             disabled={busy}
             onClick={() => useCreateDaoStore.getState().setImagePreview(null)}
           >
@@ -125,7 +125,7 @@ export function DaoImageField() {
         <Button
           type="button"
           size="sm"
-          variant="plain"
+          variant="ghost"
           disabled={busy}
           onClick={() => {
             useCreateDaoStore.getState().updateBasicInfo({ contractImage: DEFAULT_DAO_IMAGE_URL });

@@ -1,23 +1,15 @@
 'use client';
-import Link from 'next/link';
 
-import styles from '@/components/create-dao/workspace.module.css';
-import { LocalDrafts } from '@/components/local-workspace/local-drafts';
-import { WalletControls } from '@/components/wallet-controls';
+import { DraftsOverview } from '@/components/drafts/drafts-overview';
+import { PageSection } from '@/components/page-section';
 
 export default function DraftsPage() {
   return (
-    <div className="page-shell">
-      <div className={styles.workspace}>
-        <header className={styles.header}>
-          <Link href="/">Builder Lobby</Link>
-          <WalletControls />
-        </header>
-        <main>
-          <h1 className="page-title">Your drafts</h1>
-          <LocalDrafts />
-        </main>
-      </div>
-    </div>
+    <PageSection
+      title="Drafts"
+      description="Proposals and DAOs you started on this browser. They aren't shared or synced; clearing browser data removes them."
+    >
+      <DraftsOverview />
+    </PageSection>
   );
 }

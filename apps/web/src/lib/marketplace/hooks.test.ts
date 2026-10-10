@@ -46,11 +46,10 @@ describe('marketplace client identity bindings', () => {
       JSON.stringify({
         home: 'offers',
         favorites: [daoId, 'bad-id'],
-        labels: { [daoId]: 'Private label', 'bad-id': 'ignore' },
         publicTags: ['invented']
       })
     );
-    expect(parsed).toEqual({ home: 'offers', favorites: [daoId], labels: { [daoId]: 'Private label' } });
-    expect(parseMarketplacePreferences('malformed')).toEqual({ home: 'communities', favorites: [], labels: {} });
+    expect(parsed).toEqual({ home: 'offers', favorites: [daoId] });
+    expect(parseMarketplacePreferences('malformed')).toEqual({ home: 'communities', favorites: [] });
   });
 });

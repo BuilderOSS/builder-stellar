@@ -8,7 +8,7 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 import type { ArtworkPlan } from './artwork-configuration';
 import { inspectArtworkDirectory } from './artwork-configuration';
 import { uploadResponseJson } from './dao-image-upload';
-import styles from './workspace.module.css';
+import styles from './workspace-styles';
 
 export function ArtworkDirectoryUpload({
   onComplete,
@@ -81,7 +81,7 @@ export function ArtworkDirectoryUpload({
     }
   };
   return (
-    <div className={styles.stack} style={{ gap: 10 }}>
+    <div className={styles.stack}>
       <label htmlFor="artwork-directory" className={styles.label}>
         Artwork directory
       </label>
@@ -107,7 +107,7 @@ export function ArtworkDirectoryUpload({
       <p className={styles.muted}>collection/layer/item.png · Same extension · Up to 16 layers and 1,000 files</p>
       <Button
         type="button"
-        variant="outline"
+        variant="secondary"
         disabled={disabled || busy || !files.length || !wallet || auth !== 'authenticated'}
         onClick={() => void upload()}
       >

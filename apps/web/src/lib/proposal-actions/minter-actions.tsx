@@ -1,4 +1,4 @@
-import { Text } from '@/components/ui';
+import { CodeBlock, Text } from '@/components/ui';
 import { type AllocationDraft, validateAllocation } from '@/lib/minter/proposal-actions';
 
 import type { ActionHandler } from './types';
@@ -24,7 +24,7 @@ export const minterAllocationHandlers: ActionHandler<ScopedDraft>[] = (
         Prepare this structured allocation in Claims Admin. Replacing a root/list starts a new claim round. Batch
         allocation mints immediately on execution.
       </Text>
-      <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(value, null, 2)}</pre>
+      <CodeBlock>{JSON.stringify(value, null, 2)}</CodeBlock>
     </>
   ),
   getDefaultValues: () =>

@@ -2,12 +2,13 @@
 import { useState } from 'react';
 
 import { Input } from '@/components/ui';
+import { membershipTypeOf, votingPaceOf } from '@/lib/create-dao-presets';
 import { configuredCreationNetwork, creationAssets } from '@/lib/create-dao-schema';
-import { formatDuration } from '@/lib/time-utils';
+import { formatDuration } from '@/lib/duration';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
 import { CreationField, fieldAccessibility } from './CreationField';
-import styles from './workspace.module.css';
+import styles from './workspace-styles';
 
 export function ReviewStep({ connectedAddress }: { connectedAddress?: string }) {
   const [metadataOpen, setMetadataOpen] = useState(false);
@@ -21,22 +22,41 @@ export function ReviewStep({ connectedAddress }: { connectedAddress?: string }) 
   const assets = creationAssets(configuredCreationNetwork());
   const assetName = (id: string) => assets.find((a) => a.contractId === id)?.code ?? id;
   const rows = [
-    ['Identity', `${basic.tokenName} · ${basic.tokenSymbol}`],
-    ['Description', basic.description],
+    ['Name', [basic.tokenName, basic.tokenSymbol].filter(Boolean).join(' · ') || 'Not set yet'],
+    ['About', basic.description || 'Not set yet'],
+    ['Membership', membershipTypeOf(auction, market).title],
+    ['Voting pace', votingPaceOf(governance)?.title ?? 'Custom'],
     [
       'Auctions',
-      `${auction.enabled ? 'Selected for launch' : 'Disabled at launch'} · ${auction.reservePrice} ${assetName(auction.paymentAsset)} reserve`
+      auction.enabled
+        ? `On at launch. Each runs ${formatDuration(auction.duration, { style: 'long' })}, starting at ${auction.reservePrice} ${assetName(auction.paymentAsset)}. Late bids add ${formatDuration(auction.timeBuffer, { style: 'long' })}.`
+        : 'Off at launch. You can turn them on later by vote.'
     ],
-    ['Auction timing', `${formatDuration(auction.duration)} · ${auction.timeBuffer}s extension`],
     [
-      'Marketplace',
-      `${market.enabled ? 'Selected for launch' : 'Disabled at launch'} · ${assetName(market.paymentAsset)} · ${market.secondaryFeeBps / 100}% fee`
+      'Market',
+      market.enabled
+        ? `On at launch. Prices in ${assetName(market.paymentAsset)}, ${market.secondaryFeeBps / 100}% fee on resales.`
+        : 'Off at launch.'
     ],
-    ['Voting', `${formatDuration(governance.votingDelay)} delay · ${formatDuration(governance.votingPeriod)} voting`],
-    ['Execution queue', formatDuration(governance.queueDelay)],
-    ['Requirements', `${governance.quorumBps / 100}% quorum · ${governance.proposalThreshold} votes to propose`],
-    ['Launch admin', connectedAddress || 'Connect your wallet when ready'],
-    ['Image', preview ? 'Local preview only. Upload it or use the saved image before deployment.' : basic.contractImage]
+    [
+      'Voting',
+      `Opens ${formatDuration(governance.votingDelay, { style: 'long' })} after a proposal, stays open ${formatDuration(governance.votingPeriod, { style: 'long' })}.`
+    ],
+    [
+      'Safety delay',
+      `Passed proposals wait ${formatDuration(governance.queueDelay, { style: 'long' })} before they can run.`
+    ],
+    [
+      'Rules',
+      `${governance.quorumBps / 100}% of votes must take part. ${governance.proposalThreshold} ${governance.proposalThreshold === 1 ? 'vote' : 'votes'} needed to propose.`
+    ],
+    [
+      'Launch admin',
+      connectedAddress
+        ? `${connectedAddress.slice(0, 4)}…${connectedAddress.slice(-4)} (you)`
+        : 'Connect your wallet when ready'
+    ],
+    ['Image', preview ? 'A local preview only. Upload it, or use the saved image, before creating.' : 'Uploaded']
   ];
   return (
     <div className={styles.stack}>
@@ -49,15 +69,15 @@ export function ReviewStep({ connectedAddress }: { connectedAddress?: string }) 
         ))}
       </dl>
       <p className={styles.muted}>
-        Create deploys contracts in Setup, not a live DAO. Configure artwork and mint founder tokens there. Launch is a
-        separate, signed action.
+        Creating sets your community up in Setup, not live yet. There you add artwork and mint founder tokens. Launching
+        is a separate step you sign when you&apos;re ready.
       </p>
       <details
         open={metadataOpen || Boolean(errors.tokenUri || errors.rendererBase)}
         onToggle={(event) => setMetadataOpen(event.currentTarget.open)}
       >
-        <summary>Metadata URLs</summary>
-        <div className={styles.stack} style={{ marginTop: 16 }}>
+        <summary className={styles.label}>Advanced: metadata links</summary>
+        <div className={styles.stack}>
           <CreationField id="tokenUri" label="Token metadata URL" hint="Use {daoId} for the predicted token address">
             <Input
               id="tokenUri"

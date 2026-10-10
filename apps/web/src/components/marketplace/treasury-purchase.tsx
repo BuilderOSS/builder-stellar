@@ -11,7 +11,7 @@ import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { authNodeSpecValue, describeAuthNodes, treasuryPurchaseAuthNodes } from '@/lib/treasury-authorize';
 import type { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 
-import styles from './marketplace.module.css';
+import styles from './marketplace-styles';
 
 /**
  * Proposes that the Treasury buys an escrowed secondary listing. The purchase

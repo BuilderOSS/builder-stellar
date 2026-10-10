@@ -1,20 +1,53 @@
 'use client';
 
-import Link from 'next/link';
+import { RefreshCw, Search } from 'lucide-react';
 import { useState } from 'react';
+import { css } from 'styled-system/css';
 
-import styles from '@/components/member-directory/directory.module.css';
 import { PageSection } from '@/components/page-section';
+import {
+  Avatar,
+  Button,
+  Chip,
+  EmptyState,
+  ErrorState,
+  Field,
+  FieldHelperText,
+  FieldLabel,
+  IconButton,
+  Input,
+  ListRow,
+  Pagination,
+  Skeleton
+} from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
+import { shortAddress } from '@/lib/activity-feed';
+import { daoRoute } from '@/lib/dao-routes';
 import { useDirectoryMembers } from '@/lib/member-directory/hooks';
 import { memberAddress } from '@/lib/member-directory/validation';
+import { useAuthSessionStore } from '@/stores/auth-session-store';
+
+const finder = css({ display: 'grid', gap: '2', gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'end' });
+const summary = css({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '3' });
+const muted = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
+const stats = css({ display: 'flex', alignItems: 'center', gap: '2', flexWrap: 'wrap', justifyContent: 'flex-end' });
+
+function formatCount(value: string) {
+  try {
+    return new Intl.NumberFormat().format(BigInt(value));
+  } catch {
+    return value;
+  }
+}
 
 export default function MembersPage() {
   const { daoId } = useDaoContext();
   return <MemberDirectory key={daoId} daoId={daoId} />;
 }
+
 function MemberDirectory({ daoId }: { daoId: string }) {
-  const { daoConfig } = useDaoContext();
+  const { daoConfig, routeId } = useDaoContext();
+  const viewer = useAuthSessionStore((state) => state.address);
   // Tokens held by these DAO contracts carry no votes and never delegate.
   const systemHolders: Record<string, string> = {
     [daoConfig.treasuryContractId]: 'Treasury',
@@ -26,125 +59,157 @@ function MemberDirectory({ daoId }: { daoId: string }) {
   const [message, setMessage] = useState('');
   const [lookup, setLookup] = useState('');
   const { data, error, isLoading, isValidating, mutate } = useDirectoryMembers(daoId, page);
+
   return (
-    <PageSection
-      title="Members"
-      description="Token holders and addresses with delegated votes. Owning tokens and having voting power are different."
-    >
-      <div className={styles.row} style={{ marginBottom: 16 }}>
-        <Link href={`/dao/${daoId}/claims`}>View membership claims →</Link>
-      </div>
-      <section className={styles.panel}>
-        <div className={styles.row}>
-          <h2>Member directory</h2>
-          <button type="button" disabled={isValidating} onClick={() => void mutate()}>
-            {isValidating ? 'Refreshing…' : 'Refresh'}
-          </button>
-        </div>
-        <form
-          className={styles.row}
-          onSubmit={(e) => {
-            e.preventDefault();
-            setMessage('');
-            try {
-              setLookup(memberAddress(address));
-            } catch (error) {
+    <PageSection title="Members" description="Everyone who holds a token or has votes delegated to them.">
+      <form
+        className={finder}
+        onSubmit={(event) => {
+          event.preventDefault();
+          setMessage('');
+          try {
+            setLookup(memberAddress(address));
+          } catch (lookupError) {
+            setLookup('');
+            setMessage((lookupError as Error).message);
+          }
+        }}
+      >
+        <Field>
+          <FieldLabel htmlFor="member-lookup">Find someone</FieldLabel>
+          <Input
+            id="member-lookup"
+            value={address}
+            onChange={(event) => {
+              setAddress(event.target.value);
               setLookup('');
-              setMessage((error as Error).message);
-            }
-          }}
-        >
-          <label className={styles.grow}>
-            Find an address
-            <input
-              value={address}
-              onChange={(e) => {
-                setAddress(e.target.value);
-                setLookup('');
-              }}
-              placeholder="Stellar account or contract address"
-              autoCapitalize="none"
-              spellCheck={false}
-            />
-          </label>
-          <button type="submit">Find profile</button>
-        </form>
-        {message ? <p role="alert">{message}</p> : null}
-        {lookup ? (
-          <Link href={`/dao/${daoId}/members/${lookup}`}>
-            Open profile for {lookup.slice(0, 8)}…{lookup.slice(-6)}
-          </Link>
+            }}
+            placeholder="Stellar address (G… or C…)"
+            autoCapitalize="none"
+            spellCheck={false}
+            aria-invalid={message ? true : undefined}
+          />
+        </Field>
+        <Button type="submit" variant="secondary">
+          <Search aria-hidden="true" />
+          Find
+        </Button>
+        {message ? (
+          <FieldHelperText tone="error" className={css({ gridColumn: '1 / -1' })}>
+            {message}
+          </FieldHelperText>
         ) : null}
-        {error ? <p role="alert">{error.message} No member counts are shown until the request succeeds.</p> : null}
-        {isLoading ? <p role="status">Loading members…</p> : null}
-        {data && !error ? (
-          <>
-            <p className={styles.muted}>
-              {data.total} indexed addresses · sorted by voting power. Delegates can have votes without owning a token.
-            </p>
-            {data.items.length ? (
-              <div className={styles.tableWrap}>
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th>Address</th>
-                      <th>Tokens owned</th>
-                      <th>Voting power</th>
-                      <th>Delegates to</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.items.map((member) => (
-                      <tr key={member.address}>
-                        <td>
-                          <Link title={member.address} href={`/dao/${daoId}/members/${member.address}`}>
-                            {member.address.slice(0, 8)}…{member.address.slice(-6)}
-                          </Link>
-                          {systemHolders[member.address] ? ` · ${systemHolders[member.address]} (DAO contract)` : null}
-                        </td>
-                        <td>{member.owned_token_count}</td>
-                        <td>{member.voting_power}</td>
-                        <td>
-                          {systemHolders[member.address] ? (
-                            'No votes (system holder)'
-                          ) : !member.delegated_to ? (
-                            'Not set'
-                          ) : member.delegated_to === member.address ? (
-                            'Self'
-                          ) : (
-                            <Link title={member.delegated_to} href={`/dao/${daoId}/members/${member.delegated_to}`}>
-                              {member.delegated_to.slice(0, 8)}…{member.delegated_to.slice(-6)}
-                            </Link>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+      </form>
+      {lookup ? (
+        <ListRow
+          href={daoRoute(routeId, `members/${lookup}`)}
+          media={<Avatar address={lookup} />}
+          title={shortAddress(lookup)}
+          meta="Open their profile"
+        />
+      ) : null}
+
+      {error ? (
+        <ErrorState
+          title="Members didn't load"
+          cause={`${error.message}. Counts appear once it loads.`}
+          actions={
+            page > 0 ? (
+              <Button variant="secondary" onClick={() => setPage(page - 1)}>
+                Back a page
+              </Button>
             ) : (
-              <p>No holders or delegates indexed on this page.</p>
-            )}
-            <nav aria-label="Member pages" className={styles.row}>
-              <button type="button" disabled={page === 0 || isValidating} onClick={() => setPage(page - 1)}>
-                Previous
-              </button>
-              <span>
-                Page {page + 1}
-                {data.items.length ? ` · ${data.offset + 1}–${data.offset + data.items.length} of ${data.total}` : ''}
-              </span>
-              <button type="button" disabled={!data.hasMore || isValidating} onClick={() => setPage(page + 1)}>
-                Next
-              </button>
-            </nav>
-          </>
-        ) : null}
-        {error && page > 0 ? (
-          <button type="button" onClick={() => setPage(page - 1)}>
-            Return to previous page
-          </button>
-        ) : null}
-      </section>
+              <Button variant="secondary" onClick={() => void mutate()}>
+                Try again
+              </Button>
+            )
+          }
+        />
+      ) : null}
+
+      {isLoading ? (
+        <div className={css({ display: 'grid', gap: '2' })} role="status" aria-busy="true">
+          <span className="sr-only">Loading members</span>
+          {Array.from({ length: 5 }, (_, index) => (
+            <Skeleton key={index} className={css({ height: '14' })} />
+          ))}
+        </div>
+      ) : null}
+
+      {data && !error ? (
+        <>
+          <div className={summary}>
+            <p className={muted}>
+              {data.total} {data.total === 1 ? 'member' : 'members'} · most votes first
+            </p>
+            <IconButton
+              label="Refresh members"
+              variant="secondary"
+              size="sm"
+              loading={isValidating}
+              onClick={() => void mutate()}
+            >
+              {isValidating ? null : <RefreshCw aria-hidden="true" />}
+            </IconButton>
+          </div>
+          {data.items.length ? (
+            <ul className={css({ listStyle: 'none', m: '0', p: '0' })}>
+              {data.items.map((member) => {
+                const system = systemHolders[member.address];
+                const isViewer = Boolean(viewer && viewer === member.address);
+                const delegation = system
+                  ? 'Held by the community, no votes'
+                  : !member.delegated_to
+                    ? 'No delegate set'
+                    : member.delegated_to === member.address
+                      ? 'Votes for themselves'
+                      : `Votes go to ${shortAddress(member.delegated_to)}`;
+                return (
+                  <ListRow
+                    key={member.address}
+                    as="li"
+                    href={daoRoute(routeId, `members/${member.address}`)}
+                    media={<Avatar address={member.address} yours={isViewer} />}
+                    title={
+                      <span title={member.address}>
+                        {isViewer ? 'You' : system ? `${system} (community contract)` : shortAddress(member.address)}
+                      </span>
+                    }
+                    meta={delegation}
+                    trailing={
+                      <span className={stats}>
+                        <Chip tone={isViewer ? 'yours' : 'neutral'}>
+                          {formatCount(member.owned_token_count)}{' '}
+                          {member.owned_token_count === '1' ? 'token' : 'tokens'}
+                        </Chip>
+                        <Chip tone="outline">
+                          {formatCount(member.voting_power)} {member.voting_power === '1' ? 'vote' : 'votes'}
+                        </Chip>
+                      </span>
+                    }
+                  />
+                );
+              })}
+            </ul>
+          ) : (
+            <EmptyState title="No members here">Nobody holds a token or votes on this page yet.</EmptyState>
+          )}
+          <Pagination
+            label="Member pages"
+            page={page + 1}
+            status={
+              data.items.length
+                ? `${data.offset + 1}–${data.offset + data.items.length} of ${data.total}`
+                : `Page ${page + 1}`
+            }
+            hasPrevious={page > 0}
+            hasNext={data.hasMore}
+            onPrevious={() => setPage(page - 1)}
+            onNext={() => setPage(page + 1)}
+            disabled={isValidating}
+          />
+        </>
+      ) : null}
     </PageSection>
   );
 }

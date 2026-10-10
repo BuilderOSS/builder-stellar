@@ -1,13 +1,13 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 
-import { DashboardShell } from '@/components/dashboard/dashboard-shell';
+import { HomeView } from '@/components/home/home-view';
 import { getAuthSession } from '@/lib/auth/server';
 import { type DaoConfig, getAllDaosFromDatabase, getPendingDaosForLaunchAdmin } from '@/lib/dao-db';
 
 export const metadata: Metadata = {
-  title: 'Builder Lobby',
-  description: 'Discover, enter, and launch independent DAO worlds on Stellar.'
+  title: { absolute: 'Builder · Your community. Your rules. Your treasury.' },
+  description: 'Start a DAO with your people, vote on what happens next, and see where the shared treasury goes.'
 };
 
 export default async function Page() {
@@ -28,7 +28,7 @@ export default async function Page() {
 
   return (
     <Suspense fallback={null}>
-      <DashboardShell daos={daos} pendingDaos={pendingDaos} loadError={loadError} />
+      <HomeView daos={daos} pendingDaos={pendingDaos} loadError={loadError} />
     </Suspense>
   );
 }
