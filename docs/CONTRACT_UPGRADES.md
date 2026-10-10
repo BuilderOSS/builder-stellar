@@ -71,7 +71,10 @@ DAOs keep their addresses and history only through upgrades.
    ```
 2. New callable functions: add them to `apps/web/src/lib/proposal-supported-calls.ts` (fail-closed encoder) and,
    if members propose them, a handler in `apps/web/src/lib/proposal-actions` (+ registry, labels, identity/risk).
-3. Features that need the new release must **check the version** and explain the upgrade instead of silently
+3. Add a release note in members' words to `apps/web/src/lib/release-notes.ts`
+   (`RELEASE_NOTES[module][version]`). Manage → Contract versions, the setup checklist and the proposal
+   description show it; the registry itself only stores a version and a hash.
+4. Features that need the new release must **check the version** and explain the upgrade instead of silently
    misbehaving on old modules (e.g. `tokenReportsRenames(version)` in `lib/community-profile-plan.ts` locks rename
    until token 0.2.0 and links to Manage → Contract versions).
 
@@ -131,8 +134,11 @@ then each DAO.
         set_current_implementations --token <h> --metadata <h> --auction <h> --governor <h> --treasury <h> --marketplace <h>
       ```
    4. Every other existing DAO also needs the path from **its** current hash approved (usually the same `from`).
-4. **Each DAO**:
-   - In setup: the launch admin upgrades directly (script above, or Manage → Contract versions → Apply).
+4. **Each DAO**: once steps 3.1–3.2 are done, communities see the update by themselves: Manage →
+   Contract versions, a notice on the Manage overview and (for members of launched communities) on Home,
+   and in setup the launch checklist. A withdrawn version becomes a required step that blocks launch.
+   - In setup: the launch admin clicks **Apply N updates** (direct `upgrade` calls, one signature each), or
+     uses the script.
    - Live: Manage → Contract versions → add the upgrade to the proposal draft (plus any follow-up action that
      needs the new code, e.g. a rename), then propose, vote, queue after `voting_period`, and execute through the
      **Treasury** after `queue_delay` (Governor.execute fails with `UseTreasuryExecute`). A succeeded proposal
