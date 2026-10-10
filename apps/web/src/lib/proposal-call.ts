@@ -173,6 +173,8 @@ export function getProposalActionLabel(type: ProposalActionType) {
     'set-artwork-description': 'Update Collection Description',
     'set-artwork-project-uri': 'Update Project URI',
     'set-artwork-contract-image': 'Update Collection Image',
+    'set-token-metadata': 'Rename Community',
+    'transfer-dao-token': 'Give Treasury Token',
     'upgrade-dao-module': 'Upgrade DAO Module',
     'migrate-dao-module': 'Migrate Module Storage',
     'regenerate-token-traits': 'Seed Token Traits',
@@ -194,6 +196,9 @@ export function getProposalActionLabel(type: ProposalActionType) {
 }
 
 export function getProposalActionSummary(action: ProposalQueuedAction) {
+  if (action.type === 'set-token-metadata') return `Rename to ${action.name} (${action.symbol})`;
+  if (action.type === 'transfer-dao-token')
+    return `Give token #${action.tokenId} from the treasury to ${action.recipient}`;
   if (action.type === 'set-merkle-root')
     return `Set Merkle root ${action.root} for ${action.tokenContractId}; starts a new Merkle claim round`;
   if (action.type === 'set-allowlist')

@@ -102,6 +102,8 @@ function invoke(data) {
     DaoLaunched: true,
     ProposalCreated: true, ProposalQueued: true, ProposalExecuted: true, ProposalCancelled: true, VoteCast: true,
     DelegateChanged: true,
+    // A rename changes how members find the community: public.
+    MetadataUpdated: true,
     AuctionCreated: true, BidPlaced: true, AuctionSettled: true, AuctionCancelled: true,
     PrimaryListingCreated: true, PrimaryListingPurchased: true,
     SecondaryListingCreated: true, ListingPurchased: true,
@@ -117,6 +119,7 @@ function invoke(data) {
     MintWithMinter: 'token.mint',
     MintBatchWithMinter: 'token.batch_mint',
     MintAuthorityChanged: 'token.mint_authority_changed',
+    MetadataUpdated: 'token.metadata_updated',
     Approve: 'token.approve',
     Transfer: 'token.transfer',
     DelegateChanged: 'token.delegate_changed',
@@ -209,6 +212,7 @@ function invoke(data) {
     MintWithMinter: 'Token minted',
     MintBatchWithMinter: 'Tokens batch minted',
     MintAuthorityChanged: 'Mint authority changed',
+    MetadataUpdated: 'Community renamed',
     Approve: 'Token approval granted',
     Transfer: 'Token transferred',
     DelegateChanged: 'Delegation changed',
@@ -384,6 +388,7 @@ function invoke(data) {
     MarketplaceLaunched: function() { return 'Marketplace launched' + (pick(data, ['opened']) === 'true' ? ' and opened' : ' paused'); },
     SlugClaimed: function() { return 'Slug "' + (pick(data, ['slug']) || 'unknown') + '" claimed by ' + (tokenAddress || 'unknown'); },
     PendingSlugUpdated: function() { return 'Requested slug changed to "' + (pick(data, ['slug']) || 'unknown') + '"'; },
+    MetadataUpdated: function() { return 'Renamed to ' + (pick(data, ['name']) || 'unknown') + ' (' + (pick(data, ['symbol']) || '?') + ')'; },
     Migrated: function() { return 'Storage migrated from version ' + (pick(data, ['from_storage_version']) || '?') + ' to ' + (pick(data, ['to_storage_version']) || '?'); },
     // Topics from_hash/to_hash, data version. Hashes are shortened to 8 hex chars.
     Upgraded: function() {

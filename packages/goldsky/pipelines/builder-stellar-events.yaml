@@ -330,7 +330,8 @@ transforms:
           // marketplace, metadata); the emitting module is identified by contract_id/contract_role.
           Upgraded: ['from_hash', 'to_hash'], VersionSynced: [], Migrated: [],
           // Token (custom + OpenZeppelin non-fungible/votes/pausable)
-          TokenInitialized: ['admin'], MintAuthorityChanged: ['authority'], MintWithMinter: ['minter', 'to'], MintBatchWithMinter: ['minter'],
+          // MetadataUpdated (token 0.2.0+): rename; all data, no topics.
+          TokenInitialized: ['admin'], MetadataUpdated: [], MintAuthorityChanged: ['authority'], MintWithMinter: ['minter', 'to'], MintBatchWithMinter: ['minter'],
           Mint: ['to'], Transfer: ['from', 'to'], Approve: ['approver', 'token_id'], ApproveForAll: ['owner'],
           DelegateChanged: ['delegator'], DelegateVotesChanged: ['delegate'],
           Paused: [], Unpaused: [],
@@ -581,6 +582,8 @@ transforms:
           DaoLaunched: true,
           ProposalCreated: true, ProposalQueued: true, ProposalExecuted: true, ProposalCancelled: true, VoteCast: true,
           DelegateChanged: true,
+          // A rename changes how members find the community: public.
+          MetadataUpdated: true,
           AuctionCreated: true, BidPlaced: true, AuctionSettled: true, AuctionCancelled: true,
           PrimaryListingCreated: true, PrimaryListingPurchased: true,
           SecondaryListingCreated: true, ListingPurchased: true,
@@ -596,6 +599,7 @@ transforms:
           MintWithMinter: 'token.mint',
           MintBatchWithMinter: 'token.batch_mint',
           MintAuthorityChanged: 'token.mint_authority_changed',
+          MetadataUpdated: 'token.metadata_updated',
           Approve: 'token.approve',
           Transfer: 'token.transfer',
           DelegateChanged: 'token.delegate_changed',
@@ -688,6 +692,7 @@ transforms:
           MintWithMinter: 'Token minted',
           MintBatchWithMinter: 'Tokens batch minted',
           MintAuthorityChanged: 'Mint authority changed',
+          MetadataUpdated: 'Community renamed',
           Approve: 'Token approval granted',
           Transfer: 'Token transferred',
           DelegateChanged: 'Delegation changed',
@@ -863,6 +868,7 @@ transforms:
           MarketplaceLaunched: function() { return 'Marketplace launched' + (pick(data, ['opened']) === 'true' ? ' and opened' : ' paused'); },
           SlugClaimed: function() { return 'Slug "' + (pick(data, ['slug']) || 'unknown') + '" claimed by ' + (tokenAddress || 'unknown'); },
           PendingSlugUpdated: function() { return 'Requested slug changed to "' + (pick(data, ['slug']) || 'unknown') + '"'; },
+          MetadataUpdated: function() { return 'Renamed to ' + (pick(data, ['name']) || 'unknown') + ' (' + (pick(data, ['symbol']) || '?') + ')'; },
           Migrated: function() { return 'Storage migrated from version ' + (pick(data, ['from_storage_version']) || '?') + ' to ' + (pick(data, ['to_storage_version']) || '?'); },
           // Topics from_hash/to_hash, data version. Hashes are shortened to 8 hex chars.
           Upgraded: function() {

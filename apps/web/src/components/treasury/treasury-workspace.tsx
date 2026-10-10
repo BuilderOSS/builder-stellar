@@ -28,6 +28,7 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import { FundTreasury } from './fund-treasury';
 import { TransferProposal } from './transfer-proposal';
+import { TreasuryTokens } from './treasury-tokens';
 
 const layout = css({
   display: 'grid',
@@ -167,6 +168,8 @@ function ScopedTreasuryWorkspace() {
             </p>
           </Disclosure>
         </section>
+
+        <TreasuryTokens />
 
         <Section title="Payouts" description="Money that left the treasury after a vote, newest first">
           {history.error ? (

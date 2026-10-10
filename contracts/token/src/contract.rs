@@ -13,8 +13,8 @@ use common::clients::MetadataHookClient;
 
 use crate::error::TokenError;
 use crate::events::{
-    emit_launched, emit_mint_authority_changed, emit_token_batch_mint, emit_token_initialized,
-    emit_token_mint,
+    emit_launched, emit_metadata_updated, emit_mint_authority_changed, emit_token_batch_mint,
+    emit_token_initialized, emit_token_mint,
 };
 use crate::storage::*;
 
@@ -108,11 +108,12 @@ impl DaoTokenContract {
         common::admin::admin(e)
     }
 
-    /// Updates collection metadata (admin only).
+    /// Updates collection metadata (admin only). Emits `MetadataUpdated`.
     pub fn set_metadata(e: &Env, uri: String, name: String, symbol: String) {
         common::admin::require_admin(e);
         common::ttl::extend_instance(e);
-        Base::set_metadata(e, uri, name, symbol);
+        Base::set_metadata(e, uri.clone(), name.clone(), symbol.clone());
+        emit_metadata_updated(e, &uri, &name, &symbol);
     }
 
     /// Grants or revokes minting authority (admin only, live token only; the

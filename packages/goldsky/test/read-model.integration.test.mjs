@@ -148,6 +148,9 @@ function buildScenario() {
   emit('auction', d1.auction, 'migrated', { data: { from_storage_version: u32(1), to_storage_version: u32(2) }, ledger: 119 });
   emit('manager', 'CMANAGER', 'platform_minter_set', { topics: [addr(MINTER)], ledger: 106 });
   emit('auction', d1.auction, 'unpaused', { ledger: 130 });
+  // After launch: a rename (token 0.2.0 MetadataUpdated) and a vote that closes the market.
+  emit('token', d1.token, 'metadata_updated', { data: { name: str('Alpha Club'), symbol: str('ALPHA'), uri: str('ipfs://alpha2') }, ledger: 150, tx: 7 });
+  emit('marketplace', d1.marketplace, 'marketplace_paused', { topics: [addr(d1.treasury)], ledger: 151, tx: 7 });
 
   // --- token: a 6-token batch mint in ONE transaction (13 events, indexes >= 10),
   // each mint bumping GALICE's voting power, then one mint_batch_with_minter for
@@ -404,9 +407,9 @@ test('manager: registry, lifecycle and implementations', { skip }, () => {
     [a.token_contract, a.governor_contract, a.auction_contract, a.treasury_contract, a.metadata_contract, a.marketplace_contract],
     ['CTOK1', 'CGOV1', 'CAUC1', 'CTRE1', 'CMETA1', 'CMKT1']
   );
-  assert.equal(a.token_name, 'Alpha');
-  assert.equal(a.token_symbol, 'ALP');
-  assert.equal(a.token_uri, 'ipfs://alpha');
+  assert.equal(a.token_name, 'Alpha Club', 'name follows the latest MetadataUpdated');
+  assert.equal(a.token_symbol, 'ALPHA');
+  assert.equal(a.token_uri, 'ipfs://alpha2');
   assert.equal(a.admin_address, 'CTRE1', 'the current admin: the Treasury after the launch handoff');
   assert.equal(one(`SELECT admin_address FROM manager.daos WHERE dao_id = 'CTOK2'`).admin_address, 'GLAUNCH2', 'a pending DAO keeps its launch admin');
   assert.equal(a.token_description, 'Alpha DAO v2', 'description follows metadata updates');
@@ -415,7 +418,7 @@ test('manager: registry, lifecycle and implementations', { skip }, () => {
   // Launched with the auction disabled, then unpaused: enabled and not paused.
   assert.equal(a.auction_enabled, true);
   assert.equal(a.auction_paused, false);
-  assert.equal(a.marketplace_enabled, true);
+  assert.equal(a.marketplace_enabled, false, 'a market opened at launch and closed by vote is off');
   assert.ok(a.indexed_at);
   assert.equal(b.dao_id, 'CTOK2');
   assert.equal(b.status, 'pending');

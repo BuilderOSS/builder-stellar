@@ -14,7 +14,7 @@ import { assertClaimEnvelope } from '@/lib/minter/transaction';
 import type { ClaimAction, ClaimState, PreparedClaim } from '@/lib/minter/types';
 import { assertHolderSignedEnvelope, assertHolderWallet } from '@/lib/token-holder/transaction';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
-import { signWithWallet } from '@/lib/wallet-sign';
+import { readSigningWallet, signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import { AllocationDraftForm } from './allocation-draft';
@@ -96,13 +96,9 @@ export function Claims({ admin = false }: { admin?: boolean }) {
     setBusy(true);
     const { action, prepared, state } = review;
     try {
-      const [{ StellarWalletsKit }, { TransactionBuilder, rpc }] = await Promise.all([
-        import('@creit.tech/stellar-wallets-kit/sdk'),
-        import('@stellar/stellar-sdk')
-      ]);
-      const [wallet, network, latest] = await Promise.all([
-        StellarWalletsKit.getAddress(),
-        StellarWalletsKit.getNetwork(),
+      const [{ TransactionBuilder, rpc }] = await Promise.all([import('@stellar/stellar-sdk')]);
+      const [[wallet, network], latest] = await Promise.all([
+        readSigningWallet(),
         claimFetch<ClaimState>(`${base.replace('/dao/', '/api/dao/')}/claims`)
       ]);
       const nowSession = useAuthSessionStore.getState();

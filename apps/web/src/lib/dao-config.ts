@@ -21,6 +21,8 @@ export type DaoNetworkConfig = {
   tokenName: string;
   tokenSymbol: string;
   tokenDescription: string;
+  /** The token's base URI (token pages are built from it); needed to rename without changing it. */
+  tokenUri?: string;
   /**
    * Current DAO admin from the index: the launch admin during setup, the
    * Treasury (a contract address) after launch. Never use it as an SDK
@@ -113,6 +115,7 @@ async function loadDaoNetworkConfig(daoId: string): Promise<DaoNetworkConfig> {
     tokenName: daoConfig.token_name || '',
     tokenSymbol: daoConfig.token_symbol || '',
     tokenDescription: daoConfig.token_description || '',
+    tokenUri: daoConfig.token_uri || '',
     // The current admin: the launch admin before launch, the Treasury after.
     adminAddress: daoConfig.admin_address || (daoConfig.status === 'pending' ? daoConfig.launch_admin || '' : ''),
     launchAdmin: daoConfig.launch_admin || '',

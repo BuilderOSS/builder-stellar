@@ -1,0 +1,35 @@
+{
+  "network": "testnet",
+  "manager": "CDFQIOSA3JJWV3HIZ5XVMXBMTEL7BRZWZVUW72OQN6O3EM35OVT6PD5W",
+  "module": "token",
+  "target": "CDK3TSVJRME7EW2U35JGBHTO3XXDX6UZ4MFTZIXVWBSKUL4QTR7CZTR6",
+  "fromHash": "3e44c30029436c92b2ee8a8c1c896a211e376eec217d841e29f9523acf9b9311",
+  "toHash": "c5a5c73888cb08cb88b76ea3b9f8156100aa8f755cb872cf2043ab7100b4067c",
+  "version": "0.2.0",
+  "managerApproval": "submitted",
+  "governor": "CAJ26AICV25TLW3CLJJHWHKYG27J7EVEGNL3RFD6ASSGOREUSYQ2WCQL",
+  "treasury": "CD2PRRLVQDGSPVQXB7LTWRWPDPOSH4KS7POTUGAYTCSYA67XAA6ADPFG",
+  "proposal": {
+    "targets": [
+      "CDK3TSVJRME7EW2U35JGBHTO3XXDX6UZ4MFTZIXVWBSKUL4QTR7CZTR6",
+      "CDK3TSVJRME7EW2U35JGBHTO3XXDX6UZ4MFTZIXVWBSKUL4QTR7CZTR6"
+    ],
+    "functions": [
+      "upgrade",
+      "sync_version"
+    ],
+    "args": [
+      [
+        {
+          "bytes": "3e44c30029436c92b2ee8a8c1c896a211e376eec217d841e29f9523acf9b9311"
+        },
+        {
+          "bytes": "c5a5c73888cb08cb88b76ea3b9f8156100aa8f755cb872cf2043ab7100b4067c"
+        }
+      ],
+      []
+    ],
+    "description": "Upgrade token to 0.2.0 (c5a5c73888cb08cb88b76ea3b9f8156100aa8f755cb872cf2043ab7100b4067c)",
+    "description_hash": "24d41e4365ae226a8d898b6b104e8a214d4d603b475b7bf0a1a28be7f4922fb0"
+  }
+}

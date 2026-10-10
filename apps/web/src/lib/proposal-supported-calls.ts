@@ -35,7 +35,7 @@ export type ProposalEncodingContext = Pick<
 >;
 
 const supported = {
-  token: ['mint', 'batch_mint', 'transfer', 'set_mint_authority', 'upgrade', 'migrate', 'sync_version'],
+  token: ['mint', 'batch_mint', 'transfer', 'set_mint_authority', 'set_metadata', 'upgrade', 'migrate', 'sync_version'],
   governor: [
     'set_voting_delay',
     'set_voting_period',

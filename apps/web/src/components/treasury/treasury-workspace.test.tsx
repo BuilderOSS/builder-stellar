@@ -44,6 +44,7 @@ vi.mock('@/lib/treasury-service/hooks', () => ({
 }));
 vi.mock('./fund-treasury', () => ({ FundTreasury: () => <div>Funding form</div> }));
 vi.mock('./transfer-proposal', () => ({ TransferProposal: () => <div>Governance queue shortcut</div> }));
+vi.mock('./treasury-tokens', () => ({ TreasuryTokens: () => null }));
 
 import { TreasuryWorkspace } from './treasury-workspace';
 

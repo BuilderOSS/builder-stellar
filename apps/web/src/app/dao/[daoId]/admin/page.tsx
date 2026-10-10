@@ -72,6 +72,13 @@ export default function AdminPage() {
 
   const sections: Array<{ key: string; title: string; meta: string; href: string; access: Access }> = [
     {
+      key: 'profile',
+      title: 'Community profile',
+      meta: 'Name, image, description and website',
+      href: daoAdminRoute(routeId, '/profile'),
+      access: access(isAdmin, canProposeAdminActions)
+    },
+    {
       key: 'token',
       title: 'Mint tokens',
       meta: 'Create new membership tokens',

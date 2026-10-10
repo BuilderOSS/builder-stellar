@@ -134,7 +134,13 @@ export function validateDuration(seconds: number, minSeconds: number = 60): stri
   return null;
 }
 
-export const MAX_TOKEN_SYMBOL_LENGTH = 12;
+// Token metadata limits enforced on chain by the token (stellar-tokens non_fungible:
+// MAX_NAME_LEN, MAX_SYMBOL_LEN, MAX_BASE_URI_LEN, all in bytes). Longer values make
+// create_dao and set_metadata fail.
+export const MAX_TOKEN_NAME_BYTES = 40;
+export const MAX_TOKEN_SYMBOL_LENGTH = 10;
+export const MAX_TOKEN_URI_BYTES = 200;
+export const utf8Length = (value: string) => new TextEncoder().encode(value).length;
 
 /**
  * Validate token symbol format

@@ -1214,3 +1214,31 @@ mod delegation_security {
         assert_eq!(w.token.get_total_supply(), 1);
     }
 }
+
+#[test]
+fn set_metadata_renames_and_emits_metadata_updated() {
+    use crate::events::MetadataUpdated;
+    use soroban_sdk::testutils::Events as _;
+    use soroban_sdk::Event as _;
+
+    let (e, client, _owner) = setup();
+    let uri = String::from_str(&e, "https://example.com/v2/");
+    let name = String::from_str(&e, "Lantern Club");
+    let symbol = String::from_str(&e, "LANTERN");
+    client.set_metadata(&uri, &name, &symbol);
+
+    // Read events first: the next invocation (as_contract) starts a fresh event buffer.
+    let events = e.events().all();
+    assert!(events.events().contains(
+        &MetadataUpdated {
+            name: name.clone(),
+            symbol: symbol.clone(),
+            uri: uri.clone(),
+        }
+        .to_xdr(&e, &client.address)
+    ));
+    e.as_contract(&client.address, || {
+        assert_eq!(stellar_tokens::non_fungible::Base::name(&e), name);
+        assert_eq!(stellar_tokens::non_fungible::Base::symbol(&e), symbol);
+    });
+}

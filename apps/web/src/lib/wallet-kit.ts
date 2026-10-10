@@ -37,10 +37,5 @@ export function initializeWalletKit(network: NetworkName) {
   initialized = true;
 }
 
-export function isWalletConnectSelected() {
-  try {
-    return StellarWalletsKit.selectedModule.productId === 'wallet_connect';
-  } catch {
-    return false;
-  }
-}
+// Lives with the signing helpers so they can use it without loading every wallet module.
+export { isWalletConnectSelected } from './wallet-sign';

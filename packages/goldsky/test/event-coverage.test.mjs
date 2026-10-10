@@ -22,6 +22,7 @@ const REQUIRED_EVENTS = {
   minter: ['MerkleClaimEvent', 'AllowlistClaimEvent', 'MintBatchEvent', 'MerkleRootSetEvent', 'AllowlistSetEvent'],
   token: [
     'TokenInitialized',
+    'MetadataUpdated',
     'Mint',
     'MintWithMinter',
     'MintBatchWithMinter',
