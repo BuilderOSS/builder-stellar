@@ -13,6 +13,8 @@ export type LaunchReadiness = {
   live: boolean;
   paymentAssetsMatch: boolean;
   platformMinter: string | null;
+  /** The requested slug is already claimed by another launched DAO (launch would fail with SlugTaken). */
+  slugTaken: boolean;
 };
 export async function readLaunchReadiness(daoId: string, config: DaoNetworkConfig): Promise<LaunchReadiness> {
   const deployment = getDeploymentConfig();
@@ -33,7 +35,12 @@ export async function readLaunchReadiness(daoId: string, config: DaoNetworkConfi
   ]);
   const pending = pendingTx.result;
   let paymentAssetsMatch = false;
+  let slugTaken = false;
   if (pending) {
+    // get_dao_by_slug resolves launched DAOs only; a hit for another DAO means
+    // this request lost the race and launch_dao would fail (SlugTaken, 7123).
+    const claimed = (await manager.get_dao_by_slug({ slug: pending.slug })).result;
+    slugTaken = claimed.isOk() && claimed.unwrap() !== daoId;
     if (pending.addresses.token !== daoId) throw new Error('Manager returned a different DAO identity');
     const auction = new AuctionClient({ ...options, contractId: pending.addresses.auction });
     const marketplace = new MarketplaceClient({ ...options, contractId: pending.addresses.marketplace });
@@ -48,7 +55,8 @@ export async function readLaunchReadiness(daoId: string, config: DaoNetworkConfi
     admin: adminTx.result,
     live: liveTx.result,
     paymentAssetsMatch,
-    platformMinter: minterTx.result
+    platformMinter: minterTx.result,
+    slugTaken
   };
 }
 export function launchReadinessIssues(readiness: LaunchReadiness, launchAdmin: string): string[] {
@@ -58,6 +66,10 @@ export function launchReadinessIssues(readiness: LaunchReadiness, launchAdmin: s
     issues.push('Pending DAO admin rights could not be verified on this Manager.');
   if (readiness.admin !== launchAdmin) issues.push('Token admin no longer belongs to the launch administrator.');
   if (readiness.supply <= 0n) issues.push('Mint at least one founder token before launch.');
+  if (readiness.slugTaken && readiness.pending)
+    issues.push(
+      `The slug "${readiness.pending.slug}" was claimed by another DAO that launched first. Rename it below.`
+    );
   if (!readiness.paymentAssetsMatch)
     issues.push('Restore the payment assets pinned at creation in both modules before launch.');
   return issues;

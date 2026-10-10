@@ -17,6 +17,7 @@ vi.mock('@builder-stellar/manager-bindings', () => ({
   Client: class {
     get_pending_dao = mocks.pending;
     get_platform_minter = mocks.minter;
+    get_dao_by_slug = async () => ({ result: { isOk: () => false, unwrap: () => '' } });
   }
 }));
 vi.mock('@builder-stellar/token-bindings', () => ({
@@ -59,7 +60,8 @@ const ready = (): LaunchReadiness => ({
   admin: 'wallet-A',
   live: false,
   paymentAssetsMatch: true,
-  platformMinter: null
+  platformMinter: null,
+  slugTaken: false
 });
 const config = { name: 'testnet', rpcUrl: 'https://rpc.test', passphrase: 'test' } as DaoNetworkConfig;
 beforeEach(() => {
@@ -102,5 +104,12 @@ describe('live launch readiness', () => {
     expect(launchReadinessIssues({ ...ready(), live: true }, 'wallet-A')).toEqual([
       'This DAO is already live. Refresh the overview.'
     ]);
+  });
+});
+
+describe('slug claimed by another DAO', () => {
+  it('blocks launch with a rename hint', () => {
+    const issues = launchReadinessIssues({ ...ready(), slugTaken: true }, 'wallet-A');
+    expect(issues.join(' ')).toMatch(/test-dao.*claimed by another DAO/);
   });
 });

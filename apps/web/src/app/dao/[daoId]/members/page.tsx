@@ -10,7 +10,13 @@ import { useDirectoryMembers } from '@/lib/member-directory/hooks';
 import { memberAddress } from '@/lib/member-directory/validation';
 
 export default function MembersPage() {
-  const { daoId } = useDaoContext();
+  const { daoId, daoConfig } = useDaoContext();
+  // Tokens held by these DAO contracts carry no votes and never delegate.
+  const systemHolders: Record<string, string> = {
+    [daoConfig.treasuryContractId]: 'Treasury',
+    [daoConfig.auctionContractId]: 'Auction',
+    [daoConfig.marketplaceContractId]: 'Marketplace'
+  };
   return <MemberDirectory key={daoId} daoId={daoId} />;
 }
 function MemberDirectory({ daoId }: { daoId: string }) {
@@ -93,11 +99,14 @@ function MemberDirectory({ daoId }: { daoId: string }) {
                           <Link title={member.address} href={`/dao/${daoId}/members/${member.address}`}>
                             {member.address.slice(0, 8)}…{member.address.slice(-6)}
                           </Link>
+                          {systemHolders[member.address] ? ` · ${systemHolders[member.address]} (DAO contract)` : null}
                         </td>
                         <td>{member.owned_token_count}</td>
                         <td>{member.voting_power}</td>
                         <td>
-                          {!member.delegated_to ? (
+                          {systemHolders[member.address] ? (
+                            'No votes (system holder)'
+                          ) : !member.delegated_to ? (
                             'Not set'
                           ) : member.delegated_to === member.address ? (
                             'Self'

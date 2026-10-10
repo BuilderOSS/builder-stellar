@@ -4,6 +4,7 @@ import { useCreateDaoStore } from '@/stores/create-dao-store';
 
 import { CreationField, fieldAccessibility } from './CreationField';
 import { DaoImageField } from './DaoImageField';
+import { SlugAvailability } from './SlugAvailability';
 import styles from './workspace.module.css';
 
 export function BasicInfoStep() {
@@ -53,6 +54,7 @@ export function BasicInfoStep() {
               clear('slug');
             }}
           />
+          <SlugAvailability slug={basicInfo.slug} />
         </CreationField>
       </div>
       <DaoImageField />

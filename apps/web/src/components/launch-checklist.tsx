@@ -6,8 +6,10 @@ import useSWR from 'swr';
 
 import { ArtworkSetup } from '@/components/create-dao/ArtworkSetup';
 import { launchReadinessIssues, readLaunchReadiness } from '@/components/create-dao/launch-readiness';
+import { SlugRename } from '@/components/create-dao/SlugRename';
 import styles from '@/components/create-dao/workspace.module.css';
 import { Button, Callout } from '@/components/ui';
+import { parseContractErrorCode } from '@/lib/contract-errors';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { useDaoDeployment } from '@/lib/use-dao-deployment';
@@ -23,6 +25,8 @@ export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoN
   const [ready, setReady] = useState(false);
   const [reviewSnapshot, setReviewSnapshot] = useState('');
   const [artworkOpen, setArtworkOpen] = useState(false);
+  // SlugTaken (7123): another DAO launched first with the requested slug.
+  const [slugConflict, setSlugConflict] = useState(false);
   const operation = useRef(false);
   const launches = useLocalPreferencesStore((s) => s.launches);
   const { launchDao } = useDaoDeployment(session.address, config.name);
@@ -122,6 +126,7 @@ export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoN
       await mutate();
       router.refresh();
     } catch (e) {
+      if (parseContractErrorCode(e) === 7123) setSlugConflict(true);
       setError(e instanceof Error ? e.message : 'Launch needs attention');
     } finally {
       setBusy(false);
@@ -160,6 +165,19 @@ export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoN
         ) : null}
         {isLoading || !ready ? <p role="status">Checking live supply and ownership…</p> : null}
         {readError ? <Callout variant="error" title="Readiness unavailable" description={readError.message} /> : null}
+        {(data?.slugTaken || slugConflict) && data?.pending ? (
+          <SlugRename
+            daoId={daoId}
+            config={config}
+            address={admin ? session.address : null}
+            currentSlug={data.pending.slug}
+            onRenamed={() => {
+              setSlugConflict(false);
+              setError('');
+              void mutate();
+            }}
+          />
+        ) : null}
         {data ? (
           <>
             <dl className={styles.summary}>
@@ -170,6 +188,14 @@ export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoN
                   {data.supply > 0n ? '· Ready' : '· Founder mint required (tokens held by DAO contracts do not count)'}
                 </dd>
               </div>
+              {data.pending ? (
+                <div>
+                  <dt>Requested slug</dt>
+                  <dd>
+                    {data.pending.slug} {data.slugTaken ? '· Claimed by another DAO' : '· Claimed at launch'}
+                  </dd>
+                </div>
+              ) : null}
               <div>
                 <dt>Payment assets</dt>
                 <dd>

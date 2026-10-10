@@ -43,7 +43,7 @@ const timing = (validate: (seconds: number) => string | null) =>
       const error = validate(seconds);
       if (error) ctx.addIssue({ code: 'custom', message: error });
     });
-/** Mirrors the Manager's `validate_slug`: 3-32 chars of [a-z0-9-], no leading/trailing/doubled hyphen. */
+/** Mirrors the Manager's `validate_slug`: 4-63 chars of [a-z0-9-], no leading/trailing/doubled hyphen. */
 export function isValidSlug(value: string) {
   return /^[a-z0-9]+(-[a-z0-9]+)*$/.test(value) && value.length >= 4 && value.length <= 63;
 }

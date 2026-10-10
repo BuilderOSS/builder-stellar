@@ -12,13 +12,52 @@ export type GovernorSettings = {
   proposalThreshold: bigint;
   quorumBps: number;
   latestLedger: number;
+  /** 'indexed' from governance.settings, 'chain' from RPC reads. */
+  source: 'indexed' | 'chain';
+  queueDelay?: number;
 };
 
-type GovernorSettingsKey = readonly ['governor-settings', string, string, string, string];
+type GovernorSettingsKey = readonly ['governor-settings', string, string, string, string, string];
 
-async function fetchGovernorSettings([, contractId, rpcUrl, passphrase, publicKey]: GovernorSettingsKey) {
+async function indexedGovernorSettings(daoId: string): Promise<GovernorSettings | null> {
+  const response = await fetch(`/api/dao/${daoId}/governance/settings`, { cache: 'no-store' });
+  if (!response.ok) return null;
+  const { settings } = (await response.json()) as {
+    settings: {
+      votingDelay: number | null;
+      votingPeriod: number | null;
+      queueDelay: number | null;
+      proposalThreshold: string | null;
+      quorumBps: number | null;
+    } | null;
+  };
+  if (
+    !settings ||
+    settings.votingDelay === null ||
+    settings.votingPeriod === null ||
+    settings.proposalThreshold === null ||
+    settings.quorumBps === null
+  )
+    return null;
+  return {
+    votingDelay: settings.votingDelay,
+    votingPeriod: settings.votingPeriod,
+    proposalThreshold: BigInt(settings.proposalThreshold),
+    quorumBps: settings.quorumBps,
+    queueDelay: settings.queueDelay ?? undefined,
+    latestLedger: 0,
+    source: 'indexed'
+  };
+}
+
+async function fetchGovernorSettings([, contractId, rpcUrl, passphrase, publicKey, indexedDaoId]: GovernorSettingsKey) {
   if (!contractId) {
     throw new Error('Missing governor contract id in the active network config.');
+  }
+  // Prefer the indexed configuration when requested; fall back to RPC reads.
+  if (indexedDaoId) {
+    const indexed = await indexedGovernorSettings(indexedDaoId).catch(() => null);
+    if (indexed) return indexed;
   }
 
   const server = new Server(rpcUrl, { allowHttp: rpcUrl.startsWith('http://') });
@@ -42,14 +81,25 @@ async function fetchGovernorSettings([, contractId, rpcUrl, passphrase, publicKe
     votingPeriod: votingPeriod.result,
     proposalThreshold: proposalThreshold.result,
     quorumBps: quorumBps.result,
-    latestLedger: latestLedger.sequence
+    latestLedger: latestLedger.sequence,
+    source: 'chain'
   } satisfies GovernorSettings;
 }
 
-/** `publicKey` is only a simulation source; reads work without it. */
-export function useGovernorSettings(config: DaoNetworkConfig, publicKey?: string) {
+/**
+ * `publicKey` is only a simulation source; reads work without it. With
+ * `preferIndexed`, governance.settings is read first and RPC is the fallback.
+ */
+export function useGovernorSettings(config: DaoNetworkConfig, publicKey?: string, preferIndexed = false) {
   const key = config.governorContractId
-    ? (['governor-settings', config.governorContractId, config.rpcUrl, config.passphrase, publicKey ?? ''] as const)
+    ? ([
+        'governor-settings',
+        config.governorContractId,
+        config.rpcUrl,
+        config.passphrase,
+        publicKey ?? '',
+        preferIndexed ? config.tokenContractId : ''
+      ] as const)
     : null;
   return useSWR(key, fetchGovernorSettings, { keepPreviousData: true });
 }

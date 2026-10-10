@@ -81,7 +81,7 @@ export default function GovernanceAdminPage() {
     mutate: refreshSettings,
     error: settingsError,
     isLoading: settingsLoading
-  } = useGovernorSettings(config, session.address || config.launchAdmin);
+  } = useGovernorSettings(config, session.address || config.launchAdmin, true);
   const { data: governorAdmin } = useContractAdmin(config, 'governor', session.address || config.launchAdmin);
   const isAdmin = Boolean(session.address && governorAdmin === session.address);
   // The governor admin is the launch admin before launch and the Treasury afterwards.
@@ -346,7 +346,11 @@ export default function GovernanceAdminPage() {
               <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
                 Quorum: {settings.quorumBps} bps
               </Text>
-              <Text>Queue delay: current value is unavailable in the public ABI.</Text>
+              <Text>
+                Queue delay:{' '}
+                {settings.queueDelay === undefined ? 'unavailable from RPC (shown when indexed)' : settings.queueDelay}
+              </Text>
+              <Text>Source: {settings.source === 'indexed' ? 'indexed governance.settings' : 'live RPC reads'}</Text>
             </Stack>
           ) : null}
         </Callout>

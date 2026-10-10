@@ -64,6 +64,10 @@ export function SellForm({ data }: { data: DaoMarketplace }) {
             Two separate transactions: approve this token, then transfer it into marketplace escrow. An approval alone
             is not a listing.
           </p>
+          <p>
+            While a token is listed, its vote leaves your delegate (escrowed tokens carry no votes). It returns when you
+            cancel, or moves to the buyer when the token sells.
+          </p>
         </div>
         {!enabled ? (
           <p className={styles.notice}>
@@ -144,9 +148,9 @@ export function SellForm({ data }: { data: DaoMarketplace }) {
         ) : null}
         <p>
           Fee at listing time: <strong>{config.feeBps} bps</strong>
-          {proceeds ? ` · Seller receives ${proceeds} ${asset}` : ''}. The payment asset and fee are snapshotted when
-          you escrow, not when you open this form. A governance change before confirmation can change these terms;
-          review the confirmed listing afterward.
+          {proceeds ? ` · Seller receives ${proceeds} ${asset}` : ''}. The listing transaction carries this fee and
+          payment asset as your limits: if governance changes either before confirmation, the listing fails and you can
+          review the new terms.
         </p>
         <p className={styles.address}>Payment SAC: {config.paymentAsset}</p>
         {readiness.data?.issues.map((issue) => (
