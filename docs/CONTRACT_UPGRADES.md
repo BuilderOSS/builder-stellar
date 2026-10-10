@@ -72,11 +72,11 @@ DAOs keep their addresses and history only through upgrades.
 2. New callable functions: add them to `apps/web/src/lib/proposal-supported-calls.ts` (fail-closed encoder) and,
    if members propose them, a handler in `apps/web/src/lib/proposal-actions` (+ registry, labels, identity/risk).
 3. Add a release note in members' words to `apps/web/src/lib/release-notes.ts`
-   (`RELEASE_NOTES[module][version]`). Manage → Contract versions, the setup checklist and the proposal
+   (`RELEASE_NOTES[module][version]`). Manage → Contract upgrades, the setup checklist and the proposal
    description show it; the registry itself only stores a version and a hash.
 4. Features that need the new release must **check the version** and explain the upgrade instead of silently
    misbehaving on old modules (e.g. `tokenReportsRenames(version)` in `lib/community-profile-plan.ts` locks rename
-   until token 0.2.0 and links to Manage → Contract versions).
+   until token 0.2.0 and links to Manage → Contract upgrades).
 
 ## 4. Indexer and read model (if events or views change)
 
@@ -121,7 +121,7 @@ then each DAO.
       `approve_upgrade(<from>, <to>)`, then upgrades the DAO named in the DAO config: directly if it is in setup,
       or, if live, writes `deploys/<label>-<network>-dao-<nonce>-<module>-upgrade.json` and prints the
       propose → vote → queue → execute commands (it never submits to the Governor).
-   2. Point the app at the release. Manage → Contract versions offers `get_latest_implementation(<Name>)`,
+   2. Point the app at the release. Manage → Contract upgrades offers `get_latest_implementation(<Name>)`,
       which registration does **not** move:
       ```sh
       stellar contract invoke --id <manager> --network <network> --source-account <admin> -- \
@@ -134,12 +134,12 @@ then each DAO.
         set_current_implementations --token <h> --metadata <h> --auction <h> --governor <h> --treasury <h> --marketplace <h>
       ```
    4. Every other existing DAO also needs the path from **its** current hash approved (usually the same `from`).
-4. **Each DAO**: once steps 3.1–3.2 are done, communities see the update by themselves: Manage →
-   Contract versions, a notice on the Manage overview and (for members of launched communities) on Home,
+4. **Each DAO**: once steps 3.1–3.2 are done, communities see the upgrade by themselves: Manage →
+   Contract upgrades, a notice on the Manage overview and (for members of launched communities) on Home,
    and in setup the launch checklist. A withdrawn version becomes a required step that blocks launch.
-   - In setup: the launch admin clicks **Apply N updates** (direct `upgrade` calls, one signature each), or
+   - In setup: the launch admin clicks **Apply N upgrades** (direct `upgrade` calls, one signature each), or
      uses the script.
-   - Live: Manage → Contract versions → add the upgrade to the proposal draft (plus any follow-up action that
+   - Live: Manage → Contract upgrades → add the upgrade to the proposal draft (plus any follow-up action that
      needs the new code, e.g. a rename), then propose, vote, queue after `voting_period`, and execute through the
      **Treasury** after `queue_delay` (Governor.execute fails with `UseTreasuryExecute`). A succeeded proposal
      that isn't queued expires 14 days after voting ends; a queued one 14 days after its ETA.

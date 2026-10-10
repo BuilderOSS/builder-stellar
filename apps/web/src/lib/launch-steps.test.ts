@@ -93,7 +93,7 @@ describe('buildLaunchPlan', () => {
     });
     expect(plan.required.at(-1)).toMatchObject({ id: 'contracts', status: 'blocked' });
     expect(plan.canLaunch).toBe(false);
-    expect(plan.launchHint).toBe('Update your contracts first.');
+    expect(plan.launchHint).toBe('Upgrade your contracts first.');
     expect([plan.doneCount, plan.totalCount]).toEqual([2, 2]);
   });
 });

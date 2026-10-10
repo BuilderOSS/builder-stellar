@@ -95,9 +95,9 @@ export function buildLaunchPlan({
   if (withdrawnContracts > 0)
     required.push({
       id: 'contracts',
-      title: 'Update your contracts',
+      title: 'Upgrade your contracts',
       status: 'blocked',
-      detail: `${plural(withdrawnContracts, 'contract is', 'contracts are')} on a withdrawn version. Launch is blocked until updated.`
+      detail: `${plural(withdrawnContracts, 'contract is', 'contracts are')} on a withdrawn version. Launch is blocked until they're upgraded.`
     });
 
   const blockers: LaunchBlocker[] = [];
@@ -131,7 +131,7 @@ export function buildLaunchPlan({
   const launchHint = !readiness
     ? 'Checking your setup…'
     : firstOpen?.id === 'contracts'
-      ? 'Update your contracts first.'
+      ? 'Upgrade your contracts first.'
       : firstOpen?.id === 'slug'
         ? 'Pick a new link first.'
         : firstOpen?.id === 'founders'

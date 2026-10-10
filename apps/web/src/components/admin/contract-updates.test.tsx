@@ -73,37 +73,37 @@ describe('ContractUpdates', () => {
     state.modules = [{ module: 'token' }, { module: 'auction', current: true }];
   });
 
-  it('lets the launch admin apply updates directly in setup, with the release note', () => {
+  it('lets the launch admin apply upgrades directly in setup, with the release note', () => {
     const html = render();
-    expect(html).toContain('1 update available');
+    expect(html).toContain('1 upgrade available');
     expect(html).toContain('Membership token');
     expect(html).toContain('0.1.0 → 0.2.0');
     expect(html).toContain('Renaming the community');
-    expect(html).toContain('Apply 1 update');
+    expect(html).toContain('Apply 1 upgrade');
     expect(html).toContain('Up to date');
   });
 
-  it('proposes ordinary updates together and Voting on its own once launched', () => {
+  it('proposes ordinary upgrades together and Voting on its own once launched', () => {
     state.status = 'operational';
     state.admin = TREASURY;
     state.modules = [{ module: 'token' }, { module: 'auction' }, { module: 'governor' }];
     const html = render();
-    expect(html).toContain('3 updates available');
-    expect(html).toContain('Add 2 updates to your proposal');
-    expect(html).toContain('Propose the Voting update');
+    expect(html).toContain('3 upgrades available');
+    expect(html).toContain('Add 2 upgrades to your proposal');
+    expect(html).toContain('Propose the Voting upgrade');
     expect(html).not.toContain('Apply ');
   });
 
   it('explains a withdrawn version blocks launch in setup', () => {
     state.modules = [{ module: 'token', withdrawn: true }];
-    expect(render()).toContain('launch on a withdrawn version. Apply the update below first.');
+    expect(render()).toContain('launch on a withdrawn version. Apply the upgrade below first.');
   });
 
   it('is read only for someone who is neither the launch admin nor a proposer', () => {
     state.address = `G${'B'.repeat(55)}`;
     const html = render();
-    expect(html).toContain('Only the launch admin can apply updates during setup.');
-    expect(html).not.toContain('Apply 1 update');
+    expect(html).toContain('Only the launch admin can apply upgrades during setup.');
+    expect(html).not.toContain('Apply 1 upgrade');
   });
 
   it('says plainly when everything is current', () => {

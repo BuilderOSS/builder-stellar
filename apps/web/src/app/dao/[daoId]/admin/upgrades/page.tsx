@@ -20,7 +20,7 @@ export default function ModuleVersionsPage() {
   const { daoId, daoConfig: config } = useDaoContext();
   return (
     <PageSection
-      title="Contract versions"
+      title="Contract upgrades"
       description="Keep your community's contracts on their latest approved releases."
     >
       <div className={page}>

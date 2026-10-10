@@ -68,7 +68,7 @@ const upToDate = css({
 
 const STATUS: Record<ModuleUpdateStatus, { label: string; tone: 'success' | 'live' | 'outline' | 'danger' }> = {
   current: { label: 'Up to date', tone: 'success' },
-  available: { label: 'Update available', tone: 'live' },
+  available: { label: 'Upgrade available', tone: 'live' },
   'not-approved': { label: 'Newer release not approved', tone: 'outline' },
   withdrawn: { label: 'Version withdrawn', tone: 'danger' }
 };
@@ -110,9 +110,9 @@ export function ContractUpdates() {
           action: handler.serialize(values, context),
           source: `admin/upgrades/${update.module}`,
           metadata: {
-            title: `Update ${MODULE_LABELS[update.module]} to ${update.next!.version}`,
+            title: `Upgrade ${MODULE_LABELS[update.module]} to ${update.next!.version}`,
             description:
-              releaseNote(update.module, update.next!.version) ?? `Update ${update.module} ${arrow(update)}.`,
+              releaseNote(update.module, update.next!.version) ?? `Upgrade ${update.module} ${arrow(update)}.`,
             url: ''
           }
         };
@@ -129,7 +129,7 @@ export function ContractUpdates() {
     setMessage('');
     try {
       for (const [index, update] of plan.actionable.entries()) {
-        const label = `Update ${MODULE_LABELS[update.module]} (${index + 1} of ${plan.actionable.length})`;
+        const label = `Upgrade ${MODULE_LABELS[update.module]} (${index + 1} of ${plan.actionable.length})`;
         tx.start(label);
         const hash = await upgradeModuleDirectly(
           config,
@@ -143,7 +143,7 @@ export function ContractUpdates() {
         tx.success(`${MODULE_LABELS[update.module]} is on ${update.next!.version}`, hash);
       }
     } catch (failure) {
-      tx.fail(failure, 'Update failed');
+      tx.fail(failure, 'Upgrade failed');
     } finally {
       setBusy(false);
       await mutate();
@@ -151,7 +151,7 @@ export function ContractUpdates() {
   }
 
   const count = plan.actionable.length;
-  const plural = (n: number) => `${n} ${n === 1 ? 'update' : 'updates'}`;
+  const plural = (n: number) => `${n} ${n === 1 ? 'upgrade' : 'upgrades'}`;
 
   return (
     <>
@@ -171,8 +171,8 @@ export function ContractUpdates() {
               <p className={muted}>
                 {count
                   ? pending
-                    ? 'During setup you apply updates yourself. Each one is a signature.'
-                    : 'Updates go to a vote like any other change.'
+                    ? 'During setup you apply upgrades yourself. Each one is a signature.'
+                    : 'Upgrades go to a vote like any other change.'
                   : 'New contract releases show up here when they are approved for your community.'}
               </p>
             </div>
@@ -184,8 +184,8 @@ export function ContractUpdates() {
                 title={`${MODULE_LABELS[update.module]} ${update.current} was withdrawn`}
                 description={
                   pending
-                    ? `Your community can't launch on a withdrawn version. ${update.next ? 'Apply the update below first.' : 'Wait for a replacement release.'}`
-                    : `It keeps working, but update it as soon as you can.${update.next ? '' : ' A replacement release isn’t approved yet.'}`
+                    ? `Your community can't launch on a withdrawn version. ${update.next ? 'Apply the upgrade below first.' : 'Wait for a replacement release.'}`
+                    : `It keeps working, but upgrade it as soon as you can.${update.next ? '' : ' A replacement release isn’t approved yet.'}`
                 }
               />
             ))}
@@ -227,22 +227,24 @@ export function ContractUpdates() {
                   ) : null}
                   {plan.separate.map((update) => (
                     <Button key={update.module} variant="secondary" disabled={busy} onClick={() => propose([update])}>
-                      Propose the {MODULE_LABELS[update.module]} update
+                      Propose the {MODULE_LABELS[update.module]} upgrade
                     </Button>
                   ))}
                 </div>
               ) : (
                 <p className={note}>
                   {pending
-                    ? 'Only the launch admin can apply updates during setup.'
-                    : 'Connect a member wallet to propose these updates.'}
+                    ? 'Only the launch admin can apply upgrades during setup.'
+                    : 'Connect a member wallet to propose these upgrades.'}
                 </p>
               )
             ) : null}
             {plan.separate.length && canPropose && !direct ? (
-              <p className={note}>Voting and Treasury run proposals themselves, so each updates in its own proposal.</p>
+              <p className={note}>
+                Voting and Treasury run proposals themselves, so each upgrades in its own proposal.
+              </p>
             ) : null}
-            {error ? <Callout variant="error" title="Couldn't check for updates" description={error.message} /> : null}
+            {error ? <Callout variant="error" title="Couldn't check for upgrades" description={error.message} /> : null}
             {message ? <Callout variant="warning" title={message} role="alert" /> : null}
           </>
         )}

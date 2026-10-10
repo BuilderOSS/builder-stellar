@@ -25,16 +25,16 @@ export function ContractUpdatesNotice({ enabled }: { enabled: boolean }) {
       variant={withdrawn ? 'error' : 'info'}
       title={
         withdrawn
-          ? `${MODULE_LABELS[plan.withdrawn[0].module]} needs an update`
+          ? `${MODULE_LABELS[plan.withdrawn[0].module]} needs an upgrade`
           : count === 1
-            ? 'A contract update is available'
-            : `${count} contract updates are available`
+            ? 'A contract upgrade is available'
+            : `${count} contract upgrades are available`
       }
       description={
         withdrawn
           ? config.status === 'pending'
-            ? 'It is on a withdrawn version, so the community can’t launch until it’s updated.'
-            : 'It is on a withdrawn version. Update it as soon as you can.'
+            ? 'It is on a withdrawn version, so the community can’t launch until it’s upgraded.'
+            : 'It is on a withdrawn version. Upgrade it as soon as you can.'
           : first
             ? `${MODULE_LABELS[first.module]} ${first.current} → ${first.next!.version}${count > 1 ? `, and ${count - 1} more` : ''}.`
             : undefined
@@ -42,7 +42,7 @@ export function ContractUpdatesNotice({ enabled }: { enabled: boolean }) {
     >
       <div>
         <ButtonLink href={daoAdminRoute(routeId, '/upgrades')} variant="secondary" size="sm">
-          Review {count === 1 ? 'update' : 'updates'}
+          Review {count === 1 ? 'upgrade' : 'upgrades'}
         </ButtonLink>
       </div>
     </Callout>

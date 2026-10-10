@@ -156,7 +156,7 @@ export function LaunchSetup({ daoId, config }: { daoId: string; config: DaoNetwo
                   </ButtonLink>
                 ) : step.id === 'contracts' ? (
                   <ButtonLink href={daoAdminRoute(routeId, '/upgrades')} size="sm">
-                    Update contracts
+                    Upgrade contracts
                   </ButtonLink>
                 ) : step.id === 'founders' && step.status !== 'loading' ? (
                   <ButtonLink
@@ -196,8 +196,8 @@ export function LaunchSetup({ daoId, config }: { daoId: string; config: DaoNetwo
           {optionalUpdates.length ? (
             <LaunchStepRow
               status="todo"
-              title="Contract updates"
-              detail={`${optionalUpdates.length === 1 ? '1 update is' : `${optionalUpdates.length} updates are`} available. Easiest to apply before launch, while you can sign directly.`}
+              title="Contract upgrades"
+              detail={`${optionalUpdates.length === 1 ? '1 upgrade is' : `${optionalUpdates.length} upgrades are`} available. Easiest to apply before launch, while you can sign directly.`}
               action={
                 <ButtonLink href={daoAdminRoute(routeId, '/upgrades')} variant="secondary" size="sm">
                   Review

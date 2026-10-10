@@ -123,7 +123,7 @@ export default function AdminPage() {
     },
     {
       key: 'upgrades',
-      title: 'Contract versions',
+      title: 'Contract upgrades',
       meta: 'Review and propose upgrades',
       href: daoAdminRoute(routeId, '/upgrades'),
       access: 'open'

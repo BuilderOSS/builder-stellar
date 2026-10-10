@@ -375,11 +375,11 @@ export function CommunityProfileEditor() {
               <Callout
                 variant="info"
                 title="Renaming needs the newer token contract"
-                description={`This community's token is on ${version.data}. Update it to 0.2.0 in Contract versions, then rename here.`}
+                description={`This community's token is on ${version.data}. Upgrade it to 0.2.0 in Contract upgrades, then rename here.`}
               >
                 <div>
                   <ButtonLink href={daoAdminRoute(routeId, '/upgrades')} variant="secondary" size="sm">
-                    Open Contract versions
+                    Open Contract upgrades
                   </ButtonLink>
                 </div>
               </Callout>
