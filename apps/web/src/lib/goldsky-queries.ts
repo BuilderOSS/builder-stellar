@@ -156,16 +156,6 @@ export function useGoldskyActivityFeed(daoId: string, limit = 12) {
   );
 }
 
-export function useGoldskyTokenInventory(daoTokenAddress: string, limit = 100, offset = 0) {
-  return useSWR<GoldskyTokenResponse>(
-    `/api/dao/${encodeURIComponent(daoTokenAddress)}/tokens?limit=${limit}&offset=${offset}`,
-    fetchJson,
-    {
-      keepPreviousData: true
-    }
-  );
-}
-
 export function useGoldskyMemberList(daoTokenAddress: string, limit = 100, offset = 0) {
   return useSWR<GoldskyMemberResponse>(
     `/api/dao/${encodeURIComponent(daoTokenAddress)}/members?limit=${limit}&offset=${offset}`,
@@ -202,23 +192,4 @@ export function useDashboardData(address: string) {
   return useSWR<DashboardResponse>(address ? `/api/dashboard?wallet=${encodeURIComponent(address)}` : null, fetchJson, {
     keepPreviousData: false
   });
-}
-
-export function useGoldskyMintingHistory(daoId: string, kind?: string, limit = 50) {
-  return useSWR<GoldskyActivityResponse>(
-    `/api/dao/${encodeURIComponent(daoId)}/activity-feed?contractRole=minter${kind ? `&kind=minter.${kind}` : ''}&limit=${limit}`,
-    fetchJson,
-    { keepPreviousData: true }
-  );
-}
-
-export function useGoldskyMinterClaims(daoId: string, recipient?: string, limit = 100) {
-  // Merkle and allowlist claims emit distinct events (minter.merkle_claim /
-  // minter.allowlist_claim); callers filter the Minter feed by `kind`.
-  const actor = recipient ? `&actor=${encodeURIComponent(recipient)}` : '';
-  return useSWR<GoldskyActivityResponse>(
-    `/api/dao/${encodeURIComponent(daoId)}/activity-feed?contractRole=minter${actor}&limit=${limit}`,
-    fetchJson,
-    { keepPreviousData: true }
-  );
 }

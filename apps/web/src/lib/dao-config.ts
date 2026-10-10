@@ -38,6 +38,8 @@ export type DaoNetworkConfig = {
   minterSpec?: string[];
   auctionEnabled: boolean | null;
   auctionPaused: boolean | null;
+  /** Indexed launch choice; null while pending or unknown. */
+  marketplaceEnabled: boolean | null;
   status: 'pending' | 'operational';
 };
 
@@ -120,6 +122,7 @@ async function loadDaoNetworkConfig(daoId: string): Promise<DaoNetworkConfig> {
     marketplaceContractId: daoConfig.marketplace_contract ?? '',
     auctionEnabled: daoConfig.auction_enabled,
     auctionPaused: daoConfig.auction_paused,
+    marketplaceEnabled: daoConfig.marketplace_enabled,
     status: daoConfig.status
   };
 }

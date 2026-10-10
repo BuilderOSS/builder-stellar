@@ -71,6 +71,12 @@ export interface DaoConfig {
    */
   auction_paused: boolean | null;
 
+  /**
+   * Marketplace enabled state, mirrored from the launch configuration.
+   * - null: DAO still pending, or not recorded by the indexer
+   */
+  marketplace_enabled: boolean | null;
+
   // Blockchain Timeline
   created_ledger: number;
   created_at: string | null; // ISO timestamp
@@ -234,6 +240,7 @@ function mapDaoConfig(
     status: row.status === 'operational' ? 'operational' : 'pending',
     auction_enabled: row.auctionEnabled,
     auction_paused: row.auctionPaused,
+    marketplace_enabled: row.marketplaceEnabled,
     created_ledger: Number(row.createdLedger),
     created_at: row.createdAt?.toISOString() ?? null,
     created_tx_hash: row.createdTxHash,
