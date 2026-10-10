@@ -5,6 +5,8 @@ use soroban_sdk::{contractevent, Address, Env, String};
 pub struct MarketplaceInitialized {
     #[topic]
     pub token: Address,
+    #[topic]
+    pub admin: Address,
     pub treasury: Address,
     pub payment_asset: Address,
     pub version: String,
@@ -14,7 +16,7 @@ pub struct MarketplaceInitialized {
 /// Emitted once when the Manager launches the marketplace (Setup -> Live).
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Launched {
+pub struct MarketplaceLaunched {
     #[topic]
     pub treasury: Address,
     /// Whether the marketplace was unpaused at launch.
@@ -22,7 +24,7 @@ pub struct Launched {
 }
 
 pub fn emit_launched(e: &Env, treasury: &Address, opened: bool) {
-    Launched {
+    MarketplaceLaunched {
         treasury: treasury.clone(),
         opened,
     }
@@ -110,25 +112,38 @@ pub struct ListingExpired {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PaymentAssetUpdated {
     pub payment_asset: Address,
+    #[topic]
+    pub changed_by: Address,
 }
 
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SecondaryFeeUpdated {
     pub fee_bps: u32,
+    #[topic]
+    pub changed_by: Address,
 }
 
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MarketplacePaused {}
+pub struct MarketplacePaused {
+    /// The admin, or the Manager when `launch` forces the pause.
+    #[topic]
+    pub changed_by: Address,
+}
 
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MarketplaceUnpaused {}
+pub struct MarketplaceUnpaused {
+    /// The admin, or the Manager when `launch` opens the marketplace.
+    #[topic]
+    pub changed_by: Address,
+}
 
 pub fn emit_marketplace_initialized(
     e: &Env,
     token: &Address,
+    admin: &Address,
     treasury: &Address,
     payment_asset: &Address,
     version: &String,
@@ -136,6 +151,7 @@ pub fn emit_marketplace_initialized(
 ) {
     MarketplaceInitialized {
         token: token.clone(),
+        admin: admin.clone(),
         treasury: treasury.clone(),
         payment_asset: payment_asset.clone(),
         version: version.clone(),

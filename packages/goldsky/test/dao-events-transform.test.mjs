@@ -72,10 +72,10 @@ test('metadata initialization fields and PropertiesReset remain in the decoded p
   const initialized = decodeEvent({
     event_id: 'metadata-init', deployment_id: 'd', contract_id: 'M', contract_role: 'metadata',
     topics: '[{"symbol":"MetadataInitialized"},{"address":"TOKEN"}]',
-    data: '{"map":[{"key":{"symbol":"renderer_base"},"val":{"string":"base"}},{"key":{"symbol":"version"},"val":{"string":"1"}},{"key":{"symbol":"owner"},"val":{"address":"OWNER"}},{"key":{"symbol":"project_uri"},"val":{"string":"uri"}},{"key":{"symbol":"description"},"val":{"string":"desc"}},{"key":{"symbol":"contract_image"},"val":{"string":"image"}}]}'
+    data: '{"map":[{"key":{"symbol":"renderer_base"},"val":{"string":"base"}},{"key":{"symbol":"version"},"val":{"string":"1"}},{"key":{"symbol":"admin"},"val":{"address":"OWNER"}},{"key":{"symbol":"project_uri"},"val":{"string":"uri"}},{"key":{"symbol":"description"},"val":{"string":"desc"}},{"key":{"symbol":"contract_image"},"val":{"string":"image"}}]}'
   });
   assert.equal(argsOf(initialized).version, '1');
-  assert.equal(argsOf(initialized).owner, 'OWNER');
+  assert.equal(argsOf(initialized).admin, 'OWNER');
   assert.equal(argsOf(initialized).project_uri, 'uri');
   const reset = decodeEvent({
     event_id: 'properties-reset', deployment_id: 'd', contract_id: 'M', contract_role: 'metadata',
@@ -349,7 +349,8 @@ test('builds activity feed row from decoded delegate_changed event', () => {
   assert.ok(activity);
   assert.equal(activity.kind, 'token.delegate_changed');
   assert.equal(activity.title, 'Delegation changed');
-  assert.equal(activity.summary, 'Delegation changed');
+  assert.equal(activity.summary, 'A holder delegated votes to GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO');
+  assert.equal(activity.visibility, 'governance');
   assert.equal(activity.actor, 'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO');
   assert.deepEqual(JSON.parse(activity.topics), {});
   assert.deepEqual(JSON.parse(activity.args), { from_delegate: null, to_delegate: 'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO' });
@@ -357,7 +358,7 @@ test('builds activity feed row from decoded delegate_changed event', () => {
     'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO',
     'CC6NMFVKCHMRKFA7M333CVEFAVPLXT3XAZHZX6Q4SGNDNTKZEKWTLXT2'
   ]);
-  assert.equal(activity.visibility, 'public');
+  assert.equal(activity.visibility, 'governance');
 });
 
 test('builds activity feed row from decoded mint event', () => {
@@ -552,6 +553,40 @@ test('MintWithMinter correctly extracts minter and to from 2 topics', () => {
   assert.equal(argsOf(decoded).token_id, 42);
 });
 
+test('MintBatchWithMinter and SeedsGenerated decode the batch range', () => {
+  const batch = decodeEvent({
+    event_id: 'test-mint-batch',
+    deployment_id: 'test',
+    contract_id: 'TOKEN',
+    topics: '[{"symbol":"mint_batch_with_minter"},{"address":"MINTER_ADDR"}]',
+    data: '{"map":[{"key":{"symbol":"count"},"val":{"u32":3}},{"key":{"symbol":"first_token_id"},"val":{"u32":7}}]}',
+    transaction_hash: 'tx-1',
+    ledger_sequence: 100
+  });
+  assert.ok(batch);
+  assert.equal(batch.event_name, 'mint_batch_with_minter');
+  // The fallback role must not confuse it with the Minter's MintBatchEvent.
+  assert.equal(batch.contract_role, 'token');
+  assert.equal(topicsOf(batch).minter, 'MINTER_ADDR');
+  assert.equal(argsOf(batch).first_token_id, 7);
+  assert.equal(argsOf(batch).count, 3);
+
+  const seeds = decodeEvent({
+    event_id: 'test-seeds',
+    deployment_id: 'test',
+    contract_id: 'METADATA',
+    topics: '[{"symbol":"seeds_generated"},{"u32":7}]',
+    data: '{"map":[{"key":{"symbol":"count"},"val":{"u32":2}},{"key":{"symbol":"num_properties"},"val":{"u32":1}},{"key":{"symbol":"selections"},"val":{"vec":[{"vec":[{"u32":1},{"u32":0}]},{"vec":[{"u32":1},{"u32":1}]}]}}]}',
+    transaction_hash: 'tx-1',
+    ledger_sequence: 100
+  });
+  assert.ok(seeds);
+  assert.equal(seeds.event_name, 'seeds_generated');
+  assert.equal(seeds.contract_role, 'metadata');
+  assert.equal(topicsOf(seeds).first_token_id, 7);
+  assert.deepEqual(argsOf(seeds).selections, [[1, 0], [1, 1]]);
+});
+
 test('Execute event carries governor, target and proposal_id topics and function + index data', () => {
   const decoded = decodeEvent({
     event_id: 'test-execute',
@@ -587,7 +622,7 @@ test('decodes TokenInitialized event', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'TokenInitialized');
-  assert.equal(topicsOf(decoded).owner, 'OWNER_ADDR');
+  assert.equal(topicsOf(decoded).admin, 'OWNER_ADDR');
 
   const payload = JSON.parse(decoded.payload);
   assert.equal(payload.name, 'TestToken');
@@ -649,7 +684,7 @@ test('decodes GovernorInitialized event', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'GovernorInitialized');
-  assert.equal(decoded.owner, 'OWNER_ADDR');
+  assert.equal(decoded.admin, 'OWNER_ADDR');
 
   const payload = JSON.parse(decoded.payload);
   assert.equal(payload.voting_delay, 300);
@@ -670,7 +705,7 @@ test('decodes parameter change events (VotingDelayChanged)', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'VotingDelayChanged');
-  assert.equal(topicsOf(decoded).caller, 'CALLER_ADDR');
+  assert.equal(topicsOf(decoded).changed_by, 'CALLER_ADDR');
 
   const payload = JSON.parse(decoded.payload);
   assert.equal(payload.old_value, 300);
@@ -691,7 +726,7 @@ test('decodes AuctionInitialized event', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'AuctionInitialized');
-  assert.equal(topicsOf(decoded).owner, 'OWNER_ADDR');
+  assert.equal(topicsOf(decoded).admin, 'OWNER_ADDR');
 
   const payload = JSON.parse(decoded.payload);
   assert.equal(payload.duration, 86400);
@@ -734,7 +769,7 @@ test('decodes TreasuryInitialized event', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'TreasuryInitialized');
-  assert.equal(topicsOf(decoded).owner, 'OWNER_ADDR');
+  assert.equal(topicsOf(decoded).admin, 'OWNER_ADDR');
   assert.equal(argsOf(decoded).governor, 'GOVERNOR_ADDR');
 });
 
@@ -789,17 +824,17 @@ function run(role, contract, name, topics, data = {}, extra = {}) {
   return { decoded, activity: buildActivityFeed(decoded) };
 }
 
-test('Launched decodes identically (topic treasury) for all six modules; data differs per module', () => {
+test('each module launch event decodes with topic treasury; data differs per module', () => {
   const cases = [
-    ['token', 'TOKEN', { minters: { vec: [A('MINTER_A'), A('MINTER_B')] } }, { minters: ['MINTER_A', 'MINTER_B'] }, 'token.launched', 'Token launched'],
-    ['governor', 'GOV', {}, {}, 'governor.launched', 'Governor launched'],
-    ['treasury', 'TRE', {}, {}, 'treasury.launched', 'Treasury launched'],
-    ['metadata', 'META', {}, {}, 'metadata.launched', 'Metadata launched'],
-    ['auction', 'AUC', { started: { bool: true } }, { started: true }, 'auction.launched', 'Auction launched and started'],
-    ['marketplace', 'MKT', { opened: { bool: false } }, { opened: false }, 'marketplace.launched', 'Marketplace launched paused']
+    ['token', 'TOKEN', 'TokenLaunched', { minters: { vec: [A('MINTER_A'), A('MINTER_B')] } }, { minters: ['MINTER_A', 'MINTER_B'] }, 'token.launched', 'Token launched'],
+    ['governor', 'GOV', 'GovernorLaunched', {}, {}, 'governor.launched', 'Governor launched'],
+    ['treasury', 'TRE', 'TreasuryLaunched', {}, {}, 'treasury.launched', 'Treasury launched'],
+    ['metadata', 'META', 'MetadataLaunched', {}, {}, 'metadata.launched', 'Metadata launched'],
+    ['auction', 'AUC', 'AuctionLaunched', { started: { bool: true } }, { started: true }, 'auction.launched', 'Auction launched and started'],
+    ['marketplace', 'MKT', 'MarketplaceLaunched', { opened: { bool: false } }, { opened: false }, 'marketplace.launched', 'Marketplace launched paused']
   ];
-  for (const [role, contract, data, expectedArgs, kind, summary] of cases) {
-    const { decoded, activity } = run(role, contract, 'Launched', [A('TREASURY_ADDR')], data);
+  for (const [role, contract, name, data, expectedArgs, kind, summary] of cases) {
+    const { decoded, activity } = run(role, contract, name, [A('TREASURY_ADDR')], data);
     assert.deepEqual(topicsOf(decoded), { treasury: 'TREASURY_ADDR' }, role);
     assert.deepEqual(argsOf(decoded), expectedArgs, role);
     assert.equal(decoded.contract_id, contract);
@@ -810,7 +845,7 @@ test('Launched decodes identically (topic treasury) for all six modules; data di
     assert.equal(activity.actor, 'TREASURY_ADDR');
   }
   // Goldsky also emits snake_case event names.
-  assert.deepEqual(topicsOf(run('token', 'TOKEN', 'launched', [A('T')], { minters: { vec: [] } }).decoded), { treasury: 'T' });
+  assert.deepEqual(topicsOf(run('token', 'TOKEN', 'token_launched', [A('T')], { minters: { vec: [] } }).decoded), { treasury: 'T' });
 });
 
 test('token MintAuthorityChanged at launch is emitted per minter with changed_by = manager', () => {
@@ -887,21 +922,24 @@ test('DaoCreated decodes the nested wasm_hashes struct (map of six BytesN<32>) b
   const { decoded, activity } = run('manager', 'CMANAGER', 'DaoCreated', [A('TOKEN'), A('DEPLOYER'), A('LAUNCH_ADMIN')], {
     created_ledger: { u64: '11' },
     modules: dm({ token: A('TOKEN'), governor: A('GOV') }),
-    wasm_hashes: dm(hashes)
+    wasm_hashes: dm(hashes),
+    slug: { string: 'my-dao' }
   });
   assert.deepEqual(topicsOf(decoded), { token_address: 'TOKEN', deployer: 'DEPLOYER', launch_admin: 'LAUNCH_ADMIN' });
   const args = argsOf(decoded);
   assert.deepEqual(args.wasm_hashes, { token: 'h1', metadata: 'h2', auction: 'h3', governor: 'h4', treasury: 'h5', marketplace: 'h6' });
   assert.equal(args.modules.token, 'TOKEN');
   assert.equal(args.created_ledger, '11');
+  assert.equal(args.slug, 'my-dao');
   assert.equal(activity.kind, 'manager.dao_created');
-  assert.equal(activity.visibility, 'public');
+  assert.equal(activity.visibility, 'admin', 'a pending DAO is not public news; DaoLaunched is');
 });
 
 test('role fallback classifies new events when contract_role is unknown', () => {
   for (const [name, role] of [['AdminProposed', 'manager'], ['AdminChanged', 'manager'], ['AdminProposalCancelled', 'manager'], ['PlatformMinterSet', 'manager'], ['Upgraded', 'unknown'], ['VersionSynced', 'unknown'],
     ['RefundDeferred', 'auction'], ['RefundWithdrawn', 'auction'], ['PrimaryListingPurchased', 'marketplace'],
-    ['PrimaryListingCancelled', 'marketplace'], ['PrimaryListingExpired', 'marketplace'], ['Execute', 'treasury'], ['Launched', 'unknown']]) {
+    ['PrimaryListingCancelled', 'marketplace'], ['PrimaryListingExpired', 'marketplace'], ['Execute', 'treasury'], ['TokenLaunched', 'token'], ['TreasuryLaunched', 'treasury'], ['ProposalScheduled', 'governor'],
+    ['SlugClaimed', 'manager'], ['PendingSlugUpdated', 'manager'], ['LatestImplementationSet', 'manager'], ['Migrated', 'unknown']]) {
     const decoded = decodeEvent({ topics: JSON.stringify([S(name)]), data: JSON.stringify(dm({})) });
     assert.equal(decoded.contract_role, role, name);
   }
@@ -929,12 +967,12 @@ test('governor ProposalExecuted is a proposal_id topic emitted inside consume', 
   assert.equal(activity.visibility, 'governance');
 });
 
-test('governor setters keep the caller topic (now the owner address)', () => {
+test('governor setters carry the admin as the changed_by topic', () => {
   for (const [name, kind] of [['QueueDelayChanged', 'governance.queue_delay_changed'], ['VotingDelayChanged', 'governance.voting_delay_changed'],
     ['VotingPeriodChanged', 'governance.voting_period_changed'], ['ProposalThresholdChanged', 'governance.proposal_threshold_changed'],
     ['QuorumBpsChanged', 'governance.quorum_bps_changed']]) {
     const { decoded, activity } = run('governor', 'GOV', name, [A('OWNER')], { old_value: { u32: 1 }, new_value: { u32: 2 } });
-    assert.deepEqual(topicsOf(decoded), { caller: 'OWNER' });
+    assert.deepEqual(topicsOf(decoded), { changed_by: 'OWNER' });
     assert.deepEqual(argsOf(decoded), { old_value: 1, new_value: 2 });
     assert.equal(activity.kind, kind);
   }
@@ -953,7 +991,7 @@ test('auction RefundDeferred / RefundWithdrawn / BidRefunded', () => {
   assert.deepEqual(topicsOf(deferred.decoded), { token_id: '7', bidder: 'BIDDER' });
   assert.deepEqual(argsOf(deferred.decoded), { amount: '30' });
   assert.equal(deferred.activity.kind, 'auction.refund_deferred');
-  assert.equal(deferred.activity.visibility, 'public');
+  assert.equal(deferred.activity.visibility, 'admin');
   assert.equal(deferred.activity.token_id, '7');
   assert.equal(deferred.activity.amount, '30');
   assert.equal(deferred.activity.actor, 'BIDDER');
@@ -1036,4 +1074,23 @@ test('activity feed picks token identifiers from topics even when args is an emp
   });
   assert.equal(purchase.token_id, '3');
   assert.match(purchase.summary, /listing 4/);
+});
+
+test('automatic self-delegation stays off the public feed; real delegation is governance news', () => {
+  const base = { event_id: 'd', deployment_id: 'test', contract_id: 'TOKEN', contract_role: 'token', event_name: 'delegate_changed', ledger_sequence: 1, transaction_hash: 'tx' };
+  const self = buildActivityFeed({ ...base, topics: '{"delegator":"GALICE"}', args: '{"from_delegate":null,"to_delegate":"GALICE"}' });
+  assert.equal(self.visibility, 'system');
+  const real = buildActivityFeed({ ...base, topics: '{"delegator":"GALICE"}', args: '{"from_delegate":"GALICE","to_delegate":"GBOB"}' });
+  assert.equal(real.visibility, 'governance');
+  assert.equal(real.summary, 'GALICE delegated votes to GBOB');
+});
+
+test('public feed carries the story events, not their side effects', () => {
+  const visibility = (event_name, extra = {}) =>
+    buildActivityFeed({ event_id: event_name, deployment_id: 'test', contract_id: 'C', event_name, ledger_sequence: 1, transaction_hash: 'tx', topics: '{}', args: '{}', ...extra }).visibility;
+  for (const name of ['mint', 'mint_with_minter', 'transfer', 'delegate_votes_changed', 'seed_generated', 'seeds_generated', 'slug_claimed', 'token_initialized', 'listing_cancelled', 'refund_withdrawn'])
+    assert.notEqual(visibility(name), 'public', name);
+  for (const name of ['dao_launched', 'auction_created', 'bid_placed', 'auction_settled', 'mint_batch_with_minter', 'listing_purchased', 'primary_listing_purchased', 'upgraded'])
+    assert.equal(visibility(name), 'public', name);
+  for (const name of ['proposal_created', 'vote_cast', 'proposal_executed']) assert.equal(visibility(name), 'governance', name);
 });

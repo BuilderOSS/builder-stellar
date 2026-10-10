@@ -207,6 +207,21 @@ const topicOnlyEvents = [
   }
 ];
 
+// Batch events produce one feed row for the whole range.
+const batchMint = invoke({
+  event_id: 'batch', event_name: 'MintBatchWithMinter', deployment_id: 'test', contract_id: 'test',
+  topics: JSON.stringify({ minter: 'GMINTER' }), args: JSON.stringify({ first_token_id: 30, count: 5 })
+});
+assert.strictEqual(batchMint.kind, 'token.batch_mint');
+assert.strictEqual(batchMint.visibility, 'public');
+assert.strictEqual(batchMint.summary, 'Minted 5 tokens (30-34) by GMINTER');
+const seeds = invoke({
+  event_id: 'seeds', event_name: 'SeedsGenerated', deployment_id: 'test', contract_id: 'test',
+  topics: JSON.stringify({ first_token_id: 30 }), args: JSON.stringify({ count: 1, num_properties: 2, selections: [[2, 0, 1]] })
+});
+assert.strictEqual(seeds.kind, 'metadata.seeds_generated');
+assert.strictEqual(seeds.summary, 'Seeds generated for 1 token (30)');
+
 for (const event of topicOnlyEvents) {
   const result = invoke({
     event_id: event.event_name,
@@ -246,7 +261,7 @@ const tokenResult = invoke({
   deployment_id: 'test',
   contract_id: 'test'
 });
-assert.strictEqual(tokenResult.visibility, 'public', 'Mint should have public visibility');
+assert.strictEqual(tokenResult.visibility, 'admin', 'Per-token Mint stays off the public feed');
 
 const adminResult = invoke({
   event_id: '8',
@@ -322,17 +337,23 @@ console.log('✅ Passed\n');
 console.log('Test 16: New and changed event kinds, titles and visibility');
 const newEventCases = [
   ['PrimaryListingPurchased', 'marketplace', 'marketplace.primary_listing_purchased', 'Primary sale completed', 'public'],
-  ['PrimaryListingCancelled', 'marketplace', 'marketplace.primary_listing_cancelled', 'Primary listing cancelled', 'public'],
+  ['PrimaryListingCancelled', 'marketplace', 'marketplace.primary_listing_cancelled', 'Primary listing cancelled', 'admin'],
   ['PrimaryListingExpired', 'marketplace', 'marketplace.primary_listing_expired', 'Primary listing expired', 'admin'],
-  ['RefundDeferred', 'auction', 'auction.refund_deferred', 'Bid refund deferred', 'public'],
-  ['RefundWithdrawn', 'auction', 'auction.refund_withdrawn', 'Bid refund withdrawn', 'public'],
+  ['RefundDeferred', 'auction', 'auction.refund_deferred', 'Bid refund deferred', 'admin'],
+  ['RefundWithdrawn', 'auction', 'auction.refund_withdrawn', 'Bid refund withdrawn', 'admin'],
   ['AdminProposed', 'manager', 'manager.admin_proposed', 'Manager admin proposed', 'admin'],
   ['AdminChanged', 'manager', 'manager.admin_changed', 'Manager admin changed', 'admin'],
   ['PlatformMinterSet', 'manager', 'manager.platform_minter_set', 'Platform minter set', 'admin'],
-  ['Launched', 'token', 'token.launched', 'Token launched', 'admin'],
-  ['Launched', 'auction', 'auction.launched', 'Auction launched', 'admin'],
-  ['Launched', 'marketplace', 'marketplace.launched', 'Marketplace launched', 'admin'],
-  ['Launched', '', 'module.launched', 'Module launched', 'admin'],
+  ['TokenLaunched', 'token', 'token.launched', 'Token launched', 'admin'],
+  ['AuctionLaunched', 'auction', 'auction.launched', 'Auction launched', 'admin'],
+  ['MarketplaceLaunched', 'marketplace', 'marketplace.launched', 'Marketplace launched', 'admin'],
+  ['AdminChanged', 'token', 'token.admin_changed', 'Token admin handed to the Treasury', 'admin'],
+  ['AdminChanged', 'treasury', 'treasury.admin_changed', 'Treasury admin handed to the Treasury', 'admin'],
+  ['Migrated', 'governor', 'governor.migrated', 'Governor storage migrated', 'admin'],
+  ['ProposalScheduled', 'governor', 'governance.proposal_scheduled', 'Proposal voting scheduled', 'admin'],
+  ['SlugClaimed', 'manager', 'manager.slug_claimed', 'Slug claimed', 'admin'],
+  ['PendingSlugUpdated', 'manager', 'manager.pending_slug_updated', 'Requested slug changed', 'admin'],
+  ['LatestImplementationSet', 'manager', 'manager.latest_implementation_set', 'Latest implementation set', 'admin'],
   ['MarketplacePaused', 'marketplace', 'marketplace.paused', 'Marketplace paused', 'admin'],
   ['AdminProposalCancelled', 'manager', 'manager.admin_proposal_cancelled', 'Manager admin proposal cancelled', 'admin'],
   ['Upgraded', 'token', 'token.upgraded', 'Token upgraded', 'public'],

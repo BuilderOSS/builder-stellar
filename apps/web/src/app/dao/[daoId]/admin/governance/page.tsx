@@ -8,18 +8,18 @@ import { Grid, Stack } from 'styled-system/jsx';
 
 import { AdminValueForm } from '@/components/admin/admin-action-forms';
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
-import { AdminSectionNav } from '@/components/admin/admin-section-nav';
+import { AdminSurfaceNav as AdminSectionNav } from '@/components/admin/admin-surface-nav';
 import { DurationInput } from '@/components/admin/duration-input';
 import { PercentageInput } from '@/components/admin/percentage-input';
 import { PageSection } from '@/components/page-section';
 import { Badge, Button, Callout, Card, Heading, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
-import { treasuryIsOwner } from '@/lib/admin-proposals';
-import { useContractOwner, useGovernorSettings } from '@/lib/admin-queries';
-import { isDaoAdmin } from '@/lib/dao-config';
+import { treasuryIsAdmin } from '@/lib/admin-proposals';
+import { useContractAdmin, useGovernorSettings } from '@/lib/admin-queries';
 import { formatDuration } from '@/lib/format-duration';
 import {
   validateProposalThreshold,
+  validateQueueDelay,
   validateQuorumBps,
   validateVotingDelay,
   validateVotingPeriod
@@ -36,9 +36,10 @@ type Drafts = Partial<{
   votingPeriod: number;
   proposalThreshold: string;
   quorumBps: number;
+  queueDelay: number;
 }>;
 
-type GovernorSettingKey = 'votingDelay' | 'votingPeriod' | 'proposalThreshold' | 'quorumBps';
+type GovernorSettingKey = 'votingDelay' | 'votingPeriod' | 'proposalThreshold' | 'quorumBps' | 'queueDelay';
 
 const EMPTY_DRAFTS: Drafts = {};
 
@@ -71,7 +72,8 @@ export default function GovernanceAdminPage() {
     'set-voting-delay',
     'set-voting-period',
     'set-proposal-threshold',
-    'set-quorum-bps'
+    'set-quorum-bps',
+    'set-queue-delay'
   ]);
   const tx = useTransactionFeedback(config.name);
   const {
@@ -79,43 +81,57 @@ export default function GovernanceAdminPage() {
     mutate: refreshSettings,
     error: settingsError,
     isLoading: settingsLoading
-  } = useGovernorSettings(
-    config,
-    session.address || (config.status === 'pending' ? config.launchAdmin : config.adminAddress)
-  );
-  const { data: governorOwner } = useContractOwner(config, 'governor', session.address || undefined);
-  const isOwner = isDaoAdmin(config, session.address);
-  // The governor owner is the launch admin before launch and the Treasury afterwards.
+  } = useGovernorSettings(config, session.address || config.launchAdmin, true);
+  const { data: governorAdmin } = useContractAdmin(config, 'governor', session.address || config.launchAdmin);
+  const isAdmin = Boolean(session.address && governorAdmin === session.address);
+  // The governor admin is the launch admin before launch and the Treasury afterwards.
   // There is no separate governor-authority role any more.
-  const hasGovernanceAccess = isOwner;
-  const canProposeGovernance = Boolean(session.address && treasuryIsOwner(config, governorOwner));
+  const hasGovernanceAccess = isAdmin;
+  const canProposeGovernance = Boolean(session.address && treasuryIsAdmin(config, governorAdmin));
 
   function proposeSetting(
-    type: 'set-voting-delay' | 'set-voting-period' | 'set-proposal-threshold' | 'set-quorum-bps',
+    type: 'set-voting-delay' | 'set-voting-period' | 'set-proposal-threshold' | 'set-quorum-bps' | 'set-queue-delay',
     value: string,
     label: string
   ) {
+    if (
+      session.walletNetworkIssue ||
+      (session.walletNetworkPassphrase && session.walletNetworkPassphrase !== config.passphrase)
+    ) {
+      setFormMessage('Switch your wallet to the DAO network before preparing a governance update.');
+      return;
+    }
     const handler = getActionHandler(type);
     const action = handler.serialize(
       { value },
       { config, session: { address: session.address, kit: StellarWalletsKit } }
     );
-    proposalDraft.requestAdd({
+    proposalDraft.requestAddBatch({
       daoId,
-      action,
-      source: `admin/governance/${type}`,
-      metadata: {
-        title: `Update ${label.toLowerCase()}`,
-        description: `Update the DAO ${label.toLowerCase()} to ${value}.`,
-        url: ''
-      },
+      requests: [
+        {
+          daoId,
+          action,
+          source: `admin/governance/${type}`,
+          metadata: {
+            title: `Update ${label.toLowerCase()}`,
+            description: `Update the DAO ${label.toLowerCase()} to ${value}.`,
+            url: ''
+          }
+        }
+      ],
       onAdded: () => setFormMessage(`${label} added to the proposal draft.`)
     });
   }
 
   async function getGovernor() {
+    if (
+      session.walletNetworkIssue ||
+      (session.walletNetworkPassphrase && session.walletNetworkPassphrase !== config.passphrase)
+    )
+      throw new Error('Switch your wallet to the DAO network before signing.');
     if (!session.address) {
-      throw new Error('Connect the governor owner wallet first.');
+      throw new Error('Connect the governor admin wallet first.');
     }
 
     if (!config.governorContractId) {
@@ -141,12 +157,12 @@ export default function GovernanceAdminPage() {
     run: (governor: GovernorClient) => Promise<string>
   ) {
     if (!hasGovernanceAccess) {
-      setFormMessage('Connect the governor owner wallet first.');
+      setFormMessage('Connect the governor admin wallet first.');
       return;
     }
 
     if (!session.address) {
-      setFormMessage('Connect the governor owner wallet first.');
+      setFormMessage('Connect the governor admin wallet first.');
       return;
     }
 
@@ -288,14 +304,33 @@ export default function GovernanceAdminPage() {
     });
   }
 
+  async function applyQueueDelay() {
+    const value = drafts.queueDelay;
+    if (value === undefined) return setFormMessage('Enter the desired queue delay.');
+    const error = validateQueueDelay(value);
+    if (error) return setFormMessage(error);
+    if (!hasGovernanceAccess && canProposeGovernance) {
+      proposeSetting('set-queue-delay', String(value), 'Queue delay');
+      return;
+    }
+    await submitGovernorUpdate('queueDelay', 'Queue delay', async (governor) => {
+      const sent = await (await governor.set_queue_delay({ queue_delay: value })).signAndSend();
+      return sent.sendTransactionResponse?.hash ?? '';
+    });
+  }
+
   if (!hasGovernanceAccess && !canProposeGovernance) {
     return (
       <PageSection title="Governance Admin" description="Governance settings.">
+        <AdminSectionNav daoId={daoId} active="/governance" />
+        {settingsError ? (
+          <Callout variant="error" title="Governor values unavailable" description={settingsError.message} />
+        ) : null}
         <Callout
           variant="warning"
           badge="Access restricted"
-          title="Connect the governor owner wallet to continue"
-          description="You can still view the current governor values, but only the governor owner can update them."
+          title="Connect a wallet to prepare governance updates"
+          description="The current Governor admin applies setup changes. After launch, Treasury-administered changes go through a governance proposal."
         >
           {settings ? (
             <Stack gap="1">
@@ -311,6 +346,11 @@ export default function GovernanceAdminPage() {
               <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
                 Quorum: {settings.quorumBps} bps
               </Text>
+              <Text>
+                Queue delay:{' '}
+                {settings.queueDelay === undefined ? 'unavailable from RPC (shown when indexed)' : settings.queueDelay}
+              </Text>
+              <Text>Source: {settings.source === 'indexed' ? 'indexed governance.settings' : 'live RPC reads'}</Text>
             </Stack>
           ) : null}
         </Callout>
@@ -350,11 +390,43 @@ export default function GovernanceAdminPage() {
               </div>
 
               {settingsError ? <Callout variant="error" title={settingsError.message} /> : null}
-              {formMessage ? <Callout variant="warning" title={formMessage} /> : null}
+              {formMessage ? (
+                <div role="status">
+                  <Callout variant="warning" title={formMessage} />
+                </div>
+              ) : null}
             </Stack>
           </Card>
 
           <Grid columns={{ base: 1, xl: 2 }} gap="4">
+            <Card p="5">
+              <Stack gap="3">
+                <Heading style={{ fontSize: '1.2rem' }}>Queue delay</Heading>
+                <Text>
+                  Current value unavailable: the public Governor ABI exposes a setter but no queue-delay getter. Enter
+                  the desired value explicitly.
+                </Text>
+                <DurationInput
+                  id="queue-delay"
+                  label="Execution queue delay"
+                  value={drafts.queueDelay ?? 300}
+                  onChange={(value) => setDrafts((current) => ({ ...current, queueDelay: value }))}
+                  disabled={busy}
+                  helperText="Waiting time between queueing a successful proposal and execution. Between 5 minutes and 30 days."
+                />
+                <Button
+                  type="button"
+                  onClick={() => void applyQueueDelay()}
+                  disabled={busy || drafts.queueDelay === undefined}
+                >
+                  {busy && activeAction === 'queueDelay'
+                    ? 'Applying…'
+                    : hasGovernanceAccess
+                      ? 'Apply queue delay'
+                      : 'Add to proposal'}
+                </Button>
+              </Stack>
+            </Card>
             <Card p="5">
               <Stack gap="3">
                 <div>
@@ -375,7 +447,7 @@ export default function GovernanceAdminPage() {
                 />
                 <Stack gap="1">
                   {typeof drafts.votingDelay === 'number' && settings && drafts.votingDelay !== settings.votingDelay ? (
-                    <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: '#3b82f6' }}>
+                    <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: 'var(--accent)' }}>
                       Change: {formatSecondsValue(settings.votingDelay)} → {formatSecondsValue(drafts.votingDelay)}
                     </Text>
                   ) : null}
@@ -424,7 +496,7 @@ export default function GovernanceAdminPage() {
                   {typeof drafts.votingPeriod === 'number' &&
                   settings &&
                   drafts.votingPeriod !== settings.votingPeriod ? (
-                    <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: '#3b82f6' }}>
+                    <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: 'var(--accent)' }}>
                       Change: {formatSecondsValue(settings.votingPeriod)} → {formatSecondsValue(drafts.votingPeriod)}
                     </Text>
                   ) : null}
@@ -487,7 +559,7 @@ export default function GovernanceAdminPage() {
                   {settings &&
                   drafts.proposalThreshold &&
                   drafts.proposalThreshold !== formatThreshold(settings.proposalThreshold) ? (
-                    <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: '#3b82f6' }}>
+                    <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: 'var(--accent)' }}>
                       Change: {formatThreshold(settings.proposalThreshold)} → {drafts.proposalThreshold} votes
                     </Text>
                   ) : null}
@@ -541,7 +613,7 @@ export default function GovernanceAdminPage() {
                 />
                 <Stack gap="1">
                   {typeof drafts.quorumBps === 'number' && settings && drafts.quorumBps !== settings.quorumBps ? (
-                    <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: '#3b82f6' }}>
+                    <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: 'var(--accent)' }}>
                       Change: {(settings.quorumBps / 100).toFixed(2)}% → {(drafts.quorumBps / 100).toFixed(2)}%
                     </Text>
                   ) : null}

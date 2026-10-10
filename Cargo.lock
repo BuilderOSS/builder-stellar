@@ -186,7 +186,6 @@ version = "0.1.0"
 dependencies = [
  "common",
  "soroban-sdk",
- "stellar-access",
  "stellar-contract-utils",
  "stellar-macros",
 ]
@@ -301,7 +300,6 @@ name = "common"
 version = "0.1.0"
 dependencies = [
  "soroban-sdk",
- "stellar-access",
 ]
 
 [[package]]
@@ -422,6 +420,7 @@ dependencies = [
  "manager",
  "marketplace",
  "metadata",
+ "minter",
  "soroban-sdk",
  "stellar-governance",
  "token",
@@ -767,9 +766,7 @@ version = "0.1.0"
 dependencies = [
  "common",
  "soroban-sdk",
- "stellar-access",
  "stellar-governance",
- "stellar-macros",
  "token",
  "treasury",
 ]
@@ -1026,7 +1023,6 @@ version = "0.1.0"
 dependencies = [
  "common",
  "soroban-sdk",
- "stellar-access",
  "token",
 ]
 
@@ -1853,9 +1849,7 @@ version = "0.1.0"
 dependencies = [
  "common",
  "soroban-sdk",
- "stellar-access",
  "stellar-governance",
- "stellar-macros",
  "stellar-tokens",
 ]
 
@@ -1865,7 +1859,6 @@ version = "0.1.0"
 dependencies = [
  "common",
  "soroban-sdk",
- "stellar-access",
 ]
 
 [[package]]

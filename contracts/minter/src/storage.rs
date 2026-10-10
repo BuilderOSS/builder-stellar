@@ -2,25 +2,19 @@
 //!
 //! All per-token configuration and claim state lives in persistent storage as
 //! one entry per key, so the Minter's instance entry stays tiny and every call
-//! only loads the entries it touches. Entries have their TTL bumped on use.
+//! only loads the entries it touches. Entries follow the shared long-lived
+//! persistent TTL policy (`common::ttl`) and are renewed on use; every entry
+//! point also renews the Minter's own instance (and code) TTL.
 
 use soroban_sdk::{contracttype, Address, BytesN, Env};
 
-/// Maximum number of recipients in a single batch mint.
-pub const MAX_BATCH_RECIPIENTS: u32 = 100;
+/// Maximum number of recipients in a single batch mint (one token each). The
+/// token additionally requires the whole batch to fit its event budget
+/// (`common::batch_mint_fits`).
+pub const MAX_BATCH_RECIPIENTS: u32 = common::MAX_BATCH_RECIPIENTS;
 
 /// Maximum merkle proof depth (supports 2^32 leaves).
 pub const MAX_PROOF_LEN: u32 = 32;
-
-/// Approximate number of ledgers in a day (~5 seconds per ledger).
-pub const DAY_IN_LEDGERS: u32 = 17280;
-
-/// TTL extension applied to touched persistent entries (nominally 1 year; the
-/// network caps entries at ~180 days, renewed on touch).
-pub const TTL_EXTEND_AMOUNT: u32 = 365 * DAY_IN_LEDGERS;
-
-/// Extend when remaining TTL drops below this (~30 days).
-pub const TTL_THRESHOLD: u32 = TTL_EXTEND_AMOUNT - 335 * DAY_IN_LEDGERS;
 
 /// Storage keys for the Minter contract (persistent storage).
 #[contracttype]
@@ -58,18 +52,14 @@ pub enum MinterKey {
 fn get<V: soroban_sdk::TryFromVal<Env, soroban_sdk::Val>>(env: &Env, key: &MinterKey) -> Option<V> {
     let value = env.storage().persistent().get(key);
     if value.is_some() {
-        env.storage()
-            .persistent()
-            .extend_ttl(key, TTL_THRESHOLD, TTL_EXTEND_AMOUNT);
+        common::ttl::extend_persistent(env, key);
     }
     value
 }
 
 fn set<V: soroban_sdk::IntoVal<Env, soroban_sdk::Val>>(env: &Env, key: &MinterKey, value: &V) {
     env.storage().persistent().set(key, value);
-    env.storage()
-        .persistent()
-        .extend_ttl(key, TTL_THRESHOLD, TTL_EXTEND_AMOUNT);
+    common::ttl::extend_persistent(env, key);
 }
 
 /// Load merkle root from storage.

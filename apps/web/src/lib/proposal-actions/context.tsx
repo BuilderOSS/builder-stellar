@@ -23,7 +23,7 @@ export interface ActionFormProviderProps {
  * Wraps the entire action editor to avoid prop drilling
  */
 export function ActionFormProvider({ children, config, session }: ActionFormProviderProps) {
-  const { data: balances, isLoading: balancesLoading } = useTreasuryBalances(config);
+  const { data: balances, isLoading: balancesLoading, error: balancesError } = useTreasuryBalances(config);
   const { data: mintAuthoritiesData, isLoading: mintAuthoritiesLoading } = useGoldskyMintAuthorities(
     config.tokenContractId
   );
@@ -34,10 +34,11 @@ export function ActionFormProvider({ children, config, session }: ActionFormProv
       session,
       balances,
       balancesLoading,
+      balancesError: balancesError?.message,
       mintAuthorities: mintAuthoritiesData?.items,
       mintAuthoritiesLoading
     }),
-    [config, session, balances, balancesLoading, mintAuthoritiesData, mintAuthoritiesLoading]
+    [config, session, balances, balancesLoading, balancesError, mintAuthoritiesData, mintAuthoritiesLoading]
   );
 
   return <ActionFormContext.Provider value={contextValue}>{children}</ActionFormContext.Provider>;

@@ -20,10 +20,12 @@ pub struct MarketplaceContract;
 
 #[contractimpl]
 impl MarketplaceContract {
+    /// * `admin` - setup-phase admin of the parameter setters (the launch admin);
+    ///   becomes the Treasury at launch
     pub fn __constructor(
         e: &Env,
         token: Address,
-        launch_admin: Address,
+        admin: Address,
         treasury: Address,
         payment_asset: Address,
         manager: Address,
@@ -38,7 +40,6 @@ impl MarketplaceContract {
             e,
             &MarketplaceConfig {
                 token: token.clone(),
-                launch_admin,
                 treasury: treasury.clone(),
                 payment_asset: payment_asset.clone(),
                 default_secondary_fee_bps,
@@ -46,10 +47,12 @@ impl MarketplaceContract {
                 paused: true,
             },
         );
-        common::upgrade::init(e, &current_hash, &version);
+        common::admin::init(e, &admin);
+        common::upgrade::init(e, &current_hash, &version, STORAGE_VERSION);
         emit_marketplace_initialized(
             e,
             &token,
+            &admin,
             &treasury,
             &payment_asset,
             &version,
@@ -68,10 +71,10 @@ impl MarketplaceContract {
     /// One-shot, Manager-only launch handoff (Setup -> Live).
     ///
     /// `treasury` must equal the treasury wired at construction (wiring is
-    /// immutable). After this call the param setters are gated by the treasury
-    /// instead of `launch_admin`. The marketplace is left unpaused when `open`
-    /// is true and forced paused otherwise. Panics `PaymentAssetMismatch` if the
-    /// payment asset differs from `expected_payment_asset`. A second call panics with `AlreadyLive`.
+    /// immutable). Hands the admin to the treasury. The marketplace is left
+    /// unpaused when `open` is true and forced paused otherwise. Panics
+    /// `PaymentAssetMismatch` if the payment asset differs from
+    /// `expected_payment_asset`. A second call panics with `AlreadyLive`.
     pub fn launch(e: &Env, treasury: Address, open: bool, expected_payment_asset: Address) {
         let mut config = Self::get_config(e);
         config.manager.require_auth();
@@ -82,14 +85,21 @@ impl MarketplaceContract {
         if expected_payment_asset != config.payment_asset {
             panic_with_error!(e, MarketplaceError::PaymentAssetMismatch);
         }
-        // `open == false` forces paused even if the launch_admin unpaused in setup.
+        common::admin::handoff(e, &treasury);
+        // `open == false` forces paused even if the launch admin unpaused in setup.
         let was_paused = config.paused;
         config.paused = !open;
         storage::set_config(e, &config);
         if was_paused && open {
-            MarketplaceUnpaused {}.publish(e);
+            MarketplaceUnpaused {
+                changed_by: config.manager.clone(),
+            }
+            .publish(e);
         } else if !was_paused && !open {
-            MarketplacePaused {}.publish(e);
+            MarketplacePaused {
+                changed_by: config.manager.clone(),
+            }
+            .publish(e);
         }
         common::ttl::extend_instance(e);
         emit_launched(e, &treasury, open);
@@ -112,7 +122,7 @@ impl MarketplaceContract {
         common::ttl::extend_instance(e);
         // Nothing holds mint authority before launch.
         common::lifecycle::require_live(e);
-        let config = Self::require_admin(e);
+        let (config, _) = Self::require_admin(e);
         Self::check_open_listing(e, price, expires_at);
 
         let listing = PrimaryListing {
@@ -133,7 +143,8 @@ impl MarketplaceContract {
     }
 
     /// Buy a primary listing: pays the treasury, mints one token to `buyer`.
-    pub fn buy_primary(e: &Env, listing_id: u64, buyer: Address) -> u32 {
+    /// Rejects (`PriceAboveMax`) if the listing price exceeds `max_price`.
+    pub fn buy_primary(e: &Env, listing_id: u64, buyer: Address, max_price: i128) -> u32 {
         common::ttl::extend_instance(e);
         let config = Self::get_config(e);
         if config.paused {
@@ -143,6 +154,9 @@ impl MarketplaceContract {
         let listing = Self::load_primary(e, listing_id);
         if e.ledger().timestamp() >= listing.expires_at {
             panic_with_error!(e, MarketplaceError::ListingExpired);
+        }
+        if listing.price > max_price {
+            panic_with_error!(e, MarketplaceError::PriceAboveMax);
         }
         // Remove before any external call (single-use listing, no reentrancy window).
         storage::remove_primary_listing(e, listing_id);
@@ -192,13 +206,34 @@ impl MarketplaceContract {
         PrimaryListingExpired { listing_id }.publish(e);
     }
 
-    pub fn list(e: &Env, token_id: u32, seller: Address, price: i128, expires_at: u64) {
+    /// List `token_id` (escrowed here until bought, cancelled or expired).
+    ///
+    /// The fee and payment asset in force are captured in the listing.
+    /// `max_fee_bps` and `payment_asset` are the terms the seller signed for:
+    /// the call fails (`FeeAboveMax` / `PaymentAssetMismatch`) if the current
+    /// config is worse, so a fee or asset change landing between signing and
+    /// inclusion cannot apply to this listing.
+    pub fn list(
+        e: &Env,
+        token_id: u32,
+        seller: Address,
+        price: i128,
+        expires_at: u64,
+        max_fee_bps: u32,
+        payment_asset: Address,
+    ) {
         common::ttl::extend_instance(e);
         // Setup-window listings could pin a custom asset/fee past launch.
         common::lifecycle::require_live(e);
         let config = Self::get_config(e);
         Self::check_open_listing(e, price, expires_at);
         seller.require_auth();
+        if config.default_secondary_fee_bps > max_fee_bps {
+            panic_with_error!(e, MarketplaceError::FeeAboveMax);
+        }
+        if config.payment_asset != payment_asset {
+            panic_with_error!(e, MarketplaceError::PaymentAssetMismatch);
+        }
         if storage::get_listing(e, token_id).is_some() {
             panic_with_error!(e, MarketplaceError::ListingExists);
         }
@@ -240,7 +275,9 @@ impl MarketplaceContract {
         events::emit_secondary_created(e, token_id, &listing);
     }
 
-    pub fn buy(e: &Env, token_id: u32, buyer: Address) {
+    /// Buy a secondary listing. Rejects (`PriceAboveMax`) if the listing price
+    /// exceeds `max_price`.
+    pub fn buy(e: &Env, token_id: u32, buyer: Address, max_price: i128) {
         common::ttl::extend_instance(e);
         common::lifecycle::require_live(e);
         let config = Self::get_config(e);
@@ -253,10 +290,13 @@ impl MarketplaceContract {
         if e.ledger().timestamp() >= listing.expires_at {
             panic_with_error!(e, MarketplaceError::ListingExpired);
         }
+        if listing.price > max_price {
+            panic_with_error!(e, MarketplaceError::PriceAboveMax);
+        }
         let fee = listing
             .price
             .checked_mul(listing.fee_bps as i128)
-            .and_then(|value| value.checked_div(10_000))
+            .and_then(|value| value.checked_div(common::BPS_DENOMINATOR as i128))
             .unwrap_or_else(|| panic_with_error!(e, MarketplaceError::ArithmeticOverflow));
         let seller_amount = listing
             .price
@@ -334,42 +374,69 @@ impl MarketplaceContract {
 
     pub fn pause(e: &Env) {
         common::ttl::extend_instance(e);
-        let mut config = Self::require_admin(e);
+        let (mut config, admin) = Self::require_admin(e);
         config.paused = true;
         storage::set_config(e, &config);
-        MarketplacePaused {}.publish(e);
+        MarketplacePaused { changed_by: admin }.publish(e);
     }
 
     pub fn unpause(e: &Env) {
         common::ttl::extend_instance(e);
-        let mut config = Self::require_admin(e);
+        let (mut config, admin) = Self::require_admin(e);
         config.paused = false;
         storage::set_config(e, &config);
-        MarketplaceUnpaused {}.publish(e);
+        MarketplaceUnpaused { changed_by: admin }.publish(e);
     }
 
+    /// Fee applied to new listings (existing listings keep theirs). At most
+    /// `common::MAX_FEE_BPS` (25%).
     pub fn set_secondary_fee_bps(e: &Env, fee_bps: u32) {
         common::ttl::extend_instance(e);
-        let mut config = Self::require_admin(e);
+        let (mut config, admin) = Self::require_admin(e);
         if fee_bps > MAX_FEE_BPS {
             panic_with_error!(e, MarketplaceError::InvalidFee);
         }
         config.default_secondary_fee_bps = fee_bps;
         storage::set_config(e, &config);
-        SecondaryFeeUpdated { fee_bps }.publish(e);
+        SecondaryFeeUpdated {
+            fee_bps,
+            changed_by: admin,
+        }
+        .publish(e);
     }
 
+    /// Asset used by new listings (existing listings keep theirs).
     pub fn set_payment_asset(e: &Env, payment_asset: Address) {
         common::ttl::extend_instance(e);
-        let mut config = Self::require_admin(e);
+        let (mut config, admin) = Self::require_admin(e);
         config.payment_asset = payment_asset.clone();
         storage::set_config(e, &config);
-        PaymentAssetUpdated { payment_asset }.publish(e);
+        PaymentAssetUpdated {
+            payment_asset,
+            changed_by: admin,
+        }
+        .publish(e);
     }
 
     pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
-        let config = Self::require_admin(e);
+        let (config, _) = Self::require_admin(e);
         common::upgrade::apply(e, &config.manager, &from_hash, &to_hash);
+    }
+
+    /// Advance the storage layout after an upgrade (admin only).
+    pub fn migrate(e: &Env) {
+        Self::require_admin(e);
+        common::upgrade::migrate(e, STORAGE_VERSION);
+    }
+
+    /// Storage-layout version of the data held by this contract.
+    pub fn storage_version(e: &Env) -> u32 {
+        common::upgrade::storage_version(e)
+    }
+
+    /// Module admin: the launch admin during setup, the Treasury once live.
+    pub fn admin(e: &Env) -> Address {
+        common::admin::admin(e)
     }
 
     pub fn version(e: &Env) -> String {
@@ -381,19 +448,15 @@ impl MarketplaceContract {
     }
 
     pub fn sync_version(e: &Env) {
-        let config = Self::require_admin(e);
+        let (config, _) = Self::require_admin(e);
         common::upgrade::sync_version(e, &config.manager);
     }
 
-    /// Admin gate: `launch_admin` while in setup, the treasury once live.
-    fn require_admin(e: &Env) -> MarketplaceConfig {
-        let config = Self::get_config(e);
-        if common::lifecycle::is_live(e) {
-            config.treasury.require_auth();
-        } else {
-            config.launch_admin.require_auth();
-        }
-        config
+    /// Require the admin's auth (launch admin in setup, Treasury once live);
+    /// returns the config and the admin.
+    fn require_admin(e: &Env) -> (MarketplaceConfig, Address) {
+        let admin = common::admin::require_admin(e);
+        (Self::get_config(e), admin)
     }
 
     fn check_open_listing(e: &Env, price: i128, expires_at: u64) {

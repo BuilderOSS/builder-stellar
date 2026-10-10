@@ -13,29 +13,23 @@
 //!
 //! - Deploy complete DAOs with all 6 modules atomically
 //! - `create_dao` requires auth from both the deployer and the launch admin
-//! - Deterministic address prediction before deployment
-//! - Founder allocation configuration (fixed NFT counts)
-//! - Governance-owned from initialization
+//! - Deterministic address prediction before deployment (`predict_addresses`)
+//! - The launch admin configures the modules during setup (founder mints,
+//!   artwork, parameters), then `launch_dao` hands every module to the Treasury
 //!
-//! ## 3. DAO Registry
+//! ## 3. Slug Registry
 //!
-//! - Enumerate all deployed DAOs
-//! - Query DAO details by token address
-//! - Paginated DAO listing
-//!
-//! ## Architecture
-//!
-//! The Manager contract combines three responsibilities into a single contract for:
-//! - Simplified deployment and maintenance
-//! - Atomic DAO creation with guaranteed consistency
-//! - Single source of truth for all DAOs and implementations
+//! - A DAO requests a slug at `create_dao`; it becomes the DAO's unique,
+//!   permanent id when `launch_dao` claims it
+//! - `get_dao_by_slug` / `get_slug` resolve launched DAOs; DAO enumeration and
+//!   pagination are served by the indexer, not the contract
 //!
 //! ## Security
 //!
-//! - Admin-controlled implementation registry
-//! - Factory pause mechanism for emergencies
-//! - Nonce-based replay protection
-//! - Comprehensive input validation
+//! - Admin-controlled implementation registry and two-step admin handover
+//! - Factory pause blocks both `create_dao` and `launch_dao`
+//! - Per-deployer deterministic salts (creator + nonce + module)
+//! - Input validation against the shared bounds in `common`
 
 #![no_std]
 

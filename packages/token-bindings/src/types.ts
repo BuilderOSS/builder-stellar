@@ -1,36 +1,36 @@
 import {Address} from '@stellar/stellar-sdk';
 
     /**
- * Error Enum: TokenError
+ * Token errors (block `common::error::codes::TOKEN`).
  */
 export const TokenError = {
   /**
-   * Owner not set in contract storage
-   */
-  1102 : { message: "OwnerNotSet" },
-  /**
    * Minter is not authorized to mint tokens
    */
-  1103 : { message: "MintAuthorityNotAllowed" },
+  7201 : { message: "MintAuthorityNotAllowed" },
   /**
    * Invalid input parameters (mismatched lengths, zero amounts, etc.)
    */
-  1104 : { message: "InvalidInput" },
+  7202 : { message: "InvalidInput" },
   /**
    * `launch` treasury differs from the treasury wired at construction
    */
-  1105 : { message: "TreasuryMismatch" },
+  7203 : { message: "TreasuryMismatch" },
   /**
    * `launch` minters list does not contain the treasury
    */
-  1106 : { message: "TreasuryNotMinter" }
+  7204 : { message: "TreasuryNotMinter" },
+  /**
+   * `batch_mint` exceeds the event budget (`common::batch_mint_fits`)
+   */
+  7205 : { message: "BatchTooLarge" }
 }
 
 /**
  * Emitted once when the Manager launches the token (Setup -> Live).
  */
-export interface LaunchedEvent {
-  name: "Launched";
+export interface TokenLaunchedEvent {
+  name: "TokenLaunched";
   data: {
     treasury: string;
     minters?: Array<string>;
@@ -38,12 +38,9 @@ export interface LaunchedEvent {
 }
 
 /**
- * Custom event to track minter information during single token mints.
- *
- * OpenZeppelin's standard Mint event doesn't include the minter address, only
- * the recipient. This custom event supplements it by tracking who performed the mint,
- * which is useful for auditing and analytics (e.g., distinguishing owner mints
- * from auction contract mints).
+ * Emitted for every token minted by `mint`, next to OpenZeppelin's `Mint`, to
+ * record who performed the mint (admin, auction, marketplace, minter).
+ * `batch_mint` emits `MintBatchWithMinter` instead.
  */
 export interface MintWithMinterEvent {
   name: "MintWithMinter";
@@ -55,15 +52,12 @@ export interface MintWithMinterEvent {
 }
 
 /**
- * Emitted when the token contract is initialized.
- *
- * Contains the initial owner and token metadata. This event is emitted once
- * during contract deployment via the `__constructor` function.
+ * Emitted once by the constructor.
  */
 export interface TokenInitializedEvent {
   name: "TokenInitialized";
   data: {
-    owner: string;
+    admin: string;
     uri?: string;
     name?: string;
     symbol?: string;
@@ -72,10 +66,22 @@ export interface TokenInitializedEvent {
 }
 
 /**
+ * Emitted once per `batch_mint` call for the contiguous range
+ * `[first_token_id, first_token_id + count)`, instead of one
+ * `MintWithMinter` per token (keeps large batches under the per-transaction
+ * event size limit). Recipients come from OpenZeppelin's per-token `Mint`.
+ */
+export interface MintBatchWithMinterEvent {
+  name: "MintBatchWithMinter";
+  data: {
+    minter: string;
+    first_token_id?: number;
+    count?: number;
+  };
+}
+
+/**
  * Emitted when minting authority is granted or revoked for an address.
- *
- * Tracks changes to mint permissions, including who made the change (always the owner).
- * The owner always has implicit minting authority regardless of this flag.
  */
 export interface MintAuthorityChangedEvent {
   name: "MintAuthorityChanged";
@@ -88,54 +94,86 @@ export interface MintAuthorityChangedEvent {
 }
 
 /**
- * Errors shared by all module contracts. Codes live in the 9000 range so
- * they never collide with module (11xx-13xx, 3, 30) or manager (10xx) codes.
+ * Emitted by [`handoff`]. The emitting contract address is the event's contract id.
+ *
+ * Same shape as the Manager's own `AdminChanged`, so indexers decode both
+ * with one schema.
+ */
+export interface AdminChangedEvent {
+  name: "AdminChanged";
+  data: {
+    old_admin: string;
+    new_admin: string;
+  };
+}
+
+/**
+ * Errors shared by all module contracts (block `codes::COMMON`).
  */
 export const CommonError = {
   /**
    * Operation requires the module to be live (launched).
    */
-  9001 : { message: "NotLive" },
+  7001 : { message: "NotLive" },
   /**
    * Operation is only valid during setup; the module is already live.
    */
-  9002 : { message: "AlreadyLive" },
+  7002 : { message: "AlreadyLive" },
   /**
    * Manager address missing from storage.
    */
-  9003 : { message: "ManagerNotSet" },
+  7003 : { message: "ManagerNotSet" },
   /**
    * `CurrentHash` missing from storage.
    */
-  9004 : { message: "CurrentHashNotSet" },
+  7004 : { message: "CurrentHashNotSet" },
   /**
    * `from_hash` does not equal the stored `CurrentHash`.
    */
-  9005 : { message: "HashMismatch" },
+  7005 : { message: "HashMismatch" },
   /**
    * Manager did not approve this upgrade path.
    */
-  9006 : { message: "UpgradeNotApproved" },
+  7006 : { message: "UpgradeNotApproved" },
   /**
    * Manager has no registry entry for the requested hash.
    */
-  9007 : { message: "ImplementationNotFound" },
+  7007 : { message: "ImplementationNotFound" },
   /**
-   * Owner missing from storage.
+   * Module admin missing from storage.
    */
-  9008 : { message: "OwnerNotSet" },
+  7008 : { message: "AdminNotSet" },
   /**
    * `CurrentVersion` missing from storage.
    */
-  9009 : { message: "VersionNotSet" },
+  7009 : { message: "VersionNotSet" },
   /**
    * Treasury address missing from storage.
    */
-  9010 : { message: "TreasuryNotSet" },
+  7010 : { message: "TreasuryNotSet" },
   /**
    * Governor address missing from storage.
    */
-  9011 : { message: "GovernorNotSet" }
+  7011 : { message: "GovernorNotSet" },
+  /**
+   * `migrate` called while the stored layout is already current.
+   */
+  7012 : { message: "NothingToMigrate" },
+  /**
+   * `StorageVersion` missing from storage.
+   */
+  7013 : { message: "StorageVersionNotSet" }
+}
+
+/**
+ * Emitted by `migrate`.
+ */
+export interface MigratedEvent {
+  name: "Migrated";
+  data: {
+    from_storage_version?: number;
+    to_storage_version?: number;
+  };
 }
 
 /**
@@ -157,57 +195,6 @@ export interface VersionSyncedEvent {
   name: "VersionSynced";
   data: {
     version?: string;
-  };
-}
-
-/**
- * Error Enum: RoleTransferError
- */
-export const RoleTransferError = {
-  2200 : { message: "NoPendingTransfer" },
-  2201 : { message: "InvalidLiveUntilLedger" },
-  2202 : { message: "InvalidPendingAccount" },
-  2203 : { message: "TransferExpired" }
-}
-
-/**
- * Error Enum: OwnableError
- */
-export const OwnableError = {
-  2100 : { message: "OwnerNotSet" },
-  2101 : { message: "TransferInProgress" },
-  2102 : { message: "OwnerAlreadySet" }
-}
-
-/**
- * Event emitted when an ownership transfer is initiated.
- */
-export interface OwnershipTransferEvent {
-  name: "OwnershipTransfer";
-  data: {
-    old_owner?: string;
-    new_owner?: string;
-    live_until_ledger?: number;
-  };
-}
-
-/**
- * Event emitted when ownership is renounced.
- */
-export interface OwnershipRenouncedEvent {
-  name: "OwnershipRenounced";
-  data: {
-    old_owner?: string;
-  };
-}
-
-/**
- * Event emitted when an ownership transfer is completed.
- */
-export interface OwnershipTransferCompletedEvent {
-  name: "OwnershipTransferCompleted";
-  data: {
-    new_owner?: string;
   };
 }
 
@@ -383,5 +370,5 @@ export const NonFungibleTokenError = {
    */
   214 : { message: "SymbolMaxLenExceeded" }
 }
-    export type ContractEvent = LaunchedEvent | MintWithMinterEvent | TokenInitializedEvent | MintAuthorityChangedEvent | UpgradedEvent | VersionSyncedEvent | OwnershipTransferEvent | OwnershipRenouncedEvent | OwnershipTransferCompletedEvent | DelegateChangedEvent | DelegateVotesChangedEvent | MintEvent | ApproveEvent | TransferEvent;
+    export type ContractEvent = TokenLaunchedEvent | MintWithMinterEvent | TokenInitializedEvent | MintBatchWithMinterEvent | MintAuthorityChangedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VersionSyncedEvent | DelegateChangedEvent | DelegateVotesChangedEvent | MintEvent | ApproveEvent | TransferEvent;
     

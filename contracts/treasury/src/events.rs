@@ -1,19 +1,13 @@
-//! Event definitions and emission helpers for the Treasury contract.
-//!
-//! This module defines events for tracking treasury operations including:
-//! - Contract initialization
-//! - Launch (Setup -> Live)
-//! - Proposal action executions
+//! Events published by the Treasury contract. Admin changes are
+//! `common::admin::AdminChanged`.
 
-use soroban_sdk::{contractevent, Address, BytesN, String, Symbol};
-
-// Standard contract events
+use soroban_sdk::{contractevent, Address, BytesN, Env, String, Symbol};
 
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TreasuryInitialized {
     #[topic]
-    pub owner: Address,
+    pub admin: Address,
     pub governor: Address,
     pub version: String,
 }
@@ -21,11 +15,13 @@ pub struct TreasuryInitialized {
 /// Emitted once when the Manager launches the treasury (Setup -> Live).
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Launched {
+pub struct TreasuryLaunched {
     #[topic]
     pub treasury: Address,
 }
 
+/// Emitted for every executed proposal action, including self calls and
+/// `authorize` actions.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Execute {
@@ -40,13 +36,9 @@ pub struct Execute {
     pub index: u32,
 }
 
-// Event helper functions
-
-use soroban_sdk::Env;
-
-pub fn emit_treasury_initialized(e: &Env, owner: &Address, governor: &Address, version: &String) {
+pub fn emit_treasury_initialized(e: &Env, admin: &Address, governor: &Address, version: &String) {
     TreasuryInitialized {
-        owner: owner.clone(),
+        admin: admin.clone(),
         governor: governor.clone(),
         version: version.clone(),
     }
@@ -54,7 +46,7 @@ pub fn emit_treasury_initialized(e: &Env, owner: &Address, governor: &Address, v
 }
 
 pub fn emit_launched(e: &Env, treasury: &Address) {
-    Launched {
+    TreasuryLaunched {
         treasury: treasury.clone(),
     }
     .publish(e);

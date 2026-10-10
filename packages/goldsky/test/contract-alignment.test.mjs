@@ -19,10 +19,12 @@ test('decoder topic names match contracts and library events exactly', () => {
 
 test('same-named events are keyed by (contract, name) and share topics', () => {
   const byContract = contractEventsByContract();
-  for (const contract of ['token', 'governor', 'treasury', 'auction', 'marketplace', 'metadata']) {
-    assert.ok(byContract[`${contract}:Launched`], `${contract}:Launched missing`);
+  // AdminChanged: the Manager's own handover and every module's launch handoff.
+  for (const contract of ['manager', 'token', 'governor', 'treasury', 'auction', 'marketplace', 'metadata']) {
+    assert.ok(byContract[`${contract}:AdminChanged`], `${contract}:AdminChanged missing`);
   }
-  assert.deepEqual(contractEvents().Launched.contracts.sort(), ['auction', 'governor', 'marketplace', 'metadata', 'token', 'treasury']);
+  assert.deepEqual(contractEvents().AdminChanged.contracts.sort(), ['auction', 'governor', 'manager', 'marketplace', 'metadata', 'token', 'treasury']);
+  assert.ok(!('Launched' in contractEvents()), 'the shared Launched name is gone');
   assert.equal(contractEventList().length, Object.keys(byContract).length);
 });
 
@@ -41,9 +43,22 @@ test('topic orders of new and changed events', () => {
   assert.deepEqual(t.AdminProposed, ['current_admin', 'proposed_admin']);
   assert.deepEqual(t.AdminChanged, ['old_admin', 'new_admin']);
   assert.deepEqual(t.PlatformMinterSet, ['minter']);
-  assert.deepEqual(t.Launched, ['treasury']);
+  for (const name of ['TokenLaunched', 'GovernorLaunched', 'TreasuryLaunched', 'AuctionLaunched', 'MarketplaceLaunched', 'MetadataLaunched']) {
+    assert.deepEqual(t[name], ['treasury'], name);
+  }
   assert.deepEqual(t.Upgraded, ['from_hash', 'to_hash']);
   assert.deepEqual(t.VersionSynced, []);
+  assert.deepEqual(t.Migrated, []);
+  assert.deepEqual(t.ProposalScheduled, ['proposal_id']);
+  assert.deepEqual(t.MintBatchWithMinter, ['minter']);
+  assert.deepEqual(t.SeedsGenerated, ['first_token_id']);
+  assert.deepEqual(t.SlugClaimed, ['token_address', 'slug']);
+  assert.deepEqual(t.PendingSlugUpdated, ['token_address']);
+  assert.deepEqual(t.LatestImplementationSet, ['name', 'wasm_hash']);
+  assert.deepEqual(t.QuorumBpsChanged, ['changed_by']);
+  assert.deepEqual(t.MarketplacePaused, ['changed_by']);
+  assert.deepEqual(t.MarketplaceInitialized, ['token', 'admin']);
+  assert.ok(!('OwnershipTransfer' in t));
   assert.deepEqual(t.AdminProposalCancelled, ['current_admin', 'cancelled_admin']);
   assert.ok(!('MarketplaceUpgraded' in t));
   assert.deepEqual(t.MintAuthorityChanged, ['authority']);
@@ -51,16 +66,22 @@ test('topic orders of new and changed events', () => {
 
 test('data fields of new and changed events match events.rs', () => {
   const e = contractEventsByContract();
-  assert.deepEqual(e['token:Launched'].data, ['minters']);
-  assert.deepEqual(e['auction:Launched'].data, ['started']);
-  assert.deepEqual(e['marketplace:Launched'].data, ['opened']);
+  assert.deepEqual(e['token:TokenLaunched'].data, ['minters']);
+  assert.deepEqual(e['auction:AuctionLaunched'].data, ['started']);
+  assert.deepEqual(e['marketplace:MarketplaceLaunched'].data, ['opened']);
+  assert.deepEqual(e['governor:ProposalScheduled'].data, ['vote_start', 'vote_end', 'snapshot_ledger', 'quorum_votes']);
+  assert.deepEqual(e['manager:PendingSlugUpdated'].data, ['slug']);
+  assert.deepEqual(e['manager:SlugClaimed'].data, []);
+  assert.deepEqual(e['manager:ImplementationRegistered'].data, ['name', 'version', 'published_ledger']);
+  assert.deepEqual(e['marketplace:SecondaryFeeUpdated'].data, ['fee_bps']);
   assert.deepEqual(e['treasury:Execute'].data, ['function', 'index']);
   assert.deepEqual(e['manager:DaoLaunched'].data, ['launched_ledger', 'modules', 'launch_auction', 'launch_marketplace', 'enable_minter']);
   for (const role of ['token', 'governor', 'treasury', 'auction', 'marketplace', 'metadata']) {
     assert.deepEqual(e[`${role}:Upgraded`].data, ['version'], `${role}:Upgraded`);
     assert.deepEqual(e[`${role}:VersionSynced`].data, ['version'], `${role}:VersionSynced`);
+    assert.deepEqual(e[`${role}:Migrated`].data, ['from_storage_version', 'to_storage_version'], `${role}:Migrated`);
   }
-  assert.deepEqual(e['manager:DaoCreated'].data, ['created_ledger', 'modules', 'wasm_hashes']);
+  assert.deepEqual(e['manager:DaoCreated'].data, ['created_ledger', 'modules', 'wasm_hashes', 'slug']);
   assert.deepEqual(e['manager:AdminProposalCancelled'].data, []);
   assert.deepEqual(e['metadata:PropertiesReset'].data, ['old_num_properties']);
   assert.deepEqual(e['auction:RefundDeferred'].data, ['amount']);

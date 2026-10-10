@@ -4,21 +4,47 @@ import { batchMintGovernanceTokenHandler } from './actions/batch-mint-governance
 import { mintGovernanceTokenHandler } from './actions/mint-governance-token';
 import { transferSacTokenHandler } from './actions/transfer-sac-token';
 import {
+  cancelAuctionHandler,
   cancelPrimaryListingHandler,
   createPrimaryListingHandler,
   pauseAuctionHandler,
+  pauseMarketplaceHandler,
   setAuctionDurationHandler,
+  setAuctionMinBidIncrementHandler,
   setAuctionPaymentTokenHandler,
   setAuctionReservePriceHandler,
   setAuctionTimeBufferHandler,
+  setMarketplacePaymentTokenHandler,
+  setMarketplaceSecondaryFeeHandler,
   setMintAuthorityHandler,
   setProposalThresholdHandler,
+  setQueueDelayHandler,
   setQuorumBpsHandler,
   setVotingDelayHandler,
   setVotingPeriodHandler,
-  unpauseAuctionHandler
+  unpauseAuctionHandler,
+  unpauseMarketplaceHandler
 } from './admin-actions';
+import {
+  addArtworkPropertiesHandler,
+  type ArtworkPropertiesDraft,
+  artworkSettingHandlers
+} from './artwork-admin-actions';
+import { minterAllocationHandlers } from './minter-actions';
+import { moduleUpgradeHandler } from './module-upgrade-actions';
+import { reviewFixHandlers } from './review-fix-actions';
 import type { ActionHandler, ProposalActionType } from './types';
+
+// The shared artwork helper can build destructive resets too. Only append is
+// registered, with an exact literal type so resets never enter composer options.
+const registeredArtworkPropertiesHandler: ActionHandler<ArtworkPropertiesDraft> = {
+  ...addArtworkPropertiesHandler,
+  type: 'add-artwork-properties',
+  serialize: (data) => ({ ...addArtworkPropertiesHandler.serialize(data), type: 'add-artwork-properties' })
+};
+
+// Every module, Metadata included, exposes admin(); upgrades share one handler.
+const registeredModuleUpgradeHandler: ActionHandler = moduleUpgradeHandler;
 
 /**
  * Explicit registry - all actions registered in one place
@@ -33,14 +59,26 @@ const REGISTERED_HANDLERS: ActionHandler[] = [
   setVotingPeriodHandler,
   setProposalThresholdHandler,
   setQuorumBpsHandler,
+  setQueueDelayHandler,
   pauseAuctionHandler,
   unpauseAuctionHandler,
   setAuctionReservePriceHandler,
   setAuctionPaymentTokenHandler,
   setAuctionDurationHandler,
   setAuctionTimeBufferHandler,
+  setAuctionMinBidIncrementHandler,
+  cancelAuctionHandler,
+  setMarketplacePaymentTokenHandler,
+  setMarketplaceSecondaryFeeHandler,
+  pauseMarketplaceHandler,
+  unpauseMarketplaceHandler,
   createPrimaryListingHandler,
-  cancelPrimaryListingHandler
+  cancelPrimaryListingHandler,
+  registeredArtworkPropertiesHandler,
+  ...artworkSettingHandlers,
+  ...minterAllocationHandlers,
+  registeredModuleUpgradeHandler,
+  ...reviewFixHandlers
 ];
 
 const ACTION_REGISTRY = new Map<ProposalActionType, ActionHandler>(

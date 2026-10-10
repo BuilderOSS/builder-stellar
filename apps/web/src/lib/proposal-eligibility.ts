@@ -44,7 +44,7 @@ export function useProposalEligibility(config: DaoNetworkConfig, address: string
     isLoading: settingsLoading
   } = useGovernorSettings(
     enabled ? config : { ...config, governorContractId: '' },
-    enabled ? address || config.adminAddress : ''
+    enabled ? address || undefined : undefined
   );
 
   const loading = enabled && Boolean(address) && (memberLoading || votingPowerLoading || settingsLoading);

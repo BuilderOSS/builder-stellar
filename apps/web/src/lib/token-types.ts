@@ -10,6 +10,7 @@ export type TokenInventoryItem = {
 export type TokenInventoryResponse = {
   items: TokenInventoryItem[];
   totalSupply: string;
+  votingSupply?: string | null;
   total: number;
   limit: number;
   offset: number;

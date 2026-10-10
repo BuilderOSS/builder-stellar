@@ -1,91 +1,78 @@
 import {Address} from '@stellar/stellar-sdk';
 
     /**
- * Error Enum: AuctionError
+ * Auction errors (block `common::error::codes::AUCTION`).
  */
 export const AuctionError = {
   /**
-   * Bid placed for incorrect token ID
+   * Bid placed for a token id other than the one being auctioned
    */
-  1201 : { message: "InvalidTokenId" },
+  7401 : { message: "InvalidTokenId" },
   /**
-   * Bid placed after auction ended
+   * Bid placed at or after the auction end time
    */
-  1202 : { message: "AuctionOver" },
+  7402 : { message: "AuctionOver" },
   /**
-   * Auction hasn't started yet
+   * The auction has no start time
    */
-  1203 : { message: "AuctionNotStarted" },
+  7403 : { message: "AuctionNotStarted" },
   /**
-   * Attempting to settle an active auction
+   * Settlement attempted before the auction end time
    */
-  1204 : { message: "AuctionActive" },
+  7404 : { message: "AuctionActive" },
   /**
-   * Auction already settled
+   * The auction is already settled (or cancelled)
    */
-  1205 : { message: "AuctionSettled" },
+  7405 : { message: "AuctionSettled" },
   /**
-   * First bid doesn't meet reserve price
+   * First bid below the reserve price
    */
-  1206 : { message: "ReservePriceNotMet" },
+  7406 : { message: "ReservePriceNotMet" },
   /**
-   * Bid doesn't meet minimum increment
+   * Bid below the previous bid plus the minimum increment
    */
-  1207 : { message: "MinBidNotMet" },
+  7407 : { message: "MinBidNotMet" },
   /**
-   * Invalid configuration parameters (e.g., duration outside 5 minutes ..= 30 days, zero increment)
+   * Configuration out of bounds (duration outside 5 minutes ..= 30 days,
+   * increment outside 1..=100%, or payment token locked)
    */
-  1208 : { message: "InvalidConfig" },
+  7408 : { message: "InvalidConfig" },
   /**
-   * Auction not launched yet
+   * No auction has been created yet
    */
-  1212 : { message: "NotLaunched" },
+  7409 : { message: "NotLaunched" },
   /**
-   * Unauthorized access
+   * Caller is not the admin
    */
-  1214 : { message: "Unauthorized" },
+  7410 : { message: "Unauthorized" },
   /**
-   * Arithmetic overflow in calculations
+   * Arithmetic overflow in bid or time calculations
    */
-  1215 : { message: "ArithmeticOverflow" },
+  7411 : { message: "ArithmeticOverflow" },
   /**
-   * Invalid bid amount (too low or unreasonable)
+   * Bid amount not positive, or reserve price below `common::MIN_RESERVE_PRICE`
    */
-  1216 : { message: "InvalidBid" },
+  7412 : { message: "InvalidBid" },
   /**
-   * Contract not initialized properly
+   * Contract configuration missing
    */
-  1219 : { message: "NotInitialized" },
+  7413 : { message: "NotInitialized" },
   /**
    * `launch` treasury differs from the treasury wired at construction
    */
-  1222 : { message: "TreasuryMismatch" },
+  7414 : { message: "TreasuryMismatch" },
   /**
    * `launch` expected payment token differs from the configured one
    */
-  1223 : { message: "PaymentTokenMismatch" },
+  7415 : { message: "PaymentTokenMismatch" },
   /**
    * `withdraw_refund` called with no pending refund balance
    */
-  1224 : { message: "NoPendingRefund" },
+  7416 : { message: "NoPendingRefund" },
   /**
-   * `set_time_buffer` value outside 1..=86400 seconds
+   * `time_buffer` outside 1..=86400 seconds
    */
-  1225 : { message: "InvalidTimeBuffer" }
-}
-
-/**
- * Emitted once when the Manager launches the auction (Setup -> Live).
- */
-export interface LaunchedEvent {
-  name: "Launched";
-  data: {
-    treasury: string;
-    /**
-     * Whether the auction was unpaused and the first auction created.
-     */
-    started?: boolean;
-  };
+  7417 : { message: "InvalidTimeBuffer" }
 }
 
 /**
@@ -154,6 +141,20 @@ export interface RefundDeferredEvent {
 }
 
 /**
+ * Emitted once when the Manager launches the auction (Setup -> Live).
+ */
+export interface AuctionLaunchedEvent {
+  name: "AuctionLaunched";
+  data: {
+    treasury: string;
+    /**
+     * Whether the auction was unpaused and the first auction created.
+     */
+    started?: boolean;
+  };
+}
+
+/**
  * Event: DurationUpdated
  */
 export interface DurationUpdatedEvent {
@@ -204,7 +205,7 @@ export interface TimeBufferUpdatedEvent {
 export interface AuctionInitializedEvent {
   name: "AuctionInitialized";
   data: {
-    owner: string;
+    admin: string;
     token_contract?: string;
     treasury?: string;
     duration?: bigint;
@@ -297,8 +298,10 @@ export interface AuctionState {
   /**
    * The token ID being auctioned.
    *
-   * Starts at 1 and increments with each auction. The token is minted to the
-   * winner upon settlement.
+   * The token is minted to the auction contract when the auction is created
+   * and transferred to the winner (or the Treasury, if nobody bid) on
+   * settlement. Ids follow the token's sequence, so they need not be
+   * consecutive across auctions.
    */
   token_id: bigint;
 }
@@ -306,7 +309,7 @@ export interface AuctionState {
 /**
  * Auction configuration parameters.
  *
- * These settings control the behavior of all auctions. The owner can modify
+ * These settings control the behavior of all auctions. The admin can modify
  * them when the contract is paused, but changes only apply to future auctions,
  * not the currently active one.
  */
@@ -359,54 +362,86 @@ export interface AuctionConfig {
 }
 
 /**
- * Errors shared by all module contracts. Codes live in the 9000 range so
- * they never collide with module (11xx-13xx, 3, 30) or manager (10xx) codes.
+ * Emitted by [`handoff`]. The emitting contract address is the event's contract id.
+ *
+ * Same shape as the Manager's own `AdminChanged`, so indexers decode both
+ * with one schema.
+ */
+export interface AdminChangedEvent {
+  name: "AdminChanged";
+  data: {
+    old_admin: string;
+    new_admin: string;
+  };
+}
+
+/**
+ * Errors shared by all module contracts (block `codes::COMMON`).
  */
 export const CommonError = {
   /**
    * Operation requires the module to be live (launched).
    */
-  9001 : { message: "NotLive" },
+  7001 : { message: "NotLive" },
   /**
    * Operation is only valid during setup; the module is already live.
    */
-  9002 : { message: "AlreadyLive" },
+  7002 : { message: "AlreadyLive" },
   /**
    * Manager address missing from storage.
    */
-  9003 : { message: "ManagerNotSet" },
+  7003 : { message: "ManagerNotSet" },
   /**
    * `CurrentHash` missing from storage.
    */
-  9004 : { message: "CurrentHashNotSet" },
+  7004 : { message: "CurrentHashNotSet" },
   /**
    * `from_hash` does not equal the stored `CurrentHash`.
    */
-  9005 : { message: "HashMismatch" },
+  7005 : { message: "HashMismatch" },
   /**
    * Manager did not approve this upgrade path.
    */
-  9006 : { message: "UpgradeNotApproved" },
+  7006 : { message: "UpgradeNotApproved" },
   /**
    * Manager has no registry entry for the requested hash.
    */
-  9007 : { message: "ImplementationNotFound" },
+  7007 : { message: "ImplementationNotFound" },
   /**
-   * Owner missing from storage.
+   * Module admin missing from storage.
    */
-  9008 : { message: "OwnerNotSet" },
+  7008 : { message: "AdminNotSet" },
   /**
    * `CurrentVersion` missing from storage.
    */
-  9009 : { message: "VersionNotSet" },
+  7009 : { message: "VersionNotSet" },
   /**
    * Treasury address missing from storage.
    */
-  9010 : { message: "TreasuryNotSet" },
+  7010 : { message: "TreasuryNotSet" },
   /**
    * Governor address missing from storage.
    */
-  9011 : { message: "GovernorNotSet" }
+  7011 : { message: "GovernorNotSet" },
+  /**
+   * `migrate` called while the stored layout is already current.
+   */
+  7012 : { message: "NothingToMigrate" },
+  /**
+   * `StorageVersion` missing from storage.
+   */
+  7013 : { message: "StorageVersionNotSet" }
+}
+
+/**
+ * Emitted by `migrate`.
+ */
+export interface MigratedEvent {
+  name: "Migrated";
+  data: {
+    from_storage_version?: number;
+    to_storage_version?: number;
+  };
 }
 
 /**
@@ -428,57 +463,6 @@ export interface VersionSyncedEvent {
   name: "VersionSynced";
   data: {
     version?: string;
-  };
-}
-
-/**
- * Error Enum: RoleTransferError
- */
-export const RoleTransferError = {
-  2200 : { message: "NoPendingTransfer" },
-  2201 : { message: "InvalidLiveUntilLedger" },
-  2202 : { message: "InvalidPendingAccount" },
-  2203 : { message: "TransferExpired" }
-}
-
-/**
- * Error Enum: OwnableError
- */
-export const OwnableError = {
-  2100 : { message: "OwnerNotSet" },
-  2101 : { message: "TransferInProgress" },
-  2102 : { message: "OwnerAlreadySet" }
-}
-
-/**
- * Event emitted when an ownership transfer is initiated.
- */
-export interface OwnershipTransferEvent {
-  name: "OwnershipTransfer";
-  data: {
-    old_owner?: string;
-    new_owner?: string;
-    live_until_ledger?: number;
-  };
-}
-
-/**
- * Event emitted when ownership is renounced.
- */
-export interface OwnershipRenouncedEvent {
-  name: "OwnershipRenounced";
-  data: {
-    old_owner?: string;
-  };
-}
-
-/**
- * Event emitted when an ownership transfer is completed.
- */
-export interface OwnershipTransferCompletedEvent {
-  name: "OwnershipTransferCompleted";
-  data: {
-    new_owner?: string;
   };
 }
 
@@ -515,5 +499,5 @@ export const PausableError = {
    */
   1001 : { message: "ExpectedPause" }
 }
-    export type ContractEvent = LaunchedEvent | BidPlacedEvent | BidRefundedEvent | AuctionCreatedEvent | AuctionSettledEvent | RefundDeferredEvent | DurationUpdatedEvent | RefundWithdrawnEvent | AuctionCancelledEvent | TimeBufferUpdatedEvent | AuctionInitializedEvent | PaymentTokenUpdatedEvent | ReservePriceUpdatedEvent | MinBidIncrementUpdatedEvent | UpgradedEvent | VersionSyncedEvent | OwnershipTransferEvent | OwnershipRenouncedEvent | OwnershipTransferCompletedEvent | PausedEvent | UnpausedEvent;
+    export type ContractEvent = BidPlacedEvent | BidRefundedEvent | AuctionCreatedEvent | AuctionSettledEvent | RefundDeferredEvent | AuctionLaunchedEvent | DurationUpdatedEvent | RefundWithdrawnEvent | AuctionCancelledEvent | TimeBufferUpdatedEvent | AuctionInitializedEvent | PaymentTokenUpdatedEvent | ReservePriceUpdatedEvent | MinBidIncrementUpdatedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VersionSyncedEvent | PausedEvent | UnpausedEvent;
     

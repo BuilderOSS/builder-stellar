@@ -3,6 +3,7 @@
   "deployer": "GDQB6R74Q5K4MOCKPB3NLB7SX4BQR7DTXA3BGNKIVMZEXBEKCK4NQPFU",
   "nonce": 0,
   "launchAdmin": "GDQB6R74Q5K4MOCKPB3NLB7SX4BQR7DTXA3BGNKIVMZEXBEKCK4NQPFU",
+  "slug": "e2e-dao",
   "token": {
     "name": "E2E Rehearsal DAO",
     "symbol": "E2E",

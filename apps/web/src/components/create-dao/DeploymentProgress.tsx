@@ -1,265 +1,79 @@
-// components/create-dao/DeploymentProgress.tsx
-
 'use client';
-
-import { Check, ExternalLink, LoaderCircle, X } from 'lucide-react';
-import { Stack } from 'styled-system/jsx';
-
-import { Button, Callout, Card, Heading, Text } from '@/components/ui';
+import { Callout } from '@/components/ui';
+import type { CreationNetwork } from '@/lib/create-dao-schema';
 import { getExplorerTxUrl } from '@/lib/explorer-links';
-import type { DeploymentState, DeploymentStep } from '@/lib/use-dao-deployment';
+import type { DeploymentState } from '@/lib/use-dao-deployment';
+import type { DeploymentRecord } from '@/stores/create-dao-store';
 
-interface DeploymentProgressProps {
+import styles from './workspace.module.css';
+
+export function DeploymentProgress({
+  state,
+  record,
+  network
+}: {
   state: DeploymentState;
-  network: string;
-  onCancel?: () => void;
-}
-
-type StepStatus = 'pending' | 'active' | 'completed' | 'error';
-
-const DEPLOYMENT_STEPS: Array<{ key: DeploymentStep; label: string; description: string }> = [
-  {
-    key: 'predicting',
-    label: 'Predict Addresses',
-    description: 'Calculating contract addresses'
-  },
-  {
-    key: 'creating',
-    label: 'Create DAO',
-    description: 'Deploying contracts to blockchain'
-  }
-];
-
-function getStepStatus(
-  step: DeploymentStep,
-  currentStep: DeploymentStep,
-  completedSteps: Set<DeploymentStep>,
-  error: Error | null
-): StepStatus {
-  if (error && step === currentStep) return 'error';
-  if (completedSteps.has(step)) return 'completed';
-  if (step === currentStep) return 'active';
-  return 'pending';
-}
-
-export function DeploymentProgress({ state, network, onCancel }: DeploymentProgressProps) {
-  const { currentStep, completedSteps, transactions, progress, error, predictedAddresses, createdAddresses } = state;
-
-  const progressPercent = (progress.currentStepIndex / progress.totalSteps) * 100;
-  const isComplete = currentStep === 'complete';
-  const isFailed = currentStep === 'error';
-  const isDeploying = !isComplete && !isFailed;
-
+  record: DeploymentRecord;
+  network: CreationNetwork;
+}) {
+  const confirmed = record.status === 'confirmed';
+  const labels = {
+    idle: 'Saved deployment',
+    predicting: 'Predicting addresses…',
+    creating: 'Review the creation transaction in your wallet',
+    confirming: 'Checking on-chain confirmation…',
+    complete: 'Created in Setup',
+    error: 'Deployment needs attention'
+  };
   return (
-    <Card p="6">
-      <Stack gap="6">
-        {/* Header */}
+    <section className={styles.panel} aria-label="Deployment recovery">
+      <h2>{confirmed ? 'Created in Setup' : labels[state.currentStep]}</h2>
+      <p className={styles.muted} role="status">
+        {confirmed
+          ? record.confirmedBy === 'manager-state'
+            ? 'The pending DAO is verified on this Manager. The saved transaction status may be unavailable. Complete Setup before Launch.'
+            : 'Contracts are deployed. Upload the artwork, then mint founder tokens, and complete Setup before Launch.'
+          : record.hash
+            ? record.status === 'signed'
+              ? 'Signed envelope saved. RPC acceptance is not confirmed. Check its hash or explicitly rebroadcast these same bytes while valid.'
+              : ['rejected', 'expired', 'failed'].includes(record.status)
+                ? 'This attempt was rejected, expired, or failed. Explicit retry checks Manager state and reuses the frozen configuration and nonce.'
+                : record.acceptedAt
+                  ? 'RPC accepted this envelope. Check its confirmation or explicitly rebroadcast the same bytes; no new transaction will be signed.'
+                  : 'This older receipt records a transaction hash but not proven RPC acceptance. Check its transaction or Manager state before any retry.'
+            : 'The nonce and configuration are saved. Retrying uses the same addresses.'}
+      </p>
+      {state.error || record.error ? (
+        <Callout variant="error" title="Needs attention" description={state.error?.message || record.error || ''} />
+      ) : null}
+      <dl className={styles.summary}>
         <div>
-          <Heading as="h2" style={{ fontSize: '1.5rem', marginBottom: '8px' }}>
-            {isComplete ? 'DAO Created Successfully!' : isFailed ? 'Deployment Failed' : 'Deploying DAO...'}
-          </Heading>
-          <Text style={{ color: 'var(--gray-11)' }}>{progress.currentStepLabel}</Text>
+          <dt>Nonce</dt>
+          <dd className={styles.code}>{record.nonce}</dd>
         </div>
-
-        {/* Progress Bar */}
-        <div
-          style={{
-            width: '100%',
-            height: '8px',
-            background: 'var(--gray-4)',
-            borderRadius: '4px',
-            overflow: 'hidden'
-          }}
-        >
-          <div
-            style={{
-              width: `${progressPercent}%`,
-              height: '100%',
-              background: isFailed ? 'var(--error-9)' : isComplete ? 'var(--success-9)' : 'var(--accent-9)',
-              transition: 'width 0.3s ease'
-            }}
-          />
+        <div>
+          <dt>Deployer</dt>
+          <dd className={styles.code}>{record.deployer}</dd>
         </div>
-
-        {/* Step Progress */}
-        <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)' }}>
-          Step {progress.currentStepIndex} of {progress.totalSteps}
-        </Text>
-
-        {/* Error Message */}
-        {error && (
-          <Callout
-            variant="error"
-            title="Deployment Failed"
-            description={error.message || 'An unexpected error occurred during deployment'}
-          />
-        )}
-
-        {/* Steps List */}
-        <Stack gap="3">
-          {DEPLOYMENT_STEPS.map((step) => {
-            const status = getStepStatus(step.key, currentStep, completedSteps, error);
-            const txHash = getTxHashForStep(step.key, transactions);
-
-            return (
-              <Card
-                key={step.key}
-                p="4"
-                style={{
-                  background: status === 'active' ? 'var(--accent-2)' : 'var(--gray-2)',
-                  border: `1px solid ${status === 'active' ? 'var(--accent-6)' : status === 'error' ? 'var(--error-6)' : 'var(--gray-6)'}`
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  {/* Status Icon */}
-                  <div style={{ flexShrink: 0 }}>
-                    {status === 'completed' && (
-                      <div
-                        style={{
-                          width: '24px',
-                          height: '24px',
-                          borderRadius: '50%',
-                          background: 'var(--success-9)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                      >
-                        <Check size={14} color="white" />
-                      </div>
-                    )}
-                    {status === 'active' && <LoaderCircle size={24} className="is-spinning" color="var(--accent-9)" />}
-                    {status === 'error' && (
-                      <div
-                        style={{
-                          width: '24px',
-                          height: '24px',
-                          borderRadius: '50%',
-                          background: 'var(--error-9)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                      >
-                        <X size={14} color="white" />
-                      </div>
-                    )}
-                    {status === 'pending' && (
-                      <div
-                        style={{
-                          width: '24px',
-                          height: '24px',
-                          borderRadius: '50%',
-                          border: '2px solid var(--gray-6)'
-                        }}
-                      />
-                    )}
-                  </div>
-
-                  {/* Step Info */}
-                  <div style={{ flex: 1 }}>
-                    <Text style={{ fontWeight: 600, fontSize: '0.9375rem' }}>{step.label}</Text>
-                    <Text style={{ color: 'var(--gray-11)', fontSize: '0.875rem' }}>{step.description}</Text>
-                  </div>
-
-                  {/* Transaction Link */}
-                  {txHash && (
-                    <a
-                      href={getExplorerTxUrl(network as any, txHash)}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        color: 'var(--accent-11)',
-                        fontSize: '0.875rem',
-                        textDecoration: 'none'
-                      }}
-                    >
-                      View TX
-                      <ExternalLink size={14} />
-                    </a>
-                  )}
-                </div>
-              </Card>
-            );
-          })}
-        </Stack>
-
-        {/* Contract Addresses */}
-        {(predictedAddresses || createdAddresses) && (
-          <Card p="4" style={{ background: 'var(--gray-2)', border: '1px solid var(--gray-6)' }}>
-            <Stack gap="3">
-              <Text style={{ fontWeight: 600, fontSize: '0.9375rem' }}>
-                {createdAddresses ? 'DAO Contract Addresses' : 'Predicted Addresses'}
-              </Text>
-              {(createdAddresses || predictedAddresses)! && (
-                <Stack gap="2">
-                  <AddressRow label="Token" address={(createdAddresses || predictedAddresses)!.token} />
-                  <AddressRow label="Governor" address={(createdAddresses || predictedAddresses)!.governor} />
-                  <AddressRow label="Treasury" address={(createdAddresses || predictedAddresses)!.treasury} />
-                  <AddressRow label="Metadata" address={(createdAddresses || predictedAddresses)!.metadata} />
-                  <AddressRow label="Auction" address={(createdAddresses || predictedAddresses)!.auction} />
-                </Stack>
-              )}
-            </Stack>
-          </Card>
-        )}
-
-        {/* Actions */}
-        {isComplete && (
-          <Callout
-            variant="success"
-            title="DAO Created Successfully"
-            description="Your DAO has been deployed and is now operational. Redirecting to your DAO page..."
-          />
-        )}
-
-        {isFailed && onCancel && (
-          <div className="form-actions">
-            <Button variant="outline" onClick={onCancel}>
-              Close
-            </Button>
+        {record.hash ? (
+          <div>
+            <dt>Transaction</dt>
+            <dd>
+              <a className={styles.code} href={getExplorerTxUrl(network, record.hash)} target="_blank" rel="noreferrer">
+                {record.hash}
+              </a>
+            </dd>
           </div>
-        )}
-
-        {isDeploying && (
-          <Callout
-            variant="info"
-            title="Deployment in Progress"
-            description="Please keep this page open and confirm each transaction in your wallet when prompted. This process may take a few minutes."
-          />
-        )}
-      </Stack>
-    </Card>
-  );
-}
-
-function getTxHashForStep(step: DeploymentStep, transactions: DeploymentState['transactions']): string | undefined {
-  switch (step) {
-    case 'creating':
-      return transactions.create;
-    default:
-      return undefined;
-  }
-}
-
-function AddressRow({ label, address }: { label: string; address: string }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}>
-      <Text style={{ fontSize: '0.875rem', color: 'var(--gray-11)' }}>{label}</Text>
-      <Text
-        style={{
-          fontSize: '0.8125rem',
-          fontFamily: 'monospace',
-          maxWidth: '60%',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis'
-        }}
-      >
-        {address}
-      </Text>
-    </div>
+        ) : null}
+        {record.addresses
+          ? Object.entries(record.addresses).map(([name, address]) => (
+              <div key={name}>
+                <dt>{name}</dt>
+                <dd className={styles.code}>{address}</dd>
+              </div>
+            ))
+          : null}
+      </dl>
+    </section>
   );
 }

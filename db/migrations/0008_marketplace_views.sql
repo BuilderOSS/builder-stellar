@@ -14,7 +14,10 @@
 --   listing_purchased          topics token_id, buyer; data { seller, price, fee, payment_asset }  (secondary only)
 --   listing_cancelled / listing_expired  topic token_id; data { seller }                          (secondary only)
 --
---   launched                   topic treasury; data { opened } (see manager.module_launches)
+--   marketplace_launched       topic treasury; data { opened } (see manager.module_launches)
+--   fee_bps is at most 2,500 (25%). Sellers pass a maximum fee and the payment asset to
+--   `list` and buyers a maximum price to `buy`, so a listing never carries worse terms
+--   than the seller signed for.
 --
 -- A primary listing is closed by the first purchase/cancel/expiry event with
 -- its listing_id. A token has at most one open secondary listing, so a

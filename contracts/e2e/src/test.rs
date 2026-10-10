@@ -159,6 +159,8 @@ fn setup_with(
         (
             owner.clone(),
             treasury_id.clone(),
+            Address::generate(&e),
+            Address::generate(&e),
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
@@ -362,6 +364,7 @@ fn manager_registry_and_predictions_are_creator_scoped() {
     manager.set_current_implementations(
         &hashes[0], &hashes[1], &hashes[2], &hashes[3], &hashes[4], &hashes[5],
     );
+    manager.set_latest_implementation(&String::from_str(&e, "Token"), &hashes[0]);
     assert_eq!(
         manager
             .get_latest_implementation(&String::from_str(&e, "Token"))
@@ -959,13 +962,17 @@ fn setup_auction_setup_phase() -> (
     let owner = Address::generate(&e);
     let metadata_id = Address::generate(&e);
 
-    // Deploy DAO token (NFT)
+    // Deploy DAO token (NFT). The auction address is pre-generated so the token
+    // can exclude it from the voting supply, as the Manager wires it.
     let treasury_id = Address::generate(&e);
+    let auction_id = Address::generate(&e);
     let token_id = e.register(
         DaoTokenContract,
         (
             owner.clone(),
             treasury_id.clone(),
+            auction_id.clone(),
+            Address::generate(&e),
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
@@ -999,7 +1006,8 @@ fn setup_auction_setup_phase() -> (
     let payment_client = StellarAssetClient::new(&e, &payment_token);
 
     // Deploy auction contract
-    let auction_id = e.register(
+    e.register_at(
+        &auction_id,
         DaoAuctionContract,
         (
             owner.clone(),
@@ -1093,7 +1101,7 @@ fn test_auction_launch_starts_first_auction_and_hands_off_to_treasury() {
     let (e, token, treasury, auction, launch_admin, payment_token, _payment_client) =
         setup_auction_setup_phase();
 
-    assert_eq!(auction.get_owner(), Some(launch_admin.clone()));
+    assert_eq!(auction.admin(), launch_admin.clone());
     // The token launches first so the auction holds mint authority.
     token.launch(
         &treasury.address,
@@ -1101,7 +1109,7 @@ fn test_auction_launch_starts_first_auction_and_hands_off_to_treasury() {
     );
     auction.launch(&treasury.address, &true, &payment_token);
 
-    assert_eq!(auction.get_owner(), Some(treasury.address.clone()));
+    assert_eq!(auction.admin(), treasury.address.clone());
     assert!(!auction.paused());
     assert_eq!(auction.get_auction().token_id, 0);
 }
@@ -1113,7 +1121,7 @@ fn test_auction_launch_can_remain_paused() {
 
     auction.launch(&treasury.address, &false, &payment_token);
 
-    assert_eq!(auction.get_owner(), Some(treasury.address));
+    assert_eq!(auction.admin(), treasury.address);
     assert!(auction.paused());
 }
 
@@ -1122,7 +1130,7 @@ fn test_auction_cannot_unpause_before_launch() {
     let (_e, _token, _treasury, auction, launch_admin, _payment_token, _payment_client) =
         setup_auction_setup_phase();
     let err = auction.try_unpause(&launch_admin).err().unwrap().unwrap();
-    assert_eq!(err, soroban_sdk::Error::from_contract_error(9001));
+    assert_eq!(err, common::CommonError::NotLive.into());
 }
 
 #[test]
@@ -1176,18 +1184,18 @@ fn test_auction_no_bids_transfers_to_treasury() {
     // Settle auction
     auction.settle_and_create_new();
 
-    // IMPROVEMENT: Unsold token transferred to treasury for DAO governance use
+    // The unsold token goes to the treasury, which can distribute it by proposal.
     assert_eq!(token.balance(&treasury.address), 1);
     assert_eq!(token.owner_of(&(token_id as u32)), treasury.address);
 
     // New auction token minted to auction contract
     assert_eq!(token.balance(&auction.address), 1);
 
-    // Verify treasury can use the token for governance (has delegate set)
-    assert_eq!(
-        token.get_delegate(&treasury.address),
-        Some(treasury.address)
-    );
+    // Neither the treasury nor the auction holds voting power, so unsold tokens
+    // never enter the voting supply the quorum is computed from.
+    assert_eq!(token.get_delegate(&treasury.address), None);
+    assert_eq!(token.get_votes(&treasury.address), 0);
+    assert_eq!(token.get_total_supply(), 0);
 }
 
 #[test]
@@ -1251,7 +1259,7 @@ fn test_auction_multiple_consecutive_auctions() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1206)")] // ReservePriceNotMet
+#[should_panic(expected = "Error(Contract, #7406)")] // ReservePriceNotMet
 fn test_auction_bid_below_reserve() {
     let (e, _token, _treasury, auction, owner, _payment_token, payment_client) = setup_auction();
 
@@ -1267,7 +1275,7 @@ fn test_auction_bid_below_reserve() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1207)")] // MinBidNotMet
+#[should_panic(expected = "Error(Contract, #7407)")] // MinBidNotMet
 fn test_auction_bid_below_min_increment() {
     let (e, _token, _treasury, auction, owner, _payment_token, payment_client) = setup_auction();
 
@@ -1291,7 +1299,7 @@ fn test_auction_bid_below_min_increment() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1201)")] // InvalidTokenId
+#[should_panic(expected = "Error(Contract, #7401)")] // InvalidTokenId
 fn test_auction_bid_wrong_token_id() {
     let (e, _token, _treasury, auction, owner, _payment_token, payment_client) = setup_auction();
 
@@ -1308,7 +1316,7 @@ fn test_auction_bid_wrong_token_id() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1202)")] // AuctionOver
+#[should_panic(expected = "Error(Contract, #7402)")] // AuctionOver
 fn test_auction_bid_after_end() {
     let (e, _token, _treasury, auction, owner, _payment_token, payment_client) = setup_auction();
 
@@ -1328,7 +1336,7 @@ fn test_auction_bid_after_end() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1212)")] // NotLaunched
+#[should_panic(expected = "Error(Contract, #7409)")] // NotLaunched
 fn test_auction_get_auction_before_launch() {
     let (_e, _token, _treasury, auction, _owner, _payment_token, _payment_client) = setup_auction();
 
@@ -1337,7 +1345,7 @@ fn test_auction_get_auction_before_launch() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1204)")] // AuctionActive
+#[should_panic(expected = "Error(Contract, #7404)")] // AuctionActive
 fn test_auction_settle_while_active() {
     let (e, _token, _treasury, auction, owner, _payment_token, _payment_client) = setup_auction();
 
@@ -1392,12 +1400,12 @@ fn test_auction_pause_and_resume() {
 fn test_auction_ownership_remains_with_treasury_after_unpause() {
     let (_e, _token, treasury, auction, owner, _payment_token, _payment_client) = setup_auction();
 
-    assert_eq!(auction.get_owner(), Some(owner.clone()));
+    assert_eq!(auction.admin(), owner.clone());
     assert_eq!(owner, treasury.address);
 
     // Unpausing never changes ownership.
     auction.unpause(&owner);
-    assert_eq!(auction.get_owner(), Some(owner.clone()));
+    assert_eq!(auction.admin(), owner.clone());
 }
 
 #[test]
@@ -1485,7 +1493,7 @@ fn test_auction_payment_token_setter() {
 // ============================================================================
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1216)")] // InvalidBid
+#[should_panic(expected = "Error(Contract, #7412)")] // InvalidBid
 fn test_auction_rejects_non_positive_bid_before_transfer() {
     let (e, _token, _treasury, auction, owner, _payment_token, payment_client) = setup_auction();
     let bidder = Address::generate(&e);
@@ -1658,6 +1666,8 @@ fn test_governor_treasury_bidirectional_verification() {
         (
             owner.clone(),
             Address::generate(&e),
+            Address::generate(&e),
+            Address::generate(&e),
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
@@ -1771,7 +1781,7 @@ fn test_auction_inconsistent_payment_type_rejection() {
 // ============================================================================
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1500)")] // CustomGovernorError::InvalidQueueDelay
+#[should_panic(expected = "Error(Contract, #7501)")] // CustomGovernorError::InvalidQueueDelay
 fn test_governor_queue_delay_minimum_300() {
     let (_e, _token, _treasury, governor, _target, _owner) = setup();
 
@@ -1801,7 +1811,7 @@ fn test_governor_proposal_threshold_cannot_exceed_supply() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1501)")] // CustomGovernorError::InvalidProposalThreshold
+#[should_panic(expected = "Error(Contract, #7502)")] // CustomGovernorError::InvalidProposalThreshold
 fn test_governor_proposal_threshold_exceeds_supply() {
     let (e, token, _treasury, governor, _target, owner) = setup();
 
@@ -1836,11 +1846,14 @@ fn marketplace_primary_sale_uses_real_token_and_sac() {
     sac.mint(&buyer, &100);
 
     let metadata_id = Address::generate(&e);
+    let marketplace_id = Address::generate(&e);
     let token_id = e.register(
         DaoTokenContract,
         (
             treasury.clone(),
             treasury.clone(),
+            Address::generate(&e),
+            marketplace_id.clone(),
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "Marketplace DAO"),
             String::from_str(&e, "MDAO"),
@@ -1852,7 +1865,8 @@ fn marketplace_primary_sale_uses_real_token_and_sac() {
     );
     register_metadata(&e, &metadata_id, &token_id, &treasury);
 
-    let marketplace_id = e.register(
+    e.register_at(
+        &marketplace_id,
         MarketplaceContract,
         (
             token_id.clone(),
@@ -1876,7 +1890,7 @@ fn marketplace_primary_sale_uses_real_token_and_sac() {
     marketplace.launch(&treasury, &true, &payment.address());
 
     let listing_id = marketplace.create_primary_listing(&100, &2_000);
-    let token_id = marketplace.buy_primary(&listing_id, &buyer);
+    let token_id = marketplace.buy_primary(&listing_id, &buyer, &i128::MAX);
 
     assert_eq!(token.owner_of(&token_id), buyer);
     assert_eq!(sac.balance(&treasury), 100);
@@ -1927,9 +1941,9 @@ fn auth_error() -> soroban_sdk::Error {
 #[test]
 fn proposal_sets_governor_quorum_via_treasury_execute() {
     let (e, token, treasury, governor, _target, owner) = setup();
-    assert_eq!(governor.get_owner(), Some(treasury.address.clone()));
+    assert_eq!(governor.admin(), treasury.address.clone());
     assert_eq!(governor.treasury(), treasury.address);
-    assert_eq!(treasury.get_owner(), Some(treasury.address.clone()));
+    assert_eq!(treasury.admin(), treasury.address.clone());
     assert_eq!(treasury.governor(), governor.address);
     assert_eq!(governor.quorum_bps(), 1_000);
 
@@ -2264,6 +2278,7 @@ fn execute_before_eta_fails_and_after_expiry_fails() {
     );
     let not_queued: soroban_sdk::Error =
         stellar_governance::governor::GovernorError::ProposalNotQueued.into();
+    let not_ready: soroban_sdk::Error = governor::CustomGovernorError::ProposalNotReady.into();
 
     e.ledger().set_timestamp(2_900); // eta is 2_901
     assert_eq!(
@@ -2272,7 +2287,7 @@ fn execute_before_eta_fails_and_after_expiry_fails() {
             .err()
             .unwrap()
             .unwrap(),
-        not_queued
+        not_ready
     );
 
     e.ledger().set_timestamp(2_901 + 1_209_600); // eta + 14 days
@@ -2626,6 +2641,12 @@ fn real_auth_auction_settle_auction_when_paused_moves_nft_and_payment() {
     auction.pause(&owner);
 
     e.set_auths(&[]);
+    // A paused auction still cannot be settled before its end time.
+    assert_eq!(
+        auction.try_settle_auction().err().unwrap().unwrap(),
+        soroban_sdk::Error::from_contract_error(7404)
+    );
+    e.ledger().set_timestamp(st.end_time);
     auction.settle_auction();
     assert_eq!(token.owner_of(&(st.token_id as u32)), b1);
     assert_eq!(sac.balance(&treasury.address), 100_0000000);
@@ -2648,11 +2669,14 @@ fn real_auth_marketplace_primary_and_secondary_flows() {
     sac.mint(&buyer, &10_000);
 
     let metadata_id = Address::generate(&e);
+    let marketplace_id = Address::generate(&e);
     let token_id = e.register(
         DaoTokenContract,
         (
             treasury.clone(),
             treasury.clone(),
+            Address::generate(&e),
+            marketplace_id.clone(),
             String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "Marketplace DAO"),
             String::from_str(&e, "MDAO"),
@@ -2663,7 +2687,8 @@ fn real_auth_marketplace_primary_and_secondary_flows() {
         ),
     );
     register_metadata(&e, &metadata_id, &token_id, &treasury);
-    let marketplace_id = e.register(
+    e.register_at(
+        &marketplace_id,
         MarketplaceContract,
         (
             token_id.clone(),
@@ -2706,10 +2731,15 @@ fn real_auth_marketplace_primary_and_secondary_flows() {
         &seller,
         &marketplace_id,
         "buy_primary",
-        vec![&e, listing_id.into_val(&e), seller.into_val(&e)],
+        vec![
+            &e,
+            listing_id.into_val(&e),
+            seller.into_val(&e),
+            100_i128.into_val(&e),
+        ],
         &[pay_sub(&seller, &treasury, 100)],
     );
-    let nft = marketplace.buy_primary(&listing_id, &seller);
+    let nft = marketplace.buy_primary(&listing_id, &seller, &100);
     assert_eq!(token.owner_of(&nft), seller);
     assert_eq!(sac.balance(&treasury), 100);
 
@@ -2741,10 +2771,12 @@ fn real_auth_marketplace_primary_and_secondary_flows() {
                 who.into_val(&e),
                 price.into_val(&e),
                 expires.into_val(&e),
+                250_u32.into_val(&e),
+                pay.into_val(&e),
             ],
             &[],
         );
-        marketplace.list(&nft, who, &price, &expires);
+        marketplace.list(&nft, who, &price, &expires, &250, &pay);
         assert_eq!(token.owner_of(&nft), marketplace_id);
     };
 
@@ -2755,13 +2787,18 @@ fn real_auth_marketplace_primary_and_secondary_flows() {
         &buyer,
         &marketplace_id,
         "buy",
-        vec![&e, nft.into_val(&e), buyer.into_val(&e)],
+        vec![
+            &e,
+            nft.into_val(&e),
+            buyer.into_val(&e),
+            1_000_i128.into_val(&e),
+        ],
         &[
             pay_sub(&buyer, &treasury, 25),
             pay_sub(&buyer, &seller, 975),
         ],
     );
-    marketplace.buy(&nft, &buyer);
+    marketplace.buy(&nft, &buyer, &1_000);
     assert_eq!(token.owner_of(&nft), buyer);
     assert_eq!(sac.balance(&seller), 10_000 - 100 + 975);
 
@@ -2784,4 +2821,586 @@ fn real_auth_marketplace_primary_and_secondary_flows() {
     e.set_auths(&[]);
     marketplace.expire(&nft);
     assert_eq!(token.owner_of(&nft), buyer);
+}
+
+// ---------------------------------------------------------------------------
+// Full factory flow with the real compiled WASM modules
+// ---------------------------------------------------------------------------
+
+/// Upload a compiled module WASM. Build first: `cargo build --release --target
+/// wasm32v1-none -p token -p metadata -p auction -p governor -p treasury -p marketplace`
+/// (or `stellar contract build`).
+fn upload_module_wasm(e: &Env, name: &str) -> BytesN<32> {
+    let path = std::format!(
+        "{}/../../target/wasm32v1-none/release/{name}.wasm",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let bytes = std::fs::read(&path).unwrap_or_else(|err| {
+        panic!("missing {path} ({err}); build the contract WASMs before running dao-e2e")
+    });
+    e.deployer()
+        .upload_contract_wasm(soroban_sdk::Bytes::from_slice(e, &bytes))
+}
+
+fn slug_params(
+    e: &Env,
+    deployer: &Address,
+    nonce: u64,
+    slug: &str,
+    asset: &Address,
+) -> manager::DaoCreationParams {
+    manager::DaoCreationParams {
+        deployer: deployer.clone(),
+        nonce,
+        launch_admin: deployer.clone(),
+        initial_config: manager::InitialDaoConfigValues {
+            token_name: String::from_str(e, "Flow DAO"),
+            token_symbol: String::from_str(e, "FLOW"),
+            token_uri: String::from_str(e, "https://example.com/token/"),
+            project_uri: String::from_str(e, "https://example.com"),
+            description: String::from_str(e, "Full factory flow"),
+            contract_image: String::from_str(e, "https://example.com/image.png"),
+            renderer_base: String::from_str(e, "https://example.com/render/"),
+            slug: String::from_str(e, slug),
+            governance: manager::GovernanceConfig {
+                voting_delay: 300,
+                voting_period: 300,
+                queue_delay: 300,
+                proposal_threshold: 1,
+                quorum_bps: 1000,
+            },
+            auction: manager::AuctionConfig {
+                duration: 300,
+                reserve_price: 10_000_000,
+                time_buffer: 60,
+                payment_asset: asset.clone(),
+            },
+            marketplace: manager::MarketplaceConfig {
+                payment_asset: asset.clone(),
+                secondary_fee_bps: 250,
+            },
+        },
+    }
+}
+
+/// Manager.create_dao -> setup window (founder mint + artwork, launch admin
+/// signs directly) -> Manager.launch_dao, all against the real WASM modules.
+#[test]
+fn full_factory_flow_create_setup_launch_with_slug() {
+    let e = Env::default();
+    e.mock_all_auths();
+    e.ledger().set_sequence_number(100);
+    e.ledger().set_timestamp(1_000);
+    e.cost_estimate().budget().reset_unlimited();
+
+    let admin = Address::generate(&e);
+    let manager_id = e.register(
+        ManagerContract,
+        (
+            admin,
+            BytesN::from_array(&e, &[0; 32]),
+            String::from_str(&e, "0.1.0"),
+        ),
+    );
+    let manager = ManagerContractClient::new(&e, &manager_id);
+
+    let mut hashes = std::vec::Vec::new();
+    for (registry_name, wasm_name) in [
+        ("Token", "token"),
+        ("Metadata", "metadata"),
+        ("Auction", "auction"),
+        ("Governor", "governor"),
+        ("Treasury", "treasury"),
+        ("Marketplace", "marketplace"),
+    ] {
+        let hash = upload_module_wasm(&e, wasm_name);
+        manager.register_implementation(
+            &String::from_str(&e, registry_name),
+            &String::from_str(&e, "0.1.0"),
+            &hash,
+        );
+        hashes.push(hash);
+    }
+    manager.set_current_implementations(
+        &hashes[0], &hashes[1], &hashes[2], &hashes[3], &hashes[4], &hashes[5],
+    );
+
+    let deployer = Address::generate(&e);
+    let asset = e
+        .register_stellar_asset_contract_v2(Address::generate(&e))
+        .address();
+
+    // 1. create_dao records the requested slug on a pending DAO; nothing is
+    //    claimed until launch, so a second pending DAO may request it too.
+    let slug = String::from_str(&e, "flow-dao");
+    let dao = manager.create_dao(&slug_params(&e, &deployer, 1, "flow-dao", &asset));
+    assert_eq!(manager.get_pending_dao(&dao.token).unwrap().slug, slug);
+    assert!(manager.get_slug(&dao.token).is_none());
+    let other = Address::generate(&e);
+    let rival = manager.create_dao(&slug_params(&e, &other, 2, "flow-dao", &asset));
+
+    // 2. Setup window: the launch admin owns every module and signs directly.
+    let token = DaoTokenContractClient::new(&e, &dao.token);
+    assert!(!token.is_live());
+    assert_eq!(token.admin(), deployer);
+    token.mint(&deployer, &deployer);
+    assert_eq!(token.total_supply(), 1);
+
+    let metadata = MetadataContractClient::new(&e, &dao.metadata);
+    metadata.add_properties(
+        &vec![&e, String::from_str(&e, "Background")],
+        &vec![
+            &e,
+            ItemParam {
+                property_id: 0,
+                name: String::from_str(&e, "Blue"),
+                is_new_property: true,
+            },
+        ],
+        &IpfsGroup {
+            base_uri: String::from_str(&e, "ipfs://art"),
+            extension: String::from_str(&e, ".png"),
+        },
+    );
+    assert_eq!(metadata.properties_count(), 1);
+
+    // 3. launch_dao hands every module to the Treasury and clears the pending DAO.
+    manager.launch_dao(
+        &dao.token,
+        &manager::LaunchConfig {
+            launch_auction: true,
+            launch_marketplace: true,
+            enable_minter: false,
+            expected_minter: None,
+        },
+    );
+    assert!(manager.get_pending_dao(&dao.token).is_none());
+    assert!(token.is_live());
+    assert_eq!(token.admin(), dao.treasury);
+
+    // Launch claimed the slug: the rival can no longer launch with it or create
+    // a new DAO with it, but can rename its pending DAO.
+    assert_eq!(manager.get_dao_by_slug(&slug), dao.token);
+    assert_eq!(
+        manager.try_create_dao(&slug_params(&e, &other, 3, "flow-dao", &asset)),
+        Err(Ok(manager::ManagerError::SlugTaken))
+    );
+    let launch_all = manager::LaunchConfig {
+        launch_auction: true,
+        launch_marketplace: true,
+        enable_minter: false,
+        expected_minter: None,
+    };
+    assert_eq!(
+        manager.try_launch_dao(&rival.token, &launch_all),
+        Err(Ok(manager::ManagerError::SlugTaken))
+    );
+    manager.update_pending_slug(&rival.token, &String::from_str(&e, "flow-dao-2"));
+    assert_eq!(
+        manager.get_pending_dao(&rival.token).unwrap().slug,
+        String::from_str(&e, "flow-dao-2")
+    );
+
+    // The slug registry is permanent: it outlives the pending record, and its
+    // TTL can be renewed by anyone.
+    manager.bump_slug_ttl(&slug);
+    assert_eq!(manager.get_dao_by_slug(&slug), dao.token);
+    assert_eq!(manager.get_slug(&dao.token), Some(slug));
+}
+
+// ============================================================================
+// Review fixes: batch size under network limits, nested Treasury auth, error codes
+// ============================================================================
+
+/// Mints `recipients` new recipients x `tokens_each` tokens in one
+/// `batch_mint` against real metadata with 16 traits (the maximum, so the
+/// largest seed event), under the default (mainnet-like) resource limits,
+/// including the 16 KiB contract-event limit, and a mainnet-like
+/// `max_entry_ttl`. Returns the contract-event bytes used.
+fn batch_mint_with_sixteen_trait_artwork(recipients: u32, tokens_each: u32) -> u32 {
+    let (e, token, _treasury, _governor, _target, owner) = setup();
+    e.ledger().with_mut(|l| l.max_entry_ttl = 3_110_400);
+    let metadata = MetadataContractClient::new(&e, &token.metadata().unwrap());
+    let mut names = Vec::new(&e);
+    let mut items = Vec::new(&e);
+    for i in 0..16u32 {
+        names.push_back(String::from_str(&e, "Trait"));
+        items.push_back(ItemParam {
+            property_id: i,
+            name: String::from_str(&e, "Item"),
+            is_new_property: true,
+        });
+    }
+    metadata.add_properties(
+        &names,
+        &items,
+        &IpfsGroup {
+            base_uri: String::from_str(&e, "ipfs://art"),
+            extension: String::from_str(&e, ".png"),
+        },
+    );
+    assert_eq!(metadata.properties_count(), 16);
+
+    let mut to = Vec::new(&e);
+    let mut amounts = Vec::new(&e);
+    for _ in 0..recipients {
+        to.push_back(Address::generate(&e));
+        amounts.push_back(tokens_each as u128);
+    }
+    e.cost_estimate().budget().reset_default();
+    let ids = token.batch_mint(&owner, &to, &amounts);
+    let events_bytes = e.cost_estimate().resources().contract_events_size_bytes;
+    assert_eq!(ids.len(), recipients * tokens_each);
+    // The hook seeded every token (it is not allowed to fail silently here).
+    for id in ids.iter() {
+        assert_eq!(metadata.get_attributes(&id).len(), 17);
+    }
+    events_bytes
+}
+
+/// The largest batches `common::batch_mint_fits` allows fit one transaction
+/// with ~15% of the event limit to spare: all tokens to one recipient, one
+/// token each to the most recipients, and a mixed batch at the budget edge.
+#[test]
+fn batches_at_the_event_budget_fit_one_transaction() {
+    const LIMIT: u32 = 16_384;
+    let shapes = [
+        (1, common::MAX_BATCH_MINT),
+        (common::MAX_BATCH_RECIPIENTS, 1),
+        (5, 7), // 35 tokens over 5 recipients: 12,750 of 13,500 budget
+    ];
+    for (recipients, tokens_each) in shapes {
+        assert!(common::batch_mint_fits(
+            recipients * tokens_each,
+            recipients
+        ));
+        let used = batch_mint_with_sixteen_trait_artwork(recipients, tokens_each);
+        assert!(
+            used <= LIMIT * 90 / 100,
+            "{recipients} x {tokens_each}: {used} event bytes"
+        );
+    }
+    // The estimate is conservative: actual usage stays under the budget.
+    assert!(
+        batch_mint_with_sixteen_trait_artwork(1, common::MAX_BATCH_MINT)
+            <= common::BATCH_MINT_EVENT_BUDGET
+    );
+}
+
+/// A proposal can make the Treasury buy a marketplace listing: the purchase
+/// pulls payment from the Treasury inside the marketplace, so the Treasury's
+/// authorization is needed one level below its direct call, which a preceding
+/// `authorize` action supplies.
+#[test]
+fn treasury_buys_a_marketplace_listing_through_an_authorized_proposal() {
+    use treasury::AuthNode;
+    let (e, token, treasury, governor, _target, owner) = setup();
+    let t = treasury.address.clone();
+
+    let sac = e
+        .register_stellar_asset_contract_v2(Address::generate(&e))
+        .address();
+    StellarAssetClient::new(&e, &sac).mint(&t, &1_000);
+    let marketplace_id = e.register(
+        MarketplaceContract,
+        (
+            token.address.clone(),
+            owner.clone(),
+            t.clone(),
+            sac.clone(),
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0; 32]),
+            String::from_str(&e, "0.1.0"),
+            250u32,
+        ),
+    );
+    let marketplace = MarketplaceContractClient::new(&e, &marketplace_id);
+    marketplace.launch(&t, &true, &sac);
+
+    let seller = Address::generate(&e);
+    let nft = token.mint(&owner, &seller);
+    token.approve(
+        &seller,
+        &marketplace_id,
+        &nft,
+        &(e.ledger().sequence() + 10_000),
+    );
+    marketplace.list(&nft, &seller, &1_000, &100_000, &250, &sac);
+
+    let transfer = |to: &Address, amount: i128| AuthNode {
+        contract: sac.clone(),
+        fn_name: Symbol::new(&e, "transfer"),
+        args: vec![&e, t.into_val(&e), to.into_val(&e), amount.into_val(&e)],
+        sub: Vec::new(&e),
+    };
+    let nodes = vec![&e, transfer(&t, 25), transfer(&seller, 975)];
+    assert_eq!(treasury.check_authorization(&nodes), 2);
+
+    let targets = vec![&e, t.clone(), marketplace_id.clone()];
+    let functions = vec![&e, Symbol::new(&e, "authorize"), Symbol::new(&e, "buy")];
+    let args = vec![
+        &e,
+        vec![&e, nodes.into_val(&e)],
+        vec![
+            &e,
+            nft.into_val(&e),
+            t.into_val(&e),
+            1_000_i128.into_val(&e),
+        ],
+    ];
+    let (_id, hash) = queue_proposal(
+        &e,
+        &token,
+        &governor,
+        &owner,
+        &targets,
+        &functions,
+        &args,
+        "buy a listing",
+    );
+
+    // Real auth from here: only the Treasury's own entries authorize anything.
+    e.set_auths(&[]);
+    treasury.execute(&targets, &functions, &args, &hash);
+
+    assert_eq!(token.owner_of(&nft), t);
+    let pay = TokenClient::new(&e, &sac);
+    assert_eq!(pay.balance(&seller), 975);
+    assert_eq!(pay.balance(&t), 25); // paid 1_000, received the 2.5% fee back
+}
+
+/// Every project error code sits inside its crate's block, so a code
+/// surfacing through a cross-contract call identifies its crate.
+#[test]
+fn error_codes_are_unique_per_crate_block() {
+    use common::error::codes;
+    fn check(block: u32, codes_in: &[u32]) {
+        for c in codes_in {
+            assert!(
+                *c > block && *c < block + codes::BLOCK_SIZE,
+                "code {c} outside block {block}"
+            );
+        }
+    }
+    use auction::AuctionError as A;
+    use governor::CustomGovernorError as G;
+    use manager::ManagerError as M;
+    use marketplace::MarketplaceError as K;
+    use metadata::Error as D;
+    use minter::MinterError as N;
+    use treasury::TreasuryError as T;
+    check(
+        codes::MANAGER,
+        &[
+            M::InvalidImplementationName as u32,
+            M::SlugNotFound as u32,
+            M::LaunchAdminNotOwner as u32,
+            M::FactoryPaused as u32,
+        ],
+    );
+    check(
+        codes::METADATA,
+        &[D::NotInitialized as u32, D::StringTooLong as u32],
+    );
+    check(
+        codes::AUCTION,
+        &[A::InvalidTokenId as u32, A::InvalidTimeBuffer as u32],
+    );
+    check(
+        codes::GOVERNOR,
+        &[G::InvalidQueueDelay as u32, G::ProposalNotReady as u32],
+    );
+    check(
+        codes::TREASURY,
+        &[T::TreasuryMismatch as u32, T::InvalidAuthorization as u32],
+    );
+    check(
+        codes::MARKETPLACE,
+        &[K::NotInitialized as u32, K::PriceAboveMax as u32],
+    );
+    check(
+        codes::MINTER,
+        &[N::InvalidAmount as u32, N::TokenNotLive as u32],
+    );
+    use token::TokenError as O;
+    check(
+        codes::TOKEN,
+        &[O::MintAuthorityNotAllowed as u32, O::BatchTooLarge as u32],
+    );
+}
+
+/// Voting power through a real governor while tokens sit in the real
+/// marketplace and the treasury: listings before the snapshot leave the
+/// voting supply and lower quorum, listings after it do not change that
+/// proposal's weights, and system contracts can never vote.
+#[test]
+fn system_held_tokens_and_votes_through_a_real_proposal() {
+    let e = Env::default();
+    e.mock_all_auths();
+    e.ledger().set_sequence_number(100);
+    e.ledger().set_timestamp(1_000);
+    let admin = Address::generate(&e);
+    let manager = Address::generate(&e);
+    let zero = BytesN::from_array(&e, &[0u8; 32]);
+    let v = String::from_str(&e, "0.1.0");
+    let (treasury_id, governor_id, auction_id, marketplace_id, metadata_id) = (
+        Address::generate(&e),
+        Address::generate(&e),
+        Address::generate(&e),
+        Address::generate(&e),
+        Address::generate(&e),
+    );
+    let token_id = e.register(
+        DaoTokenContract,
+        (
+            admin.clone(),
+            treasury_id.clone(),
+            auction_id.clone(),
+            marketplace_id.clone(),
+            String::from_str(&e, "u"),
+            String::from_str(&e, "n"),
+            String::from_str(&e, "s"),
+            metadata_id.clone(),
+            manager.clone(),
+            zero.clone(),
+            v.clone(),
+        ),
+    );
+    register_metadata(&e, &metadata_id, &token_id, &admin);
+    e.register_at(
+        &treasury_id,
+        DaoTreasuryContract,
+        (
+            admin.clone(),
+            governor_id.clone(),
+            manager.clone(),
+            zero.clone(),
+            v.clone(),
+        ),
+    );
+    e.register_at(
+        &governor_id,
+        DaoGovernorContract,
+        (
+            admin.clone(),
+            token_id.clone(),
+            treasury_id.clone(),
+            300_u32,
+            300_u32,
+            300_u32,
+            1_u128,
+            5_000_u32, // 50% quorum
+            manager.clone(),
+            zero.clone(),
+            v.clone(),
+        ),
+    );
+    let pay = e
+        .register_stellar_asset_contract_v2(Address::generate(&e))
+        .address();
+    e.register_at(
+        &marketplace_id,
+        MarketplaceContract,
+        (
+            token_id.clone(),
+            admin.clone(),
+            treasury_id.clone(),
+            pay.clone(),
+            manager.clone(),
+            zero.clone(),
+            v.clone(),
+            250u32,
+        ),
+    );
+    let token = DaoTokenContractClient::new(&e, &token_id);
+    let governor = DaoGovernorContractClient::new(&e, &governor_id);
+    let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
+    let marketplace = MarketplaceContractClient::new(&e, &marketplace_id);
+
+    let alice = Address::generate(&e);
+    let bob = Address::generate(&e);
+    let carol = Address::generate(&e);
+    // Founder mints: alice 3, bob 2, treasury 5 (no votes).
+    token.batch_mint(
+        &admin,
+        &vec![&e, alice.clone(), bob.clone(), treasury_id.clone()],
+        &vec![&e, 3u128, 2u128, 5u128],
+    );
+    token.launch(
+        &treasury_id,
+        &vec![&e, treasury_id.clone(), marketplace_id.clone()],
+    );
+    governor.launch(&treasury_id);
+    treasury.launch(&treasury_id);
+    marketplace.launch(&treasury_id, &true, &pay);
+    assert_eq!(token.get_total_supply(), 5);
+
+    // alice delegates to carol, then lists one token before the proposal.
+    token.delegate(&alice, &carol);
+    let list = |who: &Address, id: u32| {
+        token.approve(who, &marketplace_id, &id, &(e.ledger().sequence() + 10_000));
+        marketplace.list(&id, who, &1_000, &1_000_000, &250, &pay);
+    };
+    list(&alice, 0);
+    assert_eq!(token.get_votes(&carol), 2);
+    assert_eq!(token.get_delegate(&alice), Some(carol.clone()));
+    assert_eq!(token.get_total_supply(), 4);
+
+    e.ledger().set_sequence_number(200);
+    e.ledger().set_timestamp(2_000);
+    let description = String::from_str(&e, "voting power");
+    let id = governor.propose(
+        &vec![&e, Address::generate(&e)],
+        &vec![&e, symbol_short!("set_value")],
+        &proposal_args(&e),
+        &description,
+        &bob,
+    );
+    // 50% of the 4 voting-capable tokens (not of 10 minted).
+    assert_eq!(governor.quorum(&governor.proposal_snapshot(&id)), 2);
+
+    // bob lists after the snapshot: his weight for this proposal is unchanged.
+    e.ledger().set_sequence_number(201);
+    list(&bob, 3);
+    assert_eq!(token.get_votes(&bob), 1);
+
+    e.ledger().set_timestamp(2_301);
+    let yes = String::from_str(&e, "yes");
+    // System contracts hold tokens but never voting power.
+    for system in [&treasury_id, &marketplace_id, &auction_id] {
+        assert_eq!(
+            governor
+                .try_cast_vote(&id, &1, &yes, system)
+                .err()
+                .unwrap()
+                .unwrap(),
+            governor::CustomGovernorError::ZeroVotingWeight.into()
+        );
+    }
+    // alice delegated away, so she has no weight; carol votes alice's 2.
+    assert_eq!(
+        governor
+            .try_cast_vote(&id, &1, &yes, &alice)
+            .err()
+            .unwrap()
+            .unwrap(),
+        governor::CustomGovernorError::ZeroVotingWeight.into()
+    );
+    assert_eq!(governor.cast_vote(&id, &1, &yes, &carol), 2);
+    assert_eq!(governor.cast_vote(&id, &0, &yes, &bob), 2);
+    e.ledger().set_timestamp(2_601);
+    // 2 for vs 2 against: quorum met (4 >= 2) but no majority.
+    assert_eq!(governor.proposal_state(&id), ProposalState::Defeated);
+
+    // A buyer of alice's listing is self-delegated and gains the vote; carol
+    // does not get it back.
+    let buyer = Address::generate(&e);
+    StellarAssetClient::new(&e, &pay).mint(&buyer, &1_000);
+    marketplace.buy(&0, &buyer, &1_000);
+    assert_eq!(token.get_delegate(&buyer), Some(buyer.clone()));
+    assert_eq!(token.get_votes(&buyer), 1);
+    assert_eq!(token.get_votes(&carol), 2);
+    assert_eq!(token.get_total_supply(), 4);
+    assert_eq!(token.get_votes(&marketplace_id), 0);
+    assert_eq!(token.get_votes(&treasury_id), 0);
 }

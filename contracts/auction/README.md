@@ -1,56 +1,35 @@
-# Auction Contract
+# Auction contract
 
-Perpetual NFT auctions for the DAO. Each auction sells one governance NFT, sends the winning payment to the treasury, and can create the next auction after settlement.
+Continuous English auctions for one governance NFT at a time. Payment uses a configured Stellar Asset Contract (SAC); native XLM is used through its native SAC address.
 
-## Behavior
+## Constructor and launch
 
-- Payment uses the configured SAC token. Native XLM is not supported.
-- The first bid must meet `reserve_price`; later bids must meet the configured percentage increment.
-- A bid inside `time_buffer` extends the auction, up to the extension limit.
-- The contract starts paused. The owner unpauses it to launch the first auction.
-- Anyone can call `settle_and_create_new` after an auction ends.
-- Configuration changes are owner-only and require the contract to be paused.
+The constructor receives the admin (launch admin), Token, Treasury, duration, reserve price, bid increment, time buffer, payment SAC, Manager, current hash, and version. All wiring is fixed at construction.
 
-## Constructor
+The module starts paused in Setup. Manager-only `launch(treasury, start, expected_payment_token)` sets Live, validates wiring/asset, hands the admin to the Treasury (`AdminChanged`) and emits `AuctionLaunched`. `start=true` unpauses and creates the first auction; otherwise governance grants Auction mint authority and unpauses later.
 
-```text
-__constructor(
-  owner,
-  token_contract,
-  treasury,
-  duration,
-  reserve_price,
-  min_bid_increment_percent,
-  time_buffer,
-  payment_token
-)
-```
+## Interface and bounds
 
-`payment_token` must be `Some(Address)`. The minimum auction duration is 300 seconds. The reserve price must be at least 1,000 stroops, and the bid increment must be between 1% and 100%.
+- `create_bid(bidder, token_id: u128, amount: i128)` requires bidder auth; the amount must meet the reserve (first bid) or the previous bid plus the increment, validated before any payment moves.
+- `settle_and_create_new()` settles and starts the next auction; `settle_auction()` settles while paused without a next auction. **Both require `now >= end_time`** (`AuctionActive`), so a pause cannot end a running auction early. No-bid auctions send the token to the Treasury (where it carries no votes).
+- `cancel_auction()` is admin-only while paused: the only way to end a running auction. It refunds the leader and sends the token to the Treasury.
+- `pause(caller)` / `unpause(caller)` require the caller to be the admin; unpause requires Live state and starts an auction if none is running.
+- `get_auction()` (fails `NotLaunched` before the first auction) / `get_config()`.
+- `pending_refund(bidder)`; `withdraw_refund(bidder)` requires bidder auth.
+- Paused admin setters: `set_duration`, `set_reserve_price`, `set_min_bid_increment`, `set_time_buffer`, `set_payment_token`.
+- `admin()`, `upgrade(from_hash, to_hash)`, `migrate()`, `sync_version()`, `version()`, `wasm_hash()`, `storage_version()`.
 
-## Main Methods
+Duration is 300–2,592,000 seconds, reserve at least 1,000 base units, increment 1–100%, and time buffer 1–86,400 seconds. Late bids extend the deadline subject to an extension-count cap. The payment token locks after the first bid.
 
-- `pause(caller)` / `unpause(caller)` - stop or resume auction operations.
-- `create_bid(bidder, token_id, amount)` - place a bid using the configured SAC token.
-- `settle_and_create_new()` - settle the current auction and start the next one.
-- `settle_auction()` - settle without creating another auction.
-- `cancel_auction()` - cancel the active auction under the contract's cancellation rules.
-- `get_auction()` / `get_config()` - read current state and configuration.
+Outbid refunds push best-effort. A failed push credits a persistent pending refund and emits `RefundDeferred`; withdrawal emits `RefundWithdrawn`. `BidRefunded` means a successful push. See [TTL maintenance](../../docs/TTL_ECONOMICS.md).
 
-Configuration setters are `set_duration`, `set_reserve_price`, `set_min_bid_increment`, `set_time_buffer`, `set_payment_token`, and `set_treasury`.
-
-## Related Contracts
-
-```text
-Auction -> Token       mint the NFT
-Auction -> Treasury    deliver auction proceeds
-```
+Errors: block 7400.
 
 ## Tests
 
-From the repository root:
+`cargo test -p auction`; `cargo test -p dao-e2e`. [Implementation](src/contract.rs), [helpers](src/helpers.rs), [events](src/events.rs), and [storage](src/storage.rs) define the exact behavior.
 
-```bash
-pnpm dao:test:unit
-pnpm dao:test:e2e
-```
+Paused settlement (`settle_auction`) is permissionless but, like
+`settle_and_create_new`, requires `now >= end_time`; it never starts a next
+auction. The web rechecks the settlement mode so it cannot silently mint a next
+auction instead, and never offers settlement before the end time.

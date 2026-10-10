@@ -106,7 +106,7 @@ fn test_constructor_initializes_correctly() {
     let (auction, owner, treasury, token_contract, _, payment_token) = setup_auction_contract(&e);
 
     assert!(auction.paused());
-    assert_eq!(auction.get_owner(), Some(owner));
+    assert_eq!(auction.admin(), owner);
     assert_eq!(auction.version(), String::from_str(&e, "0.1.0"));
     assert_eq!(auction.wasm_hash(), BytesN::from_array(&e, &[0u8; 32]));
 
@@ -130,7 +130,7 @@ fn test_constructor_with_payment_token() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1208)")] // InvalidConfig
+#[should_panic(expected = "Error(Contract, #7408)")] // InvalidConfig
 fn test_constructor_rejects_zero_duration() {
     let e = Env::default();
     let owner = Address::generate(&e);
@@ -156,7 +156,7 @@ fn test_constructor_rejects_zero_duration() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1208)")] // InvalidConfig
+#[should_panic(expected = "Error(Contract, #7408)")] // InvalidConfig
 fn test_constructor_rejects_duration_above_max() {
     let e = Env::default();
     e.register(
@@ -224,7 +224,7 @@ fn test_constructor_validates_time_buffer() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1208)")] // InvalidConfig
+#[should_panic(expected = "Error(Contract, #7408)")] // InvalidConfig
 fn test_constructor_rejects_zero_min_bid_increment() {
     let e = Env::default();
     let owner = Address::generate(&e);
@@ -287,7 +287,7 @@ fn test_set_duration_when_paused() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1208)")] // InvalidConfig
+#[should_panic(expected = "Error(Contract, #7408)")] // InvalidConfig
 fn test_set_duration_rejects_zero() {
     let e = Env::default();
     e.mock_all_auths();
@@ -319,7 +319,7 @@ fn test_set_min_bid_increment_when_paused() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1208)")] // InvalidConfig
+#[should_panic(expected = "Error(Contract, #7408)")] // InvalidConfig
 fn test_set_min_bid_increment_rejects_zero() {
     let e = Env::default();
     e.mock_all_auths();
@@ -352,7 +352,7 @@ fn test_set_time_buffer_bounds() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1225)")] // InvalidTimeBuffer
+#[should_panic(expected = "Error(Contract, #7417)")] // InvalidTimeBuffer
 fn test_set_time_buffer_zero_rejected() {
     let e = Env::default();
     e.mock_all_auths();
@@ -386,7 +386,7 @@ fn unpause_before_launch_is_not_live() {
 }
 
 #[test]
-fn launch_without_start_is_one_shot_and_clears_pending_owner() {
+fn launch_without_start_is_one_shot_and_hands_admin_to_treasury() {
     let e = Env::default();
     e.mock_all_auths();
     let owner = Address::generate(&e);
@@ -411,12 +411,11 @@ fn launch_without_start_is_one_shot_and_clears_pending_owner() {
     );
     let auction = DaoAuctionContractClient::new(&e, &id);
 
-    auction.transfer_ownership(&attacker, &(e.ledger().sequence() + 1_000));
+    assert_eq!(auction.admin(), owner);
     auction.launch(&treasury, &false, &payment_token);
-    assert_eq!(auction.get_owner(), Some(treasury.clone()));
+    assert_eq!(auction.admin(), treasury.clone());
     assert!(auction.paused());
-    assert!(auction.try_accept_ownership().is_err());
-    assert_eq!(auction.get_owner(), Some(treasury.clone()));
+    let _ = attacker;
     let r = auction.try_launch(&treasury, &true, &payment_token);
     assert_eq!(
         r.err().unwrap().unwrap(),
@@ -425,21 +424,19 @@ fn launch_without_start_is_one_shot_and_clears_pending_owner() {
 }
 
 // ============================================================================
-// Ownership Tests
+// Admin Tests
 // ============================================================================
 
 #[test]
-fn test_get_owner() {
+fn test_admin() {
     let e = Env::default();
 
     let (auction, owner, _, _, _, _) = setup_auction_contract(&e);
 
-    // Owner should be set correctly on initialization
-    assert_eq!(auction.get_owner(), Some(owner));
+    // The setup-phase admin is set on initialization; there is no transfer
+    // or renounce (the launch handoff is the only change).
+    assert_eq!(auction.admin(), owner);
 }
-
-// Note: transfer_ownership, renounce_ownership, and ownership transfer on unpause
-// are tested in e2e tests due to auth requirements
 
 // ============================================================================
 // Getter Tests
@@ -461,7 +458,7 @@ fn test_get_config() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1212)")] // NotLaunched
+#[should_panic(expected = "Error(Contract, #7409)")] // NotLaunched
 fn test_get_auction_fails_before_launch() {
     let e = Env::default();
     let (auction, _, _, _, _, _) = setup_auction_contract(&e);
@@ -535,7 +532,7 @@ fn test_config_setters_work_when_paused() {
 // ============================================================================
 
 #[test]
-#[should_panic(expected = "#1216")]
+#[should_panic(expected = "#7412")]
 fn test_constructor_rejects_low_reserve_price() {
     let e = Env::default();
     let owner = Address::generate(&e);
@@ -563,7 +560,7 @@ fn test_constructor_rejects_low_reserve_price() {
 }
 
 #[test]
-#[should_panic(expected = "#1208")]
+#[should_panic(expected = "#7408")]
 fn test_constructor_rejects_high_min_increment() {
     let e = Env::default();
     let owner = Address::generate(&e);
@@ -591,7 +588,7 @@ fn test_constructor_rejects_high_min_increment() {
 }
 
 #[test]
-#[should_panic(expected = "#1216")]
+#[should_panic(expected = "#7412")]
 fn test_set_reserve_price_rejects_low_value() {
     let e = Env::default();
     e.mock_all_auths();
@@ -603,7 +600,7 @@ fn test_set_reserve_price_rejects_low_value() {
 }
 
 #[test]
-#[should_panic(expected = "#1208")]
+#[should_panic(expected = "#7408")]
 fn test_set_min_increment_rejects_high_value() {
     let e = Env::default();
     e.mock_all_auths();
@@ -925,8 +922,8 @@ mod refunds {
             self.e.events().all().events().contains(&x)
         }
         fn pause(&self) {
-            let owner = self.auction.get_owner().unwrap();
-            self.auction.pause(&owner);
+            let admin = self.auction.admin();
+            self.auction.pause(&admin);
         }
     }
 
@@ -1275,5 +1272,80 @@ mod refunds {
             c.assert_invariant();
         }
         assert_eq!(c.token.balance(&c.addr), 0);
+    }
+
+    /// A pause (required for every config change) must not let the current
+    /// leader settle a running auction early (M1).
+    #[test]
+    fn paused_settle_before_end_time_is_rejected() {
+        let mut c = setup();
+        let a = c.funded(100_000_000);
+        c.bid(&a, 10_000_000);
+        c.pause();
+        assert_eq!(
+            c.auction.try_settle_auction().err().unwrap().unwrap(),
+            AuctionError::AuctionActive.into()
+        );
+        let end = c.auction.get_auction().end_time;
+        c.e.ledger().with_mut(|l| l.timestamp = end - 1);
+        assert_eq!(
+            c.auction.try_settle_auction().err().unwrap().unwrap(),
+            AuctionError::AuctionActive.into()
+        );
+        assert!(!c.auction.get_auction().settled);
+    }
+
+    #[test]
+    fn paused_settle_after_end_time_settles_to_the_winner() {
+        let mut c = setup();
+        let a = c.funded(100_000_000);
+        c.bid(&a, 10_000_000);
+        c.pause();
+        let end = c.auction.get_auction().end_time;
+        c.e.ledger().with_mut(|l| l.timestamp = end);
+        c.auction.settle_auction();
+        let state = c.auction.get_auction();
+        assert!(state.settled);
+        assert_eq!(c.token.balance(&c.treasury), 10_000_000);
+        c.assert_invariant();
+    }
+
+    #[test]
+    fn admin_cancel_remains_the_exit_for_a_running_auction() {
+        let mut c = setup();
+        let a = c.funded(100_000_000);
+        c.bid(&a, 10_000_000);
+        c.pause();
+        c.auction.cancel_auction();
+        assert!(c.auction.get_auction().settled);
+        assert_eq!(c.token.balance(&a), 100_000_000);
+        c.assert_invariant();
+    }
+
+    #[test]
+    fn settle_and_create_new_still_rejects_a_running_auction() {
+        let mut c = setup();
+        let a = c.funded(100_000_000);
+        c.bid(&a, 10_000_000);
+        assert_eq!(
+            c.auction
+                .try_settle_and_create_new()
+                .err()
+                .unwrap()
+                .unwrap(),
+            AuctionError::AuctionActive.into()
+        );
+    }
+
+    #[test]
+    fn migrate_needs_admin_and_a_newer_layout() {
+        let c = setup();
+        assert_eq!(c.auction.storage_version(), crate::storage::STORAGE_VERSION);
+        assert_eq!(
+            c.auction.try_migrate().err().unwrap().unwrap(),
+            common::CommonError::NothingToMigrate.into()
+        );
+        c.e.set_auths(&[]);
+        assert!(c.auction.try_migrate().is_err());
     }
 }

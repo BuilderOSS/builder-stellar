@@ -6,10 +6,10 @@
 //! ## Features
 //!
 //! - **Three Direct Methods**: mint_batch, mint_merkle, mint_allowlist
-//! - **Token-based Admin**: Admin derived from token owner, not stored
+//! - **Token-based Admin**: Admin derived from the token's admin, not stored
 //! - **Per-Token Configuration**: Separate merkle roots and allowlists per token
 //! - **Double-Claim Prevention**: Tracks claimed addresses per token
-//! - **Flexible**: Works with any token contract that has owner() and batch_mint()
+//! - **Flexible**: Works with any token contract that has admin() and batch_mint()
 
 #![no_std]
 

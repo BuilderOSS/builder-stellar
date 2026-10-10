@@ -3,13 +3,15 @@
 --
 -- The read surface used by apps/web (see apps/web/prisma/schema.prisma):
 --   app.activity_feed     tenant-resolved activity feed
---   app.proposal_list     proposals with vote tallies (state may be computed 'expired', see governance.proposals)
+--   app.proposal_list     proposals with vote tallies (state is computed from the clock, see governance.proposals)
 --   app.proposal_detail   proposals with actions and votes as JSON
 --   app.indexer_status    ingestion progress, so the app never reads raw events
 -- =============================================================================
 
 -- dao_id resolution:
---   manager events        no DAO (deployment-wide)
+--   manager events        per-DAO events (dao_created, dao_launched, slug_claimed,
+--                         pending_slug_updated) resolve through their token_address
+--                         topic when that DAO is registered here; others have no DAO
 --   minter events         shared contract, resolved through the token_id topic
 --   every other module    resolved by contract address
 -- Minter events for tokens that are not DAOs of this deployment are dropped.
@@ -18,7 +20,7 @@ SELECT
   e.activity_id,
   e.deployment_id,
   CASE e.contract_role
-    WHEN 'manager' THEN NULL
+    WHEN 'manager' THEN m.dao_id
     WHEN 'minter' THEN r.dao_id
     ELSE i.dao_id
   END AS dao_id,
@@ -51,6 +53,11 @@ LEFT JOIN manager.dao_registry r
   ON r.deployment_id = e.deployment_id
  AND r.token_address = e.token_id
  AND e.contract_role = 'minter'
+LEFT JOIN manager.dao_registry m
+  ON m.deployment_id = e.deployment_id
+ AND e.contract_role = 'manager'
+ AND e.event_name IN ('dao_created', 'dao_launched', 'slug_claimed', 'pending_slug_updated')
+ AND m.token_address = e.topics::jsonb ->> 'token_address'
 WHERE e.contract_role <> 'minter' OR r.dao_id IS NOT NULL;
 
 CREATE VIEW app.proposal_list AS

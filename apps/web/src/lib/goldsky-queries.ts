@@ -44,6 +44,7 @@ export type GoldskyTokenResponse = {
   items: GoldskyTokenItem[];
   total: number;
   totalSupply: string;
+  votingSupply?: string | null;
   limit: number;
   offset: number;
   hasMore: boolean;

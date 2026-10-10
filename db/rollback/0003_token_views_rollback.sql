@@ -1,3 +1,4 @@
+DROP VIEW IF EXISTS token.supply;
 DROP VIEW IF EXISTS token.members;
 DROP VIEW IF EXISTS token.mint_authorities;
 DROP VIEW IF EXISTS token.mint_authority_history;

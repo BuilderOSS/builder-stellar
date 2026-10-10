@@ -179,12 +179,12 @@ fn constructor_starts_paused_and_stores_config() {
         soroban_sdk::Vec::new(&env),
     );
     assert_eq!(config.token, token);
-    assert_eq!(config.launch_admin, launch_admin);
     assert_eq!(config.treasury, treasury);
     assert_eq!(config.payment_asset, payment);
     assert_eq!(config.manager, manager);
     assert!(config.paused);
     let marketplace = crate::contract::MarketplaceContractClient::new(&env, &address);
+    assert_eq!(marketplace.admin(), launch_admin);
     assert_eq!(marketplace.version(), String::from_str(&env, "0.1.0"));
     assert_eq!(
         marketplace.wasm_hash(),
@@ -247,12 +247,19 @@ fn create_primary_listing_before_launch_is_not_live() {
 fn secondary_list_and_buy_before_launch_are_not_live() {
     let fixture = fixture_setup();
     let seller = Address::generate(&fixture.env);
-    let r = fixture.marketplace.try_list(&0, &seller, &100, &2_000);
+    let r = fixture.marketplace.try_list(
+        &0,
+        &seller,
+        &100,
+        &2_000,
+        &crate::storage::MAX_FEE_BPS,
+        &fixture.marketplace.get_config().payment_asset,
+    );
     assert_eq!(
         r.err().unwrap().unwrap(),
         common::CommonError::NotLive.into()
     );
-    let r = fixture.marketplace.try_buy(&0, &seller);
+    let r = fixture.marketplace.try_buy(&0, &seller, &i128::MAX);
     assert_eq!(
         r.err().unwrap().unwrap(),
         common::CommonError::NotLive.into()
@@ -325,7 +332,7 @@ fn primary_listing_mints_lazily_to_buyer_and_pays_treasury() {
     assert_eq!(mp.get_primary_listing(&id).unwrap().price, 100);
 
     fixture.payment.mint(&fixture.buyer, &100);
-    let token_id = mp.buy_primary(&id, &fixture.buyer);
+    let token_id = mp.buy_primary(&id, &fixture.buyer, &i128::MAX);
 
     assert_eq!(fixture.token.total_supply(), 1);
     assert_eq!(fixture.token.owner_of(&token_id), fixture.buyer);
@@ -334,7 +341,7 @@ fn primary_listing_mints_lazily_to_buyer_and_pays_treasury() {
     assert!(mp.get_primary_listing(&id).is_none());
     // Single use.
     assert_eq!(
-        mp.try_buy_primary(&id, &fixture.buyer)
+        mp.try_buy_primary(&id, &fixture.buyer, &i128::MAX)
             .err()
             .unwrap()
             .unwrap(),
@@ -369,7 +376,7 @@ fn expired_primary_listing_cannot_be_bought_and_anyone_can_clear_it() {
     );
     fixture.env.ledger().set_timestamp(2_000);
     assert_eq!(
-        mp.try_buy_primary(&id, &fixture.buyer)
+        mp.try_buy_primary(&id, &fixture.buyer, &i128::MAX)
             .err()
             .unwrap()
             .unwrap(),
@@ -390,7 +397,7 @@ fn cancelled_primary_listing_cannot_be_bought() {
     mp.cancel_primary(&id);
     fixture.payment.mint(&fixture.buyer, &100);
     assert_eq!(
-        mp.try_buy_primary(&id, &fixture.buyer)
+        mp.try_buy_primary(&id, &fixture.buyer, &i128::MAX)
             .err()
             .unwrap()
             .unwrap(),
@@ -412,7 +419,7 @@ fn primary_listing_requires_authorization() {
 
     assert!(mp.try_create_primary_listing(&100, &2_000).is_err());
     assert!(mp.try_cancel_primary(&id).is_err());
-    assert!(mp.try_buy_primary(&id, &fixture.buyer).is_err());
+    assert!(mp.try_buy_primary(&id, &fixture.buyer, &i128::MAX).is_err());
     assert!(mp.get_primary_listing(&id).is_some());
     assert_eq!(fixture.token.total_supply(), 0);
     assert_eq!(fixture.payment.balance(&fixture.buyer), 100);
@@ -433,7 +440,7 @@ fn primary_listing_rejected_while_paused() {
         MarketplaceError::Paused.into()
     );
     assert_eq!(
-        mp.try_buy_primary(&id, &fixture.buyer)
+        mp.try_buy_primary(&id, &fixture.buyer, &i128::MAX)
             .err()
             .unwrap()
             .unwrap(),
@@ -441,10 +448,17 @@ fn primary_listing_rejected_while_paused() {
     );
     let token_id = fixture.token.mint(&fixture.seller, &fixture.seller);
     assert_eq!(
-        mp.try_list(&token_id, &fixture.seller, &10, &2_000)
-            .err()
-            .unwrap()
-            .unwrap(),
+        mp.try_list(
+            &token_id,
+            &fixture.seller,
+            &10,
+            &2_000,
+            &crate::storage::MAX_FEE_BPS,
+            &fixture.marketplace.get_config().payment_asset
+        )
+        .err()
+        .unwrap()
+        .unwrap(),
         MarketplaceError::Paused.into()
     );
 }
@@ -454,11 +468,18 @@ fn buy_is_rejected_while_paused_with_paused_error() {
     let fixture = fixture();
     let mp = &fixture.marketplace;
     let token_id = fixture.token.mint(&fixture.seller, &fixture.seller);
-    mp.list(&token_id, &fixture.seller, &100, &2_000);
+    mp.list(
+        &token_id,
+        &fixture.seller,
+        &100,
+        &2_000,
+        &crate::storage::MAX_FEE_BPS,
+        &fixture.marketplace.get_config().payment_asset,
+    );
     mp.pause();
     fixture.payment.mint(&fixture.buyer, &100);
     assert_eq!(
-        mp.try_buy(&token_id, &fixture.buyer)
+        mp.try_buy(&token_id, &fixture.buyer, &i128::MAX)
             .err()
             .unwrap()
             .unwrap(),
@@ -473,8 +494,22 @@ fn cancel_and_expire_work_while_paused() {
     let p1 = mp.create_primary_listing(&100, &2_000);
     let t1 = fixture.token.mint(&fixture.seller, &fixture.seller);
     let t2 = fixture.token.mint(&fixture.seller, &fixture.seller);
-    mp.list(&t1, &fixture.seller, &100, &2_000);
-    mp.list(&t2, &fixture.seller, &100, &2_000);
+    mp.list(
+        &t1,
+        &fixture.seller,
+        &100,
+        &2_000,
+        &crate::storage::MAX_FEE_BPS,
+        &fixture.marketplace.get_config().payment_asset,
+    );
+    mp.list(
+        &t2,
+        &fixture.seller,
+        &100,
+        &2_000,
+        &crate::storage::MAX_FEE_BPS,
+        &fixture.marketplace.get_config().payment_asset,
+    );
     mp.pause();
 
     mp.cancel_primary(&p1);
@@ -494,7 +529,7 @@ fn buy_primary_reverts_atomically_when_mint_fails() {
     fixture.payment.mint(&fixture.buyer, &100);
     fixture.token.set_fail_mint(&true);
 
-    assert!(mp.try_buy_primary(&id, &fixture.buyer).is_err());
+    assert!(mp.try_buy_primary(&id, &fixture.buyer, &i128::MAX).is_err());
     assert_eq!(fixture.payment.balance(&fixture.buyer), 100);
     assert_eq!(fixture.payment.balance(&fixture.treasury), 0);
     assert!(mp.get_primary_listing(&id).is_some());
@@ -502,7 +537,7 @@ fn buy_primary_reverts_atomically_when_mint_fails() {
 
     // Recoverable once minting works again.
     fixture.token.set_fail_mint(&false);
-    mp.buy_primary(&id, &fixture.buyer);
+    mp.buy_primary(&id, &fixture.buyer, &i128::MAX);
     assert_eq!(fixture.payment.balance(&fixture.treasury), 100);
 }
 
@@ -511,7 +546,14 @@ fn secondary_expiry_boundary_is_exclusive_for_buy_inclusive_for_expire() {
     let fixture = fixture();
     let mp = &fixture.marketplace;
     let token_id = fixture.token.mint(&fixture.seller, &fixture.seller);
-    mp.list(&token_id, &fixture.seller, &100, &2_000);
+    mp.list(
+        &token_id,
+        &fixture.seller,
+        &100,
+        &2_000,
+        &crate::storage::MAX_FEE_BPS,
+        &fixture.marketplace.get_config().payment_asset,
+    );
     fixture.payment.mint(&fixture.buyer, &100);
 
     fixture.env.ledger().set_timestamp(1_999);
@@ -521,7 +563,7 @@ fn secondary_expiry_boundary_is_exclusive_for_buy_inclusive_for_expire() {
     );
     fixture.env.ledger().set_timestamp(2_000);
     assert_eq!(
-        mp.try_buy(&token_id, &fixture.buyer)
+        mp.try_buy(&token_id, &fixture.buyer, &i128::MAX)
             .err()
             .unwrap()
             .unwrap(),
@@ -539,7 +581,7 @@ fn primary_expiry_boundary_at_exact_timestamp() {
     fixture.env.ledger().set_timestamp(2_000);
     fixture.payment.mint(&fixture.buyer, &100);
     assert_eq!(
-        mp.try_buy_primary(&id, &fixture.buyer)
+        mp.try_buy_primary(&id, &fixture.buyer, &i128::MAX)
             .err()
             .unwrap()
             .unwrap(),
@@ -553,14 +595,21 @@ fn secondary_buy_uses_captured_asset_and_fee_after_config_changes() {
     let fixture = fixture();
     let mp = &fixture.marketplace;
     let token_id = fixture.token.mint(&fixture.seller, &fixture.seller);
-    mp.list(&token_id, &fixture.seller, &1_000, &2_000); // fee 250 bps captured
+    mp.list(
+        &token_id,
+        &fixture.seller,
+        &1_000,
+        &2_000,
+        &crate::storage::MAX_FEE_BPS,
+        &fixture.marketplace.get_config().payment_asset,
+    ); // fee 250 bps captured
     let other = fixture.env.register(MockPayment, ());
 
     mp.set_payment_asset(&other);
     mp.set_secondary_fee_bps(&1_000);
 
     fixture.payment.mint(&fixture.buyer, &1_000);
-    mp.buy(&token_id, &fixture.buyer);
+    mp.buy(&token_id, &fixture.buyer, &i128::MAX);
     assert_eq!(fixture.payment.balance(&fixture.treasury), 25);
     assert_eq!(fixture.payment.balance(&fixture.seller), 975);
     assert_eq!(
@@ -610,7 +659,7 @@ fn wrong_address_auth_is_rejected_for_create_cancel_and_buy() {
             sub_invokes: &[],
         },
     }]);
-    assert!(mp.try_buy_primary(&id, &fixture.buyer).is_err());
+    assert!(mp.try_buy_primary(&id, &fixture.buyer, &i128::MAX).is_err());
 
     assert!(mp.get_primary_listing(&id).is_some());
     assert_eq!(fixture.token.total_supply(), 0);
@@ -625,7 +674,14 @@ fn listing_keeps_payment_asset_captured_at_list_time() {
     let new_asset = MockPaymentClient::new(&fixture.env, &new_asset_id);
 
     let token_id = fixture.token.mint(&fixture.seller, &fixture.seller);
-    mp.list(&token_id, &fixture.seller, &1_000, &2_000);
+    mp.list(
+        &token_id,
+        &fixture.seller,
+        &1_000,
+        &2_000,
+        &crate::storage::MAX_FEE_BPS,
+        &fixture.marketplace.get_config().payment_asset,
+    );
     let primary = mp.create_primary_listing(&100, &2_000);
     assert_eq!(
         mp.get_listing(&token_id).unwrap().payment_asset,
@@ -636,8 +692,8 @@ fn listing_keeps_payment_asset_captured_at_list_time() {
 
     // Buyer holds only the OLD asset; both listings still settle in it.
     fixture.payment.mint(&fixture.buyer, &1_100);
-    mp.buy(&token_id, &fixture.buyer);
-    mp.buy_primary(&primary, &fixture.buyer);
+    mp.buy(&token_id, &fixture.buyer, &i128::MAX);
+    mp.buy_primary(&primary, &fixture.buyer, &i128::MAX);
     assert_eq!(fixture.payment.balance(&fixture.buyer), 0);
     assert_eq!(fixture.payment.balance(&fixture.treasury), 125);
     assert_eq!(fixture.payment.balance(&fixture.seller), 975);
@@ -645,7 +701,14 @@ fn listing_keeps_payment_asset_captured_at_list_time() {
 
     // New listings use the new asset.
     let token2 = fixture.token.mint(&fixture.seller, &fixture.seller);
-    mp.list(&token2, &fixture.seller, &10, &2_000);
+    mp.list(
+        &token2,
+        &fixture.seller,
+        &10,
+        &2_000,
+        &crate::storage::MAX_FEE_BPS,
+        &fixture.marketplace.get_config().payment_asset,
+    );
     assert_eq!(mp.get_listing(&token2).unwrap().payment_asset, new_asset_id);
 }
 
@@ -653,12 +716,19 @@ fn listing_keeps_payment_asset_captured_at_list_time() {
 fn secondary_listing_splits_fee_and_proceeds() {
     let fixture = fixture();
     let token_id = fixture.token.mint(&fixture.seller, &fixture.seller);
-    fixture
-        .marketplace
-        .list(&token_id, &fixture.seller, &1_000, &2_000);
+    fixture.marketplace.list(
+        &token_id,
+        &fixture.seller,
+        &1_000,
+        &2_000,
+        &crate::storage::MAX_FEE_BPS,
+        &fixture.marketplace.get_config().payment_asset,
+    );
     fixture.payment.mint(&fixture.buyer, &1_000);
 
-    fixture.marketplace.buy(&token_id, &fixture.buyer);
+    fixture
+        .marketplace
+        .buy(&token_id, &fixture.buyer, &i128::MAX);
 
     assert_eq!(fixture.token.owner_of(&token_id), fixture.buyer);
     assert_eq!(fixture.payment.balance(&fixture.treasury), 25);
@@ -669,9 +739,14 @@ fn secondary_listing_splits_fee_and_proceeds() {
 fn seller_can_cancel_listing_and_reclaim_token() {
     let fixture = fixture();
     let token_id = fixture.token.mint(&fixture.seller, &fixture.seller);
-    fixture
-        .marketplace
-        .list(&token_id, &fixture.seller, &100, &2_000);
+    fixture.marketplace.list(
+        &token_id,
+        &fixture.seller,
+        &100,
+        &2_000,
+        &crate::storage::MAX_FEE_BPS,
+        &fixture.marketplace.get_config().payment_asset,
+    );
 
     fixture.marketplace.cancel(&token_id, &fixture.seller);
 
@@ -683,9 +758,14 @@ fn seller_can_cancel_listing_and_reclaim_token() {
 fn expired_listing_can_be_reclaimed() {
     let fixture = fixture();
     let token_id = fixture.token.mint(&fixture.seller, &fixture.seller);
-    fixture
-        .marketplace
-        .list(&token_id, &fixture.seller, &100, &2_000);
+    fixture.marketplace.list(
+        &token_id,
+        &fixture.seller,
+        &100,
+        &2_000,
+        &crate::storage::MAX_FEE_BPS,
+        &fixture.marketplace.get_config().payment_asset,
+    );
     fixture.env.ledger().set_timestamp(2_000);
 
     fixture.marketplace.expire(&token_id);
@@ -896,4 +976,126 @@ fn state_changing_entrypoint_extends_instance_ttl() {
         after > before,
         "instance TTL not extended: {before} -> {after}"
     );
+}
+
+mod bounds {
+    use super::*;
+
+    fn listed_token(fixture: &Fixture) -> u32 {
+        fixture.token.mint(&fixture.seller, &fixture.seller)
+    }
+
+    #[test]
+    fn fee_is_capped_at_25_percent() {
+        let fixture = fixture();
+        let mp = &fixture.marketplace;
+        mp.set_secondary_fee_bps(&crate::storage::MAX_FEE_BPS);
+        assert_eq!(
+            mp.try_set_secondary_fee_bps(&(crate::storage::MAX_FEE_BPS + 1))
+                .err()
+                .unwrap()
+                .unwrap(),
+            MarketplaceError::InvalidFee.into()
+        );
+        assert_eq!(crate::storage::MAX_FEE_BPS, 2_500);
+    }
+
+    #[test]
+    fn list_rejects_a_fee_above_the_sellers_bound() {
+        let fixture = fixture();
+        let mp = &fixture.marketplace;
+        let token_id = listed_token(&fixture);
+        // Fixture fee is 250 bps; the seller signed for at most 249.
+        let r = mp.try_list(
+            &token_id,
+            &fixture.seller,
+            &1_000,
+            &2_000,
+            &249,
+            &fixture.payment.address,
+        );
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            MarketplaceError::FeeAboveMax.into()
+        );
+        mp.list(
+            &token_id,
+            &fixture.seller,
+            &1_000,
+            &2_000,
+            &250,
+            &fixture.payment.address,
+        );
+        assert_eq!(mp.get_listing(&token_id).unwrap().fee_bps, 250);
+    }
+
+    #[test]
+    fn list_rejects_an_unexpected_payment_asset() {
+        let fixture = fixture();
+        let mp = &fixture.marketplace;
+        let token_id = listed_token(&fixture);
+        let r = mp.try_list(
+            &token_id,
+            &fixture.seller,
+            &1_000,
+            &2_000,
+            &250,
+            &Address::generate(&fixture.env),
+        );
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            MarketplaceError::PaymentAssetMismatch.into()
+        );
+        assert!(mp.get_listing(&token_id).is_none());
+    }
+
+    #[test]
+    fn buy_rejects_a_price_above_the_buyers_bound() {
+        let fixture = fixture();
+        let mp = &fixture.marketplace;
+        let token_id = listed_token(&fixture);
+        mp.list(
+            &token_id,
+            &fixture.seller,
+            &1_000,
+            &2_000,
+            &250,
+            &fixture.payment.address,
+        );
+        fixture.payment.mint(&fixture.buyer, &1_000);
+        let r = mp.try_buy(&token_id, &fixture.buyer, &999);
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            MarketplaceError::PriceAboveMax.into()
+        );
+        mp.buy(&token_id, &fixture.buyer, &1_000);
+        assert_eq!(fixture.token.owner_of(&token_id), fixture.buyer);
+    }
+
+    #[test]
+    fn buy_primary_rejects_a_price_above_the_buyers_bound() {
+        let fixture = fixture();
+        let mp = &fixture.marketplace;
+        let id = mp.create_primary_listing(&100, &2_000);
+        fixture.payment.mint(&fixture.buyer, &100);
+        let r = mp.try_buy_primary(&id, &fixture.buyer, &99);
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            MarketplaceError::PriceAboveMax.into()
+        );
+        mp.buy_primary(&id, &fixture.buyer, &100);
+    }
+
+    #[test]
+    fn launch_hands_admin_to_treasury_and_migrate_is_gated() {
+        let fixture = fixture_setup();
+        let mp = &fixture.marketplace;
+        assert_eq!(mp.admin(), fixture.launch_admin);
+        mp.launch(&fixture.treasury, &true, &fixture.payment.address);
+        assert_eq!(mp.admin(), fixture.treasury);
+        assert_eq!(
+            mp.try_migrate().err().unwrap().unwrap(),
+            common::CommonError::NothingToMigrate.into()
+        );
+    }
 }

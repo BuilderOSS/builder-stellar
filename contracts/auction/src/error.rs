@@ -1,41 +1,43 @@
 use soroban_sdk::contracterror;
 
+/// Auction errors (block `common::error::codes::AUCTION`).
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(u32)]
 pub enum AuctionError {
-    /// Bid placed for incorrect token ID
-    InvalidTokenId = 1201,
-    /// Bid placed after auction ended
-    AuctionOver = 1202,
-    /// Auction hasn't started yet
-    AuctionNotStarted = 1203,
-    /// Attempting to settle an active auction
-    AuctionActive = 1204,
-    /// Auction already settled
-    AuctionSettled = 1205,
-    /// First bid doesn't meet reserve price
-    ReservePriceNotMet = 1206,
-    /// Bid doesn't meet minimum increment
-    MinBidNotMet = 1207,
-    /// Invalid configuration parameters (e.g., duration outside 5 minutes ..= 30 days, zero increment)
-    InvalidConfig = 1208,
-    /// Auction not launched yet
-    NotLaunched = 1212,
-    /// Unauthorized access
-    Unauthorized = 1214,
-    /// Arithmetic overflow in calculations
-    ArithmeticOverflow = 1215,
-    /// Invalid bid amount (too low or unreasonable)
-    InvalidBid = 1216,
-    /// Contract not initialized properly
-    NotInitialized = 1219,
+    /// Bid placed for a token id other than the one being auctioned
+    InvalidTokenId = 7401,
+    /// Bid placed at or after the auction end time
+    AuctionOver = 7402,
+    /// The auction has no start time
+    AuctionNotStarted = 7403,
+    /// Settlement attempted before the auction end time
+    AuctionActive = 7404,
+    /// The auction is already settled (or cancelled)
+    AuctionSettled = 7405,
+    /// First bid below the reserve price
+    ReservePriceNotMet = 7406,
+    /// Bid below the previous bid plus the minimum increment
+    MinBidNotMet = 7407,
+    /// Configuration out of bounds (duration outside 5 minutes ..= 30 days,
+    /// increment outside 1..=100%, or payment token locked)
+    InvalidConfig = 7408,
+    /// No auction has been created yet
+    NotLaunched = 7409,
+    /// Caller is not the admin
+    Unauthorized = 7410,
+    /// Arithmetic overflow in bid or time calculations
+    ArithmeticOverflow = 7411,
+    /// Bid amount not positive, or reserve price below `common::MIN_RESERVE_PRICE`
+    InvalidBid = 7412,
+    /// Contract configuration missing
+    NotInitialized = 7413,
     /// `launch` treasury differs from the treasury wired at construction
-    TreasuryMismatch = 1222,
+    TreasuryMismatch = 7414,
     /// `launch` expected payment token differs from the configured one
-    PaymentTokenMismatch = 1223,
+    PaymentTokenMismatch = 7415,
     /// `withdraw_refund` called with no pending refund balance
-    NoPendingRefund = 1224,
-    /// `set_time_buffer` value outside 1..=86400 seconds
-    InvalidTimeBuffer = 1225,
+    NoPendingRefund = 7416,
+    /// `time_buffer` outside 1..=86400 seconds
+    InvalidTimeBuffer = 7417,
 }

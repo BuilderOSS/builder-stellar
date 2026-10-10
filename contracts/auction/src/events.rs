@@ -8,6 +8,9 @@
 //! - Bid placement and refunds
 //! - Time extensions and settlement
 //! - Auction cancellation
+//!
+//! Admin changes are `common::admin::AdminChanged`; pause state changes are
+//! OpenZeppelin's `Paused` / `Unpaused`.
 
 use soroban_sdk::{contractevent, Address, Env, String};
 
@@ -15,7 +18,7 @@ use soroban_sdk::{contractevent, Address, Env, String};
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuctionInitialized {
     #[topic]
-    pub owner: Address,
+    pub admin: Address,
     pub token_contract: Address,
     pub treasury: Address,
     pub duration: u64,
@@ -96,7 +99,7 @@ pub struct PaymentTokenUpdated {
 /// Emitted once when the Manager launches the auction (Setup -> Live).
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Launched {
+pub struct AuctionLaunched {
     #[topic]
     pub treasury: Address,
     /// Whether the auction was unpaused and the first auction created.
@@ -146,7 +149,7 @@ pub struct AuctionCancelled {
 // Event publishing helpers
 pub fn emit_auction_initialized(
     e: &Env,
-    owner: &Address,
+    admin: &Address,
     token_contract: &Address,
     treasury: &Address,
     duration: u64,
@@ -157,7 +160,7 @@ pub fn emit_auction_initialized(
     version: &String,
 ) {
     AuctionInitialized {
-        owner: owner.clone(),
+        admin: admin.clone(),
         token_contract: token_contract.clone(),
         treasury: treasury.clone(),
         duration,
@@ -260,7 +263,7 @@ pub fn emit_payment_token_updated(e: &Env, payment_token: &Address, changed_by: 
 }
 
 pub fn emit_launched(e: &Env, treasury: &Address, started: bool) {
-    Launched {
+    AuctionLaunched {
         treasury: treasury.clone(),
         started,
     }

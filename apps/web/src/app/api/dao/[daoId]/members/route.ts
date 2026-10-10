@@ -1,45 +1,27 @@
 import { NextResponse } from 'next/server';
 
-import { getGoldskyMember, getGoldskyMemberList } from '@/lib/goldsky';
+import { directoryMember, directoryMembers } from '@/lib/member-directory/query';
+import { memberAddress, memberPagination } from '@/lib/member-directory/validation';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request, { params }: { params: Promise<{ daoId: string }> }) {
   const url = new URL(request.url);
   const { daoId } = await params;
-  const limit = Number(url.searchParams.get('limit') ?? '100');
-  const offset = Number(url.searchParams.get('offset') ?? '0');
-  const address = url.searchParams.get('address')?.trim();
-  if (address) {
-    try {
-      return NextResponse.json(
-        { item: await getGoldskyMember(daoId, address) },
-        { headers: { 'Cache-Control': 'no-store' } }
-      );
-    } catch {
-      return NextResponse.json({ item: null, message: 'Member lookup unavailable' }, { status: 503 });
-    }
-  }
-  if (!Number.isInteger(limit) || !Number.isInteger(offset) || limit < 1 || offset < 0) {
-    return NextResponse.json({ message: 'limit and offset must be valid non-negative integers' }, { status: 400 });
-  }
-
+  const headers = { 'Cache-Control': 'no-store' };
+  let page;
+  let address: string | undefined;
   try {
-    return NextResponse.json(await getGoldskyMemberList(daoId, { limit: Math.min(limit, 1000), offset }), {
-      headers: { 'Cache-Control': 'no-store' }
+    page = memberPagination(url.searchParams);
+    if (url.searchParams.has('address')) address = memberAddress(url.searchParams.get('address')!);
+  } catch (error) {
+    return NextResponse.json({ message: (error as Error).message }, { status: 400, headers });
+  }
+  try {
+    return NextResponse.json(address ? await directoryMember(daoId, address) : await directoryMembers(daoId, page), {
+      headers
     });
   } catch {
-    return NextResponse.json(
-      {
-        items: [],
-        total: 0,
-        limit,
-        offset,
-        hasMore: false,
-        generatedAt: new Date().toISOString(),
-        message: 'Member list unavailable'
-      },
-      { status: 503 }
-    );
+    return NextResponse.json({ message: 'Member data is unavailable. Try again.' }, { status: 503, headers });
   }
 }

@@ -361,6 +361,8 @@ function prepareConfigs(ctx) {
     deployer: owner,
     launchAdmin: owner,
     nonce: s.nonce,
+    // Slugs are claimed permanently per Manager, so every rehearsal run needs a fresh one.
+    slug: `e2e-${s.nonce}`,
     founders: [{ address: owner, amount: 3 }, { address: ctx.id('BIDDER_A'), amount: 2 }],
     auction: { ...template.auction, paymentAsset: sac },
     marketplace: { ...template.marketplace, paymentAsset: sac },
@@ -482,8 +484,9 @@ async function createDao(ctx) {
     ctx.check('pending payment assets == native SAC', pending.auction_payment_asset === s.nativeSac && pending.marketplace_payment_asset === s.nativeSac);
   }
   ctx.check('token.is_live == false', view(ctx, dao.token, 'is_live') === false);
+  ctx.check('manager.get_dao_by_slug resolves the slug to the token', view(ctx, s.manager, 'get_dao_by_slug', { slug: s.config.slug }) === dao.token, s.config.slug);
 
-  // Pre-launch guards: each simulation must fail with CommonError::NotLive (9001). Nothing is submitted.
+  // Pre-launch guards: each simulation must fail with CommonError::NotLive (7001). Nothing is submitted.
   const owner = ctx.id('DAO_OWNER');
   const proposeActions = encodeActions([{ target: dao.governor, fn: 'set_quorum_bps', args: [val.u32(2000)] }]);
   const guards = [
@@ -494,8 +497,8 @@ async function createDao(ctx) {
   ];
   for (const [label, id, method, params, role] of guards) {
     const r = expectFailure(ctx, id, method, params, role);
-    ctx.check(`pre-launch guard: ${label} fails with NotLive (9001)`, r.code === 9001 && !r.unexpectedSuccess,
-      r.unexpectedSuccess ? 'simulation unexpectedly succeeded' : `error code ${r.code}${r.code === 9001 ? '' : `: ${r.text.slice(0, 300)}`}`);
+    ctx.check(`pre-launch guard: ${label} fails with NotLive (7001)`, r.code === 7001 && !r.unexpectedSuccess,
+      r.unexpectedSuccess ? 'simulation unexpectedly succeeded' : `error code ${r.code}${r.code === 7001 ? '' : `: ${r.text.slice(0, 300)}`}`);
   }
 }
 
@@ -521,7 +524,7 @@ async function launch(ctx) {
   runScript(ctx, 'deploy-dao.mjs', ['launch_dao', s.daoConfigPath, s.networkConfigPath], 'DAO_OWNER');
   loadDao(ctx);
   ctx.check('token.is_live == true', view(ctx, dao.token, 'is_live') === true);
-  ctx.check('token.owner == treasury', view(ctx, dao.token, 'owner') === dao.treasury);
+  ctx.check('token.admin == treasury', view(ctx, dao.token, 'admin') === dao.treasury);
   const holders = [
     ['treasury', dao.treasury, true], ['marketplace', dao.marketplace, true], ['auction', dao.auction, true],
     ['platform minter', s.minter, true], ['DAO_OWNER (launch admin)', ctx.id('DAO_OWNER'), false]
@@ -530,8 +533,12 @@ async function launch(ctx) {
     ctx.check(`token.mint_authority(${label}) == ${expected}`, view(ctx, dao.token, 'mint_authority', { authority: addr }) === expected);
   }
   ctx.check('manager.get_pending_dao is gone', view(ctx, s.manager, 'get_pending_dao', { token_address: dao.token }) === null);
-  ctx.check('governor.get_owner == treasury', view(ctx, dao.governor, 'get_owner') === dao.treasury);
-  ctx.check('auction.get_owner == treasury', view(ctx, dao.auction, 'get_owner') === dao.treasury);
+  ctx.check('slug claimed at launch (registry is permanent)', view(ctx, s.manager, 'get_dao_by_slug', { slug: s.config.slug }) === dao.token, s.config.slug);
+  runScript(ctx, 'deploy-dao.mjs', ['bump_slug_ttl', s.daoConfigPath, s.networkConfigPath], 'DAO_OWNER');
+  ctx.check('deploy-dao.mjs bump_slug_ttl succeeds (permissionless renewal)', true, s.config.slug);
+  for (const [label, module] of [['governor', dao.governor], ['auction', dao.auction], ['treasury', dao.treasury], ['marketplace', dao.marketplace], ['metadata', dao.metadata]]) {
+    ctx.check(`${label}.admin == treasury`, view(ctx, module, 'admin') === dao.treasury);
+  }
   ctx.check('treasury.governor == governor', view(ctx, dao.treasury, 'governor') === dao.governor);
   ctx.check('governor.treasury == treasury', view(ctx, dao.governor, 'treasury') === dao.treasury);
   ctx.check('auction not paused (started at launch)', view(ctx, dao.auction, 'paused') === false);
@@ -705,7 +712,7 @@ async function governance(ctx) {
 
     // Governor.execute must always fail (checked before the real execute so the proposal is still Queued).
     const viaGov = expectFailure(ctx, dao.governor, 'execute', { ...enc, description_hash: g.descriptionHash, executor: B }, 'BIDDER_B');
-    ctx.check('governor.execute fails with UseTreasuryExecute (1508)', viaGov.code === 1508 && !viaGov.unexpectedSuccess, `code ${viaGov.code}`);
+    ctx.check('governor.execute fails with UseTreasuryExecute (7507)', viaGov.code === 7507 && !viaGov.unexpectedSuccess, `code ${viaGov.code}`);
 
     const r = write(ctx, dao.treasury, 'execute', { ...enc, description_hash: g.descriptionHash }, 'BIDDER_B', 'gov.execute');
     g.steps.execute = { tx: r.txHash, at: nowS(), returnedId: r.value };
@@ -741,7 +748,7 @@ async function marketplace(ctx) {
     m.buyerFundsBefore = String(nativeBalance(ctx, A, m.asset));
     m.treasuryBefore = String(nativeBalance(ctx, dao.treasury, m.asset));
     ctx.save();
-    const r = write(ctx, dao.marketplace, 'buy_primary', { listing_id: String(listingId), buyer: A }, 'BIDDER_A', 'market.buy');
+    const r = write(ctx, dao.marketplace, 'buy_primary', { listing_id: String(listingId), buyer: A, max_price: m.price }, 'BIDDER_A', 'market.buy');
     m.buyTx = r.txHash;
     m.tokenId = r.value === undefined ? null : String(r.value);
     ctx.save();

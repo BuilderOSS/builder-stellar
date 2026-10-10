@@ -5,7 +5,6 @@ use core::convert::TryInto;
 use soroban_sdk::{
     contract, contractimpl, panic_with_error, Address, BytesN, Env, String, Symbol, Val, Vec,
 };
-use stellar_access::ownable::{set_owner, Ownable};
 use stellar_governance::{
     governor::{
         self as governor, emit_proposal_cancelled, emit_proposal_created, emit_proposal_executed,
@@ -13,11 +12,10 @@ use stellar_governance::{
     },
     votes::VotesClient,
 };
-use stellar_macros::only_owner;
 
 use crate::error::CustomGovernorError;
 use crate::events::{
-    emit_governor_initialized, emit_launched, emit_proposal_queued,
+    emit_governor_initialized, emit_launched, emit_proposal_queued, emit_proposal_scheduled,
     emit_proposal_threshold_changed, emit_queue_delay_changed, emit_quorum_bps_changed,
     emit_voting_delay_changed, emit_voting_period_changed,
 };
@@ -35,9 +33,8 @@ pub struct DaoGovernorContract;
 impl DaoGovernorContract {
     /// One-shot, Manager-only launch handoff (Setup -> Live).
     ///
-    /// Sets the owner to `treasury`, clears any pending two-step ownership
-    /// transfer, marks the module live, and emits `Launched`. A second call
-    /// panics with `AlreadyLive`.
+    /// Hands the admin to `treasury`, marks the module live, and emits
+    /// `GovernorLaunched`. A second call panics with `AlreadyLive`.
     pub fn launch(e: &Env, treasury: Address) {
         let manager = Self::manager(e);
         manager.require_auth();
@@ -45,7 +42,7 @@ impl DaoGovernorContract {
         if treasury != Self::treasury(e) {
             panic_with_error!(e, CustomGovernorError::TreasuryMismatch);
         }
-        common::ownership::handoff_owner(e, &treasury);
+        common::admin::handoff(e, &treasury);
         common::ttl::extend_instance(e);
         emit_launched(e, &treasury);
     }
@@ -58,7 +55,7 @@ impl DaoGovernorContract {
     ///
     /// # Arguments
     ///
-    /// * `owner` - The address that will own and control the contract
+    /// * `admin` - Setup-phase admin (the launch admin); becomes the Treasury at launch
     /// * `token_contract` - The governance token contract (must implement Votes trait)
     /// * `treasury_contract` - The treasury contract that executes approved proposals
     /// * `voting_delay` - Delay in seconds between proposal creation and vote start
@@ -76,7 +73,7 @@ impl DaoGovernorContract {
     /// Emits a `GovernorInitialized` event with all initialization parameters.
     pub fn __constructor(
         e: &Env,
-        owner: Address,
+        admin: Address,
         token_contract: Address,
         treasury_contract: Address,
         voting_delay: u32,
@@ -97,9 +94,9 @@ impl DaoGovernorContract {
             quorum_bps,
         );
 
-        set_owner(e, &owner);
+        common::admin::init(e, &admin);
         e.storage().instance().set(&GovernorKey::Manager, &manager);
-        common::upgrade::init(e, &current_hash, &version);
+        common::upgrade::init(e, &current_hash, &version, STORAGE_VERSION);
 
         let name = String::from_str(e, "MvpDaoGovernor");
         governor::set_name(e, name.clone());
@@ -118,8 +115,7 @@ impl DaoGovernorContract {
 
         emit_governor_initialized(
             e,
-            &owner,
-            &name,
+            &admin,
             &version,
             &token_contract,
             &treasury_contract,
@@ -132,31 +128,37 @@ impl DaoGovernorContract {
     }
 
     pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
-        let owner = common::error::require(
-            e,
-            stellar_access::ownable::get_owner(e),
-            common::CommonError::OwnerNotSet,
-        );
-        owner.require_auth();
+        common::admin::require_admin(e);
         let manager = Self::manager(e);
         common::upgrade::apply(e, &manager, &from_hash, &to_hash);
         governor::set_version(e, common::upgrade::version(e));
+    }
+
+    /// Advance the storage layout after an upgrade (admin only).
+    pub fn migrate(e: &Env) {
+        common::admin::require_admin(e);
+        common::upgrade::migrate(e, STORAGE_VERSION);
     }
 
     pub fn wasm_hash(e: &Env) -> BytesN<32> {
         common::upgrade::current_hash(e)
     }
 
+    /// Storage-layout version of the data held by this contract.
+    pub fn storage_version(e: &Env) -> u32 {
+        common::upgrade::storage_version(e)
+    }
+
     pub fn sync_version(e: &Env) {
-        let owner = common::error::require(
-            e,
-            stellar_access::ownable::get_owner(e),
-            common::CommonError::OwnerNotSet,
-        );
-        owner.require_auth();
+        common::admin::require_admin(e);
         let manager = Self::manager(e);
         let version = common::upgrade::sync_version(e, &manager);
         governor::set_version(e, version);
+    }
+
+    /// Module admin: the launch admin during setup, the Treasury once live.
+    pub fn admin(e: &Env) -> Address {
+        common::admin::admin(e)
     }
 
     fn manager(e: &Env) -> Address {
@@ -168,8 +170,8 @@ impl DaoGovernorContract {
             })
     }
 
-    #[only_owner]
     pub fn set_queue_delay(e: &Env, queue_delay: u32) {
+        let admin = common::admin::require_admin(e);
         common::ttl::extend_instance(e);
         Self::check_queue_delay(e, queue_delay);
 
@@ -179,38 +181,38 @@ impl DaoGovernorContract {
             .instance()
             .set(&GovernorKey::QueueDelay, &queue_delay);
 
-        emit_queue_delay_changed(e, &Self::owner_addr(e), old_value, queue_delay);
+        emit_queue_delay_changed(e, &admin, old_value, queue_delay);
     }
 
-    #[only_owner]
     pub fn set_voting_delay(e: &Env, voting_delay: u32) {
+        let admin = common::admin::require_admin(e);
         common::ttl::extend_instance(e);
         Self::check_voting_delay(e, voting_delay);
 
         let old_value = Self::voting_delay(e);
         governor::set_voting_delay(e, voting_delay);
 
-        emit_voting_delay_changed(e, &Self::owner_addr(e), old_value, voting_delay);
+        emit_voting_delay_changed(e, &admin, old_value, voting_delay);
     }
 
-    #[only_owner]
     pub fn set_voting_period(e: &Env, voting_period: u32) {
+        let admin = common::admin::require_admin(e);
         common::ttl::extend_instance(e);
         Self::check_voting_period(e, voting_period);
 
         let old_value = Self::voting_period(e);
         governor::set_voting_period(e, voting_period);
 
-        emit_voting_period_changed(e, &Self::owner_addr(e), old_value, voting_period);
+        emit_voting_period_changed(e, &admin, old_value, voting_period);
     }
 
-    #[only_owner]
     pub fn set_proposal_threshold(e: &Env, proposal_threshold: u128) {
+        let admin = common::admin::require_admin(e);
         common::ttl::extend_instance(e);
         Self::check_proposal_threshold(e, proposal_threshold);
 
-        // Validate threshold doesn't exceed total supply (would lock governance)
-        // Only check if tokens exist (total_supply > 0)
+        // A threshold above the voting supply would lock governance. Only
+        // checked once votes exist (setup may configure before minting).
         let token = governor::get_token_contract(e);
         let total_supply = VotesClient::new(e, &token)
             .get_total_supply_at_checkpoint(&e.ledger().sequence().saturating_sub(1));
@@ -221,18 +223,18 @@ impl DaoGovernorContract {
         let old_value = governor::get_proposal_threshold(e);
         governor::set_proposal_threshold(e, proposal_threshold);
 
-        emit_proposal_threshold_changed(e, &Self::owner_addr(e), old_value, proposal_threshold);
+        emit_proposal_threshold_changed(e, &admin, old_value, proposal_threshold);
     }
 
-    #[only_owner]
     pub fn set_quorum_bps(e: &Env, quorum_bps: u32) {
+        let admin = common::admin::require_admin(e);
         common::ttl::extend_instance(e);
         Self::check_quorum_bps(e, quorum_bps);
 
         let old_value = Self::quorum_bps(e);
         governor::set_quorum(e, quorum_bps as u128);
 
-        emit_quorum_bps_changed(e, &Self::owner_addr(e), old_value, quorum_bps);
+        emit_quorum_bps_changed(e, &admin, old_value, quorum_bps);
     }
 
     /// Marks a Queued proposal Executed and returns its id. Only callable by
@@ -269,7 +271,7 @@ impl DaoGovernorContract {
         }
 
         if e.ledger().timestamp() < proposal.eta {
-            panic_with_error!(e, GovernorError::ProposalNotQueued);
+            panic_with_error!(e, CustomGovernorError::ProposalNotReady);
         }
 
         proposal.state = ProposalState::Executed;
@@ -296,14 +298,6 @@ impl DaoGovernorContract {
 
     pub fn quorum_bps(e: &Env) -> u32 {
         governor::get_quorum(e, e.ledger().sequence()) as u32
-    }
-
-    fn owner_addr(e: &Env) -> Address {
-        common::error::require(
-            e,
-            stellar_access::ownable::get_owner(e),
-            common::CommonError::OwnerNotSet,
-        )
     }
 
     /// Single source of truth for governance parameter bounds. Used by the
@@ -372,11 +366,9 @@ impl DaoGovernorContract {
     /// Extends the TTL of a proposal to ensure it doesn't expire before execution
     fn extend_proposal_ttl(e: &Env, proposal_id: &BytesN<32>) {
         let key = Self::proposal_key(proposal_id);
-        e.storage().persistent().extend_ttl(
-            &key,
-            PROPOSAL_TTL_THRESHOLD,
-            PROPOSAL_TTL_EXTEND_AMOUNT,
-        );
+        e.storage()
+            .persistent()
+            .extend_ttl(&key, PROPOSAL_TTL_THRESHOLD, PROPOSAL_TTL_EXTEND_TO);
     }
 
     fn get_proposal(e: &Env, proposal_id: &BytesN<32>) -> ProposalCoreTime {
@@ -460,9 +452,6 @@ impl DaoGovernorContract {
 }
 
 #[contractimpl(contracttrait)]
-impl Ownable for DaoGovernorContract {}
-
-#[contractimpl(contracttrait)]
 impl Governor for DaoGovernorContract {
     fn voting_delay(e: &Env) -> u32 {
         governor::get_voting_delay(e)
@@ -472,6 +461,10 @@ impl Governor for DaoGovernorContract {
         governor::get_voting_period(e)
     }
 
+    /// For + Abstain votes a proposal snapshotted at `ledger` needs:
+    /// `ceil(voting_supply(ledger) * quorum_bps / 10_000)`. The voting supply
+    /// excludes tokens held by the Treasury, Auction and Marketplace (see the
+    /// token), so system-held tokens never inflate the requirement.
     fn quorum(e: &Env, ledger: u32) -> u128 {
         let quorum_bps = governor::get_quorum(e, ledger);
         let token = governor::get_token_contract(e);
@@ -541,6 +534,10 @@ impl Governor for DaoGovernorContract {
 
     fn proposal_snapshot(e: &Env, proposal_id: BytesN<32>) -> u32 {
         Self::get_proposal(e, &proposal_id).vote_snapshot
+    }
+
+    fn proposal_proposer(e: &Env, proposal_id: BytesN<32>) -> Address {
+        Self::get_proposal(e, &proposal_id).proposer
     }
 
     fn proposal_deadline(e: &Env, proposal_id: BytesN<32>) -> u32 {
@@ -633,6 +630,14 @@ impl Governor for DaoGovernorContract {
             deadline,
             &description,
         );
+        emit_proposal_scheduled(
+            e,
+            &proposal_id,
+            proposal.vote_start,
+            proposal.vote_end,
+            proposal.vote_snapshot,
+            Self::quorum(e, proposal.vote_snapshot),
+        );
 
         proposal_id
     }
@@ -659,7 +664,7 @@ impl Governor for DaoGovernorContract {
 
         // Prevent voting with zero weight (spam/griefing protection)
         if voter_weight == 0 {
-            panic_with_error!(e, GovernorError::InsufficientProposerVotes);
+            panic_with_error!(e, CustomGovernorError::ZeroVotingWeight);
         }
 
         governor::count_vote(e, &proposal_id, &voter, vote_type, voter_weight);

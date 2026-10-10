@@ -7,29 +7,19 @@
 use soroban_sdk::{contracttype, Address, BytesN};
 use stellar_governance::governor::ProposalState;
 
-// TTL constants for proposal storage
-// Proposals can stay active for voting_delay + voting_period + queue_delay
-// Using 60 days (518,400 ledgers) to safely cover max governance timeline
+/// Storage-layout version of this code (see `common::upgrade`).
+pub const STORAGE_VERSION: u32 = 1;
 
-/// Approximate number of ledgers in a day.
+/// Proposal TTL requested on every read/write (~120 days).
 ///
-/// Used for converting time-based TTLs to ledger counts. Stellar produces
-/// approximately one ledger every 5 seconds.
-pub const DAY_IN_LEDGERS: u32 = 17280; // ~5 seconds per ledger
+/// The longest lifecycle is voting delay + voting period + queue delay (30
+/// days each at most) plus the 14 day execution window: 104 days. One touch
+/// therefore keeps a proposal alive to its end; any later touch renews it.
+pub const PROPOSAL_TTL_EXTEND_TO: u32 = 120 * common::ttl::DAY_IN_LEDGERS;
 
-/// Proposal storage TTL extension amount (60 days in ledgers).
-///
-/// Proposals require longer TTL than delegations because they must persist through
-/// the entire governance lifecycle: voting delay, voting period, queue delay, and
-/// potential execution window. 60 days safely covers worst-case scenarios with
-/// maximum configured delays.
-pub const PROPOSAL_TTL_EXTEND_AMOUNT: u32 = 60 * DAY_IN_LEDGERS; // 60 days
-
-/// Proposal storage TTL threshold for triggering extension (59 days).
-///
-/// When a proposal's TTL falls below this threshold, it is automatically extended
-/// during read operations to prevent data loss during active governance processes.
-pub const PROPOSAL_TTL_THRESHOLD: u32 = PROPOSAL_TTL_EXTEND_AMOUNT - DAY_IN_LEDGERS; // 59 days
+/// Re-extend a proposal only when fewer than ~30 days remain, so reads do not
+/// re-pay rent on every touch.
+pub const PROPOSAL_TTL_THRESHOLD: u32 = 30 * common::ttl::DAY_IN_LEDGERS;
 
 // Basis points constants for quorum calculation
 // BPS = basis points (1 BPS = 0.01%)
@@ -40,7 +30,7 @@ pub const PROPOSAL_TTL_THRESHOLD: u32 = PROPOSAL_TTL_EXTEND_AMOUNT - DAY_IN_LEDG
 /// - 5000 BPS = 50.00% quorum
 /// - 2500 BPS = 25.00% quorum
 /// - 100 BPS = 1.00% quorum
-pub const BPS_DENOMINATOR: u128 = 10_000; // 100.00% = 10,000 basis points
+pub const BPS_DENOMINATOR: u128 = common::BPS_DENOMINATOR as u128;
 
 /// Rounding adjustment for ceiling division in quorum calculations.
 ///
@@ -60,7 +50,9 @@ pub const BPS_ROUNDING_ADJUSTMENT: u128 = BPS_DENOMINATOR - 1; // 9,999 for ceil
 /// and cannot be executed. This prevents indefinitely queued proposals from being
 /// executed far in the future when context may have changed.
 ///
-/// Non-queued proposals (Pending, Active, Succeeded, Defeated) do not expire.
+/// The same window applies to a Succeeded proposal that is never queued: it
+/// expires `PROPOSAL_EXPIRATION_PERIOD` after its vote ends. Pending, Active and
+/// Defeated proposals do not expire.
 pub const PROPOSAL_EXPIRATION_PERIOD: u64 = 1_209_600; // 14 days in seconds (14 * 24 * 3600)
 
 // Validation constants
@@ -72,7 +64,7 @@ pub const PROPOSAL_EXPIRATION_PERIOD: u64 = 1_209_600; // 14 days in seconds (14
 /// creation (the ledger before `propose`), so delegation or transfers during
 /// the delay cannot change that proposal's weights. The default minimum is
 /// five minutes.
-pub const MIN_VOTING_DELAY: u32 = 300;
+pub const MIN_VOTING_DELAY: u32 = common::MIN_GOVERNANCE_DELAY;
 
 /// Maximum actions per proposal, so a passed proposal always fits the
 /// execution budget of `treasury.execute`.
@@ -83,7 +75,7 @@ pub const MAX_PROPOSAL_ACTIONS: u32 = 20;
 /// Enforces a minimum duration for voting to remain open.
 /// Ensures sufficient time for community participation. The default minimum is
 /// five minutes.
-pub const MIN_VOTING_PERIOD: u32 = 300;
+pub const MIN_VOTING_PERIOD: u32 = common::MIN_GOVERNANCE_DELAY;
 
 /// Minimum queue delay (5 minutes in seconds).
 ///
@@ -94,17 +86,17 @@ pub const MIN_VOTING_PERIOD: u32 = 300;
 /// - Emergency response if needed
 ///
 /// This is the default deployment minimum; callers can select a longer delay.
-pub const MIN_QUEUE_DELAY: u32 = 300; // 5 minutes in seconds
+pub const MIN_QUEUE_DELAY: u32 = common::MIN_GOVERNANCE_DELAY;
 
 /// Maximum voting delay (30 days in seconds). Bounds governance timing so a
 /// passed proposal cannot freeze governance with an absurd value.
-pub const MAX_VOTING_DELAY: u32 = 2_592_000;
+pub const MAX_VOTING_DELAY: u32 = common::MAX_GOVERNANCE_DELAY;
 
 /// Maximum voting period (30 days in seconds).
-pub const MAX_VOTING_PERIOD: u32 = 2_592_000;
+pub const MAX_VOTING_PERIOD: u32 = common::MAX_GOVERNANCE_DELAY;
 
 /// Maximum queue delay (30 days in seconds).
-pub const MAX_QUEUE_DELAY: u32 = 2_592_000;
+pub const MAX_QUEUE_DELAY: u32 = common::MAX_GOVERNANCE_DELAY;
 
 /// Storage keys for governor-specific instance data.
 ///

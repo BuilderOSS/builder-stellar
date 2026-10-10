@@ -10,22 +10,26 @@
 //!   voting periods, providing predictable voting windows regardless of network conditions
 //! - **Proposal Lifecycle**: Complete state machine from creation through execution:
 //!   Pending → Active → Succeeded/Defeated → Queued → Executed/Expired/Canceled
-//! - **Quorum System**: Basis-points (BPS) based quorum with ceiling division ensuring
-//!   minimum participation requirements are met
-//! - **Queue Delay**: Mandatory five-minute delay between approval and execution for
-//!   transparency and security
-//! - **Flexible Authority**: Owner can grant proposal creation rights to other addresses
+//! - **Quorum System**: Basis-points (BPS) quorum of the voting supply at the
+//!   proposal snapshot, with ceiling division. The voting supply excludes
+//!   tokens held by the Treasury, Auction and Marketplace (see the token)
+//! - **Queue Delay**: A configurable delay (5 minutes to 30 days) between approval
+//!   and execution
+//! - **Admin**: The launch admin configures parameters during setup; after launch
+//!   the Treasury is the admin, so parameter changes need a passed proposal
 //! - **Treasury Integration**: Approved proposals execute actions through a separate
-//!   Treasury contract for security isolation
+//!   Treasury contract (`treasury.execute` -> `governor.consume`)
 //!
 //! ## Proposal Flow
 //!
-//! 1. **Creation**: Authorized user creates proposal with targets, values, and calldata
+//! 1. **Creation**: A holder with at least `proposal_threshold` votes proposes targets,
+//!    functions and arguments
 //! 2. **Voting Delay**: Short delay before voting starts (allows delegation changes)
 //! 3. **Active Voting**: Token holders vote For/Against/Abstain based on snapshot
 //! 4. **Success/Defeat**: Determined by quorum and majority at vote end
 //! 5. **Queue**: Successful proposals queued with execution timestamp (ETA)
-//! 6. **Execution**: After queue delay passes, proposal actions execute via Treasury
+//! 6. **Execution**: After the queue delay, anyone calls `treasury.execute`, which
+//!    consumes the proposal and dispatches its actions
 //!
 //! ## Security
 //!

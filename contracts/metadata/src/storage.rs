@@ -2,21 +2,16 @@ use soroban_sdk::{contracttype, Address, Env, String, Vec};
 
 use crate::error::Error;
 
-const DAY_IN_LEDGERS: u32 = 17_280;
-/// Nominal 1 year; the network caps entries at ~180 days (max_entry_ttl) and
-/// the host clamps the request, so the effective lifetime is ~180 days and
-/// renews on touch.
-const METADATA_TTL: u32 = 365 * DAY_IN_LEDGERS;
-const METADATA_TTL_THRESHOLD: u32 = METADATA_TTL - DAY_IN_LEDGERS;
+/// Storage-layout version of this code (see `common::upgrade`).
+pub const STORAGE_VERSION: u32 = 1;
 
 fn extend_instance_ttl(env: &Env) {
     common::ttl::extend_instance(env);
 }
 
+/// Artwork entries use the shared long-lived persistent policy.
 fn extend_persistent_ttl(env: &Env, key: &DataKey) {
-    env.storage()
-        .persistent()
-        .extend_ttl(key, METADATA_TTL_THRESHOLD, METADATA_TTL);
+    common::ttl::extend_persistent(env, key);
 }
 
 // Storage keys
@@ -36,7 +31,6 @@ pub enum DataKey {
     IpfsGroup(u32),
     Attributes(u32), // token_id -> [u16; 16]
     Manager,
-    Owner,
     Treasury,
 }
 

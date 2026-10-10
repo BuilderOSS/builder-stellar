@@ -9,7 +9,8 @@
 //! - **Pseudo-Random Seeds**: Artwork derived from ledger data + the host PRNG (see Randomness limitation)
 //! - **on_minted Hook**: Token contract calls this to generate seeds
 //! - **Image Composition**: Generates URL with query params for frontend renderer
-//! - **Governance Control**: Only token owner can modify properties and settings
+//! - **Governance Control**: Only the admin (launch admin in setup, Treasury once
+//!   live) can modify properties and settings
 //!
 //! ## Randomness limitation
 //!
@@ -25,7 +26,8 @@
 //! ## Usage
 //!
 //! The contract is initialized by the Manager during DAO creation with renderer settings.
-//! The token owner (governance) can add properties/items and update settings.
+//! The admin can add properties/items and update settings (strings are capped
+//! at `common::MAX_STRING_LENGTH`).
 //! When tokens are minted, the Token contract calls `on_minted` to generate artwork seeds.
 
 #![no_std]

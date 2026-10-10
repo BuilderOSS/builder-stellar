@@ -4,8 +4,8 @@ import type { DaoNetworkConfig } from '@/lib/dao-config';
 import type { ProposalQueuedAction } from '@/lib/proposal-actions/types';
 import { useProposalComposerStore } from '@/stores/proposal-composer-store';
 
-export function treasuryIsOwner(config: DaoNetworkConfig, owner: string | null | undefined) {
-  return Boolean(config.treasuryContractId && owner === config.treasuryContractId);
+export function treasuryIsAdmin(config: DaoNetworkConfig, admin: string | null | undefined) {
+  return Boolean(config.treasuryContractId && admin === config.treasuryContractId);
 }
 
 export function treasuryHasAuthority(

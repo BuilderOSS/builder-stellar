@@ -1,3 +1,5 @@
+import { StrKey } from '@stellar/stellar-sdk';
+
 import {
   type AdminAuthorityDraft,
   type AdminPaymentTokenDraft,
@@ -14,8 +16,10 @@ import {
 } from '@/components/admin/admin-action-forms';
 import { decimalToStroops, validateReservePrice } from '@/lib/auction-values';
 import {
+  MAX_MARKETPLACE_FEE_BPS,
   validateAuctionTimeBuffer,
   validateProposalThreshold,
+  validateQueueDelay,
   validateQuorumBps,
   validateVotingDelay,
   validateVotingPeriod
@@ -97,7 +101,7 @@ function authorityHandler(type: 'set-mint-authority', label: string): ActionHand
 }
 
 function settingHandler(
-  type: 'set-voting-delay' | 'set-voting-period' | 'set-proposal-threshold' | 'set-quorum-bps',
+  type: 'set-voting-delay' | 'set-voting-period' | 'set-queue-delay' | 'set-proposal-threshold' | 'set-quorum-bps',
   label: string,
   functionName: string,
   limitCheck: (value: number | bigint) => string | null
@@ -204,11 +208,15 @@ export const setProposalThresholdHandler = settingHandler(
 export const setQuorumBpsHandler = settingHandler('set-quorum-bps', 'Quorum', 'set_quorum_bps', (value) =>
   validateQuorumBps(Number(value))
 );
+export const setQueueDelayHandler = settingHandler('set-queue-delay', 'Queue delay', 'set_queue_delay', (value) =>
+  validateQueueDelay(Number(value))
+);
 export const setAuctionDurationHandler = auctionDurationHandler(
   'set-auction-duration',
   'Auction duration',
   'set_duration',
-  300
+  300,
+  (seconds) => (seconds > 2_592_000 ? 'Auction duration cannot exceed 30 days.' : null)
 );
 export const setAuctionTimeBufferHandler = auctionDurationHandler(
   'set-auction-time-buffer',
@@ -295,6 +303,118 @@ export const setAuctionPaymentTokenHandler: ActionHandler<AdminPaymentTokenDraft
     args: [data.paymentToken.trim()]
   })
 };
+
+// Registry action IDs describe the UI intent; method names must match the current spec.
+export const setMarketplacePaymentTokenHandler: ActionHandler<AdminPaymentTokenDraft> = {
+  ...setAuctionPaymentTokenHandler,
+  type: 'set-marketplace-payment-token',
+  label: 'Set marketplace payment asset',
+  description: 'Update the marketplace payment asset; existing listings keep their snapshotted asset',
+  validate: (data, context) => {
+    const result = setAuctionPaymentTokenHandler.validate(data, context);
+    if (!result.valid) return result;
+    return StrKey.isValidContract(data.paymentToken.trim())
+      ? valid()
+      : {
+          valid: false,
+          message: 'Payment asset must be a contract address.',
+          fields: { paymentToken: 'Payment asset must be a contract address.' }
+        };
+  },
+  serialize: (data) => ({
+    id: crypto.randomUUID(),
+    type: 'set-marketplace-payment-token',
+    recipient: data.paymentToken.trim(),
+    amount: '',
+    paymentToken: data.paymentToken.trim()
+  }),
+  buildCallVector: (data, context) => ({
+    target: context.config.marketplaceContractId,
+    function: 'set_payment_asset',
+    args: [data.paymentToken.trim()]
+  })
+};
+
+function boundedModuleValueHandler(
+  type: 'set-marketplace-secondary-fee' | 'set-auction-min-bid-increment',
+  label: string,
+  minimum: number,
+  maximum: number
+): ActionHandler<AdminValueDraft> {
+  return {
+    type,
+    label,
+    description: `Update ${label.toLowerCase()}`,
+    group: 'Administration',
+    FormComponent: AdminValueForm,
+    getDefaultValues: () => ({ value: '' }),
+    validate: (data) => {
+      const parsed = Number(data.value.trim());
+      return /^\d+$/.test(data.value.trim()) && Number.isSafeInteger(parsed) && parsed >= minimum && parsed <= maximum
+        ? valid()
+        : {
+            valid: false,
+            message: `${label} must be a whole number between ${minimum} and ${maximum}.`,
+            fields: { value: `${minimum}–${maximum} required.` }
+          };
+    },
+    serialize: (data) => ({
+      id: crypto.randomUUID(),
+      type,
+      recipient: '',
+      amount: data.value.trim(),
+      value: data.value.trim()
+    }),
+    deserialize: (action) => ({ value: action.value || action.amount || '' }),
+    buildCallVector: (data, context) => ({
+      target:
+        type === 'set-marketplace-secondary-fee'
+          ? context.config.marketplaceContractId
+          : context.config.auctionContractId,
+      function: type === 'set-marketplace-secondary-fee' ? 'set_secondary_fee_bps' : 'set_min_bid_increment',
+      args: [Number(data.value.trim())]
+    })
+  };
+}
+
+export const setMarketplaceSecondaryFeeHandler = boundedModuleValueHandler(
+  'set-marketplace-secondary-fee',
+  'Marketplace secondary fee (bps)',
+  0,
+  MAX_MARKETPLACE_FEE_BPS
+);
+export const setAuctionMinBidIncrementHandler = boundedModuleValueHandler(
+  'set-auction-min-bid-increment',
+  'Auction minimum bid increment (%)',
+  1,
+  100
+);
+
+function emptyModuleHandler(
+  type: 'pause-marketplace' | 'unpause-marketplace' | 'cancel-auction',
+  label: string
+): ActionHandler<EmptyDraft> {
+  return {
+    type,
+    label,
+    description: label,
+    group: 'Administration',
+    FormComponent: () => null,
+    getDefaultValues: () => ({}),
+    validate: () => valid(),
+    serialize: () => ({ id: crypto.randomUUID(), type, recipient: '', amount: '' }),
+    deserialize: () => ({}),
+    buildCallVector: (_data, context) => ({
+      target: type === 'cancel-auction' ? context.config.auctionContractId : context.config.marketplaceContractId,
+      function: type === 'cancel-auction' ? 'cancel_auction' : type === 'pause-marketplace' ? 'pause' : 'unpause',
+      args: []
+    })
+  };
+}
+
+export const pauseMarketplaceHandler = emptyModuleHandler('pause-marketplace', 'Pause marketplace');
+export const unpauseMarketplaceHandler = emptyModuleHandler('unpause-marketplace', 'Resume marketplace');
+export const cancelAuctionHandler = emptyModuleHandler('cancel-auction', 'Cancel paused auction');
 
 // Primary sales are lazy: after launch the Treasury is the marketplace admin, so creating and
 // cancelling primary listings are governance proposal actions executed through treasury.execute.

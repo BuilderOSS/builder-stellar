@@ -1,415 +1,54 @@
-# Goldsky Indexer Setup
+# How to configure Goldsky indexing
 
-PostgreSQL-backed event indexer for Nouns Builder Stellar using Goldsky Turbo Pipelines.
+The pipeline discovers DAO modules from Manager events and projects their history
+into PostgreSQL. Manager retains persistent slug mappings but no enumeration API;
+indexed events remain the durable directory/history layer.
 
-This guide covers setting up the Goldsky indexer to track on-chain events from Manager, Token, Governor, Treasury, Auction, Metadata, and Marketplace contracts. Goldsky is the durable DAO discovery and history layer; Manager does not retain a permanent DAO registry.
+## Inputs
 
-## Overview
+- A Manager artifact with network, Manager, shared Minter, and deployment/transaction ledger.
+- A PostgreSQL database with the [migrations/roles/grants](../db/README.md) applied by its administrator.
+- A named Goldsky Postgres secret whose database credentials can write the three landing tables and maintain the pipeline's `streamling` dynamic allowlists.
+- A configured Goldsky CLI/session. The package does not declare a Goldsky CLI dependency.
 
-The Goldsky pipeline indexes Stellar contract events into PostgreSQL, enabling efficient querying of:
-- Activity feed (all DAO events)
-- Proposal lifecycle and voting history
-- Token mints, transfers, and delegation
-- Auction bids and settlements
-- Treasury executions
+## Configure and generate
 
-## Prerequisites
-
-- Goldsky account and API key ([sign up](https://goldsky.com))
-- Neon PostgreSQL database ([create free account](https://neon.tech))
-- Deployed contracts on Stellar (testnet or mainnet)
-
-## Quick Start
-
-### 1. Setup Environment
-
-From the project root:
+From `packages/goldsky`:
 
 ```bash
-cd packages/goldsky
-
-# Interactive setup
-./scripts/setup-env.sh
-
-# Or manually create .env
 cp .env.example .env
-```
-
-Edit `.env` with your credentials:
-
-```bash
-# Goldsky
-GOLDSKY_API_KEY=your_api_key_here
-
-# Database (admin for migrations)
-DATABASE_URL=postgres://admin:password@host.neon.tech/neondb?sslmode=require
-
-# Database (app read-only)
-APP_DATABASE_URL=postgres://app_server:password@host.neon.tech/neondb?sslmode=require
-
-# Goldsky Secrets (database connection for pipeline)
-GOLDSKY_SECRET_NEON_HOST=host.neon.tech
-GOLDSKY_SECRET_NEON_PORT=5432
-GOLDSKY_SECRET_NEON_DATABASE=neondb
-GOLDSKY_SECRET_NEON_USER=goldsky_writer
-GOLDSKY_SECRET_NEON_PASSWORD=writer_password
-
-# Manager deployment artifact
-MANAGER_DEPLOYMENT_FILE=deploys/builder-testnet-manager.json
-```
-
-### 2. Setup Database
-
-#### Create Database Roles
-
-```sql
--- Goldsky writer (for pipeline)
-CREATE ROLE goldsky_writer WITH LOGIN PASSWORD 'secure_password';
-GRANT CREATE ON DATABASE neondb TO goldsky_writer;
-
--- App reader (for Next.js)
-CREATE ROLE app_server WITH LOGIN PASSWORD 'secure_password';
-GRANT CONNECT ON DATABASE neondb TO app_server;
-```
-
-#### Run Migrations and Grants
-
-From project root (see [`db/README.md`](../db/README.md) for the full guide):
-
-```bash
-export DATABASE_URL="postgres://admin:password@host.neon.tech/neondb?sslmode=require"
-./db/setup-roles.sh          # once
-./db/migrate.sh
-./db/grant-permissions.sh
-```
-
-This creates the `chain`, `manager`, `token`, `governance`, `auction`, `metadata`,
-`treasury`, `marketplace`, `minter` and `app` schemas. Goldsky writes only
-`chain.raw_events`, `chain.decoded_events` and `app.activity_feed_events`; every
-other object is a view. `goldsky_writer` gets write access to those three tables
-only, `app_server` is read-only on the view schemas.
-
-### 3. Generate Pipeline Configuration
-
-```bash
-cd packages/goldsky
+# Set MANAGER_DEPLOYMENT_FILE and GOLDSKY_POSTGRES_SECRET in the copied file.
 pnpm generate
-```
-
-This reads `.env` and generates `goldsky.yaml` with your deployment IDs and database secrets.
-
-### 4. Deploy to Goldsky
-
-```bash
-# Validate configuration
-./scripts/deploy.sh validate
-
-# Deploy pipeline
-./scripts/deploy.sh deploy
-
-# Check status
-./scripts/deploy.sh status
-
-# Monitor logs
-./scripts/deploy.sh logs
-```
-
-### 5. Configure Web App
-
-Add to `apps/web/.env`:
-
-```bash
-# Use app_server read-only credentials
-APP_DATABASE_URL=postgres://app_server:password@host.neon.tech/neondb?sslmode=require
-```
-
-## Pipeline Architecture
-
-```
-Stellar Network (testnet/mainnet)
-    ↓
-Goldsky Indexer (stellar_events source)
-    ↓
-dao_events transform
-    - Filter by deployment IDs
-    - Route to contract-specific tables
-    ↓
-raw_events transform
-    - Decode XDR-JSON to structured events
-    ↓
-decoded_events transform
-    - Extract typed event data
-    - Normalize timestamps
-    ↓
-activity_feed transform
-    - Generate user-friendly summaries
-    - Create activity feed entries
-    ↓
-PostgreSQL (Neon) destination
-```
-
-## Event Coverage
-
-The pipeline starts from the Manager deployment and indexes **54 critical DAO
-events** across Manager-discovered DAO modules:
-
-### Token (9 events)
-- `Initialize`, `Mint`, `Transfer`, `Burn`
-- `DelegateChanged`, `DelegateVotesChanged`
-- `AdminChanged`, `MintAuthorityChanged`, `ContractUpgraded`
-
-### Governor (16 events)
-- `Initialize`, `ProposalCreated`, `ProposalCanceled`, `ProposalQueued`, `ProposalExecuted`
-- `VoteCast`, `VotingDelaySet`, `VotingPeriodSet`
-- `ProposalThresholdBpsSet`, `QuorumThresholdBpsSet`
-- `VetoerChanged`, `AdminChanged`, `TreasuryChanged`, `ContractUpgraded`
-
-### Treasury
-- `Initialize`, `Launched`, `Execute`
-- `Execute` is emitted once per call in a proposal, with topics `(governor, target, proposal_id)` and data `{function, index}`.
-
-### Auction (12 events)
-- `Initialize`, `AuctionCreated`, `AuctionBid`, `AuctionSettled`, `AuctionExtended`
-- `ReservePriceUpdated`, `MinBidIncrementPercentageUpdated`
-- `TimeBufferUpdated`, `DurationUpdated`
-- `TokenChanged`, `TreasuryChanged`, `ContractUpgraded`
-
-Run validation:
-```bash
-cd packages/goldsky
 pnpm validate
-```
-
-### Behavior notes for contract events
-
-The event lists above predate the hardened contracts and the per-module event
-sets are defined by the decoders in `packages/goldsky` (see its README for the
-current coverage and schema). Behavior the pipeline must handle:
-
-- Every module emits a `Launched` event at `launch_dao`. Six different structs share the topic name `launched`; identify events by (contract address, event name), not by name alone.
-- Treasury `Execute` is one event per call, keyed by `proposal_id`. `ProposalExecuted` (Governor) is emitted in the same transaction as the `Execute` events, because `treasury.execute` calls `governor.consume`. `governor.execute` always fails, so nothing is emitted from it.
-- Auction emits `RefundDeferred` (failed push, credit stored) and `RefundWithdrawn` (pull); `BidRefunded` only when the push succeeded. An outstanding refund is the sum of deferred amounts minus withdrawn amounts per bidder.
-- Marketplace primary listings are keyed by `listing_id`, secondary listings by `token_id`. `ListingPurchased`, `ListingCancelled` and `ListingExpired` are secondary-only; primary events have their own names.
-- Manager emits `AdminProposed`, `AdminChanged`, `PlatformMinterSet`, and `DaoLaunched` carries `enable_minter`.
-- Metadata `PropertiesReset` reports `old_num_properties`.
-- Contract error codes overlap between contracts, so store errors with the contract id.
-
-## Data Access
-
-Query functions are in `apps/web/src/lib/goldsky.ts`:
-
-### Activity Feed
-
-```typescript
-import { getGoldskyActivityFeed } from '@/lib/goldsky';
-
-const activities = await getGoldskyActivityFeed({ limit: 25 });
-// Returns: { id, timestamp, event_type, title, summary, actor, metadata }
-```
-
-### Proposals
-
-```typescript
-import {
-  getGoldskyProposalList,
-  getGoldskyProposalDetail,
-  getGoldskyProposalVotes,
-  getGoldskyProposalLifecycle
-} from '@/lib/goldsky';
-
-// List proposals
-const proposals = await getGoldskyProposalList({ status: 'active' });
-
-// Get proposal detail
-const proposal = await getGoldskyProposalDetail('proposal_123');
-
-// Get votes for proposal
-const votes = await getGoldskyProposalVotes({ proposalId: 'proposal_123' });
-
-// Get full lifecycle
-const lifecycle = await getGoldskyProposalLifecycle('proposal_123');
-```
-
-### Token Data
-
-```typescript
-import {
-  getGoldskyTokenInventory,
-  getGoldskyMintAuthorities,
-  getGoldskyGovernorAuthorities
-} from '@/lib/goldsky';
-
-// Token holders and balances
-const members = await getGoldskyTokenInventory({ limit: 100 });
-
-// Mint authorities
-const mintAuth = await getGoldskyMintAuthorities();
-
-// Governor authorities
-const govAuth = await getGoldskyGovernorAuthorities();
-```
-
-### Health Check
-
-```typescript
-import { getGoldskyHealth } from '@/lib/goldsky';
-
-const health = await getGoldskyHealth();
-// Returns: { status: 'ok' | 'error', lastBlock, lastEventTime, eventCount }
-```
-
-## Development
-
-### Project Structure
-
-```
-packages/goldsky/
-├── src/
-│   ├── decoded-events.script.js    # XDR-JSON decoder
-│   ├── activity-feed.script.js     # Activity feed generator
-│   └── goldsky-template.yaml       # Pipeline template
-├── scripts/
-│   ├── generate-pipeline.mjs       # Pipeline generator
-│   ├── validate-events.mjs         # Event coverage validator
-│   ├── deploy.sh                   # Deployment manager
-│   └── setup-env.sh                # Environment setup
-├── test/
-│   ├── dao-events-transform.test.mjs
-│   └── event-coverage.test.mjs
-└── package.json
-```
-
-### Adding New Events
-
-When adding new events to contracts:
-
-1. Update `src/decoded-events.script.js` with decoder logic
-2. Update `src/activity-feed.script.js` with summary template
-3. Add or update views if the read model needs the event (append a new migration in `db/migrations/`, update `apps/web/prisma/schema.prisma` if the web reads it)
-4. Add the topic order to the decoder's `topicNames` (`pnpm validate` checks it against `contracts/*/src/events.rs`) and a test in `test/dao-events-transform.test.mjs`
-5. Run tests: `pnpm test && pnpm validate`, and `TEST_DATABASE_URL=… ./db/test-migrations.sh` for read-model changes
-6. Redeploy: `pnpm generate && ./scripts/deploy.sh redeploy`
-
-### Testing
-
-```bash
-cd packages/goldsky
-
-# Run all tests
 pnpm test
-
-# Validate event coverage against bindings
-pnpm validate
 ```
 
-## Deployment Commands
+The artifact path is resolved from the repository root, even when generation runs in the package. `GOLDSKY_START_AT` overrides the artifact ledger; otherwise generation takes `deploymentLedger` or the earliest transaction ledger. The example's fixed start ledger is deployment-specific, not a default for every Manager. The generator loads `.env` then `.env.local`, with process environment taking precedence.
 
-```bash
-cd packages/goldsky
+Output is `pipelines/builder-stellar-events.yaml`, authored from `templates/builder-stellar-events.yaml.mustache` and transform scripts. No `setup-env.sh` or `goldsky.yaml` is used. Credentials are held by the named backend secret; the generator does not interpolate `GOLDSKY_SECRET_NEON_*` values into YAML.
 
-# Validate pipeline configuration
-./scripts/deploy.sh validate
+## Database and web
 
-# Deploy pipeline to Goldsky
-./scripts/deploy.sh deploy
+From the repository root, an administrator runs `db/setup-roles.sh`, `db/migrate.sh`, and `db/grant-permissions.sh` using `DATABASE_URL`. These mutate the database. The web uses separate read-only `APP_DATABASE_URL`. See [DB operations](../db/README.md) for the exact scripts and reset boundaries.
 
-# Check pipeline status
-./scripts/deploy.sh status
+Align the web's newest-artifact deployment selection with the pipeline's explicit artifact and `NEXT_PUBLIC_NETWORK`. New DAO addresses enter six dynamic allowlists from `DaoCreated`. Minter is a configured shared contract, not a seventh DAO child.
 
-# Tail pipeline logs
-./scripts/deploy.sh logs
+## Validation and deployment boundary
 
-# Delete pipeline
-./scripts/deploy.sh delete
+`pnpm validate` checks contract-event alignment locally. `pnpm turbo:validate` invokes `goldsky turbo validate` and requires a usable CLI. `scripts/deploy.sh` still invokes `pnpm goldsky pipeline ...` commands and loads `.env`; its CLI compatibility is not established by local transform tests. Confirm the installed CLI command family before using it to validate/apply/delete a remote pipeline. This page does not claim remote deployment was verified.
 
-# Redeploy (delete + deploy)
-./scripts/deploy.sh redeploy
-```
+Pipeline name is `builder-stellar-events`; the current testnet pipeline was applied with `goldsky turbo apply` from a copy renamed `builder-stellar-testnet` (`goldsky turbo list|delete|apply`). A replay after a DB reset needs `goldsky turbo delete <name>` (clears state) and a fresh `apply`. The template requests `stellar_<network>.events` version `1.2.0`, resource size `s`, streaming mode, and an explicit start ledger. These are configured values, not a claim that every network alias is available from the vendor.
 
-## Troubleshooting
+## Event identity notes
 
-### Pipeline Deployment Fails
+- Every module emits its own launch event at `launch_dao` (`TokenLaunched`, `GovernorLaunched`, `TreasuryLaunched`, `AuctionLaunched`, `MarketplaceLaunched`, `MetadataLaunched`) and an `AdminChanged` (launch admin -> Treasury). `AdminChanged` shares its name and shape with the Manager's own admin event; identify events by (contract address, event name).
+- Governor `propose` emits `ProposalScheduled` (vote window, snapshot, quorum) next to `ProposalCreated`; proposal state in the read model is computed from it.
+- Manager `launch_dao` claims the slug (`SlugClaimed`); `DaoCreated.slug` and `PendingSlugUpdated` are only requests.
+- `batch_mint` emits one `MintBatchWithMinter` and the Metadata hook one `SeedsGenerated` per batch (views expand them per token); single mints keep `MintWithMinter` / `SeedGenerated`.
+- Contract error codes are unique across contracts (7000-7899, one block of 100 per crate), so a code identifies its contract.
 
-```bash
-# Validate YAML syntax
-./scripts/deploy.sh validate
+## Verify/troubleshoot
 
-# Verify API key
-echo $GOLDSKY_API_KEY
+Check generated addresses/start ledger, configured CLI processing status, transform errors, and scoped `manager.daos`/`app.indexer_status` views. Replaying starts at the configured ledger; there is no promise of current-block-only ingestion or <30-second indexing.
 
-# Check all secrets are set
-cat .env | grep GOLDSKY_SECRET
-```
-
-### No Events in Database
-
-```bash
-# Check pipeline state
-./scripts/deploy.sh status
-
-# Check for errors
-./scripts/deploy.sh logs
-
-# Verify deployment IDs
-pnpm generate
-cat goldsky.yaml | grep -A 5 "deployment_ids"
-```
-
-### Transform Errors in Logs
-
-```bash
-# Run local tests
-pnpm test
-
-# Check event coverage
-pnpm validate
-
-# Review decoder logic
-cat src/decoded-events.script.js
-```
-
-### Database Connection Issues
-
-```bash
-# Test admin connection
-psql "$DATABASE_URL" -c "SELECT 1"
-
-# Test app connection
-psql "$APP_DATABASE_URL" -c "SELECT 1"
-
-# Check role permissions
-psql "$DATABASE_URL" -c "SELECT * FROM information_schema.role_table_grants WHERE grantee = 'goldsky_writer'"
-```
-
-## Migration from stellar-dao
-
-If migrating from the previous stellar-dao repository:
-
-1. Update deployment IDs in `.env` to match new contract deployments
-2. Run database migrations to create schemas
-3. Regenerate pipeline: `pnpm generate`
-4. Redeploy: `./scripts/deploy.sh redeploy`
-5. Events will start indexing from current block (no historical backfill by default)
-
-## Resources
-
-- [Goldsky Documentation](https://docs.goldsky.com)
-- [Goldsky Turbo Pipelines](https://docs.goldsky.com/guides/turbo-pipelines)
-- [Stellar Events Guide](https://developers.stellar.org/docs/smart-contracts/guides/events)
-- [Neon PostgreSQL](https://neon.tech/docs)
-- [Soroban Contract Events](https://developers.stellar.org/docs/smart-contracts/events)
-
-## Next Steps
-
-After successful indexing:
-
-1. Verify events in database:
-   ```sql
-   SELECT COUNT(*) FROM chain.raw_events;
-   SELECT COUNT(*) FROM chain.decoded_events;
-   SELECT COUNT(*) FROM app.activity_feed;
-   ```
-
-2. Test query functions in web app
-3. Monitor pipeline logs for errors
-4. Set up alerting for pipeline failures
+Changes to event shape require Rust-to-decoder alignment, activity mapping, relevant SQL views/Prisma, tests, and regenerated YAML. Incompatible replay/reset needs explicit operator approval, not an automatic redeploy. See [package reference](../packages/goldsky/README.md), [view catalog](DATABASE_SCHEMA.md), and [monitoring](MONITORING.md).

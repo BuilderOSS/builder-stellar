@@ -22,10 +22,9 @@ pub struct MetadataContract;
 impl MetadataContract {
     /// One-shot, Manager-only launch handoff (Setup -> Live).
     ///
-    /// Moves the upgrade authority (`Owner`) to `treasury`, marks the module
-    /// live, and emits `Launched`. A second call panics with `AlreadyLive`.
-    /// Artwork/settings authority follows the token owner and moves with the
-    /// token's own launch.
+    /// Hands the admin (artwork, settings and upgrades) to `treasury`, marks
+    /// the module live, and emits `MetadataLaunched`. A second call panics
+    /// with `AlreadyLive`.
     pub fn launch(env: Env, treasury: Address) {
         let manager = Self::manager(&env);
         manager.require_auth();
@@ -34,7 +33,7 @@ impl MetadataContract {
         if wired != Some(treasury.clone()) {
             soroban_sdk::panic_with_error!(&env, Error::TreasuryMismatch);
         }
-        env.storage().instance().set(&DataKey::Owner, &treasury);
+        common::admin::handoff(&env, &treasury);
         common::ttl::extend_instance(&env);
         emit_launched(&env, &treasury);
     }
@@ -48,12 +47,13 @@ impl MetadataContract {
     /// * `description` - Collection description
     /// * `contract_image` - Collection image URL
     /// * `renderer_base` - Base URL for image rendering service
-    /// * `owner` - Metadata contract owner
+    /// * `admin` - setup-phase admin (the launch admin); becomes the Treasury at launch
     /// * `treasury` - DAO treasury; `launch` must be called with exactly this address
     ///
     /// # Panics
     ///
-    /// Panics with the underlying `Error` when the initial properties are invalid.
+    /// Panics with the underlying `Error` when the initial properties are
+    /// invalid or a settings string exceeds `common::MAX_STRING_LENGTH`.
     pub fn __constructor(
         env: Env,
         token: Address,
@@ -63,13 +63,18 @@ impl MetadataContract {
         renderer_base: String,
         manager: Address,
         current_hash: BytesN<32>,
-        owner: Address,
+        admin: Address,
         treasury: Address,
         property_names: Vec<String>,
         items: Vec<ItemParam>,
         ipfs_group: IpfsGroup,
         version: String,
     ) {
+        for value in [&project_uri, &description, &contract_image, &renderer_base] {
+            if let Err(err) = Self::check_length(value) {
+                soroban_sdk::panic_with_error!(&env, err);
+            }
+        }
         let settings = Settings {
             token: token.clone(),
             project_uri: project_uri.clone(),
@@ -85,16 +90,16 @@ impl MetadataContract {
             }
         }
         env.storage().instance().set(&DataKey::Manager, &manager);
-        env.storage().instance().set(&DataKey::Owner, &owner);
+        common::admin::init(&env, &admin);
         env.storage().instance().set(&DataKey::Treasury, &treasury);
-        common::upgrade::init(&env, &current_hash, &version);
+        common::upgrade::init(&env, &current_hash, &version, STORAGE_VERSION);
 
         emit_metadata_initialized(
             &env,
             &token,
             &renderer_base,
             &version,
-            &owner,
+            &admin,
             &project_uri,
             &description,
             &contract_image,
@@ -102,16 +107,25 @@ impl MetadataContract {
     }
 
     pub fn upgrade(env: Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
-        let owner: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Owner)
-            .unwrap_or_else(|| {
-                soroban_sdk::panic_with_error!(env, common::CommonError::OwnerNotSet)
-            });
-        owner.require_auth();
+        common::admin::require_admin(&env);
         let manager = Self::manager(&env);
         common::upgrade::apply(&env, &manager, &from_hash, &to_hash);
+    }
+
+    /// Advance the storage layout after an upgrade (admin only).
+    pub fn migrate(env: Env) {
+        common::admin::require_admin(&env);
+        common::upgrade::migrate(&env, STORAGE_VERSION);
+    }
+
+    /// Storage-layout version of the data held by this contract.
+    pub fn storage_version(env: Env) -> u32 {
+        common::upgrade::storage_version(&env)
+    }
+
+    /// Module admin: the launch admin during setup, the Treasury once live.
+    pub fn admin(env: Env) -> Address {
+        common::admin::admin(&env)
     }
 
     pub fn version(env: Env) -> String {
@@ -123,14 +137,7 @@ impl MetadataContract {
     }
 
     pub fn sync_version(env: Env) {
-        let owner: Address = env
-            .storage()
-            .instance()
-            .get(&DataKey::Owner)
-            .unwrap_or_else(|| {
-                soroban_sdk::panic_with_error!(env, common::CommonError::OwnerNotSet)
-            });
-        owner.require_auth();
+        common::admin::require_admin(&env);
         let manager = Self::manager(&env);
         common::upgrade::sync_version(&env, &manager);
     }
@@ -154,11 +161,10 @@ impl MetadataContract {
     ///
     /// # Authorization
     ///
-    /// Only the token owner (governance) can add properties.
+    /// Admin only (the launch admin in setup, the Treasury once live).
     ///
     /// # Errors
     ///
-    /// * `Unauthorized` - Caller is not token owner
     /// * `OnePropertyAndItemRequired` - First addition must have at least 1 property and 1 item
     /// * `PropertyHasNoItems` - Property created without items
     /// * `TooManyProperties` - Exceeds 16 property limit
@@ -173,7 +179,7 @@ impl MetadataContract {
     ) -> Result<(), Error> {
         common::ttl::extend_instance(&env);
         // Check authorization
-        Self::require_owner(&env)?;
+        Self::require_admin(&env);
 
         Self::_add_properties(&env, names, items, ipfs_group)
     }
@@ -184,7 +190,7 @@ impl MetadataContract {
     ///
     /// # Authorization
     ///
-    /// Only the token owner (governance) can reset properties.
+    /// Admin only.
     pub fn delete_and_recreate_properties(
         env: Env,
         names: Vec<String>,
@@ -193,7 +199,7 @@ impl MetadataContract {
     ) -> Result<(), Error> {
         common::ttl::extend_instance(&env);
         // Check authorization
-        Self::require_owner(&env)?;
+        Self::require_admin(&env);
 
         // Reset the counts and drop the (<= 16) property headers. Item and
         // IPFS group entries are not deleted: every getter is bounded by the
@@ -223,7 +229,7 @@ impl MetadataContract {
     ///
     /// # Errors
     ///
-    /// * `OnlyToken` - Only token contract can call this function
+    /// Only the token contract may call this (its auth is required).
     pub fn on_minted(env: Env, token_id: u32) -> Result<bool, Error> {
         common::ttl::extend_instance(&env);
         // Verify caller is token contract
@@ -235,22 +241,22 @@ impl MetadataContract {
         }
 
         let counts = Self::item_counts(&env, num_properties);
-        Self::seed_token(&env, &counts, token_id);
+        let selections = Self::seed_token(&env, &counts, token_id);
+        emit_seed_generated(&env, token_id, num_properties, &selections);
         Ok(true)
     }
 
     /// Re-seed a token that was minted before artwork existed (or whose
-    /// `on_minted` hook failed). Owner-only.
+    /// `on_minted` hook failed). Admin only.
     ///
     /// # Errors
     ///
-    /// * `Unauthorized` - caller is not the token-contract owner
     /// * `TokenNotMinted` - the token does not exist
     /// * `AlreadySeeded` - the token already has attributes
     /// * `NoProperties` - no properties are configured yet
     pub fn regenerate(env: Env, token_id: u32) -> Result<(), Error> {
         common::ttl::extend_instance(&env);
-        Self::require_owner(&env)?;
+        Self::require_admin(&env);
 
         let settings = get_settings(&env)?;
         let exists = matches!(
@@ -268,7 +274,8 @@ impl MetadataContract {
             return Err(Error::NoProperties);
         }
         let counts = Self::item_counts(&env, num_properties);
-        Self::seed_token(&env, &counts, token_id);
+        let selections = Self::seed_token(&env, &counts, token_id);
+        emit_seed_generated(&env, token_id, num_properties, &selections);
         Ok(())
     }
 
@@ -276,12 +283,12 @@ impl MetadataContract {
     /// `[first_token_id, first_token_id + count)`.
     ///
     /// Authorizes the token and loads the properties once for the whole range
-    /// instead of once per token. Emits one `SeedGenerated` event per token,
-    /// same as `on_minted`.
+    /// instead of once per token. Emits a single `SeedsGenerated` event for
+    /// the whole range rather than one `SeedGenerated` per token.
     ///
     /// # Errors
     ///
-    /// * `OnlyToken` - Only token contract can call this function
+    /// Only the token contract may call this (its auth is required).
     pub fn on_minted_batch(env: Env, first_token_id: u32, count: u32) -> Result<bool, Error> {
         common::ttl::extend_instance(&env);
         Self::require_token(&env)?;
@@ -292,9 +299,11 @@ impl MetadataContract {
         }
 
         let counts = Self::item_counts(&env, num_properties);
+        let mut selections = Vec::new(&env);
         for i in 0..count {
-            Self::seed_token(&env, &counts, first_token_id + i);
+            selections.push_back(Self::seed_token(&env, &counts, first_token_id + i));
         }
+        emit_seeds_generated(&env, first_token_id, count, num_properties, &selections);
         Ok(true)
     }
 
@@ -448,7 +457,8 @@ impl MetadataContract {
     /// Update contract image
     pub fn update_contract_image(env: Env, new_contract_image: String) -> Result<(), Error> {
         common::ttl::extend_instance(&env);
-        Self::require_owner(&env)?;
+        Self::require_admin(&env);
+        Self::check_length(&new_contract_image)?;
 
         let mut settings = get_settings(&env)?;
         let old_image = settings.contract_image.clone();
@@ -464,7 +474,8 @@ impl MetadataContract {
     /// Update renderer base URL
     pub fn update_renderer_base(env: Env, new_renderer_base: String) -> Result<(), Error> {
         common::ttl::extend_instance(&env);
-        Self::require_owner(&env)?;
+        Self::require_admin(&env);
+        Self::check_length(&new_renderer_base)?;
 
         let mut settings = get_settings(&env)?;
         let old_base = settings.renderer_base.clone();
@@ -480,7 +491,8 @@ impl MetadataContract {
     /// Update description
     pub fn update_description(env: Env, new_description: String) -> Result<(), Error> {
         common::ttl::extend_instance(&env);
-        Self::require_owner(&env)?;
+        Self::require_admin(&env);
+        Self::check_length(&new_description)?;
 
         let mut settings = get_settings(&env)?;
         let old_description = settings.description.clone();
@@ -496,7 +508,8 @@ impl MetadataContract {
     /// Update project URI
     pub fn update_project_uri(env: Env, new_project_uri: String) -> Result<(), Error> {
         common::ttl::extend_instance(&env);
-        Self::require_owner(&env)?;
+        Self::require_admin(&env);
+        Self::check_length(&new_project_uri)?;
 
         let mut settings = get_settings(&env)?;
         let old_uri = settings.project_uri.clone();
@@ -552,7 +565,7 @@ impl MetadataContract {
         let mut headers: Vec<StoredProperty> = Vec::new(env);
         let mut dirty: Vec<bool> = Vec::new(env);
         for i in 0..num_stored_properties {
-            headers.push_back(get_stored_property(env, i).unwrap());
+            headers.push_back(get_stored_property(env, i).ok_or(Error::InvalidPropertySelected)?);
             dirty.push_back(false);
         }
         for i in 0..num_new_properties {
@@ -625,7 +638,9 @@ impl MetadataContract {
         counts
     }
 
-    fn seed_token(env: &Env, counts: &Vec<u32>, token_id: u32) {
+    /// Derives and stores `token_id`'s attributes and returns them
+    /// (`[num_properties, idx...]`). Callers emit the seed event.
+    fn seed_token(env: &Env, counts: &Vec<u32>, token_id: u32) -> Vec<u32> {
         let num_properties = counts.len();
         let seed = Self::generate_seed(env, token_id);
 
@@ -646,7 +661,7 @@ impl MetadataContract {
         }
 
         set_attributes(env, token_id, &attr_vec);
-        emit_seed_generated(env, token_id, num_properties, &attr_vec);
+        attr_vec
     }
 
     /// Derive the 32-byte artwork seed for `token_id`.
@@ -678,12 +693,16 @@ impl MetadataContract {
         Bytes::from_array(env, &hash.to_array())
     }
 
-    fn require_owner(env: &Env) -> Result<(), Error> {
-        let settings = get_settings(env)?;
-        let token = stellar_access::ownable::OwnableClient::new(env, &settings.token);
-        let owner = token.get_owner().ok_or(Error::Unauthorized)?;
+    fn require_admin(env: &Env) {
+        common::admin::require_admin(env);
+    }
 
-        owner.require_auth();
+    /// Settings strings are bounded so the instance entry (loaded on every
+    /// mint hook) stays small.
+    fn check_length(value: &String) -> Result<(), Error> {
+        if value.len() > common::MAX_STRING_LENGTH {
+            return Err(Error::StringTooLong);
+        }
         Ok(())
     }
 

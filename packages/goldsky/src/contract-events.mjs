@@ -25,21 +25,22 @@ export const LIBRARY_EVENTS = {
   VoteCast: { topics: ['voter', 'proposal_id'], data: ['vote_type', 'weight', 'reason'] },
   ProposalExecuted: { topics: ['proposal_id'], data: [] },
   ProposalCancelled: { topics: ['proposal_id'], data: [] },
+  // Emitted by governor::set_quorum: once at construction (the initial quorum) and on every
+  // set_quorum_bps next to our QuorumBpsChanged.
+  QuorumChanged: { topics: [], data: ['old_quorum', 'new_quorum'] },
   Paused: { topics: [], data: [] },
-  Unpaused: { topics: [], data: [] },
-  OwnershipTransfer: { topics: [], data: ['old_owner', 'new_owner', 'live_until_ledger'] },
-  OwnershipTransferCompleted: { topics: [], data: ['new_owner'] },
-  OwnershipRenounced: { topics: [], data: ['old_owner'] }
+  Unpaused: { topics: [], data: [] }
 };
 
-// Roles that emit the events defined in contracts/common/src/*.rs.
+// Roles that emit the events defined in contracts/common/src/*.rs (admin handoff,
+// upgrades, migrations). The Manager emits its own AdminChanged with the same shape.
 export const COMMON_EVENT_ROLES = ['token', 'governor', 'treasury', 'auction', 'marketplace', 'metadata'];
 
 /**
  * Parse every #[contractevent] struct into a flat list of { contract, name, topics, data }.
- * Names are NOT unique across contracts: each module emits its own `Launched`
- * struct (token minters, auction started, marketplace opened, ...). The unique key
- * is (contract, name); the decoder keys on the event name only, so same-named
+ * Names are not guaranteed unique across contracts (for example `AdminChanged` is
+ * emitted by the Manager and, from contracts/common, by every module). The unique
+ * key is (contract, name); the decoder keys on the event name only, so same-named
  * events must agree on topics (enforced by contractEvents()).
  */
 export function contractEventList() {

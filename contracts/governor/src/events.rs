@@ -1,24 +1,22 @@
 #![allow(clippy::too_many_arguments)] // emit helpers mirror the event fields 1:1
 
-//! Event definitions and emission helpers for the Governor contract.
+//! Events published by the Governor contract.
 //!
-//! This module defines events for tracking the complete governance lifecycle including:
-//! - Contract initialization and parameter changes
-//! - Proposal creation, voting, queueing, and execution
-//!
-//! Many core governance events (ProposalCreated, VoteCast, etc.) are emitted by the
-//! stellar_governance library. Custom events here supplement those with additional
-//! metadata specific to this implementation (timestamp-based voting, detailed execution tracking).
+//! OpenZeppelin's governor library emits the core lifecycle events
+//! (`ProposalCreated`, `VoteCast`, `ProposalExecuted`, `ProposalCancelled`).
+//! The events below add initialization, parameter changes, queueing, the
+//! launch handoff and `ProposalScheduled`, which carries everything an indexer
+//! needs to compute a proposal's state without guessing (vote window, snapshot
+//! and the quorum fixed at proposal time). Admin changes are
+//! `common::admin::AdminChanged`.
 
-use soroban_sdk::{contractevent, Address};
-
-// Standard contract events
+use soroban_sdk::{contractevent, Address, BytesN, Env, String};
 
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GovernorInitialized {
     #[topic]
-    pub owner: Address,
+    pub admin: Address,
     pub token_contract: Address,
     pub treasury_contract: Address,
     pub voting_delay: u32,
@@ -27,6 +25,23 @@ pub struct GovernorInitialized {
     pub proposal_threshold: u128,
     pub quorum_bps: u32,
     pub version: String,
+}
+
+/// Emitted by `propose` next to OpenZeppelin's `ProposalCreated`.
+///
+/// `vote_start` / `vote_end` are unix timestamps (seconds); `snapshot_ledger`
+/// is the ledger voting power and voting supply are read at; `quorum_votes` is
+/// the For + Abstain total the proposal needs. Quorum is fully determined at
+/// proposal time because the snapshot precedes the proposal.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProposalScheduled {
+    #[topic]
+    pub proposal_id: BytesN<32>,
+    pub vote_start: u64,
+    pub vote_end: u64,
+    pub snapshot_ledger: u32,
+    pub quorum_votes: u128,
 }
 
 #[contractevent]
@@ -41,7 +56,7 @@ pub struct ProposalQueued {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct QueueDelayChanged {
     #[topic]
-    pub caller: Address,
+    pub changed_by: Address,
     pub old_value: u32,
     pub new_value: u32,
 }
@@ -50,7 +65,7 @@ pub struct QueueDelayChanged {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VotingDelayChanged {
     #[topic]
-    pub caller: Address,
+    pub changed_by: Address,
     pub old_value: u32,
     pub new_value: u32,
 }
@@ -59,7 +74,7 @@ pub struct VotingDelayChanged {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VotingPeriodChanged {
     #[topic]
-    pub caller: Address,
+    pub changed_by: Address,
     pub old_value: u32,
     pub new_value: u32,
 }
@@ -68,7 +83,7 @@ pub struct VotingPeriodChanged {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProposalThresholdChanged {
     #[topic]
-    pub caller: Address,
+    pub changed_by: Address,
     pub old_value: u128,
     pub new_value: u128,
 }
@@ -77,7 +92,7 @@ pub struct ProposalThresholdChanged {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct QuorumBpsChanged {
     #[topic]
-    pub caller: Address,
+    pub changed_by: Address,
     pub old_value: u32,
     pub new_value: u32,
 }
@@ -85,19 +100,14 @@ pub struct QuorumBpsChanged {
 /// Emitted once when the Manager launches the governor (Setup -> Live).
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Launched {
+pub struct GovernorLaunched {
     #[topic]
     pub treasury: Address,
 }
 
-// Event helper functions
-
-use soroban_sdk::{BytesN, Env, String};
-
 pub fn emit_governor_initialized(
     e: &Env,
-    owner: &Address,
-    #[allow(unused_variables)] name: &String,
+    admin: &Address,
     version: &String,
     token_contract: &Address,
     treasury_contract: &Address,
@@ -108,7 +118,7 @@ pub fn emit_governor_initialized(
     quorum_bps: u32,
 ) {
     GovernorInitialized {
-        owner: owner.clone(),
+        admin: admin.clone(),
         token_contract: token_contract.clone(),
         treasury_contract: treasury_contract.clone(),
         voting_delay,
@@ -121,27 +131,45 @@ pub fn emit_governor_initialized(
     .publish(e);
 }
 
-pub fn emit_queue_delay_changed(e: &Env, caller: &Address, old_value: u32, new_value: u32) {
+pub fn emit_proposal_scheduled(
+    e: &Env,
+    proposal_id: &BytesN<32>,
+    vote_start: u64,
+    vote_end: u64,
+    snapshot_ledger: u32,
+    quorum_votes: u128,
+) {
+    ProposalScheduled {
+        proposal_id: proposal_id.clone(),
+        vote_start,
+        vote_end,
+        snapshot_ledger,
+        quorum_votes,
+    }
+    .publish(e);
+}
+
+pub fn emit_queue_delay_changed(e: &Env, changed_by: &Address, old_value: u32, new_value: u32) {
     QueueDelayChanged {
-        caller: caller.clone(),
+        changed_by: changed_by.clone(),
         old_value,
         new_value,
     }
     .publish(e);
 }
 
-pub fn emit_voting_delay_changed(e: &Env, caller: &Address, old_value: u32, new_value: u32) {
+pub fn emit_voting_delay_changed(e: &Env, changed_by: &Address, old_value: u32, new_value: u32) {
     VotingDelayChanged {
-        caller: caller.clone(),
+        changed_by: changed_by.clone(),
         old_value,
         new_value,
     }
     .publish(e);
 }
 
-pub fn emit_voting_period_changed(e: &Env, caller: &Address, old_value: u32, new_value: u32) {
+pub fn emit_voting_period_changed(e: &Env, changed_by: &Address, old_value: u32, new_value: u32) {
     VotingPeriodChanged {
-        caller: caller.clone(),
+        changed_by: changed_by.clone(),
         old_value,
         new_value,
     }
@@ -150,21 +178,21 @@ pub fn emit_voting_period_changed(e: &Env, caller: &Address, old_value: u32, new
 
 pub fn emit_proposal_threshold_changed(
     e: &Env,
-    caller: &Address,
+    changed_by: &Address,
     old_value: u128,
     new_value: u128,
 ) {
     ProposalThresholdChanged {
-        caller: caller.clone(),
+        changed_by: changed_by.clone(),
         old_value,
         new_value,
     }
     .publish(e);
 }
 
-pub fn emit_quorum_bps_changed(e: &Env, caller: &Address, old_value: u32, new_value: u32) {
+pub fn emit_quorum_bps_changed(e: &Env, changed_by: &Address, old_value: u32, new_value: u32) {
     QuorumBpsChanged {
-        caller: caller.clone(),
+        changed_by: changed_by.clone(),
         old_value,
         new_value,
     }
@@ -180,7 +208,7 @@ pub fn emit_proposal_queued(e: &Env, proposal_id: &BytesN<32>, eta: u64) {
 }
 
 pub fn emit_launched(e: &Env, treasury: &Address) {
-    Launched {
+    GovernorLaunched {
         treasury: treasury.clone(),
     }
     .publish(e);

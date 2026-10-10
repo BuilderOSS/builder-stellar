@@ -4,15 +4,15 @@ import type { Route } from 'next';
 import Link from 'next/link';
 import { Grid, Stack } from 'styled-system/jsx';
 
-import { AdminSectionNav } from '@/components/admin/admin-section-nav';
+import { AdminSurfaceNav as AdminSectionNav } from '@/components/admin/admin-surface-nav';
 import { TtlExpiryPanel } from '@/components/admin/ttl-expiry-panel';
 import { PageSection } from '@/components/page-section';
 import { ProposalDraftPanel } from '@/components/proposal/proposal-draft-panel';
 import { Badge, Card, Heading, ShortId, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
-import { treasuryHasAuthority, treasuryIsOwner } from '@/lib/admin-proposals';
-import { useContractOwner } from '@/lib/admin-queries';
-import { isDaoAdmin } from '@/lib/dao-config';
+import { treasuryHasAuthority, treasuryIsAdmin } from '@/lib/admin-proposals';
+import { useContractAdmin } from '@/lib/admin-queries';
+import { useAdminTokenState } from '@/lib/admin-surfaces';
 import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
@@ -39,11 +39,8 @@ function SectionCard({
         <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
           {description}
         </Text>
-        <Link
-          href={allowed ? href : '/'}
-          style={{ color: 'inherit', pointerEvents: allowed ? 'auto' : 'none', textDecoration: 'none' }}
-        >
-          <Badge>{allowed ? 'Open section' : 'Locked'}</Badge>
+        <Link href={href} style={{ color: 'inherit', textDecoration: 'none' }}>
+          <Badge>{allowed ? 'Open section' : 'View section'}</Badge>
         </Link>
       </Stack>
     </Card>
@@ -54,23 +51,24 @@ export default function AdminPage() {
   const { daoId, daoConfig: config } = useDaoContext();
   const session = useAuthSessionStore();
   const { data: mintAuthorities } = useGoldskyMintAuthorities(config.tokenContractId);
-  const { data: tokenOwner } = useContractOwner(config, 'token', session.address || undefined);
-  const { data: governorOwner } = useContractOwner(config, 'governor', session.address || undefined);
-  const { data: auctionOwner } = useContractOwner(config, 'auction', session.address || undefined);
+  const { data: tokenAdmin } = useContractAdmin(config, 'token', session.address || undefined);
+  const { data: governorAdmin } = useContractAdmin(config, 'governor', session.address || undefined);
+  const { data: auctionAdmin } = useContractAdmin(config, 'auction', session.address || undefined);
 
-  const isOwner = isDaoAdmin(config, session.address);
-  const hasMintAccess = Boolean(isOwner || mintAuthorities?.items.some((item) => item.authority === session.address));
-  const hasGovernanceAccess = isOwner;
-  const canProposeOwnerActions = treasuryIsOwner(config, tokenOwner) || treasuryIsOwner(config, governorOwner);
+  const token = useAdminTokenState(config, session.address);
+  const isAdmin = Boolean(session.address && token.data?.admin === session.address);
+  const hasMintAccess = Boolean(isAdmin || token.data?.mintAuthority);
+  const hasGovernanceAccess = Boolean(session.address && governorAdmin === session.address);
+  const canProposeAdminActions = treasuryIsAdmin(config, tokenAdmin) || treasuryIsAdmin(config, governorAdmin);
   const canProposeMint =
-    treasuryIsOwner(config, tokenOwner) || treasuryHasAuthority(config.treasuryContractId, mintAuthorities?.items);
-  const canProposeGovernance = treasuryIsOwner(config, governorOwner);
-  const canProposeAuction = treasuryIsOwner(config, auctionOwner);
+    treasuryIsAdmin(config, tokenAdmin) || treasuryHasAuthority(config.treasuryContractId, mintAuthorities?.items);
+  const canProposeGovernance = treasuryIsAdmin(config, governorAdmin);
+  const canProposeAuction = treasuryIsAdmin(config, auctionAdmin);
   const hasAnyAccess = Boolean(
-    isOwner ||
+    isAdmin ||
     hasMintAccess ||
     hasGovernanceAccess ||
-    canProposeOwnerActions ||
+    canProposeAdminActions ||
     canProposeMint ||
     canProposeGovernance ||
     canProposeAuction
@@ -79,7 +77,7 @@ export default function AdminPage() {
   return (
     <PageSection
       title="Admin dashboard"
-      description="Role-aware entry point for owner, token, and governance operations."
+      description="Role-aware entry point for admin, token, and governance operations."
     >
       <Stack gap="4">
         <Card p="5">
@@ -98,18 +96,18 @@ export default function AdminPage() {
                 <Heading style={{ fontSize: '1.2rem', marginTop: '10px' }}>Access summary</Heading>
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {isOwner ? <Badge>Owner</Badge> : null}
+                {isAdmin ? <Badge>Admin</Badge> : null}
                 {hasMintAccess ? <Badge>Token Admin</Badge> : null}
                 {hasGovernanceAccess ? <Badge>Governance Admin</Badge> : null}
-                {!isOwner && canProposeMint ? <Badge>Mint proposals</Badge> : null}
-                {!isOwner && canProposeGovernance ? <Badge>Governance proposals</Badge> : null}
+                {!isAdmin && canProposeMint ? <Badge>Mint proposals</Badge> : null}
+                {!isAdmin && canProposeGovernance ? <Badge>Governance proposals</Badge> : null}
                 {!hasAnyAccess ? <Badge>Read only</Badge> : null}
               </div>
             </div>
 
             <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
               {session.address
-                ? 'Choose a section below. The dashboard only exposes actions the connected wallet can use.'
+                ? 'Choose a section below. Each section checks current on-chain authority before offering actions.'
                 : 'Connect a wallet to see your available admin sections.'}
             </Text>
             {session.address ? <ShortId value={session.address} label="Connected address" /> : null}
@@ -124,11 +122,11 @@ export default function AdminPage() {
 
         <Grid columns={{ base: 1, lg: 3 }} gap="4">
           <SectionCard
-            label="Owner"
+            label="Admin"
             title="Authority management"
             description="Add or remove mint authorities from a single place."
             href={`/dao/${daoId}/admin/owner` as Route}
-            allowed={isOwner || canProposeOwnerActions}
+            allowed={isAdmin || canProposeAdminActions}
           />
           <SectionCard
             label="Token Admin"
@@ -140,16 +138,37 @@ export default function AdminPage() {
           <SectionCard
             label="Governance Admin"
             title="Update governor settings"
-            description="Edit voting delay, voting period, proposal threshold, and quorum in one atomic batch."
+            description="Edit voting timings, queue delay, proposal threshold and quorum individually or prepare a governance draft."
             href={`/dao/${daoId}/admin/governance` as Route}
             allowed={hasGovernanceAccess || canProposeGovernance}
           />
           <SectionCard
-            label="Owner"
+            label="Admin"
             title="Auction controls"
             description="Pause or resume auction activity for emergency and maintenance operations."
             href={`/dao/${daoId}/admin/auction` as Route}
-            allowed={isOwner || canProposeAuction}
+            allowed={isAdmin || canProposeAuction}
+          />
+          <SectionCard
+            label="Artwork"
+            title="Artwork and metadata"
+            description="Read properties and IPFS references, install setup artwork, and prepare metadata updates."
+            href={`/dao/${daoId}/admin/artwork` as Route}
+            allowed={true}
+          />
+          <SectionCard
+            label="Setup"
+            title="Founder allocation"
+            description="Review setup supply and mint founder recipient and amount vectors before launch."
+            href={`/dao/${daoId}/admin/founders` as Route}
+            allowed={true}
+          />
+          <SectionCard
+            label="Code"
+            title="Module versions"
+            description="Read active WASM hashes and check Manager-approved upgrade transitions."
+            href={`/dao/${daoId}/admin/upgrades` as Route}
+            allowed={true}
           />
         </Grid>
       </Stack>

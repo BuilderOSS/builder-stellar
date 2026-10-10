@@ -101,7 +101,7 @@ export function AuthorityPanel({
             {items.map((item) => (
               <Card key={item.authority} p="3">
                 <Stack gap="1">
-                  <ShortId value={item.authority} label={item.source === 'owner' ? 'Owner' : 'Authority'} />
+                  <ShortId value={item.authority} label={item.source === 'owner' ? 'Admin' : 'Authority'} />
                   <Text className="lede" style={{ margin: 0, fontSize: '0.82rem' }}>
                     Ledger {item.ledger ?? item.last_updated_ledger ?? '—'}
                   </Text>

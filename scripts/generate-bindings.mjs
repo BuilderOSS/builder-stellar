@@ -1,6 +1,6 @@
 // Regenerates packages/*-bindings from the contract WASMs.
 // Usage: pnpm contracts:bindings   (then: pnpm --filter @builder-stellar/<name>-bindings build)
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { run } from './lib.mjs';
 
 const buildDir = 'target/wasm32v1-none/release';
@@ -82,6 +82,9 @@ run('stellar', ['contract', 'build']);
 
 for (const contract of contracts) {
   mkdirSync(contract.outputDir, { recursive: true });
+  // `generate --overwrite` replaces README.md with generic boilerplate; keep ours.
+  const readmePath = `${contract.outputDir}/README.md`;
+  const readme = existsSync(readmePath) ? readFileSync(readmePath, 'utf8') : null;
   run('pnpm', [
     'dlx',
     '@stellar/stellar-sdk@17.0.1',
@@ -94,6 +97,7 @@ for (const contract of contracts) {
     contract.packageName,
     '--overwrite'
   ]);
+  if (readme !== null) writeFileSync(readmePath, readme);
   patchGeneratedBindings(contract.packageName, contract.outputDir);
   rewritePackageJsonName(contract.outputDir, contract.packageJsonName);
 }

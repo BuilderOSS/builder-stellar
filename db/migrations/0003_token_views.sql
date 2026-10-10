@@ -4,16 +4,24 @@
 -- Source events (token contract):
 --   mint                  OpenZeppelin  topic to;                    data { token_id }
 --   transfer              OpenZeppelin  topics from, to;             data { token_id }
---   mint_with_minter      custom        topics minter, to;           data { token_id }
+--   mint_with_minter      custom        topics minter, to;           data { token_id }  (single mint)
+--   mint_batch_with_minter custom       topic minter;                data { first_token_id, count }  (batch_mint)
 --   delegate_changed      OpenZeppelin  topic delegator;             data { from_delegate, to_delegate }
 --   delegate_votes_changed OpenZeppelin topic delegate;              data { previous_votes, new_votes }
 --   mint_authority_changed custom       topic authority;             data { old_enabled, enabled, changed_by }
 --                         Emitted once per minter at launch (changed_by = the Manager) and
---                         afterwards only by the token owner (the Treasury, i.e. governance).
---   launched               custom       topic treasury;              data { minters[] } (see manager.module_launches)
+--                         afterwards only by the token admin (the Treasury, i.e. governance).
+--   token_launched         custom       topic treasury;              data { minters[] } (see manager.module_launches)
 --
--- A mint emits BOTH mint and mint_with_minter. Ownership comes from mint and
--- transfer; mint_with_minter only attributes who performed the mint.
+-- Every minted token emits mint. A single mint also emits mint_with_minter; a
+-- batch_mint emits one mint_batch_with_minter for the whole id range
+-- [first_token_id, first_token_id + count). Ownership comes from mint and
+-- transfer; the minter events only attribute who performed the mint.
+--
+-- Voting supply: tokens held by the DAO's Treasury, Auction and Marketplace carry
+-- no votes. Moving a token into one of them emits no delegate_votes_changed for
+-- the receiver (the voting unit leaves the supply) and moving it out credits the
+-- receiver's delegate again. token.supply splits the minted supply accordingly.
 -- =============================================================================
 
 -- Ownership changes: every mint (from_address NULL) and transfer.
@@ -39,7 +47,9 @@ JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contrac
 WHERE e.contract_role = 'token'
   AND e.event_name IN ('mint', 'transfer');
 
--- Who performed each mint (owner, auction, minter contract, ...).
+-- Who performed each mint (admin, auction, minter contract, ...), one row per
+-- token. Batch rows expand mint_batch_with_minter over its id range and take
+-- the recipient and event identity from each token's own mint event.
 CREATE VIEW token.mints AS
 SELECT
   e.event_id,
@@ -58,7 +68,34 @@ SELECT
 FROM chain.decoded_events e
 JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
 WHERE e.contract_role = 'token'
-  AND e.event_name = 'mint_with_minter';
+  AND e.event_name = 'mint_with_minter'
+UNION ALL
+SELECT
+  m.event_id,
+  m.deployment_id,
+  m.dao_id,
+  m.contract_id,
+  m.token_id,
+  b.topics::jsonb ->> 'minter' AS minter,
+  m.to_address AS recipient,
+  m.event_ledger,
+  m.transaction_index,
+  m.operation_index,
+  m.event_index,
+  m.event_at,
+  m.transaction_hash
+FROM chain.decoded_events b
+CROSS JOIN LATERAL generate_series(
+  (b.args::jsonb ->> 'first_token_id')::bigint,
+  (b.args::jsonb ->> 'first_token_id')::bigint + (b.args::jsonb ->> 'count')::bigint - 1
+) AS g(token_id)
+JOIN token.transfers m
+  ON m.deployment_id = b.deployment_id
+  AND m.contract_id = b.contract_id
+  AND m.token_id = g.token_id
+  AND m.transfer_type = 'mint'
+WHERE b.contract_role = 'token'
+  AND b.event_name = 'mint_batch_with_minter';
 
 -- Current owner of each token.
 CREATE VIEW token.inventory AS
@@ -125,7 +162,7 @@ JOIN manager.dao_registry r ON r.deployment_id = i.deployment_id AND r.dao_id = 
 WHERE e.contract_role = 'token'
   AND e.event_name = 'mint_authority_changed';
 
--- Addresses currently allowed to mint (the owner has implicit authority and is
+-- Addresses currently allowed to mint (the admin has implicit authority and is
 -- not listed here). Mint authority is granted at launch (by the Manager) and
 -- afterwards only through governance; token.set_mint_authority fails before launch.
 CREATE VIEW token.mint_authorities AS
@@ -205,3 +242,24 @@ LEFT JOIN current_delegations d
 LEFT JOIN current_votes v
   ON v.deployment_id = a.deployment_id AND v.dao_id = a.dao_id
  AND v.contract_id = a.contract_id AND v.delegate = a.address;
+
+-- Supply per DAO token. Tokens are never burned.
+--   minted_supply       every minted token
+--   system_held_supply  tokens currently held by the DAO's Treasury, Auction or
+--                       Marketplace (unsold auction tokens, escrowed listings)
+--   voting_supply       minted_supply - system_held_supply: the supply the
+--                       Governor's quorum is computed from
+CREATE VIEW token.supply AS
+SELECT
+  r.deployment_id,
+  r.dao_id,
+  r.token_contract AS contract_id,
+  count(inv.token_id)::bigint AS minted_supply,
+  (count(inv.token_id) FILTER (
+    WHERE inv.owner IN (r.treasury_contract, r.auction_contract, r.marketplace_contract)))::bigint AS system_held_supply,
+  (count(inv.token_id) - count(inv.token_id) FILTER (
+    WHERE inv.owner IN (r.treasury_contract, r.auction_contract, r.marketplace_contract)))::bigint AS voting_supply
+FROM manager.dao_registry r
+LEFT JOIN token.inventory inv
+  ON inv.deployment_id = r.deployment_id AND inv.dao_id = r.dao_id AND inv.contract_id = r.token_contract
+GROUP BY r.deployment_id, r.dao_id, r.token_contract;

@@ -4,7 +4,7 @@
   "label": "builder",
   "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
   "nonce": 0,
-  "manager": "CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y",
+  "manager": "CDFQIOSA3JJWV3HIZ5XVMXBMTEL7BRZWZVUW72OQN6O3EM35OVT6PD5W",
   "versions": {
     "manager": "0.1.0",
     "token": "0.1.0",
@@ -15,20 +15,21 @@
     "marketplace": "0.1.0",
     "minter": "0.1.0"
   },
-  "sourceCommit": "85ab6fee6875fcf426f67da591226aebc1cfc840",
+  "sourceCommit": "53b150060c4b5d8d35a3f5debbbda0c71e6601c7",
   "addresses": {
-    "token": "CB5XI27RKKZUYUAJUXDIYMNJ3NZKDHBQMMBFMEOQHC6XCTQBDWFNT2MW",
-    "metadata": "CBJWB5XFGTVI7ZMFXHCSB3YXV5IWGTQ5WC4YRUTJPHBIIAE6IEL7V4HE",
-    "auction": "CDTLFPSR4Y7ZT4S7W5DSYIBMOWDSG3WRGGB673GWP4UKBQWYIISJ53V7",
-    "governor": "CBIQT7SJMZMYTK3QQGMA62AO5GCW5HRTA57HFVOZ3WFNLMNNB4GCQFGU",
-    "treasury": "CBSUHB4VTZNKII7OG2E5GFUYMBLV2LI7C4QFVV67BDLABVGJ3HMZUSLB",
-    "marketplace": "CA24XCRWTDZ4OV6Q6E46UZUQOJNZDDWED6O52OCIZ6C5DLMAH3DCYHSI"
+    "token": "CDK3TSVJRME7EW2U35JGBHTO3XXDX6UZ4MFTZIXVWBSKUL4QTR7CZTR6",
+    "metadata": "CDK5M6MFRJAUWSX433H5LRFSSGHCKHVGIPZAMMTZHH2QVEG2N6SGLO45",
+    "auction": "CDJGH52VXT6W44GHYDFPTCSCSZLKGALLUETRSFOLZF7SAQIZNCLUCPDT",
+    "governor": "CAJ26AICV25TLW3CLJJHWHKYG27J7EVEGNL3RFD6ASSGOREUSYQ2WCQL",
+    "treasury": "CD2PRRLVQDGSPVQXB7LTWRWPDPOSH4KS7POTUGAYTCSYA67XAA6ADPFG",
+    "marketplace": "CBS2IGQZVH7O3WJCF2FQQCCOFINI5XMW65I7I6722X5XDAHEL7AFZ45S"
   },
   "config": {
     "$comment": "Seconds bounds: votingDelay/votingPeriod/queueDelay 300..=2592000; auction.timeBuffer 1..=86400; quorumBps 1..=10000; proposalThreshold is an ABSOLUTE number of votes (>= 1, not bps) and must not exceed the founder supply; reservePrice >= 1000 (stroops). Payment assets are fixed at create_dao and asserted at launch. launch.enableMinter requires the Manager platform minter (deploy-manager.mjs sets it). Founders are minted by the launch admin via token.batch_mint during setup. Primary-sale listings are created by governance after launch (no primary listing config here).",
     "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
     "nonce": 0,
     "launchAdmin": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+    "slug": "builder",
     "token": {
       "name": "Builder DAO",
       "symbol": "BUILD",
@@ -124,32 +125,33 @@
       "enableMinter": true
     }
   },
-  "updatedAt": "2026-10-08T16:02:14.341Z",
+  "updatedAt": "2026-10-10T06:25:49.700Z",
   "transactions": {
     "createDao": {
-      "txHash": "5f573e06f41417bd21db528f950f1bd35924691540a81a34307bd2f9491b87d3",
-      "ledger": 5090339
+      "txHash": "3f60585bc2b9b944f1cc71e1e04bbed3cd7f1cb995379ea436e654f293195897",
+      "ledger": 5117981
     },
-    "founderMintBatches": [
-      {
-        "txHash": "e2d1ad4e69404bf60642122a92bba5097999b079d5ddad12dfd483dc0a3f23f3",
-        "batch": 1,
-        "tokens": 30,
-        "ledger": 5090344
-      }
-    ],
     "artworkBatches": [
       {
-        "txHash": "040be3ae41e14c776045b7879ee43e28fe34cf9512ec1f4fdf31fdd04ecf6aa2",
+        "txHash": "2034f3aa4d2f6cab8ecee8be1a993a722e74d63f135e7207d44e2824d265ce64",
         "batch": 1,
         "items": 14,
-        "ledger": 5090346
+        "ledger": 5117984
       }
     ],
+    "founderMintBatches": [
+      {
+        "txHash": "1d77822f007cf95dfa6fc9a95c891990e9a70b3a667cb9afc0411cd65652a85e",
+        "batch": 1,
+        "tokens": 30,
+        "ledger": 5117987
+      }
+    ],
+    "regenerated": [],
     "launchDao": {
-      "txHash": "1d073e1f18e52347a8b17932dac3b482a6e7815422c1e6aad17cfa0160cb4b99",
-      "ledger": 5090349
+      "txHash": "1080fc680703077f9c5485a255e05a2ee4c7cdd9e9f00ea1b1766cc8a954a766",
+      "ledger": 5117992
     }
   },
-  "deploymentLedger": 5090339
+  "deploymentLedger": 5117981
 }

@@ -94,18 +94,19 @@ function invoke(data) {
 
   var normalizedEventName = normalizeEventName(eventName);
 
+  // Public feed: what a member would act on or care about. Per-token mints,
+  // seeds, transfers, vote-weight bookkeeping, setup/launch internals, refunds
+  // and listing cancellations stay out (admin/system rows): they are side effects
+  // of the events below, which already tell the story.
   var userFacing = {
-    TokenInitialized: true, Mint: true, MintWithMinter: true,
-    Transfer: true, DelegateChanged: true, DelegateVotesChanged: true,
-    ProposalCreated: true, ProposalQueued: true, VoteCast: true,
-    ProposalCancelled: true, ProposalExecuted: true,
-    AuctionCreated: true, BidPlaced: true,
-    AuctionSettled: true, BidRefunded: true, AuctionCancelled: true,
-    DaoCreated: true, DaoLaunched: true,
+    DaoLaunched: true,
+    ProposalCreated: true, ProposalQueued: true, ProposalExecuted: true, ProposalCancelled: true, VoteCast: true,
+    DelegateChanged: true,
+    AuctionCreated: true, BidPlaced: true, AuctionSettled: true, AuctionCancelled: true,
+    PrimaryListingCreated: true, PrimaryListingPurchased: true,
+    SecondaryListingCreated: true, ListingPurchased: true,
+    MintBatchWithMinter: true,
     MerkleClaimEvent: true, AllowlistClaimEvent: true, MintBatchEvent: true,
-    PrimaryListingCreated: true, PrimaryListingPurchased: true, PrimaryListingCancelled: true,
-    SecondaryListingCreated: true, ListingPurchased: true, ListingCancelled: true,
-    RefundDeferred: true, RefundWithdrawn: true,
     // Contract upgrades are the most security-relevant DAO action: public.
     Upgraded: true
   };
@@ -114,6 +115,7 @@ function invoke(data) {
     TokenInitialized: 'token.initialized',
     Mint: 'token.mint',
     MintWithMinter: 'token.mint',
+    MintBatchWithMinter: 'token.batch_mint',
     MintAuthorityChanged: 'token.mint_authority_changed',
     Approve: 'token.approve',
     Transfer: 'token.transfer',
@@ -121,6 +123,7 @@ function invoke(data) {
     DelegateVotesChanged: 'token.delegate_votes_changed',
     GovernorInitialized: 'governance.initialized',
     ProposalCreated: 'governance.proposal_created',
+    ProposalScheduled: 'governance.proposal_scheduled',
     ProposalQueued: 'governance.proposal_queued',
     VoteCast: 'governance.vote_cast',
     ProposalCancelled: 'governance.proposal_cancelled',
@@ -130,7 +133,14 @@ function invoke(data) {
     VotingPeriodChanged: 'governance.voting_period_changed',
     ProposalThresholdChanged: 'governance.proposal_threshold_changed',
     QuorumBpsChanged: 'governance.quorum_bps_changed',
+    QuorumChanged: 'governance.quorum_changed',
     TreasuryInitialized: 'treasury.initialized',
+    TokenLaunched: 'token.launched',
+    GovernorLaunched: 'governor.launched',
+    TreasuryLaunched: 'treasury.launched',
+    AuctionLaunched: 'auction.launched',
+    MarketplaceLaunched: 'marketplace.launched',
+    MetadataLaunched: 'metadata.launched',
     Execute: 'treasury.execute',
     AuctionInitialized: 'auction.initialized',
     AuctionCreated: 'auction.created',
@@ -156,9 +166,13 @@ function invoke(data) {
     ImplementationRevoked: 'manager.implementation_revoked',
     ImplementationRegistered: 'manager.implementation_registered',
     CurrentImplementationsUpdated: 'manager.implementations_updated',
+    LatestImplementationSet: 'manager.latest_implementation_set',
+    PendingSlugUpdated: 'manager.pending_slug_updated',
+    SlugClaimed: 'manager.slug_claimed',
     MetadataInitialized: 'metadata.initialized',
     PropertyAdded: 'metadata.property_added',
     SeedGenerated: 'metadata.seed_generated',
+    SeedsGenerated: 'metadata.seeds_generated',
     PropertiesReset: 'metadata.properties_reset',
     ProjectURIUpdated: 'metadata.project_uri_updated',
     DescriptionUpdated: 'metadata.description_updated',
@@ -193,6 +207,7 @@ function invoke(data) {
     TokenInitialized: 'Token initialized',
     Mint: 'Token minted',
     MintWithMinter: 'Token minted',
+    MintBatchWithMinter: 'Tokens batch minted',
     MintAuthorityChanged: 'Mint authority changed',
     Approve: 'Token approval granted',
     Transfer: 'Token transferred',
@@ -200,6 +215,7 @@ function invoke(data) {
     DelegateVotesChanged: 'Voting power changed',
     GovernorInitialized: 'Governor initialized',
     ProposalCreated: 'Proposal created',
+    ProposalScheduled: 'Proposal voting scheduled',
     ProposalQueued: 'Proposal queued',
     VoteCast: 'Vote cast',
     ProposalCancelled: 'Proposal cancelled',
@@ -209,7 +225,14 @@ function invoke(data) {
     VotingPeriodChanged: 'Voting period updated',
     ProposalThresholdChanged: 'Proposal threshold updated',
     QuorumBpsChanged: 'Quorum updated',
+    QuorumChanged: 'Quorum set',
     TreasuryInitialized: 'Treasury initialized',
+    TokenLaunched: 'Token launched',
+    GovernorLaunched: 'Governor launched',
+    TreasuryLaunched: 'Treasury launched',
+    AuctionLaunched: 'Auction launched',
+    MarketplaceLaunched: 'Marketplace launched',
+    MetadataLaunched: 'Metadata launched',
     Execute: 'Treasury executed call',
     AuctionInitialized: 'Auction initialized',
     AuctionCreated: 'Auction created',
@@ -235,9 +258,13 @@ function invoke(data) {
     ImplementationRevoked: 'Implementation revoked',
     ImplementationRegistered: 'Implementation registered',
     CurrentImplementationsUpdated: 'Implementations updated',
+    LatestImplementationSet: 'Latest implementation set',
+    PendingSlugUpdated: 'Requested slug changed',
+    SlugClaimed: 'Slug claimed',
     MetadataInitialized: 'Metadata initialized',
     PropertyAdded: 'Property added',
     SeedGenerated: 'Seed generated',
+    SeedsGenerated: 'Seeds generated',
     PropertiesReset: 'Properties reset',
     ProjectURIUpdated: 'Project URI updated',
     DescriptionUpdated: 'Description updated',
@@ -268,26 +295,22 @@ function invoke(data) {
     MarketplaceUnpaused: 'Marketplace unpaused'
   };
 
-  // Every module emits its own `Launched` event (same name, different data), so the
-  // kind/title depend on the emitting module's contract_role.
-  var launchRole = ensureString(data.contract_role, '');
-  if (normalizedEventName === 'Launched') {
-    var launchLabels = { token: 'Token', governor: 'Governor', treasury: 'Treasury', auction: 'Auction', marketplace: 'Marketplace', metadata: 'Metadata' };
-    kindMap.Launched = (launchLabels[launchRole] ? launchRole : 'module') + '.launched';
-    titleMap.Launched = (launchLabels[launchRole] || 'Module') + ' launched';
+  // `Upgraded`, `VersionSynced` and `Migrated` come from contracts/common and are emitted by
+  // every module; `AdminChanged` is emitted by the Manager (admin handover) and by every module
+  // at launch (launch admin -> Treasury). Kind and title depend on the emitting contract_role.
+  var emitterRole = ensureString(data.contract_role, '');
+  var moduleLabels = { token: 'Token', governor: 'Governor', treasury: 'Treasury', auction: 'Auction', marketplace: 'Marketplace', metadata: 'Metadata' };
+  var moduleRole = moduleLabels[emitterRole] ? emitterRole : 'module';
+  var moduleLabel = moduleLabels[emitterRole] || 'Module';
+  // OpenZeppelin Paused/Unpaused (auction) are keyed by the emitting module too.
+  var commonEvents = { Upgraded: ['upgraded', 'upgraded'], VersionSynced: ['version_synced', 'version synced'], Migrated: ['migrated', 'storage migrated'], Paused: ['paused', 'paused'], Unpaused: ['unpaused', 'unpaused'] };
+  if (commonEvents[normalizedEventName]) {
+    kindMap[normalizedEventName] = moduleRole + '.' + commonEvents[normalizedEventName][0];
+    titleMap[normalizedEventName] = moduleLabel + ' ' + commonEvents[normalizedEventName][1];
   }
-  // `Upgraded` / `VersionSynced` come from contracts/common and are emitted by every module.
-  if (normalizedEventName === 'Upgraded' || normalizedEventName === 'VersionSynced') {
-    var upgradeLabels = { token: 'Token', governor: 'Governor', treasury: 'Treasury', auction: 'Auction', marketplace: 'Marketplace', metadata: 'Metadata' };
-    var upgradeRole = upgradeLabels[launchRole] ? launchRole : 'module';
-    var upgradeLabel = upgradeLabels[launchRole] || 'Module';
-    if (normalizedEventName === 'Upgraded') {
-      kindMap.Upgraded = upgradeRole + '.upgraded';
-      titleMap.Upgraded = upgradeLabel + ' upgraded';
-    } else {
-      kindMap.VersionSynced = upgradeRole + '.version_synced';
-      titleMap.VersionSynced = upgradeLabel + ' version synced';
-    }
+  if (normalizedEventName === 'AdminChanged' && emitterRole !== 'manager') {
+    kindMap.AdminChanged = moduleRole + '.admin_changed';
+    titleMap.AdminChanged = moduleLabel + ' admin handed to the Treasury';
   }
 
   var addresses = unique([
@@ -300,6 +323,7 @@ function invoke(data) {
     pick(data, ['cancelled_admin']),
     pick(data, ['old_admin']),
     pick(data, ['new_admin']),
+    pick(data, ['admin']),
     pick(data, ['owner']),
     pick(data, ['changed_by']),
     pick(data, ['cancelled_by']),
@@ -330,6 +354,16 @@ function invoke(data) {
   var tokenAddress = pick(data, ['token_address']);
   var name = pick(data, ['name']);
 
+  function describeRange() {
+    var firstRaw = pick(data, ['first_token_id']);
+    var countRaw = pick(data, ['count']);
+    var first = Number(firstRaw);
+    var count = Number(countRaw);
+    if (!firstRaw || !countRaw || !isFinite(first) || !isFinite(count) || count < 1) return 'tokens';
+    if (count === 1) return '1 token (' + first + ')';
+    return count + ' tokens (' + first + '-' + (first + count - 1) + ')';
+  }
+
   var summaryFunctions = {
     ProposalQueued: function() { return 'Proposal ' + (proposalId || '') + ' queued'; },
     ProposalCreated: function() { return 'Proposal created'; },
@@ -346,13 +380,11 @@ function invoke(data) {
     BidRefunded: function() { return 'Bid of ' + (amount || 'unknown') + ' refunded for token ' + (tokenId || 'unknown'); },
     RefundDeferred: function() { return 'Refund of ' + (amount || 'unknown') + ' deferred for token ' + (tokenId || 'unknown') + '; claim it with withdraw_refund'; },
     RefundWithdrawn: function() { return 'Refund of ' + (amount || 'unknown') + ' withdrawn'; },
-    Launched: function() {
-      var started = pick(data, ['started']);
-      var opened = pick(data, ['opened']);
-      if (launchRole === 'auction') return 'Auction launched' + (started === 'true' ? ' and started' : ' paused');
-      if (launchRole === 'marketplace') return 'Marketplace launched' + (opened === 'true' ? ' and opened' : ' paused');
-      return (titleMap.Launched || 'Module launched');
-    },
+    AuctionLaunched: function() { return 'Auction launched' + (pick(data, ['started']) === 'true' ? ' and started' : ' paused'); },
+    MarketplaceLaunched: function() { return 'Marketplace launched' + (pick(data, ['opened']) === 'true' ? ' and opened' : ' paused'); },
+    SlugClaimed: function() { return 'Slug "' + (pick(data, ['slug']) || 'unknown') + '" claimed by ' + (tokenAddress || 'unknown'); },
+    PendingSlugUpdated: function() { return 'Requested slug changed to "' + (pick(data, ['slug']) || 'unknown') + '"'; },
+    Migrated: function() { return 'Storage migrated from version ' + (pick(data, ['from_storage_version']) || '?') + ' to ' + (pick(data, ['to_storage_version']) || '?'); },
     // Topics from_hash/to_hash, data version. Hashes are shortened to 8 hex chars.
     Upgraded: function() {
       function shortHash(h) { return h ? String(h).slice(0, 8) : 'unknown'; }
@@ -363,6 +395,8 @@ function invoke(data) {
     AdminProposalCancelled: function() { return 'Admin proposal for ' + (pick(data, ['cancelled_admin']) || 'unknown') + ' cancelled'; },
     Mint: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
     MintWithMinter: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
+    // One event per batch_mint: the range [first_token_id, first_token_id + count).
+    MintBatchWithMinter: function() { return 'Minted ' + describeRange() + ' by ' + (pick(data, ['minter']) || 'minter'); },
     MintBatchEvent: function() { var count = pick(data, ['recipient_count']); return 'Minted ' + (amount || 'tokens') + ' to ' + (count || 'multiple') + ' recipients'; },
     PrimaryListingCreated: function() { return 'Primary listing ' + (listingId || 'unknown') + ' created at ' + (amount || 'unknown price'); },
     PrimaryListingPurchased: function() { return 'Primary sale: token ' + (tokenId || 'unknown') + ' bought for ' + (amount || 'unknown price') + ' (listing ' + (listingId || 'unknown') + ')'; },
@@ -372,11 +406,13 @@ function invoke(data) {
     ListingPurchased: function() { return 'Token ' + (tokenId || 'unknown') + ' purchased for ' + (amount || 'unknown price'); },
     MerkleClaimEvent: function() { return 'Claimed ' + (amount || 'tokens') + ' via merkle proof for ' + (owner || 'recipient'); },
     AllowlistClaimEvent: function() { return 'Claimed ' + (amount || 'tokens') + ' via allowlist for ' + (owner || 'recipient'); },
-    DelegateChanged: function() { return 'Delegation changed'; },
+    DelegateChanged: function() { return (pick(data, ['delegator']) || 'A holder') + ' delegated votes to ' + (pick(data, ['to_delegate']) || 'a delegate'); },
     DaoCreated: function() { return 'DAO created by ' + (creator || 'unknown'); },
     DaoLaunched: function() { return 'DAO launched for token ' + (tokenAddress || 'unknown'); },
     ImplementationRegistered: function() { return 'Implementation "' + (name || 'unknown') + '" registered'; },
     SeedGenerated: function() { return 'Seed generated for token ' + (tokenId || 'unknown'); },
+    QuorumChanged: function() { return 'Quorum set to ' + (pick(data, ['new_quorum']) || '?') + ' bps'; },
+    SeedsGenerated: function() { return 'Seeds generated for ' + describeRange(); },
     PropertyAdded: function() { return 'Property "' + (name || 'unknown') + '" added'; }
   };
 
@@ -408,7 +444,15 @@ function invoke(data) {
   }
 
   // Strictly type all fields to ensure no mixed types in Arrow table
-  var visibility = userFacing[normalizedEventName] ? (normalizedEventName.indexOf('Proposal') === 0 || normalizedEventName === 'VoteCast' ? 'governance' : 'public') : (kindMap[normalizedEventName] ? 'admin' : 'system');
+  var visibility = userFacing[normalizedEventName] ? (normalizedEventName.indexOf('Proposal') === 0 || normalizedEventName === 'VoteCast' || normalizedEventName === 'DelegateChanged' ? 'governance' : 'public') : (kindMap[normalizedEventName] ? 'admin' : 'system');
+  // The token self-delegates a holder on their first token: automatic, not a
+  // choice anyone made. Only real delegation changes reach the public feed.
+  if (normalizedEventName === 'DelegateChanged') {
+    var delegator = pick(data, ['delegator']);
+    var toDelegate = pick(data, ['to_delegate']);
+    var fromDelegate = pick(data, ['from_delegate']);
+    if (!fromDelegate && delegator && toDelegate === delegator) visibility = 'system';
+  }
 
   // Helper to safely convert to number
   function toNumber(val) {
@@ -438,7 +482,7 @@ function invoke(data) {
     proposal_id: toString(proposalId),
     token_id: toString(tokenId),
     amount: toString(amount),
-    actor: toString(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'recipient', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator', 'buyer', 'seller', 'current_admin', 'old_admin'])),
+    actor: toString(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'recipient', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator', 'buyer', 'seller', 'current_admin', 'old_admin', 'admin'])),
     addresses: JSON.stringify(addresses || []),
     ledger_sequence: ledger_sequence,
     transaction_index: transaction_index,

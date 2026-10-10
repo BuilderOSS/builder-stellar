@@ -1,5 +1,5 @@
 name: builder-stellar-events
-description: Index Manager CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y on testnet with Goldsky Turbo
+description: Index Manager CDFQIOSA3JJWV3HIZ5XVMXBMTEL7BRZWZVUW72OQN6O3EM35OVT6PD5W on testnet with Goldsky Turbo
 resource_size: s
 use_dedicated_ip: false
 job: false
@@ -8,7 +8,7 @@ sources:
     type: dataset
     dataset_name: stellar_testnet.events
     version: 1.2.0
-    start_at: 5090312
+    start_at: 5117938
 
 transforms:
   # Each DAO-created event contains the five newly deployed module addresses.
@@ -23,7 +23,7 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"token"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y'
+      WHERE contract_id = 'CDFQIOSA3JJWV3HIZ5XVMXBMTEL7BRZWZVUW72OQN6O3EM35OVT6PD5W'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -37,7 +37,7 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"metadata"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y'
+      WHERE contract_id = 'CDFQIOSA3JJWV3HIZ5XVMXBMTEL7BRZWZVUW72OQN6O3EM35OVT6PD5W'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -51,7 +51,7 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"auction"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y'
+      WHERE contract_id = 'CDFQIOSA3JJWV3HIZ5XVMXBMTEL7BRZWZVUW72OQN6O3EM35OVT6PD5W'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -65,7 +65,7 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"governor"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y'
+      WHERE contract_id = 'CDFQIOSA3JJWV3HIZ5XVMXBMTEL7BRZWZVUW72OQN6O3EM35OVT6PD5W'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -79,7 +79,7 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"treasury"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y'
+      WHERE contract_id = 'CDFQIOSA3JJWV3HIZ5XVMXBMTEL7BRZWZVUW72OQN6O3EM35OVT6PD5W'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -93,7 +93,7 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"marketplace"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y'
+      WHERE contract_id = 'CDFQIOSA3JJWV3HIZ5XVMXBMTEL7BRZWZVUW72OQN6O3EM35OVT6PD5W'
         AND type = 'contract'
         AND topics LIKE '%dao_created%'
 
@@ -102,12 +102,12 @@ transforms:
     primary_key: event_id
     sql: |
       SELECT
-        concat('manager:CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y:', id) AS event_id,
-        'manager:CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y' AS deployment_id,
+        concat('manager:CDFQIOSA3JJWV3HIZ5XVMXBMTEL7BRZWZVUW72OQN6O3EM35OVT6PD5W:', id) AS event_id,
+        'manager:CDFQIOSA3JJWV3HIZ5XVMXBMTEL7BRZWZVUW72OQN6O3EM35OVT6PD5W' AS deployment_id,
         contract_id,
         CASE
-          WHEN contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y' THEN 'manager'
-          WHEN contract_id = 'CASTKJBMDBZS2M3NGENH7FG4VPCI7FSYVAFKN2E227QSR723KXGKFZKL' THEN 'minter'
+          WHEN contract_id = 'CDFQIOSA3JJWV3HIZ5XVMXBMTEL7BRZWZVUW72OQN6O3EM35OVT6PD5W' THEN 'manager'
+          WHEN contract_id = 'CC5TEMQCHDJ2MNR25NZVFNSAHKAHD43MVU47PZIAPCT5ODLYVEJWYB6R' THEN 'minter'
           WHEN dynamic_table_check('dao_tokens', contract_id) THEN 'token'
           WHEN dynamic_table_check('dao_metadata', contract_id) THEN 'metadata'
           WHEN dynamic_table_check('dao_auctions', contract_id) THEN 'auction'
@@ -137,10 +137,10 @@ transforms:
         CAST(NULL AS BIGINT) AS event_index,
         _gs_op
       FROM stellar_events
-       WHERE ledger_sequence >= 5090312
+       WHERE ledger_sequence >= 5117938
          AND (
-           contract_id = 'CDN6W4L6CWYD6HWKEO7J2LLGNH2NC2TAU4WEPRR5SASJCFR6BOZN452Y'
-           OR contract_id = 'CASTKJBMDBZS2M3NGENH7FG4VPCI7FSYVAFKN2E227QSR723KXGKFZKL'
+           contract_id = 'CDFQIOSA3JJWV3HIZ5XVMXBMTEL7BRZWZVUW72OQN6O3EM35OVT6PD5W'
+           OR contract_id = 'CC5TEMQCHDJ2MNR25NZVFNSAHKAHD43MVU47PZIAPCT5ODLYVEJWYB6R'
            OR dynamic_table_check('dao_tokens', contract_id)
            OR dynamic_table_check('dao_metadata', contract_id)
            OR dynamic_table_check('dao_auctions', contract_id)
@@ -319,42 +319,46 @@ transforms:
           ManagerInitialized: ['admin'], ImplementationRegistered: ['wasm_hash'], UpgradeApproved: ['from_hash', 'to_hash'],
           ImplementationRevoked: ['wasm_hash'], DaoCreated: ['token_address', 'deployer', 'launch_admin'], FactoryPaused: [], FactoryUnpaused: [],
           DaoLaunched: ['token_address'], CurrentImplementationsUpdated: [], ManagerUpgraded: ['from_hash', 'to_hash'],
+          // AdminChanged is emitted by the Manager (its own admin handover) and, with the same shape,
+          // by every DAO module at launch (contracts/common/src/admin.rs: launch admin -> Treasury).
           AdminProposed: ['current_admin', 'proposed_admin'], AdminProposalCancelled: ['current_admin', 'cancelled_admin'], AdminChanged: ['old_admin', 'new_admin'], PlatformMinterSet: ['minter'],
-          // Every module (token, governor, treasury, auction, marketplace, metadata) emits its own
-          // Launched struct with topic `treasury`; the data differs (token minters, auction started,
-          // marketplace opened). The emitting module is identified by contract_id/contract_role.
-          Launched: ['treasury'],
+          LatestImplementationSet: ['name', 'wasm_hash'], PendingSlugUpdated: ['token_address'], SlugClaimed: ['token_address', 'slug'],
+          // Each module's launch handoff (topic `treasury`).
+          TokenLaunched: ['treasury'], GovernorLaunched: ['treasury'], TreasuryLaunched: ['treasury'],
+          AuctionLaunched: ['treasury'], MarketplaceLaunched: ['treasury'], MetadataLaunched: ['treasury'],
           // contracts/common/src/upgrade.rs: emitted by EVERY module (token, governor, treasury, auction,
           // marketplace, metadata); the emitting module is identified by contract_id/contract_role.
-          Upgraded: ['from_hash', 'to_hash'], VersionSynced: [],
-          // Token (custom + OpenZeppelin non-fungible/votes/pausable/ownable)
-          TokenInitialized: ['owner'], MintAuthorityChanged: ['authority'], MintWithMinter: ['minter', 'to'],
+          Upgraded: ['from_hash', 'to_hash'], VersionSynced: [], Migrated: [],
+          // Token (custom + OpenZeppelin non-fungible/votes/pausable)
+          TokenInitialized: ['admin'], MintAuthorityChanged: ['authority'], MintWithMinter: ['minter', 'to'], MintBatchWithMinter: ['minter'],
           Mint: ['to'], Transfer: ['from', 'to'], Approve: ['approver', 'token_id'], ApproveForAll: ['owner'],
           DelegateChanged: ['delegator'], DelegateVotesChanged: ['delegate'],
-          Paused: [], Unpaused: [], OwnershipTransfer: [], OwnershipTransferCompleted: [], OwnershipRenounced: [],
+          Paused: [], Unpaused: [],
           // Governor (custom + OpenZeppelin governor)
-          GovernorInitialized: ['owner'], ProposalCreated: ['proposal_id', 'proposer'], VoteCast: ['voter', 'proposal_id'],
+          GovernorInitialized: ['admin'], ProposalCreated: ['proposal_id', 'proposer'], ProposalScheduled: ['proposal_id'],
+          VoteCast: ['voter', 'proposal_id'],
           ProposalQueued: ['proposal_id'], ProposalExecuted: ['proposal_id'], ProposalCancelled: ['proposal_id'],
-          QueueDelayChanged: ['caller'], VotingDelayChanged: ['caller'], VotingPeriodChanged: ['caller'],
-          ProposalThresholdChanged: ['caller'], QuorumBpsChanged: ['caller'],
+          QueueDelayChanged: ['changed_by'], VotingDelayChanged: ['changed_by'], VotingPeriodChanged: ['changed_by'],
+          ProposalThresholdChanged: ['changed_by'], QuorumBpsChanged: ['changed_by'], QuorumChanged: [],
           // Treasury
-          TreasuryInitialized: ['owner'], Execute: ['governor', 'target', 'proposal_id'],
+          TreasuryInitialized: ['admin'], Execute: ['governor', 'target', 'proposal_id'],
           // Auction
-          AuctionInitialized: ['owner'], AuctionCreated: ['token_id'], BidPlaced: ['token_id', 'bidder'], AuctionSettled: ['token_id'],
+          AuctionInitialized: ['admin'], AuctionCreated: ['token_id'], BidPlaced: ['token_id', 'bidder'], AuctionSettled: ['token_id'],
           BidRefunded: ['token_id', 'bidder'], AuctionCancelled: ['token_id'], DurationUpdated: [], ReservePriceUpdated: [],
           MinBidIncrementUpdated: [], TimeBufferUpdated: [], PaymentTokenUpdated: [],
           RefundDeferred: ['token_id', 'bidder'], RefundWithdrawn: ['bidder'],
           // Metadata
-          MetadataInitialized: ['token'], PropertyAdded: ['property_id'], SeedGenerated: ['token_id'], PropertiesReset: [],
+          MetadataInitialized: ['token'], PropertyAdded: ['property_id'], SeedGenerated: ['token_id'], SeedsGenerated: ['first_token_id'], PropertiesReset: [],
           ProjectURIUpdated: [], DescriptionUpdated: [], RendererBaseUpdated: [], ContractImageUpdated: [],
           // Minter
           MerkleClaimEvent: ['token_id', 'recipient'], AllowlistClaimEvent: ['token_id', 'recipient'], MintBatchEvent: ['token_id'],
           MerkleRootSetEvent: ['token_id'], AllowlistSetEvent: ['token_id'],
           // Marketplace
-          MarketplaceInitialized: ['token'], PrimaryListingCreated: ['listing_id'], PrimaryListingPurchased: ['listing_id', 'buyer'],
+          MarketplaceInitialized: ['token', 'admin'], PrimaryListingCreated: ['listing_id'], PrimaryListingPurchased: ['listing_id', 'buyer'],
           PrimaryListingCancelled: ['listing_id'], PrimaryListingExpired: ['listing_id'], SecondaryListingCreated: ['token_id'],
           ListingPurchased: ['token_id', 'buyer'], ListingCancelled: ['token_id'], ListingExpired: ['token_id'],
-          PaymentAssetUpdated: [], SecondaryFeeUpdated: [], MarketplacePaused: [], MarketplaceUnpaused: []
+          PaymentAssetUpdated: ['changed_by'], SecondaryFeeUpdated: ['changed_by'],
+          MarketplacePaused: ['changed_by'], MarketplaceUnpaused: ['changed_by']
         };
         var names = topicNames[eventName] || topicNames[toCanonical(eventName)] || [];
         var topics = {};
@@ -427,12 +431,13 @@ transforms:
           // module allowlists before decoding. Names mirror the topicNames groups.
           function roleForEvent(name) {
             var canonical = toCanonical(name);
-            if (/^(Manager|Implementation|CurrentImplementations|UpgradeApproved|Dao|Factory|Admin|PlatformMinter)/.test(canonical)) return 'manager';
+            if (canonical === 'MintBatchWithMinter') return 'token';
+            if (/^(Manager|Implementation|CurrentImplementations|LatestImplementation|UpgradeApproved|Dao|Factory|Admin|PlatformMinter|PendingSlug|SlugClaimed)/.test(canonical)) return 'manager';
             if (/^(MerkleClaim|AllowlistClaim|MintBatch|MerkleRoot|AllowlistSet)/.test(canonical)) return 'minter';
             if (/^(Marketplace|Listing|Primary|Secondary|PaymentAsset)/.test(canonical)) return 'marketplace';
             if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue)/.test(canonical)) return 'governor';
             if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken|Refund)/.test(canonical)) return 'auction';
-            if (/^(Execute|TreasuryInitialized)/.test(canonical)) return 'treasury';
+            if (/^(Execute|Treasury)/.test(canonical)) return 'treasury';
             if (/^(Metadata|Property|Properties|Seed|ProjectURI|Description|RendererBase|ContractImage)/.test(canonical)) return 'metadata';
             if (/^(Transfer|Mint|Delegate|Approve|Token)/.test(canonical)) return 'token';
             return 'unknown';
@@ -568,18 +573,19 @@ transforms:
 
         var normalizedEventName = normalizeEventName(eventName);
 
+        // Public feed: what a member would act on or care about. Per-token mints,
+        // seeds, transfers, vote-weight bookkeeping, setup/launch internals, refunds
+        // and listing cancellations stay out (admin/system rows): they are side effects
+        // of the events below, which already tell the story.
         var userFacing = {
-          TokenInitialized: true, Mint: true, MintWithMinter: true,
-          Transfer: true, DelegateChanged: true, DelegateVotesChanged: true,
-          ProposalCreated: true, ProposalQueued: true, VoteCast: true,
-          ProposalCancelled: true, ProposalExecuted: true,
-          AuctionCreated: true, BidPlaced: true,
-          AuctionSettled: true, BidRefunded: true, AuctionCancelled: true,
-          DaoCreated: true, DaoLaunched: true,
+          DaoLaunched: true,
+          ProposalCreated: true, ProposalQueued: true, ProposalExecuted: true, ProposalCancelled: true, VoteCast: true,
+          DelegateChanged: true,
+          AuctionCreated: true, BidPlaced: true, AuctionSettled: true, AuctionCancelled: true,
+          PrimaryListingCreated: true, PrimaryListingPurchased: true,
+          SecondaryListingCreated: true, ListingPurchased: true,
+          MintBatchWithMinter: true,
           MerkleClaimEvent: true, AllowlistClaimEvent: true, MintBatchEvent: true,
-          PrimaryListingCreated: true, PrimaryListingPurchased: true, PrimaryListingCancelled: true,
-          SecondaryListingCreated: true, ListingPurchased: true, ListingCancelled: true,
-          RefundDeferred: true, RefundWithdrawn: true,
           // Contract upgrades are the most security-relevant DAO action: public.
           Upgraded: true
         };
@@ -588,6 +594,7 @@ transforms:
           TokenInitialized: 'token.initialized',
           Mint: 'token.mint',
           MintWithMinter: 'token.mint',
+          MintBatchWithMinter: 'token.batch_mint',
           MintAuthorityChanged: 'token.mint_authority_changed',
           Approve: 'token.approve',
           Transfer: 'token.transfer',
@@ -595,6 +602,7 @@ transforms:
           DelegateVotesChanged: 'token.delegate_votes_changed',
           GovernorInitialized: 'governance.initialized',
           ProposalCreated: 'governance.proposal_created',
+          ProposalScheduled: 'governance.proposal_scheduled',
           ProposalQueued: 'governance.proposal_queued',
           VoteCast: 'governance.vote_cast',
           ProposalCancelled: 'governance.proposal_cancelled',
@@ -604,7 +612,14 @@ transforms:
           VotingPeriodChanged: 'governance.voting_period_changed',
           ProposalThresholdChanged: 'governance.proposal_threshold_changed',
           QuorumBpsChanged: 'governance.quorum_bps_changed',
+          QuorumChanged: 'governance.quorum_changed',
           TreasuryInitialized: 'treasury.initialized',
+          TokenLaunched: 'token.launched',
+          GovernorLaunched: 'governor.launched',
+          TreasuryLaunched: 'treasury.launched',
+          AuctionLaunched: 'auction.launched',
+          MarketplaceLaunched: 'marketplace.launched',
+          MetadataLaunched: 'metadata.launched',
           Execute: 'treasury.execute',
           AuctionInitialized: 'auction.initialized',
           AuctionCreated: 'auction.created',
@@ -630,9 +645,13 @@ transforms:
           ImplementationRevoked: 'manager.implementation_revoked',
           ImplementationRegistered: 'manager.implementation_registered',
           CurrentImplementationsUpdated: 'manager.implementations_updated',
+          LatestImplementationSet: 'manager.latest_implementation_set',
+          PendingSlugUpdated: 'manager.pending_slug_updated',
+          SlugClaimed: 'manager.slug_claimed',
           MetadataInitialized: 'metadata.initialized',
           PropertyAdded: 'metadata.property_added',
           SeedGenerated: 'metadata.seed_generated',
+          SeedsGenerated: 'metadata.seeds_generated',
           PropertiesReset: 'metadata.properties_reset',
           ProjectURIUpdated: 'metadata.project_uri_updated',
           DescriptionUpdated: 'metadata.description_updated',
@@ -667,6 +686,7 @@ transforms:
           TokenInitialized: 'Token initialized',
           Mint: 'Token minted',
           MintWithMinter: 'Token minted',
+          MintBatchWithMinter: 'Tokens batch minted',
           MintAuthorityChanged: 'Mint authority changed',
           Approve: 'Token approval granted',
           Transfer: 'Token transferred',
@@ -674,6 +694,7 @@ transforms:
           DelegateVotesChanged: 'Voting power changed',
           GovernorInitialized: 'Governor initialized',
           ProposalCreated: 'Proposal created',
+          ProposalScheduled: 'Proposal voting scheduled',
           ProposalQueued: 'Proposal queued',
           VoteCast: 'Vote cast',
           ProposalCancelled: 'Proposal cancelled',
@@ -683,7 +704,14 @@ transforms:
           VotingPeriodChanged: 'Voting period updated',
           ProposalThresholdChanged: 'Proposal threshold updated',
           QuorumBpsChanged: 'Quorum updated',
+          QuorumChanged: 'Quorum set',
           TreasuryInitialized: 'Treasury initialized',
+          TokenLaunched: 'Token launched',
+          GovernorLaunched: 'Governor launched',
+          TreasuryLaunched: 'Treasury launched',
+          AuctionLaunched: 'Auction launched',
+          MarketplaceLaunched: 'Marketplace launched',
+          MetadataLaunched: 'Metadata launched',
           Execute: 'Treasury executed call',
           AuctionInitialized: 'Auction initialized',
           AuctionCreated: 'Auction created',
@@ -709,9 +737,13 @@ transforms:
           ImplementationRevoked: 'Implementation revoked',
           ImplementationRegistered: 'Implementation registered',
           CurrentImplementationsUpdated: 'Implementations updated',
+          LatestImplementationSet: 'Latest implementation set',
+          PendingSlugUpdated: 'Requested slug changed',
+          SlugClaimed: 'Slug claimed',
           MetadataInitialized: 'Metadata initialized',
           PropertyAdded: 'Property added',
           SeedGenerated: 'Seed generated',
+          SeedsGenerated: 'Seeds generated',
           PropertiesReset: 'Properties reset',
           ProjectURIUpdated: 'Project URI updated',
           DescriptionUpdated: 'Description updated',
@@ -742,26 +774,22 @@ transforms:
           MarketplaceUnpaused: 'Marketplace unpaused'
         };
 
-        // Every module emits its own `Launched` event (same name, different data), so the
-        // kind/title depend on the emitting module's contract_role.
-        var launchRole = ensureString(data.contract_role, '');
-        if (normalizedEventName === 'Launched') {
-          var launchLabels = { token: 'Token', governor: 'Governor', treasury: 'Treasury', auction: 'Auction', marketplace: 'Marketplace', metadata: 'Metadata' };
-          kindMap.Launched = (launchLabels[launchRole] ? launchRole : 'module') + '.launched';
-          titleMap.Launched = (launchLabels[launchRole] || 'Module') + ' launched';
+        // `Upgraded`, `VersionSynced` and `Migrated` come from contracts/common and are emitted by
+        // every module; `AdminChanged` is emitted by the Manager (admin handover) and by every module
+        // at launch (launch admin -> Treasury). Kind and title depend on the emitting contract_role.
+        var emitterRole = ensureString(data.contract_role, '');
+        var moduleLabels = { token: 'Token', governor: 'Governor', treasury: 'Treasury', auction: 'Auction', marketplace: 'Marketplace', metadata: 'Metadata' };
+        var moduleRole = moduleLabels[emitterRole] ? emitterRole : 'module';
+        var moduleLabel = moduleLabels[emitterRole] || 'Module';
+        // OpenZeppelin Paused/Unpaused (auction) are keyed by the emitting module too.
+        var commonEvents = { Upgraded: ['upgraded', 'upgraded'], VersionSynced: ['version_synced', 'version synced'], Migrated: ['migrated', 'storage migrated'], Paused: ['paused', 'paused'], Unpaused: ['unpaused', 'unpaused'] };
+        if (commonEvents[normalizedEventName]) {
+          kindMap[normalizedEventName] = moduleRole + '.' + commonEvents[normalizedEventName][0];
+          titleMap[normalizedEventName] = moduleLabel + ' ' + commonEvents[normalizedEventName][1];
         }
-        // `Upgraded` / `VersionSynced` come from contracts/common and are emitted by every module.
-        if (normalizedEventName === 'Upgraded' || normalizedEventName === 'VersionSynced') {
-          var upgradeLabels = { token: 'Token', governor: 'Governor', treasury: 'Treasury', auction: 'Auction', marketplace: 'Marketplace', metadata: 'Metadata' };
-          var upgradeRole = upgradeLabels[launchRole] ? launchRole : 'module';
-          var upgradeLabel = upgradeLabels[launchRole] || 'Module';
-          if (normalizedEventName === 'Upgraded') {
-            kindMap.Upgraded = upgradeRole + '.upgraded';
-            titleMap.Upgraded = upgradeLabel + ' upgraded';
-          } else {
-            kindMap.VersionSynced = upgradeRole + '.version_synced';
-            titleMap.VersionSynced = upgradeLabel + ' version synced';
-          }
+        if (normalizedEventName === 'AdminChanged' && emitterRole !== 'manager') {
+          kindMap.AdminChanged = moduleRole + '.admin_changed';
+          titleMap.AdminChanged = moduleLabel + ' admin handed to the Treasury';
         }
 
         var addresses = unique([
@@ -774,6 +802,7 @@ transforms:
           pick(data, ['cancelled_admin']),
           pick(data, ['old_admin']),
           pick(data, ['new_admin']),
+          pick(data, ['admin']),
           pick(data, ['owner']),
           pick(data, ['changed_by']),
           pick(data, ['cancelled_by']),
@@ -804,6 +833,16 @@ transforms:
         var tokenAddress = pick(data, ['token_address']);
         var name = pick(data, ['name']);
 
+        function describeRange() {
+          var firstRaw = pick(data, ['first_token_id']);
+          var countRaw = pick(data, ['count']);
+          var first = Number(firstRaw);
+          var count = Number(countRaw);
+          if (!firstRaw || !countRaw || !isFinite(first) || !isFinite(count) || count < 1) return 'tokens';
+          if (count === 1) return '1 token (' + first + ')';
+          return count + ' tokens (' + first + '-' + (first + count - 1) + ')';
+        }
+
         var summaryFunctions = {
           ProposalQueued: function() { return 'Proposal ' + (proposalId || '') + ' queued'; },
           ProposalCreated: function() { return 'Proposal created'; },
@@ -820,13 +859,11 @@ transforms:
           BidRefunded: function() { return 'Bid of ' + (amount || 'unknown') + ' refunded for token ' + (tokenId || 'unknown'); },
           RefundDeferred: function() { return 'Refund of ' + (amount || 'unknown') + ' deferred for token ' + (tokenId || 'unknown') + '; claim it with withdraw_refund'; },
           RefundWithdrawn: function() { return 'Refund of ' + (amount || 'unknown') + ' withdrawn'; },
-          Launched: function() {
-            var started = pick(data, ['started']);
-            var opened = pick(data, ['opened']);
-            if (launchRole === 'auction') return 'Auction launched' + (started === 'true' ? ' and started' : ' paused');
-            if (launchRole === 'marketplace') return 'Marketplace launched' + (opened === 'true' ? ' and opened' : ' paused');
-            return (titleMap.Launched || 'Module launched');
-          },
+          AuctionLaunched: function() { return 'Auction launched' + (pick(data, ['started']) === 'true' ? ' and started' : ' paused'); },
+          MarketplaceLaunched: function() { return 'Marketplace launched' + (pick(data, ['opened']) === 'true' ? ' and opened' : ' paused'); },
+          SlugClaimed: function() { return 'Slug "' + (pick(data, ['slug']) || 'unknown') + '" claimed by ' + (tokenAddress || 'unknown'); },
+          PendingSlugUpdated: function() { return 'Requested slug changed to "' + (pick(data, ['slug']) || 'unknown') + '"'; },
+          Migrated: function() { return 'Storage migrated from version ' + (pick(data, ['from_storage_version']) || '?') + ' to ' + (pick(data, ['to_storage_version']) || '?'); },
           // Topics from_hash/to_hash, data version. Hashes are shortened to 8 hex chars.
           Upgraded: function() {
             function shortHash(h) { return h ? String(h).slice(0, 8) : 'unknown'; }
@@ -837,6 +874,8 @@ transforms:
           AdminProposalCancelled: function() { return 'Admin proposal for ' + (pick(data, ['cancelled_admin']) || 'unknown') + ' cancelled'; },
           Mint: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
           MintWithMinter: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
+          // One event per batch_mint: the range [first_token_id, first_token_id + count).
+          MintBatchWithMinter: function() { return 'Minted ' + describeRange() + ' by ' + (pick(data, ['minter']) || 'minter'); },
           MintBatchEvent: function() { var count = pick(data, ['recipient_count']); return 'Minted ' + (amount || 'tokens') + ' to ' + (count || 'multiple') + ' recipients'; },
           PrimaryListingCreated: function() { return 'Primary listing ' + (listingId || 'unknown') + ' created at ' + (amount || 'unknown price'); },
           PrimaryListingPurchased: function() { return 'Primary sale: token ' + (tokenId || 'unknown') + ' bought for ' + (amount || 'unknown price') + ' (listing ' + (listingId || 'unknown') + ')'; },
@@ -846,11 +885,13 @@ transforms:
           ListingPurchased: function() { return 'Token ' + (tokenId || 'unknown') + ' purchased for ' + (amount || 'unknown price'); },
           MerkleClaimEvent: function() { return 'Claimed ' + (amount || 'tokens') + ' via merkle proof for ' + (owner || 'recipient'); },
           AllowlistClaimEvent: function() { return 'Claimed ' + (amount || 'tokens') + ' via allowlist for ' + (owner || 'recipient'); },
-          DelegateChanged: function() { return 'Delegation changed'; },
+          DelegateChanged: function() { return (pick(data, ['delegator']) || 'A holder') + ' delegated votes to ' + (pick(data, ['to_delegate']) || 'a delegate'); },
           DaoCreated: function() { return 'DAO created by ' + (creator || 'unknown'); },
           DaoLaunched: function() { return 'DAO launched for token ' + (tokenAddress || 'unknown'); },
           ImplementationRegistered: function() { return 'Implementation "' + (name || 'unknown') + '" registered'; },
           SeedGenerated: function() { return 'Seed generated for token ' + (tokenId || 'unknown'); },
+          QuorumChanged: function() { return 'Quorum set to ' + (pick(data, ['new_quorum']) || '?') + ' bps'; },
+          SeedsGenerated: function() { return 'Seeds generated for ' + describeRange(); },
           PropertyAdded: function() { return 'Property "' + (name || 'unknown') + '" added'; }
         };
 
@@ -882,7 +923,15 @@ transforms:
         }
 
         // Strictly type all fields to ensure no mixed types in Arrow table
-        var visibility = userFacing[normalizedEventName] ? (normalizedEventName.indexOf('Proposal') === 0 || normalizedEventName === 'VoteCast' ? 'governance' : 'public') : (kindMap[normalizedEventName] ? 'admin' : 'system');
+        var visibility = userFacing[normalizedEventName] ? (normalizedEventName.indexOf('Proposal') === 0 || normalizedEventName === 'VoteCast' || normalizedEventName === 'DelegateChanged' ? 'governance' : 'public') : (kindMap[normalizedEventName] ? 'admin' : 'system');
+        // The token self-delegates a holder on their first token: automatic, not a
+        // choice anyone made. Only real delegation changes reach the public feed.
+        if (normalizedEventName === 'DelegateChanged') {
+          var delegator = pick(data, ['delegator']);
+          var toDelegate = pick(data, ['to_delegate']);
+          var fromDelegate = pick(data, ['from_delegate']);
+          if (!fromDelegate && delegator && toDelegate === delegator) visibility = 'system';
+        }
 
         // Helper to safely convert to number
         function toNumber(val) {
@@ -912,7 +961,7 @@ transforms:
           proposal_id: toString(proposalId),
           token_id: toString(tokenId),
           amount: toString(amount),
-          actor: toString(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'recipient', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator', 'buyer', 'seller', 'current_admin', 'old_admin'])),
+          actor: toString(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'recipient', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator', 'buyer', 'seller', 'current_admin', 'old_admin', 'admin'])),
           addresses: JSON.stringify(addresses || []),
           ledger_sequence: ledger_sequence,
           transaction_index: transaction_index,

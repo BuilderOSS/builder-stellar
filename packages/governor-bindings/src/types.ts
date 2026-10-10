@@ -1,67 +1,63 @@
 import {Address, xdr} from '@stellar/stellar-sdk';
 
     /**
- * Error Enum: CustomGovernorError
+ * Governor-specific errors (block `common::error::codes::GOVERNOR`).
+ * Lifecycle errors shared with OpenZeppelin's governor (proposal not found,
+ * not active, already executed, ...) keep their library codes (5000s).
  */
 export const CustomGovernorError = {
   /**
-   * Queue delay below minimum (must be >= 5 minutes)
+   * Queue delay below `MIN_QUEUE_DELAY`
    */
-  1500 : { message: "InvalidQueueDelay" },
+  7501 : { message: "InvalidQueueDelay" },
   /**
-   * Proposal threshold exceeds total token supply
+   * Proposal threshold is zero or exceeds the voting supply
    */
-  1501 : { message: "InvalidProposalThreshold" },
+  7502 : { message: "InvalidProposalThreshold" },
   /**
-   * Quorum basis points invalid (must be <= 10000)
+   * Quorum basis points outside 1..=10000
    */
-  1502 : { message: "InvalidQuorumBps" },
+  7503 : { message: "InvalidQuorumBps" },
   /**
-   * Owner not set in contract storage
+   * Voting delay below `MIN_VOTING_DELAY`
    */
-  1503 : { message: "OwnerNotSet" },
+  7504 : { message: "InvalidVotingDelay" },
   /**
-   * Voting delay below minimum (must be >= 5 minutes)
+   * Voting period below `MIN_VOTING_PERIOD`
    */
-  1505 : { message: "InvalidVotingDelay" },
-  /**
-   * Voting period below minimum (must be >= 5 minutes)
-   */
-  1506 : { message: "InvalidVotingPeriod" },
+  7505 : { message: "InvalidVotingPeriod" },
   /**
    * `launch` treasury differs from the treasury wired at construction
    */
-  1507 : { message: "TreasuryMismatch" },
+  7506 : { message: "TreasuryMismatch" },
   /**
    * `execute` is disabled; call `treasury.execute` instead
    */
-  1508 : { message: "UseTreasuryExecute" },
+  7507 : { message: "UseTreasuryExecute" },
   /**
    * Proposal has more than `MAX_PROPOSAL_ACTIONS` actions
    */
-  1509 : { message: "TooManyActions" },
+  7508 : { message: "TooManyActions" },
   /**
    * Voting delay above `MAX_VOTING_DELAY` (30 days)
    */
-  1510 : { message: "VotingDelayTooLong" },
+  7509 : { message: "VotingDelayTooLong" },
   /**
    * Voting period above `MAX_VOTING_PERIOD` (30 days)
    */
-  1511 : { message: "VotingPeriodTooLong" },
+  7510 : { message: "VotingPeriodTooLong" },
   /**
    * Queue delay above `MAX_QUEUE_DELAY` (30 days)
    */
-  1512 : { message: "QueueDelayTooLong" }
-}
-
-/**
- * Emitted once when the Manager launches the governor (Setup -> Live).
- */
-export interface LaunchedEvent {
-  name: "Launched";
-  data: {
-    treasury: string;
-  };
+  7511 : { message: "QueueDelayTooLong" },
+  /**
+   * The voter had no voting power at the proposal snapshot
+   */
+  7512 : { message: "ZeroVotingWeight" },
+  /**
+   * The proposal is queued but its ETA has not been reached
+   */
+  7513 : { message: "ProposalNotReady" }
 }
 
 /**
@@ -76,14 +72,43 @@ export interface ProposalQueuedEvent {
 }
 
 /**
+ * Emitted once when the Manager launches the governor (Setup -> Live).
+ */
+export interface GovernorLaunchedEvent {
+  name: "GovernorLaunched";
+  data: {
+    treasury: string;
+  };
+}
+
+/**
  * Event: QuorumBpsChanged
  */
 export interface QuorumBpsChangedEvent {
   name: "QuorumBpsChanged";
   data: {
-    caller: string;
+    changed_by: string;
     old_value?: number;
     new_value?: number;
+  };
+}
+
+/**
+ * Emitted by `propose` next to OpenZeppelin's `ProposalCreated`.
+ *
+ * `vote_start` / `vote_end` are unix timestamps (seconds); `snapshot_ledger`
+ * is the ledger voting power and voting supply are read at; `quorum_votes` is
+ * the For + Abstain total the proposal needs. Quorum is fully determined at
+ * proposal time because the snapshot precedes the proposal.
+ */
+export interface ProposalScheduledEvent {
+  name: "ProposalScheduled";
+  data: {
+    proposal_id: Uint8Array;
+    vote_start?: bigint;
+    vote_end?: bigint;
+    snapshot_ledger?: number;
+    quorum_votes?: bigint;
   };
 }
 
@@ -93,7 +118,7 @@ export interface QuorumBpsChangedEvent {
 export interface QueueDelayChangedEvent {
   name: "QueueDelayChanged";
   data: {
-    caller: string;
+    changed_by: string;
     old_value?: number;
     new_value?: number;
   };
@@ -105,7 +130,7 @@ export interface QueueDelayChangedEvent {
 export interface VotingDelayChangedEvent {
   name: "VotingDelayChanged";
   data: {
-    caller: string;
+    changed_by: string;
     old_value?: number;
     new_value?: number;
   };
@@ -117,7 +142,7 @@ export interface VotingDelayChangedEvent {
 export interface GovernorInitializedEvent {
   name: "GovernorInitialized";
   data: {
-    owner: string;
+    admin: string;
     token_contract?: string;
     treasury_contract?: string;
     voting_delay?: number;
@@ -135,7 +160,7 @@ export interface GovernorInitializedEvent {
 export interface VotingPeriodChangedEvent {
   name: "VotingPeriodChanged";
   data: {
-    caller: string;
+    changed_by: string;
     old_value?: number;
     new_value?: number;
   };
@@ -147,61 +172,93 @@ export interface VotingPeriodChangedEvent {
 export interface ProposalThresholdChangedEvent {
   name: "ProposalThresholdChanged";
   data: {
-    caller: string;
+    changed_by: string;
     old_value?: bigint;
     new_value?: bigint;
   };
 }
 
 /**
- * Errors shared by all module contracts. Codes live in the 9000 range so
- * they never collide with module (11xx-13xx, 3, 30) or manager (10xx) codes.
+ * Emitted by [`handoff`]. The emitting contract address is the event's contract id.
+ *
+ * Same shape as the Manager's own `AdminChanged`, so indexers decode both
+ * with one schema.
+ */
+export interface AdminChangedEvent {
+  name: "AdminChanged";
+  data: {
+    old_admin: string;
+    new_admin: string;
+  };
+}
+
+/**
+ * Errors shared by all module contracts (block `codes::COMMON`).
  */
 export const CommonError = {
   /**
    * Operation requires the module to be live (launched).
    */
-  9001 : { message: "NotLive" },
+  7001 : { message: "NotLive" },
   /**
    * Operation is only valid during setup; the module is already live.
    */
-  9002 : { message: "AlreadyLive" },
+  7002 : { message: "AlreadyLive" },
   /**
    * Manager address missing from storage.
    */
-  9003 : { message: "ManagerNotSet" },
+  7003 : { message: "ManagerNotSet" },
   /**
    * `CurrentHash` missing from storage.
    */
-  9004 : { message: "CurrentHashNotSet" },
+  7004 : { message: "CurrentHashNotSet" },
   /**
    * `from_hash` does not equal the stored `CurrentHash`.
    */
-  9005 : { message: "HashMismatch" },
+  7005 : { message: "HashMismatch" },
   /**
    * Manager did not approve this upgrade path.
    */
-  9006 : { message: "UpgradeNotApproved" },
+  7006 : { message: "UpgradeNotApproved" },
   /**
    * Manager has no registry entry for the requested hash.
    */
-  9007 : { message: "ImplementationNotFound" },
+  7007 : { message: "ImplementationNotFound" },
   /**
-   * Owner missing from storage.
+   * Module admin missing from storage.
    */
-  9008 : { message: "OwnerNotSet" },
+  7008 : { message: "AdminNotSet" },
   /**
    * `CurrentVersion` missing from storage.
    */
-  9009 : { message: "VersionNotSet" },
+  7009 : { message: "VersionNotSet" },
   /**
    * Treasury address missing from storage.
    */
-  9010 : { message: "TreasuryNotSet" },
+  7010 : { message: "TreasuryNotSet" },
   /**
    * Governor address missing from storage.
    */
-  9011 : { message: "GovernorNotSet" }
+  7011 : { message: "GovernorNotSet" },
+  /**
+   * `migrate` called while the stored layout is already current.
+   */
+  7012 : { message: "NothingToMigrate" },
+  /**
+   * `StorageVersion` missing from storage.
+   */
+  7013 : { message: "StorageVersionNotSet" }
+}
+
+/**
+ * Emitted by `migrate`.
+ */
+export interface MigratedEvent {
+  name: "Migrated";
+  data: {
+    from_storage_version?: number;
+    to_storage_version?: number;
+  };
 }
 
 /**
@@ -223,57 +280,6 @@ export interface VersionSyncedEvent {
   name: "VersionSynced";
   data: {
     version?: string;
-  };
-}
-
-/**
- * Error Enum: RoleTransferError
- */
-export const RoleTransferError = {
-  2200 : { message: "NoPendingTransfer" },
-  2201 : { message: "InvalidLiveUntilLedger" },
-  2202 : { message: "InvalidPendingAccount" },
-  2203 : { message: "TransferExpired" }
-}
-
-/**
- * Error Enum: OwnableError
- */
-export const OwnableError = {
-  2100 : { message: "OwnerNotSet" },
-  2101 : { message: "TransferInProgress" },
-  2102 : { message: "OwnerAlreadySet" }
-}
-
-/**
- * Event emitted when an ownership transfer is initiated.
- */
-export interface OwnershipTransferEvent {
-  name: "OwnershipTransfer";
-  data: {
-    old_owner?: string;
-    new_owner?: string;
-    live_until_ledger?: number;
-  };
-}
-
-/**
- * Event emitted when ownership is renounced.
- */
-export interface OwnershipRenouncedEvent {
-  name: "OwnershipRenounced";
-  data: {
-    old_owner?: string;
-  };
-}
-
-/**
- * Event emitted when an ownership transfer is completed.
- */
-export interface OwnershipTransferCompletedEvent {
-  name: "OwnershipTransferCompleted";
-  data: {
-    new_owner?: string;
   };
 }
 
@@ -519,5 +525,5 @@ export interface ProposalCancelledEvent {
     proposal_id: Uint8Array;
   };
 }
-    export type ContractEvent = LaunchedEvent | ProposalQueuedEvent | QuorumBpsChangedEvent | QueueDelayChangedEvent | VotingDelayChangedEvent | GovernorInitializedEvent | VotingPeriodChangedEvent | ProposalThresholdChangedEvent | UpgradedEvent | VersionSyncedEvent | OwnershipTransferEvent | OwnershipRenouncedEvent | OwnershipTransferCompletedEvent | VoteCastEvent | QuorumChangedEvent | ProposalCreatedEvent | ProposalExecutedEvent | ProposalCancelledEvent;
+    export type ContractEvent = ProposalQueuedEvent | GovernorLaunchedEvent | QuorumBpsChangedEvent | ProposalScheduledEvent | QueueDelayChangedEvent | VotingDelayChangedEvent | GovernorInitializedEvent | VotingPeriodChangedEvent | ProposalThresholdChangedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VersionSyncedEvent | VoteCastEvent | QuorumChangedEvent | ProposalCreatedEvent | ProposalExecutedEvent | ProposalCancelledEvent;
     

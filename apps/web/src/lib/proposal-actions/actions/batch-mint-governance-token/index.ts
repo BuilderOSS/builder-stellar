@@ -1,5 +1,7 @@
 // src/lib/proposal-actions/actions/batch-mint-governance-token/index.ts
 
+import { MAX_BATCH_MINT } from '@/lib/batch-mint-budget';
+
 import type { ActionHandler } from '../../types';
 import { BatchMintGovernanceTokenForm } from './component';
 import type { BatchMintGovernanceTokenData } from './types';
@@ -8,7 +10,7 @@ import { validateBatchMintGovernanceToken } from './validator';
 export const batchMintGovernanceTokenHandler: ActionHandler<BatchMintGovernanceTokenData> = {
   type: 'batch-mint-governance-token',
   label: 'Batch Mint Governance Tokens',
-  description: 'Mint multiple governance tokens (1-20) to a recipient',
+  description: `Mint multiple governance tokens (1-${MAX_BATCH_MINT}) to a recipient`,
   order: 2,
   group: 'Governance',
 
@@ -36,7 +38,7 @@ export const batchMintGovernanceTokenHandler: ActionHandler<BatchMintGovernanceT
   buildCallVector: (data, context) => ({
     target: context.tokenContractId,
     function: 'batch_mint',
-    args: [context.treasuryAddress, data.recipient.trim(), parseInt(data.amount.trim(), 10)]
+    args: [context.treasuryAddress, [data.recipient.trim()], [data.amount.trim()]]
   }),
 
   checkPreconditions: (context) => {

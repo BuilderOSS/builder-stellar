@@ -10,20 +10,23 @@
 //! - **Continuous Auctions**: New auctions start immediately after the previous one settles
 //! - **SAC Payment**: Requires a configured SAC payment token (payment type locked per auction)
 //! - **Time Extension**: Anti-sniping mechanism extends auction if bids come near the end
-//! - **Pausable**: Owner can pause for emergencies, configuration changes, or settlement
+//! - **Pausable**: The admin pauses for emergencies or configuration changes
+//!   (all setters require a pause)
 //! - **Reserve Price**: Minimum bid requirement prevents low-value sales
 //! - **Bid Increment**: Ensures meaningful competition between bidders
 //! - **Refund System**: Outbid participants automatically receive their funds back
 //!
 //! ## Auction Lifecycle
 //!
-//! 1. **Launch**: Owner unpauses contract, creating the first auction with token ID 0
+//! 1. **Launch**: The Manager's `launch` (or a later admin `unpause`) creates the
+//!    first auction, minting the next token id to the auction contract
 //! 2. **Bidding**: Users place bids (must exceed reserve + increment). Payment type
 //!    locks on first bid (all subsequent bids must use same currency)
 //! 3. **Time Extension**: If bid arrives within `time_buffer` of end, auction extends
 //!    (max 10 extensions to prevent DoS)
-//! 4. **Settlement**: Anyone can settle once time expires. Token mints to winner,
-//!    funds transfer to treasury, previous bidder gets refunded
+//! 4. **Settlement**: Anyone can settle once time expires (also while paused, but
+//!    never before the end time). The token goes to the winner and the proceeds to
+//!    the treasury; with no bids the token goes to the treasury
 //! 5. **New Auction**: Next token ID auction begins immediately
 //!
 //! ## Security Features
@@ -46,3 +49,4 @@ mod storage;
 mod test;
 
 pub use contract::*;
+pub use error::AuctionError;

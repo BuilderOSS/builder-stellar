@@ -1,24 +1,18 @@
-//! Event definitions and emission helpers for the Token contract.
+//! Events published by the Token contract.
 //!
-//! This module defines standard Soroban events published via the `contractevent` macro
-//! for on-chain indexing. Most NFT lifecycle events (Transfer, Mint, Approve) are emitted
-//! automatically by OpenZeppelin's Base and NonFungibleVotes implementations. This module
-//! only defines custom events that add information not included in the standard events,
-//! such as tracking the minter address and batch minting operations.
+//! Standard NFT lifecycle events (Transfer, Mint, Approve) and vote events
+//! (DelegateChanged, DelegateVotesChanged) come from OpenZeppelin. The events
+//! below add what those lack: the minter of each token or batch, mint-authority changes
+//! and the launch handoff. Admin changes are `common::admin::AdminChanged`.
 
-use soroban_sdk::{contractevent, Address, Vec};
+use soroban_sdk::{contractevent, Address, Env, String, Vec};
 
-// Standard contract events
-
-/// Emitted when the token contract is initialized.
-///
-/// Contains the initial owner and token metadata. This event is emitted once
-/// during contract deployment via the `__constructor` function.
+/// Emitted once by the constructor.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TokenInitialized {
     #[topic]
-    pub owner: Address,
+    pub admin: Address,
     pub uri: String,
     pub name: String,
     pub symbol: String,
@@ -26,9 +20,6 @@ pub struct TokenInitialized {
 }
 
 /// Emitted when minting authority is granted or revoked for an address.
-///
-/// Tracks changes to mint permissions, including who made the change (always the owner).
-/// The owner always has implicit minting authority regardless of this flag.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MintAuthorityChanged {
@@ -39,12 +30,9 @@ pub struct MintAuthorityChanged {
     pub changed_by: Address,
 }
 
-/// Custom event to track minter information during single token mints.
-///
-/// OpenZeppelin's standard Mint event doesn't include the minter address, only
-/// the recipient. This custom event supplements it by tracking who performed the mint,
-/// which is useful for auditing and analytics (e.g., distinguishing owner mints
-/// from auction contract mints).
+/// Emitted for every token minted by `mint`, next to OpenZeppelin's `Mint`, to
+/// record who performed the mint (admin, auction, marketplace, minter).
+/// `batch_mint` emits `MintBatchWithMinter` instead.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MintWithMinter {
@@ -55,27 +43,38 @@ pub struct MintWithMinter {
     pub token_id: u32,
 }
 
-// Note: Transfer, Approve, and standard Mint events are emitted automatically by OpenZeppelin's Base trait
-// We only define custom events here that add additional information or functionality
-// Batch minting functionality has been moved to the Minter contract
+/// Emitted once per `batch_mint` call for the contiguous range
+/// `[first_token_id, first_token_id + count)`, instead of one
+/// `MintWithMinter` per token (keeps large batches under the per-transaction
+/// event size limit). Recipients come from OpenZeppelin's per-token `Mint`.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MintBatchWithMinter {
+    #[topic]
+    pub minter: Address,
+    pub first_token_id: u32,
+    pub count: u32,
+}
 
-// Event helper functions
+/// Emitted once when the Manager launches the token (Setup -> Live).
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TokenLaunched {
+    #[topic]
+    pub treasury: Address,
+    pub minters: Vec<Address>,
+}
 
-use soroban_sdk::{Env, String};
-
-/// Emits a TokenInitialized event.
-///
-/// Called once during contract initialization to record the deployment parameters.
 pub fn emit_token_initialized(
     e: &Env,
-    owner: &Address,
+    admin: &Address,
     uri: &String,
     name: &String,
     symbol: &String,
     version: &String,
 ) {
     TokenInitialized {
-        owner: owner.clone(),
+        admin: admin.clone(),
         uri: uri.clone(),
         name: name.clone(),
         symbol: symbol.clone(),
@@ -109,17 +108,17 @@ pub fn emit_token_mint(e: &Env, minter: &Address, to: &Address, token_id: u32) {
     .publish(e);
 }
 
-/// Emitted once when the Manager launches the token (Setup -> Live).
-#[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Launched {
-    #[topic]
-    pub treasury: Address,
-    pub minters: Vec<Address>,
+pub fn emit_token_batch_mint(e: &Env, minter: &Address, first_token_id: u32, count: u32) {
+    MintBatchWithMinter {
+        minter: minter.clone(),
+        first_token_id,
+        count,
+    }
+    .publish(e);
 }
 
 pub fn emit_launched(e: &Env, treasury: &Address, minters: &Vec<Address>) {
-    Launched {
+    TokenLaunched {
         treasury: treasury.clone(),
         minters: minters.clone(),
     }

@@ -29,6 +29,11 @@ function getDeploymentId(): string {
   return DEPLOYMENT_ID;
 }
 
+/** Activity rows shown on public feeds (the indexer also writes admin/system rows). */
+const PUBLIC_VISIBILITY = ['public', 'governance'];
+/** The indexer curates visibility: public feeds read only the public/governance rows. */
+const PUBLIC_FEED_FILTER = { visibility: { in: PUBLIC_VISIBILITY } };
+
 function mapProposalList(row: AppProposalList) {
   return {
     proposal_id: row.proposalId,
@@ -36,9 +41,11 @@ function mapProposalList(row: AppProposalList) {
     proposer: row.proposer,
     description: row.description,
     snapshot_ledger: row.snapshotLedger === null ? null : Number(row.snapshotLedger),
-    // The governor does not emit a vote start; callers derive it from the chain.
-    vote_start_timestamp: null as number | null,
-    deadline_ledger: row.voteEndSeconds === null ? null : Number(row.voteEndSeconds),
+    // From ProposalScheduled: unix seconds (the snapshot is a ledger).
+    vote_start_timestamp: row.voteStartSeconds === null ? null : Number(row.voteStartSeconds),
+    vote_end_timestamp: row.voteEndSeconds === null ? null : Number(row.voteEndSeconds),
+    // Fixed at proposal time from the voting supply at the snapshot.
+    quorum_votes: row.quorumVotes === null ? null : row.quorumVotes.toFixed(0),
     eta: row.etaSeconds === null ? null : Number(row.etaSeconds),
     state: row.state,
     for_votes: row.forVotes.toString(),
@@ -154,9 +161,11 @@ export async function getGoldskyActivityFeed(
     contractRole?: string;
     actor?: string;
     kind?: string;
+    /** 'public' (default) hides admin/system rows such as launch handoffs and seed events. */
+    visibility?: 'public' | 'all';
   } = {}
 ) {
-  const { limit = 25, offset = 0, contractId, contractRole, actor, kind } = params;
+  const { limit = 25, offset = 0, contractId, contractRole, actor, kind, visibility = 'public' } = params;
   const deploymentId = getDeploymentId();
   const daoIdFromUrl = await getDaoIdFromUrl(daoId);
   const where = {
@@ -165,6 +174,7 @@ export async function getGoldskyActivityFeed(
     ...(contractId ? { contractId } : {}),
     ...(contractRole ? { contractRole } : {}),
     ...(actor ? { actor } : {}),
+    ...(visibility === 'all' ? {} : PUBLIC_FEED_FILTER),
     ...(kind
       ? {
           kind: {
@@ -393,9 +403,10 @@ export async function getGoldskyTokenInventory(
   const deploymentId = getDeploymentId();
   const daoIdFromUrl = await getDaoIdFromUrl(daoId);
   const where = { deploymentId, daoId: daoIdFromUrl };
-  const [rows, total] = await Promise.all([
+  const [rows, total, supply] = await Promise.all([
     prisma.tokenInventory.findMany({ where, orderBy: { tokenId: 'desc' }, take: limit, skip: offset }),
-    prisma.tokenInventory.count({ where })
+    prisma.tokenInventory.count({ where }),
+    prisma.tokenSupply.findFirst({ where })
   ]);
 
   return {
@@ -409,6 +420,8 @@ export async function getGoldskyTokenInventory(
     })),
     total,
     totalSupply: String(total),
+    // Tokens held by the Treasury, Auction and Marketplace carry no votes.
+    votingSupply: supply ? supply.votingSupply.toString() : null,
     limit,
     offset,
     hasMore: offset + rows.length < total,
@@ -550,6 +563,7 @@ export async function getDashboardData(address: string, params: { limit?: number
     OR: [
       ...(memberDaoIds.length ? [{ daoId: { in: memberDaoIds } }] : []),
       { deployer: { equals: normalizedAddress, mode: 'insensitive' as const } },
+      { launchAdmin: { equals: normalizedAddress, mode: 'insensitive' as const } },
       { adminAddress: { equals: normalizedAddress, mode: 'insensitive' as const } }
     ]
   };
@@ -561,6 +575,7 @@ export async function getDashboardData(address: string, params: { limit?: number
         OR: [
           ...(memberDaoIds.length ? [{ daoId: { in: memberDaoIds } }] : []),
           { deployer: { equals: normalizedAddress, mode: 'insensitive' as const } },
+          { launchAdmin: { equals: normalizedAddress, mode: 'insensitive' as const } },
           { adminAddress: { equals: normalizedAddress, mode: 'insensitive' as const } }
         ]
       },
@@ -570,12 +585,14 @@ export async function getDashboardData(address: string, params: { limit?: number
   const daoIds = myDaoCandidates.map((row) => row.daoId);
   const [feedRows, total] = await Promise.all([
     prisma.appActivityFeed.findMany({
-      where: { deploymentId, daoId: { in: daoIds } },
+      where: { deploymentId, daoId: { in: daoIds }, ...PUBLIC_FEED_FILTER },
       orderBy: [{ ledgerSequence: 'desc' }, { activityId: 'desc' }],
       take: limit,
       skip: offset
     }),
-    prisma.appActivityFeed.count({ where: { deploymentId, daoId: { in: daoIds } } })
+    prisma.appActivityFeed.count({
+      where: { deploymentId, daoId: { in: daoIds }, ...PUBLIC_FEED_FILTER }
+    })
   ]);
   const daoById = new Map(myDaoCandidates.map((row) => [row.daoId, row]));
 
