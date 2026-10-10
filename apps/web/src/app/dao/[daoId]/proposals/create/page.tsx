@@ -48,7 +48,8 @@ import {
 const layout = css({
   display: 'grid',
   gap: '8',
-  lg: { gridTemplateColumns: 'minmax(0, 1fr) 340px', alignItems: 'start' }
+  lg: { gridTemplateColumns: 'minmax(0, 1fr) 340px', alignItems: 'start' },
+  xl: { gridTemplateColumns: 'minmax(0, 1fr) 380px' }
 });
 const mainColumn = css({ display: 'grid', gap: '2', minW: '0', maxW: '720px' });
 const back = css({ justifySelf: 'start', ml: '-3' });

@@ -189,12 +189,14 @@ function HistoryPanel({ daoId }: { daoId: string }) {
   );
 }
 
-function ContextContent({ activeActionType }: { activeActionType?: string }) {
+function ContextContent({ activeActionType, id }: { activeActionType?: string; id: string }) {
   const { daoId, daoTokenAddress, daoConfig: config } = useDaoContext();
   const [tab, setTab] = useState<ContextTab>(activeActionType?.includes('transfer') ? 'treasury' : 'members');
   return (
-    <div className={css({ display: 'grid', gap: '4' })}>
+    <div className={css({ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '4', minW: '0' })}>
       <SegmentedControl
+        fill
+        id={id}
         label="Context"
         value={tab}
         onValueChange={(value) => setTab(value as ContextTab)}
@@ -215,6 +217,9 @@ function ContextContent({ activeActionType }: { activeActionType?: string }) {
 
 const desktopRail = css({
   display: { base: 'none', lg: 'grid' },
+  // One column that its children can't widen; only vertical scrolling.
+  gridTemplateColumns: 'minmax(0, 1fr)',
+  overflowX: 'hidden',
   alignContent: 'start',
   gap: '4',
   position: 'sticky',
@@ -239,7 +244,7 @@ export function ProposalContextRail({ activeActionType, mobileOpen, onMobileClos
         <h2 id="proposal-context-title" className={railTitle}>
           For reference
         </h2>
-        <ContextContent activeActionType={activeActionType} />
+        <ContextContent id="proposal-context-rail" activeActionType={activeActionType} />
       </aside>
       <Sheet
         open={mobileOpen}
@@ -249,7 +254,7 @@ export function ProposalContextRail({ activeActionType, mobileOpen, onMobileClos
         title="For reference"
         description="Treasury, members and past votes"
       >
-        <ContextContent activeActionType={activeActionType} />
+        <ContextContent id="proposal-context-sheet" activeActionType={activeActionType} />
       </Sheet>
     </>
   );

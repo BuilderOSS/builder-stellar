@@ -14,15 +14,22 @@ const topBar = css({
   top: '0',
   zIndex: 'bar',
   display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: '3',
   minH: '60px',
-  px: 'clamp(16px, 4vw, 40px)',
   pt: 'env(safe-area-inset-top)',
   // One translucent layer, where it explains that content scrolls beneath.
   bg: 'color-mix(in srgb, token(colors.canvas) 88%, transparent)',
   backdropFilter: 'blur(12px)'
+});
+// The bar's background spans the window; its controls line up with the content column below.
+const topInner = css({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: '3',
+  width: '100%',
+  maxW: 'content',
+  mx: 'auto',
+  px: 'clamp(16px, 4vw, 40px)'
 });
 const topStart = css({ display: 'flex', alignItems: 'center', gap: '2', minW: '0', flex: '1' });
 const topEnd = css({ display: 'flex', alignItems: 'center', gap: '2', flexShrink: '0' });
@@ -81,8 +88,10 @@ export function ShellFrame({
       {rail}
       <div className={column}>
         <header className={topBar}>
-          <div className={topStart}>{start}</div>
-          <div className={topEnd}>{end}</div>
+          <div className={topInner}>
+            <div className={topStart}>{start}</div>
+            <div className={topEnd}>{end}</div>
+          </div>
         </header>
         <main id="main-content" className={content} tabIndex={-1}>
           <NetworkBanner />
