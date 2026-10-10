@@ -45,7 +45,9 @@ export type ProposalActionType =
   | 'treasury-buy-listing'
   | 'set-merkle-root'
   | 'set-allowlist'
-  | 'minter-batch-mint';
+  | 'minter-batch-mint'
+  | 'set-token-metadata'
+  | 'transfer-dao-token';
 
 /**
  * Queued action structure (persisted in store)

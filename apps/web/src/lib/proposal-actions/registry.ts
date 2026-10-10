@@ -33,6 +33,7 @@ import {
 import { minterAllocationHandlers } from './minter-actions';
 import { moduleUpgradeHandler } from './module-upgrade-actions';
 import { reviewFixHandlers } from './review-fix-actions';
+import { setTokenMetadataHandler, transferDaoTokenHandler } from './token-actions';
 import type { ActionHandler, ProposalActionType } from './types';
 
 // The shared artwork helper can build destructive resets too. Only append is
@@ -73,6 +74,8 @@ const REGISTERED_HANDLERS: ActionHandler[] = [
   pauseMarketplaceHandler,
   unpauseMarketplaceHandler,
   createPrimaryListingHandler,
+  setTokenMetadataHandler,
+  transferDaoTokenHandler,
   cancelPrimaryListingHandler,
   registeredArtworkPropertiesHandler,
   ...artworkSettingHandlers,

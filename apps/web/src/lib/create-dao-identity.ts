@@ -1,4 +1,5 @@
 import { isValidSlug } from './create-dao-schema';
+import { MAX_TOKEN_SYMBOL_LENGTH } from './validation';
 
 /** Splits a name into plain ASCII words: accents dropped, everything else is a separator. */
 function words(name: string) {
@@ -23,7 +24,7 @@ export function suggestSymbol(name: string) {
     return parts
       .map((word) => word[0])
       .join('')
-      .slice(0, 12);
+      .slice(0, MAX_TOKEN_SYMBOL_LENGTH);
   return parts[0].slice(0, 8);
 }
 

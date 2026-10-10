@@ -108,6 +108,10 @@ export function getProposalActionResourceKey(action: ProposalQueuedAction): stri
         .toUpperCase()}:${String(action.recipient).trim().toUpperCase()}`;
     case 'set-auction-reserve-price':
       return 'auction:reserve-price';
+    case 'set-token-metadata':
+      return 'token:metadata';
+    case 'transfer-dao-token':
+      return `token:transfer:${String(action.tokenId ?? '').trim()}`;
     case 'set-auction-payment-token':
       return 'auction:payment-token';
     case 'set-auction-duration':
@@ -135,6 +139,8 @@ export function isHighRiskProposalAction(action: ProposalQueuedAction) {
     action.type === 'unpause-marketplace' ||
     action.type === 'set-marketplace-payment-token' ||
     action.type === 'set-auction-payment-token' ||
+    action.type === 'set-token-metadata' ||
+    action.type === 'transfer-dao-token' ||
     action.type === 'upgrade-dao-module' ||
     action.type === 'add-artwork-properties' ||
     action.type === 'set-merkle-root' ||

@@ -11,7 +11,15 @@ import {
   validateVotingDelay,
   validateVotingPeriod
 } from './governance-limits';
-import { isValidHttpUrl, isValidStellarAddress, isValidTokenSymbol } from './validation';
+import {
+  isValidHttpUrl,
+  isValidStellarAddress,
+  isValidTokenSymbol,
+  MAX_TOKEN_NAME_BYTES,
+  MAX_TOKEN_SYMBOL_LENGTH,
+  MAX_TOKEN_URI_BYTES,
+  utf8Length
+} from './validation';
 
 export type CreationNetwork = 'testnet' | 'public' | 'local';
 export const configuredCreationNetwork = (): CreationNetwork => {
@@ -53,9 +61,10 @@ const identitySchema = z.object({
     .string()
     .trim()
     .min(2, 'Use at least 2 characters')
-    .max(80)
-    .refine(withinContractString, 'Use at most 256 UTF-8 bytes'),
-  tokenSymbol: z.string().refine(isValidTokenSymbol, 'Use uppercase letters or numbers, up to 12 characters'),
+    .refine((value) => utf8Length(value) <= MAX_TOKEN_NAME_BYTES, `Use at most ${MAX_TOKEN_NAME_BYTES} characters`),
+  tokenSymbol: z
+    .string()
+    .refine(isValidTokenSymbol, `Use capital letters or numbers, up to ${MAX_TOKEN_SYMBOL_LENGTH} characters`),
   contractImage: httpUrl
 });
 const basicInfoSchema = identitySchema.extend({
@@ -66,7 +75,11 @@ const basicInfoSchema = identitySchema.extend({
     .max(240)
     .refine(withinContractString, 'Use at most 256 UTF-8 bytes'),
   projectUri: httpUrl,
-  tokenUri: templatedUrl,
+  // Becomes the token's base URI: the contract caps it at MAX_TOKEN_URI_BYTES once {daoId} is filled in.
+  tokenUri: templatedUrl.refine(
+    (value) => utf8Length(value.replaceAll('{daoId}', 'C'.repeat(56))) <= MAX_TOKEN_URI_BYTES,
+    `The resolved token URL must fit within ${MAX_TOKEN_URI_BYTES} bytes`
+  ),
   rendererBase: templatedUrl
 });
 const auctionSchema = z.object({

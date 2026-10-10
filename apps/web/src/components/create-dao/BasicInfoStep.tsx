@@ -1,6 +1,7 @@
 'use client';
 import { Input, Textarea } from '@/components/ui';
 import { followsName, suggestSlug, suggestSymbol } from '@/lib/create-dao-identity';
+import { MAX_TOKEN_NAME_BYTES, MAX_TOKEN_SYMBOL_LENGTH } from '@/lib/validation';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
 import { CreationField, fieldAccessibility } from './CreationField';
@@ -26,7 +27,7 @@ export function BasicInfoStep() {
               id="tokenName"
               autoComplete="off"
               value={basicInfo.tokenName}
-              maxLength={80}
+              maxLength={MAX_TOKEN_NAME_BYTES}
               {...fieldAccessibility('tokenName', errors)}
               onChange={(e) => {
                 const name = e.target.value;
@@ -51,14 +52,14 @@ export function BasicInfoStep() {
             hint={
               symbolFollows
                 ? 'Filled in from the name. Type to choose your own.'
-                : 'Up to 12 capital letters or numbers, like a ticker.'
+                : `Up to ${MAX_TOKEN_SYMBOL_LENGTH} capital letters or numbers, like a ticker.`
             }
           >
             <Input
               id="tokenSymbol"
               autoComplete="off"
               value={basicInfo.tokenSymbol}
-              maxLength={12}
+              maxLength={MAX_TOKEN_SYMBOL_LENGTH}
               {...fieldAccessibility('tokenSymbol', errors)}
               onChange={(e) => {
                 update({ tokenSymbol: e.target.value.toUpperCase() });
