@@ -10,8 +10,10 @@ Soroban events ─▶ Goldsky pipeline ─▶ 3 landing tables ─▶ views ─�
                   (raw ▶ decoded ▶ activity transforms)    (all derived state)
 ```
 
-Goldsky writes exactly three tables; **everything else is a view**, so replaying
-the pipeline rebuilds the whole read model and no migration ever has to move data.
+Goldsky writes exactly three landing tables; domain/app state is projected through
+views. Replay rebuilds the event-derived read model. Migration bookkeeping and
+Goldsky dynamic allowlists are separate objects, and incompatible decoder changes
+can still require a deliberate reset/replay.
 
 | Table | Written by | Purpose |
 | --- | --- | --- |
@@ -85,10 +87,14 @@ Rules:
 | `test-migrations.sh` | static checks; with `TEST_DATABASE_URL` also migrate → rollback → migrate and the read-model integration test |
 | `debug-database.sh` | inspect roles, schemas, ledger and privileges |
 
-Privileges: `goldsky_writer` can only `SELECT/INSERT/UPDATE` the three landing
-tables. `app_server` is read-only on the view schemas and has **no** access to
+Privileges: `goldsky_writer` receives `SELECT/INSERT/UPDATE` on the three landing
+tables and `USAGE/CREATE` on `chain`/`app` for sink startup. Append-only triggers
+reject changed updates/deletes. Goldsky's dynamic-table backend also needs its
+separate `streamling` setup; the landing grants do not prove that setup is complete.
+`app_server` is read-only on the view schemas and has **no** access to
 `chain.*` or the landing tables; views read them with their owner's privileges,
-which is why the web health check uses `app.indexer_status`, not raw events.
+which is why application checks use `app.indexer_status` or `app.activity_feed`,
+not raw events. These grants are role boundaries, not per-DAO row-level security.
 
 ## Fresh database
 
@@ -101,8 +107,10 @@ export DATABASE_URL=postgres://admin:...@host/neondb     # admin role
 
 ## Resetting a deployed database (clean start)
 
-Reset when the Manager is redeployed, the decoder/schema changes incompatibly,
-or you want to replay from the start ledger. Order matters: stop the writer
+Reset is a destructive clean-start operation for a disposable deployment or an
+approved incompatible replay. A new Manager address alone does not require deleting
+other deployments' history. Confirm the intended database before proceeding.
+Order matters: stop the writer
 first so it cannot repopulate half-reset tables.
 
 ```bash
@@ -123,6 +131,10 @@ schema of the same database and are not touched by the reset; they are rebuilt
 from `DaoCreated` events on replay. If the Manager address changed, drop that
 schema too (`DROP SCHEMA streamling CASCADE`) while the pipeline is stopped.
 
+That command is destructive and applies only to a confirmed obsolete dynamic-table
+schema. A shared database may have other pipelines using it. The deployment wrapper's
+CLI prerequisite/compatibility caveat is in [the Goldsky README](../packages/goldsky/README.md).
+
 ## Verifying changes
 
 ```bash
@@ -134,3 +146,9 @@ The integration test replays a full DAO lifecycle through the real pipeline
 transforms into a scratch database and asserts on the views, that every pipeline
 sink column exists with the right type, and that `apps/web/prisma/schema.prisma`
 matches the views column-for-column and type-for-type.
+
+These tests do not prove remote pipeline health or runtime role grants. Validate
+permissions separately with the role scripts and an approved test database.
+The web uses additional read-only Marketplace views and a parameterized execution
+receipt query; local drafts/preferences do not add writable app tables. See
+[web reference](../apps/web/README.md).

@@ -6,20 +6,22 @@ import { useState } from 'react';
 import { Grid, Stack } from 'styled-system/jsx';
 
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
-import { AdminSectionNav } from '@/components/admin/admin-section-nav';
+import { AdminSurfaceNav as AdminSectionNav } from '@/components/admin/admin-surface-nav';
 import { AuthorityPanel } from '@/components/admin/authority-panel';
 import { PageSection } from '@/components/page-section';
 import { Badge, Callout, Card, Heading, ShortId, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsOwner } from '@/lib/admin-proposals';
 import { useContractOwner } from '@/lib/admin-queries';
-import { type DaoNetworkConfig, isDaoAdmin } from '@/lib/dao-config';
+import { useAdminTokenState } from '@/lib/admin-surfaces';
+import { type DaoNetworkConfig } from '@/lib/dao-config';
 import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
+import { getStellarAddressError } from '@/lib/validation';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 async function submitAuthorityUpdate(
@@ -59,17 +61,19 @@ export default function OwnerPage() {
     isLoading: mintAuthoritiesLoading
   } = useGoldskyMintAuthorities(config.tokenContractId);
   const { data: tokenOwner } = useContractOwner(config, 'token', session.address || undefined);
-  const isOwner = isDaoAdmin(config, session.address);
+  const token = useAdminTokenState(config, session.address);
+  const isOwner = Boolean(session.address && token.data?.owner === session.address);
   const canProposeAuthority = Boolean(session.address && treasuryIsOwner(config, tokenOwner));
 
   if (!isOwner && !canProposeAuthority) {
     return (
       <PageSection title="Owner" description="Owner-only authority management.">
+        <AdminSectionNav daoId={daoId} active="/owner" />
         <Callout
           variant="warning"
           badge="Access restricted"
           title="Connect the owner wallet to continue"
-          description="Only the configured bootstrap owner can add or remove mint authorities."
+          description="Authority changes require the current Token owner. After launch, Treasury-owned changes go through governance."
         >
           <ShortId value={config.adminAddress} label="Owner address" />
         </Callout>
@@ -82,6 +86,18 @@ export default function OwnerPage() {
       setFormMessage('Authority address is required.');
       return;
     }
+    const addressError = getStellarAddressError(authority.trim());
+    if (addressError) {
+      setFormMessage(addressError);
+      return;
+    }
+    if (
+      session.walletNetworkIssue ||
+      (session.walletNetworkPassphrase && session.walletNetworkPassphrase !== config.passphrase)
+    ) {
+      setFormMessage('Switch your wallet to the DAO network before preparing an authority update.');
+      return;
+    }
 
     if (!config.tokenContractId) {
       setFormMessage('Missing contract id in the active network config.');
@@ -89,7 +105,7 @@ export default function OwnerPage() {
     }
 
     // Mint authority changes fail with NotLive until the DAO has been launched.
-    if (config.status === 'pending') {
+    if (!token.data?.live) {
       setFormMessage('Mint authorities can only be changed after the DAO is launched.');
       return;
     }
@@ -108,15 +124,20 @@ export default function OwnerPage() {
           { authority, enabled },
           { config, session: { address: session.address, kit: StellarWalletsKit } }
         );
-        proposalDraft.requestAdd({
+        proposalDraft.requestAddBatch({
           daoId,
-          action,
-          source: `admin/owner/${type}`,
-          metadata: {
-            title: `${enabled ? 'Grant' : 'Revoke'} mint authority`,
-            description: `${enabled ? 'Grant' : 'Revoke'} mint authority for ${authority}.`,
-            url: ''
-          },
+          requests: [
+            {
+              daoId,
+              action,
+              source: `admin/owner/${type}`,
+              metadata: {
+                title: `${enabled ? 'Grant' : 'Revoke'} mint authority`,
+                description: `${enabled ? 'Grant' : 'Revoke'} mint authority for ${authority}.`,
+                url: ''
+              }
+            }
+          ],
           onAdded: () => setFormMessage(`${enabled ? 'Grant' : 'Revoke'} mint authority added to the proposal draft.`)
         });
         return;
@@ -179,7 +200,7 @@ export default function OwnerPage() {
               onRevoke={() => void updateAuthority(mintAuthority, false)}
               allowLabel={isOwner ? 'Allow minting' : 'Propose grant'}
               revokeLabel={isOwner ? 'Revoke minting' : 'Propose revoke'}
-              busy={busy}
+              busy={busy || !token.data?.live}
               loading={mintAuthoritiesLoading}
               emptyLabel={mintAuthorityError?.message || 'No mint authorities indexed yet.'}
               draftPreview={draftStatus.actionsInDraft.find((a) => a.type === 'set-mint-authority')}

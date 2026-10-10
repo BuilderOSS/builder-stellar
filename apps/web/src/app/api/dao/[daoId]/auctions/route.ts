@@ -1,6 +1,7 @@
 import { Client as AuctionClient } from '@builder-stellar/auction-bindings';
 import { NextResponse } from 'next/server';
 
+import { parseContractErrorCode } from '@/lib/contract-errors';
 import { getDaoNetworkConfigById } from '@/lib/dao-config';
 import { getGoldskyAuctionBids, getGoldskyAuctionHistory } from '@/lib/goldsky';
 
@@ -31,8 +32,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ dao
       client.paused(),
       getGoldskyAuctionHistory(daoId)
     ]);
-    const auctionTx = await client.get_auction();
-    const auction = jsonValue(auctionTx.result) as { token_id?: string } | null;
+    let auction: { token_id?: string } | null = null;
+    try {
+      const auctionTx = await client.get_auction();
+      auction = jsonValue(auctionTx.result) as { token_id?: string } | null;
+    } catch (error) {
+      if (parseContractErrorCode(error) !== 1212) throw error;
+    }
     const paused = Boolean(pausedTx.result);
     if (!auction || typeof auction.token_id === 'undefined') {
       // No auction token exists yet. Determine if we've never launched or if we paused after launching.

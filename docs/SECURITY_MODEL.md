@@ -144,7 +144,7 @@ These are behaviors of the current contracts, not planned fixes.
 
 - Metadata seed grinding. The artwork seed is `keccak256(token_id, ledger sequence, ledger timestamp, host PRNG u64)`. Whoever controls when a mint happens, or whether to submit after simulating, can pick preferred traits. `regenerate(token_id)` only seeds a token without attributes (`AlreadySeeded` otherwise).
 - Governance parameter bounds. Voting delay, voting period and queue delay must be 300 seconds ..= 30 days; quorum 1 ..= 10,000 bp; proposal threshold nonzero and not above the voting supply. A DAO can still choose capturable or very slow parameters within those bounds. A quorum of 10,000 bp requires every voting-capable token to participate.
-- Founder supply and early takeover. During setup the launch admin can mint any number of founder tokens (in batches of 20) and delegate them; launch only requires a nonzero voting supply. With minimum timings a majority holder can propose, vote, queue and execute about 15 minutes after launch. Bidders and holders should inspect founder supply and delegation; front ends should display founder share.
+- Founder supply and early takeover. During setup the launch admin can mint any number of founder tokens (in batches that fit the event budget) and delegate them; launch only requires a nonzero voting supply. With minimum timings a majority holder can propose, vote, queue and execute about 15 minutes after launch. Bidders and holders should inspect founder supply and delegation; front ends should display founder share.
 - Treasury-held tokens never vote. Tokens the Treasury holds (unsold auctions, transfers to the Treasury) only regain voting power when a proposal transfers them out.
 - No veto once a proposal is queued. Only expiry (14 days after the ETA) stops it.
 - Opaque upgrade hashes and authorization trees. The chain checks registry approval, not code; voters must verify `to_hash` against audited reproducible builds and read any `authorize` trees.
@@ -153,3 +153,59 @@ These are behaviors of the current contracts, not planned fixes.
 - Payment assets must be plain, non-regulated Stellar Asset Contracts. AUTH_REQUIRED, clawback, fee-on-transfer or rebasing assets can freeze or misprice settlement.
 - Manager admin trust. The admin selects the hashes future DAOs deploy, can revoke implementations, pause the factory and register the platform minter (pinned by `expected_minter`). Creators should verify `DaoCreated.wasm_hashes` before launch. The admin is a single address with a two-step handover and no timelock; `PendingAdmin` has no expiry (withdraw with `cancel_pending_admin`).
 - Archival assumptions. The design assumes protocol 23+ automatic restoration where footprints allow, plus periodic maintenance (see MONITORING.md).
+
+## Application trust boundaries
+
+The app authenticates wallets with SEP-53 message signing and a SEP-10 fallback,
+then uses an encrypted `iron-session` cookie. Wallet connection alone is not an
+authenticated session. Challenge/replay/rate-limit bookkeeping is process-local;
+this reference does not claim a shared distributed replay store. Public DAO reads
+remain scoped to the configured deployment. Trading inventory/readiness derive the
+actor from the session, not a submitted address.
+
+SEP-10 reads current account signers/medium threshold from canonical Horizon and
+verifies their weighted signatures, excluding the server signer and requiring at
+least one positive client weight. Disabled-master/insufficient-threshold proofs
+cannot fall back. Master-key-only unfunded authentication is allowed only on an
+authoritative Horizon account-not-found 404 problem response, not generic 404 or
+network failure. Read/malformed-account failures return 503. Successful key-only
+sign-in does not establish funding or transaction readiness.
+
+Marketplace preparation checks same origin, session network, tenant/module/listing
+identity, live wiring/terms, ownership, and relevant account funds/trustlines. It
+returns unsigned XDR; the server does not sign/submit a trade. The wallet path
+checks account/network/source/expiry and unchanged envelope. Approval and listing
+are separate transactions. `list` carries the fee and payment asset the seller
+saw (`max_fee_bps`, `payment_asset`) and purchases carry `max_price`, so a
+governance or price change before confirmation makes the call fail (7714, 7712,
+7715) instead of applying new terms; the web re-reads and asks again.
+
+Proposal submission uses target-specific generated specs and explicit registered
+SAC transfer encoding. Unsupported external ABIs, scalar batch-mint shapes, unsafe
+integers, proposal-ID mismatch, or unavailable live state disable submission.
+Execution receipt checks bind Treasury, Governor, proposal and ordered calls; a
+missing indexed receipt is not evidence of failed execution.
+
+Treasury funding prepares a session-owned SAC transfer after scoped wiring,
+simulation and funds/reserve/fee checks; spending Treasury funds still requires
+governance. Holder preparation rechecks current on-chain NFT owner, not merely
+indexed ownership. Delegation applies to the account's owned voting units;
+single-token approval revocation is not collection-wide permission revocation.
+
+Minter claims use current registered Minter, Live/mint authority, method/round and
+recipient-bound proof; restoration-required simulations are rejected. The client
+rechecks reviewed state before signing. Allocation descriptors currently validate
+only and cannot be submitted through the shared governance encoder. This limitation
+must not be confused with implemented claimant signing.
+
+Creation/launch recovery saves finite signed envelopes separately from RPC
+acceptance. Rebroadcast preserves exact bytes/hash; reviewed configuration and
+nonce cannot be silently changed after freezing. Unknown acceptance is not proof
+of failure. Missing older envelopes cannot be safely rebroadcast.
+
+Local drafts, home preferences, artwork plans, and marketplace labels/favorites are
+browser storage, not encrypted shared permissions or on-chain rights. Scope filters
+avoid mixing workspaces but do not secure data from another user of the same browser.
+Clearing storage removes recovery data. Read-only SQL credentials do not imply that
+all server endpoints are side-effect free: uploads and transaction preparation have
+their own boundaries. See [web reference](../apps/web/README.md).

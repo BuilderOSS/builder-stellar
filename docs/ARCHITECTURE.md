@@ -1,92 +1,73 @@
 # Architecture
 
-## Versioned Redesign
-
-The baseline contains eight Soroban contracts: six DAO modules, the Manager, and the platform Minter shared by every DAO. Shared code (admin model, lifecycle flag, upgrades and migrations, TTL policy, typed cross-contract clients, error-code blocks and parameter bounds) lives in the library crate `contracts/common`. Every Manager and DAO module starts at semantic version `0.1.0` and storage version 1.
-
-1. **Implementation registry**: registers WASM hashes, tracks versions, approves transitions, revokes implementations, and records the admin-selected latest implementation per name.
-2. **DAO factory**: deploys six modules with deterministic salt-derived addresses and wires them through constructors; `launch_dao` performs the one-shot Setup to Live handoff.
-3. **Upgrade gate**: validates active, Manager-approved module transitions. Manager does not execute DAO upgrades.
+Builder separates platform deployment, DAO authority, and indexed history. A Manager creates six independent DAO modules; a shared Minter is a separate platform contract. Manager cannot administer a DAO after launch, but its registry remains an upgrade-policy dependency.
 
 ```text
-Manager
-├── implementation registry and upgrade approvals
-├── DAO factory
-├── slug registry (claimed at launch)
-└── temporary PendingDao state until launch
+Manager: implementation registry + factory + temporary PendingDao + persistent slugs
+  └─ each DAO: Token, Metadata, Auction, Governor, Treasury, Marketplace
+Shared Minter: optional post-launch mint authority, per-token allocations
 
-DAO
-├── Token
-├── Metadata
-├── Auction
-├── Governor
-├── Treasury
-└── Marketplace
+Wallet → Governor: propose / vote / queue
+Wallet → Treasury.execute → Governor.consume (returns)
+                         → ordered target calls → Execute events
+
+Events → Goldsky dynamic allowlists and transforms
+       → raw / decoded / activity landing tables
+       → PostgreSQL views → Prisma/services → API → web UI
+Local browser storage → creation/proposal drafts and preferences (not indexed)
 ```
 
-## Admin model
+## Modules
 
-Every module stores its admin with `common::admin`: the launch admin during setup, the Treasury from launch onward. The launch handoff is the only admin change; no module exposes a transfer, two-step handover or renounce. After launch every privileged change goes through a passed proposal executed by the Treasury.
+| Module | Responsibility |
+| --- | --- |
+| [Token](../contracts/token/README.md) | NFT ownership, delegation/checkpoints, voting supply (Treasury/Auction/Marketplace hold no votes), batch minting within an event budget (43 tokens to one recipient or 18 recipients), Metadata hook |
+| [Metadata](../contracts/metadata/README.md) | Artwork properties/items/IPFS groups and per-token selections |
+| [Auction](../contracts/auction/README.md) | Continuous English auction, SAC payments, settlement and refund fallback |
+| [Governor](../contracts/governor/README.md) | Timestamp voting windows, snapshot weights, quorum, queue and consumption |
+| [Treasury](../contracts/treasury/README.md) | Asset custody, admin of every module after launch, ordered proposal execution, `authorize` actions for nested auth |
+| [Marketplace](../contracts/marketplace/README.md) | Lazy primary mint-on-purchase and escrowed secondary sales; seller fee/asset and buyer price bounds; fee ≤ 25% |
+| [Manager](../contracts/manager/README.md) | Deterministic factory, implementation registration/revocation/latest selection and approvals, permanent slug registry |
+| [Minter](../contracts/minter/README.md) | Shared batch, Merkle and allowlist minting for Live tokens |
 
-## DAO Modules
+`common` is a library; `dao-e2e` is an in-memory test crate. Neither is a DAO module. Release labels live in [the manifest](../releases/contracts.json).
 
-### Token
+## Create → Setup → Launch
 
-The NFT governance token supports ownership and transfers, delegation with checkpointed voting power, batch minting (within a per-call event budget: up to 43 tokens to one recipient, or 18 recipients with one token each), minter authorization, and a Metadata mint hook. Tokens held by the DAO's Treasury, Auction and Marketplace carry no votes: their voting units leave the supply, so the Governor's quorum is computed from the voting-capable supply only. Before launch only the admin (the launch admin) can mint. At launch the Manager sets the mint-authority set to Treasury and Marketplace, plus Auction and the platform minter when requested. `set_mint_authority` is available only after launch, to the admin (Treasury).
+1. `create_dao` requires deployer and launch-admin authorization, validates configuration/current implementations, and deploys all six modules with constructor-only wiring.
+2. The launch admin is every module's `admin()` in Setup. Artwork must be added **before** founder mints: the Metadata hook seeds traits at mint time and seeds nothing without properties (`metadata.regenerate` seeds a token minted without traits). Founder mints and artwork/configuration changes are separate transactions; a later failed transaction does not undo earlier ones.
+3. `launch_dao(token_address, launch_config)` checks launch-admin auth, factory not paused, the requested slug still free (`SlugTaken`), the launch admin still the Token admin, registered/non-revoked current module hashes, a nonzero voting supply, unchanged payment assets, and the optional pinned platform minter.
+4. Launch sets every module Live and hands every module's admin to the Treasury (`AdminChanged`). Treasury and Marketplace receive mint authority; Auction receives it when started; the platform Minter receives it when enabled.
+5. Manager claims the slug (`SlugClaimed`), emits `DaoLaunched` and removes `PendingDao`. Goldsky, not Manager storage, provides the directory.
 
-### Metadata
+Slug-to-Token and Token-to-slug mappings remain in Manager after launch; there is
+no enumeration API. Creation only requests a slug (several pending DAOs may request the same one, and `update_pending_slug` renames a request); launch claims it uniquely and permanently. Slug getters resolve launched DAOs only and do not renew TTL;
+permissionless `bump_slug_ttl` is separate maintenance. Indexed layout resolution
+maps a slug to the canonical DAO Token ID before services use it.
 
-Each DAO has a Metadata module with mutable settings (strings at most 256 characters), properties, and items. The admin adds properties/items (at most 30 items per `add_properties` call) and updates descriptive settings. When a token is minted, Token calls `on_minted`; Metadata derives a seed and selects attributes. Paginated getters (`get_items`, `get_ipfs_group`, page size at most 50) are preferred over the O(total) `get_properties`/`get_ipfs_data`. `bump_artwork_ttl` is a permissionless maintenance call (see [SECURITY_MODEL.md](./SECURITY_MODEL.md)).
+Auction/Marketplace enablement controls opening/start at launch, not whether modules are deployed. The web uses saved local creation/launch receipts and a separate launch checklist; CLI deployment uses three explicit phases. See [deployment](DAO_DEPLOYMENT.md).
 
-### Auction
+## Execution and upgrades
 
-Auction provides continuous English-auction membership with reserve price, minimum bid increment, time buffer (1 to 86,400 seconds), a configurable payment asset, settlement, and Treasury proceeds. Settlement is only possible after the end time, also while paused; `cancel_auction` (admin) is the only way to end a running auction. Unsold tokens go to the Treasury (where they carry no votes). Refunds to the outbid bidder are pushed best-effort; a failed push is credited and collected with `withdraw_refund`.
+Queue and Treasury execution are permissionless at the contract boundary. The submitting wallet pays fees; neither requires token ownership. Proposing and voting have their own authorization/eligibility checks. Governor derives ETA from its queue delay, ignoring the inherited queue ETA/operator inputs.
 
-### Governor
+Treasury execution consumes the exact action vectors and description hash on Governor, then invokes each action. Governor is off the call stack before actions run. A failing action reverts the transaction, including the Executed mark. `Governor.execute` always fails with `UseTreasuryExecute`.
 
-Governor creates proposals using timestamp-based voting windows, historical voting power, quorum of the voting supply, and proposal thresholds. `propose` emits `ProposalScheduled` with the vote window, snapshot ledger and the quorum fixed at proposal time. It does not execute proposals: `governor.execute` always fails with `UseTreasuryExecute`. Execution is `treasury.execute`, which calls `governor.consume` and then dispatches the actions.
+Treasury-targeted actions use an internal allowlist (`upgrade`, `migrate`, `sync_version`, plus `authorize`, which attaches a nested authorization tree to the next action) rather than re-entry. Other module upgrades require the module admin, matching current hash, and a Manager-approved registered/non-revoked destination; `migrate()` then advances the storage version. Manager approval cannot force an upgrade. Error codes are unique per contract (7000-7899). See [security](SECURITY_MODEL.md).
 
-### Treasury
+## Read and presentation layers
 
-Treasury holds DAO assets and is the top-level executor of passed proposals. Anyone can call `treasury.execute` for a Queued proposal past its ETA. After launch Treasury is the admin of every DAO module, including itself. Calls targeting the Treasury itself are limited to `upgrade`, `migrate` and `sync_version`, plus `authorize` actions that supply nested authorization trees to the next call (for example to buy on the marketplace or swap through a router).
+The database is event-derived, not a copy of contract storage. DAO reads use deployment and DAO identity; marketplace/receipt reads additionally check module identity. Indexed proposal state mirrors `Governor.proposal_state` (with `vote_start_seconds` and `quorum_votes` from `ProposalScheduled`); detail APIs still recheck live state before submission. Submission is disabled when live state or supported ABI encoding cannot be verified.
 
-### Marketplace
+Execution receipts come from scoped successful Treasury events or the indexed execution-call view. Confirmation and receipt/index availability are distinct. The marketplace uses indexed discovery and live preflight checks; the server prepares unsigned transactions and the wallet signs/submits them.
 
-Marketplace provides lazy primary sales and escrowed holder resale. A primary listing (`create_primary_listing`, Treasury only) escrows nothing; `buy_primary` pays the Treasury and mints the NFT to the buyer. Secondary listings escrow the NFT. Each listing records the fee (at most 25%) and payment asset current at creation; sellers pass the worst fee and the asset they accept to `list`, and buyers a maximum price to `buy` / `buy_primary`. Only active listings are stored; terminal history is in events.
+The web app does not write application tables. Multiple drafts, home DAO, and private marketplace labels/favorites live in browser storage only. See [web reference](../apps/web/README.md), [database catalog](DATABASE_SCHEMA.md), and [tenant boundaries](MULTITENANT_ARCHITECTURE.md).
 
-## Creation, Setup, and Launch Flow
-
-1. Manager validates creation parameters, the requested slug (it must not belong to a launched DAO) and the current implementation hashes.
-2. `create_dao` derives deterministic salts and deploys Token, Metadata, Treasury, Governor, Auction, and Marketplace. All cross-module addresses are passed to constructors; there are no wiring setters. The launch admin is the admin of each module and every module is in Setup. `PendingDao` records the addresses, the launch admin, the requested slug, and the Auction and Marketplace payment assets.
-3. In the setup window the launch admin mints founder tokens, adds artwork, and adjusts Auction, Marketplace, and Governor parameters; `update_pending_slug` renames the requested slug. The Treasury has no authority yet.
-4. `launch_dao(token, LaunchConfig { launch_auction, launch_marketplace, enable_minter, expected_minter })` (launch admin auth) checks the factory is not paused, the token admin, the slug is still free, nonzero voting supply, and the recorded payment assets, then calls `launch` on each module. Each module becomes Live, its admin moves to the Treasury, and the Manager has no further authority. Token mint authority is the Manager-chosen set.
-5. Manager claims the slug (`SlugClaimed`), emits `DaoLaunched` and deletes `PendingDao`. Goldsky provides durable DAO discovery.
-
-The platform minter is registered separately by the Manager admin with `set_platform_minter`.
-
-## Upgrade Security
-
-DAO module upgrades require all of the following:
-
-- a DAO Governor proposal executed through `Treasury.execute`; for the Treasury's own upgrade the action targets the Treasury and is handled by its self-call allowlist;
-- Treasury authorization as the admin of the target module;
-- a Manager-approved `from_hash -> to_hash` transition; and
-- the module's current WASM hash matching `from_hash`.
-
-The target module validates the transition through `common::upgrade::apply`, stores the new hash/version, emits an upgrade event, and calls `update_current_contract_wasm` on itself. Manager admin authorization applies only to Manager's own upgrade path. Every module exposes `version()`, `wasm_hash()`, `sync_version()`, `storage_version()` and an admin-gated `migrate()`; a release that changes a storage layout does its data rewrite in `migrate`, run by the same proposal right after `upgrade`.
-
-See [SECURITY_MODEL.md](./SECURITY_MODEL.md) for trust boundaries, TTL caveats, and known limitations.
-
-## Application and Data Layers
-
-The repository includes a Next.js frontend, Goldsky configuration, event decoders, and PostgreSQL migrations. Goldsky is the durable query layer for DAO discovery, proposals, auctions, listings, sales, and upgrade history. Contracts retain only state required for live protocol behavior and replay safety.
-
-## Testing
-
-The unit and end-to-end suites run together:
-
-```bash
-pnpm contracts:test   # cargo test (the e2e crate is part of the workspace)
-```
-
-See [MANAGER_REDESIGN.md](./MANAGER_REDESIGN.md) and [MARKETPLACE_PLAN.md](./MARKETPLACE_PLAN.md) for the implementation phases and testnet reset procedure.
+Treasury funding and token-holder/claim APIs prepare unsigned transactions from
+session-derived identity; they are not database writes or server signing. Treasury
+funding targets the SAC transfer method, not Treasury execution. Live token ownership
+gates holder controls; paginated indexed lists remain discovery data. Auction
+history is indexed while settlement mode is selected/rechecked from live pause
+state. Minter claims use the current registered contract and verified ABI;
+allocation changes use registered governance actions with exact-spec encoding,
+then the same Governor queue and Treasury execution lifecycle as other proposals.

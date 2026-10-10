@@ -1,114 +1,90 @@
-import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { NextResponse } from 'next/server';
 
+import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { getDaoNetworkConfigById } from '@/lib/dao-config';
 import { getGoldskyProposalDetail } from '@/lib/goldsky';
-import { proposalIdToBuffer } from '@/lib/proposal-id';
+import { PROPOSAL_EXPIRATION_SECONDS, readProposalChainState } from '@/lib/proposal-chain-state';
+import { getIndexedExecutionReceipt } from '@/lib/proposal-execution-receipt-service';
 import { parseProposalMetadata } from '@/lib/proposal-metadata';
 import { ProposalState, proposalStateFromLabel, proposalStateLabel } from '@/lib/proposal-state';
 
 export async function GET(_request: Request, context: { params: Promise<{ daoId: string; proposalId: string }> }) {
-  const { daoId, proposalId } = await context.params;
-  const config = await getDaoNetworkConfigById(daoId);
-
-  if (!config.governorContractId) {
-    return NextResponse.json({ message: 'Missing governor contract id' }, { status: 400 });
-  }
-
   try {
+    const { daoId, proposalId } = await context.params;
+    const config = await getDaoNetworkConfigById(daoId);
+    if (!config.governorContractId)
+      return NextResponse.json({ message: 'Missing governor contract id' }, { status: 400 });
+    // Existing service establishes deployment_id + DAO identity. Never broaden on failure.
     const { proposal } = await getGoldskyProposalDetail(daoId, proposalId);
-
-    try {
-      const client = new GovernorClient({
-        contractId: config.governorContractId,
-        rpcUrl: config.rpcUrl,
-        networkPassphrase: config.passphrase,
-        publicKey: config.adminAddress
-      });
-
-      // governor.proposal_state is the authoritative state (the DB state is clock/event derived and
-      // approximate: 'expired' can also mean the vote was won but quorum was missed).
-      const proposalBuffer = proposalIdToBuffer(proposal.proposal_id);
-      const [stateTx, deadlineTx, snapshotTx, proposerTx, votingPeriodTx] = await Promise.all([
-        client.proposal_state({ proposal_id: proposalBuffer }),
-        client.proposal_deadline({ proposal_id: proposalBuffer }),
-        client.proposal_snapshot({ proposal_id: proposalBuffer }),
-        client.proposal_proposer({ proposal_id: proposalBuffer }),
-        client.voting_period()
-      ]);
-      let quorumVotes: string | null = null;
+    const live = await readProposalChainState(config, proposal.proposal_id).catch(() => null);
+    const state = live?.state ?? proposalStateFromLabel(proposal.state);
+    const deadline = live?.core?.voteEnd ?? live?.deadline ?? Number(proposal.deadline_ledger ?? 0);
+    const eta = live?.core?.eta ?? Number(proposal.eta ?? 0);
+    const voteStart = live?.core?.voteStart ?? Number(proposal.vote_start_timestamp ?? 0);
+    const metadata = parseProposalMetadata(proposal.description ?? '');
+    const targets = proposal.actions.map((action: any) => action.target);
+    const functions = proposal.actions.map((action: any) => action.function);
+    let executionReceipt = null;
+    let executionReceiptStatus = 'not-applicable';
+    if (state === ProposalState.Executed) {
       try {
-        const quorumTx = await client.quorum({ ledger: snapshotTx.result });
-        quorumVotes = quorumTx.result.toString();
+        executionReceipt = await getIndexedExecutionReceipt(
+          {
+            deploymentId: DEPLOYMENT_ID,
+            daoId: config.tokenContractId,
+            treasuryContractId: config.treasuryContractId,
+            governorContractId: config.governorContractId
+          },
+          { proposalId: proposal.proposal_id, targets, functions }
+        );
+        executionReceiptStatus = executionReceipt ? 'available' : 'pending';
       } catch {
-        quorumVotes = null;
+        executionReceiptStatus = 'unavailable';
       }
-
-      const deadline = Number(proposal.deadline_ledger ?? deadlineTx.result);
-      const voteStart =
-        proposal.vote_start_timestamp == null || Number(proposal.vote_start_timestamp) === 0
-          ? deadline - Number(votingPeriodTx.result)
-          : Number(proposal.vote_start_timestamp);
-      const metadata = parseProposalMetadata(proposal.description ?? '');
-      const payload = {
+    }
+    return NextResponse.json(
+      {
         proposalId: proposal.proposal_id,
         proposalNumber: proposal.proposal_number,
         description: proposal.description,
         title: metadata.title,
         metadata,
-        proposer: proposal.proposer || proposerTx.result,
+        // Do not call inherited proposal_proposer: it may use a different OZ storage key.
+        proposer: proposal.proposer,
         vote_end: deadline,
-        vote_snapshot: Number(proposal.snapshot_ledger ?? snapshotTx.result),
+        vote_snapshot: live?.core?.snapshot ?? live?.snapshot ?? Number(proposal.snapshot_ledger ?? 0),
         vote_start: voteStart,
+        voteStartSource: live?.core ? 'chain' : voteStart ? 'indexed' : 'unavailable',
         deadline,
-        eta: proposal.eta == null ? 0 : Number(proposal.eta),
-        state: stateTx.result,
-        label: proposalStateLabel(stateTx.result),
-        quorumVotes,
+        eta,
+        etaSource: live?.core ? 'chain' : eta ? 'indexed' : 'unavailable',
+        expiresAt:
+          state === ProposalState.Queued && eta
+            ? eta + PROPOSAL_EXPIRATION_SECONDS
+            : state === ProposalState.Succeeded && deadline
+              ? deadline + PROPOSAL_EXPIRATION_SECONDS
+              : null,
+        state,
+        stateSource: live?.stateSource ?? 'indexed',
+        label: proposalStateLabel(state),
+        quorumVotes: live?.quorumVotes ?? null,
         ledger: Number(proposal.created_ledger ?? 0),
         timestamp: Number(proposal.created_timestamp ?? 0),
         for_votes: String(proposal.vote_summary?.for ?? 0),
         against_votes: String(proposal.vote_summary?.against ?? 0),
         abstain_votes: String(proposal.vote_summary?.abstain ?? 0),
-        targets: proposal.actions?.map((action: any) => action.target) ?? [],
-        functions: proposal.actions?.map((action: any) => action.function) ?? [],
-        args: proposal.actions?.map((action: any) => action.args) ?? []
-      };
-
-      return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } });
-    } catch {
-      return NextResponse.json(
-        {
-          proposalId: proposal.proposal_id,
-          proposalNumber: proposal.proposal_number,
-          description: proposal.description,
-          title: parseProposalMetadata(proposal.description ?? '').title,
-          metadata: parseProposalMetadata(proposal.description ?? ''),
-          proposer: proposal.proposer,
-          vote_end: proposal.deadline_ledger == null ? 0 : Number(proposal.deadline_ledger),
-          vote_snapshot: proposal.snapshot_ledger == null ? 0 : Number(proposal.snapshot_ledger),
-          vote_start: proposal.vote_start_timestamp == null ? 0 : Number(proposal.vote_start_timestamp),
-          deadline: proposal.deadline_ledger == null ? 0 : Number(proposal.deadline_ledger),
-          eta: proposal.eta == null ? 0 : Number(proposal.eta),
-          state: proposalStateFromLabel(proposal.state) ?? ProposalState.Pending,
-          label: proposal.state || 'Pending',
-          quorumVotes: null,
-          ledger: Number(proposal.created_ledger ?? 0),
-          timestamp: Number(proposal.created_timestamp ?? 0),
-          for_votes: String(proposal.vote_summary?.for ?? 0),
-          against_votes: String(proposal.vote_summary?.against ?? 0),
-          abstain_votes: String(proposal.vote_summary?.abstain ?? 0),
-          targets: proposal.actions?.map((action: any) => action.target) ?? [],
-          functions: proposal.actions?.map((action: any) => action.function) ?? [],
-          args: proposal.actions?.map((action: any) => action.args) ?? []
-        },
-        { headers: { 'Cache-Control': 'no-store' } }
-      );
-    }
+        executionReceipt,
+        executionReceiptStatus,
+        targets,
+        functions,
+        args: proposal.actions.map((action: any) => action.args)
+      },
+      { headers: { 'Cache-Control': 'no-store' } }
+    );
   } catch (error) {
     return NextResponse.json(
       { message: error instanceof Error ? error.message : 'Proposal unavailable' },
-      { status: 500, headers: { 'Cache-Control': 'no-store' } }
+      { status: 503, headers: { 'Cache-Control': 'no-store' } }
     );
   }
 }

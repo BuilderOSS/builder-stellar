@@ -3,6 +3,8 @@
 import Link from 'next/link';
 
 import { DaoDirectory } from '@/components/dao-directory';
+import { LocalHomeDao } from '@/components/local-workspace/home-dao';
+import { LocalDrafts } from '@/components/local-workspace/local-drafts';
 import { MarketplaceComingSoon } from '@/components/marketplace/marketplace-coming-soon';
 import { Callout } from '@/components/ui';
 import type { DaoConfig } from '@/lib/dao-db';
@@ -68,6 +70,11 @@ export function DashboardShell({
               description="The directory could not reach its indexed data. Try again later or open a DAO directly if you have its URL."
             />
           ) : null}
+
+          <section className="dashboard-lobby__section" aria-label="Local workspace">
+            <LocalHomeDao />
+            <LocalDrafts />
+          </section>
 
           {isConnected ? (
             <div className="dashboard-lobby__member-grid">

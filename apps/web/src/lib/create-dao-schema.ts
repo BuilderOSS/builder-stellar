@@ -1,118 +1,121 @@
+import { Asset } from '@stellar/stellar-sdk';
 import { z } from 'zod';
 
-import { validateVotingDelay, validateVotingPeriod } from './governance-limits';
-import { getStellarAddressError, isValidHttpUrl, isValidStellarAddress, isValidTokenSymbol } from './validation';
+import { getNetworkConfig } from '@/config/networks';
 
-const addressSchema = z
+import { getTreasuryAssets } from './assets-config';
+import { decimalToStroops, MIN_RESERVE_PRICE_STROOPS } from './auction-values';
+import { validateQueueDelay, validateVotingDelay, validateVotingPeriod } from './governance-limits';
+import { isValidHttpUrl, isValidStellarAddress, isValidTokenSymbol } from './validation';
+
+export type CreationNetwork = 'testnet' | 'public' | 'local';
+export const configuredCreationNetwork = (): CreationNetwork => {
+  const value = process.env.NEXT_PUBLIC_NETWORK;
+  return value === 'public' || value === 'local' ? value : 'testnet';
+};
+export const creationAssets = (network: CreationNetwork) =>
+  getTreasuryAssets(network)
+    .filter((asset) => ['USDC', 'XLM'].includes(asset.code) && asset.contractId)
+    .map((asset) =>
+      network === 'local' && asset.isNative
+        ? { ...asset, contractId: Asset.native().contractId(getNetworkConfig(network).networkPassphrase) }
+        : asset
+    );
+const withinContractString = (value: string) => new TextEncoder().encode(value).length <= 256;
+const httpUrl = z
   .string()
-  .trim()
-  .superRefine((address, context) => {
-    if (!isValidStellarAddress(address)) {
-      context.addIssue({ code: 'custom', message: getStellarAddressError(address) ?? 'Invalid Stellar address' });
-    }
-  });
-
-const basicInfoSchema = z.object({
+  .refine(isValidHttpUrl, 'Enter an HTTP or HTTPS URL')
+  .refine(withinContractString, 'Use at most 256 UTF-8 bytes');
+const templatedUrl = httpUrl.refine(
+  (value) => withinContractString(value.replaceAll('{daoId}', 'C'.repeat(56))),
+  'The resolved DAO URL must fit within 256 UTF-8 bytes'
+);
+const timing = (validate: (seconds: number) => string | null) =>
+  z
+    .number()
+    .int()
+    .superRefine((seconds, ctx) => {
+      const error = validate(seconds);
+      if (error) ctx.addIssue({ code: 'custom', message: error });
+    });
+/** Mirrors the Manager's `validate_slug`: 3-32 chars of [a-z0-9-], no leading/trailing/doubled hyphen. */
+export function isValidSlug(value: string) {
+  return /^[a-z0-9]+(-[a-z0-9]+)*$/.test(value) && value.length >= 4 && value.length <= 63;
+}
+const identitySchema = z.object({
+  slug: z.string().refine(isValidSlug, 'Use 4-63 lowercase letters, numbers or single hyphens'),
   tokenName: z
     .string()
     .trim()
-    .min(2, 'Token name must be at least 2 characters')
-    .max(80, 'Token name must be 80 characters or less'),
-  tokenSymbol: z.string().refine(isValidTokenSymbol, 'Token symbol must be uppercase alphanumeric, max 12 characters'),
-  tokenUri: z.string().refine(isValidHttpUrl, 'Token URI must be a valid HTTP/HTTPS URL'),
-  projectUri: z.string().refine(isValidHttpUrl, 'Project URI must be a valid HTTP/HTTPS URL'),
+    .min(2, 'Use at least 2 characters')
+    .max(80)
+    .refine(withinContractString, 'Use at most 256 UTF-8 bytes'),
+  tokenSymbol: z.string().refine(isValidTokenSymbol, 'Use uppercase letters or numbers, up to 12 characters'),
+  contractImage: httpUrl
+});
+const basicInfoSchema = identitySchema.extend({
   description: z
     .string()
     .trim()
-    .min(12, 'Description must be at least 12 characters')
-    .max(240, 'Description must be 240 characters or less'),
-  contractImage: z.string().refine(isValidHttpUrl, 'Contract image must be a valid HTTP/HTTPS URL'),
-  rendererBase: z.string().refine(isValidHttpUrl, 'Renderer base must be a valid HTTP/HTTPS URL')
+    .min(12, 'Use at least 12 characters')
+    .max(240)
+    .refine(withinContractString, 'Use at most 256 UTF-8 bytes'),
+  projectUri: httpUrl,
+  tokenUri: templatedUrl,
+  rendererBase: templatedUrl
 });
-
-const governanceSchema = z
-  .object({
-    votingDelay: z.number().int('Voting delay must be a whole number'),
-    votingPeriod: z.number().int('Voting period must be a whole number'),
-    quorumBps: z.number().int().min(1, 'Quorum must be at least 0.01%').max(10000, 'Quorum cannot exceed 100%'),
-    // Absolute number of votes, not basis points.
-    proposalThreshold: z
-      .number()
-      .int('Proposal threshold must be a whole number')
-      .min(1, 'Proposal threshold must be at least 1 vote')
-  })
-  .superRefine((governance, context) => {
-    const votingDelayError = validateVotingDelay(governance.votingDelay);
-    if (votingDelayError) context.addIssue({ code: 'custom', message: votingDelayError, path: ['votingDelay'] });
-
-    const votingPeriodError = validateVotingPeriod(governance.votingPeriod);
-    if (votingPeriodError) context.addIssue({ code: 'custom', message: votingPeriodError, path: ['votingPeriod'] });
-  });
-
-const founderSchema = z.object({
-  address: addressSchema,
-  amount: z.number().int().positive('Amount must be greater than 0').max(10000, 'Amount cannot exceed 10,000 tokens')
+const auctionSchema = z.object({
+  enabled: z.boolean(),
+  paymentAsset: z.string().min(1, 'Choose a payment asset'),
+  reservePrice: z.string().superRefine((value, ctx) => {
+    const amount = decimalToStroops(value);
+    if (amount === null || amount < MIN_RESERVE_PRICE_STROOPS || amount > (1n << 127n) - 1n)
+      ctx.addIssue({ code: 'custom', message: 'Use an amount from 0.0001 with up to 7 decimal places (within i128)' });
+  }),
+  duration: z.number().int().min(300).max(2_592_000),
+  timeBuffer: z.number().int().min(1).max(86_400)
 });
-
-const foundersArraySchema = z
-  .array(founderSchema)
-  .max(100, 'Maximum 100 founders allowed')
-  .superRefine((founders, context) => {
-    const total = founders.reduce((sum, founder) => sum + founder.amount, 0);
-    if (total > 10000)
-      context.addIssue({
-        code: 'custom',
-        message: `Total founder allocation (${total}) exceeds maximum of 10,000 tokens`
-      });
-
-    const addresses = founders.map((founder) => founder.address.toLowerCase());
-    if (new Set(addresses).size !== addresses.length) {
-      context.addIssue({ code: 'custom', message: 'Duplicate founder addresses are not allowed' });
-    }
-  });
-
-/**
- * Membership mode defines how tokens are allocated
- * - founders: Fixed list of founder allocations
- * - marketplace: Recurring token buy/sell via marketplace
- * - auctions: Token minting via auctions
- */
-export type MembershipMode = 'founders' | 'marketplace' | 'auctions';
-
-const purposeSchema = z.object({
-  purpose: z.string().trim().min(1, 'Purpose is required').max(500, 'Purpose must be 500 characters or less'),
-  membershipMode: z.enum(['founders', 'marketplace', 'auctions'] as const)
+const marketplaceSchema = z.object({
+  enabled: z.boolean(),
+  paymentAsset: z.string().min(1, 'Choose a payment asset'),
+  secondaryFeeBps: z.number().int().min(0).max(10_000)
 });
-
-export const foundersSchema = z.object({
-  founders: foundersArraySchema
+const governanceSchema = z.object({
+  votingDelay: timing(validateVotingDelay),
+  votingPeriod: timing(validateVotingPeriod),
+  queueDelay: timing(validateQueueDelay),
+  quorumBps: z.number().int().min(1).max(10_000),
+  proposalThreshold: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER)
 });
-
-export const createDaoSchema = z.object({
+export const draftConfigurationSchema = z.object({
   basicInfo: basicInfoSchema,
-  purpose: purposeSchema,
-  governance: governanceSchema,
-  launchAdmin: addressSchema
+  auction: auctionSchema,
+  marketplace: marketplaceSchema,
+  governance: governanceSchema
 });
-
+export const createDaoSchema = draftConfigurationSchema.extend({
+  launchAdmin: z.string().refine(isValidStellarAddress, 'Connect a valid Stellar wallet')
+});
+export type DraftConfiguration = z.infer<typeof draftConfigurationSchema>;
 export type CreateDaoFormData = z.infer<typeof createDaoSchema>;
-
-export type CreateDaoSection = 'basicInfo' | 'governance' | 'purpose' | 'review';
-
-export const CREATE_DAO_SECTIONS: Array<{
-  id: CreateDaoSection;
-  number: number;
-  title: string;
-  subtitle: string;
-}> = [
-  { id: 'basicInfo', number: 1, title: 'Basic information', subtitle: 'Name, symbol, and image' },
-  { id: 'purpose', number: 2, title: 'Purpose & membership', subtitle: 'DAO goal and membership model' },
-  { id: 'governance', number: 3, title: 'Governance', subtitle: 'Voting rules and thresholds' },
-  { id: 'review', number: 4, title: 'Review and deploy', subtitle: 'Check everything before launch' }
+export function validateCreationAssets(config: DraftConfiguration, network: CreationNetwork) {
+  const allowed = new Set(creationAssets(network).map((asset) => asset.contractId));
+  if (!allowed.has(config.auction.paymentAsset) || !allowed.has(config.marketplace.paymentAsset))
+    throw new Error('Payment assets must come from the registry for this draft’s network.');
+}
+export type CreateDaoSection = 'basicInfo' | 'membership' | 'governance' | 'review';
+export const CREATE_DAO_SECTIONS: Array<{ id: CreateDaoSection; title: string }> = [
+  { id: 'basicInfo', title: 'Identity' },
+  { id: 'membership', title: 'Membership' },
+  { id: 'governance', title: 'Governance' },
+  { id: 'review', title: 'Review' }
 ];
-
 export const sectionSchemas = {
-  basicInfo: basicInfoSchema,
-  purpose: purposeSchema,
+  basicInfo: identitySchema,
+  membership: z.object({
+    basicInfo: basicInfoSchema.pick({ description: true, projectUri: true }),
+    auction: auctionSchema,
+    marketplace: marketplaceSchema
+  }),
   governance: governanceSchema
 };

@@ -50,6 +50,41 @@ Run the relevant checks before handing work to another agent:
 | Frontend | `pnpm lint`, `pnpm typecheck`, `pnpm --dir apps/web test`, and `pnpm build` as applicable |
 | Database | Forward migration, rollback, permission, and query-plan evidence |
 
+Checks are requirements, not a claim of a passing run. Current CI runs Cargo
+workspace tests, web codegen before lint/typecheck/web tests, Goldsky tests, and
+a separate Build Web job. It caches node_modules and uses Node 23. Configuration
+changes belong to implementation owners, not docs-steward.
+
+## Documentation handoff and acceptance
+
+After an accepted interface change, send docs-steward: changed behavior, source
+paths/revision, checks actually run with outcomes, config/deployment impact, and
+remaining limitations. Contract writer reviews protocol facts; services reviews
+API/ABI behavior; database/indexer review projections; frontend/design review UX.
+
+Before marking docs current:
+
+- Commands must exist with correct arguments/cwd; JSON examples and relative links
+  must be valid. Label generation, signing, deployment, and reset side effects.
+- Treasury/Governor references must match vector ABI, permissionless queue/execute,
+  exact action encoding, atomicity, and scoped ordered execution events.
+- Creation/setup/launch docs must distinguish chain confirmation, simulation,
+  local recovery, and indexing. Contract limits must not be confused with CLI budgets.
+- Views/Prisma/API fields and timestamp units must agree, with deployment/DAO/module
+  filters and chain/indexed state sources explicit.
+- TTL docs must link actual storage policies and distinguish extension, restoration,
+  signed maintenance, and unavailable/missing reports.
+- UX guides must describe reachable implemented flows. Local drafts/home/preferences
+  and private labels are not shared collaboration, public tags, or writable app tables.
+- The binding generator now preserves existing authored READMEs around SDK overwrite;
+  direct SDK invocations do not. Reconcile interface descriptions after generation. Historical
+  plans belong in [the archive](README.md), linked to maintained replacements.
+
+Useful evidence: `contracts/e2e/src/test.rs`, Goldsky contract-alignment/read-model
+tests, web creation/recovery/store tests, proposal ABI/state/receipt tests, and
+marketplace scope/preparation tests. Live/scratch-database tests and network rehearsal
+require their own approved environment; do not claim them from source inspection.
+
 Event, schema, and API work must retain both deployment and DAO identity filters. An
 event is not complete until it is indexed and exposed, explicitly indexed but internal,
 or explicitly excluded with a reason.

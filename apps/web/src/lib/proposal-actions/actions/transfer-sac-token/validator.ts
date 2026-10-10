@@ -1,5 +1,6 @@
 // src/lib/proposal-actions/actions/transfer-sac-token/validator.ts
 
+import { decimalToStroops } from '@/lib/auction-values';
 import { validateStellarAddress } from '@/lib/validate-address';
 
 import type { FormContext, ValidationResult } from '../../types';
@@ -26,19 +27,20 @@ export function validateTransferSacToken(data: TransferSacTokenData, context: Fo
   } else if (!/^-?\d+(\.\d+)?$/.test(amount)) {
     fields.amount = 'Invalid amount format';
   } else {
-    const numAmount = parseFloat(amount);
-    if (numAmount <= 0) {
+    const numAmount = decimalToStroops(amount);
+    if (numAmount === null) {
+      fields.amount = 'Enter an amount with at most seven decimal places.';
+    } else if (numAmount <= 0n) {
       fields.amount = 'Amount must be positive';
-    } else if (isNaN(numAmount) || !isFinite(numAmount)) {
-      fields.amount = 'Invalid amount';
+    } else if (numAmount >= 1n << 127n) {
+      fields.amount = 'Amount exceeds the SAC i128 limit';
     } else {
       // Check balance
       const balance = context.balances?.find((b) => b.assetCode === data.assetCode);
-      if (balance && numAmount > parseFloat(balance.balance)) {
-        fields.amount = `Amount exceeds balance of ${parseFloat(balance.balance).toLocaleString(undefined, {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 7
-        })} ${data.assetCode}`;
+      if (context.balancesError) fields.amount = `Balance unavailable: ${context.balancesError}`;
+      const balanceStroops = balance ? decimalToStroops(balance.balance) : null;
+      if (balanceStroops !== null && numAmount > balanceStroops) {
+        fields.amount = `Amount exceeds balance of ${balance!.balance} ${data.assetCode}`;
       }
     }
   }

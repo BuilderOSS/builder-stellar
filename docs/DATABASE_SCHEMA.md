@@ -36,7 +36,7 @@ by `dao_id` (the DAO token contract address).
 | `dao_modules` | registry | one row per module contract |
 | `event_identity` | modules | contract → DAO lookup used by every domain view |
 | `daos` **Prisma** | registry + `dao_slugs`, `dao_launched`, `token_initialized`, metadata, auction `paused`/`unpaused` | `status` pending/operational; `slug` (claimed slug once launched, else the requested one), `slug_claimed`, `requested_slug`, `claimed_slug`; `auction_enabled`, `auction_paused`, `token_description`; `admin_address` is the DAO's current admin: the token's latest `admin_changed` (the Treasury after launch), else the launch admin |
-| `module_launches` | each module's `<module>_launched` event (`token_launched`, `governor_launched`, …) | one row per DAO module: `is_live`, `treasury`, `started` (auction), `opened` (marketplace), `minters` (token) |
+| `module_launches` **Prisma** | each module's `<module>_launched` event (`token_launched`, `governor_launched`, …) | one row per DAO module: `is_live`, `treasury`, `started` (auction), `opened` (marketplace), `minters` (token) |
 | `module_admins` | module `admin_changed` + `dao_registry` | one row per DAO module: current `admin` (the launch admin, then the Treasury), `handed_to_treasury`, `changed_*` |
 | `dao_lifecycle` | `dao_launched` + `module_launches` | per DAO: `is_live` (all six modules launched), `<module>_live`, `launch_auction`, `launch_marketplace`, `minter_enabled`, `auction_started`, `marketplace_opened` |
 | `module_upgrades` | `upgraded`, `version_synced`, `migrated` (every module) | per DAO module: `event_type`, `module_role`, `contract_id`, `from_hash`/`to_hash` (upgraded only), `version`, `from_storage_version`/`to_storage_version` (migrated only), `event_seq`, ledger/tx/time |
@@ -101,10 +101,10 @@ and for > against) until `vote_end + 14d` and expired after, or defeated.
 | `metadata.properties` | `property_added` since the latest `properties_reset` |
 | `metadata.token_seeds` | `seed_generated` (single mint and `regenerate`) and `seeds_generated` (one per batch, `selections[i]` is token `first_token_id + i`; batch rows share the event id); `is_current` marks the latest seed per token across both |
 | `treasury.calls` | `execute`: one row per action with `proposal_id`, `call_index` (`authorize` actions appear with function `authorize`) |
-| `marketplace.primary_listings` | `primary_listing_created` closed by `primary_listing_purchased/cancelled/expired`; keyed by `listing_id`; `token_id` and `buyer` only once purchased; `payment_asset` |
-| `marketplace.secondary_listings` | `secondary_listing_created` closed by `listing_purchased/cancelled/expired`; keyed by `token_id`; `seller`, `fee_bps`, `payment_asset` |
+| `marketplace.primary_listings` **Prisma** | `primary_listing_created` closed by `primary_listing_purchased/cancelled/expired`; keyed by `listing_id`; `token_id` and `buyer` only once purchased; `payment_asset` |
+| `marketplace.secondary_listings` **Prisma** | `secondary_listing_created` closed by `listing_purchased/cancelled/expired`; keyed by `token_id`; `seller`, `fee_bps`, `payment_asset` |
 | `marketplace.purchases` | `listing_purchased` (secondary only) |
-| `marketplace.sales` | primary purchases (`token_id` only exists in `primary_listing_purchased`) plus secondary purchases; `sale_type`, `listing_id` NULL for secondary |
+| `marketplace.sales` **Prisma** | primary purchases (`token_id` only exists in `primary_listing_purchased`) plus secondary purchases; `sale_type`, `listing_id` NULL for secondary |
 
 `marketplace.listings` and its `kind` were replaced by the two listing views.
 
@@ -134,3 +134,31 @@ other tokens.
 `marketplace.listing_purchased`, …), defined in
 `packages/goldsky/src/activity-feed.script.js`. Events without a mapping get
 `contract.<event_name>` and `system` visibility.
+
+## Application boundaries
+
+SQL lifecycle columns are `launched_*`; the DAO DTO maps them to `finalized_*`.
+DAO `indexed_at` is first registry ingestion, not a per-mutation watermark.
+The Marketplace API scopes listings by deployment/DAO/module/event identity and
+reads live configuration before preparing trades. Past-expiry open listings may
+display `awaiting-expiry`; terminal state still comes from contract events.
+
+Indexed proposal state mirrors `Governor.proposal_state`, with `vote_start_seconds`
+and `quorum_votes` from `proposal_scheduled`; proposal detail still rechecks live
+chain state before enabling submission (indexed data cannot establish eligibility). Ordered execution
+receipts read `governance.proposal_execution_calls` through a parameterized query
+binding deployment, DAO, Treasury, Governor, and proposal ID. Complete matching
+actions must share one transaction/ledger. Receipt absence is separate from failed
+execution. See [web reference](../apps/web/README.md).
+
+Browser-local drafts, home DAO, and private labels do not add writable application
+tables. [Migrations](../db/migrations) define the full schema; Prisma is the app's
+view subset, not a schema-migration owner.
+
+Treasury history paginates execution calls (12/page) with deployment, DAO, Treasury
+and Governor filters; it is not a funding/deposit ledger. Member/owner inventory
+pages include total/hasMore and preserve counts/amounts as decimal strings where
+specified. Auction history joins terminal auctions to scoped settlements and
+distinguishes sold/unsold/canceled. Claim history does not establish current-round
+eligibility; RPC allocation state and simulation do. New preparation endpoints
+return unsigned transactions and do not mutate these views.

@@ -1,15 +1,18 @@
-import { nativeToScVal } from '@stellar/stellar-sdk';
+import { keccak_256 } from '@noble/hashes/sha3.js';
+import { nativeToScVal, xdr } from '@stellar/stellar-sdk';
+import { Buffer } from 'buffer';
 
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import type {
   BuildContext,
   ProposalQueuedAction as RegisteredProposalQueuedAction
 } from '@/lib/proposal-actions/types';
+import { encodeSupportedCall, type ProposalEncodingContext } from '@/lib/proposal-supported-calls';
 
 export type ProposalCallArg = string | number | boolean | null | ProposalCallArg[] | { [key: string]: ProposalCallArg };
 
 export type ProposalCallArgs = ProposalCallArg[][];
-export type EncodedProposalCallArgs = unknown[][];
+export type EncodedProposalCallArgs = xdr.ScVal[][];
 
 export type ProposalActionType = RegisteredProposalQueuedAction['type'];
 export type ProposalQueuedAction = RegisteredProposalQueuedAction;
@@ -42,13 +45,28 @@ function unwrapScValLike(value: unknown): unknown {
   if (key === 'vec') {
     return unwrapScValLike(inner);
   }
+  if (key === 'map') {
+    if (inner && typeof inner === 'object' && !Array.isArray(inner)) return unwrapScValLike(inner);
+    if (!Array.isArray(inner)) throw new Error('Invalid indexed map.');
+    const pairs = inner.map((entry) => {
+      const pair = Array.isArray(entry) ? entry : [entry?.key, entry?.val ?? entry?.value];
+      if (pair.length !== 2) throw new Error('Invalid indexed map entry.');
+      const name = unwrapScValLike(pair[0]);
+      if (typeof name !== 'string') throw new Error('Expected a string/symbol struct key.');
+      return [name, unwrapScValLike(pair[1])] as const;
+    });
+    if (new Set(pairs.map(([name]) => name)).size !== pairs.length) throw new Error('Duplicate indexed map key.');
+    return Object.fromEntries(pairs);
+  }
 
   if (key === 'bool') {
-    return Boolean(inner);
+    if (typeof inner !== 'boolean') throw new Error('Invalid indexed boolean.');
+    return inner;
   }
 
   if (key === 'u32' || key === 'i32' || key === 'u64' || key === 'i64' || key === 'u128' || key === 'i128') {
-    return typeof inner === 'number' ? inner : Number(inner);
+    if (typeof inner === 'number' && !Number.isSafeInteger(inner)) throw new Error('Unsafe indexed integer.');
+    return key === 'u32' || key === 'i32' ? Number(inner) : String(inner);
   }
 
   return { [key]: unwrapScValLike(inner) };
@@ -81,86 +99,34 @@ export function normalizeProposalCallArgs(value: ProposalCallArgs | unknown): Pr
   });
 }
 
-function encodeAddress(value: ProposalCallArg) {
-  return nativeToScVal(String(value), { type: 'address' });
+export function encodeProposalCallArgs(
+  targets: string[],
+  functions: string[],
+  args: ProposalCallArgs | unknown,
+  config: ProposalEncodingContext
+): EncodedProposalCallArgs {
+  const normalized = normalizeProposalCallArgs(args);
+  if (!targets.length || targets.length !== functions.length || targets.length !== normalized.length)
+    throw new Error('Invalid proposal call vector lengths.');
+  return normalized.map((callArgs, i) => encodeSupportedCall(targets[i]!, functions[i]!, callArgs, config));
 }
 
-function encodeU32(value: ProposalCallArg) {
-  return nativeToScVal(Number(value), { type: 'u32' });
-}
-
-function encodeU64(value: ProposalCallArg) {
-  return nativeToScVal(String(value), { type: 'u64' });
-}
-
-function encodeI128(value: ProposalCallArg) {
-  return nativeToScVal(String(value), { type: 'i128' });
-}
-
-function encodeU128(value: ProposalCallArg) {
-  return nativeToScVal(String(value), { type: 'u128' });
-}
-
-function encodeGeneric(value: ProposalCallArg) {
-  return nativeToScVal(value);
-}
-
-function encodeProposalCallArg(functionName: string, index: number, value: ProposalCallArg) {
-  if (functionName === 'mint') {
-    return index === 0 || index === 1 ? encodeAddress(value) : encodeGeneric(value);
-  }
-
-  if (functionName === 'batch_mint') {
-    if (index === 0 || index === 1) {
-      return encodeAddress(value);
-    }
-
-    return index === 2 ? encodeU32(value) : encodeGeneric(value);
-  }
-
-  if (functionName === 'transfer') {
-    if (index === 0 || index === 1) {
-      return encodeAddress(value);
-    }
-
-    return index === 2 ? encodeI128(value) : encodeGeneric(value);
-  }
-
-  if (
-    functionName === 'set_mint_authority' ||
-    functionName === 'set_voting_delay' ||
-    functionName === 'set_voting_period' ||
-    functionName === 'set_proposal_threshold' ||
-    functionName === 'set_quorum_bps' ||
-    functionName === 'set_queue_delay' ||
-    functionName === 'set_duration' ||
-    functionName === 'set_time_buffer' ||
-    functionName === 'pause' ||
-    functionName === 'unpause'
-  ) {
-    if (functionName === 'set_duration' || functionName === 'set_time_buffer') return encodeU64(value);
-    if (functionName === 'set_mint_authority') {
-      return index === 0 ? encodeAddress(value) : encodeGeneric(value);
-    }
-    if (functionName === 'pause' || functionName === 'unpause') return encodeAddress(value);
-    // Governor setters take only the new value (no caller argument).
-    if (functionName === 'set_proposal_threshold') return encodeU128(value);
-    return encodeU32(value);
-  }
-
-  if (functionName === 'set_reserve_price') return encodeI128(value);
-  if (functionName === 'create_primary_listing') return index === 0 ? encodeI128(value) : encodeU64(value);
-  if (functionName === 'cancel_primary') return encodeU64(value);
-  if (functionName === 'set_payment_token') return encodeAddress(value);
-
-  return encodeGeneric(value);
-}
-
-export function encodeProposalCallArgs(functions: string[], args: ProposalCallArgs | unknown): EncodedProposalCallArgs {
-  return normalizeProposalCallArgs(args).map((callArgs, actionIndex) => {
-    const functionName = functions[actionIndex] ?? '';
-    return callArgs.map((arg, argIndex) => encodeProposalCallArg(functionName, argIndex, arg));
-  });
+/** stellar_governance::governor::hash_proposal: three XDR values then raw description hash. */
+export function proposalCallId(
+  targets: string[],
+  functions: string[],
+  args: EncodedProposalCallArgs,
+  descriptionHash: Uint8Array
+): string {
+  if (descriptionHash.length !== 32) throw new Error('Expected a 32-byte description hash.');
+  const values = [
+    nativeToScVal(targets, { type: 'address' }),
+    nativeToScVal(functions, { type: 'symbol' }),
+    xdr.ScVal.scvVec(args.map((call) => xdr.ScVal.scvVec(call)))
+  ];
+  return Buffer.from(
+    keccak_256(Buffer.concat([...values.map((value) => Buffer.from(value.toXDR())), Buffer.from(descriptionHash)]))
+  ).toString('hex');
 }
 
 export function buildMintProposalCall(
@@ -184,6 +150,7 @@ export function getProposalActionLabel(type: ProposalActionType) {
     'set-mint-authority': 'Set Mint Authority',
     'set-voting-delay': 'Set Voting Delay',
     'set-voting-period': 'Set Voting Period',
+    'set-queue-delay': 'Set Queue Delay',
     'set-proposal-threshold': 'Set Proposal Threshold',
     'set-quorum-bps': 'Set Quorum',
     'pause-auction': 'Pause Auction',
@@ -192,8 +159,23 @@ export function getProposalActionLabel(type: ProposalActionType) {
     'set-auction-time-buffer': 'Set Auction Time Buffer',
     'set-auction-reserve-price': 'Set Auction Reserve Price',
     'set-auction-payment-token': 'Set Auction Payment Token',
+    'set-auction-min-bid-increment': 'Set Auction Minimum Bid Increment',
+    'cancel-auction': 'Cancel Paused Auction',
+    'set-marketplace-payment-token': 'Set Marketplace Payment Asset',
+    'set-marketplace-secondary-fee': 'Set Marketplace Secondary Fee',
+    'pause-marketplace': 'Pause Marketplace',
+    'unpause-marketplace': 'Resume Marketplace',
     'create-primary-listing': 'Create Primary Listing',
-    'cancel-primary-listing': 'Cancel Primary Listing'
+    'cancel-primary-listing': 'Cancel Primary Listing',
+    'add-artwork-properties': 'Append Artwork Properties and Items',
+    'set-artwork-renderer': 'Update Artwork Renderer',
+    'set-artwork-description': 'Update Collection Description',
+    'set-artwork-project-uri': 'Update Project URI',
+    'set-artwork-contract-image': 'Update Collection Image',
+    'upgrade-dao-module': 'Upgrade DAO Module',
+    'set-merkle-root': 'Set Minter Merkle Root',
+    'set-allowlist': 'Replace Minter Allowlist',
+    'minter-batch-mint': 'Minter Batch Allocation'
   };
 
   if (labels[type]) return labels[type]!;
@@ -207,18 +189,41 @@ export function getProposalActionLabel(type: ProposalActionType) {
 }
 
 export function getProposalActionSummary(action: ProposalQueuedAction) {
+  if (action.type === 'set-merkle-root')
+    return `Set Merkle root ${action.root} for ${action.tokenContractId}; starts a new Merkle claim round`;
+  if (action.type === 'set-allowlist')
+    return `Replace allowlist for ${action.tokenContractId}: ${action.addresses?.length ?? 0} recipients, ${action.amount} tokens each; starts a new allowlist round`;
+  if (action.type === 'minter-batch-mint')
+    return `Batch allocate to ${action.recipients?.length ?? 0} recipients for ${action.tokenContractId}; ordered amounts ${JSON.stringify(action.amounts)}`;
+  if (action.type === 'add-artwork-properties')
+    return `${getProposalActionLabel(action.type)}: ${Array.isArray(action.names) ? action.names.length : 0} new properties, ${Array.isArray(action.items) ? action.items.length : 0} ordered items (${action.ipfsGroup?.base_uri ?? 'IPFS reference unavailable'})`;
+  if (action.type === 'upgrade-dao-module') return `Upgrade ${action.module}: ${action.fromHash} → ${action.toHash}`;
+  if (
+    action.type === 'set-artwork-renderer' ||
+    action.type === 'set-artwork-description' ||
+    action.type === 'set-artwork-project-uri' ||
+    action.type === 'set-artwork-contract-image'
+  )
+    return `${getProposalActionLabel(action.type)} to ${action.value}`;
   if (action.type === 'set-mint-authority') {
     return `${action.enabled === false ? 'Revoke' : 'Grant'} ${getProposalActionLabel(action.type)} for ${action.authority || action.recipient}`;
   }
   if (
     action.type === 'set-voting-delay' ||
     action.type === 'set-voting-period' ||
+    action.type === 'set-queue-delay' ||
     action.type === 'set-proposal-threshold' ||
     action.type === 'set-quorum-bps'
   ) {
     return `${getProposalActionLabel(action.type)} to ${action.value || action.amount}`;
   }
-  if (action.type === 'pause-auction' || action.type === 'unpause-auction') {
+  if (
+    action.type === 'pause-auction' ||
+    action.type === 'unpause-auction' ||
+    action.type === 'pause-marketplace' ||
+    action.type === 'unpause-marketplace' ||
+    action.type === 'cancel-auction'
+  ) {
     return getProposalActionLabel(action.type);
   }
   if (action.type === 'set-auction-reserve-price') {
@@ -227,9 +232,13 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
   if (action.type === 'set-auction-duration' || action.type === 'set-auction-time-buffer') {
     return `${getProposalActionLabel(action.type)} to ${action.value || action.amount} seconds`;
   }
-  if (action.type === 'set-auction-payment-token') {
+  if (action.type === 'set-auction-payment-token' || action.type === 'set-marketplace-payment-token') {
     return `${getProposalActionLabel(action.type)} to ${action.paymentToken || action.recipient}`;
   }
+  if (action.type === 'set-marketplace-secondary-fee')
+    return `${getProposalActionLabel(action.type)} to ${action.value || action.amount} bps`;
+  if (action.type === 'set-auction-min-bid-increment')
+    return `${getProposalActionLabel(action.type)} to ${action.value || action.amount}%`;
   if (action.type === 'create-primary-listing') {
     return `${getProposalActionLabel(action.type)} at ${action.price} (expires ${action.expiresAt})`;
   }

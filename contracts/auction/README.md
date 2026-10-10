@@ -28,3 +28,8 @@ Errors: block 7400.
 ## Tests
 
 `cargo test -p auction`; `cargo test -p dao-e2e`. [Implementation](src/contract.rs), [helpers](src/helpers.rs), [events](src/events.rs), and [storage](src/storage.rs) define the exact behavior.
+
+Paused settlement (`settle_auction`) is permissionless but, like
+`settle_and_create_new`, requires `now >= end_time`; it never starts a next
+auction. The web rechecks the settlement mode so it cannot silently mint a next
+auction instead, and never offers settlement before the end time.

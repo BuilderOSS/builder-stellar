@@ -8,6 +8,7 @@
 import { getNetworkConfig, type NetworkName } from '@/config/networks';
 
 import { getDaoConfigFromDatabase } from './dao-db';
+import { registeredMinterConfig } from './registered-minter-config';
 
 export type DaoNetworkConfig = {
   name: NetworkName;
@@ -17,6 +18,7 @@ export type DaoNetworkConfig = {
   tokenName: string;
   tokenSymbol: string;
   tokenDescription: string;
+  /** Historical admin/read-simulation source. Not a module owner after launch. */
   adminAddress: string;
   launchAdmin: string;
   tokenContractId: string;
@@ -26,6 +28,9 @@ export type DaoNetworkConfig = {
   treasuryContractId: string;
   auctionContractId: string;
   marketplaceContractId: string;
+  /** Canonical Manager registration + RPC-validated spec; absent means fail closed. */
+  minterContractId?: string;
+  minterSpec?: string[];
   auctionEnabled: boolean | null;
   auctionPaused: boolean | null;
   status: 'pending' | 'operational';
@@ -34,7 +39,9 @@ export type DaoNetworkConfig = {
 export type DaoNetworkName = NetworkName;
 
 export function isDaoAdmin(config: DaoNetworkConfig, address: string | null | undefined): boolean {
-  if (!address) return false;
+  // Launch hands module ownership to the Treasury. Historical admin_address is
+  // still useful as a read-simulation source, never as post-launch authority.
+  if (!address || config.status !== 'pending') return false;
 
   const normalizedAddress = address.trim().toLowerCase();
   const configuredOwner = config.adminAddress.trim().toLowerCase();
@@ -62,8 +69,13 @@ export async function getDaoNetworkConfigById(daoId: string): Promise<DaoNetwork
 
   // Get network configuration from static config
   const networkConfig = getNetworkConfig(daoConfig.network);
+  const minter = await registeredMinterConfig(
+    networkConfig,
+    daoConfig.launch_admin || daoConfig.admin_address || ''
+  ).catch(() => ({ minterContractId: '', minterSpec: undefined }));
 
   return {
+    ...minter,
     name: daoConfig.network,
     label: daoConfig.label || '',
     rpcUrl: networkConfig.rpcUrl,

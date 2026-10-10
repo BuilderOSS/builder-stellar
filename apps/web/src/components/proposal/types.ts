@@ -1,4 +1,5 @@
 import type { ProposalCallArgs } from '@/lib/proposal-call';
+import type { ProposalExecutionReceipt } from '@/lib/proposal-execution-receipt';
 import type { ProposalMetadata } from '@/lib/proposal-metadata';
 import type { ProposalState } from '@/lib/proposal-state';
 
@@ -16,7 +17,16 @@ export type ProposalDetail = {
   vote_start: number;
   eta: number;
   deadline: number;
-  state: ProposalState;
+  state: ProposalState | null;
+  stateSource: 'chain' | 'indexed';
+  voteStartSource: 'chain' | 'indexed' | 'unavailable';
+  etaSource: 'chain' | 'indexed' | 'unavailable';
+  expiresAt: number | null;
+  for_votes: string;
+  against_votes: string;
+  abstain_votes: string;
+  executionReceipt: ProposalExecutionReceipt | null;
+  executionReceiptStatus: 'available' | 'pending' | 'unavailable' | 'not-applicable';
   label: string;
   quorumVotes: string | null;
 };

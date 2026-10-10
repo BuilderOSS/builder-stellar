@@ -1,43 +1,27 @@
-import { ArrowRight, Sparkles } from 'lucide-react';
 import type { Route } from 'next';
 import Link from 'next/link';
 
-import { Card, Heading, Text } from '@/components/ui';
+import styles from './marketplace.module.css';
 
+/** Compatibility export for the dashboard owner; this now links to the usable marketplace. */
 export function MarketplaceComingSoon({ daoName, daoHref }: { daoName?: string; daoHref?: string }) {
-  const scope = daoName ? `${daoName}'s` : 'DAO';
-
+  const communityPath = daoHref?.match(/^\/dao\/(C[A-Z2-7]{55})(?:\/marketplace)?\/?$/);
+  const href = communityPath ? `/dao/${communityPath[1]}/marketplace` : '/marketplace';
   return (
-    <Card className="marketplace-coming-soon" p="6">
-      <div className="marketplace-coming-soon__icon" aria-hidden="true">
-        <Sparkles size={22} />
+    <section className={styles.scoped}>
+      <div className={styles.panel}>
+        <div className={styles.stack}>
+          <p className={styles.eyebrow}>Community ownership</p>
+          <h2>{daoName ? `${daoName} marketplace` : 'Explore the community marketplace'}</h2>
+          <p>
+            Discover community primary offers and member resales. Primary purchases mint a new NFT to the buyer and fund
+            the DAO Treasury; secondary offers trade an existing escrowed token.
+          </p>
+          <Link className={styles.button} href={href as Route}>
+            Browse marketplace →
+          </Link>
+        </div>
       </div>
-      <p className="eyebrow">Coming soon</p>
-      <Heading as="h2" style={{ margin: '8px 0 12px', fontSize: 'clamp(1.7rem, 4vw, 2.4rem)' }}>
-        {daoName ? `A marketplace for ${scope} assets.` : 'Marketplace browsing is coming soon.'}
-      </Heading>
-      <Text className="lede" style={{ maxWidth: '560px' }}>
-        {daoName
-          ? 'This DAO marketplace is not available yet.'
-          : 'Builder does not currently show platform-wide listings. Enter a DAO to explore the market experiences it makes available.'}
-      </Text>
-      {daoHref ? (
-        <Link href={daoHref as Route} className="marketplace-coming-soon__link">
-          <span className="marketplace-coming-soon__cta marketplace-coming-soon__cta--outline">
-            Return to DAO <ArrowRight aria-hidden="true" size={16} />
-          </span>
-        </Link>
-      ) : (
-        <Link href="/#discover-daos" className="marketplace-coming-soon__link">
-          <span className="marketplace-coming-soon__cta">
-            Explore DAOs <ArrowRight aria-hidden="true" size={16} />
-          </span>
-        </Link>
-      )}
-      <div className="marketplace-coming-soon__features" aria-label="Planned marketplace features">
-        <span>DAO provenance</span>
-        <span>Marketplace browsing</span>
-      </div>
-    </Card>
+    </section>
   );
 }

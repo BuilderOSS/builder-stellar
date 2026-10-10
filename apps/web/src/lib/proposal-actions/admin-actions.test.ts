@@ -81,3 +81,60 @@ describe('primary listing proposal actions', () => {
     });
   });
 });
+
+describe('current marketplace/governor/auction administration registry', () => {
+  it('uses marketplace set_payment_asset (not a guessed set_payment_token) and no-argument pause/resume', () => {
+    expect(
+      getActionHandler('set-marketplace-payment-token').buildCallVector({ paymentToken: 'CSAC' }, buildContext)
+    ).toEqual({ target: 'CMARKET', function: 'set_payment_asset', args: ['CSAC'] });
+    expect(getActionHandler('set-marketplace-secondary-fee').buildCallVector({ value: '250' }, buildContext)).toEqual({
+      target: 'CMARKET',
+      function: 'set_secondary_fee_bps',
+      args: [250]
+    });
+    expect(getActionHandler('pause-marketplace').buildCallVector({}, buildContext)).toEqual({
+      target: 'CMARKET',
+      function: 'pause',
+      args: []
+    });
+    expect(getActionHandler('unpause-marketplace').buildCallVector({}, buildContext)).toEqual({
+      target: 'CMARKET',
+      function: 'unpause',
+      args: []
+    });
+    expect(getActionHandler('pause-auction').buildCallVector({}, buildContext).args).toEqual(['CTREASURY']);
+  });
+  it('adds queue delay and the remaining auction administration methods with source bounds', () => {
+    expect(getActionHandler('set-queue-delay').buildCallVector({ value: '300' }, buildContext)).toEqual({
+      target: 'CGOV',
+      function: 'set_queue_delay',
+      args: [300]
+    });
+    expect(getActionHandler('set-queue-delay').validate({ value: '299' }, formContext).valid).toBe(false);
+    expect(getActionHandler('set-queue-delay').validate({ value: '2592001' }, formContext).valid).toBe(false);
+    const bidIncrement = getActionHandler('set-auction-min-bid-increment');
+    expect(bidIncrement.buildCallVector({ value: '10' }, buildContext)).toEqual({
+      target: 'CAUCTION',
+      function: 'set_min_bid_increment',
+      args: [10]
+    });
+    for (const value of ['0', '101', '1.5', '9007199254740993'])
+      expect(bidIncrement.validate({ value }, formContext).valid).toBe(false);
+    for (const value of ['1', '100']) expect(bidIncrement.validate({ value }, formContext).valid).toBe(true);
+    expect(getActionHandler('cancel-auction').buildCallVector({}, buildContext)).toEqual({
+      target: 'CAUCTION',
+      function: 'cancel_auction',
+      args: []
+    });
+    expect(getActionHandler('set-auction-duration').validate({ value: '2592001' }, formContext).valid).toBe(false);
+  });
+  it('accepts fee 0..10000 bps and rejects invalid marketplace contract IDs', () => {
+    const fee = getActionHandler('set-marketplace-secondary-fee');
+    for (const value of ['0', '10000']) expect(fee.validate({ value }, formContext).valid).toBe(true);
+    for (const value of ['-1', '10001', '2.5', '9007199254740993'])
+      expect(fee.validate({ value }, formContext).valid).toBe(false);
+    expect(
+      getActionHandler('set-marketplace-payment-token').validate({ paymentToken: 'invalid' }, formContext).valid
+    ).toBe(false);
+  });
+});

@@ -1,388 +1,421 @@
-// src/stores/create-dao-store.ts
-
 'use client';
-
+import type { DaoAddresses } from '@builder-stellar/manager-bindings';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
+import {
+  configuredCreationNetwork,
+  type CreateDaoSection,
+  creationAssets,
+  type CreationNetwork,
+  type DraftConfiguration
+} from '@/lib/create-dao-schema';
+
 export const DEFAULT_DAO_IMAGE_URL = 'https://builder-stellar-web.vercel.app/images/dao-logo.png';
 export const LOCAL_DEFAULT_DAO_IMAGE_URL = '/images/dao-logo.png';
-
-/**
- * Membership mode defines how tokens are allocated in the DAO
- * - founders: Fixed list of founder allocations
- * - marketplace: Recurring token buy/sell via marketplace
- * - auctions: Token minting via auctions
- */
-export type MembershipMode = 'founders' | 'marketplace' | 'auctions';
-
-/**
- * Artwork property (trait) for DAO token artwork
- */
-export type ArtworkProperty = {
-  name: string;
-  items: string[];
-};
-
-/**
- * Artwork configuration for IPFS-based collections (legacy)
- */
-export type ArtworkConfig = {
-  ipfs: {
-    baseUri: string;
-    extension: string;
-  };
-  properties: ArtworkProperty[];
-};
-
-/**
- * DAO image source (legacy)
- */
-export type DaoImageSource =
-  | { kind: 'default'; gatewayUrl: string }
-  | { kind: 'generated'; model: string; prompt: string; ipfsUri: string; gatewayUrl: string }
-  | { kind: 'uploaded'; filename: string; ipfsUri: string; gatewayUrl: string }
-  | { kind: 'url'; gatewayUrl: string }
-  | { kind: 'legacy-unconfirmed' };
-
-/**
- * Artwork source - can be uploaded, generated, or from starter collection
- */
+// Artwork types are also consumed by the reusable layer preview and starter registry.
+export type ArtworkProperty = { name: string; items: string[] };
 export type ArtworkSource =
-  | {
-      kind: 'uploaded';
-      baseUri: string;
-      extension: string;
-      properties: ArtworkProperty[];
-      gatewayUrl?: string;
-    }
-  | {
-      kind: 'starter';
-      collectionId: string;
-      properties: ArtworkProperty[];
-    }
-  | {
-      kind: 'generated';
-      seed: string;
-    };
-
-/**
- * Basic information about the DAO
- */
-type BasicInfo = {
-  tokenName: string;
-  tokenSymbol: string;
-  tokenUri: string;
-  projectUri: string;
-  description: string;
-  contractImage: string;
-  rendererBase: string;
+  | { kind: 'uploaded'; baseUri: string; extension: string; properties: ArtworkProperty[]; gatewayUrl?: string }
+  | { kind: 'starter'; collectionId: string; properties: ArtworkProperty[] }
+  | { kind: 'generated'; seed: string };
+export type WorkspaceScope = { network: CreationNetwork; deployment: string; wallet: string | null };
+export type SubmissionStatus = 'signed' | 'submitted' | 'rejected' | 'expired' | 'confirmed' | 'failed';
+export type SignedSubmission = {
+  hash?: string;
+  signedTxXdr?: string;
+  expiresAt?: number;
+  acceptedAt?: number;
 };
-
-/**
- * Purpose and membership configuration
- */
-type PurposeConfig = {
-  purpose: string;
-  membershipMode: MembershipMode;
+export type DeploymentRecord = {
+  nonce: string;
+  deployer: string;
+  addresses?: DaoAddresses;
+  status: 'prepared' | SubmissionStatus;
+  configuration?: DraftConfiguration;
+  configurationFingerprint?: string;
+  confirmedBy?: 'transaction' | 'manager-state';
+  error?: string;
+} & SignedSubmission;
+export type LocalDaoDraft = {
+  id: string;
+  scope: WorkspaceScope;
+  configuration: DraftConfiguration;
+  imagePreview: string | null;
+  imageFilename: string;
+  section: CreateDaoSection;
+  createdAt: number;
+  updatedAt: number;
+  deployment?: DeploymentRecord;
 };
-
-/**
- * Governance parameters
- */
-type GovernanceConfig = {
-  votingDelay: number; // seconds
-  votingPeriod: number; // seconds
-  quorumBps: number; // basis points (1-10000)
-  proposalThreshold: number; // absolute number of votes (>= 1)
-};
-
-/**
- * Founder allocation
- */
-export type FounderAllocation = {
-  address: string;
-  amount: number;
-};
-
-/**
- * State
- */
-type CreateDaoState = {
-  basicInfo: BasicInfo;
-  purpose: PurposeConfig;
-  governance: GovernanceConfig;
-  launchAdmin: string;
-  busy: boolean;
-  formMessage: string;
+export function defaultConfiguration(network: CreationNetwork = configuredCreationNetwork()): DraftConfiguration {
+  const paymentAsset = creationAssets(network).find((a) => a.code === 'XLM')?.contractId ?? '';
+  return {
+    basicInfo: {
+      tokenName: '',
+      tokenSymbol: '',
+      slug: '',
+      description: '',
+      contractImage: DEFAULT_DAO_IMAGE_URL,
+      projectUri: 'https://builder-stellar-web.vercel.app',
+      tokenUri: 'https://builder-stellar-web.vercel.app/api/dao/{daoId}/token/',
+      rendererBase: 'https://builder-stellar-web.vercel.app/api/render/{daoId}/'
+    },
+    auction: { enabled: true, paymentAsset, reservePrice: '1', duration: 86400, timeBuffer: 900 },
+    marketplace: { enabled: false, paymentAsset, secondaryFeeBps: 500 },
+    governance: { votingDelay: 86400, votingPeriod: 259200, queueDelay: 3600, quorumBps: 1000, proposalThreshold: 1 }
+  };
+}
+export function sameWorkspace(scope: WorkspaceScope, other: WorkspaceScope) {
+  return scope.network === other.network && scope.deployment === other.deployment && scope.wallet === other.wallet;
+}
+export function visibleDraft(draft: LocalDaoDraft, scope: WorkspaceScope) {
+  return (
+    draft.scope.network === scope.network &&
+    draft.scope.deployment === scope.deployment &&
+    (draft.scope.wallet === null || draft.scope.wallet === scope.wallet)
+  );
+}
+export const CREATE_WORKSPACE_KEY = 'dao.create-dao.v4';
+const recoveryKey = (draft: LocalDaoDraft) =>
+  `${CREATE_WORKSPACE_KEY}.recovery:${JSON.stringify([draft.scope.network, draft.scope.deployment, draft.id])}`;
+function withRecoverySnapshots(drafts: LocalDaoDraft[]) {
+  if (typeof window === 'undefined') return drafts;
+  const snapshots = new Map(drafts.map((draft) => [draft.id, draft]));
+  const storage = window.localStorage;
+  const prefix = `${CREATE_WORKSPACE_KEY}.recovery:`;
+  for (let index = 0; index < storage.length; index++) {
+    const name = storage.key(index);
+    if (!name?.startsWith(prefix)) continue;
+    const recovered = JSON.parse(storage.getItem(name)!) as LocalDaoDraft;
+    migrateCreationWorkspace({ drafts: [recovered] });
+    if (name !== recoveryKey(recovered) || !recovered.deployment)
+      throw new Error('Local deployment recovery data is damaged');
+    snapshots.set(recovered.id, recovered);
+  }
+  return Array.from(snapshots.values()).map((draft) => {
+    const raw = window.localStorage.getItem(recoveryKey(draft));
+    if (!raw) return draft;
+    const recovered = JSON.parse(raw) as LocalDaoDraft;
+    if (
+      recovered.id !== draft.id ||
+      recovered.scope.network !== draft.scope.network ||
+      recovered.scope.deployment !== draft.scope.deployment ||
+      !recovered.deployment
+    )
+      throw new Error('Local deployment recovery data is damaged');
+    return recovered;
+  });
+}
+export function migrateCreationWorkspace(value: unknown): { drafts: LocalDaoDraft[]; activeDraftId: string | null } {
+  const old = (value ?? {}) as Record<string, any>;
+  if (Array.isArray(old.drafts)) {
+    if (
+      old.drafts.some(
+        (draft) =>
+          !draft ||
+          typeof draft.id !== 'string' ||
+          !draft.scope ||
+          !draft.configuration?.basicInfo ||
+          !draft.configuration?.auction ||
+          !draft.configuration?.marketplace ||
+          !draft.configuration?.governance
+      )
+    )
+      throw new Error('Local draft data is damaged. The original browser data has been preserved.');
+    return { drafts: old.drafts, activeDraftId: old.activeDraftId ?? null };
+  }
+  if (!old.basicInfo) return { drafts: [], activeDraftId: null };
+  const config = defaultConfiguration();
+  const basicInfo = { ...config.basicInfo, ...old.basicInfo };
+  for (const field of ['tokenUri', 'projectUri', 'rendererBase'] as const) {
+    if (typeof basicInfo[field] !== 'string' || !basicInfo[field].trim()) basicInfo[field] = config.basicInfo[field];
+  }
+  const image = old.basicInfo.contractImage;
+  const preview = typeof image === 'string' && image.startsWith('data:image/') ? image : null;
+  const draft: LocalDaoDraft = {
+    id: 'migrated-v5',
+    scope: { network: configuredCreationNetwork(), deployment: 'unassigned', wallet: old.launchAdmin || null },
+    configuration: {
+      ...config,
+      basicInfo: {
+        ...basicInfo,
+        contractImage: preview ? DEFAULT_DAO_IMAGE_URL : image || DEFAULT_DAO_IMAGE_URL
+      },
+      governance: { ...config.governance, ...old.governance },
+      auction: { ...config.auction, enabled: old.purpose?.membershipMode === 'auctions' },
+      marketplace: { ...config.marketplace, enabled: old.purpose?.membershipMode === 'marketplace' }
+    },
+    imagePreview: preview,
+    imageFilename: 'draft-image.png',
+    section: 'basicInfo',
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+  return { drafts: [draft], activeDraftId: draft.id };
+}
+type Store = DraftConfiguration & {
+  drafts: LocalDaoDraft[];
+  activeDraftId: string | null;
+  imagePreview: string | null;
+  imageFilename: string;
+  section: CreateDaoSection;
   validationErrors: Record<string, string>;
-  // Backwards compatibility for legacy components (no longer used in creation flow)
-  artworkSource?: ArtworkSource | null;
-  artwork?: ArtworkConfig;
-  daoImageSource?: DaoImageSource;
-  auction?: { enabled: boolean; duration: number };
-  founders?: FounderAllocation[];
-};
-
-/**
- * Actions
- */
-type CreateDaoActions = {
-  // Update form sections
-  updateBasicInfo: (patch: Partial<BasicInfo>) => void;
-  updatePurpose: (patch: Partial<PurposeConfig>) => void;
-  updateGovernance: (patch: Partial<GovernanceConfig>) => void;
-  updateLaunchAdmin: (address: string) => void;
-
-  // Validation
+  initialize: (scope: WorkspaceScope, requestedId?: string) => string;
+  newDraft: (scope: WorkspaceScope) => string;
+  resumeDraft: (id: string) => void;
+  duplicateDraft: (id: string) => string;
+  deleteDraft: (id: string) => void;
+  updateBasicInfo: (patch: Partial<DraftConfiguration['basicInfo']>) => void;
+  updateAuction: (patch: Partial<DraftConfiguration['auction']>) => void;
+  updateMarketplace: (patch: Partial<DraftConfiguration['marketplace']>) => void;
+  updateGovernance: (patch: Partial<DraftConfiguration['governance']>) => void;
+  setImagePreview: (image: string | null, filename?: string) => void;
+  setSection: (section: CreateDaoSection) => void;
   setValidationError: (field: string, error: string) => void;
   clearValidationError: (field: string) => void;
   clearAllValidationErrors: () => void;
-
-  // UI feedback
-  setFormMessage: (message: string) => void;
-  clearFormMessage: () => void;
-  setBusy: (busy: boolean) => void;
-
-  // Backwards compatibility for legacy components (no longer used in creation flow)
-  setArtworkSource: (source: ArtworkSource) => void;
-  clearArtworkSource: () => void;
-  updateArtwork: (patch: Partial<ArtworkConfig>) => void;
-  addArtworkItem: () => void;
-  removeArtworkItem: (index: number) => void;
-  setDaoImageSource: (source: DaoImageSource) => void;
-  updateAuction: (patch: Partial<{ enabled: boolean; duration: number }>) => void;
-  addFounder: (founder?: FounderAllocation) => void;
-  removeFounder: (index: number) => void;
-  updateFounder: (index: number, founder: Partial<FounderAllocation>) => void;
-  replaceFounders: (founders: FounderAllocation[]) => void;
-  addArtworkProperty: () => void;
-  removeArtworkProperty: (index: number) => void;
-  updateArtworkProperty: (index: number, property: Partial<ArtworkProperty>) => void;
-
-  // Reset
-  reset: () => void;
+  recordDeployment: (id: string, record: DeploymentRecord) => void;
 };
-
-export type CreateDaoStore = CreateDaoState & CreateDaoActions;
-
-const initialState: CreateDaoState = {
-  basicInfo: {
-    tokenName: '',
-    tokenSymbol: '',
-    tokenUri: 'https://builder-stellar-web.vercel.app/api/dao/{daoId}/token/',
-    projectUri: 'https://test-dao-stellar-web.vercel.app',
-    description: '',
-    contractImage: DEFAULT_DAO_IMAGE_URL,
-    rendererBase: 'https://builder-stellar-web.vercel.app/api/render/'
+let storageError = '';
+let readFailed = false;
+export function creationStorageError() {
+  return storageError;
+}
+export function assertCreationSaved() {
+  if (storageError) throw new Error(storageError);
+  if (typeof window === 'undefined') throw new Error('Local recovery storage is unavailable');
+}
+const storage = createJSONStorage(() => ({
+  getItem: (key: string) => {
+    try {
+      const raw = typeof window === 'undefined' ? null : window.localStorage.getItem(key);
+      if (raw) {
+        const envelope = JSON.parse(raw);
+        const migrated = migrateCreationWorkspace(envelope.state);
+        const drafts = withRecoverySnapshots(migrated.drafts);
+        if (Array.isArray(envelope.state?.drafts)) envelope.state = { ...envelope.state, drafts };
+        readFailed = false;
+        return JSON.stringify(envelope);
+      }
+      readFailed = false;
+      return raw;
+    } catch {
+      readFailed = true;
+      storageError = 'Cannot read local drafts. Existing data is preserved; autosave and deployment are disabled.';
+      return null;
+    }
   },
-  purpose: {
-    purpose: '',
-    membershipMode: 'auctions'
+  setItem: (key: string, value: string) => {
+    if (typeof window === 'undefined') return;
+    if (readFailed) return;
+    try {
+      window.localStorage.setItem(key, value);
+      storageError = '';
+    } catch {
+      storageError = 'Could not save this draft. Free browser storage or remove an image before deploying.';
+    }
   },
-  governance: {
-    votingDelay: 86400, // 24 hours
-    votingPeriod: 259200, // 3 days
-    quorumBps: 1000, // 10%
-    proposalThreshold: 1 // votes
-  },
-  launchAdmin: '',
-  busy: false,
-  formMessage: '',
+  removeItem: (key: string) => {
+    if (typeof window !== 'undefined') window.localStorage.removeItem(key);
+  }
+}));
+const editor = (draft: LocalDaoDraft) => ({
+  ...draft.configuration,
+  activeDraftId: draft.id,
+  imagePreview: draft.imagePreview,
+  imageFilename: draft.imageFilename,
+  section: draft.section,
   validationErrors: {}
-};
-
-const memoryStorage = {
-  getItem: (_name: string) => null,
-  setItem: (_name: string, _value: string) => undefined,
-  removeItem: (_name: string) => undefined
-};
-
-const storage = createJSONStorage(() => (typeof window === 'undefined' ? memoryStorage : window.localStorage));
-
-export const useCreateDaoStore = create<CreateDaoStore>()(
+});
+function latestDrafts(fallback: LocalDaoDraft[]) {
+  if (typeof window === 'undefined' || readFailed) return fallback;
+  try {
+    const raw = window.localStorage.getItem(CREATE_WORKSPACE_KEY);
+    return withRecoverySnapshots(raw ? migrateCreationWorkspace(JSON.parse(raw).state).drafts : fallback);
+  } catch {
+    readFailed = true;
+    storageError = 'Cannot read local drafts. Existing data is preserved; autosave and deployment are disabled.';
+    return fallback;
+  }
+}
+export const useCreateDaoStore = create<Store>()(
   persist(
-    (set) => ({
-      ...initialState,
-
-      // Update form sections
-      updateBasicInfo: (patch) =>
-        set((state) => ({
-          basicInfo: { ...state.basicInfo, ...patch }
-        })),
-
-      updatePurpose: (patch) =>
-        set((state) => ({
-          purpose: { ...state.purpose, ...patch }
-        })),
-
-      updateGovernance: (patch) =>
-        set((state) => ({
-          governance: { ...state.governance, ...patch }
-        })),
-
-      updateLaunchAdmin: (address) => set({ launchAdmin: address }),
-
-      // Validation
-      setValidationError: (field, error) =>
-        set((state) => ({
-          validationErrors: { ...state.validationErrors, [field]: error }
-        })),
-
-      clearValidationError: (field) =>
-        set((state) => {
-          const { [field]: _, ...rest } = state.validationErrors;
-          return { validationErrors: rest };
-        }),
-
-      clearAllValidationErrors: () => set({ validationErrors: {} }),
-
-      // UI feedback
-      setFormMessage: (formMessage) => set({ formMessage }),
-      clearFormMessage: () => set({ formMessage: '' }),
-      setBusy: (busy) => set({ busy }),
-
-      // Backwards compatibility for artwork components
-      setArtworkSource: (source) => set({ artworkSource: source }),
-      clearArtworkSource: () => set({ artworkSource: null }),
-      updateArtwork: (patch) =>
-        set((state) => ({
-          artwork: state.artwork
-            ? { ...state.artwork, ...patch }
-            : { ipfs: { baseUri: '', extension: '' }, properties: [], ...patch }
-        })),
-      addArtworkItem: () => {
-        // No-op for backwards compatibility
-        return;
-      },
-      removeArtworkItem: () => {
-        // No-op for backwards compatibility
-        return;
-      },
-      setDaoImageSource: (source) => set({ daoImageSource: source }),
-      updateAuction: (patch) =>
-        set((state) => ({
-          auction: state.auction ? { ...state.auction, ...patch } : { enabled: false, duration: 3600, ...patch }
-        })),
-
-      // Backwards compatibility for founder components
-      addFounder: (founder) =>
-        set((state) => ({
-          founders: [...(state.founders ?? []), founder ?? { address: '', amount: 0 }]
-        })),
-
-      removeFounder: (index) =>
-        set((state) => ({
-          founders: (state.founders ?? []).filter((_, i) => i !== index)
-        })),
-
-      updateFounder: (index, founder) =>
-        set((state) => ({
-          founders: (state.founders ?? []).map((f, i) => (i === index ? { ...f, ...founder } : f))
-        })),
-
-      replaceFounders: (founders) => set({ founders }),
-
-      // Backwards compatibility for artwork properties
-      addArtworkProperty: () =>
-        set((state) => {
-          if (!state.artworkSource || state.artworkSource.kind === 'generated') {
-            return state;
-          }
-          return {
-            artworkSource: {
-              ...state.artworkSource,
-              properties: [...state.artworkSource.properties, { name: '', items: [] }]
-            }
+    (set, get) => {
+      // Read the durable collection for every write. A stale tab must not erase another
+      // tab's saved hash, claimed scope, new draft, or confirmed recovery snapshot.
+      const saveState = (patch: Partial<Store>) =>
+        set({ ...patch, drafts: patch.drafts ?? latestDrafts(get().drafts) });
+      const update = (
+        patch: { [Key in keyof DraftConfiguration]?: Partial<DraftConfiguration[Key]> } & {
+          imagePreview?: string | null;
+          imageFilename?: string;
+          section?: CreateDaoSection;
+        }
+      ) => {
+        const current = get();
+        const drafts = latestDrafts(current.drafts);
+        const draft = drafts.find((d) => d.id === current.activeDraftId);
+        if (!draft) return;
+        if (draft.deployment) {
+          saveState({ ...editor(draft), drafts });
+          return;
+        }
+        const config = {
+          basicInfo: { ...draft.configuration.basicInfo, ...patch.basicInfo },
+          auction: { ...draft.configuration.auction, ...patch.auction },
+          marketplace: { ...draft.configuration.marketplace, ...patch.marketplace },
+          governance: { ...draft.configuration.governance, ...patch.governance }
+        };
+        const next = {
+          ...draft,
+          configuration: config,
+          updatedAt: Date.now(),
+          imagePreview: patch.imagePreview === undefined ? draft.imagePreview : patch.imagePreview,
+          imageFilename: patch.imageFilename ?? draft.imageFilename,
+          section: patch.section ?? draft.section
+        };
+        saveState({ ...editor(next), drafts: drafts.map((d) => (d.id === draft.id ? next : d)) });
+      };
+      return {
+        ...defaultConfiguration(),
+        drafts: [],
+        activeDraftId: null,
+        imagePreview: null,
+        imageFilename: '',
+        section: 'basicInfo',
+        validationErrors: {},
+        newDraft: (scope) => {
+          const id = crypto.randomUUID();
+          const draft: LocalDaoDraft = {
+            id,
+            scope,
+            configuration: defaultConfiguration(scope.network),
+            imagePreview: null,
+            imageFilename: '',
+            section: 'basicInfo',
+            createdAt: Date.now(),
+            updatedAt: Date.now()
           };
-        }),
-
-      removeArtworkProperty: (index) =>
-        set((state) => {
-          if (!state.artworkSource || state.artworkSource.kind === 'generated') {
-            return state;
+          saveState({ ...editor(draft), drafts: [...latestDrafts(get().drafts), draft] });
+          return id;
+        },
+        initialize: (scope, requestedId) => {
+          const drafts = latestDrafts(get().drafts).map((d) =>
+            d.scope.deployment === 'unassigned' &&
+            d.scope.network === scope.network &&
+            (!d.scope.wallet || d.scope.wallet === scope.wallet)
+              ? { ...d, scope: { ...d.scope, deployment: scope.deployment } }
+              : d
+          );
+          saveState({ drafts });
+          const id = requestedId ?? get().activeDraftId;
+          const draft =
+            drafts.find((d) => d.id === id && visibleDraft(d, scope)) ??
+            (!requestedId
+              ? drafts.filter((d) => sameWorkspace(d.scope, scope)).sort((a, b) => b.updatedAt - a.updatedAt)[0]
+              : undefined);
+          if (requestedId && !draft)
+            throw new Error('Draft not found in this wallet, network, and deployment workspace.');
+          if (draft) {
+            get().resumeDraft(draft.id);
+            return draft.id;
           }
-          return {
-            artworkSource: {
-              ...state.artworkSource,
-              properties: state.artworkSource.properties.filter((_, i) => i !== index)
-            }
+          return get().newDraft(scope);
+        },
+        resumeDraft: (id) => {
+          const d = latestDrafts(get().drafts).find((d) => d.id === id);
+          if (d) saveState(editor(d));
+        },
+        duplicateDraft: (id) => {
+          const drafts = latestDrafts(get().drafts);
+          const old = drafts.find((d) => d.id === id);
+          if (!old) throw new Error('Draft not found');
+          const copy = structuredClone(old);
+          copy.id = crypto.randomUUID();
+          delete copy.deployment;
+          copy.configuration.basicInfo.tokenName = `${copy.configuration.basicInfo.tokenName} copy`.slice(0, 80);
+          copy.createdAt = copy.updatedAt = Date.now();
+          copy.section = 'basicInfo';
+          saveState({ drafts: [...drafts, copy] });
+          return copy.id;
+        },
+        deleteDraft: (id) => {
+          const drafts = latestDrafts(get().drafts);
+          const d = drafts.find((d) => d.id === id);
+          if (d?.deployment && d.deployment.status !== 'failed')
+            throw new Error('Keep this deployment record for recovery. It cannot be deleted.');
+          if (d?.deployment && typeof window !== 'undefined') window.localStorage.removeItem(recoveryKey(d));
+          saveState({
+            drafts: drafts.filter((d) => d.id !== id),
+            ...(get().activeDraftId === id ? { activeDraftId: null } : {})
+          });
+        },
+        updateBasicInfo: (patch) => update({ basicInfo: patch }),
+        updateAuction: (patch) => update({ auction: patch }),
+        updateMarketplace: (patch) => update({ marketplace: patch }),
+        updateGovernance: (patch) => update({ governance: patch }),
+        setImagePreview: (imagePreview, imageFilename = '') => update({ imagePreview, imageFilename }),
+        setSection: (section) => update({ section }),
+        setValidationError: (field, error) =>
+          saveState({ validationErrors: { ...get().validationErrors, [field]: error } }),
+        clearValidationError: (field) => {
+          const errors = { ...get().validationErrors };
+          delete errors[field];
+          saveState({ validationErrors: errors });
+        },
+        clearAllValidationErrors: () => saveState({ validationErrors: {} }),
+        recordDeployment: (id, deployment) => {
+          const drafts = latestDrafts(get().drafts);
+          const draft = drafts.find((d) => d.id === id);
+          if (!draft) throw new Error('Deployment draft not found');
+          if (
+            draft.deployment &&
+            (draft.deployment.nonce !== deployment.nonce || draft.deployment.deployer !== deployment.deployer)
+          )
+            throw new Error('The saved deployment nonce and deployer cannot be replaced');
+          if (
+            draft.deployment?.configuration &&
+            deployment.configuration &&
+            JSON.stringify(draft.deployment.configuration) !== JSON.stringify(deployment.configuration)
+          )
+            throw new Error('The frozen deployment configuration cannot be replaced');
+          if (
+            draft.deployment?.configurationFingerprint &&
+            draft.deployment.configurationFingerprint !== deployment.configurationFingerprint
+          )
+            throw new Error('The frozen deployment configuration cannot be replaced');
+          const snapshot = {
+            ...draft,
+            configuration: deployment.configuration ?? draft.configuration,
+            scope: { ...draft.scope, wallet: deployment.deployer },
+            deployment,
+            updatedAt: Date.now()
           };
-        }),
-
-      updateArtworkProperty: (index, property) =>
-        set((state) => {
-          if (!state.artworkSource || state.artworkSource.kind === 'generated') {
-            return state;
+          // This per-draft key is written only by the Web-Locked deployment operation,
+          // never by form autosave. Even a racing stale autosave cannot erase its hash.
+          try {
+            if (typeof window !== 'undefined')
+              window.localStorage.setItem(recoveryKey(snapshot), JSON.stringify(snapshot));
+          } catch {
+            storageError = 'Could not save the deployment recovery snapshot. Free browser storage before signing.';
+            throw new Error(storageError);
           }
-          return {
-            artworkSource: {
-              ...state.artworkSource,
-              properties: state.artworkSource.properties.map((p, i) => (i === index ? { ...p, ...property } : p))
-            }
-          };
-        }),
-
-      // Reset
-      reset: () => set(initialState)
-    }),
+          saveState({ drafts: drafts.map((d) => (d.id === id ? snapshot : d)) });
+        }
+      };
+    },
     {
-      name: 'dao.create-dao.v4',
-      version: 5,
+      name: CREATE_WORKSPACE_KEY,
+      version: 6,
       storage,
       skipHydration: true,
-      partialize: (state) => ({
-        basicInfo: state.basicInfo,
-        purpose: state.purpose,
-        governance: state.governance,
-        launchAdmin: state.launchAdmin
-      }),
-      migrate: (persistedState, version) => {
-        const persisted = persistedState as Partial<CreateDaoState>;
-
-        // Version < 4: Remove old artwork/auction/founders fields
-        if (version < 4) {
-          // Remove old fields (implicit - just don't restore them)
-        }
-
-        // Version < 5: proposalThresholdBps (basis points) became proposalThreshold (absolute votes).
-        if (version < 5) {
-          delete persisted.governance;
-        }
-
-        return persisted as CreateDaoState;
-      },
-      merge: (persistedState, currentState) => {
-        const persisted = (persistedState ?? {}) as Partial<CreateDaoState>;
-        const merged = { ...currentState, ...persisted } as CreateDaoStore;
-
-        // Restore default URLs if they're missing
-        if (!merged.basicInfo?.tokenUri) {
-          merged.basicInfo = {
-            ...merged.basicInfo,
-            tokenUri: initialState.basicInfo.tokenUri
-          };
-        }
-        if (!merged.basicInfo?.projectUri) {
-          merged.basicInfo = {
-            ...merged.basicInfo,
-            projectUri: initialState.basicInfo.projectUri
-          };
-        }
-        if (!merged.basicInfo?.contractImage) {
-          merged.basicInfo = {
-            ...merged.basicInfo,
-            contractImage: initialState.basicInfo.contractImage
-          };
-        }
-        if (!merged.basicInfo?.rendererBase) {
-          merged.basicInfo = {
-            ...merged.basicInfo,
-            rendererBase: initialState.basicInfo.rendererBase
-          };
-        }
-
-        return merged;
+      partialize: (state) => ({ drafts: state.drafts, activeDraftId: state.activeDraftId }),
+      migrate: migrateCreationWorkspace,
+      merge: (value, current) => {
+        const saved = migrateCreationWorkspace(value);
+        const active = saved.drafts.find((d) => d.id === (current.activeDraftId ?? saved.activeDraftId));
+        return { ...current, ...saved, ...(active ? editor(active) : {}) };
       }
     }
   )

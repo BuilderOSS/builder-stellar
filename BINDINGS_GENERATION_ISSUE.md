@@ -2,6 +2,11 @@
 
 Status: resolved. Kept as a short runbook.
 
+This is the canonical authored regeneration reference. The SDK's `--overwrite`
+replaces generic package documentation, but the current repository wrapper saves
+each existing package README and restores it after generation. Keep authored
+READMEs current; invoking the SDK directly bypasses this preservation step.
+
 ## Regenerating the TypeScript bindings
 
 ```bash
@@ -10,6 +15,34 @@ pnpm --filter @builder-stellar/<name>-bindings build   # auction|governor|manage
 ```
 
 `pnpm contracts:build` (alias for `stellar contract build`) builds the WASMs only.
+
+The seven clients cover six DAO modules plus Manager. The shared Minter has no
+generated package in this script. `src/index.ts` exports `Client`, implemented in
+`src/client.ts`; structs/errors/events are in `src/types.ts`. Consumers import
+`@builder-stellar/<name>-bindings` from the pnpm workspace after its build.
+
+The web's Minter client is loaded dynamically from the deployed spec and checks
+method/error ABI shapes; it is not an eighth generated binding package.
+
+Use the same deployable WASM/toolchain for deployment and generation. Successful
+generation alone does not prove that a deployed contract has that ABI. Client
+calls assemble/simulate transactions; mutations need a signing wallet and
+`signAndSend`, then explicit confirmation. `result` from simulation is not a
+receipt. Large integers use `bigint`; binary hashes use byte arrays, not lossy
+JavaScript numbers or guessed argument types.
+
+The web predev/prebuild hooks build all seven clients. Proposal arguments are
+encoded by target ABI in
+[`proposal-supported-calls.ts`](apps/web/src/lib/proposal-supported-calls.ts);
+unsupported calls are not submitted. Token `batch_mint` uses recipient/amount
+vectors and each call must fit the event budget (`300 × tokens + 450 × recipients
+≤ 13,500`: 43 tokens to one recipient, 18 recipients with one token each).
+Every module exposes `admin()` (no `owner()` / `get_owner()`), `migrate()` and
+`storage_version()`. Marketplace `list` takes `max_fee_bps` and `payment_asset`;
+`buy` / `buy_primary` take `max_price`. Governor's generated `execute` remains present for compatibility but
+always rejects; use Treasury's four-argument vector execution method.
+
+See [contract references](docs/README.md) and [web behavior](apps/web/README.md).
 
 ## Root cause of the old compile errors
 

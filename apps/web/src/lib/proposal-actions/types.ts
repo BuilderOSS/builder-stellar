@@ -16,6 +16,7 @@ export type ProposalActionType =
   | 'set-mint-authority'
   | 'set-voting-delay'
   | 'set-voting-period'
+  | 'set-queue-delay'
   | 'set-proposal-threshold'
   | 'set-quorum-bps'
   | 'pause-auction'
@@ -24,8 +25,23 @@ export type ProposalActionType =
   | 'set-auction-time-buffer'
   | 'set-auction-reserve-price'
   | 'set-auction-payment-token'
+  | 'set-auction-min-bid-increment'
+  | 'cancel-auction'
+  | 'set-marketplace-payment-token'
+  | 'set-marketplace-secondary-fee'
+  | 'pause-marketplace'
+  | 'unpause-marketplace'
   | 'create-primary-listing'
-  | 'cancel-primary-listing';
+  | 'cancel-primary-listing'
+  | 'add-artwork-properties'
+  | 'set-artwork-renderer'
+  | 'set-artwork-description'
+  | 'set-artwork-project-uri'
+  | 'set-artwork-contract-image'
+  | 'upgrade-dao-module'
+  | 'set-merkle-root'
+  | 'set-allowlist'
+  | 'minter-batch-mint';
 
 /**
  * Queued action structure (persisted in store)
@@ -75,6 +91,7 @@ export interface FormContext {
   // Shared data
   balances?: AssetBalance[];
   balancesLoading?: boolean;
+  balancesError?: string;
   mintAuthorities?: Array<{ authority: string; enabled: boolean }>;
   mintAuthoritiesLoading?: boolean;
   // Allow custom extensions per action type

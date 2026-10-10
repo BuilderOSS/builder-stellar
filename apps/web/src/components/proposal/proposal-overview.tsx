@@ -52,7 +52,7 @@ function hasValidTimestamp(value: number) {
 function getLifecycleSummary(detail: ProposalDetail, now: number) {
   switch (detail.state) {
     case ProposalState.Pending:
-      const startTime = hasValidTimestamp(detail.vote_start) ? detail.vote_start : detail.vote_end;
+      const startTime = detail.vote_start;
       return {
         eyebrow: 'Voting starts',
         headline: hasValidTimestamp(startTime)
@@ -73,12 +73,30 @@ function getLifecycleSummary(detail: ProposalDetail, now: number) {
           : 'Voting end time is not available.'
       };
     case ProposalState.Succeeded:
+      if (detail.expiresAt && now >= detail.expiresAt * 1000)
+        return {
+          eyebrow: 'Queue window closed',
+          headline: 'Refreshing proposal state',
+          subline: 'The deadline to queue this proposal has passed. Queueing is disabled.'
+        };
       return {
         eyebrow: 'Ready to queue',
         headline: `Voting ended ${formatDateTime(detail.vote_end)}`,
         subline: 'This proposal can now be queued for execution.'
       };
     case ProposalState.Queued:
+      if (!detail.eta)
+        return {
+          eyebrow: 'Queued',
+          headline: 'Execution timing unavailable',
+          subline: 'Waiting for the indexed ETA or chain storage to become available.'
+        };
+      if (detail.expiresAt && now >= detail.expiresAt * 1000)
+        return {
+          eyebrow: 'Execution window closed',
+          headline: 'Refreshing proposal state',
+          subline: 'The execution window has expired. Execution is disabled.'
+        };
       if (hasValidTimestamp(detail.eta) && detail.eta > Math.floor(now / 1000)) {
         return {
           eyebrow: 'Execution scheduled',
@@ -214,6 +232,9 @@ export function ProposalLifecyclePanel({ detail, now, actionSlot }: ProposalLife
           <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
             {lifecycle.subline}
           </Text>
+          {detail.stateSource === 'indexed' ? (
+            <Text>Indexed state only; chain state is unavailable. Actions are disabled until refreshed.</Text>
+          ) : null}
         </Stack>
         {actionSlot ? (
           <div style={{ borderTop: '1px solid rgba(160, 194, 225, 0.18)', paddingTop: '16px' }}>{actionSlot}</div>

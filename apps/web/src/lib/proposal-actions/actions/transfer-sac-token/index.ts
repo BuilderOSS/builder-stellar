@@ -1,6 +1,9 @@
 // src/lib/proposal-actions/actions/transfer-sac-token/index.ts
 
+import { Asset } from '@stellar/stellar-sdk';
+
 import { getTreasuryAssets } from '@/lib/assets-config';
+import { decimalToStroops } from '@/lib/auction-values';
 
 import type { ActionHandler } from '../../types';
 import { TransferSacTokenForm } from './component';
@@ -35,7 +38,7 @@ export const transferSacTokenHandler: ActionHandler<TransferSacTokenData> = {
       recipient: data.recipient.trim(),
       amount: data.amount.trim(),
       assetCode: data.assetCode,
-      assetContractId: asset?.contractId
+      assetContractId: asset?.isNative ? Asset.native().contractId(context.config.passphrase) : asset?.contractId
     };
   },
 
@@ -55,10 +58,12 @@ export const transferSacTokenHandler: ActionHandler<TransferSacTokenData> = {
     }
 
     // Convert decimal to stroops (multiply by 10^7)
-    const stroops = BigInt(Math.round(parseFloat(data.amount) * 10_000_000));
+    const stroops = decimalToStroops(data.amount);
+    if (stroops === null || stroops <= 0n || stroops >= 1n << 127n)
+      throw new Error('Transfer amount must be a positive i128 with at most seven decimal places.');
 
     return {
-      target: asset.contractId,
+      target: asset.isNative ? Asset.native().contractId(context.config.passphrase) : asset.contractId,
       function: 'transfer',
       args: [context.treasuryAddress, data.recipient.trim(), stroops.toString()]
     };

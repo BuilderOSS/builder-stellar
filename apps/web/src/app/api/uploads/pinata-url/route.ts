@@ -19,7 +19,7 @@ const PinataUrlRequestSchema = z.object({
 type _PinataUrlRequest = z.infer<typeof PinataUrlRequestSchema>;
 
 /**
- * Simple CSRF token validation (same as in /api/artwork/generate)
+ * Same-origin upload request validation.
  */
 function validateCsrfToken(request: NextRequest): boolean {
   const csrfToken = request.headers.get('x-csrf-token');

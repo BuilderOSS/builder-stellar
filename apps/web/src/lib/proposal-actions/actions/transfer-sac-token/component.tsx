@@ -5,6 +5,7 @@
 import { Stack } from 'styled-system/jsx';
 
 import { Button, FieldHelperText, FieldLabel, Input, Select, Skeleton } from '@/components/ui';
+import { getTreasuryAssets } from '@/lib/assets-config';
 
 import { useActionFormContext } from '../../context';
 import type { ActionFormProps } from '../../types';
@@ -17,18 +18,15 @@ export function TransferSacTokenForm({
   validationErrors
 }: ActionFormProps<TransferSacTokenData>) {
   const context = useActionFormContext();
-  const { balances, balancesLoading } = context;
+  const { balances, balancesLoading, balancesError } = context;
 
   const selectedBalance = balances?.find((b) => b.assetCode === value.assetCode);
 
   const balanceDisplay =
     value.assetCode && balances
       ? selectedBalance
-        ? `${parseFloat(selectedBalance.balance).toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 7
-          })} ${value.assetCode}`
-        : `0 ${value.assetCode}`
+        ? `${selectedBalance.balance} ${value.assetCode}`
+        : `Balance unavailable for ${value.assetCode}`
       : null;
 
   const handleMaxClick = () => {
@@ -54,9 +52,12 @@ export function TransferSacTokenForm({
           }
         >
           <option value="">Select asset...</option>
-          <option value="XLM">XLM (Native)</option>
-          <option value="USDC">USDC</option>
-          <option value="EURC">EURC</option>
+          {getTreasuryAssets(context.config.name).map((asset) => (
+            <option key={asset.code} value={asset.code}>
+              {asset.code}
+              {asset.isNative ? ' (Native)' : ''}
+            </option>
+          ))}
         </Select>
         {validationErrors && !validationErrors.valid && validationErrors.fields?.assetCode ? (
           <FieldHelperText id="asset-code-error" style={{ color: '#f87171' }}>
@@ -75,6 +76,9 @@ export function TransferSacTokenForm({
             )}
           </FieldHelperText>
         )}
+        {balancesError ? (
+          <FieldHelperText>Balance unavailable: {balancesError}. Previous balances may be stale.</FieldHelperText>
+        ) : null}
       </Stack>
 
       <Stack gap="2">
@@ -107,9 +111,8 @@ export function TransferSacTokenForm({
           <div style={{ flex: 1 }}>
             <Input
               id="amount"
-              type="number"
-              step="0.0000001"
-              min="0"
+              type="text"
+              inputMode="decimal"
               value={value.amount}
               onChange={(e) => onChange({ ...value, amount: e.target.value })}
               placeholder="Amount to transfer"
@@ -127,7 +130,7 @@ export function TransferSacTokenForm({
               type="button"
               variant="outline"
               onClick={handleMaxClick}
-              disabled={disabled || balancesLoading}
+              disabled={disabled || balancesLoading || !!balancesError}
               style={{ whiteSpace: 'nowrap' }}
             >
               Max
