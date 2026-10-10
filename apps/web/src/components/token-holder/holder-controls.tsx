@@ -17,7 +17,7 @@ import { currentTokenHolder } from '@/lib/token-holder/read';
 import { assertHolderEnvelope, assertHolderSignedEnvelope, assertHolderWallet } from '@/lib/token-holder/transaction';
 import type { HolderAction, HolderPrepared } from '@/lib/token-holder/types';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
-import { signWithWallet } from '@/lib/wallet-sign';
+import { readSigningWallet, signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 export function HolderControls({
@@ -121,12 +121,11 @@ export function HolderControls({
     setMessage('Checking your wallet and current ownership…');
     const { prepared, action } = review;
     try {
-      const [{ StellarWalletsKit }, { Client }, { TransactionBuilder, rpc }] = await Promise.all([
-        import('@creit.tech/stellar-wallets-kit/sdk'),
+      const [{ Client }, { TransactionBuilder, rpc }] = await Promise.all([
         import('@builder-stellar/token-bindings'),
         import('@stellar/stellar-sdk')
       ]);
-      const [wallet, network] = await Promise.all([StellarWalletsKit.getAddress(), StellarWalletsKit.getNetwork()]);
+      const [wallet, network] = await readSigningWallet();
       const current = useAuthSessionStore.getState();
       if (current.authStatus !== 'authenticated' || current.address !== prepared.address)
         throw new Error('Authenticate again before signing.');

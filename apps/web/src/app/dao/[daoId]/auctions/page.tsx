@@ -1,7 +1,6 @@
 'use client';
 
 import { Client as AuctionClient } from '@builder-stellar/auction-bindings';
-import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import Image from 'next/image';
 import { useEffect, useRef, useState } from 'react';
 import { css } from 'styled-system/css';
@@ -44,7 +43,7 @@ import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { daoRoute } from '@/lib/dao-routes';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
-import { signWithWallet } from '@/lib/wallet-sign';
+import { readSigningWallet, signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 const stage = css({
@@ -144,7 +143,7 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
       if (!mounted.current) throw new Error('Auction view changed. Review the current DAO before signing.');
       const current = useAuthSessionStore.getState();
       assertAuctionWallet(current.address, current.walletNetworkPassphrase, bidder, config.passphrase);
-      const [wallet, network] = await Promise.all([StellarWalletsKit.getAddress(), StellarWalletsKit.getNetwork()]);
+      const [wallet, network] = await readSigningWallet();
       assertAuctionWallet(wallet.address, network.networkPassphrase, bidder, config.passphrase);
       if (!mounted.current) throw new Error('Auction view changed.');
     };

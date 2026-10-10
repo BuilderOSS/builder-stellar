@@ -2,6 +2,7 @@
 
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 
+import { isWalletConnectSelected } from '@/lib/wallet-kit';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 export class WalletNetworkError extends Error {
@@ -27,4 +28,19 @@ export async function signWithWallet(
 ): ReturnType<typeof StellarWalletsKit.signTransaction> {
   assertWalletNetworkReady();
   return StellarWalletsKit.signTransaction(...args);
+}
+
+/**
+ * The account and network the wallet will sign with, for the "is this still the reviewed wallet?"
+ * checks before a transaction. WalletConnect wallets (including Freighter's mobile in-app browser)
+ * can't report their network: the kit's `getNetwork` always throws for them. Their session is opened
+ * for this app's network, so use the network the session recorded at connect time instead.
+ */
+export async function readSigningWallet(): Promise<[{ address: string }, { networkPassphrase: string }]> {
+  const { address } = await StellarWalletsKit.getAddress();
+  if (isWalletConnectSelected()) {
+    return [{ address }, { networkPassphrase: useAuthSessionStore.getState().walletNetworkPassphrase }];
+  }
+  const { networkPassphrase } = await StellarWalletsKit.getNetwork();
+  return [{ address }, { networkPassphrase }];
 }

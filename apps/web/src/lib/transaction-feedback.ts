@@ -12,6 +12,18 @@ function shortenHash(value: string) {
   return `${value.slice(0, 6)}…${value.slice(-6)}`;
 }
 
+/**
+ * Wallet SDKs often reject with plain objects (`{ code, message }`) rather than Errors; keep their
+ * message instead of collapsing to the generic title.
+ */
+export function errorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string' && error) return error;
+  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string' && error.message)
+    return error.message;
+  return fallback;
+}
+
 export function useTransactionFeedback(network: DaoNetworkName) {
   const toastIdRef = useRef<string | undefined>(undefined);
 
@@ -73,7 +85,7 @@ export function useTransactionFeedback(network: DaoNetworkName) {
   function fail(error: unknown, fallback: string, contract?: ContractName) {
     const payload = {
       title: fallback,
-      description: describeContractError(error, contract) ?? (error instanceof Error ? error.message : fallback),
+      description: describeContractError(error, contract) ?? errorMessage(error, fallback),
       type: 'error' as const,
       duration: Infinity
     };

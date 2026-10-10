@@ -18,7 +18,7 @@ import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { treasuryFetch, useTreasuryFundingReadiness } from '@/lib/treasury-service/hooks';
 import type { TreasuryPrepared, TreasuryScope } from '@/lib/treasury-service/types';
 import { assertTreasuryIdentity, fundingSchema } from '@/lib/treasury-service/values';
-import { signWithWallet } from '@/lib/wallet-sign';
+import { readSigningWallet, signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 const buttons = css({ display: 'flex', gap: '2' });
@@ -102,14 +102,8 @@ export function FundTreasury({ scope, onConfirmed }: { scope: TreasuryScope; onC
     inFlight.current = true;
     setBusy(true);
     try {
-      const [{ StellarWalletsKit }, { TransactionBuilder, rpc }] = await Promise.all([
-        import('@creit.tech/stellar-wallets-kit/sdk'),
-        import('@stellar/stellar-sdk')
-      ]);
-      const [wallet, walletNetwork] = await Promise.all([
-        StellarWalletsKit.getAddress(),
-        StellarWalletsKit.getNetwork()
-      ]);
+      const [{ TransactionBuilder, rpc }] = await Promise.all([import('@stellar/stellar-sdk')]);
+      const [wallet, walletNetwork] = await readSigningWallet();
       const current = useAuthSessionStore.getState();
       if (current.authStatus !== 'authenticated' || current.address !== terms.address || current.walletNetworkIssue)
         throw new Error('Wallet session changed. Authenticate again before signing.');

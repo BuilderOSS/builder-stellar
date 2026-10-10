@@ -16,7 +16,7 @@ import {
   confirmMarketplaceTransaction
 } from '@/lib/marketplace/transaction';
 import type { MarketplaceAction, MarketplacePrepared } from '@/lib/marketplace/types';
-import { signWithWallet } from '@/lib/wallet-sign';
+import { readSigningWallet, signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import styles from './marketplace-styles';
@@ -86,14 +86,8 @@ export function TradeReview({
     setBusy(true);
     setMessage('Checking the active wallet…');
     try {
-      const [{ StellarWalletsKit }, { TransactionBuilder, rpc, scValToNative }] = await Promise.all([
-        import('@creit.tech/stellar-wallets-kit/sdk'),
-        import('@stellar/stellar-sdk')
-      ]);
-      const [wallet, walletNetwork] = await Promise.all([
-        StellarWalletsKit.getAddress(),
-        StellarWalletsKit.getNetwork()
-      ]);
+      const [{ TransactionBuilder, rpc, scValToNative }] = await Promise.all([import('@stellar/stellar-sdk')]);
+      const [wallet, walletNetwork] = await readSigningWallet();
       if (wallet.address !== useAuthSessionStore.getState().address) {
         throw new Error('The wallet account changed. Reconnect and authenticate before trading.');
       }
