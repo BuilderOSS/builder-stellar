@@ -124,7 +124,7 @@ other tokens.
 
 | View | Notes |
 | --- | --- |
-| `activity_feed` **Prisma** | activity rows with `dao_id` resolved (manager events: none; Minter: via token) |
+| `activity_feed` **Prisma** | activity rows with `dao_id` resolved (per-DAO Manager events such as `dao_launched` via their `token_address` topic, other Manager events none; Minter via token) |
 | `proposal_list` **Prisma**, `proposal_detail` **Prisma** | proposals with vote tallies; detail adds `actions` and `votes` JSON |
 | `indexer_status` **Prisma** | latest ledger / event count / last ingestion, so the app never reads raw events |
 

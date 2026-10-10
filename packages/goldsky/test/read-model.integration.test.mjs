@@ -643,6 +643,8 @@ test('module upgrades and wasm hashes: keyed by emitting contract, filtered by d
   assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'admin_proposal_cancelled'`).kind, 'manager.admin_proposal_cancelled');
   assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'migrated'`).kind, 'auction.migrated');
   assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'admin_changed' AND contract_role = 'manager'`).kind, 'manager.admin_changed');
+  assert.equal(one(`SELECT dao_id FROM app.activity_feed WHERE event_name = 'dao_launched' AND contract_role = 'manager'`).dao_id, 'CTOK1', 'launch rows belong to their DAO feed');
+  assert.equal(one(`SELECT dao_id FROM app.activity_feed WHERE event_name = 'admin_changed' AND contract_role = 'manager'`).dao_id, null, 'deployment-wide Manager events have no DAO');
   assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'admin_changed' AND contract_role = 'token'`).kind, 'token.admin_changed');
   assert.equal(one(`SELECT kind, visibility FROM app.activity_feed WHERE event_name = 'slug_claimed'`).visibility, 'admin', 'the launch row tells the story; the slug claim is bookkeeping');
 });
@@ -659,7 +661,11 @@ test('minter: claims resolve to the DAO by token_id and foreign tokens are dropp
 
 test('activity feed: tenant resolution and kinds', { skip }, () => {
   const feed = (where) => rows(`SELECT * FROM app.activity_feed WHERE ${where} ORDER BY ledger_sequence, event_index`);
-  assert.ok(feed(`contract_role = 'manager'`).every((r) => r.dao_id === null), 'manager events are deployment-wide');
+  const perDao = ['dao_created', 'dao_launched', 'slug_claimed', 'pending_slug_updated'];
+  assert.ok(
+    feed(`contract_role = 'manager'`).every((r) => (perDao.includes(r.event_name) ? r.dao_id !== null : r.dao_id === null)),
+    'per-DAO manager events resolve to their DAO; deployment-wide ones have none'
+  );
   assert.ok(feed(`contract_role = 'governor'`).every((r) => r.dao_id === 'CTOK1'));
   assert.ok(feed(`contract_role = 'minter'`).every((r) => r.dao_id === 'CTOK1'));
   assert.equal(feed(`contract_role = 'minter'`).length, 5, 'the foreign-token claim is not visible to any DAO');
