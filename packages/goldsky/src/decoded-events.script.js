@@ -63,7 +63,8 @@ function invoke(data) {
     // marketplace, metadata); the emitting module is identified by contract_id/contract_role.
     Upgraded: ['from_hash', 'to_hash'], VersionSynced: [], Migrated: [],
     // Token (custom + OpenZeppelin non-fungible/votes/pausable)
-    TokenInitialized: ['admin'], MintAuthorityChanged: ['authority'], MintWithMinter: ['minter', 'to'], MintBatchWithMinter: ['minter'],
+    // MetadataUpdated (token 0.2.0+): rename; all data, no topics.
+    TokenInitialized: ['admin'], MetadataUpdated: [], MintAuthorityChanged: ['authority'], MintWithMinter: ['minter', 'to'], MintBatchWithMinter: ['minter'],
     Mint: ['to'], Transfer: ['from', 'to'], Approve: ['approver', 'token_id'], ApproveForAll: ['owner'],
     DelegateChanged: ['delegator'], DelegateVotesChanged: ['delegate'],
     Paused: [], Unpaused: [],
