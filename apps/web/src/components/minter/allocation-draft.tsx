@@ -16,7 +16,7 @@ import { useProposalActions } from '@/lib/use-proposal-actions';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { selectDraft, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
-import styles from './claims.module.css';
+import styles from './claims-styles';
 
 export function AllocationDraftForm({ state }: { state?: ClaimState }) {
   const { daoId, daoConfig: config } = useDaoContext();

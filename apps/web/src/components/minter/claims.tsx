@@ -4,9 +4,9 @@ import Link from 'next/link';
 import { useRef, useState } from 'react';
 import { useSWRConfig } from 'swr';
 
+import { Address, Disclosure } from '@/components/ui';
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
-import { getExplorerTxUrl } from '@/lib/explorer-links';
 import { claimFetch, useClaimHistory, useCurrentClaims } from '@/lib/minter/hooks';
 import { assertPreparedIdentity } from '@/lib/minter/identity';
 import { parseProofFile, verifyClaimProof } from '@/lib/minter/proof';
@@ -18,7 +18,7 @@ import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import { AllocationDraftForm } from './allocation-draft';
-import styles from './claims.module.css';
+import styles from './claims-styles';
 
 export function Claims({ admin = false }: { admin?: boolean }) {
   const { daoId, daoConfig: config } = useDaoContext();
@@ -168,17 +168,16 @@ export function Claims({ admin = false }: { admin?: boolean }) {
   }
 
   return (
-    <main className={styles.surface}>
+    <div className={styles.surface}>
       <section className={styles.panel}>
-        <h1>{admin ? 'Claim allocations' : 'Membership claims'}</h1>
+        <h1>{admin ? 'Claim allocations' : 'Claim your tokens'}</h1>
         <p>
-          Free token allocations via the shared platform Minter. No payment currency or paid mint is supported. You only
-          pay the network transaction fee in XLM.
+          Some communities set aside free tokens for specific people. If one is waiting for you, claim it here. You only
+          pay a small network fee in XLM.
         </p>
         <div className={styles.row}>
-          <Link href={{ pathname: `${base}/members` }}>Members</Link>
           <Link href={{ pathname: `${base}/${admin ? 'claims' : 'admin/claims'}` }}>
-            {admin ? 'Claim tokens' : 'Manage allocations'}
+            {admin ? 'See the member view' : 'Manage allocations'}
           </Link>
           <button
             disabled={busy}
@@ -191,54 +190,52 @@ export function Claims({ admin = false }: { admin?: boolean }) {
             Refresh
           </button>
         </div>
-        {current.isLoading ? <p role="status">Loading current RPC state…</p> : null}
+        {current.isLoading ? <p role="status">Checking what you can claim…</p> : null}
         {current.error ? <p role="alert">{current.error.message}</p> : null}
         {data ? (
           <>
-            <p>
-              Token: {data.live ? 'Live' : 'Setup — claims and allocation configuration are disabled'} · Minter mint
-              authority: {data.mintAuthority ? 'enabled' : 'disabled'}
-            </p>
-            <p className={styles.address}>
-              Minter: {data.minterContractId ?? 'not registered'}
-              <br />
-              Token: {data.tokenContractId}
-              <br />
-              Admin: {data.admin}
-            </p>
-            <p>
-              Authentication:{' '}
-              {data.authenticated
-                ? `authenticated as ${data.address}`
-                : 'Connect and authenticate a wallet on this network using the wallet control.'}
-            </p>
+            {!data.live ? <p>Claims open once the community launches.</p> : null}
+            {!data.authenticated ? <p>Connect the wallet that was given tokens to claim them.</p> : null}
+            <Disclosure title="Technical details">
+              <p>
+                Token: {data.live ? 'live' : 'in setup'} · Minter can mint: {data.mintAuthority ? 'yes' : 'no'}
+              </p>
+              {data.minterContractId ? (
+                <Address value={data.minterContractId} label="Minter" />
+              ) : (
+                <p>Minter: not registered</p>
+              )}
+              <Address value={data.tokenContractId} label="Token" />
+              <Address value={data.admin} label="Admin" />
+              {data.authenticated && data.address ? <Address value={data.address} label="Signed in as" /> : null}
+              <p className={styles.muted}>
+                A missing entry may be absent or archived, not proof it&apos;s unclaimed; we check before you sign. Each
+                method has its own round, and a new allocation lets earlier recipients claim again.
+              </p>
+            </Disclosure>
           </>
         ) : null}
         {!allowed && !admin ? (
           <p>
-            Claims require authenticated recipient authorization, a Live token, the current platform Minter’s mint
-            authority, and the correct wallet network.
+            To claim you need the right wallet connected, a launched community, and the community&apos;s claims turned
+            on.
           </p>
         ) : null}
-        <p className={styles.muted}>
-          RPC entries missing below may be absent or archived, not a verified “unclaimed” result. Simulation checks
-          eligibility before any signature. Each method has its own round; a new allocation permits earlier recipients
-          to claim again.
-        </p>
       </section>
       {admin ? (
         <AllocationInfo state={current.error ? undefined : data} />
       ) : (
         <div className={styles.grid}>
           <section className={styles.panel}>
-            <h2>Allowlist claim</h2>
+            <h2>On the list</h2>
             <p>
-              Round: {data?.allowlist.round ?? 'unavailable'} · Amount: {data?.allowlist.amount ?? 'unavailable'} tokens
+              {data?.allowlist.amount != null ? `${data.allowlist.amount} tokens each` : 'Amount unavailable'} · round{' '}
+              {data?.allowlist.round ?? '–'}
             </p>
             <p>
-              Membership: {marker(data?.allowlist.member, 'listed', 'not listed')}
+              You: {marker(data?.allowlist.member, 'on the list', 'not on the list')}
               <br />
-              Claim: {marker(data?.allowlist.claimed, 'already claimed', 'unclaimed')}
+              Status: {marker(data?.allowlist.claimed, 'already claimed', 'not claimed yet')}
             </p>
             <button
               disabled={
@@ -251,23 +248,22 @@ export function Claims({ admin = false }: { admin?: boolean }) {
               }
               onClick={() => prepare('allowlist')}
             >
-              Review allowlist claim
+              Claim
             </button>
           </section>
           <section className={styles.panel}>
-            <h2>Merkle claim</h2>
+            <h2>Claim with a proof</h2>
             <p>
-              Round: {data?.merkle.round ?? 'unavailable'} · Claim:{' '}
-              {marker(data?.merkle.claimed, 'already claimed', 'unclaimed')}
+              Status: {marker(data?.merkle.claimed, 'already claimed', 'not claimed yet')} · round{' '}
+              {data?.merkle.round ?? '–'}
             </p>
             <p className={styles.address}>Root: {data?.merkle.root ?? 'unavailable'}</p>
             <p>
-              Obtain your exact amount and proof from the allocation organizer. Upload or paste JSON with a decimal
-              string amount and up to 32 sibling hashes (64-character hex). Empty proofs are valid only for a
-              single-leaf root. No proof is generated here.
+              The organizer gives you a small proof file with your amount. Upload it or paste it below; we check it
+              before you sign.
             </p>
             <label>
-              Proof JSON file
+              Proof file
               <input
                 type="file"
                 accept=".json,application/json"
@@ -290,7 +286,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
               />
             </label>
             <label>
-              Proof JSON
+              Or paste it
               <textarea
                 value={proofText}
                 placeholder={'{"amount":"5","proof":[]}'}
@@ -313,38 +309,32 @@ export function Claims({ admin = false }: { admin?: boolean }) {
               }
               onClick={() => prepare('merkle')}
             >
-              Validate proof and review
+              Check proof
             </button>
           </section>
         </div>
       )}
       {review ? (
         <section className={`${styles.panel} ${styles.review}`} aria-label="Claim transaction review">
-          <h2>Review before signing</h2>
+          <h2>Claim {review.prepared.amount} tokens</h2>
           <p>
-            Claim {review.prepared.amount} tokens by {review.prepared.method} in round {review.prepared.round}.
+            Network fee: {review.prepared.fee} stroops (10,000,000 stroops = 1 XLM). The tokens themselves are free.
           </p>
-          <p className={styles.address}>
-            Recipient / signer: {review.prepared.address}
-            <br />
-            Token: {review.prepared.tokenContractId}
-            <br />
-            Minter: {review.prepared.minterContractId}
-          </p>
-          <p>
-            Network: {config.label || config.name} · Fee: {review.prepared.fee} stroops (10,000,000 stroops = 1 XLM). No
-            allocation payment.
-          </p>
-          <p>
-            This authorizes the Minter claim and its token batch mint. No separate address authorization or
-            smart-account signing is supported.
-          </p>
+          <Disclosure title="Technical details">
+            <p>
+              Method: {review.prepared.method} · round {review.prepared.round}. Signing authorizes the Minter claim and
+              its batch mint; smart-account signing isn&apos;t supported.
+            </p>
+            <Address value={review.prepared.address} label="Recipient and signer" />
+            <Address value={review.prepared.tokenContractId} label="Token" />
+            <Address value={review.prepared.minterContractId} label="Minter" />
+          </Disclosure>
           <div className={styles.row}>
             <button disabled={busy || !allowed} onClick={sign}>
-              Sign and submit claim
+              Sign and claim
             </button>
             <button disabled={busy} onClick={() => setReview(null)}>
-              Cancel review
+              Cancel
             </button>
           </div>
         </section>
@@ -356,51 +346,42 @@ export function Claims({ admin = false }: { admin?: boolean }) {
           </p>
           {hash ? (
             <>
-              <p className={styles.address}>Transaction: {hash}</p>
-              {config.name !== 'local' ? (
-                <a href={getExplorerTxUrl(config.name, hash)} target="_blank" rel="noreferrer">
-                  View transaction ↗
-                </a>
-              ) : null}
-              <p>
-                Do not resubmit while confirmation is uncertain. Verify this hash before refreshing to start another
-                claim.
-              </p>
+              <Address value={hash} label="Transaction" />
+              <p>Don&apos;t claim again while this is confirming. Check the transaction before trying again.</p>
             </>
           ) : null}
         </section>
       ) : null}
       <section className={styles.panel}>
-        <h2>Indexed claim history</h2>
+        <h2>Past claims</h2>
         <p>
-          Successful Merkle and allowlist events only. Events do not contain round IDs, so this history does not
-          establish current eligibility or current-round claim counts.
+          Every successful claim, across all rounds. It doesn&apos;t tell you whether you can claim in the current
+          round.
         </p>
         {history.error ? (
           <p role="alert">{history.error.message}</p>
         ) : history.isLoading ? (
-          <p role="status">Loading indexed claims…</p>
+          <p role="status">Loading past claims…</p>
         ) : history.data ? (
           <>
-            <p>{history.data.total} successful claim events across all rounds.</p>
+            <p>{history.data.total} claims so far.</p>
             {history.data.items.length ? (
               <ul className={styles.history}>
                 {history.data.items.map((item) => (
                   <li key={item.claim_id}>
                     <p>
-                      {item.claim_type}: {item.amount ?? 'unknown amount'} tokens · ledger {item.ledger_sequence}
+                      {item.amount ?? 'Some'} tokens · {item.claim_type === 'merkle' ? 'with a proof' : 'from the list'}{' '}
+                      · ledger {item.ledger_sequence}
                     </p>
-                    <p className={styles.address}>Recipient: {item.recipient ?? 'unavailable'}</p>
-                    {item.transaction_hash && config.name !== 'local' ? (
-                      <a href={getExplorerTxUrl(config.name, item.transaction_hash)} target="_blank" rel="noreferrer">
-                        View claim transaction ↗
-                      </a>
+                    {item.recipient ? <Address value={item.recipient} label="Recipient" compact /> : null}
+                    {item.transaction_hash ? (
+                      <Address value={item.transaction_hash} label="Transaction" compact />
                     ) : null}
                   </li>
                 ))}
               </ul>
             ) : (
-              <p>No indexed claims yet. Recent confirmations may still be indexing.</p>
+              <p>No claims yet. A claim you just made can take a moment to show up.</p>
             )}
             <div className={styles.row}>
               <button disabled={page === 0} onClick={() => setPage(page - 1)}>
@@ -414,12 +395,12 @@ export function Claims({ admin = false }: { admin?: boolean }) {
           </>
         ) : null}
       </section>
-    </main>
+    </div>
   );
 }
 
 function marker(value: boolean | null | undefined, yes: string, no: string) {
-  return value === true ? yes : value === false ? no : 'not present / archived (simulation required)';
+  return value === true ? yes : value === false ? no : 'unknown (we check before you sign)';
 }
 
 function AllocationInfo({ state }: { state?: ClaimState }) {
