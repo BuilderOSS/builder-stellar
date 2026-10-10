@@ -1,5 +1,6 @@
 'use client';
 import { Input, Textarea } from '@/components/ui';
+import { followsName, suggestSlug, suggestSymbol } from '@/lib/create-dao-identity';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
 import { CreationField, fieldAccessibility } from './CreationField';
@@ -12,6 +13,10 @@ export function BasicInfoStep() {
   const errors = useCreateDaoStore((s) => s.validationErrors);
   const update = useCreateDaoStore((s) => s.updateBasicInfo);
   const clear = useCreateDaoStore((s) => s.clearValidationError);
+  // Symbol and slug follow the name until someone types their own.
+  const symbolFollows =
+    Boolean(basicInfo.tokenName) && followsName(basicInfo.tokenSymbol, basicInfo.tokenName, suggestSymbol);
+  const slugFollows = Boolean(basicInfo.tokenName) && followsName(basicInfo.slug, basicInfo.tokenName, suggestSlug);
   return (
     <div className={styles.stack}>
       <div className={styles.identity}>
@@ -24,12 +29,31 @@ export function BasicInfoStep() {
               maxLength={80}
               {...fieldAccessibility('tokenName', errors)}
               onChange={(e) => {
-                update({ tokenName: e.target.value });
+                const name = e.target.value;
+                const previous = basicInfo.tokenName;
+                const patch: Parameters<typeof update>[0] = { tokenName: name };
+                if (followsName(basicInfo.tokenSymbol, previous, suggestSymbol)) {
+                  patch.tokenSymbol = suggestSymbol(name);
+                  clear('tokenSymbol');
+                }
+                if (followsName(basicInfo.slug, previous, suggestSlug)) {
+                  patch.slug = suggestSlug(name);
+                  clear('slug');
+                }
+                update(patch);
                 clear('tokenName');
               }}
             />
           </CreationField>
-          <CreationField id="tokenSymbol" label="Symbol">
+          <CreationField
+            id="tokenSymbol"
+            label="Symbol"
+            hint={
+              symbolFollows
+                ? 'Filled in from the name. Type to choose your own.'
+                : 'Up to 12 capital letters or numbers, like a ticker.'
+            }
+          >
             <Input
               id="tokenSymbol"
               autoComplete="off"
@@ -42,7 +66,15 @@ export function BasicInfoStep() {
               }}
             />
           </CreationField>
-          <CreationField id="slug" label="URL slug">
+          <CreationField
+            id="slug"
+            label="URL slug"
+            hint={
+              basicInfo.slug
+                ? `Your link: /dao/${basicInfo.slug}${slugFollows ? ' · filled in from the name' : ''}`
+                : 'Lowercase letters, numbers and hyphens. Filled in from the name.'
+            }
+          >
             <Input
               id="slug"
               autoComplete="off"
