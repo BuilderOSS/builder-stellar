@@ -1,15 +1,78 @@
 'use client';
 
-import Link from 'next/link';
+import { Bookmark, BookmarkCheck } from 'lucide-react';
+import type { Route } from 'next';
+import NextLink from 'next/link';
 import { useDeferredValue, useState } from 'react';
+import { css } from 'styled-system/css';
 
+import { PageSection } from '@/components/page-section';
+import {
+  Button,
+  ButtonLink,
+  Checkbox,
+  Chip,
+  Crest,
+  Disclosure,
+  EmptyState,
+  ErrorState,
+  Field,
+  FieldLabel,
+  IconButton,
+  Input,
+  Pagination,
+  SearchInput,
+  SegmentedControl,
+  Select,
+  Skeleton
+} from '@/components/ui';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { useMarketplaceDirectory, useMarketplaceOffers } from '@/lib/marketplace/hooks';
 import { useMarketplacePreferences } from '@/lib/marketplace/preferences';
 
 import { ListingCard } from './listing-card';
-import styles from './marketplace.module.css';
+import styles from './marketplace-styles';
 
+const toolbar = css({
+  display: 'grid',
+  gap: '3',
+  gridTemplateColumns: { base: '1fr', md: 'minmax(0, 1fr) 220px auto' },
+  alignItems: 'center'
+});
+const viewRow = css({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: '3'
+});
+const card = css({
+  display: 'grid',
+  gap: '3',
+  p: '4',
+  minW: '0',
+  bg: 'surface',
+  borderRadius: 'card',
+  boxShadow: 'raised'
+});
+const cardHead = css({ display: 'flex', alignItems: 'center', gap: '3' });
+const cardName = css({ textStyle: 'heading', fontSize: '1.0625rem', m: '0', overflowWrap: 'anywhere' });
+const cardDescription = css({ textStyle: 'body', color: 'ink.muted', m: '0', lineClamp: '3' });
+const chips = css({ display: 'flex', flexWrap: 'wrap', gap: '1.5' });
+const note = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
+const skeletonGrid = css({
+  display: 'grid',
+  gap: '4',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))'
+});
+
+const CAPABILITY_LABEL: Record<string, string> = {
+  marketplace: 'Market',
+  auction: 'Auction',
+  metadata: 'Artwork'
+};
+
+/** Platform-wide market: communities first, then tokens for sale across them. */
 export function MarketplaceDirectoryView() {
   const network = getDeploymentConfig();
   const { preferences, update, storageIssue } = useMarketplacePreferences();
@@ -27,129 +90,116 @@ export function MarketplaceDirectoryView() {
   const result = view === 'communities' ? directory : offers;
   const communities =
     directory.data?.communities.filter((c) => !savedOnly || preferences.favorites.includes(c.daoId)) ?? [];
+  const isEmpty =
+    !result.isLoading &&
+    !result.error &&
+    (view === 'communities' ? communities.length === 0 : offers.data?.listings.length === 0);
+
   return (
     <div className={styles.root}>
-      <div className={styles.stack}>
-        <section className={styles.hero}>
-          <p className={styles.eyebrow}>Discover · collect · participate</p>
-          <h1>
-            A marketplace for
-            <br />
-            community ownership.
-          </h1>
-          <p>
-            Find a community first. Buy a newly minted governance NFT to support its Treasury, or trade an existing
-            token with another member.
-          </p>
-        </section>
-        <div className={styles.row} role="group" aria-label="Marketplace view">
-          <button
-            type="button"
-            aria-pressed={view === 'communities'}
-            onClick={() => {
-              setView('communities');
+      <PageSection
+        title="Market"
+        description="Buy a new token to support a community's treasury, or trade with another member."
+      >
+        <div className={viewRow}>
+          <SegmentedControl
+            label="Market view"
+            value={view}
+            onValueChange={(next) => {
+              setView(next as 'communities' | 'offers');
               setPage(0);
             }}
-          >
-            Communities
-          </button>
-          <button
-            type="button"
-            aria-pressed={view === 'offers'}
-            onClick={() => {
-              setView('offers');
-              setPage(0);
-            }}
-          >
-            Primary & secondary offers
-          </button>
-          <button type="button" className={styles.quiet} onClick={() => update({ home: view })}>
-            Use this as my marketplace home
-          </button>
+            options={[
+              { value: 'communities', label: 'Communities' },
+              { value: 'offers', label: 'For sale' }
+            ]}
+          />
+          {preferences.home !== view ? (
+            <Button variant="ghost" size="sm" onClick={() => update({ home: view })}>
+              Open the market here next time
+            </Button>
+          ) : null}
         </div>
-        <div className={styles.filters}>
-          <label>
-            Search communities
-            <input
-              type="search"
-              maxLength={120}
-              value={search}
-              placeholder="Name, symbol, or description"
+
+        <div className={toolbar}>
+          <SearchInput
+            label="Search communities"
+            placeholder="Name, symbol or description"
+            maxLength={120}
+            value={search}
+            onValueChange={(value) => {
+              setSearch(value);
+              setPage(0);
+            }}
+          />
+          <Select
+            aria-label="Filter by what a community runs"
+            value={capability}
+            onChange={(e) => {
+              setCapability(e.target.value);
+              setPage(0);
+            }}
+          >
+            <option value="all">Everything</option>
+            <option value="marketplace">Has a market</option>
+            <option value="auction">Runs auctions</option>
+            <option value="metadata">Has artwork</option>
+          </Select>
+          {view === 'offers' ? (
+            <Select
+              aria-label="Offer type"
+              value={kind}
               onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(0);
-              }}
-            />
-          </label>
-          <label>
-            Indexed capability
-            <select
-              value={capability}
-              onChange={(e) => {
-                setCapability(e.target.value);
+                setKind(e.target.value);
                 setPage(0);
               }}
             >
-              <option value="all">All capabilities</option>
-              <option value="marketplace">Marketplace enabled</option>
-              <option value="auction">Auction enabled</option>
-              <option value="metadata">Metadata module</option>
-            </select>
-          </label>
-          {view === 'offers' ? (
-            <label>
-              Offer type
-              <select
-                value={kind}
-                onChange={(e) => {
-                  setKind(e.target.value);
-                  setPage(0);
-                }}
-              >
-                <option value="all">Primary & secondary</option>
-                <option value="primary">Primary new mints</option>
-                <option value="secondary">Secondary resales</option>
-              </select>
-            </label>
+              <option value="all">New and resale</option>
+              <option value="primary">New from the community</option>
+              <option value="secondary">Resale from members</option>
+            </Select>
           ) : (
-            <label className={styles.check}>
-              <input type="checkbox" checked={savedOnly} onChange={(e) => setSavedOnly(e.target.checked)} />
-              Saved on this device (current page)
-            </label>
+            <Checkbox label="Saved only" checked={savedOnly} onCheckedChange={setSavedOnly} />
           )}
         </div>
-        <p className={styles.muted}>
-          Capabilities come from indexed launch choices and module wiring, not public tags. Saved communities, private
-          labels and home preferences stay in this browser only.
-        </p>
-        {storageIssue ? <p role="status">{storageIssue}</p> : null}
+
+        {storageIssue ? <p className={note}>{storageIssue}</p> : null}
         {result.error ? (
-          <div role="alert" className={styles.notice}>
-            <p>{result.error.message}</p>
-            <button type="button" onClick={() => void result.mutate()}>
-              Retry loading
-            </button>
-          </div>
+          <ErrorState
+            title="The market didn't load"
+            cause={result.error.message}
+            actions={
+              <Button variant="secondary" onClick={() => void result.mutate()}>
+                Try again
+              </Button>
+            }
+          />
         ) : null}
         {result.isLoading ? (
-          <p role="status" className={styles.notice}>
-            Loading marketplace from the indexed deployment…
-          </p>
+          <div className={skeletonGrid} role="status" aria-busy="true">
+            <span className="sr-only">Loading the market</span>
+            {Array.from({ length: 3 }, (_, index) => (
+              <Skeleton key={index} className={css({ height: '56', borderRadius: 'card' })} />
+            ))}
+          </div>
         ) : null}
+
         {view === 'communities' ? (
-          <section className={styles.grid} aria-label="Community directory">
+          <section className={styles.grid} aria-label="Communities">
             {communities.map((community) => {
               const saved = preferences.favorites.includes(community.daoId);
+              const label = preferences.labels[community.daoId];
               return (
-                <article className={styles.card} key={community.daoId}>
-                  <div className={styles.row}>
-                    <span className={styles.monogram} aria-hidden="true">
-                      {community.name.slice(0, 2).toUpperCase()}
-                    </span>
-                    <button
-                      type="button"
+                <article className={card} key={community.daoId}>
+                  <div className={cardHead}>
+                    <Crest name={community.name} seed={community.tokenContract || community.daoId} size="lg" />
+                    <div className={css({ minW: '0', flex: '1' })}>
+                      <h2 className={cardName}>{community.name}</h2>
+                      <p className={note}>{[community.symbol, label].filter(Boolean).join(' · ') || 'Community'}</p>
+                    </div>
+                    <IconButton
+                      label={`${saved ? 'Unsave' : 'Save'} ${community.name}`}
                       aria-pressed={saved}
-                      aria-label={`${saved ? 'Unsave' : 'Save'} ${community.name} privately`}
                       onClick={() =>
                         update({
                           favorites: saved
@@ -158,49 +208,41 @@ export function MarketplaceDirectoryView() {
                         })
                       }
                     >
-                      {saved ? 'Saved' : 'Save'}
-                    </button>
+                      {saved ? <BookmarkCheck aria-hidden="true" /> : <Bookmark aria-hidden="true" />}
+                    </IconButton>
                   </div>
-                  <h2>{community.name}</h2>
-                  <p className={styles.eyebrow}>
-                    {community.symbol || 'Community'} · {community.status}
-                  </p>
-                  <p className={styles.description}>
-                    {community.description || 'This community has not published a description.'}
-                  </p>
-                  <div className={styles.row}>
-                    {community.capabilities.length ? (
-                      community.capabilities.map((c) => (
-                        <span className={styles.chip} key={c}>
-                          {c === 'metadata' ? 'Metadata module' : `${c} enabled`}
-                        </span>
-                      ))
-                    ) : (
-                      <span className={styles.muted}>No enabled capabilities indexed</span>
-                    )}
-                  </div>
-                  <details>
-                    <summary>Private label (only on this device)</summary>
-                    <label>
-                      My label
-                      <input
+                  {community.description ? <p className={cardDescription}>{community.description}</p> : null}
+                  {community.capabilities.length ? (
+                    <div className={chips}>
+                      {community.capabilities.map((capabilityName) => (
+                        <Chip key={capabilityName} tone="outline">
+                          {CAPABILITY_LABEL[capabilityName] ?? capabilityName}
+                        </Chip>
+                      ))}
+                    </div>
+                  ) : null}
+                  <Disclosure title="Your private label">
+                    <Field>
+                      <FieldLabel htmlFor={`label-${community.daoId}`}>Only you see this, on this device</FieldLabel>
+                      <Input
+                        id={`label-${community.daoId}`}
                         maxLength={60}
-                        value={preferences.labels[community.daoId] ?? ''}
+                        value={label ?? ''}
                         onChange={(e) =>
                           update({ labels: { ...preferences.labels, [community.daoId]: e.target.value } })
                         }
                       />
-                    </label>
-                  </details>
-                  <Link className={styles.button} href={`/dao/${community.daoId}/marketplace`}>
-                    Explore marketplace →
-                  </Link>
+                    </Field>
+                  </Disclosure>
+                  <ButtonLink href={`/dao/${community.daoId}/marketplace` as Route} variant="secondary" block>
+                    See what&apos;s for sale
+                  </ButtonLink>
                 </article>
               );
             })}
           </section>
         ) : (
-          <section className={styles.grid} aria-label="Marketplace offers">
+          <section className={styles.grid} aria-label="For sale">
             {offers.data?.listings.map((listing) => {
               const community = offers.data?.communities.find((c) => c.daoId === listing.daoId);
               return community ? (
@@ -209,31 +251,48 @@ export function MarketplaceDirectoryView() {
             })}
           </section>
         )}
-        {!result.isLoading &&
-        !result.error &&
-        (view === 'communities' ? communities.length === 0 : offers.data?.listings.length === 0) ? (
-          <div className={styles.empty}>
-            <h2>No matches on this page</h2>
-            <p>
-              Try another search or capability. Offers appear after a community creates a primary listing through
-              governance or a member escrows an owned token.
-            </p>
-          </div>
+
+        {isEmpty ? (
+          <EmptyState
+            title="Nothing here yet"
+            action={
+              search || capability !== 'all' || savedOnly || kind !== 'all' ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setSearch('');
+                    setCapability('all');
+                    setKind('all');
+                    setSavedOnly(false);
+                    setPage(0);
+                  }}
+                >
+                  Clear filters
+                </Button>
+              ) : undefined
+            }
+          >
+            Tokens show up once a community lists new ones by vote, or a member puts one up for sale.
+          </EmptyState>
         ) : null}
-        <div className={styles.row}>
-          <button type="button" disabled={page === 0 || result.isLoading} onClick={() => setPage(page - 1)}>
-            Previous
-          </button>
-          <span>Page {page + 1}</span>
-          <button type="button" disabled={!result.data?.hasMore || result.isLoading} onClick={() => setPage(page + 1)}>
-            Next
-          </button>
-        </div>
-        <footer className={styles.muted}>
-          Verified XLM and USDC prices use exact 7-decimal amounts; unknown assets are shown in base units. An indexed
-          offer is not a guarantee of availability; every trade checks live state before you sign.
-        </footer>
-      </div>
+
+        <Pagination
+          label="Market pages"
+          page={page + 1}
+          hasPrevious={page > 0}
+          hasNext={Boolean(result.data?.hasMore)}
+          onPrevious={() => setPage(page - 1)}
+          onNext={() => setPage(page + 1)}
+          disabled={result.isLoading}
+        />
+        <p className={note}>
+          Saved communities, labels and your market view stay on this device. Every trade checks the live chain before
+          you sign, so a listing shown here may already be gone.{' '}
+          <NextLink href="/discover" className={css({ color: 'signal' })}>
+            Discover communities
+          </NextLink>
+        </p>
+      </PageSection>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import type { Route } from 'next';
 import Link from 'next/link';
 
-import styles from './marketplace.module.css';
+import styles from './marketplace-styles';
 
 /** Compatibility export for the dashboard owner; this now links to the usable marketplace. */
 export function MarketplaceComingSoon({ daoName, daoHref }: { daoName?: string; daoHref?: string }) {

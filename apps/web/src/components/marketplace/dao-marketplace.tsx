@@ -1,15 +1,57 @@
 'use client';
 
-import Link from 'next/link';
+import { Tag } from 'lucide-react';
 import { useState } from 'react';
+import { css } from 'styled-system/css';
 
-import { getExplorerTxUrl } from '@/lib/explorer-links';
+import { PageSection } from '@/components/page-section';
+import {
+  Address,
+  Amount,
+  Button,
+  ButtonLink,
+  Callout,
+  Chip,
+  Disclosure,
+  EmptyState,
+  ErrorState,
+  ListRow,
+  Pagination,
+  Section,
+  Select,
+  Skeleton
+} from '@/components/ui';
+import { daoRoute } from '@/lib/dao-routes';
 import { marketplaceAssetLabel, marketplaceDisplayAmount } from '@/lib/marketplace/asset-label';
 import { useDaoMarketplace, useMarketplaceListing } from '@/lib/marketplace/hooks';
 
 import { ListingCard } from './listing-card';
-import styles from './marketplace.module.css';
+import styles from './marketplace-styles';
 import { SellForm } from './sell-form';
+
+const statusCard = css({
+  display: 'grid',
+  gap: '2',
+  p: '4',
+  borderRadius: 'card',
+  bg: 'surface',
+  boxShadow: 'raised'
+});
+const statusRow = css({
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: '3'
+});
+const note = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
+const filters = css({
+  display: 'grid',
+  gap: '3',
+  gridTemplateColumns: { base: '1fr 1fr', md: '220px 220px 1fr' },
+  alignItems: 'center'
+});
+const sellButton = css({ gridColumn: { base: '1 / -1', md: 'auto' }, justifySelf: { md: 'end' } });
 
 export function DaoMarketplaceView({
   daoId,
@@ -33,99 +75,105 @@ export function DaoMarketplaceView({
   const query = new URLSearchParams({ kind, status, page: String(page) }).toString();
   const { data, error, isLoading, mutate } = useDaoMarketplace(daoId, query);
   const selected = useMarketplaceListing(daoId, initialKind, selectedId, selectedEventId);
+  const purchasesEnabled = Boolean(data?.launched && data.config && !data.config.paused);
+  const marketState = !data
+    ? null
+    : !data.community.marketplaceContract
+      ? { label: "This community doesn't have a market", tone: 'neutral' as const }
+      : !data.launched
+        ? { label: "The market hasn't opened yet", tone: 'warning' as const }
+        : !data.config
+          ? { label: "We couldn't read the market's live status", tone: 'warning' as const }
+          : data.config.paused
+            ? { label: 'The market is paused', tone: 'warning' as const }
+            : { label: 'Open for trading', tone: 'live' as const };
+
   return (
     <div className={styles.scoped}>
-      <div className={styles.stack}>
-        <div className={styles.row}>
-          <Link href="/marketplace">← All communities</Link>
-          <Link href={`/dao/${daoId}/admin/marketplace`}>Manage through governance</Link>
-        </div>
-        <section className={styles.hero}>
-          <p className={styles.eyebrow}>Community marketplace</p>
-          <h1>{data?.community.name || 'Marketplace'}</h1>
-          <p>
-            Primary purchases fund the Treasury and mint directly to you. Secondary purchases transfer an existing
-            escrowed token.
-          </p>
-        </section>
+      <PageSection
+        title="Market"
+        description="Buy a new token straight from the community, or a resale from a member. New sales fund the treasury."
+        actions={
+          <ButtonLink href={daoRoute(daoId, 'admin/marketplace')} variant="ghost">
+            Market settings
+          </ButtonLink>
+        }
+      >
         {error ? (
-          <div role="alert" className={styles.notice}>
-            <p>{error.message}</p>
-            <button type="button" onClick={() => void mutate()}>
-              Retry
-            </button>
-          </div>
+          <ErrorState
+            title="The market didn't load"
+            cause={error.message}
+            actions={
+              <Button variant="secondary" onClick={() => void mutate()}>
+                Try again
+              </Button>
+            }
+          />
         ) : null}
-        {isLoading ? <p role="status">Loading community marketplace…</p> : null}
-        {data ? (
+        {isLoading ? <Skeleton className={css({ height: '24', borderRadius: 'card' })} /> : null}
+        {data && marketState ? (
           <>
-            <div className={styles.notice}>
-              <div className={styles.row}>
-                <strong>
-                  {!data.community.marketplaceContract
-                    ? 'No marketplace module'
-                    : !data.launched
-                      ? 'Not launched'
-                      : !data.config
-                        ? 'Live status unavailable'
-                        : data.config.paused
-                          ? 'Marketplace paused'
-                          : 'Marketplace open'}
-                </strong>
+            <div className={statusCard}>
+              <div className={statusRow}>
+                <Chip tone={marketState.tone}>{marketState.label}</Chip>
                 {data.config ? (
-                  <span>
-                    New listings use {marketplaceAssetLabel(data.network, data.config.paymentAsset)} ·{' '}
-                    {data.config.feeBps} bps secondary fee
+                  <span className={note}>
+                    Prices in {marketplaceAssetLabel(data.network, data.config.paymentAsset)} · resale fee{' '}
+                    {(data.config.feeBps / 100).toLocaleString()}%
                   </span>
                 ) : null}
               </div>
-              <p className={styles.muted}>
-                Existing offers keep the asset and fee captured when they were created. Cancellations and expiry
-                recovery do not require purchases to be open.
+              <p className={note}>
+                Listings keep the price asset and fee they were created with. Canceling and clearing expired listings
+                work even while buying is paused.
               </p>
-              {data.configError ? <p role="alert">{data.configError}</p> : null}
+              {data.configError ? <Callout variant="warning" title={data.configError} /> : null}
             </div>
-            <div className={styles.filters}>
-              <label>
-                Listing type
-                <select
-                  value={kind}
-                  onChange={(e) => {
-                    setKind(e.target.value);
-                    setPage(0);
-                  }}
+
+            <div className={filters}>
+              <Select
+                aria-label="Listing type"
+                value={kind}
+                onChange={(e) => {
+                  setKind(e.target.value);
+                  setPage(0);
+                }}
+              >
+                <option value="all">New and resale</option>
+                <option value="primary">New from the community</option>
+                <option value="secondary">Resale from members</option>
+              </Select>
+              <Select
+                aria-label="Listing status"
+                value={status}
+                onChange={(e) => {
+                  setStatus(e.target.value);
+                  setPage(0);
+                }}
+              >
+                <option value="open">For sale now</option>
+                <option value="all">Everything</option>
+                <option value="purchased">Sold</option>
+                <option value="cancelled">Canceled</option>
+                <option value="expired">Expired and cleared</option>
+              </Select>
+              <div className={sellButton}>
+                <Button
+                  variant={selling ? 'ghost' : 'secondary'}
+                  aria-expanded={selling}
+                  onClick={() => setSelling(!selling)}
                 >
-                  <option value="all">All offers</option>
-                  <option value="primary">Primary new mints</option>
-                  <option value="secondary">Secondary resales</option>
-                </select>
-              </label>
-              <label>
-                Status
-                <select
-                  value={status}
-                  onChange={(e) => {
-                    setStatus(e.target.value);
-                    setPage(0);
-                  }}
-                >
-                  <option value="open">Open & awaiting expiry</option>
-                  <option value="all">All listing history</option>
-                  <option value="purchased">Purchased</option>
-                  <option value="cancelled">Cancelled</option>
-                  <option value="expired">Cleared expired</option>
-                </select>
-              </label>
-              <button type="button" aria-expanded={selling} onClick={() => setSelling(!selling)}>
-                {selling ? 'Hide sale form' : 'Sell an owned token'}
-              </button>
+                  <Tag aria-hidden="true" />
+                  {selling ? 'Close' : 'Sell a token you own'}
+                </Button>
+              </div>
             </div>
+
             {selling ? <SellForm data={data} /> : null}
-            {selected.error ? <p role="alert">{selected.error.message}</p> : null}
-            {selected.isLoading ? <p role="status">Loading selected listing…</p> : null}
+            {selected.error ? <Callout variant="error" title={selected.error.message} /> : null}
+            {selected.isLoading ? <Skeleton className={css({ height: '40', borderRadius: 'card' })} /> : null}
             {selected.data ? (
-              <section className={styles.panel} aria-label="Selected listing">
-                <h2>Selected listing</h2>
+              <Section title="The listing you opened">
                 <ListingCard
                   key={selected.data.listing.eventId}
                   listing={selected.data.listing}
@@ -133,99 +181,77 @@ export function DaoMarketplaceView({
                   network={data.network}
                   trading
                   initiallyExpanded
-                  purchasesEnabled={Boolean(data.launched && data.config && !data.config.paused)}
+                  purchasesEnabled={purchasesEnabled}
                 />
+              </Section>
+            ) : null}
+
+            {data.listings.length ? (
+              <section className={styles.grid} aria-label="Listings">
+                {data.listings.map((listing) => (
+                  <ListingCard
+                    key={listing.eventId}
+                    listing={listing}
+                    community={data.community}
+                    network={data.network}
+                    trading
+                    purchasesEnabled={purchasesEnabled}
+                  />
+                ))}
               </section>
-            ) : null}
-            <section className={styles.grid} aria-label="Community listings">
-              {data.listings.map((listing) => (
-                <ListingCard
-                  key={listing.eventId}
-                  listing={listing}
-                  community={data.community}
-                  network={data.network}
-                  trading
-                  purchasesEnabled={Boolean(data.launched && data.config && !data.config.paused)}
-                />
-              ))}
-            </section>
-            {!data.listings.length ? (
-              <div className={styles.empty}>
-                <h2>No listings match this view</h2>
-                <p>
-                  Primary listings are created by governance. Members can list tokens they own using the secondary sale
-                  form.
-                </p>
-              </div>
-            ) : null}
-            <div className={styles.row}>
-              <button type="button" disabled={page === 0} onClick={() => setPage(page - 1)}>
-                Previous
-              </button>
-              <span>Listing & history page {page + 1}</span>
-              <button type="button" disabled={!data.hasMore && !data.salesHasMore} onClick={() => setPage(page + 1)}>
-                Next
-              </button>
-            </div>
-            <section className={styles.panel} aria-labelledby="sales-title">
-              <h2 id="sales-title">Completed sales</h2>
-              <p className={styles.muted}>
-                Indexed settlement history. Primary listing IDs are separate from minted token IDs.
-              </p>
+            ) : (
+              <EmptyState title="Nothing for sale here">
+                New tokens are listed by a community vote. Members can sell a token they hold with the button above.
+              </EmptyState>
+            )}
+
+            <Pagination
+              label="Listing pages"
+              page={page + 1}
+              hasPrevious={page > 0}
+              hasNext={data.hasMore || data.salesHasMore}
+              onPrevious={() => setPage(page - 1)}
+              onNext={() => setPage(page + 1)}
+            />
+
+            <Section title="Recent sales" description="New listing numbers are separate from token numbers.">
               {!data.sales.length ? (
-                <p>No completed sales indexed on this page.</p>
+                <p className={note}>No sales on this page yet.</p>
               ) : (
-                <div className={styles.tableWrap}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Sale</th>
-                        <th>Token</th>
-                        <th>Price</th>
-                        <th>Fee</th>
-                        <th>Date & transaction</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                <div>
+                  {data.sales.map((sale) => (
+                    <ListRow
+                      key={sale.eventId}
+                      title={`#${sale.tokenId}`}
+                      meta={`${sale.kind === 'primary' ? 'New' : 'Resale'}${sale.listingId ? ` · listing ${sale.listingId}` : ''}${
+                        sale.at ? ` · ${new Date(sale.at).toLocaleDateString()}` : ''
+                      }${sale.fee ? ` · fee ${marketplaceDisplayAmount(data.network, sale.paymentAsset, sale.fee)}` : ''}`}
+                      trailing={
+                        <Amount
+                          value={marketplaceDisplayAmount(data.network, sale.paymentAsset, sale.price)}
+                          unit={marketplaceAssetLabel(data.network, sale.paymentAsset)}
+                        />
+                      }
+                    />
+                  ))}
+                  {data.network !== 'local' ? (
+                    <Disclosure title="Transactions">
                       {data.sales.map((sale) => (
-                        <tr key={sale.eventId}>
-                          <td>
-                            {sale.kind}
-                            {sale.listingId ? ` listing #${sale.listingId}` : ''}
-                          </td>
-                          <td>#{sale.tokenId}</td>
-                          <td>
-                            {marketplaceDisplayAmount(data.network, sale.paymentAsset, sale.price)}{' '}
-                            {marketplaceAssetLabel(data.network, sale.paymentAsset)}
-                          </td>
-                          <td>
-                            {sale.fee ? marketplaceDisplayAmount(data.network, sale.paymentAsset, sale.fee) : 'None'}
-                          </td>
-                          <td>
-                            {sale.at ? new Date(sale.at).toLocaleString() : 'Timestamp not indexed'}
-                            {data.network !== 'local' ? (
-                              <>
-                                <br />
-                                <a
-                                  href={getExplorerTxUrl(data.network, sale.transactionHash)}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  View settlement ↗
-                                </a>
-                              </>
-                            ) : null}
-                          </td>
-                        </tr>
+                        <Address
+                          key={sale.eventId}
+                          value={sale.transactionHash}
+                          label={`Sale of #${sale.tokenId}`}
+                          compact
+                        />
                       ))}
-                    </tbody>
-                  </table>
+                    </Disclosure>
+                  ) : null}
                 </div>
               )}
-            </section>
+            </Section>
           </>
         ) : null}
-      </div>
+      </PageSection>
     </div>
   );
 }

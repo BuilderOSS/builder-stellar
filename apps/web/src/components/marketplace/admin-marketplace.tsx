@@ -14,7 +14,7 @@ import type { ActionHandler, ProposalQueuedAction } from '@/lib/proposal-actions
 import { type PendingAdminProposal, useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
-import styles from './marketplace.module.css';
+import styles from './marketplace-styles';
 import { TreasuryPurchase } from './treasury-purchase';
 
 export function AdminMarketplaceView({ daoId }: { daoId: string }) {
@@ -142,7 +142,13 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
                 <input type="datetime-local" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
               </label>
             </div>
-            <button type="button" className={styles.primary} disabled={!enabled} onClick={() => queue('create')}>
+            <button
+              type="button"
+              className={styles.primary}
+              data-variant="primary"
+              disabled={!enabled}
+              onClick={() => queue('create')}
+            >
               Add create-listing action to proposal
             </button>
           </div>
@@ -327,7 +333,7 @@ function MarketplaceDraftReview({
             </button>
           ) : null}
           {!duplicate && !conflict ? (
-            <button type="button" className={styles.primary} onClick={() => onResolve('add')}>
+            <button type="button" className={styles.primary} data-variant="primary" onClick={() => onResolve('add')}>
               Add to draft & open composer
             </button>
           ) : null}

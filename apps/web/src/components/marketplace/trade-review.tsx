@@ -19,7 +19,7 @@ import type { MarketplaceAction, MarketplacePrepared } from '@/lib/marketplace/t
 import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
-import styles from './marketplace.module.css';
+import styles from './marketplace-styles';
 
 export function TradeReview({
   daoId,
@@ -37,9 +37,7 @@ export function TradeReview({
   const dialog = useRef<HTMLDialogElement>(null);
   const [prepared, setPrepared] = useState<MarketplacePrepared | null>(null);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState(
-    'Review the action, then check balances and simulate. No signature is requested until you choose Sign and submit.'
-  );
+  const [message, setMessage] = useState('Check the details first. Nothing is signed until you press Sign and send.');
   const [hash, setHash] = useState('');
   const [confirmed, setConfirmed] = useState(false);
   const inFlight = useRef(false);
@@ -73,7 +71,7 @@ export function TradeReview({
       )
         throw new Error('Transaction identity does not match this session.');
       setPrepared(result);
-      setMessage('Simulation passed. Review the exact terms and network fee below.');
+      setMessage('Looks good. Review the exact terms and network fee below.');
     } catch (error) {
       setMessage(marketplaceErrorMessage(error));
     } finally {
@@ -139,7 +137,7 @@ export function TradeReview({
         const server = new rpc.Server(prepared.rpcUrl, { allowHttp: network.name === 'local' });
         const submitted = await server.sendTransaction(transaction);
         if (submitted.status === 'ERROR')
-          throw new Error('The network rejected this transaction. Refresh the listing and simulate again.');
+          throw new Error('The network rejected this transaction. Refresh the listing and check again.');
         if (submitted.status === 'TRY_AGAIN_LATER')
           throw new Error(
             'The network is busy and has not accepted this transaction. Check its hash before preparing a retry.'
@@ -200,16 +198,11 @@ export function TradeReview({
         </p>
         {'id' in action ? (
           <p>
-            {action.kind === 'primary' ? 'Primary listing' : 'Secondary token'} #{action.id}
+            {action.kind === 'primary' ? 'New token listing' : 'Token'} #{action.id}
           </p>
         ) : null}
         {'tokenId' in action ? <p>Token #{action.tokenId}</p> : null}
-        {!allowed ? (
-          <p role="alert">
-            {session.walletNetworkIssue ||
-              'Connect and authenticate your wallet using the wallet control before trading.'}
-          </p>
-        ) : null}
+        {!allowed ? <p role="alert">{session.walletNetworkIssue || 'Connect your wallet to trade.'}</p> : null}
         <p role="status" aria-live="polite">
           {message}
         </p>
@@ -236,10 +229,11 @@ export function TradeReview({
           <button
             type="button"
             className={styles.primary}
+            data-variant="primary"
             disabled={!allowed || busy}
             onClick={prepared ? sign : prepare}
           >
-            {busy ? 'Please wait…' : prepared ? 'Sign and submit' : 'Check balances and simulate'}
+            {busy ? 'One moment' : prepared ? 'Sign and send' : 'Check'}
           </button>
         ) : (
           <button type="button" disabled={busy} onClick={onClose}>
