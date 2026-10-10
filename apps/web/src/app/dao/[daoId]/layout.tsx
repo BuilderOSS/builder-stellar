@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { DaoShell } from '@/components/dao-shell';
+import { DaoShell } from '@/components/shell/dao-shell';
 import { DaoProvider } from '@/contexts/dao-context';
 import { getDaoNetworkConfigById } from '@/lib/dao-config';
 import { resolveDaoId } from '@/lib/dao-db';

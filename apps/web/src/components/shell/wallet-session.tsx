@@ -2,11 +2,10 @@
 
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { KitEventType } from '@creit.tech/stellar-wallets-kit/types';
-import { Check, ChevronDown, Copy, ExternalLink, LogOut, Wallet } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
-import { Button, Skeleton } from '@/components/ui';
 import { getNetworkConfig, type NetworkName } from '@/config/networks';
+import { activeNetworkName } from '@/lib/active-network';
 import {
   createClientAuthMessage,
   isSep53UnsupportedError,
@@ -18,20 +17,35 @@ import {
   verifyAuthProof,
   verifySep10Proof
 } from '@/lib/auth/client';
-import { getExplorerAccountUrl } from '@/lib/explorer-links';
+import { toaster } from '@/lib/toaster';
 import { useWalletBalance } from '@/lib/wallet-balance';
 import { initializeWalletKit, isWalletConnectSelected } from '@/lib/wallet-kit';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
-type WalletNetwork = {
+export type WalletNetwork = {
   name: NetworkName;
   label: string;
   passphrase: string;
 };
 
-function shortenAddress(value: string) {
-  if (value.length <= 12) return value;
-  return `${value.slice(0, 5)}…${value.slice(-4)}`;
+type WalletSession = {
+  network: WalletNetwork;
+  address: string;
+  isAuthenticated: boolean;
+  isAuthBusy: boolean;
+  authStatus: ReturnType<typeof useAuthSessionStore.getState>['authStatus'];
+  networkIssue: string;
+  balance: string | null | undefined;
+  balanceLoading: boolean;
+  connect: () => Promise<void>;
+  disconnect: () => Promise<void>;
+};
+
+const WalletSessionContext = createContext<WalletSession | null>(null);
+
+function deploymentNetwork(): WalletNetwork {
+  const config = getNetworkConfig(activeNetworkName());
+  return { name: config.name, label: config.label, passphrase: config.networkPassphrase };
 }
 
 async function validateWalletNetwork(
@@ -50,7 +64,7 @@ async function validateWalletNetwork(
       walletNetworkPassphrase: walletNetwork.networkPassphrase,
       walletNetworkIssue: matchesConfiguredNetwork
         ? ''
-        : `Wallet is on ${walletNetwork.network ?? 'an unknown network'} and must be switched to ${currentNetwork.label}.`
+        : `Your wallet is on ${walletNetwork.network ?? 'another network'}. Switch it to ${currentNetwork.label}.`
     });
   } catch (error) {
     if (isWalletConnectSelected()) {
@@ -66,29 +80,27 @@ async function validateWalletNetwork(
       status: 'Wallet network validation unavailable',
       walletNetworkPassphrase: '',
       walletNetworkIssue:
-        error instanceof Error ? error.message : 'This wallet cannot report its network, so the app cannot validate it.'
+        error instanceof Error ? error.message : "This wallet can't report its network, so Builder can't check it."
     });
   }
 }
 
-export function WalletControls({ network }: { network?: WalletNetwork }) {
-  const configuredNetwork = getNetworkConfig((process.env.NEXT_PUBLIC_NETWORK || 'testnet') as NetworkName);
-  const currentNetwork: WalletNetwork = network ?? {
-    name: configuredNetwork.name,
-    label: configuredNetwork.label,
-    passphrase: configuredNetwork.networkPassphrase
-  };
-  const networkName = currentNetwork.name;
-  const networkLabel = currentNetwork.label;
-  const networkPassphrase = currentNetwork.passphrase;
+/**
+ * One wallet session for the whole app: Stellar Wallets Kit listeners, the
+ * SEP-53 sign-in with SEP-10 fallback, account-change logout and network
+ * validation. Mount once (root layout); read it with `useWalletSession`.
+ */
+export function WalletSessionProvider({ children }: { children: ReactNode }) {
+  const network = useMemo(() => deploymentNetwork(), []);
   const session = useAuthSessionStore();
   const updateSession = useAuthSessionStore((state) => state.updateSession);
   const setAuthStatus = useAuthSessionStore((state) => state.setAuthStatus);
   const setAuthenticatedAddress = useAuthSessionStore((state) => state.setAuthenticatedAddress);
   const resetAuth = useAuthSessionStore((state) => state.resetAuth);
   const { data: authSession, mutate: mutateAuthSession } = useAuthSession();
-  const [copied, setCopied] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string | null | undefined>(undefined);
+  const lastErrorRef = useRef('');
+
   const invalidateAuth = useCallback(async () => {
     try {
       await logoutAuth();
@@ -97,6 +109,7 @@ export function WalletControls({ network }: { network?: WalletNetwork }) {
       await mutateAuthSession({ authenticated: false, address: null }, false);
     }
   }, [mutateAuthSession, resetAuth]);
+
   const isAuthenticated = session.authStatus === 'authenticated' && Boolean(session.address);
   const isAuthBusy =
     session.authStatus === 'connecting-wallet' ||
@@ -105,11 +118,11 @@ export function WalletControls({ network }: { network?: WalletNetwork }) {
     session.authStatus === 'verifying-signature';
   const { data: balance, isLoading: balanceLoading } = useWalletBalance(
     isAuthenticated ? session.address : '',
-    networkName
+    network.name
   );
 
   useEffect(() => {
-    initializeWalletKit(networkName);
+    initializeWalletKit(network.name);
 
     const handleWalletAddress = (address: string) => {
       setWalletAddress(address);
@@ -138,15 +151,12 @@ export function WalletControls({ network }: { network?: WalletNetwork }) {
       onStateUpdated();
       onDisconnect();
     };
-  }, [invalidateAuth, networkName, resetAuth, session.address, session.authStatus]);
+  }, [invalidateAuth, network.name, resetAuth, session.address, session.authStatus]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    void validateWalletNetwork(
-      { name: networkName, label: networkLabel, passphrase: networkPassphrase },
-      updateSession
-    );
-  }, [isAuthenticated, networkLabel, networkName, networkPassphrase, updateSession]);
+    void validateWalletNetwork(network, updateSession);
+  }, [isAuthenticated, network, updateSession]);
 
   useEffect(() => {
     if (!authSession?.authenticated || !authSession.address) return;
@@ -158,15 +168,23 @@ export function WalletControls({ network }: { network?: WalletNetwork }) {
     setAuthenticatedAddress(authSession.address);
   }, [authSession, invalidateAuth, session.address, setAuthenticatedAddress, walletAddress]);
 
-  async function connectWallet() {
+  // Sign-in failures used to be silent; surface them once.
+  useEffect(() => {
+    if (session.authStatus !== 'error' || !session.authError || lastErrorRef.current === session.authError) return;
+    lastErrorRef.current = session.authError;
+    toaster.error({ title: "Couldn't connect your wallet", description: session.authError, duration: 8000 });
+  }, [session.authError, session.authStatus]);
+
+  const connect = useCallback(async () => {
+    lastErrorRef.current = '';
     try {
       setAuthStatus('connecting-wallet');
       const result = await StellarWalletsKit.authModal();
       setWalletAddress(result.address);
       if (!isWalletConnectSelected()) {
         const walletNetwork = await StellarWalletsKit.getNetwork();
-        if (walletNetwork.networkPassphrase !== currentNetwork.passphrase) {
-          throw new Error(`Switch your wallet to ${currentNetwork.label} and try again.`);
+        if (walletNetwork.networkPassphrase !== network.passphrase) {
+          throw new Error(`Switch your wallet to ${network.label} and try again.`);
         }
       }
 
@@ -178,7 +196,7 @@ export function WalletControls({ network }: { network?: WalletNetwork }) {
       try {
         setAuthStatus('awaiting-signature');
         const { signedMessage, signerAddress } = await StellarWalletsKit.signMessage(message, {
-          networkPassphrase: currentNetwork.passphrase,
+          networkPassphrase: network.passphrase,
           address: result.address
         });
         if (signerAddress && signerAddress !== result.address) {
@@ -202,7 +220,7 @@ export function WalletControls({ network }: { network?: WalletNetwork }) {
         const sep10Challenge = await requestSep10Challenge(result.address);
         setAuthStatus('awaiting-signature');
         const { signedTxXdr, signerAddress } = await StellarWalletsKit.signTransaction(sep10Challenge.xdr, {
-          networkPassphrase: currentNetwork.passphrase,
+          networkPassphrase: network.passphrase,
           address: result.address
         });
         if (signerAddress && signerAddress !== result.address) {
@@ -214,7 +232,7 @@ export function WalletControls({ network }: { network?: WalletNetwork }) {
       }
 
       setAuthenticatedAddress(result.address);
-      updateSession({ status: `Connected on ${currentNetwork.label} via ${authMethod.toUpperCase()}` });
+      updateSession({ status: `Connected on ${network.label} via ${authMethod.toUpperCase()}` });
       await mutateAuthSession();
     } catch (error) {
       resetAuth();
@@ -225,11 +243,11 @@ export function WalletControls({ network }: { network?: WalletNetwork }) {
       }
       setWalletAddress(null);
       await mutateAuthSession({ authenticated: false, address: null }, false);
-      setAuthStatus('error', error instanceof Error ? error.message : 'Wallet authentication failed.');
+      setAuthStatus('error', error instanceof Error ? error.message : 'Wallet sign-in failed.');
     }
-  }
+  }, [mutateAuthSession, network, resetAuth, setAuthStatus, setAuthenticatedAddress, updateSession]);
 
-  async function disconnectWallet() {
+  const disconnect = useCallback(async () => {
     try {
       await logoutAuth();
       await StellarWalletsKit.disconnect();
@@ -237,80 +255,45 @@ export function WalletControls({ network }: { network?: WalletNetwork }) {
       resetAuth();
       await mutateAuthSession({ authenticated: false, address: null }, false);
     }
-  }
+  }, [mutateAuthSession, resetAuth]);
 
-  async function copyAddress() {
-    try {
-      await navigator.clipboard.writeText(session.address);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1200);
-    } catch {
-      setCopied(false);
-    }
-  }
-
-  function formatBalance(value: string | null | undefined) {
-    if (value === null || typeof value === 'undefined') return 'Unavailable';
-    return `${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })} XLM`;
-  }
-
-  return (
-    <div className="wallet-summary">
-      {isAuthenticated ? (
-        <details className="wallet-menu">
-          <summary
-            className="wallet-menu__trigger"
-            title={session.address}
-            aria-label={`Wallet menu for ${session.address}`}
-          >
-            <Wallet aria-hidden="true" size={16} />
-            {shortenAddress(session.address)}
-            <ChevronDown aria-hidden="true" size={14} />
-          </summary>
-          <div className="wallet-menu__panel">
-            <div className="wallet-menu__balance">
-              <span>Balance</span>
-              <strong>
-                {balanceLoading ? (
-                  <Skeleton className="skeleton--inline" style={{ width: '80px', height: '1em' }} />
-                ) : (
-                  formatBalance(isAuthenticated ? balance : null)
-                )}
-              </strong>
-            </div>
-            <a
-              className="wallet-menu__action"
-              href={getExplorerAccountUrl(currentNetwork.name, session.address)}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <ExternalLink aria-hidden="true" size={15} />
-              View on Stellar Expert
-            </a>
-            <button className="wallet-menu__action" type="button" onClick={copyAddress}>
-              {copied ? <Check aria-hidden="true" size={15} /> : <Copy aria-hidden="true" size={15} />}
-              {copied ? 'Copied' : 'Copy address'}
-            </button>
-            <button className="wallet-menu__action" type="button" onClick={disconnectWallet}>
-              <LogOut aria-hidden="true" size={15} />
-              Disconnect
-            </button>
-          </div>
-        </details>
-      ) : (
-        <Button
-          type="button"
-          variant="solid"
-          size="sm"
-          onClick={connectWallet}
-          disabled={isAuthBusy}
-          aria-label="Connect wallet"
-          aria-busy={isAuthBusy || undefined}
-        >
-          <Wallet aria-hidden="true" size={16} />
-          {isAuthBusy ? 'Signing in…' : session.authStatus === 'error' ? 'Try again' : 'Connect'}
-        </Button>
-      )}
-    </div>
+  const value = useMemo<WalletSession>(
+    () => ({
+      network,
+      address: session.address,
+      isAuthenticated,
+      isAuthBusy,
+      authStatus: session.authStatus,
+      networkIssue: session.walletNetworkIssue,
+      balance: isAuthenticated ? balance : null,
+      balanceLoading,
+      connect,
+      disconnect
+    }),
+    [
+      balance,
+      balanceLoading,
+      connect,
+      disconnect,
+      isAuthBusy,
+      isAuthenticated,
+      network,
+      session.address,
+      session.authStatus,
+      session.walletNetworkIssue
+    ]
   );
+
+  return <WalletSessionContext.Provider value={value}>{children}</WalletSessionContext.Provider>;
+}
+
+export function useWalletSession(): WalletSession {
+  const context = useContext(WalletSessionContext);
+  if (!context) throw new Error('useWalletSession must be used within WalletSessionProvider');
+  return context;
+}
+
+export function formatXlmBalance(value: string | null | undefined) {
+  if (value === null || typeof value === 'undefined') return 'Unavailable';
+  return `${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })} XLM`;
 }

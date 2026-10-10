@@ -25,6 +25,7 @@ import {
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
+import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 export default function AuctionsPage() {
@@ -111,7 +112,7 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
           if (opts?.networkPassphrase && opts.networkPassphrase !== config.passphrase)
             throw new Error('Unexpected signing network.');
           if (opts?.address && opts.address !== bidder) throw new Error('Unexpected signing account.');
-          return StellarWalletsKit.signTransaction(xdr, { networkPassphrase: config.passphrase, address: bidder });
+          return signWithWallet(xdr, { networkPassphrase: config.passphrase, address: bidder });
         }
       });
       let assembled;

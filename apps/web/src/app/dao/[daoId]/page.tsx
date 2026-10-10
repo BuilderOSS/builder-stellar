@@ -229,7 +229,7 @@ export default function Page() {
           </summary>
           <div className="dashboard-menu__panel dashboard-contract-menu">
             <Text className="label">Contracts</Text>
-            <DaoContractList config={config} className="dashboard-contract-menu__items" />
+            <DaoContractList config={config} />
           </div>
         </details>
         <Button

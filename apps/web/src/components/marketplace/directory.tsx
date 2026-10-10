@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useDeferredValue, useState } from 'react';
 
-import { WalletControls } from '@/components/wallet-controls';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { useMarketplaceDirectory, useMarketplaceOffers } from '@/lib/marketplace/hooks';
 import { useMarketplacePreferences } from '@/lib/marketplace/preferences';
@@ -30,17 +29,7 @@ export function MarketplaceDirectoryView() {
     directory.data?.communities.filter((c) => !savedOnly || preferences.favorites.includes(c.daoId)) ?? [];
   return (
     <div className={styles.root}>
-      <a href="#marketplace-content" className="skip-link">
-        Skip to marketplace
-      </a>
-      <header className={styles.header}>
-        <Link href="/">Stellar communities</Link>
-        <div className={styles.row}>
-          <span className={styles.chip}>{network.label}</span>
-          <WalletControls />
-        </div>
-      </header>
-      <main id="marketplace-content" className={styles.stack}>
+      <div className={styles.stack}>
         <section className={styles.hero}>
           <p className={styles.eyebrow}>Discover · collect · participate</p>
           <h1>
@@ -244,7 +233,7 @@ export function MarketplaceDirectoryView() {
           Verified XLM and USDC prices use exact 7-decimal amounts; unknown assets are shown in base units. An indexed
           offer is not a guarantee of availability; every trade checks live state before you sign.
         </footer>
-      </main>
+      </div>
     </div>
   );
 }

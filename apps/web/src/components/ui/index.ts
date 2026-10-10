@@ -23,6 +23,7 @@ export { PageHeader } from './page-header';
 export { Pagination } from './pagination';
 export { Popover, PopoverClose } from './popover';
 export { ProgressSteps } from './progress-steps';
+export { Prose } from './prose';
 export { SearchInput } from './search-input';
 export { Section } from './section';
 export { SegmentedControl } from './segmented-control';

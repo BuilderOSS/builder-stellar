@@ -1,6 +1,5 @@
 'use client';
 import { Client as ManagerClient, type DaoAddresses, type LaunchConfig } from '@builder-stellar/manager-bindings';
-import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import type { AssembledTransaction } from '@stellar/stellar-sdk/contract';
 import { Server } from '@stellar/stellar-sdk/rpc';
 import { useRef, useState } from 'react';
@@ -17,6 +16,7 @@ import {
   SubmissionExpired,
   SubmissionFailed
 } from '@/components/create-dao/deployment-transaction';
+import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { assertCreationSaved, type DeploymentRecord, useCreateDaoStore } from '@/stores/create-dao-store';
 import {
@@ -105,7 +105,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
     const requestedXdr = preparedCreationXdr(assembled);
     // Validate source and lifetime before opening the wallet as well as after it.
     bindSignedCreationEnvelope(requestedXdr, requestedXdr, config.networkPassphrase, deployer);
-    const signed = await StellarWalletsKit.signTransaction(requestedXdr, {
+    const signed = await signWithWallet(requestedXdr, {
       address: deployer,
       networkPassphrase: config.networkPassphrase
     });

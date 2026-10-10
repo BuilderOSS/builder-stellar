@@ -22,6 +22,7 @@ import { proposalIdToRouteId } from '@/lib/proposal-id';
 import { encodeProposalMetadata, validateProposalMetadataDraft } from '@/lib/proposal-metadata';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
+import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import {
   selectCanProceedToStep2,
@@ -119,7 +120,7 @@ export default function ProposalCreatePage() {
         networkPassphrase: config.passphrase,
         publicKey: session.address,
         signTransaction: async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
-          StellarWalletsKit.signTransaction(xdr, {
+          signWithWallet(xdr, {
             networkPassphrase: opts?.networkPassphrase ?? config.passphrase,
             address: opts?.address ?? session.address
           })

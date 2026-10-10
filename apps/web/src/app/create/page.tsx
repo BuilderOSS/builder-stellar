@@ -9,7 +9,6 @@ import { DeploymentProgress } from '@/components/create-dao/DeploymentProgress';
 import styles from '@/components/create-dao/workspace.module.css';
 import { useWorkspaceSync } from '@/components/local-workspace/workspace-sync';
 import { Button, Callout, Heading, Text } from '@/components/ui';
-import { WalletControls } from '@/components/wallet-controls';
 import {
   configuredCreationNetwork,
   CREATE_DAO_SECTIONS,
@@ -157,169 +156,157 @@ export default function CreateDaoPage() {
       ? 'Switch your wallet to this workspace’s network.'
       : '');
   return (
-    <div className="page-shell">
-      <a className="skip-link" href="#main-content">
-        Skip to content
-      </a>
-      <div className={styles.workspace}>
-        <header className={styles.header}>
-          <div className={styles.links}>
-            <Link href="/">Builder Lobby</Link>
-            <Link href={{ pathname: '/drafts' }}>Local drafts</Link>
+    <div className={styles.workspace}>
+      <div>
+        <div className={styles.header}>
+          <div>
+            <p className="eyebrow">Local workspace · {network}</p>
+            <h1 className="page-title">Create a DAO</h1>
           </div>
-          <WalletControls />
-        </header>
-        <main id="main-content" tabIndex={-1}>
-          <div className={styles.header}>
-            <div>
-              <p className="eyebrow">Local workspace · {network}</p>
-              <h1 className="page-title">Create a DAO</h1>
-            </div>
-            <Text role="status" className={styles.muted}>
-              {creationStorageError() || (ready ? 'Saved on this browser' : 'Opening workspace…')}
-            </Text>
-          </div>
-          {pageError ? <Callout variant="error" title="Needs attention" description={pageError} /> : null}
-          {!ready ? (
-            <p role="status">
-              {pageError ? 'Open Local drafts to choose a draft in this workspace.' : 'Loading your local draft…'}
-            </p>
-          ) : draft?.deployment ? (
-            <>
-              <DeploymentProgress state={state} record={draft.deployment} network={network} />
-              {indexingMessage ? (
-                <p role="status" className={styles.muted} style={{ marginTop: 16 }}>
-                  {indexingMessage}
-                </p>
-              ) : null}
-              <div className={styles.actions}>
-                <Link href={{ pathname: '/drafts' }}>Back to local workspace</Link>
-                {draft.deployment.status === 'confirmed' && draft.deployment.addresses ? (
-                  <Button
-                    disabled={busy}
-                    onClick={async () => {
-                      setBusy(true);
-                      try {
-                        await openSetup(draft.deployment!.addresses!.token);
-                      } finally {
-                        setBusy(false);
-                      }
-                    }}
-                  >
-                    {busy ? 'Checking directory…' : 'Open Setup'}
-                  </Button>
-                ) : (
-                  <Button
-                    disabled={busy || !authenticated || Boolean(walletIssue) || Boolean(creationStorageError())}
-                    onClick={() => void deploy()}
-                  >
-                    {busy
-                      ? 'Working…'
-                      : draft.deployment.hash && !['failed', 'rejected', 'expired'].includes(draft.deployment.status)
-                        ? 'Check saved transaction'
-                        : 'Retry saved deployment'}
-                  </Button>
-                )}
-                {draft.deployment.signedTxXdr &&
-                !['confirmed', 'failed', 'rejected', 'expired'].includes(draft.deployment.status) ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={busy || !authenticated || Boolean(walletIssue)}
-                    onClick={() => void deploy(true)}
-                  >
-                    Rebroadcast saved envelope
-                  </Button>
-                ) : null}
-              </div>
-              {!authenticated ? (
-                <p className={styles.muted}>Connect and sign in with the wallet that created this deployment record.</p>
-              ) : null}
-              {walletIssue ? <p className={styles.error}>{walletIssue}</p> : null}
-            </>
-          ) : (
-            <>
-              <ol className={styles.steps} aria-label="Creation steps">
-                {CREATE_DAO_SECTIONS.map((s, i) => (
-                  <li key={s.id}>
-                    <button
-                      type="button"
-                      aria-current={s.id === store.section ? 'step' : undefined}
-                      onClick={() => store.setSection(s.id)}
-                    >
-                      {i + 1}. {s.title}
-                    </button>
-                  </li>
-                ))}
-              </ol>
-              <section className={styles.panel} aria-labelledby="step-heading">
-                <Heading
-                  ref={heading}
-                  id="step-heading"
-                  tabIndex={-1}
-                  as="h2"
-                  style={{ fontSize: '1.25rem', marginBottom: 24 }}
-                >
-                  {CREATE_DAO_SECTIONS[index]?.title}
-                </Heading>
-                {store.section === 'basicInfo' ? (
-                  <BasicInfoStep />
-                ) : store.section === 'membership' ? (
-                  <MembershipStep />
-                ) : store.section === 'governance' ? (
-                  <GovernanceStep />
-                ) : (
-                  <ReviewStep connectedAddress={session.address} />
-                )}
-              </section>
-              <div className={styles.actions}>
-                {index > 0 ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => store.setSection(CREATE_DAO_SECTIONS[index - 1].id)}
-                  >
-                    Back
-                  </Button>
-                ) : (
-                  <Link href={{ pathname: '/drafts' }}>Save for later</Link>
-                )}
-                {store.section !== 'review' ? (
-                  <Button type="button" onClick={next}>
-                    Continue
-                  </Button>
-                ) : (
-                  <Button
-                    type="button"
-                    onClick={() => void deploy()}
-                    disabled={
-                      busy ||
-                      !authenticated ||
-                      !configured ||
-                      Boolean(walletIssue) ||
-                      Boolean(store.imagePreview) ||
-                      Boolean(creationStorageError())
+          <Text role="status" className={styles.muted}>
+            {creationStorageError() || (ready ? 'Saved on this browser' : 'Opening workspace…')}
+          </Text>
+        </div>
+        {pageError ? <Callout variant="error" title="Needs attention" description={pageError} /> : null}
+        {!ready ? (
+          <p role="status">
+            {pageError ? 'Open Local drafts to choose a draft in this workspace.' : 'Loading your local draft…'}
+          </p>
+        ) : draft?.deployment ? (
+          <>
+            <DeploymentProgress state={state} record={draft.deployment} network={network} />
+            {indexingMessage ? (
+              <p role="status" className={styles.muted} style={{ marginTop: 16 }}>
+                {indexingMessage}
+              </p>
+            ) : null}
+            <div className={styles.actions}>
+              <Link href={{ pathname: '/drafts' }}>Back to local workspace</Link>
+              {draft.deployment.status === 'confirmed' && draft.deployment.addresses ? (
+                <Button
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      await openSetup(draft.deployment!.addresses!.token);
+                    } finally {
+                      setBusy(false);
                     }
-                  >
-                    {busy ? 'Creating…' : 'Create in Setup'}
-                  </Button>
-                )}
-              </div>
-              {store.section === 'review' ? (
-                <p className={styles.muted} style={{ marginTop: 16 }}>
-                  {!configured
-                    ? 'Deployment is not configured. You can still save your draft.'
-                    : !authenticated
-                      ? 'Connect and sign in when you are ready to deploy.'
-                      : walletIssue ||
-                        (store.imagePreview
-                          ? 'Upload your preview or use the saved image in Identity.'
-                          : 'You will review and sign one creation transaction. Launch happens later.')}
-                </p>
+                  }}
+                >
+                  {busy ? 'Checking directory…' : 'Open Setup'}
+                </Button>
+              ) : (
+                <Button
+                  disabled={busy || !authenticated || Boolean(walletIssue) || Boolean(creationStorageError())}
+                  onClick={() => void deploy()}
+                >
+                  {busy
+                    ? 'Working…'
+                    : draft.deployment.hash && !['failed', 'rejected', 'expired'].includes(draft.deployment.status)
+                      ? 'Check saved transaction'
+                      : 'Retry saved deployment'}
+                </Button>
+              )}
+              {draft.deployment.signedTxXdr &&
+              !['confirmed', 'failed', 'rejected', 'expired'].includes(draft.deployment.status) ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy || !authenticated || Boolean(walletIssue)}
+                  onClick={() => void deploy(true)}
+                >
+                  Rebroadcast saved envelope
+                </Button>
               ) : null}
-            </>
-          )}
-        </main>
+            </div>
+            {!authenticated ? (
+              <p className={styles.muted}>Connect and sign in with the wallet that created this deployment record.</p>
+            ) : null}
+            {walletIssue ? <p className={styles.error}>{walletIssue}</p> : null}
+          </>
+        ) : (
+          <>
+            <ol className={styles.steps} aria-label="Creation steps">
+              {CREATE_DAO_SECTIONS.map((s, i) => (
+                <li key={s.id}>
+                  <button
+                    type="button"
+                    aria-current={s.id === store.section ? 'step' : undefined}
+                    onClick={() => store.setSection(s.id)}
+                  >
+                    {i + 1}. {s.title}
+                  </button>
+                </li>
+              ))}
+            </ol>
+            <section className={styles.panel} aria-labelledby="step-heading">
+              <Heading
+                ref={heading}
+                id="step-heading"
+                tabIndex={-1}
+                as="h2"
+                style={{ fontSize: '1.25rem', marginBottom: 24 }}
+              >
+                {CREATE_DAO_SECTIONS[index]?.title}
+              </Heading>
+              {store.section === 'basicInfo' ? (
+                <BasicInfoStep />
+              ) : store.section === 'membership' ? (
+                <MembershipStep />
+              ) : store.section === 'governance' ? (
+                <GovernanceStep />
+              ) : (
+                <ReviewStep connectedAddress={session.address} />
+              )}
+            </section>
+            <div className={styles.actions}>
+              {index > 0 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => store.setSection(CREATE_DAO_SECTIONS[index - 1].id)}
+                >
+                  Back
+                </Button>
+              ) : (
+                <Link href={{ pathname: '/drafts' }}>Save for later</Link>
+              )}
+              {store.section !== 'review' ? (
+                <Button type="button" onClick={next}>
+                  Continue
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  onClick={() => void deploy()}
+                  disabled={
+                    busy ||
+                    !authenticated ||
+                    !configured ||
+                    Boolean(walletIssue) ||
+                    Boolean(store.imagePreview) ||
+                    Boolean(creationStorageError())
+                  }
+                >
+                  {busy ? 'Creating…' : 'Create in Setup'}
+                </Button>
+              )}
+            </div>
+            {store.section === 'review' ? (
+              <p className={styles.muted} style={{ marginTop: 16 }}>
+                {!configured
+                  ? 'Deployment is not configured. You can still save your draft.'
+                  : !authenticated
+                    ? 'Connect and sign in when you are ready to deploy.'
+                    : walletIssue ||
+                      (store.imagePreview
+                        ? 'Upload your preview or use the saved image in Identity.'
+                        : 'You will review and sign one creation transaction. Launch happens later.')}
+              </p>
+            ) : null}
+          </>
+        )}
       </div>
     </div>
   );

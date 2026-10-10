@@ -13,6 +13,7 @@ import { currentTokenHolder } from '@/lib/token-holder/read';
 import { assertHolderEnvelope, assertHolderSignedEnvelope, assertHolderWallet } from '@/lib/token-holder/transaction';
 import type { HolderAction, HolderPrepared } from '@/lib/token-holder/types';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
+import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 export function HolderControls({
@@ -152,7 +153,7 @@ export function HolderControls({
       )
         throw new Error('Your account changed. Authenticate again.');
       setMessage('Waiting for your wallet signature…');
-      const signed = await StellarWalletsKit.signTransaction(prepared.xdr, {
+      const signed = await signWithWallet(prepared.xdr, {
         address: prepared.address,
         networkPassphrase: config.passphrase
       });

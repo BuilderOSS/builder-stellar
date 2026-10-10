@@ -14,6 +14,7 @@ import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
+import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 type Setting = 'set-auction-duration' | 'set-auction-time-buffer' | 'set-auction-min-bid-increment';
@@ -88,7 +89,7 @@ export function AuctionParameterControls({
       const client = new AuctionClient({
         ...adminReadOptions(config, config.auctionContractId, session.address),
         signTransaction: (xdr, opts) =>
-          StellarWalletsKit.signTransaction(xdr, {
+          signWithWallet(xdr, {
             ...opts,
             address: session.address!,
             networkPassphrase: config.passphrase

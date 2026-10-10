@@ -1,7 +1,6 @@
 'use client';
 
 import { Client as TokenClient } from '@builder-stellar/token-bindings';
-import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { TransactionBuilder } from '@stellar/stellar-sdk';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -16,6 +15,7 @@ import { adminReadOptions, useAdminArtwork, useAdminTokenState } from '@/lib/adm
 import { BATCH_MINT_LIMIT_TEXT, MAX_BATCH_MINT, MAX_BATCH_RECIPIENTS } from '@/lib/batch-mint-budget';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { confirmCreationTransaction, DefinitiveTransactionFailure } from '@/lib/use-dao-deployment';
+import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 export default function FoundersAdminPage() {
@@ -84,7 +84,7 @@ export default function FoundersAdminPage() {
                 throw new Error('Wallet changed. Reconnect the setup admin on the DAO network.');
             };
             checkWallet();
-            const signed = await StellarWalletsKit.signTransaction(xdr, {
+            const signed = await signWithWallet(xdr, {
               ...opts,
               address: session.address!,
               networkPassphrase: config.passphrase

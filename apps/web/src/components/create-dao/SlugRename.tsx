@@ -1,6 +1,5 @@
 'use client';
 import { Client as ManagerClient } from '@builder-stellar/manager-bindings';
-import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { useState } from 'react';
 
 import { Button, Callout, Input } from '@/components/ui';
@@ -9,6 +8,7 @@ import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
+import { signWithWallet } from '@/lib/wallet-sign';
 
 /**
  * Another DAO launched first with this DAO's requested slug (SlugTaken, 7123).
@@ -48,8 +48,7 @@ export function SlugRename({
         networkPassphrase: config.passphrase,
         publicKey: address,
         allowHttp: config.rpcUrl.startsWith('http://'),
-        signTransaction: (xdr, opts) =>
-          StellarWalletsKit.signTransaction(xdr, { ...opts, address, networkPassphrase: config.passphrase })
+        signTransaction: (xdr, opts) => signWithWallet(xdr, { ...opts, address, networkPassphrase: config.passphrase })
       });
       tx.start('Rename requested slug');
       const assembled = await manager.update_pending_slug({ token_address: daoId, slug });

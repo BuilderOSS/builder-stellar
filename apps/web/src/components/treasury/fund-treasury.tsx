@@ -16,6 +16,7 @@ import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { treasuryFetch, useTreasuryFundingReadiness } from '@/lib/treasury-service/hooks';
 import type { TreasuryPrepared, TreasuryScope } from '@/lib/treasury-service/types';
 import { assertTreasuryIdentity, fundingSchema } from '@/lib/treasury-service/values';
+import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import styles from './treasury.module.css';
@@ -120,7 +121,7 @@ export function FundTreasury({ scope, onConfirmed }: { scope: TreasuryScope; onC
       const unsigned = TransactionBuilder.fromXDR(terms.xdr, terms.networkPassphrase);
       assertMarketplaceTransaction(unsigned, terms.address);
       setMessage('Waiting for your wallet signature…');
-      const signed = await StellarWalletsKit.signTransaction(terms.xdr, {
+      const signed = await signWithWallet(terms.xdr, {
         address: terms.address,
         networkPassphrase: terms.networkPassphrase
       });

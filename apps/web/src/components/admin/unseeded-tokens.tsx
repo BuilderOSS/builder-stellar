@@ -1,7 +1,6 @@
 'use client';
 
 import { Client as MetadataClient } from '@builder-stellar/metadata-bindings';
-import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 import useSWR from 'swr';
@@ -14,6 +13,7 @@ import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import type { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
+import { signWithWallet } from '@/lib/wallet-sign';
 
 type UnseededResponse = { tokenIds: string[]; hasMore?: boolean; message?: string };
 
@@ -55,8 +55,7 @@ export function UnseededTokens({
     try {
       const client = new MetadataClient({
         ...adminReadOptions(config, config.metadataContractId, address),
-        signTransaction: (xdr, opts) =>
-          StellarWalletsKit.signTransaction(xdr, { ...opts, address, networkPassphrase: config.passphrase })
+        signTransaction: (xdr, opts) => signWithWallet(xdr, { ...opts, address, networkPassphrase: config.passphrase })
       });
       // One transaction per token: regenerate seeds a single token id.
       for (const id of ids) {

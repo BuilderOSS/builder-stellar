@@ -14,6 +14,7 @@ import { assertClaimEnvelope } from '@/lib/minter/transaction';
 import type { ClaimAction, ClaimState, PreparedClaim } from '@/lib/minter/types';
 import { assertHolderSignedEnvelope, assertHolderWallet } from '@/lib/token-holder/transaction';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
+import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import { AllocationDraftForm } from './allocation-draft';
@@ -126,7 +127,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
       const unsigned = TransactionBuilder.fromXDR(prepared.xdr, config.passphrase);
       assertClaimEnvelope(unsigned, prepared, action);
       setMessage('Waiting for your wallet signature…');
-      const signed = await StellarWalletsKit.signTransaction(prepared.xdr, {
+      const signed = await signWithWallet(prepared.xdr, {
         address: prepared.address,
         networkPassphrase: config.passphrase
       });

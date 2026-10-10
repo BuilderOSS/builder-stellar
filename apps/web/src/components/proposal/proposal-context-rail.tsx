@@ -377,7 +377,7 @@ export function ProposalContextRail({
                 <Text className="proposal-context-kicker">On-chain addresses</Text>
                 <Text className="proposal-context-intro">Copy the contracts this proposal can interact with.</Text>
               </div>
-              <DaoContractList config={config} className="proposal-context-list" compact />
+              <DaoContractList config={config} compact />
             </Stack>
           ) : null}
           {activeTab === 'history' ? (

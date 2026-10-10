@@ -22,6 +22,7 @@ import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { getStellarAddressError } from '@/lib/validation';
+import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 async function submitAuthorityUpdate(
@@ -36,7 +37,7 @@ async function submitAuthorityUpdate(
     networkPassphrase: config.passphrase,
     publicKey: sessionAddress,
     signTransaction: async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
-      StellarWalletsKit.signTransaction(xdr, {
+      signWithWallet(xdr, {
         networkPassphrase: opts?.networkPassphrase ?? config.passphrase,
         address: opts?.address ?? sessionAddress
       })

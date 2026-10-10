@@ -29,6 +29,7 @@ import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
+import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 type Drafts = Partial<{
@@ -144,7 +145,7 @@ export default function GovernanceAdminPage() {
       networkPassphrase: config.passphrase,
       publicKey: session.address,
       signTransaction: (async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
-        StellarWalletsKit.signTransaction(xdr, {
+        signWithWallet(xdr, {
           networkPassphrase: opts?.networkPassphrase ?? config.passphrase,
           address: opts?.address ?? session.address
         })) as SignTransaction

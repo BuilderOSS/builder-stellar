@@ -28,6 +28,7 @@ import { getAllActionHandlers } from '@/lib/proposal-actions/registry';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
+import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 const fields = [
@@ -91,7 +92,7 @@ export default function ArtworkAdminPage() {
       const client = new MetadataClient({
         ...adminReadOptions(config, config.metadataContractId, session.address),
         signTransaction: (xdr, opts) =>
-          StellarWalletsKit.signTransaction(xdr, {
+          signWithWallet(xdr, {
             ...opts,
             address: session.address!,
             networkPassphrase: config.passphrase

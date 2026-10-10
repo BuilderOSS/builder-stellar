@@ -6,6 +6,8 @@ import { Bricolage_Grotesque, Figtree, JetBrains_Mono } from 'next/font/google';
 import type { ReactNode } from 'react';
 
 import { AppToaster } from '@/components/app-toaster';
+import { GlobalShell } from '@/components/shell/app-shell';
+import { WalletSessionProvider } from '@/components/shell/wallet-session';
 import { WarmInkThemeRuntime } from '@/components/warm-ink-theme';
 import { warmInkBootScript } from '@/lib/warm-ink-theme';
 
@@ -56,7 +58,9 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: warmInkBootScript }} />
       </head>
       <body>
-        {children}
+        <WalletSessionProvider>
+          <GlobalShell>{children}</GlobalShell>
+        </WalletSessionProvider>
         <WarmInkThemeRuntime />
         <AppToaster />
       </body>

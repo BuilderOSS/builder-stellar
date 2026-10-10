@@ -16,6 +16,7 @@ import {
   confirmMarketplaceTransaction
 } from '@/lib/marketplace/transaction';
 import type { MarketplaceAction, MarketplacePrepared } from '@/lib/marketplace/types';
+import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import styles from './marketplace.module.css';
@@ -113,7 +114,7 @@ export function TradeReview({
         throw error;
       }
       setMessage('Waiting for your wallet signature…');
-      const signed = await StellarWalletsKit.signTransaction(prepared.xdr, {
+      const signed = await signWithWallet(prepared.xdr, {
         networkPassphrase: prepared.networkPassphrase,
         address: prepared.address
       });
