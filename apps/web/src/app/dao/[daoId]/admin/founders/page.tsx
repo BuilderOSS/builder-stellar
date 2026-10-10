@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 
-import { AdminSurfaceNav as AdminSectionNav } from '@/components/admin/admin-surface-nav';
 import { type FounderMintRow, founderMintValues } from '@/components/admin/founder-mint-values';
 import { PageSection } from '@/components/page-section';
 import { Button, Callout, Card, Heading, Input, Text } from '@/components/ui';
@@ -130,18 +129,17 @@ export default function FoundersAdminPage() {
 
   return (
     <PageSection
-      title="Founder allocation"
-      description="Mint the setup allocation as recipient and amount vectors in one Token batch_mint transaction."
+      title="Founder tokens"
+      description="Mint tokens for the founding team before launch, all in one transaction."
     >
       <Stack gap="4">
-        <AdminSectionNav daoId={daoId} active="/founders" />
         {token.isLoading ? <Text role="status">Checking setup admin rights and supply…</Text> : null}
         {token.error ? (
           <Callout variant="error" title="Token state unavailable" description={token.error.message} />
         ) : null}
         <Card p="5">
           <Stack gap="3">
-            <Heading style={{ fontSize: '1.2rem' }}>Founder tokens</Heading>
+            <Heading size="heading">Founder tokens</Heading>
             <Text>
               Current voting supply: {token.data?.supply.toString() ?? 'Unavailable'} (tokens held by the Treasury,
               Auction and Marketplace carry no votes). Founder mints are ordinary voting NFTs, not a vesting schedule or
@@ -242,7 +240,7 @@ export default function FoundersAdminPage() {
                 </Button>
                 {review ? (
                   <>
-                    <Text style={{ overflowWrap: 'anywhere' }}>
+                    <Text overflowWrap="anywhere">
                       Review: {rows.map((row) => `${row.amount} to ${row.recipient}`).join('; ')}. Minting is not
                       reversible.
                     </Text>
@@ -291,7 +289,7 @@ export default function FoundersAdminPage() {
                 </Button>
                 {receipt ? (
                   <>
-                    <Text style={{ overflowWrap: 'anywhere' }}>Confirmed founder mint: {receipt}</Text>
+                    <Text overflowWrap="anywhere">Confirmed founder mint: {receipt}</Text>
                     <Button
                       type="button"
                       variant="outline"

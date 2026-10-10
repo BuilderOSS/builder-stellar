@@ -4,11 +4,11 @@ import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { type SignTransaction } from '@stellar/stellar-sdk/contract';
 import { useState } from 'react';
+import { css, cx } from 'styled-system/css';
 import { Grid, Stack } from 'styled-system/jsx';
 
 import { AdminValueForm } from '@/components/admin/admin-action-forms';
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
-import { AdminSurfaceNav as AdminSectionNav } from '@/components/admin/admin-surface-nav';
 import { DurationInput } from '@/components/admin/duration-input';
 import { PercentageInput } from '@/components/admin/percentage-input';
 import { PageSection } from '@/components/page-section';
@@ -322,8 +322,7 @@ export default function GovernanceAdminPage() {
 
   if (!hasGovernanceAccess && !canProposeGovernance) {
     return (
-      <PageSection title="Governance Admin" description="Governance settings.">
-        <AdminSectionNav daoId={daoId} active="/governance" />
+      <PageSection title="Voting rules" description="How proposals are timed and decided.">
         {settingsError ? (
           <Callout variant="error" title="Governor values unavailable" description={settingsError.message} />
         ) : null}
@@ -335,18 +334,10 @@ export default function GovernanceAdminPage() {
         >
           {settings ? (
             <Stack gap="1">
-              <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                Voting delay: {settings.votingDelay}
-              </Text>
-              <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                Voting period: {settings.votingPeriod}
-              </Text>
-              <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                Proposal threshold: {settings.proposalThreshold.toString()}
-              </Text>
-              <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                Quorum: {settings.quorumBps} bps
-              </Text>
+              <Text size="sm">Voting delay: {settings.votingDelay}</Text>
+              <Text size="sm">Voting period: {settings.votingPeriod}</Text>
+              <Text size="sm">Proposal threshold: {settings.proposalThreshold.toString()}</Text>
+              <Text size="sm">Quorum: {settings.quorumBps} bps</Text>
               <Text>
                 Queue delay:{' '}
                 {settings.queueDelay === undefined ? 'unavailable from RPC (shown when indexed)' : settings.queueDelay}
@@ -366,18 +357,19 @@ export default function GovernanceAdminPage() {
         onCancel={proposalDraft.cancel}
         onResolve={proposalDraft.resolve}
       />
-      <PageSection title="Governance Admin" description="Edit governor parameters and apply them one at a time.">
+      <PageSection
+        title="Voting rules"
+        description="Change one rule at a time. After launch, each change goes up for a vote."
+      >
         <Stack gap="4">
-          <AdminSectionNav daoId={daoId} active="/governance" />
-
           <Card p="5">
             <Stack gap="3">
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+              <div className={css({ display: 'flex', justifyContent: 'space-between', gap: '3', flexWrap: 'wrap' })}>
                 <Stack gap="3">
                   <div>
                     <Badge>Live values</Badge>
                   </div>
-                  <Heading style={{ fontSize: '1.2rem' }}>Current governor settings</Heading>
+                  <Heading size="heading">Current governor settings</Heading>
                 </Stack>
                 <Button
                   type="button"
@@ -402,7 +394,7 @@ export default function GovernanceAdminPage() {
           <Grid columns={{ base: 1, xl: 2 }} gap="4">
             <Card p="5">
               <Stack gap="3">
-                <Heading style={{ fontSize: '1.2rem' }}>Queue delay</Heading>
+                <Heading size="heading">Queue delay</Heading>
                 <Text>
                   Current value unavailable: the public Governor ABI exposes a setter but no queue-delay getter. Enter
                   the desired value explicitly.
@@ -434,9 +426,7 @@ export default function GovernanceAdminPage() {
                   <Badge>Voting delay</Badge>
                 </div>
                 <Stack gap="1">
-                  <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                    Current: {settings ? formatSecondsValue(settings.votingDelay) : '—'}
-                  </Text>
+                  <Text size="sm">Current: {settings ? formatSecondsValue(settings.votingDelay) : '—'}</Text>
                 </Stack>
                 <DurationInput
                   id="voting-delay"
@@ -448,12 +438,12 @@ export default function GovernanceAdminPage() {
                 />
                 <Stack gap="1">
                   {typeof drafts.votingDelay === 'number' && settings && drafts.votingDelay !== settings.votingDelay ? (
-                    <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: 'var(--accent)' }}>
+                    <Text size="sm" color="signal">
                       Change: {formatSecondsValue(settings.votingDelay)} → {formatSecondsValue(drafts.votingDelay)}
                     </Text>
                   ) : null}
                 </Stack>
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <div className={css({ display: 'flex', justifyContent: 'flex-end' })}>
                   <Button
                     type="button"
                     onClick={() => void applyVotingDelay()}
@@ -481,9 +471,7 @@ export default function GovernanceAdminPage() {
                   <Badge>Voting period</Badge>
                 </div>
                 <Stack gap="1">
-                  <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                    Current: {settings ? formatSecondsValue(settings.votingPeriod) : '—'}
-                  </Text>
+                  <Text size="sm">Current: {settings ? formatSecondsValue(settings.votingPeriod) : '—'}</Text>
                 </Stack>
                 <DurationInput
                   id="voting-period"
@@ -497,12 +485,12 @@ export default function GovernanceAdminPage() {
                   {typeof drafts.votingPeriod === 'number' &&
                   settings &&
                   drafts.votingPeriod !== settings.votingPeriod ? (
-                    <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: 'var(--accent)' }}>
+                    <Text size="sm" color="signal">
                       Change: {formatSecondsValue(settings.votingPeriod)} → {formatSecondsValue(drafts.votingPeriod)}
                     </Text>
                   ) : null}
                 </Stack>
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <div className={css({ display: 'flex', justifyContent: 'flex-end' })}>
                   <Button
                     type="button"
                     onClick={() => void applyVotingPeriod()}
@@ -530,12 +518,16 @@ export default function GovernanceAdminPage() {
                   <Badge>Proposal threshold</Badge>
                 </div>
                 <Stack gap="1">
-                  <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+                  <Text size="sm">
                     Current:{' '}
                     {settings ? (
                       `${settings.proposalThreshold.toString()} votes`
                     ) : (
-                      <Skeleton className="skeleton--inline" style={{ width: '90px', height: '1em' }} />
+                      <Skeleton
+                        className={cx(
+                          css({ display: 'inline-block', verticalAlign: 'middle', width: '90px', height: '1em' })
+                        )}
+                      />
                     )}
                   </Text>
                 </Stack>
@@ -550,22 +542,22 @@ export default function GovernanceAdminPage() {
                   draftPreview={draftStatus.actionsInDraft.find((a) => a.type === 'set-proposal-threshold')}
                 />
                 <Stack gap="1">
-                  <Text className="lede" style={{ margin: 0, fontSize: '0.8rem' }}>
+                  <Text size="sm">
                     {settings ? (
                       'Absolute number of votes (at least 1) required to create a proposal. Higher values prevent spam.'
                     ) : (
-                      <Skeleton style={{ width: '210px', height: '0.8em' }} />
+                      <Skeleton className={css({ width: '210px', height: '0.8em' })} />
                     )}
                   </Text>
                   {settings &&
                   drafts.proposalThreshold &&
                   drafts.proposalThreshold !== formatThreshold(settings.proposalThreshold) ? (
-                    <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: 'var(--accent)' }}>
+                    <Text size="sm" color="signal">
                       Change: {formatThreshold(settings.proposalThreshold)} → {drafts.proposalThreshold} votes
                     </Text>
                   ) : null}
                 </Stack>
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <div className={css({ display: 'flex', justifyContent: 'flex-end' })}>
                   <Button
                     type="button"
                     onClick={() => void applyProposalThreshold()}
@@ -595,12 +587,16 @@ export default function GovernanceAdminPage() {
                   <Badge>Quorum</Badge>
                 </div>
                 <Stack gap="1">
-                  <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+                  <Text size="sm">
                     Current:{' '}
                     {settings ? (
                       `${(settings.quorumBps / 100).toFixed(2)}%`
                     ) : (
-                      <Skeleton className="skeleton--inline" style={{ width: '80px', height: '1em' }} />
+                      <Skeleton
+                        className={cx(
+                          css({ display: 'inline-block', verticalAlign: 'middle', width: '80px', height: '1em' })
+                        )}
+                      />
                     )}
                   </Text>
                 </Stack>
@@ -614,12 +610,12 @@ export default function GovernanceAdminPage() {
                 />
                 <Stack gap="1">
                   {typeof drafts.quorumBps === 'number' && settings && drafts.quorumBps !== settings.quorumBps ? (
-                    <Text className="lede" style={{ margin: 0, fontSize: '0.8rem', color: 'var(--accent)' }}>
+                    <Text size="sm" color="signal">
                       Change: {(settings.quorumBps / 100).toFixed(2)}% → {(drafts.quorumBps / 100).toFixed(2)}%
                     </Text>
                   ) : null}
                 </Stack>
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <div className={css({ display: 'flex', justifyContent: 'flex-end' })}>
                   <Button
                     type="button"
                     onClick={() => void applyQuorumBps()}

@@ -3,12 +3,12 @@
 import { Client as AuctionClient } from '@builder-stellar/auction-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { useState } from 'react';
+import { css } from 'styled-system/css';
 import { Stack } from 'styled-system/jsx';
 import useSWR from 'swr';
 
 import { AdminReservePriceForm } from '@/components/admin/admin-action-forms';
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
-import { AdminSurfaceNav as AdminSectionNav } from '@/components/admin/admin-surface-nav';
 import { AuctionParameterControls } from '@/components/admin/auction-parameter-controls';
 import { PageSection } from '@/components/page-section';
 import { Badge, Button, Callout, Card, Heading, ShortId, Text } from '@/components/ui';
@@ -128,11 +128,10 @@ export default function AuctionAdminPage() {
     <>
       <AdminProposalDraftDialog pending={draft.pending} onCancel={draft.cancel} onResolve={draft.resolve} />
       <PageSection
-        title="Auction controls"
-        description="Review current auction state, update paused parameters, and prepare governance actions."
+        title="Auction"
+        description="See the current auction, pause it, and change its price and timing (by vote after launch)."
       >
         <Stack gap="4">
-          <AdminSectionNav daoId={daoId} active="/auction" />
           {!config.auctionContractId ? <Callout variant="info" title="No auction module configured" /> : null}
           {error || admin.error || token.error ? (
             <Callout
@@ -169,7 +168,7 @@ export default function AuctionAdminPage() {
               <Card p="5">
                 <Stack gap="3">
                   <Badge>{live ? (data.paused ? 'Paused' : 'Active') : 'Setup'}</Badge>
-                  <Heading style={{ fontSize: '1.2rem' }}>Current auction</Heading>
+                  <Heading size="heading">Current auction</Heading>
                   {data.auction ? (
                     <Text>
                       Token #{data.auction.token_id} · {data.auction.settled ? 'Settled' : 'Unsettled'}
@@ -184,7 +183,7 @@ export default function AuctionAdminPage() {
                       description="The Manager starts configured auctions at launch. Pause, resume and cancellation are not setup actions."
                     />
                   ) : null}
-                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <div className={css({ display: 'flex', gap: '3', flexWrap: 'wrap' })}>
                     <Button
                       type="button"
                       disabled={busy || !allowed || !live || data.paused}

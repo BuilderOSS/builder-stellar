@@ -1,8 +1,9 @@
 'use client';
 
+import { css } from 'styled-system/css';
 import { Stack } from 'styled-system/jsx';
 
-import { Badge, Button, Card, Heading, Text } from '@/components/ui';
+import { Badge, Button, Callout, Card, Heading, Text } from '@/components/ui';
 import { getProposalActionLabel } from '@/lib/proposal-call';
 import type { PendingAdminProposal } from '@/lib/use-admin-proposal-draft';
 
@@ -38,35 +39,31 @@ export function AdminProposalDraftDialog({
                 ? `${pending.requests.length} actions`
                 : getProposalActionLabel(pending.action.type)}
             </Badge>
-            <Heading id="proposal-consent-title" style={{ marginTop: '10px', fontSize: '1.35rem' }}>
+            <Heading id="proposal-consent-title" size="heading" mt="2.5">
               Review before adding to draft
             </Heading>
           </div>
-          <Card p="3" style={{ background: 'var(--gray-2)' }}>
+          <Card p="3" className={css({ bg: 'raised' })}>
             <Stack gap="1">
               {pending.summaries.map((summary) => (
-                <Text key={summary} style={{ fontWeight: 600 }}>
+                <Text key={summary} fontWeight="600">
                   {summary}
                 </Text>
               ))}
             </Stack>
-            <Text style={{ marginTop: '6px', fontSize: '0.875rem', color: 'var(--gray-11)' }}>
+            <Text className={css({ marginTop: '1.5', fontSize: '0.875rem', color: 'ink.muted' })}>
               This only updates your local proposal draft. Your wallet will not be asked to sign yet.
             </Text>
           </Card>
           {findings.map((finding, index) => (
-            <Card
+            <Callout
               key={`${finding.kind}-${index}`}
-              p="3"
-              style={{ borderColor: finding.severity === 'error' ? 'var(--red-7)' : 'var(--amber-7)' }}
-            >
-              <Text style={{ fontWeight: 600 }}>
-                {finding.kind === 'high-risk' ? 'High-risk action' : finding.kind}
-              </Text>
-              <Text style={{ marginTop: '4px', fontSize: '0.875rem' }}>{finding.message}</Text>
-            </Card>
+              variant={finding.severity === 'error' ? 'error' : 'warning'}
+              title={finding.kind === 'high-risk' ? 'High-risk change' : finding.kind}
+              description={finding.message}
+            />
           ))}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', flexWrap: 'wrap' }}>
+          <div className={css({ display: 'flex', justifyContent: 'flex-end', gap: '2', flexWrap: 'wrap' })}>
             <Button type="button" variant="outline" onClick={onCancel}>
               Cancel
             </Button>
@@ -86,7 +83,7 @@ export function AdminProposalDraftDialog({
               </Button>
             ) : null}
             {duplicate && !conflict && pending.requests.length === 1 ? (
-              <Text style={{ alignSelf: 'center', fontSize: '0.875rem', color: 'var(--gray-11)' }}>
+              <Text className={css({ alignSelf: 'center', fontSize: '0.875rem', color: 'ink.muted' })}>
                 Nothing added. Remove the existing duplicate from the draft if needed.
               </Text>
             ) : null}

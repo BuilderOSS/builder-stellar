@@ -122,7 +122,7 @@ export function AuctionParameterControls({
       <AdminProposalDraftDialog pending={draft.pending} onCancel={draft.cancel} onResolve={draft.resolve} />
       <Card p="5">
         <Stack gap="4">
-          <Heading style={{ fontSize: '1.2rem' }}>Auction parameters</Heading>
+          <Heading size="heading">Auction parameters</Heading>
           <Text>
             Changes require a paused auction. Proposal execution checks the state again; pause first, then return here.
           </Text>
@@ -180,7 +180,7 @@ export function AuctionParameterControls({
               </Button>
             </Stack>
           ))}
-          <Heading style={{ fontSize: '1.1rem' }}>Cancel current auction</Heading>
+          <Heading size="heading">Cancel current auction</Heading>
           <Text>
             Cancellation refunds the highest bid (or records a withdrawable refund if transfer fails) and sends the
             unsold NFT to Treasury. It does not resume auctions.

@@ -6,7 +6,6 @@ import { useState } from 'react';
 import { Grid, Stack } from 'styled-system/jsx';
 
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
-import { AdminSurfaceNav as AdminSectionNav } from '@/components/admin/admin-surface-nav';
 import { AuthorityPanel } from '@/components/admin/authority-panel';
 import { PageSection } from '@/components/page-section';
 import { Badge, Callout, Card, Heading, ShortId, Text } from '@/components/ui';
@@ -68,8 +67,7 @@ export default function AuthorityPage() {
 
   if (!isAdmin && !canProposeAuthority) {
     return (
-      <PageSection title="Admin" description="Admin-only authority management.">
-        <AdminSectionNav daoId={daoId} active="/owner" />
+      <PageSection title="Who can mint" description="Accounts allowed to mint tokens.">
         <Callout
           variant="warning"
           badge="Access restricted"
@@ -171,17 +169,18 @@ export default function AuthorityPage() {
         onCancel={proposalDraft.cancel}
         onResolve={proposalDraft.resolve}
       />
-      <PageSection title="Admin" description="Manage mint authorities from one control center.">
+      <PageSection
+        title="Who can mint"
+        description="Add or remove accounts allowed to mint tokens (by vote after launch)."
+      >
         <Stack gap="4">
-          <AdminSectionNav daoId={daoId} active="/owner" />
-
           <Card p="5">
             <Stack gap="3">
               <div>
                 <Badge>Admin</Badge>
               </div>
-              <Heading style={{ fontSize: '1.2rem' }}>Admin controls</Heading>
-              <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+              <Heading size="heading">Admin controls</Heading>
+              <Text size="sm">
                 The admin can add or remove token mint authorities. Those authorities can then use the token admin page.
                 Mint authorities can only be changed after the DAO is launched.
               </Text>

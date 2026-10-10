@@ -6,7 +6,6 @@ import { useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
-import { AdminSurfaceNav as AdminSectionNav } from '@/components/admin/admin-surface-nav';
 import { artworkAppendPlan } from '@/components/admin/artwork-admin-plan';
 import { ArtworkStateInspector } from '@/components/admin/artwork-state-inspector';
 import { UnseededTokens } from '@/components/admin/unseeded-tokens';
@@ -159,11 +158,10 @@ export default function ArtworkAdminPage() {
     <>
       <AdminProposalDraftDialog pending={proposal.pending} onCancel={proposal.cancel} onResolve={proposal.resolve} />
       <PageSection
-        title="Artwork configuration"
-        description="Read on-chain artwork, install setup layers, and govern collection metadata."
+        title="Artwork"
+        description="The layers every token is drawn from. Add them during setup; change them by vote after launch."
       >
         <Stack gap="4">
-          <AdminSectionNav daoId={daoId} active="/artwork" />
           {!config.metadataContractId ? (
             <Callout
               variant="warning"
@@ -222,7 +220,7 @@ export default function ArtworkAdminPage() {
             <>
               <Card p="5">
                 <Stack gap="4">
-                  <Heading style={{ fontSize: '1.2rem' }}>Collection metadata</Heading>
+                  <Heading size="heading">Collection metadata</Heading>
                   <Text>
                     These settings are on-chain. Uploading to IPFS alone does not update them. Renderer changes can
                     affect existing token images.
@@ -231,7 +229,7 @@ export default function ArtworkAdminPage() {
                     const registered = handlers.some((handler) => String(handler.type) === type);
                     return (
                       <Stack gap="2" key={key}>
-                        <Text style={{ overflowWrap: 'anywhere' }}>
+                        <Text overflowWrap="anywhere">
                           Current {label.toLowerCase()}: {artwork.data!.settings[key] || 'Not set'}
                         </Text>
                         <label htmlFor={key}>
@@ -283,7 +281,7 @@ export default function ArtworkAdminPage() {
               {direct && token.data?.live === false ? (
                 <Card p="5">
                   <Stack gap="3">
-                    <Heading style={{ fontSize: '1.2rem' }}>Install setup artwork</Heading>
+                    <Heading size="heading">Install setup artwork</Heading>
                     {!artwork.data.properties.length ? (
                       <ArtworkSetup daoId={daoId} config={config} />
                     ) : (
@@ -299,7 +297,7 @@ export default function ArtworkAdminPage() {
               {canPropose ? (
                 <Card p="5">
                   <Stack gap="3">
-                    <Heading style={{ fontSize: '1.2rem' }}>Append artwork through governance</Heading>
+                    <Heading size="heading">Append artwork through governance</Heading>
                     <Text>
                       Upload a directory of new layers. Each call adds at most 30 items and an IPFS group. Existing
                       property and item IDs stay intact; this is not a reset.

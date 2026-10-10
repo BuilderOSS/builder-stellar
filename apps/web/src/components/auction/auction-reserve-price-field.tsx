@@ -34,7 +34,7 @@ export function AuctionReservePriceField({
       <FieldHelperText>
         Minimum {MIN_RESERVE_PRICE_TOKENS} {tokenCode}; up to 7 decimal places.
       </FieldHelperText>
-      {error ? <FieldHelperText style={{ color: 'var(--negative)' }}>{error}</FieldHelperText> : null}
+      {error ? <FieldHelperText tone="error">{error}</FieldHelperText> : null}
     </Stack>
   );
 }

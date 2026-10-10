@@ -97,7 +97,7 @@ export function UnseededTokens({
   return (
     <Card p="5">
       <Stack gap="3">
-        <Heading style={{ fontSize: '1.2rem' }}>Tokens without traits</Heading>
+        <Heading size="heading">Tokens without traits</Heading>
         <Text>
           {ids.length}
           {data?.hasMore ? '+' : ''} token{ids.length === 1 ? '' : 's'} were minted before any artwork existed and have

@@ -88,7 +88,9 @@ export function ModuleVersionCard({
       <AdminProposalDraftDialog pending={draft.pending} onCancel={draft.cancel} onResolve={draft.resolve} />
       <Card p="5">
         <Stack gap="3">
-          <Heading style={{ fontSize: '1.2rem', textTransform: 'capitalize' }}>{module}</Heading>
+          <Heading size="heading" textTransform="capitalize">
+            {module}
+          </Heading>
           {state.isLoading ? <Text role="status">Reading version and Manager approval…</Text> : null}
           {state.error ? (
             <Callout variant="error" title="Module read failed" description={state.error.message} />
@@ -100,7 +102,7 @@ export function ModuleVersionCard({
               <Text>
                 Current version: {state.data.version} · Storage version: {state.data.storageVersion}
               </Text>
-              <Text style={{ overflowWrap: 'anywhere' }}>Current WASM hash: {state.data.fromHash}</Text>
+              <Text overflowWrap="anywhere">Current WASM hash: {state.data.fromHash}</Text>
               <Badge>
                 {state.data.source
                   ? state.data.source.revoked
@@ -111,7 +113,7 @@ export function ModuleVersionCard({
               {state.data.target ? (
                 <>
                   <Text>Candidate version: {state.data.target.version}</Text>
-                  <Text style={{ overflowWrap: 'anywhere' }}>Candidate hash: {state.data.target.hash}</Text>
+                  <Text overflowWrap="anywhere">Candidate hash: {state.data.target.hash}</Text>
                   <Badge>
                     {state.data.fromHash === state.data.target.hash
                       ? 'Already current'

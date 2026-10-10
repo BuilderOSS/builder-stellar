@@ -167,11 +167,7 @@ export function TtlExpiryPanel({ config }: { config: DaoNetworkConfig }) {
         />
       );
     }
-    return isLoading ? (
-      <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-        Checking contract expiry...
-      </Text>
-    ) : null;
+    return isLoading ? <Text size="sm">Checking contract expiry...</Text> : null;
   }
 
   const code = report.code;
@@ -199,25 +195,17 @@ export function TtlExpiryPanel({ config }: { config: DaoNetworkConfig }) {
           onRenew={() => void renewArtwork()}
         />
       ) : null}
-      {error ? (
-        <Text className="lede" style={{ margin: 0, fontSize: '0.85rem' }}>
-          Could not refresh contract expiry; the figures below may be out of date.
-        </Text>
-      ) : null}
+      {error ? <Text size="sm">Could not refresh contract expiry; the figures below may be out of date.</Text> : null}
       {renewError ? <Callout variant="error" title="Artwork renewal did not finish" description={renewError} /> : null}
       {healthyLines.length > 0 || unchecked ? (
         <Card p="4">
           <Stack gap="1">
             {healthyLines.map((line) => (
-              <Text key={line} className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
+              <Text key={line} size="sm">
                 {line}
               </Text>
             ))}
-            {unchecked ? (
-              <Text className="lede" style={{ margin: 0, fontSize: '0.85rem' }}>
-                {unchecked}
-              </Text>
-            ) : null}
+            {unchecked ? <Text size="sm">{unchecked}</Text> : null}
           </Stack>
         </Card>
       ) : null}
