@@ -49,15 +49,26 @@ const disclosure = sva({
 export function Disclosure({
   title = 'Technical details',
   children,
-  defaultOpen = false
+  defaultOpen = false,
+  open,
+  onOpenChange
 }: {
   title?: ReactNode;
   children: ReactNode;
   defaultOpen?: boolean;
+  /** Control it, e.g. to force it open while a field inside has an error. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const classes = disclosure();
   return (
-    <Collapsible.Root className={classes.root} defaultOpen={defaultOpen} lazyMount>
+    <Collapsible.Root
+      className={classes.root}
+      defaultOpen={defaultOpen}
+      open={open}
+      onOpenChange={onOpenChange ? (details) => onOpenChange(details.open) : undefined}
+      lazyMount
+    >
       <Collapsible.Trigger className={classes.trigger}>
         {title}
         <ChevronDown aria-hidden="true" className={classes.icon} />

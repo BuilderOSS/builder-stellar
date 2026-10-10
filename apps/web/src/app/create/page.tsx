@@ -31,9 +31,13 @@ const FORM_SECTIONS = [
   {
     id: 'membership',
     title: 'Membership',
-    description: 'How people join: auctions, the market, and what a token costs.'
+    description: 'Pick how people become members. Fine-tune prices and timings later.'
   },
-  { id: 'voting', title: 'Voting', description: 'How proposals pass and how long each stage takes.' },
+  {
+    id: 'voting',
+    title: 'Voting',
+    description: 'Pick a pace for decisions. The exact rules are in Advanced settings.'
+  },
   {
     id: 'review',
     title: 'Check and create',
@@ -86,9 +90,14 @@ export default function CreateDaoPage() {
       const key = ['basicInfo', 'governance'].includes(parts[0]) ? parts.slice(1).join('.') : parts.join('.');
       store.setValidationError(key, issue.message);
     }
-    requestAnimationFrame(() =>
-      document.querySelector<HTMLElement>('[aria-invalid="true"], [data-invalid="true"]')?.focus()
-    );
+    // A field inside Advanced settings mounts a frame or two after its panel opens; keep looking briefly.
+    let frames = 0;
+    const focusFirst = () => {
+      const field = document.querySelector<HTMLElement>('[aria-invalid="true"], [data-invalid="true"]');
+      if (field) field.focus();
+      else if (++frames < 10) requestAnimationFrame(focusFirst);
+    };
+    requestAnimationFrame(focusFirst);
   };
   const openSetup = async (token: string) => {
     indexingRequest.current?.abort();

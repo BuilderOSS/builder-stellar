@@ -1,11 +1,12 @@
 'use client';
 
 import { RadioGroup } from '@ark-ui/react/radio-group';
+import { Check } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { sva } from 'styled-system/css';
 
 const choice = sva({
-  slots: ['root', 'label', 'list', 'item', 'indicator', 'text', 'description'],
+  slots: ['root', 'label', 'list', 'item', 'indicator', 'text', 'description', 'check', 'badge'],
   base: {
     root: { display: 'grid', gap: '2', containerType: 'inline-size' },
     label: { textStyle: 'label', color: 'ink' },
@@ -50,8 +51,74 @@ const choice = sva({
       _checked: { boxShadow: 'inset 0 0 0 5px var(--choice-color, token(colors.signal))' }
     },
     text: { display: 'grid', gap: '0.5', minW: '0' },
-    description: { textStyle: 'caption', color: 'ink.muted', fontWeight: '400' }
-  }
+    description: { textStyle: 'caption', color: 'ink.muted', fontWeight: '400' },
+    check: { display: 'none' },
+    badge: { display: 'none' }
+  },
+  variants: {
+    variant: {
+      tile: {},
+      // Bigger cards for "pick what kind of thing this is" choices.
+      card: {
+        list: {
+          gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+          gap: '3',
+          '@container (max-width: 480px)': { gridTemplateColumns: 'minmax(0, 1fr)' }
+        },
+        item: {
+          display: 'grid',
+          alignContent: 'start',
+          alignItems: 'start',
+          gap: '2',
+          p: '4',
+          pr: '10',
+          borderRadius: 'card',
+          transitionProperty: 'box-shadow, background-color, scale',
+          transitionDuration: 'fast, fast, press',
+          transitionTimingFunction: 'ease, ease, token(easings.out)',
+          _active: { scale: '0.96' },
+          '& > svg': { width: '5', height: '5', color: 'ink.muted' },
+          '&[data-state=checked] > svg': { color: 'signal' }
+        },
+        text: { gap: '1' },
+        description: { fontSize: '0.875rem', lineHeight: '1.45' },
+        // Number-free selection mark: the check cross-fades in when the card is picked.
+        check: {
+          display: 'grid',
+          placeItems: 'center',
+          position: 'absolute',
+          top: '3.5',
+          right: '3.5',
+          width: '5',
+          height: '5',
+          borderRadius: 'full',
+          bg: 'signal',
+          color: 'primary.fg',
+          opacity: '0',
+          transform: 'scale(0.25)',
+          filter: 'blur(4px)',
+          transitionProperty: 'opacity, transform, filter',
+          transitionDuration: '200ms',
+          transitionTimingFunction: 'cubic-bezier(0.2, 0, 0, 1)',
+          '[data-state=checked] > &': { opacity: '1', transform: 'scale(1)', filter: 'blur(0px)' },
+          '& svg': { width: '3', height: '3' },
+          _motionReduce: { transitionProperty: 'opacity', transform: 'none', filter: 'none' }
+        },
+        badge: {
+          display: 'inline-flex',
+          justifySelf: 'start',
+          px: '2',
+          py: '0.5',
+          borderRadius: 'full',
+          bg: 'signal.wash',
+          color: 'signal',
+          textStyle: 'micro',
+          fontWeight: '600'
+        }
+      }
+    }
+  },
+  defaultVariants: { variant: 'tile' }
 });
 
 export type ChoiceOption = {
@@ -59,6 +126,8 @@ export type ChoiceOption = {
   label: ReactNode;
   description?: ReactNode;
   icon?: ReactNode;
+  /** Short tag shown on card choices, e.g. Recommended. */
+  badge?: ReactNode;
   disabled?: boolean;
   /** Tone for the selected ring, e.g. For = success, Against = danger. */
   tone?: 'success' | 'danger' | 'neutral';
@@ -80,7 +149,8 @@ export function ChoiceGroup({
   value,
   onValueChange,
   name,
-  disabled
+  disabled,
+  variant = 'tile'
 }: {
   label: ReactNode;
   options: ChoiceOption[];
@@ -88,8 +158,10 @@ export function ChoiceGroup({
   onValueChange: (value: string) => void;
   name?: string;
   disabled?: boolean;
+  /** `card` for a few big, described options; `tile` (default) for compact rows like a vote. */
+  variant?: 'tile' | 'card';
 }) {
-  const classes = choice();
+  const classes = choice({ variant });
   return (
     <RadioGroup.Root
       className={classes.root}
@@ -110,11 +182,17 @@ export function ChoiceGroup({
             className={classes.item}
             style={option.tone ? ({ '--choice-color': TONE_VAR[option.tone] } as React.CSSProperties) : undefined}
           >
-            {option.icon ?? <RadioGroup.ItemControl className={classes.indicator} />}
+            {option.icon ?? (variant === 'card' ? null : <RadioGroup.ItemControl className={classes.indicator} />)}
             <span className={classes.text}>
               <RadioGroup.ItemText>{option.label}</RadioGroup.ItemText>
               {option.description ? <span className={classes.description}>{option.description}</span> : null}
             </span>
+            {variant === 'card' && option.badge ? <span className={classes.badge}>{option.badge}</span> : null}
+            {variant === 'card' ? (
+              <span className={classes.check} aria-hidden="true">
+                <Check strokeWidth={3} />
+              </span>
+            ) : null}
             <RadioGroup.ItemHiddenInput />
           </RadioGroup.Item>
         ))}

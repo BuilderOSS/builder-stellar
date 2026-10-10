@@ -2,6 +2,7 @@
 import { useState } from 'react';
 
 import { Input } from '@/components/ui';
+import { membershipTypeOf, votingPaceOf } from '@/lib/create-dao-presets';
 import { configuredCreationNetwork, creationAssets } from '@/lib/create-dao-schema';
 import { formatDuration } from '@/lib/duration';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
@@ -23,6 +24,8 @@ export function ReviewStep({ connectedAddress }: { connectedAddress?: string }) 
   const rows = [
     ['Name', [basic.tokenName, basic.tokenSymbol].filter(Boolean).join(' · ') || 'Not set yet'],
     ['About', basic.description || 'Not set yet'],
+    ['Membership', membershipTypeOf(auction, market).title],
+    ['Voting pace', votingPaceOf(governance)?.title ?? 'Custom'],
     [
       'Auctions',
       auction.enabled
