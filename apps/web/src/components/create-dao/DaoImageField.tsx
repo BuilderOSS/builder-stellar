@@ -93,7 +93,7 @@ export function DaoImageField() {
           <Button
             size="sm"
             type="button"
-            variant="outline"
+            variant="secondary"
             disabled={busy || !address || auth !== 'authenticated'}
             onClick={() => void upload()}
           >
@@ -102,7 +102,7 @@ export function DaoImageField() {
           <Button
             size="sm"
             type="button"
-            variant="plain"
+            variant="ghost"
             disabled={busy}
             onClick={() => useCreateDaoStore.getState().setImagePreview(null)}
           >
@@ -125,7 +125,7 @@ export function DaoImageField() {
         <Button
           type="button"
           size="sm"
-          variant="plain"
+          variant="ghost"
           disabled={busy}
           onClick={() => {
             useCreateDaoStore.getState().updateBasicInfo({ contractImage: DEFAULT_DAO_IMAGE_URL });

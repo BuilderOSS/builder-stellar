@@ -107,7 +107,7 @@ export function ArtworkDirectoryUpload({
       <p className={styles.muted}>collection/layer/item.png · Same extension · Up to 16 layers and 1,000 files</p>
       <Button
         type="button"
-        variant="outline"
+        variant="secondary"
         disabled={disabled || busy || !files.length || !wallet || auth !== 'authenticated'}
         onClick={() => void upload()}
       >

@@ -165,7 +165,7 @@ export function AuctionParameterControls({
               )}
               <Button
                 type="button"
-                variant="outline"
+                variant="secondary"
                 disabled={
                   busy ||
                   !paused ||
@@ -195,14 +195,14 @@ export function AuctionParameterControls({
               >
                 {admin ? 'Confirm cancellation' : 'Add cancellation to proposal'}
               </Button>
-              <Button type="button" variant="plain" disabled={busy} onClick={() => setConfirmCancel(false)}>
+              <Button type="button" variant="ghost" disabled={busy} onClick={() => setConfirmCancel(false)}>
                 Keep auction
               </Button>
             </div>
           ) : (
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               disabled={busy || !paused || !live || !cancellable || (!admin && !canPropose)}
               onClick={() => setConfirmCancel(true)}
             >

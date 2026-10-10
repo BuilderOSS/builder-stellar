@@ -148,7 +148,7 @@ export function ModuleVersionCard({
           </label>
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             disabled={busy || state.isLoading}
             onClick={() => {
               if (!/^[a-f0-9]{64}$/i.test(hashInput.trim()))
@@ -161,7 +161,7 @@ export function ModuleVersionCard({
           </Button>
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             disabled={busy || state.isLoading}
             onClick={() => void state.mutate()}
           >
@@ -182,7 +182,7 @@ export function ModuleVersionCard({
             </Button>
           ) : null}
           {canPropose ? (
-            <Button type="button" variant="outline" disabled={busy || !state.data} onClick={proposeMigrate}>
+            <Button type="button" variant="secondary" disabled={busy || !state.data} onClick={proposeMigrate}>
               Add storage migration to proposal
             </Button>
           ) : null}

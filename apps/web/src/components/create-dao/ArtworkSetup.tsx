@@ -172,7 +172,7 @@ export function ArtworkSetup({ daoId, config }: { daoId: string; config: DaoNetw
           <Button
             key={collection.id}
             type="button"
-            variant="outline"
+            variant="secondary"
             disabled={started || busy}
             onClick={() =>
               choose({
@@ -199,7 +199,7 @@ export function ArtworkSetup({ daoId, config }: { daoId: string; config: DaoNetw
                     <Button
                       size="sm"
                       type="button"
-                      variant="plain"
+                      variant="ghost"
                       disabled={started || busy || !index}
                       aria-label={`Move ${property.name} earlier`}
                       onClick={() => {
@@ -213,7 +213,7 @@ export function ArtworkSetup({ daoId, config }: { daoId: string; config: DaoNetw
                     <Button
                       size="sm"
                       type="button"
-                      variant="plain"
+                      variant="ghost"
                       disabled={started || busy || index === plan.properties.length - 1}
                       aria-label={`Move ${property.name} later`}
                       onClick={() => {

@@ -147,7 +147,7 @@ export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoN
         <div className={styles.links}>
           <Button
             type="button"
-            variant="plain"
+            variant="ghost"
             aria-expanded={artworkOpen}
             aria-controls="artwork-setup-panel"
             onClick={() => setArtworkOpen((open) => !open)}
@@ -279,7 +279,7 @@ export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoN
         ) : null}
         <div className={styles.links}>
           <Button
-            variant="outline"
+            variant="secondary"
             type="button"
             disabled={busy || isValidating}
             onClick={() => {
@@ -313,7 +313,7 @@ export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoN
           {recover && !confirmed && choice.signedTxXdr ? (
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               disabled={busy || !admin || !ready || Boolean(session.walletNetworkIssue)}
               onClick={() => void handleLaunch(true)}
             >

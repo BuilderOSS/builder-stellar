@@ -33,7 +33,7 @@ export function ArtworkPreviewCanvas({
               ? `Loading preview… ${preview.loadingProgress}%`
               : 'Preview only. On-chain artwork is set by the signed batches below.')}
       </p>
-      <Button type="button" size="sm" variant="outline" onClick={preview.reload} disabled={preview.isLoading}>
+      <Button type="button" size="sm" variant="secondary" onClick={preview.reload} disabled={preview.isLoading}>
         Shuffle preview
       </Button>
     </div>

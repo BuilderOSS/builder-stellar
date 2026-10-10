@@ -96,7 +96,7 @@ export function ArtworkStateInspector({
           <div className={css({ display: 'flex', gap: '3', flexWrap: 'wrap' })}>
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               disabled={!page || data.isLoading}
               onClick={() => setPage((current) => current - 1)}
             >
@@ -104,7 +104,7 @@ export function ArtworkStateInspector({
             </Button>
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               disabled={data.isLoading || (page + 1) * 50 >= (data.data?.count ?? 0)}
               onClick={() => setPage((current) => current + 1)}
             >

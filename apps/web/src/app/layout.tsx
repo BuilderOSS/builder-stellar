@@ -34,10 +34,13 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  // Browser chrome can't read CSS variables; these mirror colors.canvas.
+  /* eslint-disable no-restricted-syntax */
   themeColor: [
     { media: '(prefers-color-scheme: dark)', color: '#15120F' },
     { media: '(prefers-color-scheme: light)', color: '#F3EFE8' }
   ],
+  /* eslint-enable no-restricted-syntax */
   viewportFit: 'cover'
 };
 

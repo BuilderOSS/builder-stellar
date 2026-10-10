@@ -210,7 +210,7 @@ export default function TokenAdminPage() {
                 <Button type="button" onClick={handleMint} disabled={busy || (!hasMintAccess && !canProposeMint)}>
                   {busy ? 'Preparing…' : hasMintAccess ? 'Mint to recipient' : 'Create mint proposal'}
                 </Button>
-                <Button type="button" variant="outline" onClick={() => void mutate()} disabled={isLoading}>
+                <Button type="button" variant="secondary" onClick={() => void mutate()} disabled={isLoading}>
                   {isLoading ? 'Refreshing...' : 'Refresh authorities'}
                 </Button>
               </div>

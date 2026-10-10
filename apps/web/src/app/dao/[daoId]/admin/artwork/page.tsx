@@ -179,7 +179,7 @@ export default function ArtworkAdminPage() {
           ) : null}
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             disabled={busy || artwork.isLoading}
             onClick={() => void Promise.all([artwork.mutate(), token.mutate()])}
           >
@@ -247,7 +247,7 @@ export default function ArtworkAdminPage() {
                         {direct || (canPropose && registered) ? (
                           <Button
                             type="button"
-                            variant="outline"
+                            variant="secondary"
                             disabled={
                               busy ||
                               !networkReady ||

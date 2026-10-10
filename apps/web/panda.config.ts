@@ -215,29 +215,6 @@ const button = defineRecipe({
         color: 'danger',
         borderColor: 'danger.edge',
         '@media (hover: hover) and (pointer: fine)': { _hover: { bg: 'danger.wash' } }
-      },
-      // Legacy aliases, removed once every screen is migrated (Phase 4).
-      solid: {
-        bg: 'primary',
-        color: 'primary.fg',
-        '@media (hover: hover) and (pointer: fine)': { _hover: { bg: 'primary.hover' } }
-      },
-      surface: {
-        bg: 'raised',
-        color: 'ink',
-        borderColor: 'rule',
-        '@media (hover: hover) and (pointer: fine)': { _hover: { bg: 'hover' } }
-      },
-      outline: {
-        bg: 'raised',
-        color: 'ink',
-        borderColor: 'rule',
-        '@media (hover: hover) and (pointer: fine)': { _hover: { bg: 'hover', borderColor: 'rule.strong' } }
-      },
-      plain: {
-        bg: 'transparent',
-        color: 'ink.muted',
-        '@media (hover: hover) and (pointer: fine)': { _hover: { bg: 'hover', color: 'ink' } }
       }
     },
     size: {

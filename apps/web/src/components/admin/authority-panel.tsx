@@ -73,14 +73,14 @@ export function AuthorityPanel({
             <Button type="button" onClick={() => onAllow?.()} disabled={busy}>
               {busy ? 'Saving...' : allowLabel}
             </Button>
-            <Button type="button" variant="outline" onClick={() => onRevoke?.()} disabled={busy}>
+            <Button type="button" variant="secondary" onClick={() => onRevoke?.()} disabled={busy}>
               {busy ? 'Saving...' : revokeLabel}
             </Button>
           </div>
         ) : null}
 
         {loading ? (
-          <div role="status" aria-busy="true" className="skeleton-list">
+          <div role="status" aria-busy="true" className={css({ display: 'grid', gap: '3' })}>
             <span className="sr-only">Loading authorities</span>
             {Array.from({ length: 3 }, (_, index) => (
               <Card key={index} p="3">

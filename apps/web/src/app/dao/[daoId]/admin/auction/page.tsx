@@ -145,7 +145,7 @@ export default function AuctionAdminPage() {
           ) : null}
           <Button
             type="button"
-            variant="outline"
+            variant="secondary"
             disabled={busy || isLoading}
             onClick={() => void Promise.all([mutate(), admin.mutate(), token.mutate()])}
           >
@@ -193,7 +193,7 @@ export default function AuctionAdminPage() {
                     </Button>
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="secondary"
                       disabled={busy || !allowed || !live || !data.paused}
                       onClick={() => void apply('unpause-auction')}
                     >
@@ -212,7 +212,7 @@ export default function AuctionAdminPage() {
                   />
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="secondary"
                     disabled={busy || !allowed || !data.paused || !reservePrice}
                     onClick={() => void apply('set-auction-reserve-price')}
                   >

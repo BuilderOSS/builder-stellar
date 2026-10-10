@@ -373,7 +373,7 @@ export default function GovernanceAdminPage() {
                 </Stack>
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="secondary"
                   size="sm"
                   onClick={() => void refreshSettings()}
                   disabled={settingsLoading}

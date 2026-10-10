@@ -147,7 +147,7 @@ export default function FoundersAdminPage() {
             </Text>
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               disabled={busy}
               onClick={() => void Promise.all([token.mutate(), artwork.mutate()])}
             >
@@ -222,7 +222,7 @@ export default function FoundersAdminPage() {
                     </label>
                     <Button
                       type="button"
-                      variant="plain"
+                      variant="ghost"
                       disabled={busy || review || !allowed || rows.length === 1}
                       onClick={() => setRows((current) => current.filter((_, id) => id !== index))}
                     >
@@ -232,7 +232,7 @@ export default function FoundersAdminPage() {
                 ))}
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="secondary"
                   disabled={busy || review || !allowed || rows.length >= MAX_BATCH_RECIPIENTS}
                   onClick={() => setRows((current) => [...current, { recipient: '', amount: '1' }])}
                 >
@@ -263,7 +263,7 @@ export default function FoundersAdminPage() {
                     >
                       {busy ? 'Checking mint…' : 'Sign founder allocation'}
                     </Button>
-                    <Button type="button" variant="plain" disabled={busy} onClick={() => setReview(false)}>
+                    <Button type="button" variant="ghost" disabled={busy} onClick={() => setReview(false)}>
                       Edit allocation
                     </Button>
                   </>
@@ -284,7 +284,7 @@ export default function FoundersAdminPage() {
                     Review allocation
                   </Button>
                 )}
-                <Button type="button" variant="outline" disabled={busy || !allowed} onClick={() => void mint(true)}>
+                <Button type="button" variant="secondary" disabled={busy || !allowed} onClick={() => void mint(true)}>
                   Check saved mint transaction
                 </Button>
                 {receipt ? (
@@ -292,7 +292,7 @@ export default function FoundersAdminPage() {
                     <Text overflowWrap="anywhere">Confirmed founder mint: {receipt}</Text>
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="secondary"
                       disabled={busy}
                       onClick={() => {
                         localStorage.removeItem(receiptKey);

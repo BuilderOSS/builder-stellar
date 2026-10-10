@@ -64,6 +64,29 @@ const config = [
     }
   },
   {
+    // Design system guardrails (see DESIGN.md): style with Panda tokens and the
+    // components in src/components/ui, never ad-hoc values.
+    files: ['src/app/**/*.tsx', 'src/components/**/*.tsx', 'src/lib/**/*.tsx'],
+    ignores: ['src/components/ui/**', 'src/app/api/**'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "JSXAttribute[name.name='style'] > JSXExpressionContainer > ObjectExpression",
+          message: 'Use Panda css()/recipes or a ui component instead of inline style objects (DESIGN.md).'
+        },
+        {
+          selector: 'Literal[value=/^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/]',
+          message: 'Use a colour token (colors.*) instead of a hex literal (DESIGN.md).'
+        }
+      ],
+      'no-restricted-imports': [
+        'error',
+        { patterns: [{ group: ['*.module.css'], message: 'CSS modules are retired; use Panda (DESIGN.md).' }] }
+      ]
+    }
+  },
+  {
     ignores: ['styled-system/**']
   }
 ];
