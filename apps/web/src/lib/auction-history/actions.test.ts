@@ -72,10 +72,13 @@ describe('explicit auction action preparation', () => {
     await expect(prepareBuyerAction(api, snapshot, 'GSESSION', 'bid', 10500001n, 100)).rejects.toThrow('not accepting');
     expect(mock.create_bid).not.toHaveBeenCalled();
   });
-  it('dispatches settle-only while paused and settle-and-create at exact expiry when unpaused', async () => {
+  it('dispatches settle-only while paused (never before the end time) and settle-and-create when unpaused', async () => {
     const paused = { ...snapshot, paused: true };
+    const early = client(paused);
+    await expect(prepareBuyerAction(early.api, paused, 'GSESSION', 'settle', null, 50)).rejects.toThrow();
+    expect(early.mock.settle_auction).not.toHaveBeenCalled();
     const only = client(paused);
-    await prepareBuyerAction(only.api, paused, 'GSESSION', 'settle', null, 50);
+    await prepareBuyerAction(only.api, paused, 'GSESSION', 'settle', null, 100);
     expect(only.mock.settle_auction).toHaveBeenCalledOnce();
     expect(only.mock.settle_and_create_new).not.toHaveBeenCalled();
     const next = client();

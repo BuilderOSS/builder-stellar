@@ -50,7 +50,9 @@ export function assertMarketplacePurchaseAuthorization(
     const id = marketplaceId(listing.id, listing.kind);
     const rootArgs = [
       listing.kind === 'primary' ? nativeToScVal(id, { type: 'u64' }) : nativeToScVal(Number(id), { type: 'u32' }),
-      new Address(buyer).toScVal()
+      new Address(buyer).toScVal(),
+      // max_price: the buyer's bound, which must equal the reviewed listing price.
+      nativeToScVal(BigInt(listing.price), { type: 'i128' })
     ];
     if (!callMatches(operation.func.invokeContract, listing.contractId, method, rootArgs)) reject();
 

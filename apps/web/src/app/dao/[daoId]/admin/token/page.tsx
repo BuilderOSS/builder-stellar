@@ -11,8 +11,8 @@ import { AuthorityPanel } from '@/components/admin/authority-panel';
 import { PageSection } from '@/components/page-section';
 import { Badge, Button, Callout, Card, Heading, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
-import { treasuryHasAuthority, treasuryIsOwner } from '@/lib/admin-proposals';
-import { useContractOwner } from '@/lib/admin-queries';
+import { treasuryHasAuthority, treasuryIsAdmin } from '@/lib/admin-proposals';
+import { useContractAdmin } from '@/lib/admin-queries';
 import { useAdminTokenState } from '@/lib/admin-surfaces';
 import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { BatchMintGovernanceTokenForm } from '@/lib/proposal-actions/actions/batch-mint-governance-token/component';
@@ -35,12 +35,12 @@ export default function TokenAdminPage() {
   const draftStatus = useAdminDraftStatus(daoId, ['batch-mint-governance-token']);
   const tx = useTransactionFeedback(config.name);
   const { data: mintAuthorities, error, isLoading, mutate } = useGoldskyMintAuthorities(config.tokenContractId);
-  const { data: tokenOwner } = useContractOwner(config, 'token', session.address || undefined);
+  const { data: tokenAdmin } = useContractAdmin(config, 'token', session.address || undefined);
   const token = useAdminTokenState(config, session.address);
-  const isOwner = Boolean(session.address && token.data?.owner === session.address);
-  const hasMintAccess = Boolean(isOwner || token.data?.mintAuthority);
+  const isAdmin = Boolean(session.address && token.data?.admin === session.address);
+  const hasMintAccess = Boolean(isAdmin || token.data?.mintAuthority);
   const treasuryCanMint =
-    treasuryIsOwner(config, tokenOwner) || treasuryHasAuthority(config.treasuryContractId, mintAuthorities?.items);
+    treasuryIsAdmin(config, tokenAdmin) || treasuryHasAuthority(config.treasuryContractId, mintAuthorities?.items);
   const canProposeMint = Boolean(session.address && token.data?.live && treasuryCanMint);
 
   async function handleMint() {
@@ -168,7 +168,7 @@ export default function TokenAdminPage() {
               <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
                 {hasMintAccess
                   ? 'Enter a recipient address and mint up to 20 tokens directly to that wallet.'
-                  : 'Only a mint authority or the owner can mint from this page.'}
+                  : 'Only a mint authority or the admin can mint from this page.'}
               </Text>
               <BatchMintGovernanceTokenForm
                 value={{ recipient, amount } satisfies BatchMintGovernanceTokenData}
@@ -198,7 +198,7 @@ export default function TokenAdminPage() {
           <AuthorityPanel
             title="Mint authorities"
             badge="Token"
-            description="These wallets are explicitly allowed to mint. The owner is always allowed too."
+            description="These wallets are explicitly allowed to mint. The admin is always allowed too."
             items={mintAuthorities?.items ?? []}
             value=""
             allowLabel=""

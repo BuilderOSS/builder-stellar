@@ -3,7 +3,7 @@ import { rpc, StrKey, TransactionBuilder } from '@stellar/stellar-sdk';
 import type { AssembledTransaction } from '@stellar/stellar-sdk/contract';
 import { z } from 'zod';
 
-import type { DaoNetworkConfig } from '@/lib/dao-config';
+import { type DaoNetworkConfig, readSource } from '@/lib/dao-config';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { directoryScope } from '@/lib/member-directory/query';
 import { holderTokenId, memberAddress } from '@/lib/member-directory/validation';
@@ -52,7 +52,7 @@ export function holderClient(config: DaoNetworkConfig, address: string) {
     contractId: config.tokenContractId,
     rpcUrl: config.rpcUrl,
     networkPassphrase: config.passphrase,
-    publicKey: address,
+    publicKey: readSource(address),
     allowHttp: config.name === 'local'
   });
 }

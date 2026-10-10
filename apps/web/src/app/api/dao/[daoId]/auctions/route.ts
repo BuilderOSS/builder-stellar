@@ -2,7 +2,7 @@ import { Client as AuctionClient } from '@builder-stellar/auction-bindings';
 import { NextResponse } from 'next/server';
 
 import { parseContractErrorCode } from '@/lib/contract-errors';
-import { getDaoNetworkConfigById } from '@/lib/dao-config';
+import { getDaoNetworkConfigById, readSource } from '@/lib/dao-config';
 import { getGoldskyAuctionBids, getGoldskyAuctionHistory } from '@/lib/goldsky';
 
 function jsonValue(value: unknown): unknown {
@@ -25,7 +25,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ dao
       contractId: config.auctionContractId,
       rpcUrl: config.rpcUrl,
       networkPassphrase: config.passphrase,
-      publicKey: config.adminAddress
+      publicKey: readSource(config.launchAdmin)
     });
     const [configTx, pausedTx, history] = await Promise.all([
       client.get_config(),
@@ -37,7 +37,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ dao
       const auctionTx = await client.get_auction();
       auction = jsonValue(auctionTx.result) as { token_id?: string } | null;
     } catch (error) {
-      if (parseContractErrorCode(error) !== 1212) throw error;
+      // AuctionError::NotLaunched: no auction has been created yet.
+      if (parseContractErrorCode(error) !== 7409) throw error;
     }
     const paused = Boolean(pausedTx.result);
     if (!auction || typeof auction.token_id === 'undefined') {

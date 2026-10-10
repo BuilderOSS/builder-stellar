@@ -43,17 +43,16 @@ export function assertMinterSpec(spec: contract.Spec) {
   const errors = spec.findEntry('MinterError');
   if (errors.type !== 'scSpecEntryUdtErrorEnumV0') throw new Error('Unsupported Minter error ABI.');
   const required = {
-    InvalidAmount: 2,
-    InvalidTokenId: 3,
-    BatchTooLarge: 4,
-    MerkleRootNotSet: 5,
-    AllowlistNotSet: 6,
-    NotInAllowlist: 7,
-    AlreadyClaimed: 8,
-    MerkleProofInvalid: 9,
-    InvalidInput: 10,
-    TokenContractError: 11,
-    TokenNotLive: 13
+    InvalidAmount: 7801,
+    InvalidTokenId: 7802,
+    BatchTooLarge: 7803,
+    MerkleRootNotSet: 7804,
+    AllowlistNotSet: 7805,
+    NotInAllowlist: 7806,
+    AlreadyClaimed: 7807,
+    MerkleProofInvalid: 7808,
+    InvalidInput: 7809,
+    TokenNotLive: 7810
   };
   const cases = new Map(errors.udtErrorEnumV0.cases.map((item) => [item.name.toString(), item.value]));
   for (const [name, code] of Object.entries(required))

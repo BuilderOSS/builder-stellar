@@ -128,10 +128,10 @@ describe('current marketplace/governor/auction administration registry', () => {
     });
     expect(getActionHandler('set-auction-duration').validate({ value: '2592001' }, formContext).valid).toBe(false);
   });
-  it('accepts fee 0..10000 bps and rejects invalid marketplace contract IDs', () => {
+  it('accepts fee 0..2500 bps (25% cap) and rejects invalid marketplace contract IDs', () => {
     const fee = getActionHandler('set-marketplace-secondary-fee');
-    for (const value of ['0', '10000']) expect(fee.validate({ value }, formContext).valid).toBe(true);
-    for (const value of ['-1', '10001', '2.5', '9007199254740993'])
+    for (const value of ['0', '2500']) expect(fee.validate({ value }, formContext).valid).toBe(true);
+    for (const value of ['-1', '2501', '10000', '2.5', '9007199254740993'])
       expect(fee.validate({ value }, formContext).valid).toBe(false);
     expect(
       getActionHandler('set-marketplace-payment-token').validate({ paymentToken: 'invalid' }, formContext).valid

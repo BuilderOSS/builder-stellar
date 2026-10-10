@@ -13,8 +13,8 @@ import { AuctionParameterControls } from '@/components/admin/auction-parameter-c
 import { PageSection } from '@/components/page-section';
 import { Badge, Button, Callout, Card, Heading, ShortId, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
-import { treasuryIsOwner } from '@/lib/admin-proposals';
-import { useContractOwner } from '@/lib/admin-queries';
+import { treasuryIsAdmin } from '@/lib/admin-proposals';
+import { useContractAdmin } from '@/lib/admin-queries';
 import { adminReadOptions, useAdminTokenState } from '@/lib/admin-surfaces';
 import { decimalToStroops, formatStroops } from '@/lib/auction-values';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
@@ -55,9 +55,9 @@ export default function AuctionAdminPage() {
     fetcher
   );
   const token = useAdminTokenState(config, session.address);
-  const owner = useContractOwner(config, 'auction', session.address || config.launchAdmin || config.adminAddress);
-  const direct = Boolean(session.address && owner.data === session.address);
-  const canPropose = Boolean(session.address && token.data?.live && treasuryIsOwner(config, owner.data));
+  const admin = useContractAdmin(config, 'auction', session.address || config.launchAdmin);
+  const direct = Boolean(session.address && admin.data === session.address);
+  const canPropose = Boolean(session.address && token.data?.live && treasuryIsAdmin(config, admin.data));
   const allowed = direct || canPropose;
   const live = token.data?.live === true;
   const networkReady =
@@ -133,21 +133,21 @@ export default function AuctionAdminPage() {
         <Stack gap="4">
           <AdminSectionNav daoId={daoId} active="/auction" />
           {!config.auctionContractId ? <Callout variant="info" title="No auction module configured" /> : null}
-          {error || owner.error || token.error ? (
+          {error || admin.error || token.error ? (
             <Callout
               variant="error"
               title="Auction controls could not be loaded"
-              description={(error || owner.error || token.error).message}
+              description={(error || admin.error || token.error).message}
             />
           ) : null}
-          {isLoading || token.isLoading || owner.isLoading ? (
+          {isLoading || token.isLoading || admin.isLoading ? (
             <Text role="status">Loading live auction state…</Text>
           ) : null}
           <Button
             type="button"
             variant="outline"
             disabled={busy || isLoading}
-            onClick={() => void Promise.all([mutate(), owner.mutate(), token.mutate()])}
+            onClick={() => void Promise.all([mutate(), admin.mutate(), token.mutate()])}
           >
             Refresh live values
           </Button>
@@ -155,7 +155,7 @@ export default function AuctionAdminPage() {
             <Callout
               variant="info"
               title="Read-only auction view"
-              description="Connect the current owner during setup. After launch, Treasury-owned updates go through governance."
+              description="Connect the current admin during setup. After launch, Treasury-administered updates go through governance."
             />
           ) : null}
           {message ? (
@@ -231,7 +231,7 @@ export default function AuctionAdminPage() {
                 config={config}
                 paused={data.paused}
                 live={live}
-                owner={direct}
+                admin={direct}
                 canPropose={canPropose}
                 values={{
                   duration: Number(data.config.duration),

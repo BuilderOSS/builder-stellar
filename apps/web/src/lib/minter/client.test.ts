@@ -117,7 +117,7 @@ describe('Minter exact ABI and identity isolation', () => {
     for (const change of [
       { live: false },
       { mintAuthority: false },
-      { owner: ALICE },
+      { admin: ALICE },
       { deploymentId: 'dep-b' },
       { daoId: TREASURY },
       { tokenContractId: TREASURY }

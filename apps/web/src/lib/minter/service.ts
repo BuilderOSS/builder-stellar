@@ -4,7 +4,7 @@ import { rpc, StrKey, TransactionBuilder } from '@stellar/stellar-sdk';
 import { z } from 'zod';
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
-import { getDaoNetworkConfigById } from '@/lib/dao-config';
+import { getDaoNetworkConfigById, readSource } from '@/lib/dao-config';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { getGoldskyMinterClaims } from '@/lib/goldsky';
 import { readHolderValue, requireHolderAddress } from '@/lib/token-holder/read';
@@ -65,7 +65,7 @@ export async function currentClaims(
   const options = {
     rpcUrl: config.rpcUrl,
     networkPassphrase: config.passphrase,
-    publicKey: address ?? config.adminAddress,
+    publicKey: readSource(address, config.launchAdmin),
     allowHttp: config.name === 'local'
   };
   const manager = new ManagerClient({ ...options, contractId: network.managerAddress });
@@ -75,9 +75,9 @@ export async function currentClaims(
     return value;
   });
   const token = new TokenClient({ ...options, contractId: config.tokenContractId });
-  const [live, owner, authority] = await Promise.all([
+  const [live, admin, authority] = await Promise.all([
     token.is_live().then((tx) => readHolderValue(tx, bool)),
-    token.owner().then((tx) => readHolderValue(tx, requireHolderAddress)),
+    token.admin().then((tx) => readHolderValue(tx, requireHolderAddress)),
     minter ? token.mint_authority({ authority: minter }).then((tx) => readHolderValue(tx, bool)) : false
   ]);
   const state = minter
@@ -101,7 +101,7 @@ export async function currentClaims(
     address,
     authenticated,
     live,
-    owner,
+    admin,
     mintAuthority: authority,
     ...state
   };

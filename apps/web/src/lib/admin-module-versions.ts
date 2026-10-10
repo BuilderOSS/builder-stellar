@@ -49,11 +49,7 @@ export async function readAdminModuleVersion(
   };
   const client = new Clients[module](adminReadOptions(config, contractId, address));
   const manager = new ManagerClient(adminReadOptions(config, deployment.managerAddress, address));
-  const [version, hash, owner] = await Promise.all([
-    client.version(),
-    client.wasm_hash(),
-    'get_owner' in client ? client.get_owner() : Promise.resolve(null)
-  ]);
+  const [version, hash, admin] = await Promise.all([client.version(), client.wasm_hash(), client.admin()]);
   const source = (await manager.get_implementation({ wasm_hash: hash.result })).result;
   const target = targetHash
     ? (await manager.get_implementation({ wasm_hash: hashFromHex(targetHash) })).result
@@ -68,7 +64,7 @@ export async function readAdminModuleVersion(
     contractId,
     version: version.result,
     fromHash: hashToHex(hash.result),
-    owner: owner?.result ?? null,
+    admin: admin?.result ?? null,
     source,
     target: target
       ? { version: target.version, hash: hashToHex(target.wasm_hash), revoked: target.revoked, name: target.name }

@@ -11,7 +11,10 @@ vi.mock('@/lib/minter/service', async (original) => {
   return { ...service, prepareClaim: mocks.prepare };
 });
 vi.mock('@/lib/goldsky', () => ({ getGoldskyMinterClaims: vi.fn() }));
-vi.mock('@/lib/dao-config', () => ({ getDaoNetworkConfigById: vi.fn() }));
+vi.mock('@/lib/dao-config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/dao-config')>()),
+  getDaoNetworkConfigById: vi.fn()
+}));
 
 import { POST } from './route';
 

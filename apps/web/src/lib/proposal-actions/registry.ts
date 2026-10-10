@@ -1,9 +1,5 @@
 // src/lib/proposal-actions/registry.ts
 
-import { createElement, Fragment } from 'react';
-
-import { Callout } from '@/components/ui';
-
 import { batchMintGovernanceTokenHandler } from './actions/batch-mint-governance-token';
 import { mintGovernanceTokenHandler } from './actions/mint-governance-token';
 import { transferSacTokenHandler } from './actions/transfer-sac-token';
@@ -46,32 +42,8 @@ const registeredArtworkPropertiesHandler: ActionHandler<ArtworkPropertiesDraft> 
   serialize: (data) => ({ ...addArtworkPropertiesHandler.serialize(data), type: 'add-artwork-properties' })
 };
 
-const registeredModuleUpgradeHandler: ActionHandler = {
-  ...moduleUpgradeHandler,
-  FormComponent: (props) =>
-    createElement(
-      Fragment,
-      null,
-      createElement(moduleUpgradeHandler.FormComponent, props),
-      props.value?.module === 'metadata'
-        ? createElement(Callout, {
-            variant: 'warning',
-            title: 'Metadata upgrade ownership has no public getter. Upgrade proposals remain blocked.'
-          })
-        : props.validationErrors && !props.validationErrors.valid
-          ? createElement(Callout, { variant: 'warning', title: props.validationErrors.message })
-          : null
-    ),
-  validate: (data, context) =>
-    data.module === 'metadata'
-      ? { valid: false, message: 'Metadata upgrade ownership has no public getter. Upgrade proposals remain blocked.' }
-      : moduleUpgradeHandler.validate(data, context),
-  buildCallVector: (data, context) => {
-    if (data.module === 'metadata')
-      throw new Error('Metadata upgrade authority is unavailable; submission is disabled.');
-    return moduleUpgradeHandler.buildCallVector(data, context);
-  }
-};
+// Every module, Metadata included, exposes admin(); upgrades share one handler.
+const registeredModuleUpgradeHandler: ActionHandler = moduleUpgradeHandler;
 
 /**
  * Explicit registry - all actions registered in one place

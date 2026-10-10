@@ -9,7 +9,7 @@ import { getDeploymentConfig } from '@/lib/deployment-config';
 export type LaunchReadiness = {
   pending: PendingDao | null;
   supply: bigint;
-  owner: string;
+  admin: string;
   live: boolean;
   paymentAssetsMatch: boolean;
   platformMinter: string | null;
@@ -24,10 +24,10 @@ export async function readLaunchReadiness(daoId: string, config: DaoNetworkConfi
   };
   const manager = new ManagerClient({ ...options, contractId: deployment.managerAddress });
   const token = new TokenClient({ ...options, contractId: daoId });
-  const [pendingTx, supplyTx, ownerTx, liveTx, minterTx] = await Promise.all([
+  const [pendingTx, supplyTx, adminTx, liveTx, minterTx] = await Promise.all([
     manager.get_pending_dao({ token_address: daoId }),
     token.total_supply(),
-    token.owner(),
+    token.admin(),
     token.is_live(),
     manager.get_platform_minter()
   ]);
@@ -45,7 +45,7 @@ export async function readLaunchReadiness(daoId: string, config: DaoNetworkConfi
   return {
     pending,
     supply: supplyTx.result,
-    owner: ownerTx.result,
+    admin: adminTx.result,
     live: liveTx.result,
     paymentAssetsMatch,
     platformMinter: minterTx.result
@@ -55,8 +55,8 @@ export function launchReadinessIssues(readiness: LaunchReadiness, launchAdmin: s
   if (readiness.live) return ['This DAO is already live. Refresh the overview.'];
   const issues: string[] = [];
   if (!readiness.pending || readiness.pending.launch_admin !== launchAdmin)
-    issues.push('Pending DAO ownership could not be verified on this Manager.');
-  if (readiness.owner !== launchAdmin) issues.push('Token ownership no longer belongs to the launch administrator.');
+    issues.push('Pending DAO admin rights could not be verified on this Manager.');
+  if (readiness.admin !== launchAdmin) issues.push('Token admin no longer belongs to the launch administrator.');
   if (readiness.supply <= 0n) issues.push('Mint at least one founder token before launch.');
   if (!readiness.paymentAssetsMatch)
     issues.push('Restore the payment assets pinned at creation in both modules before launch.');

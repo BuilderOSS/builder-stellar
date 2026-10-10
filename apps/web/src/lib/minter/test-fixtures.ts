@@ -27,7 +27,7 @@ export const state: ClaimState = {
   authenticated: true,
   live: true,
   mintAuthority: true,
-  owner: TREASURY,
+  admin: TREASURY,
   ledger: 123,
   merkle: { root: '00'.repeat(32), round: 2, claimed: null },
   allowlist: { amount: '9007199254740993', round: 3, member: true, claimed: null }
@@ -60,17 +60,16 @@ export function minterSpec(
       })
     );
   const errors = {
-    InvalidAmount: 2,
-    InvalidTokenId: 3,
-    BatchTooLarge: 4,
-    MerkleRootNotSet: 5,
-    AllowlistNotSet: 6,
-    NotInAllowlist: 7,
-    AlreadyClaimed: 8,
-    MerkleProofInvalid: 9,
-    InvalidInput: 10,
-    TokenContractError: 11,
-    TokenNotLive: overrides.liveError ?? 13
+    InvalidAmount: 7801,
+    InvalidTokenId: 7802,
+    BatchTooLarge: 7803,
+    MerkleRootNotSet: 7804,
+    AllowlistNotSet: 7805,
+    NotInAllowlist: 7806,
+    AlreadyClaimed: 7807,
+    MerkleProofInvalid: 7808,
+    InvalidInput: 7809,
+    TokenNotLive: overrides.liveError ?? 7810
   };
   return new contract.Spec([
     fn('mint_allowlist', [

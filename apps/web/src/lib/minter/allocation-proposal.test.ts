@@ -47,14 +47,14 @@ describe('trusted registered Minter governance allocations', () => {
       expect(getActionHandler(draft.type)).toBeDefined();
     }
   });
-  it('fails closed for another deployment, token, registration, network, owner, Live state or mint authority', () => {
+  it('fails closed for another deployment, token, registration, network, admin, Live state or mint authority', () => {
     for (const changed of [
       { ...state, deploymentId: 'other' },
       { ...state, daoId: MINTER },
       { ...state, tokenContractId: MINTER },
       { ...state, minterContractId: TOKEN },
       { ...state, network: 'public' },
-      { ...state, owner: ALICE },
+      { ...state, admin: ALICE },
       { ...state, live: false },
       { ...state, mintAuthority: false }
     ]) {

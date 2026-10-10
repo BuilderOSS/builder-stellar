@@ -66,8 +66,8 @@ describe('proposal admin-call inspector rendering', () => {
     expect(html).toContain(toHash);
     expect(html).toContain('ABI support is not approval');
   });
-  it('leaves external/Metadata upgrades unsupported instead of inferring a module authority', () => {
-    for (const target of [contract(9), state.config.metadataContractId]) {
+  it('leaves external upgrades unsupported instead of inferring a module authority', () => {
+    for (const target of [contract(9)]) {
       const html = renderToStaticMarkup(
         <ProposalActionPreview targets={[target]} functions={['upgrade']} args={[['01'.repeat(32), 'ab'.repeat(32)]]} />
       );

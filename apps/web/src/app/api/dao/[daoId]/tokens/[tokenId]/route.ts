@@ -24,7 +24,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
       prisma.tokenInventory.findFirst({
         where: { deploymentId, daoId: token, contractId: token, tokenId: BigInt(tokenId) }
       }),
-      currentTokenHolder(holderClient(config, config.adminAddress || config.launchAdmin), tokenId),
+      currentTokenHolder(holderClient(config, config.launchAdmin), tokenId),
       resolveOnchainTokenMetadata(
         config,
         tokenId,

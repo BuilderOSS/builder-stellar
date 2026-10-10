@@ -29,7 +29,7 @@ export default function FoundersAdminPage() {
   const [message, setMessage] = useState('');
   const [receipt, setReceipt] = useState('');
   const allowed = Boolean(
-    token.data && !token.data.live && token.data.owner === session.address && session.authStatus === 'authenticated'
+    token.data && !token.data.live && token.data.admin === session.address && session.authStatus === 'authenticated'
   );
   const networkReady =
     !session.walletNetworkIssue &&
@@ -61,8 +61,8 @@ export default function FoundersAdminPage() {
         if (!review) throw new Error('Review the founder allocation before signing.');
         const values = founderMintValues(rows);
         const current = await token.mutate();
-        if (!current || current.live || current.owner !== session.address)
-          throw new Error('Setup ownership changed. Refresh before minting.');
+        if (!current || current.live || current.admin !== session.address)
+          throw new Error('Setup admin rights changed. Refresh before minting.');
         const client = new TokenClient({
           ...adminReadOptions(config, config.tokenContractId, session.address),
           signTransaction: async (xdr, opts) => {
@@ -74,7 +74,7 @@ export default function FoundersAdminPage() {
                 wallet.walletNetworkIssue ||
                 (wallet.walletNetworkPassphrase && wallet.walletNetworkPassphrase !== config.passphrase)
               )
-                throw new Error('Wallet changed. Reconnect the setup owner on the DAO network.');
+                throw new Error('Wallet changed. Reconnect the setup admin on the DAO network.');
             };
             checkWallet();
             const signed = await StellarWalletsKit.signTransaction(xdr, {
@@ -128,7 +128,7 @@ export default function FoundersAdminPage() {
     >
       <Stack gap="4">
         <AdminSectionNav daoId={daoId} active="/founders" />
-        {token.isLoading ? <Text role="status">Checking setup ownership and supply…</Text> : null}
+        {token.isLoading ? <Text role="status">Checking setup admin rights and supply…</Text> : null}
         {token.error ? (
           <Callout variant="error" title="Token state unavailable" description={token.error.message} />
         ) : null}
@@ -161,8 +161,8 @@ export default function FoundersAdminPage() {
                 {!allowed ? (
                   <Callout
                     variant="info"
-                    title="Connect and authenticate the current setup owner"
-                    description="Only the current Token owner can mint the setup founder allocation."
+                    title="Connect and authenticate the current setup admin"
+                    description="Only the current Token admin can mint the setup founder allocation."
                   />
                 ) : null}
                 <Callout

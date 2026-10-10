@@ -14,7 +14,10 @@ vi.mock('@builder-stellar/auction-bindings', () => ({
     paused = mocks.paused;
   }
 }));
-vi.mock('@/lib/dao-config', () => ({ getDaoNetworkConfigById: mocks.config }));
+vi.mock('@/lib/dao-config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/dao-config')>()),
+  getDaoNetworkConfigById: mocks.config
+}));
 vi.mock('@/lib/goldsky', () => ({ getGoldskyAuctionHistory: mocks.history, getGoldskyAuctionBids: mocks.bids }));
 import { GET } from './route';
 
@@ -26,7 +29,7 @@ describe('expected prelaunch auction state', () => {
     mocks.paused.mockResolvedValue({ result: true });
     mocks.history.mockResolvedValue([]);
     mocks.bids.mockClear();
-    mocks.auction.mockRejectedValue(new Error('Error(Contract, #1212)'));
+    mocks.auction.mockRejectedValue(new Error('Error(Contract, #7409)'));
   });
   it('returns NotLaunched as an ordinary state, not a 500', async () => {
     const response = await get();

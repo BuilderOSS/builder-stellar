@@ -31,7 +31,7 @@ export const marketplaceActionSchema = z.union([
       price: z.string().max(60),
       expiresAt: z.string().max(20),
       paymentAsset: z.string().length(56),
-      feeBps: z.number().int().min(0).max(10_000)
+      feeBps: z.number().int().min(0).max(2_500)
     })
     .strict(),
   z.object({ action: z.literal('revoke'), tokenId: z.string().max(10) }).strict(),
@@ -154,12 +154,24 @@ export async function prepareMarketplaceAction(
               )
             )
           : marketplaceTransactionXdr(
-              await client.list({ token_id: tokenId, seller: actor.address, price, expires_at: expiry }, options)
+              await client.list(
+                {
+                  token_id: tokenId,
+                  seller: actor.address,
+                  price,
+                  expires_at: expiry,
+                  // The seller's reviewed terms: the contract rejects the listing
+                  // if governance changed the fee or asset before confirmation.
+                  max_fee_bps: action.feeBps,
+                  payment_asset: action.paymentAsset
+                },
+                options
+              )
             );
       summary =
         action.action === 'approve'
           ? `Approve only token #${tokenId} for the marketplace until ledger ${latest.sequence + 120}. This does not list or escrow the token.`
-          : `Escrow token #${tokenId} for ${formatMarketplaceAmount(price)} ${readiness.assetCode}. ${action.feeBps} bps is deducted from the sale price. Expires ${new Date(Number(expiry) * 1000).toISOString()}. The asset and fee are captured at execution: a governance change before confirmation can change them. Review the confirmed listing and cancel it if its terms are unsuitable.`;
+          : `Escrow token #${tokenId} for ${formatMarketplaceAmount(price)} ${readiness.assetCode}. ${action.feeBps} bps is deducted from the sale price. Expires ${new Date(Number(expiry) * 1000).toISOString()}. These terms are bound into the transaction: if governance changes the fee or asset before confirmation, the listing fails instead of applying new terms. While listed, the token's vote leaves your delegate until it is sold or the listing is cancelled.`;
     }
   } else if ('kind' in action) {
     const indexed = await marketplaceListing(community, action.kind, action.id, action.eventId);
@@ -184,8 +196,8 @@ export async function prepareMarketplaceAction(
       if (!asset) throw new MarketplaceError('Only verified XLM and USDC SAC assets are supported.');
       const simulated =
         action.kind === 'primary'
-          ? await client.buy_primary({ listing_id: id, buyer: actor.address }, options)
-          : await client.buy({ token_id: Number(id), buyer: actor.address }, options);
+          ? await client.buy_primary({ listing_id: id, buyer: actor.address, max_price: purchasePrice }, options)
+          : await client.buy({ token_id: Number(id), buyer: actor.address, max_price: purchasePrice }, options);
       xdr = marketplaceTransactionXdr<void | number>(simulated);
       assertMarketplacePurchaseAuthorization(
         xdr,

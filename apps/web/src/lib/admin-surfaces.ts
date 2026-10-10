@@ -2,14 +2,14 @@ import { Client as MetadataClient } from '@builder-stellar/metadata-bindings';
 import { Client as TokenClient } from '@builder-stellar/token-bindings';
 import useSWR from 'swr';
 
-import type { DaoNetworkConfig } from '@/lib/dao-config';
+import { type DaoNetworkConfig, readSource } from '@/lib/dao-config';
 
 export function adminReadOptions(config: DaoNetworkConfig, contractId: string, address?: string | null) {
   return {
     contractId,
     rpcUrl: config.rpcUrl,
     networkPassphrase: config.passphrase,
-    publicKey: address || config.launchAdmin || config.adminAddress,
+    publicKey: readSource(address, config.launchAdmin),
     allowHttp: config.rpcUrl.startsWith('http://')
   };
 }
@@ -18,18 +18,18 @@ export function adminReadOptions(config: DaoNetworkConfig, contractId: string, a
 export function useAdminTokenState(config: DaoNetworkConfig, address?: string | null) {
   return useSWR(
     config.tokenContractId
-      ? ['admin-token-state', config.tokenContractId, config.rpcUrl, config.passphrase, address || config.adminAddress]
+      ? ['admin-token-state', config.tokenContractId, config.rpcUrl, config.passphrase, address || '']
       : null,
     async () => {
       const token = new TokenClient(adminReadOptions(config, config.tokenContractId, address));
-      const [owner, live, supply, authority] = await Promise.all([
-        token.get_owner(),
+      const [admin, live, supply, authority] = await Promise.all([
+        token.admin(),
         token.is_live(),
         token.total_supply(),
         address ? token.mint_authority({ authority: address }) : Promise.resolve(null)
       ]);
       return {
-        owner: owner.result,
+        admin: admin.result,
         live: live.result,
         supply: supply.result,
         mintAuthority: authority?.result === true
@@ -41,14 +41,15 @@ export function useAdminTokenState(config: DaoNetworkConfig, address?: string | 
 export function useAdminArtwork(config: DaoNetworkConfig, address?: string | null) {
   return useSWR(
     config.metadataContractId
-      ? ['admin-artwork', config.metadataContractId, config.rpcUrl, config.passphrase, address || config.adminAddress]
+      ? ['admin-artwork', config.metadataContractId, config.rpcUrl, config.passphrase, address || '']
       : null,
     async () => {
       const client = new MetadataClient(adminReadOptions(config, config.metadataContractId, address));
-      const [settings, count, groups] = await Promise.all([
+      const [settings, count, groups, admin] = await Promise.all([
         client.get_settings(),
         client.properties_count(),
-        client.ipfs_data_count()
+        client.ipfs_data_count(),
+        client.admin()
       ]);
       // Count headers first; never fetch all artwork items to render a summary.
       const properties = await Promise.all(
@@ -57,7 +58,7 @@ export function useAdminArtwork(config: DaoNetworkConfig, address?: string | nul
           return { id: property_id, count: items.result };
         })
       );
-      return { settings: settings.result.unwrap(), properties, groupCount: groups.result };
+      return { settings: settings.result.unwrap(), properties, groupCount: groups.result, admin: admin.result };
     }
   );
 }

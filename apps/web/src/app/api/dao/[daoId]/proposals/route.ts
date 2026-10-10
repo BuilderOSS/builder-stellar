@@ -2,7 +2,7 @@ import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { NextResponse } from 'next/server';
 
 import { parseLimit, parseNonNegativeInteger } from '@/lib/api-pagination';
-import { getDaoNetworkConfigById } from '@/lib/dao-config';
+import { getDaoNetworkConfigById, readSource } from '@/lib/dao-config';
 import { getGoldskyProposalList } from '@/lib/goldsky';
 import { proposalIdToBuffer } from '@/lib/proposal-id';
 import { parseProposalMetadata, type ProposalMetadata } from '@/lib/proposal-metadata';
@@ -57,7 +57,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
       contractId: config.governorContractId,
       rpcUrl: config.rpcUrl,
       networkPassphrase: config.passphrase,
-      publicKey: config.adminAddress
+      publicKey: readSource(config.launchAdmin)
     });
 
     const items = await Promise.all(

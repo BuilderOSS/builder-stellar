@@ -82,7 +82,8 @@ export function purchaseRootArgs(listing: MarketplaceListing, buyer: string) {
     listing.kind === 'primary'
       ? nativeToScVal(BigInt(listing.id), { type: 'u64' })
       : nativeToScVal(Number(listing.id), { type: 'u32' }),
-    new Address(buyer).toScVal()
+    new Address(buyer).toScVal(),
+    nativeToScVal(BigInt(listing.price), { type: 'i128' })
   ];
 }
 

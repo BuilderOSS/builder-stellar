@@ -16,6 +16,7 @@ import {
 } from '@/components/admin/admin-action-forms';
 import { decimalToStroops, validateReservePrice } from '@/lib/auction-values';
 import {
+  MAX_MARKETPLACE_FEE_BPS,
   validateAuctionTimeBuffer,
   validateProposalThreshold,
   validateQueueDelay,
@@ -380,7 +381,7 @@ export const setMarketplaceSecondaryFeeHandler = boundedModuleValueHandler(
   'set-marketplace-secondary-fee',
   'Marketplace secondary fee (bps)',
   0,
-  10_000
+  MAX_MARKETPLACE_FEE_BPS
 );
 export const setAuctionMinBidIncrementHandler = boundedModuleValueHandler(
   'set-auction-min-bid-increment',

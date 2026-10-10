@@ -45,9 +45,10 @@ export function auctionBuyerState(
 
 export function settlementMethod(data: CurrentAuction, now: number) {
   if (!data.auction || data.auction.settled || BigInt(data.auction.start_time) === 0n) return null;
-  // The paused-only contract method deliberately permits settlement before expiry.
-  if (data.paused) return 'settle_auction' as const;
-  return now > 0 && BigInt(data.auction.end_time) <= BigInt(now) ? ('settle_and_create_new' as const) : null;
+  // Both settle methods require now >= end_time (AuctionActive otherwise), even
+  // while paused. Paused settlement closes the auction without starting another.
+  if (now <= 0 || BigInt(data.auction.end_time) > BigInt(now)) return null;
+  return data.paused ? ('settle_auction' as const) : ('settle_and_create_new' as const);
 }
 
 export function assertAuctionWallet(

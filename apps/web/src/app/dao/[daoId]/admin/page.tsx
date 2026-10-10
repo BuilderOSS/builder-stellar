@@ -10,8 +10,8 @@ import { PageSection } from '@/components/page-section';
 import { ProposalDraftPanel } from '@/components/proposal/proposal-draft-panel';
 import { Badge, Card, Heading, ShortId, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
-import { treasuryHasAuthority, treasuryIsOwner } from '@/lib/admin-proposals';
-import { useContractOwner } from '@/lib/admin-queries';
+import { treasuryHasAuthority, treasuryIsAdmin } from '@/lib/admin-proposals';
+import { useContractAdmin } from '@/lib/admin-queries';
 import { useAdminTokenState } from '@/lib/admin-surfaces';
 import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
@@ -51,24 +51,24 @@ export default function AdminPage() {
   const { daoId, daoConfig: config } = useDaoContext();
   const session = useAuthSessionStore();
   const { data: mintAuthorities } = useGoldskyMintAuthorities(config.tokenContractId);
-  const { data: tokenOwner } = useContractOwner(config, 'token', session.address || undefined);
-  const { data: governorOwner } = useContractOwner(config, 'governor', session.address || undefined);
-  const { data: auctionOwner } = useContractOwner(config, 'auction', session.address || undefined);
+  const { data: tokenAdmin } = useContractAdmin(config, 'token', session.address || undefined);
+  const { data: governorAdmin } = useContractAdmin(config, 'governor', session.address || undefined);
+  const { data: auctionAdmin } = useContractAdmin(config, 'auction', session.address || undefined);
 
   const token = useAdminTokenState(config, session.address);
-  const isOwner = Boolean(session.address && token.data?.owner === session.address);
-  const hasMintAccess = Boolean(isOwner || token.data?.mintAuthority);
-  const hasGovernanceAccess = Boolean(session.address && governorOwner === session.address);
-  const canProposeOwnerActions = treasuryIsOwner(config, tokenOwner) || treasuryIsOwner(config, governorOwner);
+  const isAdmin = Boolean(session.address && token.data?.admin === session.address);
+  const hasMintAccess = Boolean(isAdmin || token.data?.mintAuthority);
+  const hasGovernanceAccess = Boolean(session.address && governorAdmin === session.address);
+  const canProposeAdminActions = treasuryIsAdmin(config, tokenAdmin) || treasuryIsAdmin(config, governorAdmin);
   const canProposeMint =
-    treasuryIsOwner(config, tokenOwner) || treasuryHasAuthority(config.treasuryContractId, mintAuthorities?.items);
-  const canProposeGovernance = treasuryIsOwner(config, governorOwner);
-  const canProposeAuction = treasuryIsOwner(config, auctionOwner);
+    treasuryIsAdmin(config, tokenAdmin) || treasuryHasAuthority(config.treasuryContractId, mintAuthorities?.items);
+  const canProposeGovernance = treasuryIsAdmin(config, governorAdmin);
+  const canProposeAuction = treasuryIsAdmin(config, auctionAdmin);
   const hasAnyAccess = Boolean(
-    isOwner ||
+    isAdmin ||
     hasMintAccess ||
     hasGovernanceAccess ||
-    canProposeOwnerActions ||
+    canProposeAdminActions ||
     canProposeMint ||
     canProposeGovernance ||
     canProposeAuction
@@ -77,7 +77,7 @@ export default function AdminPage() {
   return (
     <PageSection
       title="Admin dashboard"
-      description="Role-aware entry point for owner, token, and governance operations."
+      description="Role-aware entry point for admin, token, and governance operations."
     >
       <Stack gap="4">
         <Card p="5">
@@ -96,11 +96,11 @@ export default function AdminPage() {
                 <Heading style={{ fontSize: '1.2rem', marginTop: '10px' }}>Access summary</Heading>
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {isOwner ? <Badge>Owner</Badge> : null}
+                {isAdmin ? <Badge>Admin</Badge> : null}
                 {hasMintAccess ? <Badge>Token Admin</Badge> : null}
                 {hasGovernanceAccess ? <Badge>Governance Admin</Badge> : null}
-                {!isOwner && canProposeMint ? <Badge>Mint proposals</Badge> : null}
-                {!isOwner && canProposeGovernance ? <Badge>Governance proposals</Badge> : null}
+                {!isAdmin && canProposeMint ? <Badge>Mint proposals</Badge> : null}
+                {!isAdmin && canProposeGovernance ? <Badge>Governance proposals</Badge> : null}
                 {!hasAnyAccess ? <Badge>Read only</Badge> : null}
               </div>
             </div>
@@ -122,11 +122,11 @@ export default function AdminPage() {
 
         <Grid columns={{ base: 1, lg: 3 }} gap="4">
           <SectionCard
-            label="Owner"
+            label="Admin"
             title="Authority management"
             description="Add or remove mint authorities from a single place."
             href={`/dao/${daoId}/admin/owner` as Route}
-            allowed={isOwner || canProposeOwnerActions}
+            allowed={isAdmin || canProposeAdminActions}
           />
           <SectionCard
             label="Token Admin"
@@ -143,11 +143,11 @@ export default function AdminPage() {
             allowed={hasGovernanceAccess || canProposeGovernance}
           />
           <SectionCard
-            label="Owner"
+            label="Admin"
             title="Auction controls"
             description="Pause or resume auction activity for emergency and maintenance operations."
             href={`/dao/${daoId}/admin/auction` as Route}
-            allowed={isOwner || canProposeAuction}
+            allowed={isAdmin || canProposeAuction}
           />
           <SectionCard
             label="Artwork"

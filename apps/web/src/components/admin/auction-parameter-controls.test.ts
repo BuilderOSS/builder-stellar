@@ -25,7 +25,7 @@ const props = {
   config: { name: 'testnet', passphrase: 'test' } as DaoNetworkConfig,
   paused: true,
   live: true,
-  owner: false,
+  admin: false,
   canPropose: true,
   values: { duration: 300, timeBuffer: 30, increment: 10 },
   cancellable: true,

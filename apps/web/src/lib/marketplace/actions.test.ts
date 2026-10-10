@@ -246,7 +246,7 @@ describe('authenticated marketplace preparation lifecycle', () => {
       eventId: 'primary-event'
     });
     expect(mocks.client.buy_primary).toHaveBeenCalledWith(
-      { listing_id: 9007199254740993n, buyer },
+      { listing_id: 9007199254740993n, buyer, max_price: 10000001n },
       { timeoutInSeconds: 180 }
     );
     expect(mocks.client.buy).not.toHaveBeenCalled();
@@ -266,7 +266,10 @@ describe('authenticated marketplace preparation lifecycle', () => {
       id: '7',
       eventId: 'cycle-one'
     });
-    expect(mocks.client.buy).toHaveBeenCalledWith({ token_id: 7, buyer }, { timeoutInSeconds: 180 });
+    expect(mocks.client.buy).toHaveBeenCalledWith(
+      { token_id: 7, buyer, max_price: 10000001n },
+      { timeoutInSeconds: 180 }
+    );
     expect(mocks.client.buy_primary).not.toHaveBeenCalled();
     expect(result.summary).toContain('250 bps');
     expect(mocks.readiness).toHaveBeenCalledWith(buyer, 'testnet', usdc);
@@ -288,7 +291,7 @@ describe('authenticated marketplace preparation lifecycle', () => {
     expect(mocks.client.list).not.toHaveBeenCalled();
     await prepareMarketplaceAction('dao-a', actor, { ...action, action: 'list' });
     expect(mocks.client.list).toHaveBeenCalledWith(
-      { token_id: 7, seller: buyer, price: 10000001n, expires_at: expiry },
+      { token_id: 7, seller: buyer, price: 10000001n, expires_at: expiry, max_fee_bps: 500, payment_asset: xlm },
       { timeoutInSeconds: 180 }
     );
   });

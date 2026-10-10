@@ -2,7 +2,7 @@ import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { Address, scValToNative, xdr } from '@stellar/stellar-sdk';
 import { Server } from '@stellar/stellar-sdk/rpc';
 
-import type { DaoNetworkConfig } from '@/lib/dao-config';
+import { type DaoNetworkConfig, readSource } from '@/lib/dao-config';
 import { proposalIdToBuffer } from '@/lib/proposal-id';
 
 export const PROPOSAL_EXPIRATION_SECONDS = 1_209_600;
@@ -39,7 +39,7 @@ export async function readProposalChainState(config: DaoNetworkConfig, proposalI
     contractId: config.governorContractId,
     rpcUrl: config.rpcUrl,
     networkPassphrase: config.passphrase,
-    publicKey: config.adminAddress
+    publicKey: readSource(config.launchAdmin)
   });
   const id = proposalIdToBuffer(proposalId);
   const server = new Server(config.rpcUrl, { allowHttp: config.rpcUrl.startsWith('http://') });

@@ -69,10 +69,11 @@ describe('auction buyer economics and lifecycle', () => {
       auctionBuyerState(config, { ...auctionFixture, auction: { ...auctionFixture.auction!, settled: true } }, 100)
     ).toBe('settled');
   });
-  it('matches paused-only settlement, including pre-expiry, and never restarts an already settled auction', () => {
+  it('never settles before the end time (even paused) and never restarts an already settled auction', () => {
     expect(settlementMethod(auctionFixture, 99)).toBeNull();
     expect(settlementMethod(auctionFixture, 100)).toBe('settle_and_create_new');
-    expect(settlementMethod({ ...auctionFixture, paused: true }, 50)).toBe('settle_auction');
+    expect(settlementMethod({ ...auctionFixture, paused: true }, 50)).toBeNull();
+    expect(settlementMethod({ ...auctionFixture, paused: true }, 100)).toBe('settle_auction');
     expect(settlementMethod({ ...auctionFixture, auction: null }, 100)).toBeNull();
     expect(
       settlementMethod({ ...auctionFixture, auction: { ...auctionFixture.auction!, settled: true } }, 100)

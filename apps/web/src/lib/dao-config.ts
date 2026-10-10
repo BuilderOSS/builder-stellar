@@ -18,7 +18,11 @@ export type DaoNetworkConfig = {
   tokenName: string;
   tokenSymbol: string;
   tokenDescription: string;
-  /** Historical admin/read-simulation source. Not a module owner after launch. */
+  /**
+   * Current DAO admin from the index: the launch admin during setup, the
+   * Treasury (a contract address) after launch. Never use it as an SDK
+   * simulation source; use `readSource`.
+   */
   adminAddress: string;
   launchAdmin: string;
   tokenContractId: string;
@@ -38,18 +42,30 @@ export type DaoNetworkConfig = {
 
 export type DaoNetworkName = NetworkName;
 
+const ACCOUNT_RE = /^G[A-Z2-7]{55}$/;
+
+/**
+ * Source account for read-only simulations: the first candidate that is a
+ * classic account, else undefined (the SDK then simulates from its null
+ * account). Contract addresses such as the post-launch Treasury admin cannot be
+ * loaded as a source account.
+ */
+export function readSource(...candidates: Array<string | null | undefined>): string | undefined {
+  return candidates.find((value): value is string => typeof value === 'string' && ACCOUNT_RE.test(value));
+}
+
 export function isDaoAdmin(config: DaoNetworkConfig, address: string | null | undefined): boolean {
-  // Launch hands module ownership to the Treasury. Historical admin_address is
-  // still useful as a read-simulation source, never as post-launch authority.
+  // Launch hands every module's admin to the Treasury: only the pending launch
+  // admin administers the DAO directly.
   if (!address || config.status !== 'pending') return false;
 
   const normalizedAddress = address.trim().toLowerCase();
-  const configuredOwner = config.adminAddress.trim().toLowerCase();
+  const configuredAdmin = config.adminAddress.trim().toLowerCase();
   const pendingLaunchAdmin = config.launchAdmin.trim().toLowerCase();
 
   return Boolean(
     normalizedAddress &&
-    (normalizedAddress === configuredOwner || (config.status === 'pending' && normalizedAddress === pendingLaunchAdmin))
+    (normalizedAddress === configuredAdmin || (config.status === 'pending' && normalizedAddress === pendingLaunchAdmin))
   );
 }
 
@@ -84,7 +100,7 @@ export async function getDaoNetworkConfigById(daoId: string): Promise<DaoNetwork
     tokenName: daoConfig.token_name || '',
     tokenSymbol: daoConfig.token_symbol || '',
     tokenDescription: daoConfig.token_description || '',
-    // Before launch, the launch administrator owns the module contracts.
+    // The current admin: the launch admin before launch, the Treasury after.
     adminAddress: daoConfig.admin_address || (daoConfig.status === 'pending' ? daoConfig.launch_admin || '' : ''),
     launchAdmin: daoConfig.launch_admin || '',
     tokenContractId: daoConfig.token_address,

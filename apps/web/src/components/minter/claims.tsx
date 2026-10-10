@@ -203,7 +203,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
               <br />
               Token: {data.tokenContractId}
               <br />
-              Owner: {data.owner}
+              Admin: {data.admin}
             </p>
             <p>
               Authentication:{' '}
@@ -424,10 +424,10 @@ function marker(value: boolean | null | undefined, yes: string, no: string) {
 function AllocationInfo({ state }: { state?: ClaimState }) {
   return (
     <section className={styles.panel}>
-      <h2>Owner / governance allocation configuration</h2>
+      <h2>Admin / governance allocation configuration</h2>
       <p>
-        Only the current Token owner can set an allowlist, set a Merkle root, or batch mint. These methods require a
-        Live token; setup allocations cannot be configured before launch. After launch the owner is normally the
+        Only the current Token admin can set an allowlist, set a Merkle root, or batch mint. These methods require a
+        Live token; setup allocations cannot be configured before launch. After launch the admin is normally the
         Treasury, so changes must execute through governance.
       </p>
       <p>
@@ -440,7 +440,7 @@ function AllocationInfo({ state }: { state?: ClaimState }) {
       </p>
       <p role="note">
         Governance submission is not enabled on this page: the shared proposal encoder/registry does not support Minter
-        targets yet. Validated, unregistered allocation action descriptors are available for lead integration. No owner
+        targets yet. Validated, unregistered allocation action descriptors are available for lead integration. No admin
         transaction is signed here.
       </p>
       <AllocationDraftForm state={state} />

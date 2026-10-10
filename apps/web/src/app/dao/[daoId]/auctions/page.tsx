@@ -268,7 +268,7 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
                 <Callout
                   variant="warning"
                   title={state === 'paused' ? 'Bidding is paused' : 'Bidding has ended'}
-                  description={`${auction.highest_bidder ? 'Settlement transfers the token to the winner and proceeds to treasury.' : 'With no bids, settlement transfers the unsold token to treasury; it is not burned.'} ${data.paused ? 'Paused settlement does not start another auction and may close this auction before its end time.' : 'Settlement also mints and starts the next auction.'}`}
+                  description={`${auction.highest_bidder ? 'Settlement transfers the token to the winner and proceeds to treasury.' : 'With no bids, settlement transfers the unsold token to treasury; it is not burned.'} ${data.paused ? 'Once the end time passes, paused settlement closes this auction without starting another.' : 'Settlement also mints and starts the next auction.'}`}
                 />
               ) : null}
               {canSettle ? (

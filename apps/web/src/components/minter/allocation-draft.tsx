@@ -41,7 +41,7 @@ export function AllocationDraftForm({ state }: { state?: ClaimState }) {
     state.network === config.name &&
     state.live &&
     state.mintAuthority &&
-    state.owner === config.treasuryContractId &&
+    state.admin === config.treasuryContractId &&
     !!config.minterContractId &&
     state.minterContractId === config.minterContractId &&
     !!config.minterSpec?.length;
@@ -53,7 +53,7 @@ export function AllocationDraftForm({ state }: { state?: ClaimState }) {
     try {
       if (!allowed)
         throw new Error(
-          'Authenticate and verify the current Minter, Token owner, Live state and mint authority first.'
+          'Authenticate and verify the current Minter, Token admin, Live state and mint authority first.'
         );
       if (!state) throw new Error('Refresh current allocation state first.');
       if (text.length > 20000) throw new Error('Allocation JSON exceeds 20 KB.');
@@ -140,7 +140,7 @@ export function AllocationDraftForm({ state }: { state?: ClaimState }) {
       </p>
       <p>
         Review limit: 100 recipients. Replacing a root/list starts a new round and permits repeat claims. Batch mint is
-        immediate owner allocation, not a claim round.
+        immediate admin allocation, not a claim round.
       </p>
       <label>
         Allocation JSON

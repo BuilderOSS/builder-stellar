@@ -4,7 +4,7 @@ import { Client as TokenClient } from '@builder-stellar/token-bindings';
 import { Server } from '@stellar/stellar-sdk/rpc';
 import useSWR from 'swr';
 
-import type { DaoNetworkConfig } from '@/lib/dao-config';
+import { type DaoNetworkConfig, readSource } from '@/lib/dao-config';
 
 export type GovernorSettings = {
   votingDelay: number;
@@ -26,7 +26,7 @@ async function fetchGovernorSettings([, contractId, rpcUrl, passphrase, publicKe
     contractId,
     rpcUrl,
     networkPassphrase: passphrase,
-    publicKey
+    publicKey: readSource(publicKey)
   });
   const latestLedger = await server.getLatestLedger();
 
@@ -46,19 +46,19 @@ async function fetchGovernorSettings([, contractId, rpcUrl, passphrase, publicKe
   } satisfies GovernorSettings;
 }
 
-export function useGovernorSettings(config: DaoNetworkConfig, publicKey: string) {
-  const key =
-    config.governorContractId && publicKey
-      ? (['governor-settings', config.governorContractId, config.rpcUrl, config.passphrase, publicKey] as const)
-      : null;
+/** `publicKey` is only a simulation source; reads work without it. */
+export function useGovernorSettings(config: DaoNetworkConfig, publicKey?: string) {
+  const key = config.governorContractId
+    ? (['governor-settings', config.governorContractId, config.rpcUrl, config.passphrase, publicKey ?? ''] as const)
+    : null;
   return useSWR(key, fetchGovernorSettings, { keepPreviousData: true });
 }
 
 type ContractKind = 'token' | 'governor' | 'auction';
-type ContractOwnerKey = readonly ['contract-owner', ContractKind, string, string, string, string];
+type ContractAdminKey = readonly ['contract-admin', ContractKind, string, string, string, string];
 
-async function fetchContractOwner([, kind, contractId, rpcUrl, passphrase, publicKey]: ContractOwnerKey) {
-  const options = { contractId, rpcUrl, networkPassphrase: passphrase, publicKey };
+async function fetchContractAdmin([, kind, contractId, rpcUrl, passphrase, publicKey]: ContractAdminKey) {
+  const options = { contractId, rpcUrl, networkPassphrase: passphrase, publicKey: readSource(publicKey) };
   const client =
     kind === 'token'
       ? new TokenClient(options)
@@ -66,20 +66,19 @@ async function fetchContractOwner([, kind, contractId, rpcUrl, passphrase, publi
         ? new GovernorClient(options)
         : new AuctionClient(options);
 
-  return (await client.get_owner()).result;
+  return (await client.admin()).result;
 }
 
-export function useContractOwner(config: DaoNetworkConfig, kind: ContractKind, publicKey?: string) {
+export function useContractAdmin(config: DaoNetworkConfig, kind: ContractKind, publicKey?: string) {
   const contractId =
     kind === 'token'
       ? config.tokenContractId
       : kind === 'governor'
         ? config.governorContractId
         : config.auctionContractId;
-  const key =
-    contractId && publicKey
-      ? (['contract-owner', kind, contractId, config.rpcUrl, config.passphrase, publicKey] as const)
-      : null;
+  const key = contractId
+    ? (['contract-admin', kind, contractId, config.rpcUrl, config.passphrase, publicKey ?? ''] as const)
+    : null;
 
-  return useSWR(key, fetchContractOwner);
+  return useSWR(key, fetchContractAdmin);
 }

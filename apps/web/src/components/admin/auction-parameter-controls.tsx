@@ -22,7 +22,7 @@ export function AuctionParameterControls({
   config,
   paused,
   live,
-  owner,
+  admin,
   canPropose,
   values,
   cancellable,
@@ -34,7 +34,7 @@ export function AuctionParameterControls({
   config: DaoNetworkConfig;
   paused: boolean;
   live: boolean;
-  owner: boolean;
+  admin: boolean;
   canPropose: boolean;
   values: { duration: number; timeBuffer: number; increment: number };
   cancellable: boolean;
@@ -58,13 +58,13 @@ export function AuctionParameterControls({
     { type: 'set-auction-min-bid-increment' as const, label: 'Minimum bid increment (%)', value: values.increment }
   ];
   async function apply(type: Setting | 'cancel-auction', label: string) {
-    if (!session.address || busy || !paused || !networkReady || (!owner && !canPropose)) return;
+    if (!session.address || busy || !paused || !networkReady || (!admin && !canPropose)) return;
     if (type === 'cancel-auction' && (!live || !cancellable)) return;
     const handler = getActionHandler(type);
     const data = type === 'cancel-auction' ? {} : { value: edits[type] ?? '' };
     const validation = handler.validate(data, context);
     if (!validation.valid) return setMessage(validation.message);
-    if (!owner) {
+    if (!admin) {
       draft.requestAdd({
         daoId,
         action: handler.serialize(data, context),
@@ -144,7 +144,7 @@ export function AuctionParameterControls({
                     max={100}
                     step={1}
                     value={edits[type] ?? String(value)}
-                    disabled={busy || !paused || (!owner && !canPropose)}
+                    disabled={busy || !paused || (!admin && !canPropose)}
                     onChange={(event) => setEdits((current) => ({ ...current, [type]: event.target.value }))}
                   />
                 </label>
@@ -153,7 +153,7 @@ export function AuctionParameterControls({
                   id={type}
                   label={label}
                   value={Number(edits[type] ?? value)}
-                  disabled={busy || !paused || (!owner && !canPropose)}
+                  disabled={busy || !paused || (!admin && !canPropose)}
                   onChange={(next) => setEdits((current) => ({ ...current, [type]: String(next) }))}
                   helperText={
                     type === 'set-auction-duration'
@@ -169,13 +169,13 @@ export function AuctionParameterControls({
                   busy ||
                   !paused ||
                   !networkReady ||
-                  (!owner && !canPropose) ||
+                  (!admin && !canPropose) ||
                   !edits[type] ||
                   Number(edits[type]) === value
                 }
                 onClick={() => void apply(type, label)}
               >
-                {owner ? 'Apply' : 'Add to proposal'}
+                {admin ? 'Apply' : 'Add to proposal'}
               </Button>
             </Stack>
           ))}
@@ -189,10 +189,10 @@ export function AuctionParameterControls({
               <Callout variant="warning" title="Cancel this paused, unsettled auction?" />
               <Button
                 type="button"
-                disabled={busy || !paused || !networkReady || !live || !cancellable || (!owner && !canPropose)}
+                disabled={busy || !paused || !networkReady || !live || !cancellable || (!admin && !canPropose)}
                 onClick={() => void apply('cancel-auction', 'Cancel auction')}
               >
-                {owner ? 'Confirm cancellation' : 'Add cancellation to proposal'}
+                {admin ? 'Confirm cancellation' : 'Add cancellation to proposal'}
               </Button>
               <Button type="button" variant="plain" disabled={busy} onClick={() => setConfirmCancel(false)}>
                 Keep auction
@@ -202,7 +202,7 @@ export function AuctionParameterControls({
             <Button
               type="button"
               variant="outline"
-              disabled={busy || !paused || !live || !cancellable || (!owner && !canPropose)}
+              disabled={busy || !paused || !live || !cancellable || (!admin && !canPropose)}
               onClick={() => setConfirmCancel(true)}
             >
               Review cancellation

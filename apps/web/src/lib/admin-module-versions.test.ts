@@ -5,7 +5,7 @@ import type { DaoNetworkConfig } from '@/lib/dao-config';
 const mocks = vi.hoisted(() => ({
   version: vi.fn(),
   hash: vi.fn(),
-  owner: vi.fn(),
+  admin: vi.fn(),
   implementation: vi.fn(),
   latest: vi.fn(),
   approved: vi.fn(),
@@ -15,7 +15,7 @@ vi.mock('@builder-stellar/token-bindings', () => ({
   Client: class {
     version = mocks.version;
     wasm_hash = mocks.hash;
-    get_owner = mocks.owner;
+    admin = mocks.admin;
   }
 }));
 vi.mock('@builder-stellar/manager-bindings', () => ({
@@ -45,7 +45,7 @@ describe('read-only module release and transition checks', () => {
     mocks.deployment.mockReturnValue({ networkPassphrase: 'test', managerAddress: 'manager' });
     mocks.version.mockResolvedValue({ result: 'v1' });
     mocks.hash.mockResolvedValue({ result: from });
-    mocks.owner.mockResolvedValue({ result: 'treasury' });
+    mocks.admin.mockResolvedValue({ result: 'treasury' });
     mocks.implementation.mockResolvedValue({
       result: { name: 'ActualRegisteredName', version: 'v1', wasm_hash: from, revoked: true }
     });

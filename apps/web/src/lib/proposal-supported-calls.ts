@@ -28,7 +28,7 @@ export type ProposalEncodingContext = Pick<
 >;
 
 const supported = {
-  token: ['mint', 'batch_mint', 'transfer', 'set_mint_authority', 'upgrade', 'sync_version'],
+  token: ['mint', 'batch_mint', 'transfer', 'set_mint_authority', 'upgrade', 'migrate', 'sync_version'],
   governor: [
     'set_voting_delay',
     'set_voting_period',
@@ -36,6 +36,7 @@ const supported = {
     'set_quorum_bps',
     'set_queue_delay',
     'upgrade',
+    'migrate',
     'sync_version'
   ],
   auction: [
@@ -48,17 +49,23 @@ const supported = {
     'set_min_bid_increment',
     'cancel_auction',
     'upgrade',
+    'migrate',
     'sync_version'
   ],
-  treasury: ['upgrade', 'sync_version'],
-  // Settings/artwork authority follows Token.get_owner, not Metadata's upgrade
-  // owner. No getter exists for that upgrade owner: do not infer it here.
+  // Treasury self-calls are limited to these by the contract; `authorize`
+  // attaches a nested authorization tree to the next action.
+  treasury: ['upgrade', 'migrate', 'sync_version', 'authorize'],
+  // Metadata has its own admin() (launch admin, then the Treasury).
   metadata: [
     'add_properties',
     'update_renderer_base',
     'update_description',
     'update_project_uri',
-    'update_contract_image'
+    'update_contract_image',
+    'regenerate',
+    'upgrade',
+    'migrate',
+    'sync_version'
   ],
   marketplace: [
     'create_primary_listing',
@@ -68,6 +75,7 @@ const supported = {
     'pause',
     'unpause',
     'upgrade',
+    'migrate',
     'sync_version'
   ]
 } as const;
@@ -160,8 +168,6 @@ export function encodeSupportedCall(
               : target && target === config.metadataContractId
                 ? 'metadata'
                 : null;
-  if (role === 'metadata' && (fn === 'upgrade' || fn === 'sync_version'))
-    throw new Error('Metadata upgrade authority has no public getter; submission is disabled.');
   if (role && (supported[role] as readonly string[]).includes(fn)) {
     const Clients = {
       token: TokenClient,

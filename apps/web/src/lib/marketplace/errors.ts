@@ -1,17 +1,22 @@
 export function marketplaceErrorMessage(error: unknown) {
   const text = error instanceof Error ? error.message : String(error);
   const messages: Record<string, string> = {
-    '1303': 'The price must be greater than zero.',
-    '1304': 'Choose an expiry in the future.',
-    '1305': 'This token already has a listing. Refresh the marketplace.',
-    '1306': 'This listing is no longer available. Refresh before trying again.',
-    '1307': 'This listing has expired. It can no longer be purchased.',
-    '1308': 'This listing has not expired yet.',
-    '1309': 'Only the original seller can cancel this listing.',
-    '1311':
+    '7702': 'The price must be greater than zero.',
+    '7703': 'Choose an expiry in the future.',
+    '7704': 'This token already has a listing. Refresh the marketplace.',
+    '7705': 'This listing is no longer available. Refresh before trying again.',
+    '7706': 'This listing has expired. It can no longer be purchased.',
+    '7707': 'This listing has not expired yet.',
+    '7708': 'Only the original seller can cancel this listing.',
+    '7709': 'The marketplace fee is out of range (at most 25%).',
+    '7710':
       'This listing price and fee exceed the contract arithmetic limit. The seller can cancel the listing and choose a smaller price.',
-    '1314': 'The marketplace is paused. Purchases and new listings are unavailable.',
-    '9001': 'The marketplace has not launched yet.'
+    '7712':
+      'The marketplace payment asset changed since you reviewed it. Refresh, review the new asset and list again.',
+    '7713': 'The marketplace is paused. Purchases and new listings are unavailable.',
+    '7714': 'The marketplace fee increased since you reviewed it. Refresh, review the new fee and list again.',
+    '7715': 'The price is now higher than the price you reviewed. Refresh the listing and review the new price.',
+    '7001': 'The marketplace has not launched yet.'
   };
   for (const [code, message] of Object.entries(messages)) {
     if (new RegExp(`(?:Error\\(Contract, #|contract error[: ]+|error #)${code}\\b`, 'i').test(text)) return message;

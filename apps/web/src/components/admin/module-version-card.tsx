@@ -7,7 +7,7 @@ import { Stack } from 'styled-system/jsx';
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
 import { Badge, Button, Callout, Card, Heading, Input, ShortId, Text } from '@/components/ui';
 import { readAdminModuleVersion, type UpgradeModule, useAdminModuleVersion } from '@/lib/admin-module-versions';
-import { treasuryIsOwner } from '@/lib/admin-proposals';
+import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { assertAdminCallSupported } from '@/lib/admin-registered-call';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { getAllActionHandlers } from '@/lib/proposal-actions/registry';
@@ -31,20 +31,20 @@ export function ModuleVersionCard({
   const state = useAdminModuleVersion(config, module, session.address, targetHash);
   const draft = useAdminProposalDraft();
   const handler = getAllActionHandlers().find((item) => String(item.type) === 'upgrade-dao-module');
-  const canPropose = Boolean(state.data && session.address && treasuryIsOwner(config, state.data.owner));
+  const canPropose = Boolean(state.data && session.address && treasuryIsAdmin(config, state.data.admin));
   async function propose() {
     if (!handler || !state.data?.target || !canPropose || busy) return;
     setBusy(true);
     try {
       const current = await readAdminModuleVersion(config, module, session.address, state.data.target.hash);
       if (
-        !treasuryIsOwner(config, current.owner) ||
+        !treasuryIsAdmin(config, current.admin) ||
         !current.approved ||
         current.target?.revoked ||
         current.fromHash === current.target?.hash
       )
         throw new Error(
-          'This transition is no longer approved, ownership changed, or the target is already active. Refresh the module.'
+          'This transition is no longer approved, admin rights changed, or the target is already active. Refresh the module.'
         );
       const values = { module, fromHash: current.fromHash, toHash: current.target!.hash };
       const context = { config, session: { address: session.address, kit: StellarWalletsKit } };
@@ -80,7 +80,7 @@ export function ModuleVersionCard({
           {state.data ? (
             <>
               <ShortId value={state.data.contractId} label="Contract" />
-              {state.data.owner ? <ShortId value={state.data.owner} label="Current owner" /> : null}
+              {state.data.admin ? <ShortId value={state.data.admin} label="Current admin" /> : null}
               <Text>Current version: {state.data.version}</Text>
               <Text style={{ overflowWrap: 'anywhere' }}>Current WASM hash: {state.data.fromHash}</Text>
               <Badge>
@@ -111,12 +111,6 @@ export function ModuleVersionCard({
                   a known hash below.
                 </Text>
               )}
-              {module === 'metadata' ? (
-                <Text>
-                  Metadata upgrade ownership has no public getter in this ABI. Upgrade proposal creation stays blocked;
-                  artwork ownership is separately read from the Token.
-                </Text>
-              ) : null}
             </>
           ) : null}
           <label htmlFor={`upgrade-hash-${module}`}>

@@ -1,6 +1,7 @@
 'use client';
 import { Input, Textarea } from '@/components/ui';
 import { configuredCreationNetwork, creationAssets } from '@/lib/create-dao-schema';
+import { MAX_MARKETPLACE_FEE_BPS } from '@/lib/governance-limits';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
 import { CreationField, fieldAccessibility } from './CreationField';
@@ -127,7 +128,7 @@ export function MembershipStep() {
               id="marketplace.secondaryFeeBps"
               type="number"
               min={0}
-              max={10000}
+              max={MAX_MARKETPLACE_FEE_BPS}
               value={Number.isFinite(market.secondaryFeeBps) ? market.secondaryFeeBps : ''}
               {...fieldAccessibility('marketplace.secondaryFeeBps', errors)}
               onChange={(e) => store.updateMarketplace({ secondaryFeeBps: e.target.valueAsNumber })}

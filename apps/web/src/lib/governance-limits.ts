@@ -8,6 +8,8 @@ export const MIN_AUCTION_TIME_BUFFER_SECONDS = 1;
 export const MAX_AUCTION_TIME_BUFFER_SECONDS = 86_400;
 export const MIN_QUORUM_BPS = 1;
 export const MAX_QUORUM_BPS = 10_000;
+/** common::MAX_FEE_BPS: the marketplace secondary fee is at most 25%. */
+export const MAX_MARKETPLACE_FEE_BPS = 2_500;
 /** Proposal threshold is an absolute number of votes (not basis points). */
 export const MIN_PROPOSAL_THRESHOLD_VOTES = 1n;
 /** Governor MAX_PROPOSAL_ACTIONS */

@@ -5,7 +5,12 @@ import { getNetworkConfig } from '@/config/networks';
 
 import { getTreasuryAssets } from './assets-config';
 import { decimalToStroops, MIN_RESERVE_PRICE_STROOPS } from './auction-values';
-import { validateQueueDelay, validateVotingDelay, validateVotingPeriod } from './governance-limits';
+import {
+  MAX_MARKETPLACE_FEE_BPS,
+  validateQueueDelay,
+  validateVotingDelay,
+  validateVotingPeriod
+} from './governance-limits';
 import { isValidHttpUrl, isValidStellarAddress, isValidTokenSymbol } from './validation';
 
 export type CreationNetwork = 'testnet' | 'public' | 'local';
@@ -78,7 +83,11 @@ const auctionSchema = z.object({
 const marketplaceSchema = z.object({
   enabled: z.boolean(),
   paymentAsset: z.string().min(1, 'Choose a payment asset'),
-  secondaryFeeBps: z.number().int().min(0).max(10_000)
+  secondaryFeeBps: z
+    .number()
+    .int()
+    .min(0)
+    .max(MAX_MARKETPLACE_FEE_BPS, 'The marketplace fee is at most 2,500 bps (25%).')
 });
 const governanceSchema = z.object({
   votingDelay: timing(validateVotingDelay),

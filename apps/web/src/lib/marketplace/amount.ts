@@ -1,3 +1,5 @@
+import { MAX_MARKETPLACE_FEE_BPS } from '@/lib/governance-limits';
+
 const SCALE = 10_000_000n;
 export const MAX_I128 = (1n << 127n) - 1n;
 
@@ -22,7 +24,8 @@ export function formatMarketplaceAmount(value: string | bigint): string {
 }
 
 export function marketplaceFee(price: string, feeBps: number): bigint {
-  if (!Number.isInteger(feeBps) || feeBps < 0 || feeBps > 10_000) throw new Error('Invalid marketplace fee.');
+  if (!Number.isInteger(feeBps) || feeBps < 0 || feeBps > MAX_MARKETPLACE_FEE_BPS)
+    throw new Error('Invalid marketplace fee.');
   const amount = BigInt(price);
   const intermediate = amount * BigInt(feeBps);
   if (amount < 0n || amount > MAX_I128 || intermediate > MAX_I128)

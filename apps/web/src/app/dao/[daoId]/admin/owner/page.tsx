@@ -11,8 +11,8 @@ import { AuthorityPanel } from '@/components/admin/authority-panel';
 import { PageSection } from '@/components/page-section';
 import { Badge, Callout, Card, Heading, ShortId, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
-import { treasuryIsOwner } from '@/lib/admin-proposals';
-import { useContractOwner } from '@/lib/admin-queries';
+import { treasuryIsAdmin } from '@/lib/admin-proposals';
+import { useContractAdmin } from '@/lib/admin-queries';
 import { useAdminTokenState } from '@/lib/admin-surfaces';
 import { type DaoNetworkConfig } from '@/lib/dao-config';
 import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
@@ -45,7 +45,7 @@ async function submitAuthorityUpdate(
   return (await client.set_mint_authority({ authority, enabled })).signAndSend();
 }
 
-export default function OwnerPage() {
+export default function AuthorityPage() {
   const { daoId, daoConfig: config } = useDaoContext();
   const session = useAuthSessionStore();
   const [mintAuthority, setMintAuthority] = useState('');
@@ -60,22 +60,22 @@ export default function OwnerPage() {
     error: mintAuthorityError,
     isLoading: mintAuthoritiesLoading
   } = useGoldskyMintAuthorities(config.tokenContractId);
-  const { data: tokenOwner } = useContractOwner(config, 'token', session.address || undefined);
+  const { data: tokenAdmin } = useContractAdmin(config, 'token', session.address || undefined);
   const token = useAdminTokenState(config, session.address);
-  const isOwner = Boolean(session.address && token.data?.owner === session.address);
-  const canProposeAuthority = Boolean(session.address && treasuryIsOwner(config, tokenOwner));
+  const isAdmin = Boolean(session.address && token.data?.admin === session.address);
+  const canProposeAuthority = Boolean(session.address && treasuryIsAdmin(config, tokenAdmin));
 
-  if (!isOwner && !canProposeAuthority) {
+  if (!isAdmin && !canProposeAuthority) {
     return (
-      <PageSection title="Owner" description="Owner-only authority management.">
+      <PageSection title="Admin" description="Admin-only authority management.">
         <AdminSectionNav daoId={daoId} active="/owner" />
         <Callout
           variant="warning"
           badge="Access restricted"
-          title="Connect the owner wallet to continue"
-          description="Authority changes require the current Token owner. After launch, Treasury-owned changes go through governance."
+          title="Connect the admin wallet to continue"
+          description="Authority changes require the current Token admin. After launch, Treasury-administered changes go through governance."
         >
-          <ShortId value={config.adminAddress} label="Owner address" />
+          <ShortId value={config.adminAddress} label="Admin address" />
         </Callout>
       </PageSection>
     );
@@ -110,14 +110,14 @@ export default function OwnerPage() {
       return;
     }
 
-    const treasuryOwnsTarget = treasuryIsOwner(config, tokenOwner);
-    if (!isOwner && !treasuryOwnsTarget) {
+    const treasuryAdministersTarget = treasuryIsAdmin(config, tokenAdmin);
+    if (!isAdmin && !treasuryAdministersTarget) {
       setFormMessage('The treasury does not currently own this contract.');
       return;
     }
 
     try {
-      if (!isOwner && treasuryOwnsTarget) {
+      if (!isAdmin && treasuryAdministersTarget) {
         const type = 'set-mint-authority';
         const handler = getActionHandler(type);
         const action = handler.serialize(
@@ -170,18 +170,18 @@ export default function OwnerPage() {
         onCancel={proposalDraft.cancel}
         onResolve={proposalDraft.resolve}
       />
-      <PageSection title="Owner" description="Manage mint authorities from one control center.">
+      <PageSection title="Admin" description="Manage mint authorities from one control center.">
         <Stack gap="4">
           <AdminSectionNav daoId={daoId} active="/owner" />
 
           <Card p="5">
             <Stack gap="3">
               <div>
-                <Badge>Owner</Badge>
+                <Badge>Admin</Badge>
               </div>
-              <Heading style={{ fontSize: '1.2rem' }}>Owner controls</Heading>
+              <Heading style={{ fontSize: '1.2rem' }}>Admin controls</Heading>
               <Text className="lede" style={{ margin: 0, fontSize: '0.9rem' }}>
-                The owner can add or remove token mint authorities. Those authorities can then use the token admin page.
+                The admin can add or remove token mint authorities. Those authorities can then use the token admin page.
                 Mint authorities can only be changed after the DAO is launched.
               </Text>
               {formMessage ? <Callout variant="warning" title={formMessage} /> : null}
@@ -198,8 +198,8 @@ export default function OwnerPage() {
               onValueChange={setMintAuthority}
               onAllow={() => void updateAuthority(mintAuthority, true)}
               onRevoke={() => void updateAuthority(mintAuthority, false)}
-              allowLabel={isOwner ? 'Allow minting' : 'Propose grant'}
-              revokeLabel={isOwner ? 'Revoke minting' : 'Propose revoke'}
+              allowLabel={isAdmin ? 'Allow minting' : 'Propose grant'}
+              revokeLabel={isAdmin ? 'Revoke minting' : 'Propose revoke'}
               busy={busy || !token.data?.live}
               loading={mintAuthoritiesLoading}
               emptyLabel={mintAuthorityError?.message || 'No mint authorities indexed yet.'}

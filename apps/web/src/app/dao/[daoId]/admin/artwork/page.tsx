@@ -15,7 +15,7 @@ import { ArtworkSetup } from '@/components/create-dao/ArtworkSetup';
 import { PageSection } from '@/components/page-section';
 import { Button, Callout, Card, Heading, Input, ShortId, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
-import { treasuryIsOwner } from '@/lib/admin-proposals';
+import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { assertAdminCallSupported } from '@/lib/admin-registered-call';
 import { adminReadOptions, useAdminArtwork, useAdminTokenState } from '@/lib/admin-surfaces';
 import {
@@ -47,10 +47,13 @@ export default function ArtworkAdminPage() {
   const [upload, setUpload] = useState<ArtworkPlan | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  // Metadata.require_owner reads get_settings().token -> Token.get_owner().
+  // Artwork and settings authority is Metadata's own admin() (launch admin in
+  // setup, the Treasury after launch).
   const wired = artwork.data?.settings.token === config.tokenContractId;
-  const direct = Boolean(wired && session.address && token.data?.owner === session.address);
-  const canPropose = Boolean(wired && session.address && token.data?.live && treasuryIsOwner(config, token.data.owner));
+  const direct = Boolean(wired && session.address && artwork.data?.admin === session.address);
+  const canPropose = Boolean(
+    wired && session.address && token.data?.live && treasuryIsAdmin(config, artwork.data?.admin)
+  );
   const networkReady =
     !session.walletNetworkIssue &&
     (!session.walletNetworkPassphrase || session.walletNetworkPassphrase === config.passphrase);
@@ -163,12 +166,10 @@ export default function ArtworkAdminPage() {
             <Callout
               variant="warning"
               title="Metadata contract address is missing"
-              description="The Manager creates Metadata with the DAO, not at launch. Refresh the DAO configuration or ask the deployment owner to inspect it."
+              description="The Manager creates Metadata with the DAO, not at launch. Refresh the DAO configuration or ask the deployment admin to inspect it."
             />
           ) : null}
-          {artwork.isLoading || token.isLoading ? (
-            <Text role="status">Reading artwork and Token ownership…</Text>
-          ) : null}
+          {artwork.isLoading || token.isLoading ? <Text role="status">Reading artwork and Token admin…</Text> : null}
           {artwork.error || token.error ? (
             <Callout
               variant="error"
@@ -189,7 +190,7 @@ export default function ArtworkAdminPage() {
             <Callout
               variant="info"
               title="Read-only artwork view"
-              description="Artwork authority follows the current Token owner. Connect that wallet during setup, or prepare a governance proposal after Treasury owns the Token."
+              description="Artwork authority follows the current Token admin. Connect that wallet during setup, or prepare a governance proposal after Treasury owns the Token."
             />
           ) : null}
           {artwork.data && !wired ? (

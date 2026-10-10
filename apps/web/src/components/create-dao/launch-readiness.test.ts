@@ -7,7 +7,7 @@ import { type LaunchReadiness, launchReadinessIssues, readLaunchReadiness } from
 const mocks = vi.hoisted(() => ({
   pending: vi.fn(),
   supply: vi.fn(),
-  owner: vi.fn(),
+  admin: vi.fn(),
   live: vi.fn(),
   minter: vi.fn(),
   auction: vi.fn(),
@@ -22,7 +22,7 @@ vi.mock('@builder-stellar/manager-bindings', () => ({
 vi.mock('@builder-stellar/token-bindings', () => ({
   Client: class {
     total_supply = mocks.supply;
-    owner = mocks.owner;
+    admin = mocks.admin;
     is_live = mocks.live;
   }
 }));
@@ -48,9 +48,15 @@ const addresses = {
   metadata: 'metadata-A'
 };
 const ready = (): LaunchReadiness => ({
-  pending: { addresses, launch_admin: 'wallet-A', auction_payment_asset: 'xlm', marketplace_payment_asset: 'usdc' },
+  pending: {
+    addresses,
+    launch_admin: 'wallet-A',
+    auction_payment_asset: 'xlm',
+    marketplace_payment_asset: 'usdc',
+    slug: 'test-dao'
+  },
   supply: 1n,
-  owner: 'wallet-A',
+  admin: 'wallet-A',
   live: false,
   paymentAssetsMatch: true,
   platformMinter: null
@@ -59,7 +65,7 @@ const config = { name: 'testnet', rpcUrl: 'https://rpc.test', passphrase: 'test'
 beforeEach(() => {
   mocks.pending.mockResolvedValue({ result: ready().pending });
   mocks.supply.mockResolvedValue({ result: 1n });
-  mocks.owner.mockResolvedValue({ result: 'wallet-A' });
+  mocks.admin.mockResolvedValue({ result: 'wallet-A' });
   mocks.live.mockResolvedValue({ result: false });
   mocks.minter.mockResolvedValue({ result: null });
   mocks.auction.mockResolvedValue({ result: { payment_token: 'xlm' } });
@@ -91,8 +97,8 @@ describe('live launch readiness', () => {
     });
     await expect(readLaunchReadiness('dao-A', config)).rejects.toThrow('identity');
   });
-  it('rejects lost owner/admin and never calls an already-live DAO ready', () => {
-    expect(launchReadinessIssues({ ...ready(), owner: 'other-wallet', pending: null }, 'wallet-A')).toHaveLength(2);
+  it('rejects a lost admin and never calls an already-live DAO ready', () => {
+    expect(launchReadinessIssues({ ...ready(), admin: 'other-wallet', pending: null }, 'wallet-A')).toHaveLength(2);
     expect(launchReadinessIssues({ ...ready(), live: true }, 'wallet-A')).toEqual([
       'This DAO is already live. Refresh the overview.'
     ]);

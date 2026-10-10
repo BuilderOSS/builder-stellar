@@ -53,8 +53,8 @@ export function buildAllocationDraft(
     !StrKey.isValidContract(state.minterContractId)
   )
     throw new Error('Live allocation identity and mint authority must be verified.');
-  if (!treasury || state.owner !== treasury)
-    throw new Error('The Treasury must be the current Token owner for a governance allocation.');
+  if (!treasury || state.admin !== treasury)
+    throw new Error('The Treasury must be the current Token admin for a governance allocation.');
   const call =
     draft.type === 'set-merkle-root'
       ? { function: 'set_merkle_root' as const, args: [daoId, draft.root] }

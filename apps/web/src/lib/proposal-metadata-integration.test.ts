@@ -249,21 +249,15 @@ describe('Metadata and module upgrade registry integration', () => {
     }
   });
 
-  it('keeps Metadata upgrade blocked despite its ABI, and refuses unknown modules/malformed hashes', () => {
+  it('supports Metadata upgrades (Metadata exposes admin()) and refuses unknown modules/malformed hashes', () => {
     const handler = getActionHandler('upgrade-dao-module');
     const values = { module: 'metadata', fromHash: '01'.repeat(32), toHash: 'ab'.repeat(32) };
     expect(metadata.getFunc('upgrade').inputs).toHaveLength(2);
-    expect(handler.validate(values, context).valid).toBe(false);
-    expect(() => assertAdminCallSupported(handler, values, context)).toThrow(/Metadata upgrade/);
-    expect(() =>
+    expect(handler.validate(values, context).valid).toBe(true);
+    expect(
       encodeSupportedCall(config.metadataContractId, 'upgrade', [values.fromHash, values.toHash], config)
-    ).toThrow(/no public getter/);
-    expect(() => encodeSupportedCall(config.metadataContractId, 'sync_version', [], config)).toThrow(
-      /no public getter/
-    );
-    expect(() =>
-      inspectProposalAdminCall(config.metadataContractId, 'upgrade', [values.fromHash, values.toHash], config)
-    ).toThrow(/no public getter/);
+    ).toHaveLength(2);
+    expect(encodeSupportedCall(config.metadataContractId, 'sync_version', [], config)).toHaveLength(0);
     expect(handler.validate({ ...values, module: 'external' }, context).valid).toBe(false);
     expect(handler.validate({ ...values, module: 'token', fromHash: 'bad' }, context).valid).toBe(false);
     expect(() =>

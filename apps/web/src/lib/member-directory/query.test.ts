@@ -9,7 +9,10 @@ const mocks = vi.hoisted(() => ({
   supply: vi.fn()
 }));
 vi.mock('@/config/deployments.generated', () => ({ DEPLOYMENT_ID: 'deployment-a' }));
-vi.mock('@/lib/dao-config', () => ({ getDaoNetworkConfigById: mocks.config }));
+vi.mock('@/lib/dao-config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/dao-config')>()),
+  getDaoNetworkConfigById: mocks.config
+}));
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     tokenMember: { findMany: mocks.list, count: mocks.count, findFirst: mocks.member },

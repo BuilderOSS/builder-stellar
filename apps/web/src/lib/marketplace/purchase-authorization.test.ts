@@ -184,7 +184,7 @@ describe('purchase simulation real-XDR authorization binding', () => {
       ).toThrow('reviewed listing');
     }
   });
-  it.each([0, 10000])('accepts the baseline zero-payment omission at fee %i bps', (feeBps) => {
+  it.each([0, 2500])('accepts the baseline zero-payment omission at fee %i bps', (feeBps) => {
     const expected = { ...listing, feeBps };
     expect(() => check(expected, purchaseFixture(expected))).not.toThrow();
   });

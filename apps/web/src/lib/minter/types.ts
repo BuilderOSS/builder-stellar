@@ -11,7 +11,7 @@ export type ClaimState = {
   authenticated: boolean;
   live: boolean;
   mintAuthority: boolean;
-  owner: string;
+  admin: string;
   ledger: number | null;
   merkle: { round: number | null; root: string | null; claimed: boolean | null };
   allowlist: { round: number | null; amount: string | null; member: boolean | null; claimed: boolean | null };

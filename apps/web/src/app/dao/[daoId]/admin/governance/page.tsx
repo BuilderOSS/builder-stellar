@@ -14,8 +14,8 @@ import { PercentageInput } from '@/components/admin/percentage-input';
 import { PageSection } from '@/components/page-section';
 import { Badge, Button, Callout, Card, Heading, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
-import { treasuryIsOwner } from '@/lib/admin-proposals';
-import { useContractOwner, useGovernorSettings } from '@/lib/admin-queries';
+import { treasuryIsAdmin } from '@/lib/admin-proposals';
+import { useContractAdmin, useGovernorSettings } from '@/lib/admin-queries';
 import { formatDuration } from '@/lib/format-duration';
 import {
   validateProposalThreshold,
@@ -81,16 +81,13 @@ export default function GovernanceAdminPage() {
     mutate: refreshSettings,
     error: settingsError,
     isLoading: settingsLoading
-  } = useGovernorSettings(
-    config,
-    session.address || (config.status === 'pending' ? config.launchAdmin : config.adminAddress)
-  );
-  const { data: governorOwner } = useContractOwner(config, 'governor', session.address || config.adminAddress);
-  const isOwner = Boolean(session.address && governorOwner === session.address);
-  // The governor owner is the launch admin before launch and the Treasury afterwards.
+  } = useGovernorSettings(config, session.address || config.launchAdmin);
+  const { data: governorAdmin } = useContractAdmin(config, 'governor', session.address || config.launchAdmin);
+  const isAdmin = Boolean(session.address && governorAdmin === session.address);
+  // The governor admin is the launch admin before launch and the Treasury afterwards.
   // There is no separate governor-authority role any more.
-  const hasGovernanceAccess = isOwner;
-  const canProposeGovernance = Boolean(session.address && treasuryIsOwner(config, governorOwner));
+  const hasGovernanceAccess = isAdmin;
+  const canProposeGovernance = Boolean(session.address && treasuryIsAdmin(config, governorAdmin));
 
   function proposeSetting(
     type: 'set-voting-delay' | 'set-voting-period' | 'set-proposal-threshold' | 'set-quorum-bps' | 'set-queue-delay',
@@ -134,7 +131,7 @@ export default function GovernanceAdminPage() {
     )
       throw new Error('Switch your wallet to the DAO network before signing.');
     if (!session.address) {
-      throw new Error('Connect the governor owner wallet first.');
+      throw new Error('Connect the governor admin wallet first.');
     }
 
     if (!config.governorContractId) {
@@ -160,12 +157,12 @@ export default function GovernanceAdminPage() {
     run: (governor: GovernorClient) => Promise<string>
   ) {
     if (!hasGovernanceAccess) {
-      setFormMessage('Connect the governor owner wallet first.');
+      setFormMessage('Connect the governor admin wallet first.');
       return;
     }
 
     if (!session.address) {
-      setFormMessage('Connect the governor owner wallet first.');
+      setFormMessage('Connect the governor admin wallet first.');
       return;
     }
 
@@ -333,7 +330,7 @@ export default function GovernanceAdminPage() {
           variant="warning"
           badge="Access restricted"
           title="Connect a wallet to prepare governance updates"
-          description="The current Governor owner applies setup changes. After launch, Treasury-owned changes go through a governance proposal."
+          description="The current Governor admin applies setup changes. After launch, Treasury-administered changes go through a governance proposal."
         >
           {settings ? (
             <Stack gap="1">

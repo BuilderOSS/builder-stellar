@@ -550,6 +550,7 @@ export async function getDashboardData(address: string, params: { limit?: number
     OR: [
       ...(memberDaoIds.length ? [{ daoId: { in: memberDaoIds } }] : []),
       { deployer: { equals: normalizedAddress, mode: 'insensitive' as const } },
+      { launchAdmin: { equals: normalizedAddress, mode: 'insensitive' as const } },
       { adminAddress: { equals: normalizedAddress, mode: 'insensitive' as const } }
     ]
   };
@@ -561,6 +562,7 @@ export async function getDashboardData(address: string, params: { limit?: number
         OR: [
           ...(memberDaoIds.length ? [{ daoId: { in: memberDaoIds } }] : []),
           { deployer: { equals: normalizedAddress, mode: 'insensitive' as const } },
+          { launchAdmin: { equals: normalizedAddress, mode: 'insensitive' as const } },
           { adminAddress: { equals: normalizedAddress, mode: 'insensitive' as const } }
         ]
       },

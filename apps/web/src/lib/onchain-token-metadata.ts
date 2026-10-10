@@ -2,7 +2,7 @@ import type { IpfsGroup, Property, Settings } from '@builder-stellar/metadata-bi
 import { Client as MetadataClient } from '@builder-stellar/metadata-bindings';
 import { Server } from '@stellar/stellar-sdk/rpc';
 
-import type { DaoNetworkConfig } from '@/lib/dao-config';
+import { type DaoNetworkConfig, readSource } from '@/lib/dao-config';
 
 export type ResolvedArtwork = {
   property: string;
@@ -50,7 +50,7 @@ export async function resolveOnchainTokenMetadata(
     contractId: config.metadataContractId,
     rpcUrl: config.rpcUrl,
     networkPassphrase: config.passphrase,
-    publicKey: config.adminAddress
+    publicKey: readSource(config.launchAdmin)
   });
 
   // NOTE: get_properties()/get_ipfs_data() are O(total collection size) on chain. They still work for

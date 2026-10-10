@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ config: vi.fn(), raw: vi.fn() }));
 vi.mock('@/config/deployments.generated', () => ({ DEPLOYMENT_ID: 'manager:DEPLOYMENT_A' }));
-vi.mock('@/lib/dao-config', () => ({ getDaoNetworkConfigById: mocks.config }));
+vi.mock('@/lib/dao-config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/dao-config')>()),
+  getDaoNetworkConfigById: mocks.config
+}));
 vi.mock('@/lib/prisma', () => ({ prisma: { $queryRaw: mocks.raw } }));
 
 import { auctionHistoryScope, historyPagination, readAuctionHistory } from './query';

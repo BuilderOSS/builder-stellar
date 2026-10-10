@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ config: vi.fn(), proposal: vi.fn(), chain: vi.fn(), receipt: vi.fn() }));
-vi.mock('@/lib/dao-config', () => ({ getDaoNetworkConfigById: mocks.config }));
+vi.mock('@/lib/dao-config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/dao-config')>()),
+  getDaoNetworkConfigById: mocks.config
+}));
 vi.mock('@/lib/goldsky', () => ({ getGoldskyProposalDetail: mocks.proposal }));
 vi.mock('@/lib/proposal-execution-receipt-service', () => ({ getIndexedExecutionReceipt: mocks.receipt }));
 vi.mock('@/lib/proposal-chain-state', () => ({
