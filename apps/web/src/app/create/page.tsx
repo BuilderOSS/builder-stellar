@@ -6,9 +6,9 @@ import type { ZodError } from 'zod';
 
 import { BasicInfoStep, GovernanceStep, MembershipStep, ReviewStep } from '@/components/create-dao';
 import { DeploymentProgress } from '@/components/create-dao/DeploymentProgress';
-import styles from '@/components/create-dao/workspace.module.css';
+import styles from '@/components/create-dao/workspace-styles';
 import { useWorkspaceSync } from '@/components/local-workspace/workspace-sync';
-import { Button, Callout, Heading, Text } from '@/components/ui';
+import { Button, Callout, Heading, PageHeader, ProgressSteps } from '@/components/ui';
 import {
   configuredCreationNetwork,
   CREATE_DAO_SECTIONS,
@@ -158,30 +158,25 @@ export default function CreateDaoPage() {
   return (
     <div className={styles.workspace}>
       <div>
-        <div className={styles.header}>
-          <div>
-            <p className="eyebrow">Local workspace · {network}</p>
-            <h1 className="page-title">Create a DAO</h1>
-          </div>
-          <Text role="status" className={styles.muted}>
-            {creationStorageError() || (ready ? 'Saved on this browser' : 'Opening workspace…')}
-          </Text>
-        </div>
-        {pageError ? <Callout variant="error" title="Needs attention" description={pageError} /> : null}
+        <PageHeader
+          title="Start a DAO"
+          meta={
+            creationStorageError() || (ready ? `Saved on this browser as you go · ${network}` : 'Opening your draft…')
+          }
+        />
+        {pageError ? <Callout variant="error" title="This needs attention" description={pageError} /> : null}
         {!ready ? (
-          <p role="status">
-            {pageError ? 'Open Local drafts to choose a draft in this workspace.' : 'Loading your local draft…'}
-          </p>
+          <p role="status">{pageError ? 'Open Drafts to pick a draft on this network.' : 'Loading your draft…'}</p>
         ) : draft?.deployment ? (
           <>
             <DeploymentProgress state={state} record={draft.deployment} network={network} />
             {indexingMessage ? (
-              <p role="status" className={styles.muted} style={{ marginTop: 16 }}>
+              <p role="status" className={styles.muted}>
                 {indexingMessage}
               </p>
             ) : null}
             <div className={styles.actions}>
-              <Link href={{ pathname: '/drafts' }}>Back to local workspace</Link>
+              <Link href={{ pathname: '/drafts' }}>Back to drafts</Link>
               {draft.deployment.status === 'confirmed' && draft.deployment.addresses ? (
                 <Button
                   disabled={busy}
@@ -194,7 +189,7 @@ export default function CreateDaoPage() {
                     }
                   }}
                 >
-                  {busy ? 'Checking directory…' : 'Open Setup'}
+                  {busy ? 'Opening…' : 'Continue to setup'}
                 </Button>
               ) : (
                 <Button
@@ -204,50 +199,37 @@ export default function CreateDaoPage() {
                   {busy
                     ? 'Working…'
                     : draft.deployment.hash && !['failed', 'rejected', 'expired'].includes(draft.deployment.status)
-                      ? 'Check saved transaction'
-                      : 'Retry saved deployment'}
+                      ? 'Check the transaction'
+                      : 'Try again'}
                 </Button>
               )}
               {draft.deployment.signedTxXdr &&
               !['confirmed', 'failed', 'rejected', 'expired'].includes(draft.deployment.status) ? (
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="secondary"
                   disabled={busy || !authenticated || Boolean(walletIssue)}
                   onClick={() => void deploy(true)}
                 >
-                  Rebroadcast saved envelope
+                  Send the same signed transaction again
                 </Button>
               ) : null}
             </div>
             {!authenticated ? (
-              <p className={styles.muted}>Connect and sign in with the wallet that created this deployment record.</p>
+              <p className={styles.muted}>Connect the wallet you created this with to continue.</p>
             ) : null}
             {walletIssue ? <p className={styles.error}>{walletIssue}</p> : null}
           </>
         ) : (
           <>
-            <ol className={styles.steps} aria-label="Creation steps">
-              {CREATE_DAO_SECTIONS.map((s, i) => (
-                <li key={s.id}>
-                  <button
-                    type="button"
-                    aria-current={s.id === store.section ? 'step' : undefined}
-                    onClick={() => store.setSection(s.id)}
-                  >
-                    {i + 1}. {s.title}
-                  </button>
-                </li>
-              ))}
-            </ol>
+            <ProgressSteps
+              steps={CREATE_DAO_SECTIONS.map((section) => ({ id: section.id, label: section.title }))}
+              current={Math.max(0, index)}
+              onSelect={(target) => store.setSection(CREATE_DAO_SECTIONS[target].id)}
+              canSelect={() => true}
+            />
             <section className={styles.panel} aria-labelledby="step-heading">
-              <Heading
-                ref={heading}
-                id="step-heading"
-                tabIndex={-1}
-                as="h2"
-                style={{ fontSize: '1.25rem', marginBottom: 24 }}
-              >
+              <Heading ref={heading} id="step-heading" tabIndex={-1} as="h2" size="title">
                 {CREATE_DAO_SECTIONS[index]?.title}
               </Heading>
               {store.section === 'basicInfo' ? (
@@ -264,7 +246,7 @@ export default function CreateDaoPage() {
               {index > 0 ? (
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="ghost"
                   onClick={() => store.setSection(CREATE_DAO_SECTIONS[index - 1].id)}
                 >
                   Back
@@ -289,20 +271,20 @@ export default function CreateDaoPage() {
                     Boolean(creationStorageError())
                   }
                 >
-                  {busy ? 'Creating…' : 'Create in Setup'}
+                  {busy ? 'Creating…' : 'Create community'}
                 </Button>
               )}
             </div>
             {store.section === 'review' ? (
-              <p className={styles.muted} style={{ marginTop: 16 }}>
+              <p className={styles.muted}>
                 {!configured
-                  ? 'Deployment is not configured. You can still save your draft.'
+                  ? "Creating isn't set up on this deployment yet. Your draft is still saved."
                   : !authenticated
-                    ? 'Connect and sign in when you are ready to deploy.'
+                    ? 'Connect your wallet when you’re ready to create it.'
                     : walletIssue ||
                       (store.imagePreview
-                        ? 'Upload your preview or use the saved image in Identity.'
-                        : 'You will review and sign one creation transaction. Launch happens later.')}
+                        ? 'Upload your image (or use the saved one) in Identity first.'
+                        : 'You sign once to create it in Setup. You launch it later, when it’s ready.')}
               </p>
             ) : null}
           </>

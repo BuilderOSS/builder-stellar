@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
-import styles from './workspace.module.css';
+import styles from './workspace-styles';
 
 export function CreationField({
   id,

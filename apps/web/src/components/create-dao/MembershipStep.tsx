@@ -1,11 +1,12 @@
 'use client';
-import { Input, Textarea } from '@/components/ui';
+import { DurationInput, Input, Select, Switch, Textarea } from '@/components/ui';
 import { configuredCreationNetwork, creationAssets } from '@/lib/create-dao-schema';
 import { MAX_MARKETPLACE_FEE_BPS } from '@/lib/governance-limits';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
 import { CreationField, fieldAccessibility } from './CreationField';
-import styles from './workspace.module.css';
+import { PercentField } from './PercentField';
+import styles from './workspace-styles';
 
 export function MembershipStep() {
   const basic = useCreateDaoStore((s) => s.basicInfo);
@@ -39,30 +40,31 @@ export function MembershipStep() {
         />
       </CreationField>
       <div className={styles.group}>
-        <label className={styles.choice}>
-          <input
-            type="checkbox"
-            checked={auction.enabled}
-            onChange={(e) => store.updateAuction({ enabled: e.target.checked })}
-          />
-          Launch with auctions
-        </label>
+        <Switch
+          label="Run auctions"
+          description="New tokens are auctioned one at a time. Each sale funds the treasury."
+          checked={auction.enabled}
+          onCheckedChange={(enabled) => store.updateAuction({ enabled })}
+        />
         <div className={styles.columns}>
-          <CreationField id="auction.paymentAsset" label="Auction payment asset">
-            <select
+          <CreationField id="auction.paymentAsset" label="Bids are in">
+            <Select
               id="auction.paymentAsset"
               value={auction.paymentAsset}
               onChange={(e) => store.updateAuction({ paymentAsset: e.target.value })}
-              style={selectStyle}
             >
               {assets.map((a) => (
                 <option key={a.code} value={a.contractId}>
                   {a.code}
                 </option>
               ))}
-            </select>
+            </Select>
           </CreationField>
-          <CreationField id="auction.reservePrice" label="Reserve price" hint="Up to 7 decimal places">
+          <CreationField
+            id="auction.reservePrice"
+            label="Starting price"
+            hint="The lowest first bid. Up to 7 decimals."
+          >
             <Input
               id="auction.reservePrice"
               inputMode="decimal"
@@ -71,84 +73,73 @@ export function MembershipStep() {
               onChange={(e) => store.updateAuction({ reservePrice: e.target.value })}
             />
           </CreationField>
-          <CreationField id="auction.duration" label="Auction duration (seconds)">
-            <Input
-              id="auction.duration"
-              type="number"
-              min={300}
-              max={2592000}
-              value={Number.isFinite(auction.duration) ? auction.duration : ''}
-              {...fieldAccessibility('auction.duration', errors)}
-              onChange={(e) => store.updateAuction({ duration: e.target.valueAsNumber })}
-            />
-          </CreationField>
-          <CreationField id="auction.timeBuffer" label="Extension buffer (seconds)">
-            <Input
-              id="auction.timeBuffer"
-              type="number"
-              min={1}
-              max={86400}
-              value={Number.isFinite(auction.timeBuffer) ? auction.timeBuffer : ''}
-              {...fieldAccessibility('auction.timeBuffer', errors)}
-              onChange={(e) => store.updateAuction({ timeBuffer: e.target.valueAsNumber })}
-            />
-          </CreationField>
         </div>
+        <div className={styles.field}>
+          <DurationInput
+            id="auction.duration"
+            label="Each auction lasts"
+            value={Number.isFinite(auction.duration) ? auction.duration : ''}
+            onChange={(duration) => store.updateAuction({ duration })}
+            invalid={Boolean(errors['auction.duration'])}
+            showSeconds={false}
+            helperText="Between 5 minutes and 30 days."
+          />
+          {errors['auction.duration'] ? <p className={styles.error}>{errors['auction.duration']}</p> : null}
+        </div>
+        <div className={styles.field}>
+          <DurationInput
+            id="auction.timeBuffer"
+            label="A late bid adds"
+            value={Number.isFinite(auction.timeBuffer) ? auction.timeBuffer : ''}
+            onChange={(timeBuffer) => store.updateAuction({ timeBuffer })}
+            invalid={Boolean(errors['auction.timeBuffer'])}
+            helperText="Bids in the last stretch extend the auction by this much, so everyone gets a fair chance."
+          />
+          {errors['auction.timeBuffer'] ? <p className={styles.error}>{errors['auction.timeBuffer']}</p> : null}
+        </div>
+        <div className={styles.columns}></div>
       </div>
       <div className={styles.group}>
-        <label className={styles.choice}>
-          <input
-            type="checkbox"
-            checked={market.enabled}
-            onChange={(e) => store.updateMarketplace({ enabled: e.target.checked })}
-          />
-          Launch with marketplace
-        </label>
+        <Switch
+          label="Open a market"
+          description="Members can resell tokens, and the community can list new ones by vote."
+          checked={market.enabled}
+          onCheckedChange={(enabled) => store.updateMarketplace({ enabled })}
+        />
         <div className={styles.columns}>
-          <CreationField id="marketplace.paymentAsset" label="Marketplace payment asset">
-            <select
+          <CreationField id="marketplace.paymentAsset" label="Prices are in">
+            <Select
               id="marketplace.paymentAsset"
               value={market.paymentAsset}
               onChange={(e) => store.updateMarketplace({ paymentAsset: e.target.value })}
-              style={selectStyle}
             >
               {assets.map((a) => (
                 <option key={a.code} value={a.contractId}>
                   {a.code}
                 </option>
               ))}
-            </select>
+            </Select>
           </CreationField>
           <CreationField
             id="marketplace.secondaryFeeBps"
-            label="Secondary fee (basis points)"
-            hint="100 basis points = 1%"
+            label="Fee on resales"
+            hint={`Paid by the seller, up to ${MAX_MARKETPLACE_FEE_BPS / 100}%.`}
           >
-            <Input
+            <PercentField
               id="marketplace.secondaryFeeBps"
-              type="number"
               min={0}
-              max={MAX_MARKETPLACE_FEE_BPS}
-              value={Number.isFinite(market.secondaryFeeBps) ? market.secondaryFeeBps : ''}
+              max={MAX_MARKETPLACE_FEE_BPS / 100}
+              bps={market.secondaryFeeBps}
               {...fieldAccessibility('marketplace.secondaryFeeBps', errors)}
-              onChange={(e) => store.updateMarketplace({ secondaryFeeBps: e.target.valueAsNumber })}
+              onChange={(secondaryFeeBps) => store.updateMarketplace({ secondaryFeeBps })}
             />
           </CreationField>
         </div>
       </div>
       <p className={styles.muted}>
-        Payment assets are fixed at creation, including for disabled modules. Mint at least one founder token during
-        Setup before Launch.
+        The bid and price assets are fixed once you create the community, even for things you turn off now. You&apos;ll
+        mint at least one founder token in Setup before launching.
       </p>
     </div>
   );
 }
-const selectStyle = {
-  minHeight: 44,
-  borderRadius: 8,
-  padding: '8px 12px',
-  border: '1px solid var(--border-default)',
-  background: 'var(--surface-1)',
-  color: 'var(--text-primary)',
-  width: '100%'
-};

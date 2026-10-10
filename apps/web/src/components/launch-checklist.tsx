@@ -7,7 +7,7 @@ import useSWR from 'swr';
 import { ArtworkSetup } from '@/components/create-dao/ArtworkSetup';
 import { launchReadinessIssues, readLaunchReadiness } from '@/components/create-dao/launch-readiness';
 import { SlugRename } from '@/components/create-dao/SlugRename';
-import styles from '@/components/create-dao/workspace.module.css';
+import styles from '@/components/create-dao/workspace-styles';
 import { Button, Callout } from '@/components/ui';
 import { parseContractErrorCode } from '@/lib/contract-errors';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
@@ -228,7 +228,7 @@ export function LaunchChecklist({ daoId, config }: { daoId: string; config: DaoN
             ) : null}
           </>
         ) : null}
-        <fieldset disabled={!ready || busy || recover} style={{ border: 0, padding: 0, margin: 0 }}>
+        <fieldset disabled={!ready || busy || recover} className={styles.fieldset}>
           <legend className={styles.label}>Modules at launch</legend>
           <label className={styles.choice}>
             <input type="checkbox" checked={choice.auction} onChange={(e) => change({ auction: e.target.checked })} />

@@ -8,7 +8,7 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 import type { ArtworkPlan } from './artwork-configuration';
 import { inspectArtworkDirectory } from './artwork-configuration';
 import { uploadResponseJson } from './dao-image-upload';
-import styles from './workspace.module.css';
+import styles from './workspace-styles';
 
 export function ArtworkDirectoryUpload({
   onComplete,
@@ -81,7 +81,7 @@ export function ArtworkDirectoryUpload({
     }
   };
   return (
-    <div className={styles.stack} style={{ gap: 10 }}>
+    <div className={styles.stack}>
       <label htmlFor="artwork-directory" className={styles.label}>
         Artwork directory
       </label>

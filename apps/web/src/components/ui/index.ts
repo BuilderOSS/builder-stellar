@@ -15,6 +15,7 @@ export { Countdown } from './countdown';
 export { Crest, crestHueStyle, CrestStripe } from './crest';
 export { Dialog } from './dialog';
 export { Disclosure } from './disclosure';
+export { DurationInput } from './duration-input';
 export { FallbackImage } from './FallbackImage';
 export { Field, FieldError, FieldHelperText, FieldLabel } from './field';
 export { IconLinkButton } from './icon-link-button';

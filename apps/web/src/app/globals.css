@@ -156,6 +156,10 @@ textarea {
   outline: 2px solid var(--focus);
   outline-offset: 3px;
 }
+/* Headings and regions focused by script (focus management), not by the user. */
+[tabindex='-1']:focus {
+  outline: none;
+}
 
 .skip-link {
   position: fixed;

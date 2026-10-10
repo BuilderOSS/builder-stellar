@@ -5,7 +5,7 @@ import { Button } from '@/components/ui';
 import { useArtworkPreview } from '@/hooks/useArtworkPreview';
 import type { ArtworkProperty, ArtworkSource } from '@/stores/create-dao-store';
 
-import styles from './workspace.module.css';
+import styles from './workspace-styles';
 
 export function ArtworkPreviewCanvas({
   source,
@@ -17,18 +17,13 @@ export function ArtworkPreviewCanvas({
   const canvas = useRef<HTMLCanvasElement>(null);
   const preview = useArtworkPreview({ source, orderedLayers, canvasRef: canvas });
   return (
-    <div className={styles.stack} style={{ gap: 10 }}>
+    <div className={styles.stack}>
       <canvas
         ref={canvas}
         width={400}
         height={400}
         aria-label="Randomized layered artwork preview"
-        style={{
-          width: 'min(100%, 260px)',
-          aspectRatio: '1',
-          border: '1px solid var(--border-default)',
-          borderRadius: 12
-        }}
+        className={styles.canvas}
       />
       <p className={styles.muted} role="status">
         {preview.error ||

@@ -1,12 +1,15 @@
 'use client';
-import styles from '@/components/create-dao/workspace.module.css';
+
 import { LocalDrafts } from '@/components/local-workspace/local-drafts';
+import { PageSection } from '@/components/page-section';
 
 export default function DraftsPage() {
   return (
-    <div className={styles.workspace}>
-      <h1 className="page-title">Your drafts</h1>
+    <PageSection
+      title="Drafts"
+      description="Communities you started on this browser. They aren't shared or synced; clearing browser data removes them."
+    >
       <LocalDrafts />
-    </div>
+    </PageSection>
   );
 }

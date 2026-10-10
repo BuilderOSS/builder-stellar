@@ -2,8 +2,8 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
-import styles from '@/components/create-dao/workspace.module.css';
-import { Button, Callout } from '@/components/ui';
+import styles from '@/components/create-dao/workspace-styles';
+import { Button, ButtonLink, Callout } from '@/components/ui';
 import { configuredCreationNetwork } from '@/lib/create-dao-schema';
 import { getDeploymentConfig, isDeploymentConfigured } from '@/lib/deployment-config';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
@@ -37,55 +37,58 @@ export function LocalDrafts() {
     .sort((a, b) => b.updatedAt - a.updatedAt);
   return (
     <section aria-labelledby="local-drafts-heading" className={styles.stack}>
-      <div className={styles.header} style={{ marginBottom: 0 }}>
+      <div className={styles.header}>
         <div>
-          <h2 id="local-drafts-heading">Local workspace</h2>
-          <p className={styles.muted}>
-            This browser only. Not shared or synced. Clearing browser data removes drafts and recovery records.
-          </p>
+          <h2 id="local-drafts-heading" className={styles.sectionTitle}>
+            Your drafts
+          </h2>
+          <p className={styles.muted}>Saved on this browser only.</p>
         </div>
-        <Link
+        <ButtonLink
           href="/create"
+          variant="secondary"
+          size="sm"
           onClick={() => {
             if (hydrated) useCreateDaoStore.getState().newDraft(scope);
           }}
         >
           New draft
-        </Link>
+        </ButtonLink>
       </div>
       {error || creationStorageError() ? (
-        <Callout variant="error" title="Local workspace" description={error || creationStorageError()} />
+        <Callout variant="error" title="Drafts need attention" description={error || creationStorageError()} />
       ) : null}
       {!hydrated ? (
-        <p role="status">Loading drafts…</p>
-      ) : !visible.length ? (
-        <p className={styles.muted}>
-          No drafts in this {scope.network} workspace. Start one without connecting a wallet.
+        <p className={styles.muted} role="status">
+          Loading drafts…
         </p>
+      ) : !visible.length ? (
+        <p className={styles.muted}>No drafts yet. You can start one without connecting a wallet.</p>
       ) : (
         <div className={styles.list}>
           {visible.map((d) => (
             <article key={d.id} className={styles.draft}>
               <div>
-                <h3>{d.configuration.basicInfo.tokenName || 'Untitled DAO'}</h3>
+                <h3>{d.configuration.basicInfo.tokenName || 'Untitled community'}</h3>
                 <p className={styles.muted}>
                   {d.deployment?.status === 'confirmed'
-                    ? 'Created · Setup'
+                    ? 'Created, in setup'
                     : d.deployment
-                      ? 'Deployment recovery'
+                      ? 'Creating, needs a check'
                       : 'Draft'}{' '}
-                  · {d.scope.network} · {d.scope.wallet ? 'Wallet workspace' : 'Guest draft'}
+                  · {d.scope.network}
+                  {d.scope.wallet ? '' : ' · not tied to a wallet'}
                 </p>
                 <p className={styles.muted}>Saved {new Date(d.updatedAt).toLocaleString()}</p>
               </div>
               <div className={styles.links}>
                 <Link href={`/create?draft=${encodeURIComponent(d.id)}`}>
-                  {d.deployment ? 'Resume Setup' : 'Resume'}
+                  {d.deployment ? 'Continue setup' : 'Continue'}
                 </Link>
                 <Button
                   size="sm"
                   type="button"
-                  variant="outline"
+                  variant="secondary"
                   onClick={() => {
                     try {
                       useCreateDaoStore.getState().duplicateDraft(d.id);
@@ -97,17 +100,18 @@ export function LocalDrafts() {
                   Duplicate
                 </Button>
                 {!d.deployment || d.deployment.status === 'failed' ? (
-                  <Button size="sm" type="button" variant="plain" onClick={() => setDeleteId(d.id)}>
+                  <Button size="sm" type="button" variant="ghost" onClick={() => setDeleteId(d.id)}>
                     Delete
                   </Button>
                 ) : null}
               </div>
               {deleteId === d.id ? (
                 <div role="group" aria-label="Confirm deletion" className={styles.links}>
-                  <span>Delete this local draft? This cannot be undone.</span>
+                  <span className={styles.muted}>Delete this draft? It can&apos;t be undone.</span>
                   <Button
                     size="sm"
                     type="button"
+                    variant="danger"
                     onClick={() => {
                       try {
                         useCreateDaoStore.getState().deleteDraft(d.id);
@@ -119,7 +123,7 @@ export function LocalDrafts() {
                   >
                     Delete draft
                   </Button>
-                  <Button size="sm" type="button" variant="outline" onClick={() => setDeleteId(null)}>
+                  <Button size="sm" type="button" variant="ghost" onClick={() => setDeleteId(null)}>
                     Keep draft
                   </Button>
                 </div>

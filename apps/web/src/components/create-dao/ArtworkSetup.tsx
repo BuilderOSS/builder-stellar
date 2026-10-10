@@ -17,7 +17,7 @@ import { preferenceScopeKey } from '@/stores/local-preferences-store';
 import { artworkBatches, type ArtworkPlan } from './artwork-configuration';
 import { ArtworkDirectoryUpload } from './ArtworkDirectoryUpload';
 import { ArtworkPreviewCanvas } from './ArtworkPreviewCanvas';
-import styles from './workspace.module.css';
+import styles from './workspace-styles';
 
 export function ArtworkSetup({ daoId, config }: { daoId: string; config: DaoNetworkConfig }) {
   const session = useAuthSessionStore();
@@ -193,7 +193,7 @@ export function ArtworkSetup({ daoId, config }: { daoId: string; config: DaoNetw
           <div className={styles.columns}>
             <ol>
               {plan.properties.map((property, index) => (
-                <li key={property.name} style={{ marginBottom: 12 }}>
+                <li key={property.name}>
                   {property.name} · {property.items.length} items
                   <div className={styles.links}>
                     <Button
