@@ -3404,3 +3404,249 @@ fn system_held_tokens_and_votes_through_a_real_proposal() {
     assert_eq!(token.get_votes(&marketplace_id), 0);
     assert_eq!(token.get_votes(&treasury_id), 0);
 }
+
+// ============================================================================
+// Token 0.1.0 -> 0.2.0 upgrade (MetadataUpdated), from the deployed code
+// ============================================================================
+
+/// Upload a released module WASM kept as a fixture (`contracts/e2e/fixtures`), so upgrades
+/// start from the exact code that is deployed, not from a local rebuild.
+fn upload_fixture_wasm(e: &Env, file: &str) -> BytesN<32> {
+    let path = std::format!("{}/fixtures/{file}", env!("CARGO_MANIFEST_DIR"));
+    let bytes = std::fs::read(&path).unwrap_or_else(|err| panic!("missing fixture {path} ({err})"));
+    e.deployer()
+        .upload_contract_wasm(soroban_sdk::Bytes::from_slice(e, &bytes))
+}
+
+struct UpgradeFixture {
+    e: Env,
+    manager: ManagerContractClient<'static>,
+    dao: manager::DaoAddresses,
+    deployer: Address,
+    old_token: BytesN<32>,
+    new_token: BytesN<32>,
+}
+
+/// A real factory DAO whose token runs the deployed 0.1.0 code, with the local token build
+/// registered as 0.2.0 and the 0.1.0 -> 0.2.0 path approved. One founder token is minted.
+fn dao_on_deployed_token() -> UpgradeFixture {
+    let e = Env::default();
+    e.mock_all_auths();
+    e.ledger().set_sequence_number(100);
+    e.ledger().set_timestamp(1_000);
+    e.cost_estimate().budget().reset_unlimited();
+
+    let admin = Address::generate(&e);
+    let manager_id = e.register(
+        ManagerContract,
+        (
+            admin,
+            BytesN::from_array(&e, &[0; 32]),
+            String::from_str(&e, "0.1.0"),
+        ),
+    );
+    let manager = ManagerContractClient::new(&e, &manager_id);
+
+    let old_token = upload_fixture_wasm(&e, "token-0.1.0.wasm");
+    manager.register_implementation(
+        &String::from_str(&e, "Token"),
+        &String::from_str(&e, "0.1.0"),
+        &old_token,
+    );
+    let mut others = std::vec::Vec::new();
+    for (registry_name, wasm_name) in [
+        ("Metadata", "metadata"),
+        ("Auction", "auction"),
+        ("Governor", "governor"),
+        ("Treasury", "treasury"),
+        ("Marketplace", "marketplace"),
+    ] {
+        let hash = upload_module_wasm(&e, wasm_name);
+        manager.register_implementation(
+            &String::from_str(&e, registry_name),
+            &String::from_str(&e, "0.1.0"),
+            &hash,
+        );
+        others.push(hash);
+    }
+    manager.set_current_implementations(
+        &old_token, &others[0], &others[1], &others[2], &others[3], &others[4],
+    );
+
+    let deployer = Address::generate(&e);
+    let asset = e
+        .register_stellar_asset_contract_v2(Address::generate(&e))
+        .address();
+    let dao = manager.create_dao(&slug_params(&e, &deployer, 1, "upgrade-dao", &asset));
+    let token = DaoTokenContractClient::new(&e, &dao.token);
+    token.mint(&deployer, &deployer);
+
+    // The release: register the new token code and approve exactly this path.
+    let new_token = upload_module_wasm(&e, "token");
+    assert_ne!(
+        old_token, new_token,
+        "rebuild the token WASM: the local build matches the deployed one"
+    );
+    manager.register_implementation(
+        &String::from_str(&e, "Token"),
+        &String::from_str(&e, "0.2.0"),
+        &new_token,
+    );
+    manager.approve_upgrade(&old_token, &new_token);
+
+    UpgradeFixture {
+        e,
+        manager,
+        dao,
+        deployer,
+        old_token,
+        new_token,
+    }
+}
+
+fn metadata_updated_count(e: &Env) -> usize {
+    use soroban_sdk::testutils::Events as _;
+    use soroban_sdk::xdr::{ContractEventBody, ScSymbol, ScVal};
+    let sym = ScVal::Symbol(ScSymbol("metadata_updated".try_into().unwrap()));
+    e.events()
+        .all()
+        .events()
+        .iter()
+        .filter(|ev| match &ev.body {
+            ContractEventBody::V0(b) => b.topics.first() == Some(&sym),
+        })
+        .count()
+}
+
+fn token_name(e: &Env, token: &Address) -> String {
+    e.as_contract(token, || stellar_tokens::non_fungible::Base::name(e))
+}
+
+/// Setup window: the launch admin upgrades the token directly. State survives, the version and
+/// hash move, and only the new code reports a rename.
+#[test]
+fn token_upgrade_in_setup_keeps_state_and_starts_emitting_metadata_updated() {
+    let f = dao_on_deployed_token();
+    let e = &f.e;
+    let token = DaoTokenContractClient::new(e, &f.dao.token);
+    assert_eq!(token.version(), String::from_str(e, "0.1.0"));
+
+    // The deployed code renames silently: this is the bug the upgrade fixes.
+    let uri = String::from_str(e, "https://example.com/token/");
+    token.set_metadata(
+        &uri,
+        &String::from_str(e, "Quiet Name"),
+        &String::from_str(e, "QUIET"),
+    );
+    assert_eq!(metadata_updated_count(e), 0);
+
+    token.upgrade(&f.old_token, &f.new_token);
+    assert_eq!(token.version(), String::from_str(e, "0.2.0"));
+    assert_eq!(token.wasm_hash(), f.new_token);
+    // Nothing stored by 0.1.0 was lost.
+    assert_eq!(token.balance(&f.deployer), 1);
+    assert_eq!(token.owner_of(&0), f.deployer);
+    assert_eq!(token.get_votes(&f.deployer), 1);
+    assert_eq!(token.admin(), f.deployer);
+    assert_eq!(
+        token_name(e, &f.dao.token),
+        String::from_str(e, "Quiet Name")
+    );
+
+    let name = String::from_str(e, "Lantern Club");
+    token.set_metadata(&uri, &name, &String::from_str(e, "LANTERN"));
+    assert_eq!(metadata_updated_count(e), 1);
+    assert_eq!(token_name(e, &f.dao.token), name);
+
+    // The DAO still launches on the upgraded token.
+    f.manager.launch_dao(
+        &f.dao.token,
+        &manager::LaunchConfig {
+            launch_auction: false,
+            launch_marketplace: false,
+            enable_minter: false,
+            expected_minter: None,
+        },
+    );
+    assert!(token.is_live());
+}
+
+/// Live DAO: one proposal upgrades the token and renames it; the rename runs on the new code
+/// in the same execution, and only the Treasury's own authorization is used.
+#[test]
+fn token_upgrade_by_proposal_then_rename_in_the_same_proposal() {
+    let f = dao_on_deployed_token();
+    let e = &f.e;
+    f.manager.launch_dao(
+        &f.dao.token,
+        &manager::LaunchConfig {
+            launch_auction: false,
+            launch_marketplace: false,
+            enable_minter: false,
+            expected_minter: None,
+        },
+    );
+    let token = DaoTokenContractClient::new(e, &f.dao.token);
+    let governor = DaoGovernorContractClient::new(e, &f.dao.governor);
+    let treasury = DaoTreasuryContractClient::new(e, &f.dao.treasury);
+    assert_eq!(token.admin(), f.dao.treasury);
+
+    let name = String::from_str(e, "Lantern Club");
+    let targets = vec![e, f.dao.token.clone(), f.dao.token.clone()];
+    let functions = vec![e, Symbol::new(e, "upgrade"), Symbol::new(e, "set_metadata")];
+    let args = vec![
+        e,
+        vec![e, f.old_token.into_val(e), f.new_token.into_val(e)],
+        vec![
+            e,
+            String::from_str(e, "https://example.com/token/").into_val(e),
+            name.into_val(e),
+            String::from_str(e, "LANTERN").into_val(e),
+        ],
+    ];
+    // The founder's vote carries it (supply 1, quorum 10%).
+    e.ledger().set_sequence_number(200);
+    e.ledger().set_timestamp(2_000);
+    let description = String::from_str(e, "Upgrade the token and rename");
+    let desc_hash = description_hash(e, &description);
+    let id = governor.propose(&targets, &functions, &args, &description, &f.deployer);
+    e.ledger().set_timestamp(2_301);
+    governor.cast_vote(&id, &1, &String::from_str(e, "yes"), &f.deployer);
+    e.ledger().set_timestamp(2_601);
+    governor.queue(
+        &targets,
+        &functions,
+        &args,
+        &desc_hash,
+        &2_901_u32,
+        &f.deployer,
+    );
+    e.ledger().set_timestamp(2_901);
+
+    // Enforcing mode: only the Treasury's own authorization may reach the token.
+    e.set_auths(&[]);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
+    assert_eq!(metadata_updated_count(e), 1);
+    assert_eq!(governor.proposal_state(&id), ProposalState::Executed);
+    assert_eq!(token.version(), String::from_str(e, "0.2.0"));
+    assert_eq!(token_name(e, &f.dao.token), name);
+    assert_eq!(token.balance(&f.deployer), 1);
+}
+
+/// The Manager's approval is the gate: unapproved paths, a stale `from` and a revoked target fail.
+#[test]
+fn token_upgrade_rejects_unapproved_stale_and_revoked_paths() {
+    let f = dao_on_deployed_token();
+    let e = &f.e;
+    let token = DaoTokenContractClient::new(e, &f.dao.token);
+
+    // A registered but unapproved target.
+    let stray = upload_module_wasm(e, "metadata");
+    assert!(token.try_upgrade(&f.old_token, &stray).is_err());
+    // `from` must be the code actually running.
+    assert!(token.try_upgrade(&f.new_token, &f.old_token).is_err());
+    // A revoked target can't be upgraded to, even on an approved path.
+    f.manager.revoke_implementation(&f.new_token);
+    assert!(token.try_upgrade(&f.old_token, &f.new_token).is_err());
+    assert_eq!(token.version(), String::from_str(e, "0.1.0"));
+}

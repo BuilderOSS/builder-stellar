@@ -52,6 +52,19 @@ export interface MintWithMinterEvent {
 }
 
 /**
+ * Emitted by `set_metadata` (admin only). OpenZeppelin's `set_metadata`
+ * writes storage silently; this makes a rename visible to indexers.
+ */
+export interface MetadataUpdatedEvent {
+  name: "MetadataUpdated";
+  data: {
+    name?: string;
+    symbol?: string;
+    uri?: string;
+  };
+}
+
+/**
  * Emitted once by the constructor.
  */
 export interface TokenInitializedEvent {
@@ -370,5 +383,5 @@ export const NonFungibleTokenError = {
    */
   214 : { message: "SymbolMaxLenExceeded" }
 }
-    export type ContractEvent = TokenLaunchedEvent | MintWithMinterEvent | TokenInitializedEvent | MintBatchWithMinterEvent | MintAuthorityChangedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VersionSyncedEvent | DelegateChangedEvent | DelegateVotesChangedEvent | MintEvent | ApproveEvent | TransferEvent;
+    export type ContractEvent = TokenLaunchedEvent | MintWithMinterEvent | MetadataUpdatedEvent | TokenInitializedEvent | MintBatchWithMinterEvent | MintAuthorityChangedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VersionSyncedEvent | DelegateChangedEvent | DelegateVotesChangedEvent | MintEvent | ApproveEvent | TransferEvent;
     

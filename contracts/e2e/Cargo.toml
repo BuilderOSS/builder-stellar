@@ -21,4 +21,5 @@ auction = { path = "../auction", features = ["testutils"] }
 marketplace = { path = "../marketplace", features = ["testutils"] }
 minter = { path = "../minter", features = ["testutils"] }
 stellar-governance = { workspace = true }
+stellar-tokens = { workspace = true }
 common = { path = "../common", features = ["testutils"] }

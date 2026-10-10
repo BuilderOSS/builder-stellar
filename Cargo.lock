@@ -423,6 +423,7 @@ dependencies = [
  "minter",
  "soroban-sdk",
  "stellar-governance",
+ "stellar-tokens",
  "token",
  "treasury",
 ]

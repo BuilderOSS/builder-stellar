@@ -56,6 +56,16 @@ pub struct MintBatchWithMinter {
     pub count: u32,
 }
 
+/// Emitted by `set_metadata` (admin only). OpenZeppelin's `set_metadata`
+/// writes storage silently; this makes a rename visible to indexers.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MetadataUpdated {
+    pub name: String,
+    pub symbol: String,
+    pub uri: String,
+}
+
 /// Emitted once when the Manager launches the token (Setup -> Live).
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -121,6 +131,15 @@ pub fn emit_launched(e: &Env, treasury: &Address, minters: &Vec<Address>) {
     TokenLaunched {
         treasury: treasury.clone(),
         minters: minters.clone(),
+    }
+    .publish(e);
+}
+
+pub fn emit_metadata_updated(e: &Env, uri: &String, name: &String, symbol: &String) {
+    MetadataUpdated {
+        name: name.clone(),
+        symbol: symbol.clone(),
+        uri: uri.clone(),
     }
     .publish(e);
 }
