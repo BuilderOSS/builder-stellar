@@ -19,12 +19,18 @@ vi.mock('@/lib/dao-config', async (importOriginal) => ({
   getDaoNetworkConfigById: mocks.config
 }));
 vi.mock('@/lib/goldsky', () => ({ getGoldskyAuctionHistory: mocks.history, getGoldskyAuctionBids: mocks.bids }));
+vi.mock('@/lib/prisma', () => ({
+  prisma: { auctionAuction: { findFirst: async () => null }, auctionBid: { findMany: async () => [] } }
+}));
+import { clearServerCache } from '@/lib/server-cache';
+
 import { GET } from './route';
 
 const get = () =>
   GET(new Request('https://app.test/api/dao/dao1/auctions'), { params: Promise.resolve({ daoId: 'dao1' }) });
 describe('expected prelaunch auction state', () => {
   beforeEach(() => {
+    clearServerCache();
     mocks.config.mockResolvedValue({ auctionContractId: 'auction1', auctionEnabled: true });
     mocks.paused.mockResolvedValue({ result: true });
     mocks.history.mockResolvedValue([]);

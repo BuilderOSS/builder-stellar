@@ -12,6 +12,12 @@ pre-commit:
       run: pnpm exec eslint --fix --no-warn-ignored {staged_files}
       stage_fixed: true
 
+    # Typecheck the web app when TypeScript changes (lint alone missed type errors).
+    typecheck-web:
+      root: "apps/web/"
+      glob: "*.{ts,tsx}"
+      run: pnpm typecheck
+
     # Format Rust contract files
     format-rust:
       glob: "contracts/**/*.rs"

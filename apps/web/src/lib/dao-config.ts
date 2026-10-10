@@ -9,6 +9,7 @@ import { getNetworkConfig, type NetworkName } from '@/config/networks';
 
 import { getDaoConfigFromDatabase, resolveDaoId } from './dao-db';
 import { registeredMinterConfig } from './registered-minter-config';
+import { cached } from './server-cache';
 
 export type DaoNetworkConfig = {
   name: NetworkName;
@@ -80,6 +81,12 @@ export function isDaoAdmin(config: DaoNetworkConfig, address: string | null | un
  * @throws Error if DAO not found or database query fails
  */
 export async function getDaoNetworkConfigById(daoId: string): Promise<DaoNetworkConfig> {
+  // Every API route resolves the DAO first; a short cache keeps that off the
+  // hot path (the indexed configuration changes only with chain events).
+  return cached(`dao-config:${daoId}`, 30_000, () => loadDaoNetworkConfig(daoId));
+}
+
+async function loadDaoNetworkConfig(daoId: string): Promise<DaoNetworkConfig> {
   // Query database for complete DAO configuration
   // Accept the canonical Token address or a claimed slug.
   const daoConfig = await getDaoConfigFromDatabase(await resolveDaoId(daoId));

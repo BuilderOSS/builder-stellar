@@ -135,6 +135,16 @@ other tokens.
 `packages/goldsky/src/activity-feed.script.js`. Events without a mapping get
 `contract.<event_name>` and `system` visibility.
 
+`visibility` curates the feed. **public/governance** rows are what a member acts
+on: launches, proposals (created, queued, executed, cancelled), votes, real
+delegation, auctions (started, bid, settled, cancelled), marketplace listings and
+sales, allocations (`mint_batch_with_minter`, Minter claims and batches), and
+upgrades. Their side effects are **admin/system**: per-token `mint` /
+`mint_with_minter`, transfers, `delegate_votes_changed`, seeds, slug claims,
+setup and launch internals, refunds, listing cancellations, and the automatic
+self-delegation on a holder's first token. Public feeds read only public and
+governance rows (the web formats them into sentences, see `apps/web/src/lib/activity-feed.ts`).
+
 ## Application boundaries
 
 SQL lifecycle columns are `launched_*`; the DAO DTO maps them to `finalized_*`.

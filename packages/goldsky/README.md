@@ -237,6 +237,14 @@ minter") plus one admin `metadata.seeds_generated` row, not one row per token; M
 `primary_listing_expired` and `marketplace.paused` are `admin`. `activity_feed_events`
 columns are unchanged; `listing_id` and `index` are only in `topics`/`args`.
 
+**Public feed curation.** Only story events are `public`/`governance`: launches,
+proposals and votes, real delegation, auctions (started, bid, settled, cancelled),
+marketplace listings and sales, allocations and claims, and upgrades. Per-token
+`Mint`/`MintWithMinter`, transfers, vote-weight changes, seeds, slug claims,
+setup/launch internals, refunds, listing cancellations and the automatic
+self-delegation on a first token (`from_delegate` empty, `to_delegate` =
+delegator) are `admin`/`system`. See `userFacing` in `src/activity-feed.script.js`.
+
 ## Data Access Layer
 
 Query functions in `apps/web/src/lib/goldsky.ts`:

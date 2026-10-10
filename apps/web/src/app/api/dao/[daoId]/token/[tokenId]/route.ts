@@ -19,7 +19,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
     );
     return NextResponse.json(metadata, {
       headers: {
-        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600'
+        'Cache-Control': 'public, max-age=60, s-maxage=3600, stale-while-revalidate=86400'
       }
     });
   } catch (error) {

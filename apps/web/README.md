@@ -107,6 +107,25 @@ Selling is approval → escrow/list, not one atomic cross-transaction operation.
 
 The preparation API derives the actor from the authenticated session, checks origin/network, scoped listing identity, live configuration, ownership/terms, balances and applicable trustline readiness. It returns unsigned XDR and fee/summary; the server has no trade signer and does not submit it. The wallet checks account/network/source/expiry and unchanged envelope before signing/submission. A timeout requires checking the same hash before retrying. Index refresh is separate from chain confirmation.
 
+## Reads, RPC and caching
+
+Pages read the indexed database first. RPC is reserved for data the index lacks
+or for live checks right before signing. `lib/server-cache.ts` is a process-local
+TTL cache with in-flight de-duplication:
+- DAO config (30 s) and the Minter registration (10 min);
+- artwork collection names (5 min per Metadata contract) and token traits, read
+  from `metadata.token_seeds` (RPC fallback only for unindexed tokens);
+- rendered token images (keyed by the exact layer set), plus long `Cache-Control`
+  on render and metadata responses.
+
+The auction route serves the open auction, its bids and its extended end time
+from the index, with a cached RPC fallback. Bidding, settlement and trades still
+recheck live state when prepared.
+
+The activity feed shows curated public/governance rows only (see
+`docs/DATABASE_SCHEMA.md`), formatted by `lib/activity-feed.ts` into a category,
+a plain sentence, a relative time and a link.
+
 ## API map
 
 All DAO reads are deployment-scoped. Private trading helpers require a session.

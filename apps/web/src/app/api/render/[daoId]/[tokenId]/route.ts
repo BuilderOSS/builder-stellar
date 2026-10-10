@@ -6,6 +6,7 @@ import { Agent, fetch } from 'undici';
 import { getDaoNetworkConfigById } from '@/lib/dao-config';
 import { assertSafeRemoteUrl, getFetchableUrls, IPFS_GATEWAYS } from '@/lib/ipfs-gateway';
 import { resolveOnchainTokenMetadata } from '@/lib/onchain-token-metadata';
+import { cached } from '@/lib/server-cache';
 import { parseTokenId } from '@/lib/token-id';
 
 export const dynamic = 'force-dynamic';
@@ -147,35 +148,49 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
     if (metadata.artwork.length === 0) throw new Error(`No artwork found for token ${resolvedTokenId}`);
     if (metadata.artwork.length > MAX_LAYERS) throw new Error('Artwork has too many layers');
 
-    const maxBytesPerLayer = Math.min(MAX_IMAGE_BYTES, Math.floor(MAX_TOTAL_IMAGE_BYTES / metadata.artwork.length));
-    const layers = await mapWithConcurrency(metadata.artwork, MAX_CONCURRENT_LAYER_FETCHES, ({ url }) =>
-      fetchImage(url, controller.signal, maxBytesPerLayer)
-    );
+    // Composition is the expensive part (IPFS fetches + sharp). Cache the
+    // result per token and exact layer set: a trait change is a new key.
+    const image = await cached(
+      `render:${config.tokenContractId}:${resolvedTokenId}:${metadata.artwork.map(({ url }) => url).join('|')}`,
+      60 * 60_000,
+      async () => {
+        const maxBytesPerLayer = Math.min(MAX_IMAGE_BYTES, Math.floor(MAX_TOTAL_IMAGE_BYTES / metadata.artwork.length));
+        const layers = await mapWithConcurrency(metadata.artwork, MAX_CONCURRENT_LAYER_FETCHES, ({ url }) =>
+          fetchImage(url, controller.signal, maxBytesPerLayer)
+        );
 
-    const base = await withSignal(
-      sharp(layers[0], { limitInputPixels: MAX_INPUT_PIXELS }).resize(SIZE, SIZE, { fit: 'contain' }).png().toBuffer(),
-      controller.signal
-    );
-    const overlays: Buffer[] = [];
-    for (const layer of layers.slice(1)) {
-      overlays.push(
-        await withSignal(
-          sharp(layer, { limitInputPixels: MAX_INPUT_PIXELS }).resize(SIZE, SIZE, { fit: 'contain' }).png().toBuffer(),
+        const base = await withSignal(
+          sharp(layers[0], { limitInputPixels: MAX_INPUT_PIXELS })
+            .resize(SIZE, SIZE, { fit: 'contain' })
+            .png()
+            .toBuffer(),
           controller.signal
-        )
-      );
-    }
-    const image = await withSignal(
-      sharp(base)
-        .composite(overlays.map((input) => ({ input })))
-        .webp({ quality: 85 })
-        .toBuffer(),
-      controller.signal
+        );
+        const overlays: Buffer[] = [];
+        for (const layer of layers.slice(1)) {
+          overlays.push(
+            await withSignal(
+              sharp(layer, { limitInputPixels: MAX_INPUT_PIXELS })
+                .resize(SIZE, SIZE, { fit: 'contain' })
+                .png()
+                .toBuffer(),
+              controller.signal
+            )
+          );
+        }
+        return await withSignal(
+          sharp(base)
+            .composite(overlays.map((input) => ({ input })))
+            .webp({ quality: 85 })
+            .toBuffer(),
+          controller.signal
+        );
+      }
     );
 
     return new Response(image, {
       headers: {
-        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
+        'Cache-Control': 'public, max-age=300, s-maxage=86400, stale-while-revalidate=604800',
         'Content-Type': 'image/webp'
       }
     });

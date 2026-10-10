@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getNetworkConfig } from '@/config/networks';
 import { MINTER, minterSpec } from '@/lib/minter/test-fixtures';
+import { clearServerCache } from '@/lib/server-cache';
 
 const calls = vi.hoisted(() => ({ registration: vi.fn(), manager: vi.fn(), minter: vi.fn() }));
 vi.mock('@builder-stellar/manager-bindings', () => ({
@@ -25,6 +26,7 @@ import { registeredMinterConfig } from './registered-minter-config';
 
 describe('server-discovered platform Minter', () => {
   beforeEach(() => {
+    clearServerCache();
     calls.registration.mockReset();
     calls.minter.mockReset();
     calls.manager.mockClear();
@@ -44,8 +46,10 @@ describe('server-discovered platform Minter', () => {
     expect(await registeredMinterConfig(getNetworkConfig('testnet'), 'source')).toMatchObject({ minterContractId: '' });
     expect(calls.minter).not.toHaveBeenCalled();
     await expect(registeredMinterConfig(getNetworkConfig('public'), 'source')).rejects.toThrow(/network mismatch/);
+    clearServerCache(); // results are cached for 10 minutes per Manager
     calls.registration.mockResolvedValue({ result: 'not-a-contract' });
     await expect(registeredMinterConfig(getNetworkConfig('testnet'), 'source')).rejects.toThrow(/Invalid/);
+    clearServerCache();
     calls.registration.mockResolvedValue({ result: MINTER });
     calls.minter.mockRejectedValue(new Error('ABI incompatible'));
     await expect(registeredMinterConfig(getNetworkConfig('testnet'), 'source')).rejects.toThrow(/ABI incompatible/);
