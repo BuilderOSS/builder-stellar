@@ -1,10 +1,11 @@
 'use client';
 
 import { ArrowUpRight } from 'lucide-react';
+import type { Route } from 'next';
 import Link from 'next/link';
 
 import { Card, Heading, Text } from '@/components/ui';
-import { formatActivitySummary } from '@/lib/activity-feed';
+import { formatActivity, relativeTime } from '@/lib/activity-feed';
 import { daoRoute } from '@/lib/dao-routes';
 import type { DashboardFeedItem } from '@/lib/goldsky-queries';
 
@@ -18,6 +19,10 @@ function formatActivityDate(value: string | number | null) {
   if (Number.isNaN(date.getTime())) return 'Date unavailable';
 
   return new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+}
+
+function row(item: DashboardFeedItem) {
+  return formatActivity(item, item.dao_id);
 }
 
 function daoName(item: DashboardFeedItem) {
@@ -51,7 +56,9 @@ export function DashboardFeed({
         <div className="empty-state dashboard-feed__empty" role="status">
           <p className="eyebrow">Nothing new yet</p>
           <Heading style={{ fontSize: '1.25rem', margin: '8px 0' }}>Your feed is waiting for activity</Heading>
-          <Text className="lede">Proposals, votes, treasury actions, and other DAO events will appear here.</Text>
+          <Text className="lede">
+            Proposals, votes, auctions, sales and allocations from your DAOs will appear here.
+          </Text>
         </div>
       ) : null}
       {items.length ? (
@@ -59,13 +66,20 @@ export function DashboardFeed({
           {items.map((item) => (
             <Card key={item.activity_id} className="dashboard-feed__item" p="4">
               <div className="dashboard-feed__item-topline">
-                <Text className="label">{daoName(item)}</Text>
-                <Text className="dashboard-feed__date">{formatActivityDate(item.timestamp)}</Text>
+                <Text className="label">
+                  {daoName(item)} · {row(item).category}
+                </Text>
+                <time className="dashboard-feed__date" title={formatActivityDate(item.timestamp)}>
+                  {relativeTime(item.timestamp)}
+                </time>
               </div>
-              <Heading style={{ fontSize: '1rem', margin: '8px 0 4px' }}>{item.title}</Heading>
-              <Text className="dashboard-feed__summary">{formatActivitySummary(item)}</Text>
-              <Link className="dashboard-feed__link" href={daoRoute(item.dao_id)}>
-                Open DAO
+              <Heading style={{ fontSize: '1rem', margin: '8px 0 4px' }}>{row(item).title}</Heading>
+              {row(item).detail ? <Text className="dashboard-feed__summary">{row(item).detail}</Text> : null}
+              <Link
+                className="dashboard-feed__link"
+                href={(row(item).href as Route | undefined) ?? daoRoute(item.dao_id)}
+              >
+                {row(item).href ? 'View' : 'Open DAO'}
                 <ArrowUpRight aria-hidden="true" size={14} />
               </Link>
             </Card>

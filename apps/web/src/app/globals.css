@@ -1771,7 +1771,33 @@ textarea {
 .dashboard-activity-row[data-first] {
   border-top: 0;
 }
+.dashboard-activity-row--link {
+  color: inherit;
+  text-decoration: none;
+  margin: 0 -10px;
+  padding-inline: 10px;
+  border-radius: 10px;
+  transition: background-color 150ms var(--ease-ui);
+}
+.dashboard-activity-row--link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .dashboard-activity-row--link:hover {
+    background-color: var(--surface-hover);
+  }
+}
+.activity-category {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
 .dashboard-activity-meta {
+  white-space: nowrap;
   max-width: 22rem;
   margin: 0;
   font-size: 0.8rem;

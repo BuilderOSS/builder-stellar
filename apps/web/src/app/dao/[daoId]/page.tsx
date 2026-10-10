@@ -1,6 +1,7 @@
 'use client';
 
 import { Activity, ChevronDown, RefreshCw } from 'lucide-react';
+import type { Route } from 'next';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Stack } from 'styled-system/jsx';
@@ -16,7 +17,7 @@ import { TokenCard } from '@/components/token/token-card';
 import { Button, Callout, Card, Heading, Skeleton, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { useIsLaunchAdmin } from '@/hooks/useIsLaunchAdmin';
-import { formatActivitySummary } from '@/lib/activity-feed';
+import { formatActivity, relativeTime } from '@/lib/activity-feed';
 import { useGoldskyActivityFeed, useGoldskyHealth } from '@/lib/goldsky-queries';
 import { ProposalState } from '@/lib/proposal-state';
 import { useTokenInventory } from '@/lib/token-queries';
@@ -491,7 +492,7 @@ export default function Page() {
           {!activityLoading && !activityItems.length ? (
             <div className="empty-state" role="status">
               <Text className="lede" style={{ margin: '0 auto' }}>
-                No indexed activity yet. Governance and token events will appear here.
+                Nothing has happened yet. Proposals, votes, auctions and sales will appear here.
               </Text>
             </div>
           ) : null}
@@ -499,23 +500,43 @@ export default function Page() {
             <>
               <div className="dashboard-activity-scroll">
                 <div className="dashboard-activity-list">
-                  {activityItems.map((item, index) => (
-                    <div
-                      className="dashboard-activity-row"
-                      data-first={index === 0 ? 'true' : undefined}
-                      key={item.activity_id}
-                    >
-                      <div>
-                        <Text style={{ margin: 0, fontWeight: 700 }}>{item.title}</Text>
-                        <Text className="lede" style={{ margin: '4px 0 0', fontSize: '0.9rem' }}>
-                          {formatActivitySummary(item)}
-                        </Text>
+                  {activityItems.map((item, index) => {
+                    const row = formatActivity(item, daoId);
+                    const content = (
+                      <>
+                        <div>
+                          <Text className="activity-category">{row.category}</Text>
+                          <Text style={{ margin: '2px 0 0', fontWeight: 600 }}>{row.title}</Text>
+                          {row.detail ? (
+                            <Text className="lede" style={{ margin: '2px 0 0', fontSize: '0.88rem' }}>
+                              {row.detail}
+                            </Text>
+                          ) : null}
+                        </div>
+                        <time className="lede dashboard-activity-meta" title={formatTimestamp(item.timestamp)}>
+                          {relativeTime(item.timestamp)}
+                        </time>
+                      </>
+                    );
+                    return row.href ? (
+                      <Link
+                        className="dashboard-activity-row dashboard-activity-row--link"
+                        data-first={index === 0 ? 'true' : undefined}
+                        key={item.activity_id}
+                        href={row.href as Route}
+                      >
+                        {content}
+                      </Link>
+                    ) : (
+                      <div
+                        className="dashboard-activity-row"
+                        data-first={index === 0 ? 'true' : undefined}
+                        key={item.activity_id}
+                      >
+                        {content}
                       </div>
-                      <Text className="lede dashboard-activity-meta">
-                        {formatTimestamp(item.timestamp)} | Ledger {item.ledger_sequence} | {item.contract_role}
-                      </Text>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
               {canLoadMoreActivity ? (

@@ -261,7 +261,7 @@ const tokenResult = invoke({
   deployment_id: 'test',
   contract_id: 'test'
 });
-assert.strictEqual(tokenResult.visibility, 'public', 'Mint should have public visibility');
+assert.strictEqual(tokenResult.visibility, 'admin', 'Per-token Mint stays off the public feed');
 
 const adminResult = invoke({
   event_id: '8',
@@ -337,10 +337,10 @@ console.log('✅ Passed\n');
 console.log('Test 16: New and changed event kinds, titles and visibility');
 const newEventCases = [
   ['PrimaryListingPurchased', 'marketplace', 'marketplace.primary_listing_purchased', 'Primary sale completed', 'public'],
-  ['PrimaryListingCancelled', 'marketplace', 'marketplace.primary_listing_cancelled', 'Primary listing cancelled', 'public'],
+  ['PrimaryListingCancelled', 'marketplace', 'marketplace.primary_listing_cancelled', 'Primary listing cancelled', 'admin'],
   ['PrimaryListingExpired', 'marketplace', 'marketplace.primary_listing_expired', 'Primary listing expired', 'admin'],
-  ['RefundDeferred', 'auction', 'auction.refund_deferred', 'Bid refund deferred', 'public'],
-  ['RefundWithdrawn', 'auction', 'auction.refund_withdrawn', 'Bid refund withdrawn', 'public'],
+  ['RefundDeferred', 'auction', 'auction.refund_deferred', 'Bid refund deferred', 'admin'],
+  ['RefundWithdrawn', 'auction', 'auction.refund_withdrawn', 'Bid refund withdrawn', 'admin'],
   ['AdminProposed', 'manager', 'manager.admin_proposed', 'Manager admin proposed', 'admin'],
   ['AdminChanged', 'manager', 'manager.admin_changed', 'Manager admin changed', 'admin'],
   ['PlatformMinterSet', 'manager', 'manager.platform_minter_set', 'Platform minter set', 'admin'],
@@ -351,7 +351,7 @@ const newEventCases = [
   ['AdminChanged', 'treasury', 'treasury.admin_changed', 'Treasury admin handed to the Treasury', 'admin'],
   ['Migrated', 'governor', 'governor.migrated', 'Governor storage migrated', 'admin'],
   ['ProposalScheduled', 'governor', 'governance.proposal_scheduled', 'Proposal voting scheduled', 'admin'],
-  ['SlugClaimed', 'manager', 'manager.slug_claimed', 'Slug claimed', 'public'],
+  ['SlugClaimed', 'manager', 'manager.slug_claimed', 'Slug claimed', 'admin'],
   ['PendingSlugUpdated', 'manager', 'manager.pending_slug_updated', 'Requested slug changed', 'admin'],
   ['LatestImplementationSet', 'manager', 'manager.latest_implementation_set', 'Latest implementation set', 'admin'],
   ['MarketplacePaused', 'marketplace', 'marketplace.paused', 'Marketplace paused', 'admin'],

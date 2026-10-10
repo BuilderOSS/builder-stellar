@@ -644,7 +644,7 @@ test('module upgrades and wasm hashes: keyed by emitting contract, filtered by d
   assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'migrated'`).kind, 'auction.migrated');
   assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'admin_changed' AND contract_role = 'manager'`).kind, 'manager.admin_changed');
   assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'admin_changed' AND contract_role = 'token'`).kind, 'token.admin_changed');
-  assert.equal(one(`SELECT kind, visibility FROM app.activity_feed WHERE event_name = 'slug_claimed'`).visibility, 'public');
+  assert.equal(one(`SELECT kind, visibility FROM app.activity_feed WHERE event_name = 'slug_claimed'`).visibility, 'admin', 'the launch row tells the story; the slug claim is bookkeeping');
 });
 
 test('minter: claims resolve to the DAO by token_id and foreign tokens are dropped', { skip }, () => {

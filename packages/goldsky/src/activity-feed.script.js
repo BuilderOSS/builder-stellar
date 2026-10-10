@@ -94,18 +94,19 @@ function invoke(data) {
 
   var normalizedEventName = normalizeEventName(eventName);
 
+  // Public feed: what a member would act on or care about. Per-token mints,
+  // seeds, transfers, vote-weight bookkeeping, setup/launch internals, refunds
+  // and listing cancellations stay out (admin/system rows): they are side effects
+  // of the events below, which already tell the story.
   var userFacing = {
-    TokenInitialized: true, Mint: true, MintWithMinter: true, MintBatchWithMinter: true,
-    Transfer: true, DelegateChanged: true, DelegateVotesChanged: true,
-    ProposalCreated: true, ProposalQueued: true, VoteCast: true,
-    ProposalCancelled: true, ProposalExecuted: true,
-    AuctionCreated: true, BidPlaced: true,
-    AuctionSettled: true, BidRefunded: true, AuctionCancelled: true,
-    DaoCreated: true, DaoLaunched: true, SlugClaimed: true,
+    DaoLaunched: true,
+    ProposalCreated: true, ProposalQueued: true, ProposalExecuted: true, ProposalCancelled: true, VoteCast: true,
+    DelegateChanged: true,
+    AuctionCreated: true, BidPlaced: true, AuctionSettled: true, AuctionCancelled: true,
+    PrimaryListingCreated: true, PrimaryListingPurchased: true,
+    SecondaryListingCreated: true, ListingPurchased: true,
+    MintBatchWithMinter: true,
     MerkleClaimEvent: true, AllowlistClaimEvent: true, MintBatchEvent: true,
-    PrimaryListingCreated: true, PrimaryListingPurchased: true, PrimaryListingCancelled: true,
-    SecondaryListingCreated: true, ListingPurchased: true, ListingCancelled: true,
-    RefundDeferred: true, RefundWithdrawn: true,
     // Contract upgrades are the most security-relevant DAO action: public.
     Upgraded: true
   };
@@ -405,7 +406,7 @@ function invoke(data) {
     ListingPurchased: function() { return 'Token ' + (tokenId || 'unknown') + ' purchased for ' + (amount || 'unknown price'); },
     MerkleClaimEvent: function() { return 'Claimed ' + (amount || 'tokens') + ' via merkle proof for ' + (owner || 'recipient'); },
     AllowlistClaimEvent: function() { return 'Claimed ' + (amount || 'tokens') + ' via allowlist for ' + (owner || 'recipient'); },
-    DelegateChanged: function() { return 'Delegation changed'; },
+    DelegateChanged: function() { return (pick(data, ['delegator']) || 'A holder') + ' delegated votes to ' + (pick(data, ['to_delegate']) || 'a delegate'); },
     DaoCreated: function() { return 'DAO created by ' + (creator || 'unknown'); },
     DaoLaunched: function() { return 'DAO launched for token ' + (tokenAddress || 'unknown'); },
     ImplementationRegistered: function() { return 'Implementation "' + (name || 'unknown') + '" registered'; },
@@ -443,7 +444,15 @@ function invoke(data) {
   }
 
   // Strictly type all fields to ensure no mixed types in Arrow table
-  var visibility = userFacing[normalizedEventName] ? (normalizedEventName.indexOf('Proposal') === 0 || normalizedEventName === 'VoteCast' ? 'governance' : 'public') : (kindMap[normalizedEventName] ? 'admin' : 'system');
+  var visibility = userFacing[normalizedEventName] ? (normalizedEventName.indexOf('Proposal') === 0 || normalizedEventName === 'VoteCast' || normalizedEventName === 'DelegateChanged' ? 'governance' : 'public') : (kindMap[normalizedEventName] ? 'admin' : 'system');
+  // The token self-delegates a holder on their first token: automatic, not a
+  // choice anyone made. Only real delegation changes reach the public feed.
+  if (normalizedEventName === 'DelegateChanged') {
+    var delegator = pick(data, ['delegator']);
+    var toDelegate = pick(data, ['to_delegate']);
+    var fromDelegate = pick(data, ['from_delegate']);
+    if (!fromDelegate && delegator && toDelegate === delegator) visibility = 'system';
+  }
 
   // Helper to safely convert to number
   function toNumber(val) {

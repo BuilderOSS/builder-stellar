@@ -349,7 +349,8 @@ test('builds activity feed row from decoded delegate_changed event', () => {
   assert.ok(activity);
   assert.equal(activity.kind, 'token.delegate_changed');
   assert.equal(activity.title, 'Delegation changed');
-  assert.equal(activity.summary, 'Delegation changed');
+  assert.equal(activity.summary, 'A holder delegated votes to GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO');
+  assert.equal(activity.visibility, 'governance');
   assert.equal(activity.actor, 'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO');
   assert.deepEqual(JSON.parse(activity.topics), {});
   assert.deepEqual(JSON.parse(activity.args), { from_delegate: null, to_delegate: 'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO' });
@@ -357,7 +358,7 @@ test('builds activity feed row from decoded delegate_changed event', () => {
     'GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO',
     'CC6NMFVKCHMRKFA7M333CVEFAVPLXT3XAZHZX6Q4SGNDNTKZEKWTLXT2'
   ]);
-  assert.equal(activity.visibility, 'public');
+  assert.equal(activity.visibility, 'governance');
 });
 
 test('builds activity feed row from decoded mint event', () => {
@@ -931,7 +932,7 @@ test('DaoCreated decodes the nested wasm_hashes struct (map of six BytesN<32>) b
   assert.equal(args.created_ledger, '11');
   assert.equal(args.slug, 'my-dao');
   assert.equal(activity.kind, 'manager.dao_created');
-  assert.equal(activity.visibility, 'public');
+  assert.equal(activity.visibility, 'admin', 'a pending DAO is not public news; DaoLaunched is');
 });
 
 test('role fallback classifies new events when contract_role is unknown', () => {
@@ -990,7 +991,7 @@ test('auction RefundDeferred / RefundWithdrawn / BidRefunded', () => {
   assert.deepEqual(topicsOf(deferred.decoded), { token_id: '7', bidder: 'BIDDER' });
   assert.deepEqual(argsOf(deferred.decoded), { amount: '30' });
   assert.equal(deferred.activity.kind, 'auction.refund_deferred');
-  assert.equal(deferred.activity.visibility, 'public');
+  assert.equal(deferred.activity.visibility, 'admin');
   assert.equal(deferred.activity.token_id, '7');
   assert.equal(deferred.activity.amount, '30');
   assert.equal(deferred.activity.actor, 'BIDDER');
@@ -1073,4 +1074,23 @@ test('activity feed picks token identifiers from topics even when args is an emp
   });
   assert.equal(purchase.token_id, '3');
   assert.match(purchase.summary, /listing 4/);
+});
+
+test('automatic self-delegation stays off the public feed; real delegation is governance news', () => {
+  const base = { event_id: 'd', deployment_id: 'test', contract_id: 'TOKEN', contract_role: 'token', event_name: 'delegate_changed', ledger_sequence: 1, transaction_hash: 'tx' };
+  const self = buildActivityFeed({ ...base, topics: '{"delegator":"GALICE"}', args: '{"from_delegate":null,"to_delegate":"GALICE"}' });
+  assert.equal(self.visibility, 'system');
+  const real = buildActivityFeed({ ...base, topics: '{"delegator":"GALICE"}', args: '{"from_delegate":"GALICE","to_delegate":"GBOB"}' });
+  assert.equal(real.visibility, 'governance');
+  assert.equal(real.summary, 'GALICE delegated votes to GBOB');
+});
+
+test('public feed carries the story events, not their side effects', () => {
+  const visibility = (event_name, extra = {}) =>
+    buildActivityFeed({ event_id: event_name, deployment_id: 'test', contract_id: 'C', event_name, ledger_sequence: 1, transaction_hash: 'tx', topics: '{}', args: '{}', ...extra }).visibility;
+  for (const name of ['mint', 'mint_with_minter', 'transfer', 'delegate_votes_changed', 'seed_generated', 'seeds_generated', 'slug_claimed', 'token_initialized', 'listing_cancelled', 'refund_withdrawn'])
+    assert.notEqual(visibility(name), 'public', name);
+  for (const name of ['dao_launched', 'auction_created', 'bid_placed', 'auction_settled', 'mint_batch_with_minter', 'listing_purchased', 'primary_listing_purchased', 'upgraded'])
+    assert.equal(visibility(name), 'public', name);
+  for (const name of ['proposal_created', 'vote_cast', 'proposal_executed']) assert.equal(visibility(name), 'governance', name);
 });

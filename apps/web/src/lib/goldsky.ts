@@ -31,11 +31,8 @@ function getDeploymentId(): string {
 
 /** Activity rows shown on public feeds (the indexer also writes admin/system rows). */
 const PUBLIC_VISIBILITY = ['public', 'governance'];
-/**
- * A single mint emits OpenZeppelin `mint` and `mint_with_minter`; both are
- * public, so public feeds keep only the `mint` row for each token.
- */
-const PUBLIC_FEED_FILTER = { visibility: { in: PUBLIC_VISIBILITY }, NOT: { eventName: 'mint_with_minter' } };
+/** The indexer curates visibility: public feeds read only the public/governance rows. */
+const PUBLIC_FEED_FILTER = { visibility: { in: PUBLIC_VISIBILITY } };
 
 function mapProposalList(row: AppProposalList) {
   return {
