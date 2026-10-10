@@ -2,9 +2,21 @@ use soroban_sdk::{contracttype, panic_with_error, Address, Env};
 
 use crate::error::MarketplaceError;
 
-const TTL: u32 = 518_400;
-const MAX_TTL: u32 = 518_400;
-pub const MAX_FEE_BPS: u32 = 10_000;
+/// Storage-layout version of this code (see `common::upgrade`).
+pub const STORAGE_VERSION: u32 = 1;
+
+/// Upper bound for the secondary-sale fee (25%).
+pub const MAX_FEE_BPS: u32 = common::MAX_FEE_BPS;
+
+/// Listings are re-extended to ~30 days whenever fewer than ~7 days remain.
+/// An expired listing can be cleared by anyone, so listings only need to
+/// outlive their own expiry; any touch renews them.
+const LISTING_TTL_EXTEND_TO: u32 = 30 * common::ttl::DAY_IN_LEDGERS;
+const LISTING_TTL_THRESHOLD: u32 = 7 * common::ttl::DAY_IN_LEDGERS;
+
+fn extend_listing(e: &Env, key: &DataKey) {
+    common::ttl::extend_persistent_for(e, key, LISTING_TTL_THRESHOLD, LISTING_TTL_EXTEND_TO);
+}
 
 /// Secondary (escrowed-token) listing, keyed by token id.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -32,8 +44,7 @@ pub struct PrimaryListing {
 #[contracttype]
 pub struct MarketplaceConfig {
     pub token: Address,
-    /// Setup-phase admin of the param setters; replaced by `treasury` once Live.
-    pub launch_admin: Address,
+    /// Fee and primary-sale recipient. Also the admin once live (`common::admin`).
     pub treasury: Address,
     pub payment_asset: Address,
     pub default_secondary_fee_bps: u32,
@@ -67,7 +78,7 @@ pub fn get_listing(e: &Env, token_id: u32) -> Option<Listing> {
     let key = DataKey::Listing(token_id);
     let listing = e.storage().persistent().get(&key);
     if listing.is_some() {
-        e.storage().persistent().extend_ttl(&key, TTL, MAX_TTL);
+        extend_listing(e, &key);
     }
     listing
 }
@@ -75,7 +86,7 @@ pub fn get_listing(e: &Env, token_id: u32) -> Option<Listing> {
 pub fn set_listing(e: &Env, token_id: u32, listing: &Listing) {
     let key = DataKey::Listing(token_id);
     e.storage().persistent().set(&key, listing);
-    e.storage().persistent().extend_ttl(&key, TTL, MAX_TTL);
+    extend_listing(e, &key);
 }
 
 pub fn remove_listing(e: &Env, token_id: u32) {
@@ -86,7 +97,7 @@ pub fn get_primary_listing(e: &Env, listing_id: u64) -> Option<PrimaryListing> {
     let key = DataKey::PrimaryListing(listing_id);
     let listing = e.storage().persistent().get(&key);
     if listing.is_some() {
-        e.storage().persistent().extend_ttl(&key, TTL, MAX_TTL);
+        extend_listing(e, &key);
     }
     listing
 }
@@ -94,7 +105,7 @@ pub fn get_primary_listing(e: &Env, listing_id: u64) -> Option<PrimaryListing> {
 pub fn set_primary_listing(e: &Env, listing_id: u64, listing: &PrimaryListing) {
     let key = DataKey::PrimaryListing(listing_id);
     e.storage().persistent().set(&key, listing);
-    e.storage().persistent().extend_ttl(&key, TTL, MAX_TTL);
+    extend_listing(e, &key);
 }
 
 pub fn remove_primary_listing(e: &Env, listing_id: u64) {

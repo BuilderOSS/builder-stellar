@@ -9,6 +9,33 @@ use soroban_sdk::{
 
 use crate::{DaoTokenContract, DaoTokenContractClient};
 
+/// Register a token with `admin`, `treasury`, `manager` and `hash`; the
+/// auction, marketplace and metadata addresses are fresh dummies.
+fn deploy(
+    e: &Env,
+    admin: Address,
+    treasury: Address,
+    manager: Address,
+    hash: BytesN<32>,
+) -> Address {
+    e.register(
+        DaoTokenContract,
+        (
+            admin,
+            treasury,
+            Address::generate(e),
+            Address::generate(e),
+            String::from_str(e, "https://example.com/"),
+            String::from_str(e, "DAO Vote NFT"),
+            String::from_str(e, "vDAO"),
+            Address::generate(e),
+            manager,
+            hash,
+            String::from_str(e, "0.1.0"),
+        ),
+    )
+}
+
 fn setup() -> (Env, DaoTokenContractClient<'static>, Address) {
     let (e, client, owner, _manager) = setup_with_manager();
     (e, client, owner)
@@ -21,20 +48,12 @@ fn setup_with_manager() -> (Env, DaoTokenContractClient<'static>, Address, Addre
     let manager = Address::generate(&e);
 
     let owner = Address::generate(&e);
-    let metadata = Address::generate(&e); // Dummy metadata address for tests
-    let contract_id = e.register(
-        DaoTokenContract,
-        (
-            owner.clone(),
-            Address::generate(&e),
-            String::from_str(&e, "https://example.com/"),
-            String::from_str(&e, "DAO Vote NFT"),
-            String::from_str(&e, "vDAO"),
-            metadata,
-            manager.clone(),
-            BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
-        ),
+    let contract_id = deploy(
+        &e,
+        owner.clone(),
+        Address::generate(&e),
+        manager.clone(),
+        BytesN::from_array(&e, &[0u8; 32]),
     );
     let client = DaoTokenContractClient::new(&e, &contract_id);
     (e, client, owner, manager)
@@ -43,20 +62,12 @@ fn setup_with_manager() -> (Env, DaoTokenContractClient<'static>, Address, Addre
 fn setup_no_auth() -> (Env, DaoTokenContractClient<'static>, Address) {
     let e = Env::default();
     let owner = Address::generate(&e);
-    let metadata = Address::generate(&e); // Dummy metadata address for tests
-    let contract_id = e.register(
-        DaoTokenContract,
-        (
-            owner.clone(),
-            Address::generate(&e),
-            String::from_str(&e, "https://example.com/"),
-            String::from_str(&e, "DAO Vote NFT"),
-            String::from_str(&e, "vDAO"),
-            metadata,
-            Address::generate(&e),
-            BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
-        ),
+    let contract_id = deploy(
+        &e,
+        owner.clone(),
+        Address::generate(&e),
+        Address::generate(&e),
+        BytesN::from_array(&e, &[0u8; 32]),
     );
     let client = DaoTokenContractClient::new(&e, &contract_id);
     (e, client, owner)
@@ -148,7 +159,7 @@ fn launch_sets_owner_and_exact_minter_set() {
     let stranger = Address::generate(&e);
     let treasury = launch(&e, &client, &[a.clone(), b.clone()]);
 
-    assert_eq!(client.get_owner(), Some(treasury));
+    assert_eq!(client.admin(), treasury);
     assert!(client.mint_authority(&a));
     assert!(client.mint_authority(&b));
     assert!(!client.mint_authority(&stranger));
@@ -188,16 +199,33 @@ fn launch_admin_cannot_mint_after_launch() {
 }
 
 #[test]
-fn launch_clears_pending_ownership_transfer() {
-    let (e, client, _owner, _m) = setup_with_manager();
-    let attacker = Address::generate(&e);
-    // launch_admin starts a two-step transfer during setup...
-    let live_until = e.ledger().sequence() + 1_000;
-    client.transfer_ownership(&attacker, &live_until);
+fn launch_hands_admin_to_treasury() {
+    let (e, client, owner, _m) = setup_with_manager();
+    assert_eq!(client.admin(), owner);
     let treasury = launch(&e, &client, &[]);
-    // ...and cannot accept it after launch.
-    assert!(client.try_accept_ownership().is_err());
-    assert_eq!(client.get_owner(), Some(treasury));
+    assert_eq!(client.admin(), treasury);
+    // The launch admin lost every admin power: set_metadata now needs the treasury.
+    e.mock_auths(&[MockAuth {
+        address: &owner,
+        invoke: &MockAuthInvoke {
+            contract: &client.address,
+            fn_name: "set_metadata",
+            args: (
+                String::from_str(&e, "u"),
+                String::from_str(&e, "n"),
+                String::from_str(&e, "s"),
+            )
+                .into_val(&e),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(client
+        .try_set_metadata(
+            &String::from_str(&e, "u"),
+            &String::from_str(&e, "n"),
+            &String::from_str(&e, "s"),
+        )
+        .is_err());
 }
 
 #[test]
@@ -340,18 +368,18 @@ fn test_batch_mint_multiple_recipients() {
     e.mock_all_auths();
 
     let recipients = soroban_sdk::vec![&e, alice.clone(), bob.clone(), carol.clone()];
-    let amounts = soroban_sdk::vec![&e, 10u128, 15u128, 5u128];
+    let amounts = soroban_sdk::vec![&e, 6u128, 9u128, 5u128];
 
     let token_ids = client.batch_mint(&owner, &recipients, &amounts);
 
-    assert_eq!(token_ids.len(), 30);
-    assert_eq!(client.balance(&alice), 10);
-    assert_eq!(client.balance(&bob), 15);
+    assert_eq!(token_ids.len(), 20);
+    assert_eq!(client.balance(&alice), 6);
+    assert_eq!(client.balance(&bob), 9);
     assert_eq!(client.balance(&carol), 5);
-    assert_eq!(client.get_votes(&alice), 10);
-    assert_eq!(client.get_votes(&bob), 15);
+    assert_eq!(client.get_votes(&alice), 6);
+    assert_eq!(client.get_votes(&bob), 9);
     assert_eq!(client.get_votes(&carol), 5);
-    assert_eq!(client.total_supply(), 30);
+    assert_eq!(client.total_supply(), 20);
 }
 
 #[test]
@@ -405,7 +433,7 @@ fn test_batch_mint_preserves_existing_delegation() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1104)")] // TokenError::InvalidInput
+#[should_panic(expected = "Error(Contract, #7202)")] // TokenError::InvalidInput
 fn test_batch_mint_mismatched_lengths() {
     let (e, client, owner) = setup();
     let alice = Address::generate(&e);
@@ -419,7 +447,7 @@ fn test_batch_mint_mismatched_lengths() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1104)")] // TokenError::InvalidInput
+#[should_panic(expected = "Error(Contract, #7202)")] // TokenError::InvalidInput
 fn test_batch_mint_zero_amount() {
     let (e, client, owner) = setup();
     let alice = Address::generate(&e);
@@ -516,19 +544,12 @@ mod upgrade_via_common {
         let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
         let from = BytesN::from_array(&e, &[1u8; 32]);
         let to = empty_wasm(&e);
-        let id = e.register(
-            DaoTokenContract,
-            (
-                Address::generate(&e),
-                Address::generate(&e),
-                String::from_str(&e, "https://example.com/"),
-                String::from_str(&e, "DAO Vote NFT"),
-                String::from_str(&e, "vDAO"),
-                Address::generate(&e),
-                mgr.address.clone(),
-                from.clone(),
-                String::from_str(&e, "0.1.0"),
-            ),
+        let id = deploy(
+            &e,
+            Address::generate(&e),
+            Address::generate(&e),
+            mgr.address.clone(),
+            from.clone(),
         );
         let client = DaoTokenContractClient::new(&e, &id);
         assert_eq!(client.version(), String::from_str(&e, "0.1.0"));
@@ -554,19 +575,12 @@ mod upgrade_via_common {
         let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
         let from = BytesN::from_array(&e, &[1u8; 32]);
         let to = empty_wasm(&e);
-        let id = e.register(
-            DaoTokenContract,
-            (
-                Address::generate(&e),
-                Address::generate(&e),
-                String::from_str(&e, "https://example.com/"),
-                String::from_str(&e, "DAO Vote NFT"),
-                String::from_str(&e, "vDAO"),
-                Address::generate(&e),
-                mgr.address.clone(),
-                from.clone(),
-                String::from_str(&e, "0.1.0"),
-            ),
+        let id = deploy(
+            &e,
+            Address::generate(&e),
+            Address::generate(&e),
+            mgr.address.clone(),
+            from.clone(),
         );
         let client = DaoTokenContractClient::new(&e, &id);
         assert_eq!(client.version(), String::from_str(&e, "0.1.0"));
@@ -589,19 +603,12 @@ mod upgrade_via_common {
         let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
         let from = BytesN::from_array(&e, &[1u8; 32]);
         let to = empty_wasm(&e);
-        let id = e.register(
-            DaoTokenContract,
-            (
-                Address::generate(&e),
-                Address::generate(&e),
-                String::from_str(&e, "https://example.com/"),
-                String::from_str(&e, "DAO Vote NFT"),
-                String::from_str(&e, "vDAO"),
-                Address::generate(&e),
-                mgr.address.clone(),
-                from.clone(),
-                String::from_str(&e, "0.1.0"),
-            ),
+        let id = deploy(
+            &e,
+            Address::generate(&e),
+            Address::generate(&e),
+            mgr.address.clone(),
+            from.clone(),
         );
         let client = DaoTokenContractClient::new(&e, &id);
         mgr.approve(&from, &to);
@@ -625,19 +632,12 @@ mod upgrade_via_common {
         let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
         let from = BytesN::from_array(&e, &[1u8; 32]);
         let to = empty_wasm(&e);
-        let id = e.register(
-            DaoTokenContract,
-            (
-                Address::generate(&e),
-                Address::generate(&e),
-                String::from_str(&e, "https://example.com/"),
-                String::from_str(&e, "DAO Vote NFT"),
-                String::from_str(&e, "vDAO"),
-                Address::generate(&e),
-                mgr.address.clone(),
-                from.clone(),
-                String::from_str(&e, "0.1.0"),
-            ),
+        let id = deploy(
+            &e,
+            Address::generate(&e),
+            Address::generate(&e),
+            mgr.address.clone(),
+            from.clone(),
         );
         let client = DaoTokenContractClient::new(&e, &id);
         let wrong = BytesN::from_array(&e, &[9u8; 32]);
@@ -661,19 +661,12 @@ mod upgrade_via_common {
         let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
         let from = BytesN::from_array(&e, &[1u8; 32]);
         let to = empty_wasm(&e);
-        let id = e.register(
-            DaoTokenContract,
-            (
-                Address::generate(&e),
-                Address::generate(&e),
-                String::from_str(&e, "https://example.com/"),
-                String::from_str(&e, "DAO Vote NFT"),
-                String::from_str(&e, "vDAO"),
-                Address::generate(&e),
-                mgr.address.clone(),
-                from.clone(),
-                String::from_str(&e, "0.1.0"),
-            ),
+        let id = deploy(
+            &e,
+            Address::generate(&e),
+            Address::generate(&e),
+            mgr.address.clone(),
+            from.clone(),
         );
         let client = DaoTokenContractClient::new(&e, &id);
         mgr.approve(&from, &to);
@@ -720,19 +713,12 @@ fn launch_requires_manager_auth() {
     let owner = Address::generate(&e);
     let treasury = Address::generate(&e);
     let manager = Address::generate(&e);
-    let id = e.register(
-        DaoTokenContract,
-        (
-            owner.clone(),
-            treasury.clone(),
-            String::from_str(&e, "u"),
-            String::from_str(&e, "n"),
-            String::from_str(&e, "s"),
-            Address::generate(&e),
-            manager.clone(),
-            BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
-        ),
+    let id = deploy(
+        &e,
+        owner.clone(),
+        treasury.clone(),
+        manager.clone(),
+        BytesN::from_array(&e, &[0u8; 32]),
     );
     let client = DaoTokenContractClient::new(&e, &id);
     let minters = vec![&e, treasury.clone()];
@@ -760,4 +746,416 @@ fn launch_requires_manager_auth() {
     }]);
     client.launch(&treasury, &minters);
     assert!(client.is_live());
+}
+
+/// Address wired under `key` in the token's instance storage.
+fn wired(e: &Env, client: &DaoTokenContractClient, key: crate::storage::TokenKey) -> Address {
+    e.as_contract(&client.address, || {
+        e.storage().instance().get(&key).unwrap()
+    })
+}
+
+/// Sum of balances that should carry votes: everyone except the three
+/// system holders. Checked against `get_total_supply` after every step.
+fn assert_voting_supply(client: &DaoTokenContractClient, holders: &[&Address], expected: u128) {
+    let sum: u128 = holders.iter().map(|h| client.balance(h) as u128).sum();
+    assert_eq!(sum, expected);
+    assert_eq!(client.get_total_supply(), expected);
+    assert_eq!(client.total_supply(), expected as i128);
+}
+
+mod voting_supply {
+    use super::*;
+    use crate::storage::TokenKey;
+
+    #[test]
+    fn system_holders_carry_no_votes_through_every_path() {
+        let (e, client, owner) = setup();
+        let treasury = wired(&e, &client, TokenKey::Treasury);
+        let auction = wired(&e, &client, TokenKey::Auction);
+        let marketplace = wired(&e, &client, TokenKey::Marketplace);
+        let alice = Address::generate(&e);
+        let bob = Address::generate(&e);
+        let voters = [&alice, &bob];
+
+        // Founder batch: tokens to the treasury carry no votes.
+        client.batch_mint(
+            &owner,
+            &vec![&e, alice.clone(), treasury.clone()],
+            &vec![&e, 3u128, 4u128],
+        );
+        assert_voting_supply(&client, &voters, 3);
+        assert_eq!(client.balance(&treasury), 4);
+        assert_eq!(client.get_votes(&treasury), 0);
+        assert_eq!(client.get_delegate(&treasury), None);
+
+        // Auction mint (single mint to a system holder): still no votes.
+        let auctioned = client.mint(&owner, &auction);
+        assert_voting_supply(&client, &voters, 3);
+
+        // Settlement to a bidder mints the voting unit.
+        client.transfer(&auction, &bob, &auctioned);
+        assert_voting_supply(&client, &voters, 4);
+        assert_eq!(client.get_votes(&bob), 1);
+
+        // Listing escrows into the marketplace: the seller's vote is burned.
+        client.approve(&alice, &marketplace, &0, &(e.ledger().sequence() + 100));
+        client.transfer_from(&marketplace, &alice, &marketplace, &0);
+        assert_voting_supply(&client, &voters, 3);
+        assert_eq!(client.get_votes(&alice), 2);
+
+        // Buy releases it to the buyer.
+        client.transfer(&marketplace, &bob, &0);
+        assert_voting_supply(&client, &voters, 4);
+        assert_eq!(client.get_votes(&bob), 2);
+
+        // A no-bid settlement moves auction -> treasury: no checkpoint churn.
+        let unsold = client.mint(&owner, &auction);
+        let before = client.get_total_supply();
+        client.transfer(&auction, &treasury, &unsold);
+        assert_eq!(client.get_total_supply(), before);
+        assert_eq!(client.balance(&treasury), 5);
+
+        // A treasury payout (by proposal) mints the voting unit to the recipient.
+        client.transfer(&treasury, &alice, &unsold);
+        assert_voting_supply(&client, &voters, 5);
+        assert_eq!(client.get_votes(&alice), 3);
+    }
+
+    #[test]
+    fn delegated_votes_follow_system_transfers() {
+        let (e, client, owner) = setup();
+        let marketplace = wired(&e, &client, TokenKey::Marketplace);
+        let alice = Address::generate(&e);
+        let carol = Address::generate(&e);
+        let id = client.mint(&owner, &alice);
+        client.delegate(&alice, &carol);
+        assert_eq!(client.get_votes(&carol), 1);
+
+        client.transfer(&alice, &marketplace, &id);
+        assert_eq!(client.get_votes(&carol), 0);
+        assert_eq!(client.get_total_supply(), 0);
+
+        client.transfer(&marketplace, &alice, &id);
+        assert_eq!(client.get_votes(&carol), 1);
+        assert_eq!(client.get_total_supply(), 1);
+    }
+}
+
+#[test]
+fn batch_mint_is_capped_at_max_batch_mint() {
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+    let bob = Address::generate(&e);
+    let max = common::MAX_BATCH_MINT as u128;
+
+    let ids = client.batch_mint(&owner, &vec![&e, alice.clone()], &vec![&e, max]);
+    assert_eq!(ids.len(), common::MAX_BATCH_MINT);
+
+    let r = client.try_batch_mint(
+        &owner,
+        &vec![&e, alice.clone(), bob.clone()],
+        &vec![&e, max, 1u128],
+    );
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        crate::error::TokenError::BatchTooLarge.into()
+    );
+    // u32 overflow of the running total is reported the same way.
+    let r = client.try_batch_mint(
+        &owner,
+        &vec![&e, alice.clone(), bob.clone()],
+        &vec![&e, u32::MAX as u128, 1u128],
+    );
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        crate::error::TokenError::BatchTooLarge.into()
+    );
+}
+
+#[test]
+fn batch_mint_extends_owner_entries() {
+    use soroban_sdk::testutils::storage::Persistent as _;
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+    client.batch_mint(&owner, &vec![&e, alice.clone()], &vec![&e, 2u128]);
+    let ttl = e.as_contract(&client.address, || {
+        e.storage()
+            .persistent()
+            .get_ttl(&stellar_tokens::non_fungible::NFTStorageKey::Owner(1))
+    });
+    assert!(ttl >= common::ttl::PERSISTENT_TTL_THRESHOLD);
+}
+
+#[test]
+fn mint_authority_lives_in_persistent_storage() {
+    let (e, client, _owner, _m) = setup_with_manager();
+    let minter = Address::generate(&e);
+    launch(&e, &client, std::slice::from_ref(&minter));
+    let key = crate::storage::TokenKey::MintAuthority(minter.clone());
+    e.as_contract(&client.address, || {
+        assert!(!e.storage().instance().has(&key));
+        assert_eq!(e.storage().persistent().get::<_, bool>(&key), Some(true));
+    });
+}
+
+#[test]
+fn migrate_is_admin_gated_and_needs_a_newer_layout() {
+    let (e, client, _owner) = setup();
+    assert_eq!(client.storage_version(), crate::storage::STORAGE_VERSION);
+    e.set_auths(&[]);
+    assert!(client.try_migrate().is_err());
+    e.mock_all_auths();
+    assert_eq!(
+        client.try_migrate().err().unwrap().unwrap(),
+        CommonError::NothingToMigrate.into()
+    );
+}
+
+/// Voting power and delegation around the three non-voting system holders
+/// (Treasury, Auction, Marketplace). Each test checks votes, delegates and the
+/// voting supply after every step, because a mistake here either inflates
+/// quorum (governance freeze) or conjures votes (governance capture).
+mod delegation_security {
+    use super::*;
+    use crate::storage::TokenKey;
+
+    struct World {
+        e: Env,
+        token: DaoTokenContractClient<'static>,
+        admin: Address,
+        treasury: Address,
+        auction: Address,
+        marketplace: Address,
+    }
+
+    fn world() -> World {
+        let (e, token, admin) = setup();
+        let treasury = wired(&e, &token, TokenKey::Treasury);
+        let auction = wired(&e, &token, TokenKey::Auction);
+        let marketplace = wired(&e, &token, TokenKey::Marketplace);
+        World {
+            e,
+            token,
+            admin,
+            treasury,
+            auction,
+            marketplace,
+        }
+    }
+
+    impl World {
+        fn mint_to(&self, to: &Address) -> u32 {
+            self.token.mint(&self.admin, to)
+        }
+        /// Escrow `id` from `seller` into the marketplace the way `list` does.
+        fn list(&self, seller: &Address, id: u32) {
+            self.token.approve(
+                seller,
+                &self.marketplace,
+                &id,
+                &(self.e.ledger().sequence() + 100),
+            );
+            self.token
+                .transfer_from(&self.marketplace, seller, &self.marketplace, &id);
+        }
+        fn assert_system_holders_vote_free(&self) {
+            for h in [&self.treasury, &self.auction, &self.marketplace] {
+                assert_eq!(self.token.get_votes(h), 0, "system holder has votes");
+                assert_eq!(
+                    self.token.get_delegate(h),
+                    None,
+                    "system holder auto-delegated"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn system_holders_are_never_auto_delegated_on_any_receive_path() {
+        let w = world();
+        let alice = Address::generate(&w.e);
+        // mint, batch_mint, transfer and transfer_from into each system holder.
+        let a = w.mint_to(&w.auction);
+        w.token.batch_mint(
+            &w.admin,
+            &vec![&w.e, w.treasury.clone(), w.marketplace.clone()],
+            &vec![&w.e, 2u128, 1u128],
+        );
+        let b = w.mint_to(&alice);
+        w.token.transfer(&alice, &w.treasury, &b);
+        let c = w.mint_to(&alice);
+        w.list(&alice, c);
+        w.token.transfer(&w.auction, &w.treasury, &a);
+        w.assert_system_holders_vote_free();
+        assert_eq!(w.token.get_total_supply(), 0);
+        assert_eq!(w.token.balance(&w.treasury), 4);
+        // Alice keeps her own self-delegation, now with no units behind it.
+        assert_eq!(w.token.get_delegate(&alice), Some(alice.clone()));
+        assert_eq!(w.token.get_votes(&alice), 0);
+    }
+
+    #[test]
+    fn listing_moves_votes_off_the_sellers_delegate_and_cancel_restores_them() {
+        let w = world();
+        let seller = Address::generate(&w.e);
+        let carol = Address::generate(&w.e);
+        let id = w.mint_to(&seller);
+        w.mint_to(&seller);
+        w.token.delegate(&seller, &carol);
+        assert_eq!(w.token.get_votes(&carol), 2);
+
+        w.list(&seller, id);
+        assert_eq!(w.token.get_votes(&carol), 1);
+        assert_eq!(w.token.get_delegate(&seller), Some(carol.clone()));
+        assert_eq!(w.token.get_total_supply(), 1);
+        w.assert_system_holders_vote_free();
+
+        // Cancel: the token returns and the vote goes back to the same delegate.
+        w.token.transfer(&w.marketplace, &seller, &id);
+        assert_eq!(w.token.get_votes(&carol), 2);
+        assert_eq!(w.token.get_delegate(&seller), Some(carol));
+        assert_eq!(w.token.get_total_supply(), 2);
+    }
+
+    #[test]
+    fn a_buyer_keeps_their_delegation_and_their_delegate_gains_the_vote() {
+        let w = world();
+        let seller = Address::generate(&w.e);
+        let carol = Address::generate(&w.e);
+        let buyer = Address::generate(&w.e);
+        let dave = Address::generate(&w.e);
+        let id = w.mint_to(&seller);
+        w.token.delegate(&seller, &carol);
+        // The buyer already holds a token and delegates it to dave.
+        w.mint_to(&buyer);
+        w.token.delegate(&buyer, &dave);
+
+        w.list(&seller, id);
+        w.token.transfer(&w.marketplace, &buyer, &id);
+        assert_eq!(w.token.get_votes(&carol), 0);
+        assert_eq!(w.token.get_votes(&dave), 2);
+        assert_eq!(w.token.get_delegate(&buyer), Some(dave));
+        assert_eq!(w.token.get_votes(&buyer), 0);
+        assert_eq!(w.token.get_total_supply(), 2);
+    }
+
+    #[test]
+    fn a_first_time_buyer_is_self_delegated() {
+        let w = world();
+        let seller = Address::generate(&w.e);
+        let buyer = Address::generate(&w.e);
+        let id = w.mint_to(&seller);
+        w.list(&seller, id);
+        assert_eq!(w.token.get_delegate(&buyer), None);
+        w.token.transfer(&w.marketplace, &buyer, &id);
+        assert_eq!(w.token.get_delegate(&buyer), Some(buyer.clone()));
+        assert_eq!(w.token.get_votes(&buyer), 1);
+    }
+
+    #[test]
+    fn redelegating_while_listed_moves_nothing_until_the_token_returns() {
+        let w = world();
+        let seller = Address::generate(&w.e);
+        let carol = Address::generate(&w.e);
+        let erin = Address::generate(&w.e);
+        let id = w.mint_to(&seller);
+        w.token.delegate(&seller, &carol);
+        w.list(&seller, id);
+        // Zero units held: changing delegate moves no votes.
+        w.token.delegate(&seller, &erin);
+        assert_eq!(w.token.get_votes(&carol), 0);
+        assert_eq!(w.token.get_votes(&erin), 0);
+        assert_eq!(w.token.get_total_supply(), 0);
+        w.token.transfer(&w.marketplace, &seller, &id);
+        assert_eq!(w.token.get_votes(&erin), 1);
+        assert_eq!(w.token.get_votes(&carol), 0);
+    }
+
+    #[test]
+    fn treasury_delegating_explicitly_cannot_conjure_votes() {
+        let w = world();
+        let mallory = Address::generate(&w.e);
+        let alice = Address::generate(&w.e);
+        // e.g. a proposal makes the Treasury call `delegate(treasury, mallory)`.
+        w.token.delegate(&w.treasury, &mallory);
+        assert_eq!(w.token.get_delegate(&w.treasury), Some(mallory.clone()));
+        // Tokens arriving at the Treasury still carry no votes for mallory.
+        w.mint_to(&w.treasury);
+        let id = w.mint_to(&alice);
+        w.token.transfer(&alice, &w.treasury, &id);
+        assert_eq!(w.token.get_votes(&mallory), 0);
+        assert_eq!(w.token.get_total_supply(), 0);
+        // Paying them out never underflows mallory or credits her.
+        w.token.transfer(&w.treasury, &alice, &id);
+        assert_eq!(w.token.get_votes(&mallory), 0);
+        assert_eq!(w.token.get_votes(&alice), 1);
+        assert_eq!(w.token.get_total_supply(), 1);
+        // The same holds for the auction and marketplace.
+        w.token.delegate(&w.auction, &mallory);
+        w.token.delegate(&w.marketplace, &mallory);
+        w.mint_to(&w.auction);
+        w.list(&alice, id);
+        assert_eq!(w.token.get_votes(&mallory), 0);
+        assert_eq!(w.token.get_total_supply(), 0);
+    }
+
+    #[test]
+    fn delegating_to_the_treasury_keeps_those_votes_in_the_voting_supply() {
+        let w = world();
+        let alice = Address::generate(&w.e);
+        w.mint_to(&alice);
+        w.mint_to(&alice);
+        // A holder may delegate to any address, including the Treasury. Those
+        // units belong to a voting-capable holder, so they stay in the supply;
+        // the Treasury can only use them through a passed proposal.
+        w.token.delegate(&alice, &w.treasury);
+        assert_eq!(w.token.get_votes(&w.treasury), 2);
+        assert_eq!(w.token.get_total_supply(), 2);
+        assert_eq!(w.token.get_delegate(&w.treasury), None);
+        w.token.delegate(&alice, &alice);
+        assert_eq!(w.token.get_votes(&w.treasury), 0);
+        assert_eq!(w.token.get_votes(&alice), 2);
+    }
+
+    #[test]
+    fn moves_between_system_holders_write_no_vote_checkpoints() {
+        let w = world();
+        let alice = Address::generate(&w.e);
+        w.mint_to(&alice); // one voting token, so the supply has a checkpoint
+        let id = w.mint_to(&w.auction);
+        let supply_at = |w: &World| {
+            w.e.as_contract(&w.token.address, || {
+                w.e.storage().persistent().get::<_, u32>(
+                    &stellar_governance::votes::VotesStorageKey::NumTotalSupplyCheckpoints,
+                )
+            })
+        };
+        let before = supply_at(&w);
+        w.token.transfer(&w.auction, &w.treasury, &id);
+        w.token.transfer(&w.treasury, &w.marketplace, &id);
+        assert_eq!(supply_at(&w), before);
+        assert_eq!(w.token.get_total_supply(), 1);
+    }
+
+    #[test]
+    fn past_checkpoints_are_unaffected_by_later_listings() {
+        use soroban_sdk::testutils::Ledger as _;
+        let w = world();
+        let seller = Address::generate(&w.e);
+        let id = w.mint_to(&seller);
+        w.mint_to(&seller);
+        w.e.ledger()
+            .set_sequence_number(w.e.ledger().sequence() + 10);
+        let snapshot = w.e.ledger().sequence() - 1;
+        w.e.ledger()
+            .set_sequence_number(w.e.ledger().sequence() + 10);
+        w.list(&seller, id);
+        // A proposal snapshotted earlier still sees both votes and the full supply.
+        assert_eq!(w.token.get_votes_at_checkpoint(&seller, &snapshot), 2);
+        assert_eq!(w.token.get_total_supply_at_checkpoint(&snapshot), 2);
+        // Current values reflect the listing.
+        assert_eq!(w.token.get_votes(&seller), 1);
+        assert_eq!(w.token.get_total_supply(), 1);
+    }
 }

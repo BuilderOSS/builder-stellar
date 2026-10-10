@@ -32,6 +32,8 @@ fn create_token_contract(env: &Env, owner: &Address) -> Address {
         (
             owner.clone(),
             treasury(env),
+            Address::generate(env), // auction
+            Address::generate(env), // marketplace
             String::from_str(env, "https://test.com"),
             String::from_str(env, "Test Token"),
             String::from_str(env, "TEST"),
@@ -137,7 +139,7 @@ fn test_mint_batch_requires_admin_auth() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #10)")] // InvalidInput
+#[should_panic(expected = "Error(Contract, #7809)")] // InvalidInput
 fn test_mint_batch_mismatched_lengths() {
     let env = Env::default();
     env.mock_all_auths();
@@ -157,7 +159,7 @@ fn test_mint_batch_mismatched_lengths() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #4)")] // BatchTooLarge
+#[should_panic(expected = "Error(Contract, #7803)")] // BatchTooLarge
 fn test_mint_batch_too_many_recipients() {
     let env = Env::default();
     env.mock_all_auths();
@@ -167,10 +169,10 @@ fn test_mint_batch_too_many_recipients() {
     let token_client = token::DaoTokenContractClient::new(&env, &token);
     launch_token(&env, &token_client, &minter.address);
 
-    // Create 101 recipients (exceeds MAX_BATCH of 100)
+    // One more recipient than MAX_BATCH_RECIPIENTS
     let mut recipients = Vec::new(&env);
     let mut amounts = Vec::new(&env);
-    for _ in 0..101 {
+    for _ in 0..=crate::MAX_BATCH_RECIPIENTS {
         recipients.push_back(Address::generate(&env));
         amounts.push_back(1u128);
     }
@@ -179,7 +181,7 @@ fn test_mint_batch_too_many_recipients() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1104)")] // InvalidInput (from Token contract)
+#[should_panic(expected = "Error(Contract, #7202)")] // InvalidInput (from Token contract)
 fn test_mint_batch_zero_amount() {
     let env = Env::default();
     env.mock_all_auths();
@@ -294,7 +296,7 @@ fn test_allowlist_failed_claim_emits_no_success_event() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #7)")] // NotInAllowlist
+#[should_panic(expected = "Error(Contract, #7806)")] // NotInAllowlist
 fn test_mint_allowlist_not_in_list() {
     let env = Env::default();
     env.mock_all_auths();
@@ -315,7 +317,7 @@ fn test_mint_allowlist_not_in_list() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #2)")] // InvalidAmount
+#[should_panic(expected = "Error(Contract, #7801)")] // InvalidAmount
 fn test_mint_allowlist_wrong_amount() {
     let env = Env::default();
     env.mock_all_auths();
@@ -335,7 +337,7 @@ fn test_mint_allowlist_wrong_amount() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #8)")] // AlreadyClaimed
+#[should_panic(expected = "Error(Contract, #7807)")] // AlreadyClaimed
 fn test_mint_allowlist_double_claim() {
     let env = Env::default();
     env.mock_all_auths();
@@ -609,7 +611,7 @@ fn test_mint_merkle_invalid_proof() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #5)")] // MerkleRootNotSet
+#[should_panic(expected = "Error(Contract, #7804)")] // MerkleRootNotSet
 fn test_mint_merkle_no_root_set() {
     let env = Env::default();
     env.mock_all_auths();
@@ -624,7 +626,7 @@ fn test_mint_merkle_no_root_set() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #8)")] // AlreadyClaimed
+#[should_panic(expected = "Error(Contract, #7807)")] // AlreadyClaimed
 fn test_mint_merkle_double_claim() {
     let env = Env::default();
     env.mock_all_auths();
@@ -769,7 +771,7 @@ fn test_minter_with_contract_as_minter() {
 }
 
 #[test]
-fn test_batch_mint_30_tokens_three_founders() {
+fn test_batch_mint_founder_allocation_in_two_calls() {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -781,12 +783,18 @@ fn test_batch_mint_30_tokens_three_founders() {
     let token_client = token::DaoTokenContractClient::new(&env, &token);
     launch_token(&env, &token_client, &minter.address);
 
-    // Simulate DAO founder allocation: 3 founders × 10 tokens each = 30 total
-    let recipients = Vec::from_array(&env, [founder1.clone(), founder2.clone(), founder3.clone()]);
-    let amounts = Vec::from_array(&env, [10u128, 10u128, 10u128]);
-
-    // This should work without storage footprint issues due to optimized batch_mint
-    minter.mint_batch(&token, &recipients, &amounts);
+    // DAO founder allocation: 3 founders x 10 tokens = 30, above the 20 token
+    // per-call cap, so it is minted in two calls (20 + 10).
+    minter.mint_batch(
+        &token,
+        &Vec::from_array(&env, [founder1.clone(), founder2.clone()]),
+        &Vec::from_array(&env, [10u128, 10u128]),
+    );
+    minter.mint_batch(
+        &token,
+        &Vec::from_array(&env, [founder3.clone()]),
+        &Vec::from_array(&env, [10u128]),
+    );
 
     // Verify all tokens were minted correctly
     assert_eq!(token_client.balance(&founder1), 10);
@@ -821,17 +829,27 @@ fn test_batch_mint_large_amounts_single_recipient() {
     let token_client = token::DaoTokenContractClient::new(&env, &token);
     launch_token(&env, &token_client, &minter.address);
 
-    // Test minting large amount to single recipient (reduced to 25 to avoid budget limits)
+    // A full batch (the token's per-call cap) to a single recipient.
+    let max = common::MAX_BATCH_MINT as u128;
     let recipients = Vec::from_array(&env, [recipient.clone()]);
-    let amounts = Vec::from_array(&env, [25u128]);
+    let amounts = Vec::from_array(&env, [max]);
 
     minter.mint_batch(&token, &recipients, &amounts);
 
-    assert_eq!(token_client.balance(&recipient), 25);
-    assert_eq!(token_client.get_votes(&recipient), 25);
-    assert_eq!(token_client.total_supply(), 25);
+    assert_eq!(token_client.balance(&recipient), max as u32);
+    assert_eq!(token_client.get_votes(&recipient), max);
+    assert_eq!(token_client.total_supply(), max as i128);
 
-    // Verify checkpoint efficiency - only 1 checkpoint created, not 25
+    // One more token than the cap is rejected by the token (error propagates).
+    let r = minter.try_mint_batch(&token, &recipients, &Vec::from_array(&env, [max + 1]));
+    // TokenError::BatchTooLarge is not a MinterError, so it surfaces as a
+    // raw contract error code.
+    assert!(matches!(
+        r,
+        Err(Err(soroban_sdk::InvokeError::Contract(7205)))
+    ));
+
+    // Verify checkpoint efficiency - only 1 checkpoint created, not one per token
     assert_eq!(token_client.num_checkpoints(&recipient), 1);
 }
 
@@ -1004,4 +1022,28 @@ fn test_stale_root_proof_rejected_after_set_merkle_root() {
         .try_mint_merkle(&token, &bob, &3u128, &bob_old_proof)
         .is_err());
     assert_eq!(token_client.balance(&bob), 0);
+}
+
+#[test]
+fn entry_points_renew_the_minter_instance_ttl() {
+    use common::testutils::{advance_ledgers, instance_ttl};
+    let env = Env::default();
+    env.mock_all_auths();
+    let (_admin, token, minter) = setup(&env);
+    let token_client = token::DaoTokenContractClient::new(&env, &token);
+    launch_token(&env, &token_client, &minter.address);
+
+    minter.set_allowlist(
+        &token,
+        &Vec::from_array(&env, [Address::generate(&env)]),
+        &1u128,
+    );
+    let fresh = instance_ttl(&env, &minter.address);
+    assert!(fresh >= common::ttl::INSTANCE_TTL_THRESHOLD);
+
+    // Age it below the threshold; the next call renews it.
+    advance_ledgers(&env, fresh - common::ttl::INSTANCE_TTL_THRESHOLD + 1);
+    let aged = instance_ttl(&env, &minter.address);
+    minter.set_merkle_root(&token, &BytesN::from_array(&env, &[1u8; 32]));
+    assert!(instance_ttl(&env, &minter.address) > aged);
 }

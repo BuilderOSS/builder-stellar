@@ -1,47 +1,57 @@
 import {Address} from '@stellar/stellar-sdk';
 
     /**
- * Error Enum: Error
+ * Metadata errors (block `common::error::codes::METADATA`).
  */
 export const Error = {
-  3 : { message: "NotInitialized" },
+  /**
+   * Settings missing (contract not initialized)
+   */
+  7301 : { message: "NotInitialized" },
   /**
    * `launch` treasury differs from the treasury wired at construction
    */
-  4 : { message: "TreasuryMismatch" },
-  10 : { message: "OnePropertyAndItemRequired" },
-  11 : { message: "PropertyHasNoItems" },
-  12 : { message: "TooManyProperties" },
-  13 : { message: "InvalidPropertySelected" },
+  7302 : { message: "TreasuryMismatch" },
+  /**
+   * The first `add_properties` call must add at least one property and one item
+   */
+  7303 : { message: "OnePropertyAndItemRequired" },
+  /**
+   * A call added no items, or a new property got no items
+   */
+  7304 : { message: "PropertyHasNoItems" },
+  /**
+   * More than 16 properties
+   */
+  7305 : { message: "TooManyProperties" },
+  /**
+   * An item references a property that does not exist
+   */
+  7306 : { message: "InvalidPropertySelected" },
   /**
    * `regenerate` called while no properties exist
    */
-  14 : { message: "NoProperties" },
+  7307 : { message: "NoProperties" },
   /**
    * More than `MAX_ITEMS_PER_CALL` items in one `add_properties` call
    */
-  15 : { message: "TooManyItems" },
+  7308 : { message: "TooManyItems" },
   /**
-   * A paginated/bump `limit` above the allowed cap
+   * A paginated/bump `limit` above `MAX_PAGE`
    */
-  16 : { message: "LimitTooHigh" },
-  20 : { message: "OnlyToken" },
-  21 : { message: "TokenNotMinted" },
+  7309 : { message: "LimitTooHigh" },
+  /**
+   * The token does not exist (or has no attributes yet)
+   */
+  7310 : { message: "TokenNotMinted" },
   /**
    * `regenerate` called for a token that already has attributes
    */
-  22 : { message: "AlreadySeeded" },
-  30 : { message: "Unauthorized" }
-}
-
-/**
- * Emitted once when the Manager launches the metadata module (Setup -> Live).
- */
-export interface LaunchedEvent {
-  name: "Launched";
-  data: {
-    treasury: string;
-  };
+  7311 : { message: "AlreadySeeded" },
+  /**
+   * A settings string is longer than `common::MAX_STRING_LENGTH`
+   */
+  7312 : { message: "StringTooLong" }
 }
 
 /**
@@ -81,6 +91,16 @@ export interface PropertiesResetEvent {
 }
 
 /**
+ * Emitted once when the Manager launches the metadata module (Setup -> Live).
+ */
+export interface MetadataLaunchedEvent {
+  name: "MetadataLaunched";
+  data: {
+    treasury: string;
+  };
+}
+
+/**
  * Event: ProjectURIUpdated
  */
 export interface ProjectURIUpdatedEvent {
@@ -111,7 +131,7 @@ export interface MetadataInitializedEvent {
     token: string;
     renderer_base?: string;
     version?: string;
-    owner?: string;
+    admin?: string;
     project_uri?: string;
     description?: string;
     contract_image?: string;
@@ -185,54 +205,86 @@ export interface ItemParam {
 }
 
 /**
- * Errors shared by all module contracts. Codes live in the 9000 range so
- * they never collide with module (11xx-13xx, 3, 30) or manager (10xx) codes.
+ * Emitted by [`handoff`]. The emitting contract address is the event's contract id.
+ *
+ * Same shape as the Manager's own `AdminChanged`, so indexers decode both
+ * with one schema.
+ */
+export interface AdminChangedEvent {
+  name: "AdminChanged";
+  data: {
+    old_admin: string;
+    new_admin: string;
+  };
+}
+
+/**
+ * Errors shared by all module contracts (block `codes::COMMON`).
  */
 export const CommonError = {
   /**
    * Operation requires the module to be live (launched).
    */
-  9001 : { message: "NotLive" },
+  7001 : { message: "NotLive" },
   /**
    * Operation is only valid during setup; the module is already live.
    */
-  9002 : { message: "AlreadyLive" },
+  7002 : { message: "AlreadyLive" },
   /**
    * Manager address missing from storage.
    */
-  9003 : { message: "ManagerNotSet" },
+  7003 : { message: "ManagerNotSet" },
   /**
    * `CurrentHash` missing from storage.
    */
-  9004 : { message: "CurrentHashNotSet" },
+  7004 : { message: "CurrentHashNotSet" },
   /**
    * `from_hash` does not equal the stored `CurrentHash`.
    */
-  9005 : { message: "HashMismatch" },
+  7005 : { message: "HashMismatch" },
   /**
    * Manager did not approve this upgrade path.
    */
-  9006 : { message: "UpgradeNotApproved" },
+  7006 : { message: "UpgradeNotApproved" },
   /**
    * Manager has no registry entry for the requested hash.
    */
-  9007 : { message: "ImplementationNotFound" },
+  7007 : { message: "ImplementationNotFound" },
   /**
-   * Owner missing from storage.
+   * Module admin missing from storage.
    */
-  9008 : { message: "OwnerNotSet" },
+  7008 : { message: "AdminNotSet" },
   /**
    * `CurrentVersion` missing from storage.
    */
-  9009 : { message: "VersionNotSet" },
+  7009 : { message: "VersionNotSet" },
   /**
    * Treasury address missing from storage.
    */
-  9010 : { message: "TreasuryNotSet" },
+  7010 : { message: "TreasuryNotSet" },
   /**
    * Governor address missing from storage.
    */
-  9011 : { message: "GovernorNotSet" }
+  7011 : { message: "GovernorNotSet" },
+  /**
+   * `migrate` called while the stored layout is already current.
+   */
+  7012 : { message: "NothingToMigrate" },
+  /**
+   * `StorageVersion` missing from storage.
+   */
+  7013 : { message: "StorageVersionNotSet" }
+}
+
+/**
+ * Emitted by `migrate`.
+ */
+export interface MigratedEvent {
+  name: "Migrated";
+  data: {
+    from_storage_version?: number;
+    to_storage_version?: number;
+  };
 }
 
 /**
@@ -256,5 +308,5 @@ export interface VersionSyncedEvent {
     version?: string;
   };
 }
-    export type ContractEvent = LaunchedEvent | PropertyAddedEvent | SeedGeneratedEvent | PropertiesResetEvent | ProjectURIUpdatedEvent | DescriptionUpdatedEvent | MetadataInitializedEvent | RendererBaseUpdatedEvent | ContractImageUpdatedEvent | UpgradedEvent | VersionSyncedEvent;
+    export type ContractEvent = PropertyAddedEvent | SeedGeneratedEvent | PropertiesResetEvent | MetadataLaunchedEvent | ProjectURIUpdatedEvent | DescriptionUpdatedEvent | MetadataInitializedEvent | RendererBaseUpdatedEvent | ContractImageUpdatedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VersionSyncedEvent;
     

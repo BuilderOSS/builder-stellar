@@ -325,6 +325,7 @@ function registerImplementation(managerAddress, wasmHash, name, version) {
   if (existing.ok && existing.record) {
     assertImplementationMatches(existing.record, wasmHash, name, version, 'already on-chain');
     console.log(`Implementation ${name} already registered (${wasmHash}), skipping`);
+    setLatestImplementation(managerAddress, wasmHash, name);
     return;
   }
   console.log(`Registering implementation ${name}...`);
@@ -358,10 +359,40 @@ function registerImplementation(managerAddress, wasmHash, name, version) {
   if (!after.ok) throw new Error(`Could not read back ${name} implementation ${wasmHash} after registering`);
   assertImplementationMatches(after.record, wasmHash, name, version, 'after registration');
   console.log(`Registered ${name} implementation`);
+  setLatestImplementation(managerAddress, wasmHash, name);
+}
+
+// Registration does not move the "latest" pointer; select it explicitly (idempotent).
+function setLatestImplementation(managerAddress, wasmHash, name) {
+  const r = runQuiet('stellar', [
+    'contract', 'invoke', '--id', managerAddress, '--source-account', identityName,
+    '--network', networkName, '--send', 'no', '--', 'get_latest_implementation', '--name', name
+  ]);
+  const last = r.ok ? (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, '').trim().split('\n').pop().trim() : 'null';
+  if (last !== 'null') {
+    try {
+      if (JSON.parse(last).wasm_hash === wasmHash) {
+        console.log(`Latest ${name} implementation already ${wasmHash}, skipping`);
+        return;
+      }
+    } catch {
+      // fall through and set it
+    }
+  }
+  const result = runQuiet('stellar', [
+    'contract', 'invoke', '--id', managerAddress, '--source-account', identityName,
+    '--network', networkName, '--', 'set_latest_implementation', '--name', name, '--wasm_hash', wasmHash
+  ]);
+  if (!result.ok) {
+    console.error('set_latest_implementation output:', result.stdout);
+    console.error('set_latest_implementation error:', result.stderr);
+    throw new Error(`Failed to set the latest ${name} implementation`);
+  }
+  console.log(`Latest ${name} implementation set to ${wasmHash}`);
 }
 
 // NOTE: security decisions must use get_implementation(hash) and the Current* hashes,
-// never get_latest_implementation(name): it returns None once the latest hash is revoked.
+// never get_latest_implementation(name): it returns None once the selected hash is revoked.
 
 function setCurrentImplementations(managerAddress, implementations) {
   console.log('Setting current implementations...');

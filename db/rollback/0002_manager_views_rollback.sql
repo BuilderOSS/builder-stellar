@@ -1,6 +1,15 @@
-DROP VIEW IF EXISTS manager.module_versions;
-DROP VIEW IF EXISTS manager.module_upgrades;
 DROP VIEW IF EXISTS manager.settings;
 DROP VIEW IF EXISTS manager.admin_history;
+DROP VIEW IF EXISTS manager.module_versions;
+DROP VIEW IF EXISTS manager.module_upgrades;
+DROP VIEW IF EXISTS manager.module_admins;
 DROP VIEW IF EXISTS manager.dao_lifecycle;
 DROP VIEW IF EXISTS manager.module_launches;
+DROP VIEW IF EXISTS manager.current_implementations;
+DROP VIEW IF EXISTS manager.latest_implementations;
+DROP VIEW IF EXISTS manager.implementations;
+DROP VIEW IF EXISTS manager.daos;
+DROP VIEW IF EXISTS manager.event_identity;
+DROP VIEW IF EXISTS manager.dao_modules;
+DROP VIEW IF EXISTS manager.dao_slugs;
+DROP VIEW IF EXISTS manager.dao_registry;

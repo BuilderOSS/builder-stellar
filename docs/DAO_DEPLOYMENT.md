@@ -96,13 +96,14 @@ Contract-enforced bounds at `create_dao` (violations fail with the listed Manage
 
 | Field | Bound | Error |
 | --- | --- | --- |
-| `votingDelay`, `votingPeriod`, `queueDelay` | each 300 to 2,592,000 seconds (30 days) | `InvalidGovernanceTiming` (1117) |
-| `quorumBps` | 1 to 10,000 | `InvalidQuorumBps` (1105) |
-| proposal threshold (`GovernanceConfig.proposal_threshold`, an absolute token count, not bps) | at least 1 | `InvalidProposalThreshold` (1120) |
-| `auction.duration` | 300 seconds to 2,592,000 seconds (30 days) | `InvalidDuration` (1107) |
-| `auction.reservePrice` | at least 1,000 stroops | `InvalidParamBounds` (1103) |
-| `auction.timeBuffer` | 1 to 86,400 seconds | `InvalidTimeBuffer` (1108) |
-| `marketplace.secondaryFeeBps` | at most 10,000 | `InvalidParamBounds` (1103) |
+| `votingDelay`, `votingPeriod`, `queueDelay` | each 300 to 2,592,000 seconds (30 days) | `InvalidGovernanceTiming` (7118) |
+| `quorumBps` | 1 to 10,000 (of the voting supply; Treasury/Auction/Marketplace-held tokens never count) | `InvalidQuorumBps` (7113) |
+| proposal threshold (`GovernanceConfig.proposal_threshold`, an absolute token count, not bps) | at least 1 | `InvalidProposalThreshold` (7119) |
+| `auction.duration` | 300 seconds to 2,592,000 seconds (30 days) | `InvalidDuration` (7114) |
+| `auction.reservePrice` | at least 1,000 stroops | `InvalidParamBounds` (7112) |
+| `auction.timeBuffer` | 1 to 86,400 seconds | `InvalidTimeBuffer` (7115) |
+| `marketplace.secondaryFeeBps` | at most 2,500 (25%) | `InvalidFee` (7125) |
+| `slug` | 4 to 63 chars of `[a-z0-9-]`, no leading/trailing/doubled hyphen; not claimed by a launched DAO | `InvalidSlug` (7122) / `SlugTaken` (7123) |
 
 The auction and marketplace payment assets given here are recorded in
 `PendingDao`. `launch_dao` fails if either was changed during setup.
@@ -113,22 +114,26 @@ The flow has three on-chain phases.
 
 **1. `create_dao`** (deployer AND launch admin auth; one signature if they are the same address. `scripts/deploy-dao.mjs` signs with a single stellar CLI identity, so it requires `deployer == launchAdmin` and fails validation otherwise. For different accounts, build with `stellar tx new invoke --build-only`, sign with both accounts using `stellar tx sign`, and submit manually). Deploys Token, Metadata, Treasury,
 Governor, Auction and Marketplace at deterministic addresses. All wiring is
-constructor-only: there are no setters for the Treasury, Governor, Token or
-Manager addresses. Every module is in Setup, the launch admin owns it, and the
-Auction and Marketplace are paused. Manager stores `PendingDao` (addresses,
-launch admin, recorded payment assets).
+constructor-only: there are no setters for the Treasury, Governor, Token,
+Auction, Marketplace or Manager addresses. Every module is in Setup with the
+launch admin as its admin, and the Auction and Marketplace are paused. Manager
+stores `PendingDao` (addresses, launch admin, requested slug, recorded payment
+assets). The slug is only requested here: `launch_dao` claims it.
 
 **2. Setup window** (launch admin). Until `launch_dao` succeeds the launch admin can:
 
-- mint founder tokens with `token.mint` / `token.batch_mint`; only the Token
-  owner can mint before launch, and `set_mint_authority` and the Minter contract
-  fail with `NotLive`. Founder amounts are not capped by the contracts, and at
-  least one token must exist at launch;
+- mint founder tokens with `token.mint` / `token.batch_mint` (at most 20 tokens
+  per call; the script batches automatically); only the token admin can mint
+  before launch, and `set_mint_authority` and the Minter contract fail with
+  `NotLive`. Founder amounts are not capped by the contracts, and at least one
+  token must be held by someone other than the Treasury, Auction or Marketplace
+  at launch (tokens those contracts hold carry no votes);
 - add artwork (`metadata.add_properties`, at most 30 items per call) and update
   Metadata settings;
 - adjust Auction parameters while it is paused, and Marketplace fee, payment
   asset and pause state;
-- use the owner-only Governor setters.
+- use the admin-only Governor setters;
+- rename the requested slug with `manager.update_pending_slug(token, slug)`.
 
 The launch admin cannot create proposals, vote, execute, create primary listings,
 list or buy on the secondary market, or unpause the Auction in this window (`NotLive`).
@@ -139,9 +144,10 @@ SECURITY_MODEL.md "Known limitations" (founder supply, quorum lock) before choos
 founder distribution, timings and `quorumBps`.
 
 **3. `launch_dao(token_address, LaunchConfig { launch_auction, launch_marketplace, enable_minter, expected_minter })`**
-(launch admin auth). The Manager checks the launch admin still owns the Token,
-supply is nonzero, and the payment assets match `PendingDao`. It then launches
-every module: ownership moves to the Treasury, the Auction starts if
+(launch admin auth). The Manager checks the factory is not paused, the slug is
+still free, the launch admin is still the token admin, the voting supply is
+nonzero, and the payment assets match `PendingDao`. It then launches every
+module: each module's admin moves to the Treasury, the slug is claimed, the Auction starts if
 `launch_auction`, the Marketplace is left open if `launch_marketplace` (forced
 paused otherwise), and `PendingDao` is deleted. Token mint authority is set to
 Treasury and Marketplace, plus Auction if `launch_auction`, plus the platform
@@ -149,10 +155,10 @@ minter if `enable_minter`.
 
 The platform minter is not chosen by the DAO. The Manager admin registers it
 beforehand with `manager.set_platform_minter(minter)`; `enable_minter: true`
-fails with `PlatformMinterNotSet` (1008) if none is registered. When
+fails with `PlatformMinterNotSet` (7108) if none is registered. When
 `enable_minter` is true, `LaunchConfig.expected_minter` must be set to the
 minter returned by `manager.get_platform_minter()`, otherwise launch fails with
-`PlatformMinterMismatch` (1010); `scripts/deploy-dao.mjs launch_dao` reads and
+`PlatformMinterMismatch` (7110); `scripts/deploy-dao.mjs launch_dao` reads and
 pins it automatically.
 
 The script wrapper writes the artifact to
@@ -205,7 +211,7 @@ DAO has been created but not yet launched. Every module is in Setup.
 
 **Duration**: Setup window (founder mints, artwork, parameters)
 
-**Operations Blocked** (`NotLive`, 9001):
+**Operations Blocked** (`NotLive`, 7001):
 - No proposals can be created, voted on, queued or executed
 - `treasury.execute`, the Minter and `token.set_mint_authority` fail
 - The Auction cannot be unpaused and primary listings cannot be created
@@ -396,10 +402,12 @@ If `launch_dao()` didn't complete:
    - `enable_minter`: grant mint authority to the Manager-registered platform minter
    - `expected_minter`: required (the registered minter's address) when `enable_minter` is true; `null` otherwise
 
-   Common failures: `LaunchSupplyZero` (1121, mint a founder token first),
-   `Unauthorized` (1000, the launch admin no longer owns the Token),
+   Common failures: `LaunchSupplyZero` (7120, mint a founder token to a holder
+   first), `LaunchAdminNotOwner` (7126, the launch admin no longer administers
+   the token), `SlugTaken` (7123, another DAO launched with the slug: rename with
+   `update_pending_slug`), `FactoryPaused` (7111),
    `PaymentTokenMismatch` / `PaymentAssetMismatch` (a payment asset changed
-   during setup), `PlatformMinterNotSet` (1008). A failed launch changes nothing;
+   during setup), `PlatformMinterNotSet` (7108). A failed launch changes nothing;
    retry after fixing the cause.
 
 3. Check status updated:

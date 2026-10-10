@@ -7,18 +7,8 @@ use soroban_sdk::{contracttype, panic_with_error, Address, Env};
 
 use crate::error::AuctionError;
 
-// Storage TTL constants - extend for ~30 days (518,400 seconds)
-
-/// Number of ledgers for TTL extension (30 days).
-///
-/// Auction data should persist through the entire auction lifecycle plus settlement
-/// window. 30 days provides sufficient buffer for auctions with longer durations.
-const LEDGERS_TO_LIVE: u32 = 518_400;
-
-/// Maximum TTL for auction storage (30 days).
-///
-/// Sets the upper bound for TTL extension operations.
-const MAX_TTL: u32 = 518_400;
+/// Storage-layout version of this code (see `common::upgrade`).
+pub const STORAGE_VERSION: u32 = 1;
 
 /// Maximum number of time extensions allowed per auction.
 ///
@@ -29,12 +19,9 @@ pub const MAX_AUCTION_EXTENSIONS: u32 = 10;
 
 // Validation constants
 
-/// Minimum reserve price in stroops (0.0001 XLM).
-///
-/// Prevents dust auctions and ensures meaningful bids. Set to 1000 stroops
-/// (0.0001 XLM) as the minimum viable auction amount. This applies to both
-/// native XLM and SAC token payments.
-pub const MIN_RESERVE_PRICE: i128 = 1000;
+/// Minimum reserve price (smallest units of the payment asset). Prevents
+/// dust auctions.
+pub const MIN_RESERVE_PRICE: i128 = common::MIN_RESERVE_PRICE;
 
 /// Maximum bid increment percentage (100 = 100%).
 ///
@@ -51,11 +38,7 @@ pub const MAX_TIME_BUFFER: u64 = common::MAX_AUCTION_TIME_BUFFER;
 pub const PERCENT_DENOMINATOR: i128 = 100;
 
 /// Minimum auction duration (5 minutes in seconds).
-///
-/// Enforces a minimum duration for each auction to ensure sufficient time
-/// for bidding activity. Set to 5 minutes for testing purposes. Production
-/// deployments may want longer durations for more competitive bidding.
-pub const MIN_AUCTION_DURATION: u64 = 300; // 5 minutes in seconds
+pub const MIN_AUCTION_DURATION: u64 = common::MIN_AUCTION_DURATION;
 
 /// Maximum auction duration (30 days in seconds).
 pub const MAX_AUCTION_DURATION: u64 = common::MAX_AUCTION_DURATION;
@@ -66,11 +49,11 @@ pub const MAX_AUCTION_DURATION: u64 = common::MAX_AUCTION_DURATION;
 pub enum DataKey {
     /// Auction configuration parameters (duration, reserve price, etc.)
     Config,
-    /// Current auction state (token ID, bids, timing, etc.)
+    /// Current auction state (token ID, bids, timing, etc.). Absent until the
+    /// first auction is created, which is how `has_auction` is derived.
     Auction,
-    /// Whether the first auction has been launched (prevents re-initialization)
-    Launched,
     Manager,
+    /// Set by the first bid; the payment token can no longer change.
     PaymentTokenLocked,
     /// Persistent: refund owed to a bidder whose push refund failed (i128).
     PendingRefund(Address),
@@ -78,7 +61,7 @@ pub enum DataKey {
 
 /// Auction configuration parameters.
 ///
-/// These settings control the behavior of all auctions. The owner can modify
+/// These settings control the behavior of all auctions. The admin can modify
 /// them when the contract is paused, but changes only apply to future auctions,
 /// not the currently active one.
 #[derive(Clone, Debug)]
@@ -126,8 +109,10 @@ pub struct AuctionConfig {
 pub struct AuctionState {
     /// The token ID being auctioned.
     ///
-    /// Starts at 1 and increments with each auction. The token is minted to the
-    /// winner upon settlement.
+    /// The token is minted to the auction contract when the auction is created
+    /// and transferred to the winner (or the Treasury, if nobody bid) on
+    /// settlement. Ids follow the token's sequence, so they need not be
+    /// consecutive across auctions.
     pub token_id: u128,
     /// Current highest bid amount.
     ///
@@ -157,10 +142,9 @@ pub struct AuctionState {
     pub extension_count: u32,
 }
 
-// Storage helpers with TTL management
+// Storage helpers. Instance TTL follows `common::ttl` and is extended on
+// every state-changing entry point.
 pub fn get_config(e: &Env) -> AuctionConfig {
-    // Extend TTL on read to prevent expiration
-    e.storage().instance().extend_ttl(LEDGERS_TO_LIVE, MAX_TTL);
     e.storage()
         .instance()
         .get(&DataKey::Config)
@@ -178,55 +162,36 @@ pub fn set_payment_token_locked(e: &Env) {
     e.storage()
         .instance()
         .set(&DataKey::PaymentTokenLocked, &true);
-    e.storage().instance().extend_ttl(LEDGERS_TO_LIVE, MAX_TTL);
 }
 
 pub fn set_config(e: &Env, config: &AuctionConfig) {
     e.storage().instance().set(&DataKey::Config, config);
-    e.storage().instance().extend_ttl(LEDGERS_TO_LIVE, MAX_TTL);
 }
 
+/// The current auction. Panics `NotLaunched` before the first auction exists.
 pub fn get_auction(e: &Env) -> AuctionState {
-    if !is_launched(e) {
-        panic_with_error!(e, AuctionError::NotLaunched);
-    }
-    e.storage().instance().extend_ttl(LEDGERS_TO_LIVE, MAX_TTL);
     e.storage()
         .instance()
         .get(&DataKey::Auction)
-        .unwrap_or_else(|| panic_with_error!(e, AuctionError::NotInitialized))
+        .unwrap_or_else(|| panic_with_error!(e, AuctionError::NotLaunched))
 }
 
 pub fn set_auction(e: &Env, auction: &AuctionState) {
     e.storage().instance().set(&DataKey::Auction, auction);
-    e.storage().instance().extend_ttl(LEDGERS_TO_LIVE, MAX_TTL);
 }
 
-pub fn is_launched(e: &Env) -> bool {
-    e.storage().instance().extend_ttl(LEDGERS_TO_LIVE, MAX_TTL);
-    e.storage()
-        .instance()
-        .get(&DataKey::Launched)
-        .unwrap_or(false)
+/// Whether the first auction has been created.
+pub fn has_auction(e: &Env) -> bool {
+    e.storage().instance().has(&DataKey::Auction)
 }
 
-pub fn set_launched(e: &Env, launched: bool) {
-    e.storage().instance().set(&DataKey::Launched, &launched);
-    e.storage().instance().extend_ttl(LEDGERS_TO_LIVE, MAX_TTL);
-}
-
-/// Persistent TTL for `PendingRefund` entries (nominally 1 year, capped by the
-/// network at ~180 days, bumped on every touch).
-const PENDING_REFUND_TTL: u32 = 365 * common::ttl::DAY_IN_LEDGERS;
-const PENDING_REFUND_THRESHOLD: u32 = PENDING_REFUND_TTL - common::ttl::DAY_IN_LEDGERS;
+// `PendingRefund` entries use the shared long-lived persistent policy.
 
 pub fn get_pending_refund(e: &Env, bidder: &Address) -> i128 {
     let key = DataKey::PendingRefund(bidder.clone());
     let v: Option<i128> = e.storage().persistent().get(&key);
     if v.is_some() {
-        e.storage()
-            .persistent()
-            .extend_ttl(&key, PENDING_REFUND_THRESHOLD, PENDING_REFUND_TTL);
+        common::ttl::extend_persistent(e, &key);
     }
     v.unwrap_or(0)
 }
@@ -238,9 +203,7 @@ pub fn add_pending_refund(e: &Env, bidder: &Address, amount: i128) -> i128 {
         .checked_add(amount)
         .unwrap_or_else(|| panic_with_error!(e, AuctionError::ArithmeticOverflow));
     e.storage().persistent().set(&key, &total);
-    e.storage()
-        .persistent()
-        .extend_ttl(&key, PENDING_REFUND_THRESHOLD, PENDING_REFUND_TTL);
+    common::ttl::extend_persistent(e, &key);
     total
 }
 

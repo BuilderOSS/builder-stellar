@@ -73,9 +73,11 @@ contracts/token/       NFT voting token
 contracts/metadata/    Mutable properties/items and mint hook
 contracts/auction/     Auction membership module
 contracts/governor/    Proposal and voting logic
-contracts/treasury/    Asset custody and module ownership
-contracts/manager/     Implementation registry and DAO factory
+contracts/treasury/    Asset custody, proposal execution, admin of every module after launch
+contracts/manager/     Implementation registry, DAO factory and slug registry
 contracts/marketplace/ Primary and secondary NFT marketplace
+contracts/minter/      Platform minter shared by every DAO (merkle/allowlist claims)
+contracts/common/      Shared library: admin model, lifecycle, upgrades/migrations, TTL, error codes
 contracts/e2e/         Contract integration tests
 apps/web/              Next.js frontend
 packages/*-bindings/   Generated TypeScript clients
@@ -97,11 +99,15 @@ configs/               Network and DAO configuration
 - [Database Schema](docs/DATABASE_SCHEMA.md)
 - [DAO Deployment](docs/DAO_DEPLOYMENT.md)
 - [Monitoring](docs/MONITORING.md)
+- [Security Model](docs/SECURITY_MODEL.md)
+- [TTL Economics](docs/TTL_ECONOMICS.md)
+- [Contract Review Fix Plan](docs/CONTRACT_REVIEW_FIX_PLAN.md)
+- [Frontend Handover](docs/FRONTEND_HANDOVER.md) (temporary: delete once the web app is updated)
 - [Agent Workflow](docs/AGENT_WORKFLOW.md)
 
 ## Common Commands
 
-- `pnpm contracts:build` - build all six contract crates
+- `pnpm contracts:build` - build all eight contract WASMs
 - `pnpm contracts:bindings` - generate TypeScript bindings
 - `pnpm deploy:local` - deploy direct contracts locally
 - `pnpm deploy:testnet` - deploy direct contracts to testnet

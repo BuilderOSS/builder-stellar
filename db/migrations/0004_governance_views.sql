@@ -4,6 +4,10 @@
 -- Source events (governor contract):
 --   proposal_created   topics proposal_id, proposer;
 --                      data { targets[], functions[], args[][], vote_snapshot, vote_end, description }
+--   proposal_scheduled topic proposal_id;
+--                      data { vote_start, vote_end, snapshot_ledger, quorum_votes }
+--                      (same transaction as proposal_created; quorum is fixed at proposal
+--                      time because the snapshot precedes the proposal)
 --   vote_cast          topics voter, proposal_id; data { vote_type, weight, reason }
 --   proposal_queued    topic proposal_id; data { eta }
 --   proposal_executed  topic proposal_id   (emitted inside Governor.consume, same tx as the Treasury calls)
@@ -14,11 +18,10 @@
 --                      one event per call of the proposal; Treasury.execute is
 --                      permissionless and consumes the proposal on the Governor first.
 --
--- The Governor has no authority role any more (GovernorAuthorityChanged is gone);
--- the Treasury owns the Governor from launch and parameter setters emit
--- *_changed events with the owner as `caller`.
+-- The Treasury is the Governor's admin from launch; parameter setters emit
+-- *_changed events with the admin as `changed_by`.
 --
--- vote_snapshot is a ledger sequence; vote_end is a unix timestamp in seconds.
+-- vote_snapshot is a ledger sequence; vote_start / vote_end are unix timestamps in seconds.
 -- vote_type: 0 against, 1 for, 2 abstain.
 -- =============================================================================
 
@@ -127,15 +130,16 @@ LEFT JOIN governance.proposal_actions a
 WHERE e.contract_role = 'treasury'
   AND e.event_name = 'execute';
 
--- Proposal with its latest lifecycle state.
---   'pending'   no lifecycle event yet (covers Pending/Active/Succeeded/Defeated on chain)
---   'queued' / 'executed' / 'canceled'   latest ProposalQueued / ProposalExecuted / ProposalCancelled
---   'expired'   computed from the clock (the chain reports Expired lazily, with no event):
---               * queued and now >= eta + 14 days (the Treasury can no longer execute it), or
---               * never queued, now >= vote_end + 14 days, and for_votes > against_votes.
---                 Quorum is not derivable from events, so a never-queued proposal that
---                 won the vote but missed quorum is reported 'expired' here although the
---                 chain says Defeated; both are terminal.
+-- Proposal with its state, mirroring Governor.proposal_state exactly:
+--   'executed' / 'canceled'   ProposalExecuted / ProposalCancelled
+--   'queued'    ProposalQueued and now < eta + 14 days; 'expired' after that
+--   otherwise, from ProposalScheduled and the vote tallies at the current time:
+--   'pending'   now < vote_start
+--   'active'    vote_start <= now < vote_end
+--   'succeeded' vote ended, for + abstain >= quorum_votes and for > against,
+--               and now < vote_end + 14 days; 'expired' after that
+--   'defeated'  vote ended without quorum or without a majority
+-- The chain reports these lazily (no event), so they are computed from the clock.
 -- 14 days = PROPOSAL_EXPIRATION_PERIOD (1_209_600 s) in the Governor contract.
 CREATE VIEW governance.proposals AS
 WITH created AS (
@@ -148,7 +152,9 @@ WITH created AS (
     e.topics::jsonb ->> 'proposer' AS proposer,
     e.args::jsonb ->> 'description' AS description,
     (e.args::jsonb ->> 'vote_snapshot')::bigint AS snapshot_ledger,
-    (e.args::jsonb ->> 'vote_end')::bigint AS vote_end_seconds,
+    (s.args::jsonb ->> 'vote_start')::bigint AS vote_start_seconds,
+    COALESCE((s.args::jsonb ->> 'vote_end')::bigint, (e.args::jsonb ->> 'vote_end')::bigint) AS vote_end_seconds,
+    (s.args::jsonb ->> 'quorum_votes')::numeric(78, 0) AS quorum_votes,
     jsonb_array_length(COALESCE(e.args::jsonb -> 'targets', '[]'::jsonb)) AS action_count,
     e.ledger_sequence AS created_ledger,
     e.transaction_index,
@@ -158,6 +164,12 @@ WITH created AS (
     e.transaction_hash AS created_transaction_hash
   FROM chain.decoded_events e
   JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
+  LEFT JOIN chain.decoded_events s
+    ON s.deployment_id = e.deployment_id
+   AND s.contract_id = e.contract_id
+   AND s.contract_role = 'governor'
+   AND s.event_name = 'proposal_scheduled'
+   AND s.topic_0 = e.topic_0
   WHERE e.contract_role = 'governor'
     AND e.event_name = 'proposal_created'
 ), lifecycle AS (
@@ -179,20 +191,23 @@ WITH created AS (
   SELECT
     deployment_id, dao_id, proposal_id,
     COALESCE(sum(weight) FILTER (WHERE support = 1), 0) AS for_votes,
-    COALESCE(sum(weight) FILTER (WHERE support = 0), 0) AS against_votes
+    COALESCE(sum(weight) FILTER (WHERE support = 0), 0) AS against_votes,
+    COALESCE(sum(weight) FILTER (WHERE support = 2), 0) AS abstain_votes
   FROM governance.proposal_votes
   GROUP BY deployment_id, dao_id, proposal_id
 )
 SELECT
   c.*,
   CASE
-    WHEN l.state = 'queued'
-      AND extract(epoch FROM now()) >= l.eta_seconds + 1209600 THEN 'expired'
-    WHEN l.state IS NULL
-      AND c.vote_end_seconds IS NOT NULL
-      AND extract(epoch FROM now()) >= c.vote_end_seconds + 1209600
-      AND COALESCE(t.for_votes, 0) > COALESCE(t.against_votes, 0) THEN 'expired'
-    ELSE COALESCE(l.state, 'pending')
+    WHEN l.state IN ('executed', 'canceled') THEN l.state
+    WHEN l.state = 'queued' THEN
+      CASE WHEN extract(epoch FROM now()) >= l.eta_seconds + 1209600 THEN 'expired' ELSE 'queued' END
+    WHEN c.vote_start_seconds IS NOT NULL AND extract(epoch FROM now()) < c.vote_start_seconds THEN 'pending'
+    WHEN extract(epoch FROM now()) < c.vote_end_seconds THEN 'active'
+    WHEN COALESCE(t.for_votes, 0) + COALESCE(t.abstain_votes, 0) >= COALESCE(c.quorum_votes, 0)
+      AND COALESCE(t.for_votes, 0) > COALESCE(t.against_votes, 0) THEN
+      CASE WHEN extract(epoch FROM now()) >= c.vote_end_seconds + 1209600 THEN 'expired' ELSE 'succeeded' END
+    ELSE 'defeated'
   END AS state,
   l.eta_seconds,
   l.updated_ledger,

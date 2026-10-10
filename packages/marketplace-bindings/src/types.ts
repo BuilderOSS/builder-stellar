@@ -1,45 +1,69 @@
 import {Address} from '@stellar/stellar-sdk';
 
     /**
- * Error Enum: MarketplaceError
+ * Marketplace errors (block `common::error::codes::MARKETPLACE`).
  */
 export const MarketplaceError = {
-  1301 : { message: "NotInitialized" },
-  1303 : { message: "InvalidPrice" },
-  1304 : { message: "InvalidExpiry" },
-  1305 : { message: "ListingExists" },
-  1306 : { message: "ListingNotFound" },
-  1307 : { message: "ListingExpired" },
-  1308 : { message: "ListingActive" },
-  1309 : { message: "NotSeller" },
-  1310 : { message: "InvalidFee" },
-  1311 : { message: "ArithmeticOverflow" },
   /**
-   * `launch` treasury differs from the treasury wired at construction.
+   * Contract configuration missing
    */
-  1312 : { message: "TreasuryMismatch" },
+  7701 : { message: "NotInitialized" },
   /**
-   * `launch` expected payment asset differs from the configured one
+   * Price is not positive
    */
-  1313 : { message: "PaymentAssetMismatch" },
+  7702 : { message: "InvalidPrice" },
   /**
-   * The marketplace is paused (new listings and purchases are rejected).
+   * Expiry is not in the future
    */
-  1314 : { message: "Paused" }
-}
-
-/**
- * Emitted once when the Manager launches the marketplace (Setup -> Live).
- */
-export interface LaunchedEvent {
-  name: "Launched";
-  data: {
-    treasury: string;
-    /**
-     * Whether the marketplace was unpaused at launch.
-     */
-    opened?: boolean;
-  };
+  7703 : { message: "InvalidExpiry" },
+  /**
+   * The token is already listed
+   */
+  7704 : { message: "ListingExists" },
+  /**
+   * No such listing
+   */
+  7705 : { message: "ListingNotFound" },
+  /**
+   * The listing has expired
+   */
+  7706 : { message: "ListingExpired" },
+  /**
+   * The listing has not expired yet
+   */
+  7707 : { message: "ListingActive" },
+  /**
+   * The caller is not the token owner / listing seller
+   */
+  7708 : { message: "NotSeller" },
+  /**
+   * Fee above `common::MAX_FEE_BPS`
+   */
+  7709 : { message: "InvalidFee" },
+  /**
+   * Arithmetic overflow in fee calculations
+   */
+  7710 : { message: "ArithmeticOverflow" },
+  /**
+   * `launch` treasury differs from the treasury wired at construction
+   */
+  7711 : { message: "TreasuryMismatch" },
+  /**
+   * The payment asset differs from the one the caller expected
+   */
+  7712 : { message: "PaymentAssetMismatch" },
+  /**
+   * The marketplace is paused (new listings and purchases are rejected)
+   */
+  7713 : { message: "Paused" },
+  /**
+   * The current fee exceeds the seller's `max_fee_bps`
+   */
+  7714 : { message: "FeeAboveMax" },
+  /**
+   * The listing price exceeds the buyer's `max_price`
+   */
+  7715 : { message: "PriceAboveMax" }
 }
 
 /**
@@ -85,7 +109,24 @@ export interface ListingPurchasedEvent {
 export interface MarketplacePausedEvent {
   name: "MarketplacePaused";
   data: {
+    /**
+     * The admin, or the Manager when `launch` forces the pause.
+     */
+    changed_by: string;
+  };
+}
 
+/**
+ * Emitted once when the Manager launches the marketplace (Setup -> Live).
+ */
+export interface MarketplaceLaunchedEvent {
+  name: "MarketplaceLaunched";
+  data: {
+    treasury: string;
+    /**
+     * Whether the marketplace was unpaused at launch.
+     */
+    opened?: boolean;
   };
 }
 
@@ -95,7 +136,10 @@ export interface MarketplacePausedEvent {
 export interface MarketplaceUnpausedEvent {
   name: "MarketplaceUnpaused";
   data: {
-
+    /**
+     * The admin, or the Manager when `launch` opens the marketplace.
+     */
+    changed_by: string;
   };
 }
 
@@ -106,6 +150,7 @@ export interface PaymentAssetUpdatedEvent {
   name: "PaymentAssetUpdated";
   data: {
     payment_asset?: string;
+    changed_by: string;
   };
 }
 
@@ -116,6 +161,7 @@ export interface SecondaryFeeUpdatedEvent {
   name: "SecondaryFeeUpdated";
   data: {
     fee_bps?: number;
+    changed_by: string;
   };
 }
 
@@ -149,6 +195,7 @@ export interface MarketplaceInitializedEvent {
   name: "MarketplaceInitialized";
   data: {
     token: string;
+    admin: string;
     treasury?: string;
     payment_asset?: string;
     version?: string;
@@ -226,66 +273,97 @@ export interface PrimaryListing {
  */
 export interface MarketplaceConfig {
   default_secondary_fee_bps: number;
-  /**
-   * Setup-phase admin of the param setters; replaced by `treasury` once Live.
-   */
-  launch_admin: string;
   manager: string;
   paused: boolean;
   payment_asset: string;
   token: string;
+  /**
+   * Fee and primary-sale recipient. Also the admin once live (`common::admin`).
+   */
   treasury: string;
 }
 
 /**
- * Errors shared by all module contracts. Codes live in the 9000 range so
- * they never collide with module (11xx-13xx, 3, 30) or manager (10xx) codes.
+ * Emitted by [`handoff`]. The emitting contract address is the event's contract id.
+ *
+ * Same shape as the Manager's own `AdminChanged`, so indexers decode both
+ * with one schema.
+ */
+export interface AdminChangedEvent {
+  name: "AdminChanged";
+  data: {
+    old_admin: string;
+    new_admin: string;
+  };
+}
+
+/**
+ * Errors shared by all module contracts (block `codes::COMMON`).
  */
 export const CommonError = {
   /**
    * Operation requires the module to be live (launched).
    */
-  9001 : { message: "NotLive" },
+  7001 : { message: "NotLive" },
   /**
    * Operation is only valid during setup; the module is already live.
    */
-  9002 : { message: "AlreadyLive" },
+  7002 : { message: "AlreadyLive" },
   /**
    * Manager address missing from storage.
    */
-  9003 : { message: "ManagerNotSet" },
+  7003 : { message: "ManagerNotSet" },
   /**
    * `CurrentHash` missing from storage.
    */
-  9004 : { message: "CurrentHashNotSet" },
+  7004 : { message: "CurrentHashNotSet" },
   /**
    * `from_hash` does not equal the stored `CurrentHash`.
    */
-  9005 : { message: "HashMismatch" },
+  7005 : { message: "HashMismatch" },
   /**
    * Manager did not approve this upgrade path.
    */
-  9006 : { message: "UpgradeNotApproved" },
+  7006 : { message: "UpgradeNotApproved" },
   /**
    * Manager has no registry entry for the requested hash.
    */
-  9007 : { message: "ImplementationNotFound" },
+  7007 : { message: "ImplementationNotFound" },
   /**
-   * Owner missing from storage.
+   * Module admin missing from storage.
    */
-  9008 : { message: "OwnerNotSet" },
+  7008 : { message: "AdminNotSet" },
   /**
    * `CurrentVersion` missing from storage.
    */
-  9009 : { message: "VersionNotSet" },
+  7009 : { message: "VersionNotSet" },
   /**
    * Treasury address missing from storage.
    */
-  9010 : { message: "TreasuryNotSet" },
+  7010 : { message: "TreasuryNotSet" },
   /**
    * Governor address missing from storage.
    */
-  9011 : { message: "GovernorNotSet" }
+  7011 : { message: "GovernorNotSet" },
+  /**
+   * `migrate` called while the stored layout is already current.
+   */
+  7012 : { message: "NothingToMigrate" },
+  /**
+   * `StorageVersion` missing from storage.
+   */
+  7013 : { message: "StorageVersionNotSet" }
+}
+
+/**
+ * Emitted by `migrate`.
+ */
+export interface MigratedEvent {
+  name: "Migrated";
+  data: {
+    from_storage_version?: number;
+    to_storage_version?: number;
+  };
 }
 
 /**
@@ -309,5 +387,5 @@ export interface VersionSyncedEvent {
     version?: string;
   };
 }
-    export type ContractEvent = LaunchedEvent | ListingExpiredEvent | ListingCancelledEvent | ListingPurchasedEvent | MarketplacePausedEvent | MarketplaceUnpausedEvent | PaymentAssetUpdatedEvent | SecondaryFeeUpdatedEvent | PrimaryListingCreatedEvent | PrimaryListingExpiredEvent | MarketplaceInitializedEvent | PrimaryListingCancelledEvent | PrimaryListingPurchasedEvent | SecondaryListingCreatedEvent | UpgradedEvent | VersionSyncedEvent;
+    export type ContractEvent = ListingExpiredEvent | ListingCancelledEvent | ListingPurchasedEvent | MarketplacePausedEvent | MarketplaceLaunchedEvent | MarketplaceUnpausedEvent | PaymentAssetUpdatedEvent | SecondaryFeeUpdatedEvent | PrimaryListingCreatedEvent | PrimaryListingExpiredEvent | MarketplaceInitializedEvent | PrimaryListingCancelledEvent | PrimaryListingPurchasedEvent | SecondaryListingCreatedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VersionSyncedEvent;
     

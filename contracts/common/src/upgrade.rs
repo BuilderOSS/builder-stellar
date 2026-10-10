@@ -1,12 +1,23 @@
-//! Manager-approved upgrade flow and the standard `CurrentHash` /
-//! `CurrentVersion` instance keys.
+//! Manager-approved upgrade flow, the standard `CurrentHash` /
+//! `CurrentVersion` instance keys, and the storage-layout migration convention.
 //!
-//! Authorization (who may call `upgrade`) stays in each module; this crate
-//! only performs the checks that follow it.
+//! Authorization (who may call `upgrade` / `migrate`) stays in each module;
+//! this crate only performs the checks that follow it.
 //!
-//! Storage: two instance entries (`CurrentHash`: 32 bytes, `CurrentVersion`:
-//! string). Cross-contract calls: `manager.is_upgrade_approved` and
-//! `manager.get_implementation_version`, both read-only.
+//! # Migrations
+//!
+//! Every module declares a `STORAGE_VERSION` constant (the layout its code
+//! expects) and records it at construction. A WASM upgrade swaps code but not
+//! data, so a release that changes a module's storage layout bumps the
+//! constant and does its data rewrite in the module's admin-gated `migrate`
+//! entry point, which first calls [`migrate`] here. A governance upgrade
+//! proposal runs `upgrade` and then `migrate` as consecutive actions; the new
+//! code is active for the second call.
+//!
+//! Storage: three instance entries (`CurrentHash`: 32 bytes, `CurrentVersion`:
+//! string, `StorageVersion`: u32). Cross-contract calls:
+//! `manager.is_upgrade_approved` and `manager.get_implementation_version`,
+//! both read-only.
 
 use soroban_sdk::{contractevent, contracttype, panic_with_error, Address, BytesN, Env, String};
 
@@ -17,6 +28,7 @@ use crate::{clients::ManagerRegistryClient, error::CommonError, ttl};
 pub enum UpgradeKey {
     CurrentHash,
     CurrentVersion,
+    StorageVersion,
 }
 
 /// Emitted by `apply`. The emitting contract address is the event's contract id.
@@ -30,6 +42,14 @@ pub struct Upgraded {
     pub version: String,
 }
 
+/// Emitted by `migrate`.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Migrated {
+    pub from_storage_version: u32,
+    pub to_storage_version: u32,
+}
+
 /// Emitted by `sync_version`.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -37,14 +57,46 @@ pub struct VersionSynced {
     pub version: String,
 }
 
-/// Record hash and version at construction time.
-pub fn init(e: &Env, current_hash: &BytesN<32>, version: &String) {
+/// Record hash, release version and storage-layout version at construction time.
+pub fn init(e: &Env, current_hash: &BytesN<32>, version: &String, storage_version: u32) {
     e.storage()
         .instance()
         .set(&UpgradeKey::CurrentHash, current_hash);
     e.storage()
         .instance()
         .set(&UpgradeKey::CurrentVersion, version);
+    e.storage()
+        .instance()
+        .set(&UpgradeKey::StorageVersion, &storage_version);
+}
+
+/// Storage-layout version of the data currently held by this contract.
+pub fn storage_version(e: &Env) -> u32 {
+    e.storage()
+        .instance()
+        .get(&UpgradeKey::StorageVersion)
+        .unwrap_or_else(|| panic_with_error!(e, CommonError::StorageVersionNotSet))
+}
+
+/// Advance the stored layout version to `code_storage_version` and emit
+/// `Migrated`. Panics `NothingToMigrate` unless the stored version is older.
+/// Authorization is the caller's responsibility; the module performs its own
+/// data rewrite after this returns. Returns the previous version.
+pub fn migrate(e: &Env, code_storage_version: u32) -> u32 {
+    ttl::extend_instance(e);
+    let from = storage_version(e);
+    if from >= code_storage_version {
+        panic_with_error!(e, CommonError::NothingToMigrate);
+    }
+    e.storage()
+        .instance()
+        .set(&UpgradeKey::StorageVersion, &code_storage_version);
+    Migrated {
+        from_storage_version: from,
+        to_storage_version: code_storage_version,
+    }
+    .publish(e);
+    from
 }
 
 pub fn current_hash(e: &Env) -> BytesN<32> {

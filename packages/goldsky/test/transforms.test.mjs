@@ -232,7 +232,7 @@ console.log('✅ Passed\n');
 // Test 11: new events keep every column type stable across decoder and activity feed
 console.log('Test 11: Hardened-contract events keep Arrow-safe types');
 const newEventRows = [
-  ['Launched', [{ symbol: 'Launched' }, { address: 'T' }], { map: [{ key: { symbol: 'minters' }, val: { vec: [{ address: 'M' }] } }] }],
+  ['TokenLaunched', [{ symbol: 'TokenLaunched' }, { address: 'T' }], { map: [{ key: { symbol: 'minters' }, val: { vec: [{ address: 'M' }] } }] }],
   ['Execute', [{ symbol: 'Execute' }, { address: 'G' }, { address: 'X' }, { bytes: 'ab' }], { map: [{ key: { symbol: 'function' }, val: { symbol: 'f' } }, { key: { symbol: 'index' }, val: { u32: 0 } }] }],
   ['PrimaryListingPurchased', [{ symbol: 'PrimaryListingPurchased' }, { u64: '1' }, { address: 'B' }], { map: [{ key: { symbol: 'token_id' }, val: { u32: 4 } }] }],
   ['RefundWithdrawn', [{ symbol: 'RefundWithdrawn' }, { address: 'B' }], { map: [{ key: { symbol: 'amount' }, val: { i128: '5' } }] }]

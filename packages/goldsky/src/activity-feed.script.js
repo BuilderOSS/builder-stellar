@@ -101,7 +101,7 @@ function invoke(data) {
     ProposalCancelled: true, ProposalExecuted: true,
     AuctionCreated: true, BidPlaced: true,
     AuctionSettled: true, BidRefunded: true, AuctionCancelled: true,
-    DaoCreated: true, DaoLaunched: true,
+    DaoCreated: true, DaoLaunched: true, SlugClaimed: true,
     MerkleClaimEvent: true, AllowlistClaimEvent: true, MintBatchEvent: true,
     PrimaryListingCreated: true, PrimaryListingPurchased: true, PrimaryListingCancelled: true,
     SecondaryListingCreated: true, ListingPurchased: true, ListingCancelled: true,
@@ -121,6 +121,7 @@ function invoke(data) {
     DelegateVotesChanged: 'token.delegate_votes_changed',
     GovernorInitialized: 'governance.initialized',
     ProposalCreated: 'governance.proposal_created',
+    ProposalScheduled: 'governance.proposal_scheduled',
     ProposalQueued: 'governance.proposal_queued',
     VoteCast: 'governance.vote_cast',
     ProposalCancelled: 'governance.proposal_cancelled',
@@ -131,6 +132,12 @@ function invoke(data) {
     ProposalThresholdChanged: 'governance.proposal_threshold_changed',
     QuorumBpsChanged: 'governance.quorum_bps_changed',
     TreasuryInitialized: 'treasury.initialized',
+    TokenLaunched: 'token.launched',
+    GovernorLaunched: 'governor.launched',
+    TreasuryLaunched: 'treasury.launched',
+    AuctionLaunched: 'auction.launched',
+    MarketplaceLaunched: 'marketplace.launched',
+    MetadataLaunched: 'metadata.launched',
     Execute: 'treasury.execute',
     AuctionInitialized: 'auction.initialized',
     AuctionCreated: 'auction.created',
@@ -156,6 +163,9 @@ function invoke(data) {
     ImplementationRevoked: 'manager.implementation_revoked',
     ImplementationRegistered: 'manager.implementation_registered',
     CurrentImplementationsUpdated: 'manager.implementations_updated',
+    LatestImplementationSet: 'manager.latest_implementation_set',
+    PendingSlugUpdated: 'manager.pending_slug_updated',
+    SlugClaimed: 'manager.slug_claimed',
     MetadataInitialized: 'metadata.initialized',
     PropertyAdded: 'metadata.property_added',
     SeedGenerated: 'metadata.seed_generated',
@@ -200,6 +210,7 @@ function invoke(data) {
     DelegateVotesChanged: 'Voting power changed',
     GovernorInitialized: 'Governor initialized',
     ProposalCreated: 'Proposal created',
+    ProposalScheduled: 'Proposal voting scheduled',
     ProposalQueued: 'Proposal queued',
     VoteCast: 'Vote cast',
     ProposalCancelled: 'Proposal cancelled',
@@ -210,6 +221,12 @@ function invoke(data) {
     ProposalThresholdChanged: 'Proposal threshold updated',
     QuorumBpsChanged: 'Quorum updated',
     TreasuryInitialized: 'Treasury initialized',
+    TokenLaunched: 'Token launched',
+    GovernorLaunched: 'Governor launched',
+    TreasuryLaunched: 'Treasury launched',
+    AuctionLaunched: 'Auction launched',
+    MarketplaceLaunched: 'Marketplace launched',
+    MetadataLaunched: 'Metadata launched',
     Execute: 'Treasury executed call',
     AuctionInitialized: 'Auction initialized',
     AuctionCreated: 'Auction created',
@@ -235,6 +252,9 @@ function invoke(data) {
     ImplementationRevoked: 'Implementation revoked',
     ImplementationRegistered: 'Implementation registered',
     CurrentImplementationsUpdated: 'Implementations updated',
+    LatestImplementationSet: 'Latest implementation set',
+    PendingSlugUpdated: 'Requested slug changed',
+    SlugClaimed: 'Slug claimed',
     MetadataInitialized: 'Metadata initialized',
     PropertyAdded: 'Property added',
     SeedGenerated: 'Seed generated',
@@ -268,26 +288,21 @@ function invoke(data) {
     MarketplaceUnpaused: 'Marketplace unpaused'
   };
 
-  // Every module emits its own `Launched` event (same name, different data), so the
-  // kind/title depend on the emitting module's contract_role.
-  var launchRole = ensureString(data.contract_role, '');
-  if (normalizedEventName === 'Launched') {
-    var launchLabels = { token: 'Token', governor: 'Governor', treasury: 'Treasury', auction: 'Auction', marketplace: 'Marketplace', metadata: 'Metadata' };
-    kindMap.Launched = (launchLabels[launchRole] ? launchRole : 'module') + '.launched';
-    titleMap.Launched = (launchLabels[launchRole] || 'Module') + ' launched';
+  // `Upgraded`, `VersionSynced` and `Migrated` come from contracts/common and are emitted by
+  // every module; `AdminChanged` is emitted by the Manager (admin handover) and by every module
+  // at launch (launch admin -> Treasury). Kind and title depend on the emitting contract_role.
+  var emitterRole = ensureString(data.contract_role, '');
+  var moduleLabels = { token: 'Token', governor: 'Governor', treasury: 'Treasury', auction: 'Auction', marketplace: 'Marketplace', metadata: 'Metadata' };
+  var moduleRole = moduleLabels[emitterRole] ? emitterRole : 'module';
+  var moduleLabel = moduleLabels[emitterRole] || 'Module';
+  var commonEvents = { Upgraded: ['upgraded', 'upgraded'], VersionSynced: ['version_synced', 'version synced'], Migrated: ['migrated', 'storage migrated'] };
+  if (commonEvents[normalizedEventName]) {
+    kindMap[normalizedEventName] = moduleRole + '.' + commonEvents[normalizedEventName][0];
+    titleMap[normalizedEventName] = moduleLabel + ' ' + commonEvents[normalizedEventName][1];
   }
-  // `Upgraded` / `VersionSynced` come from contracts/common and are emitted by every module.
-  if (normalizedEventName === 'Upgraded' || normalizedEventName === 'VersionSynced') {
-    var upgradeLabels = { token: 'Token', governor: 'Governor', treasury: 'Treasury', auction: 'Auction', marketplace: 'Marketplace', metadata: 'Metadata' };
-    var upgradeRole = upgradeLabels[launchRole] ? launchRole : 'module';
-    var upgradeLabel = upgradeLabels[launchRole] || 'Module';
-    if (normalizedEventName === 'Upgraded') {
-      kindMap.Upgraded = upgradeRole + '.upgraded';
-      titleMap.Upgraded = upgradeLabel + ' upgraded';
-    } else {
-      kindMap.VersionSynced = upgradeRole + '.version_synced';
-      titleMap.VersionSynced = upgradeLabel + ' version synced';
-    }
+  if (normalizedEventName === 'AdminChanged' && emitterRole !== 'manager') {
+    kindMap.AdminChanged = moduleRole + '.admin_changed';
+    titleMap.AdminChanged = moduleLabel + ' admin handed to the Treasury';
   }
 
   var addresses = unique([
@@ -300,6 +315,7 @@ function invoke(data) {
     pick(data, ['cancelled_admin']),
     pick(data, ['old_admin']),
     pick(data, ['new_admin']),
+    pick(data, ['admin']),
     pick(data, ['owner']),
     pick(data, ['changed_by']),
     pick(data, ['cancelled_by']),
@@ -346,13 +362,11 @@ function invoke(data) {
     BidRefunded: function() { return 'Bid of ' + (amount || 'unknown') + ' refunded for token ' + (tokenId || 'unknown'); },
     RefundDeferred: function() { return 'Refund of ' + (amount || 'unknown') + ' deferred for token ' + (tokenId || 'unknown') + '; claim it with withdraw_refund'; },
     RefundWithdrawn: function() { return 'Refund of ' + (amount || 'unknown') + ' withdrawn'; },
-    Launched: function() {
-      var started = pick(data, ['started']);
-      var opened = pick(data, ['opened']);
-      if (launchRole === 'auction') return 'Auction launched' + (started === 'true' ? ' and started' : ' paused');
-      if (launchRole === 'marketplace') return 'Marketplace launched' + (opened === 'true' ? ' and opened' : ' paused');
-      return (titleMap.Launched || 'Module launched');
-    },
+    AuctionLaunched: function() { return 'Auction launched' + (pick(data, ['started']) === 'true' ? ' and started' : ' paused'); },
+    MarketplaceLaunched: function() { return 'Marketplace launched' + (pick(data, ['opened']) === 'true' ? ' and opened' : ' paused'); },
+    SlugClaimed: function() { return 'Slug "' + (pick(data, ['slug']) || 'unknown') + '" claimed by ' + (tokenAddress || 'unknown'); },
+    PendingSlugUpdated: function() { return 'Requested slug changed to "' + (pick(data, ['slug']) || 'unknown') + '"'; },
+    Migrated: function() { return 'Storage migrated from version ' + (pick(data, ['from_storage_version']) || '?') + ' to ' + (pick(data, ['to_storage_version']) || '?'); },
     // Topics from_hash/to_hash, data version. Hashes are shortened to 8 hex chars.
     Upgraded: function() {
       function shortHash(h) { return h ? String(h).slice(0, 8) : 'unknown'; }
@@ -438,7 +452,7 @@ function invoke(data) {
     proposal_id: toString(proposalId),
     token_id: toString(tokenId),
     amount: toString(amount),
-    actor: toString(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'recipient', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator', 'buyer', 'seller', 'current_admin', 'old_admin'])),
+    actor: toString(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'recipient', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator', 'buyer', 'seller', 'current_admin', 'old_admin', 'admin'])),
     addresses: JSON.stringify(addresses || []),
     ledger_sequence: ledger_sequence,
     transaction_index: transaction_index,

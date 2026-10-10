@@ -52,28 +52,31 @@ function invoke(data) {
     ManagerInitialized: ['admin'], ImplementationRegistered: ['wasm_hash'], UpgradeApproved: ['from_hash', 'to_hash'],
     ImplementationRevoked: ['wasm_hash'], DaoCreated: ['token_address', 'deployer', 'launch_admin'], FactoryPaused: [], FactoryUnpaused: [],
     DaoLaunched: ['token_address'], CurrentImplementationsUpdated: [], ManagerUpgraded: ['from_hash', 'to_hash'],
+    // AdminChanged is emitted by the Manager (its own admin handover) and, with the same shape,
+    // by every DAO module at launch (contracts/common/src/admin.rs: launch admin -> Treasury).
     AdminProposed: ['current_admin', 'proposed_admin'], AdminProposalCancelled: ['current_admin', 'cancelled_admin'], AdminChanged: ['old_admin', 'new_admin'], PlatformMinterSet: ['minter'],
-    // Every module (token, governor, treasury, auction, marketplace, metadata) emits its own
-    // Launched struct with topic `treasury`; the data differs (token minters, auction started,
-    // marketplace opened). The emitting module is identified by contract_id/contract_role.
-    Launched: ['treasury'],
+    LatestImplementationSet: ['name', 'wasm_hash'], PendingSlugUpdated: ['token_address'], SlugClaimed: ['token_address', 'slug'],
+    // Each module's launch handoff (topic `treasury`).
+    TokenLaunched: ['treasury'], GovernorLaunched: ['treasury'], TreasuryLaunched: ['treasury'],
+    AuctionLaunched: ['treasury'], MarketplaceLaunched: ['treasury'], MetadataLaunched: ['treasury'],
     // contracts/common/src/upgrade.rs: emitted by EVERY module (token, governor, treasury, auction,
     // marketplace, metadata); the emitting module is identified by contract_id/contract_role.
-    Upgraded: ['from_hash', 'to_hash'], VersionSynced: [],
-    // Token (custom + OpenZeppelin non-fungible/votes/pausable/ownable)
-    TokenInitialized: ['owner'], MintAuthorityChanged: ['authority'], MintWithMinter: ['minter', 'to'],
+    Upgraded: ['from_hash', 'to_hash'], VersionSynced: [], Migrated: [],
+    // Token (custom + OpenZeppelin non-fungible/votes/pausable)
+    TokenInitialized: ['admin'], MintAuthorityChanged: ['authority'], MintWithMinter: ['minter', 'to'],
     Mint: ['to'], Transfer: ['from', 'to'], Approve: ['approver', 'token_id'], ApproveForAll: ['owner'],
     DelegateChanged: ['delegator'], DelegateVotesChanged: ['delegate'],
-    Paused: [], Unpaused: [], OwnershipTransfer: [], OwnershipTransferCompleted: [], OwnershipRenounced: [],
+    Paused: [], Unpaused: [],
     // Governor (custom + OpenZeppelin governor)
-    GovernorInitialized: ['owner'], ProposalCreated: ['proposal_id', 'proposer'], VoteCast: ['voter', 'proposal_id'],
+    GovernorInitialized: ['admin'], ProposalCreated: ['proposal_id', 'proposer'], ProposalScheduled: ['proposal_id'],
+    VoteCast: ['voter', 'proposal_id'],
     ProposalQueued: ['proposal_id'], ProposalExecuted: ['proposal_id'], ProposalCancelled: ['proposal_id'],
-    QueueDelayChanged: ['caller'], VotingDelayChanged: ['caller'], VotingPeriodChanged: ['caller'],
-    ProposalThresholdChanged: ['caller'], QuorumBpsChanged: ['caller'],
+    QueueDelayChanged: ['changed_by'], VotingDelayChanged: ['changed_by'], VotingPeriodChanged: ['changed_by'],
+    ProposalThresholdChanged: ['changed_by'], QuorumBpsChanged: ['changed_by'],
     // Treasury
-    TreasuryInitialized: ['owner'], Execute: ['governor', 'target', 'proposal_id'],
+    TreasuryInitialized: ['admin'], Execute: ['governor', 'target', 'proposal_id'],
     // Auction
-    AuctionInitialized: ['owner'], AuctionCreated: ['token_id'], BidPlaced: ['token_id', 'bidder'], AuctionSettled: ['token_id'],
+    AuctionInitialized: ['admin'], AuctionCreated: ['token_id'], BidPlaced: ['token_id', 'bidder'], AuctionSettled: ['token_id'],
     BidRefunded: ['token_id', 'bidder'], AuctionCancelled: ['token_id'], DurationUpdated: [], ReservePriceUpdated: [],
     MinBidIncrementUpdated: [], TimeBufferUpdated: [], PaymentTokenUpdated: [],
     RefundDeferred: ['token_id', 'bidder'], RefundWithdrawn: ['bidder'],
@@ -84,10 +87,11 @@ function invoke(data) {
     MerkleClaimEvent: ['token_id', 'recipient'], AllowlistClaimEvent: ['token_id', 'recipient'], MintBatchEvent: ['token_id'],
     MerkleRootSetEvent: ['token_id'], AllowlistSetEvent: ['token_id'],
     // Marketplace
-    MarketplaceInitialized: ['token'], PrimaryListingCreated: ['listing_id'], PrimaryListingPurchased: ['listing_id', 'buyer'],
+    MarketplaceInitialized: ['token', 'admin'], PrimaryListingCreated: ['listing_id'], PrimaryListingPurchased: ['listing_id', 'buyer'],
     PrimaryListingCancelled: ['listing_id'], PrimaryListingExpired: ['listing_id'], SecondaryListingCreated: ['token_id'],
     ListingPurchased: ['token_id', 'buyer'], ListingCancelled: ['token_id'], ListingExpired: ['token_id'],
-    PaymentAssetUpdated: [], SecondaryFeeUpdated: [], MarketplacePaused: [], MarketplaceUnpaused: []
+    PaymentAssetUpdated: ['changed_by'], SecondaryFeeUpdated: ['changed_by'],
+    MarketplacePaused: ['changed_by'], MarketplaceUnpaused: ['changed_by']
   };
   var names = topicNames[eventName] || topicNames[toCanonical(eventName)] || [];
   var topics = {};
@@ -160,12 +164,12 @@ function invoke(data) {
     // module allowlists before decoding. Names mirror the topicNames groups.
     function roleForEvent(name) {
       var canonical = toCanonical(name);
-      if (/^(Manager|Implementation|CurrentImplementations|UpgradeApproved|Dao|Factory|Admin|PlatformMinter)/.test(canonical)) return 'manager';
+      if (/^(Manager|Implementation|CurrentImplementations|LatestImplementation|UpgradeApproved|Dao|Factory|Admin|PlatformMinter|PendingSlug|SlugClaimed)/.test(canonical)) return 'manager';
       if (/^(MerkleClaim|AllowlistClaim|MintBatch|MerkleRoot|AllowlistSet)/.test(canonical)) return 'minter';
       if (/^(Marketplace|Listing|Primary|Secondary|PaymentAsset)/.test(canonical)) return 'marketplace';
       if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue)/.test(canonical)) return 'governor';
       if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken|Refund)/.test(canonical)) return 'auction';
-      if (/^(Execute|TreasuryInitialized)/.test(canonical)) return 'treasury';
+      if (/^(Execute|Treasury)/.test(canonical)) return 'treasury';
       if (/^(Metadata|Property|Properties|Seed|ProjectURI|Description|RendererBase|ContractImage)/.test(canonical)) return 'metadata';
       if (/^(Transfer|Mint|Delegate|Approve|Token)/.test(canonical)) return 'token';
       return 'unknown';

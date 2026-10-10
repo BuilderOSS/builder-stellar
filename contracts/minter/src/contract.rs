@@ -13,7 +13,7 @@ pub struct MinterContract;
 #[contractimpl]
 impl MinterContract {
     /// Batch mints tokens to multiple recipients.
-    /// Only callable by the token owner (admin).
+    /// Only callable by the token's admin.
     ///
     /// # Arguments
     ///
@@ -24,14 +24,15 @@ impl MinterContract {
     ///
     /// # Authorization
     ///
-    /// Requires authentication from token owner
+    /// Requires authentication from the token's admin
     pub fn mint_batch(
         e: &Env,
         token_id: Address,
         recipients: Vec<Address>,
         amounts: Vec<u128>,
     ) -> Result<(), MinterError> {
-        // Get admin from token owner (also validates token_id)
+        common::ttl::extend_instance(e);
+        // Admin is the token's admin (also validates token_id)
         require_token_live(e, &token_id)?;
         let admin = get_admin(e, &token_id)?;
         admin.require_auth();
@@ -46,19 +47,14 @@ impl MinterContract {
             return Err(MinterError::BatchTooLarge);
         }
 
-        // Call Token's batch_mint() directly instead of looping
-        // This optimizes both delegation checks and checkpoint creation
-        // Token batch_mint signature: batch_mint(minter: &Address, recipients: &Vec<Address>, amounts: &Vec<u128>) -> Vec<u32>
+        // One token call for the whole batch: delegation and vote checkpoints
+        // are touched once per recipient. Token errors propagate unchanged.
         let minter = e.current_contract_address();
-        match NftClient::new(e, &token_id).try_batch_mint(&minter, &recipients, &amounts) {
-            Ok(Ok(token_ids)) => {
-                let total_amount: u128 = amounts.iter().fold(0u128, |acc, a| acc.saturating_add(a));
-                let first_token_id = token_ids.first().unwrap_or(0);
-                emit_mint_batch(e, &token_id, count, total_amount, first_token_id);
-                Ok(())
-            }
-            _ => Err(MinterError::TokenContractError),
-        }
+        let token_ids = NftClient::new(e, &token_id).batch_mint(&minter, &recipients, &amounts);
+        let total_amount: u128 = amounts.iter().fold(0u128, |acc, a| acc.saturating_add(a));
+        let first_token_id = token_ids.first().unwrap_or(0);
+        emit_mint_batch(e, &token_id, count, total_amount, first_token_id);
+        Ok(())
     }
 
     /// Mints tokens to a recipient with merkle proof verification.
@@ -78,6 +74,7 @@ impl MinterContract {
         proof: Vec<BytesN<32>>,
     ) -> Result<(), MinterError> {
         recipient.require_auth();
+        common::ttl::extend_instance(e);
         require_token_live(e, &token_id)?;
 
         let merkle_root = get_merkle_root(e, &token_id).ok_or(MinterError::MerkleRootNotSet)?;
@@ -110,6 +107,7 @@ impl MinterContract {
         amount: u128,
     ) -> Result<(), MinterError> {
         recipient.require_auth();
+        common::ttl::extend_instance(e);
         require_token_live(e, &token_id)?;
 
         let fixed_amount =
@@ -140,16 +138,17 @@ impl MinterContract {
     /// (allowlist claims are unaffected); earlier merkle claimers may claim again
     /// under the new root. Claim markers are per method, so a recipient can claim
     /// once on each method per round; admins control both lists.
-    /// Only callable by token owner (admin).
+    /// Only callable by the token's admin.
     ///
     /// # Authorization
     ///
-    /// Requires authentication from token owner
+    /// Requires authentication from the token's admin
     pub fn set_merkle_root(
         e: &Env,
         token_id: Address,
         root: BytesN<32>,
     ) -> Result<(), MinterError> {
+        common::ttl::extend_instance(e);
         // Roots set during setup would otherwise survive launch.
         require_token_live(e, &token_id)?;
         let admin = get_admin(e, &token_id)?;
@@ -164,7 +163,7 @@ impl MinterContract {
     }
 
     /// Sets the allowlist for a token, replacing any previous allowlist.
-    /// Only callable by token owner (admin).
+    /// Only callable by the token's admin.
     ///
     /// Each address gets its own persistent entry under a fresh version, so the
     /// previous list is invalidated without deleting its entries. Claim markers
@@ -174,13 +173,14 @@ impl MinterContract {
     ///
     /// # Authorization
     ///
-    /// Requires authentication from token owner
+    /// Requires authentication from the token's admin
     pub fn set_allowlist(
         e: &Env,
         token_id: Address,
         addresses: Vec<Address>,
         fixed_amount: u128,
     ) -> Result<(), MinterError> {
+        common::ttl::extend_instance(e);
         require_token_live(e, &token_id)?;
         let admin = get_admin(e, &token_id)?;
         admin.require_auth();
@@ -202,11 +202,11 @@ impl MinterContract {
 
 // ========== Private helper functions ==========
 
-/// Get admin from token owner. NO stored admin - derived from token.owner().
+/// The token's admin (its Treasury once live). Nothing is stored here.
 /// A failing call means `token_id` is not a valid token contract.
 fn get_admin(e: &Env, token_id: &Address) -> Result<Address, MinterError> {
-    match NftClient::new(e, token_id).try_owner() {
-        Ok(Ok(owner)) => Ok(owner),
+    match NftClient::new(e, token_id).try_admin() {
+        Ok(Ok(admin)) => Ok(admin),
         _ => Err(MinterError::InvalidTokenId),
     }
 }
@@ -222,7 +222,8 @@ fn require_token_live(e: &Env, token_id: &Address) -> Result<(), MinterError> {
 }
 
 /// Mint `amount` tokens to `recipient` with a single token call, so delegation
-/// and voting checkpoints are handled once per claim rather than once per token.
+/// and voting checkpoints are handled once per claim rather than once per
+/// token. Token errors propagate unchanged.
 fn mint_claim(
     e: &Env,
     token_id: &Address,
@@ -237,10 +238,8 @@ fn mint_claim(
     let recipients = vec![e, recipient.clone()];
     let amounts = vec![e, amount];
 
-    match NftClient::new(e, token_id).try_batch_mint(&minter, &recipients, &amounts) {
-        Ok(Ok(_)) => Ok(()),
-        _ => Err(MinterError::TokenContractError),
-    }
+    NftClient::new(e, token_id).batch_mint(&minter, &recipients, &amounts);
+    Ok(())
 }
 
 /// Verify a merkle proof against `merkle_root`.

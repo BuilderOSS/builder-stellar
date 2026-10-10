@@ -2,21 +2,14 @@
 
 use soroban_sdk::{contracttype, Address, BytesN, Env, IntoVal, String, TryFromVal, Val};
 
-/// Ledgers per day at 5s per ledger.
-const DAY_IN_LEDGERS: u32 = 17_280;
-/// Persistent and instance entries are extended on touch to a nominal 1 year;
-/// the network caps this at ~180 days (max_entry_ttl) and it renews on touch.
-pub const TTL_EXTEND_TO: u32 = 365 * DAY_IN_LEDGERS;
-/// Extension only happens when remaining TTL drops below ~30 days.
-pub const TTL_THRESHOLD: u32 = 30 * DAY_IN_LEDGERS;
-
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ImplementationVersion {
     pub name: String,
     pub version: String,
     pub wasm_hash: BytesN<32>,
-    pub published_at: u64,
+    /// Ledger sequence of the registration.
+    pub published_ledger: u64,
     pub revoked: bool,
 }
 
@@ -25,7 +18,8 @@ pub struct ImplementationVersion {
 pub struct UpgradeApproval {
     pub from_hash: BytesN<32>,
     pub to_hash: BytesN<32>,
-    pub approved_at: u64,
+    /// Ledger sequence of the approval.
+    pub approved_ledger: u64,
 }
 
 #[contracttype]
@@ -71,7 +65,8 @@ pub struct InitialDaoConfigValues {
     pub description: String,
     pub contract_image: String,
     pub renderer_base: String,
-    /// Unique, permanent, human-friendly DAO identifier (`[a-z0-9-]`, 4-63 chars).
+    /// Requested human-friendly DAO identifier (`[a-z0-9-]`, 4-63 chars).
+    /// Claimed (unique, permanent) only at `launch_dao`.
     pub slug: String,
     pub governance: GovernanceConfig,
     pub auction: AuctionConfig,
@@ -129,12 +124,14 @@ pub struct DaoAddresses {
 ///
 /// Module WASM hashes are deliberately NOT stored: `launch_dao` reads each
 /// module's current `wasm_hash()` and checks it against the registry, so a
-/// pre-launch owner `upgrade` is honored and a revoked hash is rejected.
+/// pre-launch admin `upgrade` is honored and a revoked hash is rejected.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PendingDao {
     pub addresses: DaoAddresses,
     pub launch_admin: Address,
+    /// Requested slug; claimed at `launch_dao`, changeable with `update_pending_slug`.
+    pub slug: String,
     /// Auction payment token chosen at create_dao; launch refuses if it changed.
     pub auction_payment_asset: Address,
     /// Marketplace payment asset chosen at create_dao; launch refuses if it changed.
@@ -160,9 +157,9 @@ pub enum ManagerKey {
     PendingDao(Address),
     PendingAdmin,
     PlatformMinter,
-    /// slug -> token address. Permanent; renewed via `bump_slug_ttl`.
+    /// slug -> token address, written at `launch_dao`. Permanent; renewed via `bump_slug_ttl`.
     SlugToDao(String),
-    /// token address -> slug. Permanent; renewed via `bump_slug_ttl`.
+    /// token address -> slug, written at `launch_dao`. Permanent; renewed via `bump_slug_ttl`.
     DaoSlug(Address),
 }
 
@@ -199,9 +196,7 @@ pub fn extend_instance_ttl(env: &Env) {
 pub fn get_persistent<V: TryFromVal<Env, Val>>(env: &Env, key: &ManagerKey) -> Option<V> {
     let value = env.storage().persistent().get(key);
     if value.is_some() {
-        env.storage()
-            .persistent()
-            .extend_ttl(key, TTL_THRESHOLD, TTL_EXTEND_TO);
+        common::ttl::extend_persistent(env, key);
     }
     value
 }
@@ -209,9 +204,7 @@ pub fn get_persistent<V: TryFromVal<Env, Val>>(env: &Env, key: &ManagerKey) -> O
 /// Write a persistent entry and extend its TTL.
 pub fn set_persistent<V: IntoVal<Env, Val>>(env: &Env, key: &ManagerKey, value: &V) {
     env.storage().persistent().set(key, value);
-    env.storage()
-        .persistent()
-        .extend_ttl(key, TTL_THRESHOLD, TTL_EXTEND_TO);
+    common::ttl::extend_persistent(env, key);
 }
 
 pub fn remove_persistent(env: &Env, key: &ManagerKey) {
@@ -221,9 +214,7 @@ pub fn remove_persistent(env: &Env, key: &ManagerKey) {
 /// Extend a persistent entry's TTL without reading it. No-op when absent.
 pub fn bump_persistent(env: &Env, key: &ManagerKey) {
     if env.storage().persistent().has(key) {
-        env.storage()
-            .persistent()
-            .extend_ttl(key, TTL_THRESHOLD, TTL_EXTEND_TO);
+        common::ttl::extend_persistent(env, key);
     }
 }
 

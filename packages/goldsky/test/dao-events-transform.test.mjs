@@ -72,10 +72,10 @@ test('metadata initialization fields and PropertiesReset remain in the decoded p
   const initialized = decodeEvent({
     event_id: 'metadata-init', deployment_id: 'd', contract_id: 'M', contract_role: 'metadata',
     topics: '[{"symbol":"MetadataInitialized"},{"address":"TOKEN"}]',
-    data: '{"map":[{"key":{"symbol":"renderer_base"},"val":{"string":"base"}},{"key":{"symbol":"version"},"val":{"string":"1"}},{"key":{"symbol":"owner"},"val":{"address":"OWNER"}},{"key":{"symbol":"project_uri"},"val":{"string":"uri"}},{"key":{"symbol":"description"},"val":{"string":"desc"}},{"key":{"symbol":"contract_image"},"val":{"string":"image"}}]}'
+    data: '{"map":[{"key":{"symbol":"renderer_base"},"val":{"string":"base"}},{"key":{"symbol":"version"},"val":{"string":"1"}},{"key":{"symbol":"admin"},"val":{"address":"OWNER"}},{"key":{"symbol":"project_uri"},"val":{"string":"uri"}},{"key":{"symbol":"description"},"val":{"string":"desc"}},{"key":{"symbol":"contract_image"},"val":{"string":"image"}}]}'
   });
   assert.equal(argsOf(initialized).version, '1');
-  assert.equal(argsOf(initialized).owner, 'OWNER');
+  assert.equal(argsOf(initialized).admin, 'OWNER');
   assert.equal(argsOf(initialized).project_uri, 'uri');
   const reset = decodeEvent({
     event_id: 'properties-reset', deployment_id: 'd', contract_id: 'M', contract_role: 'metadata',
@@ -587,7 +587,7 @@ test('decodes TokenInitialized event', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'TokenInitialized');
-  assert.equal(topicsOf(decoded).owner, 'OWNER_ADDR');
+  assert.equal(topicsOf(decoded).admin, 'OWNER_ADDR');
 
   const payload = JSON.parse(decoded.payload);
   assert.equal(payload.name, 'TestToken');
@@ -649,7 +649,7 @@ test('decodes GovernorInitialized event', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'GovernorInitialized');
-  assert.equal(decoded.owner, 'OWNER_ADDR');
+  assert.equal(decoded.admin, 'OWNER_ADDR');
 
   const payload = JSON.parse(decoded.payload);
   assert.equal(payload.voting_delay, 300);
@@ -670,7 +670,7 @@ test('decodes parameter change events (VotingDelayChanged)', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'VotingDelayChanged');
-  assert.equal(topicsOf(decoded).caller, 'CALLER_ADDR');
+  assert.equal(topicsOf(decoded).changed_by, 'CALLER_ADDR');
 
   const payload = JSON.parse(decoded.payload);
   assert.equal(payload.old_value, 300);
@@ -691,7 +691,7 @@ test('decodes AuctionInitialized event', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'AuctionInitialized');
-  assert.equal(topicsOf(decoded).owner, 'OWNER_ADDR');
+  assert.equal(topicsOf(decoded).admin, 'OWNER_ADDR');
 
   const payload = JSON.parse(decoded.payload);
   assert.equal(payload.duration, 86400);
@@ -734,7 +734,7 @@ test('decodes TreasuryInitialized event', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'TreasuryInitialized');
-  assert.equal(topicsOf(decoded).owner, 'OWNER_ADDR');
+  assert.equal(topicsOf(decoded).admin, 'OWNER_ADDR');
   assert.equal(argsOf(decoded).governor, 'GOVERNOR_ADDR');
 });
 
@@ -789,17 +789,17 @@ function run(role, contract, name, topics, data = {}, extra = {}) {
   return { decoded, activity: buildActivityFeed(decoded) };
 }
 
-test('Launched decodes identically (topic treasury) for all six modules; data differs per module', () => {
+test('each module launch event decodes with topic treasury; data differs per module', () => {
   const cases = [
-    ['token', 'TOKEN', { minters: { vec: [A('MINTER_A'), A('MINTER_B')] } }, { minters: ['MINTER_A', 'MINTER_B'] }, 'token.launched', 'Token launched'],
-    ['governor', 'GOV', {}, {}, 'governor.launched', 'Governor launched'],
-    ['treasury', 'TRE', {}, {}, 'treasury.launched', 'Treasury launched'],
-    ['metadata', 'META', {}, {}, 'metadata.launched', 'Metadata launched'],
-    ['auction', 'AUC', { started: { bool: true } }, { started: true }, 'auction.launched', 'Auction launched and started'],
-    ['marketplace', 'MKT', { opened: { bool: false } }, { opened: false }, 'marketplace.launched', 'Marketplace launched paused']
+    ['token', 'TOKEN', 'TokenLaunched', { minters: { vec: [A('MINTER_A'), A('MINTER_B')] } }, { minters: ['MINTER_A', 'MINTER_B'] }, 'token.launched', 'Token launched'],
+    ['governor', 'GOV', 'GovernorLaunched', {}, {}, 'governor.launched', 'Governor launched'],
+    ['treasury', 'TRE', 'TreasuryLaunched', {}, {}, 'treasury.launched', 'Treasury launched'],
+    ['metadata', 'META', 'MetadataLaunched', {}, {}, 'metadata.launched', 'Metadata launched'],
+    ['auction', 'AUC', 'AuctionLaunched', { started: { bool: true } }, { started: true }, 'auction.launched', 'Auction launched and started'],
+    ['marketplace', 'MKT', 'MarketplaceLaunched', { opened: { bool: false } }, { opened: false }, 'marketplace.launched', 'Marketplace launched paused']
   ];
-  for (const [role, contract, data, expectedArgs, kind, summary] of cases) {
-    const { decoded, activity } = run(role, contract, 'Launched', [A('TREASURY_ADDR')], data);
+  for (const [role, contract, name, data, expectedArgs, kind, summary] of cases) {
+    const { decoded, activity } = run(role, contract, name, [A('TREASURY_ADDR')], data);
     assert.deepEqual(topicsOf(decoded), { treasury: 'TREASURY_ADDR' }, role);
     assert.deepEqual(argsOf(decoded), expectedArgs, role);
     assert.equal(decoded.contract_id, contract);
@@ -810,7 +810,7 @@ test('Launched decodes identically (topic treasury) for all six modules; data di
     assert.equal(activity.actor, 'TREASURY_ADDR');
   }
   // Goldsky also emits snake_case event names.
-  assert.deepEqual(topicsOf(run('token', 'TOKEN', 'launched', [A('T')], { minters: { vec: [] } }).decoded), { treasury: 'T' });
+  assert.deepEqual(topicsOf(run('token', 'TOKEN', 'token_launched', [A('T')], { minters: { vec: [] } }).decoded), { treasury: 'T' });
 });
 
 test('token MintAuthorityChanged at launch is emitted per minter with changed_by = manager', () => {
@@ -903,7 +903,8 @@ test('DaoCreated decodes the nested wasm_hashes struct (map of six BytesN<32>) b
 test('role fallback classifies new events when contract_role is unknown', () => {
   for (const [name, role] of [['AdminProposed', 'manager'], ['AdminChanged', 'manager'], ['AdminProposalCancelled', 'manager'], ['PlatformMinterSet', 'manager'], ['Upgraded', 'unknown'], ['VersionSynced', 'unknown'],
     ['RefundDeferred', 'auction'], ['RefundWithdrawn', 'auction'], ['PrimaryListingPurchased', 'marketplace'],
-    ['PrimaryListingCancelled', 'marketplace'], ['PrimaryListingExpired', 'marketplace'], ['Execute', 'treasury'], ['Launched', 'unknown']]) {
+    ['PrimaryListingCancelled', 'marketplace'], ['PrimaryListingExpired', 'marketplace'], ['Execute', 'treasury'], ['TokenLaunched', 'token'], ['TreasuryLaunched', 'treasury'], ['ProposalScheduled', 'governor'],
+    ['SlugClaimed', 'manager'], ['PendingSlugUpdated', 'manager'], ['LatestImplementationSet', 'manager'], ['Migrated', 'unknown']]) {
     const decoded = decodeEvent({ topics: JSON.stringify([S(name)]), data: JSON.stringify(dm({})) });
     assert.equal(decoded.contract_role, role, name);
   }
@@ -931,12 +932,12 @@ test('governor ProposalExecuted is a proposal_id topic emitted inside consume', 
   assert.equal(activity.visibility, 'governance');
 });
 
-test('governor setters keep the caller topic (now the owner address)', () => {
+test('governor setters carry the admin as the changed_by topic', () => {
   for (const [name, kind] of [['QueueDelayChanged', 'governance.queue_delay_changed'], ['VotingDelayChanged', 'governance.voting_delay_changed'],
     ['VotingPeriodChanged', 'governance.voting_period_changed'], ['ProposalThresholdChanged', 'governance.proposal_threshold_changed'],
     ['QuorumBpsChanged', 'governance.quorum_bps_changed']]) {
     const { decoded, activity } = run('governor', 'GOV', name, [A('OWNER')], { old_value: { u32: 1 }, new_value: { u32: 2 } });
-    assert.deepEqual(topicsOf(decoded), { caller: 'OWNER' });
+    assert.deepEqual(topicsOf(decoded), { changed_by: 'OWNER' });
     assert.deepEqual(argsOf(decoded), { old_value: 1, new_value: 2 });
     assert.equal(activity.kind, kind);
   }

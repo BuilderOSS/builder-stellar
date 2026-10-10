@@ -2,13 +2,14 @@
 -- METADATA VIEWS
 --
 -- Source events (metadata contract):
---   metadata_initialized topic token;  data { renderer_base, version, owner, project_uri, description, contract_image }
+--   metadata_initialized topic token;  data { renderer_base, version, admin, project_uri, description, contract_image }
 --   property_added       topic property_id (u32); data { name }
 --   properties_reset     data { old_num_properties }   invalidates earlier property_added events
 --   seed_generated       topic token_id (u32);     data { num_properties, selections[] }
 --                        emitted at mint and again by regenerate(token_id): several rows per token,
 --                        the latest is the current seed (is_current)
---   launched             topic treasury (see manager.module_launches)
+--   metadata_launched    topic treasury (see manager.module_launches)
+--   admin_changed        topics old_admin, new_admin (launch handoff; see manager.module_admins)
 --   project_uri_updated / description_updated / contract_image_updated / renderer_base_updated
 --                        data { old_*, new_* }
 -- =============================================================================
@@ -65,7 +66,8 @@ WHERE e.contract_role = 'metadata'
   AND e.event_name = 'seed_generated';
 
 -- Current configuration: the initial values overlaid with the latest update of
--- each field.
+-- each field. `owner` is the metadata module's current admin (the launch admin,
+-- then the Treasury); the column keeps the name the web app's Prisma model reads.
 CREATE VIEW metadata.configuration AS
 WITH initialized AS (
   SELECT DISTINCT ON (e.deployment_id, e.contract_id)
@@ -75,7 +77,7 @@ WITH initialized AS (
     e.topic_0 AS token_contract,
     e.args::jsonb ->> 'renderer_base' AS renderer_base,
     e.args::jsonb ->> 'version' AS version,
-    e.args::jsonb ->> 'owner' AS owner,
+    e.args::jsonb ->> 'admin' AS initial_admin,
     e.args::jsonb ->> 'project_uri' AS project_uri,
     e.args::jsonb ->> 'description' AS description,
     e.args::jsonb ->> 'contract_image' AS contract_image,
@@ -115,7 +117,7 @@ SELECT
   i.token_contract,
   COALESCE(u.renderer_base, i.renderer_base) AS renderer_base,
   i.version,
-  i.owner,
+  COALESCE(a.admin, i.initial_admin) AS owner,
   COALESCE(u.project_uri, i.project_uri) AS project_uri,
   COALESCE(u.description, i.description) AS description,
   COALESCE(u.contract_image, i.contract_image) AS contract_image,
@@ -123,4 +125,6 @@ SELECT
   i.init_at,
   i.init_transaction_hash
 FROM initialized i
-LEFT JOIN updates u ON u.deployment_id = i.deployment_id AND u.contract_id = i.metadata_contract;
+LEFT JOIN updates u ON u.deployment_id = i.deployment_id AND u.contract_id = i.metadata_contract
+LEFT JOIN manager.module_admins a
+  ON a.deployment_id = i.deployment_id AND a.module_contract = i.metadata_contract AND a.module_role = 'metadata';

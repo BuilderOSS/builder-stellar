@@ -9,9 +9,11 @@
 --   refund_withdrawn  topic bidder;            data { amount }        (bidder pulled their credit, no token_id)
 --   auction_settled   topic token_id;         data { winner (nullable), amount }
 --   auction_cancelled topic token_id;         data { reason, cancelled_by }
---                     cancel_auction (owner, paused) also sends the unsold NFT to the treasury; the
+--                     cancel_auction (admin, paused) also sends the unsold NFT to the treasury; the
 --                     token `transfer` event shows up in token.transfers / token.inventory.
---   launched          topic treasury;         data { started }  (see manager.module_launches)
+--   auction_launched  topic treasury;         data { started }  (see manager.module_launches)
+--   Settlement (settle_and_create_new, or settle_auction while paused) is only possible
+--   once now >= end_time; cancel_auction is the only way to end a running auction.
 --   The auction TreasuryUpdated event no longer exists (the treasury is fixed at launch).
 --   auction_initialized / duration_updated / time_buffer_updated: configuration
 -- =============================================================================

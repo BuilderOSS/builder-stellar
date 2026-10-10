@@ -33,21 +33,23 @@ Governor proposal (queued)
   -> listing stored (no mint, no escrow)
 
 Buyer
-  -> Marketplace.buy_primary(listing_id, buyer)
+  -> Marketplace.buy_primary(listing_id, buyer, max_price)
   -> asset payment from buyer to Treasury
   -> Marketplace self-authorizes Token.mint -> NFT minted to the buyer
 ```
 
 At DAO launch, Manager grants Marketplace Token mint authority together with
-Treasury and, when enabled, Auction. Marketplace has no ownership of Token,
-Treasury, Governor, Auction, or Metadata.
+Treasury and, when enabled, Auction. Marketplace has no admin role over Token,
+Treasury, Governor, Auction, or Metadata. Tokens it escrows carry no votes (the
+token excludes the Marketplace from the voting supply), so a listed token's vote
+leaves its holder's delegate until the token returns or is bought.
 
 Admin functions (`create_primary_listing`, `cancel_primary`, `pause`, `unpause`,
-`set_secondary_fee_bps`, `set_payment_asset`, `upgrade`, `sync_version`) are
-gated by `require_admin`: the launch admin during setup, the Treasury once
-launched. `create_primary_listing` and `cancel_primary` additionally require the
+`set_secondary_fee_bps`, `set_payment_asset`, `upgrade`, `migrate`,
+`sync_version`) are gated by `common::admin`: the launch admin during setup, the
+Treasury once launched (handed over at `launch`, event `AdminChanged`). `create_primary_listing` and `cancel_primary` additionally require the
 Marketplace to be Live (`NotLive`), and `create_primary_listing` requires it to
-be unpaused (`Paused`, 1314). Marketplace is therefore not an unrestricted
+be unpaused (`Paused`, 7713). Marketplace is therefore not an unrestricted
 minter even though it has Token mint authority: it mints only inside
 `buy_primary`, only for a listing the Treasury created, and only to the
 paying buyer.
@@ -61,15 +63,19 @@ select an asset. The asset current at listing time is stored in each listing
 
 - Primary-sale proceeds go entirely to Treasury.
 - Secondary-sale proceeds split between the seller and Treasury.
-- Governance sets the default secondary fee in basis points, capped at 10,000
-  (100%) by the contract.
+- Governance sets the default secondary fee in basis points, capped at 2,500
+  (25%, `common::MAX_FEE_BPS`) by the contract.
 - Marketplace snapshots the fee basis points into each secondary listing. A
   later governance change applies only to listings created afterward.
+- The seller passes the worst fee (`max_fee_bps`) and the asset they accept to
+  `list`, so a fee or asset change landing between signing and inclusion fails
+  the listing (`FeeAboveMax`, `PaymentAssetMismatch`) instead of applying.
+- Buyers pass `max_price` to `buy` / `buy_primary` (`PriceAboveMax`).
 
 The DAO creation configuration supplies the initial payment asset and secondary
 fee. `create_dao` records the payment asset in `PendingDao`, and `launch_dao`
 passes it to `Marketplace.launch`, which fails with `PaymentAssetMismatch`
-(1313) if the setup window changed it.
+(7712) if the setup window changed it.
 
 ## Holder Escrow Flow
 
@@ -80,7 +86,8 @@ The initial flow uses Token's existing per-token approval:
 
 1. Seller calls `Token.approve(seller, marketplace, token_id,
    approval_expiration_ledger)`.
-2. Seller calls `Marketplace.list(token_id, price, expires_at)`.
+2. Seller calls `Marketplace.list(token_id, seller, price, expires_at,
+   max_fee_bps, payment_asset)`.
 3. Marketplace requires seller authorization, verifies current ownership and
    valid listing inputs, then self-authorizes `Token.transfer_from` to move the
    NFT into Marketplace escrow.
@@ -109,11 +116,12 @@ available only through `Treasury.execute` for a queued proposal.
 ### Holder and public functions
 
 ```rust
-list(token_id: u32, seller: Address, price: i128, expires_at: u64)
-buy(token_id: u32, buyer: Address)
+list(token_id: u32, seller: Address, price: i128, expires_at: u64,
+     max_fee_bps: u32, payment_asset: Address)
+buy(token_id: u32, buyer: Address, max_price: i128)
 cancel(token_id: u32, seller: Address)
 expire(token_id: u32)
-buy_primary(listing_id: u64, buyer: Address) -> u32  // token_id
+buy_primary(listing_id: u64, buyer: Address, max_price: i128) -> u32  // token_id
 expire_primary(listing_id: u64)
 get_listing(token_id: u32) -> Option<Listing>
 get_primary_listing(listing_id: u64) -> Option<PrimaryListing>
@@ -145,9 +153,8 @@ get_config() -> MarketplaceConfig
 Marketplace persists only live protocol state:
 
 ```rust
-MarketplaceConfig {
+MarketplaceConfig {   // the admin lives in common::admin
     token: Address,
-    launch_admin: Address,
     treasury: Address,
     payment_asset: Address,
     default_secondary_fee_bps: u32,
@@ -171,10 +178,10 @@ PrimaryListing {   // keyed by listing_id
 ```
 
 The Marketplace is constructed paused. The constructor takes `(token,
-launch_admin, treasury, payment_asset, manager, current_hash, version,
+admin, treasury, payment_asset, manager, current_hash, version,
 default_secondary_fee_bps)`. `launch(treasury, open, expected_payment_asset)`
 sets paused to `!open` and emits `MarketplaceUnpaused` or `MarketplacePaused` if
-the state changed, then `Launched`.
+the state changed, then `MarketplaceLaunched`.
 
 Delete the listing immediately after a successful purchase, cancellation, or
 expiry. Goldsky events provide listing discovery, seller inventory, sale
@@ -204,17 +211,19 @@ transfer (for example a 0 fee) is skipped.
 
 Marketplace emits:
 
-- `MarketplaceInitialized`, `Launched { #treasury, opened }`
+- `MarketplaceInitialized { #token, #admin, ... }`, `MarketplaceLaunched { #treasury, opened }`, `AdminChanged`
 - Primary: `PrimaryListingCreated { #listing_id, price, expires_at, payment_asset }`,
   `PrimaryListingPurchased { #listing_id, #buyer, token_id, price, payment_asset }`,
   `PrimaryListingCancelled { #listing_id }`, `PrimaryListingExpired { #listing_id }`
 - Secondary: `SecondaryListingCreated { #token_id, seller, price, expires_at, fee_bps, payment_asset }`,
   `ListingPurchased { #token_id, #buyer, seller, price, fee, payment_asset }`,
   `ListingCancelled { #token_id, seller }`, `ListingExpired { #token_id, seller }`
-- `PaymentAssetUpdated`, `SecondaryFeeUpdated`
-- `MarketplacePaused` and `MarketplaceUnpaused` (also emitted by `launch` when
-  the pause state changes)
-- `MarketplaceUpgraded`
+- `PaymentAssetUpdated { #changed_by, payment_asset }`, `SecondaryFeeUpdated { #changed_by, fee_bps }`
+- `MarketplacePaused { #changed_by }` and `MarketplaceUnpaused { #changed_by }`
+  (also emitted by `launch` when the pause state changes; `changed_by` is then
+  the Manager)
+- the common `Upgraded`, `VersionSynced` and `Migrated` (the old
+  `MarketplaceUpgraded` is gone)
 
 `ListingPurchased`, `ListingCancelled` and `ListingExpired` are secondary-only.
 Primary and secondary listing ids are different keyspaces (`listing_id` versus
@@ -251,8 +260,10 @@ inventory.
 Launch checks only the recovery invariants:
 
 ```text
-Token owner == launch_admin
-Token total supply > 0
+factory not paused
+requested slug not claimed by a launched DAO
+token admin == launch_admin
+token voting supply > 0
 Marketplace and Auction payment assets == the assets recorded at create_dao
 ```
 

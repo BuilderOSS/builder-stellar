@@ -19,5 +19,6 @@ governor = { path = "../governor", features = ["testutils"] }
 treasury = { path = "../treasury", features = ["testutils"] }
 auction = { path = "../auction", features = ["testutils"] }
 marketplace = { path = "../marketplace", features = ["testutils"] }
+minter = { path = "../minter", features = ["testutils"] }
 stellar-governance = { workspace = true }
 common = { path = "../common", features = ["testutils"] }

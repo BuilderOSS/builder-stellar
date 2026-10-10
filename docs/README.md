@@ -34,7 +34,10 @@ The Stellar Builder platform is a multi-tenant DAO system where one application 
 - [GOLDSKY_SETUP.md](./GOLDSKY_SETUP.md) - Pipeline configuration and event coverage
 
 **Deployment:**
-- [SECURITY_MODEL.md](./SECURITY_MODEL.md) - Trust boundaries, setup-window rules, TTL caveats, known limitations
+- [SECURITY_MODEL.md](./SECURITY_MODEL.md) - Trust boundaries, admin model, voting supply, setup-window rules, error codes, known limitations
+- [TTL_ECONOMICS.md](./TTL_ECONOMICS.md) - TTL policy, rent and operator renewal tasks
+- [CONTRACT_REVIEW_FIX_PLAN.md](./CONTRACT_REVIEW_FIX_PLAN.md) - Contract review findings and how each was fixed
+- [FRONTEND_HANDOVER.md](./FRONTEND_HANDOVER.md) - **Temporary.** Web-app changes required by the contract, indexer and database changes; delete it once the frontend is updated
 - [MANAGER_REDESIGN.md](./MANAGER_REDESIGN.md) - Approved Manager storage, upgrade, versioning, and testnet-reset design
 - [MARKETPLACE_PLAN.md](./MARKETPLACE_PLAN.md) - Per-DAO fixed-price primary and secondary marketplace plan
 - [MANAGER_DEPLOYMENT.md](./MANAGER_DEPLOYMENT.md) - Manager setup
@@ -90,8 +93,8 @@ create_dao()           Pending  →  Operational
     ↓                    ↓
 DaoCreated        setup window         launch_dao()
     ↓             (mint, artwork,           ↓
-Database          parameters)          DaoLaunched + Launched per module
-insert                                 ownership moves to Treasury
+Database          parameters)          DaoLaunched + SlugClaimed + <Module>Launched
+insert                                 + AdminChanged per module (admin -> Treasury)
 ```
 
 ---

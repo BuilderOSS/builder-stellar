@@ -22,18 +22,13 @@ pub struct ManagerContract;
 // Constants
 // ============================================================================
 
-/// Maximum string length for implementation names.
-const MAX_STRING_LENGTH: u32 = 256;
-const MIN_AUCTION_DURATION: u64 = 300;
-/// Must equal `common::MAX_AUCTION_DURATION`.
-const MAX_AUCTION_DURATION: u64 = common::MAX_AUCTION_DURATION;
-const MIN_RESERVE_PRICE: i128 = 1_000;
-const MIN_GOVERNANCE_DELAY: u64 = 300;
-/// Maximum for each governance timing value (30 days). Must equal the
-/// governor crate's `MAX_*` constants (asserted in tests); the manager does not
-/// depend on the governor crate.
-const MAX_GOVERNANCE_DELAY: u32 = 2_592_000;
-const MAX_BPS: u32 = 10_000;
+// Parameter bounds come from `common` so the Manager and each module validate
+// against the same values.
+use common::{
+    BPS_DENOMINATOR as MAX_BPS, MAX_AUCTION_DURATION, MAX_AUCTION_TIME_BUFFER, MAX_FEE_BPS,
+    MAX_GOVERNANCE_DELAY, MAX_STRING_LENGTH, MIN_AUCTION_DURATION, MIN_GOVERNANCE_DELAY,
+    MIN_RESERVE_PRICE,
+};
 /// Min 4 so only meaningful slugs are used; max 63 is the DNS label limit
 /// (leaves room for `<slug>.example.com` subdomains later).
 const MIN_SLUG_LENGTH: u32 = 4;
@@ -85,11 +80,14 @@ impl ManagerContract {
     ///
     /// # Errors
     ///
-    /// * `Unauthorized` - Caller is not admin
     /// * `InvalidImplementationName` - Name is empty or too long
     /// * `InvalidVersion` - Version is empty or too long
     /// * `ImplementationAlreadyRegistered` - A record already exists for this hash
     ///   (records are immutable: no renaming, re-versioning or un-revoking)
+    ///
+    /// Registration does not change the "latest" implementation for `name`;
+    /// the admin selects it explicitly with `set_latest_implementation`, so
+    /// registering an older (patch) release never regresses it.
     pub fn register_implementation(
         env: Env,
         name: String,
@@ -117,7 +115,7 @@ impl ManagerContract {
             name: name.clone(),
             version: version.clone(),
             wasm_hash: wasm_hash.clone(),
-            published_at: env.ledger().sequence() as u64,
+            published_ledger: env.ledger().sequence() as u64,
             revoked: false,
         };
 
@@ -128,22 +126,39 @@ impl ManagerContract {
             &implementation,
         );
 
-        // Update latest version for this name
-        set_persistent(
-            &env,
-            &ManagerKey::LatestImplementation(name.clone()),
-            &wasm_hash,
-        );
-
-        // Emit event
         emit_implementation_registered(
             &env,
             &name,
             &version,
             &wasm_hash,
-            implementation.published_at,
+            implementation.published_ledger,
         );
 
+        Ok(())
+    }
+
+    /// Select the latest implementation for `name` (admin only).
+    ///
+    /// # Errors
+    ///
+    /// * `ImplementationNotFound` - `wasm_hash` is not registered or is revoked
+    /// * `InvalidImplementationName` - `wasm_hash` is registered under another name
+    pub fn set_latest_implementation(
+        env: Env,
+        name: String,
+        wasm_hash: BytesN<32>,
+    ) -> Result<(), ManagerError> {
+        Self::require_admin(&env)?;
+        let implementation = Self::active_implementation(&env, &wasm_hash)?;
+        if implementation.name != name {
+            return Err(ManagerError::InvalidImplementationName);
+        }
+        set_persistent(
+            &env,
+            &ManagerKey::LatestImplementation(name.clone()),
+            &wasm_hash,
+        );
+        emit_latest_implementation_set(&env, &name, &wasm_hash, &implementation.version);
         Ok(())
     }
 
@@ -160,7 +175,6 @@ impl ManagerContract {
     ///
     /// # Errors
     ///
-    /// * `Unauthorized` - Caller is not admin
     /// * `ImplementationNotFound` - One or both implementations don't exist
     /// * `InvalidUpgradePath` - Target is revoked, or the names differ
     ///
@@ -198,7 +212,7 @@ impl ManagerContract {
         let approval = UpgradeApproval {
             from_hash: from_hash.clone(),
             to_hash: to_hash.clone(),
-            approved_at: env.ledger().sequence() as u64,
+            approved_ledger: env.ledger().sequence() as u64,
         };
 
         // Store approval
@@ -209,7 +223,7 @@ impl ManagerContract {
         );
 
         // Emit event
-        emit_upgrade_approved(&env, &from_hash, &to_hash, approval.approved_at);
+        emit_upgrade_approved(&env, &from_hash, &to_hash, approval.approved_ledger);
 
         Ok(())
     }
@@ -226,7 +240,6 @@ impl ManagerContract {
     ///
     /// # Errors
     ///
-    /// * `Unauthorized` - Caller is not admin
     /// * `ImplementationNotFound` - Implementation doesn't exist
     /// * `ImplementationAlreadyRevoked` - Implementation already revoked
     pub fn revoke_implementation(env: Env, wasm_hash: BytesN<32>) -> Result<(), ManagerError> {
@@ -256,8 +269,7 @@ impl ManagerContract {
         );
 
         // Emit event
-        let revoked_at = env.ledger().sequence() as u64;
-        emit_implementation_revoked(&env, &wasm_hash, revoked_at);
+        emit_implementation_revoked(&env, &wasm_hash, env.ledger().sequence() as u64);
 
         Ok(())
     }
@@ -378,14 +390,15 @@ impl ManagerContract {
     ///
     /// * `token` - Token implementation WASM hash
     /// * `metadata` - Metadata implementation WASM hash
-    /// * `auction` - Auction implementation WASM hash (TODO: needs implementation)
-    /// * `governor` - Governor implementation WASM hash (TODO: needs implementation)
-    /// * `treasury` - Treasury implementation WASM hash (TODO: needs implementation)
+    /// * `auction` - Auction implementation WASM hash
+    /// * `governor` - Governor implementation WASM hash
+    /// * `treasury` - Treasury implementation WASM hash
+    /// * `marketplace` - Marketplace implementation WASM hash
     ///
     /// # Errors
     ///
-    /// * `Unauthorized` - Caller is not admin
-    /// * `ImplementationNotFound` - One or more implementations don't exist
+    /// * `ImplementationNotFound` - One or more implementations don't exist or are revoked
+    /// * `InvalidImplementationName` - A hash is registered under the wrong module name
     pub fn set_current_implementations(
         env: Env,
         token: BytesN<32>,
@@ -456,7 +469,6 @@ impl ManagerContract {
     ///
     /// # Errors
     ///
-    /// * `Unauthorized` - Caller is not admin
     pub fn pause_factory(env: Env) -> Result<(), ManagerError> {
         Self::require_admin(&env)?;
         set_factory_paused(&env, true);
@@ -472,7 +484,6 @@ impl ManagerContract {
     ///
     /// # Errors
     ///
-    /// * `Unauthorized` - Caller is not admin
     pub fn unpause_factory(env: Env) -> Result<(), ManagerError> {
         Self::require_admin(&env)?;
         set_factory_paused(&env, false);
@@ -503,16 +514,21 @@ impl ManagerContract {
     ///
     /// All deployed contract addresses
     ///
+    /// The requested slug is validated and must not belong to a launched DAO,
+    /// but it is only claimed at `launch_dao` (pending DAOs hold no slug, so an
+    /// abandoned creation blocks nothing).
+    ///
     /// # Errors
     ///
     /// * `FactoryPaused` - Factory is paused
     /// * `CurrentImplementationsNotSet` - Current WASM hashes not configured
+    /// * `InvalidSlug` / `SlugTaken` - Malformed slug, or claimed by a launched DAO
     pub fn create_dao(env: Env, params: DaoCreationParams) -> Result<DaoAddresses, ManagerError> {
         // The deployer owns the newly-created modules and must authorize the
-        // factory operation and subsequent owner-gated setup calls.
+        // factory operation and subsequent admin-gated setup calls.
         extend_instance_ttl(&env);
         params.deployer.require_auth();
-        // The launch admin becomes owner of every module and must consent to
+        // The launch admin becomes the admin of every module and must consent to
         // being named (prevents spam/impersonation). Soroban rejects a second
         // require_auth on the same address within one frame (Auth/ExistingValue),
         // so only call it when the launch admin differs from the deployer.
@@ -525,43 +541,13 @@ impl ManagerContract {
             return Err(ManagerError::FactoryPaused);
         }
 
-        // Validate and extract configuration
-        Self::validate_initial_config(&params.initial_config)?;
-        let slug = params.initial_config.slug.clone();
-        if has_persistent(&env, &ManagerKey::SlugToDao(slug.clone())) {
-            return Err(ManagerError::SlugTaken);
-        }
-        let (
-            token_name,
-            token_symbol,
-            token_uri,
-            project_uri,
-            description,
-            contract_image,
-            renderer_base,
-            governance,
-            auction_duration,
-            reserve_price,
-            time_buffer,
-            payment_asset,
-            marketplace_payment_asset,
-            marketplace_fee_bps,
-        ) = (
-            params.initial_config.token_name.clone(),
-            params.initial_config.token_symbol.clone(),
-            params.initial_config.token_uri.clone(),
-            params.initial_config.project_uri.clone(),
-            params.initial_config.description.clone(),
-            params.initial_config.contract_image.clone(),
-            params.initial_config.renderer_base.clone(),
-            params.initial_config.governance.clone(),
-            params.initial_config.auction.duration,
-            params.initial_config.auction.reserve_price,
-            params.initial_config.auction.time_buffer,
-            params.initial_config.auction.payment_asset.clone(),
-            params.initial_config.marketplace.payment_asset.clone(),
-            params.initial_config.marketplace.secondary_fee_bps,
-        );
+        // Validate configuration; the slug is claimed only at launch.
+        let config = &params.initial_config;
+        Self::validate_initial_config(config)?;
+        Self::require_slug_unclaimed(&env, &config.slug)?;
+        let governance = &config.governance;
+        let payment_asset = config.auction.payment_asset.clone();
+        let marketplace_payment_asset = config.marketplace.payment_asset.clone();
 
         // Load current implementation hashes, rejecting unset or revoked ones in one pass.
         let (token_wasm, token_version) =
@@ -617,7 +603,7 @@ impl ManagerContract {
         let marketplace_deployer = env.deployer().with_current_contract(marketplace_salt);
         let marketplace_addr = marketplace_deployer.deployed_address();
 
-        // Step 1: Deploy and initialize Treasury (needs owner and governor)
+        // Step 1: Deploy and initialize Treasury (needs admin and governor)
         treasury_deployer.deploy_v2(
             treasury_wasm.clone(),
             (
@@ -629,16 +615,19 @@ impl ManagerContract {
             ),
         );
 
-        // Step 2: Deploy and initialize Token with launch_admin as owner.
-        // The launch_admin configures the token, governance, and auction before launch.
+        // Step 2: Deploy and initialize Token with launch_admin as admin.
+        // The launch_admin configures the token, governance, and auction before
+        // launch. Treasury, Auction and Marketplace hold no voting power.
         token_deployer.deploy_v2(
             token_wasm.clone(),
             (
                 params.launch_admin.clone(),
                 treasury_addr.clone(),
-                token_uri,
-                token_name,
-                token_symbol,
+                auction_addr.clone(),
+                marketplace_addr.clone(),
+                config.token_uri.clone(),
+                config.token_name.clone(),
+                config.token_symbol.clone(),
                 metadata_addr.clone(),
                 env.current_contract_address(),
                 token_wasm.clone(),
@@ -654,10 +643,10 @@ impl ManagerContract {
             metadata_wasm.clone(),
             (
                 token_addr.clone(),
-                project_uri,
-                description,
-                contract_image,
-                renderer_base,
+                config.project_uri.clone(),
+                config.description.clone(),
+                config.contract_image.clone(),
+                config.renderer_base.clone(),
                 env.current_contract_address(),
                 metadata_wasm.clone(),
                 params.launch_admin.clone(),
@@ -703,10 +692,10 @@ impl ManagerContract {
                 params.launch_admin.clone(),
                 token_addr.clone(),
                 treasury_addr.clone(),
-                auction_duration,
-                reserve_price,
+                config.auction.duration,
+                config.auction.reserve_price,
                 min_bid_increment,
-                time_buffer,
+                config.auction.time_buffer,
                 payment_asset.clone(),
                 env.current_contract_address(),
                 auction_wasm.clone(),
@@ -727,7 +716,7 @@ impl ManagerContract {
                 env.current_contract_address(),
                 marketplace_wasm,
                 marketplace_version,
-                marketplace_fee_bps,
+                config.marketplace.secondary_fee_bps,
             ),
         );
 
@@ -744,15 +733,13 @@ impl ManagerContract {
         let pending = PendingDao {
             addresses: addresses.clone(),
             launch_admin: params.launch_admin.clone(),
+            slug: config.slug.clone(),
             auction_payment_asset: payment_asset,
             marketplace_payment_asset,
         };
         // One persistent entry per pending DAO; no expiry semantics. Archived
         // entries are restorable, so an abandoned creation only costs its creator's rent.
         set_persistent(&env, &ManagerKey::PendingDao(token_addr.clone()), &pending);
-        // Permanent slug registry (never removed at launch); renewed via `bump_slug_ttl`.
-        set_persistent(&env, &ManagerKey::SlugToDao(slug.clone()), &token_addr);
-        set_persistent(&env, &ManagerKey::DaoSlug(token_addr.clone()), &slug);
 
         // Emit events
         emit_dao_created(
@@ -763,10 +750,35 @@ impl ManagerContract {
             env.ledger().sequence() as u64,
             &addresses,
             &wasm_hashes,
-            &slug,
+            &config.slug,
         );
 
         Ok(addresses)
+    }
+
+    /// Change the requested slug of a pending DAO (launch admin only), for
+    /// example after `launch_dao` failed with `SlugTaken`.
+    ///
+    /// # Errors
+    ///
+    /// * `DaoNotFound` - No pending DAO for `token_address`
+    /// * `InvalidSlug` / `SlugTaken` - Malformed slug, or claimed by a launched DAO
+    pub fn update_pending_slug(
+        env: Env,
+        token_address: Address,
+        slug: String,
+    ) -> Result<(), ManagerError> {
+        extend_instance_ttl(&env);
+        let key = ManagerKey::PendingDao(token_address.clone());
+        let mut pending: PendingDao =
+            get_persistent(&env, &key).ok_or(ManagerError::DaoNotFound)?;
+        pending.launch_admin.require_auth();
+        Self::validate_slug(&slug)?;
+        Self::require_slug_unclaimed(&env, &slug)?;
+        pending.slug = slug.clone();
+        set_persistent(&env, &key, &pending);
+        emit_pending_slug_updated(&env, &token_address, &slug);
+        Ok(())
     }
 
     /// Launch a configured DAO.
@@ -787,18 +799,22 @@ impl ManagerContract {
     ///
     /// # Validation
     ///
-    /// - Token total supply must be > 0 (at least one token minted)
-    /// - launch_admin must be the current token owner
+    /// - The factory must not be paused (`FactoryPaused`)
+    /// - Token voting supply must be > 0 (at least one token minted to a holder
+    ///   other than the Treasury, Auction or Marketplace)
+    /// - launch_admin must be the current token admin (`LaunchAdminNotOwner`)
+    /// - The requested slug must still be unclaimed (`SlugTaken`; change it with
+    ///   `update_pending_slug`)
     /// - Every module's CURRENT `wasm_hash()` must be registered and not revoked
     ///   (`PendingDaoUsesRevokedImplementation`); checked before any launch call
     ///
     /// # Effects
     ///
-    /// 1. Validates launch preconditions (`Unauthorized`, `LaunchSupplyZero`)
+    /// 1. Validates launch preconditions and claims the slug (`SlugClaimed`)
     /// 2. Calls `token.launch` with minters = [Treasury, Marketplace] + [Auction if
     ///    launch_auction] + [PlatformMinter if enable_minter; `PlatformMinterNotSet`
     ///    when unset], then `launch` on Governor, Treasury, Marketplace, Auction, Metadata
-    /// 3. Each module becomes Live: ownership moves to the Treasury and the Manager
+    /// 3. Each module becomes Live: its admin moves to the Treasury and the Manager
     ///    has no further authority over the DAO (a second launch panics `AlreadyLive`)
     /// 4. Deletes the temporary PendingDao state
     pub fn launch_dao(
@@ -811,15 +827,19 @@ impl ManagerContract {
             get_persistent(&env, &ManagerKey::PendingDao(token_address.clone()))
                 .ok_or(ManagerError::DaoNotFound)?;
         pending.launch_admin.require_auth();
+        if is_factory_paused(&env) {
+            return Err(ManagerError::FactoryPaused);
+        }
+        Self::require_slug_unclaimed(&env, &pending.slug)?;
 
         let addresses = pending.addresses.clone();
         let treasury = addresses.treasury.clone();
         // Typed clients (common::clients) rather than the module crates:
         // linking those would export their functions from the Manager WASM.
         let nft = NftClient::new(&env, &addresses.token);
-        // launch_admin must still be the token owner.
-        if nft.owner() != pending.launch_admin {
-            return Err(ManagerError::Unauthorized);
+        // launch_admin must still be the token admin.
+        if nft.admin() != pending.launch_admin {
+            return Err(ManagerError::LaunchAdminNotOwner);
         }
         // Every module must currently run a registered, non-revoked hash. The
         // CURRENT hash is read from each module (not the one recorded at
@@ -841,7 +861,7 @@ impl ManagerContract {
                 _ => return Err(ManagerError::PendingDaoUsesRevokedImplementation),
             }
         }
-        // At least one token must exist.
+        // At least one voting-capable token must exist.
         if nft.total_supply() <= 0 {
             return Err(ManagerError::LaunchSupplyZero);
         }
@@ -881,7 +901,19 @@ impl ManagerContract {
         );
         TreasuryLaunchClient::new(&env, &addresses.metadata).launch(&treasury);
 
-        // Delete pending DAO state
+        // Claim the slug (permanent, renewed via `bump_slug_ttl`) and delete
+        // the pending DAO state.
+        set_persistent(
+            &env,
+            &ManagerKey::SlugToDao(pending.slug.clone()),
+            &token_address,
+        );
+        set_persistent(
+            &env,
+            &ManagerKey::DaoSlug(token_address.clone()),
+            &pending.slug,
+        );
+        emit_slug_claimed(&env, &token_address, &pending.slug);
         remove_persistent(&env, &ManagerKey::PendingDao(token_address.clone()));
 
         // Emit launch event
@@ -902,7 +934,7 @@ impl ManagerContract {
         get_persistent(&env, &ManagerKey::PendingDao(token_address))
     }
 
-    /// Token address registered under `slug`.
+    /// Token address of the launched DAO that claimed `slug`.
     ///
     /// Plain read: does not extend TTL (renewal is explicit via `bump_slug_ttl`).
     pub fn get_dao_by_slug(env: Env, slug: String) -> Result<Address, ManagerError> {
@@ -913,7 +945,8 @@ impl ManagerContract {
             .ok_or(ManagerError::SlugNotFound)
     }
 
-    /// Slug registered for a DAO's token address, if any.
+    /// Slug claimed by a launched DAO, if any (a pending DAO's requested slug
+    /// is in `get_pending_dao`).
     pub fn get_slug(env: Env, token_address: Address) -> Option<String> {
         extend_instance_ttl(&env);
         env.storage()
@@ -1009,7 +1042,6 @@ impl ManagerContract {
     ///
     /// # Errors
     ///
-    /// * `Unauthorized` - Caller is not admin
     /// * `ImplementationNotFound` - Target implementation doesn't exist or is revoked
     /// * `InvalidVersion` - from_hash doesn't match current hash
     pub fn upgrade_manager(
@@ -1189,10 +1221,8 @@ impl ManagerContract {
         Ok(())
     }
 
-    /// Generate deterministic salt for contract deployment.
-    ///
-    /// Combines nonce and module name to create a unique salt.
-    /// Note: Simplified version - in production should also include creator address
+    /// Generate a deterministic deployment salt from the creator, the nonce and
+    /// the module name, so each deployer has an independent nonce space.
     fn generate_salt(env: &Env, creator: &Address, nonce: u64, module: &str) -> BytesN<32> {
         let mut bytes_to_hash = soroban_sdk::Bytes::new(env);
 
@@ -1248,6 +1278,14 @@ impl ManagerContract {
         Ok(())
     }
 
+    /// `SlugTaken` if a launched DAO already claimed `slug`.
+    fn require_slug_unclaimed(env: &Env, slug: &String) -> Result<(), ManagerError> {
+        if has_persistent(env, &ManagerKey::SlugToDao(slug.clone())) {
+            return Err(ManagerError::SlugTaken);
+        }
+        Ok(())
+    }
+
     fn validate_initial_config(config: &InitialDaoConfigValues) -> Result<(), ManagerError> {
         for value in [
             &config.token_name,
@@ -1262,12 +1300,10 @@ impl ManagerContract {
         }
         Self::validate_slug(&config.slug)?;
 
-        if u64::from(config.governance.voting_delay) < MIN_GOVERNANCE_DELAY
-            || u64::from(config.governance.voting_period) < MIN_GOVERNANCE_DELAY
-            || u64::from(config.governance.queue_delay) < MIN_GOVERNANCE_DELAY
-            || config.governance.voting_delay > MAX_GOVERNANCE_DELAY
-            || config.governance.voting_period > MAX_GOVERNANCE_DELAY
-            || config.governance.queue_delay > MAX_GOVERNANCE_DELAY
+        let timing = MIN_GOVERNANCE_DELAY..=MAX_GOVERNANCE_DELAY;
+        if !timing.contains(&config.governance.voting_delay)
+            || !timing.contains(&config.governance.voting_period)
+            || !timing.contains(&config.governance.queue_delay)
         {
             return Err(ManagerError::InvalidGovernanceTiming);
         }
@@ -1286,13 +1322,11 @@ impl ManagerContract {
         if config.auction.reserve_price < MIN_RESERVE_PRICE {
             return Err(ManagerError::InvalidParamBounds);
         }
-        if config.auction.time_buffer == 0
-            || config.auction.time_buffer > common::MAX_AUCTION_TIME_BUFFER
-        {
+        if config.auction.time_buffer == 0 || config.auction.time_buffer > MAX_AUCTION_TIME_BUFFER {
             return Err(ManagerError::InvalidTimeBuffer);
         }
-        if config.marketplace.secondary_fee_bps > MAX_BPS {
-            return Err(ManagerError::InvalidParamBounds);
+        if config.marketplace.secondary_fee_bps > MAX_FEE_BPS {
+            return Err(ManagerError::InvalidFee);
         }
         Ok(())
     }

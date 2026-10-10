@@ -6,7 +6,9 @@
 --            One event per call executed for a proposal. Treasury.execute is
 --            permissionless: it consumes the proposal on the Governor, then
 --            dispatches the calls in order (index 0..n-1, same transaction).
---   launched topic treasury (see manager.module_launches)
+--   treasury_launched topic treasury (see manager.module_launches)
+--   Proposals may include `authorize` actions aimed at the Treasury itself; they emit an
+--   execute row like any other action (function 'authorize').
 --
 -- The Treasury no longer has a governor setter (GovernorChanged is gone): the
 -- Governor is fixed at launch. Per-proposal execution detail with call

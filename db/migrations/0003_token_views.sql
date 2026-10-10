@@ -9,11 +9,16 @@
 --   delegate_votes_changed OpenZeppelin topic delegate;              data { previous_votes, new_votes }
 --   mint_authority_changed custom       topic authority;             data { old_enabled, enabled, changed_by }
 --                         Emitted once per minter at launch (changed_by = the Manager) and
---                         afterwards only by the token owner (the Treasury, i.e. governance).
---   launched               custom       topic treasury;              data { minters[] } (see manager.module_launches)
+--                         afterwards only by the token admin (the Treasury, i.e. governance).
+--   token_launched         custom       topic treasury;              data { minters[] } (see manager.module_launches)
 --
 -- A mint emits BOTH mint and mint_with_minter. Ownership comes from mint and
 -- transfer; mint_with_minter only attributes who performed the mint.
+--
+-- Voting supply: tokens held by the DAO's Treasury, Auction and Marketplace carry
+-- no votes. Moving a token into one of them emits no delegate_votes_changed for
+-- the receiver (the voting unit leaves the supply) and moving it out credits the
+-- receiver's delegate again. token.supply splits the minted supply accordingly.
 -- =============================================================================
 
 -- Ownership changes: every mint (from_address NULL) and transfer.
@@ -125,7 +130,7 @@ JOIN manager.dao_registry r ON r.deployment_id = i.deployment_id AND r.dao_id = 
 WHERE e.contract_role = 'token'
   AND e.event_name = 'mint_authority_changed';
 
--- Addresses currently allowed to mint (the owner has implicit authority and is
+-- Addresses currently allowed to mint (the admin has implicit authority and is
 -- not listed here). Mint authority is granted at launch (by the Manager) and
 -- afterwards only through governance; token.set_mint_authority fails before launch.
 CREATE VIEW token.mint_authorities AS
@@ -205,3 +210,24 @@ LEFT JOIN current_delegations d
 LEFT JOIN current_votes v
   ON v.deployment_id = a.deployment_id AND v.dao_id = a.dao_id
  AND v.contract_id = a.contract_id AND v.delegate = a.address;
+
+-- Supply per DAO token. Tokens are never burned.
+--   minted_supply       every minted token
+--   system_held_supply  tokens currently held by the DAO's Treasury, Auction or
+--                       Marketplace (unsold auction tokens, escrowed listings)
+--   voting_supply       minted_supply - system_held_supply: the supply the
+--                       Governor's quorum is computed from
+CREATE VIEW token.supply AS
+SELECT
+  r.deployment_id,
+  r.dao_id,
+  r.token_contract AS contract_id,
+  count(inv.token_id)::bigint AS minted_supply,
+  (count(inv.token_id) FILTER (
+    WHERE inv.owner IN (r.treasury_contract, r.auction_contract, r.marketplace_contract)))::bigint AS system_held_supply,
+  (count(inv.token_id) - count(inv.token_id) FILTER (
+    WHERE inv.owner IN (r.treasury_contract, r.auction_contract, r.marketplace_contract)))::bigint AS voting_supply
+FROM manager.dao_registry r
+LEFT JOIN token.inventory inv
+  ON inv.deployment_id = r.deployment_id AND inv.dao_id = r.dao_id AND inv.contract_id = r.token_contract
+GROUP BY r.deployment_id, r.dao_id, r.token_contract;

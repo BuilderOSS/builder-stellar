@@ -102,23 +102,23 @@ This ensures:
     - Manager deploys 6 contracts (Token, Governor, Auction, Treasury, Metadata, Marketplace)
    - DaoCreated event emitted
    - Status: **pending**
-   - Contracts owned by launch_admin
+   - Every module administered by launch_admin (common::admin)
    - Token metadata stored: name, symbol, description, uri
 
 2. **Configuration**
    - add_properties() - Configure NFT metadata properties
    - Metadata is set up for token rendering
 
-3. **Ownership Transfer**
-   - accept_ownership() - launch_admin accepts token ownership
+3. **Founder mint**
+   - token.batch_mint() - launch_admin mints founder tokens (at most 20 per call)
 
 ### Finalization Phase
 
 4. **launch_dao(token_address)**
    - Manager validates completion
-    - Checks accepted Token ownership and expected total supply
+    - Checks the factory is not paused, the slug is free, the launch admin is still the token admin and the voting supply is nonzero
     - Grants post-finalization mint authorities
-    - Transfers every module's ownership/upgrade authority to Treasury
+    - Hands every module's admin (configuration and upgrade authority) to the Treasury and claims the slug
    - Status: **operational**
     - Auction launches only when requested; otherwise it remains paused for later governance enablement
     - Marketplace remains available for governance-controlled fixed-price sales

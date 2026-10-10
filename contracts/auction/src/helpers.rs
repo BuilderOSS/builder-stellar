@@ -73,6 +73,40 @@ pub(crate) fn create_auction(e: &Env) {
     );
 }
 
+/// Reject `amount` unless it meets the reserve (first bid) or the previous
+/// bid plus the minimum increment. Called before any payment moves.
+pub(crate) fn validate_bid_amount(
+    e: &Env,
+    auction: &AuctionState,
+    config: &AuctionConfig,
+    amount: i128,
+) {
+    if amount <= 0 {
+        panic_with_error!(e, AuctionError::InvalidBid);
+    }
+    if auction.highest_bidder.is_none() {
+        if amount < config.reserve_price {
+            panic_with_error!(e, AuctionError::ReservePriceNotMet);
+        }
+        return;
+    }
+    // min_bid = last_bid + last_bid * percent / PERCENT_DENOMINATOR
+    let increment = auction
+        .highest_bid
+        .checked_mul(config.min_bid_increment_percent as i128)
+        .and_then(|v| v.checked_div(PERCENT_DENOMINATOR))
+        .unwrap_or_else(|| panic_with_error!(e, AuctionError::ArithmeticOverflow));
+    let min_bid = auction
+        .highest_bid
+        .checked_add(increment)
+        .unwrap_or_else(|| panic_with_error!(e, AuctionError::ArithmeticOverflow));
+    if amount < min_bid {
+        panic_with_error!(e, AuctionError::MinBidNotMet);
+    }
+}
+
+/// Record an already validated and paid bid: update the leader, extend the
+/// end time inside the anti-snipe buffer, and refund the previous leader.
 pub(crate) fn process_bid(
     e: &Env,
     auction: &mut AuctionState,
@@ -82,29 +116,6 @@ pub(crate) fn process_bid(
 ) {
     let last_bidder = auction.highest_bidder.clone();
     let last_bid = auction.highest_bid;
-
-    // Validate bid amount
-    if last_bidder.is_none() {
-        // SECURITY: First bid - check reserve price
-        if amount < config.reserve_price {
-            panic_with_error!(e, AuctionError::ReservePriceNotMet);
-        }
-    } else {
-        // SECURITY: Check minimum increment with overflow protection
-        // Calculate: min_bid = last_bid + (last_bid * percent / PERCENT_DENOMINATOR)
-        let increment = last_bid
-            .checked_mul(config.min_bid_increment_percent as i128)
-            .and_then(|v| v.checked_div(PERCENT_DENOMINATOR))
-            .unwrap_or_else(|| panic_with_error!(e, AuctionError::ArithmeticOverflow));
-
-        let min_bid = last_bid
-            .checked_add(increment)
-            .unwrap_or_else(|| panic_with_error!(e, AuctionError::ArithmeticOverflow));
-
-        if amount < min_bid {
-            panic_with_error!(e, AuctionError::MinBidNotMet);
-        }
-    }
 
     // Update auction state BEFORE refund (CEI pattern)
     auction.highest_bid = amount;
@@ -161,6 +172,13 @@ pub(crate) fn settle_auction_internal(e: &Env) {
     // Ensure auction has started
     if auction.start_time == 0 {
         panic_with_error!(e, AuctionError::AuctionNotStarted);
+    }
+
+    // Never settle a running auction, on either path: a pause (needed for any
+    // config change) must not let the current leader end the auction early.
+    // `cancel_auction` is the emergency exit for a running auction.
+    if e.ledger().timestamp() < auction.end_time {
+        panic_with_error!(e, AuctionError::AuctionActive);
     }
 
     // Mark as settled BEFORE transfers (CEI pattern)
@@ -233,8 +251,9 @@ pub(crate) fn settle_auction_internal(e: &Env) {
             auction.highest_bid,
         );
     } else {
-        // No bids - transfer token to treasury for DAO governance use
-        // The treasury can use these tokens for voting, redistribution via proposals, or hold them
+        // No bids: the token goes to the Treasury, which can distribute it by
+        // proposal. Treasury-held tokens carry no votes (see the token), so
+        // unsold tokens never raise the quorum.
         let transfer_symbol = Symbol::new(e, "transfer");
         let nft_transfer_args = soroban_sdk::vec![
             e,

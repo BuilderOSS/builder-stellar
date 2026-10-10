@@ -7,28 +7,22 @@
 //!
 //! ## Key Features
 //!
-//! - **Governor-Controlled Execution**: Only the designated Governor contract can
-//!   invoke the `execute()` function
-//! - **Authorization Delegation**: The Treasury authorizes itself as the caller when
-//!   invoking target contracts, allowing it to act on behalf of the DAO
-//! - **Flexible Actions**: Can invoke any function on any contract with arbitrary arguments
-//! - **Owner Management**: The owner can update the Governor address if needed
-//!
-//! ## Security Model
-//!
-//! The Treasury holds the DAO's authority and assets. By requiring Governor approval
-//! for all actions, it ensures:
-//! 1. All state changes go through the governance process
-//! 2. The Governor cannot directly manipulate Treasury authority
-//! 3. A compromised Governor can be replaced by the owner without losing Treasury assets
+//! - **Governor-Controlled Execution**: `execute` runs only proposals the
+//!   Governor has queued; `governor.consume` marks them Executed first
+//! - **Authorization**: The Treasury authorizes each external call it makes;
+//!   an `authorize` action can add the deeper authorization trees a call
+//!   needs (see `AuthNode`)
+//! - **Self calls**: A proposal may call the Treasury's own `upgrade`,
+//!   `migrate` and `sync_version` (allowlisted)
+//! - **Admin of the DAO**: After launch the Treasury is the admin of every DAO
+//!   module, so every privileged change goes through a proposal
 //!
 //! ## Typical Flow
 //!
-//! 1. Governor contract approves and executes a proposal
-//! 2. Governor calls `treasury.execute(target, function, args)`
-//! 3. Treasury verifies the caller is the authorized Governor
-//! 4. Treasury authorizes itself and invokes `target.function(args)`
-//! 5. The target contract sees the Treasury as the authenticated caller
+//! 1. A proposal passes and is queued on the Governor
+//! 2. Anyone calls `treasury.execute(targets, functions, args, description_hash)`
+//! 3. The Treasury calls `governor.consume`, which validates and marks the proposal
+//! 4. The Treasury dispatches each action with its own authority
 
 #![no_std]
 
@@ -39,6 +33,7 @@ mod storage;
 
 pub use contract::*;
 pub use error::TreasuryError;
+pub use storage::{AuthNode, MAX_AUTH_DEPTH, MAX_AUTH_NODES};
 
 #[cfg(test)]
 mod test;

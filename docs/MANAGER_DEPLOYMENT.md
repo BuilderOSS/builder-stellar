@@ -10,7 +10,7 @@ Manager is the platform deployment module. It owns the implementation registry a
 - Deploy modules at deterministic addresses using creator and nonce salts.
 - Deploy modules with all cross-module wiring passed to their constructors.
 - Keep one temporary `PendingDao` record until launch, then delete it.
-- Run `launch_dao`, the one-shot handoff that makes each module Live and moves ownership to the DAO Treasury.
+- Run `launch_dao`, the one-shot handoff that makes each module Live, hands every module's admin to the DAO Treasury and claims the slug.
 - Register the platform minter (`set_platform_minter`) and manage the admin role (`propose_admin` / `accept_admin`).
 - Pause and unpause DAO creation.
 
@@ -50,7 +50,7 @@ The result contains deterministic addresses for all six modules. After launch, v
 
 ## Launch Flow and Platform Configuration
 
-`create_dao` requires authorization from BOTH `params.deployer` and `params.launch_admin` (one signature when they are the same address), so nobody can be named launch admin without consenting. It writes `PendingDao`; the launch admin configures the DAO during the setup window; `launch_dao(token_address, LaunchConfig { launch_auction, launch_marketplace, enable_minter, expected_minter })` then launches every module. Rules enforced by the Manager at launch: launch admin authorization and Token ownership, nonzero Token supply, and unchanged Auction/Marketplace payment assets (recorded at `create_dao`). See [MANAGER_REDESIGN.md](./MANAGER_REDESIGN.md) and [SECURITY_MODEL.md](./SECURITY_MODEL.md).
+`create_dao` requires authorization from BOTH `params.deployer` and `params.launch_admin` (one signature when they are the same address), so nobody can be named launch admin without consenting. It writes `PendingDao`; the launch admin configures the DAO during the setup window; `launch_dao(token_address, LaunchConfig { launch_auction, launch_marketplace, enable_minter, expected_minter })` then launches every module. Rules enforced by the Manager at launch: launch admin authorization, factory not paused, the requested slug still unclaimed (it is claimed at launch), the launch admin still the token admin, nonzero voting supply, and unchanged Auction/Marketplace payment assets (recorded at `create_dao`). See [MANAGER_REDESIGN.md](./MANAGER_REDESIGN.md) and [SECURITY_MODEL.md](./SECURITY_MODEL.md).
 
 Before any DAO that uses `enable_minter` launches, the Manager admin registers the minter:
 
@@ -59,11 +59,11 @@ stellar contract invoke --id <MANAGER_ADDRESS> --source-account <admin-identity>
   -- set_platform_minter --minter <MINTER_ADDRESS>
 ```
 
-The launch admin cannot choose the minter. Without a registered minter, `launch_dao` with `enable_minter: true` fails with `PlatformMinterNotSet` (1008). `get_platform_minter` returns the current value.
+The launch admin cannot choose the minter. Without a registered minter, `launch_dao` with `enable_minter: true` fails with `PlatformMinterNotSet` (7108). `get_platform_minter` returns the current value.
 
 Admin handover is two-step: the current admin calls `propose_admin(new_admin)` and the new admin calls `accept_admin()`; `get_admin` and `get_pending_admin` read the state.
 
-Creation bounds: voting delay, voting period and queue delay each 300 to 2,592,000 seconds; auction time buffer 1 to 86,400 seconds; quorum 1 to 10,000 bps; proposal threshold at least 1. Out-of-range values are rejected by `create_dao`.
+Creation bounds: voting delay, voting period and queue delay each 300 to 2,592,000 seconds; auction time buffer 1 to 86,400 seconds; quorum 1 to 10,000 bps; proposal threshold at least 1; secondary marketplace fee at most 2,500 bps. Out-of-range values are rejected by `create_dao`.
 
 ## Upgrade Workflow
 
@@ -71,13 +71,13 @@ For a DAO module upgrade:
 
 1. Build and install the new WASM.
 2. Register its hash with Manager.
-3. Have the Manager owner approve the exact `from_hash -> to_hash` pair.
-4. Create a DAO Governor proposal whose action targets the module's `upgrade` method, pass it through vote and queue, then have anyone call `treasury.execute`. (`governor.execute` always fails with `UseTreasuryExecute`.) Treasury self-upgrades use the same route; calls aimed at the Treasury itself are limited to `upgrade` and `sync_version`.
+3. Have the Manager admin approve the exact `from_hash -> to_hash` pair.
+4. Create a DAO Governor proposal whose action targets the module's `upgrade` method, pass it through vote and queue, then have anyone call `treasury.execute`. (`governor.execute` always fails with `UseTreasuryExecute`.) Treasury self-upgrades use the same route; calls aimed at the Treasury itself are limited to `upgrade`, `migrate` and `sync_version`. A release that changes a storage layout adds a `migrate()` action right after `upgrade`.
 5. The target module verifies its current hash, asks Manager to validate the active approved transition and target version, writes the new version/hash, emits an event, and updates its own WASM.
 
-The module rejects upgrades without owner authorization, without Manager approval, or when `from_hash` does not match the current hash. Revoked or unknown implementations cannot be used. Approving a destination hash alone is not enough; the transition is directional.
+The module rejects upgrades without admin authorization, without Manager approval, or when `from_hash` does not match the current hash. Revoked or unknown implementations cannot be used. Approving a destination hash alone is not enough; the transition is directional.
 
-Registry notes: `launch_dao` fails with `PendingDaoUsesRevokedImplementation` (1122) if any module of a pending DAO currently runs a revoked or unregistered hash; the launch admin must first `upgrade` that module (owner path, before launch) to an approved, non-revoked hash. `get_latest_implementation(name)` returns `None` after the latest hash is revoked, so deploy tooling must use `get_implementation(hash)` and the `Current*` hashes for security decisions. `scripts/deploy-manager.mjs` verifies each registered record's name and version (before skipping an existing hash and after registering) because records are write-once and cannot be corrected.
+Registry notes: `launch_dao` fails with `PendingDaoUsesRevokedImplementation` (7121) if any module of a pending DAO currently runs a revoked or unregistered hash; the launch admin must first `upgrade` that module (admin path, before launch) to an approved, non-revoked hash. `register_implementation` does not move the latest pointer: the admin selects it with `set_latest_implementation(name, hash)` (`deploy-manager.mjs` does this after registering). `get_latest_implementation(name)` returns `None` once the selected hash is revoked, so deploy tooling must use `get_implementation(hash)` and the `Current*` hashes for security decisions. `scripts/deploy-manager.mjs` verifies each registered record's name and version (before skipping an existing hash and after registering) because records are write-once and cannot be corrected.
 
 ## Artifacts and Verification
 

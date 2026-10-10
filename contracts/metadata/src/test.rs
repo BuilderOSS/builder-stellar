@@ -52,7 +52,9 @@ fn create_token_contract(env: &Env, owner: &Address) -> Address {
         DaoTokenContract,
         (
             owner.clone(),
-            Address::generate(env),
+            Address::generate(env), // treasury
+            Address::generate(env), // auction
+            Address::generate(env), // marketplace
             String::from_str(env, "https://test.com"),
             String::from_str(env, "Test Token"),
             String::from_str(env, "TEST"),
@@ -461,15 +463,9 @@ fn launch_is_one_shot_and_moves_upgrade_authority() {
             .get(&crate::storage::DataKey::Treasury)
             .unwrap()
     });
+    assert_eq!(client.admin(), owner);
     client.launch(&treasury);
-    env.as_contract(&client.address, || {
-        let stored: Address = env
-            .storage()
-            .instance()
-            .get(&crate::storage::DataKey::Owner)
-            .unwrap();
-        assert_eq!(stored, treasury);
-    });
+    assert_eq!(client.admin(), treasury);
     let r = client.try_launch(&owner);
     assert_eq!(
         r.err().unwrap().unwrap(),
@@ -1109,9 +1105,14 @@ fn bump_artwork_ttl_renews_window_and_is_bounded() {
     };
     let before = ttls(&env);
 
-    // Move time forward, then renew the whole flat space (permissionless).
+    // Age every entry below the renewal threshold, then renew the whole flat
+    // space (permissionless). Entries above the threshold are left alone.
     let seq = env.ledger().sequence();
-    env.ledger().set_sequence_number(seq + 100 * 17_280);
+    let youngest = before.0.min(before.1).min(before.2).min(before.3);
+    let oldest = before.0.max(before.1).max(before.2).max(before.3);
+    assert!(oldest - youngest < common::ttl::PERSISTENT_TTL_THRESHOLD);
+    env.ledger()
+        .set_sequence_number(seq + (oldest - common::ttl::PERSISTENT_TTL_THRESHOLD) + 1);
     let aged = ttls(&env);
     assert!(aged.0 < before.0 && aged.1 < before.1 && aged.2 < before.2);
     env.set_auths(&[]);
@@ -1173,4 +1174,69 @@ fn state_changing_entrypoint_extends_instance_ttl() {
         after > before,
         "instance TTL not extended: {before} -> {after}"
     );
+}
+
+#[test]
+fn settings_strings_are_capped() {
+    let (env, client, _o, _t) = setup();
+    let max = common::MAX_STRING_LENGTH as usize;
+    let ok = String::from_str(&env, &"a".repeat(max));
+    let long = String::from_str(&env, &"a".repeat(max + 1));
+    client.update_description(&ok);
+    for r in [
+        client.try_update_description(&long),
+        client.try_update_project_uri(&long),
+        client.try_update_contract_image(&long),
+        client.try_update_renderer_base(&long),
+    ] {
+        assert_eq!(r.err().unwrap().unwrap(), crate::Error::StringTooLong);
+    }
+    assert_eq!(client.description(), ok);
+}
+
+#[test]
+fn artwork_admin_moves_to_treasury_at_launch() {
+    use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
+    use soroban_sdk::IntoVal;
+    let env = Env::default();
+    env.mock_all_auths();
+    let client = create_contract(&env);
+    let owner = Address::generate(&env);
+    register_metadata(
+        &env,
+        &client.address,
+        &Address::generate(&env),
+        &Address::generate(&env),
+        &BytesN::from_array(&env, &[0; 32]),
+        &owner,
+    );
+    let treasury = env.as_contract(&client.address, || {
+        env.storage()
+            .instance()
+            .get::<_, Address>(&crate::storage::DataKey::Treasury)
+            .unwrap()
+    });
+    client.launch(&treasury);
+    let text = String::from_str(&env, "new");
+    env.mock_auths(&[MockAuth {
+        address: &owner,
+        invoke: &MockAuthInvoke {
+            contract: &client.address,
+            fn_name: "update_description",
+            args: (text.clone(),).into_val(&env),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(client.try_update_description(&text).is_err());
+    env.mock_auths(&[MockAuth {
+        address: &treasury,
+        invoke: &MockAuthInvoke {
+            contract: &client.address,
+            fn_name: "update_description",
+            args: (text.clone(),).into_val(&env),
+            sub_invokes: &[],
+        },
+    }]);
+    client.update_description(&text);
+    assert_eq!(client.description(), text);
 }

@@ -5,5 +5,9 @@ export const REMOVED_EVENTS = [
   'GovernorAuthorityChanged',   // GovernorAuthority role removed
   'GovernorChanged',            // treasury set_governor removed
   'TreasuryUpdated',            // auction set_treasury removed
-  'MarketplaceUpgraded'         // replaced by the common Upgraded event (role marketplace)
+  'MarketplaceUpgraded',        // replaced by the common Upgraded event (role marketplace)
+  'Launched',                   // replaced by per-module TokenLaunched, GovernorLaunched, ...
+  'OwnershipTransfer',          // OpenZeppelin Ownable replaced by common::admin (no transfer)
+  'OwnershipTransferCompleted', // ditto
+  'OwnershipRenounced'          // ditto: no renounce
 ];

@@ -59,27 +59,31 @@ until restored.
 
 ## 2. Per-DAO contract instances (paid by the caller that touches them)
 
-Each deployed contract's instance storage (its config, owner, Live flag, etc.) is extended by
-`common::ttl::extend_instance` on every state-changing entrypoint:
+Each deployed contract's instance storage (its config, admin, Live flag, storage version, etc.) is
+extended by `common::ttl::extend_instance` on every state-changing entrypoint (the Minter, which has no
+other instance state, extends its instance on every entry point too, so its code reference stays live):
 
 - extend to **170 days** whenever fewer than **60 days** remain;
 - so an active DAO is extended at most about once every 110 days, paid by whoever's transaction
   crosses the threshold (a few XLM at most for the instance, far below the code cost).
 
-A DAO that is never touched for 170 days will archive. Its instance (owner, treasury, Live flag)
+A DAO that is never touched for 170 days will archive. Its instance (admin, treasury, Live flag)
 must then be restored before the DAO can be used again. Restoring is an ordinary restore transaction.
 
-Persistent per-key entries have their own TTLs (values in the code, clamped by the network cap):
+Persistent per-key entries have their own TTLs. The shared policy lives in `contracts/common/src/ttl.rs`:
+an extension only happens when the remaining TTL is below a threshold that is well under the
+extend-to value, so ordinary reads do not re-pay rent on every touch.
 
-| Entry | Set in | TTL | Effective TTL |
+| Entry | Policy | Extend to (when below) | Effective TTL |
 |---|---|---|---|
-| Manager registry records (`Implementation`, `UpgradeApproval`, `PendingAdmin`, `PlatformMinter`) | `contracts/manager/src/storage.rs` | extend to 365 days when below 30 | 180 days (network cap) |
-| Auction pending refunds | `contracts/auction/src/storage.rs` | 365 days | 180 days |
-| Marketplace listings (escrow of NFTs) | `contracts/marketplace/src/storage.rs` | 30 days | 30 days |
-| Governor proposals | `contracts/governor/src/storage.rs` | 60 days | 60 days |
-| Token delegations | `contracts/token/src/storage.rs` | 365 days (threshold 30) | 180 days |
-| Metadata artwork entries (properties, items, IPFS groups) | `contracts/metadata/src/storage.rs` | 365 days | 180 days |
-| Minter claim markers and allowlists | `contracts/minter/src/storage.rs` | 365 days | 180 days |
+| Manager registry records, slugs, pending DAOs (`Implementation`, `UpgradeApproval`, `LatestImplementation`, `PendingDao`, `SlugToDao`, `DaoSlug`, `PendingAdmin`, `PlatformMinter`) | `ttl::extend_persistent` | 365 days (30 days) | 180 days (network cap) |
+| Token delegations and mint authorities | `ttl::extend_persistent` | 365 days (30 days) | 180 days |
+| Token ownership written by `batch_mint` | `ttl::extend_persistent` | 365 days (30 days) | 180 days (OpenZeppelin extends on read afterwards) |
+| Auction pending refunds | `ttl::extend_persistent` | 365 days (30 days) | 180 days |
+| Metadata artwork entries (properties, items, IPFS groups, attributes) | `ttl::extend_persistent` | 365 days (30 days) | 180 days |
+| Minter claim markers and allowlists | `ttl::extend_persistent` | 365 days (30 days) | 180 days |
+| Governor proposals | `contracts/governor/src/storage.rs` | 120 days (30 days) | 120 days; covers the longest lifecycle (3 x 30 days of delays + 14 days to execute = 104 days) from one touch |
+| Marketplace listings (escrow of NFTs) | `contracts/marketplace/src/storage.rs` | 30 days (7 days) | 30 days; expired listings can be cleared by anyone |
 
 Entries whose TTL runs out are archived, and lose their contents until restored. Some of them are
 security-relevant: an archived `PendingRefund` is a refund owed to a bidder that can't be claimed until

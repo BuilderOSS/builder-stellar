@@ -1,33 +1,36 @@
 # Manager contract
 
-Platform implementation registry and deterministic six-module DAO factory. It keeps a permanent slug registry but is otherwise not an on-chain DAO directory, and it holds no DAO owner authority after launch.
+Platform implementation registry and deterministic six-module DAO factory. It keeps a permanent registry of claimed slugs but is otherwise not an on-chain DAO directory, and it holds no authority over a DAO after launch.
 
 ## Factory
 
-`predict_addresses(creator, nonce)` returns Token, Metadata, Auction, Governor, Treasury, and Marketplace addresses. `create_dao(params)` accepts deployer, `u64` nonce, launch admin, and initial Token/Metadata/Governance/Auction/Marketplace configuration, including the DAO `slug`. Deployer and launch admin both authorize (one auth when identical).
+`predict_addresses(creator, nonce)` returns Token, Metadata, Auction, Governor, Treasury, and Marketplace addresses. `create_dao(params)` accepts deployer, `u64` nonce, launch admin, and initial Token/Metadata/Governance/Auction/Marketplace configuration, including the requested `slug`. Deployer and launch admin both authorize (one auth when identical).
 
-Creation validates factory/current implementation state and configuration, wires modules through constructors, claims the slug, emits `DaoCreated` with addresses, six hashes and the slug, and stores `PendingDao`. `get_pending_dao(token_address)` supports recovery; successful launch deletes it. There is no enumeration API or founder-allocation registry.
+Creation validates the factory state (`FactoryPaused`), current implementations and configuration (shared bounds from `common`; marketplace fee at most 25%, `InvalidFee`), wires modules through constructors (the Token also receives the Auction and Marketplace addresses, which hold no votes), emits `DaoCreated` with addresses, six hashes and the requested slug, and stores `PendingDao`. `get_pending_dao(token_address)` supports recovery; launch deletes it.
 
-`launch_dao(token_address, launch_config)` validates launch-admin Token ownership, nonzero supply, current module hashes registered/non-revoked, and creation-time payment assets. `LaunchConfig` has `launch_auction`, `launch_marketplace`, `enable_minter`, and `expected_minter: Option<Address>`. Enabled Minter must match the registered address. All six modules become Live/Treasury-owned atomically.
+`launch_dao(token_address, launch_config)` checks, in order: launch-admin auth, factory not paused (`FactoryPaused`), slug still free (`SlugTaken`), the launch admin is still the token admin (`LaunchAdminNotOwner`), module hashes registered/non-revoked, nonzero voting supply (`LaunchSupplyZero`), and the creation-time payment assets. `LaunchConfig` has `launch_auction`, `launch_marketplace`, `enable_minter`, and `expected_minter: Option<Address>`. All six modules become Live with the Treasury as admin, atomically; the slug is claimed (`SlugClaimed`) and `DaoLaunched` emitted.
 
 ## Slugs
 
-Each DAO claims a unique, human-friendly slug in `create_dao` (`initial_config.slug`): 4-63 characters of `[a-z0-9-]`, no leading, trailing or doubled hyphen (`InvalidSlug`). A claimed slug fails with `SlugTaken`; claims are first come, first served and permanent (not released at launch).
+A slug is 4-63 characters of `[a-z0-9-]`, no leading, trailing or doubled hyphen (`InvalidSlug`).
 
-- `get_dao_by_slug(slug)` returns the token address (`SlugNotFound` otherwise); `get_slug(token_address)` returns the slug. Neither extends TTL.
-- Registry entries (`SlugToDao`, `DaoSlug`) are persistent and expire unless renewed. `bump_slug_ttl(slug)` is permissionless; DAO operators or the platform admin call it periodically (`node scripts/deploy-dao.mjs bump_slug_ttl <dao-config> <network-config>`). The network caps each extension at ~180 days.
-- TODO before production: decide on slug pricing (see `TODO(pricing)` in `validate_slug`).
+- `create_dao` only records the request (several pending DAOs may request the same slug) and rejects a slug claimed by a launched DAO.
+- `launch_dao` claims it: unique, permanent. If another DAO launched with it first, `launch_dao` fails with `SlugTaken`.
+- `update_pending_slug(token_address, slug)` (launch admin) renames a pending DAO's request.
+- `get_dao_by_slug(slug)` / `get_slug(token_address)` resolve launched DAOs only (`SlugNotFound`); a pending request is in `get_pending_dao`. Neither read extends TTL.
+- `bump_slug_ttl(slug)` is permissionless; call it periodically (`node scripts/deploy-dao.mjs bump_slug_ttl <dao-config> <network-config>`).
+- TODO before production: decide on slug pricing (`TODO(pricing)` in `validate_slug`).
 
 ## Registry/admin
 
-- Register implementation name/version/hash; revoke it; select six current module hashes.
-- Approve directional `from_hash → to_hash` module upgrades. Both hashes must share the registered name; target must be active. A revoked source can migrate away.
-- Read actual records/current hashes. Latest lookup has no fallback after revocation.
-- Pause/unpause creation; set/get platform Minter.
+- `register_implementation(name, version, hash)` (write-once; does not move "latest"); `set_latest_implementation(name, hash)` selects the latest active hash for a name; `revoke_implementation`; `set_current_implementations` selects the six factory hashes.
+- `approve_upgrade(from, to)`: both hashes share the registered name; target must be active; a revoked source can migrate away.
+- `get_implementation`, `get_latest_implementation` (`None` once that hash is revoked), `is_upgrade_approved`, `get_implementation_version`.
+- `pause_factory` / `unpause_factory` (blocks `create_dao` and `launch_dao`); `set_platform_minter` / `get_platform_minter`.
 - `propose_admin`, `accept_admin`, `cancel_pending_admin`, `get_admin`, `get_pending_admin`.
-- `upgrade_manager(from_hash, to_hash)` requires admin, matching source, and active registered Manager destination. Versions come from registry, not caller-supplied upgrade labels.
+- `upgrade_manager(from_hash, to_hash)` requires admin, matching source, and an approved, active Manager destination.
 
-Registration is write-once: an existing hash cannot be renamed, re-versioned, or un-revoked. Manager approval gates but cannot execute a DAO upgrade. Post-launch revocation does not halt normal DAO operation.
+Ledger-number fields in events end in `_ledger` (`published_ledger`, `approved_ledger`, `revoked_ledger`, ...). Errors: block 7100.
 
 ## Source and tests
 

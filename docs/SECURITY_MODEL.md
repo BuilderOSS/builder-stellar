@@ -1,123 +1,153 @@
 # Security Model
 
-Scope: the Soroban contracts at commit `5136397` plus the governance timing caps in `contracts/governor`. The Rust sources under `contracts/*/src` are authoritative; this document describes behavior, not intent. It is not an audit.
+Scope: the Soroban contracts under `contracts/` after the contract review fixes (see [CONTRACT_REVIEW_FIX_PLAN.md](./CONTRACT_REVIEW_FIX_PLAN.md)). The Rust sources under `contracts/*/src` are authoritative; this document describes behavior, not intent. It is not an audit.
 
 ## Roles
 
 | Role | Holder | Authority |
 | --- | --- | --- |
-| Manager admin | Address set in the Manager constructor; two-step handover via `propose_admin` / `accept_admin` | Registers/revokes implementation WASM hashes, selects current hashes, approves upgrade transitions, pauses `create_dao`, upgrades the Manager, registers the platform minter (`set_platform_minter`) |
+| Manager admin | Address set in the Manager constructor; two-step handover via `propose_admin` / `accept_admin` | Registers/revokes implementation WASM hashes, selects the latest hash per name (`set_latest_implementation`) and the factory's current hashes, approves upgrade transitions, pauses the factory (`create_dao` and `launch_dao`), upgrades the Manager, registers the platform minter |
 | Deployer | `params.deployer` of `create_dao` | Authorizes `create_dao` (together with the launch admin); no standing authority afterward |
-| Launch admin | `params.launch_admin` of `create_dao` | Owner of Token, Governor, Treasury, Auction, Metadata and the Marketplace admin during the setup window. Must also authorize `create_dao` (prevents naming a non-consenting launch admin); authorizes `launch_dao`. |
-| Treasury | The DAO Treasury contract | Owner of every module (including itself) from launch onward |
-| Anyone | Any account | `treasury.execute` for a Queued proposal, `marketplace.expire_primary`, `metadata.bump_artwork_ttl`, auction bid/settle, token holders' own actions |
+| Launch admin | `params.launch_admin` of `create_dao` | Admin of every module (Token, Governor, Treasury, Auction, Marketplace, Metadata) during the setup window. Must also authorize `create_dao`; authorizes `launch_dao` and `update_pending_slug` |
+| Treasury | The DAO Treasury contract | Admin of every module (including itself) from launch onward; acts only through passed proposals |
+| Anyone | Any account | `treasury.execute` for a Queued proposal, auction bid/settle, `marketplace.expire` / `expire_primary`, `metadata.bump_artwork_ttl`, `manager.bump_slug_ttl`, token holders' own actions |
+
+## One admin model
+
+Every module stores its admin with `common::admin`. The admin is the launch admin during setup and the Treasury after `launch`; `common::admin::handoff` is the only change and emits `AdminChanged { old_admin, new_admin }`. There is no `transfer_ownership`, two-step handover, `set_admin` or `renounce_ownership` on any module, so:
+
+- a transfer started during setup cannot survive launch (there is none to start);
+- governance cannot hand a module to a non-Treasury address, and cannot renounce the admin and brick minting, upgrades or settings.
+
+Each module exposes `admin()` for reads. Admin-gated functions call `common::admin::require_admin`.
 
 ## Lifecycle: setup window and launch
 
-Every module starts in Setup. `launch` is one-shot, callable only by the Manager (`manager.require_auth()`), and panics `AlreadyLive` (9002) on a second call. `launch_dao` calls them in this order: Token, Governor, Treasury, Marketplace, Auction, Metadata. It fails atomically, so a failed launch leaves every module in Setup and `PendingDao` intact.
+Every module starts in Setup. `launch` is one-shot, callable only by the Manager (`manager.require_auth()`), and panics `AlreadyLive` (7002) on a second call. `launch_dao` calls them in this order: Token, Governor, Treasury, Marketplace, Auction, Metadata. It fails atomically, so a failed launch leaves every module in Setup and `PendingDao` intact.
 
-All cross-module wiring (token, treasury, governor, manager addresses) is passed to constructors. The address setters that existed before (`set_treasury`, `set_token_contract`, `set_governor_authority`, `set_governor`, and the Auction `set_treasury`) are removed, and `launch` checks that the Treasury argument equals the Treasury wired at construction (`TreasuryMismatch`).
+All cross-module wiring (token, treasury, auction, marketplace, governor, manager addresses) is passed to constructors and is immutable. `launch` checks that the Treasury argument equals the Treasury wired at construction (`TreasuryMismatch`).
 
 During setup the launch admin can:
 
-- mint founder tokens directly on the Token (`mint`, `batch_mint`; the Token owner is the only minter before launch);
-- add artwork to Metadata and update its settings;
-- change Auction parameters while it is paused (`set_duration`, `set_reserve_price`, `set_min_bid_increment`, `set_time_buffer`, `set_payment_token`) and Marketplace parameters (`set_secondary_fee_bps`, `set_payment_asset`, `pause`, `unpause`);
-- change Governor parameters through the owner-only setters;
-- upgrade modules along Manager-approved transitions.
+- mint founder tokens directly on the Token (`mint`, `batch_mint`; only the admin mints before launch);
+- add artwork to Metadata and update its settings (strings capped at 256 characters);
+- change Auction parameters while it is paused and Marketplace parameters;
+- change Governor parameters through the admin-only setters;
+- upgrade modules along Manager-approved transitions;
+- rename the pending DAO's requested slug (`update_pending_slug`).
 
-Before launch, `token.set_mint_authority`, `auction.unpause`, primary listing creation, secondary `list` and `buy` (so a setup-time listing cannot pin a custom asset or fee past launch; `cancel` and `expire` stay available), all Governor proposal functions, `treasury.execute` and the Minter fail with `NotLive` (9001).
+Before launch, `token.set_mint_authority`, `auction.unpause`, primary listing creation, secondary `list` and `buy`, all Governor proposal functions, `treasury.execute` and the Minter fail with `NotLive` (7001).
 
 `launch_dao` enforces:
 
-- `launch_admin` authorization and that `launch_admin` is still the Token owner (`Unauthorized`);
-- Token total supply greater than zero (`LaunchSupplyZero`, 1121);
-- every module's CURRENT `wasm_hash()` is registered and not revoked (`PendingDaoUsesRevokedImplementation`, 1122), checked before any launch call so a rejection launches nothing. The current hash is read from each module rather than stored in `PendingDao`, so a pre-launch owner `upgrade` to an approved, non-revoked hash fixes a pending DAO built on a since-revoked hash; `PendingDao` is unchanged. Revocation never affects the operation of an already-launched DAO;
-- the Auction and Marketplace payment assets equal the ones recorded at `create_dao` (`PaymentTokenMismatch` / `PaymentAssetMismatch`), so a launch admin cannot swap the payment asset during setup without the launch failing;
-- the mint-authority set is fixed by the Manager: Treasury and Marketplace always, Auction if `launch_auction`, and the admin-registered platform minter if `enable_minter` (`PlatformMinterNotSet`, 1008, when none is registered). The launch admin cannot name another minter. When `enable_minter` is set, `LaunchConfig.expected_minter` must be `Some(minter)` and equal the registered platform minter (`PlatformMinterMismatch`, 1010, otherwise, including `None`), so the Manager admin cannot swap the minter between the launch admin's review and the launch transaction.
+- the factory is not paused (`FactoryPaused`, 7111): the pause is the emergency stop for both creation and launch;
+- `launch_admin` authorization and that it is still the Token admin (`LaunchAdminNotOwner`, 7126);
+- the requested slug is still unclaimed (`SlugTaken`, 7123); see [Slugs](#slugs);
+- every module's current `wasm_hash()` is registered and not revoked (`PendingDaoUsesRevokedImplementation`, 7121), checked before any launch call;
+- the Token's voting supply is greater than zero (`LaunchSupplyZero`, 7120): at least one token is held by someone other than the Treasury, Auction or Marketplace;
+- the Auction and Marketplace payment assets equal those recorded at `create_dao` (`PaymentTokenMismatch` / `PaymentAssetMismatch`);
+- the mint-authority set is fixed by the Manager: Treasury and Marketplace always, Auction if `launch_auction`, and the admin-registered platform minter if `enable_minter` (`PlatformMinterNotSet`, 7108; `PlatformMinterMismatch`, 7110, unless `expected_minter` equals it).
 
-At launch, ownership of each module moves to the Treasury and any pending two-step ownership transfer is cleared (`common::ownership::handoff_owner`), so a transfer started in setup cannot be accepted afterward. `launch_auction` / `launch_marketplace` only decide whether the Auction is started and whether the Marketplace is left open; a Marketplace launched with `open = false` is forced paused.
+## Voting supply and quorum
 
-## What the Manager can and cannot do after launch
+Tokens held by the DAO's Treasury, Auction and Marketplace carry no votes. The token wires their addresses at construction (immutable) and maps them to "no holder" in OpenZeppelin's `transfer_voting_units`: moving a token into one of them burns its voting unit and removes it from the `TotalSupply` checkpoint; moving it out mints the unit again for the receiver's delegate. Consequences:
 
-The Manager has no entrypoint that acts on a launched DAO. Its `launch` calls fail with `AlreadyLive`, it holds no owner or minter role in any module, and it keeps no DAO registry (the `PendingDao` entry is deleted at launch).
+- The Governor's quorum (`ceil(voting_supply_at_snapshot * quorum_bps / 10_000)`) and the proposal-threshold check use the voting-capable supply. Unsold auction tokens piling up in the Treasury, the token on auction and escrowed listings never raise the quorum, so governance cannot drift into a permanent quorum lock.
+- System holders are never auto-delegated and can never vote (`ZeroVotingWeight`, 7512). A system holder calling `delegate` moves no votes, because it holds no voting units.
+- A holder whose token is escrowed in the Marketplace loses that vote until the token returns (cancel/expire) or is bought (the buyer's delegate gains it). The holder's delegation itself is unchanged.
+- Delegating *to* the Treasury is allowed; those units belong to a voting-capable holder and stay in the voting supply. The Treasury can only cast them through a passed proposal.
+- Votes and supply are read at the ledger before `propose`, so later transfers or listings never change a proposal's weights or quorum.
 
-It does keep two platform-level effects:
-
-- It answers `is_upgrade_approved`-style checks that modules perform during their own `upgrade`. The Manager admin can approve or revoke a `from_hash -> to_hash` transition, and the admin can revoke an implementation. A revoked or unapproved hash blocks a DAO's upgrade; the Manager cannot force one.
-- The module `upgrade` and `sync_version` read the Manager address stored at construction. The Manager can therefore withhold approval but cannot execute an upgrade.
-
-The platform minter chosen by the Manager admin is granted mint authority at launch if the launch admin sets `enable_minter`. That grant is not revocable by the Manager afterward; only the Treasury (via a proposal calling `token.set_mint_authority`) can revoke it.
+These behaviors are covered by `contracts/token` (`delegation_security`) and the e2e test `system_held_tokens_and_votes_through_a_real_proposal`.
 
 ## Governance execution path
 
-1. Proposal functions (`propose`, `cast_vote`, `queue`) run on the Governor.
-2. Anyone calls `treasury.execute(targets, functions, args, description_hash)`. No caller auth is required; authority comes from the proposal.
-3. The Treasury calls `governor.consume(...)`, which requires the Treasury's auth, checks the proposal is Queued and past its ETA, marks it Executed and emits `ProposalExecuted`. The Governor is no longer on the call stack when the actions run, so actions may call the Governor's owner setters.
-4. The Treasury dispatches each action in order, authorizing exactly that call, and emits one `Execute` event per call (topics governor, target, proposal id; data function and index).
-5. Any failing call reverts the whole transaction, including the Executed mark. The proposal stays Queued and can be retried until it expires.
+1. Proposal functions (`propose`, `cast_vote`, `queue`) run on the Governor. `propose` emits OpenZeppelin `ProposalCreated` and `ProposalScheduled { vote_start, vote_end, snapshot_ledger, quorum_votes }`.
+2. Anyone calls `treasury.execute(targets, functions, args, description_hash)`. Authority comes from the proposal.
+3. The Treasury calls `governor.consume(...)`, which requires the Treasury's auth, checks the proposal is Queued, past its ETA (`ProposalNotReady`, 7513) and unexpired, marks it Executed and emits `ProposalExecuted`.
+4. The Treasury dispatches each action in order and emits one `Execute` event per action:
+   - target = Treasury, function `authorize`: stores extra authorization trees for the next action (see below);
+   - target = Treasury, any other function: the allowlist `upgrade(from, to)`, `migrate()`, `sync_version()`; anything else fails with `UnknownSelfCall` (7602) or `InvalidSelfCallArgs` (7603);
+   - any other target: invoked with the Treasury authorizing exactly that call, plus any trees from a preceding `authorize`.
+5. Any failing action reverts the whole transaction, including the Executed mark. The proposal stays Queued and can be retried until it expires.
 
-`governor.execute` always fails with `UseTreasuryExecute` (1508). Calls whose target is the Treasury itself cannot use `invoke_contract` (Soroban forbids re-entry); they run through an internal allowlist limited to `upgrade(from, to)` and `sync_version()`. Any other Treasury self-call fails with `UnknownSelfCall` (1402) or `InvalidSelfCallArgs` (1403). After launch the Treasury is its own owner, so `treasury.upgrade` and `treasury.sync_version` called directly cannot be authorized by any external account; they are only reachable through `execute`.
+`governor.execute` always fails with `UseTreasuryExecute` (7507). A proposal has at most 20 actions (`TooManyActions`, 7508). A Succeeded proposal that is never queued expires 14 days after voting ends; a Queued proposal expires 14 days after its ETA.
 
-A proposal has at most 20 actions (`TooManyActions`, 1509). A Succeeded proposal that is never queued becomes Expired 14 days after voting ends; a Queued proposal expires 14 days after its ETA.
+### Nested authorization (`authorize` actions)
 
-## Upgrade path
+Some calls need the Treasury's authorization below the Treasury's direct call, for example `marketplace.buy` with the Treasury as buyer (the marketplace pulls the SAC payment from the Treasury) or a swap through a router. An `authorize` action (target = Treasury, function `authorize`, one `Vec<AuthNode>` argument) adds those authorization trees to the next action only. Because it is an ordinary action, the trees are part of the proposal id and voters approve them.
+
+Rules: trees apply only to the immediately following external call; an `authorize` that is dangling, followed by another `authorize` or by a Treasury self-call, empty or malformed fails with `InvalidAuthorization` (7605). Trees are bounded to depth 4 and 16 nodes. `treasury.check_authorization(nodes)` is a read-only check to simulate before proposing. Each tree authorizes exactly the invocation it describes (contract, function, arguments), so voters must read them like any other action.
+
+## Upgrade path and migrations
 
 A module upgrade needs all of:
 
 1. A Manager registry entry for the target hash that is not revoked, and an approval for the exact `from_hash -> to_hash` pair (Manager admin).
 2. The module's stored current hash equal to `from_hash`.
-3. The module owner's authorization. After launch this is the Treasury, reached by a DAO proposal that targets the module's `upgrade`; for the Treasury itself the proposal targets the Treasury and uses the self-call allowlist.
+3. The module admin's authorization. After launch this is the Treasury, reached by a proposal that targets the module's `upgrade`; for the Treasury itself the proposal uses the self-call allowlist.
 
-`common::upgrade::apply` performs steps 1 and 2 for every module. Failures are reported with `CommonError` codes 9004-9007. During setup the launch admin can run the same upgrade directly as owner.
+Every module records a storage-layout version at construction (`StorageVersion`, initially 1) and exposes an admin-gated `migrate()` and a `storage_version()` view. A release that changes a module's storage layout bumps its `STORAGE_VERSION` and does its data rewrite in `migrate`, which first calls `common::upgrade::migrate` (fails with `NothingToMigrate`, 7012, unless the stored version is older; emits `Migrated`). A governance upgrade proposal runs `upgrade` then `migrate` as consecutive actions.
 
-Revocation: `is_upgrade_approved(from, to)` requires only the TARGET to be non-revoked (and both hashes registered under the same name), so a module running a revoked hash can still migrate away along an approval created after the revocation (`approve_upgrade` accepts a revoked source, rejects a revoked target). `get_implementation_version` also answers for revoked hashes so `sync_version` keeps working for modules still on one. Registry records are immutable: `register_implementation` rejects an existing hash (`ImplementationAlreadyRegistered`, 1009), so a record cannot be renamed or un-revoked.
+Revocation: `is_upgrade_approved(from, to)` requires only the target to be non-revoked, so a module on a revoked hash can still migrate away. Registry records are immutable (`ImplementationAlreadyRegistered`, 7109). Registration does not move the "latest" pointer for a name; the Manager admin sets it explicitly with `set_latest_implementation`, so registering an older patch release never regresses it.
 
-`common::upgrade` emits `Upgraded { from_hash, to_hash (topics), version }` on every module upgrade and `VersionSynced { version }` on `sync_version`; `create_dao` emits the six module WASM hashes in `DaoCreated.wasm_hashes` so creators can verify what was deployed.
+## Slugs
 
-## Refund pull fallback
+`create_dao` validates the requested slug and rejects one already claimed by a launched DAO, but does not claim it. The slug is stored in `PendingDao`; `launch_dao` claims it (permanent, unique, emits `SlugClaimed`) and fails with `SlugTaken` if another DAO launched with it first. The launch admin can then rename with `update_pending_slug`. An abandoned pending DAO holds no slug, so there is nothing to release or expire.
 
-Auction refunds to the previous bidder are pushed on a best-effort basis. If the transfer fails, the amount is credited to a per-bidder balance and `RefundDeferred` is emitted instead of `BidRefunded`; the bid itself is not blocked, so a bidder that cannot receive funds cannot freeze the auction. The bidder collects with `withdraw_refund(bidder)` (`NoPendingRefund`, 1224, when the balance is zero) and `RefundWithdrawn` is emitted. `pending_refund(bidder)` reads the balance. Deferred balances persist until withdrawn, subject to the TTL caveat below.
+Trade-off: a pending DAO's requested slug is public, so someone can create and launch their own DAO with it first. That costs the create fee plus rent for six contracts and yields a real, launched DAO, so it is far costlier than squatting at creation, but not impossible. Slug pricing (TODO in `manager/src/contract.rs`) is the lever if it becomes a problem.
 
-## Registry caveats
+## Auction
 
-`get_latest_implementation(name)` returns `None` once the latest hash for a name is revoked (there is no fallback pointer). Tooling and indexers must make security decisions with `get_implementation(hash)` and the Manager's `Current*` hashes, never with `get_latest_implementation`. Registry records are write-once: a wrong name/version for a hash cannot be corrected and un-revoking is impossible.
+Settlement requires `now >= end_time` on both paths (`settle_and_create_new`, and `settle_auction` while paused; `AuctionActive`, 7404 otherwise). A pause, which every config change requires, therefore cannot be used to end a running auction early in the leader's favor; `cancel_auction` (admin, paused) is the only way to end a running auction, and it refunds the leader and sends the token to the Treasury.
 
-## Error code namespacing
+Refunds to an outbid bidder are pushed; if the push fails, the amount is credited (`RefundDeferred`) and pulled later with `withdraw_refund` (`NoPendingRefund`, 7416, when empty), so a bidder that cannot receive cannot freeze the auction.
 
-Error codes are unique only per contract. Examples of overlaps: Auction 1201 and Manager 1201; Token 1103/1105 and Manager 1103/1105; Minter and Metadata share 3, 4, 10, 11, 13. Shared `CommonError` codes (9001-9011) are raised by the launch and upgrade paths of every module. Consumers must key errors by `(contract id, code)`, never by code alone.
+## Marketplace
+
+- The secondary fee is capped at 25% (`common::MAX_FEE_BPS` = 2,500; `InvalidFee`, 7709). It is snapshotted into each listing.
+- `list(token_id, seller, price, expires_at, max_fee_bps, payment_asset)`: the seller signs the worst fee and the asset they accept. If a fee or asset change lands between signing and inclusion, the listing fails (`FeeAboveMax`, 7714; `PaymentAssetMismatch`, 7712) instead of applying worse terms.
+- `buy(token_id, buyer, max_price)` and `buy_primary(listing_id, buyer, max_price)` fail with `PriceAboveMax` (7715) above the buyer's bound.
+- `expires_at` has no maximum; escrowed tokens stay in escrow until bought, cancelled (seller) or expired (anyone, after expiry).
+
+## Batch minting
+
+`batch_mint` mints at most `common::MAX_BATCH_MINT` (20) tokens per call (`BatchTooLarge`, 7205). A transaction may publish at most 16 KiB of contract events and each minted token emits about 630 bytes (OpenZeppelin `Mint`, `MintWithMinter`, metadata `SeedGenerated`), so batches above ~26 tokens fail on the network. The cap also bounds the metadata seeding hook, whose failure (including budget exhaustion) cannot be caught. Larger founder allocations are minted in several calls.
+
+## Error codes
+
+Every project error code is unique across contracts. Each crate owns a block of 100 codes in 7000-7899, outside every OpenZeppelin range:
+
+| Block | Crate |
+| --- | --- |
+| 7000 | common (`NotLive` 7001, `AlreadyLive` 7002, ... `NothingToMigrate` 7012) |
+| 7100 | manager |
+| 7200 | token |
+| 7300 | metadata |
+| 7400 | auction |
+| 7500 | governor (custom; OpenZeppelin governor lifecycle errors keep their 5000s codes) |
+| 7600 | treasury |
+| 7700 | marketplace |
+| 7800 | minter |
+
+A code therefore identifies its crate even when it surfaces through a cross-contract call. The e2e test `error_codes_are_unique_per_crate_block` and a `common` unit test enforce the blocks. Errors raised by the token inside a Minter call propagate unchanged.
 
 ## TTL and archival
 
-The network caps entry TTL at about 180 days (about 3,110,400 ledgers); the host clamps longer extensions. Instance TTL (which covers the contract code reference and instance keys such as owner, config, mint authority, lifecycle flag) is extended to 170 days when fewer than 60 days remain, on state-changing calls. A module nobody touches for roughly 170 days can have its instance expire; archived entries can be restored, but the module is unavailable until then.
-
-Persistent per-key entries expire independently of the instance:
-
-- Metadata artwork (properties, items, IPFS groups) is only extended when read or written through the contract. Run `metadata.bump_artwork_ttl(start, limit)` periodically, in windows of at most 50 entries (`LimitTooHigh`, 16, above that). It is permissionless.
-- Governor proposals are extended to 60 days on access.
-- Pending auction refunds, token ownership and voting checkpoints, marketplace listings, and Manager registry entries are persistent per-key entries with the same cap.
-
-See [MONITORING.md](./MONITORING.md) for the maintenance task.
+See [TTL_ECONOMICS.md](./TTL_ECONOMICS.md) for the policy. In short: instances are extended to ~170 days when fewer than 60 days remain; long-lived persistent entries (registry, slugs, delegations, mint authorities, artwork, refunds, minter claims) to the network cap when fewer than 30 days remain; proposals to 120 days (covers the longest lifecycle of 104 days) when fewer than 30 remain; listings to 30 days when fewer than 7 remain. Every Minter entry point extends the Minter's own instance. `metadata.bump_artwork_ttl` and `manager.bump_slug_ttl` are permissionless renewals.
 
 ## Known limitations
 
 These are behaviors of the current contracts, not planned fixes.
 
-- Metadata seed grinding. The artwork seed is `keccak256(token_id, ledger sequence, ledger timestamp, host PRNG u64)`. Whoever controls when a mint happens, or whether to submit after simulating, can pick preferred traits. Traits are pseudo-random, not manipulation-resistant. `regenerate(token_id)` (owner only) can re-roll a token.
-- Governance parameter bounds. Voting delay, voting period and queue delay must be at least 300 seconds and at most 2,592,000 seconds (30 days); the Manager and Governor both enforce this. Quorum may be as low as 1 bp (the Manager and Governor reject 0 and values above 10,000), and the proposal threshold only needs to be nonzero and not above total supply. A DAO can set parameters that make governance trivially capturable or very slow within those bounds.
-- Founder minting is unbounded in setup. Before launch the launch admin can mint any number of tokens (`batch_mint` limits only the `u32` total). The 10,000 founder cap described in older documents is not enforced by the contracts. Token distribution at launch is a launch-admin decision that is not constrained on-chain beyond supply being nonzero.
-- Marketplace fee up to 100%. `default_secondary_fee_bps` may be set up to 10,000, and a fee of 10,000 sends the full secondary price to the Treasury. The fee is snapshotted into each listing at listing time.
-- Marketplace expiry is unbounded. `expires_at` need only be in the future; there is no maximum. Escrowed secondary NFTs stay in escrow until `buy`, `cancel` (seller) or `expire` (anyone, after expiry). Primary listings hold no escrow.
-- Primary and secondary listings record the payment asset current at listing time; changing `payment_asset` later does not reprice existing listings.
-- Auction `set_time_buffer` and the Manager reject a time buffer above 86,400 seconds, and auction duration is bounded to 300 seconds ..= 2,592,000 seconds (30 days) in the Auction constructor, `set_duration` and the Manager (`InvalidDuration` / `InvalidConfig`). The reserve price has a lower bound only; there is deliberately no upper cap.
-- Voting power is fixed at proposal creation. Votes and total supply are snapshotted at the ledger before `propose`, so the voting delay is a notice period only and cannot change that proposal's weights. Treasury-, Auction- and Marketplace-held NFTs count toward the quorum denominator (total supply at the snapshot) but cannot vote, except through a proposal for the Treasury.
-- Founder supply and early takeover. During setup the launch admin can mint unlimited founder tokens and delegate them; launch only requires `total_supply > 0`. With the minimum governance timings (voting delay, voting period and queue delay of 300 s each) a holder of a majority of voting power can propose, vote, queue and execute roughly 15 minutes after launch (the first proposal needs only the previous ledger's snapshot). There is no cooling-off period, no cap on founder share, and no veto once a proposal is queued. Bidders and holders must inspect founder supply and delegation (Token mints, `DelegateChanged` events, `get_votes` of the launch admin) before bidding; DAO creators should choose longer governance timings. Front ends should display founder share.
-- Quorum lock. `quorum_bps` may be up to 10,000 and the denominator is total supply at the snapshot, which includes NFTs that cannot vote (the live auction NFT, Marketplace-held NFTs, unsold auction NFTs accumulating in the Treasury). A quorum above the voting-capable share (10,000 is always unreachable) makes every future proposal impossible, including the proposal to lower it, which permanently freezes governance, Treasury funds and upgrades. Operators should keep quorum well below the circulating, voting-capable share.
-- Payment assets must be plain, non-regulated Stellar Asset Contracts. Assets with AUTH_REQUIRED, clawback, fee-on-transfer or rebasing behavior can freeze or misprice settlement (bids, refunds, buys, Treasury payouts).
-- Manager admin trust. The Manager admin can change the current implementation hashes used for future DAOs (`set_current_implementations`), and creators cannot pin hashes; a DAO created but not yet launched is exposed to whatever the registry points at until it launches. Creators verify `DaoCreated.wasm_hashes` and should not launch if they differ from the audited set. The admin can also revoke implementations, pause the factory and register the platform minter (pinned by `expected_minter` at launch).
-- No veto once a proposal is queued. Voters and holders cannot cancel a queued proposal; only expiry (14 days after the ETA) stops it.
-- Module upgrades depend on voters verifying opaque WASM hashes. A proposal names `from_hash` and `to_hash`; the chain checks registry approval, not code. Voters must verify the hash against audited, reproducible builds and the `Upgraded` event after execution.
-- Archival assumptions. The design assumes protocol 23+ behavior (archived entries restore automatically on access where footprints allow) plus periodic maintenance: run `metadata.bump_artwork_ttl` and touch modules at least every few months (see MONITORING.md).
-- Proposal ids do not include the proposer. An identical-payload proposal (same targets, functions, args and description) can be front-run and then cancelled by any holder above the proposal threshold; an honest proposer changes the description to get a fresh id.
-- Manager `PendingAdmin` has no expiry. The admin can withdraw a pending handover with `cancel_pending_admin` (admin-only, emits `AdminProposalCancelled`); an unaccepted proposal otherwise stays valid indefinitely.
-- The Manager admin is a single address with a two-step handover; there is no timelock or multisig in the contract.
+- Metadata seed grinding. The artwork seed is `keccak256(token_id, ledger sequence, ledger timestamp, host PRNG u64)`. Whoever controls when a mint happens, or whether to submit after simulating, can pick preferred traits. `regenerate(token_id)` only seeds a token without attributes (`AlreadySeeded` otherwise).
+- Governance parameter bounds. Voting delay, voting period and queue delay must be 300 seconds ..= 30 days; quorum 1 ..= 10,000 bp; proposal threshold nonzero and not above the voting supply. A DAO can still choose capturable or very slow parameters within those bounds. A quorum of 10,000 bp requires every voting-capable token to participate.
+- Founder supply and early takeover. During setup the launch admin can mint any number of founder tokens (in batches of 20) and delegate them; launch only requires a nonzero voting supply. With minimum timings a majority holder can propose, vote, queue and execute about 15 minutes after launch. Bidders and holders should inspect founder supply and delegation; front ends should display founder share.
+- Treasury-held tokens never vote. Tokens the Treasury holds (unsold auctions, transfers to the Treasury) only regain voting power when a proposal transfers them out.
+- No veto once a proposal is queued. Only expiry (14 days after the ETA) stops it.
+- Opaque upgrade hashes and authorization trees. The chain checks registry approval, not code; voters must verify `to_hash` against audited reproducible builds and read any `authorize` trees.
+- Proposal ids do not include the proposer. An identical-payload proposal can be front-run and then cancelled by its proposer; an honest proposer changes the description.
+- Slug front-running at launch (see [Slugs](#slugs)).
+- Payment assets must be plain, non-regulated Stellar Asset Contracts. AUTH_REQUIRED, clawback, fee-on-transfer or rebasing assets can freeze or misprice settlement.
+- Manager admin trust. The admin selects the hashes future DAOs deploy, can revoke implementations, pause the factory and register the platform minter (pinned by `expected_minter`). Creators should verify `DaoCreated.wasm_hashes` before launch. The admin is a single address with a two-step handover and no timelock; `PendingAdmin` has no expiry (withdraw with `cancel_pending_admin`).
+- Archival assumptions. The design assumes protocol 23+ automatic restoration where footprints allow, plus periodic maintenance (see MONITORING.md).

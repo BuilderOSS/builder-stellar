@@ -69,11 +69,12 @@ The entry exists only between successful `create_dao` and successful
 
 1. `create_dao` deploys all six deterministic modules and writes `PendingDao`
    atomically.
-2. The launch administrator (already the owner of every module) configures each
+2. The launch administrator (already the admin of every module) configures each
    module in separate retriable transactions during the setup window, including
    token metadata and founder allocations.
-3. `launch_dao` reads this one entry, calls `launch` on every module (ownership
-   moves to Treasury), emits `DaoLaunched`, and deletes the entry.
+3. `launch_dao` reads this one entry, calls `launch` on every module (each
+   module's admin moves to the Treasury), claims the requested slug
+   (`SlugClaimed`), emits `DaoLaunched`, and deletes the entry.
 4. A failed launch rolls back every cross-contract call, leaving the
    pending entry unchanged and available for retry.
 
@@ -113,7 +114,7 @@ initial configuration bounds above. It deploys modules with all wiring passed
 to their constructors, so the launch administrator configures parameters but
 never wires addresses.
 
-Custom module WASMs remain valid: a Manager owner can register any WASM and
+Custom module WASMs remain valid: the Manager admin can register any WASM and
 select it as current. A WASM hash cannot prove its contract interface on-chain.
 The registered module role is administrator-attested and deployment/testing is
 the compatibility gate.
@@ -121,8 +122,12 @@ the compatibility gate.
 `launch_dao(token_address, launch_config)` requires:
 
 - the pending launch administrator's authorization;
-- the launch administrator is still the Token owner (`Unauthorized`);
-- token total supply > 0 (`LaunchSupplyZero`);
+- the factory is not paused (`FactoryPaused`);
+- the requested slug is not claimed by a launched DAO (`SlugTaken`; rename with
+  `update_pending_slug`);
+- the launch administrator is still the token admin (`LaunchAdminNotOwner`);
+- token voting supply > 0 (`LaunchSupplyZero`; Treasury/Auction/Marketplace-held
+  tokens do not count);
 - the Auction and Marketplace payment assets still equal the ones recorded in
   `PendingDao`.
 
@@ -150,8 +155,10 @@ It then calls the one-shot, Manager-only `launch` on each module, in this order:
 4. Auction `launch(treasury, start, expected_payment_token)`;
 5. Metadata `launch(treasury)`.
 
-Each `launch` sets the module Live, hands ownership to Treasury (clearing any
-pending two-step transfer), and emits `Launched`. A second call fails with
+Each `launch` sets the module Live, hands the module admin to the Treasury
+(`common::admin::handoff`, event `AdminChanged`), and emits its own launch event
+(`TokenLaunched`, `GovernorLaunched`, ...). Modules have no ownership transfer,
+two-step handover or renounce, so nothing started in setup survives launch. A second call fails with
 `AlreadyLive`, so the Manager has no authority over a launched DAO. `launch_dao`
 then emits `DaoLaunched` (including `launch_auction`, `launch_marketplace`,
 `enable_minter`) and deletes `PendingDao`. Any failure reverts every call.
@@ -170,7 +177,7 @@ registers the platform minter with `set_platform_minter` / `get_platform_minter`
 ### Authority and Upgrades
 
 Manager does not upgrade DAO modules. A DAO governance proposal authorizes an
-upgrade, and the target module upgrades itself only when its DAO owner
+upgrade, and the target module upgrades itself only when its DAO admin
 authorizes it and Manager has approved the exact active `from_hash -> to_hash`
 transition.
 
@@ -182,12 +189,13 @@ Every DAO module exposes a module-local upgrade entrypoint. Its upgrade flow is:
    dispatches the actions with Treasury authorization. The Governor is no
    longer on the call stack at that point.
 3. For a module other than the Treasury, the Treasury invokes the module's
-   `upgrade` as the module owner. For the Treasury's own upgrade the action
+   `upgrade` as the module admin. For the Treasury's own upgrade the action
    targets the Treasury; Soroban forbids re-entering a contract that is
    already on the stack, so the Treasury runs an internal allowlist
    (`self_dispatch`) instead of `invoke_contract`. That allowlist permits only
-   `upgrade(from, to)` and `sync_version()`; anything else fails with
-   `UnknownSelfCall` or `InvalidSelfCallArgs`.
+   `upgrade(from, to)`, `migrate()` and `sync_version()`; anything else fails
+   with `UnknownSelfCall` or `InvalidSelfCallArgs`. (`authorize` actions, which
+   attach nested authorization to the next call, are handled separately.)
 4. The target module verifies that `from_hash` equals its locally stored current
    hash.
 5. The target module asks Manager to validate the registered, active, approved
@@ -195,21 +203,24 @@ Every DAO module exposes a module-local upgrade entrypoint. Its upgrade flow is:
    (`common::upgrade::apply`).
 6. The target module writes the target hash and version, emits its module
    upgrade event, and invokes `update_current_contract_wasm(to_hash)` on itself.
+7. If the release changes the module's storage layout, the same proposal's next
+   action calls the module's `migrate()`, which advances its `StorageVersion`
+   and rewrites the data (`Migrated` event).
 
 `Governor::execute` (the OpenZeppelin trait method) is retained but always fails
-with `UseTreasuryExecute` (1508). There is no `Governor -> Treasury -> Governor`
-call path. A Governor upgrade or owner-setter call is a Treasury action executed
+with `UseTreasuryExecute` (7507). There is no `Governor -> Treasury -> Governor`
+call path. A Governor upgrade or admin-setter call is a Treasury action executed
 after `consume` returns. A failing action reverts the whole `execute`
 transaction, including the Executed mark, so the proposal stays Queued and can
 be retried until it expires.
 
 Manager approval is a technical compatibility gate, not permission for Builder
-to execute an upgrade. The DAO proposal and module-owner authorization remain
+to execute an upgrade. The DAO proposal and module-admin authorization remain
 required for every DAO-local upgrade.
 
-Manager itself is different: its configured owner/admin can upgrade it. Manager
+Manager itself is different: its configured admin can upgrade it. Manager
 stores its own current hash and semantic version. `upgrade_manager(from_hash,
-to_hash)` requires owner authorization, checks `from_hash` against the stored
+to_hash)` requires admin authorization, checks `from_hash` against the stored
 current hash, requires `to_hash` to be a registered, active Manager
 implementation, writes the new hash/version, emits an upgrade event, and calls
 `update_current_contract_wasm(to_hash)`.

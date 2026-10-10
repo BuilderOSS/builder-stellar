@@ -9,4 +9,5 @@ mod storage;
 mod test;
 
 pub use contract::*;
+pub use error::MarketplaceError;
 pub use storage::{Listing, MarketplaceConfig, PrimaryListing};

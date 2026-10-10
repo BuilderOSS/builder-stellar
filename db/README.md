@@ -23,7 +23,7 @@ Landing rows are append-only (triggers reject updates and deletes; an identical
 re-delivery is accepted so pipeline restarts are safe). A `BEFORE INSERT`
 trigger recovers `operation_index` / `event_index` from the dataset event id
 (`…-op-<n>-event-<m>`), because the pipeline source does not expose them and
-view ordering inside one transaction (e.g. a 30-token batch mint) depends on them.
+view ordering inside one transaction (e.g. a 20-token batch mint) depends on them.
 
 See [`docs/DATABASE_SCHEMA.md`](../docs/DATABASE_SCHEMA.md) for the view catalog
 and the contract event each view reads.
@@ -47,18 +47,21 @@ transaction together with its row in `public.schema_migrations` (name + SHA-256)
 | --- | --- |
 | `0001_landing_tables` | schemas, helper functions (incl. `chain.ledger_closed_at_ts`, which reads the pipeline's epoch-millisecond closed-at values), the 3 landing tables, indexes, triggers |
 | `0002_manager_views` | DAO registry, modules, identity, `manager.daos`, per-module launch status and `dao_lifecycle`, module upgrade history and current module versions, admin history/settings (incl. cancelled proposals), implementations |
-| `0003_token_views` | transfers, mints, inventory, delegations, mint authorities, members |
-| `0004_governance_views` | proposals (with computed `expired`), votes, actions, lifecycle, per-proposal execution calls |
+| `0003_token_views` | transfers, mints, inventory, delegations, mint authorities, members, supply (voting vs system-held) |
+| `0004_governance_views` | proposals (state computed from `proposal_scheduled` and the clock), votes, actions, lifecycle, per-proposal execution calls |
 | `0005_auction_views` | auctions, bids, refunds (pushed and deferred), withdrawals, pending refunds, settlements, cancellations |
 | `0006_metadata_views` | properties, token seeds, configuration |
-| `0007_treasury_views` | treasury calls (one per executed proposal call) |
+| `0007_treasury_views` | treasury calls (one per executed proposal action) |
 | `0008_marketplace_views` | primary listings (by `listing_id`), secondary listings (by `token_id`), purchases, sales |
 | `0009_minter_views` | merkle/allowlist claims, batch mints, allocation updates |
 | `0010_app_views` | activity feed, proposal list/detail, indexer status |
 
-Launch model: every module emits its own `launched` event (six different
-structs share the name), so launch state is keyed by the emitting contract
-(`manager.module_launches`), never by event name alone.
+Launch model: every module emits its own launch event (`token_launched`,
+`governor_launched`, ...) and hands its admin to the Treasury (`admin_changed`,
+the same name and shape as the Manager's own admin event), so launch and admin
+state are keyed by the emitting contract (`manager.module_launches`,
+`manager.module_admins`). Slugs are requested at `dao_created` and claimed at
+launch (`manager.dao_slugs`).
 
 Rules:
 

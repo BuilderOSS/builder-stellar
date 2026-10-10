@@ -9,7 +9,7 @@ pub struct ManagerInitialized {
     #[topic]
     pub admin: Address,
     pub version: String,
-    pub deployed_at: u64,
+    pub deployed_ledger: u64,
 }
 
 #[contractevent]
@@ -40,7 +40,17 @@ pub struct ImplementationRegistered {
     pub version: String,
     #[topic]
     pub wasm_hash: BytesN<32>,
-    pub published_at: u64,
+    pub published_ledger: u64,
+}
+
+/// Emitted by `set_latest_implementation`.
+#[contractevent]
+pub struct LatestImplementationSet {
+    #[topic]
+    pub name: String,
+    #[topic]
+    pub wasm_hash: BytesN<32>,
+    pub version: String,
 }
 #[contractevent]
 pub struct UpgradeApproved {
@@ -48,13 +58,13 @@ pub struct UpgradeApproved {
     pub from_hash: BytesN<32>,
     #[topic]
     pub to_hash: BytesN<32>,
-    pub approved_at: u64,
+    pub approved_ledger: u64,
 }
 #[contractevent]
 pub struct ImplementationRevoked {
     #[topic]
     pub wasm_hash: BytesN<32>,
-    pub revoked_at: u64,
+    pub revoked_ledger: u64,
 }
 #[contractevent]
 pub struct DaoCreated {
@@ -68,7 +78,24 @@ pub struct DaoCreated {
     pub modules: DaoAddresses,
     /// WASM hashes the modules were deployed from.
     pub wasm_hashes: DaoWasmHashes,
-    /// Unique slug claimed for this DAO.
+    /// Requested slug. Not unique until claimed at launch (`SlugClaimed`).
+    pub slug: String,
+}
+
+/// Emitted by `update_pending_slug`.
+#[contractevent]
+pub struct PendingSlugUpdated {
+    #[topic]
+    pub token_address: Address,
+    pub slug: String,
+}
+
+/// Emitted by `launch_dao` when the DAO's slug becomes its permanent, unique id.
+#[contractevent]
+pub struct SlugClaimed {
+    #[topic]
+    pub token_address: Address,
+    #[topic]
     pub slug: String,
 }
 #[contractevent]
@@ -109,7 +136,7 @@ pub struct ManagerUpgraded {
     pub to_hash: BytesN<32>,
     pub from_version: String,
     pub to_version: String,
-    pub upgraded_at: u64,
+    pub upgraded_ledger: u64,
 }
 
 // ============================================================================
@@ -122,13 +149,13 @@ pub fn emit_implementation_registered(
     name: &String,
     version: &String,
     wasm_hash: &BytesN<32>,
-    published_at: u64,
+    published_ledger: u64,
 ) {
     ImplementationRegistered {
         name: name.clone(),
         version: version.clone(),
         wasm_hash: wasm_hash.clone(),
-        published_at,
+        published_ledger,
     }
     .publish(env);
 }
@@ -138,21 +165,21 @@ pub fn emit_upgrade_approved(
     env: &Env,
     from_hash: &BytesN<32>,
     to_hash: &BytesN<32>,
-    approved_at: u64,
+    approved_ledger: u64,
 ) {
     UpgradeApproved {
         from_hash: from_hash.clone(),
         to_hash: to_hash.clone(),
-        approved_at,
+        approved_ledger,
     }
     .publish(env);
 }
 
 /// Emitted when an implementation is revoked.
-pub fn emit_implementation_revoked(env: &Env, wasm_hash: &BytesN<32>, revoked_at: u64) {
+pub fn emit_implementation_revoked(env: &Env, wasm_hash: &BytesN<32>, revoked_ledger: u64) {
     ImplementationRevoked {
         wasm_hash: wasm_hash.clone(),
-        revoked_at,
+        revoked_ledger,
     }
     .publish(env);
 }
@@ -162,6 +189,7 @@ pub fn emit_implementation_revoked(env: &Env, wasm_hash: &BytesN<32>, revoked_at
 // ============================================================================
 
 /// Emitted when a new DAO is created.
+#[allow(clippy::too_many_arguments)] // mirrors the event fields 1:1
 pub fn emit_dao_created(
     env: &Env,
     token_address: &Address,
@@ -180,6 +208,39 @@ pub fn emit_dao_created(
         modules: modules.clone(),
         wasm_hashes: wasm_hashes.clone(),
         slug: slug.clone(),
+    }
+    .publish(env);
+}
+
+/// Emitted when a pending DAO's requested slug changes.
+pub fn emit_pending_slug_updated(env: &Env, token_address: &Address, slug: &String) {
+    PendingSlugUpdated {
+        token_address: token_address.clone(),
+        slug: slug.clone(),
+    }
+    .publish(env);
+}
+
+/// Emitted when a DAO's slug is claimed at launch.
+pub fn emit_slug_claimed(env: &Env, token_address: &Address, slug: &String) {
+    SlugClaimed {
+        token_address: token_address.clone(),
+        slug: slug.clone(),
+    }
+    .publish(env);
+}
+
+/// Emitted when the admin selects the latest implementation for a name.
+pub fn emit_latest_implementation_set(
+    env: &Env,
+    name: &String,
+    wasm_hash: &BytesN<32>,
+    version: &String,
+) {
+    LatestImplementationSet {
+        name: name.clone(),
+        wasm_hash: wasm_hash.clone(),
+        version: version.clone(),
     }
     .publish(env);
 }
@@ -240,11 +301,16 @@ pub fn emit_current_implementations_updated(
 }
 
 /// Emitted when Manager is initialized.
-pub fn emit_manager_initialized(env: &Env, admin: &Address, version: &String, deployed_at: u64) {
+pub fn emit_manager_initialized(
+    env: &Env,
+    admin: &Address,
+    version: &String,
+    deployed_ledger: u64,
+) {
     ManagerInitialized {
         admin: admin.clone(),
         version: version.clone(),
-        deployed_at,
+        deployed_ledger,
     }
     .publish(env);
 }
@@ -256,14 +322,14 @@ pub fn emit_manager_upgraded(
     to_hash: &BytesN<32>,
     from_version: &String,
     to_version: &String,
-    upgraded_at: u64,
+    upgraded_ledger: u64,
 ) {
     ManagerUpgraded {
         from_hash: from_hash.clone(),
         to_hash: to_hash.clone(),
         from_version: from_version.clone(),
         to_version: to_version.clone(),
-        upgraded_at,
+        upgraded_ledger,
     }
     .publish(env);
 }

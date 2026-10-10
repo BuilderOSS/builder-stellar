@@ -5,13 +5,13 @@ use soroban_sdk::{contractevent, Address, Env, String, Vec};
 /// Emitted once when the Manager launches the metadata module (Setup -> Live).
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Launched {
+pub struct MetadataLaunched {
     #[topic]
     pub treasury: Address,
 }
 
 pub fn emit_launched(env: &Env, treasury: &Address) {
-    Launched {
+    MetadataLaunched {
         treasury: treasury.clone(),
     }
     .publish(env);
@@ -24,7 +24,7 @@ pub struct MetadataInitialized {
     pub token: Address,
     pub renderer_base: String,
     pub version: String,
-    pub owner: Address,
+    pub admin: Address,
     pub project_uri: String,
     pub description: String,
     pub contract_image: String,
@@ -35,7 +35,7 @@ pub fn emit_metadata_initialized(
     token: &Address,
     renderer_base: &String,
     version: &String,
-    owner: &Address,
+    admin: &Address,
     project_uri: &String,
     description: &String,
     contract_image: &String,
@@ -44,7 +44,7 @@ pub fn emit_metadata_initialized(
         token: token.clone(),
         renderer_base: renderer_base.clone(),
         version: version.clone(),
-        owner: owner.clone(),
+        admin: admin.clone(),
         project_uri: project_uri.clone(),
         description: description.clone(),
         contract_image: contract_image.clone(),

@@ -29,13 +29,16 @@ const REQUIRED_EVENTS = {
     'Approve',
     'DelegateChanged',
     'DelegateVotesChanged',
-    'Launched',
+    'TokenLaunched',
+    'AdminChanged',
     'Upgraded',
-    'VersionSynced'
+    'VersionSynced',
+    'Migrated'
   ],
   governor: [
     'GovernorInitialized',
     'ProposalCreated',
+    'ProposalScheduled',
     'ProposalQueued',
     'VoteCast',
     'ProposalCancelled',
@@ -45,16 +48,20 @@ const REQUIRED_EVENTS = {
     'VotingPeriodChanged',
     'ProposalThresholdChanged',
     'QuorumBpsChanged',
-    'Launched',
+    'GovernorLaunched',
+    'AdminChanged',
     'Upgraded',
-    'VersionSynced'
+    'VersionSynced',
+    'Migrated'
   ],
   treasury: [
     'TreasuryInitialized',
-    'Launched',
+    'TreasuryLaunched',
     'Execute',
+    'AdminChanged',
     'Upgraded',
-    'VersionSynced'
+    'VersionSynced',
+    'Migrated'
   ],
   auction: [
     'AuctionInitialized',
@@ -69,10 +76,12 @@ const REQUIRED_EVENTS = {
     'BidRefunded',
     'RefundDeferred',
     'RefundWithdrawn',
-    'Launched',
+    'AuctionLaunched',
     'AuctionCancelled',
+    'AdminChanged',
     'Upgraded',
-    'VersionSynced'
+    'VersionSynced',
+    'Migrated'
   ],
   metadata: [
     'MetadataInitialized',
@@ -83,13 +92,15 @@ const REQUIRED_EVENTS = {
     'RendererBaseUpdated',
     'ContractImageUpdated',
     'SeedGenerated',
-    'Launched',
+    'MetadataLaunched',
+    'AdminChanged',
     'Upgraded',
-    'VersionSynced'
+    'VersionSynced',
+    'Migrated'
   ],
   marketplace: [
     'MarketplaceInitialized',
-    'Launched',
+    'MarketplaceLaunched',
     'PrimaryListingCreated',
     'PrimaryListingPurchased',
     'PrimaryListingCancelled',
@@ -102,8 +113,10 @@ const REQUIRED_EVENTS = {
     'SecondaryFeeUpdated',
     'MarketplacePaused',
     'MarketplaceUnpaused',
+    'AdminChanged',
     'Upgraded',
-    'VersionSynced'
+    'VersionSynced',
+    'Migrated'
   ],
   manager: [
     'ManagerInitialized',
@@ -119,7 +132,10 @@ const REQUIRED_EVENTS = {
     'AdminProposed',
     'AdminChanged',
     'AdminProposalCancelled',
-    'PlatformMinterSet'
+    'PlatformMinterSet',
+    'LatestImplementationSet',
+    'PendingSlugUpdated',
+    'SlugClaimed'
   ]
 };
 
@@ -270,10 +286,13 @@ test('REQUIRED_EVENTS matches contracts/*/src/events.rs exactly, per contract', 
   assert.deepStrictEqual(Object.keys(REQUIRED_EVENTS).sort(), Object.keys(actual).sort());
 });
 
-test('every module emits a Launched event (six structs share one name)', () => {
-  const launched = contractEventList().filter((e) => e.name === 'Launched');
-  assert.deepStrictEqual(launched.map((e) => e.contract).sort(), ['auction', 'governor', 'marketplace', 'metadata', 'token', 'treasury']);
-  for (const e of launched) assert.deepStrictEqual(e.topics, ['treasury'], `${e.contract}.Launched topics`);
+test('every module emits its own <Module>Launched event with topic treasury', () => {
+  const launched = contractEventList().filter((e) => /^[A-Z][a-z]+Launched$/.test(e.name) && e.contract !== 'manager');
+  assert.deepStrictEqual(launched.map((e) => `${e.contract}:${e.name}`).sort(), [
+    'auction:AuctionLaunched', 'governor:GovernorLaunched', 'marketplace:MarketplaceLaunched',
+    'metadata:MetadataLaunched', 'token:TokenLaunched', 'treasury:TreasuryLaunched'
+  ]);
+  for (const e of launched) assert.deepStrictEqual(e.topics, ['treasury'], `${e.contract}.${e.name} topics`);
   const dataByContract = Object.fromEntries(launched.map((e) => [e.contract, e.data]));
   assert.deepStrictEqual(dataByContract.token, ['minters']);
   assert.deepStrictEqual(dataByContract.auction, ['started']);
@@ -281,9 +300,9 @@ test('every module emits a Launched event (six structs share one name)', () => {
   for (const c of ['governor', 'treasury', 'metadata']) assert.deepStrictEqual(dataByContract[c], []);
 });
 
-test('Upgraded and VersionSynced come from contracts/common and are listed once per emitting module', () => {
+test('Upgraded, VersionSynced, Migrated and AdminChanged come from contracts/common and are listed once per emitting module', () => {
   const roles = ['auction', 'governor', 'marketplace', 'metadata', 'token', 'treasury'];
-  for (const name of ['Upgraded', 'VersionSynced']) {
+  for (const name of ['Upgraded', 'VersionSynced', 'Migrated']) {
     const found = contractEventList().filter((e) => e.name === name);
     assert.deepStrictEqual(found.map((e) => e.contract).sort(), roles, name);
     for (const e of found) assert.strictEqual(e.source, 'common');
@@ -294,6 +313,12 @@ test('Upgraded and VersionSynced come from contracts/common and are listed once 
   const synced = contractEventList().find((e) => e.name === 'VersionSynced');
   assert.deepStrictEqual(synced.topics, []);
   assert.deepStrictEqual(synced.data, ['version']);
+  const migrated = contractEventList().find((e) => e.name === 'Migrated');
+  assert.deepStrictEqual(migrated.data, ['from_storage_version', 'to_storage_version']);
+  // AdminChanged: once per module from common, plus the Manager's own, with one shape.
+  const admin = contractEventList().filter((e) => e.name === 'AdminChanged');
+  assert.deepStrictEqual(admin.map((e) => e.contract).sort(), ['manager', ...roles].sort());
+  for (const e of admin) assert.deepStrictEqual(e.topics, ['old_admin', 'new_admin'], `${e.contract}.AdminChanged`);
 });
 
 test('removed events are neither emitted by any contract nor decoded', () => {

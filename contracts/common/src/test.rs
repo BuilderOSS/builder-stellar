@@ -1,13 +1,16 @@
 extern crate std;
 
 use soroban_sdk::{
-    contract, contractimpl, testutils::Events as _, Address, BytesN, Env, Event as _, String,
+    contract, contractimpl,
+    testutils::{Address as _, Events as _},
+    Address, BytesN, Env, Event as _, String,
 };
 
 use crate::{
+    admin::{self, AdminChanged},
     lifecycle,
     testutils::{empty_wasm, MockManager, MockManagerClient},
-    upgrade::{self, Upgraded, VersionSynced},
+    upgrade::{self, Migrated, Upgraded, VersionSynced},
     CommonError,
 };
 
@@ -16,8 +19,24 @@ struct Harness;
 
 #[contractimpl]
 impl Harness {
-    pub fn __constructor(e: Env, hash: BytesN<32>, version: String) {
-        upgrade::init(&e, &hash, &version);
+    pub fn __constructor(e: Env, hash: BytesN<32>, version: String, admin: Address) {
+        upgrade::init(&e, &hash, &version, 1);
+        admin::init(&e, &admin);
+    }
+    pub fn migrate(e: Env, code_storage_version: u32) -> u32 {
+        upgrade::migrate(&e, code_storage_version)
+    }
+    pub fn storage_version(e: Env) -> u32 {
+        upgrade::storage_version(&e)
+    }
+    pub fn admin(e: Env) -> Address {
+        admin::admin(&e)
+    }
+    pub fn admin_only(e: Env) {
+        admin::require_admin(&e);
+    }
+    pub fn handoff(e: Env, new_admin: Address) {
+        admin::handoff(&e, &new_admin);
     }
     pub fn upgrade(e: Env, manager: Address, from: BytesN<32>, to: BytesN<32>) {
         upgrade::apply(&e, &manager, &from, &to);
@@ -50,9 +69,10 @@ fn setup() -> (Env, HarnessClient<'static>, MockManagerClient<'static>) {
     let e = Env::default();
     e.mock_all_auths();
     let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+    let admin = Address::generate(&e);
     let c = HarnessClient::new(
         &e,
-        &e.register(Harness, (h(&e, 1), String::from_str(&e, "0.1.0"))),
+        &e.register(Harness, (h(&e, 1), String::from_str(&e, "0.1.0"), admin)),
     );
     (e, c, mgr)
 }
@@ -153,4 +173,70 @@ fn lifecycle_flow() {
         c.try_need_setup().err().unwrap().unwrap(),
         CommonError::AlreadyLive.into()
     );
+}
+
+#[test]
+fn migrate_advances_storage_version_once() {
+    let (e, c, _) = setup();
+    assert_eq!(c.storage_version(), 1);
+    assert_eq!(
+        c.try_migrate(&1).err().unwrap().unwrap(),
+        CommonError::NothingToMigrate.into()
+    );
+    assert_eq!(c.migrate(&2), 1);
+    assert_eq!(
+        e.events().all().events().last().unwrap(),
+        &Migrated {
+            from_storage_version: 1,
+            to_storage_version: 2,
+        }
+        .to_xdr(&e, &c.address)
+    );
+    assert_eq!(c.storage_version(), 2);
+    assert_eq!(
+        c.try_migrate(&2).err().unwrap().unwrap(),
+        CommonError::NothingToMigrate.into()
+    );
+}
+
+#[test]
+fn admin_handoff_moves_authority_and_emits() {
+    let (e, c, _) = setup();
+    let first = c.admin();
+    let treasury = Address::generate(&e);
+    c.handoff(&treasury);
+    assert_eq!(
+        e.events().all().events().last().unwrap(),
+        &AdminChanged {
+            old_admin: first,
+            new_admin: treasury.clone(),
+        }
+        .to_xdr(&e, &c.address)
+    );
+    assert_eq!(c.admin(), treasury);
+    c.admin_only();
+    assert_eq!(e.auths().last().unwrap().0, treasury);
+}
+
+#[test]
+fn error_codes_sit_in_the_common_block() {
+    use crate::error::codes;
+    for code in [
+        CommonError::NotLive,
+        CommonError::AlreadyLive,
+        CommonError::ManagerNotSet,
+        CommonError::CurrentHashNotSet,
+        CommonError::HashMismatch,
+        CommonError::UpgradeNotApproved,
+        CommonError::ImplementationNotFound,
+        CommonError::AdminNotSet,
+        CommonError::VersionNotSet,
+        CommonError::TreasuryNotSet,
+        CommonError::GovernorNotSet,
+        CommonError::NothingToMigrate,
+        CommonError::StorageVersionNotSet,
+    ] {
+        let c = code as u32;
+        assert!(c > codes::COMMON && c < codes::COMMON + codes::BLOCK_SIZE);
+    }
 }

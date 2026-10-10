@@ -17,12 +17,13 @@ const networkConfigPath = args[2];
  * 1. create_dao: Manager.create_dao deploys Token, Treasury, Governor, Metadata, Auction and Marketplace
  *    in one transaction and wires them through constructors (there are no wiring setters). Governance,
  *    auction, marketplace and metadata settings from the config are passed as constructor values, and
- *    the payment assets are recorded by the Manager for launch-time assertion. The launch admin owns
- *    every module during the setup window.
+ *    the payment assets are recorded by the Manager for launch-time assertion. The launch admin is
+ *    the admin of every module during the setup window.
  *
  * 2. admin_checklist (setup window, the launch admin signs directly; no Manager, Minter or Treasury):
- *    - mint founder tokens with token.batch_mint (the owner may mint before launch; launch_dao
- *      requires total_supply > 0). Batches are bounded to 16 recipient entries / 100 tokens.
+ *    - mint founder tokens with token.batch_mint (the admin may mint before launch; launch_dao
+ *      requires a nonzero voting supply, i.e. founders other than the Treasury/Auction/Marketplace).
+ *      Batches are bounded to 20 tokens per call (common::MAX_BATCH_MINT: the 16 KiB event limit).
  *    - add the artwork with metadata.add_properties in batches of <= 30 items (each batch adds its
  *      own IPFS group). Progress is derived from metadata.ipfs_data_count().
  *    Not possible before launch: token.set_mint_authority (NotLive), Minter merkle/allowlist
@@ -33,12 +34,14 @@ const networkConfigPath = args[2];
  * 3. launch_dao: Manager.launch_dao(token_address, launch_config{launch_auction, launch_marketplace,
  *    enable_minter, expected_minter}; expected_minter is pinned to get_platform_minter when
  *    enable_minter is set). It grants mint authority itself (Treasury, Marketplace, Auction if launched,
- *    and the Manager's registered PlatformMinter if enable_minter), moves ownership of every module
- *    to the Treasury and deletes the pending state. The Manager has no authority afterwards.
+ *    and the Manager's registered PlatformMinter if enable_minter), hands the admin of every module
+ *    to the Treasury, claims the slug and deletes the pending state. The Manager has no authority
+ *    afterwards.
  *
- * Slug: `slug` in the config is claimed permanently by create_dao (unique per Manager; 4-63 chars of
- * [a-z0-9-]). create_dao pre-checks that it is free and verifies the registration afterwards. The slug
- * registry entries expire unless renewed: run the permissionless `bump_slug_ttl` phase periodically
+ * Slug: `slug` in the config is requested by create_dao and claimed permanently by launch_dao (unique
+ * per Manager; 4-63 chars of [a-z0-9-]). Both phases pre-check that no launched DAO holds it; launch
+ * fails with SlugTaken if another DAO launched with it first (rename with manager.update_pending_slug
+ * and update the config). The claimed slug registry entries expire unless renewed: run the permissionless `bump_slug_ttl` phase periodically
  * (the network caps each extension at ~180 days). It needs no auth beyond paying the fee.
  *
  * Prerequisites: Manager deployed with deploy-manager.mjs (which also registers the platform
@@ -67,14 +70,15 @@ const LIMITS = {
   minGovernanceDelay: 300,
   maxGovernanceDelay: 2_592_000,
   maxBps: 10_000,
+  maxFeeBps: 2_500, // common::MAX_FEE_BPS (25%)
   minAuctionDuration: 300,
   minReservePrice: 1000n,
   maxTimeBuffer: 86_400,
   maxString: 256,
   maxArtworkItemsPerCall: 30,
   maxProperties: 16,
-  maxBatchMintTokens: 100,
-  maxBatchMintRecipients: 16
+  maxBatchMintTokens: 20, // common::MAX_BATCH_MINT
+  maxBatchMintRecipients: 20
 };
 const ADDRESS_RE = /^[GC][A-Z2-7]{55}$/;
 const CONTRACT_RE = /^C[A-Z2-7]{55}$/;
@@ -136,7 +140,7 @@ function validateDaoConfig(config) {
   const marketplace = config.marketplace ?? {};
   const marketplaceAsset = marketplace.paymentAsset ?? auction.paymentAsset;
   addr('marketplace.paymentAsset', marketplaceAsset, CONTRACT_RE);
-  intRange('marketplace.secondaryFeeBps', marketplace.secondaryFeeBps ?? 250, 0, LIMITS.maxBps);
+  intRange('marketplace.secondaryFeeBps', marketplace.secondaryFeeBps ?? 250, 0, LIMITS.maxFeeBps);
 
   const launch = config.launch ?? {};
   for (const key of ['launchAuction', 'launchMarketplace', 'enableMinter']) {
@@ -176,7 +180,7 @@ function validateDaoConfig(config) {
   }
 }
 
-// Founder mint batches: pieces of <= 100 tokens, packed into batches of <= 16 entries / 100 tokens.
+// Founder mint batches: pieces of <= 20 tokens, packed into batches of <= 20 entries / 20 tokens.
 function planFounderBatches(founders) {
   const pieces = founders.flatMap(({ address, amount }) => {
     const out = [];
@@ -430,6 +434,18 @@ let artifact;
 let addresses;
 let transactions = {};
 
+// Fail before spending fees if a launched DAO already claimed the slug
+// (SlugNotFound / #7128 means it is free; pending DAOs do not hold slugs).
+function assertSlugUnclaimed() {
+  let claimedBy = null;
+  try {
+    claimedBy = invokeView(managerAddress, 'get_dao_by_slug', { slug: daoConfig.slug });
+  } catch (e) {
+    if (!/SlugNotFound|#7128/.test(String(e.message))) throw e;
+  }
+  if (claimedBy) throw new Error(`Slug "${daoConfig.slug}" is already claimed by ${claimedBy}; choose another slug in the DAO config`);
+}
+
 if (phase === 'bump_slug_ttl') {
   console.log(`\n=== Renewing slug "${daoConfig.slug}" storage TTL ===\n`);
   invoke(managerAddress, 'bump_slug_ttl', { slug: daoConfig.slug });
@@ -438,24 +454,17 @@ if (phase === 'bump_slug_ttl') {
 }
 
 if (phase === 'create_dao') {
-  console.log('\n=== Creating DAO (setup window: all modules owned by the launch admin) ===\n');
+  console.log('\n=== Creating DAO (setup window: the launch admin administers every module) ===\n');
   requireIdentity('deployer', daoConfig.deployer);
-  // Fail before spending fees if the slug is taken (SlugNotFound / #1202 means it is free).
-  let claimedBy = null;
-  try {
-    claimedBy = invokeView(managerAddress, 'get_dao_by_slug', { slug: daoConfig.slug });
-  } catch (e) {
-    if (!/SlugNotFound|#1202/.test(String(e.message))) throw e;
-  }
-  if (claimedBy) throw new Error(`Slug "${daoConfig.slug}" is already registered to ${claimedBy}; choose another slug in the DAO config`);
+  assertSlugUnclaimed();
   const output = invoke(managerAddress, 'create_dao', {
     params: JSON.stringify({ deployer: daoConfig.deployer, nonce: { u64: String(daoConfig.nonce) }, launch_admin: daoConfig.launchAdmin, initial_config: initialConfig() })
   });
   addresses = addressesFromOutput(output);
   if (!addresses) throw new Error('DAO creation succeeded but DAO addresses could not be parsed');
-  const registered = invokeView(managerAddress, 'get_dao_by_slug', { slug: daoConfig.slug });
-  if (registered !== addresses.token) throw new Error(`Slug "${daoConfig.slug}" resolves to ${registered}, expected ${addresses.token}`);
-  console.log(`Slug "${daoConfig.slug}" registered to ${addresses.token}`);
+  const requested = invokeView(managerAddress, 'get_pending_dao', { token_address: addresses.token })?.slug;
+  if (requested !== daoConfig.slug) throw new Error(`Pending DAO requests slug "${requested}", expected "${daoConfig.slug}"`);
+  console.log(`Slug "${daoConfig.slug}" requested; launch_dao claims it.`);
   transactions.createDao = transaction(output);
   writeArtifact({ status: 'created', addresses, transactions, replaceTransactions: true });
   console.log('Create phase complete. Run admin_checklist next.');
@@ -562,8 +571,12 @@ if (phase === 'launch_dao') {
     throw new Error('Config payment assets differ from the ones recorded at create_dao; launch_dao would fail with a payment mismatch. Recreate the DAO or restore the original config.');
   }
   if (!(Number(invokeView(addresses.token, 'total_supply')) > 0)) {
-    throw new Error('Token total_supply is 0: run admin_checklist first (launch_dao fails with LaunchSupplyZero).');
+    throw new Error('Token voting supply is 0: run admin_checklist first, minting founders other than the Treasury/Auction/Marketplace (launch_dao fails with LaunchSupplyZero).');
   }
+  if (pending.slug !== daoConfig.slug) {
+    throw new Error(`Pending DAO requests slug "${pending.slug}" but the config has "${daoConfig.slug}"; update one of them first.`);
+  }
+  assertSlugUnclaimed();
   if (launchFlags.enable_minter) {
     const minter = invokeView(managerAddress, 'get_platform_minter');
     if (!minter) throw new Error('enable_minter is set but the Manager has no platform minter (PlatformMinterNotSet). The Manager admin must run set_platform_minter (deploy-manager.mjs does this).');
@@ -580,7 +593,10 @@ if (phase === 'launch_dao') {
   transactions.launchDao = transaction(launchOutput);
   writeArtifact({ status: 'operational', addresses, transactions });
   console.log(`DAO launched: ${JSON.stringify(launchFlags)}`);
-  console.log('All modules are Live and owned by the Treasury. Further administration is by governance proposal (see scripts/upgrade-contract.mjs for the payload shape).');
+  const claimed = invokeView(managerAddress, 'get_dao_by_slug', { slug: daoConfig.slug });
+  if (claimed !== addresses.token) throw new Error(`Slug "${daoConfig.slug}" resolves to ${claimed}, expected ${addresses.token}`);
+  console.log(`Slug "${daoConfig.slug}" claimed by ${addresses.token}`);
+  console.log('All modules are Live with the Treasury as admin. Further administration is by governance proposal (see scripts/upgrade-contract.mjs for the payload shape).');
   if (launchFlags.launch_marketplace) console.log('Primary sales: the Treasury must create listings via governance (marketplace.create_primary_listing), buyers call buy_primary.');
   process.exit(0);
 }

@@ -1,29 +1,35 @@
-import {Address} from '@stellar/stellar-sdk';
+import {Address, xdr} from '@stellar/stellar-sdk';
 
     /**
- * Error Enum: TreasuryError
+ * Treasury errors (block `common::error::codes::TREASURY`).
  */
 export const TreasuryError = {
   /**
-   * `launch` treasury argument is not this contract's address
+   * `launch` treasury is not this contract
    */
-  1401 : { message: "TreasuryMismatch" },
+  7601 : { message: "TreasuryMismatch" },
   /**
-   * A proposal targeted the Treasury with a function outside the allowlist
+   * A proposal action targets the Treasury with a function outside the allowlist
    */
-  1402 : { message: "UnknownSelfCall" },
+  7602 : { message: "UnknownSelfCall" },
   /**
-   * Malformed arguments for an allowlisted self call
+   * Wrong number or type of arguments for an allowlisted self call
    */
-  1403 : { message: "InvalidSelfCallArgs" },
+  7603 : { message: "InvalidSelfCallArgs" },
   /**
-   * targets/functions/args lengths differ
+   * `targets`, `functions` and `args` lengths differ
    */
-  1404 : { message: "InvalidProposalLength" }
+  7604 : { message: "InvalidProposalLength" },
+  /**
+   * An `authorize` action is malformed, too large, or not followed by an
+   * external call it can apply to
+   */
+  7605 : { message: "InvalidAuthorization" }
 }
 
 /**
- * Event: Execute
+ * Emitted for every executed proposal action, including self calls and
+ * `authorize` actions.
  */
 export interface ExecuteEvent {
   name: "Execute";
@@ -42,8 +48,8 @@ export interface ExecuteEvent {
 /**
  * Emitted once when the Manager launches the treasury (Setup -> Live).
  */
-export interface LaunchedEvent {
-  name: "Launched";
+export interface TreasuryLaunchedEvent {
+  name: "TreasuryLaunched";
   data: {
     treasury: string;
   };
@@ -55,61 +61,112 @@ export interface LaunchedEvent {
 export interface TreasuryInitializedEvent {
   name: "TreasuryInitialized";
   data: {
-    owner: string;
+    admin: string;
     governor?: string;
     version?: string;
   };
 }
 
 /**
- * Errors shared by all module contracts. Codes live in the 9000 range so
- * they never collide with module (11xx-13xx, 3, 30) or manager (10xx) codes.
+ * One contract invocation the Treasury pre-authorizes, with the invocations
+ * below it that also need the Treasury's authorization.
+ *
+ * A proposal action aimed at the Treasury itself with function `authorize`
+ * and a single `Vec<AuthNode>` argument adds these trees to the Treasury's
+ * authorization for the *next* action. Use it when the next call reaches a
+ * contract that requires the Treasury's auth deeper in the call stack (for
+ * example a token `transfer` from the Treasury made by a marketplace or an
+ * AMM). Because it is an ordinary action, the trees are part of the proposal
+ * id and voters approve them with the rest of the proposal.
+ */
+export interface AuthNode {
+  args: Array<any>;
+  contract: string;
+  fn_name: string;
+  sub: Array<AuthNode>;
+}
+
+/**
+ * Emitted by [`handoff`]. The emitting contract address is the event's contract id.
+ *
+ * Same shape as the Manager's own `AdminChanged`, so indexers decode both
+ * with one schema.
+ */
+export interface AdminChangedEvent {
+  name: "AdminChanged";
+  data: {
+    old_admin: string;
+    new_admin: string;
+  };
+}
+
+/**
+ * Errors shared by all module contracts (block `codes::COMMON`).
  */
 export const CommonError = {
   /**
    * Operation requires the module to be live (launched).
    */
-  9001 : { message: "NotLive" },
+  7001 : { message: "NotLive" },
   /**
    * Operation is only valid during setup; the module is already live.
    */
-  9002 : { message: "AlreadyLive" },
+  7002 : { message: "AlreadyLive" },
   /**
    * Manager address missing from storage.
    */
-  9003 : { message: "ManagerNotSet" },
+  7003 : { message: "ManagerNotSet" },
   /**
    * `CurrentHash` missing from storage.
    */
-  9004 : { message: "CurrentHashNotSet" },
+  7004 : { message: "CurrentHashNotSet" },
   /**
    * `from_hash` does not equal the stored `CurrentHash`.
    */
-  9005 : { message: "HashMismatch" },
+  7005 : { message: "HashMismatch" },
   /**
    * Manager did not approve this upgrade path.
    */
-  9006 : { message: "UpgradeNotApproved" },
+  7006 : { message: "UpgradeNotApproved" },
   /**
    * Manager has no registry entry for the requested hash.
    */
-  9007 : { message: "ImplementationNotFound" },
+  7007 : { message: "ImplementationNotFound" },
   /**
-   * Owner missing from storage.
+   * Module admin missing from storage.
    */
-  9008 : { message: "OwnerNotSet" },
+  7008 : { message: "AdminNotSet" },
   /**
    * `CurrentVersion` missing from storage.
    */
-  9009 : { message: "VersionNotSet" },
+  7009 : { message: "VersionNotSet" },
   /**
    * Treasury address missing from storage.
    */
-  9010 : { message: "TreasuryNotSet" },
+  7010 : { message: "TreasuryNotSet" },
   /**
    * Governor address missing from storage.
    */
-  9011 : { message: "GovernorNotSet" }
+  7011 : { message: "GovernorNotSet" },
+  /**
+   * `migrate` called while the stored layout is already current.
+   */
+  7012 : { message: "NothingToMigrate" },
+  /**
+   * `StorageVersion` missing from storage.
+   */
+  7013 : { message: "StorageVersionNotSet" }
+}
+
+/**
+ * Emitted by `migrate`.
+ */
+export interface MigratedEvent {
+  name: "Migrated";
+  data: {
+    from_storage_version?: number;
+    to_storage_version?: number;
+  };
 }
 
 /**
@@ -133,56 +190,5 @@ export interface VersionSyncedEvent {
     version?: string;
   };
 }
-
-/**
- * Error Enum: RoleTransferError
- */
-export const RoleTransferError = {
-  2200 : { message: "NoPendingTransfer" },
-  2201 : { message: "InvalidLiveUntilLedger" },
-  2202 : { message: "InvalidPendingAccount" },
-  2203 : { message: "TransferExpired" }
-}
-
-/**
- * Error Enum: OwnableError
- */
-export const OwnableError = {
-  2100 : { message: "OwnerNotSet" },
-  2101 : { message: "TransferInProgress" },
-  2102 : { message: "OwnerAlreadySet" }
-}
-
-/**
- * Event emitted when an ownership transfer is initiated.
- */
-export interface OwnershipTransferEvent {
-  name: "OwnershipTransfer";
-  data: {
-    old_owner?: string;
-    new_owner?: string;
-    live_until_ledger?: number;
-  };
-}
-
-/**
- * Event emitted when ownership is renounced.
- */
-export interface OwnershipRenouncedEvent {
-  name: "OwnershipRenounced";
-  data: {
-    old_owner?: string;
-  };
-}
-
-/**
- * Event emitted when an ownership transfer is completed.
- */
-export interface OwnershipTransferCompletedEvent {
-  name: "OwnershipTransferCompleted";
-  data: {
-    new_owner?: string;
-  };
-}
-    export type ContractEvent = ExecuteEvent | LaunchedEvent | TreasuryInitializedEvent | UpgradedEvent | VersionSyncedEvent | OwnershipTransferEvent | OwnershipRenouncedEvent | OwnershipTransferCompletedEvent;
+    export type ContractEvent = ExecuteEvent | TreasuryLaunchedEvent | TreasuryInitializedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VersionSyncedEvent;
     

@@ -51,7 +51,7 @@ fn implementation_version_is_available_by_hash() {
 }
 
 #[test]
-#[should_panic(expected = "Error(Contract, #1005)")]
+#[should_panic(expected = "Error(Contract, #7105)")]
 fn reject_cross_module_upgrade_approval() {
     let (env, client, _admin) = setup();
     let token_hash = BytesN::from_array(&env, &[1u8; 32]);
@@ -81,7 +81,10 @@ fn test_register_implementation() {
 
     client.register_implementation(&name, &version, &wasm_hash);
 
-    // Verify implementation was registered
+    // Registration alone does not select "latest".
+    assert!(client.get_latest_implementation(&name).is_none());
+    client.set_latest_implementation(&name, &wasm_hash);
+
     let implementation = client.get_latest_implementation(&name);
     assert!(implementation.is_some());
 
@@ -350,7 +353,14 @@ fn test_multiple_implementation_versions() {
     client.register_implementation(&name, &String::from_str(&env, "2"), &v2_wasm);
     client.register_implementation(&name, &String::from_str(&env, "3"), &v3_wasm);
 
-    // Latest should be v3
+    // "Latest" is selected explicitly; registering an older release after it
+    // (e.g. a v2 patch) never regresses it.
+    client.set_latest_implementation(&name, &v3_wasm);
+    client.register_implementation(
+        &name,
+        &String::from_str(&env, "2.1"),
+        &BytesN::from_array(&env, &[4u8; 32]),
+    );
     let latest = client.get_latest_implementation(&name).unwrap();
     assert_eq!(latest.version, String::from_str(&env, "3"));
     assert_eq!(latest.wasm_hash, v3_wasm);
@@ -572,6 +582,7 @@ fn test_get_latest_implementation_with_revoked() {
 
     client.register_implementation(&name, &String::from_str(&env, "1"), &v1_wasm);
     client.register_implementation(&name, &String::from_str(&env, "2"), &v2_wasm);
+    client.set_latest_implementation(&name, &v2_wasm);
 
     // Revoke v2 (latest)
     client.revoke_implementation(&v2_wasm);
@@ -635,7 +646,7 @@ fn stub_wasm(env: &Env, tag: &str, ctor_arity: usize, init_arity: usize) -> Byte
 /// sets them as the factory defaults.
 fn register_stub_implementations(env: &Env, client: &ManagerContractClient) {
     let specs: [(&str, usize, usize); 6] = [
-        ("Token", 9, 0),
+        ("Token", 11, 0),
         ("Metadata", 13, 0),
         ("Auction", 11, 0),
         ("Governor", 11, 0),
@@ -652,6 +663,7 @@ fn register_stub_implementations(env: &Env, client: &ManagerContractClient) {
             &String::from_str(env, "1"),
             &hash,
         );
+        client.set_latest_implementation(&String::from_str(env, name), &hash);
         hashes.push(hash);
     }
     client.set_current_implementations(
@@ -741,7 +753,7 @@ impl MockModule {
             .get(&2u32)
             .unwrap_or(BytesN::from_array(&e, &[0u8; 32]))
     }
-    pub fn owner(e: Env) -> Address {
+    pub fn admin(e: Env) -> Address {
         e.storage().instance().get(&1u32).unwrap()
     }
     pub fn total_supply(_e: Env) -> i128 {
@@ -875,10 +887,11 @@ fn test_instance_entry_size_constant_across_500_create_dao() {
     assert!(client.get_pending_dao(&first.token).is_some());
     let last = last.unwrap();
     assert!(client.get_pending_dao(&last.token).is_some());
-    // Every DAO owns a distinct slug; first and last resolve both ways.
+    // Pending DAOs only hold their requested slug; nothing is claimed yet.
     for dao in [&first, &last] {
-        let slug = client.get_slug(&dao.token).expect("slug registered");
-        assert_eq!(client.get_dao_by_slug(&slug), dao.token);
+        let slug = client.get_pending_dao(&dao.token).unwrap().slug;
+        assert!(client.get_slug(&dao.token).is_none());
+        assert!(client.try_get_dao_by_slug(&slug).is_err());
     }
 }
 
@@ -909,6 +922,7 @@ fn test_registry_reads_work_after_500_registrations() {
     assert!(client.is_upgrade_approved(&base, &hash_for(0)));
     assert!(client.is_upgrade_approved(&hash_for(498), &hash_for(499)));
     assert!(!client.is_upgrade_approved(&base, &hash_for(499)));
+    client.set_latest_implementation(&name, &hash_for(499));
     assert_eq!(
         client.get_latest_implementation(&name).unwrap().wasm_hash,
         hash_for(499)
@@ -948,6 +962,7 @@ fn test_pending_dao_launches_after_500_unrelated_create_dao() {
             marketplace,
         },
         launch_admin: launch_admin.clone(),
+        slug: String::from_str(&env, "mock-dao"),
         auction_payment_asset: Address::generate(&env),
         marketplace_payment_asset: Address::generate(&env),
     };
@@ -1083,6 +1098,8 @@ mod real_dao {
             (
                 launch_admin.clone(),
                 addresses.treasury.clone(),
+                addresses.auction.clone(),
+                addresses.marketplace.clone(),
                 String::from_str(&env, "https://example.com/"),
                 String::from_str(&env, "DAO"),
                 String::from_str(&env, "DAO"),
@@ -1186,6 +1203,7 @@ mod real_dao {
         let pending = PendingDao {
             addresses: addresses.clone(),
             launch_admin: launch_admin.clone(),
+            slug: String::from_str(&env, "real-dao"),
             auction_payment_asset: payment.clone(),
             marketplace_payment_asset: payment.clone(),
         };
@@ -1308,20 +1326,13 @@ mod real_dao {
         let treasury = dao.addresses.treasury.clone();
         let attacker = Address::generate(env);
 
-        // Metadata's upgrade authority is a plain `Owner` instance key.
-        let metadata_owner = || -> Option<Address> {
-            env.as_contract(&dao.addresses.metadata, || {
-                env.storage()
-                    .instance()
-                    .get(&vec![env, Symbol::new(env, "Owner")])
-            })
-        };
+        let metadata_owner = || -> Option<Address> { Some(dao.metadata.admin()) };
         let snapshot = || {
             (
-                dao.token.get_owner(),
-                dao.governor.get_owner(),
-                dao.treasury.get_owner(),
-                dao.auction.get_owner(),
+                dao.token.admin(),
+                dao.governor.admin(),
+                dao.treasury.admin(),
+                dao.auction.admin(),
                 dao.auction.paused(),
                 dao.marketplace.get_config(),
                 {
@@ -1410,7 +1421,7 @@ mod real_dao {
         }
 
         assert_eq!(before, snapshot());
-        assert_eq!(dao.token.get_owner(), Some(treasury.clone()));
+        assert_eq!(dao.token.admin(), treasury.clone());
         assert_eq!(metadata_owner(), Some(treasury));
     }
 
@@ -1459,10 +1470,12 @@ mod real_dao {
         assert!(!dao.token.mint_authority(&minter));
         assert!(!dao.token.mint_authority(&dao.launch_admin));
         assert!(!dao.token.mint_authority(&a.governor));
-        assert_eq!(dao.token.get_owner(), Some(a.treasury.clone()));
-        assert_eq!(dao.governor.get_owner(), Some(a.treasury.clone()));
-        assert_eq!(dao.treasury.get_owner(), Some(a.treasury.clone()));
-        assert_eq!(dao.auction.get_owner(), Some(a.treasury.clone()));
+        assert_eq!(dao.token.admin(), a.treasury.clone());
+        assert_eq!(dao.governor.admin(), a.treasury.clone());
+        assert_eq!(dao.treasury.admin(), a.treasury.clone());
+        assert_eq!(dao.auction.admin(), a.treasury.clone());
+        assert_eq!(dao.marketplace.admin(), a.treasury.clone());
+        assert_eq!(dao.metadata.admin(), a.treasury.clone());
         assert!(!dao.auction.paused());
         assert!(!dao.marketplace.get_config().paused);
         // launch_admin can no longer mint.
@@ -1546,7 +1559,7 @@ mod real_dao {
         );
         // Nothing launched: still pending, token still owned by launch_admin.
         assert!(dao.client.get_pending_dao(&dao.addresses.token).is_some());
-        assert_eq!(dao.token.get_owner(), Some(dao.launch_admin.clone()));
+        assert_eq!(dao.token.admin(), dao.launch_admin.clone());
     }
 
     #[test]
@@ -1559,6 +1572,8 @@ mod real_dao {
             (
                 dao.launch_admin.clone(),
                 dao.addresses.treasury.clone(),
+                dao.addresses.auction.clone(),
+                dao.addresses.marketplace.clone(),
                 String::from_str(env, "u"),
                 String::from_str(env, "n"),
                 String::from_str(env, "s"),
@@ -1577,6 +1592,7 @@ mod real_dao {
                 &PendingDao {
                     addresses,
                     launch_admin: dao.launch_admin.clone(),
+                    slug: String::from_str(env, "empty-dao"),
                     auction_payment_asset: dao.payment.clone(),
                     marketplace_payment_asset: dao.payment.clone(),
                 },
@@ -1624,28 +1640,49 @@ mod real_dao {
         );
     }
 
-    /// Acceptance (h): a transfer_ownership started in setup cannot be accepted after launch.
+    /// Acceptance (h): no module exposes an admin transfer, two-step handover or
+    /// renounce; the launch handoff is the only admin change.
     #[test]
-    fn pending_ownership_transfer_started_in_setup_is_dead_after_launch() {
+    fn no_module_exposes_admin_transfer_or_renounce() {
         let dao = build();
-        let attacker = Address::generate(&dao.env);
-        let until = dao.env.ledger().sequence() + 1_000;
-        dao.token.transfer_ownership(&attacker, &until);
-        dao.governor.transfer_ownership(&attacker, &until);
-        dao.treasury.transfer_ownership(&attacker, &until);
-        dao.auction.transfer_ownership(&attacker, &until);
+        let env = &dao.env;
+        let who = Address::generate(env);
+        let a = &dao.addresses;
+        for contract in [
+            &a.token,
+            &a.governor,
+            &a.treasury,
+            &a.auction,
+            &a.marketplace,
+            &a.metadata,
+        ] {
+            for function in [
+                "transfer_ownership",
+                "accept_ownership",
+                "renounce_ownership",
+                "set_admin",
+                "get_owner",
+            ] {
+                assert!(
+                    env.try_invoke_contract::<(), soroban_sdk::Error>(
+                        contract,
+                        &Symbol::new(env, function),
+                        vec![env, who.to_val()],
+                    )
+                    .is_err(),
+                    "{function} must not exist"
+                );
+            }
+        }
         dao.client
             .launch_dao(&dao.addresses.token, &cfg(true, true, false));
-
-        assert!(dao.token.try_accept_ownership().is_err());
-        assert!(dao.governor.try_accept_ownership().is_err());
-        assert!(dao.treasury.try_accept_ownership().is_err());
-        assert!(dao.auction.try_accept_ownership().is_err());
-        let t = Some(dao.addresses.treasury.clone());
-        assert_eq!(dao.token.get_owner(), t);
-        assert_eq!(dao.governor.get_owner(), t);
-        assert_eq!(dao.treasury.get_owner(), t);
-        assert_eq!(dao.auction.get_owner(), t);
+        let t = dao.addresses.treasury.clone();
+        assert_eq!(dao.token.admin(), t);
+        assert_eq!(dao.governor.admin(), t);
+        assert_eq!(dao.treasury.admin(), t);
+        assert_eq!(dao.auction.admin(), t);
+        assert_eq!(dao.marketplace.admin(), t);
+        assert_eq!(dao.metadata.admin(), t);
     }
 
     /// Acceptance (f): create_dao rejects zero quorum and zero proposal threshold.
@@ -1677,12 +1714,12 @@ mod real_dao {
         client.create_dao(&dao_params(&env, &deployer, 2));
     }
 
-    /// The manager's local cap must track the governor crate's constants.
+    /// The Manager and the governor validate against the same `common` bounds.
     #[test]
     fn governance_timing_cap_matches_governor_constants() {
-        assert_eq!(governor::MAX_VOTING_DELAY, 2_592_000);
-        assert_eq!(governor::MAX_VOTING_PERIOD, 2_592_000);
-        assert_eq!(governor::MAX_QUEUE_DELAY, 2_592_000);
+        assert_eq!(governor::MAX_VOTING_DELAY, common::MAX_GOVERNANCE_DELAY);
+        assert_eq!(governor::MAX_VOTING_PERIOD, common::MAX_GOVERNANCE_DELAY);
+        assert_eq!(governor::MAX_QUEUE_DELAY, common::MAX_GOVERNANCE_DELAY);
     }
 
     #[test]
@@ -1746,7 +1783,7 @@ mod real_dao {
             .try_launch_dao(&dao.addresses.token, &cfg(true, true, false));
         assert!(r.is_err());
         assert!(dao.client.get_pending_dao(&dao.addresses.token).is_some());
-        assert_eq!(dao.token.get_owner(), Some(dao.launch_admin.clone()));
+        assert_eq!(dao.token.admin(), dao.launch_admin.clone());
         dao.auction.set_payment_token(&dao.payment);
 
         // ...and the marketplace payment asset.
@@ -1796,7 +1833,7 @@ mod real_dao {
             .try_launch_dao(&dao.addresses.token, &config)
             .is_err());
         assert!(dao.client.get_pending_dao(&dao.addresses.token).is_some());
-        assert_eq!(dao.token.get_owner(), Some(dao.launch_admin.clone()));
+        assert_eq!(dao.token.admin(), dao.launch_admin.clone());
     }
 
     #[test]
@@ -2196,6 +2233,7 @@ mod launch_revocation {
                 marketplace: marketplace.clone(),
             },
             launch_admin: launch_admin.clone(),
+            slug: String::from_str(env, "mock-dao"),
             auction_payment_asset: Address::generate(env),
             marketplace_payment_asset: Address::generate(env),
         };
@@ -2316,26 +2354,179 @@ fn params_with_slug(env: &Env, nonce: u64, slug: &str) -> DaoCreationParams {
     p
 }
 
+/// Seed a pending DAO backed by mock modules (so `launch_dao` completes)
+/// that requests `slug`. Returns its token address.
+fn seed_mock_pending(env: &Env, client: &ManagerContractClient, slug: &str) -> Address {
+    // Mocks report the all-zero hash, which launch_dao requires registered.
+    let zero = BytesN::from_array(env, &[0u8; 32]);
+    if client.get_implementation(&zero).is_none() {
+        client.register_implementation(
+            &String::from_str(env, "Mock"),
+            &String::from_str(env, "1"),
+            &zero,
+        );
+    }
+    let launch_admin = Address::generate(env);
+    let token = env.register(MockModule, ());
+    env.as_contract(&token, || {
+        env.storage().instance().set(&1u32, &launch_admin);
+    });
+    let pending = PendingDao {
+        addresses: crate::storage::DaoAddresses {
+            token: token.clone(),
+            metadata: env.register(MockLaunchModule, ()),
+            auction: env.register(MockToggleModule, ()),
+            governor: env.register(MockLaunchModule, ()),
+            treasury: env.register(MockLaunchModule, ()),
+            marketplace: env.register(MockToggleModule, ()),
+        },
+        launch_admin,
+        slug: String::from_str(env, slug),
+        auction_payment_asset: Address::generate(env),
+        marketplace_payment_asset: Address::generate(env),
+    };
+    env.as_contract(&client.address, || {
+        crate::storage::set_persistent(env, &ManagerKey::PendingDao(token.clone()), &pending);
+    });
+    token
+}
+
+fn launch_cfg() -> LaunchConfig {
+    LaunchConfig {
+        launch_auction: true,
+        launch_marketplace: true,
+        enable_minter: false,
+        expected_minter: None,
+    }
+}
+
 #[test]
-fn slug_is_registered_and_resolves_both_ways() {
+fn slug_is_requested_at_create_and_claimed_at_launch() {
     let (env, client, _a) = setup();
     register_stub_implementations(&env, &client);
     env.mock_all_auths();
     let addrs = client.create_dao(&params_with_slug(&env, 1, "nouns-builders"));
     let slug = String::from_str(&env, "nouns-builders");
-    assert_eq!(client.get_dao_by_slug(&slug), addrs.token);
-    assert_eq!(client.get_slug(&addrs.token), Some(slug));
+    // Requested only: the pending DAO carries it, nothing resolves yet.
+    assert_eq!(client.get_pending_dao(&addrs.token).unwrap().slug, slug);
+    assert!(client.get_slug(&addrs.token).is_none());
+    assert_eq!(
+        client.try_get_dao_by_slug(&slug),
+        Err(Ok(crate::ManagerError::SlugNotFound))
+    );
+
+    let token = seed_mock_pending(&env, &client, "launched-dao");
+    client.launch_dao(&token, &launch_cfg());
+    let launched = String::from_str(&env, "launched-dao");
+    assert_eq!(client.get_dao_by_slug(&launched), token);
+    assert_eq!(client.get_slug(&token), Some(launched));
 }
 
 #[test]
-fn duplicate_slug_is_rejected() {
+fn first_launch_wins_a_contested_slug_and_the_other_can_rename() {
+    let (env, client, _a) = setup();
+    env.mock_all_auths();
+    let first = seed_mock_pending(&env, &client, "contested");
+    let second = seed_mock_pending(&env, &client, "contested");
+    client.launch_dao(&first, &launch_cfg());
+    assert_eq!(
+        client.try_launch_dao(&second, &launch_cfg()),
+        Err(Ok(crate::ManagerError::SlugTaken))
+    );
+    // Renaming to a claimed slug is refused, a free one works.
+    assert_eq!(
+        client.try_update_pending_slug(&second, &String::from_str(&env, "contested")),
+        Err(Ok(crate::ManagerError::SlugTaken))
+    );
+    assert_eq!(
+        client.try_update_pending_slug(&second, &String::from_str(&env, "Bad_Slug")),
+        Err(Ok(crate::ManagerError::InvalidSlug))
+    );
+    client.update_pending_slug(&second, &String::from_str(&env, "runner-up"));
+    client.launch_dao(&second, &launch_cfg());
+    assert_eq!(
+        client.get_dao_by_slug(&String::from_str(&env, "runner-up")),
+        second
+    );
+    assert_eq!(
+        client.get_dao_by_slug(&String::from_str(&env, "contested")),
+        first
+    );
+}
+
+#[test]
+fn create_dao_rejects_a_slug_claimed_by_a_launched_dao() {
     let (env, client, _a) = setup();
     register_stub_implementations(&env, &client);
     env.mock_all_auths();
+    // Pending duplicates are allowed: nothing is claimed until launch.
     client.create_dao(&params_with_slug(&env, 1, "taken"));
+    client.create_dao(&params_with_slug(&env, 2, "taken"));
+    let token = seed_mock_pending(&env, &client, "taken");
+    client.launch_dao(&token, &launch_cfg());
     assert_eq!(
-        client.try_create_dao(&params_with_slug(&env, 2, "taken")),
+        client.try_create_dao(&params_with_slug(&env, 3, "taken")),
         Err(Ok(crate::ManagerError::SlugTaken))
+    );
+}
+
+#[test]
+fn update_pending_slug_requires_the_launch_admin() {
+    use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
+    use soroban_sdk::IntoVal;
+    let (env, client, _a) = setup();
+    env.mock_all_auths();
+    let token = seed_mock_pending(&env, &client, "mine");
+    let new_slug = String::from_str(&env, "theirs");
+    let stranger = Address::generate(&env);
+    env.mock_auths(&[MockAuth {
+        address: &stranger,
+        invoke: &MockAuthInvoke {
+            contract: &client.address,
+            fn_name: "update_pending_slug",
+            args: (token.clone(), new_slug.clone()).into_val(&env),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(client.try_update_pending_slug(&token, &new_slug).is_err());
+    assert_eq!(
+        client.get_pending_dao(&token).unwrap().slug,
+        String::from_str(&env, "mine")
+    );
+}
+
+#[test]
+fn launch_dao_is_blocked_while_the_factory_is_paused() {
+    let (env, client, _a) = setup();
+    env.mock_all_auths();
+    let token = seed_mock_pending(&env, &client, "paused-dao");
+    client.pause_factory();
+    assert_eq!(
+        client.try_launch_dao(&token, &launch_cfg()),
+        Err(Ok(crate::ManagerError::FactoryPaused))
+    );
+    client.unpause_factory();
+    client.launch_dao(&token, &launch_cfg());
+}
+
+#[test]
+fn set_latest_implementation_validates_the_record() {
+    let (env, client, _a) = setup();
+    let name = String::from_str(&env, "Token");
+    let hash = BytesN::from_array(&env, &[5u8; 32]);
+    assert_eq!(
+        client.try_set_latest_implementation(&name, &hash),
+        Err(Ok(crate::ManagerError::ImplementationNotFound))
+    );
+    client.register_implementation(&name, &String::from_str(&env, "1"), &hash);
+    assert_eq!(
+        client.try_set_latest_implementation(&String::from_str(&env, "Auction"), &hash),
+        Err(Ok(crate::ManagerError::InvalidImplementationName))
+    );
+    client.revoke_implementation(&hash);
+    assert_eq!(
+        client.try_set_latest_implementation(&name, &hash),
+        Err(Ok(crate::ManagerError::ImplementationNotFound))
     );
 }
 
@@ -2389,14 +2580,14 @@ fn slug_survives_ttl_bump_past_original_expiry() {
     let (env, client, _a) = setup();
     register_stub_implementations(&env, &client);
     env.mock_all_auths();
-    let addrs = client.create_dao(&params_with_slug(&env, 1, "durable"));
+    let token = seed_mock_pending(&env, &client, "durable");
+    client.launch_dao(&token, &launch_cfg());
     let slug = String::from_str(&env, "durable");
     let step = 100 * 17_280;
     for _ in 0..3 {
         env.ledger().with_mut(|l| l.sequence_number += step);
         client.bump_slug_ttl(&slug); // permissionless, no auth
-        client.get_pending_dao(&addrs.token);
     }
-    assert_eq!(client.get_dao_by_slug(&slug), addrs.token);
-    assert_eq!(client.get_slug(&addrs.token), Some(slug));
+    assert_eq!(client.get_dao_by_slug(&slug), token);
+    assert_eq!(client.get_slug(&token), Some(slug));
 }

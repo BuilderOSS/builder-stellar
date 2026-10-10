@@ -15,6 +15,7 @@ stellar-tokens = { workspace = true }
 common = { path = "../common" }
 
 [dev-dependencies]
+common = { path = "../common", features = ["testutils"] }
 soroban-sdk = { workspace = true, features = ["testutils"] }
 token = { path = "../token", features = ["testutils"] }
 

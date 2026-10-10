@@ -7,9 +7,8 @@ use soroban_sdk::{
     contract, contractimpl, contracttrait, panic_with_error, Address, BytesN, Env, IntoVal, String,
     Symbol,
 };
-use stellar_access::ownable::{self, Ownable};
 use stellar_contract_utils::pausable::{self, Pausable};
-use stellar_macros::{only_owner, when_not_paused, when_paused};
+use stellar_macros::{when_not_paused, when_paused};
 
 use crate::{
     error::AuctionError,
@@ -18,12 +17,14 @@ use crate::{
         emit_min_bid_increment_updated, emit_payment_token_updated, emit_refund_withdrawn,
         emit_reserve_price_updated, emit_time_buffer_updated,
     },
-    helpers::{create_auction, process_bid, refund_bid, settle_auction_internal},
+    helpers::{
+        create_auction, process_bid, refund_bid, settle_auction_internal, validate_bid_amount,
+    },
     storage::{
-        clear_pending_refund, get_auction, get_config, get_pending_refund, is_launched,
-        is_payment_token_locked, set_auction, set_config, set_launched, set_payment_token_locked,
-        AuctionConfig, AuctionState, DataKey, MAX_AUCTION_DURATION, MAX_BID_INCREMENT_PERCENT,
-        MAX_TIME_BUFFER, MIN_AUCTION_DURATION, MIN_RESERVE_PRICE,
+        clear_pending_refund, get_auction, get_config, get_pending_refund, has_auction,
+        is_payment_token_locked, set_auction, set_config, set_payment_token_locked, AuctionConfig,
+        AuctionState, DataKey, MAX_AUCTION_DURATION, MAX_BID_INCREMENT_PERCENT, MAX_TIME_BUFFER,
+        MIN_AUCTION_DURATION, MIN_RESERVE_PRICE, STORAGE_VERSION,
     },
 };
 
@@ -35,7 +36,7 @@ pub trait DaoAuctionContractTrait {
     /// Initialize the auction contract
     fn __constructor(
         e: &Env,
-        owner: Address,
+        admin: Address,
         token_contract: Address,
         treasury: Address,
         duration: u64,
@@ -54,7 +55,7 @@ pub trait DaoAuctionContractTrait {
     /// Settle current auction and create new one
     fn settle_and_create_new(e: &Env);
 
-    /// Settle the current auction (when paused)
+    /// Settle an ended auction while paused (no new auction is created)
     fn settle_auction(e: &Env);
 
     /// Get current auction state
@@ -63,7 +64,7 @@ pub trait DaoAuctionContractTrait {
     /// Get auction configuration
     fn get_config(e: &Env) -> AuctionConfig;
 
-    /// Cancel current auction (owner only, when paused)
+    /// Cancel the current auction (admin only, when paused)
     fn cancel_auction(e: &Env);
 
     /// Pull a refund whose push failed (bidder auth required). Panics
@@ -73,7 +74,7 @@ pub trait DaoAuctionContractTrait {
     /// Refund credited to `bidder` and not yet withdrawn.
     fn pending_refund(e: &Env, bidder: Address) -> i128;
 
-    // Configuration setters (owner only, when paused)
+    // Configuration setters (admin only, when paused)
     fn set_duration(e: &Env, duration: u64);
     fn set_reserve_price(e: &Env, reserve_price: i128);
     fn set_min_bid_increment(e: &Env, min_bid_increment_percent: u32);
@@ -81,69 +82,68 @@ pub trait DaoAuctionContractTrait {
     fn set_payment_token(e: &Env, payment_token: Address);
     fn launch(e: &Env, treasury: Address, start: bool, expected_payment_token: Address);
     fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>);
+    /// Advance the storage layout after an upgrade (admin only).
+    fn migrate(e: &Env);
     fn version(e: &Env) -> String;
     fn wasm_hash(e: &Env) -> BytesN<32>;
+    /// Storage-layout version of the data held by this contract.
+    fn storage_version(e: &Env) -> u32;
     fn sync_version(e: &Env);
+    /// Module admin: the launch admin during setup, the Treasury once live.
+    fn admin(e: &Env) -> Address;
 }
 
 #[contractimpl(contracttrait)]
 impl Pausable for DaoAuctionContract {
     fn pause(e: &Env, caller: Address) {
-        caller.require_auth();
-        let owner = ownable::get_owner(e).unwrap();
-        if caller != owner {
-            panic_with_error!(e, AuctionError::Unauthorized);
-        }
+        Self::require_caller_is_admin(e, &caller);
+        common::ttl::extend_instance(e);
         pausable::pause(e);
     }
 
     fn unpause(e: &Env, caller: Address) {
         // Nothing holds mint authority before launch, so unpausing would fail at mint.
         common::lifecycle::require_live(e);
-        caller.require_auth();
-        let owner = ownable::get_owner(e).unwrap();
-        if caller != owner {
-            panic_with_error!(e, AuctionError::Unauthorized);
-        }
+        Self::require_caller_is_admin(e, &caller);
+        common::ttl::extend_instance(e);
         pausable::unpause(e);
 
-        // If first auction, launch
-        if !is_launched(e) {
-            set_launched(e, true);
-
-            // Create first auction
+        // Start the first auction, or a new one if the last was settled while paused.
+        if !has_auction(e) || get_auction(e).settled {
             create_auction(e);
-        } else {
-            // If resuming and previous auction was settled, create new one
-            let auction = get_auction(e);
-            if auction.settled {
-                create_auction(e);
-            }
         }
     }
 }
 
-#[contractimpl(contracttrait)]
-impl Ownable for DaoAuctionContract {}
+impl DaoAuctionContract {
+    /// `caller` must be the admin and authorize the call.
+    fn require_caller_is_admin(e: &Env, caller: &Address) {
+        caller.require_auth();
+        if *caller != common::admin::admin(e) {
+            panic_with_error!(e, AuctionError::Unauthorized);
+        }
+    }
+
+    fn manager(e: &Env) -> Address {
+        common::error::require(
+            e,
+            e.storage().instance().get(&DataKey::Manager),
+            common::CommonError::ManagerNotSet,
+        )
+    }
+}
 
 #[contractimpl]
 impl DaoAuctionContractTrait for DaoAuctionContract {
     /// One-shot, Manager-only launch handoff (Setup -> Live).
     ///
-    /// Marks the module live first, then hands ownership to `treasury` (clearing
-    /// any pending two-step transfer) and, when `start` is true, unpauses and
-    /// creates the first auction (the token must already be live so the auction
-    /// holds mint authority). Panics `PaymentTokenMismatch` if the configured
-    /// payment token differs from `expected_payment_token`. A second call panics with `AlreadyLive`.
+    /// Marks the module live first, then hands the admin to `treasury` and,
+    /// when `start` is true, unpauses and creates the first auction (the token
+    /// must already be live so the auction holds mint authority). Panics
+    /// `PaymentTokenMismatch` if the configured payment token differs from
+    /// `expected_payment_token`. A second call panics with `AlreadyLive`.
     fn launch(e: &Env, treasury: Address, start: bool, expected_payment_token: Address) {
-        let manager: Address = e
-            .storage()
-            .instance()
-            .get(&DataKey::Manager)
-            .unwrap_or_else(|| {
-                soroban_sdk::panic_with_error!(e, common::CommonError::ManagerNotSet)
-            });
-        manager.require_auth();
+        Self::manager(e).require_auth();
         common::lifecycle::mark_live(e);
         if treasury != get_config(e).treasury {
             panic_with_error!(e, AuctionError::TreasuryMismatch);
@@ -153,11 +153,10 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         if expected_payment_token != get_config(e).payment_token {
             panic_with_error!(e, AuctionError::PaymentTokenMismatch);
         }
-        common::ownership::handoff_owner(e, &treasury);
+        common::admin::handoff(e, &treasury);
         if start {
             pausable::unpause(e);
-            if !is_launched(e) {
-                set_launched(e, true);
+            if !has_auction(e) {
                 create_auction(e);
             }
         }
@@ -167,7 +166,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
 
     fn __constructor(
         e: &Env,
-        owner: Address,
+        admin: Address,
         token_contract: Address,
         treasury: Address,
         duration: u64,
@@ -200,8 +199,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
             panic_with_error!(e, AuctionError::InvalidTimeBuffer);
         }
 
-        // Set owner
-        ownable::set_owner(e, &owner);
+        common::admin::init(e, &admin);
 
         // Start paused
         pausable::pause(e);
@@ -218,14 +216,11 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         };
         set_config(e, &config);
         e.storage().instance().set(&DataKey::Manager, &manager);
-        common::upgrade::init(e, &current_hash, &version);
-
-        // Not launched yet
-        set_launched(e, false);
+        common::upgrade::init(e, &current_hash, &version, STORAGE_VERSION);
 
         emit_auction_initialized(
             e,
-            &owner,
+            &admin,
             &token_contract,
             &treasury,
             duration,
@@ -238,17 +233,21 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     }
 
     fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
-        let owner =
-            common::error::require(e, ownable::get_owner(e), common::CommonError::OwnerNotSet);
-        owner.require_auth();
-        let manager: Address = e
-            .storage()
-            .instance()
-            .get(&DataKey::Manager)
-            .unwrap_or_else(|| {
-                soroban_sdk::panic_with_error!(e, common::CommonError::ManagerNotSet)
-            });
-        common::upgrade::apply(e, &manager, &from_hash, &to_hash);
+        common::admin::require_admin(e);
+        common::upgrade::apply(e, &Self::manager(e), &from_hash, &to_hash);
+    }
+
+    fn migrate(e: &Env) {
+        common::admin::require_admin(e);
+        common::upgrade::migrate(e, STORAGE_VERSION);
+    }
+
+    fn storage_version(e: &Env) -> u32 {
+        common::upgrade::storage_version(e)
+    }
+
+    fn admin(e: &Env) -> Address {
+        common::admin::admin(e)
     }
 
     fn version(e: &Env) -> String {
@@ -260,68 +259,32 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     }
 
     fn sync_version(e: &Env) {
-        let owner =
-            common::error::require(e, ownable::get_owner(e), common::CommonError::OwnerNotSet);
-        owner.require_auth();
-        let manager: Address = e
-            .storage()
-            .instance()
-            .get(&DataKey::Manager)
-            .unwrap_or_else(|| {
-                soroban_sdk::panic_with_error!(e, common::CommonError::ManagerNotSet)
-            });
-        common::upgrade::sync_version(e, &manager);
+        common::admin::require_admin(e);
+        common::upgrade::sync_version(e, &Self::manager(e));
     }
 
     #[when_not_paused]
     fn create_bid(e: &Env, bidder: Address, token_id: u128, amount: i128) {
         bidder.require_auth();
+        common::ttl::extend_instance(e);
 
         let mut auction = get_auction(e);
         let config = get_config(e);
 
-        // Validate token ID
         if auction.token_id != token_id {
             panic_with_error!(e, AuctionError::InvalidTokenId);
         }
-
-        // Check auction not ended
-        let now = e.ledger().timestamp();
-        if now >= auction.end_time {
+        if e.ledger().timestamp() >= auction.end_time {
             panic_with_error!(e, AuctionError::AuctionOver);
         }
+        // Validate the bid economics before any payment moves, rather than
+        // relying on rollback to protect the bidder.
+        validate_bid_amount(e, &auction, &config, amount);
 
-        if amount <= 0 {
-            panic_with_error!(e, AuctionError::InvalidBid);
-        }
-
-        // Validate all bid economics before making the external payment call.
-        // This avoids relying on transaction rollback to protect the bidder.
-        if auction.highest_bidder.is_none() {
-            if amount < config.reserve_price {
-                panic_with_error!(e, AuctionError::ReservePriceNotMet);
-            }
-        } else {
-            let increment = auction
-                .highest_bid
-                .checked_mul(config.min_bid_increment_percent as i128)
-                .and_then(|value| value.checked_div(100))
-                .unwrap_or_else(|| panic_with_error!(e, AuctionError::ArithmeticOverflow));
-            let min_bid = auction
-                .highest_bid
-                .checked_add(increment)
-                .unwrap_or_else(|| panic_with_error!(e, AuctionError::ArithmeticOverflow));
-            if amount < min_bid {
-                panic_with_error!(e, AuctionError::MinBidNotMet);
-            }
-        }
-
-        // Transfer payment tokens from bidder to contract
-        // Bidder authorizes this via bidder.require_auth() at function entry
         if !is_payment_token_locked(e) {
             set_payment_token_locked(e);
         }
-
+        // Covered by the bidder's `require_auth` above.
         TokenClient::new(e, &config.payment_token).transfer(
             &bidder,
             e.current_contract_address(),
@@ -337,20 +300,16 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     /// The only griefing vector is settling at exact end time, which is minimal impact.
     #[when_not_paused]
     fn settle_and_create_new(e: &Env) {
-        let auction = get_auction(e);
-
-        // Ensure auction has ended
-        let now = e.ledger().timestamp();
-        if now < auction.end_time {
-            panic_with_error!(e, AuctionError::AuctionActive);
-        }
-
+        common::ttl::extend_instance(e);
         settle_auction_internal(e);
         create_auction(e);
     }
 
+    /// Permissionless like `settle_and_create_new`, and likewise only after
+    /// the auction has ended (`AuctionActive` otherwise).
     #[when_paused]
     fn settle_auction(e: &Env) {
+        common::ttl::extend_instance(e);
         settle_auction_internal(e);
     }
 
@@ -362,11 +321,12 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         get_config(e)
     }
 
-    /// Cancel the current auction and refund the highest bidder (owner only, when paused)
-    /// This allows the owner to cancel an auction in emergency situations
-    #[only_owner]
+    /// Cancel the current auction and refund the highest bidder (admin only,
+    /// when paused). The emergency exit for a running auction.
     #[when_paused]
     fn cancel_auction(e: &Env) {
+        let admin = common::admin::require_admin(e);
+        common::ttl::extend_instance(e);
         let auction = get_auction(e);
         let config = get_config(e);
 
@@ -387,8 +347,6 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
                 );
             }
         }
-
-        let owner = ownable::get_owner(e).unwrap();
 
         // Mark as settled to prevent further bids (before the NFT transfer, CEI)
         let mut cancelled_auction = auction.clone();
@@ -420,11 +378,12 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
             &(auction.token_id as u32),
         );
 
-        emit_auction_cancelled(e, auction.token_id, 0, &owner); // reason: 0 = owner cancelled
+        emit_auction_cancelled(e, auction.token_id, 0, &admin); // reason: 0 = admin cancelled
     }
 
     fn withdraw_refund(e: &Env, bidder: Address) {
         bidder.require_auth();
+        common::ttl::extend_instance(e);
 
         let amount = get_pending_refund(e, &bidder);
         if amount <= 0 {
@@ -466,83 +425,79 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         get_pending_refund(e, &bidder)
     }
 
-    #[only_owner]
     #[when_paused]
     fn set_duration(e: &Env, duration: u64) {
+        let admin = common::admin::require_admin(e);
+        common::ttl::extend_instance(e);
         if !(MIN_AUCTION_DURATION..=MAX_AUCTION_DURATION).contains(&duration) {
             panic_with_error!(e, AuctionError::InvalidConfig);
         }
-
-        let owner = ownable::get_owner(e).unwrap();
 
         let mut config = get_config(e);
         config.duration = duration;
         set_config(e, &config);
 
-        emit_duration_updated(e, duration, &owner);
+        emit_duration_updated(e, duration, &admin);
     }
 
-    #[only_owner]
     #[when_paused]
     fn set_reserve_price(e: &Env, reserve_price: i128) {
+        let admin = common::admin::require_admin(e);
+        common::ttl::extend_instance(e);
         // SECURITY: Validate reserve price is reasonable
         if reserve_price < MIN_RESERVE_PRICE {
             panic_with_error!(e, AuctionError::InvalidBid);
         }
 
-        let owner = ownable::get_owner(e).unwrap();
-
         let mut config = get_config(e);
         config.reserve_price = reserve_price;
         set_config(e, &config);
 
-        emit_reserve_price_updated(e, reserve_price, &owner);
+        emit_reserve_price_updated(e, reserve_price, &admin);
     }
 
-    #[only_owner]
     #[when_paused]
     fn set_min_bid_increment(e: &Env, min_bid_increment_percent: u32) {
+        let admin = common::admin::require_admin(e);
+        common::ttl::extend_instance(e);
         if min_bid_increment_percent == 0 || min_bid_increment_percent > MAX_BID_INCREMENT_PERCENT {
             panic_with_error!(e, AuctionError::InvalidConfig);
         }
-
-        let owner = ownable::get_owner(e).unwrap();
 
         let mut config = get_config(e);
         config.min_bid_increment_percent = min_bid_increment_percent;
         set_config(e, &config);
 
-        emit_min_bid_increment_updated(e, min_bid_increment_percent, &owner);
+        emit_min_bid_increment_updated(e, min_bid_increment_percent, &admin);
     }
 
-    #[only_owner]
     #[when_paused]
     fn set_time_buffer(e: &Env, time_buffer: u64) {
+        let admin = common::admin::require_admin(e);
+        common::ttl::extend_instance(e);
         if time_buffer == 0 || time_buffer > MAX_TIME_BUFFER {
             panic_with_error!(e, AuctionError::InvalidTimeBuffer);
         }
-        let owner = ownable::get_owner(e).unwrap();
 
         let mut config = get_config(e);
         config.time_buffer = time_buffer;
         set_config(e, &config);
 
-        emit_time_buffer_updated(e, time_buffer, &owner);
+        emit_time_buffer_updated(e, time_buffer, &admin);
     }
 
-    #[only_owner]
     #[when_paused]
     fn set_payment_token(e: &Env, payment_token: Address) {
+        let admin = common::admin::require_admin(e);
+        common::ttl::extend_instance(e);
         if is_payment_token_locked(e) {
             panic_with_error!(e, AuctionError::InvalidConfig);
         }
-
-        let owner = ownable::get_owner(e).unwrap();
 
         let mut config = get_config(e);
         config.payment_token = payment_token.clone();
         set_config(e, &config);
 
-        emit_payment_token_updated(e, &payment_token, &owner);
+        emit_payment_token_updated(e, &payment_token, &admin);
     }
 }

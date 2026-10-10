@@ -286,7 +286,7 @@ community-facing screen.
 ### Authority states
 
 The UI must distinguish public visibility, membership, voting power, launch
-admin authority, direct owner authority before finalization, and
+admin authority (the launch admin is the admin of every module) before launch, and
 governance-only authority after finalization. These are product states, not
 just permission guards.
 
