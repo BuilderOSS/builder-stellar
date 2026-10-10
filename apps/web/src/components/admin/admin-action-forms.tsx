@@ -17,7 +17,7 @@ export type CreatePrimaryListingDraft = { price: string; expiresAt: string };
 export type CancelPrimaryListingDraft = { listingId: string };
 
 function ErrorText({ message }: { message?: string }) {
-  return message ? <FieldHelperText style={{ color: '#f87171' }}>{message}</FieldHelperText> : null;
+  return message ? <FieldHelperText tone="error">{message}</FieldHelperText> : null;
 }
 
 export function AuthorityActionForm({

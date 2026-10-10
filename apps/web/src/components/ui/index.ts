@@ -7,6 +7,7 @@ export { Button, ButtonLink, IconButton } from './button';
 export { Callout } from './callout';
 export { Card } from './card';
 export { ChoiceGroup, type ChoiceOption } from './choice-group';
+export { CodeBlock } from './code-block';
 export { ConfirmAction } from './confirm-action';
 export { CopyIconButton } from './copy-icon-button';
 export { Countdown } from './countdown';

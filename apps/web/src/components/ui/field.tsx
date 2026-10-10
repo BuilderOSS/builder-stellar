@@ -13,8 +13,13 @@ export function FieldLabel({ className, ...props }: ComponentProps<'label'>) {
   return <label {...props} className={cx(labelClass, className)} />;
 }
 
-export function FieldHelperText({ className, ...props }: ComponentProps<'p'>) {
-  return <p {...props} className={cx(helperClass, className)} />;
+/** Help under a field; `tone="error"` turns it into the field's error message. */
+export function FieldHelperText({ className, tone, ...props }: ComponentProps<'p'> & { tone?: 'error' }) {
+  return tone === 'error' ? (
+    <p role="alert" {...props} className={cx(errorClass, className)} />
+  ) : (
+    <p {...props} className={cx(helperClass, className)} />
+  );
 }
 
 export function FieldError({ className, ...props }: ComponentProps<'p'>) {

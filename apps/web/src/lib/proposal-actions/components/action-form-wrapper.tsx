@@ -3,6 +3,7 @@
 'use client';
 
 import { Suspense, useCallback, useState } from 'react';
+import { css } from 'styled-system/css';
 
 import { ProposalActionConfirmDialog } from '@/components/proposal/proposal-action-confirm-dialog';
 import { Skeleton } from '@/components/ui';
@@ -80,7 +81,7 @@ export function ActionFormWrapper({ daoId }: { daoId: string }) {
         setConfirmDialog({
           open: true,
           title: 'Switch action type?',
-          message: 'Switching action type will clear your current draft. Continue?',
+          message: 'Switching clears what you entered for this action.',
           confirmLabel: 'Switch',
           onConfirm: () => {
             changeActionType(address, daoId, newType);
@@ -125,14 +126,12 @@ export function ActionFormWrapper({ daoId }: { daoId: string }) {
         <ActionErrorBoundary actionType={editingState.actionType}>
           <Suspense
             fallback={
-              <div role="status" aria-busy="true" className="skeleton-form">
-                <span className="sr-only">Loading action form</span>
-                <div style={{ display: 'grid', gap: '10px' }}>
-                  <Skeleton style={{ width: '100px', height: '0.9em' }} />
-                  <Skeleton style={{ width: '100%', height: '2.5em' }} />
-                  <Skeleton style={{ width: '180px', height: '0.9em' }} />
-                  <Skeleton style={{ width: '100%', height: '2.5em' }} />
-                </div>
+              <div role="status" aria-busy="true" className={css({ display: 'grid', gap: '2.5' })}>
+                <span className="sr-only">Loading the form</span>
+                <Skeleton className={css({ width: '24', height: '3.5' })} />
+                <Skeleton className={css({ height: '11' })} />
+                <Skeleton className={css({ width: '40', height: '3.5' })} />
+                <Skeleton className={css({ height: '11' })} />
               </div>
             }
           >
