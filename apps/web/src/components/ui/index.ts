@@ -1,6 +1,7 @@
 export { ActionBar } from './action-bar';
 export { Address, shortenId } from './address';
 export { Amount } from './amount';
+export { AmountInput } from './amount-input';
 export { Avatar, AvatarStack } from './avatar';
 export { Badge, Badge as Chip } from './badge';
 export { Button, ButtonLink, IconButton } from './button';
