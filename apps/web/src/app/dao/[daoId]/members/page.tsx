@@ -10,16 +10,17 @@ import { useDirectoryMembers } from '@/lib/member-directory/hooks';
 import { memberAddress } from '@/lib/member-directory/validation';
 
 export default function MembersPage() {
-  const { daoId, daoConfig } = useDaoContext();
+  const { daoId } = useDaoContext();
+  return <MemberDirectory key={daoId} daoId={daoId} />;
+}
+function MemberDirectory({ daoId }: { daoId: string }) {
+  const { daoConfig } = useDaoContext();
   // Tokens held by these DAO contracts carry no votes and never delegate.
   const systemHolders: Record<string, string> = {
     [daoConfig.treasuryContractId]: 'Treasury',
     [daoConfig.auctionContractId]: 'Auction',
     [daoConfig.marketplaceContractId]: 'Marketplace'
   };
-  return <MemberDirectory key={daoId} daoId={daoId} />;
-}
-function MemberDirectory({ daoId }: { daoId: string }) {
   const [page, setPage] = useState(0);
   const [address, setAddress] = useState('');
   const [message, setMessage] = useState('');
