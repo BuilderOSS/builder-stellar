@@ -90,7 +90,7 @@ describe('treasury rendered read states', () => {
     expect(html).toContain('Execution history unavailable');
     expect(html).not.toContain('999.0000000');
     expect(html).not.toContain('0 funded assets');
-    expect(html).not.toContain('No indexed treasury executions yet');
+    expect(html).not.toContain('No payouts yet');
   });
   it('links each call to its proposal receipt and network transaction, preserving the complete hash', () => {
     mock.history.data = {
@@ -110,7 +110,7 @@ describe('treasury rendered read states', () => {
     };
     const html = renderToStaticMarkup(<TreasuryWorkspace />);
     expect(html).toContain(`/dao/dao-a/proposals/${'07'.repeat(32)}`);
-    expect(html).toContain('Proposal &amp; full execution receipt');
+    expect(html).toContain('View proposal');
     expect(html).toContain('aa'.repeat(32));
     expect(html).toContain('Ledger 100');
     expect(html).toContain('aria-label="Treasury execution history pages"');
