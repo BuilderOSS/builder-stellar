@@ -18,6 +18,7 @@ import { daoAdminRoute } from '@/lib/dao-routes';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { formatDuration } from '@/lib/duration';
 import { buildLaunchPlan } from '@/lib/launch-steps';
+import { useModuleUpdates } from '@/lib/use-module-updates';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import { LaunchCard } from './launch-card';
@@ -45,12 +46,19 @@ export function useLaunchPlan(daoId: string, config: DaoNetworkConfig) {
     { refreshInterval: 15000, revalidateOnFocus: true }
   );
   const artwork = useAdminArtwork(config, session.address);
+  // Only the launch admin can act on contract updates during setup, so only they pay for the reads.
+  const updates = useModuleUpdates(
+    config,
+    session.address,
+    Boolean(session.address && session.address === config.launchAdmin)
+  );
   const plan = buildLaunchPlan({
     readiness: readiness.data,
     artwork: artwork.data,
-    launchAdmin: config.launchAdmin
+    launchAdmin: config.launchAdmin,
+    withdrawnContracts: updates.plan.withdrawn.length
   });
-  return { readiness, artwork, plan };
+  return { readiness, artwork, plan, updates };
 }
 
 /**
@@ -60,7 +68,8 @@ export function useLaunchPlan(daoId: string, config: DaoNetworkConfig) {
 export function LaunchSetup({ daoId, config }: { daoId: string; config: DaoNetworkConfig }) {
   const { routeId } = useDaoContext();
   const session = useAuthSessionStore();
-  const { readiness, artwork, plan } = useLaunchPlan(daoId, config);
+  const { readiness, artwork, plan, updates } = useLaunchPlan(daoId, config);
+  const optionalUpdates = updates.plan.actionable.filter((update) => update.status === 'available');
   const isAdmin = Boolean(session.address && session.address === config.launchAdmin);
   const auction = useSWR(
     isAdmin && config.auctionContractId ? `/api/dao/${encodeURIComponent(daoId)}/auctions` : null,
@@ -145,6 +154,10 @@ export function LaunchSetup({ daoId, config }: { daoId: string; config: DaoNetwo
                   >
                     {step.status === 'done' ? 'Review artwork' : 'Add artwork'}
                   </ButtonLink>
+                ) : step.id === 'contracts' ? (
+                  <ButtonLink href={daoAdminRoute(routeId, '/upgrades')} size="sm">
+                    Update contracts
+                  </ButtonLink>
                 ) : step.id === 'founders' && step.status !== 'loading' ? (
                   <ButtonLink
                     href={daoAdminRoute(routeId, '/founders')}
@@ -180,6 +193,18 @@ export function LaunchSetup({ daoId, config }: { daoId: string; config: DaoNetwo
           <p className={muted}>Prefilled from when you created it. Change now, or later by a vote.</p>
         </div>
         <ul className={steps}>
+          {optionalUpdates.length ? (
+            <LaunchStepRow
+              status="todo"
+              title="Contract updates"
+              detail={`${optionalUpdates.length === 1 ? '1 update is' : `${optionalUpdates.length} updates are`} available. Easiest to apply before launch, while you can sign directly.`}
+              action={
+                <ButtonLink href={daoAdminRoute(routeId, '/upgrades')} variant="secondary" size="sm">
+                  Review
+                </ButtonLink>
+              }
+            />
+          ) : null}
           {config.auctionContractId ? (
             <LaunchStepRow
               status="done"

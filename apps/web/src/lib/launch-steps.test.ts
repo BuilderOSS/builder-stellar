@@ -83,4 +83,17 @@ describe('buildLaunchPlan', () => {
     const live = buildLaunchPlan({ readiness: readiness({ live: true }), artwork: artwork([1]), launchAdmin: ADMIN });
     expect(live).toMatchObject({ live: true, required: [], canLaunch: false });
   });
+
+  it('blocks launch while a contract is on a withdrawn version, without counting it as progress', () => {
+    const plan = buildLaunchPlan({
+      readiness: readiness({ supply: 1n }),
+      artwork: artwork([5]),
+      launchAdmin: ADMIN,
+      withdrawnContracts: 1
+    });
+    expect(plan.required.at(-1)).toMatchObject({ id: 'contracts', status: 'blocked' });
+    expect(plan.canLaunch).toBe(false);
+    expect(plan.launchHint).toBe('Update your contracts first.');
+    expect([plan.doneCount, plan.totalCount]).toEqual([2, 2]);
+  });
 });

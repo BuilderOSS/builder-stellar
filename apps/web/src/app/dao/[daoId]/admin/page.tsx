@@ -2,6 +2,7 @@
 
 import { css } from 'styled-system/css';
 
+import { ContractUpdatesNotice } from '@/components/admin/contract-updates-notice';
 import { TtlExpiryPanel } from '@/components/admin/ttl-expiry-panel';
 import { PageSection } from '@/components/page-section';
 import { ProposalDraftPanel } from '@/components/proposal/proposal-draft-panel';
@@ -138,6 +139,7 @@ export default function AdminPage() {
           : 'After launch, most changes go up for a vote.'
       }`}
     >
+      <ContractUpdatesNotice enabled={hasAnyAccess} />
       <section className={accessCard} aria-labelledby="access-title">
         <div className={css({ display: 'flex', alignItems: 'center', gap: '3', minW: '0' })}>
           {session.address ? <Avatar address={session.address} size="lg" yours={hasAnyAccess} /> : null}
