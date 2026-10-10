@@ -9,7 +9,6 @@ import { ActivityList } from '@/components/activity/activity-list';
 import { DaoContractList } from '@/components/dao-contract-list';
 import { MembershipCard } from '@/components/dao-home/membership-card';
 import { type HomeAuction, NowCard } from '@/components/dao-home/now-card';
-import { LaunchChecklist } from '@/components/launch-checklist';
 import { ProposalRow } from '@/components/proposal/proposal-row';
 import type { ProposalListResponse } from '@/components/proposal/types';
 import { TokenCard } from '@/components/token/token-card';
@@ -165,12 +164,6 @@ export default function Page() {
         assetCode={assetCode}
         now={now}
       />
-
-      {isLaunchSetup ? (
-        <section id="launch-checklist" aria-label="Launch setup" className={css({ mt: '8' })}>
-          <LaunchChecklist daoId={daoId} config={config} />
-        </section>
-      ) : null}
 
       <div className={columns}>
         <div className={mainColumn}>

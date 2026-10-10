@@ -25,6 +25,7 @@ export { Menu, type MenuEntry } from './menu';
 export { PageHeader } from './page-header';
 export { Pagination } from './pagination';
 export { Popover, PopoverClose } from './popover';
+export { ProgressBar } from './progress-bar';
 export { ProgressSteps } from './progress-steps';
 export { Prose } from './prose';
 export { SearchInput } from './search-input';

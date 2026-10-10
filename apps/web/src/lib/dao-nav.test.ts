@@ -64,6 +64,18 @@ describe('resolveDaoNav', () => {
   });
 });
 
+describe('setup item', () => {
+  it('shows Setup only while the community is pending, before Manage', () => {
+    const pending = resolveDaoNav('d', { ...base, status: 'pending' }, { canManage: true });
+    expect(keys(pending.railFooter)).toEqual(['setup', 'manage']);
+    expect(keys(pending.more)[0]).toBe('setup');
+    expect(pending.railFooter[0].href).toBe('/dao/d/setup');
+    const live = resolveDaoNav('d', { ...base, status: 'operational' }, { canManage: true });
+    expect(keys(live.railFooter)).toEqual(['manage']);
+    expect(keys(live.more)).not.toContain('setup');
+  });
+});
+
 describe('activeNavKey', () => {
   const items = [
     { key: 'home', href: '/dao/d', exact: true },

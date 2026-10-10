@@ -10,9 +10,17 @@ import { css, sva } from 'styled-system/css';
 import { Button, ListRow, Sheet } from '@/components/ui';
 import { useCloseOnNavigate } from '@/hooks/use-close-on-navigate';
 import { activeNavKey } from '@/lib/dao-nav';
-import { daoAdminRoute } from '@/lib/dao-routes';
+import { daoAdminRoute, daoRoute } from '@/lib/dao-routes';
 
-type ManageItem = { key: string; label: string; meta: string; section: string; exact?: boolean };
+type ManageItem = {
+  key: string;
+  label: string;
+  meta: string;
+  section: string;
+  exact?: boolean;
+  /** Needed before launch; tagged while the community is in setup. */
+  requiredForLaunch?: boolean;
+};
 
 const GROUPS: Array<{ title: string; items: ManageItem[] }> = [
   {
@@ -23,9 +31,21 @@ const GROUPS: Array<{ title: string; items: ManageItem[] }> = [
     title: 'Membership',
     items: [
       { key: 'token', label: 'Mint tokens', meta: 'Create new membership tokens', section: '/token' },
-      { key: 'founders', label: 'Founder tokens', meta: 'Tokens for the founding team', section: '/founders' },
+      {
+        key: 'founders',
+        label: 'Founder tokens',
+        meta: 'Tokens for the founding team',
+        section: '/founders',
+        requiredForLaunch: true
+      },
       { key: 'claims', label: 'Claim allocations', meta: 'Free tokens people can claim', section: '/claims' },
-      { key: 'artwork', label: 'Artwork', meta: 'The art every token is drawn from', section: '/artwork' }
+      {
+        key: 'artwork',
+        label: 'Artwork',
+        meta: 'The art every token is drawn from',
+        section: '/artwork',
+        requiredForLaunch: true
+      }
     ]
   },
   {
@@ -81,6 +101,7 @@ const nav = sva({
   }
 });
 
+const requiredTag = css({ ml: 'auto', textStyle: 'micro', color: 'warning', fontWeight: '600' });
 const mobileTrigger = css({ display: { base: 'flex', lg: 'none' } });
 const sheetGroup = css({ display: 'grid', gap: '1', mb: '4' });
 const sheetTitle = css({ textStyle: 'micro', color: 'ink.faint', m: '0' });
@@ -89,7 +110,7 @@ const sheetTitle = css({ textStyle: 'micro', color: 'ink.faint', m: '0' });
  * Manage sections in one grouped list: a sticky side list on wide screens, a
  * section picker in a sheet on phones.
  */
-export function ManageNav({ routeId }: { routeId: string }) {
+export function ManageNav({ routeId, inSetup = false }: { routeId: string; inSetup?: boolean }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   useCloseOnNavigate(() => setOpen(false));
@@ -100,6 +121,18 @@ export function ManageNav({ routeId }: { routeId: string }) {
   return (
     <>
       <nav className={classes.root} aria-label="Manage sections">
+        {inSetup ? (
+          <div className={classes.group}>
+            <p className={classes.title}>Setup</p>
+            <ul className={classes.list}>
+              <li>
+                <NextLink href={daoRoute(routeId, 'setup') as Route} className={classes.link}>
+                  Launch checklist
+                </NextLink>
+              </li>
+            </ul>
+          </div>
+        ) : null}
         {GROUPS.map((group) => (
           <div key={group.title} className={classes.group}>
             <p className={classes.title}>{group.title}</p>
@@ -112,6 +145,7 @@ export function ManageNav({ routeId }: { routeId: string }) {
                     aria-current={active?.key === item.key ? 'page' : undefined}
                   >
                     {item.label}
+                    {inSetup && item.requiredForLaunch ? <span className={requiredTag}>Required</span> : null}
                   </NextLink>
                 </li>
               ))}
@@ -127,6 +161,19 @@ export function ManageNav({ routeId }: { routeId: string }) {
         </Button>
       </div>
       <Sheet open={open} onOpenChange={setOpen} title="Manage">
+        {inSetup ? (
+          <div className={sheetGroup}>
+            <p className={sheetTitle}>Setup</p>
+            <ul className={css({ listStyle: 'none', m: '0', p: '0' })}>
+              <ListRow
+                as="li"
+                href={daoRoute(routeId, 'setup')}
+                title="Launch checklist"
+                meta="What's left before launch"
+              />
+            </ul>
+          </div>
+        ) : null}
         {GROUPS.map((group) => (
           <div key={group.title} className={sheetGroup}>
             <p className={sheetTitle}>{group.title}</p>
@@ -137,7 +184,7 @@ export function ManageNav({ routeId }: { routeId: string }) {
                   as="li"
                   href={daoAdminRoute(routeId, item.section)}
                   title={item.label}
-                  meta={item.meta}
+                  meta={inSetup && item.requiredForLaunch ? `Required for launch · ${item.meta}` : item.meta}
                 />
               ))}
             </ul>

@@ -31,6 +31,9 @@ const chips = css({ display: 'flex', flexWrap: 'wrap', gap: '1.5' });
 
 type Access = 'direct' | 'vote' | 'read' | 'open';
 
+/** Manage sections the launch checklist depends on. */
+const REQUIRED_FOR_LAUNCH = new Set(['artwork', 'founders']);
+
 function AccessChip({ access }: { access: Access }) {
   if (access === 'direct') return <Chip tone="yours">You can change this</Chip>;
   if (access === 'vote') return <Chip tone="live">Needs a vote</Chip>;
@@ -162,7 +165,17 @@ export default function AdminPage() {
               href={section.href}
               title={section.title}
               meta={section.meta}
-              trailing={<AccessChip access={section.access} />}
+              trailing={
+                config.status === 'pending' ? (
+                  REQUIRED_FOR_LAUNCH.has(section.key) ? (
+                    <Chip tone="warning">Required for launch</Chip>
+                  ) : (
+                    <Chip>Optional before launch</Chip>
+                  )
+                ) : (
+                  <AccessChip access={section.access} />
+                )
+              }
             />
           ))}
         </div>

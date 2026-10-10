@@ -5,6 +5,8 @@ import Image from 'next/image';
 import type { ReactNode } from 'react';
 import { css, sva } from 'styled-system/css';
 
+import { useLaunchPlan } from '@/components/launch/launch-setup';
+import { SetupProgress } from '@/components/launch/setup-progress';
 import { ButtonLink, Chip, Countdown, Skeleton } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { formatAuctionAmount } from '@/lib/auction-history/state';
@@ -96,6 +98,37 @@ function Shell({
   );
 }
 
+/** Launch admins in setup: how far along they are, and the way back to the checklist. */
+function SetupNow() {
+  const { daoId, routeId, daoConfig } = useDaoContext();
+  const { plan } = useLaunchPlan(daoId, daoConfig);
+  const next = plan.required.find((step) => step.status !== 'done');
+  return (
+    <Shell
+      meta={<Chip tone="warning">In setup</Chip>}
+      title={plan.canLaunch ? 'Ready to launch' : 'Finish setting up your community'}
+      text={
+        <div className={css({ display: 'grid', gap: '3' })}>
+          <span>
+            {plan.canLaunch
+              ? 'Everything required is done. Check what starts at launch, then open it to members.'
+              : next && next.status !== 'loading'
+                ? `Next: ${next.title.toLowerCase()}. Members can join once you launch.`
+                : 'Members can join once you launch.'}
+          </span>
+          <SetupProgress done={plan.doneCount} total={plan.totalCount} />
+        </div>
+      }
+      action={
+        <ButtonLink href={daoRoute(routeId, 'setup')}>
+          {plan.canLaunch ? 'Go to launch' : 'Continue setup'}
+          <ArrowRight aria-hidden="true" />
+        </ButtonLink>
+      }
+    />
+  );
+}
+
 /**
  * The one thing to do here right now. Live auction beats open votes beats
  * quiet states; launch admins see their setup first.
@@ -130,21 +163,7 @@ export function NowCard({
   now: number | null;
 }) {
   const { routeId } = useDaoContext();
-  if (isLaunchSetup) {
-    return (
-      <Shell
-        meta={<Chip tone="warning">In setup</Chip>}
-        title="Finish setting up your community"
-        text="Add artwork, mint founder tokens and choose what runs at launch. Members can join once you launch."
-        action={
-          <ButtonLink href="#launch-checklist">
-            Open launch checklist
-            <ArrowRight aria-hidden="true" />
-          </ButtonLink>
-        }
-      />
-    );
-  }
+  if (isLaunchSetup) return <SetupNow />;
 
   if (auctionError && proposalsError) {
     return (

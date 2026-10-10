@@ -1,7 +1,7 @@
 'use client';
 
 import type { LucideIcon } from 'lucide-react';
-import { Gavel, House, Landmark, MoreHorizontal, Settings, Store, Ticket, Users, Vote } from 'lucide-react';
+import { Gavel, House, Landmark, MoreHorizontal, Rocket, Settings, Store, Ticket, Users, Vote } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { css } from 'styled-system/css';
@@ -29,6 +29,7 @@ const ICONS: Record<DaoNavKey, LucideIcon> = {
   treasury: Landmark,
   members: Users,
   claims: Ticket,
+  setup: Rocket,
   manage: Settings
 };
 

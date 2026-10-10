@@ -1,7 +1,7 @@
 import type { DaoNetworkConfig } from './dao-config';
 import { daoRoute } from './dao-routes';
 
-export type DaoNavKey = 'home' | 'vote' | 'auction' | 'market' | 'treasury' | 'members' | 'claims' | 'manage';
+export type DaoNavKey = 'home' | 'vote' | 'auction' | 'market' | 'treasury' | 'members' | 'claims' | 'setup' | 'manage';
 
 export type DaoNavItem = {
   key: DaoNavKey;
@@ -26,7 +26,8 @@ export type DaoNav = {
 type NavCapabilities = Pick<
   DaoNetworkConfig,
   'auctionContractId' | 'auctionEnabled' | 'marketplaceContractId' | 'marketplaceEnabled' | 'minterContractId'
->;
+> &
+  Partial<Pick<DaoNetworkConfig, 'status'>>;
 
 export function hasAuction(config: NavCapabilities) {
   // A disabled auction can be reactivated, so it stays reachable; a DAO
@@ -57,6 +58,7 @@ export function resolveDaoNav(daoId: string, config: NavCapabilities, { canManag
     treasury: { key: 'treasury', label: 'Treasury', href: daoRoute(daoId, 'treasury') },
     members: { key: 'members', label: 'Members', href: daoRoute(daoId, 'members') },
     claims: { key: 'claims', label: 'Claims', href: daoRoute(daoId, 'claims') },
+    setup: { key: 'setup', label: 'Setup', href: daoRoute(daoId, 'setup') },
     manage: { key: 'manage', label: 'Manage', href: daoRoute(daoId, 'admin') }
   };
 
@@ -71,19 +73,22 @@ export function resolveDaoNav(daoId: string, config: NavCapabilities, { canManag
         return Boolean(config.minterContractId);
       case 'manage':
         return canManage;
+      case 'setup':
+        // The launch checklist exists only until launch; everyone can see its progress.
+        return config.status === 'pending';
       default:
         return true;
     }
   };
 
   const tabs = (['home', 'vote', slot3, 'treasury'] as DaoNavKey[]).map((key) => items[key]);
-  const more = (['auction', 'market', 'members', 'claims', 'manage'] as DaoNavKey[])
+  const more = (['setup', 'auction', 'market', 'members', 'claims', 'manage'] as DaoNavKey[])
     .filter((key) => key !== slot3 && available(key))
     .map((key) => items[key]);
   const rail = (['home', 'vote', 'auction', 'market', 'treasury', 'members', 'claims'] as DaoNavKey[])
     .filter(available)
     .map((key) => items[key]);
-  const railFooter = available('manage') ? [items.manage] : [];
+  const railFooter = (['setup', 'manage'] as DaoNavKey[]).filter(available).map((key) => items[key]);
 
   return { tabs, more, rail, railFooter, slot3 };
 }
