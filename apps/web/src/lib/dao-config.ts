@@ -7,7 +7,7 @@
 
 import { getNetworkConfig, type NetworkName } from '@/config/networks';
 
-import { getDaoConfigFromDatabase } from './dao-db';
+import { getDaoConfigFromDatabase, resolveDaoId } from './dao-db';
 import { registeredMinterConfig } from './registered-minter-config';
 
 export type DaoNetworkConfig = {
@@ -81,7 +81,8 @@ export function isDaoAdmin(config: DaoNetworkConfig, address: string | null | un
  */
 export async function getDaoNetworkConfigById(daoId: string): Promise<DaoNetworkConfig> {
   // Query database for complete DAO configuration
-  const daoConfig = await getDaoConfigFromDatabase(daoId);
+  // Accept the canonical Token address or a claimed slug.
+  const daoConfig = await getDaoConfigFromDatabase(await resolveDaoId(daoId));
 
   // Get network configuration from static config
   const networkConfig = getNetworkConfig(daoConfig.network);

@@ -12,7 +12,7 @@ import { selectDraft, useProposalComposerStore } from '@/stores/proposal-compose
 
 const ITEMS: Array<{ section: string; label: string }> = [
   { section: '', label: 'Dashboard' },
-  { section: '/owner', label: 'Owner' },
+  { section: '/owner', label: 'Authorities' },
   { section: '/token', label: 'Token Admin' },
   { section: '/governance', label: 'Governance Admin' },
   { section: '/auction', label: 'Auction Admin' }

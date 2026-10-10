@@ -31,6 +31,11 @@ function getDeploymentId(): string {
 
 /** Activity rows shown on public feeds (the indexer also writes admin/system rows). */
 const PUBLIC_VISIBILITY = ['public', 'governance'];
+/**
+ * A single mint emits OpenZeppelin `mint` and `mint_with_minter`; both are
+ * public, so public feeds keep only the `mint` row for each token.
+ */
+const PUBLIC_FEED_FILTER = { visibility: { in: PUBLIC_VISIBILITY }, NOT: { eventName: 'mint_with_minter' } };
 
 function mapProposalList(row: AppProposalList) {
   return {
@@ -172,7 +177,7 @@ export async function getGoldskyActivityFeed(
     ...(contractId ? { contractId } : {}),
     ...(contractRole ? { contractRole } : {}),
     ...(actor ? { actor } : {}),
-    ...(visibility === 'all' ? {} : { visibility: { in: PUBLIC_VISIBILITY } }),
+    ...(visibility === 'all' ? {} : PUBLIC_FEED_FILTER),
     ...(kind
       ? {
           kind: {
@@ -583,13 +588,13 @@ export async function getDashboardData(address: string, params: { limit?: number
   const daoIds = myDaoCandidates.map((row) => row.daoId);
   const [feedRows, total] = await Promise.all([
     prisma.appActivityFeed.findMany({
-      where: { deploymentId, daoId: { in: daoIds }, visibility: { in: PUBLIC_VISIBILITY } },
+      where: { deploymentId, daoId: { in: daoIds }, ...PUBLIC_FEED_FILTER },
       orderBy: [{ ledgerSequence: 'desc' }, { activityId: 'desc' }],
       take: limit,
       skip: offset
     }),
     prisma.appActivityFeed.count({
-      where: { deploymentId, daoId: { in: daoIds }, visibility: { in: PUBLIC_VISIBILITY } }
+      where: { deploymentId, daoId: { in: daoIds }, ...PUBLIC_FEED_FILTER }
     })
   ]);
   const daoById = new Map(myDaoCandidates.map((row) => [row.daoId, row]));
