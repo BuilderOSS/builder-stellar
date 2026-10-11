@@ -240,9 +240,7 @@ export function ContractUpdates() {
               )
             ) : null}
             {plan.separate.length && canPropose && !direct ? (
-              <p className={note}>
-                Voting and Treasury run proposals themselves, so each upgrades in its own proposal.
-              </p>
+              <p className={note}>The Treasury runs proposals itself, so its upgrade goes in its own proposal.</p>
             ) : null}
             {error ? <Callout variant="error" title="Couldn't check for upgrades" description={error.message} /> : null}
             {message ? <Callout variant="warning" title={message} role="alert" /> : null}

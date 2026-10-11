@@ -39,12 +39,12 @@ describe('classifyModule', () => {
 });
 
 describe('planModuleUpdates', () => {
-  it('batches ordinary modules and keeps Voting and Treasury separate', () => {
+  it('batches every module, Voting included, and keeps only the Treasury separate', () => {
     const plan = planModuleUpdates(
       (['token', 'auction', 'governor', 'treasury'] as const).map((module) => classifyModule(state({ module })))
     );
-    expect(plan.batch.map((u) => u.module)).toEqual(['token', 'auction']);
-    expect(plan.separate.map((u) => u.module)).toEqual(['governor', 'treasury']);
+    expect(plan.batch.map((u) => u.module)).toEqual(['token', 'auction', 'governor']);
+    expect(plan.separate.map((u) => u.module)).toEqual(['treasury']);
     expect(plan.actionable).toHaveLength(4);
   });
 });

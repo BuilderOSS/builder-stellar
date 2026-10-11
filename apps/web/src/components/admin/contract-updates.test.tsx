@@ -10,7 +10,11 @@ const state = vi.hoisted(() => ({
   address: '',
   status: 'pending' as 'pending' | 'operational',
   admin: '',
-  modules: [] as Array<{ module: 'token' | 'governor' | 'auction'; withdrawn?: boolean; current?: boolean }>
+  modules: [] as Array<{
+    module: 'token' | 'governor' | 'auction' | 'treasury';
+    withdrawn?: boolean;
+    current?: boolean;
+  }>
 }));
 
 vi.mock('@/contexts/dao-context', () => ({
@@ -83,15 +87,25 @@ describe('ContractUpdates', () => {
     expect(html).toContain('Up to date');
   });
 
-  it('proposes ordinary upgrades together and Voting on its own once launched', () => {
+  it('proposes every upgrade together, Voting included, once launched', () => {
     state.status = 'operational';
     state.admin = TREASURY;
     state.modules = [{ module: 'token' }, { module: 'auction' }, { module: 'governor' }];
     const html = render();
     expect(html).toContain('3 upgrades available');
-    expect(html).toContain('Add 2 upgrades to your proposal');
-    expect(html).toContain('Propose the Voting upgrade');
+    expect(html).toContain('Add 3 upgrades to your proposal');
+    expect(html).not.toContain('Propose the Voting upgrade');
     expect(html).not.toContain('Apply ');
+  });
+
+  it('keeps a Treasury upgrade in its own proposal', () => {
+    state.status = 'operational';
+    state.admin = TREASURY;
+    state.modules = [{ module: 'auction' }, { module: 'treasury' }];
+    const html = render();
+    expect(html).toContain('Add 1 upgrade to your proposal');
+    expect(html).toContain('Propose the Treasury upgrade');
+    expect(html).toContain('its upgrade goes in its own proposal');
   });
 
   it('explains a withdrawn version blocks launch in setup', () => {

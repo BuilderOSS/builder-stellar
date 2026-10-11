@@ -145,6 +145,10 @@ then each DAO.
      that isn't queued expires 14 days after voting ends; a queued one 14 days after its ETA.
    - Treasury and Governor upgrade themselves through the Treasury's self-call allowlist (`upgrade`, `migrate`,
      `sync_version`). If `sync_version` in the same execute still sees old code, put it in a second proposal.
+   - Manage puts every module upgrade in **one** proposal except the Treasury's, which goes alone: the Treasury
+     runs the proposal, so later calls in the same run would still use its old code. The Governor batches safely
+     (it has finished with the proposal before the Treasury makes the calls); see
+     `comment_modules_upgrade_by_proposal_keeps_live_state` in `contracts/e2e/src/test.rs`.
 
 ## 6. Verify
 

@@ -42,10 +42,12 @@ export const MODULE_LABELS: Record<UpgradeModule, string> = {
 export const MODULE_ORDER: UpgradeModule[] = ['token', 'governor', 'treasury', 'auction', 'marketplace', 'metadata'];
 
 /**
- * These two run proposals themselves, so they upgrade in their own proposal rather than inside a
- * batch that also changes other contracts.
+ * The Treasury runs every proposal's calls, so an upgrade of itself only takes effect after the run
+ * that applies it: later calls in the same proposal would still use its old code. It upgrades in its
+ * own proposal. The Governor is done with a proposal before the Treasury makes its calls, so it
+ * batches safely with the rest (covered by `comment_modules_upgrade_by_proposal_keeps_live_state`).
  */
-export const SELF_GOVERNING: UpgradeModule[] = ['governor', 'treasury'];
+export const SELF_UPGRADING: UpgradeModule[] = ['treasury'];
 
 export function classifyModule(state: ModuleVersionState): ModuleUpdate {
   const { target } = state;
@@ -67,9 +69,9 @@ export function planModuleUpdates(updates: ModuleUpdate[]) {
   return {
     actionable,
     withdrawn: updates.filter((update) => update.status === 'withdrawn'),
-    /** One proposal for everything that isn't a self-governing contract. */
-    batch: actionable.filter((update) => !SELF_GOVERNING.includes(update.module)),
+    /** One proposal for everything except the Treasury. */
+    batch: actionable.filter((update) => !SELF_UPGRADING.includes(update.module)),
     /** Each in its own proposal. */
-    separate: actionable.filter((update) => SELF_GOVERNING.includes(update.module))
+    separate: actionable.filter((update) => SELF_UPGRADING.includes(update.module))
   };
 }
