@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { classifyModule, moduleLabelInSentence, type ModuleVersionState, planModuleUpdates } from './module-updates';
+import {
+  classifyModule,
+  moduleLabelInSentence,
+  type ModuleUpdate,
+  type ModuleVersionState,
+  planModuleUpdates,
+  upgradeProposalMetadata
+} from './module-updates';
 
 const OLD = 'a'.repeat(64);
 const NEW = 'b'.repeat(64);
@@ -54,5 +61,35 @@ describe('moduleLabelInSentence', () => {
     expect(moduleLabelInSentence('governor')).toBe('proposals and votes');
     expect(moduleLabelInSentence('auction')).toBe('the auction');
     expect(moduleLabelInSentence('token')).toBe('the membership token');
+  });
+});
+
+describe('upgradeProposalMetadata', () => {
+  const update = (module: ModuleUpdate['module'], version = '0.2.0'): ModuleUpdate => ({
+    module,
+    status: 'available',
+    current: '0.1.0',
+    next: { version, hash: 'h' },
+    fromHash: 'f'
+  });
+
+  it('names every contract in a batch and carries each release note', () => {
+    const meta = upgradeProposalMetadata([update('governor'), update('auction'), update('marketplace')]);
+    expect(meta.title).toBe('Upgrade proposals and votes, the auction and the market to 0.2.0');
+    expect(meta.description).toContain('Proposals and votes 0.1.0 → 0.2.0: Members can comment on proposals');
+    expect(meta.description).toContain('Auction 0.1.0 → 0.2.0: Bidders can add a short comment');
+    expect(meta.description).toContain('Market 0.1.0 → 0.2.0:');
+  });
+
+  it('keeps a single upgrade plain', () => {
+    const meta = upgradeProposalMetadata([update('auction')]);
+    expect(meta.title).toBe('Upgrade the auction to 0.2.0');
+    expect(meta.description.startsWith('Bidders can add a short comment')).toBe(true);
+  });
+
+  it('says latest releases when versions differ', () => {
+    expect(upgradeProposalMetadata([update('token', '0.3.0'), update('auction')]).title).toBe(
+      'Upgrade the membership token and the auction to their latest releases'
+    );
   });
 });

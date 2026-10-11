@@ -1,4 +1,5 @@
 import type { UpgradeModule } from '@/lib/admin-module-versions';
+import { releaseNote } from '@/lib/release-notes';
 
 /** What `readAdminModuleVersion` returns, reduced to what update decisions need. */
 export type ModuleVersionState = {
@@ -88,4 +89,28 @@ export function planModuleUpdates(updates: ModuleUpdate[]) {
     /** Each in its own proposal. */
     separate: actionable.filter((update) => SELF_UPGRADING.includes(update.module))
   };
+}
+
+/** "a", "a and b", "a, b and c". */
+function listInSentence(items: string[]) {
+  return items.length < 2 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
+/**
+ * Title and description for a proposal that applies these upgrades. A batch names every contract
+ * it touches, and the description carries each one's release notes, so voters see the whole change.
+ */
+export function upgradeProposalMetadata(updates: ModuleUpdate[]) {
+  const actionable = updates.filter((update) => update.next);
+  const versions = [...new Set(actionable.map((update) => update.next!.version))];
+  const names = listInSentence(actionable.map((update) => moduleLabelInSentence(update.module)));
+  const title =
+    versions.length === 1 ? `Upgrade ${names} to ${versions[0]}` : `Upgrade ${names} to their latest releases`;
+  const notes = actionable.map((update) => {
+    const note = releaseNote(update.module, update.next!.version) ?? 'No release notes for this version yet.';
+    return actionable.length === 1
+      ? note
+      : `${MODULE_LABELS[update.module]} ${update.current} → ${update.next!.version}: ${note}`;
+  });
+  return { title, description: notes.join('\n\n'), url: '' };
 }

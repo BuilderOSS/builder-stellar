@@ -11,7 +11,13 @@ import { card, muted, title } from '@/components/ui/panel-styles';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { assertAdminCallSupported } from '@/lib/admin-registered-call';
-import { MODULE_LABELS, moduleLabelInSentence, type ModuleUpdate, type ModuleUpdateStatus } from '@/lib/module-updates';
+import {
+  MODULE_LABELS,
+  moduleLabelInSentence,
+  type ModuleUpdate,
+  type ModuleUpdateStatus,
+  upgradeProposalMetadata
+} from '@/lib/module-updates';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { releaseNote } from '@/lib/release-notes';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
@@ -100,6 +106,9 @@ export function ContractUpdates() {
   function propose(updates: ModuleUpdate[]) {
     setMessage('');
     try {
+      // The draft takes its title and description from the first change, so every change in the
+      // batch carries the same combined text.
+      const metadata = upgradeProposalMetadata(updates);
       const requests = updates.map((update) => {
         const values = { module: update.module, fromHash: update.fromHash, toHash: update.next!.hash };
         const valid = handler.validate(values, context);
@@ -109,12 +118,7 @@ export function ContractUpdates() {
           daoId,
           action: handler.serialize(values, context),
           source: `admin/upgrades/${update.module}`,
-          metadata: {
-            title: `Upgrade ${moduleLabelInSentence(update.module)} to ${update.next!.version}`,
-            description:
-              releaseNote(update.module, update.next!.version) ?? `Upgrade ${update.module} ${arrow(update)}.`,
-            url: ''
-          }
+          metadata
         };
       });
       draft.requestAddBatch({ daoId, requests });
