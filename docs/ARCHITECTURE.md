@@ -27,7 +27,7 @@ Local browser storage → creation/proposal drafts and preferences (not indexed)
 | [Governor](../contracts/governor/README.md) | Timestamp voting windows, snapshot weights, quorum, queue and consumption |
 | [Treasury](../contracts/treasury/README.md) | Asset custody, admin of every module after launch, ordered proposal execution, `authorize` actions for nested auth |
 | [Marketplace](../contracts/marketplace/README.md) | Lazy primary mint-on-purchase and escrowed secondary sales; seller fee/asset and buyer price bounds; fee ≤ 25% |
-| [Manager](../contracts/manager/README.md) | Deterministic factory, implementation registration/revocation/latest selection and approvals, permanent slug registry |
+| [Manager](../contracts/manager/README.md) | Deterministic factory, implementation registration/revocation/latest selection and approvals, slug registry (launched DAOs can move by vote) |
 | [Minter](../contracts/minter/README.md) | Shared batch, Merkle and allowlist minting for Live tokens |
 
 `common` is a library; `dao-e2e` is an in-memory test crate. Neither is a DAO module. Release labels live in [the manifest](../releases/contracts.json).
@@ -41,7 +41,7 @@ Local browser storage → creation/proposal drafts and preferences (not indexed)
 5. Manager claims the slug (`SlugClaimed`), emits `DaoLaunched` and removes `PendingDao`. Goldsky, not Manager storage, provides the directory.
 
 Slug-to-Token and Token-to-slug mappings remain in Manager after launch; there is
-no enumeration API. Creation only requests a slug (several pending DAOs may request the same one, and `update_pending_slug` renames a request); launch claims it uniquely and permanently. Slug getters resolve launched DAOs only and do not renew TTL;
+no enumeration API. Creation only requests a slug (several pending DAOs may request the same one, and `update_pending_slug` renames a request); launch claims it uniquely, and a launched DAO can later move to a new slug by vote (`change_slug`, Manager 0.2.0), which releases the old one. Slug getters resolve launched DAOs only and do not renew TTL;
 permissionless `bump_slug_ttl` is separate maintenance. Indexed layout resolution
 maps a slug to the canonical DAO Token ID before services use it.
 

@@ -95,6 +95,8 @@ Revocation: `is_upgrade_approved(from, to)` requires only the target to be non-r
 
 `create_dao` validates the requested slug and rejects one already claimed by a launched DAO, but does not claim it. The slug is stored in `PendingDao`; `launch_dao` claims it (permanent, unique, emits `SlugClaimed`) and fails with `SlugTaken` if another DAO launched with it first. The launch admin can then rename with `update_pending_slug`. An abandoned pending DAO holds no slug, so there is nothing to release or expire.
 
+After launch, `change_slug(token, new_slug)` (Manager 0.2.0) moves a DAO to a new slug. It refuses unknown tokens before calling them (only `launch_dao` writes `DaoSlug`), then requires the token's `admin()`, which is the Treasury after launch, so only a passed proposal can rename. This relies on the token having no admin transfer after launch; a token release that adds one must revisit it. The old slug is released in the same call and anyone may claim it, even in the same transaction as `treasury.execute`. The app redirects an old link only while no DAO holds it and tells voters so. The new slug is visible in the proposal before execution and can be taken first; execution then fails with `SlugTaken` and the DAO proposes again. The factory pause also blocks `change_slug`.
+
 Trade-off: a pending DAO's requested slug is public, so someone can create and launch their own DAO with it first. That costs the create fee plus rent for six contracts and yields a real, launched DAO, so it is far costlier than squatting at creation, but not impossible. Slug pricing (TODO in `manager/src/contract.rs`) is the lever if it becomes a problem.
 
 ## Auction

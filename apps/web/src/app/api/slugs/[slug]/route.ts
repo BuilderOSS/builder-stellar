@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Slug availability from the index. A slug is taken only once a DAO launched
- * with it (claimed, permanent). Pending requests are not reservations: several
+ * with it (claimed; released again if that DAO moves by vote). Pending requests are not reservations: several
  * pending DAOs may request the same slug and the first to launch claims it.
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ slug: string }> }) {

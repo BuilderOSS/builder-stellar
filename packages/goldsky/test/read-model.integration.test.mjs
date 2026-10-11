@@ -151,6 +151,10 @@ function buildScenario() {
   // After launch: a rename (token 0.2.0 MetadataUpdated) and a vote that closes the market.
   emit('token', d1.token, 'metadata_updated', { data: { name: str('Alpha Club'), symbol: str('ALPHA'), uri: str('ipfs://alpha2') }, ledger: 150, tx: 7 });
   emit('marketplace', d1.marketplace, 'marketplace_paused', { topics: [addr(d1.treasury)], ledger: 151, tx: 7 });
+  // Slug changes by vote (Manager 0.2.0): two in one transaction (dao-one -> dao-uno -> alpha-club),
+  // then a pending DAO's request for the freed 'dao-one' stays a request (it is not reserved).
+  emit('manager', 'CMANAGER', 'slug_changed', { topics: [addr('CTOK1'), str('dao-uno')], data: { old_slug: str('dao-one') }, ledger: 152, tx: 2, evt: 0 });
+  emit('manager', 'CMANAGER', 'slug_changed', { topics: [addr('CTOK1'), str('alpha-club')], data: { old_slug: str('dao-uno') }, ledger: 152, tx: 2, evt: 1 });
 
   // --- token: a 6-token batch mint in ONE transaction (13 events, indexes >= 10),
   // each mint bumping GALICE's voting power, then one mint_batch_with_minter for
@@ -391,18 +395,30 @@ test('manager: registry, lifecycle and implementations', { skip }, () => {
   assert.equal(a.dao_id, 'CTOK1');
   assert.equal(a.deployer, 'GDEPLOYER');
   assert.equal(a.launch_admin, 'GLAUNCH');
-  assert.equal(a.slug, 'dao-one');
+  assert.equal(a.slug, 'alpha-club', 'the latest slug_changed wins, ordered by event position');
   assert.equal(a.slug_claimed, true);
   assert.equal(b.slug, 'dao-two', 'a pending DAO shows its latest requested slug');
   assert.equal(b.slug_claimed, false);
   assert.deepEqual(
     rows(`SELECT dao_id, requested_slug, claimed_slug, claimed_ledger FROM manager.dao_slugs ORDER BY dao_id`),
     [
-      { dao_id: 'CTOK1', requested_slug: 'dao-one', claimed_slug: 'dao-one', claimed_ledger: 116 },
+      { dao_id: 'CTOK1', requested_slug: 'dao-one', claimed_slug: 'alpha-club', claimed_ledger: 116 },
       { dao_id: 'CTOK2', requested_slug: 'dao-two', claimed_slug: null, claimed_ledger: null }
     ]
   );
   assert.equal(one(`SELECT created_slug FROM manager.dao_registry WHERE dao_id = 'CTOK2'`).created_slug, 'dao-one');
+  assert.deepEqual(
+    rows(`SELECT dao_id, slug, ledger_sequence, event_index FROM manager.dao_previous_slugs ORDER BY ledger_sequence, event_index`),
+    [
+      { dao_id: 'CTOK1', slug: 'dao-one', ledger_sequence: 152, event_index: 0 },
+      { dao_id: 'CTOK1', slug: 'dao-uno', ledger_sequence: 152, event_index: 1 }
+    ]
+  );
+  assert.equal(
+    one(`SELECT count(*)::int AS n FROM manager.dao_slugs WHERE claimed_slug = 'dao-one'`).n,
+    0,
+    'a released slug is nobody\'s claimed slug'
+  );
   assert.deepEqual(
     [a.token_contract, a.governor_contract, a.auction_contract, a.treasury_contract, a.metadata_contract, a.marketplace_contract],
     ['CTOK1', 'CGOV1', 'CAUC1', 'CTRE1', 'CMETA1', 'CMKT1']
@@ -650,6 +666,9 @@ test('module upgrades and wasm hashes: keyed by emitting contract, filtered by d
   assert.equal(one(`SELECT dao_id FROM app.activity_feed WHERE event_name = 'admin_changed' AND contract_role = 'manager'`).dao_id, null, 'deployment-wide Manager events have no DAO');
   assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'admin_changed' AND contract_role = 'token'`).kind, 'token.admin_changed');
   assert.equal(one(`SELECT kind, visibility FROM app.activity_feed WHERE event_name = 'slug_claimed'`).visibility, 'admin', 'the launch row tells the story; the slug claim is bookkeeping');
+  const renamed = rows(`SELECT dao_id, visibility, summary FROM app.activity_feed WHERE event_name = 'slug_changed' ORDER BY event_index`);
+  assert.deepEqual(renamed.map((r) => [r.dao_id, r.visibility]), [['CTOK1', 'public'], ['CTOK1', 'public']]);
+  assert.equal(renamed[1].summary, 'Link changed to /dao/alpha-club (was /dao/dao-uno)');
 });
 
 test('minter: claims resolve to the DAO by token_id and foreign tokens are dropped', { skip }, () => {
@@ -664,7 +683,7 @@ test('minter: claims resolve to the DAO by token_id and foreign tokens are dropp
 
 test('activity feed: tenant resolution and kinds', { skip }, () => {
   const feed = (where) => rows(`SELECT * FROM app.activity_feed WHERE ${where} ORDER BY ledger_sequence, event_index`);
-  const perDao = ['dao_created', 'dao_launched', 'slug_claimed', 'pending_slug_updated'];
+  const perDao = ['dao_created', 'dao_launched', 'slug_claimed', 'pending_slug_updated', 'slug_changed'];
   assert.ok(
     feed(`contract_role = 'manager'`).every((r) => (perDao.includes(r.event_name) ? r.dao_id !== null : r.dao_id === null)),
     'per-DAO manager events resolve to their DAO; deployment-wide ones have none'

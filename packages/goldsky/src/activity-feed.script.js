@@ -104,6 +104,8 @@ function invoke(data) {
     DelegateChanged: true,
     // A rename changes how members find the community: public.
     MetadataUpdated: true,
+    // So does a new link.
+    SlugChanged: true,
     AuctionCreated: true, BidPlaced: true, AuctionSettled: true, AuctionCancelled: true,
     PrimaryListingCreated: true, PrimaryListingPurchased: true,
     SecondaryListingCreated: true, ListingPurchased: true,
@@ -172,6 +174,7 @@ function invoke(data) {
     LatestImplementationSet: 'manager.latest_implementation_set',
     PendingSlugUpdated: 'manager.pending_slug_updated',
     SlugClaimed: 'manager.slug_claimed',
+    SlugChanged: 'manager.slug_changed',
     MetadataInitialized: 'metadata.initialized',
     PropertyAdded: 'metadata.property_added',
     SeedGenerated: 'metadata.seed_generated',
@@ -265,6 +268,7 @@ function invoke(data) {
     LatestImplementationSet: 'Latest implementation set',
     PendingSlugUpdated: 'Requested slug changed',
     SlugClaimed: 'Slug claimed',
+    SlugChanged: 'Community link changed',
     MetadataInitialized: 'Metadata initialized',
     PropertyAdded: 'Property added',
     SeedGenerated: 'Seed generated',
@@ -387,6 +391,7 @@ function invoke(data) {
     AuctionLaunched: function() { return 'Auction launched' + (pick(data, ['started']) === 'true' ? ' and started' : ' paused'); },
     MarketplaceLaunched: function() { return 'Marketplace launched' + (pick(data, ['opened']) === 'true' ? ' and opened' : ' paused'); },
     SlugClaimed: function() { return 'Slug "' + (pick(data, ['slug']) || 'unknown') + '" claimed by ' + (tokenAddress || 'unknown'); },
+    SlugChanged: function() { return 'Link changed to /dao/' + (pick(data, ['new_slug']) || 'unknown') + ' (was /dao/' + (pick(data, ['old_slug']) || 'unknown') + ')'; },
     PendingSlugUpdated: function() { return 'Requested slug changed to "' + (pick(data, ['slug']) || 'unknown') + '"'; },
     MetadataUpdated: function() { return 'Renamed to ' + (pick(data, ['name']) || 'unknown') + ' (' + (pick(data, ['symbol']) || '?') + ')'; },
     Migrated: function() { return 'Storage migrated from version ' + (pick(data, ['from_storage_version']) || '?') + ' to ' + (pick(data, ['to_storage_version']) || '?'); },

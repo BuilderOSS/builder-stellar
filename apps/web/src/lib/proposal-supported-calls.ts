@@ -1,5 +1,6 @@
 import { Client as AuctionClient } from '@builder-stellar/auction-bindings';
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
+import { Client as ManagerClient } from '@builder-stellar/manager-bindings';
 import { Client as MarketplaceClient } from '@builder-stellar/marketplace-bindings';
 import { Client as MetadataClient } from '@builder-stellar/metadata-bindings';
 import { Client as TokenClient } from '@builder-stellar/token-bindings';
@@ -10,6 +11,7 @@ import { Buffer } from 'buffer';
 
 import { getTreasuryAssets } from '@/lib/assets-config';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
+import { getDeploymentConfig } from '@/lib/deployment-config';
 import { assertMinterSpec } from '@/lib/minter/client';
 import {
   type AuthNodeDraft,
@@ -173,6 +175,18 @@ export function encodeSupportedCall(
       fn,
       Object.fromEntries(inputs.map((input, i) => [input.name.toString(), specValue(args[i], input.type, spec)]))
     );
+  }
+  // The shared Manager: only a DAO's own slug change (the Manager checks the caller is its token admin).
+  if (target && target === getDeploymentConfig().managerAddress) {
+    if (fn !== 'change_slug') throw new Error(`Unsupported Manager call ${fn}; submission is disabled.`);
+    if (args.length !== 2 || args[0] !== config.tokenContractId) throw new Error('A slug change must name this DAO.');
+    if (typeof args[1] !== 'string') throw new Error('Expected a string proposal argument.');
+    const spec = new ManagerClient({
+      contractId: target,
+      rpcUrl: config.rpcUrl,
+      networkPassphrase: config.passphrase
+    }).spec;
+    return spec.funcArgsToScVals(fn, { token_address: args[0], new_slug: args[1] });
   }
   const role =
     target && target === config.tokenContractId

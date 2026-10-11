@@ -110,6 +110,6 @@ describe('live launch readiness', () => {
 describe('slug claimed by another DAO', () => {
   it('blocks launch with a rename hint', () => {
     const issues = launchReadinessIssues({ ...ready(), slugTaken: true }, 'wallet-A');
-    expect(issues.join(' ')).toMatch(/test-dao.*claimed by another DAO/);
+    expect(issues.join(' ')).toMatch(/launched first with \/dao\/test-dao/);
   });
 });

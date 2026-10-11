@@ -138,7 +138,8 @@ const REQUIRED_EVENTS = {
     'PlatformMinterSet',
     'LatestImplementationSet',
     'PendingSlugUpdated',
-    'SlugClaimed'
+    'SlugClaimed',
+    'SlugChanged'
   ]
 };
 

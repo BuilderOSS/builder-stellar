@@ -110,6 +110,8 @@ export function getProposalActionResourceKey(action: ProposalQueuedAction): stri
       return 'auction:reserve-price';
     case 'set-token-metadata':
       return 'token:metadata';
+    case 'change-dao-slug':
+      return 'manager:slug';
     case 'transfer-dao-token':
       return `token:transfer:${String(action.tokenId ?? '').trim()}`;
     case 'set-auction-payment-token':
@@ -141,6 +143,7 @@ export function isHighRiskProposalAction(action: ProposalQueuedAction) {
     action.type === 'set-auction-payment-token' ||
     action.type === 'set-token-metadata' ||
     action.type === 'transfer-dao-token' ||
+    action.type === 'change-dao-slug' ||
     action.type === 'upgrade-dao-module' ||
     action.type === 'add-artwork-properties' ||
     action.type === 'set-merkle-root' ||
@@ -206,6 +209,22 @@ export function analyzeProposalAction(action: ProposalQueuedAction, existing: Pr
         existingActionIndexes: [previous]
       });
   }
+
+  // A link change can fail at execution if someone takes the slug first, which reverts every
+  // action in the proposal; keep it on its own.
+  const slugChanges = existing.flatMap((candidate, index) => (candidate.type === 'change-dao-slug' ? [index] : []));
+  const bundlesSlugChange =
+    action.type === 'change-dao-slug'
+      ? existing.some((candidate) => candidate.type !== 'change-dao-slug')
+      : slugChanges.length > 0;
+  if (bundlesSlugChange)
+    findings.push({
+      severity: 'warning',
+      kind: 'order',
+      message:
+        'Propose a link change on its own: if the new link is taken before the vote passes, every action in this proposal fails.',
+      existingActionIndexes: action.type === 'change-dao-slug' ? [] : slugChanges
+    });
 
   existing.forEach((candidate, index) => {
     const candidateIdentity = getProposalActionIdentity(candidate);

@@ -75,7 +75,7 @@ export default function AdminPage() {
     {
       key: 'profile',
       title: 'Community profile',
-      meta: 'Name, image, description and website',
+      meta: 'Name, link, image and description',
       href: daoAdminRoute(routeId, '/profile'),
       access: access(isAdmin, canProposeAdminActions)
     },

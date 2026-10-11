@@ -11,7 +11,7 @@
   "manager": "CDFQIOSA3JJWV3HIZ5XVMXBMTEL7BRZWZVUW72OQN6O3EM35OVT6PD5W",
   "minter": "CC5TEMQCHDJ2MNR25NZVFNSAHKAHD43MVU47PZIAPCT5ODLYVEJWYB6R",
   "implementations": {
-    "manager": "e5c3ec1f67e587446e6883c20a3e1b55a8e73c6119c35bf9d1cd4e8c7d22b402",
+    "manager": "5bc08fd3b5d042c8f285dac22b1c9cbbb50fad1c1e62355c3987526ea4a2ff2a",
     "token": "c5a5c73888cb08cb88b76ea3b9f8156100aa8f755cb872cf2043ab7100b4067c",
     "metadata": "e1aec5e86af009148e323f2707a2a6ab67c2f15e4b71a548d712286b692420a2",
     "auction": "1ba75578710683325476e5ad404b649d17e1cf7afdc1eb17d38815d34c07f107",
@@ -21,7 +21,7 @@
     "minter": "28b837b4edf8d5bfc9e819243fc96e45a7199cf4d81d7eb13d286728a68f8012"
   },
   "versions": {
-    "manager": "0.1.0",
+    "manager": "0.2.0",
     "token": "0.2.0",
     "metadata": "0.1.0",
     "auction": "0.1.0",
@@ -58,6 +58,17 @@
           "executeTx": "438a0809bf104294d215b7cade074c484e3b39ea00c94eaca615bdb9156fa251"
         }
       ]
+    },
+    {
+      "module": "manager",
+      "from": "e5c3ec1f67e587446e6883c20a3e1b55a8e73c6119c35bf9d1cd4e8c7d22b402",
+      "to": "5bc08fd3b5d042c8f285dac22b1c9cbbb50fad1c1e62355c3987526ea4a2ff2a",
+      "version": "0.2.0",
+      "date": "2026-10-11",
+      "registerTx": "1190eac346de69afdaa40f15c6ec5e1b643c3e85e60ffcaf418b27d1a6948fb5",
+      "approveTx": "490f04cf2ea32ead0b07ea7872a3121e75cedf15a7517b9bb7a9e141ad5dc0cd",
+      "upgradeTx": "55b86011adb0ddbe11b62eab4ac132824158d54764cf5ebebf680a1cfab71ed0",
+      "migration": "0012_slug_changes"
     }
   ]
 }

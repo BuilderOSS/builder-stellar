@@ -901,7 +901,7 @@ impl ManagerContract {
         );
         TreasuryLaunchClient::new(&env, &addresses.metadata).launch(&treasury);
 
-        // Claim the slug (permanent, renewed via `bump_slug_ttl`) and delete
+        // Claim the slug (held until `change_slug`, renewed via `bump_slug_ttl`) and delete
         // the pending DAO state.
         set_persistent(
             &env,
@@ -926,6 +926,54 @@ impl ManagerContract {
             launch_config.launch_marketplace,
             launch_config.enable_minter,
         );
+        Ok(())
+    }
+
+    /// Move a launched DAO to a new slug. The old slug is released at once and
+    /// any DAO may claim it, from this same transaction on.
+    ///
+    /// # Authorization
+    ///
+    /// The token's admin, which after launch is the DAO's Treasury, so this
+    /// only runs through a passed proposal (`treasury.execute`). This relies on
+    /// the token having no admin transfer after launch (`common::admin::handoff`
+    /// is one-shot); a token release that adds one must revisit this check.
+    ///
+    /// # Errors
+    ///
+    /// * `FactoryPaused` - Slug claims are stopped while the factory is paused
+    /// * `SlugNotFound` - `token_address` is not a launched DAO (pending DAOs
+    ///   use `update_pending_slug`)
+    /// * `SlugUnchanged` - `new_slug` is the DAO's current slug
+    /// * `InvalidSlug` / `SlugTaken` - Malformed slug, or claimed by a launched DAO
+    pub fn change_slug(
+        env: Env,
+        token_address: Address,
+        new_slug: String,
+    ) -> Result<(), ManagerError> {
+        extend_instance_ttl(&env);
+        if is_factory_paused(&env) {
+            return Err(ManagerError::FactoryPaused);
+        }
+        // Only `launch_dao` writes DaoSlug, so this gates out unknown token
+        // contracts before any call into them.
+        let old_slug: String = get_persistent(&env, &ManagerKey::DaoSlug(token_address.clone()))
+            .ok_or(ManagerError::SlugNotFound)?;
+        NftClient::new(&env, &token_address).admin().require_auth();
+        if new_slug == old_slug {
+            return Err(ManagerError::SlugUnchanged);
+        }
+        Self::validate_slug(&new_slug)?;
+        Self::require_slug_unclaimed(&env, &new_slug)?;
+
+        remove_persistent(&env, &ManagerKey::SlugToDao(old_slug.clone()));
+        set_persistent(
+            &env,
+            &ManagerKey::SlugToDao(new_slug.clone()),
+            &token_address,
+        );
+        set_persistent(&env, &ManagerKey::DaoSlug(token_address.clone()), &new_slug);
+        emit_slug_changed(&env, &token_address, &old_slug, &new_slug);
         Ok(())
     }
 

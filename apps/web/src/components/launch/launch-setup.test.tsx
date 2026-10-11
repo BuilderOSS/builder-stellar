@@ -121,7 +121,9 @@ describe('LaunchSetup', () => {
     // the hint comes from the same plan that enables it.
     expect(html).toContain('Ready when you are.');
     expect(html).not.toContain('first.');
-    expect(html.replace(/<!-- -->/g, '')).toContain('Your link /dao/lantern-club becomes permanent.');
+    expect(html.replace(/<!-- -->/g, '')).toContain(
+      'Your link /dao/lantern-club is claimed. Changing it later takes a vote.'
+    );
   });
 
   it('adds the rename step when another community took the link', () => {

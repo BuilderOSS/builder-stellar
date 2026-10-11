@@ -120,7 +120,11 @@ export const ManagerError = {
   /**
    * No launched DAO is registered under this slug
    */
-  7128 : { message: "SlugNotFound" }
+  7128 : { message: "SlugNotFound" },
+  /**
+   * `change_slug` to the slug the DAO already has
+   */
+  7129 : { message: "SlugUnchanged" }
 }
 
 export type ManagerError = typeof ManagerError[keyof typeof ManagerError];
@@ -163,7 +167,21 @@ export interface DaoLaunchedEvent {
 }
 
 /**
- * Emitted by `launch_dao` when the DAO's slug becomes its permanent, unique id.
+ * Emitted by `change_slug`: a launched DAO moved to `new_slug` and released
+ * `old_slug`, which any DAO may claim from the same ledger on.
+ */
+export interface SlugChangedEvent {
+  name: "SlugChanged";
+  data: {
+    token_address: string;
+    new_slug: string;
+    old_slug?: string;
+  };
+}
+
+/**
+ * Emitted by `launch_dao` when the DAO's slug becomes its unique id (it can
+ * later change by vote, see `SlugChanged`).
  */
 export interface SlugClaimedEvent {
   name: "SlugClaimed";
@@ -470,7 +488,8 @@ export interface InitialDaoConfigValues {
   renderer_base: string;
   /**
    * Requested human-friendly DAO identifier (`[a-z0-9-]`, 4-63 chars).
-   * Claimed (unique, permanent) only at `launch_dao`.
+   * Claimed (unique) only at `launch_dao`; a launched DAO can move to a new
+   * slug by vote (`change_slug`).
    */
   slug: string;
   token_name: string;
@@ -535,5 +554,5 @@ export const CommonError = {
    */
   7013 : { message: "StorageVersionNotSet" }
 }
-    export type ContractEvent = DaoCreatedEvent | DaoLaunchedEvent | SlugClaimedEvent | AdminChangedEvent | AdminProposedEvent | FactoryPausedEvent | FactoryUnpausedEvent | ManagerUpgradedEvent | UpgradeApprovedEvent | PlatformMinterSetEvent | ManagerInitializedEvent | PendingSlugUpdatedEvent | ImplementationRevokedEvent | AdminProposalCancelledEvent | LatestImplementationSetEvent | ImplementationRegisteredEvent | CurrentImplementationsUpdatedEvent;
+    export type ContractEvent = DaoCreatedEvent | DaoLaunchedEvent | SlugChangedEvent | SlugClaimedEvent | AdminChangedEvent | AdminProposedEvent | FactoryPausedEvent | FactoryUnpausedEvent | ManagerUpgradedEvent | UpgradeApprovedEvent | PlatformMinterSetEvent | ManagerInitializedEvent | PendingSlugUpdatedEvent | ImplementationRevokedEvent | AdminProposalCancelledEvent | LatestImplementationSetEvent | ImplementationRegisteredEvent | CurrentImplementationsUpdatedEvent;
     

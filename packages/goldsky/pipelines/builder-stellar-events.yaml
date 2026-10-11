@@ -323,6 +323,8 @@ transforms:
           // by every DAO module at launch (contracts/common/src/admin.rs: launch admin -> Treasury).
           AdminProposed: ['current_admin', 'proposed_admin'], AdminProposalCancelled: ['current_admin', 'cancelled_admin'], AdminChanged: ['old_admin', 'new_admin'], PlatformMinterSet: ['minter'],
           LatestImplementationSet: ['name', 'wasm_hash'], PendingSlugUpdated: ['token_address'], SlugClaimed: ['token_address', 'slug'],
+          // Manager 0.2.0+: a launched DAO moved to new_slug by vote; old_slug (data) is released.
+          SlugChanged: ['token_address', 'new_slug'],
           // Each module's launch handoff (topic `treasury`).
           TokenLaunched: ['treasury'], GovernorLaunched: ['treasury'], TreasuryLaunched: ['treasury'],
           AuctionLaunched: ['treasury'], MarketplaceLaunched: ['treasury'], MetadataLaunched: ['treasury'],
@@ -584,6 +586,8 @@ transforms:
           DelegateChanged: true,
           // A rename changes how members find the community: public.
           MetadataUpdated: true,
+          // So does a new link.
+          SlugChanged: true,
           AuctionCreated: true, BidPlaced: true, AuctionSettled: true, AuctionCancelled: true,
           PrimaryListingCreated: true, PrimaryListingPurchased: true,
           SecondaryListingCreated: true, ListingPurchased: true,
@@ -652,6 +656,7 @@ transforms:
           LatestImplementationSet: 'manager.latest_implementation_set',
           PendingSlugUpdated: 'manager.pending_slug_updated',
           SlugClaimed: 'manager.slug_claimed',
+          SlugChanged: 'manager.slug_changed',
           MetadataInitialized: 'metadata.initialized',
           PropertyAdded: 'metadata.property_added',
           SeedGenerated: 'metadata.seed_generated',
@@ -745,6 +750,7 @@ transforms:
           LatestImplementationSet: 'Latest implementation set',
           PendingSlugUpdated: 'Requested slug changed',
           SlugClaimed: 'Slug claimed',
+          SlugChanged: 'Community link changed',
           MetadataInitialized: 'Metadata initialized',
           PropertyAdded: 'Property added',
           SeedGenerated: 'Seed generated',
@@ -867,6 +873,7 @@ transforms:
           AuctionLaunched: function() { return 'Auction launched' + (pick(data, ['started']) === 'true' ? ' and started' : ' paused'); },
           MarketplaceLaunched: function() { return 'Marketplace launched' + (pick(data, ['opened']) === 'true' ? ' and opened' : ' paused'); },
           SlugClaimed: function() { return 'Slug "' + (pick(data, ['slug']) || 'unknown') + '" claimed by ' + (tokenAddress || 'unknown'); },
+          SlugChanged: function() { return 'Link changed to /dao/' + (pick(data, ['new_slug']) || 'unknown') + ' (was /dao/' + (pick(data, ['old_slug']) || 'unknown') + ')'; },
           PendingSlugUpdated: function() { return 'Requested slug changed to "' + (pick(data, ['slug']) || 'unknown') + '"'; },
           MetadataUpdated: function() { return 'Renamed to ' + (pick(data, ['name']) || 'unknown') + ' (' + (pick(data, ['symbol']) || '?') + ')'; },
           Migrated: function() { return 'Storage migrated from version ' + (pick(data, ['from_storage_version']) || '?') + ' to ' + (pick(data, ['to_storage_version']) || '?'); },

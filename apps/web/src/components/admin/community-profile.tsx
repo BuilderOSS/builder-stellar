@@ -3,9 +3,9 @@
 import { Client as MetadataClient } from '@builder-stellar/metadata-bindings';
 import { Client as TokenClient } from '@builder-stellar/token-bindings';
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
-import { ImageUp } from 'lucide-react';
+import { Check, ImageUp, X } from 'lucide-react';
 import { type ReactNode, useRef, useState } from 'react';
-import { css } from 'styled-system/css';
+import { css, cx } from 'styled-system/css';
 import useSWR from 'swr';
 
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
@@ -17,15 +17,22 @@ import {
   Callout,
   Chip,
   Crest,
-  FieldHelperText,
   FieldLabel,
   Input,
+  Spinner,
   Textarea
 } from '@/components/ui';
 import { card, muted, title } from '@/components/ui/panel-styles';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { adminReadOptions, useAdminArtwork, useAdminTokenState } from '@/lib/admin-surfaces';
+import {
+  checkNewLink,
+  managerClient,
+  managerSupportsSlugChange,
+  useLinkAvailability,
+  useManagerLink
+} from '@/lib/community-link';
 import {
   buildProfilePlan,
   type CommunityProfile,
@@ -35,6 +42,7 @@ import {
 import { daoAdminRoute } from '@/lib/dao-routes';
 import { validateArtworkSetting } from '@/lib/proposal-actions/artwork-admin-actions';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
+import { getProposalActionSummary } from '@/lib/proposal-call';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
@@ -87,7 +95,25 @@ const stepRow = css({
 });
 const stepTitle = css({ textStyle: 'body', fontWeight: '600', color: 'ink', display: 'block' });
 const stepDetail = css({ textStyle: 'mono', fontSize: '0.8125rem', color: 'ink.muted', overflowWrap: 'anywhere' });
-const footer = css({ display: 'flex', justifyContent: 'flex-end' });
+const footer = css({ display: 'flex', justifyContent: 'flex-end', gap: '2', flexWrap: 'wrap' });
+const linkStatus = css({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '1.5',
+  textStyle: 'caption',
+  minH: '5',
+  m: '0',
+  transitionProperty: 'color',
+  transitionDuration: '150ms',
+  '& svg': { width: '4', height: '4', flexShrink: '0' }
+});
+const linkTone = {
+  ok: css({ color: 'success', fontWeight: '600' }),
+  bad: css({ color: 'danger', fontWeight: '600' }),
+  quiet: css({ color: 'ink.muted' })
+};
+const planGroup = css({ display: 'grid', gap: '3', pt: '3', borderTopWidth: '1px', borderColor: 'rule' });
+const planNote = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
 
 function Changed({ show, onUndo, children }: { show: boolean; onUndo: () => void; children?: ReactNode }) {
   return (
@@ -176,6 +202,21 @@ export function CommunityProfileEditor() {
     (!session.walletNetworkPassphrase || session.walletNetworkPassphrase === config.passphrase);
   const context = { config, session: { address: session.address, kit: StellarWalletsKit } };
 
+  // The link lives in the Manager. During setup it changes directly with the rest; after launch it
+  // needs its own proposal, since a link someone takes first would fail everything bundled with it.
+  const readSource = adminReadOptions(config, config.tokenContractId, session.address).publicKey;
+  const link = useManagerLink(config, daoId, readSource);
+  const [linkEdit, setLinkEdit] = useState<string | undefined>();
+  const currentLink = link.data?.slug ?? null;
+  const nextLink = (linkEdit ?? currentLink ?? '').trim();
+  const linkChanged = linkEdit !== undefined && nextLink !== currentLink;
+  const availability = useLinkAvailability(linkChanged ? nextLink : '');
+  const linkCheck = linkChanged ? checkNewLink(nextLink, currentLink, daoId, availability) : null;
+  const linkSupported = !live || managerSupportsSlugChange(link.data?.version);
+  const canChangeLink = Boolean(currentLink) && linkSupported && (direct || canPropose);
+  const linkReady = linkChanged && linkCheck?.state === 'ok';
+  const linkStep = linkReady ? { title: 'Change the link', detail: `/dao/${currentLink} → /dao/${nextLink}` } : null;
+
   const steps = buildProfilePlan(current, edits);
   const stepError = (step: ProfileStep) =>
     step.type === 'set-token-metadata'
@@ -195,7 +236,9 @@ export function CommunityProfileEditor() {
       return [[key, result.message]];
     })
   ) as Record<string, string>;
-  const blocked = Object.keys(errors).length > 0 || Boolean(preview);
+  const blocked = Object.keys(errors).length > 0 || Boolean(preview) || (direct && linkChanged && !linkReady);
+  // During setup the link is one more direct step; after launch it is proposed separately.
+  const shownSteps = direct && linkStep ? [...steps, { type: 'change-dao-slug', ...linkStep }] : steps;
 
   async function pickImage(file: File) {
     try {
@@ -219,6 +262,22 @@ export function CommunityProfileEditor() {
     }
   }
 
+  function proposeLink() {
+    if (!linkReady) return;
+    const action = getActionHandler('change-dao-slug').serialize({ slug: nextLink }, context);
+    draft.requestAdd({
+      daoId,
+      action,
+      source: 'admin/profile/change-dao-slug',
+      metadata: {
+        title: `Change our link to /dao/${nextLink}`,
+        description: getProposalActionSummary(action),
+        url: ''
+      },
+      onAdded: () => setLinkEdit(undefined)
+    });
+  }
+
   function addToProposal() {
     if (!steps.length || blocked) return;
     draft.requestAddBatch({
@@ -237,13 +296,14 @@ export function CommunityProfileEditor() {
   }
 
   async function applyDirectly() {
-    if (!session.address || !steps.length || blocked || !networkReady) return;
+    if (!session.address || !shownSteps.length || blocked || !networkReady) return;
     setBusy(true);
     const sign = (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
       signWithWallet(xdr, { ...opts, address: session.address!, networkPassphrase: config.passphrase });
     try {
+      const total = shownSteps.length;
       for (const [index, step] of steps.entries()) {
-        const label = steps.length > 1 ? `${step.title} (step ${index + 1} of ${steps.length})` : step.title;
+        const label = total > 1 ? `${step.title} (step ${index + 1} of ${total})` : step.title;
         tx.start(label);
         let assembled;
         if (step.type === 'set-token-metadata') {
@@ -285,20 +345,37 @@ export function CommunityProfileEditor() {
             }[step.type] as keyof CommunityProfile
           );
       }
+      if (linkStep) {
+        const label = total > 1 ? `${linkStep.title} (step ${total} of ${total})` : linkStep.title;
+        tx.start(label);
+        const assembled = await managerClient(config, session.address, sign).update_pending_slug({
+          token_address: daoId,
+          slug: nextLink
+        });
+        assembled.result.unwrap();
+        const sent = await assembled.signAndSend();
+        const hash = sent.sendTransactionResponse?.hash ?? '';
+        tx.submitted(`${linkStep.title} submitted`, hash);
+        await waitForConfirmation(hash, config.rpcUrl);
+        tx.success(`Your link is now /dao/${nextLink}`, hash);
+        setLinkEdit(undefined);
+      }
     } catch (failure) {
       tx.fail(failure, 'Profile update failed');
     } finally {
       setBusy(false);
-      await Promise.all([artwork.mutate(), token.mutate()]);
+      await Promise.all([artwork.mutate(), token.mutate(), link.mutate()]);
     }
   }
 
   const disabled = busy || !canAct;
-  const count = steps.length ? `${steps.length} ${steps.length === 1 ? 'change' : 'changes'}` : 'changes';
+  const count = shownSteps.length
+    ? `${shownSteps.length} ${shownSteps.length === 1 ? 'change' : 'changes'}`
+    : 'changes';
   const submitLabel = direct ? `Apply ${count}` : `Add ${count} to your proposal`;
   const submit = (
     <Button
-      disabled={disabled || !steps.length || blocked || (direct && !networkReady)}
+      disabled={disabled || !shownSteps.length || blocked || (direct && !networkReady)}
       loading={busy}
       onClick={() => (direct ? void applyDirectly() : addToProposal())}
     >
@@ -413,6 +490,46 @@ export function CommunityProfileEditor() {
               </div>
             </div>
             <div className={field}>
+              <FieldLabel htmlFor="profile-link">Link</FieldLabel>
+              <Input
+                id="profile-link"
+                value={linkEdit ?? currentLink ?? ''}
+                placeholder={currentLink ?? routeId}
+                maxLength={63}
+                spellCheck={false}
+                autoCapitalize="none"
+                autoComplete="off"
+                disabled={busy || !canChangeLink}
+                aria-invalid={linkCheck?.state === 'bad' || undefined}
+                aria-describedby="profile-link-status"
+                onChange={(event) => {
+                  setMessage('');
+                  setLinkEdit(event.target.value.toLowerCase().replace(/\s+/g, '-'));
+                }}
+              />
+              <Changed show={linkChanged} onUndo={() => setLinkEdit(undefined)}>
+                <p
+                  id="profile-link-status"
+                  aria-live="polite"
+                  className={cx(
+                    linkStatus,
+                    linkCheck?.state === 'ok' ? linkTone.ok : linkCheck?.state === 'bad' ? linkTone.bad : linkTone.quiet
+                  )}
+                >
+                  {linkCheck?.state === 'checking' ? <Spinner label="Checking" /> : null}
+                  {linkCheck?.state === 'ok' ? <Check aria-hidden="true" strokeWidth={2} /> : null}
+                  {linkCheck?.state === 'bad' ? <X aria-hidden="true" strokeWidth={2} /> : null}
+                  {linkCheck
+                    ? linkCheck.text
+                    : !live
+                      ? `/dao/${currentLink ?? routeId}. Yours once you launch.`
+                      : linkSupported
+                        ? `/dao/${currentLink ?? routeId}. Changing it takes its own vote.`
+                        : `/dao/${currentLink ?? routeId}. Changing it needs the latest platform release.`}
+                </p>
+              </Changed>
+            </div>
+            <div className={field}>
               <FieldLabel htmlFor="profile-description">Description</FieldLabel>
               <Textarea
                 id="profile-description"
@@ -438,13 +555,6 @@ export function CommunityProfileEditor() {
               <Changed show={changed('website')} onUndo={() => reset('website')} />
               {errors.website ? <p className={error}>{errors.website}</p> : null}
             </div>
-            <div className={field}>
-              <span className={css({ textStyle: 'label', color: 'ink' })}>Link</span>
-              <p className={hint}>/dao/{routeId}</p>
-              <FieldHelperText>
-                {live ? 'Your link is permanent.' : 'Your link is claimed at launch and then permanent.'}
-              </FieldHelperText>
-            </div>
           </div>
         </div>
 
@@ -452,25 +562,47 @@ export function CommunityProfileEditor() {
           <h3 className={css({ textStyle: 'subheading', m: '0' })}>
             {direct ? 'This will' : 'If the proposal passes, it will'}
           </h3>
-          {steps.length ? (
+          {shownSteps.length ? (
             <ol className={stepList}>
-              {steps.map((step) => (
+              {shownSteps.map((step) => (
                 <li key={step.type} className={stepRow}>
                   <span className={stepTitle}>{step.title}</span>
                   <span className={stepDetail}>{step.detail}</span>
                 </li>
               ))}
             </ol>
-          ) : (
+          ) : !linkStep ? (
             <p className={hint}>Change something above to see what will happen.</p>
-          )}
+          ) : null}
+          {direct && linkStep ? (
+            <p className={planNote}>
+              The new link is yours once you launch. If another community launches first with it, pick another.
+            </p>
+          ) : null}
           {preview ? <p className={hint}>Upload the new image to include it.</p> : null}
+          {!direct && linkStep ? (
+            <div className={cx(planGroup, stepRow)}>
+              <span className={stepTitle}>In its own proposal: change the link</span>
+              <span className={stepDetail}>{linkStep.detail}</span>
+              <p className={planNote}>
+                /dao/{currentLink} is freed when it passes. Old links lead here until another community takes it, which
+                can happen right away. If /dao/{nextLink} is taken before the vote, that proposal fails and you can
+                propose another link.
+              </p>
+              <div>
+                <Button variant={steps.length ? 'secondary' : 'primary'} disabled={busy} onClick={proposeLink}>
+                  Propose the new link
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         {message ? <Callout variant="warning" title={message} role="alert" /> : null}
-        <div className={footer}>{submit}</div>
+        {/* With only a new link after launch, its own button is the one action. */}
+        {shownSteps.length || !linkStep ? <div className={footer}>{submit}</div> : null}
       </section>
-      {steps.length ? <ActionBar mobileOnly>{submit}</ActionBar> : null}
+      {shownSteps.length ? <ActionBar mobileOnly>{submit}</ActionBar> : null}
     </>
   );
 }

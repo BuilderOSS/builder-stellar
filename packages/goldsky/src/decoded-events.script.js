@@ -56,6 +56,8 @@ function invoke(data) {
     // by every DAO module at launch (contracts/common/src/admin.rs: launch admin -> Treasury).
     AdminProposed: ['current_admin', 'proposed_admin'], AdminProposalCancelled: ['current_admin', 'cancelled_admin'], AdminChanged: ['old_admin', 'new_admin'], PlatformMinterSet: ['minter'],
     LatestImplementationSet: ['name', 'wasm_hash'], PendingSlugUpdated: ['token_address'], SlugClaimed: ['token_address', 'slug'],
+    // Manager 0.2.0+: a launched DAO moved to new_slug by vote; old_slug (data) is released.
+    SlugChanged: ['token_address', 'new_slug'],
     // Each module's launch handoff (topic `treasury`).
     TokenLaunched: ['treasury'], GovernorLaunched: ['treasury'], TreasuryLaunched: ['treasury'],
     AuctionLaunched: ['treasury'], MarketplaceLaunched: ['treasury'], MetadataLaunched: ['treasury'],

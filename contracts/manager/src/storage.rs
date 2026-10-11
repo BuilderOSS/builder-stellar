@@ -66,7 +66,8 @@ pub struct InitialDaoConfigValues {
     pub contract_image: String,
     pub renderer_base: String,
     /// Requested human-friendly DAO identifier (`[a-z0-9-]`, 4-63 chars).
-    /// Claimed (unique, permanent) only at `launch_dao`.
+    /// Claimed (unique) only at `launch_dao`; a launched DAO can move to a new
+    /// slug by vote (`change_slug`).
     pub slug: String,
     pub governance: GovernanceConfig,
     pub auction: AuctionConfig,
@@ -157,9 +158,11 @@ pub enum ManagerKey {
     PendingDao(Address),
     PendingAdmin,
     PlatformMinter,
-    /// slug -> token address, written at `launch_dao`. Permanent; renewed via `bump_slug_ttl`.
+    /// slug -> token address, written at `launch_dao`, moved by `change_slug` (the old
+    /// slug is removed). Renewed via `bump_slug_ttl`.
     SlugToDao(String),
-    /// token address -> slug, written at `launch_dao`. Permanent; renewed via `bump_slug_ttl`.
+    /// token address -> current slug, written at `launch_dao` and `change_slug`.
+    /// Renewed via `bump_slug_ttl`.
     DaoSlug(Address),
 }
 

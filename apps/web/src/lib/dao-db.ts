@@ -26,7 +26,7 @@ export interface DaoConfig {
 
   // Core Identity
   token_address: string; // Same as dao_id
-  /** The DAO's permanent URL slug once launched; null while it is only requested. */
+  /** The DAO's current URL slug once launched; null while it is only requested. */
   slug?: string | null;
   creator: string | null; // Account that deployed this DAO
   launch_admin: string | null;
@@ -119,13 +119,21 @@ const CONTRACT_ID_PATTERN = /^C[A-Z2-7]{55}$/;
  */
 export async function resolveDaoId(idOrSlug: string): Promise<string> {
   if (CONTRACT_ID_PATTERN.test(idOrSlug)) return idOrSlug;
-  // A claimed slug is unique and permanent (claimed at launch). Several pending
-  // DAOs may request the same slug, so a request only resolves when unambiguous.
+  // A claimed slug is unique (claimed at launch, moved only by a vote to change it).
   const claimed = await prisma.managerDao.findFirst({
     where: { deploymentId: DEPLOYMENT_ID, claimedSlug: idOrSlug },
-    select: { daoId: true }
+    select: { daoId: true },
+    orderBy: { launchedLedger: 'desc' }
   });
   if (claimed) return claimed.daoId;
+  // An old link keeps working while no DAO holds it: the latest DAO that moved away from it.
+  const previous = await prisma.managerDaoPreviousSlug.findFirst({
+    where: { deploymentId: DEPLOYMENT_ID, slug: idOrSlug },
+    select: { daoId: true },
+    orderBy: [{ ledgerSequence: 'desc' }, { transactionIndex: 'desc' }, { eventIndex: 'desc' }]
+  });
+  if (previous) return previous.daoId;
+  // Several pending DAOs may request the same slug, so a request only resolves when unambiguous.
   const requested = await prisma.managerDao.findMany({
     where: { deploymentId: DEPLOYMENT_ID, slugClaimed: false, requestedSlug: idOrSlug },
     select: { daoId: true },

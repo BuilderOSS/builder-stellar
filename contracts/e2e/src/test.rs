@@ -3650,3 +3650,213 @@ fn token_upgrade_rejects_unapproved_stale_and_revoked_paths() {
     assert!(token.try_upgrade(&f.old_token, &f.new_token).is_err());
     assert_eq!(token.version(), String::from_str(e, "0.1.0"));
 }
+
+// ============================================================================
+// Slug change by vote (Manager 0.2.0 `change_slug`)
+// ============================================================================
+
+const NO_LAUNCH_MODULES: manager::LaunchConfig = manager::LaunchConfig {
+    launch_auction: false,
+    launch_marketplace: false,
+    enable_minter: false,
+    expected_minter: None,
+};
+
+/// A launched factory DAO under "upgrade-dao" (one founder token, Treasury in charge).
+fn launched_dao() -> UpgradeFixture {
+    let f = dao_on_deployed_token();
+    f.manager.launch_dao(&f.dao.token, &NO_LAUNCH_MODULES);
+    f
+}
+
+/// Propose, vote and queue a one-action proposal; returns (id, description hash).
+fn queue_single_action(
+    f: &UpgradeFixture,
+    target: &Address,
+    function: &str,
+    call_args: Vec<Val>,
+    description: &str,
+) -> (
+    BytesN<32>,
+    BytesN<32>,
+    Vec<Address>,
+    Vec<Symbol>,
+    Vec<Vec<Val>>,
+) {
+    let e = &f.e;
+    let governor = DaoGovernorContractClient::new(e, &f.dao.governor);
+    let targets = vec![e, target.clone()];
+    let functions = vec![e, Symbol::new(e, function)];
+    let args = vec![e, call_args];
+    e.ledger().set_sequence_number(200);
+    e.ledger().set_timestamp(2_000);
+    let description = String::from_str(e, description);
+    let desc_hash = description_hash(e, &description);
+    let id = governor.propose(&targets, &functions, &args, &description, &f.deployer);
+    e.ledger().set_timestamp(2_301);
+    governor.cast_vote(&id, &1, &String::from_str(e, "yes"), &f.deployer);
+    e.ledger().set_timestamp(2_601);
+    governor.queue(
+        &targets,
+        &functions,
+        &args,
+        &desc_hash,
+        &2_901_u32,
+        &f.deployer,
+    );
+    e.ledger().set_timestamp(2_901);
+    (id, desc_hash, targets, functions, args)
+}
+
+/// Live DAO renames through propose -> vote -> queue -> treasury.execute, with only the
+/// Treasury's own authorization. The old slug is released at once.
+#[test]
+fn live_dao_changes_slug_by_proposal() {
+    let f = launched_dao();
+    let e = &f.e;
+    let new_slug = String::from_str(e, "lantern-club");
+    let (id, desc_hash, targets, functions, args) = queue_single_action(
+        &f,
+        &f.manager.address,
+        "change_slug",
+        vec![e, f.dao.token.into_val(e), new_slug.into_val(e)],
+        "Change our link",
+    );
+
+    e.set_auths(&[]);
+    DaoTreasuryContractClient::new(e, &f.dao.treasury)
+        .execute(&targets, &functions, &args, &desc_hash);
+    assert_eq!(
+        DaoGovernorContractClient::new(e, &f.dao.governor).proposal_state(&id),
+        ProposalState::Executed
+    );
+    assert_eq!(f.manager.get_slug(&f.dao.token), Some(new_slug.clone()));
+    assert_eq!(f.manager.get_dao_by_slug(&new_slug), f.dao.token);
+    assert!(f
+        .manager
+        .try_get_dao_by_slug(&String::from_str(e, "upgrade-dao"))
+        .is_err());
+}
+
+/// The new slug is public while the proposal waits. If another DAO launches with it first,
+/// execution fails with SlugTaken and the proposal stays queued.
+#[test]
+fn squatted_target_slug_fails_execution_and_keeps_the_proposal_queued() {
+    let f = launched_dao();
+    let e = &f.e;
+    let wanted = String::from_str(e, "wanted-name");
+    let (id, desc_hash, targets, functions, args) = queue_single_action(
+        &f,
+        &f.manager.address,
+        "change_slug",
+        vec![e, f.dao.token.into_val(e), wanted.into_val(e)],
+        "Change our link",
+    );
+
+    let squatter = Address::generate(e);
+    let asset = e
+        .register_stellar_asset_contract_v2(Address::generate(e))
+        .address();
+    let other = f
+        .manager
+        .create_dao(&slug_params(e, &squatter, 2, "wanted-name", &asset));
+    DaoTokenContractClient::new(e, &other.token).mint(&squatter, &squatter);
+    f.manager.launch_dao(&other.token, &NO_LAUNCH_MODULES);
+
+    e.set_auths(&[]);
+    assert!(DaoTreasuryContractClient::new(e, &f.dao.treasury)
+        .try_execute(&targets, &functions, &args, &desc_hash)
+        .is_err());
+    assert_eq!(
+        DaoGovernorContractClient::new(e, &f.dao.governor).proposal_state(&id),
+        ProposalState::Queued
+    );
+    assert_eq!(
+        f.manager.get_slug(&f.dao.token),
+        Some(String::from_str(e, "upgrade-dao"))
+    );
+}
+
+/// Manager 0.1.0 (the deployed code) -> local build as 0.2.0: slug entries written by the old
+/// code survive, and the new `change_slug` works on a DAO launched before the upgrade.
+#[test]
+fn manager_upgrade_from_deployed_code_keeps_slugs_and_enables_change_slug() {
+    let e = Env::default();
+    e.mock_all_auths();
+    e.ledger().set_sequence_number(100);
+    e.ledger().set_timestamp(1_000);
+    e.cost_estimate().budget().reset_unlimited();
+
+    let path = std::format!("{}/fixtures/manager-0.1.0.wasm", env!("CARGO_MANIFEST_DIR"));
+    let old_bytes =
+        std::fs::read(&path).unwrap_or_else(|err| panic!("missing fixture {path} ({err})"));
+    let old_hash = e
+        .deployer()
+        .upload_contract_wasm(soroban_sdk::Bytes::from_slice(&e, &old_bytes));
+    let admin = Address::generate(&e);
+    let manager_id = e.register(
+        old_bytes.as_slice(),
+        (admin, old_hash.clone(), String::from_str(&e, "0.1.0")),
+    );
+    let manager = ManagerContractClient::new(&e, &manager_id);
+
+    let mut hashes = std::vec::Vec::new();
+    for (registry_name, wasm_name) in [
+        ("Token", "token"),
+        ("Metadata", "metadata"),
+        ("Auction", "auction"),
+        ("Governor", "governor"),
+        ("Treasury", "treasury"),
+        ("Marketplace", "marketplace"),
+    ] {
+        let hash = upload_module_wasm(&e, wasm_name);
+        manager.register_implementation(
+            &String::from_str(&e, registry_name),
+            &String::from_str(&e, "0.1.0"),
+            &hash,
+        );
+        hashes.push(hash);
+    }
+    manager.set_current_implementations(
+        &hashes[0], &hashes[1], &hashes[2], &hashes[3], &hashes[4], &hashes[5],
+    );
+
+    let asset = e
+        .register_stellar_asset_contract_v2(Address::generate(&e))
+        .address();
+    let founder = Address::generate(&e);
+    let dao = manager.create_dao(&slug_params(&e, &founder, 1, "before-upgrade", &asset));
+    DaoTokenContractClient::new(&e, &dao.token).mint(&founder, &founder);
+    manager.launch_dao(&dao.token, &NO_LAUNCH_MODULES);
+
+    // The release: register both Manager builds and approve the path.
+    let new_hash = upload_module_wasm(&e, "manager");
+    assert_ne!(old_hash, new_hash, "rebuild the manager WASM");
+    let name = String::from_str(&e, "Manager");
+    manager.register_implementation(&name, &String::from_str(&e, "0.1.0"), &old_hash);
+    manager.register_implementation(&name, &String::from_str(&e, "0.2.0"), &new_hash);
+    manager.approve_upgrade(&old_hash, &new_hash);
+    manager.upgrade_manager(&old_hash, &new_hash);
+
+    assert_eq!(manager.version(), String::from_str(&e, "0.2.0"));
+    let before = String::from_str(&e, "before-upgrade");
+    assert_eq!(manager.get_dao_by_slug(&before), dao.token);
+    assert_eq!(manager.get_slug(&dao.token), Some(before.clone()));
+
+    let after = String::from_str(&e, "after-upgrade");
+    manager.change_slug(&dao.token, &after);
+    assert_eq!(manager.get_dao_by_slug(&after), dao.token);
+
+    // The freed slug goes to the next DAO that launches with it.
+    let other_founder = Address::generate(&e);
+    let other = manager.create_dao(&slug_params(
+        &e,
+        &other_founder,
+        2,
+        "before-upgrade",
+        &asset,
+    ));
+    DaoTokenContractClient::new(&e, &other.token).mint(&other_founder, &other_founder);
+    manager.launch_dao(&other.token, &NO_LAUNCH_MODULES);
+    assert_eq!(manager.get_dao_by_slug(&before), other.token);
+}

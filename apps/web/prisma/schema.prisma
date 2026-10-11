@@ -444,6 +444,21 @@ view ManagerDaoSlug {
   @@schema("manager")
 }
 
+/// Slugs a DAO moved away from by vote (Manager change_slug). Not reserved: another DAO may hold one now.
+view ManagerDaoPreviousSlug {
+  deploymentId     String    @map("deployment_id")
+  daoId            String    @map("dao_id")
+  slug             String
+  ledgerSequence   BigInt    @map("ledger_sequence")
+  transactionIndex BigInt?   @map("transaction_index")
+  operationIndex   BigInt?   @map("operation_index")
+  eventIndex       BigInt?   @map("event_index")
+  changedAt        DateTime? @map("changed_at")
+
+  @@map("dao_previous_slugs")
+  @@schema("manager")
+}
+
 view ManagerModuleAdmin {
   deploymentId     String    @map("deployment_id")
   daoId            String    @map("dao_id")

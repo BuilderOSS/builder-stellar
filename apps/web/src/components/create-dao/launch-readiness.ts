@@ -67,9 +67,7 @@ export function launchReadinessIssues(readiness: LaunchReadiness, launchAdmin: s
   if (readiness.admin !== launchAdmin) issues.push('Token admin no longer belongs to the launch administrator.');
   if (readiness.supply <= 0n) issues.push('Mint at least one founder token before launch.');
   if (readiness.slugTaken && readiness.pending)
-    issues.push(
-      `The slug "${readiness.pending.slug}" was claimed by another DAO that launched first. Rename it below.`
-    );
+    issues.push(`Another community launched first with /dao/${readiness.pending.slug}. Pick another link below.`);
   if (!readiness.paymentAssetsMatch)
     issues.push('Restore the payment assets pinned at creation in both modules before launch.');
   return issues;

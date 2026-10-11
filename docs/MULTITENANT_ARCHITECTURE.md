@@ -21,12 +21,15 @@ Goldsky writes `chain.raw_events`, `chain.decoded_events`, and `app.activity_fee
 
 Module events resolve through `manager.event_identity`. Shared Minter events resolve through their DAO-token `token_id` topic; foreign token events are excluded from DAO views. Details: [database catalog](DATABASE_SCHEMA.md).
 
-Manager also retains permanent slug mappings. `DaoCreated.slug` is only a
+Manager also retains slug mappings. `DaoCreated.slug` is only a
 request (several pending DAOs may request the same slug); `SlugClaimed` at launch
-makes it unique. `manager.daos.slug` is the claimed slug once launched, else the
+makes it unique, and `SlugChanged` (a vote, Manager 0.2.0) moves it and releases the
+old one. `manager.daos.slug` is the current claimed slug once launched, else the
 latest request (`slug_claimed`, `requested_slug`, `claimed_slug` disambiguate;
 `manager.dao_slugs` lists both). Layout resolution filters by deployment, prefers
-the claimed slug, and maps to canonical Token ID. Direct service/API validation still requires its actual documented ID
+the current claimed slug, then the latest DAO that moved away from it
+(`manager.dao_previous_slugs`, so old links redirect while unclaimed), then an
+unambiguous request, and maps to canonical Token ID. Direct service/API validation still requires its actual documented ID
 format rather than accepting arbitrary aliases.
 
 ## Query isolation

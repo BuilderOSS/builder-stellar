@@ -73,4 +73,6 @@ pub enum ManagerError {
     DaoNotFound = 7127,
     /// No launched DAO is registered under this slug
     SlugNotFound = 7128,
+    /// `change_slug` to the slug the DAO already has
+    SlugUnchanged = 7129,
 }
