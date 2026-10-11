@@ -5,7 +5,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 
-const state = vi.hoisted(() => ({ config: {} as DaoNetworkConfig }));
+const state = vi.hoisted(() => ({
+  config: {} as DaoNetworkConfig,
+  release: { data: undefined as unknown, isLoading: false }
+}));
+vi.mock('@/lib/upgrade-release', () => ({ useUpgradeRelease: () => state.release }));
+// Disclosures mount their content lazily; render it inline so the exact hashes stay checkable here.
+vi.mock('@/components/ui', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/components/ui')>()),
+  Disclosure: ({ children }: { children: React.ReactNode }) => <div>{children}</div>
+}));
 vi.mock('@/contexts/dao-context', () => ({
   useDaoContext: () => ({ daoConfig: state.config }),
   useOptionalDaoContext: () => ({ daoConfig: state.config })
@@ -54,20 +63,59 @@ describe('proposal admin-call inspector rendering', () => {
     expect(html.indexOf('First')).toBeLessThan(html.indexOf('Second'));
     expect(html).toContain('is_new_property');
   });
-  it('shows both full 32-byte upgrade hashes and never claims ABI support proves approval', () => {
+  describe('module upgrades', () => {
     const fromHash = '0'.repeat(63) + '1';
     const toHash = '00' + 'ab'.repeat(31);
-    const html = renderToStaticMarkup(
-      <ProposalActionPreview
-        targets={[state.config.treasuryContractId]}
-        functions={['upgrade']}
-        args={[[fromHash, toHash]]}
-      />
-    );
-    expect(html).toContain('Upgrade treasury module');
-    expect(html).toContain(fromHash);
-    expect(html).toContain(toHash);
-    expect(html).toContain('doesn’t mean the upgrade is approved');
+    const render = () =>
+      renderToStaticMarkup(
+        <ProposalActionPreview
+          targets={[state.config.auctionContractId]}
+          functions={['upgrade']}
+          args={[[fromHash, toHash]]}
+        />
+      );
+    afterEach(() => {
+      state.release = { data: undefined, isLoading: false };
+    });
+
+    it('reads an approved release as routine, with its notes, and keeps the exact hashes', () => {
+      state.release = {
+        data: { fromVersion: '0.1.0', toVersion: '0.2.0', approved: true, revoked: false },
+        isLoading: false
+      };
+      const html = render();
+      expect(html).toContain('Upgrade Auction');
+      expect(html).toContain('Approved release');
+      expect(html).toContain('0.1.0 → 0.2.0');
+      expect(html).toContain('Bidders can add a short comment');
+      expect(html).not.toContain('High risk');
+      expect(html).toContain(fromHash);
+      expect(html).toContain(toHash);
+    });
+
+    it('warns when the registry does not approve the upgrade', () => {
+      state.release = {
+        data: { fromVersion: '0.1.0', toVersion: null, approved: false, revoked: false },
+        isLoading: false
+      };
+      const html = render();
+      expect(html).toContain('This release isn&#x27;t approved');
+      expect(html).not.toContain('Approved release');
+    });
+
+    it('says plainly when the target release was withdrawn', () => {
+      state.release = {
+        data: { fromVersion: '0.1.0', toVersion: '0.2.0', approved: true, revoked: true },
+        isLoading: false
+      };
+      expect(render()).toContain('This release was withdrawn');
+    });
+
+    it('never claims approval it could not check', () => {
+      const html = render();
+      expect(html).toContain('Couldn&#x27;t check this release');
+      expect(html).not.toContain('Approved release');
+    });
   });
   it('leaves external upgrades unsupported instead of inferring a module authority', () => {
     for (const target of [contract(9)]) {
@@ -76,7 +124,7 @@ describe('proposal admin-call inspector rendering', () => {
       );
       expect(html).toContain('This app can&#x27;t read this call');
       expect(html).toContain('Queueing and running it from here are turned off');
-      expect(html).not.toContain('Upgrade metadata module');
+      expect(html).not.toContain('Upgrade Artwork and profile');
     }
   });
 });

@@ -42,6 +42,7 @@ export function AdminProposalDraftDialog({
   const duplicate = findings.some((finding) => finding.kind === 'duplicate');
   const conflict = findings.some((finding) => finding.kind === 'conflict');
   const highRisk = findings.some((finding) => finding.kind === 'high-risk');
+  const onlyUpgrades = Boolean(pending?.requests.every((request) => request.action.type === 'upgrade-dao-module'));
 
   return (
     <Dialog
@@ -84,14 +85,19 @@ export function AdminProposalDraftDialog({
               </p>
             ))}
           </div>
-          {shownFindings.map(({ finding, count }, index) => (
-            <Callout
-              key={`${finding.kind}-${index}`}
-              variant={finding.severity === 'error' ? 'error' : 'warning'}
-              title={count > 1 ? `${FINDING_TITLE[finding.kind]} (${count} changes)` : FINDING_TITLE[finding.kind]}
-              description={finding.message}
-            />
-          ))}
+          {shownFindings.map(({ finding, count }, index) => {
+            // Manage only offers approved upgrades, so they read as information rather than a warning.
+            const routineUpgrade = finding.kind === 'high-risk' && onlyUpgrades;
+            const title = routineUpgrade ? 'Contract upgrade' : FINDING_TITLE[finding.kind];
+            return (
+              <Callout
+                key={`${finding.kind}-${index}`}
+                variant={finding.severity === 'error' ? 'error' : routineUpgrade ? 'info' : 'warning'}
+                title={count > 1 ? `${title} (${count} changes)` : title}
+                description={finding.message}
+              />
+            );
+          })}
           {duplicate && !conflict && pending.requests.length === 1 ? (
             <p className={note}>
               It&apos;s already in your draft, so nothing was added. Remove the existing one first if you meant to

@@ -153,6 +153,13 @@ export function isHighRiskProposalAction(action: ProposalQueuedAction) {
   );
 }
 
+/** Why a high-risk action deserves a second look, in members' words. */
+function highRiskMessage(action: ProposalQueuedAction) {
+  return action.type === 'upgrade-dao-module'
+    ? 'Replaces this contract’s code. The contract checks the upgrade is approved when the proposal runs; an unapproved one fails and changes nothing.'
+    : 'This action can change DAO control, treasury behavior, or token balances.';
+}
+
 const PAUSE_TOGGLES = new Set(['pause-auction', 'unpause-auction', 'pause-marketplace', 'unpause-marketplace']);
 /** Auction calls the contract only accepts while auctions are paused. */
 const NEEDS_PAUSED_AUCTION = new Set([
@@ -193,7 +200,7 @@ export function analyzeProposalAction(action: ProposalQueuedAction, existing: Pr
       findings.push({
         severity: 'warning',
         kind: 'high-risk',
-        message: 'This action can change DAO control, treasury behavior, or token balances.',
+        message: highRiskMessage(action),
         existingActionIndexes: []
       });
     return findings;
@@ -251,7 +258,7 @@ export function analyzeProposalAction(action: ProposalQueuedAction, existing: Pr
     findings.push({
       severity: 'warning',
       kind: 'high-risk',
-      message: 'This action can change DAO control, treasury behavior, or token balances.',
+      message: highRiskMessage(action),
       existingActionIndexes: []
     });
   }

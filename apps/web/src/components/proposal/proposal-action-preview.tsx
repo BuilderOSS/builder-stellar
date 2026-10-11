@@ -12,6 +12,8 @@ import { normalizeProposalCallArgs, type ProposalCallArg, type ProposalCallArgs 
 import { ProposalState } from '@/lib/proposal-state';
 import { encodeSupportedCall } from '@/lib/proposal-supported-calls';
 
+import { UpgradeActionDetail } from './upgrade-action-detail';
+
 type ProposalActionPreviewProps = {
   targets: string[];
   functions: string[];
@@ -226,7 +228,9 @@ export function ProposalActionPreview({
                   ) : null}
                   <p className={classes.title}>{title}</p>
                 </div>
-                {inspection ? (
+                {inspection?.upgrade ? (
+                  <UpgradeActionDetail {...inspection.upgrade} contract={target} />
+                ) : inspection ? (
                   <>
                     <div className={classes.risk}>
                       <TriangleAlert aria-hidden="true" />
@@ -247,10 +251,14 @@ export function ProposalActionPreview({
                     </dl>
                   </>
                 ) : null}
-                <Address value={target} label="Contract" compact />
-                <p className={classes.raw}>
-                  {functionName}({actionArgs.map(formatArg).join(', ') || JSON.stringify(args[index] ?? [])})
-                </p>
+                {inspection?.upgrade ? null : (
+                  <>
+                    <Address value={target} label="Contract" compact />
+                    <p className={classes.raw}>
+                      {functionName}({actionArgs.map(formatArg).join(', ') || JSON.stringify(args[index] ?? [])})
+                    </p>
+                  </>
+                )}
                 {!supported ? (
                   <p className={classes.note}>
                     This app can't read this call, so it's shown exactly as indexed. Queueing and running it from here
