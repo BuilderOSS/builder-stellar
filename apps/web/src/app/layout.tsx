@@ -5,6 +5,7 @@ import type { Metadata, Viewport } from 'next';
 import { Bricolage_Grotesque, Figtree, JetBrains_Mono } from 'next/font/google';
 import type { ReactNode } from 'react';
 
+import { AgentationDevToolbar } from '@/components/agentation-dev-toolbar';
 import { AppToaster } from '@/components/app-toaster';
 import { GlobalShell } from '@/components/shell/app-shell';
 import { WalletSessionProvider } from '@/components/shell/wallet-session';
@@ -66,6 +67,7 @@ export default function RootLayout({
         </WalletSessionProvider>
         <WarmInkThemeRuntime />
         <AppToaster />
+        <AgentationDevToolbar />
       </body>
     </html>
   );
