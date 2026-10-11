@@ -18,6 +18,7 @@ import {
 } from '@/components/ui';
 import { relativeTime, shortAddress } from '@/lib/activity-feed';
 import { commentBytes, type CommentItem, toOneLine } from '@/lib/comments';
+import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 const counter = css({ fontVariantNumeric: 'tabular-nums' });
 
@@ -123,6 +124,7 @@ export function CommentThread({
 }) {
   const [draft, setDraft] = useState('');
   const used = commentBytes(draft);
+  const signedIn = useAuthSessionStore((state) => state.authStatus === 'authenticated');
   const ready = Boolean(compose && !compose.unavailableReason && commentFits(draft, compose.maxBytes));
 
   async function post() {
@@ -175,6 +177,7 @@ export function CommentThread({
                   <MarkdownField
                     id={`${id}-comment`}
                     variant="comment"
+                    canUpload={signedIn}
                     rows={4}
                     value={draft}
                     onChange={setDraft}

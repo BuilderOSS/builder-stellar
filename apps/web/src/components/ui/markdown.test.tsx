@@ -45,10 +45,10 @@ describe('Markdown', () => {
     expect(html).not.toContain('<h1');
   });
 
-  it('keeps comments to inline formatting, links and lists', () => {
+  it('keeps comments to inline formatting, links, lists and images', () => {
     const html = render('# Big\n\n**ok** ![img](https://x.y/a.png)\n\n| A |\n|---|\n| 1 |', 'comment');
     expect(html).not.toContain('<h');
-    expect(html).not.toContain('<img');
+    expect(html).toContain('<img');
     expect(html).not.toContain('<table');
     expect(html).toContain('Big');
     expect(html).toContain('<strong>ok</strong>');

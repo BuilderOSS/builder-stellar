@@ -27,8 +27,8 @@ export function safeMarkdownUrl(url: string) {
   return SAFE_URL.test(trimmed) ? trimmed : null;
 }
 
-/** What a comment may use: inline formatting, links, lists and quotes. No headings, images or tables. */
-const COMMENT_ELEMENTS = ['p', 'br', 'strong', 'em', 'del', 'a', 'ul', 'ol', 'li', 'code', 'pre', 'blockquote'];
+/** What a comment may use: inline formatting, links, lists, quotes and images. No headings or tables. */
+const COMMENT_ELEMENTS = ['p', 'br', 'strong', 'em', 'del', 'a', 'ul', 'ol', 'li', 'code', 'pre', 'blockquote', 'img'];
 
 const root = css({
   color: 'ink',
@@ -81,7 +81,13 @@ const root = css({
   '& th': { color: 'ink.muted', fontWeight: '600' },
   '& input[type=checkbox]': { mr: '1.5', accentColor: 'var(--colors-signal)' }
 });
-const comment = css({ fontSize: '0.9375rem', lineHeight: '1.6', '& p': { mb: '2' } });
+const comment = css({
+  fontSize: '0.9375rem',
+  lineHeight: '1.6',
+  '& p': { mb: '2' },
+  // A picture in a comment supports the words; it shouldn't take over the thread.
+  '& img': { maxH: '80', width: 'auto', my: '2' }
+});
 const image = css({
   display: 'block',
   maxW: '100%',
@@ -139,11 +145,11 @@ const RICH_COMPONENTS: Components = {
   h5: shifted('h6'),
   h6: shifted('h6')
 };
-const COMMENT_COMPONENTS: Components = { a: Link };
+const COMMENT_COMPONENTS: Components = { a: Link, img: Image };
 
 /**
  * Member-written markdown (proposal descriptions, proposal comments). `rich` allows headings,
- * images and tables; `comment` keeps inline formatting, links, lists and quotes and unwraps the rest.
+ * images and tables; `comment` keeps inline formatting, links, lists, quotes and images and unwraps the rest.
  */
 export function Markdown({
   source,

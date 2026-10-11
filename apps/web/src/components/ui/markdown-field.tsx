@@ -56,7 +56,7 @@ export function MarkdownField({
   disabled,
   invalid,
   describedBy,
-  images = variant === 'rich',
+  images = true,
   canUpload = false,
   upload = async (file) => (await uploadImage(file, 'markdown-image')).ipfsUri
 }: {
@@ -69,7 +69,7 @@ export function MarkdownField({
   disabled?: boolean;
   invalid?: boolean;
   describedBy?: string;
-  /** Offer image upload (rich text only by default). */
+  /** Offer image upload by drop, paste or the toolbar. */
   images?: boolean;
   /** Uploading needs a signed-in wallet session. */
   canUpload?: boolean;
@@ -256,11 +256,7 @@ export function MarkdownField({
         />
       ) : null}
       {uploadError ? <FieldHelperText tone="error">{uploadError}</FieldHelperText> : null}
-      <FieldHelperText>
-        {images
-          ? 'Markdown works: **bold**, _italic_, lists, links. Drop or paste images.'
-          : 'Markdown works: **bold**, _italic_, lists, links.'}
-      </FieldHelperText>
+      {images ? <FieldHelperText>Drop or paste images to add them.</FieldHelperText> : null}
     </div>
   );
 }

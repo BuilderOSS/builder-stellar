@@ -14,14 +14,17 @@ describe('MarkdownField', () => {
     }
     expect(html).toContain('Write');
     expect(html).toContain('Preview');
-    expect(html).toContain('Drop or paste images.');
+    expect(html).toContain('Drop or paste images to add them.');
+    expect(html).not.toContain('Markdown works');
   });
 
-  it('asks for a sign-in before images, and leaves them out of comments', () => {
+  it('asks for a sign-in before images, and offers them in comments too', () => {
     expect(renderToStaticMarkup(<MarkdownField id="why" value="" onChange={() => {}} />)).toContain(
       'aria-label="Sign in to add images"'
     );
-    const comment = renderToStaticMarkup(<MarkdownField id="c" value="" onChange={() => {}} variant="comment" />);
-    expect(comment).not.toContain('image');
+    const comment = renderToStaticMarkup(
+      <MarkdownField id="c" value="" onChange={() => {}} variant="comment" canUpload />
+    );
+    expect(comment).toContain('aria-label="Add an image"');
   });
 });
