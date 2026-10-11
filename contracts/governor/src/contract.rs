@@ -614,6 +614,9 @@ impl Governor for DaoGovernorContract {
 
         Self::set_proposal(e, &proposal_id, &proposal);
 
+        // OpenZeppelin's ProposalCreated documents `vote_end` as a ledger number; this governor
+        // passes the unix-seconds deadline instead. Read the vote window from ProposalScheduled.
+        // The u32 holds timestamps until 2106, which is accepted for this contract version.
         let deadline = proposal
             .vote_end
             .try_into()
