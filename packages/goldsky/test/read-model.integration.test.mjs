@@ -222,6 +222,9 @@ function buildScenario() {
   created('p2', 145, { voteStart: nowSeconds - 600, voteEnd: 2000000000 });
   created('p3', 146);
   emit('governor', d1.governor, 'proposal_cancelled', { topics: [bytes('p3')], ledger: 147 });
+  // Event-only comments (governor 0.2.0), in any proposal state.
+  emit('governor', d1.governor, 'proposal_commented', { topics: [bytes('p1'), addr('GBOB')], data: { body: str('Shipped, thanks all') }, ledger: 147, evt: 1 });
+  emit('governor', d1.governor, 'proposal_commented', { topics: [bytes('p3'), addr('GALICE')], data: { body: str('Withdrawn for now') }, ledger: 147, evt: 2 });
   // Never queued, quorum met and for > against, 14 days past vote_end -> expired.
   created('p4', 148, { quorum: 3 });
   emit('governor', d1.governor, 'vote_cast', { topics: [addr('GALICE'), bytes('p4')], data: { vote_type: u32(1), weight: u128(5), reason: str('') }, ledger: 148, evt: 1 });
@@ -243,11 +246,11 @@ function buildScenario() {
     topics: [u128(id)], data: { start_time: u64(1000), end_time: u64(2000), reserve_price: i128(10), payment_token: addr('CXLM') }, ledger
   });
   auctionCreated(7, 150);
-  emit('auction', d1.auction, 'bid_placed', { topics: [u128(7), addr('GBID1')], data: { amount: i128(20), extended: bool(false), new_end_time: u64(2000) }, ledger: 151 });
-  emit('auction', d1.auction, 'bid_placed', { topics: [u128(7), addr('GBID2')], data: { amount: i128(30), extended: bool(true), new_end_time: u64(2300) }, ledger: 152 });
+  emit('auction', d1.auction, 'bid_placed', { topics: [u128(7), addr('GBID1')], data: { amount: i128(20), extended: bool(false), new_end_time: u64(2000), comment: str('gm') }, ledger: 151 });
+  emit('auction', d1.auction, 'bid_placed', { topics: [u128(7), addr('GBID2')], data: { amount: i128(30), extended: bool(true), new_end_time: u64(2300), comment: str('') }, ledger: 152 });
   emit('auction', d1.auction, 'bid_refunded', { topics: [u128(7), addr('GBID1')], data: { amount: i128(20) }, ledger: 152, evt: 1 });
   // A refund whose push failed is credited, then pulled by the bidder.
-  emit('auction', d1.auction, 'bid_placed', { topics: [u128(7), addr('GBID3')], data: { amount: i128(40), extended: bool(false), new_end_time: u64(2300) }, ledger: 153 });
+  emit('auction', d1.auction, 'bid_placed', { topics: [u128(7), addr('GBID3')], data: { amount: i128(40), extended: bool(false), new_end_time: u64(2300), comment: str('') }, ledger: 153 });
   emit('auction', d1.auction, 'refund_deferred', { topics: [u128(7), addr('GBID2')], data: { amount: i128(30) }, ledger: 153, evt: 1 });
   emit('auction', d1.auction, 'refund_withdrawn', { topics: [addr('GBID2')], data: { amount: i128(30) }, ledger: 154 });
   emit('auction', d1.auction, 'auction_settled', { topics: [u128(7)], data: { winner: addr('GBID2'), amount: i128(30) }, ledger: 160 });
@@ -280,6 +283,8 @@ function buildScenario() {
   emit('marketplace', d1.marketplace, 'primary_listing_purchased', {
     topics: [u64(1), addr('GBUYER')], data: { token_id: u32(9), price: i128(100), payment_asset: addr('CXLM') }, ledger: 181
   });
+  // Comments (marketplace 0.2.0) outlive the listing they are about.
+  emit('marketplace', d1.marketplace, 'primary_listing_commented', { topics: [u64(1), addr('GBUYER')], data: { body: str('Got one!') }, ledger: 181, evt: 1 });
   primary(2, 187);
   emit('marketplace', d1.marketplace, 'primary_listing_cancelled', { topics: [u64(2)], ledger: 188 });
   primary(3, 189);
@@ -290,6 +295,7 @@ function buildScenario() {
   secondary(10, 182);
   emit('marketplace', d1.marketplace, 'listing_cancelled', { topics: [u32(10)], data: { seller: addr('GSELLER') }, ledger: 183 });
   secondary(11, 184);
+  emit('marketplace', d1.marketplace, 'listing_commented', { topics: [u32(11), addr('GBUYER')], data: { body: str('Would you take 80?') }, ledger: 184, evt: 1 });
   secondary(12, 185);
   emit('marketplace', d1.marketplace, 'listing_purchased', {
     topics: [u32(12), addr('GBUYER')], data: { seller: addr('GSELLER'), price: i128(100), fee: i128(2), payment_asset: addr('CXLM') }, ledger: 186
@@ -539,7 +545,7 @@ test('auction: bids, refunds, settlements and per-auction configuration', { skip
   ]);
   assert.equal(auctions[0].time_buffer_seconds, 300);
   assert.equal(Number(auctions[0].reserve_price), 10);
-  assert.deepEqual(rows(`SELECT bidder, amount, extended FROM auction.bids ORDER BY event_ledger`).map((b) => [b.bidder, Number(b.amount), b.extended]), [['GBID1', 20, false], ['GBID2', 30, true], ['GBID3', 40, false]]);
+  assert.deepEqual(rows(`SELECT bidder, amount, extended, comment FROM auction.bids ORDER BY event_ledger`).map((b) => [b.bidder, Number(b.amount), b.extended, b.comment]), [['GBID1', 20, false, 'gm'], ['GBID2', 30, true, null], ['GBID3', 40, false, null]]);
   assert.deepEqual(
     rows(`SELECT bidder, refund_status, amount FROM auction.bid_refunds ORDER BY event_ledger, event_index`).map((r) => [r.bidder, r.refund_status, Number(r.amount)]),
     [['GBID1', 'refunded', 20], ['GBID2', 'deferred', 30], ['GBID4', 'deferred', 7]]
@@ -587,6 +593,29 @@ test('marketplace: primary listings by listing_id, secondary by token_id, sales,
     [['primary', 1, 9, 'GBUYER', null, 100, null], ['secondary', null, 12, 'GBUYER', 'GSELLER', 100, 2]]
   );
   assert.deepEqual(rows(`SELECT token_id, fee FROM marketplace.purchases`).map((r) => [r.token_id, Number(r.fee)]), [[12, 2]], 'purchases is secondary-only');
+});
+
+test('comments: event-only threads per proposal, primary listing and token', { skip }, () => {
+  assert.deepEqual(
+    rows(`SELECT proposal_id, author, body, dao_id FROM governance.proposal_comments ORDER BY event_ledger, event_index`).map((r) => [r.author, r.body, r.dao_id]),
+    [['GBOB', 'Shipped, thanks all', 'CTOK1'], ['GALICE', 'Withdrawn for now', 'CTOK1']]
+  );
+  assert.deepEqual(
+    rows(`SELECT listing_id, author, body FROM marketplace.primary_listing_comments`).map((r) => [Number(r.listing_id), r.author, r.body]),
+    [[1, 'GBUYER', 'Got one!']],
+    'a comment outlives its (purchased) listing'
+  );
+  assert.deepEqual(
+    rows(`SELECT token_id, author, body FROM marketplace.listing_comments`).map((r) => [Number(r.token_id), r.author, r.body]),
+    [[11, 'GBUYER', 'Would you take 80?']]
+  );
+  const feed = rows(`SELECT kind, visibility, actor FROM app.activity_feed WHERE kind LIKE '%_commented' ORDER BY ledger_sequence, event_index`);
+  assert.deepEqual(feed.map((r) => [r.kind, r.visibility, r.actor]), [
+    ['governance.proposal_commented', 'governance', 'GBOB'],
+    ['governance.proposal_commented', 'governance', 'GALICE'],
+    ['marketplace.primary_listing_commented', 'public', 'GBUYER'],
+    ['marketplace.listing_commented', 'public', 'GBUYER']
+  ]);
 });
 
 test('launch lifecycle: per-module launches keyed by emitting contract, admin history, mint grant', { skip }, () => {

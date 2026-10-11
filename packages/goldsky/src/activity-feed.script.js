@@ -101,6 +101,8 @@ function invoke(data) {
   var userFacing = {
     DaoLaunched: true,
     ProposalCreated: true, ProposalQueued: true, ProposalExecuted: true, ProposalCancelled: true, VoteCast: true,
+    // Event-only comments (governor/marketplace 0.2.0+).
+    ProposalCommented: true, PrimaryListingCommented: true, ListingCommented: true,
     DelegateChanged: true,
     // A rename changes how members find the community: public.
     MetadataUpdated: true,
@@ -131,6 +133,7 @@ function invoke(data) {
     ProposalScheduled: 'governance.proposal_scheduled',
     ProposalQueued: 'governance.proposal_queued',
     VoteCast: 'governance.vote_cast',
+    ProposalCommented: 'governance.proposal_commented',
     ProposalCancelled: 'governance.proposal_cancelled',
     ProposalExecuted: 'governance.proposal_executed',
     QueueDelayChanged: 'governance.queue_delay_changed',
@@ -196,6 +199,8 @@ function invoke(data) {
     AdminProposalCancelled: 'manager.admin_proposal_cancelled',
     MarketplaceInitialized: 'marketplace.initialized',
     PrimaryListingCreated: 'marketplace.primary_listing_created',
+    PrimaryListingCommented: 'marketplace.primary_listing_commented',
+    ListingCommented: 'marketplace.listing_commented',
     PrimaryListingPurchased: 'marketplace.primary_listing_purchased',
     PrimaryListingCancelled: 'marketplace.primary_listing_cancelled',
     PrimaryListingExpired: 'marketplace.primary_listing_expired',
@@ -225,6 +230,7 @@ function invoke(data) {
     ProposalScheduled: 'Proposal voting scheduled',
     ProposalQueued: 'Proposal queued',
     VoteCast: 'Vote cast',
+    ProposalCommented: 'Proposal comment',
     ProposalCancelled: 'Proposal cancelled',
     ProposalExecuted: 'Proposal executed',
     QueueDelayChanged: 'Queue delay updated',
@@ -290,6 +296,8 @@ function invoke(data) {
     AdminProposalCancelled: 'Manager admin proposal cancelled',
     MarketplaceInitialized: 'Marketplace initialized',
     PrimaryListingCreated: 'Primary listing created',
+    PrimaryListingCommented: 'Primary listing comment',
+    ListingCommented: 'Listing comment',
     PrimaryListingPurchased: 'Primary sale completed',
     PrimaryListingCancelled: 'Primary listing cancelled',
     PrimaryListingExpired: 'Primary listing expired',
@@ -347,7 +355,8 @@ function invoke(data) {
     pick(data, ['token_address']),
     pick(data, ['recipient']),
     pick(data, ['buyer']),
-    pick(data, ['seller'])
+    pick(data, ['seller']),
+    pick(data, ['author'])
   ]);
 
   var proposalId = pick(data, ['proposal_id']);
@@ -361,6 +370,13 @@ function invoke(data) {
   var creator = pick(data, ['creator']);
   var tokenAddress = pick(data, ['token_address']);
   var name = pick(data, ['name']);
+  // Comment text (bid comment or comment body), shortened for the summary line.
+  var commentText = pick(data, ['comment', 'body']);
+  function quoted() {
+    if (!commentText) return '';
+    var text = String(commentText).replace(/\s+/g, ' ').trim();
+    return text.length > 120 ? text.slice(0, 117) + '...' : text;
+  }
 
   function describeRange() {
     var firstRaw = pick(data, ['first_token_id']);
@@ -376,7 +392,10 @@ function invoke(data) {
     ProposalQueued: function() { return 'Proposal ' + (proposalId || '') + ' queued'; },
     ProposalCreated: function() { return 'Proposal created'; },
     VoteCast: function() { return 'Vote cast on proposal'; },
-    BidPlaced: function() { return 'Bid of ' + (amount || 'unknown') + ' placed on token ' + (tokenId || 'unknown'); },
+    BidPlaced: function() { return 'Bid of ' + (amount || 'unknown') + ' placed on token ' + (tokenId || 'unknown') + (quoted() ? ': "' + quoted() + '"' : ''); },
+    ProposalCommented: function() { return 'Comment on proposal: "' + quoted() + '"'; },
+    PrimaryListingCommented: function() { return 'Comment on primary listing ' + (listingId || 'unknown') + ': "' + quoted() + '"'; },
+    ListingCommented: function() { return 'Comment on token ' + (tokenId || 'unknown') + ': "' + quoted() + '"'; },
     AuctionSettled: function() { return 'Auction settled for token ' + (tokenId || 'unknown'); },
     AuctionCreated: function() { return 'Auction created for token ' + (tokenId || 'unknown'); },
     // One Execute event per call: topics governor/target/proposal_id, data function + index.
@@ -492,7 +511,7 @@ function invoke(data) {
     proposal_id: toString(proposalId),
     token_id: toString(tokenId),
     amount: toString(amount),
-    actor: toString(pick(data, ['actor', 'proposer', 'voter', 'bidder', 'minter', 'recipient', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator', 'buyer', 'seller', 'current_admin', 'old_admin', 'admin'])),
+    actor: toString(pick(data, ['actor', 'proposer', 'voter', 'author', 'bidder', 'minter', 'recipient', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator', 'buyer', 'seller', 'current_admin', 'old_admin', 'admin'])),
     addresses: JSON.stringify(addresses || []),
     ledger_sequence: ledger_sequence,
     transaction_index: transaction_index,

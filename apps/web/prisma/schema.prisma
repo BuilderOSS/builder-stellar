@@ -109,6 +109,44 @@ view MarketplaceSecondaryListing {
   @@schema("marketplace")
 }
 
+view MarketplacePrimaryListingComment {
+  commentEventId   String    @map("comment_event_id")
+  deploymentId     String    @map("deployment_id")
+  daoId            String    @map("dao_id")
+  contractId       String    @map("contract_id")
+  listingId        BigInt    @map("listing_id")
+  author           String
+  body             String
+  eventLedger      BigInt    @map("event_ledger")
+  transactionIndex BigInt?   @map("transaction_index")
+  operationIndex   BigInt?   @map("operation_index")
+  eventIndex       BigInt?   @map("event_index")
+  eventAt          DateTime? @map("event_at")
+  transactionHash  String    @map("transaction_hash")
+
+  @@map("primary_listing_comments")
+  @@schema("marketplace")
+}
+
+view MarketplaceListingComment {
+  commentEventId   String    @map("comment_event_id")
+  deploymentId     String    @map("deployment_id")
+  daoId            String    @map("dao_id")
+  contractId       String    @map("contract_id")
+  tokenId          BigInt    @map("token_id")
+  author           String
+  body             String
+  eventLedger      BigInt    @map("event_ledger")
+  transactionIndex BigInt?   @map("transaction_index")
+  operationIndex   BigInt?   @map("operation_index")
+  eventIndex       BigInt?   @map("event_index")
+  eventAt          DateTime? @map("event_at")
+  transactionHash  String    @map("transaction_hash")
+
+  @@map("listing_comments")
+  @@schema("marketplace")
+}
+
 view MarketplaceSale {
   eventId         String    @map("event_id")
   deploymentId    String    @map("deployment_id")
@@ -275,6 +313,25 @@ view GovernanceProposalVote {
   @@schema("governance")
 }
 
+view GovernanceProposalComment {
+  commentEventId   String    @map("comment_event_id")
+  deploymentId     String    @map("deployment_id")
+  daoId            String    @map("dao_id")
+  contractId       String    @map("contract_id")
+  proposalId       String    @map("proposal_id")
+  author           String
+  body             String
+  eventLedger      BigInt    @map("event_ledger")
+  transactionIndex BigInt?   @map("transaction_index")
+  operationIndex   BigInt?   @map("operation_index")
+  eventIndex       BigInt?   @map("event_index")
+  eventAt          DateTime? @map("event_at")
+  transactionHash  String    @map("transaction_hash")
+
+  @@map("proposal_comments")
+  @@schema("governance")
+}
+
 view GovernanceProposalLifecycle {
   lifecycleEventId String    @map("lifecycle_event_id")
   deploymentId     String    @map("deployment_id")
@@ -369,6 +426,7 @@ view AuctionBid {
   eventLedger     BigInt    @map("event_ledger")
   eventAt         DateTime? @map("event_at")
   transactionHash String    @map("transaction_hash")
+  comment         String?
 
   @@map("bids")
   @@schema("auction")
