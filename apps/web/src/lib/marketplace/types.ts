@@ -94,8 +94,6 @@ export type MarketplaceAction =
 export interface MarketplaceComments {
   deploymentId: string;
   daoId: string;
-  /** False until this community's marketplace runs 0.2.0, which adds comments. */
-  commentsEnabled: boolean;
   items: CommentItem[];
 }
 export interface MarketplacePrepared {

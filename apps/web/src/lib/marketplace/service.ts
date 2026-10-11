@@ -2,7 +2,6 @@ import { Client as MarketplaceClient } from '@builder-stellar/marketplace-bindin
 import type { ManagerDao, MarketplacePrimaryListing, MarketplaceSecondaryListing } from '@prisma/client';
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
-import { supportsComments } from '@/lib/comments';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { prisma } from '@/lib/prisma';
 
@@ -200,7 +199,7 @@ export async function marketplaceListing(
 
 /**
  * Event-only comments, oldest first: a primary listing's by listing id, a resale's by token id (so
- * the thread carries over relistings). `commentsEnabled` is false until the marketplace runs 0.2.0.
+ * the thread carries over relistings).
  */
 export async function marketplaceComments(
   community: MarketplaceCommunity,
@@ -219,19 +218,17 @@ export async function marketplaceComments(
     { transactionIndex: 'asc' as const },
     { eventIndex: 'asc' as const }
   ];
-  const [rows, version] = await Promise.all([
+  const rows =
     kind === 'primary'
-      ? prisma.marketplacePrimaryListingComment.findMany({ where: { ...scope, listingId: parsed }, orderBy, take: 200 })
-      : prisma.marketplaceListingComment.findMany({ where: { ...scope, tokenId: parsed }, orderBy, take: 200 }),
-    marketplaceClient(community)
-      .version()
-      .then(({ result }) => result)
-      .catch(() => undefined)
-  ]);
+      ? await prisma.marketplacePrimaryListingComment.findMany({
+          where: { ...scope, listingId: parsed },
+          orderBy,
+          take: 200
+        })
+      : await prisma.marketplaceListingComment.findMany({ where: { ...scope, tokenId: parsed }, orderBy, take: 200 });
   return {
     deploymentId: DEPLOYMENT_ID,
     daoId: community.daoId,
-    commentsEnabled: supportsComments(version),
     items: rows.map((row) => ({
       id: row.commentEventId,
       author: row.author,

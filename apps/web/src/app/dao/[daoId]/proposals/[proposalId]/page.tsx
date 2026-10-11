@@ -24,7 +24,7 @@ import { Avatar, Button, ButtonLink, Callout, ConfirmAction, Skeleton } from '@/
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
 import { shortAddress } from '@/lib/activity-feed';
-import { commentBytes, type CommentItem, MAX_PROPOSAL_COMMENT_BYTES, useCommentsSupported } from '@/lib/comments';
+import { commentBytes, type CommentItem, MAX_PROPOSAL_COMMENT_BYTES } from '@/lib/comments';
 import { daoRoute } from '@/lib/dao-routes';
 import { keccak256Bytes } from '@/lib/keccak';
 import { proposalActionAvailability } from '@/lib/proposal-availability';
@@ -150,7 +150,6 @@ export default function ProposalDetailPage() {
   const [busy, setBusy] = useState(false);
   const [justVoted, setJustVoted] = useState(false);
   const [commenting, setCommenting] = useState(false);
-  const commentsSupported = useCommentsSupported(config, 'governor');
   const tx = useTransactionFeedback(config.name);
   const [now, setNow] = useState(() => Date.now());
   const [executionResult, setExecutionResult] = useState<{
@@ -673,20 +672,12 @@ export default function ProposalDetailPage() {
                 loadError={data?.commentsError}
                 viewer={session.address}
                 emptyText="Updates and questions about this proposal show up here."
-                composer={
-                  commentsSupported === undefined
-                    ? null
-                    : {
-                        unavailableReason: !commentsSupported
-                          ? 'Comments open once this community upgrades its governor.'
-                          : !session.address
-                            ? 'Connect a wallet to comment.'
-                            : '',
-                        maxBytes: MAX_PROPOSAL_COMMENT_BYTES,
-                        busy: commenting,
-                        onPost: postComment
-                      }
-                }
+                composer={{
+                  unavailableReason: session.address ? '' : 'Connect a wallet to comment.',
+                  maxBytes: MAX_PROPOSAL_COMMENT_BYTES,
+                  busy: commenting,
+                  onPost: postComment
+                }}
               />
               <div>
                 <Button variant="ghost" size="sm" onClick={() => void mutate()} loading={isLoading}>

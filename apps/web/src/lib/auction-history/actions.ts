@@ -1,28 +1,9 @@
 import type { Client as AuctionClient } from '@builder-stellar/auction-bindings';
-import { Address, nativeToScVal } from '@stellar/stellar-sdk';
-import { AssembledTransaction } from '@stellar/stellar-sdk/contract';
 
 import { commentBytes, MAX_COMMENT_BYTES } from '@/lib/comments';
 
 import { settlementMethod, validateAuctionBid } from './state';
 import type { CurrentAuction } from './types';
-
-/**
- * `create_bid` as auction 0.1.0 exposes it: no comment argument. The bindings follow the current
- * contract, so this call is built by hand. Remove once every community runs auction 0.2.0+.
- */
-function createBidWithoutComment(client: AuctionClient, bidder: string, tokenId: bigint, amount: bigint) {
-  return AssembledTransaction.build<void>({
-    ...client.options,
-    method: 'create_bid',
-    args: [
-      new Address(bidder).toScVal(),
-      nativeToScVal(tokenId, { type: 'u128' }),
-      nativeToScVal(amount, { type: 'i128' })
-    ],
-    parseResultXdr: () => undefined
-  });
-}
 
 export async function prepareBuyerAction(
   client: AuctionClient,
@@ -31,8 +12,7 @@ export async function prepareBuyerAction(
   action: 'bid' | 'settle',
   amount: bigint | null,
   now = Math.floor(Date.now() / 1000),
-  /** `withComment: false` targets an auction still on 0.1.0, which takes no comment. */
-  { comment = '', withComment = true }: { comment?: string; withComment?: boolean } = {}
+  { comment = '' }: { comment?: string } = {}
 ) {
   const [auctionTx, configTx, pausedTx] = await Promise.all([
     client.get_auction(),
@@ -61,10 +41,6 @@ export async function prepareBuyerAction(
   if (action === 'bid') {
     if (amount === null) throw new Error('Enter a positive amount with up to 7 decimal places.');
     validateAuctionBid(live, snapshot.auction!.token_id, amount, now);
-    if (!withComment) {
-      if (comment) throw new Error("This community's auction doesn't take comments yet.");
-      return createBidWithoutComment(client, bidder, auction.token_id, amount);
-    }
     if (commentBytes(comment) > MAX_COMMENT_BYTES) throw new Error('Shorten your comment to send it with the bid.');
     return client.create_bid({ bidder, token_id: auction.token_id, amount, comment });
   }

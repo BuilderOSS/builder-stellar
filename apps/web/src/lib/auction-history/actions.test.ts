@@ -1,5 +1,4 @@
 import type { Client as AuctionClient } from '@builder-stellar/auction-bindings';
-import { AssembledTransaction } from '@stellar/stellar-sdk/contract';
 import { describe, expect, it, vi } from 'vitest';
 
 import { prepareBuyerAction, prepareBuyerRefund } from './actions';
@@ -65,30 +64,6 @@ describe('explicit auction action preparation', () => {
     await expect(
       prepareBuyerAction(api, snapshot, 'GSESSION', 'bid', 10500001n, 50, { comment: '€'.repeat(342) })
     ).rejects.toThrow('Shorten');
-  });
-  it('an auction still on 0.1.0 gets the old call and refuses a comment', async () => {
-    const { mock, api } = client();
-    await expect(
-      prepareBuyerAction(api, snapshot, 'GSESSION', 'bid', 10500001n, 50, { comment: 'gm', withComment: false })
-    ).rejects.toThrow("doesn't take comments");
-    expect(mock.create_bid).not.toHaveBeenCalled();
-
-    const build = vi.spyOn(AssembledTransaction, 'build').mockResolvedValue({} as AssembledTransaction<void>);
-    await prepareBuyerAction(
-      api,
-      snapshot,
-      'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
-      'bid',
-      10500001n,
-      50,
-      {
-        withComment: false
-      }
-    );
-    expect(build).toHaveBeenCalledWith(expect.objectContaining({ method: 'create_bid' }));
-    expect(build.mock.calls[0][0].args).toHaveLength(3);
-    expect(mock.create_bid).not.toHaveBeenCalled();
-    build.mockRestore();
   });
   it('fresh reads reject outbid minimums, expiry, pause, token and payment-token rotation', async () => {
     const cases = [

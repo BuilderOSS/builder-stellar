@@ -81,7 +81,36 @@
       "approveTx": "ea559a252d3626c5f64815ff0991d704cbf02a053b6b65d1c16ecd7dedb47dd0",
       "latestTx": "62975220598e5c67f3491162dec89fa042ceada22ad8ba581c58486604448ca7",
       "migration": "0013_comments",
-      "daos": []
+      "daos": [
+        {
+          "dao": "CDK3TSVJRME7EW2U35JGBHTO3XXDX6UZ4MFTZIXVWBSKUL4QTR7CZTR6",
+          "slug": "builder",
+          "proposal": "f4a580d1c158509e8582ad061bbab317475214ece972cafcbbefadfef13fb794",
+          "proposeTx": "bce2361a8f2c66fe7857efc59aeb2f9516c6862a993496aba449787025e79fca",
+          "voteTx": "a043c62dde7e1c0bb5df4d9d6bec7c5b75ea57a7e1b3373aa3b60628f7ef63df",
+          "queueTx": "f136ec6ca893611a671e0eac86b0b2ce818b8587064099e87b8d1c751620cc83",
+          "executeTx": "e53364669332b5f53ac9eef6407725171cd6b632a73f98d44e8450a869f2494e"
+        },
+        {
+          "dao": "CAOJRMBAGOTAGAECDRQTZF2KBDIDYAWPCDN4HHZMEOT4CBGFCOEAOIK7",
+          "slug": "fast-dao",
+          "proposal": "a0546fb92267dcd575858bdec2cd01232f0faf97b02a890c924bd46e47920a15",
+          "proposeTx": "423f126b225bf870d7d6944426de9135bfad95647464a1bce1137858f835ad12",
+          "voteTx": "af313b4c88bd16f6f9956d5c4c0d981b4579bd5d8b544b6b0559ece688046ad4",
+          "queueTx": "2976253a8cb3ab95dfd090d2599906b5321f764d3e8a94546381435a796b7c0a",
+          "executeTx": "fce1b20b652b35291fef773c7151dfe3cd8914a4e9ae02cf3b58c56a7f3ea46f"
+        },
+        {
+          "dao": "CBI36ODKRFZ7ZNZ7IDWHAIFMFQ3VE6DMPQOCFYO5JLFKLFXZUA56HP5I",
+          "slug": "fast-dao-new",
+          "proposal": "8d8032f21dd9fee698d07a281bab74e079d07d8a0a2f2f91b890e7bb47ec4e99",
+          "proposeTx": "879c95772e438d96145c80c15bd33072b8c27b18aba601274ef9e8e722934bf1",
+          "voteTx": "3fceb3aa106ab36d337c15ad2c4a43f484de9e51f728fbd847a82d88351fc7f4",
+          "queueTx": "79803e1b9cbd41b4f2a3b2ebf79670eb35d602c5733efddcc7a95b399577dd29",
+          "executeTx": "264f5c7158fb4e03434c1ca8733a6444a360f7a9ab7c8ed7f87315b55caf1eb2"
+        }
+      ],
+      "note": "All three modules upgraded in one proposal per DAO."
     },
     {
       "module": "governor",
@@ -94,7 +123,36 @@
       "approveTx": "a1c0f6d042718ec0595702abcd85f75dd60296ed37c884cff8c82c913d1ff5a3",
       "latestTx": "2dba55b8c6b49641c8431981f128aa1fe7452ca3d2e0f65cf9ec1e7de7f22412",
       "migration": "0013_comments",
-      "daos": []
+      "daos": [
+        {
+          "dao": "CDK3TSVJRME7EW2U35JGBHTO3XXDX6UZ4MFTZIXVWBSKUL4QTR7CZTR6",
+          "slug": "builder",
+          "proposal": "f4a580d1c158509e8582ad061bbab317475214ece972cafcbbefadfef13fb794",
+          "proposeTx": "bce2361a8f2c66fe7857efc59aeb2f9516c6862a993496aba449787025e79fca",
+          "voteTx": "a043c62dde7e1c0bb5df4d9d6bec7c5b75ea57a7e1b3373aa3b60628f7ef63df",
+          "queueTx": "f136ec6ca893611a671e0eac86b0b2ce818b8587064099e87b8d1c751620cc83",
+          "executeTx": "e53364669332b5f53ac9eef6407725171cd6b632a73f98d44e8450a869f2494e"
+        },
+        {
+          "dao": "CAOJRMBAGOTAGAECDRQTZF2KBDIDYAWPCDN4HHZMEOT4CBGFCOEAOIK7",
+          "slug": "fast-dao",
+          "proposal": "a0546fb92267dcd575858bdec2cd01232f0faf97b02a890c924bd46e47920a15",
+          "proposeTx": "423f126b225bf870d7d6944426de9135bfad95647464a1bce1137858f835ad12",
+          "voteTx": "af313b4c88bd16f6f9956d5c4c0d981b4579bd5d8b544b6b0559ece688046ad4",
+          "queueTx": "2976253a8cb3ab95dfd090d2599906b5321f764d3e8a94546381435a796b7c0a",
+          "executeTx": "fce1b20b652b35291fef773c7151dfe3cd8914a4e9ae02cf3b58c56a7f3ea46f"
+        },
+        {
+          "dao": "CBI36ODKRFZ7ZNZ7IDWHAIFMFQ3VE6DMPQOCFYO5JLFKLFXZUA56HP5I",
+          "slug": "fast-dao-new",
+          "proposal": "8d8032f21dd9fee698d07a281bab74e079d07d8a0a2f2f91b890e7bb47ec4e99",
+          "proposeTx": "879c95772e438d96145c80c15bd33072b8c27b18aba601274ef9e8e722934bf1",
+          "voteTx": "3fceb3aa106ab36d337c15ad2c4a43f484de9e51f728fbd847a82d88351fc7f4",
+          "queueTx": "79803e1b9cbd41b4f2a3b2ebf79670eb35d602c5733efddcc7a95b399577dd29",
+          "executeTx": "264f5c7158fb4e03434c1ca8733a6444a360f7a9ab7c8ed7f87315b55caf1eb2"
+        }
+      ],
+      "note": "All three modules upgraded in one proposal per DAO."
     },
     {
       "module": "marketplace",
@@ -107,7 +165,36 @@
       "approveTx": "c28eef3c092845fc8c8c96dd86a883badb5ec9c5c0f122265d88b364e8414ee1",
       "latestTx": "3b7e3624c46a5b317ef2a871a2f9c270c77c3d74a61a9397a3dc03ae5130ce71",
       "migration": "0013_comments",
-      "daos": []
+      "daos": [
+        {
+          "dao": "CDK3TSVJRME7EW2U35JGBHTO3XXDX6UZ4MFTZIXVWBSKUL4QTR7CZTR6",
+          "slug": "builder",
+          "proposal": "f4a580d1c158509e8582ad061bbab317475214ece972cafcbbefadfef13fb794",
+          "proposeTx": "bce2361a8f2c66fe7857efc59aeb2f9516c6862a993496aba449787025e79fca",
+          "voteTx": "a043c62dde7e1c0bb5df4d9d6bec7c5b75ea57a7e1b3373aa3b60628f7ef63df",
+          "queueTx": "f136ec6ca893611a671e0eac86b0b2ce818b8587064099e87b8d1c751620cc83",
+          "executeTx": "e53364669332b5f53ac9eef6407725171cd6b632a73f98d44e8450a869f2494e"
+        },
+        {
+          "dao": "CAOJRMBAGOTAGAECDRQTZF2KBDIDYAWPCDN4HHZMEOT4CBGFCOEAOIK7",
+          "slug": "fast-dao",
+          "proposal": "a0546fb92267dcd575858bdec2cd01232f0faf97b02a890c924bd46e47920a15",
+          "proposeTx": "423f126b225bf870d7d6944426de9135bfad95647464a1bce1137858f835ad12",
+          "voteTx": "af313b4c88bd16f6f9956d5c4c0d981b4579bd5d8b544b6b0559ece688046ad4",
+          "queueTx": "2976253a8cb3ab95dfd090d2599906b5321f764d3e8a94546381435a796b7c0a",
+          "executeTx": "fce1b20b652b35291fef773c7151dfe3cd8914a4e9ae02cf3b58c56a7f3ea46f"
+        },
+        {
+          "dao": "CBI36ODKRFZ7ZNZ7IDWHAIFMFQ3VE6DMPQOCFYO5JLFKLFXZUA56HP5I",
+          "slug": "fast-dao-new",
+          "proposal": "8d8032f21dd9fee698d07a281bab74e079d07d8a0a2f2f91b890e7bb47ec4e99",
+          "proposeTx": "879c95772e438d96145c80c15bd33072b8c27b18aba601274ef9e8e722934bf1",
+          "voteTx": "3fceb3aa106ab36d337c15ad2c4a43f484de9e51f728fbd847a82d88351fc7f4",
+          "queueTx": "79803e1b9cbd41b4f2a3b2ebf79670eb35d602c5733efddcc7a95b399577dd29",
+          "executeTx": "264f5c7158fb4e03434c1ca8733a6444a360f7a9ab7c8ed7f87315b55caf1eb2"
+        }
+      ],
+      "note": "All three modules upgraded in one proposal per DAO."
     }
   ],
   "currentImplementationsTx": "c875b5ae511ad6751bb2783cc3dababbf79875a3b6ea074c1ddae09b401fc8a3"

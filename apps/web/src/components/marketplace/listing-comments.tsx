@@ -43,11 +43,7 @@ export function ListingComments({ listing }: { listing: MarketplaceListing }) {
         composer={
           comments.data
             ? {
-                unavailableReason: !comments.data.commentsEnabled
-                  ? 'Comments open once this community upgrades its market.'
-                  : !signedIn
-                    ? 'Connect and sign in with your wallet to comment.'
-                    : '',
+                unavailableReason: signedIn ? '' : 'Connect and sign in with your wallet to comment.',
                 maxBytes: MAX_COMMENT_BYTES,
                 busy: Boolean(action),
                 onPost: (body) =>

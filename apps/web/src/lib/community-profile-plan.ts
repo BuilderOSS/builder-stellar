@@ -60,8 +60,3 @@ export function buildProfilePlan(current: CommunityProfile, edits: Partial<Commu
 }
 
 /** Renames only reach the app from token 0.2.0 on (it adds the MetadataUpdated event). */
-export function tokenReportsRenames(version: string | undefined) {
-  if (!version) return false;
-  const [major, minor] = version.split('.').map((part) => Number.parseInt(part, 10));
-  return major > 0 || (major === 0 && minor >= 2);
-}

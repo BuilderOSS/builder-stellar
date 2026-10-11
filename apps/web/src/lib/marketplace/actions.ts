@@ -4,7 +4,7 @@ import type { AssembledTransaction } from '@stellar/stellar-sdk/contract';
 import { z } from 'zod';
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
-import { commentBytes, MAX_COMMENT_BYTES, supportsComments } from '@/lib/comments';
+import { commentBytes, MAX_COMMENT_BYTES } from '@/lib/comments';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { prisma } from '@/lib/prisma';
 
@@ -186,8 +186,6 @@ export async function prepareMarketplaceAction(
     // Event-only: the marketplace emits the comment and stores nothing. Anyone may comment.
     if (!action.body.trim() || commentBytes(action.body) > MAX_COMMENT_BYTES)
       throw new MarketplaceError('Comments need some text and must fit in 1 KB.');
-    if (!supportsComments((await client.version()).result))
-      throw new MarketplaceError('Comments open once this community upgrades its market.', 409);
     let id: bigint;
     try {
       id = marketplaceId(action.id, action.kind);
