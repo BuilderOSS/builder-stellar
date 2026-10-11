@@ -45,14 +45,21 @@ describe('resolveDaoNav', () => {
     expect(nav.tabs[0]).toMatchObject({ href: '/dao/lantern', exact: true });
   });
 
-  it('keeps a disabled auction reachable in More', () => {
+  it('hides a disabled auction from the rail, tabs and More', () => {
     const nav = resolveDaoNav(
       'd',
       { ...base, auctionContractId: 'CA', auctionEnabled: false, marketplaceContractId: 'CM' },
       { canManage: false }
     );
     expect(nav.slot3).toBe('market');
-    expect(keys(nav.more)).toEqual(['auction', 'members']);
+    expect(keys(nav.more)).toEqual(['members']);
+    expect(keys(nav.rail)).not.toContain('auction');
+    expect(keys(nav.tabs)).not.toContain('auction');
+  });
+
+  it('keeps Auction during setup, where launch decides whether it runs', () => {
+    const nav = resolveDaoNav('d', { ...base, auctionContractId: 'CA', auctionEnabled: null }, { canManage: false });
+    expect(keys(nav.rail)).toContain('auction');
   });
 
   it('hides modules the community does not have and Manage for non-managers', () => {

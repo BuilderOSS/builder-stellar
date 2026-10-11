@@ -30,6 +30,7 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { useDaoMembership } from '@/hooks/use-dao-membership';
 import { useIsLaunchAdmin } from '@/hooks/useIsLaunchAdmin';
 import { getTreasuryAssets } from '@/lib/assets-config';
+import { hasAuction, hasMarketplace } from '@/lib/dao-nav';
 import { daoRoute } from '@/lib/dao-routes';
 import { useGoldskyActivityFeed, useGoldskyHealth } from '@/lib/goldsky-queries';
 import { ProposalState } from '@/lib/proposal-state';
@@ -163,8 +164,8 @@ export default function Page() {
         proposalsLoading={proposals.isLoading}
         proposalsError={proposals.error}
         activeProposals={activeCount}
-        hasAuctionModule={Boolean(config.auctionContractId)}
-        auctionEnabled={config.auctionEnabled}
+        runsAuctions={hasAuction(config)}
+        hasMarket={hasMarketplace(config)}
         assetCode={assetCode}
         now={now}
       />

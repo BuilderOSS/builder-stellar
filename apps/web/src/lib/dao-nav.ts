@@ -30,9 +30,9 @@ type NavCapabilities = Pick<
   Partial<Pick<DaoNetworkConfig, 'status'>>;
 
 export function hasAuction(config: NavCapabilities) {
-  // A disabled auction can be reactivated, so it stays reachable; a DAO
-  // without an auction contract never had one.
-  return Boolean(config.auctionContractId);
+  // Every community has an auction contract; it runs auctions only if it launched with them or a
+  // vote turned them on (null in setup, where launch decides). Turning them on lives in Manage.
+  return Boolean(config.auctionContractId) && config.auctionEnabled !== false;
 }
 
 export function hasMarketplace(config: NavCapabilities) {
@@ -44,7 +44,7 @@ export function hasMarketplace(config: NavCapabilities) {
  * resume) auctions, else Market when its marketplace is enabled, else Members.
  */
 export function resolveSlot3(config: NavCapabilities): DaoNav['slot3'] {
-  if (hasAuction(config) && config.auctionEnabled !== false) return 'auction';
+  if (hasAuction(config)) return 'auction';
   if (hasMarketplace(config)) return 'market';
   return 'members';
 }
