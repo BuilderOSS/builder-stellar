@@ -9,19 +9,9 @@ import { css } from 'styled-system/css';
 import useSWR from 'swr';
 
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
+import { CommunityLinkField } from '@/components/admin/community-link';
 import { prepareDaoImage, uploadDaoImage } from '@/components/create-dao/dao-image-upload';
-import {
-  ActionBar,
-  Button,
-  ButtonLink,
-  Callout,
-  Chip,
-  Crest,
-  FieldHelperText,
-  FieldLabel,
-  Input,
-  Textarea
-} from '@/components/ui';
+import { ActionBar, Button, ButtonLink, Callout, Chip, Crest, FieldLabel, Input, Textarea } from '@/components/ui';
 import { card, muted, title } from '@/components/ui/panel-styles';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
@@ -35,6 +25,7 @@ import {
 import { daoAdminRoute } from '@/lib/dao-routes';
 import { validateArtworkSetting } from '@/lib/proposal-actions/artwork-admin-actions';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
+import { getProposalActionSummary } from '@/lib/proposal-call';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
@@ -233,6 +224,21 @@ export function CommunityProfileEditor() {
         };
       }),
       onAdded: () => setEdits({})
+    });
+  }
+
+  function proposeLinkChange(slug: string) {
+    const handler = getActionHandler('change-dao-slug');
+    const action = handler.serialize({ slug }, context);
+    draft.requestAdd({
+      daoId,
+      action,
+      source: 'admin/profile/change-dao-slug',
+      metadata: {
+        title: `Change our link to /dao/${slug}`,
+        description: getProposalActionSummary(action),
+        url: ''
+      }
     });
   }
 
@@ -438,13 +444,14 @@ export function CommunityProfileEditor() {
               <Changed show={changed('website')} onUndo={() => reset('website')} />
               {errors.website ? <p className={error}>{errors.website}</p> : null}
             </div>
-            <div className={field}>
-              <span className={css({ textStyle: 'label', color: 'ink' })}>Link</span>
-              <p className={hint}>/dao/{routeId}</p>
-              <FieldHelperText>
-                {live ? 'Your link is permanent.' : 'Your link is claimed at launch and then permanent.'}
-              </FieldHelperText>
-            </div>
+            <CommunityLinkField
+              config={config}
+              routeId={routeId}
+              live={live}
+              canPropose={canPropose}
+              readSource={adminReadOptions(config, config.tokenContractId, session.address).publicKey}
+              onPropose={proposeLinkChange}
+            />
           </div>
         </div>
 

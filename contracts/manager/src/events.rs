@@ -90,7 +90,8 @@ pub struct PendingSlugUpdated {
     pub slug: String,
 }
 
-/// Emitted by `launch_dao` when the DAO's slug becomes its permanent, unique id.
+/// Emitted by `launch_dao` when the DAO's slug becomes its unique id (it can
+/// later change by vote, see `SlugChanged`).
 #[contractevent]
 pub struct SlugClaimed {
     #[topic]
@@ -217,6 +218,27 @@ pub fn emit_pending_slug_updated(env: &Env, token_address: &Address, slug: &Stri
     PendingSlugUpdated {
         token_address: token_address.clone(),
         slug: slug.clone(),
+    }
+    .publish(env);
+}
+
+/// Emitted by `change_slug`: a launched DAO moved to `new_slug` and released
+/// `old_slug`, which any DAO may claim from the same ledger on.
+#[contractevent]
+pub struct SlugChanged {
+    #[topic]
+    pub token_address: Address,
+    #[topic]
+    pub new_slug: String,
+    pub old_slug: String,
+}
+
+/// Emitted when a launched DAO changes its slug.
+pub fn emit_slug_changed(env: &Env, token_address: &Address, old_slug: &String, new_slug: &String) {
+    SlugChanged {
+        token_address: token_address.clone(),
+        new_slug: new_slug.clone(),
+        old_slug: old_slug.clone(),
     }
     .publish(env);
 }

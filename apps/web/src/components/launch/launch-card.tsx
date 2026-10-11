@@ -234,7 +234,7 @@ export function LaunchCard({
             <ul className={consequences}>
               <li>Your setup admin rights pass to the community treasury.</li>
               <li>After this, changes go through proposals that members vote on.</li>
-              {slug ? <li>Your link /dao/{slug} becomes permanent.</li> : null}
+              {slug ? <li>Your link /dao/{slug} is claimed. Changing it later takes a vote.</li> : null}
             </ul>
           </div>
         </>
@@ -308,7 +308,7 @@ export function LaunchCard({
           <li>After this, changes go through proposals.</li>
           {choice.auction ? <li>The first auction starts right away.</li> : null}
           {choice.marketplace ? <li>The market opens.</li> : null}
-          {slug ? <li>/dao/{slug} becomes permanent.</li> : null}
+          {slug ? <li>/dao/{slug} is claimed. Changing it later takes a vote.</li> : null}
         </ul>
       </Dialog>
     </section>

@@ -19,15 +19,16 @@
 //!
 //! ## 3. Slug Registry
 //!
-//! - A DAO requests a slug at `create_dao`; it becomes the DAO's unique,
-//!   permanent id when `launch_dao` claims it
+//! - A DAO requests a slug at `create_dao`; it becomes the DAO's unique id
+//!   when `launch_dao` claims it. A launched DAO can move to a new slug by
+//!   vote (`change_slug`), which releases the old one
 //! - `get_dao_by_slug` / `get_slug` resolve launched DAOs; DAO enumeration and
 //!   pagination are served by the indexer, not the contract
 //!
 //! ## Security
 //!
 //! - Admin-controlled implementation registry and two-step admin handover
-//! - Factory pause blocks both `create_dao` and `launch_dao`
+//! - Factory pause blocks `create_dao`, `launch_dao` and `change_slug`
 //! - Per-deployer deterministic salts (creator + nonce + module)
 //! - Input validation against the shared bounds in `common`
 

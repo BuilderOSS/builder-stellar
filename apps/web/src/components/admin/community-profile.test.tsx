@@ -17,6 +17,7 @@ vi.mock('@/contexts/dao-context', () => {
     routeId: 'lantern-club',
     daoConfig: {
       name: 'testnet',
+      slug: 'lantern-club',
       tokenName: 'Lantern Club',
       tokenSymbol: 'LANTERN',
       tokenUri: 'https://example.com/token/',
@@ -81,7 +82,7 @@ describe('CommunityProfileEditor', () => {
     expect(input(html, 'profile-name')).toContain('value="Lantern Club"');
     expect(input(html, 'profile-name')).not.toContain('disabled');
     expect(input(html, 'profile-website')).toContain('value="https://lantern.club"');
-    expect(html).toContain('Your link is claimed at launch and then permanent.');
+    expect(html).toContain('Your link is claimed at launch.');
   });
 
   it('sends changes to a proposal once the treasury is the admin', () => {
@@ -92,7 +93,10 @@ describe('CommunityProfileEditor', () => {
     // Members can still draft every change; the vote decides.
     expect(input(html, 'profile-name')).not.toContain('disabled');
     expect(html).not.toContain('Read only');
-    expect(html).toContain('Your link is permanent.');
+    // The link changes in its own proposal, with the warning about the old link.
+    expect(input(html, 'profile-link')).toContain('placeholder="lantern-club"');
+    expect(html).toContain('Propose the link change');
+    expect(html).toContain('keeps leading here only until another community takes it');
   });
 
   it('locks name and symbol, with a path to upgrade, while the token is on 0.1.0', () => {
@@ -103,6 +107,15 @@ describe('CommunityProfileEditor', () => {
     expect(input(html, 'profile-name')).toContain('disabled');
     expect(input(html, 'profile-symbol')).toContain('disabled');
     expect(input(html, 'profile-website')).not.toContain('disabled');
+  });
+
+  it('keeps the link fixed while the Manager predates change_slug', () => {
+    state.live = true;
+    state.admin = TREASURY;
+    state.version = '0.1.0';
+    const html = render();
+    expect(input(html, 'profile-link')).toBe('');
+    expect(html).toContain('Changing it needs a newer platform release.');
   });
 
   it('is read only for a wallet with no authority', () => {

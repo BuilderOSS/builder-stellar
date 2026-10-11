@@ -8,7 +8,7 @@ type SlugStatus = { valid: boolean; claimedBy?: string | null; pendingRequests?:
 
 /**
  * A slug is taken only once a DAO launches with it. Creating a DAO only
- * requests the slug; the first requester to launch claims it permanently.
+ * requests the slug; the first requester to launch claims it.
  */
 export function SlugAvailability({ slug }: { slug: string }) {
   const [debounced, setDebounced] = useState(slug);
@@ -21,11 +21,7 @@ export function SlugAvailability({ slug }: { slug: string }) {
   );
   if (!isValidSlug(slug) || !data || data.message) return null;
   if (data.claimedBy)
-    return (
-      <p role="alert">
-        “{slug}” is taken: a launched DAO owns it permanently. Choose another slug (creation would fail).
-      </p>
-    );
+    return <p role="alert">“{slug}” is taken: a launched DAO holds it. Choose another slug (creation would fail).</p>;
   return (
     <p role="status">
       “{slug}” is available. Creating only requests it; the slug is claimed when your DAO launches, and another DAO that

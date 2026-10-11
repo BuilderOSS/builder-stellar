@@ -352,6 +352,7 @@ const newEventCases = [
   ['Migrated', 'governor', 'governor.migrated', 'Governor storage migrated', 'admin'],
   ['ProposalScheduled', 'governor', 'governance.proposal_scheduled', 'Proposal voting scheduled', 'admin'],
   ['SlugClaimed', 'manager', 'manager.slug_claimed', 'Slug claimed', 'admin'],
+  ['SlugChanged', 'manager', 'manager.slug_changed', 'Community link changed', 'public'],
   ['PendingSlugUpdated', 'manager', 'manager.pending_slug_updated', 'Requested slug changed', 'admin'],
   ['LatestImplementationSet', 'manager', 'manager.latest_implementation_set', 'Latest implementation set', 'admin'],
   ['MarketplacePaused', 'marketplace', 'marketplace.paused', 'Marketplace paused', 'admin'],

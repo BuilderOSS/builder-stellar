@@ -2591,3 +2591,207 @@ fn slug_survives_ttl_bump_past_original_expiry() {
     assert_eq!(client.get_dao_by_slug(&slug), token);
     assert_eq!(client.get_slug(&token), Some(slug));
 }
+
+// ============================================================================
+// change_slug
+// ============================================================================
+
+/// A token whose `admin()` must never be reached: `change_slug` has to reject
+/// unknown tokens before calling into them.
+#[contract]
+struct PanickingAdminToken;
+
+#[contractimpl]
+impl PanickingAdminToken {
+    pub fn admin(_e: Env) -> Address {
+        panic!("change_slug called into an unknown token")
+    }
+}
+
+/// Launch a mock DAO under `slug`, then hand its token admin to a fresh
+/// "treasury" address, as the real launch does. Returns (token, treasury).
+fn launch_mock(env: &Env, client: &ManagerContractClient, slug: &str) -> (Address, Address) {
+    let token = seed_mock_pending(env, client, slug);
+    client.launch_dao(&token, &launch_cfg());
+    let treasury = Address::generate(env);
+    env.as_contract(&token, || {
+        env.storage().instance().set(&1u32, &treasury);
+    });
+    (token, treasury)
+}
+
+fn s(env: &Env, slug: &str) -> String {
+    String::from_str(env, slug)
+}
+
+#[test]
+fn change_slug_moves_the_dao_and_releases_the_old_slug() {
+    let (env, client, _a) = setup();
+    env.mock_all_auths();
+    let (token, _treasury) = launch_mock(&env, &client, "old-name");
+    client.change_slug(&token, &s(&env, "new-name"));
+
+    assert_eq!(client.get_slug(&token), Some(s(&env, "new-name")));
+    assert_eq!(client.get_dao_by_slug(&s(&env, "new-name")), token);
+    assert_eq!(
+        client.try_get_dao_by_slug(&s(&env, "old-name")),
+        Err(Ok(crate::ManagerError::SlugNotFound))
+    );
+    assert_eq!(
+        client.try_bump_slug_ttl(&s(&env, "old-name")),
+        Err(Ok(crate::ManagerError::SlugNotFound))
+    );
+    client.bump_slug_ttl(&s(&env, "new-name"));
+
+    // The freed slug is claimable by another DAO at launch.
+    let other = seed_mock_pending(&env, &client, "old-name");
+    client.launch_dao(&other, &launch_cfg());
+    assert_eq!(client.get_dao_by_slug(&s(&env, "old-name")), other);
+}
+
+#[test]
+fn change_slug_emits_slug_changed() {
+    use soroban_sdk::testutils::Events as _;
+    use soroban_sdk::Event as _;
+    let (env, client, _a) = setup();
+    env.mock_all_auths();
+    let (token, _treasury) = launch_mock(&env, &client, "before");
+    client.change_slug(&token, &s(&env, "after"));
+    let events = env.events().all();
+    assert_eq!(
+        events.events().last().unwrap(),
+        &crate::events::SlugChanged {
+            token_address: token.clone(),
+            new_slug: s(&env, "after"),
+            old_slug: s(&env, "before"),
+        }
+        .to_xdr(&env, &client.address)
+    );
+}
+
+#[test]
+fn change_slug_round_trips_and_chains() {
+    let (env, client, _a) = setup();
+    env.mock_all_auths();
+    let (token, _treasury) = launch_mock(&env, &client, "first");
+    client.change_slug(&token, &s(&env, "second"));
+    client.change_slug(&token, &s(&env, "third"));
+    assert_eq!(client.get_slug(&token), Some(s(&env, "third")));
+    for gone in ["first", "second"] {
+        assert_eq!(
+            client.try_get_dao_by_slug(&s(&env, gone)),
+            Err(Ok(crate::ManagerError::SlugNotFound))
+        );
+    }
+    // Taking back a freed slug of its own is a normal claim.
+    client.change_slug(&token, &s(&env, "first"));
+    assert_eq!(client.get_dao_by_slug(&s(&env, "first")), token);
+}
+
+#[test]
+fn change_slug_rejects_bad_targets() {
+    let (env, client, _a) = setup();
+    env.mock_all_auths();
+    let (token, _t) = launch_mock(&env, &client, "mine");
+    let (_other, _t2) = launch_mock(&env, &client, "theirs");
+    assert_eq!(
+        client.try_change_slug(&token, &s(&env, "mine")),
+        Err(Ok(crate::ManagerError::SlugUnchanged))
+    );
+    assert_eq!(
+        client.try_change_slug(&token, &s(&env, "theirs")),
+        Err(Ok(crate::ManagerError::SlugTaken))
+    );
+    for bad in ["abc", "Bad_Slug", "a--b", "-abc"] {
+        assert_eq!(
+            client.try_change_slug(&token, &s(&env, bad)),
+            Err(Ok(crate::ManagerError::InvalidSlug)),
+            "{bad}"
+        );
+    }
+    assert_eq!(client.get_slug(&token), Some(s(&env, "mine")));
+}
+
+#[test]
+fn change_slug_rejects_pending_and_unknown_tokens_before_calling_them() {
+    let (env, client, _a) = setup();
+    env.mock_all_auths();
+    let pending = seed_mock_pending(&env, &client, "pending-dao");
+    assert_eq!(
+        client.try_change_slug(&pending, &s(&env, "elsewhere")),
+        Err(Ok(crate::ManagerError::SlugNotFound))
+    );
+    // An arbitrary contract never gets called: its admin() would panic.
+    let unknown = env.register(PanickingAdminToken, ());
+    assert_eq!(
+        client.try_change_slug(&unknown, &s(&env, "elsewhere")),
+        Err(Ok(crate::ManagerError::SlugNotFound))
+    );
+}
+
+#[test]
+fn change_slug_requires_the_token_admin() {
+    use soroban_sdk::testutils::{MockAuth, MockAuthInvoke};
+    use soroban_sdk::IntoVal;
+    let (env, client, _a) = setup();
+    env.mock_all_auths();
+    let (token, treasury) = launch_mock(&env, &client, "guarded");
+    let (_b_token, b_treasury) = launch_mock(&env, &client, "dao-b-slug");
+    // The launch admin no longer holds the token after launch.
+    let launch_admin = Address::generate(&env);
+    let target = s(&env, "hijacked");
+    for signer in [&launch_admin, &b_treasury] {
+        env.mock_auths(&[MockAuth {
+            address: signer,
+            invoke: &MockAuthInvoke {
+                contract: &client.address,
+                fn_name: "change_slug",
+                args: (token.clone(), target.clone()).into_val(&env),
+                sub_invokes: &[],
+            },
+        }]);
+        assert!(client.try_change_slug(&token, &target).is_err());
+        assert_eq!(client.get_slug(&token), Some(s(&env, "guarded")));
+    }
+    env.mock_auths(&[MockAuth {
+        address: &treasury,
+        invoke: &MockAuthInvoke {
+            contract: &client.address,
+            fn_name: "change_slug",
+            args: (token.clone(), target.clone()).into_val(&env),
+            sub_invokes: &[],
+        },
+    }]);
+    client.change_slug(&token, &target);
+    assert_eq!(client.get_slug(&token), Some(target));
+}
+
+#[test]
+fn change_slug_is_blocked_while_the_factory_is_paused() {
+    let (env, client, _a) = setup();
+    env.mock_all_auths();
+    let (token, _t) = launch_mock(&env, &client, "paused-rename");
+    client.pause_factory();
+    assert_eq!(
+        client.try_change_slug(&token, &s(&env, "fresh-name")),
+        Err(Ok(crate::ManagerError::FactoryPaused))
+    );
+    client.unpause_factory();
+    client.change_slug(&token, &s(&env, "fresh-name"));
+}
+
+#[test]
+fn pending_dao_requesting_the_new_slug_is_blocked_and_can_recover() {
+    let (env, client, _a) = setup();
+    env.mock_all_auths();
+    let (token, _t) = launch_mock(&env, &client, "launched-one");
+    let pending = seed_mock_pending(&env, &client, "wanted");
+    client.change_slug(&token, &s(&env, "wanted"));
+    assert_eq!(
+        client.try_launch_dao(&pending, &launch_cfg()),
+        Err(Ok(crate::ManagerError::SlugTaken))
+    );
+    client.update_pending_slug(&pending, &s(&env, "launched-one"));
+    client.launch_dao(&pending, &launch_cfg());
+    assert_eq!(client.get_dao_by_slug(&s(&env, "launched-one")), pending);
+}

@@ -13,7 +13,7 @@ import { cached } from './server-cache';
 
 export type DaoNetworkConfig = {
   name: NetworkName;
-  /** Permanent URL slug once launched (claimed); null before launch. */
+  /** URL slug once launched (claimed; changes only by vote); null before launch. */
   slug?: string | null;
   label: string;
   rpcUrl: string;

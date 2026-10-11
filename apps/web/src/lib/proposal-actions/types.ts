@@ -47,7 +47,8 @@ export type ProposalActionType =
   | 'set-allowlist'
   | 'minter-batch-mint'
   | 'set-token-metadata'
-  | 'transfer-dao-token';
+  | 'transfer-dao-token'
+  | 'change-dao-slug';
 
 /**
  * Queued action structure (persisted in store)

@@ -32,7 +32,8 @@ by `dao_id` (the DAO token contract address).
 | View | Reads | Notes |
 | --- | --- | --- |
 | `dao_registry` | `dao_created` | one row per DAO: deployer, launch admin, six module contracts, the six `<module>_wasm_hash` columns from `dao_created.wasm_hashes`, and `created_slug` (the slug requested at creation, not unique) |
-| `dao_slugs` **Prisma** | `dao_created`, `pending_slug_updated`, `slug_claimed` | per DAO: `requested_slug` (latest request, not unique), `claimed_slug` (unique and permanent, set by `launch_dao`; NULL while pending), `claimed_ledger`, `claimed_at` |
+| `dao_slugs` **Prisma** | `dao_created`, `pending_slug_updated`, `slug_claimed`, `slug_changed` | per DAO: `requested_slug` (latest request, not unique), `claimed_slug` (unique; set by `launch_dao`, then the latest `change_slug`; NULL while pending), `claimed_ledger`, `claimed_at` (the original launch claim) |
+| `dao_previous_slugs` **Prisma** | `slug_changed` | one row per slug a DAO moved away from, with its event position. Not reserved: the app redirects an old link only while no DAO holds it |
 | `dao_modules` | registry | one row per module contract |
 | `event_identity` | modules | contract → DAO lookup used by every domain view |
 | `daos` **Prisma** | registry + `dao_slugs`, `dao_launched`, `token_initialized`, metadata, auction `paused`/`unpaused` | `status` pending/operational; `slug` (claimed slug once launched, else the requested one), `slug_claimed`, `requested_slug`, `claimed_slug`; `auction_enabled`, `auction_paused`, `token_description`; `admin_address` is the DAO's current admin: the token's latest `admin_changed` (the Treasury after launch), else the launch admin |

@@ -33,6 +33,7 @@ import {
 import { minterAllocationHandlers } from './minter-actions';
 import { moduleUpgradeHandler } from './module-upgrade-actions';
 import { reviewFixHandlers } from './review-fix-actions';
+import { changeDaoSlugHandler } from './slug-actions';
 import { setTokenMetadataHandler, transferDaoTokenHandler } from './token-actions';
 import type { ActionHandler, ProposalActionType } from './types';
 
@@ -76,6 +77,7 @@ const REGISTERED_HANDLERS: ActionHandler[] = [
   createPrimaryListingHandler,
   setTokenMetadataHandler,
   transferDaoTokenHandler,
+  changeDaoSlugHandler,
   cancelPrimaryListingHandler,
   registeredArtworkPropertiesHandler,
   ...artworkSettingHandlers,

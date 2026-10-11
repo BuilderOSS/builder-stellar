@@ -175,6 +175,7 @@ export function getProposalActionLabel(type: ProposalActionType) {
     'set-artwork-contract-image': 'Update Collection Image',
     'set-token-metadata': 'Rename Community',
     'transfer-dao-token': 'Give Treasury Token',
+    'change-dao-slug': 'Change Community Link',
     'upgrade-dao-module': 'Upgrade DAO Module',
     'migrate-dao-module': 'Migrate Module Storage',
     'regenerate-token-traits': 'Seed Token Traits',
@@ -197,6 +198,8 @@ export function getProposalActionLabel(type: ProposalActionType) {
 
 export function getProposalActionSummary(action: ProposalQueuedAction) {
   if (action.type === 'set-token-metadata') return `Rename to ${action.name} (${action.symbol})`;
+  if (action.type === 'change-dao-slug')
+    return `Change link${action.previousSlug ? ` from /dao/${action.previousSlug}` : ''} to /dao/${action.slug}. The old link is freed right away and keeps leading here only until another community takes it. If /dao/${action.slug} is taken before this runs, the proposal fails.`;
   if (action.type === 'transfer-dao-token')
     return `Give token #${action.tokenId} from the treasury to ${action.recipient}`;
   if (action.type === 'set-merkle-root')

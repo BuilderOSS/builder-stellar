@@ -5,7 +5,7 @@ Builder is a Soroban DAO framework and web application for creating and operatin
 ## System
 
 - Manager deploys six modules per DAO: Token, Metadata, Auction, Governor, Treasury, and Marketplace.
-- Manager is a factory and implementation registry. `create_dao` only requests a slug; `launch_dao` claims it permanently (unique per Manager). Manager deletes pending setup state at launch, keeps the claimed slug-to-DAO mappings, and has no DAO enumeration API.
+- Manager is a factory and implementation registry. `create_dao` only requests a slug; `launch_dao` claims it (unique per Manager); a launched DAO can move to a new slug by vote. Manager deletes pending setup state at launch, keeps the claimed slug-to-DAO mappings, and has no DAO enumeration API.
 - Every module has one admin: the launch admin during Setup, the Treasury after launch (`admin()`; no ownership transfer or renounce). Launch requires a nonzero **voting** supply (tokens held by the Treasury, Auction and Marketplace carry no votes) and hands every module's admin, including the Treasury's, to the Treasury.
 - Proposals are created, voted on, and queued through Governor. Anyone can execute a ready proposal through **Treasury**, which consumes it on Governor and dispatches the actions in order.
 - A shared platform Minter is deployed separately. Together with Manager and the six DAO modules, this makes eight deployable contracts. `common` and `dao-e2e` are support/test crates.
