@@ -30,7 +30,7 @@ const GROUPS: Array<{ title: string; items: ManageItem[] }> = [
   {
     title: 'Community',
     items: [
-      { key: 'profile', label: 'Community profile', meta: 'Name, image, description and website', section: '/profile' }
+      { key: 'profile', label: 'Community profile', meta: 'Name, link, image and description', section: '/profile' }
     ]
   },
   {

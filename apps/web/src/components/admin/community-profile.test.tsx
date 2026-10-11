@@ -8,7 +8,8 @@ const state = vi.hoisted(() => ({
   address: '',
   admin: '',
   live: false,
-  version: '0.2.0' as string | undefined
+  version: '0.2.0' as string | undefined,
+  link: { version: '0.2.0', slug: 'lantern-club', claimed: false }
 }));
 
 vi.mock('@/contexts/dao-context', () => {
@@ -50,6 +51,11 @@ vi.mock('@/lib/admin-surfaces', () => ({
   })
 }));
 vi.mock('swr', () => ({ default: () => ({ data: state.version }) }));
+vi.mock('@/lib/community-link', async (load) => ({
+  ...(await load<typeof import('@/lib/community-link')>()),
+  useManagerLink: () => ({ data: state.link, mutate: vi.fn() }),
+  useLinkAvailability: () => undefined
+}));
 vi.mock('@/lib/use-admin-proposal-draft', () => ({
   useAdminProposalDraft: () => ({ pending: null, requestAddBatch: vi.fn(), cancel: vi.fn(), resolve: vi.fn() })
 }));
@@ -74,6 +80,7 @@ describe('CommunityProfileEditor', () => {
     state.admin = ADMIN;
     state.live = false;
     state.version = '0.2.0';
+    state.link = { version: '0.2.0', slug: 'lantern-club', claimed: false };
   });
 
   it('lets the launch admin edit everything directly during setup, showing current values', () => {
@@ -82,7 +89,8 @@ describe('CommunityProfileEditor', () => {
     expect(input(html, 'profile-name')).toContain('value="Lantern Club"');
     expect(input(html, 'profile-name')).not.toContain('disabled');
     expect(input(html, 'profile-website')).toContain('value="https://lantern.club"');
-    expect(html).toContain('Your link is claimed at launch.');
+    expect(input(html, 'profile-link')).toContain('value="lantern-club"');
+    expect(html).toContain('Yours once you launch.');
   });
 
   it('sends changes to a proposal once the treasury is the admin', () => {
@@ -93,10 +101,10 @@ describe('CommunityProfileEditor', () => {
     // Members can still draft every change; the vote decides.
     expect(input(html, 'profile-name')).not.toContain('disabled');
     expect(html).not.toContain('Read only');
-    // The link changes in its own proposal, with the warning about the old link.
-    expect(input(html, 'profile-link')).toContain('placeholder="lantern-club"');
-    expect(html).toContain('Propose the link change');
-    expect(html).toContain('keeps leading here only until another community takes it');
+    // The link sits with the rest of the profile; changing it is its own vote.
+    expect(input(html, 'profile-link')).toContain('value="lantern-club"');
+    expect(input(html, 'profile-link')).not.toContain('disabled');
+    expect(html).toContain('Changing it takes its own vote.');
   });
 
   it('locks name and symbol, with a path to upgrade, while the token is on 0.1.0', () => {
@@ -112,10 +120,10 @@ describe('CommunityProfileEditor', () => {
   it('keeps the link fixed while the Manager predates change_slug', () => {
     state.live = true;
     state.admin = TREASURY;
-    state.version = '0.1.0';
+    state.link = { version: '0.1.0', slug: 'lantern-club', claimed: true };
     const html = render();
-    expect(input(html, 'profile-link')).toBe('');
-    expect(html).toContain('Changing it needs a newer platform release.');
+    expect(input(html, 'profile-link')).toContain('disabled');
+    expect(html).toContain('Changing it needs the latest platform release.');
   });
 
   it('is read only for a wallet with no authority', () => {

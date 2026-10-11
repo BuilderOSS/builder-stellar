@@ -69,10 +69,10 @@ export function BasicInfoStep() {
           </CreationField>
           <CreationField
             id="slug"
-            label="URL slug"
+            label="Link"
             hint={
               basicInfo.slug
-                ? `Your link: /dao/${basicInfo.slug}${slugFollows ? ' · filled in from the name' : ''}`
+                ? `/dao/${basicInfo.slug}${slugFollows ? ' · filled in from the name' : ''}`
                 : 'Lowercase letters, numbers and hyphens. Filled in from the name.'
             }
           >
@@ -81,7 +81,7 @@ export function BasicInfoStep() {
               autoComplete="off"
               value={basicInfo.slug}
               maxLength={63}
-              placeholder="my-dao"
+              placeholder="my-community"
               {...fieldAccessibility('slug', errors)}
               onChange={(e) => {
                 update({ slug: e.target.value.toLowerCase() });

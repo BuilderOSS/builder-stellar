@@ -20,14 +20,13 @@ export function SlugAvailability({ slug }: { slug: string }) {
     fetch(url, { cache: 'no-store' }).then((response) => response.json())
   );
   if (!isValidSlug(slug) || !data || data.message) return null;
-  if (data.claimedBy)
-    return <p role="alert">“{slug}” is taken: a launched DAO holds it. Choose another slug (creation would fail).</p>;
+  if (data.claimedBy) return <p role="alert">/dao/{slug} is taken by another community. Pick another link.</p>;
   return (
     <p role="status">
-      “{slug}” is available. Creating only requests it; the slug is claimed when your DAO launches, and another DAO that
-      launches first with the same slug takes it.
+      /dao/{slug} is available. It becomes yours when you launch; another community that launches first with the same
+      link takes it.
       {data.pendingRequests
-        ? ` ${data.pendingRequests} pending DAO${data.pendingRequests === 1 ? ' has' : 's have'} requested it already.`
+        ? ` ${data.pendingRequests} ${data.pendingRequests === 1 ? 'community in setup has' : 'communities in setup have'} asked for it too.`
         : ''}
     </p>
   );

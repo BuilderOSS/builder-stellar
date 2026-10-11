@@ -35,13 +35,13 @@ export function SlugRename({
 
   async function rename() {
     if (!address || busy) return;
-    if (!isValidSlug(slug)) return setMessage('Use 4-63 characters of a-z, 0-9 and single hyphens.');
-    if (slug === currentSlug) return setMessage('Choose a different slug.');
+    if (!isValidSlug(slug)) return setMessage('Use 4-63 lowercase letters, numbers or single hyphens.');
+    if (slug === currentSlug) return setMessage('This is your link now.');
     setBusy(true);
     setMessage('');
     try {
       const status = await fetch(`/api/slugs/${slug}`, { cache: 'no-store' }).then((response) => response.json());
-      if (status?.claimedBy) throw new Error(`“${slug}” is already claimed by a launched DAO.`);
+      if (status?.claimedBy) throw new Error(`/dao/${slug} is taken by another community.`);
       const manager = new ManagerClient({
         contractId: getDeploymentConfig().managerAddress,
         rpcUrl: config.rpcUrl,
@@ -50,17 +50,17 @@ export function SlugRename({
         allowHttp: config.rpcUrl.startsWith('http://'),
         signTransaction: (xdr, opts) => signWithWallet(xdr, { ...opts, address, networkPassphrase: config.passphrase })
       });
-      tx.start('Rename requested slug');
+      tx.start('Change the link');
       const assembled = await manager.update_pending_slug({ token_address: daoId, slug });
       assembled.result.unwrap();
       const sent = await assembled.signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
       await waitForConfirmation(hash, config.rpcUrl);
-      tx.success(`Requested slug changed to “${slug}”`, hash);
+      tx.success(`Your link is now /dao/${slug}`, hash);
       setSlug('');
       onRenamed();
     } catch (error) {
-      tx.fail(error, 'Slug rename needs attention', 'manager');
+      tx.fail(error, 'Link change needs attention', 'manager');
       setMessage(error instanceof Error ? error.message : 'Rename failed');
     } finally {
       setBusy(false);
@@ -68,13 +68,13 @@ export function SlugRename({
   }
 
   return (
-    <Callout variant="warning" title={`“${currentSlug}” was claimed by another DAO`}>
+    <Callout variant="warning" title={`Another community took /dao/${currentSlug}`}>
       <p>
-        Another DAO launched first with this slug, so launch would fail. Request a different slug, then launch. The new
-        slug is claimed only when this DAO launches.
+        It launched first with this link, so your launch would fail. Pick another link, then launch. It becomes yours
+        when you launch.
       </p>
       <label htmlFor="rename-slug">
-        New slug
+        New link
         <Input
           id="rename-slug"
           autoComplete="off"
@@ -85,7 +85,7 @@ export function SlugRename({
         />
       </label>
       <Button type="button" disabled={busy || !address || !slug} onClick={() => void rename()}>
-        {busy ? 'Renaming…' : 'Rename requested slug'}
+        {busy ? 'Changing…' : 'Change the link'}
       </Button>
       {message ? <p role="alert">{message}</p> : null}
     </Callout>
