@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { css } from 'styled-system/css';
 import useSWR from 'swr';
 
+import { CommentThread } from '@/components/comments/comment-thread';
 import { ProposalActionPreview } from '@/components/proposal/proposal-action-preview';
 import { ProposalExecutePanel } from '@/components/proposal/proposal-execute-panel';
 import { ProposalExecutionReceipt } from '@/components/proposal/proposal-execution-receipt';
@@ -23,6 +24,7 @@ import { Avatar, Button, ButtonLink, Callout, ConfirmAction, Skeleton } from '@/
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
 import { shortAddress } from '@/lib/activity-feed';
+import { commentBytes, type CommentItem, MAX_PROPOSAL_COMMENT_BYTES, useCommentsSupported } from '@/lib/comments';
 import { daoRoute } from '@/lib/dao-routes';
 import { keccak256Bytes } from '@/lib/keccak';
 import { proposalActionAvailability } from '@/lib/proposal-availability';
@@ -43,6 +45,8 @@ type ProposalPageData = {
   detail: ProposalDetail;
   votes: ProposalVoteItem[];
   votesError: string;
+  comments: CommentItem[];
+  commentsError: boolean;
 };
 
 const VOTE_FOR = 1;
@@ -75,9 +79,12 @@ async function fetchProposalPageData([, , daoId, proposalId]: readonly [
   string,
   string
 ]): Promise<ProposalPageData> {
-  const [detailResponse, votesResponse] = await Promise.all([
+  const [detailResponse, votesResponse, commentsResponse] = await Promise.all([
     fetch(`/api/dao/${encodeURIComponent(daoId)}/proposals/${proposalId}`, { cache: 'no-store' }),
     fetch(`/api/dao/${encodeURIComponent(daoId)}/proposals/${proposalId}/votes`, { cache: 'no-store' }).catch(
+      () => null
+    ),
+    fetch(`/api/dao/${encodeURIComponent(daoId)}/proposals/${proposalId}/comments`, { cache: 'no-store' }).catch(
       () => null
     )
   ]);
@@ -91,10 +98,16 @@ async function fetchProposalPageData([, , daoId, proposalId]: readonly [
     ? ((await votesResponse.json().catch(() => null)) as { items?: ProposalVoteItem[] } | null)
     : null;
 
+  const commentsPayload = commentsResponse
+    ? ((await commentsResponse.json().catch(() => null)) as { items?: CommentItem[] } | null)
+    : null;
+
   return {
     detail,
     votes: votesResponse?.ok ? (votesPayload?.items ?? []) : [],
-    votesError: votesResponse?.ok && votesPayload ? '' : 'Indexed vote history is unavailable.'
+    votesError: votesResponse?.ok && votesPayload ? '' : 'Indexed vote history is unavailable.',
+    comments: commentsResponse?.ok ? (commentsPayload?.items ?? []) : [],
+    commentsError: !(commentsResponse?.ok && commentsPayload)
   };
 }
 
@@ -136,6 +149,8 @@ export default function ProposalDetailPage() {
   const [formMessage, setFormMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [justVoted, setJustVoted] = useState(false);
+  const [commenting, setCommenting] = useState(false);
+  const commentsSupported = useCommentsSupported(config, 'governor');
   const tx = useTransactionFeedback(config.name);
   const [now, setNow] = useState(() => Date.now());
   const [executionResult, setExecutionResult] = useState<{
@@ -282,6 +297,11 @@ export default function ProposalDetailPage() {
       return;
     }
 
+    if (commentBytes(voteReason) > MAX_PROPOSAL_COMMENT_BYTES) {
+      setFormMessage('Your reason is too long. Shorten it, or post the rest as a comment.');
+      return;
+    }
+
     setBusy(true);
     setFormMessage('');
     tx.start('Submitting vote...');
@@ -312,6 +332,33 @@ export default function ProposalDetailPage() {
       tx.fail(err, 'Vote failed', 'governor');
     } finally {
       setBusy(false);
+    }
+  }
+
+  // Comments are event-only: the governor emits ProposalCommented and stores nothing.
+  async function postComment(body: string) {
+    if (!detail) return false;
+    setCommenting(true);
+    tx.start('Posting comment...');
+    try {
+      const governor = await getGovernor();
+      const assembled = await governor.comment({
+        proposal_id: proposalIdToBuffer(detail.proposalId),
+        body,
+        author: session.address
+      });
+      const sent = await assembled.signAndSend();
+      const hash = sent.sendTransactionResponse?.hash ?? '';
+      tx.submitted('Comment submitted', hash);
+      await waitForConfirmation(hash, config.rpcUrl);
+      await mutate();
+      tx.success('Comment posted', hash);
+      return true;
+    } catch (err) {
+      tx.fail(err, 'Comment failed', 'governor');
+      return false;
+    } finally {
+      setCommenting(false);
     }
   }
 
@@ -602,6 +649,28 @@ export default function ProposalDetailPage() {
                 viewer={session.address}
               />
               {data?.votesError ? <Callout variant="warning" title="Vote history didn't load" /> : null}
+              <CommentThread
+                id="proposal"
+                title="Discussion"
+                comments={data?.comments ?? []}
+                loadError={data?.commentsError}
+                viewer={session.address}
+                emptyText="Updates and questions about this proposal show up here."
+                composer={
+                  commentsSupported === undefined
+                    ? null
+                    : {
+                        unavailableReason: !commentsSupported
+                          ? 'Comments open once this community upgrades its governor.'
+                          : !session.address
+                            ? 'Connect a wallet to comment.'
+                            : '',
+                        maxBytes: MAX_PROPOSAL_COMMENT_BYTES,
+                        busy: commenting,
+                        onPost: postComment
+                      }
+                }
+              />
               <div>
                 <Button variant="ghost" size="sm" onClick={() => void mutate()} loading={isLoading}>
                   {isLoading ? null : <RefreshCw aria-hidden="true" />}

@@ -63,7 +63,15 @@ export const MarketplaceError = {
   /**
    * The listing price exceeds the buyer's `max_price`
    */
-  7715 : { message: "PriceAboveMax" }
+  7715 : { message: "PriceAboveMax" },
+  /**
+   * Comment body is empty
+   */
+  7716 : { message: "CommentEmpty" },
+  /**
+   * Comment body exceeds `MAX_COMMENT_LENGTH`
+   */
+  7717 : { message: "CommentTooLong" }
 }
 
 /**
@@ -85,6 +93,19 @@ export interface ListingCancelledEvent {
   data: {
     token_id: number;
     seller?: string;
+  };
+}
+
+/**
+ * A comment on a token's secondary listings. Keyed by token, so the thread
+ * carries over relistings. Event-only: the body is never stored.
+ */
+export interface ListingCommentedEvent {
+  name: "ListingCommented";
+  data: {
+    token_id: number;
+    author: string;
+    body?: string;
   };
 }
 
@@ -210,6 +231,18 @@ export interface PrimaryListingCancelledEvent {
   name: "PrimaryListingCancelled";
   data: {
     listing_id: bigint;
+  };
+}
+
+/**
+ * A comment on a primary listing. Event-only: the body is never stored.
+ */
+export interface PrimaryListingCommentedEvent {
+  name: "PrimaryListingCommented";
+  data: {
+    listing_id: bigint;
+    author: string;
+    body?: string;
   };
 }
 
@@ -387,5 +420,5 @@ export interface VersionSyncedEvent {
     version?: string;
   };
 }
-    export type ContractEvent = ListingExpiredEvent | ListingCancelledEvent | ListingPurchasedEvent | MarketplacePausedEvent | MarketplaceLaunchedEvent | MarketplaceUnpausedEvent | PaymentAssetUpdatedEvent | SecondaryFeeUpdatedEvent | PrimaryListingCreatedEvent | PrimaryListingExpiredEvent | MarketplaceInitializedEvent | PrimaryListingCancelledEvent | PrimaryListingPurchasedEvent | SecondaryListingCreatedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VersionSyncedEvent;
+    export type ContractEvent = ListingExpiredEvent | ListingCancelledEvent | ListingCommentedEvent | ListingPurchasedEvent | MarketplacePausedEvent | MarketplaceLaunchedEvent | MarketplaceUnpausedEvent | PaymentAssetUpdatedEvent | SecondaryFeeUpdatedEvent | PrimaryListingCreatedEvent | PrimaryListingExpiredEvent | MarketplaceInitializedEvent | PrimaryListingCancelledEvent | PrimaryListingCommentedEvent | PrimaryListingPurchasedEvent | SecondaryListingCreatedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VersionSyncedEvent;
     

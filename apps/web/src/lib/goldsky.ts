@@ -143,7 +143,8 @@ export async function getGoldskyAuctionBids(daoId: string, tokenId: string, limi
     payment_type: null,
     ledger_sequence: Number(row.eventLedger),
     timestamp: row.eventAt,
-    transaction_hash: row.transactionHash
+    transaction_hash: row.transactionHash,
+    comment: row.comment
   }));
 }
 
@@ -308,19 +309,7 @@ export async function getGoldskyProposalVotes(
   const { proposalId, limit = 100, offset = 0, support } = params;
   const deploymentId = getDeploymentId();
   const daoIdFromUrl = await getDaoIdFromUrl(daoId);
-  const numericProposalNumber = Number(proposalId);
-  const proposal = await prisma.appProposalDetail.findFirst({
-    where: {
-      deploymentId,
-      daoId: daoIdFromUrl,
-      OR: [
-        { proposalId },
-        ...(Number.isInteger(numericProposalNumber) ? [{ proposalNumber: numericProposalNumber }] : [])
-      ]
-    },
-    select: { proposalId: true }
-  });
-  const resolvedProposalId = proposal?.proposalId;
+  const resolvedProposalId = await resolveProposalId(deploymentId, daoIdFromUrl, proposalId);
 
   if (!resolvedProposalId) {
     return {
@@ -380,6 +369,71 @@ export async function getGoldskyProposalVotes(
     })),
     total,
     tally,
+    limit,
+    offset,
+    hasMore: offset + rows.length < total,
+    generatedAt: new Date().toISOString()
+  };
+}
+
+/** A proposal's id from its id or its number in this DAO. */
+async function resolveProposalId(deploymentId: string, daoId: string, proposalId: string) {
+  const numericProposalNumber = Number(proposalId);
+  const proposal = await prisma.appProposalDetail.findFirst({
+    where: {
+      deploymentId,
+      daoId,
+      OR: [
+        { proposalId },
+        ...(Number.isInteger(numericProposalNumber) ? [{ proposalNumber: numericProposalNumber }] : [])
+      ]
+    },
+    select: { proposalId: true }
+  });
+  return proposal?.proposalId;
+}
+
+function commentTimestamp(eventAt: Date | null) {
+  return eventAt?.getTime() ? Math.floor(eventAt.getTime() / 1000) : null;
+}
+
+/**
+ * Proposal Comments
+ *
+ * Event-only comments on a proposal, oldest first (a conversation reads top to bottom).
+ */
+export async function getGoldskyProposalComments(
+  daoId: string,
+  params: { proposalId: string; limit?: number; offset?: number }
+) {
+  const { proposalId, limit = 100, offset = 0 } = params;
+  const deploymentId = getDeploymentId();
+  const daoIdFromUrl = await getDaoIdFromUrl(daoId);
+  const resolvedProposalId = await resolveProposalId(deploymentId, daoIdFromUrl, proposalId);
+  if (!resolvedProposalId) {
+    return { items: [], total: 0, limit, offset, hasMore: false, generatedAt: new Date().toISOString() };
+  }
+
+  const where = { deploymentId, daoId: daoIdFromUrl, proposalId: resolvedProposalId };
+  const [rows, total] = await Promise.all([
+    prisma.governanceProposalComment.findMany({
+      where,
+      orderBy: [{ eventLedger: 'asc' }, { transactionIndex: 'asc' }, { eventIndex: 'asc' }],
+      take: limit,
+      skip: offset
+    }),
+    prisma.governanceProposalComment.count({ where })
+  ]);
+
+  return {
+    items: rows.map((row) => ({
+      id: row.commentEventId,
+      author: row.author,
+      body: row.body,
+      timestamp: commentTimestamp(row.eventAt),
+      txHash: row.transactionHash
+    })),
+    total,
     limit,
     offset,
     hasMore: offset + rows.length < total,

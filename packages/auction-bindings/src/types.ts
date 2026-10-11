@@ -72,7 +72,11 @@ export const AuctionError = {
   /**
    * `time_buffer` outside 1..=86400 seconds
    */
-  7417 : { message: "InvalidTimeBuffer" }
+  7417 : { message: "InvalidTimeBuffer" },
+  /**
+   * Bid comment exceeds `MAX_COMMENT_LENGTH`
+   */
+  7418 : { message: "CommentTooLong" }
 }
 
 /**
@@ -86,6 +90,10 @@ export interface BidPlacedEvent {
     amount?: bigint;
     extended?: boolean;
     new_end_time?: bigint;
+    /**
+     * Optional bidder comment (empty if none). Event-only, never stored.
+     */
+    comment?: string;
   };
 }
 
