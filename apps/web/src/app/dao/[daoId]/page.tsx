@@ -182,10 +182,10 @@ export default function Page() {
             }
           >
             {proposals.error ? (
-              <Callout variant="error" title="Votes didn't load" description={proposals.error.message} />
+              <Callout variant="error" title="Proposals didn't load" description={proposals.error.message} />
             ) : proposals.isLoading && !proposals.data ? (
               <div className={listSkeleton} role="status" aria-busy="true">
-                <span className="sr-only">Loading votes</span>
+                <span className="sr-only">Loading proposals</span>
                 <Skeleton className={css({ height: '16' })} />
                 <Skeleton className={css({ height: '16' })} />
               </div>

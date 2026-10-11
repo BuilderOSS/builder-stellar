@@ -15,7 +15,7 @@ export function validateMintGovernanceToken(data: MintGovernanceTokenData, conte
   if (context.mintAuthoritiesLoading) {
     return {
       valid: false,
-      message: 'Checking mint authority...'
+      message: 'Checking mint authority…'
     };
   }
 

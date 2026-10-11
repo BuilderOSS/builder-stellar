@@ -66,7 +66,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
         (!data.merkle.root || !address || !verifyClaimProof(address, action.amount, action.proof, data.merkle.root))
       )
         throw new Error(
-          'Proof does not match your account, amount and current root. Obtain the proof from the allocation organizer.'
+          'This proof doesn’t match your account, amount or the current claim list. Ask whoever runs the claim for a new one.'
         );
       const prepared = await claimFetch<PreparedClaim>(`${base.replace('/dao/', '/api/dao/')}/claims/prepare`, {
         method: 'POST',
@@ -81,9 +81,9 @@ export function Claims({ admin = false }: { admin?: boolean }) {
       const { TransactionBuilder } = await import('@stellar/stellar-sdk');
       assertClaimEnvelope(TransactionBuilder.fromXDR(prepared.xdr, config.passphrase), prepared, action);
       setReview({ action, prepared, state: data });
-      setMessage('Simulation passed. No signature or submission yet.');
+      setMessage('Looks good. Nothing is signed or sent yet.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Claim preparation failed.');
+      setMessage(error instanceof Error ? error.message : "We couldn't prepare your claim.");
     } finally {
       lock.current = false;
       setBusy(false);
@@ -146,7 +146,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
         throw new Error('Submission was not accepted. Check the transaction hash before retrying.');
       setMessage('Submitted. Waiting for confirmation…');
       await waitForConfirmation(txHash, config.rpcUrl);
-      setMessage('Claim confirmed. Indexed history may take a moment to catch up.');
+      setMessage('Claim confirmed. Your claim history can take a moment to catch up.');
       await mutate(
         (key) =>
           Array.isArray(key) &&

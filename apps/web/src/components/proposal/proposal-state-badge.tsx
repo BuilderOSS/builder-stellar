@@ -1,7 +1,7 @@
 import { Ban, CircleCheck, CircleDot, Clock, Hourglass, Play, XCircle } from 'lucide-react';
 
 import { Chip } from '@/components/ui';
-import { proposalStateTone } from '@/lib/proposal-state';
+import { proposalStateDisplay, proposalStateTone } from '@/lib/proposal-state';
 
 const ICONS: Record<string, typeof Clock> = {
   Pending: Clock,
@@ -20,7 +20,7 @@ export function ProposalStateBadge({ label }: { label: string }) {
   return (
     <Chip tone={proposalStateTone(label)}>
       <Icon aria-hidden="true" />
-      {label}
+      {proposalStateDisplay(label)}
     </Chip>
   );
 }

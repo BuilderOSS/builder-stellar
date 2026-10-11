@@ -11,10 +11,10 @@ export const minterAllocationHandlers: ActionHandler<ScopedDraft>[] = (
   type,
   label:
     type === 'set-merkle-root'
-      ? 'Set Minter Merkle root'
+      ? 'Set a claim list (Merkle root)'
       : type === 'set-allowlist'
-        ? 'Replace Minter allowlist'
-        : 'Minter batch allocation',
+        ? 'Replace the claim allowlist'
+        : 'Allocate tokens in a batch',
   description:
     'Prepare allocations in Claims Admin after current registration, Token admin, Live state and mint authority are verified.',
   group: 'Allocations',

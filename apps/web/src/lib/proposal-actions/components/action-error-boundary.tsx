@@ -35,8 +35,8 @@ export class ActionErrorBoundary extends Component<Props, State> {
       return (
         <Callout
           variant="error"
-          title="Action Form Error"
-          description={`There was an error rendering the ${this.props.actionType} form. ${this.state.error?.message || 'Unknown error'}`}
+          title="This form didn't load"
+          description={`Something broke while showing the ${this.props.actionType} form. ${this.state.error?.message || ''}`}
         />
       );
     }

@@ -100,7 +100,7 @@ export function ListingCard({
             <dt>Price asset contract</dt>
             <dd className={styles.address}>{listing.paymentAsset}</dd>
             <dt>Created</dt>
-            <dd>{listing.createdAt ? new Date(listing.createdAt).toLocaleString() : 'Timestamp not indexed'}</dd>
+            <dd>{listing.createdAt ? new Date(listing.createdAt).toLocaleString() : 'Time not available yet'}</dd>
             {listing.closedAt ? (
               <>
                 <dt>Closed</dt>
@@ -114,7 +114,7 @@ export function ListingCard({
                 <dt>Seller proceeds</dt>
                 <dd>
                   {sellerProceeds === null
-                    ? 'Price exceeds the contract fee calculation limit.'
+                    ? 'This price is too large for the market to work out its fee.'
                     : `${sellerProceeds} ${asset}`}
                 </dd>
               </>

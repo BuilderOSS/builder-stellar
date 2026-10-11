@@ -54,11 +54,11 @@ export default function TokenAdminPage() {
       session.walletNetworkIssue ||
       (session.walletNetworkPassphrase && session.walletNetworkPassphrase !== config.passphrase)
     ) {
-      setFormMessage('Switch your wallet to the DAO network before minting.');
+      setFormMessage('Switch your wallet to this community’s network before minting.');
       return;
     }
     if (!session.address || (!hasMintAccess && !canProposeMint)) {
-      setFormMessage('Connect a mint authority wallet or use a DAO whose treasury has mint authority.');
+      setFormMessage('Connect a wallet that can mint, or propose the mint if the treasury can mint.');
       return;
     }
 
@@ -105,14 +105,16 @@ export default function TokenAdminPage() {
               action,
               source: 'admin/token',
               metadata: {
-                title: `Mint ${amount} governance token${amount === '1' ? '' : 's'}`,
-                description: `Mint ${amount} governance token${amount === '1' ? '' : 's'} to ${recipient}.`,
+                title: `Mint ${amount} membership token${amount === '1' ? '' : 's'}`,
+                description: `Mint ${amount} membership token${amount === '1' ? '' : 's'} to ${recipient}.`,
                 url: ''
               }
             }
           ],
           onAdded: () => {
-            setFormMessage(`Added ${amount} governance token${amount === '1' ? '' : 's'} to the proposal draft.`);
+            setFormMessage(
+              `Added minting ${amount} membership token${amount === '1' ? '' : 's'} to your proposal draft.`
+            );
             setRecipient('');
             setAmount('1');
           }
@@ -122,7 +124,7 @@ export default function TokenAdminPage() {
 
       setBusy(true);
       setFormMessage('');
-      tx.start('Preparing batch mint transaction...');
+      tx.start('Minting tokens');
 
       const client = new TokenClient({
         contractId: config.tokenContractId,
@@ -170,13 +172,15 @@ export default function TokenAdminPage() {
           <Card p="5">
             <Stack gap="3">
               <div>
-                <Badge>{hasMintAccess ? 'Mint enabled' : 'Read only'}</Badge>
+                <Badge>{hasMintAccess ? 'You can mint' : canProposeMint ? 'Mint by vote' : 'Read only'}</Badge>
               </div>
-              <Heading size="heading">Mint voting token</Heading>
+              <Heading size="heading">Mint membership tokens</Heading>
               <Text size="sm">
                 {hasMintAccess
-                  ? `Enter a recipient address and mint up to ${MAX_BATCH_MINT} tokens per transaction directly to that wallet.`
-                  : 'Only a mint authority or the admin can mint from this page.'}
+                  ? `Mint up to ${MAX_BATCH_MINT} tokens at a time straight to one wallet.`
+                  : canProposeMint
+                    ? `Propose minting up to ${MAX_BATCH_MINT} tokens at a time to one wallet. It runs if the vote passes.`
+                    : 'Only an account allowed to mint, or the admin, can mint from this page.'}
               </Text>
               <BatchMintGovernanceTokenForm
                 value={{ recipient, amount } satisfies BatchMintGovernanceTokenData}
@@ -192,7 +196,7 @@ export default function TokenAdminPage() {
                   <Callout
                     variant="error"
                     title="Upload the artwork first"
-                    description="This DAO has no artwork properties yet. Tokens minted now get no traits and need metadata.regenerate later."
+                    description="This community has no artwork yet. Tokens minted now have no traits until they’re seeded from Manage."
                   />
                   <label htmlFor="ack-no-artwork">
                     <input
@@ -211,13 +215,13 @@ export default function TokenAdminPage() {
                   {busy ? 'Preparing…' : hasMintAccess ? 'Mint to recipient' : 'Create mint proposal'}
                 </Button>
                 <Button type="button" variant="secondary" onClick={() => void mutate()} disabled={isLoading}>
-                  {isLoading ? 'Refreshing...' : 'Refresh authorities'}
+                  {isLoading ? 'Refreshing…' : 'Refresh authorities'}
                 </Button>
               </div>
               {formMessage ? <Callout variant="warning" title={formMessage} /> : null}
               {error ? <Callout variant="error" title={error.message} /> : null}
               {token.error ? (
-                <Callout variant="error" title="Live mint authority unavailable" description={token.error.message} />
+                <Callout variant="error" title="Couldn't check who can mint" description={token.error.message} />
               ) : null}
             </Stack>
           </Card>
@@ -225,14 +229,14 @@ export default function TokenAdminPage() {
           <AuthorityPanel
             title="Mint authorities"
             badge="Token"
-            description="These wallets are explicitly allowed to mint. The admin is always allowed too."
+            description="These accounts are allowed to mint. The admin always can."
             items={mintAuthorities?.items ?? []}
             value=""
             allowLabel=""
             revokeLabel=""
             editable={false}
             loading={isLoading}
-            emptyLabel="No explicit mint authorities indexed yet."
+            emptyLabel="No accounts have been allowed to mint yet."
           />
         </Stack>
       </PageSection>

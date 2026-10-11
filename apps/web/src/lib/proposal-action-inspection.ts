@@ -77,7 +77,7 @@ export function inspectProposalAdminCall(
     if (!moduleName) return null;
     return {
       title: `Upgrade ${moduleName} module`,
-      risk: 'High risk: changes deployed code. Current hash, module authority, and Manager-approved transition are checked on-chain; ABI support is not approval.',
+      risk: 'High risk: replaces the contract’s code. The current release, who may upgrade, and the approved upgrade path are all checked on-chain when it runs. This app being able to read the call doesn’t mean the upgrade is approved.',
       fields: [
         { label: 'Current WASM hash (32 bytes)', value: Buffer.from(scValToNative(encoded[0]!)).toString('hex') },
         { label: 'Target WASM hash (32 bytes)', value: Buffer.from(scValToNative(encoded[1]!)).toString('hex') }

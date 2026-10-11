@@ -99,7 +99,7 @@ export default function GovernanceAdminPage() {
       session.walletNetworkIssue ||
       (session.walletNetworkPassphrase && session.walletNetworkPassphrase !== config.passphrase)
     ) {
-      setFormMessage('Switch your wallet to the DAO network before preparing a governance update.');
+      setFormMessage('Switch your wallet to this community’s network first.');
       return;
     }
     const handler = getActionHandler(type);
@@ -116,7 +116,7 @@ export default function GovernanceAdminPage() {
           source: `admin/governance/${type}`,
           metadata: {
             title: `Update ${label.toLowerCase()}`,
-            description: `Update the DAO ${label.toLowerCase()} to ${value}.`,
+            description: `Change the ${label.toLowerCase()} to ${value}.`,
             url: ''
           }
         }
@@ -130,9 +130,9 @@ export default function GovernanceAdminPage() {
       session.walletNetworkIssue ||
       (session.walletNetworkPassphrase && session.walletNetworkPassphrase !== config.passphrase)
     )
-      throw new Error('Switch your wallet to the DAO network before signing.');
+      throw new Error('Switch your wallet to this community’s network first.');
     if (!session.address) {
-      throw new Error('Connect the governor admin wallet first.');
+      throw new Error('Connect the launch admin wallet first.');
     }
 
     if (!config.governorContractId) {
@@ -158,12 +158,12 @@ export default function GovernanceAdminPage() {
     run: (governor: GovernorClient) => Promise<string>
   ) {
     if (!hasGovernanceAccess) {
-      setFormMessage('Connect the governor admin wallet first.');
+      setFormMessage('Connect the launch admin wallet first.');
       return;
     }
 
     if (!session.address) {
-      setFormMessage('Connect the governor admin wallet first.');
+      setFormMessage('Connect the launch admin wallet first.');
       return;
     }
 
@@ -175,7 +175,7 @@ export default function GovernanceAdminPage() {
     setBusy(true);
     setActiveAction(action);
     setFormMessage('');
-    tx.start(`Applying ${label.toLowerCase()}...`);
+    tx.start(`Applying ${label.toLowerCase()}…`);
 
     try {
       const governor = await getGovernor();
@@ -307,7 +307,7 @@ export default function GovernanceAdminPage() {
 
   async function applyQueueDelay() {
     const value = drafts.queueDelay;
-    if (value === undefined) return setFormMessage('Enter the desired queue delay.');
+    if (value === undefined) return setFormMessage('Enter a safety delay.');
     const error = validateQueueDelay(value);
     if (error) return setFormMessage(error);
     if (!hasGovernanceAccess && canProposeGovernance) {
@@ -324,25 +324,24 @@ export default function GovernanceAdminPage() {
     return (
       <PageSection title="Voting rules" description="How proposals are timed and decided.">
         {settingsError ? (
-          <Callout variant="error" title="Governor values unavailable" description={settingsError.message} />
+          <Callout variant="error" title="Voting rules didn't load" description={settingsError.message} />
         ) : null}
         <Callout
           variant="warning"
           badge="Access restricted"
-          title="Connect a wallet to prepare governance updates"
-          description="The current Governor admin applies setup changes. After launch, Treasury-administered changes go through a governance proposal."
+          title="Connect a wallet to change voting rules"
+          description="During setup, the launch admin changes these directly. After launch, each change goes to a vote."
         >
           {settings ? (
             <Stack gap="1">
-              <Text size="sm">Voting delay: {settings.votingDelay}</Text>
-              <Text size="sm">Voting period: {settings.votingPeriod}</Text>
-              <Text size="sm">Proposal threshold: {settings.proposalThreshold.toString()}</Text>
-              <Text size="sm">Quorum: {settings.quorumBps} bps</Text>
-              <Text>
-                Queue delay:{' '}
-                {settings.queueDelay === undefined ? 'unavailable from RPC (shown when indexed)' : settings.queueDelay}
+              <Text size="sm">Wait before voting opens: {formatSecondsValue(settings.votingDelay)}</Text>
+              <Text size="sm">Voting stays open: {formatSecondsValue(settings.votingPeriod)}</Text>
+              <Text size="sm">Votes needed to propose: {settings.proposalThreshold.toString()}</Text>
+              <Text size="sm">Quorum: {settings.quorumBps / 100}%</Text>
+              <Text size="sm">
+                Safety delay:{' '}
+                {settings.queueDelay === undefined ? 'not available yet' : formatSecondsValue(settings.queueDelay)}
               </Text>
-              <Text>Source: {settings.source === 'indexed' ? 'indexed governance.settings' : 'live RPC reads'}</Text>
             </Stack>
           ) : null}
         </Callout>
@@ -369,7 +368,7 @@ export default function GovernanceAdminPage() {
                   <div>
                     <Badge>Live values</Badge>
                   </div>
-                  <Heading size="heading">Current governor settings</Heading>
+                  <Heading size="heading">Current rules</Heading>
                 </Stack>
                 <Button
                   type="button"
@@ -378,7 +377,7 @@ export default function GovernanceAdminPage() {
                   onClick={() => void refreshSettings()}
                   disabled={settingsLoading}
                 >
-                  {settingsLoading ? 'Refreshing...' : 'Refresh'}
+                  {settingsLoading ? 'Refreshing…' : 'Refresh'}
                 </Button>
               </div>
 
@@ -394,18 +393,15 @@ export default function GovernanceAdminPage() {
           <Grid columns={{ base: 1, xl: 2 }} gap="4">
             <Card p="5">
               <Stack gap="3">
-                <Heading size="heading">Queue delay</Heading>
-                <Text>
-                  Current value unavailable: the public Governor ABI exposes a setter but no queue-delay getter. Enter
-                  the desired value explicitly.
-                </Text>
+                <Heading size="heading">Safety delay</Heading>
+                <Text>The current value can&apos;t be read from the contract, so enter the delay you want.</Text>
                 <DurationInput
                   id="queue-delay"
-                  label="Execution queue delay"
+                  label="Safety delay"
                   value={drafts.queueDelay ?? 300}
                   onChange={(value) => setDrafts((current) => ({ ...current, queueDelay: value }))}
                   disabled={busy}
-                  helperText="Waiting time between queueing a successful proposal and execution. Between 5 minutes and 30 days."
+                  helperText="How long a passed proposal waits after it’s queued before it can run. Between 5 minutes and 30 days."
                 />
                 <Button
                   type="button"
@@ -434,7 +430,7 @@ export default function GovernanceAdminPage() {
                   value={drafts.votingDelay ?? settings?.votingDelay ?? 0}
                   onChange={(value) => setDrafts((current) => ({ ...current, votingDelay: value }))}
                   disabled={busy}
-                  helperText="Time between proposal creation and when voting begins. Between 5 minutes and 30 days. Example: 1 day gives members time to see new proposals."
+                  helperText="How long after a proposal is made before voting opens. Between 5 minutes and 30 days. A day gives members time to read it."
                 />
                 <Stack gap="1">
                   {typeof drafts.votingDelay === 'number' && settings && drafts.votingDelay !== settings.votingDelay ? (
@@ -456,7 +452,7 @@ export default function GovernanceAdminPage() {
                     }
                   >
                     {busy && activeAction === 'votingDelay'
-                      ? 'Applying...'
+                      ? 'Applying…'
                       : hasGovernanceAccess
                         ? 'Apply'
                         : 'Add to proposal'}
@@ -479,7 +475,7 @@ export default function GovernanceAdminPage() {
                   value={drafts.votingPeriod ?? settings?.votingPeriod ?? 0}
                   onChange={(value) => setDrafts((current) => ({ ...current, votingPeriod: value }))}
                   disabled={busy}
-                  helperText="How long voting remains open after it starts. Between 5 minutes and 30 days. Longer periods allow more participation. Common: 3-7 days."
+                  helperText="How long voting stays open. Between 5 minutes and 30 days. Longer windows let more members take part; 3 to 7 days is common."
                 />
                 <Stack gap="1">
                   {typeof drafts.votingPeriod === 'number' &&
@@ -503,7 +499,7 @@ export default function GovernanceAdminPage() {
                     }
                   >
                     {busy && activeAction === 'votingPeriod'
-                      ? 'Applying...'
+                      ? 'Applying…'
                       : hasGovernanceAccess
                         ? 'Apply'
                         : 'Add to proposal'}
@@ -544,7 +540,7 @@ export default function GovernanceAdminPage() {
                 <Stack gap="1">
                   <Text size="sm">
                     {settings ? (
-                      'Absolute number of votes (at least 1) required to create a proposal. Higher values prevent spam.'
+                      'How many votes someone needs to make a proposal (at least 1). Higher numbers cut down on spam.'
                     ) : (
                       <Skeleton className={css({ width: '210px', height: '0.8em' })} />
                     )}
@@ -572,7 +568,7 @@ export default function GovernanceAdminPage() {
                     }
                   >
                     {busy && activeAction === 'proposalThreshold'
-                      ? 'Applying...'
+                      ? 'Applying…'
                       : hasGovernanceAccess
                         ? 'Apply'
                         : 'Add to proposal'}
@@ -606,7 +602,7 @@ export default function GovernanceAdminPage() {
                   value={drafts.quorumBps ?? settings?.quorumBps ?? 0}
                   onChange={(value) => setDrafts((current) => ({ ...current, quorumBps: value }))}
                   disabled={busy}
-                  helperText="Percentage of total votes needed for a proposal to pass. Example: 10% means 10 out of 100 votes required."
+                  helperText="Share of all votes that must be For or Abstain for a proposal to pass. Example: with 100 votes, 10% means at least 10."
                 />
                 <Stack gap="1">
                   {typeof drafts.quorumBps === 'number' && settings && drafts.quorumBps !== settings.quorumBps ? (
@@ -628,7 +624,7 @@ export default function GovernanceAdminPage() {
                     }
                   >
                     {busy && activeAction === 'quorumBps'
-                      ? 'Applying...'
+                      ? 'Applying…'
                       : hasGovernanceAccess
                         ? 'Apply'
                         : 'Add to proposal'}

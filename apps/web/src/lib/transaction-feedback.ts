@@ -63,8 +63,8 @@ export function useTransactionFeedback(network: DaoNetworkName) {
     const payload = {
       title: message,
       description: hash
-        ? `Transaction ${shortenHash(hash)} submitted. Waiting for confirmation...`
-        : 'Transaction submitted. Waiting for confirmation...',
+        ? `Transaction ${shortenHash(hash)} submitted. Waiting for confirmation…`
+        : 'Transaction submitted. Waiting for confirmation…',
       type: 'loading' as const,
       duration: Infinity,
       action: hash

@@ -67,15 +67,15 @@ describe('proposal admin-call inspector rendering', () => {
     expect(html).toContain('Upgrade treasury module');
     expect(html).toContain(fromHash);
     expect(html).toContain(toHash);
-    expect(html).toContain('ABI support is not approval');
+    expect(html).toContain('doesn’t mean the upgrade is approved');
   });
   it('leaves external upgrades unsupported instead of inferring a module authority', () => {
     for (const target of [contract(9)]) {
       const html = renderToStaticMarkup(
         <ProposalActionPreview targets={[target]} functions={['upgrade']} args={[['01'.repeat(32), 'ab'.repeat(32)]]} />
       );
-      expect(html).toContain('Unknown or unsupported ABI');
-      expect(html).toContain('automatic submission is disabled');
+      expect(html).toContain('This app can&#x27;t read this call');
+      expect(html).toContain('Queueing and running it from here are turned off');
       expect(html).not.toContain('Upgrade metadata module');
     }
   });

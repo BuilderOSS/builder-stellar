@@ -2,6 +2,7 @@ import { css } from 'styled-system/css';
 
 import { Avatar, Chip, EmptyState, Section } from '@/components/ui';
 import { shortAddress } from '@/lib/activity-feed';
+import { ProposalState } from '@/lib/proposal-state';
 
 import type { ProposalVoteItem } from './types';
 
@@ -10,7 +11,41 @@ type ProposalVoteHistoryProps = {
   voteLabelForSupport: (support: number) => string;
   formatTimestamp: (timestamp: number) => string;
   viewer?: string;
+  state?: ProposalState;
+  /** Unix seconds; shown while voting hasn't opened. */
+  voteStart?: number;
 };
+
+function historyCopy(state: ProposalState | undefined, count: number, opensAt: string) {
+  const voted = count === 1 ? '1 member voted' : `${count} members voted`;
+  if (state === ProposalState.Pending)
+    return {
+      title: 'Votes',
+      description: undefined,
+      emptyTitle: "Voting hasn't opened yet",
+      emptyBody: opensAt ? `Members can vote from ${opensAt}.` : 'Members can vote once voting opens.'
+    };
+  if (state === ProposalState.Active)
+    return {
+      title: 'Votes so far',
+      description: count ? voted : undefined,
+      emptyTitle: 'No votes yet',
+      emptyBody: 'Votes show up here as members cast them.'
+    };
+  if (state === ProposalState.Canceled)
+    return {
+      title: 'How members voted',
+      description: count ? voted : undefined,
+      emptyTitle: 'No votes',
+      emptyBody: 'It was canceled before anyone voted.'
+    };
+  return {
+    title: 'How members voted',
+    description: count ? voted : undefined,
+    emptyTitle: 'No votes',
+    emptyBody: 'Nobody voted on this proposal.'
+  };
+}
 
 const list = css({ listStyle: 'none', m: '0', p: '0' });
 const item = css({
@@ -33,11 +68,19 @@ const TONE: Record<string, 'success' | 'danger' | 'neutral'> = {
   Abstain: 'neutral'
 };
 
-export function ProposalVoteHistory({ votes, voteLabelForSupport, formatTimestamp, viewer }: ProposalVoteHistoryProps) {
+export function ProposalVoteHistory({
+  votes,
+  voteLabelForSupport,
+  formatTimestamp,
+  viewer,
+  state,
+  voteStart
+}: ProposalVoteHistoryProps) {
+  const copy = historyCopy(state, votes.length, voteStart ? formatTimestamp(voteStart) : '');
   return (
-    <Section title="How members voted" description={votes.length ? `${votes.length} votes` : undefined}>
+    <Section title={copy.title} description={copy.description}>
       {!votes.length ? (
-        <EmptyState title="No votes yet">Votes show up here as members cast them.</EmptyState>
+        <EmptyState title={copy.emptyTitle}>{copy.emptyBody}</EmptyState>
       ) : (
         <ul className={list}>
           {votes.map((vote) => {

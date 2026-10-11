@@ -77,24 +77,26 @@ export function ProposalVotePanel({
         <div>
           <Chip tone="yours">You voted {currentVote.label}</Chip>
         </div>
-        <p className={votedReason}>{currentVote.reason || 'No reason given.'}</p>
+        <p className={votedReason}>{currentVote.reason || 'You didn’t give a reason.'}</p>
       </div>
     );
   }
 
   return (
     <div className={stack}>
-      <p className={power}>
-        {votingPowerLoading ? (
-          <Skeleton className={css({ display: 'inline-block', width: '40', height: '4' })} />
-        ) : votingPowerError ? (
-          votingPowerError
-        ) : (
-          <>
-            You have <span className={powerValue}>{votes}</span> {votes === '1' ? 'vote' : 'votes'} on this proposal
-          </>
-        )}
-      </p>
+      {votingPower === null && !votingPowerLoading && !votingPowerError ? null : (
+        <p className={power}>
+          {votingPowerLoading ? (
+            <Skeleton className={css({ display: 'inline-block', width: '40', height: '4' })} />
+          ) : votingPowerError ? (
+            votingPowerError
+          ) : (
+            <>
+              You have <span className={powerValue}>{votes}</span> {votes === '1' ? 'vote' : 'votes'} on this proposal
+            </>
+          )}
+        </p>
+      )}
 
       {unavailableReason ? <Callout variant="warning" title={unavailableReason} /> : null}
 

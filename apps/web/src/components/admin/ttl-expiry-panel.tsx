@@ -96,7 +96,7 @@ function ArtworkBanner({
     .join(' ');
 
   const label = busy
-    ? `Renewing artwork${progress ? ` (${progress.done} of ${progress.total})` : ''}...`
+    ? `Renewing artwork${progress ? ` (${progress.done} of ${progress.total})` : ''}…`
     : expired
       ? 'Artwork expired: restore and renew'
       : 'Artwork expiring: renew';
@@ -136,7 +136,7 @@ export function TtlExpiryPanel({ config }: { config: DaoNetworkConfig }) {
     try {
       for (const [index, window] of windows.entries()) {
         const step = `${index + 1} of ${windows.length}`;
-        tx.start(`Renewing artwork (${step})...`);
+        tx.start(`Renewing artwork (${step})…`);
         const hash = await sendArtworkBumpWindow(config, session.address, window, artwork.totalEntries, (submitted) =>
           tx.submitted(`Artwork renewal ${step} submitted`, submitted)
         );

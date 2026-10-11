@@ -20,6 +20,7 @@ import { card, muted, title } from '@/components/ui/panel-styles';
 import { useDaoContext } from '@/contexts/dao-context';
 import { findAsset } from '@/lib/assets-config';
 import { decimalToStroops } from '@/lib/auction-values';
+import { contractCallLabel } from '@/lib/contract-call-labels';
 import { daoRoute } from '@/lib/dao-routes';
 import { useTreasuryBalances } from '@/lib/treasury-queries';
 import { clientTreasuryScope, useTreasuryHistory } from '@/lib/treasury-service/hooks';
@@ -101,7 +102,7 @@ function ScopedTreasuryWorkspace() {
   function refresh() {
     setRefreshError('');
     void Promise.all([balances.mutate(), history.mutate()]).catch(() =>
-      setRefreshError('Some treasury reads could not be refreshed. Previous data may be stale.')
+      setRefreshError('Some treasury data didn’t refresh. What you see may be out of date.')
     );
   }
 
@@ -115,7 +116,11 @@ function ScopedTreasuryWorkspace() {
                 What the community holds
               </h2>
               <p className={muted}>
-                {funded === undefined ? 'Live balances' : `${funded} funded asset${funded === 1 ? '' : 's'}`}
+                {funded === undefined
+                  ? 'Live balances'
+                  : funded === 0
+                    ? 'Nothing here yet'
+                    : `${funded} funded asset${funded === 1 ? '' : 's'}`}
               </p>
             </div>
             <IconButton label="Refresh treasury" variant="secondary" loading={refreshing} onClick={refresh}>
@@ -163,44 +168,37 @@ function ScopedTreasuryWorkspace() {
           <Disclosure title="Technical details">
             {config.treasuryContractId ? <Address value={config.treasuryContractId} label="Treasury contract" /> : null}
             <p className={muted}>
-              Balances are read live from the chain, exact to seven decimals. Payout history comes from the indexer and
-              can lag a little. Contributions don&apos;t appear in payout history.
+              Balances are read live from the chain, exact to seven decimals. History comes from the indexer and can lag
+              a little. Contributions don&apos;t appear in it.
             </p>
           </Disclosure>
         </section>
 
         <TreasuryTokens />
 
-        <Section title="Payouts" description="Money that left the treasury after a vote, newest first">
+        <Section title="What the treasury ran" description="Every action members voted through, newest first">
           {history.error ? (
-            <Callout
-              variant="error"
-              role="alert"
-              title="Execution history unavailable"
-              description={history.error.message}
-            />
+            <Callout variant="error" role="alert" title="History didn't load" description={history.error.message} />
           ) : null}
           {history.isLoading ? (
             <div className={css({ display: 'grid', gap: '2' })} role="status" aria-busy="true">
-              <span className="sr-only">Loading payouts</span>
+              <span className="sr-only">Loading history</span>
               <Skeleton className={css({ height: '16' })} />
             </div>
           ) : null}
           {history.data && !history.error ? (
             !history.data.calls.length ? (
-              <EmptyState title={page === 0 ? 'No payouts yet' : 'Nothing more here'}>
-                {page === 0 ? 'When members vote to spend treasury funds, each payout shows up here.' : undefined}
+              <EmptyState title={page === 0 ? 'Nothing has run yet' : 'Nothing more here'}>
+                {page === 0 ? 'When members vote to spend funds or change something, it shows up here.' : undefined}
               </EmptyState>
             ) : (
               <ol className={historyList}>
                 {history.data.calls.map((call) => (
                   <li key={call.eventId} className={historyItem}>
                     <div className={head}>
-                      <p className={assetName}>
-                        Step {call.index + 1}: {call.function}
-                      </p>
+                      <p className={assetName}>{contractCallLabel(call.function)}</p>
                       <span className={muted}>
-                        Ledger {call.ledger}
+                        Action {call.index + 1}
                         {call.at ? ` · ${new Date(call.at).toLocaleDateString()}` : ''}
                       </span>
                     </div>
@@ -215,7 +213,7 @@ function ScopedTreasuryWorkspace() {
             )
           ) : null}
           <Pagination
-            label="Treasury execution history pages"
+            label="Treasury history pages"
             page={page + 1}
             hasPrevious={page > 0}
             hasNext={Boolean(history.data?.hasMore) && !history.error}

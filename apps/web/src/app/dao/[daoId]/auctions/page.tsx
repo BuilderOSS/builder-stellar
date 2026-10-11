@@ -125,11 +125,11 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
   const submit = async (action: 'bid' | 'settle' | 'refund') => {
     if (inFlight.current) return;
     setMessage('');
-    if (!walletReady) return setMessage('Connect a wallet on the DAO network first.');
+    if (!walletReady) return setMessage(`Connect a wallet on ${getNetworkConfig(config.name).label} first.`);
     if (action !== 'refund' && (!data || state === 'setup' || state === 'disabled'))
-      return setMessage('Auctions are not available for this DAO.');
-    if (action === 'bid' && state !== 'active') return setMessage('This auction is not accepting bids.');
-    if (action === 'settle' && !canSettle) return setMessage('This auction cannot be settled yet.');
+      return setMessage("This community doesn't run auctions right now.");
+    if (action === 'bid' && state !== 'active') return setMessage("This auction isn't taking bids.");
+    if (action === 'settle' && !canSettle) return setMessage("This auction can't be settled yet.");
     const parsed = parseAuctionAmount(amount);
     if (action === 'bid' && (parsed === null || parsed < minimumAuctionBid(data!)))
       return setMessage(
@@ -137,7 +137,9 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
       );
     inFlight.current = true;
     setBusy(action);
-    tx.start(action === 'bid' ? 'Preparing bid…' : action === 'settle' ? 'Preparing settlement…' : 'Preparing refund…');
+    tx.start(
+      action === 'bid' ? 'Placing your bid' : action === 'settle' ? 'Settling the auction' : 'Claiming your refund'
+    );
     const bidder = session.address;
     const assertWallet = async () => {
       if (!mounted.current) throw new Error('Auction view changed. Review the current DAO before signing.');
@@ -172,7 +174,7 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
       // Only this explicit user action opens the wallet. Reads never sign.
       const sent = await assembled.signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
-      tx.submitted('Auction transaction submitted', hash);
+      tx.submitted(action === 'bid' ? 'Bid sent' : action === 'settle' ? 'Settlement sent' : 'Refund claim sent', hash);
       await waitForConfirmation(hash, config.rpcUrl);
       tx.success(action === 'bid' ? 'Bid confirmed' : action === 'settle' ? 'Auction settled' : 'Refund claimed', hash);
       if (mounted.current) {
@@ -181,7 +183,11 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
       }
       await Promise.all([mutate(), refund.mutate()]);
     } catch (error) {
-      tx.fail(error, 'Auction transaction failed', 'auction');
+      tx.fail(
+        error,
+        action === 'bid' ? 'Bid failed' : action === 'settle' ? 'Settling failed' : 'Refund claim failed',
+        'auction'
+      );
     } finally {
       inFlight.current = false;
       if (mounted.current) setBusy(null);
@@ -312,7 +318,9 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
 
             <div className={figures}>
               <div>
-                <p className={figureLabel}>{auction.highest_bidder ? 'Top bid' : 'Starting at'}</p>
+                <p className={figureLabel}>
+                  {auction.highest_bidder ? (state === 'expired' ? 'Winning bid' : 'Top bid') : 'Starting at'}
+                </p>
                 <p className={figureValue}>
                   <Amount
                     value={formatAuctionAmount(
@@ -339,9 +347,13 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
                 href={daoRoute(routeId, `members/${auction.highest_bidder}`)}
                 media={<Avatar address={auction.highest_bidder} yours={auction.highest_bidder === session.address} />}
                 title={
-                  auction.highest_bidder === session.address ? "You're winning" : shortAddress(auction.highest_bidder)
+                  auction.highest_bidder === session.address
+                    ? state === 'expired'
+                      ? 'You won'
+                      : "You're winning"
+                    : shortAddress(auction.highest_bidder)
                 }
-                meta="Highest bidder"
+                meta={state === 'expired' ? 'Winner' : 'Highest bidder'}
               />
             ) : null}
 
@@ -428,7 +440,11 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
                   ))}
                 </div>
               ) : (
-                <p className={note}>No bids yet. New bids can take a moment to show up.</p>
+                <p className={note}>
+                  {state === 'active'
+                    ? 'No bids yet. New bids can take a moment to show up.'
+                    : 'No one bid on this token.'}
+                </p>
               )}
             </Section>
 

@@ -16,13 +16,13 @@ export async function generateMetadata({ params }: { params: Promise<{ daoId: st
   try {
     const daoConfig = await getDaoNetworkConfigById(await resolveDaoId(routeId));
     return {
-      title: daoConfig.tokenName || 'DAO',
-      description: daoConfig.tokenDescription || 'Decentralized Autonomous Organization'
+      title: daoConfig.tokenName || 'Community',
+      description: daoConfig.tokenDescription || 'A community on Builder.'
     };
   } catch {
     return {
-      title: 'DAO Not Found',
-      description: 'The requested DAO could not be found'
+      title: 'Community not found',
+      description: "We couldn't find that community."
     };
   }
 }

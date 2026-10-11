@@ -37,7 +37,7 @@ const MORE_META: Partial<Record<DaoNavKey, string>> = {
   auction: 'Bid on new tokens',
   market: 'Buy and sell tokens',
   members: 'Who holds tokens and votes',
-  claims: 'Claim tokens you are allowed to mint',
+  claims: 'Claim tokens set aside for you',
   manage: 'Settings, roles and setup'
 };
 

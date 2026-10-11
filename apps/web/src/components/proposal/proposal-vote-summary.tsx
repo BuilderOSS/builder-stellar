@@ -11,6 +11,8 @@ type ProposalVoteSummaryProps = {
   viewer?: string;
   /** Play the "your vote lands" moment once, right after this wallet votes. */
   celebrateViewer?: boolean;
+  /** Where voting stands: before it opens, while it's open, or after it closed. */
+  phase?: 'upcoming' | 'open' | 'closed';
 };
 
 const wrap = css({ display: 'grid', gap: '4' });
@@ -48,6 +50,17 @@ function format(value: bigint) {
   return new Intl.NumberFormat().format(value);
 }
 
+function quorumLine(quorum: bigint | null, participation: bigint, met: boolean, phase: 'upcoming' | 'open' | 'closed') {
+  if (quorum === null) return 'Quorum unavailable';
+  if (met) return `Quorum reached (${format(participation)} of ${format(quorum)})`;
+  const missing = quorum > participation ? quorum - participation : 0n;
+  const votes = missing === 1n ? 'vote' : 'votes';
+  if (phase === 'upcoming')
+    return `Needs ${format(quorum)} For or Abstain ${quorum === 1n ? 'vote' : 'votes'} to reach quorum`;
+  if (phase === 'closed') return `Missed quorum by ${format(missing)} ${votes}`;
+  return `${format(missing)} more For or Abstain ${votes} to reach quorum`;
+}
+
 /**
  * The split, the quorum line and whether it would pass, in words.
  * Quorum counts For and Abstain; passing needs more For than Against.
@@ -57,7 +70,8 @@ export function ProposalVoteSummary({
   quorumVotes,
   voters = [],
   viewer,
-  celebrateViewer
+  celebrateViewer,
+  phase = 'open'
 }: ProposalVoteSummaryProps) {
   const forVotes = toBigInt(totals.for);
   const againstVotes = toBigInt(totals.against);
@@ -79,15 +93,15 @@ export function ProposalVoteSummary({
       <ul className={statusList}>
         <li className={status} data-met={quorumMet ? '' : undefined}>
           {quorumMet ? <CircleCheck aria-hidden="true" /> : <CircleDashed aria-hidden="true" />}
-          {quorum === null
-            ? 'Quorum unavailable'
-            : quorumMet
-              ? `Quorum reached (${format(participation)} of ${format(quorum)})`
-              : `${format(quorum > participation ? quorum - participation : 0n)} more For or Abstain votes to reach quorum`}
+          {quorumLine(quorum, participation, quorumMet, phase)}
         </li>
         <li className={status} data-met={approvalMet ? '' : undefined}>
           {approvalMet ? <CircleCheck aria-hidden="true" /> : <CircleDashed aria-hidden="true" />}
-          {approvalMet ? 'More For than Against' : 'Needs more For than Against votes'}
+          {approvalMet
+            ? 'More For than Against'
+            : phase === 'closed'
+              ? 'Not more For than Against'
+              : 'Needs more For than Against votes'}
         </li>
       </ul>
       {shownVoters.length ? (

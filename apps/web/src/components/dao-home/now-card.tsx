@@ -169,7 +169,7 @@ export function NowCard({
     return (
       <Shell
         title="We couldn't load what's happening"
-        text="Votes and the auction didn't load. Pull to refresh, or try again in a moment."
+        text="Proposals and the auction didn't load. Try again in a moment."
       />
     );
   }
@@ -185,11 +185,7 @@ export function NowCard({
         meta={
           <>
             <Chip tone="live">{ended ? 'Auction ended' : 'Auction live'}</Chip>
-            {activeProposals ? (
-              <Chip>
-                {activeProposals} vote{activeProposals === 1 ? '' : 's'} open
-              </Chip>
-            ) : null}
+            {activeProposals ? <Chip>{activeProposals} open for voting</Chip> : null}
           </>
         }
         title={`${name} #${live.token_id}`}
@@ -219,7 +215,11 @@ export function NowCard({
       <Shell
         meta={<Chip tone="live">Voting open</Chip>}
         title={`${activeProposals} proposal${activeProposals === 1 ? ' needs' : 's need'} votes`}
-        text="Members decide together. Read what's proposed and cast your vote before it closes."
+        text={
+          activeProposals === 1
+            ? "Members decide together. Read what's proposed and vote before it closes."
+            : "Members decide together. Read what's proposed and vote before each one closes."
+        }
         action={<ButtonLink href={daoRoute(routeId, 'proposals')}>Go vote</ButtonLink>}
       />
     );
@@ -241,7 +241,7 @@ export function NowCard({
     return (
       <Shell
         title="The auction didn't load"
-        text="Votes and activity are below. The auction is temporarily unavailable."
+        text="Proposals and activity are below. The auction is temporarily unavailable."
         action={
           <ButtonLink href={daoRoute(routeId, 'auctions')} variant="secondary">
             View auction
@@ -257,8 +257,8 @@ export function NowCard({
       : auctionEnabled === false
         ? { title: 'All quiet for now', text: "This community doesn't run auctions. New proposals will show up here." }
         : auction?.status === 'not-launched'
-          ? { title: 'The first auction is coming', text: 'Auctions are set up and will start once launched.' }
-          : { title: 'All quiet for now', text: 'No votes are open and no auction is running.' };
+          ? { title: 'The first auction is coming', text: 'Auctions are set up and start when the community launches.' }
+          : { title: 'All quiet for now', text: 'No proposals are open for voting and no auction is running.' };
 
   return (
     <Shell
@@ -271,7 +271,7 @@ export function NowCard({
           </ButtonLink>
         ) : (
           <ButtonLink href={daoRoute(routeId, 'proposals')} variant="secondary">
-            See past votes
+            See past proposals
           </ButtonLink>
         )
       }

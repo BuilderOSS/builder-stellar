@@ -92,7 +92,7 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
     case 'proposalexecuted':
       return { category: 'Governance', title: 'Proposal executed', href: proposalHref };
     case 'proposalcancelled':
-      return { category: 'Governance', title: 'Proposal cancelled', href: proposalHref };
+      return { category: 'Governance', title: 'Proposal canceled', href: proposalHref };
     case 'delegatechanged':
       return {
         category: 'Governance',
@@ -117,7 +117,7 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
       };
     }
     case 'auctioncancelled':
-      return { category: 'Auction', title: `Auction for ${tokenLabel} cancelled`, href: auctionHref };
+      return { category: 'Auction', title: `Auction for ${tokenLabel} canceled`, href: auctionHref };
     case 'primarylistingcreated':
       return { category: 'Market', title: `New token offered for ${value ?? 'sale'}`, href: marketHref };
     case 'primarylistingpurchased':
@@ -161,12 +161,11 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
         title: `${firstValue(args.total_amount, item.amount) ?? 'Tokens'} tokens allocated to ${firstValue(args.recipient_count) ?? 'several'} members`
       };
     case 'daolaunched':
-      return { category: 'DAO', title: 'The DAO launched' };
+      return { category: 'DAO', title: 'The community launched' };
     case 'upgraded':
       return {
         category: 'DAO',
-        title: `Contract upgraded to version ${firstValue(args.version) ?? 'unknown'}`,
-        detail: 'Verify the new code hash before trusting the release.'
+        title: `Contract upgraded to version ${firstValue(args.version) ?? 'unknown'}`
       };
     default:
       return { category: 'DAO', title: item.title, detail: item.summary };

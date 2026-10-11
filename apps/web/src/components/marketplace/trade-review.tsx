@@ -156,11 +156,11 @@ export function TradeReview({
       setConfirmed(true);
       setMessage(
         mintedToken === null
-          ? 'Confirmed on-chain. The indexed marketplace may take a few seconds to update.'
-          : `Confirmed on-chain. NFT token #${mintedToken} was minted to your account. The indexed marketplace may take a few seconds to update.`
+          ? 'Confirmed. The market can take a few seconds to update.'
+          : `Confirmed. Token #${mintedToken} is yours. The market can take a few seconds to update.`
       );
       await mutate((key) => Array.isArray(key) && key[0] === 'marketplace' && key[1] === DEPLOYMENT_ID).catch(() => {
-        setMessage('Confirmed on-chain. Indexed reads are currently unavailable; refresh before making another trade.');
+        setMessage('Confirmed. The market’s data is unavailable right now, so refresh before your next trade.');
       });
       onConfirmed?.();
     } catch (error) {
@@ -182,7 +182,7 @@ export function TradeReview({
     >
       <div className={styles.stack}>
         <div className={styles.row}>
-          <h2 id="trade-title">Review marketplace action</h2>
+          <h2 id="trade-title">Review your trade</h2>
           <button type="button" disabled={busy} onClick={onClose} aria-label="Close transaction review">
             Close
           </button>

@@ -59,7 +59,7 @@ function getLifecycleSummary(detail: ProposalDetail, now: number): Lifecycle {
     case ProposalState.Succeeded:
       if (detail.expiresAt && now >= detail.expiresAt * 1000)
         return {
-          label: 'Queue window closed',
+          label: 'Queue deadline passed',
           headline: 'Checking the latest state',
           subline: 'The deadline to queue this proposal has passed.'
         };
@@ -106,9 +106,17 @@ function getLifecycleSummary(detail: ProposalDetail, now: number): Lifecycle {
     case ProposalState.Canceled:
       return { label: 'Closed', headline: 'Canceled', subline: 'The proposer withdrew this proposal.' };
     case ProposalState.Expired:
-      return { label: 'Closed', headline: 'Expired', subline: 'It passed, but was not executed in time.' };
+      return {
+        label: 'Closed',
+        headline: 'Expired',
+        subline: 'It passed, but nobody executed it before the deadline.'
+      };
     case ProposalState.Executed:
-      return { label: 'Done', headline: 'Executed', subline: 'Every action in this proposal has run.' };
+      return {
+        label: 'Done',
+        headline: 'Executed',
+        subline: detail.functions.length === 1 ? 'Its action has run.' : 'Every action in this proposal has run.'
+      };
     default:
       return { label: 'Status', headline: 'Status unavailable', subline: 'Try refreshing in a moment.' };
   }

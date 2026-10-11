@@ -66,7 +66,7 @@ export function ProposalActionQueue({ daoId, editable = true }: { daoId: string;
       setConfirmDialog({
         open: true,
         title: 'Switch to editing this action?',
-        message: 'Your current unsaved changes will be discarded (the original queued action remains unchanged).',
+        message: 'Your unsaved changes here are lost. The action already in the proposal stays as it is.',
         confirmLabel: 'Switch',
         onConfirm: () => {
           beginEdit(address, daoId, index);

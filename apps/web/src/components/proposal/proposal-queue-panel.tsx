@@ -16,7 +16,7 @@ export function ProposalQueuePanel({ busy, disabled, onQueue }: ProposalQueuePan
       <Button block onClick={onQueue} disabled={disabled} loading={busy}>
         {busy ? 'Queueing' : 'Queue for execution'}
       </Button>
-      <p className={note}>Anyone can do this once the vote passes. Your wallet pays the network fee.</p>
+      <p className={note}>Queueing starts the safety delay. Anyone can do it; your wallet pays the network fee.</p>
     </div>
   );
 }

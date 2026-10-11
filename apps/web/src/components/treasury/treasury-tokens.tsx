@@ -68,7 +68,7 @@ export function TreasuryTokens() {
   return (
     <Section
       title="Tokens the treasury holds"
-      description="Members can vote to give any of these to someone, for example a token left from a cancelled auction."
+      description="Members can vote to give any of these to someone, for example one from an auction nobody bid on."
     >
       <AdminProposalDraftDialog pending={draft.pending} onCancel={draft.cancel} onResolve={draft.resolve} />
       <div>
