@@ -1,7 +1,9 @@
 import { activeNetworkName } from '@/lib/active-network';
 import { getTreasuryAssets } from '@/lib/assets-config';
 import { formatStroops } from '@/lib/auction-values';
+import { toOneLine } from '@/lib/comments';
 import type { DashboardFeedItem, GoldskyActivityItem } from '@/lib/goldsky-queries';
+import { markdownToText } from '@/lib/markdown-text';
 import { parseProposalMetadata } from '@/lib/proposal-metadata';
 
 type ActivityItem =
@@ -103,7 +105,7 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
       return {
         category: 'Governance',
         title: `${shortAddress(firstValue(topics.author))} commented on a proposal`,
-        detail: firstValue(args.body) ? `“${firstValue(args.body)}”` : undefined,
+        detail: firstValue(args.body) ? `“${markdownToText(firstValue(args.body)!, 160)}”` : undefined,
         href: proposalHref
       };
     case 'proposalqueued':
@@ -124,7 +126,7 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
       return {
         category: 'Auction',
         title: `${shortAddress(firstValue(topics.bidder))} bid ${value ?? 'on'}${value ? ` on ${tokenLabel}` : ` ${tokenLabel}`}`,
-        detail: comment ? `“${comment}”` : undefined,
+        detail: comment ? `“${toOneLine(comment)}”` : undefined,
         href: auctionHref
       };
     }
@@ -162,7 +164,7 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
       return {
         category: 'Market',
         title: `${shortAddress(firstValue(topics.author))} commented on ${event === 'listingcommented' ? tokenLabel : `new token listing ${listingId ?? ''}`.trim()}`,
-        detail: firstValue(args.body) ? `“${firstValue(args.body)}”` : undefined,
+        detail: firstValue(args.body) ? `“${toOneLine(firstValue(args.body)!)}”` : undefined,
         href: marketHref
       };
     }

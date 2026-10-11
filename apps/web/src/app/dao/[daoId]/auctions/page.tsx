@@ -40,7 +40,7 @@ import {
   parseAuctionAmount,
   settlementMethod
 } from '@/lib/auction-history/state';
-import { commentBytes, MAX_COMMENT_BYTES } from '@/lib/comments';
+import { commentBytes, MAX_COMMENT_BYTES, toOneLine } from '@/lib/comments';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { daoRoute } from '@/lib/dao-routes';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
@@ -76,7 +76,7 @@ const figureValue = css({
   fontVariantNumeric: 'tabular-nums'
 });
 const note = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
-const bidComment = css({ display: 'block', color: 'ink', whiteSpace: 'pre-wrap' });
+const bidComment = css({ display: 'block', color: 'ink', overflowWrap: 'anywhere' });
 
 export default function AuctionsPage() {
   const { daoId, daoConfig } = useDaoContext();
@@ -399,7 +399,8 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
                   maxBytes={MAX_COMMENT_BYTES}
                   disabled={Boolean(busy)}
                   rows={2}
-                  helper="Shown with your bid, for good. It can't be edited."
+                  oneLine
+                  helper="One line, shown with your bid for good. It can't be edited."
                 />
                 <Button
                   block
@@ -457,7 +458,7 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
                       meta={
                         bid.comment ? (
                           <>
-                            <span className={bidComment}>{bid.comment}</span>
+                            <span className={bidComment}>{toOneLine(bid.comment)}</span>
                             {bid.timestamp ? relativeTime(bid.timestamp) : null}
                           </>
                         ) : bid.timestamp ? (

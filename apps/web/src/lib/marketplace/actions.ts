@@ -186,6 +186,7 @@ export async function prepareMarketplaceAction(
     // Event-only: the marketplace emits the comment and stores nothing. Anyone may comment.
     if (!action.body.trim() || commentBytes(action.body) > MAX_COMMENT_BYTES)
       throw new MarketplaceError('Comments need some text and must fit in 1 KB.');
+    if (/[\r\n]/.test(action.body)) throw new MarketplaceError('Listing comments are one line of plain text.');
     let id: bigint;
     try {
       id = marketplaceId(action.id, action.kind);

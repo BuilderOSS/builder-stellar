@@ -11,11 +11,14 @@ import {
   Field,
   FieldHelperText,
   FieldLabel,
+  Markdown,
+  MarkdownField,
   Section,
   Textarea
 } from '@/components/ui';
 import { relativeTime, shortAddress } from '@/lib/activity-feed';
-import { commentBytes, type CommentItem } from '@/lib/comments';
+import { commentBytes, type CommentItem, toOneLine } from '@/lib/comments';
+import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 const counter = css({ fontVariantNumeric: 'tabular-nums' });
 
@@ -28,7 +31,8 @@ export function CommentInput({
   maxBytes,
   disabled,
   rows = 3,
-  helper
+  helper,
+  oneLine = false
 }: {
   id: string;
   label: string;
@@ -38,6 +42,8 @@ export function CommentInput({
   disabled?: boolean;
   rows?: number;
   helper?: string;
+  /** Fold line breaks to spaces as you type: for bid and listing comments. */
+  oneLine?: boolean;
 }) {
   const used = commentBytes(value);
   const over = used > maxBytes;
@@ -48,7 +54,7 @@ export function CommentInput({
         id={id}
         rows={rows}
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => onChange(oneLine ? toOneLine(event.target.value) : event.target.value)}
         disabled={disabled}
         aria-invalid={over || undefined}
       />
@@ -79,7 +85,8 @@ const item = css({
 const head = css({ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '2' });
 const who = css({ textStyle: 'body', fontWeight: '600', m: '0' });
 const meta = css({ textStyle: 'caption', color: 'ink.muted' });
-const body = css({ textStyle: 'body', m: '0', mt: '1', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' });
+const body = css({ textStyle: 'body', m: '0', mt: '1', overflowWrap: 'anywhere' });
+const richBody = css({ mt: '1' });
 const composer = css({ display: 'grid', gap: '3', mt: '4' });
 
 export type CommentComposer = {
@@ -102,7 +109,8 @@ export function CommentThread({
   loadError,
   viewer,
   emptyText,
-  composer: compose
+  composer: compose,
+  format = 'plain'
 }: {
   id: string;
   title: string;
@@ -111,17 +119,24 @@ export function CommentThread({
   viewer?: string;
   emptyText: string;
   composer: CommentComposer | null;
+  /** `markdown` for proposal discussion; `plain` keeps listing comments to one line of text. */
+  format?: 'markdown' | 'plain';
 }) {
   const [draft, setDraft] = useState('');
+  const used = commentBytes(draft);
+  const signedIn = useAuthSessionStore((state) => state.authStatus === 'authenticated');
   const ready = Boolean(compose && !compose.unavailableReason && commentFits(draft, compose.maxBytes));
 
   async function post() {
     if (!compose || !ready) return;
-    if (await compose.onPost(draft)) setDraft('');
+    if (await compose.onPost(format === 'plain' ? toOneLine(draft).trim() : draft.trim())) setDraft('');
   }
 
   return (
-    <Section title={title} description={comments.length ? `${comments.length} comments` : undefined}>
+    <Section
+      title={title}
+      description={comments.length ? `${comments.length} ${comments.length === 1 ? 'comment' : 'comments'}` : undefined}
+    >
       {loadError ? <Callout variant="warning" title="Comments didn't load" /> : null}
       {!comments.length && !loadError ? (
         <EmptyState title="No comments yet">{emptyText}</EmptyState>
@@ -139,7 +154,11 @@ export function CommentThread({
                     </p>
                     {comment.timestamp ? <span className={meta}>{relativeTime(comment.timestamp)}</span> : null}
                   </div>
-                  <p className={body}>{comment.body}</p>
+                  {format === 'markdown' ? (
+                    <Markdown source={comment.body} variant="comment" className={richBody} />
+                  ) : (
+                    <p className={body}>{toOneLine(comment.body)}</p>
+                  )}
                 </div>
               </li>
             );
@@ -152,15 +171,41 @@ export function CommentThread({
             <Callout title={compose.unavailableReason} />
           ) : (
             <>
-              <CommentInput
-                id={`${id}-comment`}
-                label="Add a comment"
-                value={draft}
-                onChange={setDraft}
-                maxBytes={compose.maxBytes}
-                disabled={compose.busy}
-                helper="Everyone can read it, and it can't be edited or deleted."
-              />
+              {format === 'markdown' ? (
+                <Field>
+                  <FieldLabel htmlFor={`${id}-comment`}>Add a comment</FieldLabel>
+                  <MarkdownField
+                    id={`${id}-comment`}
+                    variant="comment"
+                    canUpload={signedIn}
+                    rows={4}
+                    value={draft}
+                    onChange={setDraft}
+                    disabled={compose.busy}
+                    invalid={used > compose.maxBytes}
+                  />
+                  <FieldHelperText tone={used > compose.maxBytes ? 'error' : undefined}>
+                    {used > compose.maxBytes
+                      ? 'Too long to post. Shorten it a little. '
+                      : "Everyone can read it, and it can't be edited or deleted. "}
+                    <span className={counter}>
+                      {used.toLocaleString()} / {compose.maxBytes.toLocaleString()}
+                    </span>
+                  </FieldHelperText>
+                </Field>
+              ) : (
+                <CommentInput
+                  id={`${id}-comment`}
+                  label="Add a comment"
+                  value={draft}
+                  onChange={setDraft}
+                  maxBytes={compose.maxBytes}
+                  disabled={compose.busy}
+                  rows={2}
+                  oneLine
+                  helper="One line of plain text. Everyone can read it, and it can't be edited or deleted."
+                />
+              )}
               <div>
                 <Button variant="secondary" onClick={() => void post()} disabled={!ready} loading={compose.busy}>
                   {compose.busy ? 'Posting' : 'Post comment'}

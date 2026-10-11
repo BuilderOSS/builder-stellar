@@ -29,6 +29,14 @@ export const UPLOAD_POLICIES = {
     requiresSquare: true,
     description: 'DAO identity image (PNG, JPEG, or WebP)'
   },
+  'markdown-image': {
+    allowedMimes: ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],
+    maxBytes: 5 * 1024 * 1024, // 5MB
+    maxDimensionPixels: 4000,
+    minDimensionPixels: 1,
+    requiresSquare: false,
+    description: 'Image in a proposal (PNG, JPEG, WebP or GIF)'
+  },
   'artwork-directory': {
     allowedMimes: ['image/png', 'image/jpeg', 'image/webp'],
     maxBytesPerFile: 2 * 1024 * 1024, // 2MB per file

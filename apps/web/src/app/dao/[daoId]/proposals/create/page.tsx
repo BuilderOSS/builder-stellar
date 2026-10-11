@@ -20,11 +20,12 @@ import {
   FieldHelperText,
   FieldLabel,
   Input,
+  Markdown,
+  MarkdownField,
   PageHeader,
   ProgressSteps,
   Section,
-  Skeleton,
-  Textarea
+  Skeleton
 } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
@@ -34,7 +35,12 @@ import { ActionFormProvider, ActionFormWrapper, ProposalActionQueue } from '@/li
 import { buildProposalCallVectors, encodeProposalCallArgs, getProposalActionSummary } from '@/lib/proposal-call';
 import { useProposalEligibility } from '@/lib/proposal-eligibility';
 import { proposalIdToRouteId } from '@/lib/proposal-id';
-import { encodeProposalMetadata, validateProposalMetadataDraft } from '@/lib/proposal-metadata';
+import {
+  encodeProposalMetadata,
+  PROPOSAL_DESCRIPTION_MAX_BYTES,
+  proposalDescriptionBytes,
+  validateProposalMetadataDraft
+} from '@/lib/proposal-metadata';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { signWithWallet } from '@/lib/wallet-sign';
@@ -60,7 +66,6 @@ const actions = css({ display: 'flex', justifyContent: 'space-between', gap: '2'
 const hint = css({ textStyle: 'body', color: 'ink.muted', m: '0' });
 const review = css({ display: 'grid', gap: '3', p: '5', borderRadius: 'card', bg: 'surface', boxShadow: 'raised' });
 const reviewTitle = css({ textStyle: 'title', fontSize: '1.375rem', m: '0' });
-const reviewBody = css({ textStyle: 'body', color: 'ink', m: '0', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' });
 const reviewLink = css({ textStyle: 'label', color: 'signal', overflowWrap: 'anywhere' });
 const reviewHeading = css({ textStyle: 'label', color: 'ink.muted', m: '0', mt: '2' });
 const reviewList = css({ display: 'grid', gap: '2', listStyle: 'none', m: '0', p: '0' });
@@ -134,6 +139,7 @@ export default function ProposalCreatePage() {
 
   // Metadata validation
   const metadataValidation = validateProposalMetadataDraft(metadata);
+  const descriptionBytes = proposalDescriptionBytes(metadata);
 
   const handleProceedToStep2 = () => {
     if (metadataValidation.valid) {
@@ -303,14 +309,23 @@ export default function ProposalCreatePage() {
                     </Field>
                     <Field>
                       <FieldLabel htmlFor="description">Why</FieldLabel>
-                      <Textarea
+                      <MarkdownField
                         id="description"
                         value={metadata.description}
-                        onChange={(e) => updateMetadata(session.address, daoId, { description: e.target.value })}
+                        onChange={(description) => updateMetadata(session.address, daoId, { description })}
                         placeholder="What changes, who it helps, and what it costs"
-                        rows={7}
+                        rows={9}
+                        canUpload={session.authStatus === 'authenticated'}
+                        invalid={descriptionBytes > PROPOSAL_DESCRIPTION_MAX_BYTES}
+                        describedBy="description-budget"
                       />
-                      <FieldHelperText>Members read this before they vote. Plain words work best.</FieldHelperText>
+                      <FieldHelperText
+                        id="description-budget"
+                        tone={descriptionBytes > PROPOSAL_DESCRIPTION_MAX_BYTES ? 'error' : undefined}
+                      >
+                        {descriptionBytes.toLocaleString()} of {PROPOSAL_DESCRIPTION_MAX_BYTES.toLocaleString()} bytes
+                        used. Images take only their link, about 70 bytes each.
+                      </FieldHelperText>
                     </Field>
                     <Field>
                       <FieldLabel htmlFor="url">Discussion link (optional)</FieldLabel>
@@ -395,7 +410,7 @@ export default function ProposalCreatePage() {
                     ))}
                     <section className={review} aria-label="Proposal preview">
                       <h2 className={reviewTitle}>{metadata.title}</h2>
-                      <p className={reviewBody}>{metadata.description}</p>
+                      <Markdown source={metadata.description} variant="rich" />
                       {metadata.url ? (
                         <a href={metadata.url} target="_blank" rel="noreferrer" className={reviewLink}>
                           {metadata.url}

@@ -668,6 +668,7 @@ export default function ProposalDetailPage() {
               <CommentThread
                 id="proposal"
                 title="Discussion"
+                format="markdown"
                 comments={data?.comments ?? []}
                 loadError={data?.commentsError}
                 viewer={session.address}

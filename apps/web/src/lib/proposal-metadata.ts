@@ -163,6 +163,14 @@ export function encodeProposalMetadata(metadata: ProposalMetadataDraft) {
   });
 }
 
+/** The Governor rejects a proposal whose encoded description (title, text and link as JSON) exceeds this. */
+export const PROPOSAL_DESCRIPTION_MAX_BYTES = 4096;
+
+/** Bytes the proposal will use on-chain, counted on exactly what is submitted. */
+export function proposalDescriptionBytes(metadata: ProposalMetadataDraft) {
+  return new TextEncoder().encode(encodeProposalMetadata(metadata)).length;
+}
+
 export function validateProposalMetadataDraft(metadata: ProposalMetadataDraft): ProposalMetadataValidation {
   const title = metadata.title.trim();
   if (!title) {
@@ -188,6 +196,13 @@ export function validateProposalMetadataDraft(metadata: ProposalMetadataDraft): 
     } catch {
       return { valid: false, message: 'URL must be a valid web address.' };
     }
+  }
+
+  if (proposalDescriptionBytes(metadata) > PROPOSAL_DESCRIPTION_MAX_BYTES) {
+    return {
+      valid: false,
+      message: 'This proposal is too long to submit. Shorten the text or move detail to the link.'
+    };
   }
 
   return { valid: true, message: '' };
