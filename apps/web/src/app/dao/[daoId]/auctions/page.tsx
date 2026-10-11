@@ -109,7 +109,8 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
   const state = auctionBuyerState(config, data, now);
   const auction = data?.auction;
   const asset = getTreasuryAssets(config.name).find((item) => item.contractId === data?.config.payment_token);
-  const paymentToken = asset?.code ?? 'SAC';
+  // A custom payment asset has no known code; never show "SAC" to members.
+  const paymentToken = asset?.code ?? 'tokens';
   const method = data ? settlementMethod(data, now) : null;
   const canSettle = method && !['disabled', 'setup', 'loading'].includes(state);
   const walletReady = Boolean(

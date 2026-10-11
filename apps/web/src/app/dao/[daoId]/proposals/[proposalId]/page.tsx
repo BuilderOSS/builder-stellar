@@ -339,7 +339,7 @@ export default function ProposalDetailPage() {
   async function postComment(body: string) {
     if (!detail) return false;
     setCommenting(true);
-    tx.start('Posting comment...');
+    tx.start('Posting your comment');
     try {
       const governor = await getGovernor();
       const assembled = await governor.comment({
@@ -349,7 +349,7 @@ export default function ProposalDetailPage() {
       });
       const sent = await assembled.signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
-      tx.submitted('Comment submitted', hash);
+      tx.submitted('Comment sent', hash);
       await waitForConfirmation(hash, config.rpcUrl);
       await mutate();
       tx.success('Comment posted', hash);
