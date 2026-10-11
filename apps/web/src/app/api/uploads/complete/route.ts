@@ -22,7 +22,7 @@ import { getAuthorization } from '@/lib/pinata-upload-auth';
  *   filename: string
  *   mimeType: string
  *   sizeBytes: number
- *   uploadType: 'dao-image' | 'artwork-directory'
+ *   uploadType: 'dao-image' | 'markdown-image' | 'artwork-directory'
  * }
  *
  * Response:

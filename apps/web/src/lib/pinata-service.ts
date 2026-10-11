@@ -1,4 +1,4 @@
-import { cidToUrls, getPreferredGatewayHost, UploadType } from './pinata-upload';
+import { cidToUrls, getPreferredGatewayHost, UPLOAD_POLICIES, UploadType } from './pinata-upload';
 
 /**
  * Custom error classes for Pinata operations
@@ -72,10 +72,10 @@ export class PinataService {
   async createSignedUploadUrl(uploadType: UploadType): Promise<string> {
     try {
       const uploadPolicy =
-        uploadType === 'dao-image'
+        uploadType === 'dao-image' || uploadType === 'markdown-image'
           ? {
-              max_file_size: 5 * 1024 * 1024,
-              allow_mime_types: ['image/png', 'image/jpeg', 'image/webp']
+              max_file_size: UPLOAD_POLICIES[uploadType].maxBytes,
+              allow_mime_types: [...UPLOAD_POLICIES[uploadType].allowedMimes]
             }
           : {
               max_file_size: 100 * 1024 * 1024,

@@ -10,7 +10,7 @@ import { storeAuthorization } from '@/lib/pinata-upload-auth';
  * Request validation schema for signed URL generation
  */
 const PinataUrlRequestSchema = z.object({
-  uploadType: z.enum(['dao-image', 'artwork-directory']),
+  uploadType: z.enum(['dao-image', 'markdown-image', 'artwork-directory']),
   mimeType: z.string(),
   sizeBytes: z.number().int().positive(),
   filename: z.string().min(1)
@@ -40,7 +40,7 @@ function validateCsrfToken(request: NextRequest): boolean {
  *
  * Request body:
  * {
- *   uploadType: 'dao-image' | 'artwork-directory'
+ *   uploadType: 'dao-image' | 'markdown-image' | 'artwork-directory'
  *   mimeType: string (e.g., 'image/png')
  *   sizeBytes: number
  *   filename: string

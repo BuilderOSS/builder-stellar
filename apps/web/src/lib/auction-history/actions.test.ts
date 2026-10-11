@@ -56,6 +56,11 @@ describe('explicit auction action preparation', () => {
     });
     expect(prepared.signAndSend).not.toHaveBeenCalled();
   });
+  it('sends a bid comment as one line', async () => {
+    const { mock, api } = client();
+    await prepareBuyerAction(api, snapshot, 'GSESSION', 'bid', 10500001n, 50, { comment: ' gm\nfrens ' });
+    expect(mock.create_bid).toHaveBeenCalledWith(expect.objectContaining({ comment: 'gm frens' }));
+  });
   it('sends the bid comment, and refuses one over the 1 KiB cap before any wallet prompt', async () => {
     const { mock, api } = client();
     await prepareBuyerAction(api, snapshot, 'GSESSION', 'bid', 10500001n, 50, { comment: 'gm' });

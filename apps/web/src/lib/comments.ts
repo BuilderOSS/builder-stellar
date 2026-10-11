@@ -18,3 +18,11 @@ const encoder = new TextEncoder();
 export function commentBytes(text: string) {
   return encoder.encode(text).length;
 }
+
+/**
+ * Bid and listing comments are one line of plain text: line breaks fold to spaces as people type,
+ * and comments made before this rule still read as one line.
+ */
+export function toOneLine(text: string) {
+  return text.replace(/\s*[\r\n]+\s*/g, ' ');
+}

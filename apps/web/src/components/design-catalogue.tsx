@@ -31,6 +31,8 @@ import {
   IconButton,
   Input,
   ListRow,
+  Markdown,
+  MarkdownField,
   Menu,
   PageHeader,
   Pagination,
@@ -49,6 +51,20 @@ import {
   VoteTally
 } from '@/components/ui';
 import { toaster } from '@/lib/toaster';
+
+const SAMPLE_MARKDOWN = `## The plan
+
+Fund the **winter tool library** for _three months_.
+
+- 2,400 XLM to the workshop
+- A public [budget sheet](https://example.com)
+
+> Members asked for this at the last call.
+
+| Item | Cost |
+|---|---|
+| Tools | 1,800 XLM |
+| Storage | 600 XLM |`;
 
 const page = css({ maxW: 'content', mx: 'auto', px: 'clamp(16px, 4vw, 40px)', py: '10', pb: '40' });
 const grid = css({ display: 'grid', gap: '8' });
@@ -89,6 +105,7 @@ export function DesignCatalogue() {
   const [checked, setChecked] = useState(false);
   const [query, setQuery] = useState('');
   const [step, setStep] = useState(1);
+  const [markdown, setMarkdown] = useState(SAMPLE_MARKDOWN);
   const [auctionEndsAt] = useState(() => Math.floor(Date.now() / 1000) + 7_800);
 
   return (
@@ -236,6 +253,14 @@ export function DesignCatalogue() {
             </Field>
           </div>
           <SearchInput label="Search communities" value={query} onValueChange={setQuery} placeholder="Search" />
+        </Section>
+
+        <Section title="Markdown">
+          <Field>
+            <FieldLabel htmlFor="design-markdown">Why</FieldLabel>
+            <MarkdownField id="design-markdown" value={markdown} onChange={setMarkdown} />
+          </Field>
+          <Markdown source={'**Comment** with a [link](https://example.com) and `code`.'} variant="comment" />
         </Section>
 
         <Section title="Lists">

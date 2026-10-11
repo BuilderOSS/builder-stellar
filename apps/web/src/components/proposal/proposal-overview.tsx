@@ -2,7 +2,7 @@ import { ArrowUpRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { css } from 'styled-system/css';
 
-import { Address, Countdown, Disclosure, Section } from '@/components/ui';
+import { Address, Countdown, Disclosure, Markdown, Section } from '@/components/ui';
 import type { DaoNetworkName } from '@/lib/dao-config';
 import { getExplorerLedgerUrl } from '@/lib/explorer-links';
 import { ProposalState } from '@/lib/proposal-state';
@@ -122,15 +122,7 @@ function getLifecycleSummary(detail: ProposalDetail, now: number): Lifecycle {
   }
 }
 
-const body = css({
-  textStyle: 'body',
-  fontSize: '1rem',
-  lineHeight: '1.7',
-  color: 'ink',
-  m: '0',
-  whiteSpace: 'pre-wrap',
-  overflowWrap: 'anywhere'
-});
+const empty = css({ textStyle: 'body', color: 'ink.muted', m: '0' });
 const link = css({
   display: 'inline-flex',
   alignItems: 'center',
@@ -147,7 +139,11 @@ const factLabel = css({ textStyle: 'caption', color: 'ink.muted' });
 export function ProposalOverview({ detail, network }: { detail: ProposalDetail; network: DaoNetworkName }) {
   return (
     <Section title="The proposal">
-      <p className={body}>{detail.metadata.description || 'No description was given.'}</p>
+      {detail.metadata.description.trim() ? (
+        <Markdown source={detail.metadata.description} variant="rich" />
+      ) : (
+        <p className={empty}>No description was given.</p>
+      )}
       {detail.metadata.url ? (
         <a href={detail.metadata.url} target="_blank" rel="noreferrer" className={link}>
           {detail.metadata.url}

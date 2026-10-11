@@ -95,7 +95,7 @@ export function getAuthorization(uploadId: string): UploadAuthorization | null {
   const expiresAt = new Date(parsed.expiresAt);
   if (
     !Number.isFinite(expiresAt.getTime()) ||
-    !['dao-image', 'artwork-directory'].includes(parsed.uploadType) ||
+    !['dao-image', 'markdown-image', 'artwork-directory'].includes(parsed.uploadType) ||
     !Array.isArray(parsed.expectedMimes) ||
     parsed.expectedMimes.length === 0 ||
     !Number.isFinite(parsed.maxBytes)

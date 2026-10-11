@@ -31,7 +31,9 @@ it('uses signed upload and verified completion contracts, returning only a durab
     .fn()
     .mockResolvedValueOnce(Response.json({ signedUrl: 'https://uploads.pinata.cloud/test', uploadId: 'upload-1' }))
     .mockResolvedValueOnce(Response.json({ data: { cid: 'bafytest' } }))
-    .mockResolvedValueOnce(Response.json({ gatewayUrl: 'https://gateway.example/ipfs/bafytest' }));
+    .mockResolvedValueOnce(
+      Response.json({ gatewayUrl: 'https://gateway.example/ipfs/bafytest', ipfsUri: 'ipfs://bafytest' })
+    );
   vi.stubGlobal('fetch', fetch);
   expect(await uploadDaoImage(file)).toBe('https://gateway.example/ipfs/bafytest');
   const authorization = fetch.mock.calls[0];

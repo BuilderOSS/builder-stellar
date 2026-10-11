@@ -1,6 +1,6 @@
 import type { Client as AuctionClient } from '@builder-stellar/auction-bindings';
 
-import { commentBytes, MAX_COMMENT_BYTES } from '@/lib/comments';
+import { commentBytes, MAX_COMMENT_BYTES, toOneLine } from '@/lib/comments';
 
 import { settlementMethod, validateAuctionBid } from './state';
 import type { CurrentAuction } from './types';
@@ -41,8 +41,10 @@ export async function prepareBuyerAction(
   if (action === 'bid') {
     if (amount === null) throw new Error('Enter a positive amount with up to 7 decimal places.');
     validateAuctionBid(live, snapshot.auction!.token_id, amount, now);
-    if (commentBytes(comment) > MAX_COMMENT_BYTES) throw new Error('Shorten your comment to send it with the bid.');
-    return client.create_bid({ bidder, token_id: auction.token_id, amount, comment });
+    // Bid comments are one line of plain text, whatever the box let through.
+    const line = toOneLine(comment).trim();
+    if (commentBytes(line) > MAX_COMMENT_BYTES) throw new Error('Shorten your comment to send it with the bid.');
+    return client.create_bid({ bidder, token_id: auction.token_id, amount, comment: line });
   }
   const method = settlementMethod(live, now);
   // Do not silently turn a reviewed settle-only action into one that mints another token.
