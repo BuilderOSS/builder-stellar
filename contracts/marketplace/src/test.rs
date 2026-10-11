@@ -1099,3 +1099,99 @@ mod bounds {
         );
     }
 }
+
+mod comments {
+    use super::*;
+    use crate::events::{ListingCommented, PrimaryListingCommented};
+    use soroban_sdk::{testutils::Events as _, Event as _};
+
+    fn text(e: &Env, len: u32) -> String {
+        String::from_str(e, &"a".repeat(len as usize))
+    }
+
+    #[test]
+    fn primary_listing_comment_emits_event_after_listing_is_gone() {
+        let fixture = fixture();
+        let mp = &fixture.marketplace;
+        let id = mp.create_primary_listing(&100, &2_000);
+        mp.cancel_primary(&id);
+        mp.pause();
+        let body = text(&fixture.env, common::MAX_COMMENT_LENGTH);
+        mp.comment_primary_listing(&id, &body, &fixture.buyer);
+        assert_eq!(
+            fixture.env.events().all().events().last().unwrap(),
+            &PrimaryListingCommented {
+                listing_id: id,
+                author: fixture.buyer.clone(),
+                body,
+            }
+            .to_xdr(&fixture.env, &mp.address)
+        );
+        assert_eq!(fixture.env.auths()[0].0, fixture.buyer);
+    }
+
+    #[test]
+    fn primary_listing_comment_requires_a_created_listing() {
+        let fixture = fixture();
+        let mp = &fixture.marketplace;
+        let body = String::from_str(&fixture.env, "hi");
+        assert_eq!(
+            mp.try_comment_primary_listing(&0, &body, &fixture.buyer)
+                .err()
+                .unwrap()
+                .unwrap(),
+            MarketplaceError::ListingNotFound.into()
+        );
+    }
+
+    #[test]
+    fn listing_comment_needs_no_active_listing() {
+        let fixture = fixture();
+        let mp = &fixture.marketplace;
+        let body = String::from_str(&fixture.env, "nice token");
+        mp.comment_listing(&7, &body, &fixture.seller);
+        assert_eq!(
+            fixture.env.events().all().events().last().unwrap(),
+            &ListingCommented {
+                token_id: 7,
+                author: fixture.seller.clone(),
+                body,
+            }
+            .to_xdr(&fixture.env, &mp.address)
+        );
+    }
+
+    #[test]
+    fn comment_body_must_be_non_empty_and_within_cap() {
+        let fixture = fixture();
+        let mp = &fixture.marketplace;
+        let id = mp.create_primary_listing(&100, &2_000);
+        let empty = String::from_str(&fixture.env, "");
+        let long = text(&fixture.env, common::MAX_COMMENT_LENGTH + 1);
+        let err = |r: Result<_, Result<soroban_sdk::Error, _>>| r.err().unwrap().unwrap();
+        assert_eq!(
+            err(mp.try_comment_listing(&1, &empty, &fixture.buyer)),
+            MarketplaceError::CommentEmpty.into()
+        );
+        assert_eq!(
+            err(mp.try_comment_listing(&1, &long, &fixture.buyer)),
+            MarketplaceError::CommentTooLong.into()
+        );
+        assert_eq!(
+            err(mp.try_comment_primary_listing(&id, &long, &fixture.buyer)),
+            MarketplaceError::CommentTooLong.into()
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "HostError: Error(Auth, InvalidAction)")]
+    fn comment_requires_author_auth() {
+        let fixture = fixture();
+        fixture.env.set_auths(&[]);
+        fixture.marketplace.comment_listing(
+            &1,
+            &String::from_str(&fixture.env, "hi"),
+            &fixture.buyer,
+        );
+    }
+}

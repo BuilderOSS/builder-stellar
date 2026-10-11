@@ -13,7 +13,7 @@ export type CurrentAuction = {
   } | null;
   config: { reserve_price: string; min_bid_increment_percent: number; payment_token: string };
   paused: boolean;
-  bids?: Array<{ event_id: string; bidder: string; amount: string; timestamp: string | null }>;
+  bids?: Array<{ event_id: string; bidder: string; amount: string; timestamp: string | null; comment?: string | null }>;
 };
 
 export type AuctionHistoryItem = {

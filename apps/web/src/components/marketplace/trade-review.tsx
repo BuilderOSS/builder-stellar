@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { css } from 'styled-system/css';
+import { css, cx } from 'styled-system/css';
 import { useSWRConfig } from 'swr';
 
 import { Address, Button, Callout, Dialog } from '@/components/ui';
@@ -23,10 +23,12 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 const line = css({ textStyle: 'body', color: 'ink', m: '0' });
 const muted = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
+const quote = css({ textStyle: 'body', color: 'ink', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', m: '0' });
 const box = css({ display: 'grid', gap: '2', p: '3.5', borderRadius: 'control', bg: 'raised' });
 
 const ACTION_TITLE: Record<MarketplaceAction['action'], string> = {
   buy: 'Buy this token',
+  comment: 'Post your comment',
   cancel: 'Cancel your listing',
   expire: 'Clear an ended listing',
   approve: 'Allow the market to hold your token',
@@ -211,6 +213,7 @@ export function TradeReview({
         </p>
       ) : null}
       {'tokenId' in action ? <p className={line}>Token #{action.tokenId}</p> : null}
+      {'body' in action ? <p className={cx(box, quote)}>{action.body}</p> : null}
       {!allowed ? (
         <Callout variant="warning" title={session.walletNetworkIssue || 'Connect your wallet to trade.'} />
       ) : null}

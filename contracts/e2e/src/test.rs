@@ -1060,14 +1060,14 @@ fn test_auction_full_lifecycle() {
     assert!(!auction_state.settled);
 
     // Bidder 1 places first bid at reserve price
-    auction.create_bid(&bidder1, &token_id, &100_0000000);
+    auction.create_bid(&bidder1, &token_id, &100_0000000, &String::from_str(&e, ""));
 
     let auction_state = auction.get_auction();
     assert_eq!(auction_state.highest_bid, 100_0000000);
     assert_eq!(auction_state.highest_bidder, Some(bidder1.clone()));
 
     // Bidder 2 places higher bid (110 USDC - 10% increment)
-    auction.create_bid(&bidder2, &token_id, &110_0000000);
+    auction.create_bid(&bidder2, &token_id, &110_0000000, &String::from_str(&e, ""));
 
     let auction_state = auction.get_auction();
     assert_eq!(auction_state.highest_bid, 110_0000000);
@@ -1151,7 +1151,7 @@ fn test_auction_time_extension() {
     e.ledger().set_timestamp(original_end - 25);
 
     // Place bid - should extend auction
-    auction.create_bid(&bidder, &token_id, &100_0000000);
+    auction.create_bid(&bidder, &token_id, &100_0000000, &String::from_str(&e, ""));
 
     let auction_state = auction.get_auction();
     let config = auction.get_config();
@@ -1244,7 +1244,7 @@ fn test_auction_multiple_consecutive_auctions() {
         let token_id = auction_state.token_id;
 
         // Each bidder bids on their respective auction
-        auction.create_bid(bidder, &token_id, &100_0000000);
+        auction.create_bid(bidder, &token_id, &100_0000000, &String::from_str(&e, ""));
 
         // Advance and settle
         e.ledger().set_timestamp(auction_state.end_time + 1);
@@ -1271,7 +1271,12 @@ fn test_auction_bid_below_reserve() {
     let auction_state = auction.get_auction();
 
     // Try to bid below reserve price (should panic)
-    auction.create_bid(&bidder, &auction_state.token_id, &50_0000000);
+    auction.create_bid(
+        &bidder,
+        &auction_state.token_id,
+        &50_0000000,
+        &String::from_str(&e, ""),
+    );
 }
 
 #[test]
@@ -1291,11 +1296,11 @@ fn test_auction_bid_below_min_increment() {
     let token_id = auction_state.token_id;
 
     // First bid at reserve
-    auction.create_bid(&bidder1, &token_id, &100_0000000);
+    auction.create_bid(&bidder1, &token_id, &100_0000000, &String::from_str(&e, ""));
 
     // Try to bid with insufficient increment (should panic)
     // Min increment is 10%, so need at least 110 USDC
-    auction.create_bid(&bidder2, &token_id, &105_0000000);
+    auction.create_bid(&bidder2, &token_id, &105_0000000, &String::from_str(&e, ""));
 }
 
 #[test]
@@ -1312,7 +1317,12 @@ fn test_auction_bid_wrong_token_id() {
     let wrong_token_id = auction_state.token_id + 999;
 
     // Try to bid on wrong token ID (should panic)
-    auction.create_bid(&bidder, &wrong_token_id, &100_0000000);
+    auction.create_bid(
+        &bidder,
+        &wrong_token_id,
+        &100_0000000,
+        &String::from_str(&e, ""),
+    );
 }
 
 #[test]
@@ -1332,7 +1342,7 @@ fn test_auction_bid_after_end() {
     e.ledger().set_timestamp(auction_state.end_time + 1);
 
     // Try to bid after auction ended (should panic)
-    auction.create_bid(&bidder, &token_id, &100_0000000);
+    auction.create_bid(&bidder, &token_id, &100_0000000, &String::from_str(&e, ""));
 }
 
 #[test]
@@ -1372,7 +1382,7 @@ fn test_auction_pause_and_resume() {
     let token_id = auction_state.token_id;
 
     // Place a bid
-    auction.create_bid(&bidder, &token_id, &100_0000000);
+    auction.create_bid(&bidder, &token_id, &100_0000000, &String::from_str(&e, ""));
 
     // Pause the auction
     auction.pause(&owner);
@@ -1434,7 +1444,7 @@ fn test_auction_settle_auction_vs_settle_and_create() {
     let token_id = auction_state.token_id;
 
     // Place bid
-    auction.create_bid(&bidder, &token_id, &100_0000000);
+    auction.create_bid(&bidder, &token_id, &100_0000000, &String::from_str(&e, ""));
 
     // Advance past end
     e.ledger().set_timestamp(auction_state.end_time + 1);
@@ -1501,7 +1511,7 @@ fn test_auction_rejects_non_positive_bid_before_transfer() {
     auction.unpause(&owner);
 
     let token_id = auction.get_auction().token_id;
-    auction.create_bid(&bidder, &token_id, &0);
+    auction.create_bid(&bidder, &token_id, &0, &String::from_str(&e, ""));
 }
 
 #[test]
@@ -1527,7 +1537,7 @@ fn test_auction_extension_dos_protection() {
 
         // Place bid with incrementing amounts
         let bid_amount = 1_000000000_i128 << i;
-        auction.create_bid(&bidder, &token_id, &bid_amount);
+        auction.create_bid(&bidder, &token_id, &bid_amount, &String::from_str(&e, ""));
     }
 
     // The eleventh bid is still valid before the auction's end time. Once the
@@ -1555,14 +1565,14 @@ fn test_auction_payment_currency_locked_on_first_bid() {
     // This is implementation detail - the auction starts with PaymentType::Native placeholder
 
     // Place first bid with SAC token
-    auction.create_bid(&bidder, &token_id, &100_0000000);
+    auction.create_bid(&bidder, &token_id, &100_0000000, &String::from_str(&e, ""));
 
     // After first bid, payment_currency should be locked to SAC(payment_token_addr)
     // We can't directly inspect payment_currency, but we can test that the behavior is correct
     // by verifying subsequent bids work with the same token
 
     // Place second bid with higher amount - should succeed
-    auction.create_bid(&bidder, &token_id, &150_0000000);
+    auction.create_bid(&bidder, &token_id, &150_0000000, &String::from_str(&e, ""));
 
     // Verify both bids succeeded
     let final_state = auction.get_auction();
@@ -1579,7 +1589,7 @@ fn test_auction_payment_token_cannot_change_after_first_bid() {
     payment_client.mint(&bidder, &1000_0000000);
     auction.unpause(&owner);
     let token_id = auction.get_auction().token_id;
-    auction.create_bid(&bidder, &token_id, &100_0000000);
+    auction.create_bid(&bidder, &token_id, &100_0000000, &String::from_str(&e, ""));
 
     auction.pause(&owner);
     let new_payment_token = Address::generate(&e);
@@ -1765,10 +1775,10 @@ fn test_auction_inconsistent_payment_type_rejection() {
     let token_id = auction_state.token_id;
 
     // First bid locks payment currency to the SAC token
-    auction.create_bid(&bidder1, &token_id, &100_0000000);
+    auction.create_bid(&bidder1, &token_id, &100_0000000, &String::from_str(&e, ""));
 
     // Second bid with same payment token should succeed
-    auction.create_bid(&bidder2, &token_id, &150_0000000);
+    auction.create_bid(&bidder2, &token_id, &150_0000000, &String::from_str(&e, ""));
 
     // Verify second bid succeeded
     let final_state = auction.get_auction();
@@ -2491,7 +2501,13 @@ fn real_auth_auction_mint_bid_refund_and_settle() {
             who,
             &auction.address,
             "create_bid",
-            vec![&e, who.into_val(&e), tid.into_val(&e), amount.into_val(&e)],
+            vec![
+                &e,
+                who.into_val(&e),
+                tid.into_val(&e),
+                amount.into_val(&e),
+                String::from_str(&e, "").into_val(&e),
+            ],
             &[MockAuthInvoke {
                 contract: &pay,
                 fn_name: "transfer",
@@ -2504,7 +2520,7 @@ fn real_auth_auction_mint_bid_refund_and_settle() {
                 sub_invokes: &[],
             }],
         );
-        auction.create_bid(who, &tid, &amount);
+        auction.create_bid(who, &tid, &amount, &String::from_str(&e, ""));
     };
     bid(&b1, 100_0000000);
     bid(&b2, 110_0000000); // refunds b1 through a contract-authorized SAC transfer
@@ -2547,6 +2563,7 @@ fn real_auth_auction_pause_settle_and_cancel() {
             b1.into_val(&e),
             tid.into_val(&e),
             100_0000000_i128.into_val(&e),
+            String::from_str(&e, "").into_val(&e),
         ],
         &[MockAuthInvoke {
             contract: &pay,
@@ -2560,7 +2577,7 @@ fn real_auth_auction_pause_settle_and_cancel() {
             sub_invokes: &[],
         }],
     );
-    auction.create_bid(&b1, &tid, &100_0000000);
+    auction.create_bid(&b1, &tid, &100_0000000, &String::from_str(&e, ""));
 
     only_auth(
         &e,
@@ -2616,6 +2633,7 @@ fn real_auth_auction_settle_auction_when_paused_moves_nft_and_payment() {
             b1.into_val(&e),
             st.token_id.into_val(&e),
             100_0000000_i128.into_val(&e),
+            String::from_str(&e, "").into_val(&e),
         ],
         &[MockAuthInvoke {
             contract: &pay,
@@ -2629,7 +2647,7 @@ fn real_auth_auction_settle_auction_when_paused_moves_nft_and_payment() {
             sub_invokes: &[],
         }],
     );
-    auction.create_bid(&b1, &st.token_id, &100_0000000);
+    auction.create_bid(&b1, &st.token_id, &100_0000000, &String::from_str(&e, ""));
     only_auth(
         &e,
         &owner,
@@ -3859,4 +3877,276 @@ fn manager_upgrade_from_deployed_code_keeps_slugs_and_enables_change_slug() {
     DaoTokenContractClient::new(&e, &other.token).mint(&other_founder, &other_founder);
     manager.launch_dao(&other.token, &NO_LAUNCH_MODULES);
     assert_eq!(manager.get_dao_by_slug(&before), other.token);
+}
+
+// ============================================================================
+// Governor / Auction / Marketplace 0.1.0 -> 0.2.0 upgrade (on-chain comments)
+// ============================================================================
+
+struct ModulesUpgradeFixture {
+    e: Env,
+    manager: ManagerContractClient<'static>,
+    dao: manager::DaoAddresses,
+    deployer: Address,
+    asset: Address,
+    /// (old, new) code hashes for governor, auction and marketplace.
+    governor_code: (BytesN<32>, BytesN<32>),
+    auction_code: (BytesN<32>, BytesN<32>),
+    marketplace_code: (BytesN<32>, BytesN<32>),
+}
+
+/// A factory DAO whose governor, auction and marketplace run the deployed 0.1.0 code, with the
+/// local builds registered as 0.2.0 and each 0.1.0 -> 0.2.0 path approved. One founder token is
+/// minted and the artwork has one trait, so the auction can launch.
+fn dao_on_deployed_modules() -> ModulesUpgradeFixture {
+    let e = Env::default();
+    e.mock_all_auths();
+    e.ledger().set_sequence_number(100);
+    e.ledger().set_timestamp(1_000);
+    e.cost_estimate().budget().reset_unlimited();
+
+    let manager_id = e.register(
+        ManagerContract,
+        (
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0; 32]),
+            String::from_str(&e, "0.1.0"),
+        ),
+    );
+    let manager = ManagerContractClient::new(&e, &manager_id);
+    let register = |name: &str, version: &str, hash: &BytesN<32>| {
+        manager.register_implementation(
+            &String::from_str(&e, name),
+            &String::from_str(&e, version),
+            hash,
+        );
+    };
+
+    let token = upload_module_wasm(&e, "token");
+    let metadata = upload_module_wasm(&e, "metadata");
+    let treasury = upload_module_wasm(&e, "treasury");
+    let old_auction = upload_fixture_wasm(&e, "auction-0.1.0.wasm");
+    let old_governor = upload_fixture_wasm(&e, "governor-0.1.0.wasm");
+    let old_marketplace = upload_fixture_wasm(&e, "marketplace-0.1.0.wasm");
+    register("Token", "0.1.0", &token);
+    register("Metadata", "0.1.0", &metadata);
+    register("Treasury", "0.1.0", &treasury);
+    register("Auction", "0.1.0", &old_auction);
+    register("Governor", "0.1.0", &old_governor);
+    register("Marketplace", "0.1.0", &old_marketplace);
+    manager.set_current_implementations(
+        &token,
+        &metadata,
+        &old_auction,
+        &old_governor,
+        &treasury,
+        &old_marketplace,
+    );
+
+    let deployer = Address::generate(&e);
+    let asset = e
+        .register_stellar_asset_contract_v2(Address::generate(&e))
+        .address();
+    let dao = manager.create_dao(&slug_params(&e, &deployer, 1, "comment-dao", &asset));
+    DaoTokenContractClient::new(&e, &dao.token).mint(&deployer, &deployer);
+    MetadataContractClient::new(&e, &dao.metadata).add_properties(
+        &vec![&e, String::from_str(&e, "Background")],
+        &vec![
+            &e,
+            ItemParam {
+                property_id: 0,
+                name: String::from_str(&e, "Blue"),
+                is_new_property: true,
+            },
+        ],
+        &IpfsGroup {
+            base_uri: String::from_str(&e, "ipfs://art"),
+            extension: String::from_str(&e, ".png"),
+        },
+    );
+
+    // The release: register the new code and approve exactly these paths.
+    let release = |name: &str, wasm: &str, old: BytesN<32>| {
+        let new = upload_module_wasm(&e, wasm);
+        assert_ne!(
+            old, new,
+            "rebuild the {wasm} WASM: it matches the deployed one"
+        );
+        register(name, "0.2.0", &new);
+        manager.approve_upgrade(&old, &new);
+        (old, new)
+    };
+    let governor_code = release("Governor", "governor", old_governor);
+    let auction_code = release("Auction", "auction", old_auction);
+    let marketplace_code = release("Marketplace", "marketplace", old_marketplace);
+
+    ModulesUpgradeFixture {
+        e,
+        manager,
+        dao,
+        deployer,
+        asset,
+        governor_code,
+        auction_code,
+        marketplace_code,
+    }
+}
+
+/// `create_bid` as the deployed 0.1.0 auction exposes it (no comment argument).
+fn create_bid_v010(e: &Env, auction: &Address, bidder: &Address, token_id: u128, amount: i128) {
+    e.invoke_contract::<()>(
+        auction,
+        &Symbol::new(e, "create_bid"),
+        vec![
+            e,
+            bidder.into_val(e),
+            token_id.into_val(e),
+            amount.into_val(e),
+        ],
+    );
+}
+
+/// Setup window: the launch admin upgrades all three modules directly; the comment entry
+/// points then work and the DAO still launches.
+#[test]
+fn comment_modules_upgrade_in_setup() {
+    let f = dao_on_deployed_modules();
+    let e = &f.e;
+    let governor = DaoGovernorContractClient::new(e, &f.dao.governor);
+    let auction = DaoAuctionContractClient::new(e, &f.dao.auction);
+    let marketplace = MarketplaceContractClient::new(e, &f.dao.marketplace);
+    assert_eq!(auction.version(), String::from_str(e, "0.1.0"));
+
+    governor.upgrade(&f.governor_code.0, &f.governor_code.1);
+    auction.upgrade(&f.auction_code.0, &f.auction_code.1);
+    marketplace.upgrade(&f.marketplace_code.0, &f.marketplace_code.1);
+    for v in [governor.version(), auction.version(), marketplace.version()] {
+        assert_eq!(v, String::from_str(e, "0.2.0"));
+    }
+    assert_eq!(auction.wasm_hash(), f.auction_code.1);
+    assert_eq!(governor.admin(), f.deployer);
+
+    f.manager.launch_dao(
+        &f.dao.token,
+        &manager::LaunchConfig {
+            launch_auction: true,
+            launch_marketplace: true,
+            enable_minter: false,
+            expected_minter: None,
+        },
+    );
+    let bidder = Address::generate(e);
+    StellarAssetClient::new(e, &f.asset).mint(&bidder, &100_0000000);
+    let tid = auction.get_auction().token_id;
+    auction.create_bid(&bidder, &tid, &20_000_000, &String::from_str(e, "gm"));
+    assert_eq!(auction.get_auction().highest_bidder, Some(bidder.clone()));
+    marketplace.comment_listing(&0, &String::from_str(e, "nice"), &bidder);
+}
+
+/// Live DAO: a bid placed on 0.1.0 survives one proposal that upgrades the governor, auction
+/// and marketplace; the auction then settles, takes commented bids, and the old proposal and
+/// listings accept comments. Only the Treasury's own authorization runs the upgrade.
+#[test]
+fn comment_modules_upgrade_by_proposal_keeps_live_state() {
+    let f = dao_on_deployed_modules();
+    let e = &f.e;
+    f.manager.launch_dao(
+        &f.dao.token,
+        &manager::LaunchConfig {
+            launch_auction: true,
+            launch_marketplace: true,
+            enable_minter: false,
+            expected_minter: None,
+        },
+    );
+    let governor = DaoGovernorContractClient::new(e, &f.dao.governor);
+    let auction = DaoAuctionContractClient::new(e, &f.dao.auction);
+    let marketplace = MarketplaceContractClient::new(e, &f.dao.marketplace);
+    let treasury = DaoTreasuryContractClient::new(e, &f.dao.treasury);
+    let sac = StellarAssetClient::new(e, &f.asset);
+
+    // A bid on the deployed code, which has no comment argument.
+    let early = Address::generate(e);
+    sac.mint(&early, &100_0000000);
+    let first = auction.get_auction();
+    create_bid_v010(e, &f.dao.auction, &early, first.token_id, 20_000_000);
+
+    let targets = vec![
+        e,
+        f.dao.governor.clone(),
+        f.dao.auction.clone(),
+        f.dao.marketplace.clone(),
+    ];
+    let functions = vec![
+        e,
+        Symbol::new(e, "upgrade"),
+        Symbol::new(e, "upgrade"),
+        Symbol::new(e, "upgrade"),
+    ];
+    let args = vec![
+        e,
+        vec![
+            e,
+            f.governor_code.0.into_val(e),
+            f.governor_code.1.into_val(e),
+        ],
+        vec![
+            e,
+            f.auction_code.0.into_val(e),
+            f.auction_code.1.into_val(e),
+        ],
+        vec![
+            e,
+            f.marketplace_code.0.into_val(e),
+            f.marketplace_code.1.into_val(e),
+        ],
+    ];
+    e.ledger().set_sequence_number(200);
+    e.ledger().set_timestamp(2_000);
+    let description = String::from_str(e, "Upgrade for on-chain comments");
+    let desc_hash = description_hash(e, &description);
+    let id = governor.propose(&targets, &functions, &args, &description, &f.deployer);
+    e.ledger().set_timestamp(2_301);
+    governor.cast_vote(&id, &1, &String::from_str(e, "yes"), &f.deployer);
+    e.ledger().set_timestamp(2_601);
+    governor.queue(
+        &targets,
+        &functions,
+        &args,
+        &desc_hash,
+        &2_901_u32,
+        &f.deployer,
+    );
+    e.ledger().set_timestamp(2_901);
+
+    e.set_auths(&[]);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
+    e.mock_all_auths();
+    assert_eq!(governor.proposal_state(&id), ProposalState::Executed);
+    for v in [governor.version(), auction.version(), marketplace.version()] {
+        assert_eq!(v, String::from_str(e, "0.2.0"));
+    }
+
+    // The 0.1.0 bid is intact and settles on the new code.
+    let kept = auction.get_auction();
+    assert_eq!(kept.token_id, first.token_id);
+    assert_eq!(kept.highest_bidder, Some(early.clone()));
+    assert_eq!(kept.highest_bid, 20_000_000);
+    auction.settle_and_create_new();
+    let token = DaoTokenContractClient::new(e, &f.dao.token);
+    assert_eq!(token.owner_of(&(first.token_id as u32)), early);
+
+    // New features: a commented bid, and comments on the executed proposal and a listing.
+    let next = auction.get_auction();
+    let late = Address::generate(e);
+    sac.mint(&late, &100_0000000);
+    auction.create_bid(
+        &late,
+        &next.token_id,
+        &20_000_000,
+        &String::from_str(e, "for the culture"),
+    );
+    assert_eq!(auction.get_auction().highest_bidder, Some(late.clone()));
+    governor.comment(&id, &String::from_str(e, "shipped"), &late);
+    marketplace.comment_listing(&0, &String::from_str(e, "nice"), &late);
 }

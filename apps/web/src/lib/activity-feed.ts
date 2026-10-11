@@ -99,6 +99,13 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
         href: proposalHref
       };
     }
+    case 'proposalcommented':
+      return {
+        category: 'Governance',
+        title: `${shortAddress(firstValue(topics.author))} commented on a proposal`,
+        detail: firstValue(args.body) ? `“${firstValue(args.body)}”` : undefined,
+        href: proposalHref
+      };
     case 'proposalqueued':
       return { category: 'Governance', title: 'Proposal passed and queued for execution', href: proposalHref };
     case 'proposalexecuted':
@@ -112,12 +119,15 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
       };
     case 'auctioncreated':
       return { category: 'Auction', title: `Auction started for ${tokenLabel}`, href: auctionHref };
-    case 'bidplaced':
+    case 'bidplaced': {
+      const comment = firstValue(args.comment);
       return {
         category: 'Auction',
         title: `${shortAddress(firstValue(topics.bidder))} bid ${value ?? 'on'}${value ? ` on ${tokenLabel}` : ` ${tokenLabel}`}`,
+        detail: comment ? `“${comment}”` : undefined,
         href: auctionHref
       };
+    }
     case 'auctionsettled': {
       const winner = firstValue(topics.winner, args.winner);
       return {
@@ -146,6 +156,16 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
         title: `${shortAddress(firstValue(topics.buyer))} bought ${tokenLabel}${value ? ` for ${value}` : ''}`,
         href: marketHref
       };
+    case 'primarylistingcommented':
+    case 'listingcommented': {
+      const listingId = firstValue(topics.listing_id);
+      return {
+        category: 'Market',
+        title: `${shortAddress(firstValue(topics.author))} commented on ${event === 'listingcommented' ? tokenLabel : `new token listing ${listingId ?? ''}`.trim()}`,
+        detail: firstValue(args.body) ? `“${firstValue(args.body)}”` : undefined,
+        href: marketHref
+      };
+    }
     case 'mintbatchwithminter': {
       const count = Number(firstValue(args.count));
       const first = Number(firstValue(topics.first_token_id, args.first_token_id));

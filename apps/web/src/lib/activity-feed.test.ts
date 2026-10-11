@@ -63,6 +63,45 @@ describe('activity feed rows', () => {
     expect(vote).toMatchObject({ title: 'GCLG…U6CO voted For with 10 votes', detail: '“Yes”' });
   });
 
+  it('quotes comments on proposals, bids and listings', () => {
+    expect(
+      formatActivity(
+        item({
+          event_name: 'proposal_commented',
+          proposal_id: 'abc',
+          topics: JSON.stringify({ proposal_id: 'abc', author: ALICE }),
+          args: JSON.stringify({ body: 'Shipped the first batch' })
+        }),
+        'dao'
+      )
+    ).toEqual({
+      category: 'Governance',
+      title: 'GCLG…U6CO commented on a proposal',
+      detail: '“Shipped the first batch”',
+      href: '/dao/dao/proposals/abc'
+    });
+    expect(
+      formatActivity(
+        item({
+          token_id: '30',
+          amount: '1200000000',
+          topics: JSON.stringify({ bidder: ALICE }),
+          args: JSON.stringify({ comment: 'gm' })
+        })
+      ).detail
+    ).toBe('“gm”');
+    expect(
+      formatActivity(
+        item({ event_name: 'listing_commented', token_id: '7', topics: JSON.stringify({ author: ALICE }) })
+      ).title
+    ).toBe('GCLG…U6CO commented on #7');
+    expect(
+      formatActivity(
+        item({ event_name: 'primary_listing_commented', topics: JSON.stringify({ listing_id: 2, author: ALICE }) })
+      ).title
+    ).toBe('GCLG…U6CO commented on new token listing 2');
+  });
+
   it('summarises an allocation once instead of a row per token', () => {
     expect(
       formatActivity(

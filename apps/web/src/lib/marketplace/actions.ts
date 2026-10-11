@@ -4,6 +4,7 @@ import type { AssembledTransaction } from '@stellar/stellar-sdk/contract';
 import { z } from 'zod';
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
+import { commentBytes, MAX_COMMENT_BYTES, supportsComments } from '@/lib/comments';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { prisma } from '@/lib/prisma';
 
@@ -35,7 +36,15 @@ export const marketplaceActionSchema = z.union([
     })
     .strict(),
   z.object({ action: z.literal('revoke'), tokenId: z.string().max(10) }).strict(),
-  z.object({ action: z.literal('trustline'), paymentAsset: z.string().length(56) }).strict()
+  z.object({ action: z.literal('trustline'), paymentAsset: z.string().length(56) }).strict(),
+  z
+    .object({
+      action: z.literal('comment'),
+      kind: z.enum(['primary', 'secondary']),
+      id: z.string().max(20),
+      body: z.string().min(1).max(MAX_COMMENT_BYTES)
+    })
+    .strict()
 ]);
 
 /** toXdr alone does not throw on a failed simulation. Validate simulation data first. */
@@ -173,6 +182,24 @@ export async function prepareMarketplaceAction(
           ? `Approve only token #${tokenId} for the marketplace until ledger ${latest.sequence + 120}. This does not list or escrow the token.`
           : `Escrow token #${tokenId} for ${formatMarketplaceAmount(price)} ${readiness.assetCode}. ${action.feeBps} bps is deducted from the sale price. Expires ${new Date(Number(expiry) * 1000).toISOString()}. These terms are bound into the transaction: if governance changes the fee or asset before confirmation, the listing fails instead of applying new terms. While listed, the token's vote leaves your delegate until it is sold or the listing is cancelled.`;
     }
+  } else if (action.action === 'comment') {
+    // Event-only: the marketplace emits the comment and stores nothing. Anyone may comment.
+    if (!action.body.trim() || commentBytes(action.body) > MAX_COMMENT_BYTES)
+      throw new MarketplaceError('Comments need some text and must fit in 1 KB.');
+    if (!supportsComments((await client.version()).result))
+      throw new MarketplaceError('Comments open once this community upgrades its market.', 409);
+    let id: bigint;
+    try {
+      id = marketplaceId(action.id, action.kind);
+    } catch {
+      throw new MarketplaceError('Invalid listing identifier.', 400);
+    }
+    xdr = marketplaceTransactionXdr(
+      action.kind === 'primary'
+        ? await client.comment_primary_listing({ listing_id: id, body: action.body, author: actor.address }, options)
+        : await client.comment_listing({ token_id: Number(id), body: action.body, author: actor.address }, options)
+    );
+    summary = `Post a public comment on ${action.kind === 'primary' ? `new token listing ${id}` : `token #${id}`}. Everyone can read it, and it can't be edited or deleted.`;
   } else if ('kind' in action) {
     const indexed = await marketplaceListing(community, action.kind, action.id, action.eventId);
     if (indexed.status !== 'open' && indexed.status !== 'awaiting-expiry')

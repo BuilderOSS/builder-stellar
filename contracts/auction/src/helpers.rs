@@ -2,7 +2,7 @@ use common::clients::NftClient;
 use soroban_sdk::token::TokenClient;
 use soroban_sdk::{
     auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation},
-    panic_with_error, Address, Env, IntoVal, Symbol,
+    panic_with_error, Address, Env, IntoVal, String, Symbol,
 };
 
 use crate::{
@@ -113,6 +113,7 @@ pub(crate) fn process_bid(
     config: &AuctionConfig,
     bidder: &Address,
     amount: i128,
+    comment: &String,
 ) {
     let last_bidder = auction.highest_bidder.clone();
     let last_bid = auction.highest_bid;
@@ -158,6 +159,7 @@ pub(crate) fn process_bid(
         amount,
         extended,
         auction.end_time,
+        comment,
     );
 }
 

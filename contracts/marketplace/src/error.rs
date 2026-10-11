@@ -35,4 +35,8 @@ pub enum MarketplaceError {
     FeeAboveMax = 7714,
     /// The listing price exceeds the buyer's `max_price`
     PriceAboveMax = 7715,
+    /// Comment body is empty
+    CommentEmpty = 7716,
+    /// Comment body exceeds `MAX_COMMENT_LENGTH`
+    CommentTooLong = 7717,
 }

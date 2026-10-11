@@ -2,6 +2,7 @@ import { Client as MarketplaceClient } from '@builder-stellar/marketplace-bindin
 import type { ManagerDao, MarketplacePrimaryListing, MarketplaceSecondaryListing } from '@prisma/client';
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
+import { supportsComments } from '@/lib/comments';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { prisma } from '@/lib/prisma';
 
@@ -16,6 +17,7 @@ import {
 } from './query';
 import type {
   DaoMarketplace,
+  MarketplaceComments,
   MarketplaceCommunity,
   MarketplaceDirectory,
   MarketplaceListing,
@@ -194,6 +196,50 @@ export async function marketplaceListing(
   const listing = mapListing(row, kind);
   assertMarketplaceIdentity(listing, community);
   return listing;
+}
+
+/**
+ * Event-only comments, oldest first: a primary listing's by listing id, a resale's by token id (so
+ * the thread carries over relistings). `commentsEnabled` is false until the marketplace runs 0.2.0.
+ */
+export async function marketplaceComments(
+  community: MarketplaceCommunity,
+  kind: 'primary' | 'secondary',
+  id: string
+): Promise<MarketplaceComments> {
+  let parsed: bigint;
+  try {
+    parsed = marketplaceId(id, kind);
+  } catch {
+    throw new MarketplaceError('Invalid listing identifier.', 400);
+  }
+  const scope = marketplaceScope(DEPLOYMENT_ID, community.daoId, community.marketplaceContract ?? '');
+  const orderBy = [
+    { eventLedger: 'asc' as const },
+    { transactionIndex: 'asc' as const },
+    { eventIndex: 'asc' as const }
+  ];
+  const [rows, version] = await Promise.all([
+    kind === 'primary'
+      ? prisma.marketplacePrimaryListingComment.findMany({ where: { ...scope, listingId: parsed }, orderBy, take: 200 })
+      : prisma.marketplaceListingComment.findMany({ where: { ...scope, tokenId: parsed }, orderBy, take: 200 }),
+    marketplaceClient(community)
+      .version()
+      .then(({ result }) => result)
+      .catch(() => undefined)
+  ]);
+  return {
+    deploymentId: DEPLOYMENT_ID,
+    daoId: community.daoId,
+    commentsEnabled: supportsComments(version),
+    items: rows.map((row) => ({
+      id: row.commentEventId,
+      author: row.author,
+      body: row.body,
+      timestamp: row.eventAt?.getTime() ? Math.floor(row.eventAt.getTime() / 1000) : null,
+      txHash: row.transactionHash
+    }))
+  };
 }
 
 export async function daoMarketplace(daoId: string, params: URLSearchParams): Promise<DaoMarketplace> {

@@ -57,7 +57,15 @@ export const CustomGovernorError = {
   /**
    * The proposal is queued but its ETA has not been reached
    */
-  7513 : { message: "ProposalNotReady" }
+  7513 : { message: "ProposalNotReady" },
+  /**
+   * Comment body is empty
+   */
+  7514 : { message: "CommentEmpty" },
+  /**
+   * Comment body or vote reason exceeds `MAX_PROPOSAL_COMMENT_LENGTH`
+   */
+  7515 : { message: "CommentTooLong" }
 }
 
 /**
@@ -90,6 +98,18 @@ export interface QuorumBpsChangedEvent {
     changed_by: string;
     old_value?: number;
     new_value?: number;
+  };
+}
+
+/**
+ * A comment on a proposal. Event-only: the body is never stored on-chain.
+ */
+export interface ProposalCommentedEvent {
+  name: "ProposalCommented";
+  data: {
+    proposal_id: Uint8Array;
+    author: string;
+    body?: string;
   };
 }
 
@@ -525,5 +545,5 @@ export interface ProposalCancelledEvent {
     proposal_id: Uint8Array;
   };
 }
-    export type ContractEvent = ProposalQueuedEvent | GovernorLaunchedEvent | QuorumBpsChangedEvent | ProposalScheduledEvent | QueueDelayChangedEvent | VotingDelayChangedEvent | GovernorInitializedEvent | VotingPeriodChangedEvent | ProposalThresholdChangedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VersionSyncedEvent | VoteCastEvent | QuorumChangedEvent | ProposalCreatedEvent | ProposalExecutedEvent | ProposalCancelledEvent;
+    export type ContractEvent = ProposalQueuedEvent | GovernorLaunchedEvent | QuorumBpsChangedEvent | ProposalCommentedEvent | ProposalScheduledEvent | QueueDelayChangedEvent | VotingDelayChangedEvent | GovernorInitializedEvent | VotingPeriodChangedEvent | ProposalThresholdChangedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VersionSyncedEvent | VoteCastEvent | QuorumChangedEvent | ProposalCreatedEvent | ProposalExecutedEvent | ProposalCancelledEvent;
     

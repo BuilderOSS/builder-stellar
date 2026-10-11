@@ -13,6 +13,7 @@ import { useMarketplaceReadiness } from '@/lib/marketplace/hooks';
 import type { MarketplaceAction, MarketplaceCommunity, MarketplaceListing } from '@/lib/marketplace/types';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
+import { ListingComments } from './listing-comments';
 import styles from './marketplace-styles';
 import { TradeReview } from './trade-review';
 
@@ -197,6 +198,7 @@ export function ListingCard({
               </Button>
             </>
           ) : null}
+          {trading ? <ListingComments listing={listing} /> : null}
           <Link href={`/dao/${community.daoId}/marketplace?status=all`}>All listings and sales</Link>
         </div>
       ) : null}

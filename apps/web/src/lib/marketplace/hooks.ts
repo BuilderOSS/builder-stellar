@@ -7,6 +7,7 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import type {
   DaoMarketplace,
+  MarketplaceComments,
   MarketplaceDirectory,
   MarketplaceInventory,
   MarketplaceListing,
@@ -64,6 +65,16 @@ export function useMarketplaceListing(daoId: string, kind: string, id: string, e
   return useSWR<{ deploymentId: string; daoId: string; listing: MarketplaceListing }>(
     id && eventId && ['primary', 'secondary'].includes(kind)
       ? marketplaceKey(daoId, 'listing', `/api/dao/${encodeURIComponent(daoId)}/marketplace/listing?${query}`)
+      : null,
+    fetchKey,
+    options
+  );
+}
+export function useMarketplaceComments(daoId: string, kind: string, id: string, enabled: boolean) {
+  const query = new URLSearchParams({ kind, id }).toString();
+  return useSWR<MarketplaceComments>(
+    enabled && id
+      ? marketplaceKey(daoId, 'comments', `/api/dao/${encodeURIComponent(daoId)}/marketplace/comments?${query}`)
       : null,
     fetchKey,
     options
