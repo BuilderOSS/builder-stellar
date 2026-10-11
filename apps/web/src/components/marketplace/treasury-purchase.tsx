@@ -4,6 +4,7 @@ import { Client as MarketplaceClient } from '@builder-stellar/marketplace-bindin
 import { type AuthNode, Client as TreasuryClient } from '@builder-stellar/treasury-bindings';
 import { useState } from 'react';
 
+import { Button, Callout, Field, FieldLabel, Input } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { readSource } from '@/lib/dao-config';
 import { formatMarketplaceAmount, marketplaceFee } from '@/lib/marketplace/amount';
@@ -106,19 +107,22 @@ export function TreasuryPurchase({
           authorization for exactly the listing&apos;s payment transfers, then the purchase at no more than the current
           price.
         </p>
-        <label>
-          Listed token ID
-          <input
+        <Field>
+          <FieldLabel htmlFor="treasury-purchase-token">Listed token ID</FieldLabel>
+          <Input
+            id="treasury-purchase-token"
             inputMode="numeric"
             value={tokenId}
             placeholder="Token ID"
             onChange={(e) => setTokenId(e.target.value)}
           />
-        </label>
-        <button type="button" disabled={!enabled || busy} onClick={() => void prepare()}>
-          {busy ? 'Checking listing…' : 'Add Treasury purchase to proposal'}
-        </button>
-        {message ? <p role="alert">{message}</p> : null}
+        </Field>
+        <div>
+          <Button variant="secondary" disabled={!enabled} loading={busy} onClick={() => void prepare()}>
+            Add Treasury purchase to proposal
+          </Button>
+        </div>
+        {message ? <Callout variant="warning" title={message} role="alert" /> : null}
       </div>
     </section>
   );

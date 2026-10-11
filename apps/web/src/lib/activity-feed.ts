@@ -1,10 +1,18 @@
+import { activeNetworkName } from '@/lib/active-network';
+import { getTreasuryAssets } from '@/lib/assets-config';
 import { formatStroops } from '@/lib/auction-values';
 import type { DashboardFeedItem, GoldskyActivityItem } from '@/lib/goldsky-queries';
 import { parseProposalMetadata } from '@/lib/proposal-metadata';
 
 type ActivityItem =
-  | Pick<GoldskyActivityItem, 'event_name' | 'topics' | 'args' | 'token_id' | 'amount' | 'summary' | 'title'>
-  | Pick<DashboardFeedItem, 'event_name' | 'topics' | 'args' | 'token_id' | 'amount' | 'summary' | 'title'>;
+  | Pick<
+      GoldskyActivityItem,
+      'event_name' | 'topics' | 'args' | 'token_id' | 'amount' | 'summary' | 'title' | 'payment_asset'
+    >
+  | Pick<
+      DashboardFeedItem,
+      'event_name' | 'topics' | 'args' | 'token_id' | 'amount' | 'summary' | 'title' | 'payment_asset'
+    >;
 type LinkableItem = ActivityItem & { proposal_id?: string | null };
 
 export type ActivityCategory = 'Governance' | 'Auction' | 'Market' | 'Membership' | 'DAO';
@@ -41,11 +49,15 @@ export function shortAddress(value: string | undefined) {
   return /^[GC][A-Z2-7]{55}$/.test(value) ? `${value.slice(0, 4)}…${value.slice(-4)}` : value;
 }
 
-/** Payment amounts are SAC base units with 7 decimals (XLM, USDC). */
-function amount(value: string | undefined) {
+/** Payment amounts are SAC base units with 7 decimals (XLM, USDC), shown with the asset's code when known. */
+function amount(value: string | undefined, paymentAsset?: string | null) {
   if (!value || !/^\d+$/.test(value)) return undefined;
   try {
-    return formatStroops(value);
+    const formatted = formatStroops(value);
+    const code = paymentAsset
+      ? getTreasuryAssets(activeNetworkName()).find((asset) => asset.contractId === paymentAsset)?.code
+      : undefined;
+    return code ? `${formatted} ${code}` : formatted;
   } catch {
     return undefined;
   }
@@ -59,7 +71,7 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
   const event = (item.event_name ?? '').toLowerCase().replace(/_/g, '');
   const token = firstValue(item.token_id, topics.token_id, args.token_id);
   const tokenLabel = token === undefined ? 'a token' : `#${token}`;
-  const value = amount(firstValue(item.amount, args.amount, args.price));
+  const value = amount(firstValue(item.amount, args.amount, args.price), item.payment_asset);
   const base = daoId ? `/dao/${daoId}` : undefined;
   const proposalId = firstValue(item.proposal_id, topics.proposal_id);
   const proposalHref = base && proposalId ? `${base}/proposals/${proposalId}` : undefined;

@@ -24,6 +24,21 @@ describe('activity feed rows', () => {
     ).toEqual({ category: 'Auction', title: 'GCLG…U6CO bid 120 on #30', href: '/dao/dao/auctions' });
   });
 
+  it('names the payment asset when the feed knows it', () => {
+    const testnetXlm = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC';
+    expect(
+      formatActivity(
+        item({
+          token_id: '31',
+          amount: '100000000',
+          topics: JSON.stringify({ bidder: ALICE }),
+          payment_asset: testnetXlm
+        }),
+        'dao'
+      ).title
+    ).toBe('GCLG…U6CO bid 10 XLM on #31');
+  });
+
   it('names the proposal and links votes to it', () => {
     const created = formatActivity(
       item({

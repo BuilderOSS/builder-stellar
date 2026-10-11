@@ -1,12 +1,25 @@
 'use client';
 
-import Link from 'next/link';
+import { RefreshCw, Upload } from 'lucide-react';
+import type { Route } from 'next';
 import { useRef, useState } from 'react';
+import { css } from 'styled-system/css';
 import { useSWRConfig } from 'swr';
 
-import { Address, Disclosure } from '@/components/ui';
+import {
+  Address,
+  Button,
+  ButtonLink,
+  Callout,
+  Disclosure,
+  Field,
+  FieldLabel,
+  Pagination,
+  Textarea
+} from '@/components/ui';
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
+import { formatStroops } from '@/lib/auction-values';
 import { claimFetch, useClaimHistory, useCurrentClaims } from '@/lib/minter/hooks';
 import { assertPreparedIdentity } from '@/lib/minter/identity';
 import { parseProofFile, verifyClaimProof } from '@/lib/minter/proof';
@@ -29,6 +42,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
   const history = useClaimHistory(config.tokenContractId, page);
   const { mutate } = useSWRConfig();
   const [proofText, setProofText] = useState('');
+  const proofInput = useRef<HTMLInputElement>(null);
   const [review, setReview] = useState<{ action: ClaimAction; prepared: PreparedClaim; state: ClaimState } | null>(
     null
   );
@@ -172,10 +186,12 @@ export function Claims({ admin = false }: { admin?: boolean }) {
           pay a small network fee in XLM.
         </p>
         <div className={styles.row}>
-          <Link href={{ pathname: `${base}/${admin ? 'claims' : 'admin/claims'}` }}>
+          <ButtonLink href={`${base}/${admin ? 'claims' : 'admin/claims'}` as Route} variant="secondary" size="sm">
             {admin ? 'See the member view' : 'Manage allocations'}
-          </Link>
-          <button
+          </ButtonLink>
+          <Button
+            variant="ghost"
+            size="sm"
             disabled={busy}
             onClick={() => {
               setReview(null);
@@ -183,11 +199,14 @@ export function Claims({ admin = false }: { admin?: boolean }) {
               void history.mutate();
             }}
           >
+            <RefreshCw aria-hidden="true" />
             Refresh
-          </button>
+          </Button>
         </div>
         {current.isLoading ? <p role="status">Checking what you can claim…</p> : null}
-        {current.error ? <p role="alert">{current.error.message}</p> : null}
+        {current.error ? (
+          <Callout variant="error" title="Claims didn't load" description={current.error.message} />
+        ) : null}
         {data ? (
           <>
             {!data.live ? <p>Claims open once the community launches.</p> : null}
@@ -233,19 +252,21 @@ export function Claims({ admin = false }: { admin?: boolean }) {
               <br />
               Status: {marker(data?.allowlist.claimed, 'already claimed', 'not claimed yet')}
             </p>
-            <button
-              disabled={
-                !allowed ||
-                busy ||
-                Boolean(hash) ||
-                data?.allowlist.round == null ||
-                data?.allowlist.amount == null ||
-                data?.allowlist.claimed === true
-              }
-              onClick={() => prepare('allowlist')}
-            >
-              Claim
-            </button>
+            <div>
+              <Button
+                disabled={
+                  !allowed ||
+                  busy ||
+                  Boolean(hash) ||
+                  data?.allowlist.round == null ||
+                  data?.allowlist.amount == null ||
+                  data?.allowlist.claimed === true
+                }
+                onClick={() => prepare('allowlist')}
+              >
+                Claim
+              </Button>
+            </div>
           </section>
           <section className={styles.panel}>
             <h2>Claim with a proof</h2>
@@ -258,10 +279,24 @@ export function Claims({ admin = false }: { admin?: boolean }) {
               The organizer gives you a small proof file with your amount. Upload it or paste it below; we check it
               before you sign.
             </p>
-            <label>
-              Proof file
+            <Field>
+              <FieldLabel htmlFor="claim-proof-file">Proof file</FieldLabel>
+              <div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={busy || Boolean(hash)}
+                  onClick={() => proofInput.current?.click()}
+                >
+                  <Upload aria-hidden="true" />
+                  Choose a proof file
+                </Button>
+              </div>
               <input
+                ref={proofInput}
+                id="claim-proof-file"
                 type="file"
+                hidden
                 accept=".json,application/json"
                 disabled={busy || Boolean(hash)}
                 onChange={async (event) => {
@@ -278,12 +313,15 @@ export function Claims({ admin = false }: { admin?: boolean }) {
                     setProofText('');
                     setMessage(error instanceof Error ? error.message : 'Invalid proof file.');
                   }
+                  event.target.value = '';
                 }}
               />
-            </label>
-            <label>
-              Or paste it
-              <textarea
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="claim-proof-text">Or paste it</FieldLabel>
+              <Textarea
+                id="claim-proof-text"
+                className={css({ textStyle: 'mono', fontSize: '0.8125rem' })}
                 value={proofText}
                 placeholder={'{"amount":"5","proof":[]}'}
                 disabled={busy || Boolean(hash)}
@@ -292,30 +330,31 @@ export function Claims({ admin = false }: { admin?: boolean }) {
                   setReview(null);
                 }}
               />
-            </label>
-            <button
-              disabled={
-                !allowed ||
-                busy ||
-                Boolean(hash) ||
-                !proofText ||
-                !data?.merkle.root ||
-                data.merkle.round === null ||
-                data.merkle.claimed === true
-              }
-              onClick={() => prepare('merkle')}
-            >
-              Check proof
-            </button>
+            </Field>
+            <div>
+              <Button
+                variant="secondary"
+                disabled={
+                  !allowed ||
+                  busy ||
+                  Boolean(hash) ||
+                  !proofText ||
+                  !data?.merkle.root ||
+                  data.merkle.round === null ||
+                  data.merkle.claimed === true
+                }
+                onClick={() => prepare('merkle')}
+              >
+                Check proof
+              </Button>
+            </div>
           </section>
         </div>
       )}
       {review ? (
         <section className={`${styles.panel} ${styles.review}`} aria-label="Claim transaction review">
           <h2>Claim {review.prepared.amount} tokens</h2>
-          <p>
-            Network fee: {review.prepared.fee} stroops (10,000,000 stroops = 1 XLM). The tokens themselves are free.
-          </p>
+          <p>Network fee: {formatStroops(review.prepared.fee)} XLM. The tokens themselves are free.</p>
           <Disclosure title="Technical details">
             <p>
               Method: {review.prepared.method} · round {review.prepared.round}. Signing authorizes the Minter claim and
@@ -326,12 +365,12 @@ export function Claims({ admin = false }: { admin?: boolean }) {
             <Address value={review.prepared.minterContractId} label="Minter" />
           </Disclosure>
           <div className={styles.row}>
-            <button disabled={busy || !allowed} onClick={sign}>
-              Sign and claim
-            </button>
-            <button disabled={busy} onClick={() => setReview(null)}>
+            <Button variant="ghost" disabled={busy} onClick={() => setReview(null)}>
               Cancel
-            </button>
+            </Button>
+            <Button disabled={!allowed} loading={busy} onClick={sign}>
+              Sign and claim
+            </Button>
           </div>
         </section>
       ) : null}
@@ -355,7 +394,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
           round.
         </p>
         {history.error ? (
-          <p role="alert">{history.error.message}</p>
+          <Callout variant="error" title="Past claims didn't load" description={history.error.message} />
         ) : history.isLoading ? (
           <p role="status">Loading past claims…</p>
         ) : history.data ? (
@@ -366,8 +405,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
                 {history.data.items.map((item) => (
                   <li key={item.claim_id}>
                     <p>
-                      {item.amount ?? 'Some'} tokens · {item.claim_type === 'merkle' ? 'with a proof' : 'from the list'}{' '}
-                      · ledger {item.ledger_sequence}
+                      {item.amount ?? 'Some'} tokens · {item.claim_type === 'merkle' ? 'with a proof' : 'from the list'}
                     </p>
                     {item.recipient ? <Address value={item.recipient} label="Recipient" compact /> : null}
                     {item.transaction_hash ? (
@@ -379,15 +417,14 @@ export function Claims({ admin = false }: { admin?: boolean }) {
             ) : (
               <p>No claims yet. A claim you just made can take a moment to show up.</p>
             )}
-            <div className={styles.row}>
-              <button disabled={page === 0} onClick={() => setPage(page - 1)}>
-                Previous
-              </button>
-              <span>Page {page + 1}</span>
-              <button disabled={!history.data.hasMore || page >= 5000} onClick={() => setPage(page + 1)}>
-                Next
-              </button>
-            </div>
+            <Pagination
+              label="Past claim pages"
+              page={page + 1}
+              hasPrevious={page > 0}
+              hasNext={Boolean(history.data.hasMore) && page < 5000}
+              onPrevious={() => setPage(page - 1)}
+              onNext={() => setPage(page + 1)}
+            />
           </>
         ) : null}
       </section>

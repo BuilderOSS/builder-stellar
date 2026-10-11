@@ -14,7 +14,7 @@ import type { ArtworkPlan } from '@/components/create-dao/artwork-configuration'
 import { ArtworkDirectoryUpload } from '@/components/create-dao/ArtworkDirectoryUpload';
 import { ArtworkSetup } from '@/components/create-dao/ArtworkSetup';
 import { PageSection } from '@/components/page-section';
-import { Button, Callout, Card, Heading, Input, ShortId, Text } from '@/components/ui';
+import { Button, Callout, Card, Field, FieldLabel, Heading, Input, ShortId, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { assertAdminCallSupported } from '@/lib/admin-registered-call';
@@ -231,8 +231,8 @@ export default function ArtworkAdminPage() {
                         <Text overflowWrap="anywhere">
                           Current {label.toLowerCase()}: {artwork.data!.settings[key] || 'Not set'}
                         </Text>
-                        <label htmlFor={key}>
-                          {label}
+                        <Field>
+                          <FieldLabel htmlFor={key}>{label}</FieldLabel>
                           <Input
                             id={key}
                             name={key}
@@ -242,7 +242,7 @@ export default function ArtworkAdminPage() {
                             disabled={busy || (!direct && !canPropose)}
                             onChange={(event) => setEdits((current) => ({ ...current, [type]: event.target.value }))}
                           />
-                        </label>
+                        </Field>
                         {direct || (canPropose && registered) ? (
                           <Button
                             type="button"

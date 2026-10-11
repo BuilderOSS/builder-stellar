@@ -34,6 +34,39 @@ const PUBLIC_VISIBILITY = ['public', 'governance'];
 /** The indexer curates visibility: public feeds read only the public/governance rows. */
 const PUBLIC_FEED_FILTER = { visibility: { in: PUBLIC_VISIBILITY } };
 
+type FeedRowForAsset = { daoId: string | null; contractRole: string; tokenId: string | null; args: string };
+
+/**
+ * The payment asset (SAC contract id) behind each feed row's amount, so amounts can carry a unit.
+ * Market events name it in their args; auction events take it from the auction for that token,
+ * which stays right even if the community later changes the auction's payment asset.
+ */
+async function feedPaymentAssets(deploymentId: string, rows: FeedRowForAsset[]) {
+  const auctionRows = rows.filter(
+    (row) => row.contractRole === 'auction' && row.daoId && /^\d+$/.test(row.tokenId ?? '')
+  );
+  const auctions = auctionRows.length
+    ? await prisma.auctionAuction.findMany({
+        where: {
+          deploymentId,
+          daoId: { in: [...new Set(auctionRows.map((row) => row.daoId!))] },
+          tokenId: { in: [...new Set(auctionRows.map((row) => BigInt(row.tokenId!)))] }
+        },
+        select: { daoId: true, tokenId: true, paymentToken: true }
+      })
+    : [];
+  const byAuction = new Map(auctions.map((row) => [`${row.daoId}:${row.tokenId}`, row.paymentToken]));
+  return rows.map((row) => {
+    if (row.contractRole === 'auction') return byAuction.get(`${row.daoId}:${row.tokenId}`) ?? null;
+    try {
+      const args = JSON.parse(row.args) as { payment_asset?: unknown };
+      return typeof args?.payment_asset === 'string' ? args.payment_asset : null;
+    } catch {
+      return null;
+    }
+  });
+}
+
 function mapProposalList(row: AppProposalList) {
   return {
     proposal_id: row.proposalId,
@@ -195,9 +228,11 @@ export async function getGoldskyActivityFeed(
     }),
     prisma.appActivityFeed.count({ where })
   ]);
+  const paymentAssets = await feedPaymentAssets(deploymentId, rows);
 
   return {
-    items: rows.map((row) => ({
+    items: rows.map((row, index) => ({
+      payment_asset: paymentAssets[index],
       activity_id: row.activityId,
       contract_id: row.contractId,
       contract_role: row.contractRole,
@@ -595,6 +630,7 @@ export async function getDashboardData(address: string, params: { limit?: number
     })
   ]);
   const daoById = new Map(myDaoCandidates.map((row) => [row.daoId, row]));
+  const paymentAssets = await feedPaymentAssets(deploymentId, feedRows);
   // Collection images live on the metadata configuration, not the manager row.
   const images = new Map(
     (
@@ -617,8 +653,9 @@ export async function getDashboardData(address: string, params: { limit?: number
       status: row.status
     })),
     feed: {
-      items: feedRows.map((row) => ({
+      items: feedRows.map((row, index) => ({
         activity_id: row.activityId,
+        payment_asset: paymentAssets[index],
         dao_id: row.daoId,
         contract_role: row.contractRole,
         event_name: row.eventName,

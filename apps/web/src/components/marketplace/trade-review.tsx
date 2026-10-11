@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
+import { css } from 'styled-system/css';
 import { useSWRConfig } from 'swr';
 
+import { Address, Button, Callout, Dialog } from '@/components/ui';
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { getExplorerTxUrl } from '@/lib/explorer-links';
@@ -19,7 +21,19 @@ import type { MarketplaceAction, MarketplacePrepared } from '@/lib/marketplace/t
 import { readSigningWallet, signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
-import styles from './marketplace-styles';
+const line = css({ textStyle: 'body', color: 'ink', m: '0' });
+const muted = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
+const box = css({ display: 'grid', gap: '2', p: '3.5', borderRadius: 'control', bg: 'raised' });
+
+const ACTION_TITLE: Record<MarketplaceAction['action'], string> = {
+  buy: 'Buy this token',
+  cancel: 'Cancel your listing',
+  expire: 'Clear an ended listing',
+  approve: 'Allow the market to hold your token',
+  list: 'List your token',
+  revoke: 'Take back the permission',
+  trustline: 'Add a USDC trustline'
+};
 
 export function TradeReview({
   daoId,
@@ -34,7 +48,6 @@ export function TradeReview({
 }) {
   const session = useAuthSessionStore();
   const { mutate } = useSWRConfig();
-  const dialog = useRef<HTMLDialogElement>(null);
   const [prepared, setPrepared] = useState<MarketplacePrepared | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('Check the details first. Nothing is signed until you press Sign and send.');
@@ -43,10 +56,6 @@ export function TradeReview({
   const inFlight = useRef(false);
   const network = getDeploymentConfig();
   const allowed = session.authStatus === 'authenticated' && Boolean(session.address) && !session.walletNetworkIssue;
-  useEffect(() => {
-    dialog.current?.showModal();
-  }, []);
-
   async function prepare() {
     if (inFlight.current || !allowed) return;
     inFlight.current = true;
@@ -171,70 +180,62 @@ export function TradeReview({
     }
   }
   return (
-    <dialog
-      ref={dialog}
-      className={styles.dialog}
-      aria-labelledby="trade-title"
-      onCancel={(e) => {
-        if (busy) e.preventDefault();
-        else onClose();
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !busy) onClose();
       }}
-    >
-      <div className={styles.stack}>
-        <div className={styles.row}>
-          <h2 id="trade-title">Review your trade</h2>
-          <button type="button" disabled={busy} onClick={onClose} aria-label="Close transaction review">
-            Close
-          </button>
-        </div>
-        <p className={styles.eyebrow}>
-          {action.action} · {network.label}
-        </p>
-        {'id' in action ? (
-          <p>
-            {action.kind === 'primary' ? 'New token listing' : 'Token'} #{action.id}
-          </p>
-        ) : null}
-        {'tokenId' in action ? <p>Token #{action.tokenId}</p> : null}
-        {!allowed ? <p role="alert">{session.walletNetworkIssue || 'Connect your wallet to trade.'}</p> : null}
-        <p role="status" aria-live="polite">
-          {message}
-        </p>
-        {prepared ? (
-          <div className={styles.notice}>
-            <p>{prepared.summary}</p>
-            <p>
-              Network fee: <strong>{formatMarketplaceAmount(prepared.fee)} XLM</strong>
-            </p>
-            <p className={styles.address}>Signer: {prepared.address}</p>
-          </div>
-        ) : null}
-        {hash ? (
-          <div className={styles.notice}>
-            <p className={styles.address}>Transaction: {hash}</p>
-            {network.name !== 'local' ? (
-              <a href={getExplorerTxUrl(network.name, hash)} target="_blank" rel="noreferrer">
-                View transaction ↗
-              </a>
-            ) : null}
-          </div>
-        ) : null}
-        {!confirmed && !hash ? (
-          <button
-            type="button"
-            className={styles.primary}
-            data-variant="primary"
-            disabled={!allowed || busy}
-            onClick={prepared ? sign : prepare}
-          >
-            {busy ? 'One moment' : prepared ? 'Sign and send' : 'Check'}
-          </button>
+      closeOnInteractOutside={!busy}
+      title={ACTION_TITLE[action.action]}
+      description={network.label}
+      footer={
+        !confirmed && !hash ? (
+          <>
+            <Button variant="ghost" disabled={busy} onClick={onClose}>
+              Close
+            </Button>
+            <Button disabled={!allowed} loading={busy} onClick={prepared ? sign : prepare}>
+              {prepared ? 'Sign and send' : 'Check'}
+            </Button>
+          </>
         ) : (
-          <button type="button" disabled={busy} onClick={onClose}>
+          <Button variant="secondary" disabled={busy} onClick={onClose}>
             Done
-          </button>
-        )}
-      </div>
-    </dialog>
+          </Button>
+        )
+      }
+    >
+      {'id' in action ? (
+        <p className={line}>
+          {action.kind === 'primary' ? 'New token listing' : 'Token'} #{action.id}
+        </p>
+      ) : null}
+      {'tokenId' in action ? <p className={line}>Token #{action.tokenId}</p> : null}
+      {!allowed ? (
+        <Callout variant="warning" title={session.walletNetworkIssue || 'Connect your wallet to trade.'} />
+      ) : null}
+      <p className={muted} role="status" aria-live="polite">
+        {message}
+      </p>
+      {prepared ? (
+        <div className={box}>
+          <p className={line}>{prepared.summary}</p>
+          <p className={line}>
+            Network fee: <strong>{formatMarketplaceAmount(prepared.fee)} XLM</strong>
+          </p>
+          <Address value={prepared.address} label="Signer" compact />
+        </div>
+      ) : null}
+      {hash ? (
+        <div className={box}>
+          <Address
+            value={hash}
+            label="Transaction"
+            compact
+            explorerUrl={network.name !== 'local' ? getExplorerTxUrl(network.name, hash) : undefined}
+          />
+        </div>
+      ) : null}
+    </Dialog>
   );
 }

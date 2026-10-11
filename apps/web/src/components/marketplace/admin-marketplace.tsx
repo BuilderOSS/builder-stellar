@@ -1,17 +1,20 @@
 'use client';
 
-import Link from 'next/link';
+import { ChevronLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 
+import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
+import { AmountInput, Button, ButtonLink, Callout, Field, FieldLabel, Input } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
+import { daoRoute } from '@/lib/dao-routes';
 import { formatMarketplaceAmount, marketplaceId, parseMarketplaceAmount } from '@/lib/marketplace/amount';
 import { marketplaceAssetLabel } from '@/lib/marketplace/asset-label';
 import { marketplaceGovernanceAction, marketplaceSettingHandlers } from '@/lib/marketplace/governance';
 import { useDaoMarketplace } from '@/lib/marketplace/hooks';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import type { ActionHandler, ProposalQueuedAction } from '@/lib/proposal-actions/types';
-import { type PendingAdminProposal, useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
+import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import styles from './marketplace-styles';
@@ -74,7 +77,12 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
   return (
     <div className={styles.scoped}>
       <div className={styles.stack}>
-        <Link href={`/dao/${routeId}/marketplace`}>← Community marketplace</Link>
+        <div>
+          <ButtonLink href={daoRoute(routeId, 'marketplace')} variant="ghost" size="sm">
+            <ChevronLeft aria-hidden="true" />
+            Community market
+          </ButtonLink>
+        </div>
         <section className={styles.hero}>
           <p className={styles.eyebrow}>Governance administration</p>
           <h1>Manage the marketplace</h1>
@@ -84,7 +92,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
           </p>
         </section>
         {isLoading ? <p role="status">Verifying marketplace state…</p> : null}
-        {error ? <p role="alert">{error.message}</p> : null}
+        {error ? <Callout variant="error" title="The market didn't load" description={error.message} /> : null}
         {data ? (
           <section className={styles.notice}>
             <strong>
@@ -128,55 +136,67 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
               </p>
             ) : null}
             <div className={styles.formGrid}>
-              <label>
-                Price ({data?.config ? marketplaceAssetLabel(data.network, data.config.paymentAsset) : 'payment SAC'})
-                <input
+              <Field>
+                <FieldLabel htmlFor="primary-price">Price</FieldLabel>
+                <AmountInput
+                  id="primary-price"
+                  unit={data?.config ? marketplaceAssetLabel(data.network, data.config.paymentAsset) : '—'}
                   inputMode="decimal"
                   value={price}
-                  placeholder="10.0000000"
+                  placeholder="10"
                   onChange={(e) => setPrice(e.target.value)}
                 />
-              </label>
-              <label>
-                Expiry (local time)
-                <input type="datetime-local" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
-              </label>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="primary-expiry">Expiry (local time)</FieldLabel>
+                <Input
+                  id="primary-expiry"
+                  type="datetime-local"
+                  value={expiresAt}
+                  onChange={(e) => setExpiresAt(e.target.value)}
+                />
+              </Field>
             </div>
-            <button
-              type="button"
-              className={styles.primary}
-              data-variant="primary"
-              disabled={!enabled}
-              onClick={() => queue('create')}
-            >
-              Add create-listing action to proposal
-            </button>
+            <div>
+              <Button disabled={!enabled} onClick={() => queue('create')}>
+                Add create-listing action to proposal
+              </Button>
+            </div>
           </div>
         </section>
         <section className={styles.panel}>
           <div className={styles.stack}>
             <h2>Propose cancelling a primary listing</h2>
-            <label>
-              Primary listing ID
-              <input
+            <Field>
+              <FieldLabel htmlFor="primary-listing-id">Primary listing ID</FieldLabel>
+              <Input
+                id="primary-listing-id"
                 inputMode="numeric"
                 value={listingId}
                 placeholder="Listing ID, not a token ID"
                 onChange={(e) => setListingId(e.target.value)}
               />
-            </label>
+            </Field>
             {data?.listings.length ? (
               <div className={styles.row}>
                 {data.listings.map((l) => (
-                  <button type="button" key={l.eventId} onClick={() => setListingId(l.id)}>
+                  <Button
+                    key={l.eventId}
+                    variant="secondary"
+                    size="sm"
+                    aria-pressed={listingId === l.id}
+                    onClick={() => setListingId(l.id)}
+                  >
                     Select listing #{l.id}
-                  </button>
+                  </Button>
                 ))}
               </div>
             ) : null}
-            <button type="button" disabled={!enabled} onClick={() => queue('cancel')}>
-              Add cancellation action to proposal
-            </button>
+            <div>
+              <Button variant="secondary" disabled={!enabled} onClick={() => queue('cancel')}>
+                Add cancellation action to proposal
+              </Button>
+            </div>
           </div>
         </section>
         <TreasuryPurchase daoId={daoId} enabled={enabled} proposal={proposal} />
@@ -211,17 +231,15 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
             composer.
           </p>
         ) : null}
-        {message ? <p role="alert">{message}</p> : null}
-        {proposal.pending ? (
-          <MarketplaceDraftReview
-            pending={proposal.pending}
-            onCancel={proposal.cancel}
-            onResolve={(resolution) => {
-              proposal.resolve(resolution);
-              router.push(`/dao/${routeId}/proposals/create`);
-            }}
-          />
-        ) : null}
+        {message ? <Callout variant="warning" title={message} role="alert" /> : null}
+        <AdminProposalDraftDialog
+          pending={proposal.pending}
+          onCancel={proposal.cancel}
+          onResolve={(resolution) => {
+            proposal.resolve(resolution);
+            router.push(`/dao/${routeId}/proposals/create`);
+          }}
+        />
       </div>
     </div>
   );
@@ -263,7 +281,11 @@ function MarketplaceSettings({
             intentionally unavailable.
           </p>
         )}
-        <Link href={`/dao/${routeId}/proposals`}>View governance proposals</Link>
+        <div>
+          <ButtonLink href={daoRoute(routeId, 'proposals')} variant="ghost" size="sm">
+            View governance proposals
+          </ButtonLink>
+        </div>
       </div>
     </section>
   );
@@ -287,58 +309,12 @@ function MarketplaceSetting({
       <div className={styles.stack}>
         <h3>{handler.label}</h3>
         <Form value={draft} onChange={setDraft} disabled={!enabled} network={network} />
-        <button type="button" disabled={!enabled} onClick={() => onQueue(handler, draft)}>
-          Review {handler.label.toLowerCase()} proposal
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function MarketplaceDraftReview({
-  pending,
-  onCancel,
-  onResolve
-}: {
-  pending: PendingAdminProposal;
-  onCancel: () => void;
-  onResolve: (resolution: 'add' | 'replace' | 'keep') => void;
-}) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    ref.current?.showModal();
-  }, []);
-  const duplicate = pending.findings.some((f) => f.kind === 'duplicate');
-  const conflict = pending.findings.some((f) => f.kind === 'conflict');
-  return (
-    <dialog ref={ref} className={styles.dialog} aria-labelledby="draft-review-title" onCancel={onCancel}>
-      <div className={styles.stack}>
-        <h2 id="draft-review-title">Review proposal draft</h2>
-        <p>{pending.metadata.description}</p>
-        <p>This changes only a local proposal draft. No signature or direct admin transaction is requested.</p>
-        <p className={styles.address}>Target role: marketplace · DAO {pending.daoId}</p>
-        {pending.summaries.map((summary) => (
-          <p key={summary}>{summary}</p>
-        ))}
-        {pending.findings.map((finding, index) => (
-          <p key={`${finding.kind}:${index}`}>{finding.message}</p>
-        ))}
-        <div className={styles.row}>
-          <button type="button" onClick={onCancel}>
-            Cancel
-          </button>
-          {conflict ? (
-            <button type="button" onClick={() => onResolve('replace')}>
-              Replace conflicting action
-            </button>
-          ) : null}
-          {!duplicate && !conflict ? (
-            <button type="button" className={styles.primary} data-variant="primary" onClick={() => onResolve('add')}>
-              Add to draft & open composer
-            </button>
-          ) : null}
+        <div>
+          <Button variant="secondary" disabled={!enabled} onClick={() => onQueue(handler, draft)}>
+            Review {handler.label.toLowerCase()} proposal
+          </Button>
         </div>
       </div>
-    </dialog>
+    </div>
   );
 }

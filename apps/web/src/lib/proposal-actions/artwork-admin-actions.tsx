@@ -1,6 +1,6 @@
 import type { IpfsGroup, ItemParam } from '@builder-stellar/metadata-bindings';
 
-import { CodeBlock, Input, Text } from '@/components/ui';
+import { CodeBlock, Field, FieldLabel, Input, Text } from '@/components/ui';
 import type {
   ActionFormProps,
   ActionHandler,
@@ -119,10 +119,15 @@ export const artworkSettingHandlers = (Object.keys(artworkSettingMethods) as Art
     description: 'Update collection metadata through the Metadata admin (the Treasury after launch).',
     group: 'Artwork',
     FormComponent: ({ value, onChange, disabled }) => (
-      <label>
-        New value
-        <Input value={value.value} disabled={disabled} onChange={(event) => onChange({ value: event.target.value })} />
-      </label>
+      <Field>
+        <FieldLabel htmlFor={`artwork-setting-${type}`}>New value</FieldLabel>
+        <Input
+          id={`artwork-setting-${type}`}
+          value={value.value}
+          disabled={disabled}
+          onChange={(event) => onChange({ value: event.target.value })}
+        />
+      </Field>
     ),
     getDefaultValues: () => ({ value: '' }),
     validate: (data) => validateArtworkSetting(data.value, type),

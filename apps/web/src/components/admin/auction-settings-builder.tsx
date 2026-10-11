@@ -46,17 +46,6 @@ const fieldGrid = css({
 const field = css({ display: 'grid', gap: '1.5', alignContent: 'start', minW: '0' });
 const hintRow = css({ display: 'flex', alignItems: 'center', gap: '3', flexWrap: 'wrap' });
 const hint = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
-const undo = css({
-  p: '0',
-  bg: 'transparent',
-  border: '0',
-  color: 'signal',
-  textStyle: 'caption',
-  fontWeight: '600',
-  cursor: 'pointer',
-  _hover: { textDecoration: 'underline' },
-  _focusVisible: { outline: '2px solid', outlineColor: 'signal', outlineOffset: '2px', borderRadius: 'sm' }
-});
 // The "Changed" chip fades in; it never moves, so there is nothing to reduce for motion.
 const changedChip = css({
   transitionProperty: 'opacity',
@@ -134,9 +123,9 @@ function SettingField({
           </span>
         ) : null}
         {changed ? (
-          <button type="button" className={undo} onClick={onUndo}>
+          <Button variant="ghost" size="sm" onClick={onUndo}>
             Undo
-          </button>
+          </Button>
         ) : null}
       </div>
     </div>

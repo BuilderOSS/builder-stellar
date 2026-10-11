@@ -67,17 +67,6 @@ const field = css({ display: 'grid', gap: '1.5', minW: '0', alignContent: 'start
 const hintRow = css({ display: 'flex', alignItems: 'center', gap: '3', flexWrap: 'wrap', minH: '5' });
 const hint = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
 const error = css({ textStyle: 'caption', color: 'danger', fontWeight: '600', m: '0' });
-const undo = css({
-  p: '0',
-  bg: 'transparent',
-  border: '0',
-  color: 'signal',
-  textStyle: 'caption',
-  fontWeight: '600',
-  cursor: 'pointer',
-  _hover: { textDecoration: 'underline' },
-  _focusVisible: { outline: '2px solid', outlineColor: 'signal', outlineOffset: '2px', borderRadius: 'sm' }
-});
 const planBox = css({
   display: 'grid',
   gap: '3',
@@ -122,9 +111,9 @@ function Changed({ show, onUndo, children }: { show: boolean; onUndo: () => void
       {show ? (
         <>
           <Chip tone="live">Changed</Chip>
-          <button type="button" className={undo} onClick={onUndo}>
+          <Button variant="ghost" size="sm" onClick={onUndo}>
             Undo
-          </button>
+          </Button>
         </>
       ) : null}
     </div>

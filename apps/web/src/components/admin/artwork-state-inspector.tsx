@@ -6,7 +6,7 @@ import { css } from 'styled-system/css';
 import { Stack } from 'styled-system/jsx';
 import useSWR from 'swr';
 
-import { Button, Callout, Card, Heading, Input, Text } from '@/components/ui';
+import { Button, Callout, Card, Field, FieldLabel, Heading, Input, Select, Text } from '@/components/ui';
 import { adminReadOptions } from '@/lib/admin-surfaces';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 
@@ -59,12 +59,12 @@ export function ArtworkStateInspector({
           {propertyCount} properties · {groupCount} IPFS groups
         </Text>
         {propertyCount ? (
-          <label>
-            Property ID{' '}
-            <select
+          <Field>
+            <FieldLabel htmlFor="artwork-property">Property ID</FieldLabel>
+            <Select
+              id="artwork-property"
               name="artwork-property"
               autoComplete="off"
-              className={css({ color: 'ink', bg: 'raised', minHeight: '44px' })}
               value={selected}
               onChange={(event) => {
                 setProperty(Number(event.target.value));
@@ -76,8 +76,8 @@ export function ArtworkStateInspector({
                   Property {id}
                 </option>
               ))}
-            </select>
-          </label>
+            </Select>
+          </Field>
         ) : (
           <Text>No artwork properties are configured yet.</Text>
         )}
@@ -114,9 +114,10 @@ export function ArtworkStateInspector({
         ) : null}
         {groupCount ? (
           <>
-            <label>
-              IPFS group ID{' '}
+            <Field>
+              <FieldLabel htmlFor="artwork-ipfs-group">IPFS group ID</FieldLabel>
               <Input
+                id="artwork-ipfs-group"
                 name="artwork-ipfs-group"
                 autoComplete="off"
                 type="number"
@@ -129,7 +130,7 @@ export function ArtworkStateInspector({
                   if (Number.isInteger(next) && next >= 0 && next < groupCount) setGroup(next);
                 }}
               />
-            </label>
+            </Field>
             <Text overflowWrap="anywhere">
               {data.data?.ipfs ? `${data.data.ipfs.base_uri} · ${data.data.ipfs.extension}` : 'No IPFS group found.'}
             </Text>

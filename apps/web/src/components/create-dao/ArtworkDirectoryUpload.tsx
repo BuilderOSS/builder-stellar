@@ -1,7 +1,9 @@
 'use client';
+import { FolderOpen } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { css } from 'styled-system/css';
 
-import { Button } from '@/components/ui';
+import { Button, FieldLabel } from '@/components/ui';
 import { cidToUrls, UPLOAD_POLICIES, validateImageDimensions } from '@/lib/pinata-upload';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
@@ -9,6 +11,8 @@ import type { ArtworkPlan } from './artwork-configuration';
 import { inspectArtworkDirectory } from './artwork-configuration';
 import { uploadResponseJson } from './dao-image-upload';
 import styles from './workspace-styles';
+
+const pickRow = css({ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '3' });
 
 export function ArtworkDirectoryUpload({
   onComplete,
@@ -82,13 +86,21 @@ export function ArtworkDirectoryUpload({
   };
   return (
     <div className={styles.stack}>
-      <label htmlFor="artwork-directory" className={styles.label}>
-        Artwork directory
-      </label>
+      <FieldLabel htmlFor="artwork-directory">Artwork directory</FieldLabel>
+      <div className={pickRow}>
+        <Button variant="secondary" disabled={disabled || busy} onClick={() => input.current?.click()}>
+          <FolderOpen aria-hidden="true" />
+          Choose a folder
+        </Button>
+        <span className={styles.muted}>
+          {files.length ? `${files.length} ${files.length === 1 ? 'file' : 'files'} selected` : 'No folder chosen'}
+        </span>
+      </div>
       <input
         ref={input}
         id="artwork-directory"
         type="file"
+        hidden
         multiple
         disabled={disabled || busy}
         accept="image/png,image/jpeg,image/webp"

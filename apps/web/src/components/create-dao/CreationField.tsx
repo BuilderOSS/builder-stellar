@@ -1,6 +1,7 @@
 'use client';
 import type { ReactNode } from 'react';
 
+import { FieldLabel } from '@/components/ui';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
 import styles from './workspace-styles';
@@ -19,7 +20,7 @@ export function CreationField({
   const error = useCreateDaoStore((s) => s.validationErrors[id]);
   return (
     <div className={styles.field}>
-      <label htmlFor={id}>{label}</label>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
       {children}
       {hint ? (
         <p className={styles.muted} id={`${id}-hint`}>

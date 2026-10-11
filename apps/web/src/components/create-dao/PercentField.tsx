@@ -1,7 +1,8 @@
 'use client';
 import type { ComponentProps } from 'react';
 import { css } from 'styled-system/css';
-import { input } from 'styled-system/recipes';
+
+import { Input } from '@/components/ui';
 
 const wrap = css({ position: 'relative' });
 const field = css({ pr: '10', fontVariantNumeric: 'tabular-nums' });
@@ -23,13 +24,13 @@ export function PercentField({
 }: Omit<ComponentProps<'input'>, 'value' | 'onChange' | 'type'> & { bps: number; onChange: (bps: number) => void }) {
   return (
     <div className={wrap}>
-      <input
+      <Input
         type="number"
         inputMode="decimal"
         min={0.01}
         max={100}
         step={0.01}
-        className={`${input()} ${field}`}
+        className={field}
         value={Number.isFinite(bps) ? bps / 100 : ''}
         onChange={(event) => onChange(Math.round(event.target.valueAsNumber * 100))}
         {...props}

@@ -2,16 +2,16 @@
 
 import { Client as TokenClient } from '@builder-stellar/token-bindings';
 import { TransactionBuilder } from '@stellar/stellar-sdk';
-import Link from 'next/link';
 import { useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 
 import { type FounderMintRow, founderMintValues } from '@/components/admin/founder-mint-values';
 import { PageSection } from '@/components/page-section';
-import { Button, Callout, Card, Heading, Input, Text } from '@/components/ui';
+import { Button, ButtonLink, Callout, Card, Checkbox, Field, FieldLabel, Heading, Input, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { adminReadOptions, useAdminArtwork, useAdminTokenState } from '@/lib/admin-surfaces';
 import { BATCH_MINT_LIMIT_TEXT, MAX_BATCH_MINT, MAX_BATCH_RECIPIENTS } from '@/lib/batch-mint-budget';
+import { daoAdminRoute } from '@/lib/dao-routes';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { confirmCreationTransaction, DefinitiveTransactionFailure } from '@/lib/use-dao-deployment';
 import { signWithWallet } from '@/lib/wallet-sign';
@@ -160,7 +160,11 @@ export default function FoundersAdminPage() {
                   title="Setup is complete"
                   description="After launch, mint additional tokens through the current mint authority or a Treasury governance proposal."
                 />
-                <Link href={`/dao/${routeId}/admin/token`}>Open Token Admin</Link>
+                <div>
+                  <ButtonLink href={daoAdminRoute(routeId, '/token')} variant="secondary" size="sm">
+                    Open Mint tokens
+                  </ButtonLink>
+                </div>
               </>
             ) : (
               <>
@@ -180,11 +184,15 @@ export default function FoundersAdminPage() {
                       : 'Artwork properties exist. Refresh and confirm all planned batches are finished before minting: traits are seeded at mint time.'
                   }
                 />
-                <Link href={`/dao/${routeId}/admin/artwork`}>Review artwork setup</Link>
+                <div>
+                  <ButtonLink href={daoAdminRoute(routeId, '/artwork')} variant="secondary" size="sm">
+                    Review artwork setup
+                  </ButtonLink>
+                </div>
                 {rows.map((row, index) => (
                   <Stack gap="2" key={index}>
-                    <label htmlFor={`founder-${index}`}>
-                      Founder {index + 1} account
+                    <Field>
+                      <FieldLabel htmlFor={`founder-${index}`}>Founder {index + 1} account</FieldLabel>
                       <Input
                         id={`founder-${index}`}
                         name={`founder-${index}`}
@@ -200,9 +208,9 @@ export default function FoundersAdminPage() {
                           )
                         }
                       />
-                    </label>
-                    <label htmlFor={`founder-amount-${index}`}>
-                      Token amount
+                    </Field>
+                    <Field>
+                      <FieldLabel htmlFor={`founder-amount-${index}`}>Token amount</FieldLabel>
                       <Input
                         id={`founder-amount-${index}`}
                         name={`founder-amount-${index}`}
@@ -219,7 +227,7 @@ export default function FoundersAdminPage() {
                           )
                         }
                       />
-                    </label>
+                    </Field>
                     <Button
                       type="button"
                       variant="ghost"
@@ -245,16 +253,12 @@ export default function FoundersAdminPage() {
                       reversible.
                     </Text>
                     {noArtwork ? (
-                      <label htmlFor="ack-no-artwork">
-                        <input
-                          id="ack-no-artwork"
-                          type="checkbox"
-                          checked={ackNoArtwork}
-                          disabled={busy}
-                          onChange={(event) => setAckNoArtwork(event.target.checked)}
-                        />{' '}
-                        I understand these tokens will be minted without traits.
-                      </label>
+                      <Checkbox
+                        label="I understand these tokens will be minted without traits."
+                        checked={ackNoArtwork}
+                        disabled={busy}
+                        onCheckedChange={setAckNoArtwork}
+                      />
                     ) : null}
                     <Button
                       type="button"

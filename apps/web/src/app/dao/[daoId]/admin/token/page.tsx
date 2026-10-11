@@ -9,7 +9,7 @@ import { Stack } from 'styled-system/jsx';
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
 import { AuthorityPanel } from '@/components/admin/authority-panel';
 import { PageSection } from '@/components/page-section';
-import { Badge, Button, Callout, Card, Heading, Text } from '@/components/ui';
+import { Badge, Button, Callout, Card, Checkbox, Heading, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryHasAuthority, treasuryIsAdmin } from '@/lib/admin-proposals';
 import { useContractAdmin } from '@/lib/admin-queries';
@@ -198,16 +198,12 @@ export default function TokenAdminPage() {
                     title="Upload the artwork first"
                     description="This community has no artwork yet. Tokens minted now have no traits until they’re seeded from Manage."
                   />
-                  <label htmlFor="ack-no-artwork">
-                    <input
-                      id="ack-no-artwork"
-                      type="checkbox"
-                      checked={ackNoArtwork}
-                      disabled={busy}
-                      onChange={(event) => setAckNoArtwork(event.target.checked)}
-                    />{' '}
-                    I understand these tokens will be minted without traits.
-                  </label>
+                  <Checkbox
+                    label="I understand these tokens will be minted without traits."
+                    checked={ackNoArtwork}
+                    disabled={busy}
+                    onCheckedChange={setAckNoArtwork}
+                  />
                 </>
               ) : null}
               <div className={css({ display: 'flex', gap: '2', flexWrap: 'wrap' })}>
