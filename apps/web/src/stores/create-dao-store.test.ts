@@ -109,6 +109,14 @@ describe('durable browser workspace', () => {
     expect(() => store.deleteDraft(id)).toThrow('recovery');
     expect(useCreateDaoStore.getState().drafts[0].scope.wallet).toBe('wallet-A');
   });
+  it('lets a confirmed creation go, including its recovery snapshot, so it does not come back', async () => {
+    const store = useCreateDaoStore.getState();
+    const id = store.newDraft(guest);
+    store.recordDeployment(id, { nonce: '7', hash: 'done', deployer: 'wallet-A', status: 'confirmed' });
+    store.deleteDraft(id);
+    await useCreateDaoStore.persist.rehydrate();
+    expect(useCreateDaoStore.getState().drafts.find((d) => d.id === id)).toBeUndefined();
+  });
   it('deletes only the selected draft', () => {
     const store = useCreateDaoStore.getState();
     const first = store.newDraft(guest);

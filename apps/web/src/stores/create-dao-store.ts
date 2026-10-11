@@ -343,7 +343,9 @@ export const useCreateDaoStore = create<Store>()(
         deleteDraft: (id) => {
           const drafts = latestDrafts(get().drafts);
           const d = drafts.find((d) => d.id === id);
-          if (d?.deployment && d.deployment.status !== 'failed')
+          // A failed attempt has nothing to recover and a confirmed one already exists on the network;
+          // anything in between may still land, so its record stays until it resolves.
+          if (d?.deployment && d.deployment.status !== 'failed' && d.deployment.status !== 'confirmed')
             throw new Error('Keep this deployment record for recovery. It cannot be deleted.');
           if (d?.deployment && typeof window !== 'undefined') window.localStorage.removeItem(recoveryKey(d));
           saveState({

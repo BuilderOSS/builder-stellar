@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 
 import { useLocalDrafts } from '@/components/local-workspace/local-drafts';
 import { useOptionalDaoContext } from '@/contexts/dao-context';
@@ -10,7 +10,8 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 import { normalizeWalletAddress, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
-import { collectDrafts, type CommunityRef, type DraftItem } from './collect-drafts';
+import { collectDrafts, type CommunityRef, createdToken, type DraftItem } from './collect-drafts';
+import { retireCreatedDraft } from './retire-created-draft';
 
 const NO_DRAFTS = {};
 
@@ -43,13 +44,24 @@ export function useAllDrafts() {
     [proposalDrafts, daoDrafts, communities]
   );
 
+  // A created community that now shows in your communities is done with its draft: clear it out.
+  useEffect(() => {
+    if (!hydrated) return;
+    for (const draft of daoDrafts) {
+      const token = createdToken(draft);
+      if (token && communities.has(token)) retireCreatedDraft(draft);
+    }
+  }, [hydrated, daoDrafts, communities]);
+
   function discard(item: DraftItem) {
     if (!item.discardable) return;
     if (item.kind === 'proposal') {
       if (address) resetProposal(address, item.id);
-    } else {
-      useCreateDaoStore.getState().deleteDraft(item.id);
+      return;
     }
+    const draft = daoDrafts.find((d) => d.id === item.id);
+    if (draft && item.created) retireCreatedDraft(draft);
+    else useCreateDaoStore.getState().deleteDraft(item.id);
   }
 
   return { items, hydrated, signedIn: Boolean(address), discard };
