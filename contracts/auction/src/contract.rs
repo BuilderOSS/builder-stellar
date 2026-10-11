@@ -49,8 +49,9 @@ pub trait DaoAuctionContractTrait {
         version: String,
     );
 
-    /// Create a bid with SAC token
-    fn create_bid(e: &Env, bidder: Address, token_id: u128, amount: i128);
+    /// Create a bid with SAC token. `comment` is optional (empty for none),
+    /// at most `MAX_COMMENT_LENGTH` bytes, and only emitted in `BidPlaced`.
+    fn create_bid(e: &Env, bidder: Address, token_id: u128, amount: i128, comment: String);
 
     /// Settle current auction and create new one
     fn settle_and_create_new(e: &Env);
@@ -264,9 +265,13 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     }
 
     #[when_not_paused]
-    fn create_bid(e: &Env, bidder: Address, token_id: u128, amount: i128) {
+    fn create_bid(e: &Env, bidder: Address, token_id: u128, amount: i128, comment: String) {
         bidder.require_auth();
         common::ttl::extend_instance(e);
+
+        if comment.len() > common::MAX_COMMENT_LENGTH {
+            panic_with_error!(e, AuctionError::CommentTooLong);
+        }
 
         let mut auction = get_auction(e);
         let config = get_config(e);
@@ -291,7 +296,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
             &amount,
         );
 
-        process_bid(e, &mut auction, &config, &bidder, amount);
+        process_bid(e, &mut auction, &config, &bidder, amount, &comment);
     }
 
     /// DESIGN NOTE: settle_and_create_new is intentionally permissionless.

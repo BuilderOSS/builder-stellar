@@ -33,4 +33,8 @@ pub enum CustomGovernorError {
     ZeroVotingWeight = 7512,
     /// The proposal is queued but its ETA has not been reached
     ProposalNotReady = 7513,
+    /// Comment body is empty
+    CommentEmpty = 7514,
+    /// Comment body or vote reason exceeds `MAX_PROPOSAL_COMMENT_LENGTH`
+    CommentTooLong = 7515,
 }

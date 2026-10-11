@@ -1737,3 +1737,105 @@ fn treasury_held_tokens_never_raise_quorum() {
     e.ledger().set_timestamp(2_601);
     assert_eq!(governor.proposal_state(&id), ProposalState::Succeeded);
 }
+
+mod comments {
+    use super::*;
+    use crate::events::ProposalCommented;
+    use soroban_sdk::{testutils::Events as _, Event as _};
+    use std::string::String as StdString;
+
+    fn proposal(
+        e: &Env,
+        token: &DaoTokenContractClient,
+        governor: &DaoGovernorContractClient,
+        target: &TargetContractClient,
+        owner: &Address,
+    ) -> BytesN<32> {
+        let proposer = Address::generate(e);
+        for _ in 0..3 {
+            token.mint(owner, &proposer);
+        }
+        e.ledger().set_sequence_number(200);
+        governor.propose(
+            &vec![e, target.address.clone()],
+            &vec![e, symbol_short!("set_value")],
+            &proposal_args(e),
+            &String::from_str(e, "comments"),
+            &proposer,
+        )
+    }
+
+    fn text(e: &Env, len: u32) -> String {
+        String::from_str(e, &"a".repeat(len as usize))
+    }
+
+    #[test]
+    fn comment_emits_event_and_needs_author_auth() {
+        let (e, token, _treasury, governor, target, owner) = setup();
+        let id = proposal(&e, &token, &governor, &target, &owner);
+        let author = Address::generate(&e);
+        let body = text(&e, common::MAX_PROPOSAL_COMMENT_LENGTH);
+        governor.comment(&id, &body, &author);
+        assert_eq!(
+            e.events().all().events().last().unwrap(),
+            &ProposalCommented {
+                proposal_id: id.clone(),
+                author: author.clone(),
+                body,
+            }
+            .to_xdr(&e, &governor.address)
+        );
+        assert_eq!(
+            e.auths()[0].0,
+            author,
+            "the author must authorize the comment"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "HostError: Error(Contract, #7515)")]
+    fn comment_over_cap_fails() {
+        let (e, token, _treasury, governor, target, owner) = setup();
+        let id = proposal(&e, &token, &governor, &target, &owner);
+        let body = text(&e, common::MAX_PROPOSAL_COMMENT_LENGTH + 1);
+        governor.comment(&id, &body, &Address::generate(&e));
+    }
+
+    #[test]
+    #[should_panic(expected = "HostError: Error(Contract, #7514)")]
+    fn empty_comment_fails() {
+        let (e, token, _treasury, governor, target, owner) = setup();
+        let id = proposal(&e, &token, &governor, &target, &owner);
+        governor.comment(&id, &String::from_str(&e, ""), &Address::generate(&e));
+    }
+
+    #[test]
+    #[should_panic(expected = "HostError: Error(Contract, #5000)")]
+    fn comment_on_unknown_proposal_fails() {
+        let (e, _token, _treasury, governor, _target, _owner) = setup();
+        governor.comment(
+            &BytesN::from_array(&e, &[7; 32]),
+            &String::from_str(&e, "hello"),
+            &Address::generate(&e),
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "HostError: Error(Auth, InvalidAction)")]
+    fn comment_requires_author_auth() {
+        let (e, token, _treasury, governor, target, owner) = setup();
+        let id = proposal(&e, &token, &governor, &target, &owner);
+        e.set_auths(&[]);
+        governor.comment(&id, &String::from_str(&e, "hi"), &Address::generate(&e));
+    }
+
+    #[test]
+    #[should_panic(expected = "HostError: Error(Contract, #7515)")]
+    fn vote_reason_over_cap_fails() {
+        let (e, token, _treasury, governor, target, owner) = setup();
+        let id = proposal(&e, &token, &governor, &target, &owner);
+        e.ledger().set_timestamp(1_000 + 301);
+        let reason: StdString = "a".repeat(common::MAX_PROPOSAL_COMMENT_LENGTH as usize + 1);
+        governor.cast_vote(&id, &1, &String::from_str(&e, &reason), &owner);
+    }
+}

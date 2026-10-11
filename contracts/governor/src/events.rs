@@ -5,7 +5,7 @@
 //! OpenZeppelin's governor library emits the core lifecycle events
 //! (`ProposalCreated`, `VoteCast`, `ProposalExecuted`, `ProposalCancelled`).
 //! The events below add initialization, parameter changes, queueing, the
-//! launch handoff and `ProposalScheduled`, which carries everything an indexer
+//! launch handoff, `ProposalCommented` and `ProposalScheduled`, which carries everything an indexer
 //! needs to compute a proposal's state without guessing (vote window, snapshot
 //! and the quorum fixed at proposal time). Admin changes are
 //! `common::admin::AdminChanged`.
@@ -97,6 +97,17 @@ pub struct QuorumBpsChanged {
     pub new_value: u32,
 }
 
+/// A comment on a proposal. Event-only: the body is never stored on-chain.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProposalCommented {
+    #[topic]
+    pub proposal_id: BytesN<32>,
+    #[topic]
+    pub author: Address,
+    pub body: String,
+}
+
 /// Emitted once when the Manager launches the governor (Setup -> Live).
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -145,6 +156,15 @@ pub fn emit_proposal_scheduled(
         vote_end,
         snapshot_ledger,
         quorum_votes,
+    }
+    .publish(e);
+}
+
+pub fn emit_proposal_commented(e: &Env, proposal_id: &BytesN<32>, author: &Address, body: &String) {
+    ProposalCommented {
+        proposal_id: proposal_id.clone(),
+        author: author.clone(),
+        body: body.clone(),
     }
     .publish(e);
 }

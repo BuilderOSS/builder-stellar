@@ -15,9 +15,9 @@ use stellar_governance::{
 
 use crate::error::CustomGovernorError;
 use crate::events::{
-    emit_governor_initialized, emit_launched, emit_proposal_queued, emit_proposal_scheduled,
-    emit_proposal_threshold_changed, emit_queue_delay_changed, emit_quorum_bps_changed,
-    emit_voting_delay_changed, emit_voting_period_changed,
+    emit_governor_initialized, emit_launched, emit_proposal_commented, emit_proposal_queued,
+    emit_proposal_scheduled, emit_proposal_threshold_changed, emit_queue_delay_changed,
+    emit_quorum_bps_changed, emit_voting_delay_changed, emit_voting_period_changed,
 };
 use crate::storage::*;
 
@@ -281,6 +281,24 @@ impl DaoGovernorContract {
         proposal_id
     }
 
+    /// Posts a comment on an existing proposal, in any state. Anyone may
+    /// comment. Event-only: emits `ProposalCommented` and writes no storage.
+    pub fn comment(e: &Env, proposal_id: BytesN<32>, body: String, author: Address) {
+        author.require_auth();
+        if !e
+            .storage()
+            .persistent()
+            .has(&Self::proposal_key(&proposal_id))
+        {
+            panic_with_error!(e, GovernorError::ProposalNotFound);
+        }
+        if body.is_empty() {
+            panic_with_error!(e, CustomGovernorError::CommentEmpty);
+        }
+        Self::check_comment_length(e, &body);
+        emit_proposal_commented(e, &proposal_id, &author, &body);
+    }
+
     pub fn treasury(e: &Env) -> Address {
         common::error::require(
             e,
@@ -356,6 +374,12 @@ impl DaoGovernorContract {
     fn check_quorum_bps(e: &Env, v: u32) {
         if v == 0 || v > BPS_DENOMINATOR as u32 {
             panic_with_error!(e, CustomGovernorError::InvalidQuorumBps);
+        }
+    }
+
+    fn check_comment_length(e: &Env, body: &String) {
+        if body.len() > common::MAX_PROPOSAL_COMMENT_LENGTH {
+            panic_with_error!(e, CustomGovernorError::CommentTooLong);
         }
     }
 
@@ -652,6 +676,7 @@ impl Governor for DaoGovernorContract {
         common::ttl::extend_instance(e);
         common::lifecycle::require_live(e);
         voter.require_auth();
+        Self::check_comment_length(e, &reason);
 
         let proposal = Self::get_proposal(e, &proposal_id);
         if Self::proposal_state_internal(e, &proposal_id, &proposal) != ProposalState::Active {
