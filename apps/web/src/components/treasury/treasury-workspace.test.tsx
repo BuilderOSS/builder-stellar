@@ -89,7 +89,7 @@ describe('treasury rendered read states', () => {
     mock.history.error = new Error('Index unavailable');
     const html = renderToStaticMarkup(<TreasuryWorkspace />);
     expect(html).toContain('Balances unavailable');
-    expect(html).toContain('Execution history unavailable');
+    expect(html).toContain('History didn&#x27;t load');
     expect(html).not.toContain('999.0000000');
     expect(html).not.toContain('0 funded assets');
     expect(html).not.toContain('No payouts yet');
@@ -114,7 +114,7 @@ describe('treasury rendered read states', () => {
     expect(html).toContain(`/dao/dao-a/proposals/${'07'.repeat(32)}`);
     expect(html).toContain('View proposal');
     expect(html).toContain('aa'.repeat(32));
-    expect(html).toContain('Ledger 100');
-    expect(html).toContain('aria-label="Treasury execution history pages"');
+    expect(html).toContain('Send funds');
+    expect(html).toContain('aria-label="Treasury history pages"');
   });
 });

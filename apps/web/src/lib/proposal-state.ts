@@ -40,6 +40,22 @@ export function proposalActionMode(state: ProposalState | null | undefined): Pro
   }
 }
 
+const STATE_DISPLAY: Record<string, string> = {
+  Pending: 'Voting soon',
+  Active: 'Voting',
+  Succeeded: 'Passed',
+  Queued: 'Queued',
+  Executed: 'Executed',
+  Defeated: "Didn't pass",
+  Canceled: 'Canceled',
+  Expired: 'Expired'
+};
+
+/** Member-facing word for a chain state label ("Succeeded" reads as "Passed"). */
+export function proposalStateDisplay(label: string) {
+  return STATE_DISPLAY[label] ?? label;
+}
+
 export type ProposalStateTone = 'live' | 'success' | 'warning' | 'danger' | 'neutral';
 
 /** Chip tone for a proposal state label (always shown with its word). */

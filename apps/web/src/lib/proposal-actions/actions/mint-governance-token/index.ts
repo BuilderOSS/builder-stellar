@@ -44,7 +44,7 @@ export const mintGovernanceTokenHandler: ActionHandler<MintGovernanceTokenData> 
     if (context.mintAuthoritiesLoading) {
       return {
         canExecute: false,
-        reason: 'Checking mint authority...',
+        reason: 'Checking mint authority…',
         loading: true
       };
     }

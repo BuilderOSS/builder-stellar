@@ -52,7 +52,7 @@ function TransferProposalForm() {
   function checkDraft() {
     if (!allowed) throw new Error('Authenticate on this network after the community launches.');
     if (!getTreasuryAssets(daoConfig.name).some((asset) => asset.code === draft.assetCode))
-      throw new Error('Select a configured SAC asset.');
+      throw new Error('Choose an asset to send.');
     if (
       context.balancesLoading ||
       context.balancesError ||

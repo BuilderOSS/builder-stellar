@@ -24,6 +24,21 @@ describe('activity feed rows', () => {
     ).toEqual({ category: 'Auction', title: 'GCLG…U6CO bid 120 on #30', href: '/dao/dao/auctions' });
   });
 
+  it('names the payment asset when the feed knows it', () => {
+    const testnetXlm = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC';
+    expect(
+      formatActivity(
+        item({
+          token_id: '31',
+          amount: '100000000',
+          topics: JSON.stringify({ bidder: ALICE }),
+          payment_asset: testnetXlm
+        }),
+        'dao'
+      ).title
+    ).toBe('GCLG…U6CO bid 10 XLM on #31');
+  });
+
   it('names the proposal and links votes to it', () => {
     const created = formatActivity(
       item({
@@ -46,6 +61,45 @@ describe('activity feed rows', () => {
       'dao'
     );
     expect(vote).toMatchObject({ title: 'GCLG…U6CO voted For with 10 votes', detail: '“Yes”' });
+  });
+
+  it('quotes comments on proposals, bids and listings', () => {
+    expect(
+      formatActivity(
+        item({
+          event_name: 'proposal_commented',
+          proposal_id: 'abc',
+          topics: JSON.stringify({ proposal_id: 'abc', author: ALICE }),
+          args: JSON.stringify({ body: 'Shipped the first batch' })
+        }),
+        'dao'
+      )
+    ).toEqual({
+      category: 'Governance',
+      title: 'GCLG…U6CO commented on a proposal',
+      detail: '“Shipped the first batch”',
+      href: '/dao/dao/proposals/abc'
+    });
+    expect(
+      formatActivity(
+        item({
+          token_id: '30',
+          amount: '1200000000',
+          topics: JSON.stringify({ bidder: ALICE }),
+          args: JSON.stringify({ comment: 'gm' })
+        })
+      ).detail
+    ).toBe('“gm”');
+    expect(
+      formatActivity(
+        item({ event_name: 'listing_commented', token_id: '7', topics: JSON.stringify({ author: ALICE }) })
+      ).title
+    ).toBe('GCLG…U6CO commented on #7');
+    expect(
+      formatActivity(
+        item({ event_name: 'primary_listing_commented', topics: JSON.stringify({ listing_id: 2, author: ALICE }) })
+      ).title
+    ).toBe('GCLG…U6CO commented on new token listing 2');
   });
 
   it('summarises an allocation once instead of a row per token', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildProfilePlan, type CommunityProfile, tokenReportsRenames } from './community-profile-plan';
+import { buildProfilePlan, type CommunityProfile } from './community-profile-plan';
 
 const current: CommunityProfile = {
   name: 'Lantern Club',
@@ -43,15 +43,5 @@ describe('buildProfilePlan', () => {
       'set-artwork-description',
       'set-artwork-project-uri'
     ]);
-  });
-});
-
-describe('tokenReportsRenames', () => {
-  it('is true from 0.2.0', () => {
-    expect(tokenReportsRenames('0.1.0')).toBe(false);
-    expect(tokenReportsRenames('0.2.0')).toBe(true);
-    expect(tokenReportsRenames('0.10.1')).toBe(true);
-    expect(tokenReportsRenames('1.0.0')).toBe(true);
-    expect(tokenReportsRenames(undefined)).toBe(false);
   });
 });

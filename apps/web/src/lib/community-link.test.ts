@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { checkNewLink, managerSupportsSlugChange } from './community-link';
+import { checkNewLink } from './community-link';
 
 describe('checkNewLink', () => {
   it('walks format, sameness, lookup and availability', () => {
@@ -19,12 +19,5 @@ describe('checkNewLink', () => {
       state: 'ok',
       text: '/dao/new-link is available.'
     });
-  });
-
-  it('knows which Manager releases support change_slug', () => {
-    expect(managerSupportsSlugChange('0.1.0')).toBe(false);
-    expect(managerSupportsSlugChange('0.2.0')).toBe(true);
-    expect(managerSupportsSlugChange('1.0.0')).toBe(true);
-    expect(managerSupportsSlugChange(undefined)).toBe(false);
   });
 });

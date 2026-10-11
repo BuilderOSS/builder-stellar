@@ -94,7 +94,7 @@ export default function AuthorityPage() {
       session.walletNetworkIssue ||
       (session.walletNetworkPassphrase && session.walletNetworkPassphrase !== config.passphrase)
     ) {
-      setFormMessage('Switch your wallet to the DAO network before preparing an authority update.');
+      setFormMessage('Switch your wallet to this community’s network first.');
       return;
     }
 
@@ -105,7 +105,7 @@ export default function AuthorityPage() {
 
     // Mint authority changes fail with NotLive until the DAO has been launched.
     if (!token.data?.live) {
-      setFormMessage('Mint authorities can only be changed after the DAO is launched.');
+      setFormMessage('Who can mint changes by vote once the community launches.');
       return;
     }
 
@@ -145,16 +145,16 @@ export default function AuthorityPage() {
       setBusy(true);
       setFormMessage('');
       const actionType = enabled ? 'Granting' : 'Revoking';
-      tx.start(`${actionType} Mint Authority...`);
+      tx.start(`${actionType} mint access`);
 
       const sent = await submitAuthorityUpdate(config, session.address, authority, enabled);
       const hash = sent.sendTransactionResponse?.hash ?? '';
-      tx.submitted(`${actionType} Mint Authority`, hash);
+      tx.submitted(`${actionType} mint access`, hash);
       await waitForConfirmation(hash, config.rpcUrl);
       setFormMessage('');
       setMintAuthority('');
       void refreshMintAuthorities();
-      tx.success(`${enabled ? 'Updated' : 'Revoked'} authority`, hash);
+      tx.success(enabled ? 'Mint access granted' : 'Mint access revoked', hash);
     } catch (error) {
       tx.fail(error, 'Authority update failed');
     } finally {
@@ -202,7 +202,7 @@ export default function AuthorityPage() {
               revokeLabel={isAdmin ? 'Revoke minting' : 'Propose revoke'}
               busy={busy || !token.data?.live}
               loading={mintAuthoritiesLoading}
-              emptyLabel={mintAuthorityError?.message || 'No mint authorities indexed yet.'}
+              emptyLabel={mintAuthorityError?.message || 'No accounts have been allowed to mint yet.'}
               draftPreview={draftStatus.actionsInDraft.find((a) => a.type === 'set-mint-authority')}
             />
           </Grid>

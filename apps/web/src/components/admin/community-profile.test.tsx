@@ -8,8 +8,7 @@ const state = vi.hoisted(() => ({
   address: '',
   admin: '',
   live: false,
-  version: '0.2.0' as string | undefined,
-  link: { version: '0.2.0', slug: 'lantern-club', claimed: false }
+  link: { slug: 'lantern-club', claimed: false }
 }));
 
 vi.mock('@/contexts/dao-context', () => {
@@ -50,7 +49,6 @@ vi.mock('@/lib/admin-surfaces', () => ({
     mutate: vi.fn()
   })
 }));
-vi.mock('swr', () => ({ default: () => ({ data: state.version }) }));
 vi.mock('@/lib/community-link', async (load) => ({
   ...(await load<typeof import('@/lib/community-link')>()),
   useManagerLink: () => ({ data: state.link, mutate: vi.fn() }),
@@ -79,8 +77,7 @@ describe('CommunityProfileEditor', () => {
     state.address = ADMIN;
     state.admin = ADMIN;
     state.live = false;
-    state.version = '0.2.0';
-    state.link = { version: '0.2.0', slug: 'lantern-club', claimed: false };
+    state.link = { slug: 'lantern-club', claimed: false };
   });
 
   it('lets the launch admin edit everything directly during setup, showing current values', () => {
@@ -105,25 +102,6 @@ describe('CommunityProfileEditor', () => {
     expect(input(html, 'profile-link')).toContain('value="lantern-club"');
     expect(input(html, 'profile-link')).not.toContain('disabled');
     expect(html).toContain('Changing it takes its own vote.');
-  });
-
-  it('locks name and symbol, with a path to upgrade, while the token is on 0.1.0', () => {
-    state.version = '0.1.0';
-    const html = render();
-    expect(html).toContain('Renaming needs the newer token contract');
-    expect(html).toContain('href="/dao/lantern-club/admin/upgrades"');
-    expect(input(html, 'profile-name')).toContain('disabled');
-    expect(input(html, 'profile-symbol')).toContain('disabled');
-    expect(input(html, 'profile-website')).not.toContain('disabled');
-  });
-
-  it('keeps the link fixed while the Manager predates change_slug', () => {
-    state.live = true;
-    state.admin = TREASURY;
-    state.link = { version: '0.1.0', slug: 'lantern-club', claimed: true };
-    const html = render();
-    expect(input(html, 'profile-link')).toContain('disabled');
-    expect(html).toContain('Changing it needs the latest platform release.');
   });
 
   it('is read only for a wallet with no authority', () => {

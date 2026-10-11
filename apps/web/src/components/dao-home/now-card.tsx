@@ -137,14 +137,14 @@ export function NowCard({
   daoId,
   name,
   isLaunchSetup,
-  auction,
-  auctionLoading,
-  auctionError,
+  auction: auctionData,
+  auctionLoading: auctionDataLoading,
+  auctionError: auctionDataError,
   proposalsLoading,
   proposalsError,
   activeProposals,
-  hasAuctionModule,
-  auctionEnabled,
+  runsAuctions,
+  hasMarket,
   assetCode,
   now
 }: {
@@ -157,19 +157,24 @@ export function NowCard({
   proposalsLoading: boolean;
   proposalsError: Error | undefined;
   activeProposals: number;
-  hasAuctionModule: boolean;
-  auctionEnabled: boolean | null;
+  /** The community runs auctions (or may at launch); otherwise auction state is ignored. */
+  runsAuctions: boolean;
+  hasMarket: boolean;
   assetCode: string;
   now: number | null;
 }) {
   const { routeId } = useDaoContext();
   if (isLaunchSetup) return <SetupNow />;
+  // A community without auctions has a paused auction contract; none of its state is news here.
+  const auction = runsAuctions ? auctionData : undefined;
+  const auctionLoading = runsAuctions && auctionDataLoading;
+  const auctionError = runsAuctions ? auctionDataError : undefined;
 
   if (auctionError && proposalsError) {
     return (
       <Shell
         title="We couldn't load what's happening"
-        text="Votes and the auction didn't load. Pull to refresh, or try again in a moment."
+        text="Proposals and the auction didn't load. Try again in a moment."
       />
     );
   }
@@ -185,11 +190,7 @@ export function NowCard({
         meta={
           <>
             <Chip tone="live">{ended ? 'Auction ended' : 'Auction live'}</Chip>
-            {activeProposals ? (
-              <Chip>
-                {activeProposals} vote{activeProposals === 1 ? '' : 's'} open
-              </Chip>
-            ) : null}
+            {activeProposals ? <Chip>{activeProposals} open for voting</Chip> : null}
           </>
         }
         title={`${name} #${live.token_id}`}
@@ -219,7 +220,11 @@ export function NowCard({
       <Shell
         meta={<Chip tone="live">Voting open</Chip>}
         title={`${activeProposals} proposal${activeProposals === 1 ? ' needs' : 's need'} votes`}
-        text="Members decide together. Read what's proposed and cast your vote before it closes."
+        text={
+          activeProposals === 1
+            ? "Members decide together. Read what's proposed and vote before it closes."
+            : "Members decide together. Read what's proposed and vote before each one closes."
+        }
         action={<ButtonLink href={daoRoute(routeId, 'proposals')}>Go vote</ButtonLink>}
       />
     );
@@ -241,7 +246,7 @@ export function NowCard({
     return (
       <Shell
         title="The auction didn't load"
-        text="Votes and activity are below. The auction is temporarily unavailable."
+        text="Proposals and activity are below. The auction is temporarily unavailable."
         action={
           <ButtonLink href={daoRoute(routeId, 'auctions')} variant="secondary">
             View auction
@@ -251,27 +256,30 @@ export function NowCard({
     );
   }
 
-  const quiet =
-    auction?.status === 'paused'
+  const quiet = !runsAuctions
+    ? { title: 'All quiet for now', text: 'No proposals are open for voting right now. New ones show up here.' }
+    : auction?.status === 'paused'
       ? { title: 'Auctions are paused', text: 'Bidding and settlement are on hold for now.' }
-      : auctionEnabled === false
-        ? { title: 'All quiet for now', text: "This community doesn't run auctions. New proposals will show up here." }
-        : auction?.status === 'not-launched'
-          ? { title: 'The first auction is coming', text: 'Auctions are set up and will start once launched.' }
-          : { title: 'All quiet for now', text: 'No votes are open and no auction is running.' };
+      : auction?.status === 'not-launched'
+        ? { title: 'The first auction is coming', text: 'Auctions are set up and start when the community launches.' }
+        : { title: 'All quiet for now', text: 'No proposals are open for voting and no auction is running.' };
 
   return (
     <Shell
       title={quiet.title}
       text={quiet.text}
       action={
-        hasAuctionModule ? (
+        runsAuctions ? (
           <ButtonLink href={daoRoute(routeId, 'auctions')} variant="secondary">
             View auction
           </ButtonLink>
+        ) : hasMarket ? (
+          <ButtonLink href={daoRoute(routeId, 'marketplace')} variant="secondary">
+            Visit the market
+          </ButtonLink>
         ) : (
           <ButtonLink href={daoRoute(routeId, 'proposals')} variant="secondary">
-            See past votes
+            See past proposals
           </ButtonLink>
         )
       }

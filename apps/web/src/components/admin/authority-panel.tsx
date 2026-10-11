@@ -71,10 +71,10 @@ export function AuthorityPanel({
         {editable ? (
           <div className={css({ display: 'flex', gap: '2', flexWrap: 'wrap' })}>
             <Button type="button" onClick={() => onAllow?.()} disabled={busy}>
-              {busy ? 'Saving...' : allowLabel}
+              {busy ? 'Saving…' : allowLabel}
             </Button>
             <Button type="button" variant="secondary" onClick={() => onRevoke?.()} disabled={busy}>
-              {busy ? 'Saving...' : revokeLabel}
+              {busy ? 'Saving…' : revokeLabel}
             </Button>
           </div>
         ) : null}

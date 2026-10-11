@@ -3,7 +3,7 @@
 import { ButtonLink, Callout } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { daoAdminRoute } from '@/lib/dao-routes';
-import { MODULE_LABELS } from '@/lib/module-updates';
+import { MODULE_LABELS, moduleLabelInSentence } from '@/lib/module-updates';
 import { useModuleUpdates } from '@/lib/use-module-updates';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
@@ -25,7 +25,7 @@ export function ContractUpdatesNotice({ enabled }: { enabled: boolean }) {
       variant={withdrawn ? 'error' : 'info'}
       title={
         withdrawn
-          ? `${MODULE_LABELS[plan.withdrawn[0].module]} needs an upgrade`
+          ? `An upgrade is needed for ${moduleLabelInSentence(plan.withdrawn[0].module)}`
           : count === 1
             ? 'A contract upgrade is available'
             : `${count} contract upgrades are available`
@@ -33,8 +33,8 @@ export function ContractUpdatesNotice({ enabled }: { enabled: boolean }) {
       description={
         withdrawn
           ? config.status === 'pending'
-            ? 'It is on a withdrawn version, so the community can’t launch until it’s upgraded.'
-            : 'It is on a withdrawn version. Upgrade it as soon as you can.'
+            ? 'That contract is on a withdrawn version, so the community can’t launch until it’s upgraded.'
+            : 'That contract is on a withdrawn version. Upgrade it as soon as you can.'
           : first
             ? `${MODULE_LABELS[first.module]} ${first.current} → ${first.next!.version}${count > 1 ? `, and ${count - 1} more` : ''}.`
             : undefined

@@ -13,6 +13,8 @@ export type DraftItem = {
   updatedAt: number;
   /** False for a DAO draft whose deployment record must be kept for recovery. */
   discardable: boolean;
+  /** A created community's draft; discarding it carries the launch choices over first. */
+  created?: boolean;
 };
 
 export type CommunityRef = { name: string; routeId: string };
@@ -28,6 +30,11 @@ export function daoDraftStatus(draft: LocalDaoDraft) {
     : draft.deployment
       ? 'Creating, needs a check'
       : '';
+}
+
+/** The new community's address once its creation is confirmed. */
+export function createdToken(draft: LocalDaoDraft) {
+  return draft.deployment?.status === 'confirmed' ? draft.deployment.addresses?.token : undefined;
 }
 
 /**
@@ -66,14 +73,20 @@ export function collectDrafts({
     });
   const daos: DraftItem[] = daoDrafts
     .filter((draft) => draft.deployment || draft.configuration.basicInfo.tokenName.trim())
-    .map((draft) => ({
-      kind: 'dao',
-      id: draft.id,
-      title: draft.configuration.basicInfo.tokenName.trim() || 'Untitled DAO',
-      meta: [daoDraftStatus(draft), saved(draft.updatedAt, now)].filter(Boolean).join(' · '),
-      href: `/create?draft=${encodeURIComponent(draft.id)}`,
-      updatedAt: draft.updatedAt,
-      discardable: !draft.deployment || draft.deployment.status === 'failed'
-    }));
+    // Once a created community shows up in your communities, its draft has nothing left to do.
+    .filter((draft) => !(createdToken(draft) && communities.has(createdToken(draft)!)))
+    .map((draft) => {
+      const token = createdToken(draft);
+      return {
+        kind: 'dao',
+        id: draft.id,
+        title: draft.configuration.basicInfo.tokenName.trim() || 'Untitled community',
+        meta: [daoDraftStatus(draft), saved(draft.updatedAt, now)].filter(Boolean).join(' · '),
+        href: token ? daoRoute(token, 'setup') : `/create?draft=${encodeURIComponent(draft.id)}`,
+        updatedAt: draft.updatedAt,
+        discardable: !draft.deployment || draft.deployment.status === 'failed' || Boolean(token),
+        created: Boolean(token)
+      };
+    });
   return [...proposals, ...daos].sort((a, b) => b.updatedAt - a.updatedAt);
 }

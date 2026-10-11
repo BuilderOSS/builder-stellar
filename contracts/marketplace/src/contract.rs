@@ -372,6 +372,37 @@ impl MarketplaceContract {
         .publish(e);
     }
 
+    /// Comment on a primary listing that was ever created (it may since be
+    /// sold, cancelled or expired). Anyone may comment, even while paused.
+    /// Event-only: emits `PrimaryListingCommented` and writes no storage.
+    pub fn comment_primary_listing(e: &Env, listing_id: u64, body: String, author: Address) {
+        author.require_auth();
+        if listing_id >= storage::peek_next_listing_id(e) {
+            panic_with_error!(e, MarketplaceError::ListingNotFound);
+        }
+        Self::check_comment(e, &body);
+        PrimaryListingCommented {
+            listing_id,
+            author,
+            body,
+        }
+        .publish(e);
+    }
+
+    /// Comment on `token_id`'s secondary listings. No active listing is
+    /// required, so the thread survives relisting. Anyone may comment, even
+    /// while paused. Event-only: emits `ListingCommented`, writes no storage.
+    pub fn comment_listing(e: &Env, token_id: u32, body: String, author: Address) {
+        author.require_auth();
+        Self::check_comment(e, &body);
+        ListingCommented {
+            token_id,
+            author,
+            body,
+        }
+        .publish(e);
+    }
+
     pub fn pause(e: &Env) {
         common::ttl::extend_instance(e);
         let (mut config, admin) = Self::require_admin(e);
@@ -468,6 +499,15 @@ impl MarketplaceContract {
         }
         if expires_at <= e.ledger().timestamp() {
             panic_with_error!(e, MarketplaceError::InvalidExpiry);
+        }
+    }
+
+    fn check_comment(e: &Env, body: &String) {
+        if body.is_empty() {
+            panic_with_error!(e, MarketplaceError::CommentEmpty);
+        }
+        if body.len() > common::MAX_COMMENT_LENGTH {
+            panic_with_error!(e, MarketplaceError::CommentTooLong);
         }
     }
 

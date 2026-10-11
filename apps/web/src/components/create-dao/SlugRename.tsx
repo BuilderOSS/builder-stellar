@@ -2,7 +2,7 @@
 import { Client as ManagerClient } from '@builder-stellar/manager-bindings';
 import { useState } from 'react';
 
-import { Button, Callout, Input } from '@/components/ui';
+import { Button, Callout, Field, FieldHelperText, FieldLabel, Input } from '@/components/ui';
 import { isValidSlug } from '@/lib/create-dao-schema';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { getDeploymentConfig } from '@/lib/deployment-config';
@@ -73,8 +73,8 @@ export function SlugRename({
         It launched first with this link, so your launch would fail. Pick another link, then launch. It becomes yours
         when you launch.
       </p>
-      <label htmlFor="rename-slug">
-        New link
+      <Field>
+        <FieldLabel htmlFor="rename-slug">New link</FieldLabel>
         <Input
           id="rename-slug"
           autoComplete="off"
@@ -83,11 +83,11 @@ export function SlugRename({
           disabled={busy || !address}
           onChange={(event) => setSlug(event.target.value.toLowerCase())}
         />
-      </label>
+        {message ? <FieldHelperText tone="error">{message}</FieldHelperText> : null}
+      </Field>
       <Button type="button" disabled={busy || !address || !slug} onClick={() => void rename()}>
         {busy ? 'Changing…' : 'Change the link'}
       </Button>
-      {message ? <p role="alert">{message}</p> : null}
     </Callout>
   );
 }

@@ -6,16 +6,47 @@ import { Address, Chip, Section } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { getTreasuryAssets } from '@/lib/assets-config';
 import { formatStroops } from '@/lib/auction-values';
+import { contractCallLabel } from '@/lib/contract-call-labels';
 import { inspectProposalAdminCall, type ProposalCallInspection } from '@/lib/proposal-action-inspection';
 import { normalizeProposalCallArgs, type ProposalCallArg, type ProposalCallArgs } from '@/lib/proposal-call';
+import { ProposalState } from '@/lib/proposal-state';
 import { encodeSupportedCall } from '@/lib/proposal-supported-calls';
+
+import { UpgradeActionDetail } from './upgrade-action-detail';
 
 type ProposalActionPreviewProps = {
   targets: string[];
   functions: string[];
   args: ProposalCallArgs;
   tokenContractId?: string;
+  /** Chain state, so the heading can say whether these actions will run, ran, or never will. */
+  state?: ProposalState;
 };
+
+/** Heading and count line for the action list, worded for where the proposal is. */
+export function actionListCopy(count: number, state: ProposalState | undefined) {
+  const one = count === 1;
+  const noun = one ? 'This action' : `These ${count} actions`;
+  switch (state) {
+    case ProposalState.Executed:
+      return { title: 'What it did', description: one ? undefined : `${noun} ran, in this order.` };
+    case ProposalState.Succeeded:
+    case ProposalState.Queued:
+      return { title: 'When it runs', description: one ? undefined : `${noun} run together, in this order.` };
+    case ProposalState.Defeated:
+    case ProposalState.Canceled:
+    case ProposalState.Expired:
+      return {
+        title: 'What it proposed',
+        description: one ? 'Nothing ran.' : `${noun} were proposed. Nothing ran.`
+      };
+    default:
+      return {
+        title: 'If it passes',
+        description: one ? undefined : `${noun} run together, in this order.`
+      };
+  }
+}
 
 function formatArg(value: ProposalCallArg) {
   if (value === null) return 'null';
@@ -71,7 +102,19 @@ function getActionTitle(
     const assetCode = getAssetCodeFromContractId(target, network, passphrase);
     return `Send ${amount} ${assetCode} to ${recipient}`;
   }
-  return functionName;
+  return contractCallLabel(functionName);
+}
+
+function pauseTitle(
+  target: string,
+  functionName: string,
+  config: { auctionContractId: string; marketplaceContractId: string }
+) {
+  if (functionName !== 'pause' && functionName !== 'unpause') return null;
+  const paused = functionName === 'pause';
+  if (target === config.auctionContractId) return paused ? 'Pause auctions' : 'Resume auctions';
+  if (target === config.marketplaceContractId) return paused ? 'Pause the market' : 'Reopen the market';
+  return null;
 }
 
 const action = sva({
@@ -132,9 +175,17 @@ const action = sva({
  * What a proposal does if it passes, in order. Plain titles first, then the
  * exact target and arguments so anyone can verify them.
  */
-export function ProposalActionPreview({ targets, functions, args, tokenContractId }: ProposalActionPreviewProps) {
+export function ProposalActionPreview({
+  targets,
+  functions,
+  args,
+  tokenContractId,
+  state
+}: ProposalActionPreviewProps) {
   const { daoConfig } = useDaoContext();
   const classes = action();
+  const copy = actionListCopy(functions.length, state);
+  const numbered = functions.length > 1;
   let normalizedArgs: ProposalCallArgs = [];
   try {
     normalizedArgs = normalizeProposalCallArgs(args);
@@ -143,10 +194,7 @@ export function ProposalActionPreview({ targets, functions, args, tokenContractI
   }
 
   return (
-    <Section
-      title="If it passes"
-      description={`${functions.length} action${functions.length === 1 ? '' : 's'}, run in this order`}
-    >
+    <Section title={copy.title} description={functions.length ? copy.description : undefined}>
       {!functions.length ? (
         <p className={css({ textStyle: 'body', color: 'ink.muted', m: '0' })}>This proposal makes no changes.</p>
       ) : (
@@ -165,6 +213,7 @@ export function ProposalActionPreview({ targets, functions, args, tokenContractI
               inspection = inspectProposalAdminCall(target, functionName, actionArgs, daoConfig);
               title =
                 inspection?.title ??
+                pauseTitle(target, functionName, daoConfig) ??
                 getActionTitle(target, functionName, actionArgs, tokenContractId, daoConfig.name, daoConfig.passphrase);
             } catch {
               supported = false;
@@ -172,18 +221,22 @@ export function ProposalActionPreview({ targets, functions, args, tokenContractI
             return (
               <li key={`${functionName}:${index}`} className={classes.root}>
                 <div className={classes.head}>
-                  <span className={classes.index} aria-hidden="true">
-                    {index + 1}
-                  </span>
+                  {numbered ? (
+                    <span className={classes.index} aria-hidden="true">
+                      {index + 1}
+                    </span>
+                  ) : null}
                   <p className={classes.title}>{title}</p>
                 </div>
-                {inspection ? (
+                {inspection?.upgrade ? (
+                  <UpgradeActionDetail {...inspection.upgrade} contract={target} />
+                ) : inspection ? (
                   <>
                     <div className={classes.risk}>
                       <TriangleAlert aria-hidden="true" />
                       <div>
-                        <Chip tone="warning">High risk</Chip>
-                        <p className={css({ m: '0', mt: '1.5' })}>{inspection.risk}</p>
+                        {inspection.risk.startsWith('High risk') ? <Chip tone="warning">High risk</Chip> : null}
+                        <p className={css({ m: '0', mt: '1.5' })}>{inspection.risk.replace(/^High risk:\s*/, '')}</p>
                       </div>
                     </div>
                     <dl className={classes.fields}>
@@ -198,13 +251,18 @@ export function ProposalActionPreview({ targets, functions, args, tokenContractI
                     </dl>
                   </>
                 ) : null}
-                <Address value={target} label="Contract" compact />
-                <p className={classes.raw}>
-                  {functionName}({actionArgs.map(formatArg).join(', ') || JSON.stringify(args[index] ?? [])})
-                </p>
+                {inspection?.upgrade ? null : (
+                  <>
+                    <Address value={target} label="Contract" compact />
+                    <p className={classes.raw}>
+                      {functionName}({actionArgs.map(formatArg).join(', ') || JSON.stringify(args[index] ?? [])})
+                    </p>
+                  </>
+                )}
                 {!supported ? (
                   <p className={classes.note}>
-                    Unknown or unsupported ABI. Raw indexed call shown; automatic submission is disabled.
+                    This app can't read this call, so it's shown exactly as indexed. Queueing and running it from here
+                    are turned off.
                   </p>
                 ) : null}
               </li>

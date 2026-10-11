@@ -13,6 +13,8 @@ export type GoldskyActivityItem = {
   proposal_id: string | null;
   token_id: string | null;
   amount: string | null;
+  /** SAC contract id the amount is paid in, when known. */
+  payment_asset?: string | null;
   proposal_number: string | null;
   actor: string | null;
   addresses: string | string[] | null;
@@ -120,6 +122,8 @@ export type DashboardFeedItem = {
   proposal_id: string | null;
   token_id: string | null;
   amount: string | null;
+  /** SAC contract id the amount is paid in, when known. */
+  payment_asset?: string | null;
   actor: string | null;
   ledger_sequence: number;
   timestamp: string | number | null;

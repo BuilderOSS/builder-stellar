@@ -14,7 +14,7 @@ import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
 import { useProposalEligibility } from '@/lib/proposal-eligibility';
-import { ProposalState } from '@/lib/proposal-state';
+import { ProposalState, proposalStateDisplay } from '@/lib/proposal-state';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { selectHasDraft, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
@@ -67,6 +67,11 @@ export default function ProposalsPage() {
     });
   }, [items, query, status]);
   const openItems = visibleItems.filter((item) => item.state !== null && OPEN_STATES.has(item.state));
+  const votingNow = openItems.filter((item) => item.state === ProposalState.Active).length;
+  const openingSoon = openItems.length - votingNow;
+  const openSummary = [votingNow ? `${votingNow} voting now` : '', openingSoon ? `${openingSoon} opening soon` : '']
+    .filter(Boolean)
+    .join(', ');
   const pastItems = visibleItems.filter((item) => item.state === null || !OPEN_STATES.has(item.state));
   const createDisabled = !hasDraft && !eligibility.eligible;
   const canShowProposalAction = Boolean(session.address) || !hasDraft;
@@ -87,6 +92,9 @@ export default function ProposalsPage() {
       }
     >
       {createDisabledMessage && session.address ? <p className={hint}>{createDisabledMessage}</p> : null}
+      {!session.address && config.status !== 'pending' ? (
+        <p className={hint}>Connect a wallet to make a proposal.</p>
+      ) : null}
 
       <div className={toolbar} role="search">
         <SearchInput label="Search proposals" placeholder="Search proposals" value={query} onValueChange={setQuery} />
@@ -95,7 +103,7 @@ export default function ProposalsPage() {
             <option value="all">All statuses</option>
             {statusOptions.map((option) => (
               <option key={option} value={option}>
-                {option}
+                {proposalStateDisplay(option)}
               </option>
             ))}
           </Select>
@@ -138,7 +146,7 @@ export default function ProposalsPage() {
       ) : (
         <>
           {openItems.length ? (
-            <Section title="Open now" description={`${openItems.length} to vote on`}>
+            <Section title="Open now" description={openSummary}>
               <div>
                 {openItems.map((item) => (
                   <ProposalRow key={item.proposalId} item={item} href={href(item.proposalNumber)} />

@@ -57,7 +57,7 @@ async function validateWalletNetwork(
     const matchesConfiguredNetwork = walletNetwork.networkPassphrase === currentNetwork.passphrase;
     const status = matchesConfiguredNetwork
       ? `Connected on ${currentNetwork.label}`
-      : `Wallet network mismatch: ${walletNetwork.network ?? 'unknown'} is not ${currentNetwork.label}`;
+      : `Your wallet is on ${walletNetwork.network ?? 'another network'}, not ${currentNetwork.label}`;
 
     updateSession({
       status,

@@ -2,8 +2,10 @@
 
 import { useRouter } from 'next/navigation';
 import { useRef, useState } from 'react';
+import { css } from 'styled-system/css';
 
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
+import { Button, Field, FieldLabel, Textarea } from '@/components/ui';
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
@@ -142,9 +144,11 @@ export function AllocationDraftForm({ state }: { state?: ClaimState }) {
         Review limit: 100 recipients. Replacing a root/list starts a new round and permits repeat claims. Batch mint is
         immediate admin allocation, not a claim round.
       </p>
-      <label>
-        Allocation JSON
-        <textarea
+      <Field>
+        <FieldLabel htmlFor="allocation-json">Allocation JSON</FieldLabel>
+        <Textarea
+          id="allocation-json"
+          className={css({ textStyle: 'mono', fontSize: '0.8125rem' })}
           value={text}
           onChange={(event) => {
             setText(event.target.value);
@@ -152,10 +156,17 @@ export function AllocationDraftForm({ state }: { state?: ClaimState }) {
             cancelReview();
           }}
         />
-      </label>
-      <button disabled={!allowed || busy || !!proposal.pending} onClick={() => void review()}>
-        {busy ? 'Refreshing allocation authority…' : 'Review allocation proposal'}
-      </button>
+      </Field>
+      <div>
+        <Button
+          variant="secondary"
+          disabled={!allowed || !!proposal.pending}
+          loading={busy}
+          onClick={() => void review()}
+        >
+          Review allocation proposal
+        </Button>
+      </div>
       {result ? (
         <pre className={styles.address} role="status">
           {result}

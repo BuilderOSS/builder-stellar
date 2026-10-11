@@ -899,7 +899,8 @@ mod refunds {
         }
         fn bid(&self, who: &Address, amount: i128) {
             let id = self.auction.get_auction().token_id;
-            self.auction.create_bid(who, &id, &amount);
+            self.auction
+                .create_bid(who, &id, &amount, &String::from_str(&self.e, ""));
         }
         /// contract balance == live highest bid + sum(PendingRefund)
         fn assert_invariant(&self) {
@@ -1141,7 +1142,7 @@ mod refunds {
             invoke: &MockAuthInvoke {
                 contract: &c.addr,
                 fn_name: "create_bid",
-                args: (who.clone(), id, amount).into_val(&c.e),
+                args: (who.clone(), id, amount, String::from_str(&c.e, "")).into_val(&c.e),
                 sub_invokes: &[MockAuthInvoke {
                     contract: &c.token.address,
                     fn_name: "transfer",
@@ -1150,7 +1151,8 @@ mod refunds {
                 }],
             },
         }]);
-        c.auction.create_bid(who, &id, &amount);
+        c.auction
+            .create_bid(who, &id, &amount, &String::from_str(&c.e, ""));
     }
 
     #[test]
@@ -1347,5 +1349,40 @@ mod refunds {
         );
         c.e.set_auths(&[]);
         assert!(c.auction.try_migrate().is_err());
+    }
+
+    #[test]
+    fn bid_comment_is_emitted_in_bid_placed() {
+        let mut c = setup();
+        let a = c.funded(100_000_000);
+        let auction = c.auction.get_auction();
+        let (id, end) = (auction.token_id, auction.end_time);
+        let comment = String::from_str(&c.e, &"a".repeat(common::MAX_COMMENT_LENGTH as usize));
+        c.auction.create_bid(&a, &id, &20_000_000, &comment);
+        assert!(c.emitted(&crate::events::BidPlaced {
+            token_id: id,
+            bidder: a,
+            amount: 20_000_000,
+            extended: false,
+            new_end_time: end,
+            comment,
+        }));
+    }
+
+    #[test]
+    fn bid_comment_over_cap_is_rejected_before_payment() {
+        let mut c = setup();
+        let a = c.funded(100_000_000);
+        let id = c.auction.get_auction().token_id;
+        let comment = String::from_str(&c.e, &"a".repeat(common::MAX_COMMENT_LENGTH as usize + 1));
+        assert_eq!(
+            c.auction
+                .try_create_bid(&a, &id, &20_000_000, &comment)
+                .err()
+                .unwrap()
+                .unwrap(),
+            AuctionError::CommentTooLong.into()
+        );
+        assert_eq!(c.token.balance(&a), 100_000_000);
     }
 }

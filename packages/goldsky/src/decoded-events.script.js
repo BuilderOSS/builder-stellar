@@ -73,6 +73,8 @@ function invoke(data) {
     // Governor (custom + OpenZeppelin governor)
     GovernorInitialized: ['admin'], ProposalCreated: ['proposal_id', 'proposer'], ProposalScheduled: ['proposal_id'],
     VoteCast: ['voter', 'proposal_id'],
+    // Governor 0.2.0+: event-only proposal comment (body in data).
+    ProposalCommented: ['proposal_id', 'author'],
     ProposalQueued: ['proposal_id'], ProposalExecuted: ['proposal_id'], ProposalCancelled: ['proposal_id'],
     QueueDelayChanged: ['changed_by'], VotingDelayChanged: ['changed_by'], VotingPeriodChanged: ['changed_by'],
     ProposalThresholdChanged: ['changed_by'], QuorumBpsChanged: ['changed_by'], QuorumChanged: [],
@@ -93,6 +95,8 @@ function invoke(data) {
     MarketplaceInitialized: ['token', 'admin'], PrimaryListingCreated: ['listing_id'], PrimaryListingPurchased: ['listing_id', 'buyer'],
     PrimaryListingCancelled: ['listing_id'], PrimaryListingExpired: ['listing_id'], SecondaryListingCreated: ['token_id'],
     ListingPurchased: ['token_id', 'buyer'], ListingCancelled: ['token_id'], ListingExpired: ['token_id'],
+    // Marketplace 0.2.0+: event-only comments (body in data).
+    PrimaryListingCommented: ['listing_id', 'author'], ListingCommented: ['token_id', 'author'],
     PaymentAssetUpdated: ['changed_by'], SecondaryFeeUpdated: ['changed_by'],
     MarketplacePaused: ['changed_by'], MarketplaceUnpaused: ['changed_by']
   };

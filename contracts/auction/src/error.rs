@@ -40,4 +40,6 @@ pub enum AuctionError {
     NoPendingRefund = 7416,
     /// `time_buffer` outside 1..=86400 seconds
     InvalidTimeBuffer = 7417,
+    /// Bid comment exceeds `MAX_COMMENT_LENGTH`
+    CommentTooLong = 7418,
 }

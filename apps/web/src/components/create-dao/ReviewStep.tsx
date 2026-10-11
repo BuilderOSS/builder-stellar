@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 
-import { Input } from '@/components/ui';
+import { Disclosure, Input } from '@/components/ui';
 import { membershipTypeOf, votingPaceOf } from '@/lib/create-dao-presets';
 import { configuredCreationNetwork, creationAssets } from '@/lib/create-dao-schema';
 import { formatDuration } from '@/lib/duration';
@@ -72,11 +72,11 @@ export function ReviewStep({ connectedAddress }: { connectedAddress?: string }) 
         Creating sets your community up in Setup, not live yet. There you add artwork and mint founder tokens. Launching
         is a separate step you sign when you&apos;re ready.
       </p>
-      <details
+      <Disclosure
+        title="Advanced: metadata links"
         open={metadataOpen || Boolean(errors.tokenUri || errors.rendererBase)}
-        onToggle={(event) => setMetadataOpen(event.currentTarget.open)}
+        onOpenChange={setMetadataOpen}
       >
-        <summary className={styles.label}>Advanced: metadata links</summary>
         <div className={styles.stack}>
           <CreationField id="tokenUri" label="Token metadata URL" hint="Use {daoId} for the predicted token address">
             <Input
@@ -97,7 +97,7 @@ export function ReviewStep({ connectedAddress }: { connectedAddress?: string }) 
             />
           </CreationField>
         </div>
-      </details>
+      </Disclosure>
     </div>
   );
 }

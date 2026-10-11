@@ -1,10 +1,18 @@
+import { activeNetworkName } from '@/lib/active-network';
+import { getTreasuryAssets } from '@/lib/assets-config';
 import { formatStroops } from '@/lib/auction-values';
 import type { DashboardFeedItem, GoldskyActivityItem } from '@/lib/goldsky-queries';
 import { parseProposalMetadata } from '@/lib/proposal-metadata';
 
 type ActivityItem =
-  | Pick<GoldskyActivityItem, 'event_name' | 'topics' | 'args' | 'token_id' | 'amount' | 'summary' | 'title'>
-  | Pick<DashboardFeedItem, 'event_name' | 'topics' | 'args' | 'token_id' | 'amount' | 'summary' | 'title'>;
+  | Pick<
+      GoldskyActivityItem,
+      'event_name' | 'topics' | 'args' | 'token_id' | 'amount' | 'summary' | 'title' | 'payment_asset'
+    >
+  | Pick<
+      DashboardFeedItem,
+      'event_name' | 'topics' | 'args' | 'token_id' | 'amount' | 'summary' | 'title' | 'payment_asset'
+    >;
 type LinkableItem = ActivityItem & { proposal_id?: string | null };
 
 export type ActivityCategory = 'Governance' | 'Auction' | 'Market' | 'Membership' | 'DAO';
@@ -41,11 +49,15 @@ export function shortAddress(value: string | undefined) {
   return /^[GC][A-Z2-7]{55}$/.test(value) ? `${value.slice(0, 4)}…${value.slice(-4)}` : value;
 }
 
-/** Payment amounts are SAC base units with 7 decimals (XLM, USDC). */
-function amount(value: string | undefined) {
+/** Payment amounts are SAC base units with 7 decimals (XLM, USDC), shown with the asset's code when known. */
+function amount(value: string | undefined, paymentAsset?: string | null) {
   if (!value || !/^\d+$/.test(value)) return undefined;
   try {
-    return formatStroops(value);
+    const formatted = formatStroops(value);
+    const code = paymentAsset
+      ? getTreasuryAssets(activeNetworkName()).find((asset) => asset.contractId === paymentAsset)?.code
+      : undefined;
+    return code ? `${formatted} ${code}` : formatted;
   } catch {
     return undefined;
   }
@@ -59,7 +71,7 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
   const event = (item.event_name ?? '').toLowerCase().replace(/_/g, '');
   const token = firstValue(item.token_id, topics.token_id, args.token_id);
   const tokenLabel = token === undefined ? 'a token' : `#${token}`;
-  const value = amount(firstValue(item.amount, args.amount, args.price));
+  const value = amount(firstValue(item.amount, args.amount, args.price), item.payment_asset);
   const base = daoId ? `/dao/${daoId}` : undefined;
   const proposalId = firstValue(item.proposal_id, topics.proposal_id);
   const proposalHref = base && proposalId ? `${base}/proposals/${proposalId}` : undefined;
@@ -87,12 +99,19 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
         href: proposalHref
       };
     }
+    case 'proposalcommented':
+      return {
+        category: 'Governance',
+        title: `${shortAddress(firstValue(topics.author))} commented on a proposal`,
+        detail: firstValue(args.body) ? `“${firstValue(args.body)}”` : undefined,
+        href: proposalHref
+      };
     case 'proposalqueued':
       return { category: 'Governance', title: 'Proposal passed and queued for execution', href: proposalHref };
     case 'proposalexecuted':
       return { category: 'Governance', title: 'Proposal executed', href: proposalHref };
     case 'proposalcancelled':
-      return { category: 'Governance', title: 'Proposal cancelled', href: proposalHref };
+      return { category: 'Governance', title: 'Proposal canceled', href: proposalHref };
     case 'delegatechanged':
       return {
         category: 'Governance',
@@ -100,12 +119,15 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
       };
     case 'auctioncreated':
       return { category: 'Auction', title: `Auction started for ${tokenLabel}`, href: auctionHref };
-    case 'bidplaced':
+    case 'bidplaced': {
+      const comment = firstValue(args.comment);
       return {
         category: 'Auction',
         title: `${shortAddress(firstValue(topics.bidder))} bid ${value ?? 'on'}${value ? ` on ${tokenLabel}` : ` ${tokenLabel}`}`,
+        detail: comment ? `“${comment}”` : undefined,
         href: auctionHref
       };
+    }
     case 'auctionsettled': {
       const winner = firstValue(topics.winner, args.winner);
       return {
@@ -117,7 +139,7 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
       };
     }
     case 'auctioncancelled':
-      return { category: 'Auction', title: `Auction for ${tokenLabel} cancelled`, href: auctionHref };
+      return { category: 'Auction', title: `Auction for ${tokenLabel} canceled`, href: auctionHref };
     case 'primarylistingcreated':
       return { category: 'Market', title: `New token offered for ${value ?? 'sale'}`, href: marketHref };
     case 'primarylistingpurchased':
@@ -134,6 +156,16 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
         title: `${shortAddress(firstValue(topics.buyer))} bought ${tokenLabel}${value ? ` for ${value}` : ''}`,
         href: marketHref
       };
+    case 'primarylistingcommented':
+    case 'listingcommented': {
+      const listingId = firstValue(topics.listing_id);
+      return {
+        category: 'Market',
+        title: `${shortAddress(firstValue(topics.author))} commented on ${event === 'listingcommented' ? tokenLabel : `new token listing ${listingId ?? ''}`.trim()}`,
+        detail: firstValue(args.body) ? `“${firstValue(args.body)}”` : undefined,
+        href: marketHref
+      };
+    }
     case 'mintbatchwithminter': {
       const count = Number(firstValue(args.count));
       const first = Number(firstValue(topics.first_token_id, args.first_token_id));
@@ -161,12 +193,11 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
         title: `${firstValue(args.total_amount, item.amount) ?? 'Tokens'} tokens allocated to ${firstValue(args.recipient_count) ?? 'several'} members`
       };
     case 'daolaunched':
-      return { category: 'DAO', title: 'The DAO launched' };
+      return { category: 'DAO', title: 'The community launched' };
     case 'upgraded':
       return {
         category: 'DAO',
-        title: `Contract upgraded to version ${firstValue(args.version) ?? 'unknown'}`,
-        detail: 'Verify the new code hash before trusting the release.'
+        title: `Contract upgraded to version ${firstValue(args.version) ?? 'unknown'}`
       };
     default:
       return { category: 'DAO', title: item.title, detail: item.summary };

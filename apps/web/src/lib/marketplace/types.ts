@@ -1,4 +1,5 @@
 import type { NetworkName } from '@/config/networks';
+import type { CommentItem } from '@/lib/comments';
 
 export type ListingKind = 'primary' | 'secondary';
 export type ListingStatus = 'open' | 'purchased' | 'cancelled' | 'expired' | 'awaiting-expiry';
@@ -88,7 +89,13 @@ export type MarketplaceAction =
       feeBps: number;
     }
   | { action: 'revoke'; tokenId: string }
-  | { action: 'trustline'; paymentAsset: string };
+  | { action: 'trustline'; paymentAsset: string }
+  | { action: 'comment'; kind: ListingKind; id: string; body: string };
+export interface MarketplaceComments {
+  deploymentId: string;
+  daoId: string;
+  items: CommentItem[];
+}
 export interface MarketplacePrepared {
   deploymentId: string;
   daoId: string;

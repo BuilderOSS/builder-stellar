@@ -75,8 +75,10 @@ DAOs keep their addresses and history only through upgrades.
    (`RELEASE_NOTES[module][version]`). Manage → Contract upgrades, the setup checklist and the proposal
    description show it; the registry itself only stores a version and a hash.
 4. Features that need the new release must **check the version** and explain the upgrade instead of silently
-   misbehaving on old modules (e.g. `tokenReportsRenames(version)` in `lib/community-profile-plan.ts` locks rename
-   until token 0.2.0 and links to Manage → Contract upgrades).
+   misbehaving on old modules: read the module's `version()`, lock the feature below the release, and link to
+   Manage → Contract upgrades. (Token 0.2.0 renames and the 0.2.0 comments did this.) Once every deployed
+   community runs the release, **delete the check and any old-call fallback** (§6), so the app only carries
+   code for releases that are actually live.
 
 ## 4. Indexer and read model (if events or views change)
 
@@ -145,6 +147,10 @@ then each DAO.
      that isn't queued expires 14 days after voting ends; a queued one 14 days after its ETA.
    - Treasury and Governor upgrade themselves through the Treasury's self-call allowlist (`upgrade`, `migrate`,
      `sync_version`). If `sync_version` in the same execute still sees old code, put it in a second proposal.
+   - Manage puts every module upgrade in **one** proposal except the Treasury's, which goes alone: the Treasury
+     runs the proposal, so later calls in the same run would still use its old code. The Governor batches safely
+     (it has finished with the proposal before the Treasury makes the calls); see
+     `comment_modules_upgrade_by_proposal_keeps_live_state` in `contracts/e2e/src/test.rs`.
 
 ## 6. Verify
 
@@ -156,6 +162,8 @@ stellar contract invoke --id <module-address> --network <network> --source-accou
 - Read model: `manager.module_versions` shows the new hash/version and `upgrade_count`; the activity feed shows
   "Contract upgraded to version …".
 - Exercise the new behaviour once on the upgraded DAO (e.g. rename) and confirm it reaches the app after indexing.
+- When every community is on the release, remove the version checks and old-call fallbacks from the app
+  (see §3.4) and record each DAO's proposal transactions in the deploy record.
 - Report every transaction hash.
 
 ## Rolling back

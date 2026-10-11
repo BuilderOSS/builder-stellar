@@ -52,6 +52,14 @@ pub const MAX_FEE_BPS: u32 = 2_500;
 /// Maximum length of a configurable string (names, URIs, descriptions).
 pub const MAX_STRING_LENGTH: u32 = 256;
 
+/// Maximum length in bytes of a proposal comment or vote reason (~1,350
+/// English words). Comments are event-only, and a transaction may publish at
+/// most 16 KiB of contract events, so this leaves room for the event envelope.
+pub const MAX_PROPOSAL_COMMENT_LENGTH: u32 = 8_192;
+/// Maximum length in bytes of a bid or listing comment. Bids also emit token
+/// transfer and refund events in the same transaction, so this stays small.
+pub const MAX_COMMENT_LENGTH: u32 = 1_024;
+
 /// Contract-event budget for one `batch_mint` call, in estimated bytes.
 ///
 /// A transaction may publish at most 16 KiB of contract events. A batch emits

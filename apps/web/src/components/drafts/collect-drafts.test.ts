@@ -82,6 +82,24 @@ describe('collectDrafts', () => {
     expect(failed.discardable).toBe(true);
   });
 
+  it('sends a created community to its setup, lets it be discarded, and drops it once it is listed', () => {
+    const token = `C${'B'.repeat(55)}`;
+    const created = daoDraft('d4', 'Lantern Club', NOW, {
+      status: 'confirmed',
+      addresses: { token }
+    } as LocalDaoDraft['deployment']);
+    const [item] = collectDrafts({ proposalDrafts: {}, daoDrafts: [created], communities: new Map(), now: NOW });
+    expect(item).toMatchObject({ href: `/dao/${token}/setup`, discardable: true, created: true });
+    expect(
+      collectDrafts({
+        proposalDrafts: {},
+        daoDrafts: [created],
+        communities: new Map([[token, { name: 'Lantern Club', routeId: 'lantern' }]]),
+        now: NOW
+      })
+    ).toEqual([]);
+  });
+
   it('falls back to a short address for a community it cannot name', () => {
     const [item] = collectDrafts({
       proposalDrafts: {

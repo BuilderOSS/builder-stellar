@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { css } from 'styled-system/css';
 import useSWR from 'swr';
 
+import { CommentThread } from '@/components/comments/comment-thread';
 import { ProposalActionPreview } from '@/components/proposal/proposal-action-preview';
 import { ProposalExecutePanel } from '@/components/proposal/proposal-execute-panel';
 import { ProposalExecutionReceipt } from '@/components/proposal/proposal-execution-receipt';
@@ -23,6 +24,7 @@ import { Avatar, Button, ButtonLink, Callout, ConfirmAction, Skeleton } from '@/
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
 import { shortAddress } from '@/lib/activity-feed';
+import { commentBytes, type CommentItem, MAX_PROPOSAL_COMMENT_BYTES } from '@/lib/comments';
 import { daoRoute } from '@/lib/dao-routes';
 import { keccak256Bytes } from '@/lib/keccak';
 import { proposalActionAvailability } from '@/lib/proposal-availability';
@@ -43,6 +45,8 @@ type ProposalPageData = {
   detail: ProposalDetail;
   votes: ProposalVoteItem[];
   votesError: string;
+  comments: CommentItem[];
+  commentsError: boolean;
 };
 
 const VOTE_FOR = 1;
@@ -75,9 +79,12 @@ async function fetchProposalPageData([, , daoId, proposalId]: readonly [
   string,
   string
 ]): Promise<ProposalPageData> {
-  const [detailResponse, votesResponse] = await Promise.all([
+  const [detailResponse, votesResponse, commentsResponse] = await Promise.all([
     fetch(`/api/dao/${encodeURIComponent(daoId)}/proposals/${proposalId}`, { cache: 'no-store' }),
     fetch(`/api/dao/${encodeURIComponent(daoId)}/proposals/${proposalId}/votes`, { cache: 'no-store' }).catch(
+      () => null
+    ),
+    fetch(`/api/dao/${encodeURIComponent(daoId)}/proposals/${proposalId}/comments`, { cache: 'no-store' }).catch(
       () => null
     )
   ]);
@@ -91,10 +98,16 @@ async function fetchProposalPageData([, , daoId, proposalId]: readonly [
     ? ((await votesResponse.json().catch(() => null)) as { items?: ProposalVoteItem[] } | null)
     : null;
 
+  const commentsPayload = commentsResponse
+    ? ((await commentsResponse.json().catch(() => null)) as { items?: CommentItem[] } | null)
+    : null;
+
   return {
     detail,
     votes: votesResponse?.ok ? (votesPayload?.items ?? []) : [],
-    votesError: votesResponse?.ok && votesPayload ? '' : 'Indexed vote history is unavailable.'
+    votesError: votesResponse?.ok && votesPayload ? '' : 'Vote history is unavailable.',
+    comments: commentsResponse?.ok ? (commentsPayload?.items ?? []) : [],
+    commentsError: !(commentsResponse?.ok && commentsPayload)
   };
 }
 
@@ -136,6 +149,7 @@ export default function ProposalDetailPage() {
   const [formMessage, setFormMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [justVoted, setJustVoted] = useState(false);
+  const [commenting, setCommenting] = useState(false);
   const tx = useTransactionFeedback(config.name);
   const [now, setNow] = useState(() => Date.now());
   const [executionResult, setExecutionResult] = useState<{
@@ -235,7 +249,7 @@ export default function ProposalDetailPage() {
     const state = (await governor.proposal_state({ proposal_id: proposalIdToBuffer(detail.proposalId) })).result;
     if (!expected.includes(state)) {
       void mutate();
-      throw new Error('Proposal state changed. Refresh before continuing.');
+      throw new Error('This proposal changed since you opened it. Refresh and try again.');
     }
     return governor;
   }
@@ -282,9 +296,14 @@ export default function ProposalDetailPage() {
       return;
     }
 
+    if (commentBytes(voteReason) > MAX_PROPOSAL_COMMENT_BYTES) {
+      setFormMessage('Your reason is too long. Shorten it, or post the rest as a comment.');
+      return;
+    }
+
     setBusy(true);
     setFormMessage('');
-    tx.start('Submitting vote...');
+    tx.start('Casting your vote');
 
     try {
       const governor = await requireCurrentState([ProposalState.Active]);
@@ -292,7 +311,7 @@ export default function ProposalDetailPage() {
         (await governor.has_voted({ proposal_id: proposalIdToBuffer(detail.proposalId), account: session.address }))
           .result
       )
-        throw new Error('This wallet has already voted.');
+        throw new Error('You’ve already voted on this proposal.');
       const assembled = await governor.cast_vote({
         proposal_id: proposalIdToBuffer(detail.proposalId),
         vote_type: voteType,
@@ -301,7 +320,7 @@ export default function ProposalDetailPage() {
       });
       const sent = await assembled.signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
-      tx.submitted('Vote submitted', hash);
+      tx.submitted('Vote sent', hash);
       await waitForConfirmation(hash, config.rpcUrl);
       setVoteReason('');
       setSelectedVoteType(null);
@@ -312,6 +331,33 @@ export default function ProposalDetailPage() {
       tx.fail(err, 'Vote failed', 'governor');
     } finally {
       setBusy(false);
+    }
+  }
+
+  // Comments are event-only: the governor emits ProposalCommented and stores nothing.
+  async function postComment(body: string) {
+    if (!detail) return false;
+    setCommenting(true);
+    tx.start('Posting your comment');
+    try {
+      const governor = await getGovernor();
+      const assembled = await governor.comment({
+        proposal_id: proposalIdToBuffer(detail.proposalId),
+        body,
+        author: session.address
+      });
+      const sent = await assembled.signAndSend();
+      const hash = sent.sendTransactionResponse?.hash ?? '';
+      tx.submitted('Comment sent', hash);
+      await waitForConfirmation(hash, config.rpcUrl);
+      await mutate();
+      tx.success('Comment posted', hash);
+      return true;
+    } catch (err) {
+      tx.fail(err, 'Comment failed', 'governor');
+      return false;
+    } finally {
+      setCommenting(false);
     }
   }
 
@@ -332,7 +378,7 @@ export default function ProposalDetailPage() {
 
     setBusy(true);
     setFormMessage('');
-    tx.start('Queueing proposal...');
+    tx.start('Queueing proposal');
 
     try {
       const governor = await requireCurrentState([ProposalState.Succeeded]);
@@ -346,7 +392,7 @@ export default function ProposalDetailPage() {
       const assembled = await governor.queue(payload);
       const sent = await assembled.signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
-      tx.submitted('Proposal queued', hash);
+      tx.submitted('Queueing proposal', hash);
       await waitForConfirmation(hash, config.rpcUrl);
       await mutate();
       tx.success('Proposal queued', hash);
@@ -371,13 +417,13 @@ export default function ProposalDetailPage() {
       return;
     }
     if (detail.eta && Date.now() < detail.eta * 1000) {
-      setFormMessage('Queued proposal is not ready to execute yet.');
+      setFormMessage('The safety delay isn’t over yet.');
       return;
     }
 
     setBusy(true);
     setFormMessage('');
-    tx.start('Executing proposal...');
+    tx.start('Executing proposal');
 
     try {
       const governor = await requireCurrentState([ProposalState.Queued]);
@@ -404,7 +450,7 @@ export default function ProposalDetailPage() {
         throw new Error('No transaction hash received from response');
       }
 
-      tx.submitted('Proposal executing', hash);
+      tx.submitted('Executing proposal', hash);
 
       const confirmed = await waitForConfirmation(hash, config.rpcUrl);
       try {
@@ -428,13 +474,13 @@ export default function ProposalDetailPage() {
   async function cancelProposal() {
     if (!detail || detail.proposer !== session.address) return;
     setBusy(true);
-    tx.start('Canceling proposal...');
+    tx.start('Canceling proposal');
     try {
       const governor = await requireCurrentState([ProposalState.Pending, ProposalState.Active]);
       const payload = await verifiedCallPayload(governor);
       const sent = await (await governor.cancel({ ...payload, operator: session.address })).signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
-      tx.submitted('Cancellation submitted', hash);
+      tx.submitted('Canceling proposal', hash);
       await waitForConfirmation(hash, config.rpcUrl);
       await mutate();
       tx.success('Proposal canceled', hash);
@@ -454,12 +500,12 @@ export default function ProposalDetailPage() {
       : !session.address
         ? 'Connect a wallet to vote.'
         : votingPowerLoading
-          ? 'Voting power is still loading.'
+          ? 'Checking your votes…'
           : votingPowerError
-            ? `Voting power could not be loaded: ${votingPowerError.message}`
+            ? `Your votes didn't load: ${votingPowerError.message}`
             : votingPower && votingPower.votes > 0n
               ? ''
-              : 'No voting power at the proposal snapshot.';
+              : "You didn't hold any votes when this proposal was made, so you can't vote on it.";
   const canVote = Boolean(availability.vote && hasVoted === false && !voteUnavailableReason);
 
   function voteLabelForSupport(support: number) {
@@ -480,11 +526,11 @@ export default function ProposalDetailPage() {
         votingPowerError={votingPowerError?.message ?? ''}
         unavailableReason={
           hasVotedError
-            ? 'Unable to check whether this wallet has voted.'
+            ? "Couldn't check whether you've already voted."
             : hasVoted === undefined && session.address
-              ? 'Checking prior vote...'
+              ? 'Checking whether you’ve already voted…'
               : hasVoted
-                ? 'This wallet has already voted.'
+                ? 'You’ve already voted. Your vote shows here once it’s indexed.'
                 : voteUnavailableReason
         }
         onVoteReasonChange={setVoteReason}
@@ -507,11 +553,15 @@ export default function ProposalDetailPage() {
         now={now}
         eta={detail.eta}
         expiresAt={detail.expiresAt}
+        actionCount={detail.functions.length}
         onExecute={() => void executeProposal()}
       />
     ) : null;
 
   const voters = votes.map((vote) => vote.voter);
+  const votePhase =
+    detail?.state === ProposalState.Pending ? 'upcoming' : detail?.state === ProposalState.Active ? 'open' : 'closed';
+  const pendingVote = detail?.state === ProposalState.Pending;
 
   return (
     <div className={page}>
@@ -552,13 +602,19 @@ export default function ProposalDetailPage() {
             <aside className={side} aria-label="Status and voting">
               {formMessage ? <Callout variant="warning" title={formMessage} /> : null}
               <ProposalLifecyclePanel detail={detail} now={now} actionSlot={actionPanel} />
-              <section className={summaryCard} aria-label="Results so far">
+              <section
+                className={summaryCard}
+                aria-label={
+                  votePhase === 'closed' ? 'Results' : votePhase === 'open' ? 'Results so far' : 'What it needs to pass'
+                }
+              >
                 <ProposalVoteSummary
                   totals={{ for: detail.for_votes, against: detail.against_votes, abstain: detail.abstain_votes }}
                   quorumVotes={detail.quorumVotes}
                   voters={voters}
                   viewer={session.address}
                   celebrateViewer={justVoted}
+                  phase={votePhase}
                 />
               </section>
               {detail.proposer === session.address &&
@@ -570,7 +626,11 @@ export default function ProposalDetailPage() {
                     </Button>
                   }
                   title="Cancel this proposal?"
-                  description="Voting stops and it can't be reopened. You'd need to propose it again."
+                  description={
+                    pendingVote
+                      ? "It won't go to a vote and can't be reopened. You'd need to propose it again."
+                      : "Voting stops and it can't be reopened. You'd need to propose it again."
+                  }
                   confirmLabel="Cancel proposal"
                   busy={busy}
                   onConfirm={() => cancelProposal()}
@@ -594,14 +654,31 @@ export default function ProposalDetailPage() {
                 functions={detail.functions}
                 args={detail.args}
                 tokenContractId={config.tokenContractId}
+                state={detail.state ?? undefined}
               />
               <ProposalVoteHistory
                 votes={votes}
                 voteLabelForSupport={voteLabelForSupport}
                 formatTimestamp={formatTimestamp}
                 viewer={session.address}
+                state={detail.state ?? undefined}
+                voteStart={detail.vote_start}
               />
               {data?.votesError ? <Callout variant="warning" title="Vote history didn't load" /> : null}
+              <CommentThread
+                id="proposal"
+                title="Discussion"
+                comments={data?.comments ?? []}
+                loadError={data?.commentsError}
+                viewer={session.address}
+                emptyText="Updates and questions about this proposal show up here."
+                composer={{
+                  unavailableReason: session.address ? '' : 'Connect a wallet to comment.',
+                  maxBytes: MAX_PROPOSAL_COMMENT_BYTES,
+                  busy: commenting,
+                  onPost: postComment
+                }}
+              />
               <div>
                 <Button variant="ghost" size="sm" onClick={() => void mutate()} loading={isLoading}>
                   {isLoading ? null : <RefreshCw aria-hidden="true" />}

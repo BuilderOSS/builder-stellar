@@ -51,9 +51,19 @@ describe('explicit auction action preparation', () => {
     expect(mock.create_bid).toHaveBeenCalledWith({
       bidder: 'GSESSION',
       token_id: 9007199254740993n,
-      amount: 10500001n
+      amount: 10500001n,
+      comment: ''
     });
     expect(prepared.signAndSend).not.toHaveBeenCalled();
+  });
+  it('sends the bid comment, and refuses one over the 1 KiB cap before any wallet prompt', async () => {
+    const { mock, api } = client();
+    await prepareBuyerAction(api, snapshot, 'GSESSION', 'bid', 10500001n, 50, { comment: 'gm' });
+    expect(mock.create_bid).toHaveBeenCalledWith(expect.objectContaining({ comment: 'gm' }));
+    // 342 three-byte characters: 1026 bytes, but only 342 characters.
+    await expect(
+      prepareBuyerAction(api, snapshot, 'GSESSION', 'bid', 10500001n, 50, { comment: '€'.repeat(342) })
+    ).rejects.toThrow('Shorten');
   });
   it('fresh reads reject outbid minimums, expiry, pause, token and payment-token rotation', async () => {
     const cases = [

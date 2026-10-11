@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { css } from 'styled-system/css';
 
 import { AuctionHistory } from '@/components/auction-history/history';
+import { CommentInput } from '@/components/comments/comment-thread';
 import { PageSection } from '@/components/page-section';
 import {
   Address,
@@ -39,6 +40,7 @@ import {
   parseAuctionAmount,
   settlementMethod
 } from '@/lib/auction-history/state';
+import { commentBytes, MAX_COMMENT_BYTES } from '@/lib/comments';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { daoRoute } from '@/lib/dao-routes';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
@@ -74,6 +76,7 @@ const figureValue = css({
   fontVariantNumeric: 'tabular-nums'
 });
 const note = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
+const bidComment = css({ display: 'block', color: 'ink', whiteSpace: 'pre-wrap' });
 
 export default function AuctionsPage() {
   const { daoId, daoConfig } = useDaoContext();
@@ -94,6 +97,7 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
   const { data, error, isLoading, mutate } = useCurrentAuction(config, daoId);
   const refund = useBuyerRefund(config, daoId, session.address);
   const [amount, setAmount] = useState('');
+  const [comment, setComment] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState<'bid' | 'settle' | 'refund' | null>(null);
   const [historyRevision, setHistoryRevision] = useState(0);
@@ -103,7 +107,8 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
   const state = auctionBuyerState(config, data, now);
   const auction = data?.auction;
   const asset = getTreasuryAssets(config.name).find((item) => item.contractId === data?.config.payment_token);
-  const paymentToken = asset?.code ?? 'SAC';
+  // A custom payment asset has no known code; never show "SAC" to members.
+  const paymentToken = asset?.code ?? 'tokens';
   const method = data ? settlementMethod(data, now) : null;
   const canSettle = method && !['disabled', 'setup', 'loading'].includes(state);
   const walletReady = Boolean(
@@ -125,19 +130,23 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
   const submit = async (action: 'bid' | 'settle' | 'refund') => {
     if (inFlight.current) return;
     setMessage('');
-    if (!walletReady) return setMessage('Connect a wallet on the DAO network first.');
+    if (!walletReady) return setMessage(`Connect a wallet on ${getNetworkConfig(config.name).label} first.`);
     if (action !== 'refund' && (!data || state === 'setup' || state === 'disabled'))
-      return setMessage('Auctions are not available for this DAO.');
-    if (action === 'bid' && state !== 'active') return setMessage('This auction is not accepting bids.');
-    if (action === 'settle' && !canSettle) return setMessage('This auction cannot be settled yet.');
+      return setMessage("This community doesn't run auctions right now.");
+    if (action === 'bid' && state !== 'active') return setMessage("This auction isn't taking bids.");
+    if (action === 'settle' && !canSettle) return setMessage("This auction can't be settled yet.");
     const parsed = parseAuctionAmount(amount);
     if (action === 'bid' && (parsed === null || parsed < minimumAuctionBid(data!)))
       return setMessage(
         `Enter at least ${formatAuctionAmount(minimumAuctionBid(data!))} ${paymentToken}, up to 7 decimals.`
       );
+    if (action === 'bid' && commentBytes(comment) > MAX_COMMENT_BYTES)
+      return setMessage('Your comment is too long. Shorten it to place the bid.');
     inFlight.current = true;
     setBusy(action);
-    tx.start(action === 'bid' ? 'Preparing bid…' : action === 'settle' ? 'Preparing settlement…' : 'Preparing refund…');
+    tx.start(
+      action === 'bid' ? 'Placing your bid' : action === 'settle' ? 'Settling the auction' : 'Claiming your refund'
+    );
     const bidder = session.address;
     const assertWallet = async () => {
       if (!mounted.current) throw new Error('Auction view changed. Review the current DAO before signing.');
@@ -167,21 +176,28 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
       if (action === 'refund') {
         assembled = await prepareBuyerRefund(client, bidder);
       } else {
-        assembled = await prepareBuyerAction(client, data!, bidder, action, parsed);
+        assembled = await prepareBuyerAction(client, data!, bidder, action, parsed, Math.floor(Date.now() / 1000), {
+          comment: comment.trim()
+        });
       }
       // Only this explicit user action opens the wallet. Reads never sign.
       const sent = await assembled.signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
-      tx.submitted('Auction transaction submitted', hash);
+      tx.submitted(action === 'bid' ? 'Bid sent' : action === 'settle' ? 'Settlement sent' : 'Refund claim sent', hash);
       await waitForConfirmation(hash, config.rpcUrl);
       tx.success(action === 'bid' ? 'Bid confirmed' : action === 'settle' ? 'Auction settled' : 'Refund claimed', hash);
       if (mounted.current) {
         setAmount('');
+        setComment('');
         setHistoryRevision((value) => value + 1);
       }
       await Promise.all([mutate(), refund.mutate()]);
     } catch (error) {
-      tx.fail(error, 'Auction transaction failed', 'auction');
+      tx.fail(
+        error,
+        action === 'bid' ? 'Bid failed' : action === 'settle' ? 'Settling failed' : 'Refund claim failed',
+        'auction'
+      );
     } finally {
       inFlight.current = false;
       if (mounted.current) setBusy(null);
@@ -312,7 +328,9 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
 
             <div className={figures}>
               <div>
-                <p className={figureLabel}>{auction.highest_bidder ? 'Top bid' : 'Starting at'}</p>
+                <p className={figureLabel}>
+                  {auction.highest_bidder ? (state === 'expired' ? 'Winning bid' : 'Top bid') : 'Starting at'}
+                </p>
                 <p className={figureValue}>
                   <Amount
                     value={formatAuctionAmount(
@@ -339,9 +357,13 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
                 href={daoRoute(routeId, `members/${auction.highest_bidder}`)}
                 media={<Avatar address={auction.highest_bidder} yours={auction.highest_bidder === session.address} />}
                 title={
-                  auction.highest_bidder === session.address ? "You're winning" : shortAddress(auction.highest_bidder)
+                  auction.highest_bidder === session.address
+                    ? state === 'expired'
+                      ? 'You won'
+                      : "You're winning"
+                    : shortAddress(auction.highest_bidder)
                 }
-                meta="Highest bidder"
+                meta={state === 'expired' ? 'Winner' : 'Highest bidder'}
               />
             ) : null}
 
@@ -369,6 +391,16 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
                     </Button>
                   </div>
                 ) : null}
+                <CommentInput
+                  id="auction-bid-comment"
+                  label="Say something (optional)"
+                  value={comment}
+                  onChange={setComment}
+                  maxBytes={MAX_COMMENT_BYTES}
+                  disabled={Boolean(busy)}
+                  rows={2}
+                  helper="Shown with your bid, for good. It can't be edited."
+                />
                 <Button
                   block
                   size="lg"
@@ -422,13 +454,26 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
                       href={daoRoute(routeId, `members/${bid.bidder}`)}
                       media={<Avatar address={bid.bidder} size="sm" yours={bid.bidder === session.address} />}
                       title={bid.bidder === session.address ? 'You' : shortAddress(bid.bidder)}
-                      meta={bid.timestamp ? relativeTime(bid.timestamp) : undefined}
+                      meta={
+                        bid.comment ? (
+                          <>
+                            <span className={bidComment}>{bid.comment}</span>
+                            {bid.timestamp ? relativeTime(bid.timestamp) : null}
+                          </>
+                        ) : bid.timestamp ? (
+                          relativeTime(bid.timestamp)
+                        ) : undefined
+                      }
                       trailing={<Amount value={formatAuctionAmount(bid.amount)} unit={paymentToken} />}
                     />
                   ))}
                 </div>
               ) : (
-                <p className={note}>No bids yet. New bids can take a moment to show up.</p>
+                <p className={note}>
+                  {state === 'active'
+                    ? 'No bids yet. New bids can take a moment to show up.'
+                    : 'No one bid on this token.'}
+                </p>
               )}
             </Section>
 

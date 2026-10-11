@@ -56,16 +56,16 @@ export function AuctionPaymentTokenSelect({
             {assetLabel(asset)}
           </option>
         ))}
-        <option value={CUSTOM_VALUE}>Custom SAC contract</option>
+        <option value={CUSTOM_VALUE}>Another token (contract address)</option>
       </Select>
       {isCustom || selectValue === CUSTOM_VALUE ? (
         <Input
           id={`${id}-custom`}
           value={value}
           onChange={(event) => onChange(event.target.value)}
-          placeholder="C..."
+          placeholder="C…"
           disabled={disabled}
-          aria-label="Custom SAC contract address"
+          aria-label="Token contract address"
         />
       ) : null}
       {selectedAsset?.contractId ? (

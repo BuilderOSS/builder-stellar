@@ -50,6 +50,8 @@ pub struct BidPlaced {
     pub amount: i128,
     pub extended: bool,
     pub new_end_time: u64,
+    /// Optional bidder comment (empty if none). Event-only, never stored.
+    pub comment: String,
 }
 
 #[contractevent]
@@ -198,6 +200,7 @@ pub fn emit_bid_placed(
     amount: i128,
     extended: bool,
     new_end_time: u64,
+    comment: &String,
 ) {
     BidPlaced {
         token_id,
@@ -205,6 +208,7 @@ pub fn emit_bid_placed(
         amount,
         extended,
         new_end_time,
+        comment: comment.clone(),
     }
     .publish(e);
 }

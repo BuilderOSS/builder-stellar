@@ -108,6 +108,29 @@ pub struct ListingExpired {
     pub seller: Address,
 }
 
+/// A comment on a primary listing. Event-only: the body is never stored.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PrimaryListingCommented {
+    #[topic]
+    pub listing_id: u64,
+    #[topic]
+    pub author: Address,
+    pub body: String,
+}
+
+/// A comment on a token's secondary listings. Keyed by token, so the thread
+/// carries over relistings. Event-only: the body is never stored.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ListingCommented {
+    #[topic]
+    pub token_id: u32,
+    #[topic]
+    pub author: Address,
+    pub body: String,
+}
+
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PaymentAssetUpdated {

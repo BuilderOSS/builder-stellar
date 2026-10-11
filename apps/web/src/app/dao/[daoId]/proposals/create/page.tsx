@@ -120,7 +120,7 @@ export default function ProposalCreatePage() {
   const isPendingLaunch = config.status === 'pending';
   const proposalCreationLocked = !eligibility.eligible || isPendingLaunch;
   const proposalCreationDisabledMessage = isPendingLaunch
-    ? 'Proposals can only be created after the DAO has been launched.'
+    ? 'Proposals open once your community launches.'
     : eligibility.message;
   // The Governor accepts at most MAX_PROPOSAL_ACTIONS (20) actions per proposal.
   const actionCountError = validateProposalActionCount(queuedActions.length);
@@ -157,7 +157,7 @@ export default function ProposalCreatePage() {
     try {
       setTransactionBusy(true);
       setConfirmDialogOpen(false);
-      txFeedback.start('Preparing proposal...');
+      txFeedback.start('Submitting your proposal');
 
       // Build call vectors
       const { targets, functions, args } = buildProposalCallVectors(
@@ -197,7 +197,7 @@ export default function ProposalCreatePage() {
       const sent = await assembled.signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
 
-      txFeedback.submitted('Proposal submitted', hash);
+      txFeedback.submitted('Proposal sent', hash);
       await waitForConfirmation(hash, config.rpcUrl);
 
       txFeedback.success('Proposal created', hash);
@@ -401,13 +401,17 @@ export default function ProposalCreatePage() {
                           {metadata.url}
                         </a>
                       ) : null}
-                      <h3 className={reviewHeading}>If it passes</h3>
+                      <h3 className={reviewHeading}>
+                        {queuedActions.length === 1 ? 'If it passes, this runs' : 'If it passes, these run in order'}
+                      </h3>
                       <ol className={reviewList}>
                         {queuedActions.map((action, i) => (
                           <li key={action.id} className={reviewItem}>
-                            <span className={reviewIndex} aria-hidden="true">
-                              {i + 1}
-                            </span>
+                            {queuedActions.length > 1 ? (
+                              <span className={reviewIndex} aria-hidden="true">
+                                {i + 1}
+                              </span>
+                            ) : null}
                             {getProposalActionSummary(action)}
                           </li>
                         ))}
@@ -459,7 +463,7 @@ export default function ProposalCreatePage() {
         onConfirm={handleConfirmSubmit}
         onCancel={() => setConfirmDialogOpen(false)}
         title="Submit this proposal?"
-        message={`It goes up for a vote with ${queuedActions.length} action${queuedActions.length === 1 ? '' : 's'}. Your wallet will show the final transaction before you sign.`}
+        message={`It goes to a vote with ${queuedActions.length === 1 ? 'one action' : `${queuedActions.length} actions`}. Your wallet shows the final transaction before you sign.`}
         confirmLabel="Submit proposal"
         busy={transactionBusy}
       />

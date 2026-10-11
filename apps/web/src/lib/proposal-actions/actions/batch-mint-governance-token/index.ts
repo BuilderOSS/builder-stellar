@@ -46,7 +46,7 @@ export const batchMintGovernanceTokenHandler: ActionHandler<BatchMintGovernanceT
     if (context.mintAuthoritiesLoading) {
       return {
         canExecute: false,
-        reason: 'Checking mint authority...',
+        reason: 'Checking mint authority…',
         loading: true
       };
     }

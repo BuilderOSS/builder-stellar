@@ -73,12 +73,12 @@ export function FundTreasury({ scope, onConfirmed }: { scope: TreasuryScope; onC
       )
         throw new Error('Prepared funding terms do not match this wallet and network.');
       setPrepared(result);
-      setMessage('Simulation passed. Review the exact transfer below. Nothing has been signed.');
+      setMessage('Looks good. Review the exact transfer below. Nothing is signed yet.');
     } catch (error) {
       setMessage(
         error instanceof Error && error.name !== 'ZodError'
           ? error.message
-          : 'Enter a positive decimal amount with at most seven decimal places.'
+          : 'Enter an amount above zero, with up to 7 decimal places.'
       );
     } finally {
       inFlight.current = false;
@@ -87,10 +87,10 @@ export function FundTreasury({ scope, onConfirmed }: { scope: TreasuryScope; onC
   }
 
   async function checkConfirmation(txHash: string) {
-    setMessage('Waiting for on-chain confirmation. Do not submit another transfer.');
+    setMessage('Waiting for confirmation. Don’t send another transfer.');
     await waitForConfirmation(txHash, network.rpcUrl);
     setConfirmed(true);
-    setMessage('Confirmed on-chain. Your contribution is held by the treasury and governed by proposals.');
+    setMessage('Confirmed. Your contribution is in the treasury, and members decide how it’s spent.');
     // A read failure cannot undo a confirmed transfer.
     void readiness.mutate().catch(() => {});
     onConfirmed();

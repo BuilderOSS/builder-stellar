@@ -19,7 +19,7 @@ export function validateBatchMintGovernanceToken(
   if (context.mintAuthoritiesLoading) {
     return {
       valid: false,
-      message: 'Checking mint authority...'
+      message: 'Checking mint authority…'
     };
   }
 

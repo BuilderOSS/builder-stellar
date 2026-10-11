@@ -6,40 +6,16 @@ import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 import { Check, ImageUp, X } from 'lucide-react';
 import { type ReactNode, useRef, useState } from 'react';
 import { css, cx } from 'styled-system/css';
-import useSWR from 'swr';
 
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
 import { prepareDaoImage, uploadDaoImage } from '@/components/create-dao/dao-image-upload';
-import {
-  ActionBar,
-  Button,
-  ButtonLink,
-  Callout,
-  Chip,
-  Crest,
-  FieldLabel,
-  Input,
-  Spinner,
-  Textarea
-} from '@/components/ui';
+import { ActionBar, Button, Callout, Chip, Crest, FieldLabel, Input, Spinner, Textarea } from '@/components/ui';
 import { card, muted, title } from '@/components/ui/panel-styles';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { adminReadOptions, useAdminArtwork, useAdminTokenState } from '@/lib/admin-surfaces';
-import {
-  checkNewLink,
-  managerClient,
-  managerSupportsSlugChange,
-  useLinkAvailability,
-  useManagerLink
-} from '@/lib/community-link';
-import {
-  buildProfilePlan,
-  type CommunityProfile,
-  type ProfileStep,
-  tokenReportsRenames
-} from '@/lib/community-profile-plan';
-import { daoAdminRoute } from '@/lib/dao-routes';
+import { checkNewLink, managerClient, useLinkAvailability, useManagerLink } from '@/lib/community-link';
+import { buildProfilePlan, type CommunityProfile, type ProfileStep } from '@/lib/community-profile-plan';
 import { validateArtworkSetting } from '@/lib/proposal-actions/artwork-admin-actions';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { getProposalActionSummary } from '@/lib/proposal-call';
@@ -67,17 +43,6 @@ const field = css({ display: 'grid', gap: '1.5', minW: '0', alignContent: 'start
 const hintRow = css({ display: 'flex', alignItems: 'center', gap: '3', flexWrap: 'wrap', minH: '5' });
 const hint = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
 const error = css({ textStyle: 'caption', color: 'danger', fontWeight: '600', m: '0' });
-const undo = css({
-  p: '0',
-  bg: 'transparent',
-  border: '0',
-  color: 'signal',
-  textStyle: 'caption',
-  fontWeight: '600',
-  cursor: 'pointer',
-  _hover: { textDecoration: 'underline' },
-  _focusVisible: { outline: '2px solid', outlineColor: 'signal', outlineOffset: '2px', borderRadius: 'sm' }
-});
 const planBox = css({
   display: 'grid',
   gap: '3',
@@ -122,21 +87,13 @@ function Changed({ show, onUndo, children }: { show: boolean; onUndo: () => void
       {show ? (
         <>
           <Chip tone="live">Changed</Chip>
-          <button type="button" className={undo} onClick={onUndo}>
+          <Button variant="ghost" size="sm" onClick={onUndo}>
             Undo
-          </button>
+          </Button>
         </>
       ) : null}
     </div>
   );
-}
-
-/** Read the token's release, so renames are only offered where the app will see them. */
-function useTokenVersion(tokenContractId: string, readOptions: ReturnType<typeof adminReadOptions>) {
-  return useSWR(tokenContractId ? ['token-version', tokenContractId] : null, async () => {
-    const client = new TokenClient(readOptions);
-    return (await client.version()).result;
-  });
 }
 
 /**
@@ -148,10 +105,6 @@ export function CommunityProfileEditor() {
   const session = useAuthSessionStore();
   const token = useAdminTokenState(config, session.address);
   const artwork = useAdminArtwork(config, session.address);
-  const version = useTokenVersion(
-    config.tokenContractId,
-    adminReadOptions(config, config.tokenContractId, session.address)
-  );
   const draft = useAdminProposalDraft();
   const tx = useTransactionFeedback(config.name);
   const [edits, setEdits] = useState<Partial<CommunityProfile>>({});
@@ -196,7 +149,6 @@ export function CommunityProfileEditor() {
     treasuryIsAdmin(config, artwork.data?.admin)
   );
   const canAct = direct || canPropose;
-  const renamesVisible = tokenReportsRenames(version.data);
   const networkReady =
     !session.walletNetworkIssue &&
     (!session.walletNetworkPassphrase || session.walletNetworkPassphrase === config.passphrase);
@@ -212,8 +164,7 @@ export function CommunityProfileEditor() {
   const linkChanged = linkEdit !== undefined && nextLink !== currentLink;
   const availability = useLinkAvailability(linkChanged ? nextLink : '');
   const linkCheck = linkChanged ? checkNewLink(nextLink, currentLink, daoId, availability) : null;
-  const linkSupported = !live || managerSupportsSlugChange(link.data?.version);
-  const canChangeLink = Boolean(currentLink) && linkSupported && (direct || canPropose);
+  const canChangeLink = Boolean(currentLink) && (direct || canPropose);
   const linkReady = linkChanged && linkCheck?.state === 'ok';
   const linkStep = linkReady ? { title: 'Change the link', detail: `/dao/${currentLink} → /dao/${nextLink}` } : null;
 
@@ -448,19 +399,6 @@ export function CommunityProfileEditor() {
           </div>
 
           <div className={fields}>
-            {!renamesVisible && version.data ? (
-              <Callout
-                variant="info"
-                title="Renaming needs the newer token contract"
-                description={`This community's token is on ${version.data}. Upgrade it to 0.2.0 in Contract upgrades, then rename here.`}
-              >
-                <div>
-                  <ButtonLink href={daoAdminRoute(routeId, '/upgrades')} variant="secondary" size="sm">
-                    Open Contract upgrades
-                  </ButtonLink>
-                </div>
-              </Callout>
-            ) : null}
             <div className={twoCol}>
               <div className={field}>
                 <FieldLabel htmlFor="profile-name">Name</FieldLabel>
@@ -468,7 +406,7 @@ export function CommunityProfileEditor() {
                   id="profile-name"
                   value={value('name')}
                   maxLength={MAX_TOKEN_NAME_BYTES}
-                  disabled={disabled || !renamesVisible}
+                  disabled={disabled}
                   aria-invalid={Boolean(errors.name) || undefined}
                   onChange={(event) => set({ name: event.target.value })}
                 />
@@ -481,7 +419,7 @@ export function CommunityProfileEditor() {
                   id="profile-symbol"
                   value={value('symbol')}
                   maxLength={MAX_TOKEN_SYMBOL_LENGTH}
-                  disabled={disabled || !renamesVisible}
+                  disabled={disabled}
                   aria-invalid={Boolean(errors.symbol) || undefined}
                   onChange={(event) => set({ symbol: event.target.value.toUpperCase() })}
                 />
@@ -523,9 +461,7 @@ export function CommunityProfileEditor() {
                     ? linkCheck.text
                     : !live
                       ? `/dao/${currentLink ?? routeId}. Yours once you launch.`
-                      : linkSupported
-                        ? `/dao/${currentLink ?? routeId}. Changing it takes its own vote.`
-                        : `/dao/${currentLink ?? routeId}. Changing it needs the latest platform release.`}
+                      : `/dao/${currentLink ?? routeId}. Changing it takes its own vote.`}
                 </p>
               </Changed>
             </div>

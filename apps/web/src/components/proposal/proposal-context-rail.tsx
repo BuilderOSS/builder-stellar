@@ -253,7 +253,7 @@ export function ProposalContextRail({ activeActionType, mobileOpen, onMobileClos
           if (!open) onMobileClose();
         }}
         title="For reference"
-        description="Treasury, members and past votes"
+        description="Treasury, members and past proposals"
       >
         <ContextContent id="proposal-context-sheet" activeActionType={activeActionType} />
       </Sheet>

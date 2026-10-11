@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 
+import { Address, AmountInput, Button, Callout, Disclosure, Field, FieldLabel, Input, Select } from '@/components/ui';
 import { formatMarketplaceAmount, marketplaceFee, parseMarketplaceAmount } from '@/lib/marketplace/amount';
 import { marketplaceAssetLabel } from '@/lib/marketplace/asset-label';
 import { useMarketplaceInventory, useMarketplaceReadiness } from '@/lib/marketplace/hooks';
@@ -23,7 +24,7 @@ export function SellForm({ data }: { data: DaoMarketplace }) {
   const [message, setMessage] = useState('');
   const config = data.config;
   const readiness = useMarketplaceReadiness(data.community.daoId, config?.paymentAsset ?? null, true);
-  if (!config) return <p>Live marketplace configuration must be available before listing a token.</p>;
+  if (!config) return <Callout variant="warning" title="The market's settings didn't load, so you can't list yet." />;
   const asset = marketplaceAssetLabel(data.network, config.paymentAsset);
   const supportedAsset = ['XLM', 'USDC'].includes(asset);
   const enabled = data.launched && !config.paused && auth === 'authenticated' && supportedAsset;
@@ -38,10 +39,10 @@ export function SellForm({ data }: { data: DaoMarketplace }) {
     setMessage('');
     try {
       parseMarketplaceAmount(price);
-      if (!tokenId) throw new Error('Select a token from your indexed inventory.');
+      if (!tokenId) throw new Error('Choose one of your tokens.');
       const expiry = Math.floor(new Date(expiresAt).getTime() / 1000);
       if (!Number.isSafeInteger(expiry) || expiry <= Math.floor(Date.now() / 1000))
-        throw new Error('Choose a future expiry date and time.');
+        throw new Error('Choose when the listing ends, in the future.');
       setAction({
         action: next,
         tokenId,
@@ -77,7 +78,9 @@ export function SellForm({ data }: { data: DaoMarketplace }) {
                 : "New listings are paused while the market is paused or hasn't opened."}
           </p>
         ) : null}
-        {inventory.error ? <p role="alert">{inventory.error.message}</p> : null}
+        {inventory.error ? (
+          <Callout variant="error" title="Your tokens didn't load" description={inventory.error.message} />
+        ) : null}
         {inventory.isLoading ? (
           <p className={styles.muted} role="status">
             Loading your tokens…
@@ -87,9 +90,10 @@ export function SellForm({ data }: { data: DaoMarketplace }) {
           <p className={styles.muted}>No tokens here. One you just bought can take a few seconds to show up.</p>
         ) : null}
         <div className={styles.formGrid}>
-          <label>
-            Your token
-            <select
+          <Field>
+            <FieldLabel htmlFor="sell-token">Your token</FieldLabel>
+            <Select
+              id="sell-token"
               value={tokenId}
               disabled={auth !== 'authenticated'}
               onChange={(e) => {
@@ -97,38 +101,42 @@ export function SellForm({ data }: { data: DaoMarketplace }) {
                 setApproved('');
               }}
             >
-              <option value="">Select a token</option>
+              <option value="">Choose a token</option>
               {inventory.data?.tokenIds.map((id) => (
                 <option key={id} value={id}>
                   Token #{id}
                 </option>
               ))}
-            </select>
-          </label>
-          <label>
-            Price in {asset}
-            <input
+            </Select>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="sell-price">Price</FieldLabel>
+            <AmountInput
+              id="sell-price"
+              unit={asset}
               inputMode="decimal"
               value={price}
               disabled={!enabled}
-              placeholder="10.0000000"
+              placeholder="10"
               onChange={(e) => setPrice(e.target.value)}
             />
-          </label>
-          <label>
-            Listing ends (your time)
-            <input
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="sell-expiry">Listing ends (your time)</FieldLabel>
+            <Input
+              id="sell-expiry"
               type="datetime-local"
               value={expiresAt}
               disabled={!enabled}
               onChange={(e) => setExpiresAt(e.target.value)}
             />
-          </label>
+          </Field>
         </div>
         {page > 0 || inventory.data?.hasMore ? (
           <div className={styles.row}>
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={page === 0}
               onClick={() => {
                 setPage(page - 1);
@@ -136,9 +144,10 @@ export function SellForm({ data }: { data: DaoMarketplace }) {
               }}
             >
               Previous
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={!inventory.data?.hasMore}
               onClick={() => {
                 setPage(page + 1);
@@ -146,7 +155,7 @@ export function SellForm({ data }: { data: DaoMarketplace }) {
               }}
             >
               More tokens
-            </button>
+            </Button>
           </div>
         ) : null}
         <p className={styles.muted}>
@@ -154,28 +163,29 @@ export function SellForm({ data }: { data: DaoMarketplace }) {
           {proceeds ? ` · you receive ${proceeds} ${asset}` : ''}. If the community changes the fee or price asset
           before your listing confirms, it fails safely and you can review the new terms.
         </p>
-        <p className={styles.address}>Price asset contract: {config.paymentAsset}</p>
+        <Disclosure>
+          <Address value={config.paymentAsset} label="Price asset contract" compact />
+        </Disclosure>
         {readiness.data?.issues.map((issue) => (
-          <p key={issue}>{issue}</p>
+          <Callout key={issue} variant="warning" title={issue} />
         ))}
         {readiness.data?.canAddTrustline ? (
-          <button type="button" onClick={() => setAction({ action: 'trustline', paymentAsset: config.paymentAsset })}>
-            Add a USDC trustline
-          </button>
+          <div>
+            <Button
+              variant="secondary"
+              onClick={() => setAction({ action: 'trustline', paymentAsset: config.paymentAsset })}
+            >
+              Add a USDC trustline
+            </Button>
+          </div>
         ) : null}
         <div className={styles.row}>
-          <button type="button" disabled={!enabled || !tokenId} onClick={() => review('approve')}>
+          <Button variant="secondary" disabled={!enabled || !tokenId} onClick={() => review('approve')}>
             1. Allow the market
-          </button>
-          <button
-            type="button"
-            className={styles.primary}
-            data-variant="primary"
-            disabled={!enabled || !tokenId}
-            onClick={() => review('list')}
-          >
+          </Button>
+          <Button disabled={!enabled || !tokenId} onClick={() => review('list')}>
             2. List it
-          </button>
+          </Button>
         </div>
         {approved === tokenId && tokenId ? (
           <p className={styles.notice}>
@@ -188,15 +198,18 @@ export function SellForm({ data }: { data: DaoMarketplace }) {
           </p>
         )}
         {tokenId ? (
-          <button
-            type="button"
-            disabled={auth !== 'authenticated'}
-            onClick={() => setAction({ action: 'revoke', tokenId })}
-          >
-            Take back an unused permission
-          </button>
+          <div>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={auth !== 'authenticated'}
+              onClick={() => setAction({ action: 'revoke', tokenId })}
+            >
+              Take back an unused permission
+            </Button>
+          </div>
         ) : null}
-        {message ? <p role="alert">{message}</p> : null}
+        {message ? <Callout variant="warning" title={message} role="alert" /> : null}
         {action ? (
           <TradeReview
             key={JSON.stringify(action)}

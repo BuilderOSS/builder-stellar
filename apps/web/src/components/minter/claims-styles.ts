@@ -1,42 +1,7 @@
 import { css } from 'styled-system/css';
 
-// Claims screens on Dusk tokens (formerly claims.module.css). Native
-// controls without a class pick up the system look.
+// Claims screens on Dusk tokens. Controls come from components/ui; bare links pick up the signal colour.
 const controls = {
-  '& label:not([class])': { display: 'grid', gap: '1.5', textStyle: 'label', color: 'ink' },
-  '& textarea:not([class])': {
-    width: '100%',
-    minH: '36',
-    p: '3',
-    bg: 'raised',
-    color: 'ink',
-    borderWidth: '1px',
-    borderColor: 'rule',
-    borderRadius: 'control',
-    textStyle: 'mono',
-    _focusVisible: { outline: 'none', borderColor: 'signal', boxShadow: '0 0 0 3px token(colors.signal.wash)' }
-  },
-  '& input[type=file]': { textStyle: 'caption', color: 'ink.muted' },
-  '& button:not([class])': {
-    minH: 'touch',
-    px: '4',
-    py: '2.5',
-    bg: 'raised',
-    color: 'ink',
-    borderWidth: '1px',
-    borderColor: 'rule',
-    borderRadius: 'control',
-    fontWeight: '600',
-    fontSize: '0.875rem',
-    cursor: 'pointer',
-    transitionProperty: 'background-color, scale',
-    transitionDuration: 'press',
-    transitionTimingFunction: 'out',
-    _active: { scale: '0.96' },
-    '@media (hover: hover) and (pointer: fine)': { '&:hover:not(:disabled)': { bg: 'hover' } },
-    _disabled: { opacity: '0.5', cursor: 'not-allowed', _active: { scale: '1' } },
-    _focusVisible: { outline: '2px solid', outlineColor: 'signal', outlineOffset: '2px' }
-  },
   '& a:not([class])': { color: 'signal', textStyle: 'label' }
 } as const;
 

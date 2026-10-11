@@ -7,12 +7,6 @@ import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 
 /** `change_slug` (a launched community's link, by vote) arrived in Manager 0.2.0. */
-export function managerSupportsSlugChange(version: string | undefined) {
-  if (!version) return false;
-  const [major, minor] = version.split('.').map((part) => Number.parseInt(part, 10));
-  return major > 0 || (major === 0 && minor >= 2);
-}
-
 export function managerClient(
   config: DaoNetworkConfig,
   publicKey?: string,
@@ -32,13 +26,11 @@ export function managerClient(
 export function useManagerLink(config: DaoNetworkConfig, daoId: string, readSource?: string) {
   return useSWR(['community-link', daoId, config.rpcUrl], async () => {
     const manager = managerClient(config, readSource);
-    const [version, claimed, pending] = await Promise.all([
-      manager.version(),
+    const [claimed, pending] = await Promise.all([
       manager.get_slug({ token_address: daoId }),
       manager.get_pending_dao({ token_address: daoId })
     ]);
     return {
-      version: version.result,
       slug: claimed.result ?? pending.result?.slug ?? null,
       claimed: Boolean(claimed.result)
     };

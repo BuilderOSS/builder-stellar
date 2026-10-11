@@ -11,6 +11,7 @@ import styles from '@/components/create-dao/workspace-styles';
 import { DiscardDraftDialog } from '@/components/drafts/discard-draft-dialog';
 import { useWorkspaceSync } from '@/components/local-workspace/workspace-sync';
 import { Button, Callout, PageHeader } from '@/components/ui';
+import { getNetworkConfig } from '@/config/networks';
 import { configuredCreationNetwork, draftConfigurationSchema, validateCreationAssets } from '@/lib/create-dao-schema';
 import {
   errorsFromZod,
@@ -142,7 +143,7 @@ export default function CreateDaoPage() {
           const response = await fetch(`/api/slugs/${encodeURIComponent(slug)}`, { cache: 'no-store' });
           const status = (await response.json()) as { claimedBy?: string | null };
           if (status.claimedBy)
-            extra.push({ key: 'slug', message: 'A launched DAO already owns this link. Pick another.' });
+            extra.push({ key: 'slug', message: 'A launched community already uses this link. Pick another.' });
         } catch {
           // If the check can't run, Create still fails safely on a taken slug; don't block on a network blip.
         } finally {
@@ -179,18 +180,22 @@ export default function CreateDaoPage() {
     indexingRequest.current?.abort();
     const controller = new AbortController();
     indexingRequest.current = controller;
-    setIndexingMessage('Waiting for the DAO to appear in the directory…');
+    setIndexingMessage('Waiting for your community to show up in the directory…');
     try {
       const indexed = await pollCreatedDao(token, controller.signal);
       if (controller.signal.aborted) return;
       if (indexed) router.push(`/dao/${token}`);
       else
         setIndexingMessage(
-          'Deployment is confirmed. The directory has not caught up yet. Check again without redeploying.'
+          "It's created. The directory hasn't caught up yet, so check again in a moment. Don't create it a second time."
         );
     } catch (e) {
       if (controller.signal.aborted) return;
-      setIndexingMessage(e instanceof Error ? e.message : 'Directory lookup failed. The deployment record is saved.');
+      setIndexingMessage(
+        e instanceof Error
+          ? e.message
+          : "We couldn't reach the directory. Your community is created and its record is saved."
+      );
     }
   };
   const deploy = async (rebroadcast = false) => {
@@ -219,7 +224,7 @@ export default function CreateDaoPage() {
       const addresses = await deployDao({ ...parsed.data, launchAdmin: session.address }, draft.id, { rebroadcast });
       if (useAuthSessionStore.getState().address === session.address) await openSetup(addresses.token);
     } catch (e) {
-      setPageError(e instanceof Error ? e.message : 'Deployment needs attention');
+      setPageError(e instanceof Error ? e.message : 'Creating your community needs attention');
     } finally {
       setBusy(false);
       operation.current = false;
@@ -231,7 +236,7 @@ export default function CreateDaoPage() {
     (configured &&
     session.walletNetworkPassphrase &&
     session.walletNetworkPassphrase !== getDeploymentConfig().networkPassphrase
-      ? 'Switch your wallet to this workspace’s network.'
+      ? `Switch your wallet to ${getNetworkConfig(network).label}.`
       : '');
   const unlocked = unlockedCount(store.section);
   const outline = FORM_SECTIONS.map(({ id, title }, index) => ({
@@ -244,7 +249,7 @@ export default function CreateDaoPage() {
     <div className={styles.createPage}>
       <DiscardDraftDialog
         open={discardOpen}
-        title={store.basicInfo.tokenName.trim() || 'Untitled DAO'}
+        title={store.basicInfo.tokenName.trim() || 'Untitled community'}
         onCancel={() => setDiscardOpen(false)}
         onDiscard={() => {
           setDiscardOpen(false);
@@ -261,7 +266,8 @@ export default function CreateDaoPage() {
         <PageHeader
           title="Start a DAO"
           meta={
-            creationStorageError() || (ready ? `Saved on this browser as you go · ${network}` : 'Opening your draft…')
+            creationStorageError() ||
+            (ready ? `Saved on this browser as you go · ${getNetworkConfig(network).label}` : 'Opening your draft…')
           }
         />
         {pageError && (!ready || draft?.deployment) ? (

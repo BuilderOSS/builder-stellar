@@ -7,7 +7,7 @@ import { type DaoConfig, getAllDaosFromDatabase, getPendingDaosForLaunchAdmin } 
 
 export const metadata: Metadata = {
   title: { absolute: 'Builder · Your community. Your rules. Your treasury.' },
-  description: 'Start a DAO with your people, vote on what happens next, and see where the shared treasury goes.'
+  description: 'Start a community with your people, vote on what happens next, and see where the shared treasury goes.'
 };
 
 export default async function Page() {

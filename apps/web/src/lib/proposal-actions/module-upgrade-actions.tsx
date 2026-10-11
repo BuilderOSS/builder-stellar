@@ -1,4 +1,4 @@
-import { Input } from '@/components/ui';
+import { Field, FieldLabel, Input, Select } from '@/components/ui';
 import { hashFromHex, moduleAddressKeys, type UpgradeModule } from '@/lib/admin-module-versions';
 import type { PendingAdminHandler } from '@/lib/proposal-actions/artwork-admin-actions';
 
@@ -10,9 +10,10 @@ export const moduleUpgradeHandler: PendingAdminHandler<ModuleUpgradeDraft, 'upgr
   description: 'Upgrade a current module along a Manager-approved transition. Approval is checked again on-chain.',
   FormComponent: ({ value, onChange, disabled }) => (
     <>
-      <label>
-        Module
-        <select
+      <Field>
+        <FieldLabel htmlFor="upgrade-module">Module</FieldLabel>
+        <Select
+          id="upgrade-module"
           value={value.module}
           disabled={disabled}
           onChange={(event) => {
@@ -23,24 +24,26 @@ export const moduleUpgradeHandler: PendingAdminHandler<ModuleUpgradeDraft, 'upgr
           {Object.keys(moduleAddressKeys).map((module) => (
             <option key={module}>{module}</option>
           ))}
-        </select>
-      </label>
-      <label>
-        Current WASM hash
+        </Select>
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="upgrade-from-hash">Current WASM hash</FieldLabel>
         <Input
+          id="upgrade-from-hash"
           disabled={disabled}
           value={value.fromHash}
           onChange={(event) => onChange({ ...value, fromHash: event.target.value })}
         />
-      </label>
-      <label>
-        Approved target WASM hash
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="upgrade-to-hash">Approved target WASM hash</FieldLabel>
         <Input
+          id="upgrade-to-hash"
           disabled={disabled}
           value={value.toHash}
           onChange={(event) => onChange({ ...value, toHash: event.target.value })}
         />
-      </label>
+      </Field>
     </>
   ),
   getDefaultValues: () => ({ module: 'token', fromHash: '', toHash: '' }),

@@ -62,9 +62,9 @@ export function HolderControls({
       const { rpc } = await import('@stellar/stellar-sdk');
       const latest = await new rpc.Server(config.rpcUrl, { allowHttp: config.name === 'local' }).getLatestLedger();
       setExpiry(String(holderTokenId(String(latest.sequence + 120))));
-      setMessage('Expiry set to 120 ledgers after the current ledger. Review and simulate before signing.');
+      setMessage('Set to end in about 10 minutes. Check it before signing.');
     } catch {
-      setMessage('The current ledger is unavailable. Try again or enter a known future expiry ledger.');
+      setMessage("We couldn't read the network's current position. Try again, or enter an end point yourself.");
     } finally {
       setBusy(false);
       inFlight.current = false;
@@ -106,7 +106,7 @@ export function HolderControls({
       const { TransactionBuilder } = await import('@stellar/stellar-sdk');
       assertHolderEnvelope(TransactionBuilder.fromXDR(prepared.xdr, config.passphrase), prepared, action);
       setReview({ action, prepared });
-      setMessage('Simulation passed. Review the details below. Nothing has been signed.');
+      setMessage('Looks good. Review the details below. Nothing is signed yet.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to prepare this action.');
     } finally {
@@ -175,7 +175,7 @@ export function HolderControls({
       setMessage('Submitted. Waiting for confirmation…');
       await waitForConfirmation(submitted.hash, config.rpcUrl);
       setConfirmed(true);
-      setMessage('Confirmed on-chain. Indexed ownership and votes may take a moment to update.');
+      setMessage('Confirmed. Ownership and votes can take a moment to update here.');
       onRefresh();
       await mutate(
         (key) =>

@@ -415,9 +415,50 @@ assert.strictEqual(executeRow.proposal_id, 'abc');
 assert.strictEqual(executeRow.summary, 'Executed mint on TGT (call 4 of proposal abc)');
 console.log('✅ Passed\n');
 
+// Test 18: Comments carry their author and text into the feed
+console.log('Test 18: Proposal, listing and bid comments');
+const proposalComment = invoke({
+  event_id: 'c1', event_name: 'ProposalCommented', deployment_id: 'test', contract_id: 'GOV', contract_role: 'governor',
+  topics: JSON.stringify({ proposal_id: 'abc', author: 'GAUTHOR' }), args: JSON.stringify({ body: 'Shipping   update\nnext week' })
+});
+assert.strictEqual(proposalComment.kind, 'governance.proposal_commented');
+assert.strictEqual(proposalComment.visibility, 'governance');
+assert.strictEqual(proposalComment.actor, 'GAUTHOR');
+assert.strictEqual(proposalComment.proposal_id, 'abc');
+assert.strictEqual(proposalComment.summary, 'Comment on proposal: "Shipping update next week"');
+assert.ok(JSON.parse(proposalComment.addresses).includes('GAUTHOR'));
+
+const listingComment = invoke({
+  event_id: 'c2', event_name: 'ListingCommented', deployment_id: 'test', contract_id: 'MKT', contract_role: 'marketplace',
+  topics: JSON.stringify({ token_id: 7, author: 'GAUTHOR' }), args: JSON.stringify({ body: 'x'.repeat(200) })
+});
+assert.strictEqual(listingComment.kind, 'marketplace.listing_commented');
+assert.strictEqual(listingComment.visibility, 'public');
+assert.strictEqual(listingComment.token_id, '7');
+assert.strictEqual(listingComment.summary, 'Comment on token 7: "' + 'x'.repeat(117) + '..."');
+
+const primaryComment = invoke({
+  event_id: 'c3', event_name: 'PrimaryListingCommented', deployment_id: 'test', contract_id: 'MKT', contract_role: 'marketplace',
+  topics: JSON.stringify({ listing_id: 2, author: 'GAUTHOR' }), args: JSON.stringify({ body: 'hi' })
+});
+assert.strictEqual(primaryComment.kind, 'marketplace.primary_listing_commented');
+assert.strictEqual(primaryComment.summary, 'Comment on primary listing 2: "hi"');
+
+const bidWithComment = invoke({
+  event_id: 'c4', event_name: 'BidPlaced', deployment_id: 'test', contract_id: 'AUC', contract_role: 'auction',
+  topics: JSON.stringify({ token_id: 3, bidder: 'GBID' }), args: JSON.stringify({ amount: '100', comment: 'gm' })
+});
+assert.strictEqual(bidWithComment.summary, 'Bid of 100 placed on token 3: "gm"');
+const bidWithoutComment = invoke({
+  event_id: 'c5', event_name: 'BidPlaced', deployment_id: 'test', contract_id: 'AUC', contract_role: 'auction',
+  topics: JSON.stringify({ token_id: 3, bidder: 'GBID' }), args: JSON.stringify({ amount: '100', comment: '' })
+});
+assert.strictEqual(bidWithoutComment.summary, 'Bid of 100 placed on token 3');
+console.log('✅ Passed\n');
+
 // Summary
 console.log('═══════════════════════════════════════');
-console.log('✅ All 17 tests passed!');
+console.log('✅ All 18 tests passed!');
 console.log('═══════════════════════════════════════');
 console.log('\n📊 Test Coverage:');
 console.log('  • Null/undefined input handling');

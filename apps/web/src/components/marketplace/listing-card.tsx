@@ -1,8 +1,10 @@
 'use client';
 
+import type { Route } from 'next';
 import Link from 'next/link';
 import { useState } from 'react';
 
+import { Button, ButtonLink } from '@/components/ui';
 import type { NetworkName } from '@/config/networks';
 import { getExplorerTxUrl } from '@/lib/explorer-links';
 import { formatMarketplaceAmount, marketplaceFee } from '@/lib/marketplace/amount';
@@ -11,6 +13,7 @@ import { useMarketplaceReadiness } from '@/lib/marketplace/hooks';
 import type { MarketplaceAction, MarketplaceCommunity, MarketplaceListing } from '@/lib/marketplace/types';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
+import { ListingComments } from './listing-comments';
 import styles from './marketplace-styles';
 import { TradeReview } from './trade-review';
 
@@ -81,16 +84,18 @@ export function ListingCard({
           : `${(listing.feeBps / 100).toLocaleString()}% market fee, paid by the seller`}
       </p>
       {trading ? (
-        <button type="button" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+        <Button variant="secondary" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
           {expanded ? 'Hide details' : 'Details'}
-        </button>
+        </Button>
       ) : (
-        <Link
-          className={styles.button}
-          href={`/dao/${community.daoId}/marketplace?kind=${listing.kind}&listing=${listing.id}&eventId=${encodeURIComponent(listing.eventId)}`}
+        <ButtonLink
+          variant="secondary"
+          href={
+            `/dao/${community.daoId}/marketplace?kind=${listing.kind}&listing=${listing.id}&eventId=${encodeURIComponent(listing.eventId)}` as Route
+          }
         >
           View in community
-        </Link>
+        </ButtonLink>
       )}
       {expanded ? (
         <div className={styles.stack}>
@@ -100,7 +105,7 @@ export function ListingCard({
             <dt>Price asset contract</dt>
             <dd className={styles.address}>{listing.paymentAsset}</dd>
             <dt>Created</dt>
-            <dd>{listing.createdAt ? new Date(listing.createdAt).toLocaleString() : 'Timestamp not indexed'}</dd>
+            <dd>{listing.createdAt ? new Date(listing.createdAt).toLocaleString() : 'Time not available yet'}</dd>
             {listing.closedAt ? (
               <>
                 <dt>Closed</dt>
@@ -114,7 +119,7 @@ export function ListingCard({
                 <dt>Seller proceeds</dt>
                 <dd>
                   {sellerProceeds === null
-                    ? 'Price exceeds the contract fee calculation limit.'
+                    ? 'This price is too large for the market to work out its fee.'
                     : `${sellerProceeds} ${asset}`}
                 </dd>
               </>
@@ -148,12 +153,12 @@ export function ListingCard({
                 <p key={issue}>{issue}</p>
               ))}
               {readiness.data.canAddTrustline ? (
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
                   onClick={() => setAction({ action: 'trustline', paymentAsset: listing.paymentAsset })}
                 >
                   Review adding USDC trustline
-                </button>
+                </Button>
               ) : null}
             </div>
           ) : null}
@@ -163,10 +168,7 @@ export function ListingCard({
                 <p>You can buy with XLM or USDC here. This listing can still be canceled, or cleared after it ends.</p>
               ) : null}
               <div className={styles.row}>
-                <button
-                  type="button"
-                  className={styles.primary}
-                  data-variant="primary"
+                <Button
                   onClick={() => trade('buy')}
                   disabled={
                     listing.seller === address ||
@@ -176,11 +178,11 @@ export function ListingCard({
                   }
                 >
                   Buy
-                </button>
+                </Button>
                 {listing.kind === 'secondary' && listing.seller === address ? (
-                  <button type="button" onClick={() => trade('cancel')}>
+                  <Button variant="danger" onClick={() => trade('cancel')}>
                     Cancel listing
-                  </button>
+                  </Button>
                 ) : null}
               </div>
             </>
@@ -191,11 +193,12 @@ export function ListingCard({
                 This listing has ended but hasn't been cleared. Clearing returns a resale token to its seller, or
                 removes an unsold new listing.
               </p>
-              <button type="button" onClick={() => trade('expire')}>
+              <Button variant="secondary" onClick={() => trade('expire')}>
                 Clear ended listing
-              </button>
+              </Button>
             </>
           ) : null}
+          {trading ? <ListingComments listing={listing} /> : null}
           <Link href={`/dao/${community.daoId}/marketplace?status=all`}>All listings and sales</Link>
         </div>
       ) : null}

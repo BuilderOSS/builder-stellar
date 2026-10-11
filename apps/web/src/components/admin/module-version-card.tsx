@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { Stack } from 'styled-system/jsx';
 
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
-import { Badge, Button, Callout, Card, Heading, Input, ShortId, Text } from '@/components/ui';
+import { Badge, Button, Callout, Card, Field, FieldLabel, Heading, Input, ShortId, Text } from '@/components/ui';
 import { readAdminModuleVersion, type UpgradeModule, useAdminModuleVersion } from '@/lib/admin-module-versions';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { assertAdminCallSupported } from '@/lib/admin-registered-call';
@@ -133,8 +133,8 @@ export function ModuleVersionCard({
               )}
             </>
           ) : null}
-          <label htmlFor={`upgrade-hash-${module}`}>
-            Check a registered target hash
+          <Field>
+            <FieldLabel htmlFor={`upgrade-hash-${module}`}>Check a registered target hash</FieldLabel>
             <Input
               id={`upgrade-hash-${module}`}
               name={`upgrade-hash-${module}`}
@@ -145,7 +145,7 @@ export function ModuleVersionCard({
               placeholder="64 hexadecimal characters…"
               disabled={busy}
             />
-          </label>
+          </Field>
           <Button
             type="button"
             variant="secondary"

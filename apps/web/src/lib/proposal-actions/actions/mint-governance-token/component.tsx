@@ -23,7 +23,7 @@ export function MintGovernanceTokenForm({
           id="recipient"
           value={value.recipient}
           onChange={(e) => onChange({ ...value, recipient: e.target.value })}
-          placeholder="Recipient address (G... or C...)"
+          placeholder="Recipient address (G… or C…)"
           disabled={disabled}
           aria-invalid={!!(validationErrors && !validationErrors.valid && validationErrors.fields?.recipient)}
           aria-describedby={
@@ -37,7 +37,7 @@ export function MintGovernanceTokenForm({
             {validationErrors.fields.recipient}
           </FieldHelperText>
         ) : (
-          <FieldHelperText>Enter a valid Stellar address</FieldHelperText>
+          <FieldHelperText>A Stellar address starting with G or C</FieldHelperText>
         )}
       </Stack>
 
