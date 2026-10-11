@@ -48,7 +48,15 @@ const dialog = sva({
     },
     title: { textStyle: 'title', fontSize: '1.25rem', margin: '0' },
     description: { textStyle: 'body', color: 'ink.muted', margin: '0' },
-    body: { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: '3', overflowWrap: 'anywhere' },
+    body: {
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1fr)',
+      gap: '3',
+      overflowWrap: 'anywhere',
+      // Preflight sets `break-word` on p and headings, which still lets one long hash set the
+      // column's minimum width; `anywhere` lets it wrap inside the dialog instead.
+      '& :is(h1, h2, h3, h4, h5, h6, p)': { overflowWrap: 'anywhere' }
+    },
     footer: {
       display: 'flex',
       flexDirection: { base: 'column-reverse', sm: 'row' },

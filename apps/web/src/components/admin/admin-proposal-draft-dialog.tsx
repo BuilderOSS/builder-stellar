@@ -27,6 +27,18 @@ export function AdminProposalDraftDialog({
   onResolve: (resolution: 'add' | 'replace' | 'keep') => void;
 }) {
   const findings = Array.isArray(pending?.findings) ? pending.findings : [];
+  // The same warning for several changes (e.g. three upgrades) reads once, with a count.
+  const shownFindings = [
+    ...findings
+      .reduce((groups, finding) => {
+        const key = `${finding.kind}:${finding.severity}:${finding.message}`;
+        const group = groups.get(key);
+        if (group) group.count += 1;
+        else groups.set(key, { finding, count: 1 });
+        return groups;
+      }, new Map<string, { finding: (typeof findings)[number]; count: number }>())
+      .values()
+  ];
   const duplicate = findings.some((finding) => finding.kind === 'duplicate');
   const conflict = findings.some((finding) => finding.kind === 'conflict');
   const highRisk = findings.some((finding) => finding.kind === 'high-risk');
@@ -72,11 +84,11 @@ export function AdminProposalDraftDialog({
               </p>
             ))}
           </div>
-          {findings.map((finding, index) => (
+          {shownFindings.map(({ finding, count }, index) => (
             <Callout
               key={`${finding.kind}-${index}`}
               variant={finding.severity === 'error' ? 'error' : 'warning'}
-              title={FINDING_TITLE[finding.kind]}
+              title={count > 1 ? `${FINDING_TITLE[finding.kind]} (${count} changes)` : FINDING_TITLE[finding.kind]}
               description={finding.message}
             />
           ))}
