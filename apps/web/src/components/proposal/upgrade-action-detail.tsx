@@ -4,6 +4,7 @@ import { css } from 'styled-system/css';
 import { Address, Callout, Chip, Disclosure, Skeleton } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import type { UpgradeModule } from '@/lib/admin-module-versions';
+import { moduleLabelInSentence } from '@/lib/module-updates';
 import { releaseNote } from '@/lib/release-notes';
 import { useUpgradeRelease } from '@/lib/upgrade-release';
 
@@ -23,7 +24,6 @@ const hash = css({ m: '0', textStyle: 'mono', fontSize: '0.75rem', overflowWrap:
  */
 export function UpgradeActionDetail({
   module,
-  label,
   fromHash,
   toHash,
   contract
@@ -31,7 +31,6 @@ export function UpgradeActionDetail({
   /** The module's address, shown with the hashes. */
   contract: string;
   module: UpgradeModule;
-  label: string;
   fromHash: string;
   toHash: string;
 }) {
@@ -41,7 +40,7 @@ export function UpgradeActionDetail({
 
   const technical = (
     <Disclosure title="Technical details">
-      <Address value={contract} label="Contract" compact />
+      <Address value={contract} label={`Contract (${module})`} compact />
       <dl className={hashes}>
         <div>
           <dt className={term}>Current code (WASM hash)</dt>
@@ -82,8 +81,8 @@ export function UpgradeActionDetail({
         </div>
         {note ? <p className={body}>{note}</p> : null}
         <p className={muted}>
-          {label} moves to a release approved for Builder communities. Tokens, votes, the treasury and history carry
-          over unchanged.
+          This moves {moduleLabelInSentence(module)} to a release approved for Builder communities. Tokens, votes, the
+          treasury and history carry over unchanged.
         </p>
         {technical}
       </div>

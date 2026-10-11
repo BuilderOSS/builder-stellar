@@ -11,7 +11,7 @@ import { card, muted, title } from '@/components/ui/panel-styles';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { assertAdminCallSupported } from '@/lib/admin-registered-call';
-import { MODULE_LABELS, type ModuleUpdate, type ModuleUpdateStatus } from '@/lib/module-updates';
+import { MODULE_LABELS, moduleLabelInSentence, type ModuleUpdate, type ModuleUpdateStatus } from '@/lib/module-updates';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { releaseNote } from '@/lib/release-notes';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
@@ -110,7 +110,7 @@ export function ContractUpdates() {
           action: handler.serialize(values, context),
           source: `admin/upgrades/${update.module}`,
           metadata: {
-            title: `Upgrade ${MODULE_LABELS[update.module]} to ${update.next!.version}`,
+            title: `Upgrade ${moduleLabelInSentence(update.module)} to ${update.next!.version}`,
             description:
               releaseNote(update.module, update.next!.version) ?? `Upgrade ${update.module} ${arrow(update)}.`,
             url: ''
@@ -129,7 +129,7 @@ export function ContractUpdates() {
     setMessage('');
     try {
       for (const [index, update] of plan.actionable.entries()) {
-        const label = `Upgrade ${MODULE_LABELS[update.module]} (${index + 1} of ${plan.actionable.length})`;
+        const label = `Upgrade ${moduleLabelInSentence(update.module)} (${index + 1} of ${plan.actionable.length})`;
         tx.start(label);
         const hash = await upgradeModuleDirectly(
           config,
@@ -140,7 +140,7 @@ export function ContractUpdates() {
         );
         tx.submitted(`${label} submitted`, hash);
         await waitForConfirmation(hash, config.rpcUrl);
-        tx.success(`${MODULE_LABELS[update.module]} is on ${update.next!.version}`, hash);
+        tx.success(`Upgraded ${moduleLabelInSentence(update.module)} to ${update.next!.version}`, hash);
       }
     } catch (failure) {
       tx.fail(failure, 'Upgrade failed');
@@ -181,7 +181,7 @@ export function ContractUpdates() {
               <Callout
                 key={update.module}
                 variant="error"
-                title={`${MODULE_LABELS[update.module]} ${update.current} was withdrawn`}
+                title={`Release ${update.current} of ${moduleLabelInSentence(update.module)} was withdrawn`}
                 description={
                   pending
                     ? `Your community can't launch on a withdrawn version. ${update.next ? 'Apply the upgrade below first.' : 'Wait for a replacement release.'}`
@@ -227,7 +227,7 @@ export function ContractUpdates() {
                   ) : null}
                   {plan.separate.map((update) => (
                     <Button key={update.module} variant="secondary" disabled={busy} onClick={() => propose([update])}>
-                      Propose the {MODULE_LABELS[update.module]} upgrade
+                      Propose upgrading {moduleLabelInSentence(update.module)}
                     </Button>
                   ))}
                 </div>
@@ -277,7 +277,7 @@ export function ContractUpdates() {
                 <span className={css({ textStyle: 'label', color: 'ink' })}>{MODULE_LABELS[item.module]}</span>
                 {item.ok ? (
                   <>
-                    <Address value={item.state.contractId} label="Contract" />
+                    <Address value={item.state.contractId} label={`Contract (${item.module})`} />
                     <span className={note}>
                       Running <code>{item.state.fromHash}</code> · storage version {item.state.storageVersion}
                     </span>

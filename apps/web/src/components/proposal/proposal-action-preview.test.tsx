@@ -84,7 +84,7 @@ describe('proposal admin-call inspector rendering', () => {
         isLoading: false
       };
       const html = render();
-      expect(html).toContain('Upgrade Auction');
+      expect(html).toContain('Upgrade the auction');
       expect(html).toContain('Approved release');
       expect(html).toContain('0.1.0 → 0.2.0');
       expect(html).toContain('Bidders can add a short comment');
@@ -124,7 +124,7 @@ describe('proposal admin-call inspector rendering', () => {
       );
       expect(html).toContain('This app can&#x27;t read this call');
       expect(html).toContain('Queueing and running it from here are turned off');
-      expect(html).not.toContain('Upgrade Artwork and profile');
+      expect(html).not.toContain('Upgrade artwork and profile');
     }
   });
 });

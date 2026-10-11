@@ -31,12 +31,26 @@ export type ModuleUpdate = {
 
 export const MODULE_LABELS: Record<UpgradeModule, string> = {
   token: 'Membership token',
-  governor: 'Voting',
+  governor: 'Proposals and votes',
   treasury: 'Treasury',
   auction: 'Auction',
   marketplace: 'Market',
   metadata: 'Artwork and profile'
 };
+
+const IN_SENTENCE: Record<UpgradeModule, string> = {
+  token: 'the membership token',
+  governor: 'proposals and votes',
+  treasury: 'the treasury',
+  auction: 'the auction',
+  marketplace: 'the market',
+  metadata: 'artwork and profile'
+};
+
+/** A module named inside a sentence, in sentence case: "Upgrade the auction to 0.2.0". */
+export function moduleLabelInSentence(module: UpgradeModule) {
+  return IN_SENTENCE[module];
+}
 
 /** Order modules appear in, most member-facing first. */
 export const MODULE_ORDER: UpgradeModule[] = ['token', 'governor', 'treasury', 'auction', 'marketplace', 'metadata'];

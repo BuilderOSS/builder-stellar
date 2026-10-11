@@ -94,7 +94,7 @@ describe('ContractUpdates', () => {
     const html = render();
     expect(html).toContain('3 upgrades available');
     expect(html).toContain('Add 3 upgrades to your proposal');
-    expect(html).not.toContain('Propose the Voting upgrade');
+    expect(html).not.toContain('Propose upgrading');
     expect(html).not.toContain('Apply ');
   });
 
@@ -104,7 +104,7 @@ describe('ContractUpdates', () => {
     state.modules = [{ module: 'auction' }, { module: 'treasury' }];
     const html = render();
     expect(html).toContain('Add 1 upgrade to your proposal');
-    expect(html).toContain('Propose the Treasury upgrade');
+    expect(html).toContain('Propose upgrading the treasury');
     expect(html).toContain('its upgrade goes in its own proposal');
   });
 

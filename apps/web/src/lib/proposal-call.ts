@@ -2,7 +2,7 @@ import { keccak_256 } from '@noble/hashes/sha3.js';
 import { nativeToScVal, xdr } from '@stellar/stellar-sdk';
 import { Buffer } from 'buffer';
 
-import { MODULE_LABELS } from '@/lib/module-updates';
+import { MODULE_LABELS, moduleLabelInSentence } from '@/lib/module-updates';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import type {
   BuildContext,
@@ -198,7 +198,8 @@ export function getProposalActionLabel(type: ProposalActionType) {
 }
 
 function moduleLabel(module: unknown) {
-  return MODULE_LABELS[module as keyof typeof MODULE_LABELS] ?? String(module);
+  const key = String(module);
+  return key in MODULE_LABELS ? moduleLabelInSentence(key as keyof typeof MODULE_LABELS) : key;
 }
 
 export function getProposalActionSummary(action: ProposalQueuedAction) {
@@ -217,7 +218,8 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
     return `${getProposalActionLabel(action.type)}: ${Array.isArray(action.names) ? action.names.length : 0} new properties, ${Array.isArray(action.items) ? action.items.length : 0} ordered items (${action.ipfsGroup?.base_uri ?? 'IPFS reference unavailable'})`;
   if (action.type === 'upgrade-dao-module')
     return `Upgrade ${moduleLabel(action.module)} from release ${action.fromHash} to ${action.toHash}`;
-  if (action.type === 'migrate-dao-module') return `Update ${moduleLabel(action.module)} storage to the new release`;
+  if (action.type === 'migrate-dao-module')
+    return `Update storage for ${moduleLabel(action.module)} to the new release`;
   if (action.type === 'regenerate-token-traits') return `Seed traits for token #${action.tokenId}`;
   if (action.type === 'treasury-authorize')
     return `Authorize the next action: ${Array.isArray(action.nodes) ? describeAuthNodes(action.nodes).join('; ') : 'no nodes'}`;

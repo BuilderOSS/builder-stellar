@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { classifyModule, type ModuleVersionState, planModuleUpdates } from './module-updates';
+import { classifyModule, moduleLabelInSentence, type ModuleVersionState, planModuleUpdates } from './module-updates';
 
 const OLD = 'a'.repeat(64);
 const NEW = 'b'.repeat(64);
@@ -46,5 +46,13 @@ describe('planModuleUpdates', () => {
     expect(plan.batch.map((u) => u.module)).toEqual(['token', 'auction', 'governor']);
     expect(plan.separate.map((u) => u.module)).toEqual(['treasury']);
     expect(plan.actionable).toHaveLength(4);
+  });
+});
+
+describe('moduleLabelInSentence', () => {
+  it('names each contract the way it reads mid-sentence', () => {
+    expect(moduleLabelInSentence('governor')).toBe('proposals and votes');
+    expect(moduleLabelInSentence('auction')).toBe('the auction');
+    expect(moduleLabelInSentence('token')).toBe('the membership token');
   });
 });

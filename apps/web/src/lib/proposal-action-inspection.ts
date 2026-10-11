@@ -2,7 +2,7 @@ import { scValToNative } from '@stellar/stellar-sdk';
 import { Buffer } from 'buffer';
 
 import type { UpgradeModule } from '@/lib/admin-module-versions';
-import { MODULE_LABELS } from '@/lib/module-updates';
+import { moduleLabelInSentence } from '@/lib/module-updates';
 import { encodeSupportedCall, type ProposalEncodingContext } from '@/lib/proposal-supported-calls';
 
 export type ProposalCallInspection = {
@@ -10,7 +10,7 @@ export type ProposalCallInspection = {
   risk: string;
   fields: { label: string; value: string }[];
   /** A module upgrade: shown with the registry's verdict instead of a generic warning. */
-  upgrade?: { module: UpgradeModule; label: string; fromHash: string; toHash: string };
+  upgrade?: { module: UpgradeModule; fromHash: string; toHash: string };
 };
 
 /** Inspect only target-role/spec-validated admin calls; never guess an external ABI. */
@@ -81,15 +81,14 @@ export function inspectProposalAdminCall(
     if (!moduleName) return null;
     const fromHash = Buffer.from(scValToNative(encoded[0]!)).toString('hex');
     const toHash = Buffer.from(scValToNative(encoded[1]!)).toString('hex');
-    const label = MODULE_LABELS[moduleName as UpgradeModule];
     return {
-      title: `Upgrade ${label}`,
+      title: `Upgrade ${moduleLabelInSentence(moduleName as UpgradeModule)}`,
       risk: 'Replaces the contract’s code. The contract checks on-chain that this upgrade is approved when the proposal runs; an unapproved one fails and changes nothing.',
       fields: [
         { label: 'Current WASM hash (32 bytes)', value: fromHash },
         { label: 'Target WASM hash (32 bytes)', value: toHash }
       ],
-      upgrade: { module: moduleName as UpgradeModule, label, fromHash, toHash }
+      upgrade: { module: moduleName as UpgradeModule, fromHash, toHash }
     };
   }
   if (fn === 'add_properties') {
