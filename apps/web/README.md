@@ -153,6 +153,14 @@ All DAO reads are deployment-scoped. Private trading helpers require a session.
 
 Marketplace query filters are `search` (≤120 characters), `page` (0–500), `kind=all|primary|secondary`, `status=all|open|purchased|cancelled|expired`, and `capability=all|marketplace|auction|metadata`. Community pages use 24 rows; combined offers page each kind independently (12 per kind, or 24 for one kind). Expired open rows can display `awaiting-expiry` until recovery is indexed. Successful responses are private/no-store. Route handlers and `src/lib/marketplace` are the full request/response authority.
 
+## Agentation (optional, dev only)
+
+A visual feedback toolbar for annotating the running app. It renders only when `NODE_ENV=development` and `NEXT_PUBLIC_AGENTATION_ENABLED=true` (set in `.env.local`). Global keyboard shortcuts are disabled so it can't intercept app keys.
+
+1. `npx -y agentation-mcp server` (port 4747) and register it with your agent, e.g. `claude mcp add agentation -- npx -y agentation-mcp server`.
+2. Set the flag, run `pnpm dev`, click the toolbar, annotate, and send.
+3. The agent reads notes with `agentation_get_all_pending`.
+
 ## Checks and limits
 
 ```bash
