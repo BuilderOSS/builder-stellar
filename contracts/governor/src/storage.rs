@@ -109,8 +109,10 @@ pub enum GovernorKey {
     Treasury,
     /// Delay (in seconds) between queueing and execution eligibility.
     QueueDelay,
-    /// Proposal core data, indexed by proposal ID hash.
-    Proposal(BytesN<32>),
+    /// Proposal core data (`ProposalCoreTime`), indexed by proposal ID hash.
+    /// Not `Proposal(id)`: that encodes like OpenZeppelin's
+    /// `GovernorStorageKey::Proposal(id)`, which holds a different type.
+    ProposalTime(BytesN<32>),
     Manager,
 }
 

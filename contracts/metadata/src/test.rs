@@ -1751,3 +1751,29 @@ fn token_uri_worst_case_fits_the_limits() {
     assert!(uri.len() < 16_384 / 2, "{} bytes", uri.len());
     assert!(cpu < 400_000_000 / 4, "{cpu} instructions");
 }
+
+/// docs/STORAGE_DIET_REVIEW.md Finding 1: no metadata key may encode like a
+/// `common` or OpenZeppelin key the contract links.
+#[test]
+fn storage_keys_do_not_collide() {
+    use common::testutils::{assert_keys_disjoint, common_key_shapes, key_shape};
+    use soroban_sdk::{testutils::Address as _, Address, Env, IntoVal, Val};
+    let e = Env::default();
+    let _a = Address::generate(&e);
+    let all = |keys: std::vec::Vec<Val>| -> std::vec::Vec<(std::string::String, u32)> {
+        keys.into_iter().map(|k| key_shape(&e, k)).collect()
+    };
+    let module = all(std::vec![
+        crate::storage::DataKey::Settings.into_val(&e),
+        crate::storage::DataKey::Profile.into_val(&e),
+        crate::storage::DataKey::ItemCounts.into_val(&e),
+        crate::storage::DataKey::IpfsGroupCount.into_val(&e),
+        crate::storage::DataKey::PropertyName(0).into_val(&e),
+        crate::storage::DataKey::Items(0, 0).into_val(&e),
+        crate::storage::DataKey::IpfsGroups.into_val(&e),
+        crate::storage::DataKey::AttributesPage(0).into_val(&e),
+        crate::storage::DataKey::Manager.into_val(&e),
+        crate::storage::DataKey::Treasury.into_val(&e),
+    ]);
+    assert_keys_disjoint(&[("DataKey", module), ("common", common_key_shapes(&e))]);
+}

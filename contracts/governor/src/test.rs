@@ -1836,3 +1836,45 @@ mod comments {
         governor.cast_vote(&id, &1, &String::from_str(&e, &reason), &owner);
     }
 }
+
+/// docs/STORAGE_DIET_REVIEW.md Finding 1: no governor key may encode like a
+/// `common` or OpenZeppelin key the contract links.
+#[test]
+fn storage_keys_do_not_collide() {
+    use common::testutils::{assert_keys_disjoint, common_key_shapes, key_shape};
+    use soroban_sdk::{testutils::Address as _, Address, Env, IntoVal, Val};
+    let e = Env::default();
+    let _a = Address::generate(&e);
+    let id = soroban_sdk::BytesN::from_array(&e, &[0u8; 32]);
+    use stellar_governance::governor::storage::GovernorStorageKey;
+    let all = |keys: std::vec::Vec<Val>| -> std::vec::Vec<(std::string::String, u32)> {
+        keys.into_iter().map(|k| key_shape(&e, k)).collect()
+    };
+    let module = all(std::vec![
+        crate::storage::GovernorKey::Treasury.into_val(&e),
+        crate::storage::GovernorKey::QueueDelay.into_val(&e),
+        crate::storage::GovernorKey::ProposalTime(soroban_sdk::BytesN::from_array(&e, &[0; 32]))
+            .into_val(&e),
+        crate::storage::GovernorKey::Manager.into_val(&e),
+    ]);
+    assert_keys_disjoint(&[
+        ("GovernorKey", module),
+        ("common", common_key_shapes(&e)),
+        (
+            "GovernorStorageKey",
+            all(std::vec![
+                GovernorStorageKey::Name.into_val(&e),
+                GovernorStorageKey::Version.into_val(&e),
+                GovernorStorageKey::VotingDelay.into_val(&e),
+                GovernorStorageKey::VotingPeriod.into_val(&e),
+                GovernorStorageKey::ProposalThreshold.into_val(&e),
+                GovernorStorageKey::Proposal(id.clone()).into_val(&e),
+                GovernorStorageKey::NumQuorumCheckpoints.into_val(&e),
+                GovernorStorageKey::QuorumCheckpoint(0).into_val(&e),
+                GovernorStorageKey::ProposalVote(id.clone()).into_val(&e),
+                GovernorStorageKey::HasVoted(id.clone(), _a.clone()).into_val(&e),
+                GovernorStorageKey::TokenContract.into_val(&e),
+            ]),
+        ),
+    ]);
+}

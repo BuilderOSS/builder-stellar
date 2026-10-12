@@ -384,7 +384,7 @@ impl DaoGovernorContract {
     }
 
     fn proposal_key(proposal_id: &BytesN<32>) -> GovernorKey {
-        GovernorKey::Proposal(proposal_id.clone())
+        GovernorKey::ProposalTime(proposal_id.clone())
     }
 
     /// Extends the TTL of a proposal to ensure it doesn't expire before execution

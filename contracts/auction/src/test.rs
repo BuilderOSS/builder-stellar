@@ -1386,3 +1386,30 @@ mod refunds {
         assert_eq!(c.token.balance(&a), 100_000_000);
     }
 }
+
+/// docs/STORAGE_DIET_REVIEW.md Finding 1: no auction key may encode like a
+/// `common` or OpenZeppelin key the contract links.
+#[test]
+fn storage_keys_do_not_collide() {
+    use common::testutils::{
+        assert_keys_disjoint, common_key_shapes, key_shape, shapes, OZ_PAUSABLE_SHAPES,
+    };
+    use soroban_sdk::{testutils::Address as _, Address, Env, IntoVal, Val};
+    let e = Env::default();
+    let _a = Address::generate(&e);
+    let all = |keys: std::vec::Vec<Val>| -> std::vec::Vec<(std::string::String, u32)> {
+        keys.into_iter().map(|k| key_shape(&e, k)).collect()
+    };
+    let module = all(std::vec![
+        crate::storage::DataKey::Config.into_val(&e),
+        crate::storage::DataKey::Auction.into_val(&e),
+        crate::storage::DataKey::Manager.into_val(&e),
+        crate::storage::DataKey::PaymentTokenLocked.into_val(&e),
+        crate::storage::DataKey::PendingRefund(_a.clone()).into_val(&e),
+    ]);
+    assert_keys_disjoint(&[
+        ("DataKey", module),
+        ("common", common_key_shapes(&e)),
+        ("PausableStorageKey", shapes(OZ_PAUSABLE_SHAPES)),
+    ]);
+}

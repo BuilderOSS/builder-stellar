@@ -3686,3 +3686,93 @@ fn factory_token_serves_sep50_metadata_and_records_the_minter() {
     assert_eq!(token.minter(), Some(f.minter.clone()));
     assert!(token.mint_authority(&f.minter));
 }
+
+/// docs/STORAGE_DIET_REVIEW.md Finding 2: a state-changing call must never push
+/// shared code to the instance's 170 days. The instance gets 170 days; code
+/// gets at most `CODE_TTL_EXTEND_TO`.
+#[test]
+fn calls_bump_instance_long_and_shared_code_only_briefly() {
+    use soroban_sdk::testutils::Deployer as _;
+    let f = factory_dao();
+    let e = &f.e;
+    let token = DaoTokenContractClient::new(e, &f.dao.token);
+    // Age everything well past the code threshold but keep the instance alive.
+    let age = common::ttl::INSTANCE_TTL_EXTEND_TO - common::ttl::INSTANCE_TTL_THRESHOLD + 1;
+    e.ledger().with_mut(|l| l.sequence_number += age);
+    let code_before = e.deployer().get_contract_code_ttl(&f.dao.token);
+    std::println!("code ttl before: {code_before}");
+    token.mint(&f.deployer, &f.deployer); // state-changing: calls extend_instance
+    let instance = e.deployer().get_contract_instance_ttl(&f.dao.token);
+    let code = e.deployer().get_contract_code_ttl(&f.dao.token);
+    assert_eq!(instance, common::ttl::INSTANCE_TTL_EXTEND_TO);
+    if code_before < common::ttl::CODE_TTL_THRESHOLD {
+        assert_eq!(code, common::ttl::CODE_TTL_EXTEND_TO);
+    }
+    assert!(
+        code <= common::ttl::CODE_TTL_EXTEND_TO.max(code_before),
+        "code bumped to {code} ledgers (instance target {})",
+        common::ttl::INSTANCE_TTL_EXTEND_TO
+    );
+}
+
+/// docs/STORAGE_DIET_REVIEW.md Finding 1, end to end: a live DAO renames its
+/// token by proposal, then settles an auction. The rename keeps the metadata
+/// hook, so the newly minted token still gets artwork.
+#[test]
+fn rename_by_proposal_then_settle_mints_with_artwork() {
+    let f = factory_dao();
+    let e = &f.e;
+    let token = DaoTokenContractClient::new(e, &f.dao.token);
+    let metadata = MetadataContractClient::new(e, &f.dao.metadata);
+    let auction = DaoAuctionContractClient::new(e, &f.dao.auction);
+    metadata.add_properties(
+        &vec![e, String::from_str(e, "Background")],
+        &vec![
+            e,
+            ItemParam {
+                property_id: 0,
+                name: String::from_str(e, "Blue"),
+                is_new_property: true,
+            },
+        ],
+        &IpfsGroup {
+            base_uri: String::from_str(e, "ipfs://art/"),
+            extension: String::from_str(e, ".png"),
+        },
+    );
+    f.manager.launch_dao(
+        &f.dao.token,
+        &manager::LaunchConfig {
+            launch_auction: true,
+            launch_marketplace: false,
+            minter: f.minter.clone(),
+        },
+    );
+    let first = auction.get_auction().token_id;
+
+    let (_id, desc_hash, targets, functions, args) = queue_single_action(
+        &f,
+        &f.dao.token,
+        "set_metadata",
+        vec![
+            e,
+            String::from_str(e, "Lantern Club").into_val(e),
+            String::from_str(e, "LANTERN").into_val(e),
+        ],
+        "Rename the club",
+    );
+    e.set_auths(&[]);
+    DaoTreasuryContractClient::new(e, &f.dao.treasury)
+        .execute(&targets, &functions, &args, &desc_hash);
+    e.mock_all_auths();
+    assert_eq!(token.name(), String::from_str(e, "Lantern Club"));
+    assert_eq!(token.metadata(), Some(f.dao.metadata.clone()));
+
+    auction.settle_and_create_new();
+    let next = auction.get_auction().token_id;
+    assert_ne!(next, first);
+    let next = u32::try_from(next).unwrap();
+    assert_eq!(metadata.get_attributes(&next).len(), 2);
+    let uri = token.token_uri(&next);
+    assert!(!uri.is_empty());
+}

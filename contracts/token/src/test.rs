@@ -1247,7 +1247,7 @@ fn set_metadata_renames_and_emits_metadata_updated() {
     assert_eq!(client.metadata(), metadata_contract);
 }
 
-/// Regression: `TokenKey::Metadata` used to encode to the same instance key as
+/// Regression: `TokenKey::MetadataContract` used to encode to the same instance key as
 /// OpenZeppelin's `NFTStorageKey::Metadata`, so the metadata contract address
 /// overwrote the collection name, symbol and URI at construction.
 #[test]
@@ -1350,4 +1350,110 @@ fn wiring_getters_expose_every_module() {
     assert!(client.marketplace().is_some());
     assert!(client.metadata().is_some());
     assert_eq!(client.minter(), None);
+}
+
+/// docs/STORAGE_DIET_REVIEW.md Finding 1: no token key may encode like an
+/// OpenZeppelin key the token links (the old `TokenKey::MetadataContract` did).
+#[test]
+fn storage_keys_do_not_collide() {
+    use crate::storage::TokenKey;
+    use common::testutils::{
+        assert_keys_disjoint, common_key_shapes, key_shape, shapes, OZ_SEQUENTIAL_SHAPES,
+    };
+    use soroban_sdk::{IntoVal, Val};
+    use stellar_governance::votes::VotesStorageKey;
+    use stellar_tokens::non_fungible::NFTStorageKey;
+    let e = Env::default();
+    let a = Address::generate(&e);
+    let all = |keys: std::vec::Vec<Val>| keys.into_iter().map(|k| key_shape(&e, k)).collect();
+    let token = all(std::vec![
+        TokenKey::MintAuthority(a.clone()).into_val(&e),
+        TokenKey::MetadataContract.into_val(&e),
+        TokenKey::Manager.into_val(&e),
+        TokenKey::Treasury.into_val(&e),
+        TokenKey::Auction.into_val(&e),
+        TokenKey::Marketplace.into_val(&e),
+        TokenKey::Minter.into_val(&e),
+    ]);
+    let nft = all(std::vec![
+        NFTStorageKey::Owner(0).into_val(&e),
+        NFTStorageKey::Balance(a.clone()).into_val(&e),
+        NFTStorageKey::Approval(0).into_val(&e),
+        NFTStorageKey::ApprovalForAll(a.clone(), a.clone()).into_val(&e),
+        NFTStorageKey::Metadata.into_val(&e),
+    ]);
+    let votes = all(std::vec![
+        VotesStorageKey::Delegatee(a.clone()).into_val(&e),
+        VotesStorageKey::NumCheckpoints(a.clone()).into_val(&e),
+        VotesStorageKey::DelegateCheckpoint(a.clone(), 0).into_val(&e),
+        VotesStorageKey::NumTotalSupplyCheckpoints.into_val(&e),
+        VotesStorageKey::TotalSupplyCheckpoint(0).into_val(&e),
+        VotesStorageKey::VotingUnits(a.clone()).into_val(&e),
+    ]);
+    assert_keys_disjoint(&[
+        ("TokenKey", token),
+        ("common", common_key_shapes(&e)),
+        ("NFTStorageKey", nft),
+        ("NFTSequentialStorageKey", shapes(OZ_SEQUENTIAL_SHAPES)),
+        ("VotesStorageKey", votes),
+    ]);
+}
+
+/// A rename must leave minting working: the metadata hook survives
+/// `set_metadata` and every mint path still seeds attributes.
+#[test]
+fn mint_and_batch_mint_seed_attributes_after_a_rename() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let owner = Address::generate(&e);
+    let treasury = Address::generate(&e);
+    let metadata = Address::generate(&e);
+    let token_id = e.register(
+        DaoTokenContract,
+        (
+            owner.clone(),
+            treasury,
+            Address::generate(&e),
+            Address::generate(&e),
+            String::from_str(&e, "Before"),
+            String::from_str(&e, "B"),
+            metadata.clone(),
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
+            String::from_str(&e, "0.1.0"),
+        ),
+    );
+    e.register_at(&metadata, HookCounter, ());
+    let client = DaoTokenContractClient::new(&e, &token_id);
+    client.set_metadata(&String::from_str(&e, "After"), &String::from_str(&e, "A"));
+    assert_eq!(client.metadata(), Some(metadata.clone()));
+    client.mint(&owner, &owner);
+    client.batch_mint(&owner, &vec![&e, owner.clone()], &vec![&e, 3u128]);
+    let hooks = HookCounterClient::new(&e, &metadata);
+    assert_eq!(hooks.single(), 1);
+    assert_eq!(hooks.batch(), 3);
+}
+
+/// Stands in for the Metadata contract: counts the mint hooks it receives.
+#[soroban_sdk::contract]
+struct HookCounter;
+
+#[soroban_sdk::contractimpl]
+impl HookCounter {
+    pub fn on_minted(e: Env, _token_id: u32) -> bool {
+        let n: u32 = e.storage().instance().get(&1u32).unwrap_or(0);
+        e.storage().instance().set(&1u32, &(n + 1));
+        true
+    }
+    pub fn on_minted_batch(e: Env, _first: u32, count: u32) -> bool {
+        let n: u32 = e.storage().instance().get(&2u32).unwrap_or(0);
+        e.storage().instance().set(&2u32, &(n + count));
+        true
+    }
+    pub fn single(e: Env) -> u32 {
+        e.storage().instance().get(&1u32).unwrap_or(0)
+    }
+    pub fn batch(e: Env) -> u32 {
+        e.storage().instance().get(&2u32).unwrap_or(0)
+    }
 }
