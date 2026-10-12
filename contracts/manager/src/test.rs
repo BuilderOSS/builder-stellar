@@ -2904,7 +2904,21 @@ fn manager_upgrade_waits_out_its_notice() {
         announced as u64
     );
     // A reduction waits out the notice in force; a raise applies at once.
+    // Either way it is announced: the feed tells members a notice changed.
+    let reduced_at = env.ledger().sequence();
     client.set_upgrade_delay(&1);
+    {
+        use soroban_sdk::{testutils::Events, Event as _};
+        assert_eq!(
+            env.events().all().events().last().unwrap(),
+            &common::upgrade::UpgradeDelayChanged {
+                from_ledgers: TEST_UPGRADE_DELAY,
+                to_ledgers: 1,
+                effective_ledger: reduced_at + TEST_UPGRADE_DELAY,
+            }
+            .to_xdr(&env, &client.address)
+        );
+    }
     assert_eq!(client.upgrade_delay(), TEST_UPGRADE_DELAY);
     env.ledger()
         .with_mut(|l| l.sequence_number += TEST_UPGRADE_DELAY - 1);

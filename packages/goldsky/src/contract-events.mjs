@@ -36,6 +36,9 @@ export const LIBRARY_EVENTS = {
 // upgrades, migrations). The Manager emits its own AdminChanged with the same shape.
 export const COMMON_EVENT_ROLES = ['token', 'governor', 'treasury', 'auction', 'marketplace', 'metadata'];
 
+// Common events with their own emitter set: the upgrade notice exists only on the platform contracts.
+export const COMMON_EVENT_EMITTERS = { UpgradeDelayChanged: ['manager', 'minter'] };
+
 /**
  * Parse every #[contractevent] struct into a flat list of { contract, name, topics, data }.
  * Names are not guaranteed unique across contracts (for example `AdminChanged` is
@@ -79,7 +82,8 @@ export function contractEventList() {
         }
       }
       if (dir === 'common') {
-        for (const role of COMMON_EVENT_ROLES) list.push({ contract: role, name, topics, data, source: 'common' });
+        const roles = COMMON_EVENT_EMITTERS[name] ?? COMMON_EVENT_ROLES;
+        for (const role of roles) list.push({ contract: role, name, topics, data, source: 'common' });
       } else {
         list.push({ contract: dir, name, topics, data });
       }

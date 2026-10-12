@@ -355,6 +355,8 @@ const newEventCases = [
   ['SlugChanged', 'manager', 'manager.slug_changed', 'Community link changed', 'public'],
   ['PendingSlugUpdated', 'manager', 'manager.pending_slug_updated', 'Requested slug changed', 'admin'],
   ['LatestImplementationSet', 'manager', 'manager.latest_implementation_set', 'Latest implementation set', 'admin'],
+  ['UpgradeDelayChanged', 'manager', 'manager.upgrade_delay_changed', 'Manager upgrade notice changed', 'public'],
+  ['UpgradeDelayChanged', 'minter', 'minter.upgrade_delay_changed', 'Minter upgrade notice changed', 'public'],
   ['MarketplacePaused', 'marketplace', 'marketplace.paused', 'Marketplace paused', 'admin'],
   ['AdminProposalCancelled', 'manager', 'manager.admin_proposal_cancelled', 'Manager admin proposal cancelled', 'admin'],
   ['Upgraded', 'token', 'token.upgraded', 'Token upgraded', 'public'],

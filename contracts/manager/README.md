@@ -41,7 +41,8 @@ Ledger-number fields in events end in `_ledger` (`published_ledger`, `approved_l
 `upgrade_manager(from, to)` requires an `approve_upgrade(from, to)` record at least `upgrade_delay()` ledgers old
 (constructor argument `upgrade_delay`; `UpgradeDelayNotElapsed`, 7130, before that). Re-approving keeps the first
 approval's ledger. `set_upgrade_delay(ledgers)` (admin) lengthens the notice at once; a reduction takes effect only
-after the notice in force has passed. `upgrade_approved_ledger(from, to)` and `current_implementations()` are
+after the notice in force has passed; either emits `UpgradeDelayChanged` (`from_ledgers`, `to_ledgers`,
+`effective_ledger`). `upgrade_approved_ledger(from, to)` and `current_implementations()` are
 read-only views for the platform renewal and upgrade scripts. `upgrade_manager` also requires `to` to be the
 hash announced as latest for `Manager` (`latest_pointer(name)`: hash and announcement ledger; `UpgradeNotLatest`,
 7131), and the notice counts from the later of the approval and the announcement (D42). Re-announcing the same

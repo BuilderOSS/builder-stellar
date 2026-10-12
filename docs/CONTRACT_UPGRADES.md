@@ -196,7 +196,8 @@ change, `minter.migrate()`; both require the Manager admin (`ManagerAdminNotSet`
 upgrade applies only `minter.upgrade_delay()` ledgers after the approval (`UpgradeDelayNotElapsed`, 7813, before
 that; D39): the script approves on its first run, prints the earliest ledger, and is rerun then. Approvals are
 idempotent (the first ledger counts), and the admin can lengthen the notice at once but shorten it only after the
-notice in force has passed (`set_upgrade_delay`). The upgrade must also be to the hash announced as latest for
+notice in force has passed (`set_upgrade_delay`; every change emits `UpgradeDelayChanged`, a public activity row
+that names the new notice and the ledger a reduction applies from). The upgrade must also be to the hash announced as latest for
 `Minter` (`set_latest_implementation`; `UpgradeNotLatest`, 7814, otherwise), and the notice counts from the later
 of the approval and the announcement (D42), so the script announces before approving. During the notice a DAO
 that distrusts the upgrade removes the Minter from its mint authorities by proposal

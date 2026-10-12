@@ -19,7 +19,7 @@ const __dirname = dirname(__filename);
 // Core DAO events that must be handled
 // Extracted from our contract Rust source and generated bindings
 const REQUIRED_EVENTS = {
-  minter: ['MerkleClaimEvent', 'MintBatchEvent', 'MerkleRootSetEvent'],
+  minter: ['MerkleClaimEvent', 'MintBatchEvent', 'MerkleRootSetEvent', 'UpgradeDelayChanged'],
   token: [
     'TokenInitialized',
     'MetadataUpdated',
@@ -118,6 +118,7 @@ const REQUIRED_EVENTS = {
   ],
   manager: [
     'ManagerInitialized',
+    'UpgradeDelayChanged',
     'DaoCreated',
     'DaoLaunched',
     'ImplementationRegistered',
@@ -316,6 +317,16 @@ test('Upgraded, Migrated and AdminChanged come from contracts/common and are lis
   const admin = contractEventList().filter((e) => e.name === 'AdminChanged');
   assert.deepStrictEqual(admin.map((e) => e.contract).sort(), ['manager', ...roles].sort());
   for (const e of admin) assert.deepStrictEqual(e.topics, ['old_admin', 'new_admin'], `${e.contract}.AdminChanged`);
+});
+
+test('UpgradeDelayChanged comes from contracts/common and is listed for the Manager and the Minter only', () => {
+  const found = contractEventList().filter((e) => e.name === 'UpgradeDelayChanged');
+  assert.deepStrictEqual(found.map((e) => e.contract).sort(), ['manager', 'minter']);
+  for (const e of found) {
+    assert.strictEqual(e.source, 'common');
+    assert.deepStrictEqual(e.topics, []);
+    assert.deepStrictEqual(e.data, ['from_ledgers', 'to_ledgers', 'effective_ledger']);
+  }
 });
 
 test('removed events are neither emitted by any contract nor decoded', () => {

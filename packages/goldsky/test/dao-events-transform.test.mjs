@@ -955,10 +955,26 @@ test('role fallback classifies new events when contract_role is unknown', () => 
   for (const [name, role] of [['AdminProposed', 'manager'], ['AdminChanged', 'manager'], ['AdminProposalCancelled', 'manager'], ['PlatformMinterSet', 'manager'], ['Upgraded', 'unknown'],
     ['RefundDeferred', 'auction'], ['RefundWithdrawn', 'auction'], ['PrimaryListingPurchased', 'marketplace'],
     ['PrimaryListingCancelled', 'marketplace'], ['PrimaryListingExpired', 'marketplace'], ['Execute', 'treasury'], ['TokenLaunched', 'token'], ['TreasuryLaunched', 'treasury'], ['ProposalScheduled', 'governor'],
-    ['SlugClaimed', 'manager'], ['PendingSlugUpdated', 'manager'], ['LatestImplementationSet', 'manager'], ['Migrated', 'unknown']]) {
+    ['SlugClaimed', 'manager'], ['PendingSlugUpdated', 'manager'], ['LatestImplementationSet', 'manager'], ['Migrated', 'unknown'], ['UpgradeDelayChanged', 'unknown']]) {
     const decoded = decodeEvent({ topics: JSON.stringify([S(name)]), data: JSON.stringify(dm({})) });
     assert.equal(decoded.contract_role, role, name);
   }
+});
+
+test('UpgradeDelayChanged is public, keyed by the platform contract that emitted it, and says when a reduction applies', () => {
+  const shorter = { from_ledgers: { u32: 720 }, to_ledgers: { u32: 120 }, effective_ledger: { u32: 5000 } };
+  const manager = run('manager', 'CMANAGER', 'UpgradeDelayChanged', [], shorter);
+  assert.deepEqual(argsOf(manager.decoded), { from_ledgers: 720, to_ledgers: 120, effective_ledger: 5000 });
+  assert.equal(manager.activity.kind, 'manager.upgrade_delay_changed');
+  assert.equal(manager.activity.title, 'Manager upgrade notice changed');
+  assert.equal(manager.activity.summary, 'Upgrade notice shortened from 720 to 120 ledgers, in force from ledger 5000');
+  assert.equal(manager.activity.visibility, 'public');
+
+  const longer = { from_ledgers: { u32: 120 }, to_ledgers: { u32: 720 }, effective_ledger: { u32: 4280 } };
+  const minter = run('minter', 'CMINTER', 'UpgradeDelayChanged', [], longer);
+  assert.equal(minter.activity.kind, 'minter.upgrade_delay_changed');
+  assert.equal(minter.activity.title, 'Minter upgrade notice changed');
+  assert.equal(minter.activity.summary, 'Upgrade notice lengthened from 120 to 720 ledgers');
 });
 
 test('treasury Execute: one event per call, proposal_id is a topic, activity carries call index', () => {

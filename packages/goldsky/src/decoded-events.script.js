@@ -58,6 +58,8 @@ function invoke(data) {
     LatestImplementationSet: ['name', 'wasm_hash'], PendingSlugUpdated: ['token_address'], SlugClaimed: ['token_address', 'slug'],
     // Manager 0.2.0+: a launched DAO moved to new_slug by vote; old_slug (data) is released.
     SlugChanged: ['token_address', 'new_slug'],
+    // contracts/common/src/upgrade.rs: the platform upgrade notice changed (Manager or Minter emits it).
+    UpgradeDelayChanged: [],
     // Each module's launch handoff (topic `treasury`).
     TokenLaunched: ['treasury'], GovernorLaunched: ['treasury'], TreasuryLaunched: ['treasury'],
     AuctionLaunched: ['treasury'], MarketplaceLaunched: ['treasury'], MetadataLaunched: ['treasury'],

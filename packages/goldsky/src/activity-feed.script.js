@@ -116,7 +116,9 @@ function invoke(data) {
     // A new claim round and a profile change are things members act on.
     MerkleRootSetEvent: true, ProfileUpdated: true,
     // Contract upgrades are the most security-relevant DAO action: public.
-    Upgraded: true
+    Upgraded: true,
+    // A shorter platform notice narrows the window members have to react: public.
+    UpgradeDelayChanged: true
   };
 
   var kindMap = {
@@ -194,6 +196,7 @@ function invoke(data) {
     Unpaused: 'contract.unpaused',
     ManagerInitialized: 'manager.initialized',
     ManagerUpgraded: 'manager.upgraded',
+    UpgradeDelayChanged: 'manager.upgrade_delay_changed',
     AdminProposalCancelled: 'manager.admin_proposal_cancelled',
     MarketplaceInitialized: 'marketplace.initialized',
     PrimaryListingCreated: 'marketplace.primary_listing_created',
@@ -287,6 +290,7 @@ function invoke(data) {
     Unpaused: 'Contract unpaused',
     ManagerInitialized: 'Manager initialized',
     ManagerUpgraded: 'Manager upgraded',
+    UpgradeDelayChanged: 'Manager upgrade notice changed',
     AdminProposalCancelled: 'Manager admin proposal cancelled',
     MarketplaceInitialized: 'Marketplace initialized',
     PrimaryListingCreated: 'Primary listing created',
@@ -317,6 +321,11 @@ function invoke(data) {
   if (commonEvents[normalizedEventName]) {
     kindMap[normalizedEventName] = moduleRole + '.' + commonEvents[normalizedEventName][0];
     titleMap[normalizedEventName] = moduleLabel + ' ' + commonEvents[normalizedEventName][1];
+  }
+  // The shared Minter has its own notice (contracts/common/src/upgrade.rs `set_delay`).
+  if (normalizedEventName === 'UpgradeDelayChanged' && emitterRole === 'minter') {
+    kindMap.UpgradeDelayChanged = 'minter.upgrade_delay_changed';
+    titleMap.UpgradeDelayChanged = 'Minter upgrade notice changed';
   }
   if (normalizedEventName === 'AdminChanged' && emitterRole !== 'manager') {
     kindMap.AdminChanged = moduleRole + '.admin_changed';
@@ -408,6 +417,14 @@ function invoke(data) {
     PendingSlugUpdated: function() { return 'Requested slug changed to "' + (pick(data, ['slug']) || 'unknown') + '"'; },
     MetadataUpdated: function() { return 'Renamed to ' + (pick(data, ['name']) || 'unknown') + ' (' + (pick(data, ['symbol']) || '?') + ')'; },
     Migrated: function() { return 'Storage migrated from version ' + (pick(data, ['from_storage_version']) || '?') + ' to ' + (pick(data, ['to_storage_version']) || '?'); },
+    // A reduction is in force from effective_ledger; a raise at once.
+    UpgradeDelayChanged: function() {
+      var from = pick(data, ['from_ledgers']);
+      var to = pick(data, ['to_ledgers']);
+      var shorter = Number(to) < Number(from);
+      return 'Upgrade notice ' + (shorter ? 'shortened' : 'lengthened') + ' from ' + (from || '?') + ' to ' + (to || '?') + ' ledgers' +
+        (shorter ? ', in force from ledger ' + (pick(data, ['effective_ledger']) || '?') : '');
+    },
     // Topics from_hash/to_hash, data version. Hashes are shortened to 8 hex chars.
     Upgraded: function() {
       function shortHash(h) { return h ? String(h).slice(0, 8) : 'unknown'; }

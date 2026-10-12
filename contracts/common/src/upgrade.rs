@@ -96,18 +96,27 @@ pub fn set_delay(e: &Env, ledgers: u32) {
     // its wait from the value in force, not from the one before it.
     instance.set(&crate::ns(e, UpgradeKey::UpgradeDelay), &current);
     instance.remove(&crate::ns(e, UpgradeKey::PendingUpgradeDelay));
-    if ledgers >= current {
+    let effective_ledger = if ledgers >= current {
         instance.set(&crate::ns(e, UpgradeKey::UpgradeDelay), &ledgers);
         instance.remove(&crate::ns(e, UpgradeKey::PendingUpgradeDelay));
+        e.ledger().sequence()
     } else {
+        let effective_ledger = e.ledger().sequence().saturating_add(current);
         instance.set(
             &crate::ns(e, UpgradeKey::PendingUpgradeDelay),
             &PendingUpgradeDelay {
                 ledgers,
-                effective_ledger: e.ledger().sequence().saturating_add(current),
+                effective_ledger,
             },
         );
+        effective_ledger
+    };
+    UpgradeDelayChanged {
+        from_ledgers: current,
+        to_ledgers: ledgers,
+        effective_ledger,
     }
+    .publish(e);
 }
 
 /// Whether an upgrade approved at `approved_ledger` may apply now.
@@ -124,6 +133,18 @@ pub struct Upgraded {
     #[topic]
     pub to_hash: BytesN<32>,
     pub version: String,
+}
+
+/// Emitted by `set_delay` (Manager and shared Minter only). A shorter notice
+/// is in force from `effective_ledger`; a longer one at once. This is the
+/// change a member wants told about: it shortens the window to react to a
+/// platform upgrade.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UpgradeDelayChanged {
+    pub from_ledgers: u32,
+    pub to_ledgers: u32,
+    pub effective_ledger: u32,
 }
 
 /// Emitted by `migrate`.

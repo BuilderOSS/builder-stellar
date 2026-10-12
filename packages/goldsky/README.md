@@ -182,6 +182,7 @@ share topics (enforced by `contractEvents()`). Each module's launch event has it
 | `PendingSlugUpdated` | manager | `token_address` | `slug` | new |
 | `SlugClaimed` | manager | `token_address`, `slug` | none | new; emitted by `launch_dao` (`DaoCreated.slug` is only the request) |
 | `LatestImplementationSet` | manager | `name`, `wasm_hash` | `version` | new |
+| `UpgradeDelayChanged` | manager and minter (common) | none | `from_ledgers`, `to_ledgers`, `effective_ledger` | new; public row, a reduction is in force from `effective_ledger` |
 | `TokenInitialized` / `GovernorInitialized` / `TreasuryInitialized` / `AuctionInitialized` | modules | `admin` | unchanged | topic renamed from `owner` |
 | `MarketplaceInitialized` | marketplace | `token`, `admin` | unchanged | `admin` topic added |
 | `MetadataInitialized` | metadata | `token` | `admin` replaces `owner` | renamed |

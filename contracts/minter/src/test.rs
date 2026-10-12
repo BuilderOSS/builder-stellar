@@ -1029,8 +1029,20 @@ fn upgrade_delay_is_configurable_but_a_reduction_waits() {
         MinterError::ManagerAdminNotSet
     );
     mgr.set_admin(&Address::generate(&env));
-    // Longer: at once.
+    // Longer: at once, and announced as in force now.
     minter.set_upgrade_delay(&(TEST_UPGRADE_DELAY * 3));
+    {
+        use soroban_sdk::Event as _;
+        assert_eq!(
+            env.events().all().events().last().unwrap(),
+            &common::upgrade::UpgradeDelayChanged {
+                from_ledgers: TEST_UPGRADE_DELAY,
+                to_ledgers: TEST_UPGRADE_DELAY * 3,
+                effective_ledger: env.ledger().sequence(),
+            }
+            .to_xdr(&env, &minter.address)
+        );
+    }
     assert_eq!(minter.upgrade_delay(), TEST_UPGRADE_DELAY * 3);
     // Shorter: only after the 3,000 ledgers now in force.
     minter.set_upgrade_delay(&10);

@@ -577,5 +577,20 @@ export interface LatestPointer {
   set_ledger: bigint;
   wasm_hash: Uint8Array;
 }
-    export type ContractEvent = DaoCreatedEvent | DaoLaunchedEvent | SlugChangedEvent | SlugClaimedEvent | AdminChangedEvent | AdminProposedEvent | FactoryPausedEvent | FactoryUnpausedEvent | ManagerUpgradedEvent | UpgradeApprovedEvent | PlatformMinterSetEvent | ManagerInitializedEvent | PendingSlugUpdatedEvent | ImplementationRevokedEvent | AdminProposalCancelledEvent | LatestImplementationSetEvent | ImplementationRegisteredEvent | CurrentImplementationsUpdatedEvent;
+
+/**
+ * Emitted by `set_delay` (Manager and shared Minter only). A shorter notice
+ * is in force from `effective_ledger`; a longer one at once. This is the
+ * change a member wants told about: it shortens the window to react to a
+ * platform upgrade.
+ */
+export interface UpgradeDelayChangedEvent {
+  name: "UpgradeDelayChanged";
+  data: {
+    from_ledgers?: number;
+    to_ledgers?: number;
+    effective_ledger?: number;
+  };
+}
+    export type ContractEvent = DaoCreatedEvent | DaoLaunchedEvent | SlugChangedEvent | SlugClaimedEvent | AdminChangedEvent | AdminProposedEvent | FactoryPausedEvent | FactoryUnpausedEvent | ManagerUpgradedEvent | UpgradeApprovedEvent | PlatformMinterSetEvent | ManagerInitializedEvent | PendingSlugUpdatedEvent | ImplementationRevokedEvent | AdminProposalCancelledEvent | LatestImplementationSetEvent | ImplementationRegisteredEvent | CurrentImplementationsUpdatedEvent | UpgradeDelayChangedEvent;
     
