@@ -58,9 +58,17 @@ DAO), simulates each extension, and splits any that would exceed 300 XLM in one 
 to 170 days at upload by `deploy-manager.mjs` and `upgrade-contract.mjs`.
 
 **If you lapse.** Contracts bump their own code only from 2 to 4 days, so a member's transaction pays at most a
-few days of code rent (about 4 XLM for a 37 KB module) instead of the 300 XLM that used to be the trap. If no
-transaction lands in those days the code archives, and every DAO on it stops until someone submits a
-`RestoreFootprint` for the hash (which costs roughly a renewal).
+few days of code rent (about 4 XLM for a 37 KB module) instead of the 300 XLM that used to be the trap. A
+transaction that touches several contracts pays several bumps: `launch_dao` touches all seven, so during a lapse
+a launch can cost tens of XLM and can trip the app's 50 XLM guard until the platform renews. If no transaction
+lands in those days the code archives, and every DAO on it stops until someone submits a `RestoreFootprint` for
+the hash (which costs roughly a renewal). `renew-code-ttl.mjs` refuses to run when it cannot read the Manager
+itself (its code or instance archived): restore the Manager first.
+
+**Your upgrades are on notice.** The Manager's own upgrade and the shared Minter's apply only `upgrade_delay()`
+ledgers after you approve them (set at deployment with `upgradeDelayLedgers`; 7 days recommended on a public
+network). You can lengthen the notice at once; shortening it waits out the notice in force. Every DAO pins the
+Minter as a mint authority, so this notice is what lets a DAO revoke it before an upgrade it distrusts.
 
 ## DAO creator (launch admin)
 
@@ -77,6 +85,8 @@ property) for 180 days; each founder mint writes about 17 bytes of traits; launc
 | **Total** | **~29 XLM** |
 
 Everything you write is handed to the DAO at launch; from then on it is renewed by the DAO's sweep, not by you.
+Until launch, the Manager's pending record of your DAO is part of the same sweep (Manage → Storage renewal lists
+it while the DAO has no link), so a setup that takes longer than 180 days is renewable too.
 
 ## The DAO: renewing
 
@@ -108,7 +118,14 @@ signs two.
 **If nobody renews.** After 180 days the entries archive. Nothing is deleted: anyone can restore an archived
 entry with a `RestoreFootprint`, for about the rent it would have cost to renew plus a write fee. An archived
 instance stops its contract until restored, so an abandoned DAO is paused, not lost. The Renewal tab shows
-`Expired` and offers the restore.
+`Expired` and offers the restore. Once the RPC no longer returns an expired entry at all (eviction), the tab can
+read nothing from the token; it then restores the module instances from the deployment record first (the CLI
+takes `--dao <deploys/...-dao-N.json>` for the addresses) and lists the rest on the next run.
+
+**Funds in other assets.** The sweep finds the auction's and market's payment assets and every open listing's
+asset on chain. A balance in any other asset (a donation, fees in a former payment asset) is not discoverable;
+it archives 30 days after its last use and is restored automatically when a proposal spends it (the proposal
+page restores before signing). To keep it alive in the sweep, pass it to the CLI with `--asset`.
 
 ## Members
 
@@ -131,7 +148,9 @@ your ownership entry.
 is fixed when you propose, from the current voting supply and rate, so nothing you or anyone does later changes
 it. Live proposals are in the DAO sweep; ended ones archive, and that is by design (the id list skips them).
 
-**Executing** a queued proposal is permissionless, and the executor pays the rent of whatever the actions write:
+**Executing** a queued proposal is permissionless, and the executor pays the rent of whatever the actions write.
+If an action reads something archived (a Treasury balance in an asset the sweep does not know, an old upgrade
+approval), the proposal page restores it first with one extra signature. The executor pays for that too:
 a renderer or profile update writes only instance data (negligible); `add_properties` rewrites one item page
 (~1 XLM); `set_merkle_root` writes the root and round (~1 XLM); an upgrade writes the instance only. The app shows
 the simulated fee before you sign.
@@ -143,7 +162,9 @@ payment moves between balances you already have. If the previous bidder's refund
 refuses the asset), your bid parks it as a `PendingRefund` entry for them (~0.25 XLM for 180 days).
 
 **Selling** writes the listing (~250 B) for 30 days: about 0.01 XLM. The approval is temporary and expires with
-the listing. An expired listing is cleared by anyone; the token returns to you.
+the listing. An expired listing is cleared by anyone; the token returns to you. A listing's own `expires_at` can be
+set further out than 30 days; past the storage lifetime the listing is covered by the DAO's sweep while open, and if
+that lapses too the escrowed token waits until someone restores the listing entry.
 
 **Buying** writes only your own ownership and balance records (a member's 0.02 XLM). A primary purchase mints the
 token's traits (~17 B).
@@ -151,7 +172,8 @@ token's traits (~17 B).
 ## Claimers
 
 A merkle claim writes your claim marker (~200 B) for 180 days: about 0.35 XLM, paid with the claim. The DAO pays
-for the claim round itself (root and `tree_uri`, ~1 XLM, by proposal).
+for the claim round itself (root and `tree_uri`, ~1 XLM, by proposal). An archived marker is not a second chance:
+archived entries are restored, not deleted, so a claim in the same round still fails once it is back.
 
 ## Questions
 

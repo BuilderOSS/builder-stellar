@@ -76,7 +76,7 @@ the allowlist markers and the four display strings, which § 4 removes.
 | Module `version()` (S3) | **Derived from the registry on read.** `CurrentVersion`, the constructor argument, `sync_version` and `VersionSynced` are removed from the seven DAO modules. The Manager keeps its own stored version (it is the registry). |
 | Manager registry slimming (S4) | **Dropped.** `get_latest_implementation` callers and `upgrade_manager` read the fields it would remove. |
 | Claims | **Merkle-only, with the tree published.** Allowlist storage, `set_allowlist`, `mint_allowlist` and their events go. `set_merkle_root(root, tree_uri)` stores an `ipfs://<cid>` of the full tree beside each root; `MerkleRootSet` carries `{ root, round, tree_uri }` (G2 extended). Consumers recompute the root from the file and refuse to show claims on mismatch. |
-| Quorum | **Checkpoints kept.** `quorum(ledger)` and the ledger-minus-one semantics are unchanged. The stored-snapshot idea (G4) is dropped. |
+| Quorum | **Stored per proposal (D33, D40).** `propose` computes `ceil(voting_supply_at_previous_ledger × quorum_bps / 10,000)` from the latest checkpoints only and stores it; `proposal_state` judges against the stored value, so only the latest supply and quorum checkpoints are swept. `quorum(ledger)` remains as a historical view. |
 | Proposal recoverability | **Ids only**: a counter, `ProposalId(seq)` and a `proposal(id)` core getter. No payload on-chain; the preimage stays with the proposer and in `ProposalCreated` (exception 3). |
 | Minter | **Required shared module.** The platform Minter is one contract for all DAOs; every DAO's token grants it mint authority at launch. `enable_minter` goes; the launch config carries a required `minter: Address` that must equal the registered PlatformMinter (keeps the pre-launch pin), and the token records it (`minter() -> Address`). The Minter adopts `common::upgrade` (Manager admin as upgrade authority, registered in the registry) so one approved upgrade fixes every DAO (eng review D8). |
 | Wiring and counters | **Getters added** so a fresh client can discover every module and scan finite ranges (§ 4). |
@@ -112,9 +112,11 @@ quorum snapshot per proposal; compaction C = byte-level codecs for attributes an
 **Artwork layout** (chosen so a DAO's whole catalogue is a handful of keys, § 7):
 - Instance `ItemCounts: Vec<u32>` (≤ 16) replaces `PropertyCount`; its length is the property count. Mint and
   batch mint read it once and nothing else from the artwork.
-- Persistent `PropertyName(property_id)` (16 small keys) replaces the `name` half of `StoredProperty`.
-- Persistent `Items(property_id, page) -> Vec<Item>`, 32 items per page, `MAX_ITEM_PAGES = 32` (1,024 items per
-  property). `add_properties` appends to the last page and rewrites at most one page per touched property.
+- Persistent `PropertyNames -> Vec<String>` (one key for all ≤ 16 names, D32) replaces the `name` half of
+  `StoredProperty`.
+- Persistent `Items(property_id, page)`, 32 items per page, `MAX_ITEM_PAGES = 32` (1,024 items per
+  property), stored as the item names plus one IPFS-group byte per item (`ItemPage`, D32; ~580 B for a full
+  page of short names). `add_properties` appends to the last page and rewrites at most one page per touched property.
   **Measured** worst case (16 properties each one item short of a full page, 64-byte names, a maximum-length new
   group): 89,496 bytes written, against the live `tx_max_write_bytes` of 132,096. The approved 64-item pages
   (eng review D6) measured 155,032 bytes and did not fit, so pages are 32 items; D6's intent (a bounded write
@@ -124,9 +126,11 @@ quorum snapshot per proposal; compaction C = byte-level codecs for attributes an
   copy, so the 64-group cap limits distinct folders, not upload batches.
 - Persistent `IpfsGroups -> Vec<IpfsGroup>`: one key, append-only; `get_ipfs_group(k)` indexes into it. Cap
   `MAX_IPFS_GROUPS = 64`.
-- Persistent `AttributesPage(page) -> Vec<[u32; 17]>`, 64 tokens per page (~4.4 KB): a mint reads, extends and
-  rewrites one page instead of creating a key per token (≈ +4 KB written per mint ≈ 0.0004 XLM; rent is the same
-  bytes in far fewer entries). A `batch_mint` (≤ 18 tokens) that crosses a page boundary writes two pages
+- Persistent `AttributesPage(page) -> Bytes`, 64 tokens per page as packed records (a count byte plus one byte
+  per trait, two past 256 items in a property: ~1.2 KB for a full page of 16-trait tokens, D32; the `Vec<u32>`
+  layout first implemented measured ~9.4 KB). Every mint writes its record, empty before artwork exists, so the
+  pages up to the minted count always exist. A mint reads, extends and rewrites one page instead of creating a
+  key per token (rent is the same bytes in far fewer entries). A `batch_mint` (≤ 18 tokens) that crosses a page boundary writes two pages
   atomically. `get_attributes(token_id)` reads one page; an archived page makes `token_uri` fail at simulation
   with an archived-entry error, which `/api/token` and `/api/render` map to the "unavailable" state and the Renewal
   tab shows as expired. The stored vector per token is still the property count followed by one item index per
@@ -376,9 +380,10 @@ anyone holding the key can restore them. They are not in the DAO sweep.
 2026-10-12): `tx_max_footprint_entries` 400, `tx_max_disk_read_entries` 200, `tx_max_disk_read_bytes` 200,000,
 `tx_max_write_bytes` 132,096 (binds restores), `tx_max_size_bytes` 132,096, `max_entry_ttl` 3,110,400 ledgers
 (180 days at 5 s). With the § 4 layout the reference DAO of § 10 (16 properties, 300 items, 500 tokens, 50
-proposals of which ~10 live) is 7 instances + 16 name keys + ~5–16 item pages + 1 groups key + 8 attribute pages
-+ ~20 live proposal keys + listings + 2 slug keys ≈ **60–80 keys: one `ExtendFootprintTTL` transaction, one signature**,
-with headroom to the 400-entry limit. The per-key layout it replaces needed about seven. The batch splitter stays
+proposals of which ~10 live) is 6 instances + 1 names key + 16 item pages + 1 groups key + 8 attribute pages
++ 20 live proposal keys + the latest two checkpoints + 4 mint grants + the DAO's holdings + 2 slug keys: **62 keys and
+32,180 bytes measured (`reference_dao_sweep_fits_one_transaction`): one `ExtendFootprintTTL` transaction, one
+signature**, with headroom to the 400-entry and 200 KB limits. The per-key layout it replaces needed about seven. The batch splitter stays
 only as a guard for a DAO that somehow exceeds the live limit (the UI then says so and signs in sequence).
 Mainnet values are read the same way at implementation, never assumed [re-measure before gate]. The sweep footprint
 holds persistent and instance keys only, never temporary ones (OZ approvals): one extend mixing durabilities fails
@@ -590,7 +595,7 @@ One PR on one branch (eng review D5), reviewable commits:
 | D6 | `version()` derived from the registry; `sync_version` removed | Removes bytes DAOs pay for on every call; the registry already holds the string and must stay alive for upgrades | Keep stored string; derive at write time (a no-op: the Manager already passes the registry version) |
 | D7 | S4 dropped | `get_latest_implementation` callers and `upgrade_manager` read those fields | Return `(hash, record)` |
 | D8 | Merkle-only claims, explicit exception | Owner; one claim path | Keep allowlist; emit leaves |
-| D9 | Quorum checkpoints kept | Functionality-preserving; the snapshot saved nothing meaningful | Stored `quorum_votes` (G4) |
+| D9 | ~~Quorum checkpoints kept~~ (superseded by D33: the stored quorum is what lets the sweep drop checkpoint history) | Functionality-preserving; the snapshot saved nothing meaningful | Stored `quorum_votes` (G4) |
 | D10 | Proposal ids only (counter, `ProposalId(seq)`, `proposal(id)`); no payload on-chain; the preimage is exception 3 | A payload costs the proposer 1.7–22 XLM of rent per proposal for a recovery path events and the proposer already provide; ids give a chain-only proposal list for ~60 bytes | Store the payload while live and prune it (drafts 2–3); nothing at all |
 | D11 | One-sweep renewal via footprint operations; in-contract bumps removed | Owner's new rule; Stellar already provides the operations | Per-contract bump entrypoints; a keeper |
 | D12 | Compaction C optional, last | Codec risk against per-field savings | In scope |
@@ -614,12 +619,14 @@ One PR on one branch (eng review D5), reviewable commits:
 | D31 | ~~Every OZ total-supply and quorum checkpoint is in the DAO sweep~~ (superseded by D33) | OZ binary-searches checkpoints and renews only what it reads, so an untouched midpoint can archive and break `proposal_state` years later. Supply checkpoints grow about one per auction day, so after roughly a year the sweep needs a second transaction (the batch splitter) | Renew only the latest checkpoints (breaks old lookups); compact checkpoints in the token |
 | D30 | Every Builder storage key is wrapped as `("builder", Variant)` (named `builder` until D37); OZ keys untouched; an e2e test walks the ledger and rejects any other shape | Separates Builder keys from OZ keys by construction instead of by review; readable in explorers. Costs 32 bytes per key (DAO instances +1.5 KB, § 4) | Bare variants plus the D26 guard only; a shorter prefix |
 | D32 | Compact Metadata storage: attribute pages as packed bytes (count byte + one byte per trait, two past 256 items), item pages as names + one group byte each, all property names in one key; every mint writes its record (empty before artwork) | Attribute pages were 64 % of the sweep at ~150 B per token (u32 value tags); item structs spent ~60 B per item on field names. Reference sweep 117 KB → 34 KB; a full attribute page 9.4 KB → 1.2 KB | Keep the u32 vectors; a seed per token (counts change after mint) |
-| D33 | Proposals store the quorum fixed at creation (current voting supply × current rate); only the latest supply and quorum checkpoints are swept | `proposal_state` binary-searched every checkpoint, so all had to stay live and the sweep grew ~180 B per auction day (~240 XLM more per year per year). Supply minted in the proposing ledger counts toward the quorum but cannot vote, so the requirement can only be higher | Keep every checkpoint live (D31) |
+| D33 | Proposals store the quorum fixed at creation (voting supply × current rate, the supply at the snapshot ledger by D40); only the latest supply and quorum checkpoints are swept | `proposal_state` binary-searched every checkpoint, so all had to stay live and the sweep grew ~180 B per auction day (~240 XLM more per year per year). Supply minted in the proposing ledger counts toward the quorum but cannot vote, so the requirement can only be higher | Keep every checkpoint live (D31) |
 | D34 | The sweep covers what the DAO itself holds: tokens and balances of the Treasury, Auction and Marketplace, including asset-contract balances; `token_uri` checks existence by the id counter | OZ and the asset contract renew these 30 days per touch, so an idle DAO's funds and unsold tokens archived about a month after last use (e2e negative control); a 30-day ownership entry made idle members' tokens unrenderable | Leave them to whoever touches them |
 | D35 | The app restores a member's archived records before their transaction (SDK `restore` for wallet-built calls; a 409 restore payload for server-prepared ones) | Members' entries renew 30 days per touch; without this every flow failed for a member back after a month | Extend member entries longer at the actor's cost |
 | D36 | Platform renewal finds every running hash (current implementations, latest, each DAO module) and steps any extension whose fee would exceed 300 XLM | DAOs that skipped an upgrade ran code no pointer named; a fresh 43 KB code entry to 170 days simulates at ~360 XLM, 84 % of the u32 fee cap (STORAGE_DIET_FIX_REVIEW issues 1, 2) | Artifact hashes only; one extension per entry |
 | D37 | The namespace symbol is `builder` (7 characters) instead of `buildeross` (10) | At most 9 characters the host keeps the symbol inline in a `Val`, so building a key allocates no host object; the XDR is 4 bytes shorter per key. Lowercase cannot equal a PascalCase OZ variant. Pinned bytes updated in Rust, the app and the scripts | Keep the 10-character name (readable, but a host object per key build) |
 | D38 | A proposal is stored as `(proposer, 49 packed bytes)` instead of a field-named map; the app decodes it with one shared decoder | 424 → 268 bytes per live proposal (37 % of the proposals class); the map spent ~170 bytes on field names and value tags | Keep the map (self-describing in explorers) |
+| D39 | Platform upgrade notice: the Manager's own upgrade and the shared Minter's wait `upgrade_delay()` ledgers after the Manager's approval; the delay is a constructor argument (`upgradeDelayLedgers`, short on testnet, 7 days recommended on a public network), the admin can raise it at once but a reduction applies only after the notice in force; `approve_upgrade` keeps the first approval's ledger | Every DAO depends on both contracts (registry, factory, pinned mint authority), and a Minter upgrade could mint against every DAO (contract review M1); the notice lets a DAO revoke the Minter's mint authority by proposal first | Immediate admin upgrades; a fixed delay (useless on testnet) |
+| D40 | The stored quorum uses the voting supply at the previous ledger (`token.voting_supply_at_previous_ledger`, the two latest checkpoints only), the ledger votes are snapshotted at | With this ledger's supply a holder could escrow tokens in the Marketplace in the proposing ledger (lowering the supply) while still voting with them, then cancel: a 50 % quorum passable by 34 % (contract review H1). Same-ledger mints neither vote nor count | This ledger's supply (D33 as first implemented) |
 
 ## 13. Review record
 

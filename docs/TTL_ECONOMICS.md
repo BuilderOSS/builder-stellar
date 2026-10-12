@@ -127,13 +127,16 @@ until artwork exists, so the pages up to the minted count always exist and an ar
 | `ProposalId(seq)` | persistent | The id of proposal `seq`, so proposals are listable from chain | ~170 B | Sweep while live |
 | OZ `VotingDelay`, `VotingPeriod`, `ProposalThreshold`, `NumQuorumCheckpoints`, `TokenContract` | instance | Governance settings | | instance |
 | OZ `QuorumCheckpoint(i)` | persistent | Quorum rate history | ~170 B each | Sweep: **the latest only** (D33) |
-| OZ `ProposalVote(id)` | persistent | Vote tallies | | Sweep while live, when present |
-| OZ `HasVoted(id, voter)` | persistent | One vote record | | Holder |
+| OZ `ProposalVote(id)` | persistent | Vote tallies; OZ renews it 30 days per vote or queue, the sweep to the full term while live | | Sweep while live, when present |
+| OZ `HasVoted(id, voter)` | persistent | One vote record, 30 days | | Holder |
 
-Each proposal stores its quorum when it is created, from the current voting supply and rate, so `proposal_state`,
-`queue` and `execute` never look up historical checkpoints. Old ones may archive; the `quorum(ledger)` view for a
-past ledger then needs them restored. Ended proposals leave the sweep; the id list then has gaps, which the
-chain-read proposal list skips (`apps/web/src/lib/chain-reads/proposals.ts`).
+Each proposal stores its quorum when it is created, from the voting supply at the previous ledger (the snapshot
+ledger, read from the two latest checkpoints only) and the current rate, so `proposal_state`, `queue` and
+`execute` never look up historical checkpoints. Old ones may archive; the `quorum(ledger)` view for a past
+ledger then needs them restored. Ended proposals leave the sweep; the id list then has gaps. **A contract call
+that reads an archived key fails as a whole**, so `proposal_ids(start, limit)` fails for any page holding an
+archived id; chain-reading clients read the `ProposalId(seq)` entries raw with `getLedgerEntries` instead
+(`apps/web/src/lib/chain-reads/proposals.ts`), where an archived entry is simply absent.
 
 ### Treasury, Auction, Marketplace
 
@@ -144,7 +147,8 @@ chain-read proposal list skips (`apps/web/src/lib/chain-reads/proposals.ts`).
 | Auction `PendingRefund(bidder)` | persistent | A refund the bidder can withdraw | Holder |
 | Marketplace `Config`, `NextListingId` | instance | Settings and the listing counter | instance |
 | Marketplace `Listing(id)`, `PrimaryListing(token)` | persistent | Open listings | Sweep while open |
-| Asset `Balance(treasury|auction|marketplace)` on the DAO's payment assets | persistent (SAC) | The DAO's funds and escrow | Sweep (holdings) |
+| Asset `Balance(treasury|auction|marketplace)` on the auction's and market's payment assets and on every open listing's asset | persistent (SAC) | The DAO's funds and escrow in the assets it trades in | Sweep (holdings) |
+| Asset `Balance(treasury)` on any other asset (donations, fees in a former payment asset) | persistent (SAC) | Funds the inventory cannot discover from chain | Restored when a proposal spends them (the proposal page restores before signing); add them to the sweep with `renew-dao.mjs --asset` |
 
 ### Minter (shared by every DAO)
 
@@ -163,7 +167,7 @@ chain-read proposal list skips (`apps/web/src/lib/chain-reads/proposals.ts`).
 | `Implementation(hash)`, `LatestImplementation(name)` | persistent | The registry `version()` reads, and each name's latest | Platform (`renew-code-ttl.mjs`) |
 | `PlatformMinter` | persistent | The shared Minter `launch_dao` pins | Platform |
 | `UpgradeApproval(from, to)`, `PendingAdmin` | persistent | Approved upgrade paths, an admin handoff | Used soon after they are written; restore an old one if needed |
-| `PendingDao(token)` | persistent | A created DAO awaiting launch; removed at launch | Creator |
+| `PendingDao(token)` | persistent | A created DAO awaiting launch; removed at launch | Sweep (listed while the DAO has no slug, so a long setup is renewable from the same tab) |
 | `SlugToDao(slug)`, `DaoSlug(token)` | persistent | The DAO's `/dao` link, both directions | Sweep |
 
 ## The reference DAO
@@ -187,7 +191,9 @@ DAO (e2e `reference_dao_sweep_fits_one_transaction`, which prints this table):
 
 One `ExtendFootprintTTL` transaction holds it: 62 of 400 entries and 32 KB of the 200 KB read limit. At about 19
 bytes per token, roughly 9,000 tokens fit before the read limit splits the sweep into a second transaction, and
-the sweep no longer grows with time.
+the sweep no longer grows with time. Tokens the DAO itself keeps (unsold lots the Treasury holds) add ~130 bytes
+each on top of that, so a DAO that accumulates unsold tokens reaches the limit sooner. Listing the inventory for
+a large DAO reads every ownership entry (one `getLedgerEntries` call per 100 tokens).
 
 Other measured budgets on the same fixtures:
 

@@ -181,7 +181,9 @@ stellar contract invoke --id <module-address> --network <network> --source-accou
 
 `node scripts/upgrade-contract.mjs manager configs/<network>-manager.json <from-hash>` with
 `LEGACY_MANAGER_VERSION=<active release>`: registers the old Manager hash if needed, registers and approves the
-new one, then calls `upgrade_manager` directly (Manager admin). Upgrade the Manager **before** modules whenever
+new one, then calls `upgrade_manager` (Manager admin). The Manager's own upgrade waits out its notice
+(`manager.upgrade_delay()` ledgers after the approval, D39): on the first run the script approves and prints the
+ledger from which the upgrade may run; rerun it then. Upgrade the Manager **before** modules whenever
 module upgrades rely on new Manager reads (the script checks `get_implementation_version` exists).
 
 ## Shared Minter upgrades
@@ -189,6 +191,11 @@ module upgrades rely on new Manager reads (the script checks `get_implementation
 Every DAO uses one platform Minter, pinned on its Token at launch, so a Minter upgrade reaches every DAO at once
 and needs no proposal. `node scripts/upgrade-contract.mjs minter configs/<network>-manager.json <from-hash>`
 registers and approves the new hash, then the Manager admin calls `minter.upgrade(from, to)` and, for a storage
-change, `minter.migrate()`; both require the Manager admin (`ManagerAdminNotSet`, 7811, when none is set).
+change, `minter.migrate()`; both require the Manager admin (`ManagerAdminNotSet`, 7811, when none is set). The
+upgrade applies only `minter.upgrade_delay()` ledgers after the approval (`UpgradeDelayNotElapsed`, 7813, before
+that; D39): the script approves on its first run, prints the earliest ledger, and is rerun then. Approvals are
+idempotent (the first ledger counts), and the admin can lengthen the notice at once but shorten it only after the
+notice in force has passed (`set_upgrade_delay`). The notice is what lets a DAO revoke the Minter's mint
+authority by proposal before an upgrade it distrusts lands.
 Claim roots, rounds and markers are kept; e2e `shared_minter_upgrades_then_claims_against_the_existing_root`
 covers it. A different Minter address would need every DAO to re-pin it, which this release does not support.
