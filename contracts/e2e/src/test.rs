@@ -159,7 +159,6 @@ fn setup_with(
             treasury_id.clone(),
             Address::generate(&e),
             Address::generate(&e),
-            String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
             metadata_id.clone(),
@@ -213,7 +212,11 @@ fn setup_with(
     // the canonical minter, and `owner` (the launch admin in these tests) is
     // registered as an extra launch-time minter so the tests can keep minting
     // voting power directly.
-    token.launch(&treasury_id, &vec![&e, treasury_id.clone(), owner.clone()]);
+    token.launch(
+        &treasury_id,
+        &vec![&e, treasury_id.clone(), owner.clone()],
+        &owner,
+    );
     // Governor and treasury only process proposals once live.
     governor.launch(&treasury_id);
     treasury.launch(&treasury_id);
@@ -927,6 +930,7 @@ fn setup_auction() -> AuctionFixture {
     token.launch(
         &treasury.address,
         &vec![&e, treasury.address.clone(), auction.address.clone()],
+        &treasury.address, // stands in for the platform Minter
     );
     auction.launch(&treasury.address, &false, &payment_token);
     let _ = launch_admin;
@@ -971,7 +975,6 @@ fn setup_auction_setup_phase() -> (
             treasury_id.clone(),
             auction_id.clone(),
             Address::generate(&e),
-            String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
             metadata_id.clone(),
@@ -1104,6 +1107,7 @@ fn test_auction_launch_starts_first_auction_and_hands_off_to_treasury() {
     token.launch(
         &treasury.address,
         &vec![&e, treasury.address.clone(), auction.address.clone()],
+        &treasury.address, // stands in for the platform Minter
     );
     auction.launch(&treasury.address, &true, &payment_token);
 
@@ -1676,7 +1680,6 @@ fn test_governor_treasury_bidirectional_verification() {
             Address::generate(&e),
             Address::generate(&e),
             Address::generate(&e),
-            String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
             metadata_id.clone(),
@@ -1862,7 +1865,6 @@ fn marketplace_primary_sale_uses_real_token_and_sac() {
             treasury.clone(),
             Address::generate(&e),
             marketplace_id.clone(),
-            String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "Marketplace DAO"),
             String::from_str(&e, "MDAO"),
             metadata_id.clone(),
@@ -1894,6 +1896,7 @@ fn marketplace_primary_sale_uses_real_token_and_sac() {
     token.launch(
         &treasury,
         &vec![&e, treasury.clone(), marketplace_id.clone()],
+        &treasury, // stands in for the platform Minter
     );
     marketplace.launch(&treasury, &true, &payment.address());
 
@@ -2693,7 +2696,6 @@ fn real_auth_marketplace_primary_and_secondary_flows() {
             treasury.clone(),
             Address::generate(&e),
             marketplace_id.clone(),
-            String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "Marketplace DAO"),
             String::from_str(&e, "MDAO"),
             metadata_id.clone(),
@@ -2722,6 +2724,7 @@ fn real_auth_marketplace_primary_and_secondary_flows() {
     token.launch(
         &treasury,
         &vec![&e, treasury.clone(), marketplace_id.clone()],
+        &treasury, // stands in for the platform Minter
     );
     marketplace.launch(&treasury, &true, &pay);
 
@@ -2872,7 +2875,6 @@ fn slug_params(
         initial_config: manager::InitialDaoConfigValues {
             token_name: String::from_str(e, "Flow DAO"),
             token_symbol: String::from_str(e, "FLOW"),
-            token_uri: String::from_str(e, "https://example.com/token/"),
             profile: String::from_str(e, r#"{"v":1,"description":"Test DAO"}"#),
             renderer_base: String::from_str(e, "https://example.com/render/"),
             slug: String::from_str(e, slug),
@@ -2917,6 +2919,8 @@ fn full_factory_flow_create_setup_launch_with_slug() {
         ),
     );
     let manager = ManagerContractClient::new(&e, &manager_id);
+    let platform_minter = Address::generate(&e);
+    manager.set_platform_minter(&platform_minter);
 
     let mut hashes = std::vec::Vec::new();
     for (registry_name, wasm_name) in [
@@ -2984,8 +2988,7 @@ fn full_factory_flow_create_setup_launch_with_slug() {
         &manager::LaunchConfig {
             launch_auction: true,
             launch_marketplace: true,
-            enable_minter: false,
-            expected_minter: None,
+            minter: platform_minter.clone(),
         },
     );
     assert!(manager.get_pending_dao(&dao.token).is_none());
@@ -3002,8 +3005,7 @@ fn full_factory_flow_create_setup_launch_with_slug() {
     let launch_all = manager::LaunchConfig {
         launch_auction: true,
         launch_marketplace: true,
-        enable_minter: false,
-        expected_minter: None,
+        minter: platform_minter.clone(),
     };
     assert_eq!(
         manager.try_launch_dao(&rival.token, &launch_all),
@@ -3271,7 +3273,6 @@ fn system_held_tokens_and_votes_through_a_real_proposal() {
             treasury_id.clone(),
             auction_id.clone(),
             marketplace_id.clone(),
-            String::from_str(&e, "u"),
             String::from_str(&e, "n"),
             String::from_str(&e, "s"),
             metadata_id.clone(),
@@ -3343,6 +3344,7 @@ fn system_held_tokens_and_votes_through_a_real_proposal() {
     token.launch(
         &treasury_id,
         &vec![&e, treasury_id.clone(), marketplace_id.clone()],
+        &treasury_id, // stands in for the platform Minter
     );
     governor.launch(&treasury_id);
     treasury.launch(&treasury_id);
@@ -3420,55 +3422,61 @@ fn system_held_tokens_and_votes_through_a_real_proposal() {
 }
 
 // ============================================================================
-// Token 0.1.0 -> 0.2.0 upgrade (MetadataUpdated), from the deployed code
+// Factory DAO on the current code
 // ============================================================================
 
-/// Upload a released module WASM kept as a fixture (`contracts/e2e/fixtures`), so upgrades
-/// start from the exact code that is deployed, not from a local rebuild.
-fn upload_fixture_wasm(e: &Env, file: &str) -> BytesN<32> {
-    let path = std::format!("{}/fixtures/{file}", env!("CARGO_MANIFEST_DIR"));
-    let bytes = std::fs::read(&path).unwrap_or_else(|err| panic!("missing fixture {path} ({err})"));
-    e.deployer()
-        .upload_contract_wasm(soroban_sdk::Bytes::from_slice(e, &bytes))
-}
+// Retired with the 0.1.0 deployed-code fixtures (contracts/e2e/fixtures):
+// token_upgrade_in_setup_keeps_state_and_starts_emitting_metadata_updated,
+// token_upgrade_by_proposal_then_rename_in_the_same_proposal,
+// token_upgrade_rejects_unapproved_stale_and_revoked_paths.
+// Value: protects=(none now) upgrading the deployed token 0.1.0 in place;
+// retired_because=the storage-diet release is one fresh testnet redeploy (D13)
+// and the 0.1.0 token's `launch` no longer matches the Manager (eng review D10:
+// deployed-code fixtures retire); replacement=the upgrade-through-registry tests
+// on the current code (proposal_upgrades_*), each module's upgrade unit tests,
+// and new deployed-code fixtures captured after the redeploy.
 
-struct UpgradeFixture {
+struct DaoFixture {
     e: Env,
     manager: ManagerContractClient<'static>,
     dao: manager::DaoAddresses,
     deployer: Address,
-    old_token: BytesN<32>,
-    new_token: BytesN<32>,
+    /// The shared platform Minter registered on the Manager.
+    minter: Address,
 }
 
-/// A real factory DAO whose token runs the deployed 0.1.0 code, with the local token build
-/// registered as 0.2.0 and the 0.1.0 -> 0.2.0 path approved. One founder token is minted.
-fn dao_on_deployed_token() -> UpgradeFixture {
+impl DaoFixture {
+    /// Launch config that starts neither the auction nor the marketplace.
+    fn no_launch_modules(&self) -> manager::LaunchConfig {
+        manager::LaunchConfig {
+            launch_auction: false,
+            launch_marketplace: false,
+            minter: self.minter.clone(),
+        }
+    }
+}
+
+/// A real factory DAO ("upgrade-dao") on the locally built modules, with a
+/// platform Minter registered. One founder token is minted.
+fn factory_dao() -> DaoFixture {
     let e = Env::default();
     e.mock_all_auths();
     e.ledger().set_sequence_number(100);
     e.ledger().set_timestamp(1_000);
     e.cost_estimate().budget().reset_unlimited();
 
-    let admin = Address::generate(&e);
     let manager_id = e.register(
         ManagerContract,
         (
-            admin,
+            Address::generate(&e),
             BytesN::from_array(&e, &[0; 32]),
             String::from_str(&e, "0.1.0"),
         ),
     );
     let manager = ManagerContractClient::new(&e, &manager_id);
-
-    let old_token = upload_fixture_wasm(&e, "token-0.1.0.wasm");
-    manager.register_implementation(
-        &String::from_str(&e, "Token"),
-        &String::from_str(&e, "0.1.0"),
-        &old_token,
-    );
-    let mut others = std::vec::Vec::new();
+    let mut hashes = std::vec::Vec::new();
     for (registry_name, wasm_name) in [
+        ("Token", "token"),
         ("Metadata", "metadata"),
         ("Auction", "auction"),
         ("Governor", "governor"),
@@ -3481,211 +3489,44 @@ fn dao_on_deployed_token() -> UpgradeFixture {
             &String::from_str(&e, "0.1.0"),
             &hash,
         );
-        others.push(hash);
+        hashes.push(hash);
     }
     manager.set_current_implementations(
-        &old_token, &others[0], &others[1], &others[2], &others[3], &others[4],
+        &hashes[0], &hashes[1], &hashes[2], &hashes[3], &hashes[4], &hashes[5],
     );
+    let minter = Address::generate(&e);
+    manager.set_platform_minter(&minter);
 
     let deployer = Address::generate(&e);
     let asset = e
         .register_stellar_asset_contract_v2(Address::generate(&e))
         .address();
     let dao = manager.create_dao(&slug_params(&e, &deployer, 1, "upgrade-dao", &asset));
-    let token = DaoTokenContractClient::new(&e, &dao.token);
-    token.mint(&deployer, &deployer);
+    DaoTokenContractClient::new(&e, &dao.token).mint(&deployer, &deployer);
 
-    // The release: register the new token code and approve exactly this path.
-    let new_token = upload_module_wasm(&e, "token");
-    assert_ne!(
-        old_token, new_token,
-        "rebuild the token WASM: the local build matches the deployed one"
-    );
-    manager.register_implementation(
-        &String::from_str(&e, "Token"),
-        &String::from_str(&e, "0.2.0"),
-        &new_token,
-    );
-    manager.approve_upgrade(&old_token, &new_token);
-
-    UpgradeFixture {
+    DaoFixture {
         e,
         manager,
         dao,
         deployer,
-        old_token,
-        new_token,
+        minter,
     }
-}
-
-fn metadata_updated_count(e: &Env) -> usize {
-    use soroban_sdk::testutils::Events as _;
-    use soroban_sdk::xdr::{ContractEventBody, ScSymbol, ScVal};
-    let sym = ScVal::Symbol(ScSymbol("metadata_updated".try_into().unwrap()));
-    e.events()
-        .all()
-        .events()
-        .iter()
-        .filter(|ev| match &ev.body {
-            ContractEventBody::V0(b) => b.topics.first() == Some(&sym),
-        })
-        .count()
-}
-
-fn token_name(e: &Env, token: &Address) -> String {
-    e.as_contract(token, || stellar_tokens::non_fungible::Base::name(e))
-}
-
-/// Setup window: the launch admin upgrades the token directly. State survives, the version and
-/// hash move, and only the new code reports a rename.
-#[test]
-fn token_upgrade_in_setup_keeps_state_and_starts_emitting_metadata_updated() {
-    let f = dao_on_deployed_token();
-    let e = &f.e;
-    let token = DaoTokenContractClient::new(e, &f.dao.token);
-    assert_eq!(token.version(), String::from_str(e, "0.1.0"));
-
-    // The deployed code renames silently: this is the bug the upgrade fixes.
-    let uri = String::from_str(e, "https://example.com/token/");
-    token.set_metadata(
-        &uri,
-        &String::from_str(e, "Quiet Name"),
-        &String::from_str(e, "QUIET"),
-    );
-    assert_eq!(metadata_updated_count(e), 0);
-
-    token.upgrade(&f.old_token, &f.new_token);
-    assert_eq!(token.version(), String::from_str(e, "0.2.0"));
-    assert_eq!(token.wasm_hash(), f.new_token);
-    // Nothing stored by 0.1.0 was lost.
-    assert_eq!(token.balance(&f.deployer), 1);
-    assert_eq!(token.owner_of(&0), f.deployer);
-    assert_eq!(token.get_votes(&f.deployer), 1);
-    assert_eq!(token.admin(), f.deployer);
-    assert_eq!(
-        token_name(e, &f.dao.token),
-        String::from_str(e, "Quiet Name")
-    );
-
-    let name = String::from_str(e, "Lantern Club");
-    token.set_metadata(&uri, &name, &String::from_str(e, "LANTERN"));
-    assert_eq!(metadata_updated_count(e), 1);
-    assert_eq!(token_name(e, &f.dao.token), name);
-
-    // The DAO still launches on the upgraded token.
-    f.manager.launch_dao(
-        &f.dao.token,
-        &manager::LaunchConfig {
-            launch_auction: false,
-            launch_marketplace: false,
-            enable_minter: false,
-            expected_minter: None,
-        },
-    );
-    assert!(token.is_live());
-}
-
-/// Live DAO: one proposal upgrades the token and renames it; the rename runs on the new code
-/// in the same execution, and only the Treasury's own authorization is used.
-#[test]
-fn token_upgrade_by_proposal_then_rename_in_the_same_proposal() {
-    let f = dao_on_deployed_token();
-    let e = &f.e;
-    f.manager.launch_dao(
-        &f.dao.token,
-        &manager::LaunchConfig {
-            launch_auction: false,
-            launch_marketplace: false,
-            enable_minter: false,
-            expected_minter: None,
-        },
-    );
-    let token = DaoTokenContractClient::new(e, &f.dao.token);
-    let governor = DaoGovernorContractClient::new(e, &f.dao.governor);
-    let treasury = DaoTreasuryContractClient::new(e, &f.dao.treasury);
-    assert_eq!(token.admin(), f.dao.treasury);
-
-    let name = String::from_str(e, "Lantern Club");
-    let targets = vec![e, f.dao.token.clone(), f.dao.token.clone()];
-    let functions = vec![e, Symbol::new(e, "upgrade"), Symbol::new(e, "set_metadata")];
-    let args = vec![
-        e,
-        vec![e, f.old_token.into_val(e), f.new_token.into_val(e)],
-        vec![
-            e,
-            String::from_str(e, "https://example.com/token/").into_val(e),
-            name.into_val(e),
-            String::from_str(e, "LANTERN").into_val(e),
-        ],
-    ];
-    // The founder's vote carries it (supply 1, quorum 10%).
-    e.ledger().set_sequence_number(200);
-    e.ledger().set_timestamp(2_000);
-    let description = String::from_str(e, "Upgrade the token and rename");
-    let desc_hash = description_hash(e, &description);
-    let id = governor.propose(&targets, &functions, &args, &description, &f.deployer);
-    e.ledger().set_timestamp(2_301);
-    governor.cast_vote(&id, &1, &String::from_str(e, "yes"), &f.deployer);
-    e.ledger().set_timestamp(2_601);
-    governor.queue(
-        &targets,
-        &functions,
-        &args,
-        &desc_hash,
-        &2_901_u32,
-        &f.deployer,
-    );
-    e.ledger().set_timestamp(2_901);
-
-    // Enforcing mode: only the Treasury's own authorization may reach the token.
-    e.set_auths(&[]);
-    treasury.execute(&targets, &functions, &args, &desc_hash);
-    assert_eq!(metadata_updated_count(e), 1);
-    assert_eq!(governor.proposal_state(&id), ProposalState::Executed);
-    assert_eq!(token.version(), String::from_str(e, "0.2.0"));
-    assert_eq!(token_name(e, &f.dao.token), name);
-    assert_eq!(token.balance(&f.deployer), 1);
-}
-
-/// The Manager's approval is the gate: unapproved paths, a stale `from` and a revoked target fail.
-#[test]
-fn token_upgrade_rejects_unapproved_stale_and_revoked_paths() {
-    let f = dao_on_deployed_token();
-    let e = &f.e;
-    let token = DaoTokenContractClient::new(e, &f.dao.token);
-
-    // A registered but unapproved target.
-    let stray = upload_module_wasm(e, "metadata");
-    assert!(token.try_upgrade(&f.old_token, &stray).is_err());
-    // `from` must be the code actually running.
-    assert!(token.try_upgrade(&f.new_token, &f.old_token).is_err());
-    // A revoked target can't be upgraded to, even on an approved path.
-    f.manager.revoke_implementation(&f.new_token);
-    assert!(token.try_upgrade(&f.old_token, &f.new_token).is_err());
-    assert_eq!(token.version(), String::from_str(e, "0.1.0"));
 }
 
 // ============================================================================
 // Slug change by vote (Manager 0.2.0 `change_slug`)
 // ============================================================================
 
-const NO_LAUNCH_MODULES: manager::LaunchConfig = manager::LaunchConfig {
-    launch_auction: false,
-    launch_marketplace: false,
-    enable_minter: false,
-    expected_minter: None,
-};
-
 /// A launched factory DAO under "upgrade-dao" (one founder token, Treasury in charge).
-fn launched_dao() -> UpgradeFixture {
-    let f = dao_on_deployed_token();
-    f.manager.launch_dao(&f.dao.token, &NO_LAUNCH_MODULES);
+fn launched_dao() -> DaoFixture {
+    let f = factory_dao();
+    f.manager.launch_dao(&f.dao.token, &f.no_launch_modules());
     f
 }
 
 /// Propose, vote and queue a one-action proposal; returns (id, description hash).
 fn queue_single_action(
-    f: &UpgradeFixture,
+    f: &DaoFixture,
     target: &Address,
     function: &str,
     call_args: Vec<Val>,
@@ -3775,7 +3616,7 @@ fn squatted_target_slug_fails_execution_and_keeps_the_proposal_queued() {
         .manager
         .create_dao(&slug_params(e, &squatter, 2, "wanted-name", &asset));
     DaoTokenContractClient::new(e, &other.token).mint(&squatter, &squatter);
-    f.manager.launch_dao(&other.token, &NO_LAUNCH_MODULES);
+    f.manager.launch_dao(&other.token, &f.no_launch_modules());
 
     e.set_auths(&[]);
     assert!(DaoTreasuryContractClient::new(e, &f.dao.treasury)
@@ -3800,270 +3641,48 @@ fn squatted_target_slug_fails_execution_and_keeps_the_proposal_queued() {
 // replacement=full_factory_flow_create_setup_launch_with_slug and the
 // change_slug tests on the current Manager.
 
-struct ModulesUpgradeFixture {
-    e: Env,
-    manager: ManagerContractClient<'static>,
-    dao: manager::DaoAddresses,
-    deployer: Address,
-    asset: Address,
-    /// (old, new) code hashes for governor, auction and marketplace.
-    governor_code: (BytesN<32>, BytesN<32>),
-    auction_code: (BytesN<32>, BytesN<32>),
-    marketplace_code: (BytesN<32>, BytesN<32>),
-}
+// Retired with the 0.1.0 deployed-code fixtures: comment_modules_upgrade_in_setup,
+// comment_modules_upgrade_by_proposal_keeps_live_state.
+// Value: protects=(none now) the governor/auction/marketplace 0.1.0 -> 0.2.0
+// upgrade keeping live bids and listings; retired_because=fresh redeploy (D13),
+// and the 0.1.0 fixtures cannot launch under the current Manager (eng review
+// D10); replacement=new deployed-code fixtures captured after the redeploy.
 
-/// A factory DAO whose governor, auction and marketplace run the deployed 0.1.0 code, with the
-/// local builds registered as 0.2.0 and each 0.1.0 -> 0.2.0 path approved. One founder token is
-/// minted and the artwork has one trait, so the auction can launch.
-fn dao_on_deployed_modules() -> ModulesUpgradeFixture {
-    let e = Env::default();
-    e.mock_all_auths();
-    e.ledger().set_sequence_number(100);
-    e.ledger().set_timestamp(1_000);
-    e.cost_estimate().budget().reset_unlimited();
-
-    let manager_id = e.register(
-        ManagerContract,
-        (
-            Address::generate(&e),
-            BytesN::from_array(&e, &[0; 32]),
-            String::from_str(&e, "0.1.0"),
-        ),
-    );
-    let manager = ManagerContractClient::new(&e, &manager_id);
-    let register = |name: &str, version: &str, hash: &BytesN<32>| {
-        manager.register_implementation(
-            &String::from_str(&e, name),
-            &String::from_str(&e, version),
-            hash,
-        );
-    };
-
-    let token = upload_module_wasm(&e, "token");
-    let metadata = upload_module_wasm(&e, "metadata");
-    let treasury = upload_module_wasm(&e, "treasury");
-    let old_auction = upload_fixture_wasm(&e, "auction-0.1.0.wasm");
-    let old_governor = upload_fixture_wasm(&e, "governor-0.1.0.wasm");
-    let old_marketplace = upload_fixture_wasm(&e, "marketplace-0.1.0.wasm");
-    register("Token", "0.1.0", &token);
-    register("Metadata", "0.1.0", &metadata);
-    register("Treasury", "0.1.0", &treasury);
-    register("Auction", "0.1.0", &old_auction);
-    register("Governor", "0.1.0", &old_governor);
-    register("Marketplace", "0.1.0", &old_marketplace);
-    manager.set_current_implementations(
-        &token,
-        &metadata,
-        &old_auction,
-        &old_governor,
-        &treasury,
-        &old_marketplace,
-    );
-
-    let deployer = Address::generate(&e);
-    let asset = e
-        .register_stellar_asset_contract_v2(Address::generate(&e))
-        .address();
-    let dao = manager.create_dao(&slug_params(&e, &deployer, 1, "comment-dao", &asset));
-    DaoTokenContractClient::new(&e, &dao.token).mint(&deployer, &deployer);
-    MetadataContractClient::new(&e, &dao.metadata).add_properties(
-        &vec![&e, String::from_str(&e, "Background")],
+/// SEP-50 through the factory: the token answers `name`, `symbol` and
+/// `token_uri` (built by the Metadata contract), and records the pinned
+/// platform Minter at launch.
+#[test]
+fn factory_token_serves_sep50_metadata_and_records_the_minter() {
+    let f = factory_dao();
+    let e = &f.e;
+    let token = DaoTokenContractClient::new(e, &f.dao.token);
+    let metadata = MetadataContractClient::new(e, &f.dao.metadata);
+    metadata.add_properties(
+        &vec![e, String::from_str(e, "Background")],
         &vec![
-            &e,
+            e,
             ItemParam {
                 property_id: 0,
-                name: String::from_str(&e, "Blue"),
+                name: String::from_str(e, "Blue"),
                 is_new_property: true,
             },
         ],
         &IpfsGroup {
-            base_uri: String::from_str(&e, "ipfs://art"),
-            extension: String::from_str(&e, ".png"),
+            base_uri: String::from_str(e, "ipfs://art/"),
+            extension: String::from_str(e, ".png"),
         },
     );
+    let id = token.mint(&f.deployer, &f.deployer);
+    assert_eq!(token.name(), String::from_str(e, "Flow DAO"));
+    assert_eq!(token.symbol(), String::from_str(e, "FLOW"));
+    let uri = token.token_uri(&id);
+    assert_eq!(uri, metadata.token_uri(&id, &token.name()));
+    let mut bytes = std::vec![0u8; uri.len() as usize];
+    uri.copy_into_slice(&mut bytes);
+    assert!(bytes.starts_with(b"data:application/json;base64,"));
 
-    // The release: register the new code and approve exactly these paths.
-    let release = |name: &str, wasm: &str, old: BytesN<32>| {
-        let new = upload_module_wasm(&e, wasm);
-        assert_ne!(
-            old, new,
-            "rebuild the {wasm} WASM: it matches the deployed one"
-        );
-        register(name, "0.2.0", &new);
-        manager.approve_upgrade(&old, &new);
-        (old, new)
-    };
-    let governor_code = release("Governor", "governor", old_governor);
-    let auction_code = release("Auction", "auction", old_auction);
-    let marketplace_code = release("Marketplace", "marketplace", old_marketplace);
-
-    ModulesUpgradeFixture {
-        e,
-        manager,
-        dao,
-        deployer,
-        asset,
-        governor_code,
-        auction_code,
-        marketplace_code,
-    }
-}
-
-/// `create_bid` as the deployed 0.1.0 auction exposes it (no comment argument).
-fn create_bid_v010(e: &Env, auction: &Address, bidder: &Address, token_id: u128, amount: i128) {
-    e.invoke_contract::<()>(
-        auction,
-        &Symbol::new(e, "create_bid"),
-        vec![
-            e,
-            bidder.into_val(e),
-            token_id.into_val(e),
-            amount.into_val(e),
-        ],
-    );
-}
-
-/// Setup window: the launch admin upgrades all three modules directly; the comment entry
-/// points then work and the DAO still launches.
-#[test]
-fn comment_modules_upgrade_in_setup() {
-    let f = dao_on_deployed_modules();
-    let e = &f.e;
-    let governor = DaoGovernorContractClient::new(e, &f.dao.governor);
-    let auction = DaoAuctionContractClient::new(e, &f.dao.auction);
-    let marketplace = MarketplaceContractClient::new(e, &f.dao.marketplace);
-    assert_eq!(auction.version(), String::from_str(e, "0.1.0"));
-
-    governor.upgrade(&f.governor_code.0, &f.governor_code.1);
-    auction.upgrade(&f.auction_code.0, &f.auction_code.1);
-    marketplace.upgrade(&f.marketplace_code.0, &f.marketplace_code.1);
-    for v in [governor.version(), auction.version(), marketplace.version()] {
-        assert_eq!(v, String::from_str(e, "0.2.0"));
-    }
-    assert_eq!(auction.wasm_hash(), f.auction_code.1);
-    assert_eq!(governor.admin(), f.deployer);
-
-    f.manager.launch_dao(
-        &f.dao.token,
-        &manager::LaunchConfig {
-            launch_auction: true,
-            launch_marketplace: true,
-            enable_minter: false,
-            expected_minter: None,
-        },
-    );
-    let bidder = Address::generate(e);
-    StellarAssetClient::new(e, &f.asset).mint(&bidder, &100_0000000);
-    let tid = auction.get_auction().token_id;
-    auction.create_bid(&bidder, &tid, &20_000_000, &String::from_str(e, "gm"));
-    assert_eq!(auction.get_auction().highest_bidder, Some(bidder.clone()));
-    marketplace.comment_listing(&0, &String::from_str(e, "nice"), &bidder);
-}
-
-/// Live DAO: a bid placed on 0.1.0 survives one proposal that upgrades the governor, auction
-/// and marketplace; the auction then settles, takes commented bids, and the old proposal and
-/// listings accept comments. Only the Treasury's own authorization runs the upgrade.
-#[test]
-fn comment_modules_upgrade_by_proposal_keeps_live_state() {
-    let f = dao_on_deployed_modules();
-    let e = &f.e;
-    f.manager.launch_dao(
-        &f.dao.token,
-        &manager::LaunchConfig {
-            launch_auction: true,
-            launch_marketplace: true,
-            enable_minter: false,
-            expected_minter: None,
-        },
-    );
-    let governor = DaoGovernorContractClient::new(e, &f.dao.governor);
-    let auction = DaoAuctionContractClient::new(e, &f.dao.auction);
-    let marketplace = MarketplaceContractClient::new(e, &f.dao.marketplace);
-    let treasury = DaoTreasuryContractClient::new(e, &f.dao.treasury);
-    let sac = StellarAssetClient::new(e, &f.asset);
-
-    // A bid on the deployed code, which has no comment argument.
-    let early = Address::generate(e);
-    sac.mint(&early, &100_0000000);
-    let first = auction.get_auction();
-    create_bid_v010(e, &f.dao.auction, &early, first.token_id, 20_000_000);
-
-    let targets = vec![
-        e,
-        f.dao.governor.clone(),
-        f.dao.auction.clone(),
-        f.dao.marketplace.clone(),
-    ];
-    let functions = vec![
-        e,
-        Symbol::new(e, "upgrade"),
-        Symbol::new(e, "upgrade"),
-        Symbol::new(e, "upgrade"),
-    ];
-    let args = vec![
-        e,
-        vec![
-            e,
-            f.governor_code.0.into_val(e),
-            f.governor_code.1.into_val(e),
-        ],
-        vec![
-            e,
-            f.auction_code.0.into_val(e),
-            f.auction_code.1.into_val(e),
-        ],
-        vec![
-            e,
-            f.marketplace_code.0.into_val(e),
-            f.marketplace_code.1.into_val(e),
-        ],
-    ];
-    e.ledger().set_sequence_number(200);
-    e.ledger().set_timestamp(2_000);
-    let description = String::from_str(e, "Upgrade for on-chain comments");
-    let desc_hash = description_hash(e, &description);
-    let id = governor.propose(&targets, &functions, &args, &description, &f.deployer);
-    e.ledger().set_timestamp(2_301);
-    governor.cast_vote(&id, &1, &String::from_str(e, "yes"), &f.deployer);
-    e.ledger().set_timestamp(2_601);
-    governor.queue(
-        &targets,
-        &functions,
-        &args,
-        &desc_hash,
-        &2_901_u32,
-        &f.deployer,
-    );
-    e.ledger().set_timestamp(2_901);
-
-    e.set_auths(&[]);
-    treasury.execute(&targets, &functions, &args, &desc_hash);
-    e.mock_all_auths();
-    assert_eq!(governor.proposal_state(&id), ProposalState::Executed);
-    for v in [governor.version(), auction.version(), marketplace.version()] {
-        assert_eq!(v, String::from_str(e, "0.2.0"));
-    }
-
-    // The 0.1.0 bid is intact and settles on the new code.
-    let kept = auction.get_auction();
-    assert_eq!(kept.token_id, first.token_id);
-    assert_eq!(kept.highest_bidder, Some(early.clone()));
-    assert_eq!(kept.highest_bid, 20_000_000);
-    auction.settle_and_create_new();
-    let token = DaoTokenContractClient::new(e, &f.dao.token);
-    assert_eq!(token.owner_of(&(first.token_id as u32)), early);
-
-    // New features: a commented bid, and comments on the executed proposal and a listing.
-    let next = auction.get_auction();
-    let late = Address::generate(e);
-    sac.mint(&late, &100_0000000);
-    auction.create_bid(
-        &late,
-        &next.token_id,
-        &20_000_000,
-        &String::from_str(e, "for the culture"),
-    );
-    assert_eq!(auction.get_auction().highest_bidder, Some(late.clone()));
-    governor.comment(&id, &String::from_str(e, "shipped"), &late);
-    marketplace.comment_listing(&0, &String::from_str(e, "nice"), &late);
+    assert_eq!(token.minter(), None);
+    f.manager.launch_dao(&f.dao.token, &f.no_launch_modules());
+    assert_eq!(token.minter(), Some(f.minter.clone()));
+    assert!(token.mint_authority(&f.minter));
 }

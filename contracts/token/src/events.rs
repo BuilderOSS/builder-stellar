@@ -13,7 +13,6 @@ use soroban_sdk::{contractevent, Address, Env, String, Vec};
 pub struct TokenInitialized {
     #[topic]
     pub admin: Address,
-    pub uri: String,
     pub name: String,
     pub symbol: String,
     pub version: String,
@@ -63,7 +62,6 @@ pub struct MintBatchWithMinter {
 pub struct MetadataUpdated {
     pub name: String,
     pub symbol: String,
-    pub uri: String,
 }
 
 /// Emitted once when the Manager launches the token (Setup -> Live).
@@ -78,14 +76,12 @@ pub struct TokenLaunched {
 pub fn emit_token_initialized(
     e: &Env,
     admin: &Address,
-    uri: &String,
     name: &String,
     symbol: &String,
     version: &String,
 ) {
     TokenInitialized {
         admin: admin.clone(),
-        uri: uri.clone(),
         name: name.clone(),
         symbol: symbol.clone(),
         version: version.clone(),
@@ -135,11 +131,10 @@ pub fn emit_launched(e: &Env, treasury: &Address, minters: &Vec<Address>) {
     .publish(e);
 }
 
-pub fn emit_metadata_updated(e: &Env, uri: &String, name: &String, symbol: &String) {
+pub fn emit_metadata_updated(e: &Env, name: &String, symbol: &String) {
     MetadataUpdated {
         name: name.clone(),
         symbol: symbol.clone(),
-        uri: uri.clone(),
     }
     .publish(e);
 }

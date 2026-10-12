@@ -15,4 +15,8 @@ pub enum TokenError {
     TreasuryNotMinter = 7204,
     /// `batch_mint` exceeds the event budget (`common::batch_mint_fits`)
     BatchTooLarge = 7205,
+    /// `launch` minters list does not contain the pinned platform Minter
+    MinterNotGranted = 7206,
+    /// The collection name contains `"`, `\` or a control character
+    InvalidName = 7207,
 }

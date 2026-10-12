@@ -23,7 +23,11 @@ fn treasury(env: &Env) -> Address {
 /// the minter) and `minter` receives mint authority.
 fn launch_token(env: &Env, token: &token::DaoTokenContractClient, minter: &Address) {
     let t = treasury(env);
-    token.launch(&t, &Vec::from_array(env, [t.clone(), minter.clone()]));
+    token.launch(
+        &t,
+        &Vec::from_array(env, [t.clone(), minter.clone()]),
+        minter,
+    );
 }
 
 fn create_token_contract(env: &Env, owner: &Address) -> Address {
@@ -34,7 +38,6 @@ fn create_token_contract(env: &Env, owner: &Address) -> Address {
             treasury(env),
             Address::generate(env), // auction
             Address::generate(env), // marketplace
-            String::from_str(env, "https://test.com"),
             String::from_str(env, "Test Token"),
             String::from_str(env, "TEST"),
             Address::generate(env), // metadata address (placeholder)

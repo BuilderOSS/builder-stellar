@@ -454,7 +454,9 @@ impl MetadataContract {
     }
 
     /// SEP-50 token metadata, built on-chain: a `data:application/json;base64`
-    /// URI of `{"name", "image", "attributes"}`. `image` is
+    /// URI of `{"name", "image", "attributes"}`, where `name` is
+    /// `<token_name> #<id>`. The token's own `token_uri` calls this with its
+    /// collection name (Soroban forbids calling back into the token). `image` is
     /// `<renderer_base>?contract=<token>&token=<id>`; a compositor derives the
     /// layers from `get_attributes`, `property_headers`, `get_items` and
     /// `get_ipfs_group`. Traits whose property or item no longer exists (after
@@ -463,13 +465,16 @@ impl MetadataContract {
     /// # Errors
     ///
     /// * `TokenNotMinted` - the token has no attributes
-    pub fn token_uri(env: Env, token_id: u32) -> Result<String, Error> {
+    /// * `InvalidName` - `token_name` contains `"`, `\` or a control character
+    pub fn token_uri(env: Env, token_id: u32, token_name: String) -> Result<String, Error> {
         let attributes = get_attributes(&env, token_id);
         if attributes.is_empty() {
             return Err(Error::TokenNotMinted);
         }
+        // The token passes its validated name; a direct caller is held to the
+        // same rule so the document is always valid JSON.
+        Self::check_text(&token_name, common::MAX_STRING_LENGTH)?;
         let settings = get_settings(&env)?;
-        let token_name = common::clients::NftClient::new(&env, &settings.token).name();
         let counts = get_item_counts(&env);
 
         let mut json: Writer<JSON_CAPACITY> = Writer::new();

@@ -28,4 +28,7 @@ pub enum TokenKey {
     Auction,
     /// Instance: DAO Marketplace (escrow). Holds no voting power.
     Marketplace,
+    /// Instance: the shared platform Minter granted mint authority at launch
+    /// (the claim contract this DAO pinned). Set once by `launch`.
+    Minter,
 }

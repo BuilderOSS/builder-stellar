@@ -9,7 +9,7 @@ use stellar_tokens::non_fungible::{
     emit_mint, sequential::increment_token_id, Base, NFTStorageKey,
 };
 
-use common::clients::MetadataHookClient;
+use common::clients::{MetadataHookClient, TokenUriClient};
 
 use crate::error::TokenError;
 use crate::events::{
@@ -41,7 +41,9 @@ impl DaoTokenContract {
     /// * `treasury` - DAO Treasury; `launch` must be called with exactly this address
     /// * `auction` - DAO Auction (holds the token being auctioned)
     /// * `marketplace` - DAO Marketplace (escrows listed tokens)
-    /// * `uri`, `name`, `symbol` - collection metadata
+    /// * `name`, `symbol` - collection name and symbol (OpenZeppelin caps them
+    ///   at 40 and 10 bytes; the name may not contain `"`, `\` or control
+    ///   characters because the on-chain token JSON copies it verbatim)
     /// * `metadata` - metadata contract called on every mint to seed artwork
     /// * `manager` - Manager contract (upgrade approvals, launch)
     /// * `current_hash`, `version` - this implementation's WASM hash and release
@@ -51,7 +53,6 @@ impl DaoTokenContract {
         treasury: Address,
         auction: Address,
         marketplace: Address,
-        uri: String,
         name: String,
         symbol: String,
         metadata: Address,
@@ -59,7 +60,7 @@ impl DaoTokenContract {
         current_hash: BytesN<32>,
         version: String,
     ) {
-        Base::set_metadata(e, uri.clone(), name.clone(), symbol.clone());
+        Self::set_name_and_symbol(e, &name, &symbol);
         common::admin::init(e, &admin);
         let instance = e.storage().instance();
         instance.set(&TokenKey::MetadataContract, &metadata);
@@ -68,7 +69,7 @@ impl DaoTokenContract {
         instance.set(&TokenKey::Auction, &auction);
         instance.set(&TokenKey::Marketplace, &marketplace);
         common::upgrade::init(e, &current_hash, &version, STORAGE_VERSION);
-        emit_token_initialized(e, &admin, &uri, &name, &symbol, &version);
+        emit_token_initialized(e, &admin, &name, &symbol, &version);
     }
 
     pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
@@ -108,12 +109,14 @@ impl DaoTokenContract {
         common::admin::admin(e)
     }
 
-    /// Updates collection metadata (admin only). Emits `MetadataUpdated`.
-    pub fn set_metadata(e: &Env, uri: String, name: String, symbol: String) {
+    /// Updates the collection name and symbol (admin only). Emits
+    /// `MetadataUpdated`. Token metadata itself is built by the Metadata
+    /// contract (`token_uri`).
+    pub fn set_metadata(e: &Env, name: String, symbol: String) {
         common::admin::require_admin(e);
         common::ttl::extend_instance(e);
-        Base::set_metadata(e, uri.clone(), name.clone(), symbol.clone());
-        emit_metadata_updated(e, &uri, &name, &symbol);
+        Self::set_name_and_symbol(e, &name, &symbol);
+        emit_metadata_updated(e, &name, &symbol);
     }
 
     /// Grants or revokes minting authority (admin only, live token only; the
@@ -141,10 +144,11 @@ impl DaoTokenContract {
     /// One-shot, Manager-only launch handoff (Setup -> Live).
     ///
     /// Hands the admin to `treasury`, grants mint authority to exactly
-    /// `minters` (which must contain the treasury), marks the token live and
-    /// emits `TokenLaunched`. A second call panics with `AlreadyLive`, so after
+    /// `minters` (which must contain the treasury and `minter`), records
+    /// `minter` as this DAO's claim contract, marks the token live and emits
+    /// `TokenLaunched`. A second call panics with `AlreadyLive`, so after
     /// launch the Manager has no authority over the token.
-    pub fn launch(e: &Env, treasury: Address, minters: Vec<Address>) {
+    pub fn launch(e: &Env, treasury: Address, minters: Vec<Address>, minter: Address) {
         let manager = Self::manager(e);
         manager.require_auth();
         common::lifecycle::mark_live(e);
@@ -154,6 +158,10 @@ impl DaoTokenContract {
         if !minters.contains(&treasury) {
             panic_with_error!(e, TokenError::TreasuryNotMinter);
         }
+        if !minters.contains(&minter) {
+            panic_with_error!(e, TokenError::MinterNotGranted);
+        }
+        e.storage().instance().set(&TokenKey::Minter, &minter);
         common::admin::handoff(e, &treasury);
         for minter in minters.iter() {
             let old_enabled = Self::mint_authority(e, minter.clone());
@@ -182,6 +190,49 @@ impl DaoTokenContract {
     /// SEP-50 collection symbol.
     pub fn symbol(e: &Env) -> String {
         Base::symbol(e)
+    }
+
+    /// SEP-50 token metadata, built on-chain by the Metadata contract (a
+    /// `data:application/json;base64` document). Panics if the token does not
+    /// exist or has no artwork yet.
+    pub fn token_uri(e: &Env, token_id: u32) -> String {
+        Base::owner_of(e, token_id);
+        let metadata =
+            common::error::require(e, Self::metadata(e), common::CommonError::ManagerNotSet);
+        TokenUriClient::new(e, &metadata).token_uri(&token_id, &Base::name(e))
+    }
+
+    /// Manager that approves upgrades and performed the launch.
+    pub fn manager(e: &Env) -> Address {
+        common::error::require(
+            e,
+            e.storage().instance().get(&TokenKey::Manager),
+            common::CommonError::ManagerNotSet,
+        )
+    }
+
+    /// The DAO Treasury (admin once live; holds no voting power).
+    pub fn treasury(e: &Env) -> Address {
+        common::error::require(
+            e,
+            e.storage().instance().get(&TokenKey::Treasury),
+            common::CommonError::TreasuryNotSet,
+        )
+    }
+
+    /// The DAO Auction (holds no voting power).
+    pub fn auction(e: &Env) -> Option<Address> {
+        e.storage().instance().get(&TokenKey::Auction)
+    }
+
+    /// The DAO Marketplace (escrow; holds no voting power).
+    pub fn marketplace(e: &Env) -> Option<Address> {
+        e.storage().instance().get(&TokenKey::Marketplace)
+    }
+
+    /// The shared platform Minter this DAO launched with (`None` before launch).
+    pub fn minter(e: &Env) -> Option<Address> {
+        e.storage().instance().get(&TokenKey::Minter)
     }
 
     /// Voting-capable supply: every minted token except those held by the
@@ -327,7 +378,8 @@ impl DaoTokenContract {
     }
 
     /// Approves `spender` to transfer `token_id` until `expiration_ledger`
-    /// (`owner` auth). Emits OpenZeppelin `Approve`.
+    /// (`owner` auth). The approval is cleared when the token moves. Emits
+    /// OpenZeppelin `Approve`.
     pub fn approve(
         e: &Env,
         owner: &Address,
@@ -338,6 +390,27 @@ impl DaoTokenContract {
         Base::approve(e, owner, spender, token_id, expiration_ledger);
     }
 
+    /// Lets `operator` transfer every token of `owner` until
+    /// `live_until_ledger` (`owner` auth; 0 revokes). Operator transfers go
+    /// through `transfer_from`, so votes move exactly as on a direct transfer.
+    /// Emits OpenZeppelin `ApproveForAll`.
+    pub fn approve_for_all(e: &Env, owner: &Address, operator: &Address, live_until_ledger: u32) {
+        Base::approve_for_all(e, owner, operator, live_until_ledger);
+    }
+
+    /// The live single-token approval of `token_id`, if any. Panics if the
+    /// token does not exist.
+    pub fn get_approved(e: &Env, token_id: u32) -> Option<Address> {
+        Base::owner_of(e, token_id);
+        Base::get_approved(e, token_id)
+    }
+
+    /// Whether `operator` currently holds a live approval for all of `owner`'s
+    /// tokens.
+    pub fn is_approved_for_all(e: &Env, owner: &Address, operator: &Address) -> bool {
+        Base::is_approved_for_all(e, owner, operator)
+    }
+
     /// Number of vote checkpoints recorded for `account`.
     pub fn num_checkpoints(e: &Env, account: Address) -> u32 {
         num_checkpoints(e, &account)
@@ -345,20 +418,22 @@ impl DaoTokenContract {
 }
 
 impl DaoTokenContract {
-    fn manager(e: &Env) -> Address {
-        common::error::require(
-            e,
-            e.storage().instance().get(&TokenKey::Manager),
-            common::CommonError::ManagerNotSet,
-        )
-    }
-
-    fn treasury(e: &Env) -> Address {
-        common::error::require(
-            e,
-            e.storage().instance().get(&TokenKey::Treasury),
-            common::CommonError::TreasuryNotSet,
-        )
+    /// The name is copied verbatim into the on-chain token JSON, so it may not
+    /// contain `"`, `\` or control characters (`InvalidName`). OpenZeppelin
+    /// enforces the 40- and 10-byte caps.
+    fn set_name_and_symbol(e: &Env, name: &String, symbol: &String) {
+        let len = name.len() as usize;
+        let mut buf = [0u8; stellar_tokens::non_fungible::MAX_NAME_LEN];
+        if len <= buf.len() {
+            name.copy_into_slice(&mut buf[..len]);
+            if buf[..len]
+                .iter()
+                .any(|b| *b == b'"' || *b == b'\\' || *b < 0x20)
+            {
+                panic_with_error!(e, TokenError::InvalidName);
+            }
+        }
+        Base::set_metadata(e, String::from_str(e, ""), name.clone(), symbol.clone());
     }
 
     /// The address whose voting units represent `account`'s tokens: `None`

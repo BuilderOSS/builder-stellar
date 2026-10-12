@@ -58,7 +58,6 @@ fn create_token_contract(env: &Env, owner: &Address) -> Address {
             Address::generate(env), // treasury
             Address::generate(env), // auction
             Address::generate(env), // marketplace
-            String::from_str(env, "https://test.com"),
             String::from_str(env, "Test Token"),
             String::from_str(env, "TEST"),
             Address::generate(env), // metadata address (placeholder)
@@ -1647,7 +1646,7 @@ fn token_uri_is_sep50_json_built_on_chain() {
     });
     client.add_properties(&names, &items, &group(&env, "ipfs://a"));
     assert!(client.on_minted(&12));
-    let json = decode_token_uri(&client.token_uri(&12));
+    let json = decode_token_uri(&client.token_uri(&12, &String::from_str(&env, "Test Token")));
     let mut token_str = std::vec![0u8; 56];
     token.to_string().copy_into_slice(&mut token_str);
     let token_str = std::string::String::from_utf8(token_str).unwrap();
@@ -1658,8 +1657,20 @@ fn token_uri_is_sep50_json_built_on_chain() {
         )
     );
     assert_eq!(
-        client.try_token_uri(&13).err().unwrap().unwrap(),
+        client
+            .try_token_uri(&13, &String::from_str(&env, "Test Token"))
+            .err()
+            .unwrap()
+            .unwrap(),
         crate::Error::TokenNotMinted
+    );
+    assert_eq!(
+        client
+            .try_token_uri(&12, &String::from_str(&env, "Bad \"name\""))
+            .err()
+            .unwrap()
+            .unwrap(),
+        crate::Error::InvalidName
     );
 }
 
@@ -1678,7 +1689,7 @@ fn token_uri_skips_traits_removed_by_a_reset() {
         is_new_property: true,
     });
     client.delete_and_recreate_properties(&names, &items, &group(&env, "ipfs://r"));
-    let json = decode_token_uri(&client.token_uri(&1));
+    let json = decode_token_uri(&client.token_uri(&1, &String::from_str(&env, "T")));
     assert!(
         json.ends_with(r#""attributes":[{"trait_type":"Only","value":"one"}]}"#),
         "{json}"
@@ -1701,7 +1712,6 @@ fn token_uri_worst_case_fits_the_limits() {
             Address::generate(&env),
             Address::generate(&env),
             Address::generate(&env),
-            String::from_str(&env, "https://test.com"),
             // OpenZeppelin caps the collection name at 40 bytes.
             String::from_str(&env, &"N".repeat(40)),
             String::from_str(&env, "TEST"),
@@ -1727,7 +1737,7 @@ fn token_uri_worst_case_fits_the_limits() {
     client.add_properties(&names, &items, &group(&env, "ipfs://a"));
     assert!(client.on_minted(&u32::MAX));
     env.cost_estimate().budget().reset_default();
-    let uri = client.token_uri(&u32::MAX);
+    let uri = client.token_uri(&u32::MAX, &String::from_str(&env, &"N".repeat(40)));
     let cpu = env.cost_estimate().budget().cpu_instruction_cost();
     std::println!(
         "token_uri worst case: {} bytes returned, {} CPU instructions",

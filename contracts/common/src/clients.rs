@@ -12,13 +12,12 @@ use soroban_sdk::{contractclient, Address, BytesN, Env, String, Symbol, Val, Vec
 /// Metadata.
 #[contractclient(name = "NftClient")]
 pub trait NftApi {
-    fn launch(e: &Env, treasury: Address, minters: Vec<Address>);
+    fn launch(e: &Env, treasury: Address, minters: Vec<Address>, minter: Address);
     fn admin(e: &Env) -> Address;
     fn is_live(e: &Env) -> bool;
     /// Voting-capable supply (excludes tokens held by the Treasury, Auction
     /// and Marketplace).
     fn total_supply(e: &Env) -> i128;
-    fn name(e: &Env) -> String;
     fn owner_of(e: &Env, token_id: u32) -> Address;
     fn mint(e: &Env, minter: Address, to: Address) -> u32;
     fn batch_mint(
@@ -29,6 +28,12 @@ pub trait NftApi {
     ) -> Vec<u32>;
     fn transfer(e: &Env, from: Address, to: Address, token_id: u32);
     fn transfer_from(e: &Env, spender: Address, from: Address, to: Address, token_id: u32);
+}
+
+/// Metadata's on-chain SEP-50 token JSON (the token forwards `token_uri`).
+#[contractclient(name = "TokenUriClient")]
+pub trait TokenUriApi {
+    fn token_uri(e: &Env, token_id: u32, token_name: String) -> String;
 }
 
 /// `launch(treasury)` shared by Governor, Treasury and Metadata.

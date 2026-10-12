@@ -60,7 +60,6 @@ pub struct MarketplaceConfig {
 pub struct InitialDaoConfigValues {
     pub token_name: String,
     pub token_symbol: String,
-    pub token_uri: String,
     /// DAO profile JSON (description, links, image), 1 to
     /// `common::MAX_PROFILE_LENGTH` bytes. Event-only: the Metadata contract
     /// emits it and stores its hash.
@@ -81,14 +80,10 @@ pub struct InitialDaoConfigValues {
 pub struct LaunchConfig {
     pub launch_auction: bool,
     pub launch_marketplace: bool,
-    /// Grant mint authority to the Manager-registered PlatformMinter. The
-    /// caller can never name an arbitrary minter address.
-    pub enable_minter: bool,
-    /// The platform minter the launch admin saw and approves. Required (and
-    /// must equal the registered PlatformMinter) when `enable_minter` is set,
-    /// so a Manager admin cannot swap the minter between signing and launch.
-    /// Ignored when `enable_minter` is false.
-    pub expected_minter: Option<Address>,
+    /// The shared platform Minter the launch admin saw and approves. Every
+    /// DAO launches with it; it must equal the registered PlatformMinter, so a
+    /// Manager admin cannot swap the minter between signing and launch.
+    pub minter: Address,
 }
 
 /// WASM hashes the six modules were deployed from (emitted in `DaoCreated`).

@@ -14,6 +14,10 @@ use crate::error::ManagerError;
 use crate::events::*;
 use crate::storage::*;
 
+/// OpenZeppelin non-fungible caps on the collection name and symbol.
+const MAX_TOKEN_NAME_LENGTH: u32 = 40;
+const MAX_TOKEN_SYMBOL_LENGTH: u32 = 10;
+
 /// Manager contract structure.
 #[contract]
 pub struct ManagerContract;
@@ -625,7 +629,6 @@ impl ManagerContract {
                 treasury_addr.clone(),
                 auction_addr.clone(),
                 marketplace_addr.clone(),
-                config.token_uri.clone(),
                 config.token_name.clone(),
                 config.token_symbol.clone(),
                 metadata_addr.clone(),
@@ -791,9 +794,9 @@ impl ManagerContract {
     /// * `launch_config` - Configuration for what to enable at launch
     ///   - `launch_auction` - Whether to unpause the auction
     ///   - `launch_marketplace` - Whether to unpause the marketplace
-    ///   - `enable_minter` - Whether to grant mint authority to the registered PlatformMinter
-    ///   - `expected_minter` - Required when `enable_minter` is set; must equal the registered
-    ///     PlatformMinter (`PlatformMinterMismatch` otherwise, including when `None`)
+    ///   - `minter` - The shared platform Minter the launch admin approves; must equal the
+    ///     registered PlatformMinter (`PlatformMinterNotSet` when none is registered,
+    ///     `PlatformMinterMismatch` otherwise)
     ///
     /// # Validation
     ///
@@ -809,9 +812,9 @@ impl ManagerContract {
     /// # Effects
     ///
     /// 1. Validates launch preconditions and claims the slug (`SlugClaimed`)
-    /// 2. Calls `token.launch` with minters = [Treasury, Marketplace] + [Auction if
-    ///    launch_auction] + [PlatformMinter if enable_minter; `PlatformMinterNotSet`
-    ///    when unset], then `launch` on Governor, Treasury, Marketplace, Auction, Metadata
+    /// 2. Calls `token.launch` with minters = [Treasury, Marketplace, PlatformMinter] +
+    ///    [Auction if launch_auction] and the pinned minter, then `launch` on Governor,
+    ///    Treasury, Marketplace, Auction, Metadata
     /// 3. Each module becomes Live: its admin moves to the Treasury and the Manager
     ///    has no further authority over the DAO (a second launch panics `AlreadyLive`)
     /// 4. Deletes the temporary PendingDao state
@@ -870,21 +873,20 @@ impl ManagerContract {
         if launch_config.launch_auction {
             minters.push_back(addresses.auction.clone());
         }
-        if launch_config.enable_minter {
-            let minter: Address = get_persistent(&env, &ManagerKey::PlatformMinter)
-                .ok_or(ManagerError::PlatformMinterNotSet)?;
-            // The launch admin must pin the minter they reviewed; this closes
-            // the window in which the Manager admin swaps it before launch.
-            if launch_config.expected_minter != Some(minter.clone()) {
-                return Err(ManagerError::PlatformMinterMismatch);
-            }
-            minters.push_back(minter);
+        // Every DAO launches with the shared platform Minter. The launch admin
+        // pins the minter they reviewed; this closes the window in which the
+        // Manager admin swaps it before launch.
+        let minter: Address = get_persistent(&env, &ManagerKey::PlatformMinter)
+            .ok_or(ManagerError::PlatformMinterNotSet)?;
+        if launch_config.minter != minter {
+            return Err(ManagerError::PlatformMinterMismatch);
         }
+        minters.push_back(minter.clone());
 
         // One-shot handoff. The token launches first so the auction holds mint
         // authority when it creates its first auction. After these calls every
         // module is Live and the Manager has no further authority over the DAO.
-        nft.launch(&treasury, &minters);
+        nft.launch(&treasury, &minters, &minter);
         TreasuryLaunchClient::new(&env, &addresses.governor).launch(&treasury);
         TreasuryLaunchClient::new(&env, &addresses.treasury).launch(&treasury);
         MarketplaceLaunchClient::new(&env, &addresses.marketplace).launch(
@@ -922,7 +924,7 @@ impl ManagerContract {
             &pending.addresses,
             launch_config.launch_auction,
             launch_config.launch_marketplace,
-            launch_config.enable_minter,
+            &minter,
         );
         Ok(())
     }
@@ -1348,10 +1350,16 @@ impl ManagerContract {
         for value in [
             &config.token_name,
             &config.token_symbol,
-            &config.token_uri,
             &config.renderer_base,
         ] {
             Self::validate_string(value)?;
+        }
+        // OpenZeppelin's caps, checked here so create_dao fails with a Manager
+        // error instead of inside the token constructor.
+        if config.token_name.len() > MAX_TOKEN_NAME_LENGTH
+            || config.token_symbol.len() > MAX_TOKEN_SYMBOL_LENGTH
+        {
+            return Err(ManagerError::StringTooLong);
         }
         Self::validate_profile(&config.profile)?;
         Self::validate_slug(&config.slug)?;

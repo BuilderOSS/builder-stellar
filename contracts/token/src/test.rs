@@ -25,7 +25,6 @@ fn deploy(
             treasury,
             Address::generate(e),
             Address::generate(e),
-            String::from_str(e, "https://example.com/"),
             String::from_str(e, "DAO Vote NFT"),
             String::from_str(e, "vDAO"),
             Address::generate(e),
@@ -138,16 +137,19 @@ fn wired_treasury(e: &Env, client: &DaoTokenContractClient) -> Address {
     })
 }
 
-/// Launch with `minters` (the wired treasury is always included, as the
-/// Manager does); returns the treasury address.
+/// Launch with `minters` (the wired treasury and a platform minter are always
+/// included, as the Manager does); returns the treasury address.
 fn launch(e: &Env, client: &DaoTokenContractClient, minters: &[Address]) -> Address {
     let treasury = wired_treasury(e, client);
+    let platform_minter = Address::generate(e);
     let mut v = soroban_sdk::Vec::new(e);
     v.push_back(treasury.clone());
+    v.push_back(platform_minter.clone());
     for m in minters {
         v.push_back(m.clone());
     }
-    client.launch(&treasury, &v);
+    client.launch(&treasury, &v, &platform_minter);
+    assert_eq!(client.minter(), Some(platform_minter));
     treasury
 }
 
@@ -170,7 +172,8 @@ fn launch_sets_owner_and_exact_minter_set() {
 fn second_launch_panics_already_live() {
     let (e, client, _owner, _m) = setup_with_manager();
     launch(&e, &client, &[]);
-    let r = client.try_launch(&Address::generate(&e), &vec![&e, Address::generate(&e)]);
+    let other = Address::generate(&e);
+    let r = client.try_launch(&other, &vec![&e, other.clone()], &other);
     assert_eq!(r.err().unwrap().unwrap(), CommonError::AlreadyLive.into());
 }
 
@@ -210,21 +213,12 @@ fn launch_hands_admin_to_treasury() {
         invoke: &MockAuthInvoke {
             contract: &client.address,
             fn_name: "set_metadata",
-            args: (
-                String::from_str(&e, "u"),
-                String::from_str(&e, "n"),
-                String::from_str(&e, "s"),
-            )
-                .into_val(&e),
+            args: (String::from_str(&e, "n"), String::from_str(&e, "s")).into_val(&e),
             sub_invokes: &[],
         },
     }]);
     assert!(client
-        .try_set_metadata(
-            &String::from_str(&e, "u"),
-            &String::from_str(&e, "n"),
-            &String::from_str(&e, "s"),
-        )
+        .try_set_metadata(&String::from_str(&e, "n"), &String::from_str(&e, "s"))
         .is_err());
 }
 
@@ -692,19 +686,28 @@ fn launch_rejects_unwired_treasury_and_minters_without_treasury() {
     let wired = wired_treasury(&e, &client);
     let other = Address::generate(&e);
 
-    let r = client.try_launch(&other, &vec![&e, other.clone()]);
+    let r = client.try_launch(&other, &vec![&e, other.clone()], &other);
     assert_eq!(
         r.err().unwrap().unwrap(),
         crate::error::TokenError::TreasuryMismatch.into()
     );
-    let r = client.try_launch(&wired, &vec![&e, other.clone()]);
+    let r = client.try_launch(&wired, &vec![&e, other.clone()], &other);
     assert_eq!(
         r.err().unwrap().unwrap(),
         crate::error::TokenError::TreasuryNotMinter.into()
     );
+    // The pinned minter must be granted.
+    let r = client.try_launch(&wired, &vec![&e, wired.clone()], &other);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        crate::error::TokenError::MinterNotGranted.into()
+    );
     assert!(!client.is_live());
-    client.launch(&wired, &vec![&e, wired.clone()]);
+    assert_eq!(client.minter(), None);
+    client.launch(&wired, &vec![&e, wired.clone(), other.clone()], &other);
     assert!(client.is_live());
+    assert_eq!(client.minter(), Some(other.clone()));
+    assert!(client.mint_authority(&other));
 }
 
 #[test]
@@ -728,11 +731,11 @@ fn launch_requires_manager_auth() {
         invoke: &MockAuthInvoke {
             contract: &id,
             fn_name: "launch",
-            args: (&treasury, &minters).into_val(&e),
+            args: (&treasury, &minters, &treasury).into_val(&e),
             sub_invokes: &[],
         },
     }]);
-    assert!(client.try_launch(&treasury, &minters).is_err());
+    assert!(client.try_launch(&treasury, &minters, &treasury).is_err());
     assert!(!client.is_live());
     // The manager's own authorization succeeds.
     e.mock_auths(&[MockAuth {
@@ -740,11 +743,11 @@ fn launch_requires_manager_auth() {
         invoke: &MockAuthInvoke {
             contract: &id,
             fn_name: "launch",
-            args: (&treasury, &minters).into_val(&e),
+            args: (&treasury, &minters, &treasury).into_val(&e),
             sub_invokes: &[],
         },
     }]);
-    client.launch(&treasury, &minters);
+    client.launch(&treasury, &minters, &treasury);
     assert!(client.is_live());
 }
 
@@ -1222,10 +1225,10 @@ fn set_metadata_renames_and_emits_metadata_updated() {
     use soroban_sdk::Event as _;
 
     let (e, client, _owner) = setup();
-    let uri = String::from_str(&e, "https://example.com/v2/");
+    let metadata_contract = client.metadata();
     let name = String::from_str(&e, "Lantern Club");
     let symbol = String::from_str(&e, "LANTERN");
-    client.set_metadata(&uri, &name, &symbol);
+    client.set_metadata(&name, &symbol);
 
     // Read events first: the next invocation (as_contract) starts a fresh event buffer.
     let events = e.events().all();
@@ -1233,7 +1236,6 @@ fn set_metadata_renames_and_emits_metadata_updated() {
         &MetadataUpdated {
             name: name.clone(),
             symbol: symbol.clone(),
-            uri: uri.clone(),
         }
         .to_xdr(&e, &client.address)
     ));
@@ -1241,6 +1243,8 @@ fn set_metadata_renames_and_emits_metadata_updated() {
         assert_eq!(stellar_tokens::non_fungible::Base::name(&e), name);
         assert_eq!(stellar_tokens::non_fungible::Base::symbol(&e), symbol);
     });
+    // A rename no longer clobbers the metadata contract address (shared key).
+    assert_eq!(client.metadata(), metadata_contract);
 }
 
 /// Regression: `TokenKey::Metadata` used to encode to the same instance key as
@@ -1252,4 +1256,98 @@ fn name_symbol_and_metadata_contract_are_stored_separately() {
     assert_eq!(client.name(), String::from_str(&e, "DAO Vote NFT"));
     assert_eq!(client.symbol(), String::from_str(&e, "vDAO"));
     assert!(client.metadata().is_some());
+}
+
+// ---- SEP-50 completion ----
+
+/// An operator approved for all moves votes exactly as a direct transfer.
+#[test]
+fn operator_transfer_moves_votes_like_a_direct_transfer() {
+    use soroban_sdk::testutils::Ledger;
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+    let bob = Address::generate(&e);
+    let operator = Address::generate(&e);
+    let t1 = client.mint(&owner, &alice);
+    let t2 = client.mint(&owner, &alice);
+    let until = e.ledger().sequence() + 100;
+    client.approve_for_all(&alice, &operator, &until);
+    assert!(client.is_approved_for_all(&alice, &operator));
+    assert!(!client.is_approved_for_all(&bob, &operator));
+
+    // Direct transfer and operator transfer leave the same vote state.
+    client.transfer(&alice, &bob, &t1);
+    assert_eq!((client.get_votes(&alice), client.get_votes(&bob)), (1, 1));
+    client.transfer_from(&operator, &alice, &bob, &t2);
+    assert_eq!((client.get_votes(&alice), client.get_votes(&bob)), (0, 2));
+    assert_eq!(client.get_delegate(&bob), Some(bob.clone()));
+
+    // An expired operator approval cannot transfer.
+    let t3 = client.mint(&owner, &alice);
+    e.ledger().set_sequence_number(until + 1);
+    assert!(!client.is_approved_for_all(&alice, &operator));
+    assert!(client
+        .try_transfer_from(&operator, &alice, &bob, &t3)
+        .is_err());
+    assert_eq!(client.get_votes(&alice), 1);
+}
+
+#[test]
+fn single_token_approval_is_readable_expires_and_clears_on_transfer() {
+    use soroban_sdk::testutils::Ledger;
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+    let spender = Address::generate(&e);
+    let t = client.mint(&owner, &alice);
+    assert_eq!(client.get_approved(&t), None);
+    let until = e.ledger().sequence() + 50;
+    client.approve(&alice, &spender, &t, &until);
+    assert_eq!(client.get_approved(&t), Some(spender.clone()));
+    client.transfer(&alice, &owner, &t);
+    assert_eq!(client.get_approved(&t), None);
+
+    let t2 = client.mint(&owner, &alice);
+    client.approve(&alice, &spender, &t2, &(e.ledger().sequence() + 5));
+    e.ledger().set_sequence_number(e.ledger().sequence() + 6);
+    assert_eq!(client.get_approved(&t2), None);
+    assert!(client
+        .try_transfer_from(&spender, &alice, &owner, &t2)
+        .is_err());
+
+    // SEP-50: unknown tokens panic.
+    assert!(client.try_get_approved(&999).is_err());
+    assert!(client.try_token_uri(&999).is_err());
+}
+
+/// The name is copied verbatim into the on-chain token JSON.
+#[test]
+fn collection_name_may_not_contain_json_breaking_characters() {
+    let (e, client, _owner) = setup();
+    for bad in ["Club \"X\"", "back\\slash", "tab\tname"] {
+        assert_eq!(
+            client
+                .try_set_metadata(&String::from_str(&e, bad), &String::from_str(&e, "X"))
+                .err()
+                .unwrap()
+                .unwrap(),
+            crate::error::TokenError::InvalidName.into()
+        );
+    }
+    client.set_metadata(
+        &String::from_str(&e, "Lantern's Club"),
+        &String::from_str(&e, "LC"),
+    );
+    assert_eq!(client.name(), String::from_str(&e, "Lantern's Club"));
+}
+
+#[test]
+fn wiring_getters_expose_every_module() {
+    let (e, client, _owner, manager) = setup_with_manager();
+    assert_eq!(client.manager(), manager);
+    let treasury = wired_treasury(&e, &client);
+    assert_eq!(client.treasury(), treasury);
+    assert!(client.auction().is_some());
+    assert!(client.marketplace().is_some());
+    assert!(client.metadata().is_some());
+    assert_eq!(client.minter(), None);
 }
