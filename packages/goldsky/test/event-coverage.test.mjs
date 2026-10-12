@@ -19,7 +19,7 @@ const __dirname = dirname(__filename);
 // Core DAO events that must be handled
 // Extracted from our contract Rust source and generated bindings
 const REQUIRED_EVENTS = {
-  minter: ['MerkleClaimEvent', 'AllowlistClaimEvent', 'MintBatchEvent', 'MerkleRootSetEvent', 'AllowlistSetEvent'],
+  minter: ['MerkleClaimEvent', 'MintBatchEvent', 'MerkleRootSetEvent'],
   token: [
     'TokenInitialized',
     'MetadataUpdated',
@@ -34,7 +34,6 @@ const REQUIRED_EVENTS = {
     'TokenLaunched',
     'AdminChanged',
     'Upgraded',
-    'VersionSynced',
     'Migrated'
   ],
   governor: [
@@ -54,7 +53,6 @@ const REQUIRED_EVENTS = {
     'GovernorLaunched',
     'AdminChanged',
     'Upgraded',
-    'VersionSynced',
     'Migrated'
   ],
   treasury: [
@@ -63,7 +61,6 @@ const REQUIRED_EVENTS = {
     'Execute',
     'AdminChanged',
     'Upgraded',
-    'VersionSynced',
     'Migrated'
   ],
   auction: [
@@ -83,23 +80,19 @@ const REQUIRED_EVENTS = {
     'AuctionCancelled',
     'AdminChanged',
     'Upgraded',
-    'VersionSynced',
     'Migrated'
   ],
   metadata: [
     'MetadataInitialized',
     'PropertyAdded',
     'PropertiesReset',
-    'ProjectURIUpdated',
-    'DescriptionUpdated',
+    'ProfileUpdated',
     'RendererBaseUpdated',
-    'ContractImageUpdated',
     'SeedGenerated',
     'SeedsGenerated',
     'MetadataLaunched',
     'AdminChanged',
     'Upgraded',
-    'VersionSynced',
     'Migrated'
   ],
   marketplace: [
@@ -121,7 +114,6 @@ const REQUIRED_EVENTS = {
     'MarketplaceUnpaused',
     'AdminChanged',
     'Upgraded',
-    'VersionSynced',
     'Migrated'
   ],
   manager: [
@@ -307,9 +299,9 @@ test('every module emits its own <Module>Launched event with topic treasury', ()
   for (const c of ['governor', 'treasury', 'metadata']) assert.deepStrictEqual(dataByContract[c], []);
 });
 
-test('Upgraded, VersionSynced, Migrated and AdminChanged come from contracts/common and are listed once per emitting module', () => {
+test('Upgraded, Migrated and AdminChanged come from contracts/common and are listed once per emitting module', () => {
   const roles = ['auction', 'governor', 'marketplace', 'metadata', 'token', 'treasury'];
-  for (const name of ['Upgraded', 'VersionSynced', 'Migrated']) {
+  for (const name of ['Upgraded', 'Migrated']) {
     const found = contractEventList().filter((e) => e.name === name);
     assert.deepStrictEqual(found.map((e) => e.contract).sort(), roles, name);
     for (const e of found) assert.strictEqual(e.source, 'common');
@@ -317,9 +309,7 @@ test('Upgraded, VersionSynced, Migrated and AdminChanged come from contracts/com
   const upgraded = contractEventList().find((e) => e.name === 'Upgraded');
   assert.deepStrictEqual(upgraded.topics, ['from_hash', 'to_hash']);
   assert.deepStrictEqual(upgraded.data, ['version']);
-  const synced = contractEventList().find((e) => e.name === 'VersionSynced');
-  assert.deepStrictEqual(synced.topics, []);
-  assert.deepStrictEqual(synced.data, ['version']);
+  assert.ok(!contractEventList().some((e) => e.name === 'VersionSynced'));
   const migrated = contractEventList().find((e) => e.name === 'Migrated');
   assert.deepStrictEqual(migrated.data, ['from_storage_version', 'to_storage_version']);
   // AdminChanged: once per module from common, plus the Manager's own, with one shape.

@@ -9,5 +9,12 @@ export const REMOVED_EVENTS = [
   'Launched',                   // replaced by per-module TokenLaunched, GovernorLaunched, ...
   'OwnershipTransfer',          // OpenZeppelin Ownable replaced by common::admin (no transfer)
   'OwnershipTransferCompleted', // ditto
-  'OwnershipRenounced'          // ditto: no renounce
+  'OwnershipRenounced',         // ditto: no renounce
+  // Storage diet (0.3.0, docs/STORAGE_DIET.md): fresh redeploy, no migration.
+  'VersionSynced',              // version() is read from the Manager registry
+  'ProjectURIUpdated',          // replaced by the event-only ProfileUpdated
+  'DescriptionUpdated',         // ditto
+  'ContractImageUpdated',       // ditto
+  'AllowlistClaimEvent',        // Minter is merkle-only
+  'AllowlistSetEvent'           // ditto
 ];

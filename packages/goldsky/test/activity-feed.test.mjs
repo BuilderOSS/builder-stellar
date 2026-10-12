@@ -364,12 +364,8 @@ const newEventCases = [
   ['Upgraded', 'marketplace', 'marketplace.upgraded', 'Marketplace upgraded', 'public'],
   ['Upgraded', 'metadata', 'metadata.upgraded', 'Metadata upgraded', 'public'],
   ['Upgraded', '', 'module.upgraded', 'Module upgraded', 'public'],
-  ['VersionSynced', 'token', 'token.version_synced', 'Token version synced', 'admin'],
-  ['VersionSynced', 'governor', 'governor.version_synced', 'Governor version synced', 'admin'],
-  ['VersionSynced', 'treasury', 'treasury.version_synced', 'Treasury version synced', 'admin'],
-  ['VersionSynced', 'auction', 'auction.version_synced', 'Auction version synced', 'admin'],
-  ['VersionSynced', 'marketplace', 'marketplace.version_synced', 'Marketplace version synced', 'admin'],
-  ['VersionSynced', 'metadata', 'metadata.version_synced', 'Metadata version synced', 'admin']
+  ['ProfileUpdated', 'metadata', 'metadata.profile_updated', 'Community profile updated', 'public'],
+  ['MerkleRootSetEvent', 'minter', 'minter.merkle_root_set', 'Claim round opened', 'public']
 ];
 for (const [eventName, role, kind, title, visibility] of newEventCases) {
   const row = invoke({ event_id: 'n', event_name: eventName, contract_role: role, deployment_id: 'test', contract_id: 'test' });
@@ -377,13 +373,13 @@ for (const [eventName, role, kind, title, visibility] of newEventCases) {
   assert.strictEqual(row.title, title, `${eventName}/${role} title`);
   assert.strictEqual(row.visibility, visibility, `${eventName}/${role} visibility`);
 }
-for (const removed of ['MarketplaceUpgraded', 'TreasuryChanged', 'TokenContractChanged', 'GovernorAuthorityChanged', 'GovernorChanged', 'TreasuryUpdated']) {
+for (const removed of ['MarketplaceUpgraded', 'TreasuryChanged', 'TokenContractChanged', 'GovernorAuthorityChanged', 'GovernorChanged', 'TreasuryUpdated', 'VersionSynced', 'AllowlistSetEvent', 'DescriptionUpdated']) {
   assert.strictEqual(invoke({ event_id: 'r', event_name: removed, deployment_id: 'test', contract_id: 'test' }).kind, 'contract.' + removed.toLowerCase(), `${removed} must be unmapped`);
 }
 console.log('✅ Passed\n');
 
-// Test 16b: Upgraded / VersionSynced summaries; identifiers live in topics while args may be {}
-console.log('Test 16b: Upgraded and VersionSynced summaries');
+// Test 16b: Upgraded summaries; identifiers live in topics while args may be {}
+console.log('Test 16b: Upgraded summaries');
 const upgradedRow = invoke({
   event_id: 'u', event_name: 'Upgraded', contract_role: 'auction', deployment_id: 'test', contract_id: 'AUC',
   topics: JSON.stringify({ from_hash: 'aaaaaaaa11112222', to_hash: 'bbbbbbbb33334444' }), args: JSON.stringify({ version: '1.2.0' })
@@ -395,8 +391,6 @@ const upgradedNoArgs = invoke({
   topics: JSON.stringify({ from_hash: 'aaaaaaaa11112222', to_hash: 'bbbbbbbb33334444' }), args: '{}'
 });
 assert.strictEqual(upgradedNoArgs.summary, 'Contract upgraded to version unknown (aaaaaaaa -> bbbbbbbb)');
-const syncedRow = invoke({ event_id: 's', event_name: 'VersionSynced', contract_role: 'metadata', deployment_id: 'test', contract_id: 'MD', topics: '{}', args: JSON.stringify({ version: '1.2.0' }) });
-assert.strictEqual(syncedRow.summary, 'Contract version synced to 1.2.0');
 const cancelRow = invoke({
   event_id: 'c', event_name: 'AdminProposalCancelled', contract_role: 'manager', deployment_id: 'test', contract_id: 'MGR',
   topics: JSON.stringify({ current_admin: 'CUR', cancelled_admin: 'CAN' }), args: '{}'

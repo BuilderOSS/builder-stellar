@@ -330,7 +330,8 @@ transforms:
           AuctionLaunched: ['treasury'], MarketplaceLaunched: ['treasury'], MetadataLaunched: ['treasury'],
           // contracts/common/src/upgrade.rs: emitted by EVERY module (token, governor, treasury, auction,
           // marketplace, metadata); the emitting module is identified by contract_id/contract_role.
-          Upgraded: ['from_hash', 'to_hash'], VersionSynced: [], Migrated: [],
+          // version() is read from the Manager registry since 0.3.0 (no sync event).
+          Upgraded: ['from_hash', 'to_hash'], Migrated: [],
           // Token (custom + OpenZeppelin non-fungible/votes/pausable)
           // MetadataUpdated (token 0.2.0+): rename; all data, no topics.
           TokenInitialized: ['admin'], MetadataUpdated: [], MintAuthorityChanged: ['authority'], MintWithMinter: ['minter', 'to'], MintBatchWithMinter: ['minter'],
@@ -354,10 +355,12 @@ transforms:
           RefundDeferred: ['token_id', 'bidder'], RefundWithdrawn: ['bidder'],
           // Metadata
           MetadataInitialized: ['token'], PropertyAdded: ['property_id'], SeedGenerated: ['token_id'], SeedsGenerated: ['first_token_id'], PropertiesReset: [],
-          ProjectURIUpdated: [], DescriptionUpdated: [], RendererBaseUpdated: [], ContractImageUpdated: [],
+          // ProfileUpdated (0.3.0+): the profile JSON is event-only; Metadata stores its hash and seq.
+          ProfileUpdated: ['seq'], RendererBaseUpdated: [],
           // Minter
-          MerkleClaimEvent: ['token_id', 'recipient'], AllowlistClaimEvent: ['token_id', 'recipient'], MintBatchEvent: ['token_id'],
-          MerkleRootSetEvent: ['token_id'], AllowlistSetEvent: ['token_id'],
+          // Merkle-only since 0.3.0; MerkleRootSetEvent carries { root, round, tree_uri } in data.
+          MerkleClaimEvent: ['token_id', 'recipient'], MintBatchEvent: ['token_id'],
+          MerkleRootSetEvent: ['token_id'],
           // Marketplace
           MarketplaceInitialized: ['token', 'admin'], PrimaryListingCreated: ['listing_id'], PrimaryListingPurchased: ['listing_id', 'buyer'],
           PrimaryListingCancelled: ['listing_id'], PrimaryListingExpired: ['listing_id'], SecondaryListingCreated: ['token_id'],
@@ -440,12 +443,12 @@ transforms:
             var canonical = toCanonical(name);
             if (canonical === 'MintBatchWithMinter') return 'token';
             if (/^(Manager|Implementation|CurrentImplementations|LatestImplementation|UpgradeApproved|Dao|Factory|Admin|PlatformMinter|PendingSlug|SlugClaimed)/.test(canonical)) return 'manager';
-            if (/^(MerkleClaim|AllowlistClaim|MintBatch|MerkleRoot|AllowlistSet)/.test(canonical)) return 'minter';
+            if (/^(MerkleClaim|MintBatch|MerkleRoot)/.test(canonical)) return 'minter';
             if (/^(Marketplace|Listing|Primary|Secondary|PaymentAsset)/.test(canonical)) return 'marketplace';
             if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue)/.test(canonical)) return 'governor';
             if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken|Refund)/.test(canonical)) return 'auction';
             if (/^(Execute|Treasury)/.test(canonical)) return 'treasury';
-            if (/^(Metadata|Property|Properties|Seed|ProjectURI|Description|RendererBase|ContractImage)/.test(canonical)) return 'metadata';
+            if (/^(Metadata|Property|Properties|Seed|Profile|RendererBase)/.test(canonical)) return 'metadata';
             if (/^(Transfer|Mint|Delegate|Approve|Token)/.test(canonical)) return 'token';
             return 'unknown';
           }
@@ -598,7 +601,9 @@ transforms:
           PrimaryListingCreated: true, PrimaryListingPurchased: true,
           SecondaryListingCreated: true, ListingPurchased: true,
           MintBatchWithMinter: true,
-          MerkleClaimEvent: true, AllowlistClaimEvent: true, MintBatchEvent: true,
+          MerkleClaimEvent: true, MintBatchEvent: true,
+          // A new claim round and a profile change are things members act on.
+          MerkleRootSetEvent: true, ProfileUpdated: true,
           // Contract upgrades are the most security-relevant DAO action: public.
           Upgraded: true
         };
@@ -669,15 +674,11 @@ transforms:
           SeedGenerated: 'metadata.seed_generated',
           SeedsGenerated: 'metadata.seeds_generated',
           PropertiesReset: 'metadata.properties_reset',
-          ProjectURIUpdated: 'metadata.project_uri_updated',
-          DescriptionUpdated: 'metadata.description_updated',
+          ProfileUpdated: 'metadata.profile_updated',
           RendererBaseUpdated: 'metadata.renderer_base_updated',
-          ContractImageUpdated: 'metadata.contract_image_updated',
           MerkleClaimEvent: 'minter.merkle_claim',
-          AllowlistClaimEvent: 'minter.allowlist_claim',
           MintBatchEvent: 'minter.batch_mint',
           MerkleRootSetEvent: 'minter.merkle_root_set',
-          AllowlistSetEvent: 'minter.allowlist_set',
           Paused: 'contract.paused',
           Unpaused: 'contract.unpaused',
           ManagerInitialized: 'manager.initialized',
@@ -766,15 +767,11 @@ transforms:
           SeedGenerated: 'Seed generated',
           SeedsGenerated: 'Seeds generated',
           PropertiesReset: 'Properties reset',
-          ProjectURIUpdated: 'Project URI updated',
-          DescriptionUpdated: 'Description updated',
+          ProfileUpdated: 'Community profile updated',
           RendererBaseUpdated: 'Renderer base updated',
-          ContractImageUpdated: 'Contract image updated',
           MerkleClaimEvent: 'Merkle claim completed',
-          AllowlistClaimEvent: 'Allowlist claim completed',
           MintBatchEvent: 'Batch mint completed',
-          MerkleRootSetEvent: 'Merkle root configured',
-          AllowlistSetEvent: 'Allowlist configured',
+          MerkleRootSetEvent: 'Claim round opened',
           Paused: 'Contract paused',
           Unpaused: 'Contract unpaused',
           ManagerInitialized: 'Manager initialized',
@@ -797,7 +794,7 @@ transforms:
           MarketplaceUnpaused: 'Marketplace unpaused'
         };
 
-        // `Upgraded`, `VersionSynced` and `Migrated` come from contracts/common and are emitted by
+        // `Upgraded` and `Migrated` come from contracts/common and are emitted by
         // every module; `AdminChanged` is emitted by the Manager (admin handover) and by every module
         // at launch (launch admin -> Treasury). Kind and title depend on the emitting contract_role.
         var emitterRole = ensureString(data.contract_role, '');
@@ -805,7 +802,7 @@ transforms:
         var moduleRole = moduleLabels[emitterRole] ? emitterRole : 'module';
         var moduleLabel = moduleLabels[emitterRole] || 'Module';
         // OpenZeppelin Paused/Unpaused (auction) are keyed by the emitting module too.
-        var commonEvents = { Upgraded: ['upgraded', 'upgraded'], VersionSynced: ['version_synced', 'version synced'], Migrated: ['migrated', 'storage migrated'], Paused: ['paused', 'paused'], Unpaused: ['unpaused', 'unpaused'] };
+        var commonEvents = { Upgraded: ['upgraded', 'upgraded'], Migrated: ['migrated', 'storage migrated'], Paused: ['paused', 'paused'], Unpaused: ['unpaused', 'unpaused'] };
         if (commonEvents[normalizedEventName]) {
           kindMap[normalizedEventName] = moduleRole + '.' + commonEvents[normalizedEventName][0];
           titleMap[normalizedEventName] = moduleLabel + ' ' + commonEvents[normalizedEventName][1];
@@ -906,7 +903,8 @@ transforms:
             var v = pick(data, ['version']);
             return 'Contract upgraded to version ' + (v || 'unknown') + ' (' + shortHash(pick(data, ['from_hash'])) + ' -> ' + shortHash(pick(data, ['to_hash'])) + ')';
           },
-          VersionSynced: function() { return 'Contract version synced to ' + (pick(data, ['version']) || 'unknown'); },
+          ProfileUpdated: function() { return 'Community profile updated (revision ' + (pick(data, ['seq']) || '?') + ')'; },
+          MerkleRootSetEvent: function() { return 'Claim round ' + (pick(data, ['round']) || '?') + ' opened'; },
           AdminProposalCancelled: function() { return 'Admin proposal for ' + (pick(data, ['cancelled_admin']) || 'unknown') + ' cancelled'; },
           Mint: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
           MintWithMinter: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
@@ -920,7 +918,6 @@ transforms:
           SecondaryListingCreated: function() { return 'Secondary listing created for token ' + (tokenId || 'unknown') + ' at ' + (amount || 'unknown price'); },
           ListingPurchased: function() { return 'Token ' + (tokenId || 'unknown') + ' purchased for ' + (amount || 'unknown price'); },
           MerkleClaimEvent: function() { return 'Claimed ' + (amount || 'tokens') + ' via merkle proof for ' + (owner || 'recipient'); },
-          AllowlistClaimEvent: function() { return 'Claimed ' + (amount || 'tokens') + ' via allowlist for ' + (owner || 'recipient'); },
           DelegateChanged: function() { return (pick(data, ['delegator']) || 'A holder') + ' delegated votes to ' + (pick(data, ['to_delegate']) || 'a delegate'); },
           DaoCreated: function() { return 'DAO created by ' + (creator || 'unknown'); },
           DaoLaunched: function() { return 'DAO launched for token ' + (tokenAddress || 'unknown'); },
@@ -968,6 +965,8 @@ transforms:
           var fromDelegate = pick(data, ['from_delegate']);
           if (!fromDelegate && delegator && toDelegate === delegator) visibility = 'system';
         }
+        // The profile written at DAO creation (seq 0) is part of setup, not news.
+        if (normalizedEventName === 'ProfileUpdated' && String(pick(data, ['seq'])) === '0') visibility = 'admin';
 
         // Helper to safely convert to number
         function toNumber(val) {

@@ -63,7 +63,8 @@ function invoke(data) {
     AuctionLaunched: ['treasury'], MarketplaceLaunched: ['treasury'], MetadataLaunched: ['treasury'],
     // contracts/common/src/upgrade.rs: emitted by EVERY module (token, governor, treasury, auction,
     // marketplace, metadata); the emitting module is identified by contract_id/contract_role.
-    Upgraded: ['from_hash', 'to_hash'], VersionSynced: [], Migrated: [],
+    // version() is read from the Manager registry since 0.3.0 (no sync event).
+    Upgraded: ['from_hash', 'to_hash'], Migrated: [],
     // Token (custom + OpenZeppelin non-fungible/votes/pausable)
     // MetadataUpdated (token 0.2.0+): rename; all data, no topics.
     TokenInitialized: ['admin'], MetadataUpdated: [], MintAuthorityChanged: ['authority'], MintWithMinter: ['minter', 'to'], MintBatchWithMinter: ['minter'],
@@ -87,10 +88,12 @@ function invoke(data) {
     RefundDeferred: ['token_id', 'bidder'], RefundWithdrawn: ['bidder'],
     // Metadata
     MetadataInitialized: ['token'], PropertyAdded: ['property_id'], SeedGenerated: ['token_id'], SeedsGenerated: ['first_token_id'], PropertiesReset: [],
-    ProjectURIUpdated: [], DescriptionUpdated: [], RendererBaseUpdated: [], ContractImageUpdated: [],
+    // ProfileUpdated (0.3.0+): the profile JSON is event-only; Metadata stores its hash and seq.
+    ProfileUpdated: ['seq'], RendererBaseUpdated: [],
     // Minter
-    MerkleClaimEvent: ['token_id', 'recipient'], AllowlistClaimEvent: ['token_id', 'recipient'], MintBatchEvent: ['token_id'],
-    MerkleRootSetEvent: ['token_id'], AllowlistSetEvent: ['token_id'],
+    // Merkle-only since 0.3.0; MerkleRootSetEvent carries { root, round, tree_uri } in data.
+    MerkleClaimEvent: ['token_id', 'recipient'], MintBatchEvent: ['token_id'],
+    MerkleRootSetEvent: ['token_id'],
     // Marketplace
     MarketplaceInitialized: ['token', 'admin'], PrimaryListingCreated: ['listing_id'], PrimaryListingPurchased: ['listing_id', 'buyer'],
     PrimaryListingCancelled: ['listing_id'], PrimaryListingExpired: ['listing_id'], SecondaryListingCreated: ['token_id'],
@@ -173,12 +176,12 @@ function invoke(data) {
       var canonical = toCanonical(name);
       if (canonical === 'MintBatchWithMinter') return 'token';
       if (/^(Manager|Implementation|CurrentImplementations|LatestImplementation|UpgradeApproved|Dao|Factory|Admin|PlatformMinter|PendingSlug|SlugClaimed)/.test(canonical)) return 'manager';
-      if (/^(MerkleClaim|AllowlistClaim|MintBatch|MerkleRoot|AllowlistSet)/.test(canonical)) return 'minter';
+      if (/^(MerkleClaim|MintBatch|MerkleRoot)/.test(canonical)) return 'minter';
       if (/^(Marketplace|Listing|Primary|Secondary|PaymentAsset)/.test(canonical)) return 'marketplace';
       if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue)/.test(canonical)) return 'governor';
       if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken|Refund)/.test(canonical)) return 'auction';
       if (/^(Execute|Treasury)/.test(canonical)) return 'treasury';
-      if (/^(Metadata|Property|Properties|Seed|ProjectURI|Description|RendererBase|ContractImage)/.test(canonical)) return 'metadata';
+      if (/^(Metadata|Property|Properties|Seed|Profile|RendererBase)/.test(canonical)) return 'metadata';
       if (/^(Transfer|Mint|Delegate|Approve|Token)/.test(canonical)) return 'token';
       return 'unknown';
     }

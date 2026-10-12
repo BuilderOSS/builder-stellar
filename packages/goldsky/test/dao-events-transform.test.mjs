@@ -776,10 +776,8 @@ test('decodes TreasuryInitialized event', () => {
 test('decodes the Minter events with the exact events.rs topics and payloads', () => {
   const cases = [
     ['MerkleClaimEvent', [{ symbol: 'MerkleClaimEvent' }, { address: 'TOKEN_CONTRACT' }, { address: 'RECIPIENT' }], { map: [{ key: { symbol: 'amount' }, val: { u128: '5' } }] }, { token_id: 'TOKEN_CONTRACT', recipient: 'RECIPIENT' }],
-    ['AllowlistClaimEvent', [{ symbol: 'AllowlistClaimEvent' }, { address: 'TOKEN_CONTRACT' }, { address: 'RECIPIENT' }], { map: [{ key: { symbol: 'amount' }, val: { u128: '5' } }] }, { token_id: 'TOKEN_CONTRACT', recipient: 'RECIPIENT' }],
     ['MintBatchEvent', [{ symbol: 'MintBatchEvent' }, { address: 'TOKEN_CONTRACT' }], { recipient_count: { u32: 3 }, total_amount: { u128: '9' } }, { token_id: 'TOKEN_CONTRACT' }],
-    ['MerkleRootSetEvent', [{ symbol: 'MerkleRootSetEvent' }, { address: 'TOKEN_CONTRACT' }], { map: [] }, { token_id: 'TOKEN_CONTRACT' }],
-    ['AllowlistSetEvent', [{ symbol: 'AllowlistSetEvent' }, { address: 'TOKEN_CONTRACT' }], { member_count: { u32: 4 } }, { token_id: 'TOKEN_CONTRACT' }]
+    ['MerkleRootSetEvent', [{ symbol: 'MerkleRootSetEvent' }, { address: 'TOKEN_CONTRACT' }], { map: [{ key: { symbol: 'root' }, val: { bytes: 'ab' } }, { key: { symbol: 'round' }, val: { u32: 2 } }, { key: { symbol: 'tree_uri' }, val: { string: 'ipfs://bafytree' } }] }, { token_id: 'TOKEN_CONTRACT' }]
   ];
   for (const [name, topics, data, expectedTopics] of cases) {
     const decoded = decodeEvent({ event_id: name, contract_role: 'minter', topics: JSON.stringify(topics), data: JSON.stringify(data) });
@@ -787,10 +785,33 @@ test('decodes the Minter events with the exact events.rs topics and payloads', (
     assert.equal(decoded.contract_role, 'minter');
   }
   assert.deepEqual(argsOf(decodeEvent({ topics: JSON.stringify(cases[0][1]), data: JSON.stringify(cases[0][2]) })), { amount: '5' });
+  const root = decodeEvent({ contract_role: 'minter', topics: JSON.stringify(cases[2][1]), data: JSON.stringify(cases[2][2]) });
+  assert.deepEqual(argsOf(root), { root: 'ab', round: 2, tree_uri: 'ipfs://bafytree' });
+  const activity = buildActivityFeed(root);
+  assert.equal(activity.kind, 'minter.merkle_root_set');
+  assert.equal(activity.visibility, 'public');
+  assert.equal(activity.summary, 'Claim round 2 opened');
+});
+
+test('ProfileUpdated decodes seq/hash/profile; the creation profile (seq 0) stays out of the public feed', () => {
+  const event = (seq) => decodeEvent({
+    event_id: `p${seq}`,
+    contract_role: 'metadata',
+    topics: JSON.stringify([{ symbol: 'ProfileUpdated' }, { u32: seq }]),
+    data: JSON.stringify({ map: [{ key: { symbol: 'hash' }, val: { bytes: 'cafe' } }, { key: { symbol: 'profile' }, val: { string: '{"v":1}' } }] })
+  });
+  const created = event(0);
+  assert.deepEqual(topicsOf(created), { seq: 0 });
+  assert.deepEqual(argsOf(created), { hash: 'cafe', profile: '{"v":1}' });
+  assert.equal(buildActivityFeed(created).visibility, 'admin');
+  const updated = buildActivityFeed(event(3));
+  assert.equal(updated.kind, 'metadata.profile_updated');
+  assert.equal(updated.visibility, 'public');
+  assert.equal(updated.summary, 'Community profile updated (revision 3)');
 });
 
 test('builds distinct activity kinds for Minter claim events', () => {
-  for (const [name, kind] of [['MerkleClaimEvent', 'minter.merkle_claim'], ['AllowlistClaimEvent', 'minter.allowlist_claim']]) {
+  for (const [name, kind] of [['MerkleClaimEvent', 'minter.merkle_claim']]) {
     const decoded = decodeEvent({
       event_id: name,
       contract_role: 'minter',
@@ -881,7 +902,7 @@ test('manager admin and platform minter events', () => {
   assert.equal(minter.activity.kind, 'manager.platform_minter_set');
 });
 
-test('Upgraded / VersionSynced decode for every module role; identifiers in topics, version in args', () => {
+test('Upgraded decodes for every module role; identifiers in topics, version in args', () => {
   const roles = [['token', 'TOKEN'], ['governor', 'GOV'], ['treasury', 'TRE'], ['auction', 'AUC'], ['marketplace', 'MKT'], ['metadata', 'META']];
   for (const [role, contract] of roles) {
     const up = run(role, contract, 'Upgraded', [{ bytes: 'aaaaaaaa11' }, { bytes: 'bbbbbbbb22' }], { version: { string: '1.1.0' } });
@@ -893,11 +914,6 @@ test('Upgraded / VersionSynced decode for every module role; identifiers in topi
     assert.equal(up.activity.visibility, 'public');
     assert.equal(up.activity.contract_id, contract);
     assert.equal(up.activity.summary, 'Contract upgraded to version 1.1.0 (aaaaaaaa -> bbbbbbbb)');
-    const sync = run(role, contract, 'VersionSynced', [], { version: { string: '1.1.0' } });
-    assert.deepEqual(topicsOf(sync.decoded), {});
-    assert.deepEqual(argsOf(sync.decoded), { version: '1.1.0' });
-    assert.equal(sync.activity.kind, `${role}.version_synced`);
-    assert.equal(sync.activity.visibility, 'admin');
   }
 });
 
@@ -936,7 +952,7 @@ test('DaoCreated decodes the nested wasm_hashes struct (map of six BytesN<32>) b
 });
 
 test('role fallback classifies new events when contract_role is unknown', () => {
-  for (const [name, role] of [['AdminProposed', 'manager'], ['AdminChanged', 'manager'], ['AdminProposalCancelled', 'manager'], ['PlatformMinterSet', 'manager'], ['Upgraded', 'unknown'], ['VersionSynced', 'unknown'],
+  for (const [name, role] of [['AdminProposed', 'manager'], ['AdminChanged', 'manager'], ['AdminProposalCancelled', 'manager'], ['PlatformMinterSet', 'manager'], ['Upgraded', 'unknown'],
     ['RefundDeferred', 'auction'], ['RefundWithdrawn', 'auction'], ['PrimaryListingPurchased', 'marketplace'],
     ['PrimaryListingCancelled', 'marketplace'], ['PrimaryListingExpired', 'marketplace'], ['Execute', 'treasury'], ['TokenLaunched', 'token'], ['TreasuryLaunched', 'treasury'], ['ProposalScheduled', 'governor'],
     ['SlugClaimed', 'manager'], ['PendingSlugUpdated', 'manager'], ['LatestImplementationSet', 'manager'], ['Migrated', 'unknown']]) {

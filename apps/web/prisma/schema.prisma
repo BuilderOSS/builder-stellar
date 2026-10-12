@@ -27,10 +27,14 @@ view ManagerDao {
   treasuryContract    String?   @map("treasury_contract")
   metadataContract    String?   @map("metadata_contract")
   marketplaceContract String?   @map("marketplace_contract")
+  /** The shared Minter pinned at launch (null while pending). */
+  minterContract      String?   @map("minter_contract")
   tokenName           String?   @map("token_name")
   tokenSymbol         String?   @map("token_symbol")
-  tokenDescription    String?   @map("token_description")
-  tokenUri            String?   @map("token_uri")
+  /** Latest ProfileUpdated JSON, byte-for-byte; verify against metadata.profile_hash() before use. */
+  profile             String?
+  profileHash         String?   @map("profile_hash")
+  profileSeq          BigInt?   @map("profile_seq")
   /** Current admin: the launch admin during setup, the Treasury (a contract) after launch. */
   adminAddress        String?   @map("admin_address")
   status              String
@@ -174,16 +178,28 @@ view MetadataConfiguration {
   metadataContract    String    @map("metadata_contract")
   tokenContract       String    @map("token_contract")
   rendererBase        String?   @map("renderer_base")
-  version             String?
   admin               String?
-  projectUri          String?   @map("project_uri")
-  description         String?
-  contractImage       String?   @map("contract_image")
   initLedger          BigInt    @map("init_ledger")
   initAt              DateTime? @map("init_at")
   initTransactionHash String?   @map("init_transaction_hash")
 
   @@map("configuration")
+  @@schema("metadata")
+}
+
+/// The current profile of every Metadata contract (highest ProfileUpdated seq).
+view MetadataProfile {
+  deploymentId     String    @map("deployment_id")
+  daoId            String    @map("dao_id")
+  metadataContract String    @map("metadata_contract")
+  profileSeq       BigInt    @map("profile_seq")
+  profileHash      String?   @map("profile_hash")
+  profile          String?
+  updatedLedger    BigInt    @map("updated_ledger")
+  updatedAt        DateTime? @map("updated_at")
+  updatedTxHash    String?   @map("updated_tx_hash")
+
+  @@map("profiles")
   @@schema("metadata")
 }
 
@@ -468,25 +484,6 @@ view MinterMerkleClaimEvent {
   transactionHash  String    @map("transaction_hash")
 
   @@map("merkle_claim_events")
-  @@schema("minter")
-}
-
-view MinterAllowlistClaimEvent {
-  eventId          String    @map("event_id")
-  deploymentId     String    @map("deployment_id")
-  daoId            String    @map("dao_id")
-  contractId       String    @map("contract_id")
-  tokenId          String    @map("token_id")
-  recipient        String
-  amount           Decimal
-  ledgerSequence   BigInt    @map("ledger_sequence")
-  transactionIndex BigInt?   @map("transaction_index")
-  operationIndex   BigInt?   @map("operation_index")
-  eventIndex       BigInt?   @map("event_index")
-  eventAt          DateTime? @map("event_at")
-  transactionHash  String    @map("transaction_hash")
-
-  @@map("allowlist_claim_events")
   @@schema("minter")
 }
 

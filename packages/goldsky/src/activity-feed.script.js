@@ -112,7 +112,9 @@ function invoke(data) {
     PrimaryListingCreated: true, PrimaryListingPurchased: true,
     SecondaryListingCreated: true, ListingPurchased: true,
     MintBatchWithMinter: true,
-    MerkleClaimEvent: true, AllowlistClaimEvent: true, MintBatchEvent: true,
+    MerkleClaimEvent: true, MintBatchEvent: true,
+    // A new claim round and a profile change are things members act on.
+    MerkleRootSetEvent: true, ProfileUpdated: true,
     // Contract upgrades are the most security-relevant DAO action: public.
     Upgraded: true
   };
@@ -183,15 +185,11 @@ function invoke(data) {
     SeedGenerated: 'metadata.seed_generated',
     SeedsGenerated: 'metadata.seeds_generated',
     PropertiesReset: 'metadata.properties_reset',
-    ProjectURIUpdated: 'metadata.project_uri_updated',
-    DescriptionUpdated: 'metadata.description_updated',
+    ProfileUpdated: 'metadata.profile_updated',
     RendererBaseUpdated: 'metadata.renderer_base_updated',
-    ContractImageUpdated: 'metadata.contract_image_updated',
     MerkleClaimEvent: 'minter.merkle_claim',
-    AllowlistClaimEvent: 'minter.allowlist_claim',
     MintBatchEvent: 'minter.batch_mint',
     MerkleRootSetEvent: 'minter.merkle_root_set',
-    AllowlistSetEvent: 'minter.allowlist_set',
     Paused: 'contract.paused',
     Unpaused: 'contract.unpaused',
     ManagerInitialized: 'manager.initialized',
@@ -280,15 +278,11 @@ function invoke(data) {
     SeedGenerated: 'Seed generated',
     SeedsGenerated: 'Seeds generated',
     PropertiesReset: 'Properties reset',
-    ProjectURIUpdated: 'Project URI updated',
-    DescriptionUpdated: 'Description updated',
+    ProfileUpdated: 'Community profile updated',
     RendererBaseUpdated: 'Renderer base updated',
-    ContractImageUpdated: 'Contract image updated',
     MerkleClaimEvent: 'Merkle claim completed',
-    AllowlistClaimEvent: 'Allowlist claim completed',
     MintBatchEvent: 'Batch mint completed',
-    MerkleRootSetEvent: 'Merkle root configured',
-    AllowlistSetEvent: 'Allowlist configured',
+    MerkleRootSetEvent: 'Claim round opened',
     Paused: 'Contract paused',
     Unpaused: 'Contract unpaused',
     ManagerInitialized: 'Manager initialized',
@@ -311,7 +305,7 @@ function invoke(data) {
     MarketplaceUnpaused: 'Marketplace unpaused'
   };
 
-  // `Upgraded`, `VersionSynced` and `Migrated` come from contracts/common and are emitted by
+  // `Upgraded` and `Migrated` come from contracts/common and are emitted by
   // every module; `AdminChanged` is emitted by the Manager (admin handover) and by every module
   // at launch (launch admin -> Treasury). Kind and title depend on the emitting contract_role.
   var emitterRole = ensureString(data.contract_role, '');
@@ -319,7 +313,7 @@ function invoke(data) {
   var moduleRole = moduleLabels[emitterRole] ? emitterRole : 'module';
   var moduleLabel = moduleLabels[emitterRole] || 'Module';
   // OpenZeppelin Paused/Unpaused (auction) are keyed by the emitting module too.
-  var commonEvents = { Upgraded: ['upgraded', 'upgraded'], VersionSynced: ['version_synced', 'version synced'], Migrated: ['migrated', 'storage migrated'], Paused: ['paused', 'paused'], Unpaused: ['unpaused', 'unpaused'] };
+  var commonEvents = { Upgraded: ['upgraded', 'upgraded'], Migrated: ['migrated', 'storage migrated'], Paused: ['paused', 'paused'], Unpaused: ['unpaused', 'unpaused'] };
   if (commonEvents[normalizedEventName]) {
     kindMap[normalizedEventName] = moduleRole + '.' + commonEvents[normalizedEventName][0];
     titleMap[normalizedEventName] = moduleLabel + ' ' + commonEvents[normalizedEventName][1];
@@ -420,7 +414,8 @@ function invoke(data) {
       var v = pick(data, ['version']);
       return 'Contract upgraded to version ' + (v || 'unknown') + ' (' + shortHash(pick(data, ['from_hash'])) + ' -> ' + shortHash(pick(data, ['to_hash'])) + ')';
     },
-    VersionSynced: function() { return 'Contract version synced to ' + (pick(data, ['version']) || 'unknown'); },
+    ProfileUpdated: function() { return 'Community profile updated (revision ' + (pick(data, ['seq']) || '?') + ')'; },
+    MerkleRootSetEvent: function() { return 'Claim round ' + (pick(data, ['round']) || '?') + ' opened'; },
     AdminProposalCancelled: function() { return 'Admin proposal for ' + (pick(data, ['cancelled_admin']) || 'unknown') + ' cancelled'; },
     Mint: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
     MintWithMinter: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
@@ -434,7 +429,6 @@ function invoke(data) {
     SecondaryListingCreated: function() { return 'Secondary listing created for token ' + (tokenId || 'unknown') + ' at ' + (amount || 'unknown price'); },
     ListingPurchased: function() { return 'Token ' + (tokenId || 'unknown') + ' purchased for ' + (amount || 'unknown price'); },
     MerkleClaimEvent: function() { return 'Claimed ' + (amount || 'tokens') + ' via merkle proof for ' + (owner || 'recipient'); },
-    AllowlistClaimEvent: function() { return 'Claimed ' + (amount || 'tokens') + ' via allowlist for ' + (owner || 'recipient'); },
     DelegateChanged: function() { return (pick(data, ['delegator']) || 'A holder') + ' delegated votes to ' + (pick(data, ['to_delegate']) || 'a delegate'); },
     DaoCreated: function() { return 'DAO created by ' + (creator || 'unknown'); },
     DaoLaunched: function() { return 'DAO launched for token ' + (tokenAddress || 'unknown'); },
@@ -482,6 +476,8 @@ function invoke(data) {
     var fromDelegate = pick(data, ['from_delegate']);
     if (!fromDelegate && delegator && toDelegate === delegator) visibility = 'system';
   }
+  // The profile written at DAO creation (seq 0) is part of setup, not news.
+  if (normalizedEventName === 'ProfileUpdated' && String(pick(data, ['seq'])) === '0') visibility = 'admin';
 
   // Helper to safely convert to number
   function toNumber(val) {

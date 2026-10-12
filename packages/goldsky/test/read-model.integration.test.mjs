@@ -109,20 +109,24 @@ function buildScenario() {
   // until launch), then renames its request.
   emit('manager', 'CMANAGER', 'dao_created', { topics: [addr('CTOK2'), addr('GDEPLOYER2'), addr('GLAUNCH2')], data: { created_ledger: u64(111), modules: modules(2), wasm_hashes: wasmHashes(2), slug: str('dao-one') }, ledger: 111 });
   emit('manager', 'CMANAGER', 'pending_slug_updated', { topics: [addr('CTOK2')], data: { slug: str('dao-two') }, ledger: 111, evt: 1 });
-  emit('token', d1.token, 'token_initialized', { topics: [addr('GOWNER')], data: { uri: str('ipfs://alpha'), name: str('Alpha'), symbol: str('ALP'), version: str('0.1.0') }, ledger: 112 });
+  emit('token', d1.token, 'token_initialized', { topics: [addr('GOWNER')], data: { name: str('Alpha'), symbol: str('ALP') }, ledger: 112 });
   emit('metadata', d1.metadata, 'metadata_initialized', {
     topics: [addr(d1.token)],
-    data: { renderer_base: str('https://r/'), version: str('0.1.0'), admin: addr('GOWNER'), project_uri: str('ipfs://p0'), description: str('Alpha DAO'), contract_image: str('img0') },
+    data: { renderer_base: str('https://r/'), admin: addr('GOWNER') },
     ledger: 113
+  });
+  // The profile is event-only (seq 0 at construction); Metadata stores its hash.
+  emit('metadata', d1.metadata, 'profile_updated', {
+    topics: [u32(0)], data: { hash: bytes('p0'), profile: str('{"v":1,"description":"Alpha DAO"}') }, ledger: 113, evt: 1
   });
   emit('auction', d1.auction, 'auction_initialized', {
     topics: [addr('GOWNER')],
-    data: { token_contract: addr(d1.token), treasury: addr(d1.treasury), duration: u64(86400), reserve_price: i128(10), min_bid_increment_percent: u32(5), time_buffer: u64(300), payment_token: addr('CXLM'), version: str('0.1.0') },
+    data: { token_contract: addr(d1.token), treasury: addr(d1.treasury), duration: u64(86400), reserve_price: i128(10), min_bid_increment_percent: u32(5), time_buffer: u64(300), payment_token: addr('CXLM') },
     ledger: 114
   });
   emit('manager', 'CMANAGER', 'dao_launched', {
     topics: [addr('CTOK1')],
-    data: { launched_ledger: u64(116), modules: modules(1), launch_auction: bool(false), launch_marketplace: bool(true), enable_minter: bool(true) }, ledger: 116
+    data: { launched_ledger: u64(116), modules: modules(1), launch_auction: bool(false), launch_marketplace: bool(true), minter: addr(MINTER) }, ledger: 116
   });
   // Every module emits its own `<module>_launched` event (topic treasury) and hands
   // its admin from the launch admin to the Treasury (admin_changed).
@@ -143,13 +147,15 @@ function buildScenario() {
   // Fixtures for the post-hardening events (assertions on the matching views are reconciled separately).
   emit('manager', 'CMANAGER', 'admin_proposal_cancelled', { topics: [addr('GADMIN2'), addr('GADMIN3')], ledger: 105, evt: 1 });
   emit('auction', d1.auction, 'upgraded', { topics: [bytes('a20'), bytes('b20')], data: { version: str('0.2.0') }, ledger: 117 });
-  emit('auction', d1.auction, 'version_synced', { data: { version: str('0.2.1') }, ledger: 118 });
-  emit('token', d1.token, 'version_synced', { data: { version: str('0.1.1') }, ledger: 118, evt: 1 });
+  // version() is the registry version of the running hash: register both.
+  emit('manager', 'CMANAGER', 'implementation_registered', { topics: [bytes('b20')], data: { name: str('Auction'), version: str('0.2.0'), published_ledger: u64(117) }, ledger: 117, evt: 1 });
+  emit('manager', 'CMANAGER', 'implementation_registered', { topics: [bytes('a01')], data: { name: str('Token'), version: str('0.1.0'), published_ledger: u64(100) }, ledger: 100, evt: 1 });
+  emit('manager', 'CMANAGER', 'implementation_registered', { topics: [bytes('a31')], data: { name: str('Governor'), version: str('0.1.0'), published_ledger: u64(100) }, ledger: 100, evt: 2 });
   emit('auction', d1.auction, 'migrated', { data: { from_storage_version: u32(1), to_storage_version: u32(2) }, ledger: 119 });
   emit('manager', 'CMANAGER', 'platform_minter_set', { topics: [addr(MINTER)], ledger: 106 });
   emit('auction', d1.auction, 'unpaused', { ledger: 130 });
   // After launch: a rename (token 0.2.0 MetadataUpdated) and a vote that closes the market.
-  emit('token', d1.token, 'metadata_updated', { data: { name: str('Alpha Club'), symbol: str('ALPHA'), uri: str('ipfs://alpha2') }, ledger: 150, tx: 7 });
+  emit('token', d1.token, 'metadata_updated', { data: { name: str('Alpha Club'), symbol: str('ALPHA') }, ledger: 150, tx: 7 });
   emit('marketplace', d1.marketplace, 'marketplace_paused', { topics: [addr(d1.treasury)], ledger: 151, tx: 7 });
   // Slug changes by vote (Manager 0.2.0): two in one transaction (dao-one -> dao-uno -> alpha-club),
   // then a pending DAO's request for the freed 'dao-one' stays a request (it is not reserved).
@@ -183,7 +189,7 @@ function buildScenario() {
   // --- governor / treasury -----------------------------------------------------
   emit('governor', d1.governor, 'governor_initialized', {
     topics: [addr('GOWNER')],
-    data: { token_contract: addr(d1.token), treasury_contract: addr(d1.treasury), voting_delay: u32(1), voting_period: u32(10), queue_delay: u32(1), proposal_threshold: u128(1), quorum_bps: u32(1000), version: str('0.1.0') },
+    data: { token_contract: addr(d1.token), treasury_contract: addr(d1.treasury), voting_delay: u32(1), voting_period: u32(10), queue_delay: u32(1), proposal_threshold: u128(1), quorum_bps: u32(1000) },
     ledger: 135
   });
   // OpenZeppelin's duplicate quorum event at construction, then one governed update.
@@ -271,8 +277,9 @@ function buildScenario() {
   // A batch seeds tokens 4 and 5 in one event; a later seed for 5 becomes current.
   emit('metadata', d1.metadata, 'seeds_generated', { topics: [u32(4)], data: { count: u32(2), num_properties: u32(1), selections: vec(vec(u32(1), u32(0)), vec(u32(1), u32(1))) }, ledger: 173, evt: 2 });
   emit('metadata', d1.metadata, 'seed_generated', { topics: [u32(5)], data: { num_properties: u32(1), selections: vec(u32(1), u32(0)) }, ledger: 176 });
-  emit('metadata', d1.metadata, 'description_updated', { data: { old_description: str('Alpha DAO'), new_description: str('Alpha DAO v2') }, ledger: 174 });
-  emit('metadata', d1.metadata, 'contract_image_updated', { data: { old_image: str('img0'), new_image: str('img1') }, ledger: 175 });
+  emit('metadata', d1.metadata, 'profile_updated', {
+    topics: [u32(1)], data: { hash: bytes('p1'), profile: str('{"v":1,"description":"Alpha DAO v2","image":"img1"}') }, ledger: 174
+  });
 
   // --- marketplace -------------------------------------------------------------
   // Primary listings are keyed by listing_id (u64 topic); the token is minted to the buyer on purchase.
@@ -304,11 +311,10 @@ function buildScenario() {
   // --- minter (shared contract; tenant = token_id topic) --------------------------
   const claim = (name, token, who, amount, ledger) => emit('minter', MINTER, name, { topics: [addr(token), addr(who)], data: { amount: u128(amount) }, ledger });
   claim('merkle_claim_event', 'CTOK1', 'GALICE', 3, 190);
-  claim('allowlist_claim_event', 'CTOK1', 'GBOB', 2, 191);
   claim('merkle_claim_event', 'CTOKFOREIGN', 'GMALLORY', 99, 192);
   emit('minter', MINTER, 'mint_batch_event', { topics: [addr('CTOK1')], data: { recipient_count: u32(4), total_amount: u128(8), first_token_id: u32(7) }, ledger: 193 });
-  emit('minter', MINTER, 'merkle_root_set_event', { topics: [addr('CTOK1')], ledger: 194 });
-  emit('minter', MINTER, 'allowlist_set_event', { topics: [addr('CTOK1')], data: { member_count: u32(4) }, ledger: 195 });
+  emit('minter', MINTER, 'merkle_root_set_event', { topics: [addr('CTOK1')], data: { root: bytes('r1'), round: u32(1), tree_uri: str('ipfs://tree1') }, ledger: 194 });
+  emit('minter', MINTER, 'merkle_root_set_event', { topics: [addr('CTOK1')], data: { root: bytes('r2'), round: u32(2), tree_uri: str('ipfs://tree2') }, ledger: 195 });
 }
 
 // Event ids must be unique (raw_events_pkey); fail loudly in the fixture, not in Postgres.
@@ -431,10 +437,14 @@ test('manager: registry, lifecycle and implementations', { skip }, () => {
   );
   assert.equal(a.token_name, 'Alpha Club', 'name follows the latest MetadataUpdated');
   assert.equal(a.token_symbol, 'ALPHA');
-  assert.equal(a.token_uri, 'ipfs://alpha2');
+  assert.ok(!('token_uri' in a), 'token_uri is built on chain, not indexed');
+  assert.equal(a.minter_contract, 'CMINTER', 'the shared Minter pinned at launch');
   assert.equal(a.admin_address, 'CTRE1', 'the current admin: the Treasury after the launch handoff');
   assert.equal(one(`SELECT admin_address FROM manager.daos WHERE dao_id = 'CTOK2'`).admin_address, 'GLAUNCH2', 'a pending DAO keeps its launch admin');
-  assert.equal(a.token_description, 'Alpha DAO v2', 'description follows metadata updates');
+  assert.equal(a.profile, '{"v":1,"description":"Alpha DAO v2","image":"img1"}', 'the profile follows the highest seq');
+  assert.equal(a.profile_hash, 'p1');
+  assert.equal(Number(a.profile_seq), 1);
+  assert.equal(one(`SELECT profile_seq FROM manager.daos WHERE dao_id = 'CTOK2'`).profile_seq, null, 'no profile event indexed yet');
   assert.equal(a.status, 'operational');
   assert.equal(a.launched_ledger, 116);
   // Launched with the auction disabled, then unpaused: enabled and not paused.
@@ -453,7 +463,10 @@ test('manager: registry, lifecycle and implementations', { skip }, () => {
 
   const impls = rows(`SELECT wasm_hash, name, published_ledger, revoked, revoked_ledger FROM manager.implementations ORDER BY wasm_hash`);
   assert.deepEqual(impls, [
+    { wasm_hash: 'a01', name: 'Token', published_ledger: 100, revoked: false, revoked_ledger: null },
+    { wasm_hash: 'a31', name: 'Governor', published_ledger: 100, revoked: false, revoked_ledger: null },
     { wasm_hash: 'aa', name: 'token', published_ledger: 5, revoked: false, revoked_ledger: null },
+    { wasm_hash: 'b20', name: 'Auction', published_ledger: 117, revoked: false, revoked_ledger: null },
     { wasm_hash: 'bb', name: 'auction', published_ledger: 6, revoked: true, revoked_ledger: 9 }
   ]);
   assert.deepEqual(rows(`SELECT name, wasm_hash, version FROM manager.latest_implementations`), [{ name: 'token', wasm_hash: 'aa', version: '0.1.0' }]);
@@ -569,9 +582,9 @@ test('metadata: properties reset, seeds and configuration overlay', { skip }, ()
   assert.equal(config.dao_id, 'CTOK1');
   assert.equal(config.token_contract, 'CTOK1');
   assert.equal(config.renderer_base, 'https://r/');
-  assert.equal(config.project_uri, 'ipfs://p0');
-  assert.equal(config.description, 'Alpha DAO v2');
-  assert.equal(config.contract_image, 'img1');
+  for (const gone of ['project_uri', 'description', 'contract_image', 'version']) assert.ok(!(gone in config), gone);
+  const profile = one(`SELECT dao_id, profile_seq, profile_hash FROM metadata.profiles`);
+  assert.deepEqual({ ...profile, profile_seq: Number(profile.profile_seq) }, { dao_id: 'CTOK1', profile_seq: 1, profile_hash: 'p1' });
   assert.equal(config.admin, 'CTRE1', 'the current metadata admin: the treasury after launch');
 });
 
@@ -627,8 +640,8 @@ test('launch lifecycle: per-module launches keyed by emitting contract, admin hi
     }))
   );
   assert.deepEqual(one(`SELECT minters FROM manager.module_launches WHERE dao_id = 'CTOK1' AND module_role = 'token'`).minters, ['CMINTER']);
-  const lifecycle = one(`SELECT is_live, launch_auction, launch_marketplace, minter_enabled, auction_started, marketplace_opened FROM manager.dao_lifecycle WHERE dao_id = 'CTOK1'`);
-  assert.deepEqual(lifecycle, { is_live: true, launch_auction: false, launch_marketplace: true, minter_enabled: true, auction_started: false, marketplace_opened: true });
+  const lifecycle = one(`SELECT is_live, launch_auction, launch_marketplace, minter, auction_started, marketplace_opened FROM manager.dao_lifecycle WHERE dao_id = 'CTOK1'`);
+  assert.deepEqual(lifecycle, { is_live: true, launch_auction: false, launch_marketplace: true, minter: 'CMINTER', auction_started: false, marketplace_opened: true });
   assert.deepEqual(
     rows(`SELECT event_type, previous_admin, new_admin, platform_minter FROM manager.admin_history ORDER BY event_ledger, event_index`),
     [
@@ -667,8 +680,6 @@ test('module upgrades and wasm hashes: keyed by emitting contract, filtered by d
     rows(`SELECT dao_id, module_role, contract_id, event_type, from_hash, to_hash, version FROM manager.module_upgrades WHERE deployment_id = '${DEPLOYMENT}' ORDER BY event_seq`),
     [
       { dao_id: 'CTOK1', module_role: 'auction', contract_id: 'CAUC1', event_type: 'upgraded', from_hash: 'a20', to_hash: 'b20', version: '0.2.0' },
-      { dao_id: 'CTOK1', module_role: 'auction', contract_id: 'CAUC1', event_type: 'version_synced', from_hash: null, to_hash: null, version: '0.2.1' },
-      { dao_id: 'CTOK1', module_role: 'token', contract_id: 'CTOK1', event_type: 'version_synced', from_hash: null, to_hash: null, version: '0.1.1' },
       { dao_id: 'CTOK1', module_role: 'auction', contract_id: 'CAUC1', event_type: 'migrated', from_hash: null, to_hash: null, version: null }
     ]
   );
@@ -678,13 +689,14 @@ test('module upgrades and wasm hashes: keyed by emitting contract, filtered by d
   );
   assert.deepEqual(
     one(`SELECT current_hash, current_version, upgrade_count, last_upgraded_from_hash, last_upgraded_ledger FROM manager.module_versions WHERE dao_id = 'CTOK1' AND module_role = 'auction'`),
-    { current_hash: 'b20', current_version: '0.2.1', upgrade_count: 1, last_upgraded_from_hash: 'a20', last_upgraded_ledger: 117 }
+    { current_hash: 'b20', current_version: '0.2.0', upgrade_count: 1, last_upgraded_from_hash: 'a20', last_upgraded_ledger: 117 }
   );
   assert.deepEqual(
     one(`SELECT current_hash, current_version, upgrade_count, last_upgraded_from_hash FROM manager.module_versions WHERE dao_id = 'CTOK1' AND module_role = 'token'`),
-    { current_hash: 'a01', current_version: '0.1.1', upgrade_count: 0, last_upgraded_from_hash: null }
+    { current_hash: 'a01', current_version: '0.1.0', upgrade_count: 0, last_upgraded_from_hash: null }
   );
-  assert.equal(one(`SELECT current_version FROM manager.module_versions WHERE dao_id = 'CTOK1' AND module_role = 'governor'`).current_version, null);
+  assert.equal(one(`SELECT current_version FROM manager.module_versions WHERE dao_id = 'CTOK1' AND module_role = 'governor'`).current_version, '0.1.0');
+  assert.equal(one(`SELECT current_version FROM manager.module_versions WHERE dao_id = 'CTOK1' AND module_role = 'treasury'`).current_version, null, 'an unregistered hash has no version (on chain: ImplementationNotFound)');
   assert.equal(one(`SELECT count(*)::int AS n FROM manager.module_versions WHERE dao_id = 'CTOK2'`).n, 6);
   const upgradedFeed = one(`SELECT kind, visibility, summary FROM app.activity_feed WHERE event_name = 'upgraded'`);
   assert.deepEqual(upgradedFeed, { kind: 'auction.upgraded', visibility: 'public', summary: 'Contract upgraded to version 0.2.0 (a20 -> b20)' });
@@ -702,11 +714,11 @@ test('module upgrades and wasm hashes: keyed by emitting contract, filtered by d
 
 test('minter: claims resolve to the DAO by token_id and foreign tokens are dropped', { skip }, () => {
   assert.deepEqual(rows(`SELECT dao_id, token_id, recipient, amount FROM minter.merkle_claim_events`).map((r) => [r.dao_id, r.token_id, r.recipient, Number(r.amount)]), [['CTOK1', 'CTOK1', 'GALICE', 3]]);
-  assert.deepEqual(rows(`SELECT dao_id, recipient, amount FROM minter.allowlist_claim_events`).map((r) => [r.dao_id, r.recipient, Number(r.amount)]), [['CTOK1', 'GBOB', 2]]);
+  assert.equal(one(`SELECT to_regclass('minter.allowlist_claim_events') AS v`).v, null, 'merkle-only');
   assert.deepEqual(one(`SELECT dao_id, recipient_count, total_amount, first_token_id FROM minter.batch_mint_events`), { dao_id: 'CTOK1', recipient_count: 4, total_amount: 8, first_token_id: 7 });
-  assert.deepEqual(rows(`SELECT allocation_type, member_count FROM minter.allocation_updates ORDER BY ledger_sequence`), [
-    { allocation_type: 'merkle', member_count: null },
-    { allocation_type: 'allowlist', member_count: 4 }
+  assert.deepEqual(rows(`SELECT allocation_type, merkle_root, round, tree_uri FROM minter.allocation_updates ORDER BY ledger_sequence`), [
+    { allocation_type: 'merkle', merkle_root: 'r1', round: 1, tree_uri: 'ipfs://tree1' },
+    { allocation_type: 'merkle', merkle_root: 'r2', round: 2, tree_uri: 'ipfs://tree2' }
   ]);
 });
 
@@ -719,11 +731,11 @@ test('activity feed: tenant resolution and kinds', { skip }, () => {
   );
   assert.ok(feed(`contract_role = 'governor'`).every((r) => r.dao_id === 'CTOK1'));
   assert.ok(feed(`contract_role = 'minter'`).every((r) => r.dao_id === 'CTOK1'));
-  assert.equal(feed(`contract_role = 'minter'`).length, 5, 'the foreign-token claim is not visible to any DAO');
-  assert.equal(one(`SELECT count(*)::int AS n FROM app.activity_feed_events WHERE contract_role = 'minter'`).n, 6);
+  assert.equal(feed(`contract_role = 'minter'`).length, 4, 'the foreign-token claim is not visible to any DAO');
+  assert.equal(one(`SELECT count(*)::int AS n FROM app.activity_feed_events WHERE contract_role = 'minter'`).n, 5);
 
   const kinds = rows(`SELECT kind, count(*)::int AS n FROM app.activity_feed WHERE contract_role = 'minter' GROUP BY kind ORDER BY kind`);
-  assert.deepEqual(kinds.map((k) => k.kind), ['minter.allowlist_claim', 'minter.allowlist_set', 'minter.batch_mint', 'minter.merkle_claim', 'minter.merkle_root_set']);
+  assert.deepEqual(kinds.map((k) => k.kind), ['minter.batch_mint', 'minter.merkle_claim', 'minter.merkle_root_set']);
   const merkle = one(`SELECT actor, amount, token_id, summary FROM app.activity_feed WHERE kind = 'minter.merkle_claim'`);
   assert.deepEqual([merkle.actor, merkle.amount, merkle.token_id], ['GALICE', '3', 'CTOK1']);
   assert.equal(one(`SELECT amount FROM app.activity_feed WHERE kind = 'minter.batch_mint'`).amount, '8');

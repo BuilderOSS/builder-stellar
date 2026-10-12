@@ -47,7 +47,10 @@ test('topic orders of new and changed events', () => {
     assert.deepEqual(t[name], ['treasury'], name);
   }
   assert.deepEqual(t.Upgraded, ['from_hash', 'to_hash']);
-  assert.deepEqual(t.VersionSynced, []);
+  assert.ok(!('VersionSynced' in t));
+  assert.deepEqual(t.ProfileUpdated, ['seq']);
+  assert.deepEqual(t.MerkleRootSetEvent, ['token_id']);
+  assert.ok(!('AllowlistSetEvent' in t));
   assert.deepEqual(t.Migrated, []);
   assert.deepEqual(t.ProposalScheduled, ['proposal_id']);
   assert.deepEqual(t.MintBatchWithMinter, ['minter']);
@@ -76,10 +79,13 @@ test('data fields of new and changed events match events.rs', () => {
   assert.deepEqual(e['manager:ImplementationRegistered'].data, ['name', 'version', 'published_ledger']);
   assert.deepEqual(e['marketplace:SecondaryFeeUpdated'].data, ['fee_bps']);
   assert.deepEqual(e['treasury:Execute'].data, ['function', 'index']);
-  assert.deepEqual(e['manager:DaoLaunched'].data, ['launched_ledger', 'modules', 'launch_auction', 'launch_marketplace', 'enable_minter']);
+  assert.deepEqual(e['manager:DaoLaunched'].data, ['launched_ledger', 'modules', 'launch_auction', 'launch_marketplace', 'minter']);
+  assert.deepEqual(e['metadata:ProfileUpdated'].data, ['hash', 'profile']);
+  assert.deepEqual(e['minter:MerkleRootSetEvent'].data, ['root', 'round', 'tree_uri']);
+  assert.deepEqual(e['metadata:MetadataInitialized'].data, ['renderer_base', 'admin']);
   for (const role of ['token', 'governor', 'treasury', 'auction', 'marketplace', 'metadata']) {
     assert.deepEqual(e[`${role}:Upgraded`].data, ['version'], `${role}:Upgraded`);
-    assert.deepEqual(e[`${role}:VersionSynced`].data, ['version'], `${role}:VersionSynced`);
+    assert.ok(!e[`${role}:VersionSynced`], `${role}:VersionSynced`);
     assert.deepEqual(e[`${role}:Migrated`].data, ['from_storage_version', 'to_storage_version'], `${role}:Migrated`);
   }
   assert.deepEqual(e['manager:DaoCreated'].data, ['created_ledger', 'modules', 'wasm_hashes', 'slug']);
