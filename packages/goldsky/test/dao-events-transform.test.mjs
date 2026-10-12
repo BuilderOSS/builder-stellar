@@ -850,7 +850,7 @@ function run(role, contract, name, topics, data = {}, extra = {}) {
 test('each module launch event decodes with topic treasury; data differs per module', () => {
   const cases = [
     ['token', 'TOKEN', 'TokenLaunched', { minters: { vec: [A('MINTER_A'), A('MINTER_B')] } }, { minters: ['MINTER_A', 'MINTER_B'] }, 'token.launched', 'Token launched'],
-    ['governor', 'GOV', 'GovernorLaunched', {}, {}, 'governor.launched', 'Governor launched'],
+    ['governor', 'GOV', 'GovernorLaunched', {}, {}, 'governance.launched', 'Governor launched'],
     ['treasury', 'TRE', 'TreasuryLaunched', {}, {}, 'treasury.launched', 'Treasury launched'],
     ['metadata', 'META', 'MetadataLaunched', {}, {}, 'metadata.launched', 'Metadata launched'],
     ['auction', 'AUC', 'AuctionLaunched', { started: { bool: true } }, { started: true }, 'auction.launched', 'Auction launched and started'],
@@ -904,15 +904,16 @@ test('manager admin and platform minter events', () => {
   assert.equal(minter.activity.kind, 'manager.platform_minter_set');
 });
 
-test('Upgraded decodes for every module role; identifiers in topics, version in args', () => {
-  const roles = [['token', 'TOKEN'], ['governor', 'GOV'], ['treasury', 'TRE'], ['auction', 'AUC'], ['marketplace', 'MKT'], ['metadata', 'META']];
-  for (const [role, contract] of roles) {
+test('Upgraded decodes for every module role and the shared Minter; identifiers in topics, version in args', () => {
+  // Kind prefix: the governor's kinds are governance.*; the Minter is a platform contract with its own prefix.
+  const roles = [['token', 'TOKEN'], ['governor', 'GOV', 'governance'], ['treasury', 'TRE'], ['auction', 'AUC'], ['marketplace', 'MKT'], ['metadata', 'META'], ['minter', 'CMINTER']];
+  for (const [role, contract, prefix = role] of roles) {
     const up = run(role, contract, 'Upgraded', [{ bytes: 'aaaaaaaa11' }, { bytes: 'bbbbbbbb22' }], { version: { string: '1.1.0' } });
     assert.deepEqual(topicsOf(up.decoded), { from_hash: 'aaaaaaaa11', to_hash: 'bbbbbbbb22' });
     assert.deepEqual(argsOf(up.decoded), { version: '1.1.0' });
     assert.equal(up.decoded.contract_id, contract);
     assert.equal(up.decoded.contract_role, role);
-    assert.equal(up.activity.kind, `${role}.upgraded`);
+    assert.equal(up.activity.kind, `${prefix}.upgraded`);
     assert.equal(up.activity.visibility, 'public');
     assert.equal(up.activity.contract_id, contract);
     assert.equal(up.activity.summary, 'Contract upgraded to version 1.1.0 (aaaaaaaa -> bbbbbbbb)');

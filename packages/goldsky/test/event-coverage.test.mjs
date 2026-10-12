@@ -19,7 +19,7 @@ const __dirname = dirname(__filename);
 // Core DAO events that must be handled
 // Extracted from our contract Rust source and generated bindings
 const REQUIRED_EVENTS = {
-  minter: ['MerkleClaimEvent', 'MintBatchEvent', 'MerkleRootSetEvent', 'UpgradeDelayChanged'],
+  minter: ['MerkleClaimEvent', 'MintBatchEvent', 'MerkleRootSetEvent', 'UpgradeDelayChanged', 'Upgraded', 'Migrated'],
   token: [
     'TokenInitialized',
     'MetadataUpdated',
@@ -302,9 +302,10 @@ test('every module emits its own <Module>Launched event with topic treasury', ()
 
 test('Upgraded, Migrated and AdminChanged come from contracts/common and are listed once per emitting module', () => {
   const roles = ['auction', 'governor', 'marketplace', 'metadata', 'token', 'treasury'];
+  // The shared Minter upgrades and migrates through contracts/common as well.
   for (const name of ['Upgraded', 'Migrated']) {
     const found = contractEventList().filter((e) => e.name === name);
-    assert.deepStrictEqual(found.map((e) => e.contract).sort(), roles, name);
+    assert.deepStrictEqual(found.map((e) => e.contract).sort(), [...roles, 'minter'].sort(), name);
     for (const e of found) assert.strictEqual(e.source, 'common');
   }
   const upgraded = contractEventList().find((e) => e.name === 'Upgraded');

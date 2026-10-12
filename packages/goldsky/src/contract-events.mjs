@@ -36,8 +36,14 @@ export const LIBRARY_EVENTS = {
 // upgrades, migrations). The Manager emits its own AdminChanged with the same shape.
 export const COMMON_EVENT_ROLES = ['token', 'governor', 'treasury', 'auction', 'marketplace', 'metadata'];
 
-// Common events with their own emitter set: the upgrade notice exists only on the platform contracts.
-export const COMMON_EVENT_EMITTERS = { UpgradeDelayChanged: ['manager', 'minter'] };
+// Common events with their own emitter set: the shared Minter upgrades and migrates through
+// contracts/common too (contracts/minter/src/contract.rs), and the upgrade notice exists only
+// on the platform contracts. AdminChanged stays with the DAO modules (the Minter has no admin handoff).
+export const COMMON_EVENT_EMITTERS = {
+  Upgraded: [...COMMON_EVENT_ROLES, 'minter'],
+  Migrated: [...COMMON_EVENT_ROLES, 'minter'],
+  UpgradeDelayChanged: ['manager', 'minter']
+};
 
 /**
  * Parse every #[contractevent] struct into a flat list of { contract, name, topics, data }.

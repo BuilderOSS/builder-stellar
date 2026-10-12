@@ -155,7 +155,7 @@ function invoke(data) {
     QuorumChanged: 'governance.quorum_changed',
     TreasuryInitialized: 'treasury.initialized',
     TokenLaunched: 'token.launched',
-    GovernorLaunched: 'governor.launched',
+    GovernorLaunched: 'governance.launched',
     TreasuryLaunched: 'treasury.launched',
     AuctionLaunched: 'auction.launched',
     MarketplaceLaunched: 'marketplace.launched',
@@ -321,8 +321,11 @@ function invoke(data) {
   // every module; `AdminChanged` is emitted by the Manager (admin handover) and by every module
   // at launch (launch admin -> Treasury). Kind and title depend on the emitting contract_role.
   var emitterRole = ensureString(data.contract_role, '');
-  var moduleLabels = { token: 'Token', governor: 'Governor', treasury: 'Treasury', auction: 'Auction', marketplace: 'Marketplace', metadata: 'Metadata' };
-  var moduleRole = moduleLabels[emitterRole] ? emitterRole : 'module';
+  // The shared Minter emits Upgraded/Migrated too (contracts/minter/src/contract.rs upgrade/migrate).
+  var moduleLabels = { token: 'Token', governor: 'Governor', treasury: 'Treasury', auction: 'Auction', marketplace: 'Marketplace', metadata: 'Metadata', minter: 'Minter' };
+  // Kind prefixes: the governor's kinds are `governance.*` everywhere (proposal_created, vote_cast, ...).
+  var kindPrefixes = { governor: 'governance' };
+  var moduleRole = moduleLabels[emitterRole] ? (kindPrefixes[emitterRole] || emitterRole) : 'module';
   var moduleLabel = moduleLabels[emitterRole] || 'Module';
   // OpenZeppelin Paused/Unpaused (auction) are keyed by the emitting module too.
   var commonEvents = { Upgraded: ['upgraded', 'upgraded'], Migrated: ['migrated', 'storage migrated'], Paused: ['paused', 'paused'], Unpaused: ['unpaused', 'unpaused'] };
