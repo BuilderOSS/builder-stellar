@@ -45,11 +45,44 @@ describe('critical chain state versus optional reads', () => {
     calls.entries.mockResolvedValue({ entries: [] });
     calls.proposer.mockRejectedValue(new Error('Inherited proposer incompatible'));
   });
+  const storedCore = (quorum: bigint) => ({
+    entries: [
+      {
+        val: {
+          type: 'contractData',
+          contractData: {
+            val: packedProposal({
+              proposer: Keypair.random().publicKey(),
+              voteSnapshot: 20,
+              voteStart: 1000,
+              voteEnd: 2000,
+              eta: 3000,
+              state: 5,
+              seq: 1,
+              quorum
+            })
+          }
+        }
+      }
+    ]
+  });
+  it('shows the quorum the contract stored, never a recomputed one', async () => {
+    // governor.quorum(snapshot) would say 40; the proposal was created against 42
+    // (tokens minted in the creation ledger count, D33). The page must say 42.
+    calls.entries.mockResolvedValue(storedCore(42n));
+    const result = await readProposalChainState(config, id);
+    expect(result.quorumVotes).toBe('42');
+    expect(result.core).toEqual({ voteStart: 1000, voteEnd: 2000, snapshot: 20, eta: 3000, quorum: '42' });
+    expect(calls.quorum).not.toHaveBeenCalled();
+  });
+  beforeEach(() => {
+    calls.proposer.mockRejectedValue(new Error('Inherited proposer incompatible'));
+  });
   it('preserves authoritative state if optional reads fail and never calls inherited proposer', async () => {
     calls.deadline.mockRejectedValue(new Error('deadline unavailable'));
     calls.entries.mockRejectedValue(new Error('storage unavailable'));
     const result = await readProposalChainState(config, id);
-    expect(result).toMatchObject({ state: 5, stateSource: 'chain', core: null, deadline: null, quorumVotes: '40' });
+    expect(result).toMatchObject({ state: 5, stateSource: 'chain', core: null, deadline: null, quorumVotes: null });
     expect(calls.proposer).not.toHaveBeenCalled();
   });
   it('marks indexed fallback rather than inventing a chain state', async () => {
@@ -72,7 +105,7 @@ describe('critical chain state versus optional reads', () => {
       seq: 7,
       quorum: 3n
     });
-    expect(decodeProposalCore(value)).toEqual({ voteStart: 1000, voteEnd: 2000, snapshot: 50, eta: 3000 });
+    expect(decodeProposalCore(value)).toEqual({ voteStart: 1000, voteEnd: 2000, snapshot: 50, eta: 3000, quorum: '3' });
     const key = proposalCoreKey(config.governorContractId, id);
     if (key.type !== 'contractData') throw new Error('Wrong key');
     const [namespace, decoded] = scValToNative(key.contractData.key);

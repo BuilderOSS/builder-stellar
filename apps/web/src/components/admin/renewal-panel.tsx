@@ -18,6 +18,8 @@ import {
 import { formatStroops } from '@/lib/auction-values';
 import {
   CLASS_LABELS,
+  codeHealthStatus,
+  type CodeStatus,
   estimateDate,
   LEDGERS_PER_DAY,
   type RenewalClass,
@@ -80,8 +82,19 @@ function xlm(stroops: bigint) {
   return `${formatStroops(stroops)} XLM`;
 }
 
+const CODE_STATUS_TEXT: Record<
+  Exclude<CodeStatus, 'unknown'>,
+  { label: string; tone: 'success' | 'warning' | 'danger' }
+> = {
+  healthy: { label: 'Platform · healthy', tone: 'success' },
+  soon: { label: 'Platform · renew soon', tone: 'warning' },
+  critical: { label: 'Platform · renew now', tone: 'danger' },
+  expired: { label: 'Platform · expired', tone: 'danger' }
+};
+
 function Classes({ report }: { report: RenewalReport }) {
   const { latestLedger } = report.inventory;
+  const codeStatus = codeHealthStatus(report.code.liveUntil, latestLedger);
   return (
     <div className={rows}>
       {summarizeInventory(report.inventory).map((summary) => {
@@ -107,9 +120,17 @@ function Classes({ report }: { report: RenewalReport }) {
         meta={
           report.code.liveUntil === null
             ? 'Renewed by Builder for every community. Its expiry could not be read.'
-            : `Renewed by Builder for every community · expires about ${when(report.code.liveUntil, latestLedger)}`
+            : `Renewed by Builder for every community · expires about ${when(report.code.liveUntil, latestLedger)}${
+                codeStatus === 'healthy' ? '' : ' · if it lapses, your next transaction pays a few days of its rent'
+              }`
         }
-        trailing={<Chip>Platform</Chip>}
+        trailing={
+          codeStatus === 'unknown' ? (
+            <Chip>Platform</Chip>
+          ) : (
+            <Chip tone={CODE_STATUS_TEXT[codeStatus].tone}>{CODE_STATUS_TEXT[codeStatus].label}</Chip>
+          )
+        }
       />
     </div>
   );

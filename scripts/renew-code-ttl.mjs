@@ -105,6 +105,12 @@ for (const file of readdirSync(deploysDir)) {
     // not a DAO artifact
   }
 }
+if (!process.env.DATABASE_URL) {
+  console.warn(
+    'Indexer not consulted (DATABASE_URL unset): only DAOs with a deploy artifact or passed with --token are checked. ' +
+      'A DAO created from the web app that skipped an upgrade may run a hash this run does not see.'
+  );
+}
 if (process.env.DATABASE_URL) {
   const r = runQuiet('psql', [
     process.env.DATABASE_URL,

@@ -20,9 +20,21 @@ export function proposalCoreKey(governor: string, proposalId: string) {
   );
 }
 
+/**
+ * The stored proposal core. `quorum` is the value the contract judges the
+ * proposal against (fixed at creation, D33); never recompute it from
+ * `governor.quorum(snapshot)`, which reads history the sweep no longer keeps
+ * and can differ from the stored value (tokens minted in the creation ledger).
+ */
 export function decodeProposalCore(value: xdr.ScVal) {
   const stored = decodeStoredProposal(value);
-  return { voteStart: stored.voteStart, voteEnd: stored.voteEnd, snapshot: stored.voteSnapshot, eta: stored.eta };
+  return {
+    voteStart: stored.voteStart,
+    voteEnd: stored.voteEnd,
+    snapshot: stored.voteSnapshot,
+    eta: stored.eta,
+    quorum: stored.quorum.toString()
+  };
 }
 
 /** Optional storage/timing reads must never invalidate the authoritative state. */
@@ -45,20 +57,14 @@ export async function readProposalChainState(config: DaoNetworkConfig, proposalI
     })
   ]);
   const snapshotValue = snapshot.status === 'fulfilled' ? snapshot.value.result : null;
-  let quorumVotes: string | null = null;
-  if (snapshotValue !== null) {
-    try {
-      quorumVotes = (await client.quorum({ ledger: snapshotValue })).result.toString();
-    } catch {
-      /* optional */
-    }
-  }
+  const coreValue = core.status === 'fulfilled' ? core.value : null;
   return {
     state: state.status === 'fulfilled' ? state.value.result : null,
     stateSource: state.status === 'fulfilled' ? ('chain' as const) : ('indexed' as const),
     deadline: deadline.status === 'fulfilled' ? deadline.value.result : null,
     snapshot: snapshotValue,
-    core: core.status === 'fulfilled' ? core.value : null,
-    quorumVotes
+    core: coreValue,
+    /** The quorum the contract enforces, from the stored core; null when the core could not be read. */
+    quorumVotes: coreValue?.quorum ?? null
   };
 }

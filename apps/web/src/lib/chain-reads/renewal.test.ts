@@ -7,6 +7,7 @@ import { namespacedKey } from '@/lib/storage-key';
 
 import {
   buildDaoInventory,
+  codeHealthStatus,
   extendToLedgers,
   instanceKey,
   instanceWasmHash,
@@ -326,5 +327,16 @@ describe('instanceWasmHash', () => {
       )
     ).toBeNull();
     expect(instanceWasmHash(xdr.ScVal.scvU32(1))).toBeNull();
+  });
+});
+
+describe('codeHealthStatus', () => {
+  it('uses platform lead times, not the member thresholds', () => {
+    const day = 17_280;
+    expect(codeHealthStatus(null, 1_000)).toBe('unknown');
+    expect(codeHealthStatus(1_000 + 61 * day, 1_000)).toBe('healthy');
+    expect(codeHealthStatus(1_000 + 60 * day, 1_000)).toBe('soon');
+    expect(codeHealthStatus(1_000 + 14 * day, 1_000)).toBe('critical');
+    expect(codeHealthStatus(999, 1_000)).toBe('expired');
   });
 });

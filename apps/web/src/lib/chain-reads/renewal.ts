@@ -467,3 +467,20 @@ export function yearlyRentEstimate(
   const year = BigInt(bytes) * BigInt(365 * LEDGERS_PER_DAY);
   return (extendFee * year) / BigInt(byteLedgers);
 }
+
+/**
+ * Status of shared contract code for the platform's eye. Contracts bump code
+ * only 2 → 4 days, so the member-facing thresholds (45 and 14 days) are too
+ * late for the platform to act: warn at 60 days and call it critical at 14.
+ */
+export type CodeStatus = 'healthy' | 'soon' | 'critical' | 'expired' | 'unknown';
+export const CODE_WARN_DAYS = 60;
+export const CODE_CRITICAL_DAYS = 14;
+export function codeHealthStatus(liveUntil: number | null, latestLedger: number): CodeStatus {
+  if (liveUntil === null) return 'unknown';
+  const remaining = liveUntil - latestLedger;
+  if (remaining < 0) return 'expired';
+  if (remaining <= CODE_CRITICAL_DAYS * LEDGERS_PER_DAY) return 'critical';
+  if (remaining <= CODE_WARN_DAYS * LEDGERS_PER_DAY) return 'soon';
+  return 'healthy';
+}

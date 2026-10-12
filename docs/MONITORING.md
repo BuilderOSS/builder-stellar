@@ -53,6 +53,20 @@ The timestamp helper accepts epoch milliseconds, epoch seconds, ISO timestamps, 
 
 ## Maintenance and investigation
 
+**Shared contract code is the platform's to renew, and nothing renews it automatically.** Check it at least weekly:
+
+```bash
+node scripts/renew-code-ttl.mjs deploys/builder-testnet-manager.json --dry-run   # quotes; sends nothing
+```
+
+Renew (drop `--dry-run`) when any hash is under 60 days; under 14 is urgent. Contracts bump code only 2 → 4 days
+on their own, so after a lapse members pay a few days of code rent per transaction and idle code archives. The
+Renewal tab's "Shared contract code" row shows the same status to every DAO. A cron line that fails loudly:
+
+```cron
+0 9 * * 1  cd /path/to/repo && node scripts/renew-code-ttl.mjs deploys/builder-testnet-manager.json --dry-run || mail -s "code TTL check failed" ops@example.com
+```
+
 Use [storage and TTL](TTL_ECONOMICS.md) for renewal. The platform renews shared code, the Manager registry and the shared Minter with `scripts/renew-code-ttl.mjs`; each DAO renews everything it owns (slug included) with one sweep from Manage → Storage renewal or `scripts/renew-dao.mjs`, which also restores archived keys. Watch the Renewal tab's expiry dates or run `renew-dao.mjs --dry-run` per DAO; per-holder entries (owners, balances, refunds, claim markers) renew on use. No renewal scheduler is installed.
 
 For missing indexed data, first compare artifact/network/start ledger and scoped contract IDs; then inspect pipeline processing/transform errors with the configured Goldsky CLI. The wrapper and CLI prerequisite caveat are in [the package README](../packages/goldsky/README.md). Do not print secrets to diagnose configuration.

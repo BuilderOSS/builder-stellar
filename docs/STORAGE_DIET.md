@@ -190,12 +190,12 @@ mint counter (no burn extension).
   of XDR (a 12-byte vector header and a 20-byte symbol); D37's 7-character name makes that 28. Rent is charged per
   byte, so:
 
-  | Entry | Namespaced keys | Bytes after | Overhead |
+  | Entry | Namespaced keys | Overhead with `buildeross` (measured) | With `builder` (D37) |
   |---|---|---|---|
-  | Six DAO instances together | 48 | 6,320 | +1,536 (32 %) |
-  | Manager instance | 10 | 1,160 | +320 (38 %) |
-  | A small persistent entry (slug, minter, Minter marker) | 1 | 164–360 | +32 (10–24 %) |
-  | An artwork item page (32 items) | 1 | several KB | +32 (under 1 %) |
+  | Six DAO instances together | 48 | +1,536 (32 %) | +1,344 |
+  | Manager instance | 10 | +320 (38 %) | +280 |
+  | A small persistent entry (slug, minter, Minter marker) | 1 | +32 (10–24 %) | +28 |
+  | An artwork item page (32 items) | 1 | +32 (under 1 %) | +28 |
 
   OZ per-holder entries (owners, balances, checkpoints) are unchanged. The vector header is the unavoidable part;
   a symbol of 9 characters or fewer also stays inline in a `Val` (no host object per key build), which is why the
@@ -422,8 +422,10 @@ platform's: `scripts/renew-code-ttl.mjs`
   new hash to 170 days immediately (`EXTEND_CODE_TTL_DAYS` defaults to 170, no longer opt-in), because new code is
   born at the network minimum (~7 days).
 
-The health report classifies code against the contract's code threshold and shows the quoted cost of the next
-caller-paid bump; it no longer calls 45–60 days "healthy" for code.
+The Renewal tab's shared-code row carries a platform status with operator lead time (renew soon under 60 days,
+renew now under 14, expired), separate from the member thresholds of the DAO's own classes, and says that a
+lapse costs a member's next transaction a few days of code rent. The platform's own check is
+`renew-code-ttl.mjs --dry-run` (MONITORING.md).
 
 ## 8. Indexer and app
 
