@@ -8,7 +8,7 @@ Governor creates proposals, records checkpoint-weighted votes, evaluates quorum/
 
 Voting delay, voting period, and queue delay are each 300–2,592,000 seconds. Quorum is 1–10,000 bps of the **voting supply** at the snapshot (the token excludes tokens held by the Treasury, Auction and Marketplace), computed with ceiling division over For + Abstain. The proposal threshold is a positive vote count, checked against the voting supply when set. Proposals permit 1–20 actions. Unqueued successful proposals expire 14 days after vote end; queued proposals expire 14 days after ETA.
 
-`propose` emits OpenZeppelin `ProposalCreated` and `ProposalScheduled { proposal_id, vote_start, vote_end, snapshot_ledger, quorum_votes }`; the quorum is final at proposal time.
+`propose` emits OpenZeppelin `ProposalCreated` and `ProposalScheduled { proposal_id, vote_start, vote_end, snapshot_ledger, quorum_votes }`; the quorum is final at proposal time: `ceil(voting_supply * quorum_bps / 10_000)` from the current supply and rate, stored on the proposal (`proposal(id).quorum`). `proposal_state`, `queue` and `execute` use the stored value and never read historical checkpoints, so only the latest supply and quorum checkpoints need to stay live (D33). Tokens minted in the proposing ledger count toward that supply but cannot vote (the snapshot is the previous ledger). `quorum(ledger)` remains as a view for any past ledger.
 
 ## Main interface
 

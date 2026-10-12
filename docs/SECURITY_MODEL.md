@@ -56,7 +56,7 @@ Tokens held by the DAO's Treasury, Auction and Marketplace carry no votes. The t
 - System holders are never auto-delegated and can never vote (`ZeroVotingWeight`, 7512). A system holder calling `delegate` moves no votes, because it holds no voting units.
 - A holder whose token is escrowed in the Marketplace loses that vote until the token returns (cancel/expire) or is bought (the buyer's delegate gains it). The holder's delegation itself is unchanged.
 - Delegating *to* the Treasury is allowed; those units belong to a voting-capable holder and stay in the voting supply. The Treasury can only cast them through a passed proposal.
-- Votes and supply are read at the ledger before `propose`, so later transfers or listings never change a proposal's weights or quorum.
+- Votes are read at the ledger before `propose`, and the quorum is fixed when the proposal is created from the voting supply and rate at that moment (stored on the proposal, D33), so later transfers, listings, mints or rate changes never change a proposal's weights or quorum. Tokens minted earlier in the proposing ledger count toward the quorum supply but cannot vote, so the requirement can only be higher, never lower.
 
 These behaviors are covered by `contracts/token` (`delegation_security`) and the e2e test `system_held_tokens_and_votes_through_a_real_proposal`.
 
@@ -206,6 +206,11 @@ Display text is not authenticated by storage: the DAO profile is shown only when
 indexed text hashes to Metadata's `profile_hash()`; otherwise the app says the profile
 is unavailable. Every app signature passes a fee guard that refuses a transaction able
 to charge more than 50 XLM.
+
+A member's ownership, balance and vote entries renew 30 days per touch. When one has
+archived, the app restores it before the member's transaction: the restore is a
+separate `RestoreFootprint` the member signs and pays for, built from the simulation
+for their own account, and nothing else is sent until it confirms.
 
 Creation/launch recovery saves finite signed envelopes separately from RPC
 acceptance. Rebroadcast preserves exact bytes/hash; reviewed configuration and

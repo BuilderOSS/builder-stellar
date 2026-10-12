@@ -2,10 +2,12 @@
 
 Every ledger entry a Builder contract owns, how long it lives, who renews it and what that costs. The design
 behind it is [STORAGE_DIET.md](STORAGE_DIET.md); this page is the operating reference and must change with any
-storage layout change (the e2e test `protocol_runs_on_chain_state_only` fails when the inventory drifts).
+storage layout change (the e2e tests `protocol_runs_on_chain_state_only` and
+`a_dao_kept_alive_by_the_sweep_alone_works_after_a_year` fail when the inventory drifts).
 
 Numbers are **testnet, measured 2026-10-12**. Rent rates move with the size of the network's live state, so
-re-read them before quoting mainnet costs (`stellar network settings`, or the Renewal tab's quote).
+re-read them before quoting mainnet costs (`stellar network settings`, the Renewal tab's quote, or
+`renew-code-ttl.mjs --dry-run`).
 
 ## Live network limits
 
@@ -18,24 +20,31 @@ re-read them before quoting mainnet costs (`stellar network settings`, or the Re
 | `tx_max_write_bytes` | 132,096 | Bytes one transaction writes (binds restores) |
 | `tx_max_instructions` | 400,000,000 | CPU per transaction |
 | `tx_max_contract_events_size_bytes` | 16,384 | Events plus return value per invocation |
+| Transaction fee | u32: 4,294,967,295 stroops (~429 XLM) | The most one transaction can pay |
 
 Ledger time is estimated at 5 seconds, 17,280 ledgers per day, everywhere in the app and scripts.
 
 ## Rent
 
 Rent is charged per byte of key plus value, for every ledger an entry's TTL is extended. An extension pays only
-for the ledgers it adds: extending an entry that already has 170 days left to 180 days pays for 10 days.
+for the ledgers it adds: extending an entry that already has 170 days left to 180 days pays for 10 days. So rent
+is linear in time: renewing for 180 days twice costs the same as renewing for 30 days twelve times, less the
+per-transaction overhead. The Renewal tab defaults to 180 days for that reason.
 
-**Measured rate: about 0.0098 XLM per KB per day** (simulated `ExtendFootprintTTL` of the Manager and the six DAO
-0 instances, 884 and 6,420 bytes, from 167.7 to 180 days; both gave 98 stroops per byte-day). Shared contract code
-has been more expensive per byte (a ~35 KB code entry cost ~300 XLM for ~110 days in October 2026), which is why
-code never rides on a member's transaction for long (below).
+| Entry kind | Measured rate | How |
+|---|---|---|
+| Contract data and instances | **~0.0098 XLM per KB per day** | Simulated `ExtendFootprintTTL` of the Manager and the six DAO 0 instances (884 and 6,420 bytes, 167.7 → 180 days): 98 stroops per byte-day |
+| Contract code | **~0.051 XLM per KB per day** | A 35,604-byte code entry for ~164 days simulated at 2,998,799,289 stroops (STORAGE_DIET_REVIEW § 3): 514 stroops per byte-day, about five times data |
 
-| Size | 30 days | 120 days | 180 days | One year of upkeep |
+| What | 30 days | 120 days | 180 days | One year of upkeep |
 |---|---|---|---|---|
-| 1 KB | 0.29 XLM | 1.2 XLM | 1.8 XLM | 3.6 XLM |
+| 1 KB of data | 0.29 XLM | 1.2 XLM | 1.8 XLM | 3.6 XLM |
 | A DAO's six instances (6.4 KB) | 1.9 XLM | 7.5 XLM | 11.2 XLM | 23 XLM |
-| Reference DAO sweep (117 KB, below) | 35 XLM | 138 XLM | 207 XLM | 420 XLM |
+| Reference DAO sweep (34 KB, below) | 10 XLM | 40 XLM | 60 XLM | **~122 XLM** |
+| One token's artwork record (~19 B) | | | | ~0.07 XLM |
+
+The reference sweep was 117 KB (~420 XLM a year, plus ~240 XLM a year more for every year of daily auctions)
+before D32 and D33 (below).
 
 Creating a DAO pays the six new instances up to 170 days (about 10.6 XLM at this rate), because a new entry is
 born at 7 days, under the 60-day instance threshold. The app's fee guard is therefore 50 XLM, not 10 (see
@@ -43,26 +52,30 @@ born at 7 days, under the 60-day instance threshold. The app's fee guard is ther
 
 ## TTL policy
 
-| State | Extended to | When under | Source |
+| State | Extended to | When at or under | Source |
 |---|---|---|---|
 | Contract instances (module config, admin, wiring, `Live`, `CurrentHash`) | 170 days | 60 days | `common::ttl::extend_instance`, on every state-changing call |
 | Shared contract code | 4 days | 2 days | `common::ttl::extend_instance` (code bumped separately, D27); the platform prepays 170 days |
-| Persistent entries (`common::ttl::extend_persistent`) | 365 days, clamped to 180 | 30 days | Read or written by a contract call |
+| Persistent entries (`common::ttl::extend_persistent`) | 365 days, clamped to the network maximum | 30 days | Read or written by a contract call |
 | Governor `ProposalTime(id)`, `ProposalId(seq)` | 120 days | 30 days | Covers the longest lifecycle (3 × 30-day delays + 14 days to execute) from one touch |
 | Marketplace `Listing(id)`, `PrimaryListing(token)` | 30 days | 7 days | Expired listings can be cleared by anyone |
-| OpenZeppelin entries (owners, balances, votes, checkpoints) | The library's own policy | | Extended when read or written |
+| OpenZeppelin owners, balances, votes, checkpoints | 30 days | 29 days | The library, when the entry is read or written |
+| Asset contract (SAC) balances | 30 days | 29 days | The host, when the balance is read or written |
 
-A threshold well under the target means ordinary reads do not pay rent on every touch. Getters simulated by a
-client are not transactions and renew nothing.
+The host extends when the TTL is at or below the threshold (`common` test `thresholds_include_their_bound`). A
+threshold well under the target means ordinary reads do not pay rent on every touch. Getters simulated by a client
+are not transactions and renew nothing.
 
 ## Key reference
 
 Every Builder key is namespaced: `(Symbol("buildeross"), [Symbol(Variant), args…])` (D30). OpenZeppelin keys keep
 OZ's own shape. Off-chain code builds Builder keys with `apps/web/src/lib/storage-key.ts`, whose bytes are pinned
-against the Rust encoding. The namespace adds 32 bytes per key.
+against the Rust encoding. The namespace adds 32 bytes per key. Each crate's `storage::key_samples` lists every
+variant through an exhaustive match, and its `storage_keys_do_not_collide` test keeps Builder enums disjoint.
 
-"Sweep" means the DAO's renewal sweep covers the key. "Holder" means it renews when its owner acts and anyone
-holding the key can restore it. Sizes are from the reference DAO below.
+"Sweep" means the DAO's renewal sweep covers the key. "Holder" means it renews when its owner acts and is restored
+by the app before the owner's next transaction (see [Archived member state](#archived-member-state)). Sizes are
+from the reference DAO below.
 
 ### Every module (`contracts/common`)
 
@@ -79,12 +92,13 @@ holding the key can restore it. Sizes are from the reference DAO below.
 | `MetadataContract`, `Manager`, `Treasury`, `Auction`, `Marketplace`, `Minter` | instance | Wiring; `Minter` is the shared Minter pinned at launch | | instance |
 | `MintAuthority(addr)` | persistent | A mint grant (Treasury, Auction, Marketplace, Minter) | ~170 B | Sweep |
 | OZ `Metadata`, `TokenIdCounter`, `NumTotalSupplyCheckpoints` | instance | Name, symbol, next id, checkpoint count | | instance |
-| OZ `TotalSupplyCheckpoint(i)` | persistent | Supply history, binary-searched by votes | ~180 B each | Sweep (every one, D31) |
-| OZ `Owner(t)`, `Balance(a)`, `Delegatee(a)`, `NumCheckpoints(a)`, `DelegateCheckpoint(a, i)`, `VotingUnits(a)` | persistent | Per-holder ownership and votes | | Holder |
+| OZ `TotalSupplyCheckpoint(i)` | persistent | Supply history | ~180 B each | Sweep: **the latest only** (D33) |
+| OZ `Owner(t)`, `Balance(a)` held by the Treasury, Auction or Marketplace | persistent | The DAO's own tokens | ~130 B | Sweep (holdings) |
+| OZ `Owner(t)`, `Balance(a)`, `Delegatee(a)`, `NumCheckpoints(a)`, `DelegateCheckpoint(a, i)`, `VotingUnits(a)` of members | persistent | Per-member ownership and votes | | Holder |
 | OZ `Approval(t)`, `ApprovalForAll(o, op)` | temporary | Approvals; expire by design | | Never renewed |
 
-Supply checkpoints grow about one per auction day, so after roughly a year the sweep needs a second transaction;
-the batch splitter handles it.
+`token_uri` checks existence by the id counter, not `Owner(t)`, so a member's token keeps rendering after their
+30-day ownership entry archives.
 
 ### Metadata
 
@@ -94,28 +108,31 @@ the batch splitter handles it.
 | `Profile` | instance | `profile_hash` and `profile_seq` of the event-only profile JSON (≤ 4,096 bytes, in events only) | Fixed | instance |
 | `ItemCounts`, `IpfsGroupCount` | instance | Item count per property (≤ 16), groups in use; all a mint reads | | instance |
 | `Manager`, `Treasury` | instance | Wiring | | instance |
-| `PropertyName(i)` | persistent | One property name (≤ 64 B) | ≤ 16 keys, ~150 B each | Sweep |
-| `Items(property, page)` | persistent | Up to 32 items | ≤ 32 pages per property; ~1.6 KB for 19 items | Sweep |
-| `IpfsGroups` | persistent | Every IPFS group (≤ 64) in one vector | 1 key, ~1.4 KB | Sweep |
-| `AttributesPage(p)` | persistent | Trait indexes for 64 tokens | `total_supply / 64` keys, **~9.4 KB per full page** | Sweep |
+| `PropertyNames` | persistent | Every property name (≤ 16 × 64 B), in one entry | ~460 B for 16 | Sweep |
+| `Items(property, page)` | persistent | Up to 32 items: their names, plus one byte each for the IPFS group | ≤ 32 pages per property; ~580 B for 32 short names | Sweep |
+| `IpfsGroups` | persistent | Every IPFS group (≤ 64) in one vector | ~1.4 KB | Sweep |
+| `AttributesPage(p)` | persistent | Packed trait records of 64 tokens | one per 64 minted tokens; **~1.2 KB per full page** | Sweep |
 
-Attribute pages are the largest class: 64 % of the reference sweep. Each token's traits are stored as a vector of
-`u32` values, about 150 bytes per token.
+An attribute record is a header byte (the trait count; the high bit marks two-byte indexes, needed only past 256
+items in a property) and one byte per trait: 17 bytes for 16 traits. Every mint writes its token's record, empty
+until artwork exists, so the pages up to the minted count always exist and an archived one is detectable (D32).
 
 ### Governor
 
 | Key | Class | Holds | Size | Renewed by |
 |---|---|---|---|---|
 | `Treasury`, `QueueDelay`, `Manager`, `ProposalCount` | instance | Wiring, settings, the proposal counter | | instance |
-| `ProposalTime(id)` | persistent | Timing and status of one proposal | ~390 B | Sweep while live |
+| `ProposalTime(id)` | persistent | Timing, status and the quorum fixed at creation | ~420 B | Sweep while live |
 | `ProposalId(seq)` | persistent | The id of proposal `seq`, so proposals are listable from chain | ~170 B | Sweep while live |
 | OZ `VotingDelay`, `VotingPeriod`, `ProposalThreshold`, `NumQuorumCheckpoints`, `TokenContract` | instance | Governance settings | | instance |
-| OZ `QuorumCheckpoint(i)` | persistent | Quorum history | ~170 B each | Sweep (every one, D31) |
+| OZ `QuorumCheckpoint(i)` | persistent | Quorum rate history | ~170 B each | Sweep: **the latest only** (D33) |
 | OZ `ProposalVote(id)` | persistent | Vote tallies | | Sweep while live, when present |
 | OZ `HasVoted(id, voter)` | persistent | One vote record | | Holder |
 
-Ended proposals leave the sweep. Their entries archive in time; the id list then has gaps, which the chain-read
-proposal list skips (`apps/web/src/lib/chain-reads/proposals.ts`).
+Each proposal stores its quorum when it is created, from the current voting supply and rate, so `proposal_state`,
+`queue` and `execute` never look up historical checkpoints. Old ones may archive; the `quorum(ledger)` view for a
+past ledger then needs them restored. Ended proposals leave the sweep; the id list then has gaps, which the
+chain-read proposal list skips (`apps/web/src/lib/chain-reads/proposals.ts`).
 
 ### Treasury, Auction, Marketplace
 
@@ -126,6 +143,7 @@ proposal list skips (`apps/web/src/lib/chain-reads/proposals.ts`).
 | Auction `PendingRefund(bidder)` | persistent | A refund the bidder can withdraw | Holder |
 | Marketplace `Config`, `NextListingId` | instance | Settings and the listing counter | instance |
 | Marketplace `Listing(id)`, `PrimaryListing(token)` | persistent | Open listings | Sweep while open |
+| Asset `Balance(treasury|auction|marketplace)` on the DAO's payment assets | persistent (SAC) | The DAO's funds and escrow | Sweep (holdings) |
 
 ### Minter (shared by every DAO)
 
@@ -140,50 +158,60 @@ proposal list skips (`apps/web/src/lib/chain-reads/proposals.ts`).
 
 | Key | Class | Holds | Renewed by |
 |---|---|---|---|
-| `Admin`, `FactoryPaused`, `Current*Wasm`, `CurrentManagerVersion` | instance | Platform admin, pause flag, current hashes | Platform |
-| `Implementation(hash)`, `LatestImplementation(name)`, `UpgradeApproval(from, to)` | persistent | The registry `version()` and upgrades depend on | Platform (`renew-code-ttl.mjs`) |
-| `PlatformMinter`, `PendingAdmin` | persistent | Shared Minter address, admin handoff | Platform |
+| `ManagerAdmin`, `FactoryPaused`, `Current*Wasm`, `CurrentManagerVersion` | instance | Platform admin, pause flag, current hashes | Platform |
+| `Implementation(hash)`, `LatestImplementation(name)` | persistent | The registry `version()` reads, and each name's latest | Platform (`renew-code-ttl.mjs`) |
+| `PlatformMinter` | persistent | The shared Minter `launch_dao` pins | Platform |
+| `UpgradeApproval(from, to)`, `PendingAdmin` | persistent | Approved upgrade paths, an admin handoff | Used soon after they are written; restore an old one if needed |
 | `PendingDao(token)` | persistent | A created DAO awaiting launch; removed at launch | Creator |
 | `SlugToDao(slug)`, `DaoSlug(token)` | persistent | The DAO's `/dao` link, both directions | Sweep |
 
 ## The reference DAO
 
-16 properties of 19 items, 500 tokens, 50 proposals of which 10 are live (e2e
-`reference_dao_sweep_fits_one_transaction`, which prints this table):
+16 properties of 19 items, 500 tokens, 50 proposals of which 10 are live, one token and one balance held by the
+DAO (e2e `reference_dao_sweep_fits_one_transaction`, which prints this table):
 
-| Class | Entries | Bytes |
-|---|---|---|
-| Six module instances | 6 | 6,372 |
-| `AttributesPage` | 8 | 75,164 |
-| `Items` | 16 | 25,008 |
-| `ProposalTime` + `ProposalId` | 20 | 5,560 |
-| `PropertyName` | 16 | 2,368 |
-| `IpfsGroups` | 1 | 1,436 |
-| `MintAuthority` | 4 | 688 |
-| Slug (both keys) | 2 | 356 |
-| OZ checkpoints (supply, quorum) | 2 | 352 |
-| **Total** | **75** | **117,304** |
+| Class | Entries | Bytes | Before D32/D33 |
+|---|---|---|---|
+| Six module instances | 6 | 6,372 | 6,372 |
+| `AttributesPage` | 8 | 9,624 | 75,164 |
+| `Items` | 16 | 8,624 | 25,008 |
+| `ProposalTime` + `ProposalId` | 20 | 5,920 | 5,560 |
+| `PropertyNames` | 1 | 456 | 2,368 (16 keys) |
+| `IpfsGroups` | 1 | 1,436 | 1,436 |
+| `MintAuthority` | 4 | 688 | 688 |
+| DAO holdings (`Owner`, `Balance`) | 2 | 264 | not covered |
+| Slug (both keys) | 2 | 356 | 356 |
+| Latest supply and quorum checkpoints | 2 | 352 | 352, growing ~180 B per auction day |
+| **Total** | **62** | **34,092** | **117,304** |
 
-One `ExtendFootprintTTL` transaction holds it: 75 of 400 entries and 117 KB of the 200 KB read limit. A DAO with
-roughly twice the tokens reaches the read-bytes limit first; the sweep then splits into a second transaction.
+One `ExtendFootprintTTL` transaction holds it: 62 of 400 entries and 34 KB of the 200 KB read limit. At about 19
+bytes per token, roughly 9,000 tokens fit before the read limit splits the sweep into a second transaction, and
+the sweep no longer grows with time.
 
 Other measured budgets on the same fixtures:
 
 | Call | CPU | Write bytes | Entries read / written | Event bytes |
 |---|---|---|---|---|
 | `create_dao` with a 4 KB profile | 9.3 M | 6,168 | 25 / 9 | 7,380 |
-| `propose`, 20 actions, longest description | 3.3 M | 1,692 | 12 / 4 | 6,856 |
+| `propose`, 20 actions, longest description | 3.3 M | 1,728 | 12 / 4 | 6,856 |
 
 ## Who renews what
 
 **The DAO: one sweep.** Manage → Storage renewal lists every key in the Sweep column from chain reads alone,
-shows each class's earliest expiry, simulates the price for 30, 90, 180 or any number of days, and renews them in
-one `ExtendFootprintTTL` transaction. Archived keys are restored first with `RestoreFootprint`, quoted the same
-way. Anyone can renew; the signing wallet pays. The same logic runs on the command line:
+shows each class's earliest expiry, simulates the price for 30, 90, 180 (the default) or any number of days, shows
+what a year costs at that rate, and renews them in one `ExtendFootprintTTL` transaction. Archived keys, including
+ones the RPC returns with a past live-until, are restored first with `RestoreFootprint`, quoted the same way.
+Anyone can renew; the signing wallet pays. A DAO that wants to reimburse the renewer does it by proposal. The same
+logic runs on the command line:
 
 ```bash
-node scripts/renew-dao.mjs --network testnet --token C... --days 90 --source <identity> [--dry-run]
+node scripts/renew-dao.mjs --network testnet --token C... --days 180 --source <identity> [--dry-run]
 ```
+
+The e2e test `a_dao_kept_alive_by_the_sweep_alone_works_after_a_year` keeps an idle DAO alive with nothing but
+this sweep (and the platform renewal) every 150 days while archiving everything else that expires. After a year it
+settles an auction, a new member proposes and executes a Treasury spend, a year-old claim round is claimed, and an
+old token renders. Its negative control shows an idle Treasury balance archiving when holdings are left out.
 
 Sources: [inventory and transactions](../apps/web/src/lib/chain-reads/renewal.ts),
 [report and quote](../apps/web/src/lib/renewal-queries.ts), [tab](../apps/web/src/components/admin/renewal-panel.tsx),
@@ -194,17 +222,36 @@ alone exceed the 200 KB read limit. Contracts bump code only to 4 days when unde
 lapses a member pays a few days of code rent at most. The platform prepays 170 days:
 
 ```bash
-node scripts/renew-code-ttl.mjs deploys/builder-testnet-manager.json --days 170
+node scripts/renew-code-ttl.mjs deploys/builder-testnet-manager.json --days 170 [--token C...] [--dry-run]
 ```
 
-It builds its hash list from chain (the Manager's and Minter's `wasm_hash`, `get_latest_implementation` for every
-module name, plus the artifact and any `--hash`), refuses durations at or under the 4-day code target, and also
-extends each hash's `Implementation(hash)` record, the Manager instance and the shared Minter instance.
-`deploy-manager.mjs` and `upgrade-contract.mjs` extend new code to 170 days at upload, since new code is born at 7
-days. A platform dashboard is deferred (TODOS.md).
+It finds code from the Manager's `current_implementations()` and each name's latest implementation, the Manager's
+and Minter's running `wasm_hash()`, and what every known DAO module runs (DAO deploy artifacts, `--token`, or the
+indexer's `manager.module_versions` with `DATABASE_URL`), so a DAO that skipped an upgrade keeps its code alive. It
+also renews each hash's `Implementation(hash)` record, every `LatestImplementation(name)`, `PlatformMinter`, and the
+Manager and Minter instances.
 
-**Holders: on use.** Owners, balances, delegations, vote records, refunds and claim markers renew when the holder
-acts. Anyone who knows the key can restore an archived one.
+Code rent is the platform's largest cost: a dry run on 2026-10-12 quoted about 900 XLM to bring nine code hashes
+to 170 days (Auction 264 XLM, Marketplace 251 XLM, Governor ~300 XLM). Every extension is simulated first; one
+whose resource fee would exceed 300 XLM (70 % of the u32 fee cap) is done in steps (the Governor's in that dry run:
+102 days for 178 XLM, then the rest). `deploy-manager.mjs` and `upgrade-contract.mjs` extend new code to 170 days
+at upload the same way, since new code is born at 7 days. A platform dashboard is deferred (TODOS.md).
+
+**Members: on use.** A member's ownership, balance, vote and claim entries renew for 30 days whenever they act.
+
+## Archived member state
+
+A member back after more than a month may find their entries archived. The app restores them before the
+member's transaction, with one extra wallet signature and a small fee:
+
+- calls the app builds in the browser (votes, proposals, admin actions, bids, artwork, slug, upgrades) set the
+  SDK's `restore` option (`restoreArchivedState`), so a `RestoreFootprint` runs first;
+- server-prepared flows (token actions, marketplace, claims, Treasury funding) return an unsigned
+  `RestoreFootprint` with status 409 (`code: restore-required`); the client signs and submits it, waits, and
+  prepares again (`withArchivedRestore`).
+
+Sources: [restore-required.ts](../apps/web/src/lib/restore-required.ts),
+[restore-archived-client.ts](../apps/web/src/lib/restore-archived-client.ts).
 
 ## Fee guard
 
