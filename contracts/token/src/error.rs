@@ -19,4 +19,6 @@ pub enum TokenError {
     MinterNotGranted = 7206,
     /// The collection name contains `"`, `\` or a control character
     InvalidName = 7207,
+    /// The metadata contract address is missing from the instance
+    MetadataNotSet = 7208,
 }

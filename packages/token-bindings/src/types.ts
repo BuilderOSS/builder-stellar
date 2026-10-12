@@ -31,7 +31,11 @@ export const TokenError = {
   /**
    * The collection name contains `"`, `\` or a control character
    */
-  7207 : { message: "InvalidName" }
+  7207 : { message: "InvalidName" },
+  /**
+   * The metadata contract address is missing from the instance
+   */
+  7208 : { message: "MetadataNotSet" }
 }
 
 /**

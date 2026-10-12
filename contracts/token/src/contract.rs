@@ -207,8 +207,8 @@ impl DaoTokenContract {
                 stellar_tokens::non_fungible::NonFungibleTokenError::NonExistentToken
             );
         }
-        let metadata =
-            common::error::require(e, Self::metadata(e), common::CommonError::ManagerNotSet);
+        let metadata = Self::metadata(e)
+            .unwrap_or_else(|| panic_with_error!(e, crate::error::TokenError::MetadataNotSet));
         TokenUriClient::new(e, &metadata).token_uri(&token_id, &Base::name(e))
     }
 

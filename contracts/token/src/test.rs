@@ -1457,3 +1457,19 @@ impl HookCounter {
         e.storage().instance().get(&2u32).unwrap_or(0)
     }
 }
+
+/// `token_uri` names its own missing dependency, not the Manager's.
+#[test]
+fn token_uri_without_a_metadata_address_says_so() {
+    let (e, client, owner) = setup();
+    let id = client.mint(&owner, &owner);
+    e.as_contract(&client.address, || {
+        e.storage()
+            .instance()
+            .remove(&common::ns(&e, crate::storage::TokenKey::MetadataContract));
+    });
+    assert_eq!(
+        client.try_token_uri(&id).err().unwrap().unwrap(),
+        crate::error::TokenError::MetadataNotSet.into()
+    );
+}
