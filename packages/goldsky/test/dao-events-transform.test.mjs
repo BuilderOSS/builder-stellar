@@ -1070,7 +1070,7 @@ test('marketplace primary listing lifecycle is keyed by listing_id; token_id onl
   const expired = run('marketplace', 'MKT', 'PrimaryListingExpired', [{ u64: '4' }]);
   assert.deepEqual(topicsOf(expired.decoded), { listing_id: '4' });
   assert.equal(expired.activity.kind, 'marketplace.primary_listing_expired');
-  assert.equal(expired.activity.visibility, 'admin');
+  assert.equal(expired.activity.visibility, 'public');
 });
 
 test('marketplace secondary listings: payment_asset on create, ListingPurchased is secondary-only', () => {
@@ -1123,9 +1123,11 @@ test('automatic self-delegation stays off the public feed; real delegation is go
 test('public feed carries the story events, not their side effects', () => {
   const visibility = (event_name, extra = {}) =>
     buildActivityFeed({ event_id: event_name, deployment_id: 'test', contract_id: 'C', event_name, ledger_sequence: 1, transaction_hash: 'tx', topics: '{}', args: '{}', ...extra }).visibility;
-  for (const name of ['mint', 'mint_with_minter', 'transfer', 'delegate_votes_changed', 'seed_generated', 'seeds_generated', 'slug_claimed', 'token_initialized', 'listing_cancelled', 'refund_withdrawn'])
+  // mint_batch_with_minter is the token's side of a batch; the Minter's own row is the public one.
+  for (const name of ['mint', 'mint_with_minter', 'mint_batch_with_minter', 'transfer', 'delegate_votes_changed', 'seed_generated', 'seeds_generated', 'slug_claimed', 'token_initialized', 'refund_withdrawn'])
     assert.notEqual(visibility(name), 'public', name);
-  for (const name of ['dao_launched', 'auction_created', 'bid_placed', 'auction_settled', 'mint_batch_with_minter', 'listing_purchased', 'primary_listing_purchased', 'upgraded'])
+  // A listing that closes is news like a listing that opens.
+  for (const name of ['dao_launched', 'auction_created', 'bid_placed', 'auction_settled', 'mint_batch_event', 'merkle_claim_event', 'listing_purchased', 'listing_cancelled', 'listing_expired', 'primary_listing_purchased', 'primary_listing_cancelled', 'primary_listing_expired', 'upgraded'])
     assert.equal(visibility(name), 'public', name);
   for (const name of ['proposal_created', 'vote_cast', 'proposal_executed']) assert.equal(visibility(name), 'governance', name);
 });

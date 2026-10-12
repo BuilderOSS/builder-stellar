@@ -206,7 +206,7 @@ share topics (enforced by `contractEvents()`). Each module's launch event has it
 | `SecondaryListingCreated` | marketplace | `token_id` | `seller`, `price`, `expires_at`, `fee_bps`, `payment_asset` | `payment_asset` added |
 | `ListingPurchased` / `ListingCancelled` / `ListingExpired` | marketplace | `token_id` (+`buyer`) | unchanged | secondary only |
 | `MarketplacePaused` | marketplace | none | none | may be emitted at launch |
-| `Upgraded` | token, governor, treasury, auction, marketplace, metadata (defined once in `contracts/common/src/upgrade.rs`) | `from_hash`, `to_hash` | `version` | new; replaces marketplace-only `MarketplaceUpgraded`; public activity row `<role>.upgraded` ("Contract upgraded to version V (from -> to)", hashes shortened to 8 chars) |
+| `Upgraded` | token, governor, treasury, auction, marketplace, metadata and the shared minter (defined once in `contracts/common/src/upgrade.rs`) | `from_hash`, `to_hash` | `version` | new; replaces marketplace-only `MarketplaceUpgraded`; public activity row `<role>.upgraded` (`governance.upgraded` for the governor; "Contract upgraded to version V (from -> to)", hashes shortened to 8 chars) |
 | `ProfileUpdated` | metadata | `seq` | `hash`, `profile` | new (0.3.0); the profile JSON lives only here. Public activity row except seq 0 (the initial profile, admin) |
 | `MetadataInitialized` | metadata | `token` | `renderer_base`, `admin` | description, project URI and contract image removed (0.3.0) |
 | `MerkleRootSetEvent` | minter | `token_id` | `root`, `round`, `tree_uri` | `tree_uri` added (0.3.0); public row "Claim round N opened" |
@@ -235,17 +235,21 @@ Per-module launch rows are `admin` with kind `<role>.launched`; module `AdminCha
 `<role>.migrated`, `ProposalScheduled` `governance.proposal_scheduled` (admin, it accompanies
 `ProposalCreated`); OpenZeppelin `QuorumChanged` is `governance.quorum_changed` (admin; it
 duplicates the constructor quorum and every `QuorumBpsChanged`); OpenZeppelin `Paused` / `Unpaused`
-from the Auction are `auction.paused` / `auction.unpaused`; a batch mint is one public `token.batch_mint` row ("Minted 5 tokens (30-34) by
-minter") plus one admin `metadata.seeds_generated` row, not one row per token; Manager admin changes
-(`manager.admin_proposed`, `manager.admin_changed`, `manager.platform_minter_set`),
-`primary_listing_expired` and `marketplace.paused` are `admin`. `activity_feed_events`
+from the Auction are `auction.paused` / `auction.unpaused`; a batch mint is one admin `token.batch_mint` row ("Minted 5 tokens (30-34) by
+minter") plus one admin `metadata.seeds_generated` row, not one row per token, and the Minter's own
+`minter.batch_mint` / `minter.merkle_claim` row in the same call is the public one; Manager admin changes
+(`manager.admin_proposed`, `manager.admin_changed`, `manager.platform_minter_set`) and `marketplace.paused`
+are `admin`; listing cancellations and expiries (`marketplace.listing_cancelled`, `marketplace.listing_expired`,
+`marketplace.primary_listing_cancelled`, `marketplace.primary_listing_expired`) are `public`, like the listing
+itself. The shared Minter's `Upgraded` / `Migrated` are `minter.upgraded` / `minter.migrated`; the governor's
+role-based kinds use the `governance.` prefix like its other kinds. `activity_feed_events`
 columns are unchanged; `listing_id` and `index` are only in `topics`/`args`.
 
 **Public feed curation.** Only story events are `public`/`governance`: launches,
 proposals and votes, real delegation, auctions (started, bid, settled, cancelled),
 marketplace listings and sales, allocations and claims, and upgrades. Per-token
-`Mint`/`MintWithMinter`, transfers, vote-weight changes, seeds, slug claims,
-setup/launch internals, refunds, listing cancellations and the automatic
+`Mint`/`MintWithMinter`/`MintBatchWithMinter`, transfers, vote-weight changes, seeds, slug claims,
+setup/launch internals, refunds and the automatic
 self-delegation on a first token (`from_delegate` empty, `to_delegate` =
 delegator) are `admin`/`system`. See `userFacing` in `src/activity-feed.script.js`.
 

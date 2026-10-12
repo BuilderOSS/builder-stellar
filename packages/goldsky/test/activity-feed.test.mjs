@@ -214,7 +214,8 @@ const batchMint = invoke({
   topics: JSON.stringify({ minter: 'GMINTER' }), args: JSON.stringify({ first_token_id: 30, count: 5 })
 });
 assert.strictEqual(batchMint.kind, 'token.batch_mint');
-assert.strictEqual(batchMint.visibility, 'public');
+// The Minter's own MintBatchEvent / MerkleClaimEvent in the same call is the public row.
+assert.strictEqual(batchMint.visibility, 'admin');
 assert.strictEqual(batchMint.summary, 'Minted 5 tokens (30-34) by GMINTER');
 const seeds = invoke({
   event_id: 'seeds', event_name: 'SeedsGenerated', deployment_id: 'test', contract_id: 'test',
@@ -338,8 +339,11 @@ console.log('✅ Passed\n');
 console.log('Test 16: New and changed event kinds, titles and visibility');
 const newEventCases = [
   ['PrimaryListingPurchased', 'marketplace', 'marketplace.primary_listing_purchased', 'Primary sale completed', 'public'],
-  ['PrimaryListingCancelled', 'marketplace', 'marketplace.primary_listing_cancelled', 'Primary listing cancelled', 'admin'],
-  ['PrimaryListingExpired', 'marketplace', 'marketplace.primary_listing_expired', 'Primary listing expired', 'admin'],
+  ['PrimaryListingCancelled', 'marketplace', 'marketplace.primary_listing_cancelled', 'Primary listing cancelled', 'public'],
+  ['PrimaryListingExpired', 'marketplace', 'marketplace.primary_listing_expired', 'Primary listing expired', 'public'],
+  ['ListingCancelled', 'marketplace', 'marketplace.listing_cancelled', 'Listing cancelled', 'public'],
+  ['ListingExpired', 'marketplace', 'marketplace.listing_expired', 'Listing expired', 'public'],
+  ['MintBatchWithMinter', 'token', 'token.batch_mint', 'Tokens batch minted', 'admin'],
   ['RefundDeferred', 'auction', 'auction.refund_deferred', 'Bid refund deferred', 'admin'],
   ['RefundWithdrawn', 'auction', 'auction.refund_withdrawn', 'Bid refund withdrawn', 'admin'],
   ['AdminProposed', 'manager', 'manager.admin_proposed', 'Manager admin proposed', 'admin'],

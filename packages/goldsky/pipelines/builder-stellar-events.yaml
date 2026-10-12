@@ -596,9 +596,9 @@ transforms:
         var normalizedEventName = normalizeEventName(eventName);
 
         // Public feed: what a member would act on or care about. Per-token mints,
-        // seeds, transfers, vote-weight bookkeeping, setup/launch internals, refunds
-        // and listing cancellations stay out (admin/system rows): they are side effects
-        // of the events below, which already tell the story.
+        // seeds, transfers, vote-weight bookkeeping, setup/launch internals and refunds
+        // stay out (admin/system rows): they are side effects of the events below, which
+        // already tell the story. A listing that closes is news like a listing that opens.
         var userFacing = {
           DaoLaunched: true,
           ProposalCreated: true, ProposalQueued: true, ProposalExecuted: true, ProposalCancelled: true, VoteCast: true,
@@ -610,9 +610,10 @@ transforms:
           // So does a new link.
           SlugChanged: true,
           AuctionCreated: true, BidPlaced: true, AuctionSettled: true, AuctionCancelled: true,
-          PrimaryListingCreated: true, PrimaryListingPurchased: true,
-          SecondaryListingCreated: true, ListingPurchased: true,
-          MintBatchWithMinter: true,
+          PrimaryListingCreated: true, PrimaryListingPurchased: true, PrimaryListingCancelled: true, PrimaryListingExpired: true,
+          SecondaryListingCreated: true, ListingPurchased: true, ListingCancelled: true, ListingExpired: true,
+          // The Minter's own row (MintBatchEvent / MerkleClaimEvent) tells the story of a batch;
+          // the token's MintBatchWithMinter in the same call stays admin so a mint is not announced twice.
           MerkleClaimEvent: true, MintBatchEvent: true,
           // A new claim round and a profile change are things members act on.
           MerkleRootSetEvent: true, ProfileUpdated: true,
