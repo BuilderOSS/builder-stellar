@@ -36,5 +36,7 @@ registered for shared governance submission. See [web capabilities](../../apps/w
 
 `upgrade(from, to)` applies only `upgrade_delay()` ledgers after the Manager's `approve_upgrade` (constructor
 argument `upgrade_delay`; `UpgradeDelayNotElapsed`, 7813, before that). `set_upgrade_delay(ledgers)` (Manager admin)
-lengthens the notice at once; a reduction takes effect only after the notice in force has passed. Every DAO pins
-this Minter as a mint authority, so the notice is the window in which a DAO can revoke it by proposal.
+lengthens the notice at once; a reduction takes effect only after the notice in force has passed. The target must
+be the hash announced as latest for `Minter` (`UpgradeNotLatest`, 7814), and the notice counts from the later of
+the approval and the announcement (D42). Every DAO pins this Minter as a mint authority, so the notice is the
+window in which a DAO can revoke it by proposal.

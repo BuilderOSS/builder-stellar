@@ -77,4 +77,6 @@ pub enum ManagerError {
     SlugUnchanged = 7129,
     /// The Manager's own upgrade was approved less than `upgrade_delay()` ledgers ago.
     UpgradeDelayNotElapsed = 7130,
+    /// `upgrade_manager` to a hash that is not the latest Manager implementation.
+    UpgradeNotLatest = 7131,
 }

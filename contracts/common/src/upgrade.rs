@@ -37,6 +37,19 @@ pub enum UpgradeKey {
     PendingUpgradeDelay,
 }
 
+/// What the Manager's `LatestImplementation(name)` holds: the hash announced
+/// as latest and the ledger it was announced at. A platform contract (the
+/// Manager itself, the shared Minter) upgrades only to this hash, and its
+/// notice counts from the later of the approval and this announcement, so
+/// every possible platform upgrade is visible as "running → latest" for the
+/// whole notice (D42).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LatestPointer {
+    pub wasm_hash: BytesN<32>,
+    pub set_ledger: u64,
+}
+
 /// A lowered upgrade notice that applies only once the notice in force when
 /// it was requested has passed, so it cannot be used to skip that notice.
 #[contracttype]

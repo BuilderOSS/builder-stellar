@@ -2858,9 +2858,31 @@ fn manager_upgrade_waits_out_its_notice() {
             .unwrap(),
         ManagerError::InvalidUpgradePath
     );
-    let t0 = env.ledger().sequence();
+    let approved_at = env.ledger().sequence();
     client.approve_upgrade(&from, &to);
-    assert_eq!(client.upgrade_approved_ledger(&from, &to), Some(t0 as u64));
+    assert_eq!(
+        client.upgrade_approved_ledger(&from, &to),
+        Some(approved_at as u64)
+    );
+    // Approved but not announced as latest: never applies (D42).
+    env.ledger()
+        .with_mut(|l| l.sequence_number += TEST_UPGRADE_DELAY + 1);
+    assert_eq!(
+        client
+            .try_upgrade_manager(&from, &to)
+            .err()
+            .unwrap()
+            .unwrap(),
+        ManagerError::UpgradeNotLatest
+    );
+    // Announced now: the notice restarts from the announcement.
+    let announced = env.ledger().sequence();
+    let name = String::from_str(&env, "Manager");
+    client.set_latest_implementation(&name, &to);
+    assert_eq!(
+        client.latest_pointer(&name).unwrap().set_ledger,
+        announced as u64
+    );
     assert_eq!(
         client
             .try_upgrade_manager(&from, &to)
@@ -2869,19 +2891,27 @@ fn manager_upgrade_waits_out_its_notice() {
             .unwrap(),
         ManagerError::UpgradeDelayNotElapsed
     );
-    // Re-approving later keeps the first ledger.
+    // Re-approving and re-announcing later keep their first ledgers.
     env.ledger().with_mut(|l| l.sequence_number += 10);
     client.approve_upgrade(&from, &to);
-    assert_eq!(client.upgrade_approved_ledger(&from, &to), Some(t0 as u64));
+    client.set_latest_implementation(&name, &to);
+    assert_eq!(
+        client.upgrade_approved_ledger(&from, &to),
+        Some(approved_at as u64)
+    );
+    assert_eq!(
+        client.latest_pointer(&name).unwrap().set_ledger,
+        announced as u64
+    );
     // A reduction waits out the notice in force; a raise applies at once.
     client.set_upgrade_delay(&1);
     assert_eq!(client.upgrade_delay(), TEST_UPGRADE_DELAY);
-    // Requested at t0 + 10 under a 1,000-ledger notice: effective at t0 + 1,010.
     env.ledger()
-        .with_mut(|l| l.sequence_number = t0 + 10 + TEST_UPGRADE_DELAY - 1);
+        .with_mut(|l| l.sequence_number += TEST_UPGRADE_DELAY - 1);
     assert_eq!(client.upgrade_delay(), TEST_UPGRADE_DELAY);
     env.ledger().with_mut(|l| l.sequence_number += 1);
     assert_eq!(client.upgrade_delay(), 1);
+    // The announcement's notice has passed by now too.
     client.upgrade_manager(&from, &to);
     // The empty test wasm exports nothing, so read the stored hash directly.
     let stored: BytesN<32> = env.as_contract(&client.address, || {

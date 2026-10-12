@@ -264,6 +264,15 @@ invoke(managerArtifact.manager, 'approve_upgrade', {
 // the approval). Every DAO depends on both, so the notice is what lets a DAO react first. This
 // script is rerun once the notice has passed; until then it says when.
 function platformUpgrade(target, method, label) {
+  // D42: a platform contract upgrades only to the announced latest, and its notice counts from the
+  // later of the approval and the announcement. Announce first (idempotent: re-announcing the same
+  // hash keeps its ledger).
+  invoke(managerArtifact.manager, 'set_latest_implementation', { name: implementationName, wasm_hash: targetHash });
+  const pointer = invokeView(managerArtifact.manager, 'latest_pointer', ['--name', implementationName], {
+    network: networkConfig.network,
+    source: identityName
+  });
+  const announcedAt = pointer && typeof pointer === 'object' ? Number(pointer.set_ledger) : 0;
   const approvedAt = Number(
     invokeView(managerArtifact.manager, 'upgrade_approved_ledger', ['--from_hash', fromHash, '--to_hash', targetHash], {
       network: networkConfig.network,
@@ -295,7 +304,7 @@ function platformUpgrade(target, method, label) {
   }
   const output = result.stderr || result.stdout;
   if (/7130|7813|UpgradeDelayNotElapsed/.test(output)) {
-    const earliest = approvedAt + notice;
+    const earliest = Math.max(approvedAt, announcedAt) + notice;
     console.log(
       `${label} upgrade approved at ledger ${approvedAt}; its notice is ${notice} ledgers ` +
         `(~${(notice / LEDGERS_PER_DAY).toFixed(2)} days). Rerun this command at ledger ${earliest} or later.`

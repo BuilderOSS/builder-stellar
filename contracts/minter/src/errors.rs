@@ -33,4 +33,6 @@ pub enum MinterError {
     InvalidTreeUri = 7812,
     /// The Manager approved this upgrade less than `upgrade_delay()` ledgers ago.
     UpgradeDelayNotElapsed = 7813,
+    /// `upgrade` to a hash that is not the latest Minter implementation.
+    UpgradeNotLatest = 7814,
 }

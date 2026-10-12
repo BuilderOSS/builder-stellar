@@ -920,6 +920,7 @@ fn shared_minter_upgrades_under_the_manager_admin() {
     let to = empty_wasm(&env);
     mgr.approve(&minter_hash(&env), &to);
     mgr.register(&to, &String::from_str(&env, "0.2.0"));
+    mgr.set_latest(&String::from_str(&env, "Minter"), &to);
 
     // No Manager admin yet: nobody can upgrade.
     assert_eq!(
@@ -1051,4 +1052,41 @@ fn upgrade_delay_is_configurable_but_a_reduction_waits() {
     assert_eq!(minter.upgrade_delay(), 5);
     env.ledger().with_mut(|l| l.sequence_number += 5);
     assert_eq!(minter.upgrade_delay(), 2);
+}
+
+/// D42: an approved hash that is not the announced latest never applies, and
+/// announcing it restarts the notice from the announcement.
+#[test]
+fn minter_upgrades_only_to_the_announced_latest() {
+    use common::testutils::empty_wasm;
+    use soroban_sdk::testutils::Ledger as _;
+    let env = Env::default();
+    env.mock_all_auths();
+    let (minter, mgr) = register_minter(&env);
+    mgr.set_admin(&Address::generate(&env));
+    let to = empty_wasm(&env);
+    mgr.register(&to, &String::from_str(&env, "0.2.0"));
+    mgr.approve(&minter_hash(&env), &to);
+    env.ledger()
+        .with_mut(|l| l.sequence_number += TEST_UPGRADE_DELAY * 2);
+    assert_eq!(
+        minter
+            .try_upgrade(&minter_hash(&env), &to)
+            .err()
+            .unwrap()
+            .unwrap(),
+        MinterError::UpgradeNotLatest
+    );
+    mgr.set_latest(&String::from_str(&env, "Minter"), &to);
+    assert_eq!(
+        minter
+            .try_upgrade(&minter_hash(&env), &to)
+            .err()
+            .unwrap()
+            .unwrap(),
+        MinterError::UpgradeDelayNotElapsed
+    );
+    env.ledger()
+        .with_mut(|l| l.sequence_number += TEST_UPGRADE_DELAY);
+    minter.upgrade(&minter_hash(&env), &to);
 }

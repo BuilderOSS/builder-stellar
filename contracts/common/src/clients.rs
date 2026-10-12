@@ -80,6 +80,8 @@ pub trait ManagerRegistryApi {
     fn get_admin(e: &Env) -> Option<Address>;
     /// Ledger at which `approve_upgrade(from, to)` was recorded, if it was.
     fn upgrade_approved_ledger(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) -> Option<u64>;
+    /// The hash announced as latest for `name`, and when (D42).
+    fn latest_pointer(e: &Env, name: String) -> Option<crate::upgrade::LatestPointer>;
 }
 
 /// Governor `consume`, called by the Treasury from `execute`.

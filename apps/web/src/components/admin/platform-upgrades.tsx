@@ -55,8 +55,8 @@ export function PlatformUpgrades({ enabled }: { enabled: boolean }) {
   if (!enabled || !report.data) return null;
   const data = report.data;
   const minterPending = data.minter?.pending ?? null;
-  // Quiet unless something is happening.
-  if (!data.manager.pending && !minterPending && data.minterAuthority !== false) return null;
+  // Quiet unless something is happening, or the check itself is incomplete.
+  if (!data.manager?.pending && !minterPending && data.minterAuthority !== false && !data.errors.length) return null;
 
   return (
     <Section
@@ -64,9 +64,16 @@ export function PlatformUpgrades({ enabled }: { enabled: boolean }) {
       description="Shared by every community. Builder can only upgrade them after a notice. A community that does not trust a pending Minter upgrade can revoke the Minter's mint authority by proposal before it applies."
     >
       <div className={rows}>
-        <Row state={data.manager} latestLedger={data.latestLedger} />
+        {data.manager ? <Row state={data.manager} latestLedger={data.latestLedger} /> : null}
         {data.minter ? <Row state={data.minter} latestLedger={data.latestLedger} /> : null}
       </div>
+      {data.errors.length ? (
+        <Callout
+          variant="warning"
+          title="This check is incomplete"
+          description={`Some of it could not be read: ${data.errors.join('; ')}. A pending upgrade may not be shown.`}
+        />
+      ) : null}
       {data.minterAuthority === false ? (
         <Callout
           variant="warning"
@@ -86,5 +93,32 @@ export function PlatformUpgrades({ enabled }: { enabled: boolean }) {
         </p>
       ) : null}
     </Section>
+  );
+}
+
+/**
+ * A member-visible heads-up on the community home page: a Minter upgrade is
+ * pending and the shared Minter still mints for this community. Members are
+ * the ones who vote on removing it, so they see it, not only Manage.
+ */
+export function PlatformUpgradeNotice({ enabled }: { enabled: boolean }) {
+  const { routeId, daoConfig: config } = useDaoContext();
+  const session = useAuthSessionStore();
+  const address = session.authStatus === 'authenticated' ? session.address : null;
+  const report = usePlatformUpgrades(config, address, enabled);
+  const pending = report.data?.minter?.pending ?? null;
+  if (!enabled || !report.data || !pending || report.data.minterAuthority === false) return null;
+  return (
+    <Callout
+      variant="info"
+      title="A shared Minter upgrade is pending"
+      description={`Builder will upgrade the shared Minter to ${pending.version ?? pending.toHash.slice(0, 8)} from about ${when(pending.earliestLedger, report.data.latestLedger)}. To opt out, members can propose removing it from the mint authorities before then.`}
+    >
+      <div>
+        <ButtonLink href={daoAdminRoute(routeId, '')} variant="secondary" size="sm">
+          Platform contracts
+        </ButtonLink>
+      </div>
+    </Callout>
   );
 }

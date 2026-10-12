@@ -188,7 +188,15 @@ impl MinterContract {
         let approved = ManagerRegistryClient::new(e, &manager)
             .upgrade_approved_ledger(&from_hash, &to_hash)
             .ok_or(MinterError::UpgradeDelayNotElapsed)?;
-        if !common::upgrade::notice_passed(e, approved) {
+        // Only to the announced latest Minter, and the notice counts from the
+        // later of the approval and the announcement (D42).
+        let latest = ManagerRegistryClient::new(e, &manager)
+            .latest_pointer(&String::from_str(e, "Minter"))
+            .ok_or(MinterError::UpgradeNotLatest)?;
+        if latest.wasm_hash != to_hash {
+            return Err(MinterError::UpgradeNotLatest);
+        }
+        if !common::upgrade::notice_passed(e, approved.max(latest.set_ledger)) {
             return Err(MinterError::UpgradeDelayNotElapsed);
         }
         common::upgrade::apply(e, &manager, &from_hash, &to_hash);

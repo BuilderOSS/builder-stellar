@@ -13,6 +13,7 @@ use soroban_sdk::{contract, contractimpl, vec, Address, BytesN, Env, String, Val
 use crate::error::ManagerError;
 use crate::events::*;
 use crate::storage::*;
+use common::upgrade::LatestPointer;
 
 /// OpenZeppelin non-fungible caps on the collection name and symbol.
 const MAX_TOKEN_NAME_LENGTH: u32 = 40;
@@ -169,10 +170,20 @@ impl ManagerContract {
         if implementation.name != name {
             return Err(ManagerError::InvalidImplementationName);
         }
+        // Re-announcing the same hash keeps its ledger: the platform notice
+        // counts from the first announcement and cannot be restarted (D42).
+        if let Some(current) = Self::latest_pointer(env.clone(), name.clone()) {
+            if current.wasm_hash == wasm_hash {
+                return Ok(());
+            }
+        }
         set_persistent(
             &env,
             &ManagerKey::LatestImplementation(name.clone()),
-            &wasm_hash,
+            &LatestPointer {
+                wasm_hash: wasm_hash.clone(),
+                set_ledger: env.ledger().sequence() as u64,
+            },
         );
         emit_latest_implementation_set(&env, &name, &wasm_hash, &implementation.version);
         Ok(())
@@ -384,12 +395,12 @@ impl ManagerContract {
     /// The latest implementation version, or `None` if not found.
     pub fn get_latest_implementation(env: Env, name: String) -> Option<ImplementationVersion> {
         extend_instance_ttl(&env);
-        let wasm_hash: Option<BytesN<32>> =
-            get_persistent(&env, &ManagerKey::LatestImplementation(name));
-
-        wasm_hash.and_then(|hash| {
-            get_persistent::<ImplementationVersion>(&env, &ManagerKey::Implementation(hash))
-                .filter(|implementation| !implementation.revoked)
+        Self::latest_pointer(env.clone(), name).and_then(|pointer| {
+            get_persistent::<ImplementationVersion>(
+                &env,
+                &ManagerKey::Implementation(pointer.wasm_hash),
+            )
+            .filter(|implementation| !implementation.revoked)
         })
     }
 
@@ -1132,7 +1143,15 @@ impl ManagerContract {
         let approved =
             Self::upgrade_approved_ledger(env.clone(), from_hash.clone(), to_hash.clone())
                 .ok_or(ManagerError::InvalidUpgradePath)?;
-        if !common::upgrade::notice_passed(&env, approved) {
+        // Only to the announced latest, and the notice counts from the later of
+        // the approval and the announcement, so a quietly approved hash made
+        // latest at the last moment still waits the full notice (D42).
+        let latest = Self::latest_pointer(env.clone(), String::from_str(&env, "Manager"))
+            .ok_or(ManagerError::UpgradeNotLatest)?;
+        if latest.wasm_hash != to_hash {
+            return Err(ManagerError::UpgradeNotLatest);
+        }
+        if !common::upgrade::notice_passed(&env, approved.max(latest.set_ledger)) {
             return Err(ManagerError::UpgradeDelayNotElapsed);
         }
 
@@ -1260,6 +1279,14 @@ impl ManagerContract {
             treasury: read(ManagerKey::CurrentTreasuryWasm)?,
             marketplace: read(ManagerKey::CurrentMarketplaceWasm)?,
         })
+    }
+
+    /// The hash announced as latest for `name` and the ledger it was announced
+    /// at (D42). Unlike `get_latest_implementation`, a revoked hash is still
+    /// returned: the pointer is what the platform's upgrade rule and the app's
+    /// pending-upgrade display read.
+    pub fn latest_pointer(env: Env, name: String) -> Option<LatestPointer> {
+        get_persistent(&env, &ManagerKey::LatestImplementation(name))
     }
 
     /// The upgrade notice in force for `upgrade_manager`.

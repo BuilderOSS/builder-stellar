@@ -4000,6 +4000,8 @@ fn shared_minter_upgrades_then_claims_against_the_existing_root() {
         &String::from_str(e, "0.2.0"),
         &to,
     );
+    f.manager
+        .set_latest_implementation(&String::from_str(e, "Minter"), &to);
     f.manager.approve_upgrade(&from, &to);
     // Every DAO pins this Minter: an upgrade waits 7 days after the approval
     // so a DAO can revoke the Minter's mint authority first (review M1).
@@ -5541,4 +5543,94 @@ fn without_dao_holdings_in_the_sweep_an_idle_treasury_balance_archives() {
         archive_expired(e, &f);
     }
     assert_eq!(xlm.balance(&f.dao.treasury), 0);
+}
+
+/// D42, end to end: a Minter hash approved but not announced as latest never
+/// applies, and announcing it restarts the notice, so the app's
+/// "running → latest" display sees every possible platform upgrade for the
+/// full notice.
+#[test]
+fn platform_upgrade_needs_the_announced_latest_and_the_notice_counts_from_it() {
+    let f = factory_dao();
+    let e = &f.e;
+    let (minter_id, from) = shared_minter(&f);
+    f.manager.set_platform_minter(&minter_id);
+    let minter = minter::MinterContractClient::new(e, &minter_id);
+    let hidden = upload_module_wasm(e, "minter");
+    f.manager.register_implementation(
+        &String::from_str(e, "Minter"),
+        &String::from_str(e, "0.2.0"),
+        &hidden,
+    );
+    f.manager.approve_upgrade(&from, &hidden);
+    let notice = minter.upgrade_delay();
+    e.ledger().with_mut(|l| l.sequence_number += notice + 1);
+    assert_eq!(
+        minter.try_upgrade(&from, &hidden).err().unwrap().unwrap() as u32,
+        7814 // UpgradeNotLatest
+    );
+    let announced = e.ledger().sequence() as u64;
+    f.manager
+        .set_latest_implementation(&String::from_str(e, "Minter"), &hidden);
+    assert_eq!(
+        f.manager
+            .latest_pointer(&String::from_str(e, "Minter"))
+            .unwrap()
+            .set_ledger,
+        announced
+    );
+    assert_eq!(
+        minter.try_upgrade(&from, &hidden).err().unwrap().unwrap() as u32,
+        7813 // UpgradeDelayNotElapsed: the notice restarted at the announcement
+    );
+    e.ledger().with_mut(|l| l.sequence_number += notice);
+    minter.upgrade(&from, &hidden);
+    assert_eq!(minter.wasm_hash(), hidden);
+}
+
+/// A DAO module can chain upgrades with approved step paths in one proposal
+/// (v1 → v2 → v3), which is why DAO modules keep approval paths rather than
+/// a latest-only rule: a migration sequence must be able to pass through
+/// intermediate versions. (`migrate` is not called: every variant here shares
+/// the storage version, and `migrate` refuses a no-op.)
+#[test]
+fn dao_module_chains_two_upgrades_in_one_proposal() {
+    let f = factory_dao();
+    let e = &f.e;
+    f.manager.launch_dao(&f.dao.token, &f.no_launch_modules());
+    let auction = DaoAuctionContractClient::new(e, &f.dao.auction);
+    let treasury = DaoTreasuryContractClient::new(e, &f.dao.treasury);
+    let governor = DaoGovernorContractClient::new(e, &f.dao.governor);
+    let v1 = auction.wasm_hash();
+    let v2 = module_wasm_variant(e, "auction", "v2");
+    let v3 = module_wasm_variant(e, "auction", "v3");
+    for (hash, version) in [(&v2, "0.4.0"), (&v3, "0.5.0")] {
+        f.manager.register_implementation(
+            &String::from_str(e, "Auction"),
+            &String::from_str(e, version),
+            hash,
+        );
+    }
+    // Only the step paths are approved: v1 → v3 is not.
+    f.manager.approve_upgrade(&v1, &v2);
+    f.manager.approve_upgrade(&v2, &v3);
+    advance(e, 1);
+    let targets = vec![e, f.dao.auction.clone(), f.dao.auction.clone()];
+    let functions = vec![e, Symbol::new(e, "upgrade"), Symbol::new(e, "upgrade")];
+    let args = vec![
+        e,
+        vec![e, v1.clone().into_val(e), v2.clone().into_val(e)],
+        vec![e, v2.clone().into_val(e), v3.clone().into_val(e)],
+    ];
+    let description = String::from_str(e, "Auction v1 -> v2 -> v3");
+    let desc_hash = description_hash(e, &description);
+    let id = governor.propose(&targets, &functions, &args, &description, &f.deployer);
+    advance(e, 301);
+    governor.cast_vote(&id, &1, &String::from_str(e, ""), &f.deployer);
+    advance(e, 301);
+    governor.queue(&targets, &functions, &args, &desc_hash, &0u32, &f.deployer);
+    advance(e, 301);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
+    assert_eq!(auction.wasm_hash(), v3);
+    assert_eq!(auction.version(), String::from_str(e, "0.5.0"));
 }

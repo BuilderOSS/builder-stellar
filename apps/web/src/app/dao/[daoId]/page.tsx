@@ -7,6 +7,7 @@ import useSWR from 'swr';
 
 import { ActivityList } from '@/components/activity/activity-list';
 import { ContractUpdatesNotice } from '@/components/admin/contract-updates-notice';
+import { PlatformUpgradeNotice } from '@/components/admin/platform-upgrades';
 import { CommunityProfileView } from '@/components/community/community-profile-view';
 import { DaoContractList } from '@/components/dao-contract-list';
 import { MembershipCard } from '@/components/dao-home/membership-card';
@@ -169,6 +170,7 @@ export default function Page() {
       />
 
       {config.status !== 'pending' ? <ContractUpdatesNotice enabled={membership.isMember} /> : null}
+      {config.status !== 'pending' ? <PlatformUpgradeNotice enabled={membership.isMember} /> : null}
 
       <div className={columns}>
         <div className={mainColumn}>

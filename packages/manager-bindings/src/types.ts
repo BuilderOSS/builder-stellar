@@ -128,7 +128,11 @@ export const ManagerError = {
   /**
    * The Manager's own upgrade was approved less than `upgrade_delay()` ledgers ago.
    */
-  7130 : { message: "UpgradeDelayNotElapsed" }
+  7130 : { message: "UpgradeDelayNotElapsed" },
+  /**
+   * `upgrade_manager` to a hash that is not the latest Manager implementation.
+   */
+  7131 : { message: "UpgradeNotLatest" }
 }
 
 export type ManagerError = typeof ManagerError[keyof typeof ManagerError];
@@ -559,6 +563,19 @@ export const CommonError = {
    * `StorageVersion` missing from storage.
    */
   7013 : { message: "StorageVersionNotSet" }
+}
+
+/**
+ * What the Manager's `LatestImplementation(name)` holds: the hash announced
+ * as latest and the ledger it was announced at. A platform contract (the
+ * Manager itself, the shared Minter) upgrades only to this hash, and its
+ * notice counts from the later of the approval and this announcement, so
+ * every possible platform upgrade is visible as "running → latest" for the
+ * whole notice (D42).
+ */
+export interface LatestPointer {
+  set_ledger: bigint;
+  wasm_hash: Uint8Array;
 }
     export type ContractEvent = DaoCreatedEvent | DaoLaunchedEvent | SlugChangedEvent | SlugClaimedEvent | AdminChangedEvent | AdminProposedEvent | FactoryPausedEvent | FactoryUnpausedEvent | ManagerUpgradedEvent | UpgradeApprovedEvent | PlatformMinterSetEvent | ManagerInitializedEvent | PendingSlugUpdatedEvent | ImplementationRevokedEvent | AdminProposalCancelledEvent | LatestImplementationSetEvent | ImplementationRegisteredEvent | CurrentImplementationsUpdatedEvent;
     

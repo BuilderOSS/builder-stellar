@@ -31,6 +31,7 @@ pub fn empty_wasm(e: &Env) -> BytesN<32> {
 pub enum MockKey {
     Approved(BytesN<32>, BytesN<32>),
     ApprovedAt(BytesN<32>, BytesN<32>),
+    Latest(String),
     Version(BytesN<32>),
     Admin,
 }
@@ -51,6 +52,18 @@ impl MockManager {
     }
     pub fn upgrade_approved_ledger(e: Env, from: BytesN<32>, to: BytesN<32>) -> Option<u64> {
         e.storage().instance().get(&MockKey::ApprovedAt(from, to))
+    }
+    pub fn set_latest(e: Env, name: String, hash: BytesN<32>) {
+        e.storage().instance().set(
+            &MockKey::Latest(name),
+            &crate::upgrade::LatestPointer {
+                wasm_hash: hash,
+                set_ledger: e.ledger().sequence() as u64,
+            },
+        );
+    }
+    pub fn latest_pointer(e: Env, name: String) -> Option<crate::upgrade::LatestPointer> {
+        e.storage().instance().get(&MockKey::Latest(name))
     }
     pub fn register(e: Env, hash: BytesN<32>, version: String) {
         e.storage()
