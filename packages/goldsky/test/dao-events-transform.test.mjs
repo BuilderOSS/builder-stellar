@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { buildGoldskyPipelineYaml, resolveDeploymentSelection, resolvePostgresSecretName, writeGoldskyPipeline } from '../src/pipeline-generator.mjs';
+import { buildGoldskyPipelineYaml, resolveDeploymentSelection, resolvePipelineName, resolvePostgresSecretName, writeGoldskyPipeline } from '../src/pipeline-generator.mjs';
 
 const deploymentFixture = new URL('../../../deploys/builder-testnet-manager.json', import.meta.url);
 
@@ -454,7 +454,11 @@ test('pipeline generator renders the current deployment and scripts', { skip: !e
 
   const yaml = buildGoldskyPipelineYaml({ deployment, secretName: 'MY_SECRET', startAt: 4983407, templateSource: template, scriptSource: activityScript });
 
-  assert.match(yaml, /name: builder-stellar-events/);
+  // The live Turbo pipeline is named after the network; no renamed copy on apply.
+  assert.match(yaml, /^name: builder-stellar-testnet$/m);
+  assert.equal(resolvePipelineName(deployment, {}), 'builder-stellar-testnet');
+  assert.equal(resolvePipelineName(deployment, { GOLDSKY_PIPELINE_NAME: 'builder-stellar-staging' }), 'builder-stellar-staging');
+  assert.match(buildGoldskyPipelineYaml({ deployment, secretName: 'S', startAt: 1, templateSource: template, scriptSource: activityScript, pipelineName: 'custom-name' }), /^name: custom-name$/m);
   assert.match(yaml, /dataset_name: stellar_testnet\.events/);
   assert.match(yaml, new RegExp('start_at: 4983407'));
   assert.match(yaml, new RegExp(`'manager:${deployment.manager}' AS deployment_id`));
@@ -497,7 +501,8 @@ test('writeGoldskyPipeline writes a file from env selection', { skip: !existsSyn
   assert.match(result.selection.artifactPath, /deploys\/builder-testnet-manager\.json$/);
   assert.equal(result.secretName, 'MY_SECRET');
   assert.equal(result.outputPath, outputPath);
-  assert.match(readFileSync(outputPath, 'utf8'), /name: builder-stellar-events/);
+  assert.equal(result.pipelineName, 'builder-stellar-testnet');
+  assert.match(readFileSync(outputPath, 'utf8'), /^name: builder-stellar-testnet$/m);
 });
 
 // End-to-end Integration Tests

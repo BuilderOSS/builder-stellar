@@ -110,8 +110,9 @@ then each DAO.
    ./db/migrate.sh "$ADMIN_DATABASE_URL"
    ./db/grant-permissions.sh "$ADMIN_DATABASE_URL"
    ```
-2. **Goldsky pipeline** (testnet is the Turbo pipeline `builder-stellar-testnet`): apply a copy of
-   `packages/goldsky/pipelines/builder-stellar-events.yaml` with line 1 renamed, **in place** (`goldsky turbo apply`).
+2. **Goldsky pipeline** (testnet is the Turbo pipeline `builder-stellar-testnet`, the name `pnpm generate`
+   writes into `packages/goldsky/pipelines/builder-stellar-events.yaml`): apply it **in place**
+   (`cd packages/goldsky && ./scripts/deploy.sh deploy`, i.e. `goldsky turbo apply`).
    No delete or replay is needed when the change only adds events.
 3. **Registry** (Manager admin key, `DEPLOY_IDENTITY`, default `<network>-admin`):
    1. Upload, register and approve the path:

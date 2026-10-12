@@ -345,7 +345,8 @@ function invoke(data) {
   }
 
   // Every address field any event carries (contracts/*/src/events.rs and the OpenZeppelin
-  // library events), the emitting contract last. Order is the order inside `addresses`.
+  // library events), accounts first, then module, token and payment-asset contracts, the
+  // emitting contract last. Order is the order inside `addresses`.
   var addresses = unique([
     pick(data, ['actor']),
     pick(data, ['proposer']),
@@ -375,6 +376,10 @@ function invoke(data) {
     pick(data, ['treasury']),
     pick(data, ['target']),
     pick(data, ['token_contract']),
+    pick(data, ['treasury_contract']),
+    pick(data, ['token']),
+    pick(data, ['payment_token']),
+    pick(data, ['payment_asset']),
     pick(data, ['token_address']),
     pick(data, ['deployer']),
     pick(data, ['launch_admin']),
@@ -483,6 +488,11 @@ function invoke(data) {
 
   var summary = summaryFunctions[normalizedEventName] ? summaryFunctions[normalizedEventName]() : (titleMap[normalizedEventName] || String(eventName).replace(/_/g, ' '));
 
+  // The account that acted, first match wins: a person before a contract, a sender before a
+  // receiver, the caller (changed_by, admin) before the subject (authority) or a module
+  // (governor, treasury). DaoLaunched names only contracts (token_address, the shared Minter).
+  var actor = normalizedEventName === 'DaoLaunched' ? '' : pick(data, ['actor', 'proposer', 'voter', 'author', 'bidder', 'buyer', 'seller', 'deployer', 'winner', 'minter', 'recipient', 'from', 'approver', 'owner', 'to', 'operator', 'changed_by', 'cancelled_by', 'authority', 'admin', 'governor', 'treasury', 'delegator', 'delegate', 'current_admin', 'old_admin']);
+
   // Ensure consistent string representation for JSON fields to avoid Arrow type inference issues
   var topicsValue = topics;
   if (typeof topicsValue === 'string') {
@@ -549,8 +559,7 @@ function invoke(data) {
     proposal_id: toString(proposalId),
     token_id: toString(tokenId),
     amount: toString(amount),
-    // The account that acted, first match wins: a person before a contract, a sender before a receiver.
-    actor: toString(pick(data, ['actor', 'proposer', 'voter', 'author', 'bidder', 'buyer', 'seller', 'deployer', 'winner', 'minter', 'recipient', 'from', 'approver', 'owner', 'to', 'operator', 'authority', 'changed_by', 'cancelled_by', 'governor', 'treasury', 'delegator', 'delegate', 'current_admin', 'old_admin', 'admin'])),
+    actor: toString(actor),
     addresses: JSON.stringify(addresses || []),
     ledger_sequence: ledger_sequence,
     transaction_index: transaction_index,

@@ -269,9 +269,42 @@ const adminResult = invoke({
   event_id: '8',
   event_name: 'MintAuthorityChanged',
   deployment_id: 'test',
-  contract_id: 'test'
+  contract_id: 'test',
+  topics: JSON.stringify({ authority: 'CAUCTION' }),
+  args: JSON.stringify({ old_enabled: false, enabled: true, changed_by: 'GADMIN' })
 });
 assert.strictEqual(adminResult.visibility, 'admin', 'MintAuthorityChanged should have admin visibility');
+assert.strictEqual(adminResult.actor, 'GADMIN', 'the caller is the actor, not the granted authority');
+assert.deepStrictEqual(JSON.parse(adminResult.addresses), ['CAUCTION', 'GADMIN', 'test']);
+
+// The actor is the account that acted: admin before the module contracts an init event names,
+// and no actor for DaoLaunched (it names only the token and the shared Minter).
+const auctionInit = invoke({
+  event_id: '8a', event_name: 'auction_initialized', contract_role: 'auction', deployment_id: 'test', contract_id: 'CAUCTION',
+  topics: JSON.stringify({ admin: 'GADMIN' }),
+  args: JSON.stringify({ token_contract: 'CTOKEN', treasury: 'CTREASURY', duration: '86400', reserve_price: '1', min_bid_increment_percent: 5, time_buffer: '300', payment_token: 'CXLM' })
+});
+assert.strictEqual(auctionInit.actor, 'GADMIN');
+assert.deepStrictEqual(JSON.parse(auctionInit.addresses), ['GADMIN', 'CTREASURY', 'CTOKEN', 'CXLM', 'CAUCTION']);
+const marketInit = invoke({
+  event_id: '8b', event_name: 'marketplace_initialized', contract_role: 'marketplace', deployment_id: 'test', contract_id: 'CMARKET',
+  topics: JSON.stringify({ token: 'CTOKEN', admin: 'GADMIN' }),
+  args: JSON.stringify({ treasury: 'CTREASURY', payment_asset: 'CXLM', default_secondary_fee_bps: 250 })
+});
+assert.strictEqual(marketInit.actor, 'GADMIN');
+assert.deepStrictEqual(JSON.parse(marketInit.addresses), ['GADMIN', 'CTREASURY', 'CTOKEN', 'CXLM', 'CMARKET']);
+const treasuryInit = invoke({
+  event_id: '8c', event_name: 'treasury_initialized', contract_role: 'treasury', deployment_id: 'test', contract_id: 'CTREASURY',
+  topics: JSON.stringify({ admin: 'GADMIN' }), args: JSON.stringify({ governor: 'CGOV' })
+});
+assert.strictEqual(treasuryInit.actor, 'GADMIN');
+const launched = invoke({
+  event_id: '8d', event_name: 'dao_launched', contract_role: 'manager', deployment_id: 'test', contract_id: 'CMANAGER',
+  topics: JSON.stringify({ token_address: 'CTOKEN' }),
+  args: JSON.stringify({ launched_ledger: '5', modules: { token: 'CTOKEN' }, launch_auction: true, launch_marketplace: false, minter: 'CMINTER' })
+});
+assert.strictEqual(launched.actor, '');
+assert.deepStrictEqual(JSON.parse(launched.addresses), ['CMINTER', 'CTOKEN', 'CMANAGER']);
 console.log('✅ Passed\n');
 
 // Test 13: Addresses array handling

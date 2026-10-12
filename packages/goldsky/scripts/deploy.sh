@@ -1,90 +1,81 @@
 #!/bin/bash
 #
-# Goldsky Pipeline Deployment Script
+# Goldsky Turbo pipeline deployment.
 #
 # Usage:
-#   ./scripts/deploy.sh [command] [args...]
+#   ./scripts/deploy.sh [command]
 #
 # Commands:
-#   deploy        - Deploy pipeline to Goldsky
-#   validate      - Validate pipeline configuration
-#   status        - Check pipeline deployment status
-#   logs          - Tail pipeline logs
-#   delete        - Delete pipeline from Goldsky
-#   redeploy      - Delete and redeploy pipeline
+#   validate      - Validate the generated pipeline file
+#   deploy        - Apply the pipeline (create or update)
+#   status        - Show the deployed Turbo pipelines
+#   logs          - Tail the pipeline logs
+#   delete        - Delete the pipeline
+#   redeploy      - Delete and apply again (see the replay notes below)
 #
-# Environment Variables:
-#   GOLDSKY_API_KEY     - Goldsky API key (required)
-#   GOLDSKY_SECRET_*    - Pipeline secrets (see setup-env.sh)
+# The pipeline is a Goldsky *Turbo* pipeline. Its name is the `name:` line of
+# pipelines/builder-stellar-events.yaml (`builder-stellar-<network>`, set by
+# `pnpm generate` from the Manager artifact or GOLDSKY_PIPELINE_NAME). The legacy
+# `goldsky pipeline ...` commands do not see Turbo pipelines.
+#
+# The CLI is the global `goldsky` (curl https://goldsky.com | sh; `goldsky login`).
+# Database credentials are not passed here: the pipeline reads the Goldsky secret
+# named in the YAML (GOLDSKY_POSTGRES_SECRET, default DAO_POSTGRES).
 #
 
-set -e  # Exit on error
+set -e
 
-# Color output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE_DIR="$(dirname "$SCRIPT_DIR")"
 PIPELINE_FILE="$PACKAGE_DIR/pipelines/builder-stellar-events.yaml"
 
-# Load environment
-if [ -f "$PACKAGE_DIR/.env" ]; then
-  set -a
-  source "$PACKAGE_DIR/.env"
-  set +a
-fi
+for env_file in "$PACKAGE_DIR/.env" "$PACKAGE_DIR/.env.local"; do
+  if [ -f "$env_file" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$env_file"
+    set +a
+  fi
+done
 
-# Use local Goldsky CLI from devDependencies
-GOLDSKY_CMD="pnpm goldsky"
-
-# Verify pnpm is available
-if ! command -v pnpm &> /dev/null; then
-  echo -e "${RED}Error: pnpm not installed${NC}"
-  echo ""
-  echo "Install pnpm:"
-  echo "  npm install -g pnpm"
+if ! command -v goldsky &> /dev/null; then
+  echo -e "${RED}Error: goldsky CLI not installed${NC}"
+  echo "  curl https://goldsky.com | sh && goldsky login"
   exit 1
 fi
 
-# Note: GOLDSKY_API_KEY not required - pnpm goldsky uses authenticated session
+if [ ! -f "$PIPELINE_FILE" ]; then
+  echo -e "${RED}✗ Pipeline file not found: $PIPELINE_FILE (run pnpm generate)${NC}"
+  exit 1
+fi
 
-# Get pipeline name from goldsky.yaml
 PIPELINE_NAME=$(grep "^name:" "$PIPELINE_FILE" | head -1 | sed 's/name: //' | tr -d '"' | tr -d "'")
 
 if [ -z "$PIPELINE_NAME" ]; then
-  echo -e "${RED}Error: Could not extract pipeline name from goldsky.yaml${NC}"
+  echo -e "${RED}Error: Could not read the pipeline name from $PIPELINE_FILE${NC}"
   exit 1
 fi
 
-#
-# Commands
-#
-
-cmd_validate() {
+banner() {
   echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-  echo -e "${BLUE}  Validating Goldsky Pipeline${NC}"
+  echo -e "${BLUE}  $1${NC}"
   echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
   echo ""
+}
 
+cmd_validate() {
+  banner "Validating Turbo pipeline"
   echo -e "${YELLOW}→ Pipeline file: $PIPELINE_FILE${NC}"
   echo -e "${YELLOW}→ Pipeline name: $PIPELINE_NAME${NC}"
   echo ""
 
-  # Check file exists
-  if [ ! -f "$PIPELINE_FILE" ]; then
-    echo -e "${RED}✗ Pipeline file not found${NC}"
-    exit 1
-  fi
-
-  echo -e "${GREEN}✓ Pipeline file exists${NC}"
-
-  # Validate YAML syntax
-  if ! $GOLDSKY_CMD pipeline validate "$PIPELINE_FILE" 2>&1; then
+  if ! goldsky turbo validate "$PIPELINE_FILE" 2>&1; then
     echo -e "${RED}✗ Pipeline validation failed${NC}"
     exit 1
   fi
@@ -94,174 +85,117 @@ cmd_validate() {
 }
 
 cmd_deploy() {
-  echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-  echo -e "${BLUE}  Deploying Goldsky Pipeline${NC}"
-  echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-  echo ""
-
-  # Validate first
+  banner "Applying Turbo pipeline"
   cmd_validate
 
-  echo -e "${YELLOW}→ Deploying pipeline: $PIPELINE_NAME${NC}"
+  echo -e "${YELLOW}→ Applying pipeline: $PIPELINE_NAME${NC}"
   echo ""
 
-  # Deploy pipeline
-  if ! $GOLDSKY_CMD pipeline apply "$PIPELINE_FILE" 2>&1; then
-    echo -e "${RED}✗ Deployment failed${NC}"
+  if ! goldsky turbo apply "$PIPELINE_FILE" 2>&1; then
+    echo -e "${RED}✗ Apply failed${NC}"
     exit 1
   fi
 
   echo ""
-  echo -e "${GREEN}✓ Pipeline deployed successfully${NC}"
+  echo -e "${GREEN}✓ Pipeline applied${NC}"
   echo ""
   echo -e "${YELLOW}Next steps:${NC}"
-  echo "  1. Check status: ./scripts/deploy.sh status"
-  echo "  2. View logs: ./scripts/deploy.sh logs"
+  echo "  1. Status: ./scripts/deploy.sh status"
+  echo "  2. Logs:   ./scripts/deploy.sh logs"
+  echo "  3. Verify the read model with the queries in README.md (Redeploy checklist)"
   echo ""
 }
 
 cmd_status() {
-  echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-  echo -e "${BLUE}  Pipeline Status${NC}"
-  echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
+  banner "Turbo pipelines"
+  echo -e "${YELLOW}→ Expecting: $PIPELINE_NAME${NC}"
   echo ""
-
-  echo -e "${YELLOW}→ Checking status for: $PIPELINE_NAME${NC}"
-  echo ""
-
-  $GOLDSKY_CMD pipeline status "$PIPELINE_NAME" 2>&1
-
+  goldsky turbo list 2>&1
   echo ""
 }
 
 cmd_logs() {
-  echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-  echo -e "${BLUE}  Pipeline Logs${NC}"
-  echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
+  banner "Pipeline logs"
+  echo -e "${YELLOW}→ Tailing logs for: $PIPELINE_NAME (Ctrl+C to exit)${NC}"
   echo ""
-
-  echo -e "${YELLOW}→ Tailing logs for: $PIPELINE_NAME${NC}"
-  echo -e "${YELLOW}→ Press Ctrl+C to exit${NC}"
-  echo ""
-
-  $GOLDSKY_CMD pipeline logs "$PIPELINE_NAME" --follow 2>&1
+  goldsky turbo logs "$PIPELINE_NAME" --follow 2>&1
 }
 
 cmd_delete() {
-  echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-  echo -e "${BLUE}  Delete Pipeline${NC}"
-  echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-  echo ""
-
-  echo -e "${RED}⚠️  WARNING: This will permanently delete the pipeline${NC}"
+  banner "Delete Turbo pipeline"
+  echo -e "${RED}⚠️  This permanently deletes the pipeline${NC}"
   echo -e "${YELLOW}→ Pipeline: $PIPELINE_NAME${NC}"
   echo ""
 
-  read -p "Are you sure? (type 'yes' to confirm): " confirm
-
+  read -r -p "Are you sure? (type 'yes' to confirm): " confirm
   if [ "$confirm" != "yes" ]; then
-    echo ""
     echo -e "${YELLOW}Cancelled${NC}"
     exit 0
   fi
 
   echo ""
-  echo -e "${YELLOW}→ Deleting pipeline: $PIPELINE_NAME${NC}"
-
-  if ! $GOLDSKY_CMD pipeline delete "$PIPELINE_NAME" 2>&1; then
+  if ! goldsky turbo delete "$PIPELINE_NAME" 2>&1; then
     echo -e "${RED}✗ Deletion failed${NC}"
     exit 1
   fi
-
-  echo ""
   echo -e "${GREEN}✓ Pipeline deleted${NC}"
   echo ""
 }
 
 cmd_redeploy() {
-  echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
-  echo -e "${BLUE}  Redeploy Pipeline${NC}"
-  echo -e "${BLUE}═══════════════════════════════════════════════${NC}"
+  banner "Redeploy Turbo pipeline"
+  echo -e "${YELLOW}→ This deletes and re-applies: $PIPELINE_NAME${NC}"
+  echo ""
+  echo -e "${YELLOW}The landing tables (chain.raw_events, chain.decoded_events, app.activity_feed_events)${NC}"
+  echo -e "${YELLOW}are immutable, and the DAO allowlists in schema streamling persist across pipelines.${NC}"
+  echo -e "${YELLOW}A changed transform or a new Manager needs, with the pipeline stopped:${NC}"
+  echo "  DROP SCHEMA streamling CASCADE;  then  db/reset-database.sh --yes && db/migrate.sh && db/grant-permissions.sh"
+  echo -e "${YELLOW}(see db/README.md) so the replay starts from an empty read model.${NC}"
   echo ""
 
-  echo -e "${YELLOW}→ This will delete and redeploy: $PIPELINE_NAME${NC}"
-  echo ""
-
-  read -p "Continue? (type 'yes' to confirm): " confirm
-
+  read -r -p "Continue? (type 'yes' to confirm): " confirm
   if [ "$confirm" != "yes" ]; then
-    echo ""
     echo -e "${YELLOW}Cancelled${NC}"
     exit 0
   fi
 
   echo ""
-  echo -e "${YELLOW}→ Step 1: Deleting existing pipeline${NC}"
-
-  # Try to delete (don't fail if it doesn't exist)
-  $GOLDSKY_CMD pipeline delete "$PIPELINE_NAME" 2>&1 || true
+  echo -e "${YELLOW}→ Step 1: deleting the existing pipeline (ignored if absent)${NC}"
+  goldsky turbo delete "$PIPELINE_NAME" 2>&1 || true
 
   echo ""
-  echo -e "${YELLOW}→ Step 2: Deploying new pipeline${NC}"
+  echo -e "${YELLOW}→ Step 2: applying the new pipeline${NC}"
   echo ""
-
   cmd_deploy
 }
 
 cmd_help() {
-  echo "Goldsky Pipeline Deployment Script"
+  echo "Goldsky Turbo pipeline deployment"
   echo ""
-  echo "Usage: $0 [command] [args...]"
+  echo "Usage: $0 [command]"
   echo ""
   echo "Commands:"
-  echo "  deploy        Deploy pipeline to Goldsky"
-  echo "  validate      Validate pipeline configuration"
-  echo "  status        Check pipeline deployment status"
-  echo "  logs          Tail pipeline logs"
-  echo "  delete        Delete pipeline from Goldsky"
-  echo "  redeploy      Delete and redeploy pipeline"
-  echo "  help          Show this help message"
+  echo "  validate      Validate pipelines/builder-stellar-events.yaml"
+  echo "  deploy        Apply the pipeline (create or update)"
+  echo "  status        List the deployed Turbo pipelines"
+  echo "  logs          Tail the pipeline logs"
+  echo "  delete        Delete the pipeline"
+  echo "  redeploy      Delete and apply again"
+  echo "  help          Show this help"
   echo ""
-  echo "Environment Variables:"
-  echo "  GOLDSKY_API_KEY     Goldsky API key (required)"
-  echo "  GOLDSKY_SECRET_*    Pipeline secrets (see setup-env.sh)"
-  echo ""
-  echo "Examples:"
-  echo "  $0 validate"
-  echo "  $0 deploy"
-  echo "  $0 status"
-  echo "  $0 logs"
-  echo ""
+  echo "Pipeline name: $PIPELINE_NAME (from the YAML; pnpm generate sets it)"
 }
-
-#
-# Main
-#
 
 COMMAND="${1:-help}"
 
 case "$COMMAND" in
-  deploy)
-    cmd_deploy
-    ;;
-  validate)
-    cmd_validate
-    ;;
-  status)
-    cmd_status
-    ;;
-  logs)
-    cmd_logs
-    ;;
-  delete)
-    cmd_delete
-    ;;
-  redeploy)
-    cmd_redeploy
-    ;;
-  help|--help|-h)
-    cmd_help
-    ;;
+  deploy) cmd_deploy ;;
+  validate) cmd_validate ;;
+  status) cmd_status ;;
+  logs) cmd_logs ;;
+  delete) cmd_delete ;;
+  redeploy) cmd_redeploy ;;
+  help|--help|-h) cmd_help ;;
   *)
     echo -e "${RED}Error: Unknown command '$COMMAND'${NC}"
     echo ""

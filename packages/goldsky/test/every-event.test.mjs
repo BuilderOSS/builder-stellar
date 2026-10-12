@@ -37,7 +37,7 @@ const ADDRESS_FIELDS = new Set([
   'recipient', 'deployer', 'launch_admin', 'approver', 'owner', 'operator', 'delegator', 'delegate',
   'from_delegate', 'to_delegate', 'changed_by', 'cancelled_by', 'governor', 'target', 'token', 'token_address',
   'current_admin', 'proposed_admin', 'cancelled_admin', 'old_admin', 'new_admin', 'from', 'to', 'winner',
-  'payment_asset', 'payment_token', 'contract_address', 'implementation', 'new_treasury'
+  'payment_asset', 'payment_token', 'token_contract', 'treasury_contract'
 ]);
 const BYTES_FIELDS = new Set(['proposal_id', 'wasm_hash', 'from_hash', 'to_hash', 'root', 'hash']);
 const STRING_FIELDS = new Set([
@@ -110,5 +110,17 @@ for (const c of cases) {
       assert.ok(!row.summary.includes(hole), `${c.name}: summary "${row.summary}" has a hole (${hole})`);
     }
     assert.equal(row.operation_index, null, 'positions stay NULL for the database trigger');
+    // Every address the event carries is searchable in `addresses` (accounts and contracts alike).
+    const addresses = JSON.parse(row.addresses);
+    for (const field of [...c.topics, ...c.data]) {
+      if (!ADDRESS_FIELDS.has(field)) continue;
+      assert.ok(addresses.includes(topics[field] ?? args[field]), `${c.name}: address field ${field} is missing from addresses`);
+    }
+    // The actor is the account that acted: the caller before the subject or a module contract.
+    const fields = [...c.topics, ...c.data];
+    const value = (f) => topics[f] ?? args[f];
+    if (c.name === 'DaoLaunched') assert.equal(row.actor, '', 'DaoLaunched names only contracts');
+    else if (fields.includes('changed_by')) assert.equal(row.actor, value('changed_by'), `${c.name}: changed_by is the actor`);
+    else if (fields.includes('admin')) assert.equal(row.actor, value('admin'), `${c.name}: admin is the actor`);
   });
 }

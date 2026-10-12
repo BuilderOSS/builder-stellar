@@ -2,7 +2,10 @@
 
 PostgreSQL-backed event indexer for Stellar DAO using Goldsky Turbo Pipelines.
 
-This package owns the Goldsky pipeline source, generator, tests, and deployment scripts.
+This package owns the Goldsky pipeline source, generator, tests, and deployment scripts. The
+deployed pipeline is a Goldsky **Turbo** pipeline named `builder-stellar-<network>`
+(`builder-stellar-testnet` today); `pnpm generate` writes that name into the YAML, so the file is
+applied as is (`goldsky turbo apply`). The legacy `goldsky pipeline ...` commands do not see it.
 
 ## Quick Start
 
@@ -10,7 +13,8 @@ This package owns the Goldsky pipeline source, generator, tests, and deployment 
 
 ```bash
 cp .env.example .env
-# Edit .env with your credentials
+# Point MANAGER_DEPLOYMENT_FILE at the Manager artifact; install and log in to the Goldsky CLI:
+# curl https://goldsky.com | sh && goldsky login
 ```
 
 ### 2. Run Database Migrations
@@ -43,21 +47,18 @@ pnpm generate
 
 ## Environment Variables
 
-### Required
+Read by `pnpm generate` and `scripts/deploy.sh` from `.env` / `.env.local` (or the shell):
 
-- `GOLDSKY_API_KEY` - Goldsky API key
-- `DATABASE_URL` - PostgreSQL admin connection (for migrations)
-- `APP_DATABASE_URL` - PostgreSQL read-only connection (for app queries)
+- `MANAGER_DEPLOYMENT_FILE` (required) - the Manager deployment artifact, relative to the repo root
+- `GOLDSKY_POSTGRES_SECRET` - name of the Goldsky secret holding the `goldsky_writer` Postgres
+  credentials (default `DAO_POSTGRES`). The secret is created once in Goldsky
+  (`goldsky secret create`); no database credential is written into the YAML or read here.
+- `GOLDSKY_START_AT` - start ledger, only when the artifact has no `deploymentLedger`
+  (it overrides the artifact when set)
+- `GOLDSKY_PIPELINE_NAME` - pipeline name override (default `builder-stellar-<network>`)
 
-### Goldsky Secrets
-
-Injected into the pipeline:
-
-- `GOLDSKY_SECRET_NEON_HOST` - Database host
-- `GOLDSKY_SECRET_NEON_PORT` - Database port (usually 5432)
-- `GOLDSKY_SECRET_NEON_DATABASE` - Database name
-- `GOLDSKY_SECRET_NEON_USER` - Database user (goldsky_writer role)
-- `GOLDSKY_SECRET_NEON_PASSWORD` - Database password
+The Goldsky CLI authenticates with `goldsky login`; no API key variable is used. Database
+migrations use `DATABASE_URL` from `db/README.md`, not this package.
 
 ### Manager Deployment
 
@@ -67,8 +68,8 @@ Set `MANAGER_DEPLOYMENT_FILE` to the Manager deployment artifact, for example:
 MANAGER_DEPLOYMENT_FILE=deploys/builder-testnet-manager.json
 ```
 
-The artifact supplies the Manager and deployment-level Minter contract addresses and network. It should supply the starting ledger; if it does not, set `GOLDSKY_START_AT` explicitly. The Manager is the only configured contract input; `DaoCreated` and
-`DaoRegistered` events discover each DAO's module addresses.
+The artifact supplies the Manager and deployment-level Minter contract addresses and network. It should supply the starting ledger; if it does not, set `GOLDSKY_START_AT` explicitly. The Manager and the Minter are the only configured contract inputs; each `DaoCreated`
+event's `modules` struct adds the six module addresses to the `streamling.dao_*` allowlists.
 
 The generator also reads `packages/goldsky/.env` and `packages/goldsky/.env.local` when present.
 
@@ -90,13 +91,13 @@ pnpm validate
 ### Deployment
 
 ```bash
-# Validate pipeline configuration
+# Validate pipeline configuration (goldsky turbo validate)
 ./scripts/deploy.sh validate
 
-# Deploy pipeline to Goldsky
+# Apply the pipeline (goldsky turbo apply; creates or updates in place)
 ./scripts/deploy.sh deploy
 
-# Check pipeline status
+# List the deployed Turbo pipelines
 ./scripts/deploy.sh status
 
 # Tail pipeline logs
@@ -105,13 +106,31 @@ pnpm validate
 # Delete pipeline
 ./scripts/deploy.sh delete
 
-# Redeploy (delete + deploy)
+# Redeploy (delete + apply; see the checklist below first)
 ./scripts/deploy.sh redeploy
 ```
 
+### Redeploy checklist
+
+The landing tables are immutable and the `streamling.dao_*` allowlists persist across pipelines, so
+any change to a transform's output (kinds, summaries, actors, addresses) or a new Manager is a full
+replay (details in [`db/README.md`](../../db/README.md)):
+
+1. `./scripts/deploy.sh delete` (the pipeline must be stopped before the schema drop)
+2. `DROP SCHEMA streamling CASCADE;` then `db/reset-database.sh --yes && db/migrate.sh && db/grant-permissions.sh`
+3. `pnpm generate && ./scripts/deploy.sh deploy`
+4. Verify as an admin role once the replay has caught up:
+   - `SELECT count(*) FROM chain.decoded_events WHERE contract_role = 'unknown'` → 0
+   - `SELECT count(*) FROM chain.decoded_events WHERE topics = '{}' AND topic_0 <> ''` → 0
+     (host system events such as `executable_update` are dropped by `type = 'contract'`; the
+     testnet tables held 13 of them from before that filter)
+   - `SELECT count(*) FROM app.activity_feed_events WHERE kind LIKE 'contract.%' OR kind LIKE 'module.%'` → 0
+   - raw, decoded and feed row counts are equal
+
 ## Pipeline Architecture
 
-The generator reads deployment configuration and transform scripts, then writes `goldsky.yaml`:
+The generator reads deployment configuration and transform scripts, then writes
+`pipelines/builder-stellar-events.yaml`:
 
 ```
 Stellar Network
@@ -185,14 +204,12 @@ share topics (enforced by `contractEvents()`). Each module's launch event has it
 | `UpgradeDelayChanged` | manager and minter (common) | none | `from_ledgers`, `to_ledgers`, `effective_ledger` | new; public row, a reduction is in force from `effective_ledger` |
 | `TokenInitialized` / `GovernorInitialized` / `TreasuryInitialized` / `AuctionInitialized` | modules | `admin` | unchanged | topic renamed from `owner` |
 | `MarketplaceInitialized` | marketplace | `token`, `admin` | unchanged | `admin` topic added |
-| `MetadataInitialized` | metadata | `token` | `admin` replaces `owner` | renamed |
 | `*Changed` (governor setters) | governor | `changed_by` | `old_value`, `new_value` | topic renamed from `caller` |
 | `PaymentAssetUpdated` / `SecondaryFeeUpdated` / `MarketplacePaused` / `MarketplaceUnpaused` | marketplace | `changed_by` | unchanged | `changed_by` topic added |
 | `ManagerInitialized` / `ImplementationRegistered` / `UpgradeApproved` / `ImplementationRevoked` / `ManagerUpgraded` | manager | unchanged | `*_ledger` replaces `*_at` | fields hold ledger numbers |
 | `MintAuthorityChanged` | token | `authority` | `old_enabled`, `enabled`, `changed_by` | also emitted per minter at launch |
 | `DaoLaunched` | manager | `token_address` | `launched_ledger`, `modules`, `launch_auction`, `launch_marketplace`, `minter` | `minter` (the pinned shared Minter) replaces `enable_minter` (0.3.0) |
 | `AdminProposed` | manager | `current_admin`, `proposed_admin` | none | new |
-| `AdminChanged` | manager | `old_admin`, `new_admin` | none | new |
 | `PlatformMinterSet` | manager | `minter` | none | new |
 | `Execute` | treasury | `governor`, `target`, `proposal_id` | `function`, `index` | `proposal_id` topic and `index` added; one event per call |
 | `ProposalExecuted` | governor | `proposal_id` | none | now emitted inside `consume` (same tx as `Execute`s) |
@@ -205,7 +222,6 @@ share topics (enforced by `contractEvents()`). Each module's launch event has it
 | `PrimaryListingCancelled` / `PrimaryListingExpired` | marketplace | `listing_id` | none | new |
 | `SecondaryListingCreated` | marketplace | `token_id` | `seller`, `price`, `expires_at`, `fee_bps`, `payment_asset` | `payment_asset` added |
 | `ListingPurchased` / `ListingCancelled` / `ListingExpired` | marketplace | `token_id` (+`buyer`) | unchanged | secondary only |
-| `MarketplacePaused` | marketplace | none | none | may be emitted at launch |
 | `Upgraded` | token, governor, treasury, auction, marketplace, metadata and the shared minter (defined once in `contracts/common/src/upgrade.rs`) | `from_hash`, `to_hash` | `version` | new; replaces marketplace-only `MarketplaceUpgraded`; public activity row `<role>.upgraded` (`governance.upgraded` for the governor; "Contract upgraded to version V (from -> to)", hashes shortened to 8 chars) |
 | `ProfileUpdated` | metadata | `seq` | `hash`, `profile` | new (0.3.0); the profile JSON lives only here. Public activity row except seq 0 (the initial profile, admin) |
 | `MetadataInitialized` | metadata | `token` | `renderer_base`, `admin` | description, project URI and contract image removed (0.3.0) |
@@ -218,10 +234,11 @@ share topics (enforced by `contractEvents()`). Each module's launch event has it
 
 ### Common-crate events
 
-The contract-event parser also scans `contracts/common/src/*.rs`. Events defined there are
-emitted by every module, so `contractEventList()` lists each once per emitting role (token,
-governor, treasury, auction, marketplace, metadata; `source: 'common'`). The decoder keys on
-name only: the emitting module is `contract_id` / `contract_role`.
+The contract-event parser also scans `contracts/common/src/*.rs` and lists each event there once
+per emitting role (`source: 'common'`), from `COMMON_EVENT_EMITTERS` in `src/contract-events.mjs`:
+`AdminChanged` for the six DAO modules; `Upgraded` and `Migrated` for the six modules and the
+shared Minter; `UpgradeDelayChanged` for the Manager and the Minter only. The decoder keys on
+name only: the emitting contract is `contract_id` / `contract_role`.
 
 ### Activity feed labels
 
@@ -243,7 +260,10 @@ are `admin`; listing cancellations and expiries (`marketplace.listing_cancelled`
 `marketplace.primary_listing_cancelled`, `marketplace.primary_listing_expired`) are `public`, like the listing
 itself. The shared Minter's `Upgraded` / `Migrated` are `minter.upgraded` / `minter.migrated`; the governor's
 role-based kinds use the `governance.` prefix like its other kinds. `activity_feed_events`
-columns are unchanged; `listing_id` and `index` are only in `topics`/`args`.
+columns are unchanged; `listing_id` and `index` are only in `topics`/`args`. `addresses` holds every
+address field the event carries (accounts, then module, token and payment-asset contracts, the
+emitting contract last). `actor` is the account that acted: the caller (`changed_by`, `admin`)
+before the subject (`authority`) or a module contract, and empty for `DaoLaunched`.
 
 **Public feed curation.** Only story events are `public`/`governance`: launches,
 proposals and votes, real delegation, auctions (started, bid, settled, cancelled),
@@ -255,24 +275,17 @@ delegator) are `admin`/`system`. See `userFacing` in `src/activity-feed.script.j
 
 ## Data Access Layer
 
-Query functions in `apps/web/src/lib/goldsky.ts`:
+The app reads the views through `apps/web/src/lib/goldsky.ts`. Every query is scoped to one DAO
+(`daoId` first), for example:
 
 ```typescript
-// Activity feed
-await getGoldskyActivityFeed({ limit: 25 })
-
-// Proposals
-await getGoldskyProposalList({ status: 'active' })
-await getGoldskyProposalDetail('proposal_id')
-await getGoldskyProposalVotes({ proposalId: 'id' })
-await getGoldskyProposalLifecycle('proposal_id')
-
-// Token inventory
-await getGoldskyTokenInventory({ limit: 100 })
-await getGoldskyMintAuthorities()
-await getGoldskyGovernorAuthorities()
-
-// Health check
+await getGoldskyActivityFeed(daoId, { limit: 25 })
+await getGoldskyProposalList(daoId, { status: 'active' })
+await getGoldskyProposalDetail(daoId, proposalId)
+await getGoldskyProposalVotes(daoId, proposalId)
+await getGoldskyTokenInventory(daoId, { limit: 100 })
+await getGoldskyMintAuthorities(daoId)
+await getGoldskyDaoList()
 await getGoldskyHealth()
 ```
 
@@ -293,9 +306,9 @@ packages/goldsky/
 ├── scripts/
 │   ├── generate-pipeline.mjs
 │   ├── validate-events.mjs         # decoder vs contract events
-│   └── deploy.sh
+│   └── deploy.sh                   # goldsky turbo validate/apply/list/logs/delete
 ├── test/                           # unit, contract-alignment and DB integration tests
-├── .env                            # your configuration (gitignored)
+├── .env / .env.local               # your configuration (gitignored)
 └── package.json
 ```
 
@@ -306,7 +319,7 @@ packages/goldsky/
 3. Add or update views if the read model needs it (new migration in `db/migrations/`)
 4. Add a test in `test/dao-events-transform.test.mjs` and update `REQUIRED_EVENTS` in `test/event-coverage.test.mjs` (add removed names to `test/removed-events.mjs`). `test/every-event.test.mjs` already runs every `#[contractevent]` through the decoder and the activity transform and fails on a missing kind, title or topic name, or a summary with a hole; a library event needs its emitting role in `LIBRARY_ROLES` there.
 5. Run `pnpm test && pnpm validate`
-6. Regenerate (`GOLDSKY_START_AT=<ledger> pnpm generate` when the artifact has no ledger) and redeploy: `./scripts/deploy.sh redeploy`. The checked-in pipeline test fails if it is stale.
+6. Regenerate (`GOLDSKY_START_AT=<ledger> pnpm generate` when the artifact has no ledger) and replay (Redeploy checklist above). The checked-in pipeline test fails if it is stale.
 
 ## Database Setup
 
@@ -324,9 +337,9 @@ Roles, migrations, grants and the reset runbook live in [`db/README.md`](../../d
 ### Pipeline deployment fails
 
 ```bash
-./scripts/deploy.sh validate  # Check YAML syntax
-echo $GOLDSKY_API_KEY          # Verify API key
-cat .env | grep GOLDSKY_SECRET # Check secrets
+./scripts/deploy.sh validate  # goldsky turbo validate
+goldsky login                  # CLI session
+goldsky secret list            # the Postgres secret named in the YAML must exist
 ```
 
 ### No events in database

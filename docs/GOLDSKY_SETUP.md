@@ -37,9 +37,9 @@ Why six allowlists when `manager.daos` already lists every module: `manager.daos
 
 ## Validation and deployment boundary
 
-`pnpm validate` checks contract-event alignment locally. `pnpm turbo:validate` invokes `goldsky turbo validate` and requires a usable CLI. `scripts/deploy.sh` still invokes `pnpm goldsky pipeline ...` commands and loads `.env`; its CLI compatibility is not established by local transform tests. Confirm the installed CLI command family before using it to validate/apply/delete a remote pipeline. This page does not claim remote deployment was verified.
+`pnpm validate` checks contract-event alignment locally. `pnpm turbo:validate` and `scripts/deploy.sh` use the Turbo CLI (`goldsky turbo validate|apply|list|logs|delete`, global `goldsky`, `goldsky login`); the legacy `goldsky pipeline ...` commands do not see Turbo pipelines. The script reads the pipeline name from the generated YAML.
 
-Pipeline name is `builder-stellar-events`; the current testnet pipeline was applied with `goldsky turbo apply` from a copy renamed `builder-stellar-testnet` (`goldsky turbo list|delete|apply`). A replay after a DB reset needs `goldsky turbo delete <name>` (clears state) and a fresh `apply`. The template requests `stellar_<network>.events` version `1.2.0`, resource size `s`, streaming mode, and an explicit start ledger. These are configured values, not a claim that every network alias is available from the vendor.
+The pipeline name is `builder-stellar-<network>` from the Manager artifact (`GOLDSKY_PIPELINE_NAME` overrides it), so the generated `pipelines/builder-stellar-events.yaml` is applied as is; the testnet pipeline is `builder-stellar-testnet`. A replay after a DB reset needs `goldsky turbo delete <name>` (clears state) and a fresh `apply`; the checklist is in `packages/goldsky/README.md`. The template requests `stellar_<network>.events` version `1.2.0`, resource size `s`, streaming mode, and an explicit start ledger. These are configured values, not a claim that every network alias is available from the vendor.
 
 ## Event identity notes
 
