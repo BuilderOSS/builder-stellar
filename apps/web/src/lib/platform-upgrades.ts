@@ -70,8 +70,6 @@ export function describePending(
   };
 }
 
-const hex = (bytes: Uint8Array | undefined | null) => (bytes ? Buffer.from(bytes).toString('hex') : null);
-
 export async function loadPlatformUpgrades(
   config: DaoNetworkConfig,
   address?: string | null
