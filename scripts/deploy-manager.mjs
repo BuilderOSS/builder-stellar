@@ -3,8 +3,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import readline from 'node:readline/promises';
 import {
   DEFAULT_CODE_TTL_DAYS,
-  LEDGERS_PER_DAY,
   enrichTransactionMetadata,
+  extendWithinFeeCap,
   parseCodeTtlDays,
   run,
   runQuiet
@@ -264,28 +264,19 @@ function installWasm(packageName) {
 // `node scripts/renew-code-ttl.mjs <artifact>`. EXTEND_CODE_TTL_DAYS overrides the lifetime; values at or
 // below the 4 days contracts bump code to are refused (the next caller would pay again).
 const CODE_TTL_DAYS = parseCodeTtlDays(process.env.EXTEND_CODE_TTL_DAYS || DEFAULT_CODE_TTL_DAYS);
-const CODE_TTL_LEDGERS = CODE_TTL_DAYS * LEDGERS_PER_DAY;
 
 function extendCodeTtl(label, hash) {
-  const result = runQuiet('stellar', [
-    'contract',
-    'extend',
-    '--wasm-hash',
-    hash,
-    '--ledgers-to-extend',
-    String(CODE_TTL_LEDGERS),
-    '--durability',
-    'persistent',
-    '--source-account',
-    identityName,
-    '--network',
-    networkName
-  ]);
-  if (result.ok) {
-    console.log(`Extended ${label} code TTL to ~${CODE_TTL_DAYS} days (${hash.slice(0, 12)}...)`);
-  } else {
+  // Simulated first and stepped when one extension would come close to the u32 fee cap.
+  try {
+    const steps = extendWithinFeeCap(['--wasm-hash', hash], CODE_TTL_DAYS, {
+      network: networkName,
+      source: identityName
+    });
+    const detail = steps.map((s) => `${s.days} d for ${(Number(s.fee) / 1e7).toFixed(2)} XLM`).join(', then ');
+    console.log(`Extended ${label} code (${hash.slice(0, 12)}...): ${detail}`);
+  } catch (e) {
     console.warn(
-      `WARNING: could not extend ${label} code TTL: ${(result.stderr || result.stdout).trim().split('\n').slice(-2).join(' ')}\n` +
+      `WARNING: could not extend ${label} code TTL: ${e.message.split('\n').slice(-2).join(' ')}\n` +
         '  Re-run, or run scripts/renew-code-ttl.mjs: until then the code is at the network minimum.'
     );
   }

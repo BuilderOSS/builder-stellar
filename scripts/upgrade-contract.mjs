@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { DEFAULT_CODE_TTL_DAYS, LEDGERS_PER_DAY, parseCodeTtlDays, runQuiet } from './lib.mjs';
+import { DEFAULT_CODE_TTL_DAYS, extendWithinFeeCap, parseCodeTtlDays, runQuiet } from './lib.mjs';
 
 /**
  * Upgrade tooling for the hardened contracts.
@@ -154,14 +154,15 @@ const installResult = runQuiet('stellar', [
 if (!installResult.ok && !installResult.stderr.includes('already exists') && !installResult.stdout.includes(targetHash)) {
   throw new Error(`Failed to install ${moduleName} WASM: ${installResult.stderr || installResult.stdout}`);
 }
-const extendResult = runQuiet('stellar', [
-  'contract', 'extend', '--wasm-hash', targetHash, '--ledgers-to-extend', String(codeTtlDays * LEDGERS_PER_DAY),
-  '--durability', 'persistent', '--source-account', identityName, '--network', networkConfig.network
-]);
-if (!extendResult.ok) {
-  throw new Error(`Failed to extend ${moduleName} code to ${codeTtlDays} days: ${extendResult.stderr || extendResult.stdout}`);
-}
-console.log(`Extended ${moduleName} code ${targetHash.slice(0, 12)}... to ~${codeTtlDays} days.`);
+// Simulated first and stepped when one extension would come close to the u32 fee cap.
+const extendSteps = extendWithinFeeCap(['--wasm-hash', targetHash], codeTtlDays, {
+  network: networkConfig.network,
+  source: identityName
+});
+console.log(
+  `Extended ${moduleName} code ${targetHash.slice(0, 12)}...: ` +
+    extendSteps.map((s) => `${s.days} d for ${(Number(s.fee) / 1e7).toFixed(2)} XLM`).join(', then ')
+);
 
 const implementationName = moduleName[0].toUpperCase() + moduleName.slice(1);
 if (moduleName === 'manager') {
