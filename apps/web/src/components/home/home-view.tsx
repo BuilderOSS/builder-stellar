@@ -1,6 +1,7 @@
 'use client';
 
 import { ArrowRight, Plus } from 'lucide-react';
+import { useState } from 'react';
 import { css } from 'styled-system/css';
 
 import { ActivityList } from '@/components/activity/activity-list';
@@ -15,6 +16,10 @@ import { useDashboardData } from '@/lib/goldsky-queries';
 
 import { HomeDrafts } from './home-drafts';
 
+const ACTIVITY_SHOWN = 5;
+const SUGGESTIONS_SHOWN = 4;
+
+const more = css({ display: 'flex', justifyContent: 'center', pt: '2' });
 const hero = css({ display: 'grid', gap: '5', py: { base: '6', md: '12' }, maxW: '760px' });
 const heroTitle = css({
   fontFamily: 'display',
@@ -156,10 +161,21 @@ function SignedInHome({ daos, pendingDaos }: { daos: DaoConfig[]; pendingDaos: D
   });
   mine.sort((a, b) => (a.yours === 'Home' ? -1 : b.yours === 'Home' ? 1 : 0));
   const setup = pendingDaos.map((dao) => toCommunitySummary(dao, 'Launch admin'));
-  const suggestions = daos
+  const [showAllActivity, setShowAllActivity] = useState(false);
+  // Buy again first: open auctions and listings where you're already a member,
+  // then live ones elsewhere, then the rest.
+  const available = (community: CommunitySummary) => Boolean(community.auctionLive || community.forSale);
+  const backIn = mine.filter(available);
+  const elsewhere = daos
     .filter((dao) => !mine.some((item) => item.id === dao.dao_id))
-    .slice(0, 4)
     .map((dao) => toCommunitySummary(dao));
+  const suggestions = [
+    ...backIn,
+    ...elsewhere.filter(available),
+    ...elsewhere.filter((community) => !available(community))
+  ].slice(0, SUGGESTIONS_SHOWN);
+  const upForGrabs = suggestions.some(available);
+  const activity = data?.feed.items ?? [];
 
   return (
     <div className={page}>
@@ -182,9 +198,9 @@ function SignedInHome({ daos, pendingDaos }: { daos: DaoConfig[]; pendingDaos: D
         id="your-communities"
         title="Your communities"
         action={
-          <ButtonLink href="/create" variant="ghost" size="sm">
+          <ButtonLink href="/create" variant="secondary" size="sm">
             <Plus aria-hidden="true" />
-            Start one
+            Start a DAO
           </ButtonLink>
         }
       >
@@ -213,19 +229,16 @@ function SignedInHome({ daos, pendingDaos }: { daos: DaoConfig[]; pendingDaos: D
         )}
       </Section>
 
-      {data?.feed.items.length ? (
-        <Section title="Recent activity">
-          <ActivityList
-            items={data.feed.items}
-            daoIdFor={(item) => ('dao_id' in item ? item.dao_id : '')}
-            showCommunity
-          />
-        </Section>
-      ) : null}
-
       {suggestions.length ? (
         <Section
-          title="Discover more"
+          title={upForGrabs ? 'Up for grabs' : 'Discover more'}
+          description={
+            backIn.length
+              ? "Auctions and tokens for sale in your communities first, then what's open elsewhere."
+              : upForGrabs
+                ? 'Auctions taking bids and tokens for sale right now.'
+                : undefined
+          }
           action={
             <ButtonLink href="/discover" variant="ghost" size="sm">
               See all
@@ -242,6 +255,28 @@ function SignedInHome({ daos, pendingDaos }: { daos: DaoConfig[]; pendingDaos: D
       ) : null}
 
       <HomeDrafts />
+
+      {activity.length ? (
+        <Section title="Recent activity">
+          <ActivityList
+            items={showAllActivity ? activity : activity.slice(0, ACTIVITY_SHOWN)}
+            daoIdFor={(item) => ('dao_id' in item ? item.dao_id : '')}
+            showCommunity
+          />
+          {activity.length > ACTIVITY_SHOWN ? (
+            <div className={more}>
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-expanded={showAllActivity}
+                onClick={() => setShowAllActivity((open) => !open)}
+              >
+                {showAllActivity ? 'Show less' : 'Show more'}
+              </Button>
+            </div>
+          ) : null}
+        </Section>
+      ) : null}
     </div>
   );
 }

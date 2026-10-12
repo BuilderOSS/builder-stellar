@@ -79,6 +79,13 @@ export interface DaoConfig {
    */
   marketplace_enabled: boolean | null;
 
+  /**
+   * Something to buy right now, from the index. Only set by withLiveAvailability:
+   * an open auction still taking bids, and listings that are open and unexpired.
+   */
+  auction_live?: boolean;
+  listings_open?: number;
+
   // Blockchain Timeline
   created_ledger: number;
   created_at: string | null; // ISO timestamp
@@ -304,4 +311,75 @@ export async function waitForDaoIndexed(daoId: string, timeoutMs = 30000): Promi
   }
 
   throw new Error(`DAO ${daoId} not indexed after ${timeoutMs}ms. Please check Goldsky indexer status.`);
+}
+
+/**
+ * Adds what each community has for sale right now: whether its current auction
+ * is still taking bids, and how many market listings are open. Two or three
+ * index queries for the whole list; callers opt in.
+ */
+export async function withLiveAvailability(daos: DaoConfig[]): Promise<DaoConfig[]> {
+  try {
+    return await addLiveAvailability(daos);
+  } catch {
+    // Availability only ranks and filters; the list still works without it.
+    return daos;
+  }
+}
+
+async function addLiveAvailability(daos: DaoConfig[]): Promise<DaoConfig[]> {
+  const auctionScopes = daos
+    .filter((dao) => dao.auction_contract && dao.auction_paused !== true)
+    .map((dao) => ({ daoId: dao.dao_id, contractId: dao.auction_contract! }));
+  const marketScopes = daos
+    .filter((dao) => dao.marketplace_contract && dao.marketplace_enabled !== false)
+    .map((dao) => ({ daoId: dao.dao_id, contractId: dao.marketplace_contract! }));
+  if (!auctionScopes.length && !marketScopes.length) return daos;
+
+  const now = BigInt(Math.floor(Date.now() / 1000));
+  const listingWhere = { deploymentId: DEPLOYMENT_ID, OR: marketScopes, status: 'open', expiresAt: { gt: now } };
+  const [auctions, primary, secondary] = await Promise.all([
+    auctionScopes.length
+      ? prisma.auctionAuction.findMany({
+          where: { deploymentId: DEPLOYMENT_ID, OR: auctionScopes, settled: false, cancelled: false },
+          select: { daoId: true, tokenId: true, endSeconds: true },
+          orderBy: { createdLedger: 'desc' }
+        })
+      : [],
+    marketScopes.length
+      ? prisma.marketplacePrimaryListing.groupBy({ by: ['daoId'], where: listingWhere, _count: { _all: true } })
+      : [],
+    marketScopes.length
+      ? prisma.marketplaceSecondaryListing.groupBy({ by: ['daoId'], where: listingWhere, _count: { _all: true } })
+      : []
+  ]);
+
+  // The newest unsettled auction per community. Late bids push its end out, so an
+  // auction past its first end time is still live if a bid extended it beyond now.
+  const current = new Map<string, (typeof auctions)[number]>();
+  for (const auction of auctions) if (!current.has(auction.daoId)) current.set(auction.daoId, auction);
+  const live = new Set([...current.values()].filter((a) => a.endSeconds > now).map((a) => a.daoId));
+  const pastFirstEnd = [...current.values()].filter((a) => a.endSeconds <= now);
+  if (pastFirstEnd.length) {
+    const extended = await prisma.auctionBid.findMany({
+      where: {
+        deploymentId: DEPLOYMENT_ID,
+        OR: pastFirstEnd.map((a) => ({ daoId: a.daoId, tokenId: a.tokenId })),
+        newEndSeconds: { gt: now }
+      },
+      select: { daoId: true },
+      distinct: ['daoId']
+    });
+    for (const bid of extended) live.add(bid.daoId);
+  }
+
+  const listings = new Map<string, number>();
+  for (const row of [...primary, ...secondary])
+    listings.set(row.daoId, (listings.get(row.daoId) ?? 0) + row._count._all);
+
+  return daos.map((dao) => ({
+    ...dao,
+    auction_live: live.has(dao.dao_id),
+    listings_open: listings.get(dao.dao_id) ?? 0
+  }));
 }

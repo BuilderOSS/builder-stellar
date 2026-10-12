@@ -45,18 +45,18 @@ const tokens = defineTokens({
 
 const semanticTokens = defineSemanticTokens({
   colors: {
-    canvas: { value: { base: '#F3EFE8', _dark: '#15120F' } },
-    surface: { value: { base: '#FBF8F3', _dark: '#1D1915' } },
-    raised: { value: { base: '#FFFFFF', _dark: '#26211C' } },
-    hover: { value: { base: '#F1ECE4', _dark: '#2E2822' } },
+    canvas: { value: { base: '#F3EFE8', _dark: '#141311' } },
+    surface: { value: { base: '#FBF8F3', _dark: '#1C1A18' } },
+    raised: { value: { base: '#FFFFFF', _dark: '#252220' } },
+    hover: { value: { base: '#F1ECE4', _dark: '#2D2A27' } },
     rule: {
-      DEFAULT: { value: { base: '#DDD6CB', _dark: '#3A322A' } },
-      strong: { value: { base: '#C9C0B2', _dark: '#4A4036' } }
+      DEFAULT: { value: { base: '#DDD6CB', _dark: '#393530' } },
+      strong: { value: { base: '#C9C0B2', _dark: '#48433D' } }
     },
     ink: {
       DEFAULT: { value: { base: '#221E19', _dark: '#F3EDE5' } },
-      muted: { value: { base: '#5E564C', _dark: '#B6AA9C' } },
-      faint: { value: { base: '#8E8578', _dark: '#857A6D' } }
+      muted: { value: { base: '#5E564C', _dark: '#B3ABA1' } },
+      faint: { value: { base: '#8E8578', _dark: '#847C72' } }
     },
     signal: {
       DEFAULT: { value: { base: '#0068D6', _dark: '#0085FF' } },

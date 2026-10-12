@@ -40,16 +40,24 @@ const dot = css({
   bg: 'success',
   '&[data-issue]': { bg: 'warning' }
 });
-const networkRow = css({ display: 'flex', alignItems: 'center', gap: '2', textStyle: 'caption', color: 'ink.muted' });
-const footerRow = css({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '3' });
+const networkRow = css({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '3' });
+const networkStatus = css({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '2',
+  textStyle: 'caption',
+  color: 'ink.muted'
+});
+// One line where it fits; wraps on narrow screens, each separator travelling with the link after it.
 const footerLinks = css({
   display: 'flex',
   flexWrap: 'wrap',
-  columnGap: '4',
+  alignItems: 'center',
   rowGap: '1',
   textStyle: 'caption',
   color: 'ink.muted',
-  '& a': { color: 'inherit', textDecoration: 'none', _hover: { color: 'ink' } }
+  '& a': { color: 'inherit', textDecoration: 'none', _hover: { color: 'ink' } },
+  '& > * + *::before': { content: '"·"', px: '2', color: 'ink.faint' }
 });
 
 const DRAFTS_SHOWN = 3;
@@ -160,27 +168,20 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
               { value: 'system', label: 'System', icon: <SunMoon aria-hidden="true" /> }
             ]}
           />
-          <div className={footerRow}>
-            <nav className={footerLinks} aria-label="Legal">
+          <nav className={footerLinks} aria-label="Legal">
+            <span>
               <NextLink href={'/privacy' as Route}>Privacy</NextLink>
+            </span>
+            <span>
               <NextLink href={'/terms' as Route}>Terms</NextLink>
+            </span>
+            <span>
               <NextLink href={'/disclaimer' as Route}>Disclaimer</NextLink>
+            </span>
+            <span>
               <BuilderDaoCredit />
-            </nav>
-            {wallet.isAuthenticated ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={async () => {
-                  await wallet.disconnect();
-                  onOpenChange(false);
-                }}
-              >
-                <LogOut aria-hidden="true" />
-                Disconnect
-              </Button>
-            ) : null}
-          </div>
+            </span>
+          </nav>
         </>
       }
     >
@@ -203,8 +204,21 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
             </span>
           </div>
           <div className={networkRow}>
-            <span className={dot} data-issue={wallet.networkIssue ? '' : undefined} aria-hidden="true" />
-            {wallet.networkIssue || `Connected on ${wallet.network.label}`}
+            <span className={networkStatus}>
+              <span className={dot} data-issue={wallet.networkIssue ? '' : undefined} aria-hidden="true" />
+              {wallet.networkIssue || `Connected on ${wallet.network.label}`}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={async () => {
+                await wallet.disconnect();
+                onOpenChange(false);
+              }}
+            >
+              <LogOut aria-hidden="true" />
+              Disconnect
+            </Button>
           </div>
         </section>
       ) : (
@@ -218,7 +232,7 @@ export function YouSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
             <Wallet aria-hidden="true" />
             {wallet.isAuthBusy ? 'Check your wallet' : 'Connect wallet'}
           </Button>
-          <div className={networkRow}>
+          <div className={networkStatus}>
             <span className={dot} aria-hidden="true" />
             Builder is on {wallet.network.label}
           </div>

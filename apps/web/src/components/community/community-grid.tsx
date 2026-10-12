@@ -20,6 +20,8 @@ export function toCommunitySummary(dao: DaoConfig, yours?: string): CommunitySum
     status: dao.status,
     hasAuction: Boolean(dao.auction_contract) && dao.auction_enabled !== false,
     hasMarket: Boolean(dao.marketplace_contract) && dao.marketplace_enabled !== false,
+    auctionLive: dao.auction_live,
+    forSale: dao.listings_open,
     yours
   };
 }
@@ -43,30 +45,50 @@ const toolbar = css({
 const count = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
 
 type Filter = 'all' | 'auction' | 'market';
-type Sort = 'newest' | 'name';
+export type CommunitySort = 'newest' | 'oldest' | 'name' | 'name-desc';
+
+/** Orders communities by creation ledger or by name, in either direction. */
+export function compareCommunities(
+  sort: CommunitySort,
+  a: { name: string; createdLedger?: number | null },
+  b: { name: string; createdLedger?: number | null }
+) {
+  switch (sort) {
+    case 'name':
+      return a.name.localeCompare(b.name);
+    case 'name-desc':
+      return b.name.localeCompare(a.name);
+    case 'oldest':
+      return (a.createdLedger ?? 0) - (b.createdLedger ?? 0);
+    default:
+      return (b.createdLedger ?? 0) - (a.createdLedger ?? 0);
+  }
+}
 
 /** Search, filter and sort over communities, rendered as art-first cards. */
 export function CommunityGrid({ daos }: { daos: DaoConfig[] }) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
-  const [sort, setSort] = useState<Sort>('newest');
+  const [sort, setSort] = useState<CommunitySort>('newest');
 
   const visible = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return daos
       .map((dao) => ({ dao, summary: toCommunitySummary(dao) }))
       .filter(({ dao, summary }) => {
-        if (filter === 'auction' && !summary.hasAuction) return false;
-        if (filter === 'market' && !summary.hasMarket) return false;
+        if (filter === 'auction' && !summary.auctionLive) return false;
+        if (filter === 'market' && !summary.forSale) return false;
         if (!normalized) return true;
         return [summary.name, dao.token_symbol, dao.token_description, dao.dao_id].some((value) =>
           value?.toLowerCase().includes(normalized)
         );
       })
       .sort((a, b) =>
-        sort === 'name'
-          ? a.summary.name.localeCompare(b.summary.name)
-          : (b.dao.created_ledger ?? 0) - (a.dao.created_ledger ?? 0)
+        compareCommunities(
+          sort,
+          { name: a.summary.name, createdLedger: a.dao.created_ledger },
+          { name: b.summary.name, createdLedger: b.dao.created_ledger }
+        )
       );
   }, [daos, filter, query, sort]);
 
@@ -81,12 +103,14 @@ export function CommunityGrid({ daos }: { daos: DaoConfig[] }) {
         />
         <Select aria-label="Show" value={filter} onChange={(event) => setFilter(event.target.value as Filter)}>
           <option value="all">All communities</option>
-          <option value="auction">Running auctions</option>
-          <option value="market">With a market</option>
+          <option value="auction">Auction running now</option>
+          <option value="market">Tokens for sale</option>
         </Select>
-        <Select aria-label="Sort" value={sort} onChange={(event) => setSort(event.target.value as Sort)}>
+        <Select aria-label="Sort" value={sort} onChange={(event) => setSort(event.target.value as CommunitySort)}>
           <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
           <option value="name">A to Z</option>
+          <option value="name-desc">Z to A</option>
         </Select>
       </div>
       <p className={count} role="status" aria-live="polite">

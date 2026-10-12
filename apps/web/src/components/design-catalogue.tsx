@@ -4,6 +4,7 @@ import { Gavel, Plus, Settings, Trash2, Wallet } from 'lucide-react';
 import { useState } from 'react';
 import { css } from 'styled-system/css';
 
+import { BrandLockup, BrandMark, BuilderDaoCredit } from '@/components/shell/brand-mark';
 import {
   ActionBar,
   Address,
@@ -109,7 +110,7 @@ export function DesignCatalogue() {
   const [auctionEndsAt] = useState(() => Math.floor(Date.now() / 1000) + 7_800);
 
   return (
-    <main className={page} id="main-content">
+    <div className={page}>
       <PageHeader
         title="Design system"
         meta="Warm Ink · Dusk. Every primitive in one place. Toggle the theme to check both."
@@ -124,6 +125,18 @@ export function DesignCatalogue() {
       />
 
       <div className={grid}>
+        <Section title="Brand">
+          <div className={row}>
+            <BrandMark size={48} />
+            <BrandMark size={32} />
+            <BrandMark size={20} />
+            <BrandLockup />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/icon.svg" alt="Favicon" width={32} height={32} />
+            <BuilderDaoCredit />
+          </div>
+        </Section>
+
         <Section title="Colour">
           <div className={row}>
             {SWATCHES.map(([name, className]) => (
@@ -160,6 +173,10 @@ export function DesignCatalogue() {
             <IconButton label="Settings">
               <Settings aria-hidden="true" />
             </IconButton>
+            <ButtonLink href="/">
+              <Plus aria-hidden="true" />
+              Primary link
+            </ButtonLink>
             <ButtonLink href="/" variant="secondary">
               Link button
             </ButtonLink>
@@ -383,6 +400,6 @@ export function DesignCatalogue() {
           </>
         }
       />
-    </main>
+    </div>
   );
 }

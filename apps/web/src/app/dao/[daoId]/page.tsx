@@ -29,7 +29,7 @@ import {
 import { useDaoContext } from '@/contexts/dao-context';
 import { useDaoMembership } from '@/hooks/use-dao-membership';
 import { useIsLaunchAdmin } from '@/hooks/useIsLaunchAdmin';
-import { getTreasuryAssets } from '@/lib/assets-config';
+import { paymentAssetCode } from '@/lib/assets-config';
 import { hasAuction, hasMarketplace } from '@/lib/dao-nav';
 import { daoRoute } from '@/lib/dao-routes';
 import { useGoldskyActivityFeed, useGoldskyHealth } from '@/lib/goldsky-queries';
@@ -106,9 +106,7 @@ export default function Page() {
     .sort((a, b) => Number(b.state === ProposalState.Active) - Number(a.state === ProposalState.Active))
     .slice(0, PROPOSAL_PREVIEW);
   const tokenItems = tokens.data?.items.slice(0, tokenLimit) ?? [];
-  const assetCode =
-    getTreasuryAssets(config.name).find((item) => item.contractId === auction.data?.config.payment_token)?.code ??
-    'XLM';
+  const assetCode = paymentAssetCode(config.name, auction.data?.config.payment_token) ?? 'tokens';
   const indexerHealthy = health.data?.status === 'healthy';
 
   async function refreshAll() {

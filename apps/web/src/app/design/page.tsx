@@ -1,11 +1,11 @@
-import { notFound } from 'next/navigation';
+import type { Metadata } from 'next';
 
 import { DesignCatalogue } from '@/components/design-catalogue';
 
-export const metadata = { title: 'Design system' };
+// Shareable but unlisted: no nav link, and kept out of search results.
+export const metadata: Metadata = { title: 'Design system', robots: { index: false, follow: false } };
 
-// Dev-only visual catalogue of every primitive in both themes.
+/** Visual catalogue of every primitive, brand asset and token, in both themes. */
 export default function DesignPage() {
-  if (process.env.NODE_ENV !== 'development') notFound();
   return <DesignCatalogue />;
 }

@@ -1,22 +1,14 @@
 'use client';
 
-import { Button, ButtonLink, ErrorState } from '@/components/ui';
+import { RouteError } from '@/components/route-error';
 
 export default function Error({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
-    <ErrorState
+    <RouteError
+      error={error}
+      reset={reset}
       title="This part of the community didn't load"
-      cause={error.message ? `${error.message}${error.digest ? ` (ref ${error.digest})` : ''}` : undefined}
-      actions={
-        <>
-          <Button variant="secondary" onClick={reset}>
-            Try again
-          </Button>
-          <ButtonLink href="/" variant="ghost">
-            Go to Builder home
-          </ButtonLink>
-        </>
-      }
+      homeLabel="Go to Builder home"
     />
   );
 }

@@ -2,130 +2,136 @@
  * Global base for Warm Ink · Dusk. Tokens live in panda.config.ts (see
  * DESIGN.md); this file only sets element defaults and accessibility helpers.
  * Do not add component or page classes here: build them with Panda.
+ *
+ * Everything sits in Panda's `base` layer. Unlayered CSS beats every layer
+ * regardless of specificity, so a bare `a { color: inherit }` here would
+ * override the colour of every recipe and utility on a link.
  */
 
-:root {
-  color-scheme: light;
-}
+@layer base {
+  :root {
+    color-scheme: light;
+  }
 
-:root[data-theme='dark'] {
-  color-scheme: dark;
-}
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+  }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
 
-html {
-  min-width: 320px;
-  min-height: 100%;
-  background: var(--colors-canvas);
-  scrollbar-gutter: stable;
-  -webkit-text-size-adjust: 100%;
-}
-
-body {
-  margin: 0;
-  min-height: 100%;
-  background: var(--colors-canvas);
-  color: var(--colors-ink);
-  font-family: var(--fonts-body);
-  font-size: 0.9375rem;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
-
-::selection {
-  background: var(--colors-signal-edge);
-  color: var(--colors-ink);
-}
-
-a {
-  color: inherit;
-  text-underline-offset: 3px;
-}
-
-button,
-input,
-select,
-textarea {
-  font: inherit;
-}
-
-button,
-a,
-input,
-select,
-textarea {
-  -webkit-tap-highlight-color: transparent;
-}
-
-input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
-textarea,
-select {
-  caret-color: var(--colors-signal);
-}
-
-input[type='checkbox'],
-input[type='radio'],
-input[type='range'] {
-  accent-color: var(--colors-primary);
-}
-
-textarea {
-  resize: vertical;
-}
-
-input[aria-invalid='true'],
-textarea[aria-invalid='true'],
-select[aria-invalid='true'] {
-  border-color: var(--colors-danger);
-}
-
-table {
-  border-collapse: collapse;
-  font-variant-numeric: tabular-nums;
-}
-
-code,
-time {
-  font-variant-numeric: tabular-nums;
-}
-
-:focus-visible {
-  outline: 2px solid var(--colors-signal);
-  outline-offset: 3px;
-}
-
-/* Headings and regions focused by script (focus management), not by the user. */
-[tabindex='-1']:focus {
-  outline: none;
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-/* Theme swaps change every colour at once; skip the transitions for that frame. */
-[data-theme-switching] *,
-[data-theme-switching] *::before,
-[data-theme-switching] *::after {
-  transition: none !important;
-}
-
-@media (prefers-reduced-motion: reduce) {
   html {
-    scroll-behavior: auto;
+    min-width: 320px;
+    min-height: 100%;
+    background: var(--colors-canvas);
+    scrollbar-gutter: stable;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--colors-canvas);
+    color: var(--colors-ink);
+    font-family: var(--fonts-body);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: var(--colors-signal-edge);
+    color: var(--colors-ink);
+  }
+
+  a {
+    color: inherit;
+    text-underline-offset: 3px;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+  textarea,
+  select {
+    caret-color: var(--colors-signal);
+  }
+
+  input[type='checkbox'],
+  input[type='radio'],
+  input[type='range'] {
+    accent-color: var(--colors-primary);
+  }
+
+  textarea {
+    resize: vertical;
+  }
+
+  input[aria-invalid='true'],
+  textarea[aria-invalid='true'],
+  select[aria-invalid='true'] {
+    border-color: var(--colors-danger);
+  }
+
+  table {
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+  }
+
+  code,
+  time {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--colors-signal);
+    outline-offset: 3px;
+  }
+
+  /* Headings and regions focused by script (focus management), not by the user. */
+  [tabindex='-1']:focus {
+    outline: none;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* Theme swaps change every colour at once; skip the transitions for that frame. */
+  [data-theme-switching] *,
+  [data-theme-switching] *::before,
+  [data-theme-switching] *::after {
+    transition: none !important;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
   }
 }
