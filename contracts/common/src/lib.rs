@@ -23,13 +23,19 @@ pub mod upgrade;
 
 pub use error::CommonError;
 
-/// Every storage key this protocol owns is wrapped as `("buildeross", key)`:
-/// `[Symbol("buildeross"), [Symbol(variant), args...]]`. A `#[contracttype]`
+/// Every storage key this protocol owns is wrapped as `("builder", key)`:
+/// `[Symbol("builder"), [Symbol(variant), args...]]`. A `#[contracttype]`
 /// key encodes only its variant name and arguments, so without the wrapper a
 /// module key can address the same slot as an OpenZeppelin key with the same
 /// variant (docs/STORAGE_DIET_REVIEW.md Finding 1). OpenZeppelin's own keys
 /// (owners, balances, votes, approvals) are not ours and stay unwrapped.
-pub const STORAGE_NAMESPACE: &str = "buildeross";
+///
+/// Nine characters or fewer: the host keeps such a symbol inline in a `Val`
+/// (no object allocation on every key build), and its XDR is 4 bytes shorter
+/// than a 10-character one (D37). Lowercase, so no PascalCase OpenZeppelin
+/// variant can ever equal it.
+pub const STORAGE_NAMESPACE: &str = "builder";
+const _: () = assert!(STORAGE_NAMESPACE.len() <= 9);
 
 /// Namespace `key` for storage (see `STORAGE_NAMESPACE`).
 pub fn ns<K>(e: &soroban_sdk::Env, key: K) -> (soroban_sdk::Symbol, K) {

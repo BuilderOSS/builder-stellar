@@ -3809,7 +3809,7 @@ fn rename_by_proposal_then_settle_mints_with_artwork() {
 }
 
 /// D30: every key a launched DAO, the Manager and the shared Minter write is
-/// either `("buildeross", <variant>)` or a known OpenZeppelin shape. The DAO
+/// either `("builder", <variant>)` or a known OpenZeppelin shape. The DAO
 /// runs every module first (artwork, launch with auction and marketplace,
 /// Minter claims, a secondary and a primary listing, a governed rename), so
 /// the walk sees the keys real use creates.
@@ -4335,14 +4335,14 @@ fn protocol_runs_on_chain_state_only() {
 // apps/web/src/lib/chain-reads mirrors.
 // ----------------------------------------------------------------------------
 
-/// `(Symbol("buildeross"), [Symbol(variant), args..])`, built as a client does.
+/// `(Symbol("builder"), [Symbol(variant), args..])`, built as a client does.
 fn ns_key(e: &Env, variant: &str, args: std::vec::Vec<Val>) -> Val {
     let head: Val = Symbol::new(e, variant).into_val(e);
     let mut inner = vec![e, head];
     for a in args {
         inner.push_back(a);
     }
-    let ns: Val = Symbol::new(e, "buildeross").into_val(e);
+    let ns: Val = Symbol::new(e, "builder").into_val(e);
     let inner: Val = inner.into_val(e);
     vec![e, ns, inner].into_val(e)
 }
@@ -4366,7 +4366,7 @@ fn instance_u32(e: &Env, contract: &Address, variant: &str) -> u32 {
 }
 
 /// The variant name of a storage key: the inner symbol of a namespaced
-/// `("buildeross", [Variant, ..])` key, or the first symbol of an OZ key.
+/// `("builder", [Variant, ..])` key, or the first symbol of an OZ key.
 fn key_variant(key: &soroban_sdk::xdr::ScVal) -> std::string::String {
     use soroban_sdk::xdr::ScVal;
     let name = |s: &soroban_sdk::xdr::ScSymbol| {
@@ -4376,10 +4376,10 @@ fn key_variant(key: &soroban_sdk::xdr::ScVal) -> std::string::String {
         return std::format!("{key:?}");
     };
     match (items.first(), items.get(1)) {
-        (Some(ScVal::Symbol(ns)), Some(ScVal::Vec(Some(inner)))) if name(ns) == "buildeross" => {
+        (Some(ScVal::Symbol(ns)), Some(ScVal::Vec(Some(inner)))) if name(ns) == "builder" => {
             match inner.first() {
                 Some(ScVal::Symbol(v)) => name(v),
-                _ => "buildeross(?)".into(),
+                _ => "builder(?)".into(),
             }
         }
         (Some(ScVal::Symbol(v)), _) => std::format!("oz:{}", name(v)),
@@ -4634,7 +4634,7 @@ fn assert_inventory_matches_ledger(
         let (ns, items) = match key {
             ScVal::Vec(Some(v)) => match (v.first(), v.get(1)) {
                 (Some(ScVal::Symbol(s)), Some(ScVal::Vec(Some(inner))))
-                    if s.to_utf8_string().unwrap() == "buildeross" =>
+                    if s.to_utf8_string().unwrap() == "builder" =>
                 {
                     (true, inner.to_vec())
                 }

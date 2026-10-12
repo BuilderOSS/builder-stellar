@@ -470,11 +470,12 @@ impl DaoGovernorContract {
     }
 
     fn get_proposal(e: &Env, proposal_id: &BytesN<32>) -> ProposalCoreTime {
-        let proposal: ProposalCoreTime = e
+        let stored: StoredProposal = e
             .storage()
             .persistent()
             .get(&Self::proposal_key(e, proposal_id))
             .unwrap_or_else(|| panic_with_error!(e, GovernorError::ProposalNotFound));
+        let proposal = ProposalCoreTime::unpack(e, &stored);
 
         // Extend TTL when proposal is accessed
         Self::extend_proposal_ttl(e, proposal_id, proposal.seq);
@@ -485,7 +486,7 @@ impl DaoGovernorContract {
     fn set_proposal(e: &Env, proposal_id: &BytesN<32>, proposal: &ProposalCoreTime) {
         e.storage()
             .persistent()
-            .set(&Self::proposal_key(e, proposal_id), proposal);
+            .set(&Self::proposal_key(e, proposal_id), &proposal.pack(e));
 
         // Extend TTL when proposal is updated
         Self::extend_proposal_ttl(e, proposal_id, proposal.seq);

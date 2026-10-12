@@ -5,10 +5,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { minterStorageKey, readClaimStorage } from './storage';
 import { ALICE, BOB, MINTER, TOKEN, TREASURY } from './test-fixtures';
 
-/** The `MinterKey` variant inside `("buildeross", [Variant, ..args])`. */
+/** The `MinterKey` variant inside `("builder", [Variant, ..args])`. */
 function variant(key: xdr.ScVal): unknown[] {
   const [namespace, inner] = scValToNative(key) as [string, unknown[]];
-  if (namespace !== 'buildeross') throw new Error('Key is not namespaced');
+  if (namespace !== 'builder') throw new Error('Key is not namespaced');
   return inner;
 }
 
@@ -37,7 +37,7 @@ describe('persistent Minter storage reads', () => {
   it('encodes per-token/round/recipient tuples, never shared-Minter-only identity', () => {
     const key = minterStorageKey(MINTER, TOKEN, 'MerkleClaimed', 0xffffffff, ALICE);
     if (key.type !== 'contractData') throw new Error('Unexpected key');
-    expect(scValToNative(key.contractData.key)).toEqual(['buildeross', ['MerkleClaimed', TOKEN, 0xffffffff, ALICE]]);
+    expect(scValToNative(key.contractData.key)).toEqual(['builder', ['MerkleClaimed', TOKEN, 0xffffffff, ALICE]]);
     const keys = [
       key,
       minterStorageKey(MINTER, TREASURY, 'MerkleClaimed', 0xffffffff, ALICE),

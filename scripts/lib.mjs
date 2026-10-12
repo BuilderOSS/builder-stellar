@@ -120,7 +120,7 @@ export const scv = {
 };
 
 /** Prefix of every Builder storage key (contracts/common/src/lib.rs `STORAGE_NAMESPACE`). */
-export const STORAGE_NAMESPACE = 'buildeross';
+export const STORAGE_NAMESPACE = 'builder';
 
 /** Base64 XDR of `common::ns(e, Key::Variant(args..))`. `args` are encoded ScVals. */
 export function namespacedKeyXdr(variant, ...args) {

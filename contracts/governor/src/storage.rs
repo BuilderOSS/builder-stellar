@@ -4,7 +4,7 @@
 //! and TTL management. The Governor uses a hybrid storage approach with some data
 //! in the library's storage and custom data in contract-specific keys.
 
-use soroban_sdk::{contracttype, Address, BytesN};
+use soroban_sdk::{contracttype, Address, Bytes, BytesN, Env};
 use stellar_governance::governor::ProposalState;
 
 /// Storage-layout version of this code (see `common::upgrade`).
@@ -147,7 +147,8 @@ pub struct ProposalInfo {
 /// periods, allowing for more predictable governance timelines. Timestamps are
 /// independent of network performance, unlike ledger-based periods which can vary
 /// with block production rate.
-#[contracttype]
+///
+/// In memory only: it is stored as a [`StoredProposal`] (D38).
 #[derive(Clone)]
 pub struct ProposalCoreTime {
     /// Address that created the proposal.
@@ -225,5 +226,74 @@ pub(crate) mod key_samples {
             VARIANTS,
         );
         keys.into_iter().map(|k| k.into_val(e)).collect()
+    }
+}
+
+/// Stored form of `ProposalTime(id)`: the proposer, then the numeric fields
+/// packed big-endian in [`PACKED_PROPOSAL_LEN`] bytes: `vote_snapshot` u32,
+/// `vote_start` u64, `vote_end` u64, `eta` u64, `state` u8, `seq` u32, `quorum`
+/// u128. The field-named map it replaces spent ~170 bytes per proposal on
+/// names and value tags (D38). Off-chain decoders:
+/// `apps/web/src/lib/chain-reads/proposal-core.ts`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StoredProposal(pub Address, pub Bytes);
+
+pub const PACKED_PROPOSAL_LEN: usize = 4 + 8 + 8 + 8 + 1 + 4 + 16;
+
+fn state_code(state: ProposalState) -> u8 {
+    state as u32 as u8
+}
+
+fn state_from(e: &Env, code: u8) -> ProposalState {
+    match code {
+        0 => ProposalState::Pending,
+        1 => ProposalState::Active,
+        2 => ProposalState::Defeated,
+        3 => ProposalState::Canceled,
+        4 => ProposalState::Succeeded,
+        5 => ProposalState::Queued,
+        6 => ProposalState::Expired,
+        7 => ProposalState::Executed,
+        _ => soroban_sdk::panic_with_error!(
+            e,
+            stellar_governance::governor::GovernorError::ProposalNotFound
+        ),
+    }
+}
+
+impl ProposalCoreTime {
+    pub fn pack(&self, e: &Env) -> StoredProposal {
+        let mut buf = [0u8; PACKED_PROPOSAL_LEN];
+        buf[0..4].copy_from_slice(&self.vote_snapshot.to_be_bytes());
+        buf[4..12].copy_from_slice(&self.vote_start.to_be_bytes());
+        buf[12..20].copy_from_slice(&self.vote_end.to_be_bytes());
+        buf[20..28].copy_from_slice(&self.eta.to_be_bytes());
+        buf[28] = state_code(self.state);
+        buf[29..33].copy_from_slice(&self.seq.to_be_bytes());
+        buf[33..49].copy_from_slice(&self.quorum.to_be_bytes());
+        StoredProposal(self.proposer.clone(), Bytes::from_slice(e, &buf))
+    }
+
+    pub fn unpack(e: &Env, stored: &StoredProposal) -> Self {
+        let StoredProposal(proposer, bytes) = stored;
+        assert!(
+            bytes.len() as usize == PACKED_PROPOSAL_LEN,
+            "corrupt proposal"
+        );
+        let mut buf = [0u8; PACKED_PROPOSAL_LEN];
+        bytes.copy_into_slice(&mut buf);
+        let u32_at = |at: usize| u32::from_be_bytes(buf[at..at + 4].try_into().unwrap());
+        let u64_at = |at: usize| u64::from_be_bytes(buf[at..at + 8].try_into().unwrap());
+        ProposalCoreTime {
+            proposer: proposer.clone(),
+            vote_snapshot: u32_at(0),
+            vote_start: u64_at(4),
+            vote_end: u64_at(12),
+            eta: u64_at(20),
+            state: state_from(e, buf[28]),
+            seq: u32_at(29),
+            quorum: u128::from_be_bytes(buf[33..49].try_into().unwrap()),
+        }
     }
 }

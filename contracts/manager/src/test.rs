@@ -2810,7 +2810,7 @@ fn storage_keys_do_not_collide() {
     use common::testutils::{assert_keys_disjoint, common_key_shapes, key_shapes};
     use soroban_sdk::Env;
     let e = Env::default();
-    // The Manager links no OZ storage. Its keys share the `buildeross`
+    // The Manager links no OZ storage. Its keys share the `builder`
     // namespace with `common`'s, so keep them disjoint even though it uses
     // none of them today (it would clash on adopting `common::admin` if its
     // admin key were still `Admin`).

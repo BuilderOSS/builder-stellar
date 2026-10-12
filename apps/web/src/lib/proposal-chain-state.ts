@@ -1,7 +1,8 @@
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
-import { Address, scValToNative, xdr } from '@stellar/stellar-sdk';
+import { Address, xdr } from '@stellar/stellar-sdk';
 import { Server } from '@stellar/stellar-sdk/rpc';
 
+import { decodeStoredProposal } from '@/lib/chain-reads/proposal-core';
 import { type DaoNetworkConfig, readSource } from '@/lib/dao-config';
 import { proposalIdToBuffer } from '@/lib/proposal-id';
 import { namespacedKey } from '@/lib/storage-key';
@@ -20,18 +21,8 @@ export function proposalCoreKey(governor: string, proposalId: string) {
 }
 
 export function decodeProposalCore(value: xdr.ScVal) {
-  const core = scValToNative(value);
-  const seconds = (key: string) => {
-    const number = Number(core?.[key]);
-    if (!Number.isSafeInteger(number) || number < 0) throw new Error(`Invalid proposal ${key}.`);
-    return number;
-  };
-  return {
-    voteStart: seconds('vote_start'),
-    voteEnd: seconds('vote_end'),
-    snapshot: seconds('vote_snapshot'),
-    eta: seconds('eta')
-  };
+  const stored = decodeStoredProposal(value);
+  return { voteStart: stored.voteStart, voteEnd: stored.voteEnd, snapshot: stored.voteSnapshot, eta: stored.eta };
 }
 
 /** Optional storage/timing reads must never invalidate the authoritative state. */

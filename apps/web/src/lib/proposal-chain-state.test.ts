@@ -1,4 +1,4 @@
-import { nativeToScVal, scValToNative, StrKey } from '@stellar/stellar-sdk';
+import { Keypair, nativeToScVal, scValToNative, StrKey } from '@stellar/stellar-sdk';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const calls = vi.hoisted(() => ({
@@ -23,6 +23,8 @@ vi.mock('@stellar/stellar-sdk/rpc', () => ({
     getLedgerEntries = calls.entries;
   }
 }));
+import { packedProposal } from '@/lib/chain-reads/proposal-core';
+
 import type { DaoNetworkConfig } from './dao-config';
 import { decodeProposalCore, proposalCoreKey, readProposalChainState } from './proposal-chain-state';
 
@@ -60,12 +62,21 @@ describe('critical chain state versus optional reads', () => {
     });
   });
   it('decodes exact historical vote start and ETA from the current custom storage key', () => {
-    const value = nativeToScVal({ vote_start: 1000n, vote_end: 2000n, vote_snapshot: 50, eta: 3000n });
+    const value = packedProposal({
+      proposer: Keypair.random().publicKey(),
+      voteSnapshot: 50,
+      voteStart: 1000,
+      voteEnd: 2000,
+      eta: 3000,
+      state: 5,
+      seq: 7,
+      quorum: 3n
+    });
     expect(decodeProposalCore(value)).toEqual({ voteStart: 1000, voteEnd: 2000, snapshot: 50, eta: 3000 });
     const key = proposalCoreKey(config.governorContractId, id);
     if (key.type !== 'contractData') throw new Error('Wrong key');
     const [namespace, decoded] = scValToNative(key.contractData.key);
-    expect(namespace).toBe('buildeross');
+    expect(namespace).toBe('builder');
     expect(decoded[0]).toBe('ProposalTime');
     expect(Buffer.from(decoded[1]).toString('hex')).toBe(id);
     expect(() => decodeProposalCore(nativeToScVal({ vote_end: 2000n }))).toThrow();

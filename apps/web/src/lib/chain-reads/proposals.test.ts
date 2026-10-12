@@ -39,7 +39,7 @@ describe('proposal list from chain', () => {
   it('pins the namespaced ProposalId key', () => {
     const key = proposalIdKey(GOVERNOR, 7);
     if (key.type !== 'contractData') throw new Error('Unexpected key');
-    expect(scValToNative(key.contractData.key)).toEqual(['buildeross', ['ProposalId', 7]]);
+    expect(scValToNative(key.contractData.key)).toEqual(['builder', ['ProposalId', 7]]);
   });
   it('pages newest first with 1-based numbers matching the indexer', async () => {
     const first = await chainProposalPage(governor(5), GOVERNOR, { limit: 2, offset: 0 });

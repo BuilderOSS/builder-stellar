@@ -1972,3 +1972,48 @@ fn proposal_id_entry_renews_with_the_core() {
         crate::storage::PROPOSAL_TTL_EXTEND_TO
     );
 }
+
+/// D38: a proposal is stored as `(proposer, 49 packed bytes)`, and every
+/// field survives the round trip through each lifecycle write.
+#[test]
+fn stored_proposals_are_packed_and_round_trip() {
+    use crate::storage::{GovernorKey, StoredProposal, PACKED_PROPOSAL_LEN};
+    let (e, token, _treasury, governor, target, owner) = setup();
+    let ids = propose_n(&e, &token, &governor, &target, &owner, 1);
+    let id = ids[0].clone();
+    let raw = |id: &soroban_sdk::BytesN<32>| -> StoredProposal {
+        e.as_contract(&governor.address, || {
+            e.storage()
+                .persistent()
+                .get(&common::ns(&e, GovernorKey::ProposalTime(id.clone())))
+                .unwrap()
+        })
+    };
+    let stored = raw(&id);
+    assert_eq!(stored.1.len() as usize, PACKED_PROPOSAL_LEN);
+    let info = governor.proposal(&id);
+    assert_eq!(stored.0, info.proposer);
+    assert_eq!(info.state, ProposalState::Pending);
+    // Big-endian fields where the packer put them.
+    let mut buf = [0u8; PACKED_PROPOSAL_LEN];
+    stored.1.copy_into_slice(&mut buf);
+    assert_eq!(
+        u32::from_be_bytes(buf[0..4].try_into().unwrap()),
+        info.vote_snapshot
+    );
+    assert_eq!(
+        u64::from_be_bytes(buf[4..12].try_into().unwrap()),
+        info.vote_start
+    );
+    assert_eq!(
+        u64::from_be_bytes(buf[12..20].try_into().unwrap()),
+        info.vote_end
+    );
+    assert_eq!(buf[28], 0);
+    assert_eq!(u32::from_be_bytes(buf[29..33].try_into().unwrap()), 0);
+    assert_eq!(
+        u128::from_be_bytes(buf[33..49].try_into().unwrap()),
+        info.quorum
+    );
+    assert_eq!(info.eta, 0);
+}

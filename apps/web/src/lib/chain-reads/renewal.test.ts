@@ -2,6 +2,7 @@ import { Address, Keypair, nativeToScVal, xdr } from '@stellar/stellar-sdk';
 import { Buffer } from 'buffer';
 import { describe, expect, it } from 'vitest';
 
+import { packedProposal } from '@/lib/chain-reads/proposal-core';
 import { namespacedKey } from '@/lib/storage-key';
 
 import {
@@ -56,28 +57,16 @@ const instance = (storage: Array<[xdr.ScVal, xdr.ScVal]>) =>
   );
 const id = (n: number) => xdr.ScVal.scvBytes(Buffer.alloc(32, n));
 const core = (seq: number, state: number, voteEnd: number, eta = 0) =>
-  nativeToScVal(
-    {
-      eta: BigInt(eta),
-      proposer: Keypair.random().publicKey(),
-      seq,
-      state,
-      vote_end: BigInt(voteEnd),
-      vote_snapshot: 1,
-      vote_start: 1n
-    },
-    {
-      type: {
-        eta: ['symbol', 'u64'],
-        proposer: ['symbol', 'address'],
-        seq: ['symbol', 'u32'],
-        state: ['symbol', 'u32'],
-        vote_end: ['symbol', 'u64'],
-        vote_snapshot: ['symbol', 'u32'],
-        vote_start: ['symbol', 'u64']
-      }
-    }
-  );
+  packedProposal({
+    proposer: Keypair.random().publicKey(),
+    voteSnapshot: 1,
+    voteStart: 1,
+    voteEnd,
+    eta,
+    state,
+    seq,
+    quorum: 1n
+  });
 
 /** A ledger with one launched DAO: 2 properties (40 + 3 items), 70 minted tokens, 3 proposals. */
 function ledger(omit: string[] = []) {

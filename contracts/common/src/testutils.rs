@@ -195,7 +195,7 @@ pub fn shapes(list: &[(&str, u32)]) -> std::vec::Vec<(std::string::String, u32)>
 }
 
 /// Every OpenZeppelin key shape a Builder module may write outside the
-/// `buildeross` namespace, at stellar-contracts rev fbfde38: the
+/// `builder` namespace, at stellar-contracts rev fbfde38: the
 /// non-fungible token and its sequential counter, votes, governor and
 /// pausable. Update on an OZ upgrade.
 pub const OZ_KEY_SHAPES: &[(&str, u32)] = &[
@@ -231,7 +231,7 @@ pub const OZ_KEY_SHAPES: &[(&str, u32)] = &[
 
 /// Walk every ledger entry `contracts` own (instance storage and persistent
 /// and temporary entries) and panic unless each key is either
-/// `(Symbol("buildeross"), <enum variant>)` or a known OpenZeppelin shape
+/// `(Symbol("builder"), <enum variant>)` or a known OpenZeppelin shape
 /// ([`OZ_KEY_SHAPES`]). Also panics if a contract has no namespaced key at
 /// all, so a contract the walk silently misses cannot pass.
 ///

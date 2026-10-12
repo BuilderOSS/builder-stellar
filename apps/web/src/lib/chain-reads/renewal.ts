@@ -27,6 +27,7 @@ import {
 } from '@stellar/stellar-sdk';
 import { Buffer } from 'buffer';
 
+import { decodeStoredProposal } from '@/lib/chain-reads/proposal-core';
 import { namespacedKey } from '@/lib/storage-key';
 
 export const LEDGERS_PER_DAY = 17_280;
@@ -298,13 +299,8 @@ export async function buildDaoInventory(
     cores.forEach((coreKey, index) => {
       const info = coreRead.entries.get(keyId(coreKey.key));
       if (!info) return;
-      const core = scValToNative(dataValue(info)) as {
-        state: number;
-        vote_end: bigint;
-        eta: bigint;
-        seq: number;
-      };
-      if (!proposalIsLive(core, scope.nowSeconds)) return;
+      const core = decodeStoredProposal(dataValue(info));
+      if (!proposalIsLive({ state: core.state, vote_end: core.voteEnd, eta: core.eta }, scope.nowSeconds)) return;
       const idKey = ids[core.seq] ?? ids[index]!;
       const id = dataValue(idRead.entries.get(keyId(idKey.key))!);
       live.push(
