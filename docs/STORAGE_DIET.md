@@ -82,6 +82,8 @@ the allowlist markers and the four display strings, which § 4 removes.
 | Wiring and counters | **Getters added** so a fresh client can discover every module and scan finite ranges (§ 4). |
 | Byte-level codecs for attributes and items (compaction C) | **Optional, last.** Only if measurements say so. |
 | In-contract bump entrypoints | **Removed** (`bump_artwork_ttl`, `bump_slug_ttl`) in favour of footprint TTL operations (§ 7). |
+| Storage keys | **No module key may encode like an OpenZeppelin key the module links** (`NFTStorageKey`, `VotesStorageKey`, `GovernorStorageKey`, and any OZ module added later): a unit or tuple variant encodes as `[Symbol(name), args…]`, so the enum's type name does not separate them. The token's metadata-hook key is renamed (`TokenKey::MetadataContract`) and the governor's `Proposal(id)` becomes `ProposalTime(id)`. A per-module guard test enforces it (§ 9). Source: `docs/STORAGE_DIET_REVIEW.md` Finding 1. |
+| Shared code rent | **Callers never pay for long code renewals.** The instance bump and the code bump are separate: instances keep 60 → 170 days; code is bumped only when under 2 days left, to 4 days, so a member pays a few days of shared code rent at most. The platform keeps code at 170 days, extends every new hash at upload, and builds its renewal list from the chain. Source: `docs/STORAGE_DIET_REVIEW.md` Finding 2. |
 | Rollout | **One fresh testnet redeploy**, no migration code (pre-mainnet rule). `STORAGE_VERSION` stays 1 everywhere. |
 
 Codes kept from the earlier drafts for traceability: S3 = derive the module version from the registry; S4 = slim
@@ -165,6 +167,18 @@ mint counter (no burn extension).
 - `version()` reads `CurrentHash` and calls `manager.get_implementation_version(hash)` (read-only); keeps the
   `ImplementationNotFound` error. `apply` still emits `Upgraded` with the version it looked up.
 - The Treasury self-dispatch allow-list drops `sync_version`.
+- **Instance and code TTLs are bumped separately** (`common::ttl::extend_instance`, used by every module, the
+  Manager and the Minter). `instance().extend_ttl` extends the contract **code** with the same threshold (soroban-sdk
+  27.0.6 `storage.rs`), so today any caller arriving when shared code has under 60 days left pays 170 days of code
+  rent (~300 XLM per ~35 KB entry on testnet, 2026-10-12). It becomes
+  `deployer().extend_ttl_for_contract_instance(self, 60 d, 170 d)` plus
+  `deployer().extend_ttl_for_code(self, CODE_TTL_THRESHOLD = 2 d, CODE_TTL_EXTEND_TO = 4 d)`. The code values are
+  tunable: small enough that a member pays a few days of rent at most if the platform's renewal lapses, large enough
+  that code never archives while the DAO is used.
+- **Key rule.** No storage variant may share its `(symbol, arity)` with an OpenZeppelin key the module links. The
+  token's `TokenKey::Metadata` already collided with `NFTStorageKey::Metadata` (the hook address overwrote the
+  collection name at construction; a rename overwrote the hook, so minting trapped). Fixed as
+  `TokenKey::MetadataContract`.
 
 ### Manager
 
@@ -229,6 +243,8 @@ mint counter (no burn extension).
 - Id entries renew with the core on lifecycle calls; after completion they stay persistent and may archive.
 - Quorum checkpoints, `quorum(ledger)`, `cancel` rules: unchanged. Override `version()` per S3 and `name()` as
   a constant; drop the OZ `Version`/`Name` keys and `set_version` calls.
+- Rename `GovernorKey::Proposal(id)` to `ProposalTime(id)`: it encodes like OZ `GovernorStorageKey::Proposal(id)`
+  but holds `ProposalCoreTime`. Safe today only because every OZ method that reads it is overridden.
 
 ### Treasury, Auction, Marketplace
 
@@ -362,8 +378,22 @@ D4); they are documented in `TTL_ECONOMICS.md` next to the bindings, and the § 
 guard for any storage or OZ change.
 
 **Consequences for contracts.** `bump_artwork_ttl` and `bump_slug_ttl` are removed. In-contract threshold
-renewal on touched keys stays as it is (it keeps active state alive for free); the sweep is for everything the
-DAO does not touch often.
+renewal of touched persistent keys and instances stays (it keeps active state alive for free); code is bumped only
+in small steps (§ 4 All DAO modules); the sweep is for everything the DAO does not touch often.
+
+**Code is never in a DAO's sweep.** `ExtendFootprintTTL` counts every entry's bytes against
+`tx_max_disk_read_bytes` (200,000 on testnet); seven ~35 KB code entries alone exceed it. Shared code is the
+platform's: `scripts/renew-code-ttl.mjs`
+- defaults to 170 days and refuses any value at or below the code threshold (it would be paid again by the next
+  caller);
+- builds its hash list **from chain** (the Manager registry's implementations and current hashes, plus the
+  Manager's own and the Minter's), not from the deploy artifact, so upgrade hashes are never missed;
+- and is joined by an extension at upload: `deploy-manager.mjs` and every implementation registration extend the
+  new hash to 170 days immediately (`EXTEND_CODE_TTL_DAYS` defaults to 170, no longer opt-in), because new code is
+  born at the network minimum (~7 days).
+
+The health report classifies code against the contract's code threshold and shows the quoted cost of the next
+caller-paid bump; it no longer calls 45–60 days "healthy" for code.
 
 ## 8. Indexer and app
 
@@ -393,6 +423,10 @@ from `Upgraded` / `ImplementationRegistered`; claims merkle-only. Activity feed:
 - Governance: the proposal list and states can be built from `proposal_ids` and `proposal(id)` when the indexer
   is down; queue and execute use the preimage from the indexer or the proposer's saved draft.
 - Renewal: the Manage tab of § 7.
+- **Fee guard.** Before signing, if the simulated resource fee exceeds a threshold (10 XLM), stop and explain
+  ("This action would pay ~N XLM to renew shared contract code. The platform renews this; please report it.")
+  instead of the SDK's u32 overflow error or a silent charge. Investigate the reported 2× resource fee in the web
+  assemble path (`docs/STORAGE_DIET_REVIEW.md` § 3 open item).
 - **Platform admin dashboard: deferred** to its own wave (eng review D2; TODOS.md). In this release the platform's
   renewal duty is covered by extending `scripts/renew-code-ttl.mjs` to the Manager instance, every
   `Implementation(hash)` record and the shared Minter instance and code hash.
@@ -422,6 +456,16 @@ discovers wiring; resumes artwork and renders a token from `token_uri` plus the 
 outstanding proposals from chain and executes one from the preimage it is given (exception 3); finds and operates
 auctions and listings; claims with a supplied proof; runs the renewal sweep and a restore. Our frontend, database,
 indexer and API are off. Mocks that return indexed data invalidate the run.
+
+**Storage-key and TTL tests (`docs/STORAGE_DIET_REVIEW.md`).**
+- Token: after construction `name()`, `symbol()`, `token_uri()` and `metadata()` all return; after
+  `set_metadata(name, symbol)`, `metadata()` still returns the hook and `mint`/`batch_mint` still seed attributes.
+- Key-collision guard per module: the `ScVal` of every variant of the module's key enums, with dummy arguments,
+  is disjoint by `(first symbol, length)` from the OZ key enums that module links.
+- e2e: a live DAO renames its token by proposal, then settles an auction; the minted token has attributes.
+- `common::ttl`: with code under the code threshold and the instance above its own, a call bumps code to
+  `CODE_TTL_EXTEND_TO` only; with the instance under 60 days, the instance goes to 170 days and code is untouched
+  when above its threshold.
 
 **Regression contract (eng review D10).** Every existing contract, e2e, web and Goldsky test stays green except
 tests that assert removed behaviour (allowlist mode, `sync_version`/`VersionSynced`, the four display-string
@@ -479,13 +523,20 @@ One PR on one branch (eng review D5), reviewable commits:
 4. Minter merkle-only, `tree_uri`, `claim_status`, the common upgrade path; proof tooling and vectors.
 5. Governor ids and getters; tests.
 6. Renewal: inventory library, `renew-dao.mjs`, the Renewal tab in Manage; the enumeration test.
-7. Platform renewal script: `renew-code-ttl.mjs` extended to the Manager instance, registry records, Minter.
+7. Platform renewal: `renew-code-ttl.mjs` defaults to 170 days, refuses values at or below the code threshold, and
+   reads its hash list from chain (registry, Manager, Minter); `deploy-manager.mjs` and registration extend new code
+   at upload.
 8. e2e guarantee and acceptance run on a local network; event, CPU and transaction-size budgets; bindings and
    snapshots.
 9. Indexer migration 0014 and decoders; app; docs and configs, including the rewritten `TTL_ECONOMICS.md`.
 10. Fresh testnet redeploy (separate go-ahead; runbook in project notes): new salt, Goldsky pipeline re-applied,
    database reset and migrated, the three communities recreated with real profiles and artwork, then the
    verification of § 9 against testnet, including a sweep from a wallet that is not the platform admin.
+   Checklist: the key renames and guard tests are green; every module's code is extended to 170 days at upload;
+   after deploy, every code TTL is above its threshold, and `token.metadata()`, `token.name()` and a
+   rename-then-settle succeed on testnet. The current testnet DAOs are left as they are until then (their
+   governor, auction and marketplace code archives around 2026-10-18; DAO 0 cannot mint because of the key
+   collision).
 
 ## 12. Decision ledger
 
@@ -516,6 +567,10 @@ One PR on one branch (eng review D5), reviewable commits:
 | D23 | The shared Minter gets the common upgrade path | It is required for every DAO and had no upgrade path (eng review D8) | Rotation playbook |
 | D24 | Token drops the `uri` argument; OZ `base_uri` stored empty | Dead state once `token_uri` forwards to Metadata (eng review D9); removing the OZ field is not worth the divergence | Keep the argument |
 | D25 | One PR, ten commits; regression contract: preserve everything except the listed removals, with retirement cards | Eng review D5 and D10 | Three PRs by layer; re-baseline freely |
+| D26 | No storage key may encode like a linked OpenZeppelin key; token hook key renamed, governor `Proposal(id)` renamed; a guard test per module | The token collision broke minting on testnet DAO 0 after a rename (`STORAGE_DIET_REVIEW.md` Finding 1) | Rely on review |
+| D27 | Instance and code TTL bumps decoupled: instances 60 → 170 days, code under 2 → 4 days | `instance().extend_ttl` bumps code too, so callers paid ~300 XLM of shared code rent (Finding 2) | Operations only (one missed renewal costs a member ~300 XLM) |
+| D28 | Platform code renewal: 170-day default, refuse values at or below the code threshold, hash list from chain, extend at upload; code stays out of DAO sweeps | Renewals ≤ 60 days were paid twice; upgrade hashes were missed; code entries exceed the sweep's read-bytes limit | 30-day default from the deploy artifact |
+| D29 | Fee guard before signing; investigate the 2× resource fee | A rent bump surfaced as a u32 overflow error | Leave to the SDK |
 
 ## 13. Review record
 
@@ -529,6 +584,9 @@ added D15–D19 (required shared Minter, the renewal tab and platform dashboard,
 merkle trees, the one-transaction artwork layout) and the live testnet limits were read into § 7 and § 10.
 Engineering review (`/plan-eng-review`, 2026-10-12): decisions D20–D25 above; full ledger and verdict in
 `~/.gstack/projects/BuilderOSS-builder-stellar/feat-markdown-text-eng-review-20261012-141625.md`.
+Independent review of the testnet settle and propose failures (`docs/STORAGE_DIET_REVIEW.md`, 2026-10-12):
+both findings verified against the SDK source and the live chain and adopted as D26–D29; the token key
+collision was already fixed on this branch.
 
 ## 14. Open questions
 

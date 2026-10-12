@@ -25,7 +25,7 @@ These pages describe the current repository source, including the frontend worki
 
 - [Database view catalog](DATABASE_SCHEMA.md)
 - [Security and authority model](SECURITY_MODEL.md): admin model, voting supply, batch budget, error codes
-- [Storage diet (approved design)](STORAGE_DIET.md): what leaves contract storage for events, the on-chain-only guarantee, profile JSON
+- [Storage diet (approved design)](STORAGE_DIET.md): what leaves contract storage for events, the on-chain-only guarantee, profile JSON; [its testnet-failure review](STORAGE_DIET_REVIEW.md)
 - [Contract review fixes](CONTRACT_REVIEW_FIX_PLAN.md): review findings and how each was fixed
 - [Warm Ink and frontend direction](BRAND_AND_FRONTEND_DIRECTION.md)
 - [Agent workflow and acceptance checks](AGENT_WORKFLOW.md)
