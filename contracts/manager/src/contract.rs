@@ -643,9 +643,7 @@ impl ManagerContract {
             metadata_wasm.clone(),
             (
                 token_addr.clone(),
-                config.project_uri.clone(),
-                config.description.clone(),
-                config.contract_image.clone(),
+                config.profile.clone(),
                 config.renderer_base.clone(),
                 env.current_contract_address(),
                 metadata_wasm.clone(),
@@ -1289,6 +1287,18 @@ impl ManagerContract {
         BytesN::from_array(env, &hash.to_array())
     }
 
+    /// The profile is event-only and may be longer than other strings.
+    fn validate_profile(profile: &String) -> Result<(), ManagerError> {
+        let len = profile.len();
+        if len == 0 {
+            return Err(ManagerError::StringEmpty);
+        }
+        if len > common::MAX_PROFILE_LENGTH {
+            return Err(ManagerError::StringTooLong);
+        }
+        Ok(())
+    }
+
     fn validate_string(s: &String) -> Result<(), ManagerError> {
         let len = s.len();
         if len == 0 {
@@ -1339,13 +1349,11 @@ impl ManagerContract {
             &config.token_name,
             &config.token_symbol,
             &config.token_uri,
-            &config.project_uri,
-            &config.description,
-            &config.contract_image,
             &config.renderer_base,
         ] {
             Self::validate_string(value)?;
         }
+        Self::validate_profile(&config.profile)?;
         Self::validate_slug(&config.slug)?;
 
         let timing = MIN_GOVERNANCE_DELAY..=MAX_GOVERNANCE_DELAY;

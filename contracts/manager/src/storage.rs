@@ -61,9 +61,11 @@ pub struct InitialDaoConfigValues {
     pub token_name: String,
     pub token_symbol: String,
     pub token_uri: String,
-    pub project_uri: String,
-    pub description: String,
-    pub contract_image: String,
+    /// DAO profile JSON (description, links, image), 1 to
+    /// `common::MAX_PROFILE_LENGTH` bytes. Event-only: the Metadata contract
+    /// emits it and stores its hash.
+    pub profile: String,
+    /// Base URL of the image compositor used by the on-chain `token_uri`.
     pub renderer_base: String,
     /// Requested human-friendly DAO identifier (`[a-z0-9-]`, 4-63 chars).
     /// Claimed (unique) only at `launch_dao`; a launched DAO can move to a new

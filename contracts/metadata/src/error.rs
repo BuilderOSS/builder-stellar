@@ -35,4 +35,10 @@ pub enum Error {
     TooManyIpfsGroups = 7314,
     /// A property would exceed `MAX_ITEMS_PER_PROPERTY` items
     PropertyFull = 7315,
+    /// A profile is empty or longer than `common::MAX_PROFILE_LENGTH`
+    InvalidProfile = 7316,
+    /// `update_profile` was given a stale `expected_seq`
+    ProfileSeqMismatch = 7317,
+    /// The token JSON would exceed its buffer (a string over its cap)
+    TokenUriTooLong = 7318,
 }

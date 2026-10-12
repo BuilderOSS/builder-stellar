@@ -4,6 +4,7 @@ use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Map, Stri
 
 use crate::error::Error;
 use crate::events::*;
+use crate::json::{data_uri, Writer, JSON_CAPACITY, URI_CAPACITY};
 use crate::storage::*;
 
 /// Max items written by one `add_properties` call (bounds write entries).
@@ -42,24 +43,22 @@ impl MetadataContract {
     ///
     /// # Arguments
     ///
-    /// * `token` - The associated ERC-721 token contract
-    /// * `project_uri` - DAO website/project URL
-    /// * `description` - Collection description
-    /// * `contract_image` - Collection image URL
-    /// * `renderer_base` - Base URL for image rendering service
+    /// * `token` - The associated NFT token contract
+    /// * `profile` - DAO profile JSON (description, links, image; 1 to
+    ///   `common::MAX_PROFILE_LENGTH` bytes). Emitted in `ProfileUpdated`
+    ///   (seq 0); only its hash is stored.
+    /// * `renderer_base` - Base URL of the image compositor used by `token_uri`
     /// * `admin` - setup-phase admin (the launch admin); becomes the Treasury at launch
     /// * `treasury` - DAO treasury; `launch` must be called with exactly this address
     ///
     /// # Panics
     ///
-    /// Panics with the underlying `Error` when the initial properties are
-    /// invalid or a settings string exceeds `common::MAX_STRING_LENGTH`.
+    /// Panics with the underlying `Error` when the profile, the renderer base
+    /// or the initial properties are invalid.
     pub fn __constructor(
         env: Env,
         token: Address,
-        project_uri: String,
-        description: String,
-        contract_image: String,
+        profile: String,
         renderer_base: String,
         manager: Address,
         current_hash: BytesN<32>,
@@ -70,20 +69,19 @@ impl MetadataContract {
         ipfs_group: IpfsGroup,
         version: String,
     ) {
-        for value in [&project_uri, &description, &contract_image, &renderer_base] {
-            if let Err(err) = Self::check_length(value) {
-                soroban_sdk::panic_with_error!(&env, err);
-            }
+        if let Err(err) = Self::check_text(&renderer_base, common::MAX_STRING_LENGTH) {
+            soroban_sdk::panic_with_error!(&env, err);
         }
-        let settings = Settings {
-            token: token.clone(),
-            project_uri: project_uri.clone(),
-            description: description.clone(),
-            contract_image: contract_image.clone(),
-            renderer_base: renderer_base.clone(),
-        };
-
-        set_settings(&env, &settings);
+        set_settings(
+            &env,
+            &Settings {
+                token: token.clone(),
+                renderer_base: renderer_base.clone(),
+            },
+        );
+        if let Err(err) = Self::store_profile(&env, 0, &profile) {
+            soroban_sdk::panic_with_error!(&env, err);
+        }
         if !property_names.is_empty() || !items.is_empty() {
             if let Err(err) = Self::_add_properties(&env, property_names, items, ipfs_group) {
                 soroban_sdk::panic_with_error!(&env, err);
@@ -94,16 +92,7 @@ impl MetadataContract {
         env.storage().instance().set(&DataKey::Treasury, &treasury);
         common::upgrade::init(&env, &current_hash, &version, STORAGE_VERSION);
 
-        emit_metadata_initialized(
-            &env,
-            &token,
-            &renderer_base,
-            &version,
-            &admin,
-            &project_uri,
-            &description,
-            &contract_image,
-        );
+        emit_metadata_initialized(&env, &token, &renderer_base, &version, &admin);
     }
 
     pub fn upgrade(env: Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
@@ -422,43 +411,11 @@ impl MetadataContract {
         Ok(get_settings(&env)?.renderer_base)
     }
 
-    /// Get description
-    pub fn description(env: Env) -> Result<String, Error> {
-        Ok(get_settings(&env)?.description)
-    }
-
-    /// Get contract image
-    pub fn contract_image(env: Env) -> Result<String, Error> {
-        Ok(get_settings(&env)?.contract_image)
-    }
-
-    /// Get project URI
-    pub fn project_uri(env: Env) -> Result<String, Error> {
-        Ok(get_settings(&env)?.project_uri)
-    }
-
-    /// Update contract image
-    pub fn update_contract_image(env: Env, new_contract_image: String) -> Result<(), Error> {
-        common::ttl::extend_instance(&env);
-        Self::require_admin(&env);
-        Self::check_length(&new_contract_image)?;
-
-        let mut settings = get_settings(&env)?;
-        let old_image = settings.contract_image.clone();
-
-        settings.contract_image = new_contract_image.clone();
-        set_settings(&env, &settings);
-
-        emit_contract_image_updated(&env, &old_image, &new_contract_image);
-
-        Ok(())
-    }
-
-    /// Update renderer base URL
+    /// Update renderer base URL (admin only).
     pub fn update_renderer_base(env: Env, new_renderer_base: String) -> Result<(), Error> {
         common::ttl::extend_instance(&env);
         Self::require_admin(&env);
-        Self::check_length(&new_renderer_base)?;
+        Self::check_text(&new_renderer_base, common::MAX_STRING_LENGTH)?;
 
         let mut settings = get_settings(&env)?;
         let old_base = settings.renderer_base.clone();
@@ -471,38 +428,94 @@ impl MetadataContract {
         Ok(())
     }
 
-    /// Update description
-    pub fn update_description(env: Env, new_description: String) -> Result<(), Error> {
+    /// Replace the DAO profile (admin only). `expected_seq` must equal the
+    /// current `profile_seq()`, so an update written against a stale copy of
+    /// the profile (for example one proposed before another edit executed)
+    /// fails with `ProfileSeqMismatch` instead of overwriting newer fields.
+    /// Emits `ProfileUpdated` with the next seq; only the hash is stored.
+    pub fn update_profile(env: Env, expected_seq: u32, profile: String) -> Result<(), Error> {
         common::ttl::extend_instance(&env);
         Self::require_admin(&env);
-        Self::check_length(&new_description)?;
-
-        let mut settings = get_settings(&env)?;
-        let old_description = settings.description.clone();
-
-        settings.description = new_description.clone();
-        set_settings(&env, &settings);
-
-        emit_description_updated(&env, &old_description, &new_description);
-
-        Ok(())
+        let state = get_profile_state(&env)?;
+        if expected_seq != state.seq {
+            return Err(Error::ProfileSeqMismatch);
+        }
+        Self::store_profile(&env, state.seq + 1, &profile)
     }
 
-    /// Update project URI
-    pub fn update_project_uri(env: Env, new_project_uri: String) -> Result<(), Error> {
-        common::ttl::extend_instance(&env);
-        Self::require_admin(&env);
-        Self::check_length(&new_project_uri)?;
+    /// SHA-256 of the latest profile bytes, to verify an indexed copy.
+    pub fn profile_hash(env: Env) -> Result<BytesN<32>, Error> {
+        Ok(get_profile_state(&env)?.hash)
+    }
 
-        let mut settings = get_settings(&env)?;
-        let old_uri = settings.project_uri.clone();
+    /// Number of profile updates since creation (0 = the initial profile).
+    pub fn profile_seq(env: Env) -> Result<u32, Error> {
+        Ok(get_profile_state(&env)?.seq)
+    }
 
-        settings.project_uri = new_project_uri.clone();
-        set_settings(&env, &settings);
+    /// SEP-50 token metadata, built on-chain: a `data:application/json;base64`
+    /// URI of `{"name", "image", "attributes"}`. `image` is
+    /// `<renderer_base>?contract=<token>&token=<id>`; a compositor derives the
+    /// layers from `get_attributes`, `property_headers`, `get_items` and
+    /// `get_ipfs_group`. Traits whose property or item no longer exists (after
+    /// a reset) are left out.
+    ///
+    /// # Errors
+    ///
+    /// * `TokenNotMinted` - the token has no attributes
+    pub fn token_uri(env: Env, token_id: u32) -> Result<String, Error> {
+        let attributes = get_attributes(&env, token_id);
+        if attributes.is_empty() {
+            return Err(Error::TokenNotMinted);
+        }
+        let settings = get_settings(&env)?;
+        let token_name = common::clients::NftClient::new(&env, &settings.token).name();
+        let counts = get_item_counts(&env);
 
-        emit_project_uri_updated(&env, &old_uri, &new_project_uri);
+        let mut json: Writer<JSON_CAPACITY> = Writer::new();
+        json.push(b"{\"name\":\"");
+        json.push_string(&token_name);
+        json.push(b" #");
+        json.push_u32(token_id);
+        json.push(b"\",\"image\":\"");
+        json.push_string(&settings.renderer_base);
+        json.push(b"?contract=");
+        json.push_string(&settings.token.to_string());
+        json.push(b"&token=");
+        json.push_u32(token_id);
+        json.push(b"\",\"attributes\":[");
+        let num_properties = attributes.get(0).unwrap_or(0);
+        let mut first = true;
+        for i in 0..num_properties {
+            let Some(index) = attributes.get(i + 1) else {
+                break;
+            };
+            if index >= counts.get(i).unwrap_or(0) {
+                continue;
+            }
+            let (Some(property), Some(item)) = (
+                get_property_name(&env, i),
+                get_item_page(&env, i, index / ITEMS_PER_PAGE).get(index % ITEMS_PER_PAGE),
+            ) else {
+                continue;
+            };
+            if !first {
+                json.push(b",");
+            }
+            first = false;
+            json.push(b"{\"trait_type\":\"");
+            json.push_string(&property);
+            json.push(b"\",\"value\":\"");
+            json.push_string(&item.name);
+            json.push(b"\"}");
+        }
+        json.push(b"]}");
 
-        Ok(())
+        let raw = json.bytes().ok_or(Error::TokenUriTooLong)?;
+        let mut uri: Writer<URI_CAPACITY> = Writer::new();
+        data_uri(raw, &mut uri);
+        let encoded = uri.bytes().ok_or(Error::TokenUriTooLong)?;
+        Ok(String::from_bytes(&env, encoded))
     }
 
     // Internal helpers
@@ -696,10 +709,6 @@ impl MetadataContract {
 
     /// Settings strings are bounded so the instance entry (loaded on every
     /// mint hook) stays small.
-    fn check_length(value: &String) -> Result<(), Error> {
-        Self::check_length_max(value, common::MAX_STRING_LENGTH)
-    }
-
     fn check_length_max(value: &String, max: u32) -> Result<(), Error> {
         if value.len() > max {
             return Err(Error::StringTooLong);
@@ -710,9 +719,15 @@ impl MetadataContract {
     /// Artwork names are copied verbatim into the on-chain token JSON, so
     /// they are capped and may not contain `"`, `\` or control characters.
     fn check_name(value: &String) -> Result<(), Error> {
-        Self::check_length_max(value, common::MAX_ARTWORK_NAME_LENGTH)?;
+        Self::check_text(value, common::MAX_ARTWORK_NAME_LENGTH)
+    }
+
+    /// A string copied verbatim into the token JSON: at most `max` bytes
+    /// (`max` <= `MAX_STRING_LENGTH`), no `"`, `\` or control characters.
+    fn check_text(value: &String, max: u32) -> Result<(), Error> {
+        Self::check_length_max(value, max)?;
         let len = value.len() as usize;
-        let mut buf = [0u8; common::MAX_ARTWORK_NAME_LENGTH as usize];
+        let mut buf = [0u8; common::MAX_STRING_LENGTH as usize];
         value.copy_into_slice(&mut buf[..len]);
         if buf[..len]
             .iter()
@@ -720,6 +735,24 @@ impl MetadataContract {
         {
             return Err(Error::InvalidName);
         }
+        Ok(())
+    }
+
+    /// Store the profile fingerprint at `seq` and emit the profile text.
+    fn store_profile(env: &Env, seq: u32, profile: &String) -> Result<(), Error> {
+        let len = profile.len();
+        if len == 0 || len > common::MAX_PROFILE_LENGTH {
+            return Err(Error::InvalidProfile);
+        }
+        let hash: BytesN<32> = env.crypto().sha256(&profile.to_bytes()).into();
+        set_profile_state(
+            env,
+            &ProfileState {
+                hash: hash.clone(),
+                seq,
+            },
+        );
+        emit_profile_updated(env, seq, &hash, profile);
         Ok(())
     }
 

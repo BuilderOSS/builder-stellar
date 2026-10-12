@@ -1242,3 +1242,14 @@ fn set_metadata_renames_and_emits_metadata_updated() {
         assert_eq!(stellar_tokens::non_fungible::Base::symbol(&e), symbol);
     });
 }
+
+/// Regression: `TokenKey::Metadata` used to encode to the same instance key as
+/// OpenZeppelin's `NFTStorageKey::Metadata`, so the metadata contract address
+/// overwrote the collection name, symbol and URI at construction.
+#[test]
+fn name_symbol_and_metadata_contract_are_stored_separately() {
+    let (e, client, _owner) = setup();
+    assert_eq!(client.name(), String::from_str(&e, "DAO Vote NFT"));
+    assert_eq!(client.symbol(), String::from_str(&e, "vDAO"));
+    assert!(client.metadata().is_some());
+}

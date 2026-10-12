@@ -18,6 +18,7 @@ pub trait NftApi {
     /// Voting-capable supply (excludes tokens held by the Treasury, Auction
     /// and Marketplace).
     fn total_supply(e: &Env) -> i128;
+    fn name(e: &Env) -> String;
     fn owner_of(e: &Env, token_id: u32) -> Address;
     fn mint(e: &Env, minter: Address, to: Address) -> u32;
     fn batch_mint(

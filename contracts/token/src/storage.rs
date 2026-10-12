@@ -15,7 +15,10 @@ pub enum TokenKey {
     /// token is live. The admin has implicit authority and needs no entry.
     MintAuthority(Address),
     /// Instance: metadata contract called on every mint to seed artwork.
-    Metadata,
+    /// Not named `Metadata`: a unit variant encodes as `["Metadata"]`, the
+    /// same key as OpenZeppelin's `NFTStorageKey::Metadata` (name, symbol,
+    /// URI), which this address used to overwrite.
+    MetadataContract,
     /// Instance: Manager that approves upgrades and performs the launch.
     Manager,
     /// Instance: DAO Treasury; the only address `launch` accepts. Holds no

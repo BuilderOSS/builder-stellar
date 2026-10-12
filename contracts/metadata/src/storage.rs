@@ -1,4 +1,4 @@
-use soroban_sdk::{contracttype, Address, Env, String, Vec};
+use soroban_sdk::{contracttype, Address, BytesN, Env, String, Vec};
 
 use crate::error::Error;
 
@@ -37,6 +37,8 @@ fn extend_persistent_ttl(env: &Env, key: &DataKey) {
 #[contracttype]
 pub enum DataKey {
     Settings,
+    /// Instance: fingerprint of the event-only DAO profile.
+    Profile,
     /// Instance: item count of each property, in property order (<= 16).
     /// Its length is the property count. The only artwork state mint reads.
     ItemCounts,
@@ -62,10 +64,18 @@ pub enum DataKey {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Settings {
     pub token: Address,
-    pub project_uri: String,
-    pub description: String,
-    pub contract_image: String,
+    /// Base URL of the image compositor; `token_uri` points `image` here.
     pub renderer_base: String,
+}
+
+/// The chain's record of the event-only profile: the SHA-256 of the latest
+/// profile bytes and how many updates have been made. The profile text lives
+/// only in `ProfileUpdated` events.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProfileState {
+    pub hash: BytesN<32>,
+    pub seq: u32,
 }
 
 #[contracttype]
@@ -121,6 +131,18 @@ pub fn get_settings(env: &Env) -> Result<Settings, Error> {
 
 pub fn set_settings(env: &Env, settings: &Settings) {
     env.storage().instance().set(&DataKey::Settings, settings);
+    extend_instance_ttl(env);
+}
+
+pub fn get_profile_state(env: &Env) -> Result<ProfileState, Error> {
+    env.storage()
+        .instance()
+        .get(&DataKey::Profile)
+        .ok_or(Error::NotInitialized)
+}
+
+pub fn set_profile_state(env: &Env, state: &ProfileState) {
+    env.storage().instance().set(&DataKey::Profile, state);
     extend_instance_ttl(env);
 }
 

@@ -311,9 +311,7 @@ fn test_create_dao_when_paused_fails() {
             token_name: String::from_str(&env, "DAO"),
             token_symbol: String::from_str(&env, "DAO"),
             token_uri: String::from_str(&env, "https://example.com/token"),
-            project_uri: String::from_str(&env, "https://example.com"),
-            description: String::from_str(&env, "Test DAO"),
-            contract_image: String::from_str(&env, "https://example.com/image.png"),
+            profile: String::from_str(&env, r#"{"v":1,"description":"Test DAO"}"#),
             renderer_base: String::from_str(&env, "https://example.com/render"),
             slug: String::from_str(&env, "dao-one"),
             governance: crate::storage::GovernanceConfig {
@@ -647,7 +645,7 @@ fn stub_wasm(env: &Env, tag: &str, ctor_arity: usize, init_arity: usize) -> Byte
 fn register_stub_implementations(env: &Env, client: &ManagerContractClient) {
     let specs: [(&str, usize, usize); 6] = [
         ("Token", 11, 0),
-        ("Metadata", 13, 0),
+        ("Metadata", 11, 0),
         ("Auction", 11, 0),
         ("Governor", 11, 0),
         ("Treasury", 5, 0),
@@ -700,9 +698,7 @@ fn dao_params(env: &Env, deployer: &Address, nonce: u64) -> DaoCreationParams {
             token_name: String::from_str(env, "DAO"),
             token_symbol: String::from_str(env, "DAO"),
             token_uri: String::from_str(env, "https://example.com/token"),
-            project_uri: String::from_str(env, "https://example.com"),
-            description: String::from_str(env, "Test DAO"),
-            contract_image: String::from_str(env, "https://example.com/image.png"),
+            profile: String::from_str(env, r#"{"v":1,"description":"Test DAO"}"#),
             renderer_base: String::from_str(env, "https://example.com/render"),
             slug: slug_for_nonce(env, nonce),
             governance: GovernanceConfig {
@@ -1114,9 +1110,7 @@ mod real_dao {
             metadata::MetadataContract,
             (
                 addresses.token.clone(),
-                String::from_str(&env, "https://example.com"),
-                String::from_str(&env, "desc"),
-                String::from_str(&env, "https://example.com/i.png"),
+                String::from_str(&env, r#"{"v":1,"description":"desc"}"#),
                 String::from_str(&env, "https://example.com/r"),
                 manager.clone(),
                 hash.clone(),
@@ -1447,6 +1441,32 @@ mod real_dao {
                     contract,
                     &Symbol::new(env, function),
                     vec![env, who.to_val()],
+                )
+                .is_err(),
+                "{function} must not exist"
+            );
+        }
+        // The display strings moved to the event-only profile, and artwork
+        // renewal to the footprint sweep. Each is called with arguments of its
+        // old signature, so only a missing function can fail.
+        let text = soroban_sdk::String::from_str(env, "x").to_val();
+        for (function, args) in [
+            ("update_description", vec![env, text]),
+            ("update_project_uri", vec![env, text]),
+            ("update_contract_image", vec![env, text]),
+            ("description", vec![env]),
+            ("project_uri", vec![env]),
+            ("contract_image", vec![env]),
+            (
+                "bump_artwork_ttl",
+                vec![env, 0u32.into_val(env), 1u32.into_val(env)],
+            ),
+        ] {
+            assert!(
+                env.try_invoke_contract::<soroban_sdk::Val, soroban_sdk::Error>(
+                    &dao.addresses.metadata,
+                    &Symbol::new(env, function),
+                    args,
                 )
                 .is_err(),
                 "{function} must not exist"

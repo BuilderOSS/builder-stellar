@@ -104,9 +104,7 @@ fn register_metadata(e: &Env, metadata_id: &Address, token_id: &Address, owner: 
         MetadataContract,
         (
             token_id.clone(),
-            String::from_str(e, "https://example.com/project"),
-            String::from_str(e, "DAO description"),
-            String::from_str(e, "https://example.com/image.png"),
+            String::from_str(e, r#"{"v":1,"description":"DAO description"}"#),
             String::from_str(e, "https://example.com/render/"),
             Address::generate(e),
             BytesN::from_array(e, &[0u8; 32]),
@@ -2875,9 +2873,7 @@ fn slug_params(
             token_name: String::from_str(e, "Flow DAO"),
             token_symbol: String::from_str(e, "FLOW"),
             token_uri: String::from_str(e, "https://example.com/token/"),
-            project_uri: String::from_str(e, "https://example.com"),
-            description: String::from_str(e, "Full factory flow"),
-            contract_image: String::from_str(e, "https://example.com/image.png"),
+            profile: String::from_str(e, r#"{"v":1,"description":"Test DAO"}"#),
             renderer_base: String::from_str(e, "https://example.com/render/"),
             slug: String::from_str(e, slug),
             governance: manager::GovernanceConfig {
@@ -3795,93 +3791,14 @@ fn squatted_target_slug_fails_execution_and_keeps_the_proposal_queued() {
     );
 }
 
-/// Manager 0.1.0 (the deployed code) -> local build as 0.2.0: slug entries written by the old
-/// code survive, and the new `change_slug` works on a DAO launched before the upgrade.
-#[test]
-fn manager_upgrade_from_deployed_code_keeps_slugs_and_enables_change_slug() {
-    let e = Env::default();
-    e.mock_all_auths();
-    e.ledger().set_sequence_number(100);
-    e.ledger().set_timestamp(1_000);
-    e.cost_estimate().budget().reset_unlimited();
-
-    let path = std::format!("{}/fixtures/manager-0.1.0.wasm", env!("CARGO_MANIFEST_DIR"));
-    let old_bytes =
-        std::fs::read(&path).unwrap_or_else(|err| panic!("missing fixture {path} ({err})"));
-    let old_hash = e
-        .deployer()
-        .upload_contract_wasm(soroban_sdk::Bytes::from_slice(&e, &old_bytes));
-    let admin = Address::generate(&e);
-    let manager_id = e.register(
-        old_bytes.as_slice(),
-        (admin, old_hash.clone(), String::from_str(&e, "0.1.0")),
-    );
-    let manager = ManagerContractClient::new(&e, &manager_id);
-
-    let mut hashes = std::vec::Vec::new();
-    for (registry_name, wasm_name) in [
-        ("Token", "token"),
-        ("Metadata", "metadata"),
-        ("Auction", "auction"),
-        ("Governor", "governor"),
-        ("Treasury", "treasury"),
-        ("Marketplace", "marketplace"),
-    ] {
-        let hash = upload_module_wasm(&e, wasm_name);
-        manager.register_implementation(
-            &String::from_str(&e, registry_name),
-            &String::from_str(&e, "0.1.0"),
-            &hash,
-        );
-        hashes.push(hash);
-    }
-    manager.set_current_implementations(
-        &hashes[0], &hashes[1], &hashes[2], &hashes[3], &hashes[4], &hashes[5],
-    );
-
-    let asset = e
-        .register_stellar_asset_contract_v2(Address::generate(&e))
-        .address();
-    let founder = Address::generate(&e);
-    let dao = manager.create_dao(&slug_params(&e, &founder, 1, "before-upgrade", &asset));
-    DaoTokenContractClient::new(&e, &dao.token).mint(&founder, &founder);
-    manager.launch_dao(&dao.token, &NO_LAUNCH_MODULES);
-
-    // The release: register both Manager builds and approve the path.
-    let new_hash = upload_module_wasm(&e, "manager");
-    assert_ne!(old_hash, new_hash, "rebuild the manager WASM");
-    let name = String::from_str(&e, "Manager");
-    manager.register_implementation(&name, &String::from_str(&e, "0.1.0"), &old_hash);
-    manager.register_implementation(&name, &String::from_str(&e, "0.2.0"), &new_hash);
-    manager.approve_upgrade(&old_hash, &new_hash);
-    manager.upgrade_manager(&old_hash, &new_hash);
-
-    assert_eq!(manager.version(), String::from_str(&e, "0.2.0"));
-    let before = String::from_str(&e, "before-upgrade");
-    assert_eq!(manager.get_dao_by_slug(&before), dao.token);
-    assert_eq!(manager.get_slug(&dao.token), Some(before.clone()));
-
-    let after = String::from_str(&e, "after-upgrade");
-    manager.change_slug(&dao.token, &after);
-    assert_eq!(manager.get_dao_by_slug(&after), dao.token);
-
-    // The freed slug goes to the next DAO that launches with it.
-    let other_founder = Address::generate(&e);
-    let other = manager.create_dao(&slug_params(
-        &e,
-        &other_founder,
-        2,
-        "before-upgrade",
-        &asset,
-    ));
-    DaoTokenContractClient::new(&e, &other.token).mint(&other_founder, &other_founder);
-    manager.launch_dao(&other.token, &NO_LAUNCH_MODULES);
-    assert_eq!(manager.get_dao_by_slug(&before), other.token);
-}
-
-// ============================================================================
-// Governor / Auction / Marketplace 0.1.0 -> 0.2.0 upgrade (on-chain comments)
-// ============================================================================
+// Retired: manager_upgrade_from_deployed_code_keeps_slugs_and_enables_change_slug.
+// Value: protects=(none now) upgrading the deployed Manager 0.1.0 in place while
+// its slugs survive; retired_because=docs/STORAGE_DIET.md ships as one fresh
+// testnet redeploy (D13) and the 0.1.0 Manager's create_dao passes the removed
+// display strings to the new Metadata constructor, so the fixture cannot drive
+// current modules (eng review D10: deployed-code fixtures retire);
+// replacement=full_factory_flow_create_setup_launch_with_slug and the
+// change_slug tests on the current Manager.
 
 struct ModulesUpgradeFixture {
     e: Env,

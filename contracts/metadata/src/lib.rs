@@ -35,12 +35,13 @@
 mod contract;
 mod error;
 mod events;
+mod json;
 mod storage;
 
 pub use contract::*;
 pub use error::Error;
 pub use storage::{
-    IpfsGroup, Item, ItemParam, Property, PropertyHeader, Settings, ITEMS_PER_PAGE,
+    IpfsGroup, Item, ItemParam, ProfileState, Property, PropertyHeader, Settings, ITEMS_PER_PAGE,
     MAX_IPFS_GROUPS, MAX_ITEMS_PER_PROPERTY, MAX_ITEM_PAGES, TOKENS_PER_ATTRIBUTE_PAGE,
 };
 

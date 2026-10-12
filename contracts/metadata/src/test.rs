@@ -11,6 +11,8 @@ use token::DaoTokenContract;
 use crate::events::SeedsGenerated;
 use crate::{IpfsGroup, ItemParam, MetadataContract, MetadataContractClient};
 
+const PROFILE: &str = r#"{"v":1,"description":"Test DAO","links":[]}"#;
+
 /// Returns a client for a not-yet-registered address; `initialize_metadata`
 /// (or `register_metadata`) deploys the contract there via its constructor.
 fn create_contract<'a>(env: &Env) -> MetadataContractClient<'a> {
@@ -31,9 +33,7 @@ fn register_metadata(
         MetadataContract,
         (
             token.clone(),
-            String::from_str(env, "https://example.com"),
-            String::from_str(env, "Test DAO"),
-            String::from_str(env, "https://example.com/image.png"),
+            String::from_str(env, PROFILE),
             String::from_str(env, "https://renderer.example.com/render"),
             manager.clone(),
             hash.clone(),
@@ -99,9 +99,14 @@ fn test_initialize() {
     let settings = client.get_settings();
     assert_eq!(settings.token, token);
     assert_eq!(
-        settings.project_uri,
-        String::from_str(&env, "https://example.com")
+        settings.renderer_base,
+        String::from_str(&env, "https://renderer.example.com/render")
     );
+    // The profile is event-only: seq 0, its hash stored, the text emitted.
+    assert_eq!(client.profile_seq(), 0);
+    let bytes = soroban_sdk::Bytes::from_slice(&env, PROFILE.as_bytes());
+    let hash: BytesN<32> = env.crypto().sha256(&bytes).into();
+    assert_eq!(client.profile_hash(), hash);
 }
 
 #[test]
@@ -396,12 +401,23 @@ fn test_update_settings() {
 
     initialize_metadata(&env, &client, &token, &owner);
 
-    // Update description
-    let new_description = String::from_str(&env, "Updated description");
-    client.update_description(&new_description);
-
-    let settings = client.get_settings();
-    assert_eq!(settings.description, new_description);
+    let next = String::from_str(&env, r#"{"v":1,"description":"Updated"}"#);
+    client.update_profile(&0, &next);
+    assert_eq!(client.profile_seq(), 1);
+    let hash: BytesN<32> = env.crypto().sha256(&next.to_bytes()).into();
+    assert_eq!(client.profile_hash(), hash);
+    // A write based on the old seq is refused and changes nothing.
+    let stale = String::from_str(&env, r#"{"v":1,"description":"Stale"}"#);
+    assert_eq!(
+        client
+            .try_update_profile(&0, &stale)
+            .err()
+            .unwrap()
+            .unwrap(),
+        crate::Error::ProfileSeqMismatch
+    );
+    assert_eq!(client.profile_seq(), 1);
+    assert_eq!(client.profile_hash(), hash);
 }
 
 #[test]
@@ -1149,7 +1165,7 @@ fn state_changing_entrypoint_extends_instance_ttl() {
     let (env, client, _owner, _token) = setup();
     advance_ledgers(&env, 120 * 17_280);
     let before = instance_ttl(&env, &client.address);
-    client.update_description(&String::from_str(&env, "ttl"));
+    client.update_profile(&0, &String::from_str(&env, "ttl"));
     let after = instance_ttl(&env, &client.address);
     assert!(
         after > before,
@@ -1163,16 +1179,37 @@ fn settings_strings_are_capped() {
     let max = common::MAX_STRING_LENGTH as usize;
     let ok = String::from_str(&env, &"a".repeat(max));
     let long = String::from_str(&env, &"a".repeat(max + 1));
-    client.update_description(&ok);
-    for r in [
-        client.try_update_description(&long),
-        client.try_update_project_uri(&long),
-        client.try_update_contract_image(&long),
-        client.try_update_renderer_base(&long),
-    ] {
-        assert_eq!(r.err().unwrap().unwrap(), crate::Error::StringTooLong);
+    client.update_renderer_base(&ok);
+    assert_eq!(
+        client
+            .try_update_renderer_base(&long)
+            .err()
+            .unwrap()
+            .unwrap(),
+        crate::Error::StringTooLong
+    );
+    assert_eq!(
+        client
+            .try_update_renderer_base(&String::from_str(&env, "https://x/\"q"))
+            .err()
+            .unwrap()
+            .unwrap(),
+        crate::Error::InvalidName
+    );
+    assert_eq!(client.renderer_base(), ok);
+    // Profile: 1 to MAX_PROFILE_LENGTH bytes.
+    let pmax = common::MAX_PROFILE_LENGTH as usize;
+    client.update_profile(&0, &String::from_str(&env, &"p".repeat(pmax)));
+    for bad in [std::string::String::new(), "p".repeat(pmax + 1)] {
+        assert_eq!(
+            client
+                .try_update_profile(&1, &String::from_str(&env, &bad))
+                .err()
+                .unwrap()
+                .unwrap(),
+            crate::Error::InvalidProfile
+        );
     }
-    assert_eq!(client.description(), ok);
 }
 
 #[test]
@@ -1203,23 +1240,23 @@ fn artwork_admin_moves_to_treasury_at_launch() {
         address: &owner,
         invoke: &MockAuthInvoke {
             contract: &client.address,
-            fn_name: "update_description",
-            args: (text.clone(),).into_val(&env),
+            fn_name: "update_profile",
+            args: (0u32, text.clone()).into_val(&env),
             sub_invokes: &[],
         },
     }]);
-    assert!(client.try_update_description(&text).is_err());
+    assert!(client.try_update_profile(&0, &text).is_err());
     env.mock_auths(&[MockAuth {
         address: &treasury,
         invoke: &MockAuthInvoke {
             contract: &client.address,
-            fn_name: "update_description",
-            args: (text.clone(),).into_val(&env),
+            fn_name: "update_profile",
+            args: (0u32, text.clone()).into_val(&env),
             sub_invokes: &[],
         },
     }]);
-    client.update_description(&text);
-    assert_eq!(client.description(), text);
+    client.update_profile(&0, &text);
+    assert_eq!(client.profile_seq(), 1);
 }
 
 // ---- Storage diet: paged artwork layout, caps and name rules ----
@@ -1562,4 +1599,145 @@ fn reset_never_reads_stale_pages() {
     let items = client.get_items(&0, &0, &50);
     assert_eq!(items.len(), 3);
     assert_eq!(items.get(1).unwrap().name, String::from_str(&env, "it"));
+}
+
+// ---- On-chain token_uri (SEP-50) ----
+
+fn decode_token_uri(uri: &String) -> std::string::String {
+    let mut raw = std::vec![0u8; uri.len() as usize];
+    uri.copy_into_slice(&mut raw);
+    let text = std::string::String::from_utf8(raw).unwrap();
+    let b64 = text
+        .strip_prefix("data:application/json;base64,")
+        .expect("data: URI prefix");
+    let value = |c: u8| -> u32 {
+        match c {
+            b'A'..=b'Z' => (c - b'A') as u32,
+            b'a'..=b'z' => (c - b'a' + 26) as u32,
+            b'0'..=b'9' => (c - b'0' + 52) as u32,
+            b'+' => 62,
+            b'/' => 63,
+            _ => panic!("bad base64 byte {c}"),
+        }
+    };
+    let mut out = std::vec::Vec::new();
+    for quad in b64.as_bytes().chunks(4) {
+        let pad = quad.iter().filter(|c| **c == b'=').count();
+        let mut n = 0u32;
+        for c in quad.iter() {
+            n = (n << 6) | if *c == b'=' { 0 } else { value(*c) };
+        }
+        let bytes = [(n >> 16) as u8, (n >> 8) as u8, n as u8];
+        out.extend_from_slice(&bytes[..3 - pad]);
+    }
+    std::string::String::from_utf8(out).unwrap()
+}
+
+#[test]
+fn token_uri_is_sep50_json_built_on_chain() {
+    let (env, client, _o, token) = setup();
+    add_new_property(&env, &client, "Head", 1, "ipfs://a");
+    let mut names = Vec::new(&env);
+    names.push_back(String::from_str(&env, "Body"));
+    let mut items = Vec::new(&env);
+    items.push_back(ItemParam {
+        property_id: 0,
+        name: String::from_str(&env, "blue"),
+        is_new_property: true,
+    });
+    client.add_properties(&names, &items, &group(&env, "ipfs://a"));
+    assert!(client.on_minted(&12));
+    let json = decode_token_uri(&client.token_uri(&12));
+    let mut token_str = std::vec![0u8; 56];
+    token.to_string().copy_into_slice(&mut token_str);
+    let token_str = std::string::String::from_utf8(token_str).unwrap();
+    assert_eq!(
+        json,
+        std::format!(
+            r#"{{"name":"Test Token #12","image":"https://renderer.example.com/render?contract={token_str}&token=12","attributes":[{{"trait_type":"Head","value":"item"}},{{"trait_type":"Body","value":"blue"}}]}}"#
+        )
+    );
+    assert_eq!(
+        client.try_token_uri(&13).err().unwrap().unwrap(),
+        crate::Error::TokenNotMinted
+    );
+}
+
+#[test]
+fn token_uri_skips_traits_removed_by_a_reset() {
+    let (env, client, _o, _t) = setup();
+    add_n_properties(&env, &client, 3, 1);
+    assert!(client.on_minted(&1));
+    // Recreate with one property: the token keeps three attribute indices.
+    let mut names = Vec::new(&env);
+    names.push_back(String::from_str(&env, "Only"));
+    let mut items = Vec::new(&env);
+    items.push_back(ItemParam {
+        property_id: 0,
+        name: String::from_str(&env, "one"),
+        is_new_property: true,
+    });
+    client.delete_and_recreate_properties(&names, &items, &group(&env, "ipfs://r"));
+    let json = decode_token_uri(&client.token_uri(&1));
+    assert!(
+        json.ends_with(r#""attributes":[{"trait_type":"Only","value":"one"}]}"#),
+        "{json}"
+    );
+}
+
+/// The largest possible document: 40-byte token name (OZ cap), 256-byte renderer base, 16
+/// traits with 64-byte names. It must fit the buffer, the return-value plus
+/// event limit and the CPU limit.
+#[test]
+fn token_uri_worst_case_fits_the_limits() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let owner = Address::generate(&env);
+    let max = common::MAX_STRING_LENGTH as usize;
+    let token = env.register(
+        DaoTokenContract,
+        (
+            owner.clone(),
+            Address::generate(&env),
+            Address::generate(&env),
+            Address::generate(&env),
+            String::from_str(&env, "https://test.com"),
+            // OpenZeppelin caps the collection name at 40 bytes.
+            String::from_str(&env, &"N".repeat(40)),
+            String::from_str(&env, "TEST"),
+            Address::generate(&env),
+            Address::generate(&env),
+            BytesN::from_array(&env, &[0u8; 32]),
+            String::from_str(&env, "0.1.0"),
+        ),
+    );
+    let client = create_contract(&env);
+    initialize_metadata(&env, &client, &token, &owner);
+    client.update_renderer_base(&String::from_str(&env, &"r".repeat(max)));
+    let mut names = Vec::new(&env);
+    let mut items = Vec::new(&env);
+    for i in 0..16 {
+        names.push_back(long_name(&env, 'p'));
+        items.push_back(ItemParam {
+            property_id: i,
+            name: long_name(&env, 'i'),
+            is_new_property: true,
+        });
+    }
+    client.add_properties(&names, &items, &group(&env, "ipfs://a"));
+    assert!(client.on_minted(&u32::MAX));
+    env.cost_estimate().budget().reset_default();
+    let uri = client.token_uri(&u32::MAX);
+    let cpu = env.cost_estimate().budget().cpu_instruction_cost();
+    std::println!(
+        "token_uri worst case: {} bytes returned, {} CPU instructions",
+        uri.len(),
+        cpu
+    );
+    let json = decode_token_uri(&uri);
+    assert_eq!(json.matches("trait_type").count(), 16);
+    // Live testnet: tx_max_contract_events_size_bytes 16,384 (events + return
+    // value) and tx_max_instructions 400,000,000.
+    assert!(uri.len() < 16_384 / 2, "{} bytes", uri.len());
+    assert!(cpu < 400_000_000 / 4, "{cpu} instructions");
 }

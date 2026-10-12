@@ -59,6 +59,10 @@ pub const MAX_ARTWORK_NAME_LENGTH: u32 = 64;
 /// Maximum length in bytes of an artwork IPFS group file extension.
 pub const MAX_EXTENSION_LENGTH: u32 = 16;
 
+/// Maximum length in bytes of a DAO profile (serialized JSON: description,
+/// links, image). The profile is event-only; the chain keeps its hash.
+pub const MAX_PROFILE_LENGTH: u32 = 4_096;
+
 /// Maximum length in bytes of a proposal comment or vote reason (~1,350
 /// English words). Comments are event-only, and a transaction may publish at
 /// most 16 KiB of contract events, so this leaves room for the event envelope.

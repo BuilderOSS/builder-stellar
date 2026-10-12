@@ -62,7 +62,7 @@ impl DaoTokenContract {
         Base::set_metadata(e, uri.clone(), name.clone(), symbol.clone());
         common::admin::init(e, &admin);
         let instance = e.storage().instance();
-        instance.set(&TokenKey::Metadata, &metadata);
+        instance.set(&TokenKey::MetadataContract, &metadata);
         instance.set(&TokenKey::Manager, &manager);
         instance.set(&TokenKey::Treasury, &treasury);
         instance.set(&TokenKey::Auction, &auction);
@@ -171,7 +171,17 @@ impl DaoTokenContract {
 
     /// Returns the metadata contract used for mint hooks.
     pub fn metadata(e: &Env) -> Option<Address> {
-        e.storage().instance().get(&TokenKey::Metadata)
+        e.storage().instance().get(&TokenKey::MetadataContract)
+    }
+
+    /// SEP-50 collection name.
+    pub fn name(e: &Env) -> String {
+        Base::name(e)
+    }
+
+    /// SEP-50 collection symbol.
+    pub fn symbol(e: &Env) -> String {
+        Base::symbol(e)
     }
 
     /// Voting-capable supply: every minted token except those held by the
