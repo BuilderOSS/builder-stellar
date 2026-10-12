@@ -2,6 +2,8 @@ import { Client as MarketplaceClient } from '@builder-stellar/marketplace-bindin
 import type { ManagerDao, MarketplacePrimaryListing, MarketplaceSecondaryListing } from '@prisma/client';
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
+import { getDeploymentNetwork, verifyRows } from '@/lib/dao-db';
+import { plainSummary } from '@/lib/dao-profile';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { prisma } from '@/lib/prisma';
 
@@ -23,7 +25,8 @@ import type {
   MarketplaceOffers
 } from './types';
 
-export function marketplaceCommunity(row: ManagerDao): MarketplaceCommunity {
+/** `description`: a plain summary of the verified profile, or empty (never unverified text). */
+export function marketplaceCommunity(row: ManagerDao, description = ''): MarketplaceCommunity {
   if (row.deploymentId !== DEPLOYMENT_ID || row.daoId !== row.tokenContract || row.tokenAddress !== row.daoId) {
     throw new MarketplaceError('Indexed community identity is invalid.', 503);
   }
@@ -32,7 +35,7 @@ export function marketplaceCommunity(row: ManagerDao): MarketplaceCommunity {
     daoId: row.daoId,
     name: row.tokenName || 'Unnamed community',
     symbol: row.tokenSymbol || '',
-    description: row.tokenDescription || '',
+    description,
     marketplaceContract: row.marketplaceContract,
     tokenContract: row.tokenContract,
     treasuryContract: row.treasuryContract,
@@ -97,7 +100,8 @@ function communityWhere(query: ReturnType<typeof parseMarketplaceQuery>) {
           OR: [
             { tokenName: { contains: query.search, mode: 'insensitive' as const } },
             { tokenSymbol: { contains: query.search, mode: 'insensitive' as const } },
-            { tokenDescription: { contains: query.search, mode: 'insensitive' as const } }
+            // The raw profile JSON: matches the description and link labels.
+            { profile: { contains: query.search, mode: 'insensitive' as const } }
           ]
         }
       : {}),
@@ -115,10 +119,14 @@ export async function marketplaceDirectory(params: URLSearchParams): Promise<Mar
     skip: query.page * query.take,
     take: query.take + 1
   });
+  const page = rows.slice(0, query.take);
+  const profiles = await verifyRows(getDeploymentNetwork(), page);
   return {
     deploymentId: DEPLOYMENT_ID,
     network: getDeploymentConfig().name,
-    communities: rows.slice(0, query.take).map(marketplaceCommunity),
+    communities: page.map((row) =>
+      marketplaceCommunity(row, plainSummary(profiles.get(row.daoId)?.profile.description ?? ''))
+    ),
     hasMore: query.page < MARKETPLACE_MAX_PAGE && rows.length > query.take
   };
 }
@@ -131,7 +139,7 @@ export async function marketplaceOffers(
   const query = parseMarketplaceQuery(params);
   const communities = dao
     ? [dao]
-    : (await prisma.managerDao.findMany({ where: communityWhere(query) })).map(marketplaceCommunity);
+    : (await prisma.managerDao.findMany({ where: communityWhere(query) })).map((row) => marketplaceCommunity(row));
   const scoped = communities
     .filter((c) => c.marketplaceContract)
     .map((c) => marketplaceScope(DEPLOYMENT_ID, c.daoId, c.marketplaceContract!));

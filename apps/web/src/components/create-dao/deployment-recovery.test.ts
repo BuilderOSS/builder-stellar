@@ -272,7 +272,7 @@ describe('signed deployment recovery', () => {
   it('uses actual selected launch modules, stores launch hash before send and does not sign again on recovery', async () => {
     mocks.pending.mockResolvedValue({ result: { launch_admin: wallet, addresses } });
     const hook = useDaoDeployment(wallet, 'testnet');
-    const choice = { launch_auction: false, launch_marketplace: true, enable_minter: false };
+    const choice = { launch_auction: false, launch_marketplace: true, minter: 'CMINTER' };
     mocks.send.mockRejectedValueOnce(new Error('Transmission interrupted'));
     await expect(hook.launchDao('dao-A', choice)).rejects.toThrow('interrupted');
     const key = `${preferenceScopeKey({ network: 'testnet', deployment: 'manager-A', wallet })}:dao-A`;
@@ -287,18 +287,18 @@ describe('signed deployment recovery', () => {
     await hook.launchDao('dao-A', choice);
     expect(mocks.launch).toHaveBeenCalledWith({
       token_address: 'dao-A',
-      launch_config: { ...choice, expected_minter: null }
+      launch_config: choice
     });
     expect(mocks.sign).toHaveBeenCalledTimes(1);
     expect(useLocalPreferencesStore.getState().launches[key].status).toBe('confirmed');
   });
-  it('requires an explicitly reviewed platform minter', async () => {
+  it('requires an explicitly reviewed shared claims minter', async () => {
     mocks.pending.mockResolvedValue({ result: { launch_admin: wallet, addresses } });
     await expect(
       useDaoDeployment(wallet, 'testnet').launchDao('dao-A', {
         launch_auction: false,
         launch_marketplace: false,
-        enable_minter: true
+        minter: ''
       })
     ).rejects.toThrow('Review');
     expect(mocks.sign).not.toHaveBeenCalled();
@@ -485,7 +485,7 @@ describe('signed deployment recovery', () => {
   });
   it('applies exact-envelope transport recovery and explicit replay to launch as well', async () => {
     mocks.pending.mockResolvedValue({ result: { launch_admin: wallet, addresses } });
-    const choice = { launch_auction: false, launch_marketplace: true, enable_minter: false };
+    const choice = { launch_auction: false, launch_marketplace: true, minter: 'CMINTER' };
     mocks.send.mockRejectedValueOnce(new Error('Launch transmission lost'));
     await expect(useDaoDeployment(wallet, 'testnet').launchDao('dao-A', choice)).rejects.toThrow('transmission lost');
     mocks.getTransaction.mockResolvedValueOnce(missing());
@@ -500,7 +500,7 @@ describe('signed deployment recovery', () => {
   });
   it('checks pending launch ownership again before rebuilding an expired launch envelope', async () => {
     mocks.pending.mockResolvedValue({ result: { launch_admin: wallet, addresses } });
-    const choice = { launch_auction: true, launch_marketplace: false, enable_minter: false };
+    const choice = { launch_auction: true, launch_marketplace: false, minter: 'CMINTER' };
     mocks.send.mockRejectedValueOnce(new Error('Interrupted'));
     await expect(useDaoDeployment(wallet, 'testnet').launchDao('dao-A', choice)).rejects.toThrow('Interrupted');
     mocks.getTransaction.mockResolvedValueOnce({ status: 'NOT_FOUND', latestLedgerCloseTime: expiresAt + 1 });
@@ -514,7 +514,7 @@ describe('signed deployment recovery', () => {
   });
   it('blocks a launch retry if the DAO is no longer pending, without claiming success from absence', async () => {
     mocks.pending.mockResolvedValueOnce({ result: { launch_admin: wallet, addresses } });
-    const choice = { launch_auction: false, launch_marketplace: true, enable_minter: false };
+    const choice = { launch_auction: false, launch_marketplace: true, minter: 'CMINTER' };
     mocks.send.mockResolvedValueOnce({ status: 'ERROR', hash });
     await expect(useDaoDeployment(wallet, 'testnet').launchDao('dao-A', choice)).rejects.toThrow('RPC rejected');
     mocks.getTransaction.mockResolvedValueOnce(missing());
@@ -534,7 +534,7 @@ describe('signed deployment recovery', () => {
       useDaoDeployment(wallet, 'testnet').launchDao('dao-A', {
         launch_auction: true,
         launch_marketplace: false,
-        enable_minter: false
+        minter: 'CMINTER'
       })
     ).rejects.toThrow('wallet changed');
     expect(mocks.send).not.toHaveBeenCalled();
@@ -544,18 +544,18 @@ describe('signed deployment recovery', () => {
     const choice = {
       launch_auction: false,
       launch_marketplace: true,
-      enable_minter: true,
-      expected_minter: 'reviewed-minter-A'
+      minter: 'reviewed-minter-A'
     };
     mocks.send.mockRejectedValueOnce(new Error('Interrupted'));
     await expect(useDaoDeployment(wallet, 'testnet').launchDao('dao-A', choice)).rejects.toThrow('Interrupted');
     await expect(
       useDaoDeployment(wallet, 'testnet').launchDao(
         'dao-A',
-        { ...choice, expected_minter: 'new-minter-B' },
+        { ...choice, minter: 'new-minter-B' },
         { rebroadcast: true }
       )
-    ).rejects.toThrow('saved launch review differs');
+      // The reviewed minter is a launch choice: a different one is a changed choice.
+    ).rejects.toThrow('Launch choices changed');
     expect(mocks.send).toHaveBeenCalledTimes(1);
     expect(mocks.sign).toHaveBeenCalledTimes(1);
   });
@@ -572,9 +572,9 @@ describe('signed deployment recovery', () => {
     expect(useCreateDaoStore.getState().drafts[0].deployment?.nonce).toBe('123');
   });
   it('stops launch choices changed by another tab before calling the wallet', async () => {
-    const choice = { launch_auction: false, launch_marketplace: true, enable_minter: false };
+    const choice = { launch_auction: false, launch_marketplace: true, minter: 'CMINTER' };
     const key = `${preferenceScopeKey({ network: 'testnet', deployment: 'manager-A', wallet })}:dao-A`;
-    useLocalPreferencesStore.getState().setLaunch(key, { auction: true, marketplace: false, minter: false });
+    useLocalPreferencesStore.getState().setLaunch(key, { auction: true, marketplace: false, minter: 'CMINTER' });
     await expect(useDaoDeployment(wallet, 'testnet').launchDao('dao-A', choice)).rejects.toThrow(
       'Launch choices changed'
     );
@@ -583,7 +583,7 @@ describe('signed deployment recovery', () => {
   });
   it('rebuilds a rejected launch only after fresh pending ownership verification', async () => {
     mocks.pending.mockResolvedValue({ result: { launch_admin: wallet, addresses } });
-    const choice = { launch_auction: false, launch_marketplace: true, enable_minter: false };
+    const choice = { launch_auction: false, launch_marketplace: true, minter: 'CMINTER' };
     mocks.send.mockResolvedValueOnce({ status: 'ERROR', hash });
     await expect(useDaoDeployment(wallet, 'testnet').launchDao('dao-A', choice)).rejects.toThrow('RPC rejected');
     nextEnvelope();
@@ -592,7 +592,7 @@ describe('signed deployment recovery', () => {
     expect(mocks.pending).toHaveBeenCalledTimes(2);
     expect(mocks.launch).toHaveBeenCalledTimes(2);
     expect(mocks.sign).toHaveBeenCalledTimes(2);
-    expect(mocks.launch.mock.calls[1][0].launch_config).toEqual({ ...choice, expected_minter: null });
+    expect(mocks.launch.mock.calls[1][0].launch_config).toEqual(choice);
   });
 });
 describe('scoped indexing and confirmation', () => {

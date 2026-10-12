@@ -60,7 +60,7 @@ const ready = (): LaunchReadiness => ({
   admin: 'wallet-A',
   live: false,
   paymentAssetsMatch: true,
-  platformMinter: null,
+  platformMinter: 'CMINTER',
   slugTaken: false
 });
 const config = { name: 'testnet', rpcUrl: 'https://rpc.test', passphrase: 'test' } as DaoNetworkConfig;
@@ -69,14 +69,17 @@ beforeEach(() => {
   mocks.supply.mockResolvedValue({ result: 1n });
   mocks.admin.mockResolvedValue({ result: 'wallet-A' });
   mocks.live.mockResolvedValue({ result: false });
-  mocks.minter.mockResolvedValue({ result: null });
+  mocks.minter.mockResolvedValue({ result: 'CMINTER' });
   mocks.auction.mockResolvedValue({ result: { payment_token: 'xlm' } });
   mocks.marketplace.mockResolvedValue({ result: { payment_asset: 'usdc' } });
 });
 describe('live launch readiness', () => {
-  it('does not require indexed auctionEnabled (null in Setup) or a platform minter', async () => {
+  it('does not require indexed auctionEnabled (null in Setup) but does require the shared claims minter', async () => {
     const result = await readLaunchReadiness('dao-A', { ...config, auctionEnabled: null });
     expect(launchReadinessIssues(result, 'wallet-A')).toEqual([]);
+    expect(launchReadinessIssues({ ...result, platformMinter: null }, 'wallet-A')).toEqual([
+      'No shared claims minter is registered on this network yet. Launch is possible once the platform registers one.'
+    ]);
     expect(mocks.supply).toHaveBeenCalled();
   });
   it('requires nonzero actual supply, even with auction launch selected', () => {

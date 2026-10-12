@@ -40,7 +40,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       label: dao.token_name || dao.token_symbol || 'Unnamed community',
       href: daoRoute(daoRouteId({ daoId: dao.dao_id, slug: dao.slug })),
       seed: dao.dao_id,
-      image: dao.contract_image
+      image: dao.image
     }))
     .sort((a, b) => (a.key === home?.id ? -1 : b.key === home?.id ? 1 : 0));
 

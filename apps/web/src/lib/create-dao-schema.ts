@@ -6,6 +6,14 @@ import { getNetworkConfig } from '@/config/networks';
 import { getTreasuryAssets } from './assets-config';
 import { decimalToStroops, MIN_RESERVE_PRICE_STROOPS } from './auction-values';
 import {
+  isProfileImageUrl,
+  isProfileLinkUrl,
+  MAX_LINK_LABEL,
+  MAX_PROFILE_BYTES,
+  MAX_PROFILE_LINKS,
+  profileBytes
+} from './dao-profile';
+import {
   MAX_MARKETPLACE_FEE_BPS,
   validateQueueDelay,
   validateVotingDelay,
@@ -17,7 +25,6 @@ import {
   isValidTokenSymbol,
   MAX_TOKEN_NAME_BYTES,
   MAX_TOKEN_SYMBOL_LENGTH,
-  MAX_TOKEN_URI_BYTES,
   utf8Length
 } from './validation';
 
@@ -61,27 +68,38 @@ const identitySchema = z.object({
     .string()
     .trim()
     .min(2, 'Use at least 2 characters')
-    .refine((value) => utf8Length(value) <= MAX_TOKEN_NAME_BYTES, `Use at most ${MAX_TOKEN_NAME_BYTES} characters`),
+    .refine((value) => utf8Length(value) <= MAX_TOKEN_NAME_BYTES, `Use at most ${MAX_TOKEN_NAME_BYTES} characters`)
+    // The on-chain token JSON copies the name verbatim (InvalidName).
+    .refine(
+      (value) => !/["\\\u0000-\u001f\u007f]/.test(value),
+      'Names cannot contain quotes, backslashes or line breaks'
+    ),
   tokenSymbol: z
     .string()
     .refine(isValidTokenSymbol, `Use capital letters or numbers, up to ${MAX_TOKEN_SYMBOL_LENGTH} characters`),
-  contractImage: httpUrl
+  contractImage: z.string().refine(isProfileImageUrl, 'Use an https:// or ipfs:// image address')
 });
-const basicInfoSchema = identitySchema.extend({
-  description: z
+const profileLinkSchema = z.object({
+  label: z
     .string()
     .trim()
-    .min(12, 'Use at least 12 characters')
-    .max(240)
-    .refine(withinContractString, 'Use at most 256 UTF-8 bytes'),
-  projectUri: httpUrl,
-  // Becomes the token's base URI: the contract caps it at MAX_TOKEN_URI_BYTES once {daoId} is filled in.
-  tokenUri: templatedUrl.refine(
-    (value) => utf8Length(value.replaceAll('{daoId}', 'C'.repeat(56))) <= MAX_TOKEN_URI_BYTES,
-    `The resolved token URL must fit within ${MAX_TOKEN_URI_BYTES} bytes`
-  ),
-  rendererBase: templatedUrl
+    .min(1, 'Give this link a label')
+    .refine((value) => [...value].length <= MAX_LINK_LABEL, `Labels are at most ${MAX_LINK_LABEL} characters`),
+  url: z.string().trim().refine(isProfileLinkUrl, 'Links start with https://, http://, mailto: or ipfs://')
 });
+/** The community profile (description in markdown, links, image) must fit MAX_PROFILE_BYTES serialized. */
+const profileFits = (info: { description: string; links: { label: string; url: string }[]; contractImage: string }) =>
+  profileBytes({ description: info.description, links: info.links, image: info.contractImage }) <= MAX_PROFILE_BYTES;
+const basicInfoSchema = identitySchema
+  .extend({
+    description: z.string().trim().min(12, 'Use at least 12 characters'),
+    links: z.array(profileLinkSchema).max(MAX_PROFILE_LINKS, `Use at most ${MAX_PROFILE_LINKS} links`),
+    rendererBase: templatedUrl
+  })
+  .refine(profileFits, {
+    path: ['description'],
+    message: `The description, links and image together are over the ${MAX_PROFILE_BYTES}-byte limit`
+  });
 const auctionSchema = z.object({
   enabled: z.boolean(),
   paymentAsset: z.string().min(1, 'Choose a payment asset'),
@@ -135,7 +153,10 @@ export const CREATE_DAO_SECTIONS: Array<{ id: CreateDaoSection; title: string }>
 export const sectionSchemas = {
   basicInfo: identitySchema,
   membership: z.object({
-    basicInfo: basicInfoSchema.pick({ description: true, projectUri: true }),
+    basicInfo: z.object({
+      description: z.string().trim().min(12, 'Use at least 12 characters'),
+      links: z.array(profileLinkSchema).max(MAX_PROFILE_LINKS)
+    }),
     auction: auctionSchema,
     marketplace: marketplaceSchema
   }),

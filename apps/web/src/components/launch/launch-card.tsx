@@ -72,7 +72,7 @@ export function LaunchCard({
   const { launchDao } = useDaoDeployment(session.address, config.name);
   const deployment = getDeploymentConfig();
   const key = `${preferenceScopeKey({ network: config.name, deployment: deployment.managerAddress, wallet: session.address || null })}:${daoId}`;
-  const choice = launches[key] ?? { auction: false, marketplace: false, minter: false };
+  const choice = launches[key] ?? { auction: false, marketplace: false, minter: null };
 
   // First visit: start from what was chosen when the community was created.
   useEffect(() => {
@@ -94,7 +94,7 @@ export function LaunchCard({
         prefs.setLaunch(key, {
           auction: draft.configuration.auction.enabled,
           marketplace: draft.configuration.marketplace.enabled,
-          minter: false
+          minter: null
         });
       setReady(true);
     })();
@@ -133,16 +133,15 @@ export function LaunchCard({
           await refresh(fresh);
           throw new Error(issues.join(' '));
         }
-        if (choice.minter && fresh.platformMinter !== readiness?.platformMinter)
-          throw new Error('The platform minter changed. Refresh and check it again.');
+        if (!fresh.platformMinter || fresh.platformMinter !== readiness?.platformMinter)
+          throw new Error('The shared claims minter changed. Refresh and check it again.');
       }
       await launchDao(
         daoId,
         {
           launch_auction: choice.auction,
           launch_marketplace: choice.marketplace,
-          enable_minter: choice.minter,
-          expected_minter: choice.minter ? readiness?.platformMinter : null
+          minter: readiness?.platformMinter ?? ''
         },
         { rebroadcast }
       );
@@ -213,18 +212,11 @@ export function LaunchCard({
                 onCheckedChange={(marketplace) => change({ marketplace })}
               />
             ) : null}
-            <Disclosure title="Advanced">
-              <Switch
-                label="Let the platform minter mint for this community"
-                description="Builder's shared minter can then run claim lists for you. Leave off unless you plan to use claims."
-                checked={choice.minter}
-                disabled={!ready || busy || !admin || !readiness?.platformMinter}
-                onCheckedChange={(minter) => change({ minter })}
-              />
+            <Disclosure title="Technical details">
               {readiness?.platformMinter ? (
-                <Address value={readiness.platformMinter} label="Platform minter" />
+                <Address value={readiness.platformMinter} label="Shared claims minter" />
               ) : (
-                <p className={hint}>No platform minter is registered on this network.</p>
+                <p className={hint}>No claims minter is registered on this network yet, so launch has to wait.</p>
               )}
             </Disclosure>
           </div>
@@ -234,6 +226,9 @@ export function LaunchCard({
             <ul className={consequences}>
               <li>Your setup admin rights pass to the community treasury.</li>
               <li>After this, changes go through proposals that members vote on.</li>
+              <li>
+                Builder&apos;s shared claims minter can mint tokens, but only for claim rounds your members approve.
+              </li>
               {slug ? <li>Your link /dao/{slug} is claimed. Changing it later takes a vote.</li> : null}
             </ul>
           </div>

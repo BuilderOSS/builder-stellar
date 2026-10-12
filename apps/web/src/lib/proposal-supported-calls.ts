@@ -37,7 +37,7 @@ export type ProposalEncodingContext = Pick<
 >;
 
 const supported = {
-  token: ['mint', 'batch_mint', 'transfer', 'set_mint_authority', 'set_metadata', 'upgrade', 'migrate', 'sync_version'],
+  token: ['mint', 'batch_mint', 'transfer', 'set_mint_authority', 'set_metadata', 'upgrade', 'migrate'],
   governor: [
     'set_voting_delay',
     'set_voting_period',
@@ -45,8 +45,7 @@ const supported = {
     'set_quorum_bps',
     'set_queue_delay',
     'upgrade',
-    'migrate',
-    'sync_version'
+    'migrate'
   ],
   auction: [
     'pause',
@@ -58,24 +57,13 @@ const supported = {
     'set_min_bid_increment',
     'cancel_auction',
     'upgrade',
-    'migrate',
-    'sync_version'
+    'migrate'
   ],
   // Treasury self-calls are limited to these by the contract; `authorize`
   // attaches a nested authorization tree to the next action.
-  treasury: ['upgrade', 'migrate', 'sync_version', 'authorize'],
+  treasury: ['upgrade', 'migrate', 'authorize'],
   // Metadata has its own admin() (launch admin, then the Treasury).
-  metadata: [
-    'add_properties',
-    'update_renderer_base',
-    'update_description',
-    'update_project_uri',
-    'update_contract_image',
-    'regenerate',
-    'upgrade',
-    'migrate',
-    'sync_version'
-  ],
+  metadata: ['add_properties', 'update_renderer_base', 'update_profile', 'regenerate', 'upgrade', 'migrate'],
   marketplace: [
     'create_primary_listing',
     'cancel_primary',
@@ -84,8 +72,7 @@ const supported = {
     'pause',
     'unpause',
     'upgrade',
-    'migrate',
-    'sync_version'
+    'migrate'
   ]
 } as const;
 
@@ -164,7 +151,7 @@ export function encodeSupportedCall(
   config: ProposalEncodingContext
 ): xdr.ScVal[] {
   if (config.minterContractId && target === config.minterContractId) {
-    if (!['set_merkle_root', 'set_allowlist', 'mint_batch'].includes(fn) || !config.minterSpec?.length)
+    if (!['set_merkle_root', 'mint_batch'].includes(fn) || !config.minterSpec?.length)
       throw new Error('Unsupported or unavailable trusted Minter ABI.');
     if (args[0] !== config.tokenContractId) throw new Error('Minter allocation token must match this DAO.');
     const spec = new Spec(config.minterSpec);

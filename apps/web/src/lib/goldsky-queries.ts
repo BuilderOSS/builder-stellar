@@ -104,8 +104,9 @@ export type DashboardDao = {
   slug?: string | null;
   token_name: string | null;
   token_symbol: string | null;
-  token_description: string | null;
-  contract_image: string | null;
+  /** From the verified profile; empty when none or unverified. */
+  description: string;
+  image: string;
   status: string;
 };
 

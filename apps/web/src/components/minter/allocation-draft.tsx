@@ -5,7 +5,7 @@ import { useRef, useState } from 'react';
 import { css } from 'styled-system/css';
 
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
-import { Button, Field, FieldLabel, Textarea } from '@/components/ui';
+import { Button, Field, FieldHelperText, FieldLabel, SegmentedControl, Textarea } from '@/components/ui';
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
 import { daoRoute } from '@/lib/dao-routes';
@@ -13,12 +13,29 @@ import { MAX_PROPOSAL_ACTIONS } from '@/lib/governance-limits';
 import { allocationQueueAction } from '@/lib/minter/allocation-proposal';
 import { claimFetch } from '@/lib/minter/hooks';
 import { type AllocationDraft, buildAllocationDraft } from '@/lib/minter/proposal-actions';
+import { buildClaimTree, type ClaimEntry, claimTreeJson, MAX_TREE_CLAIMS } from '@/lib/minter/tree';
 import type { ClaimState } from '@/lib/minter/types';
+import { uploadFile } from '@/lib/upload-image';
 import { useProposalActions } from '@/lib/use-proposal-actions';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { selectDraft, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
 import styles from './claims-styles';
+
+/** One recipient per line: an address and a whole-token amount, separated by a comma, space or tab. */
+export function parseAllocationLines(text: string): ClaimEntry[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#'))
+    .map((line, index) => {
+      const parts = line.split(/[\s,;]+/).filter(Boolean);
+      if (parts.length !== 2) throw new Error(`Line ${index + 1}: use an address and an amount.`);
+      return { address: parts[0]!, amount: parts[1]! };
+    });
+}
+
+type Mode = 'round' | 'batch';
 
 export function AllocationDraftForm({ state }: { state?: ClaimState }) {
   const { daoId, daoConfig: config, routeId } = useDaoContext();
@@ -33,6 +50,7 @@ export function AllocationDraftForm({ state }: { state?: ClaimState }) {
     proposal.cancel();
   }
   const [text, setText] = useState('');
+  const [mode, setMode] = useState<Mode>('round');
   const [result, setResult] = useState('');
   const allowed =
     session.authStatus === 'authenticated' &&
@@ -58,32 +76,29 @@ export function AllocationDraftForm({ state }: { state?: ClaimState }) {
           'Authenticate and verify the current Minter, Token admin, Live state and mint authority first.'
         );
       if (!state) throw new Error('Refresh current allocation state first.');
-      if (text.length > 20000) throw new Error('Allocation JSON exceeds 20 KB.');
-      const value: unknown = JSON.parse(text);
-      if (!value || typeof value !== 'object' || Array.isArray(value))
-        throw new Error('Expected allocation JSON object.');
-      const item = value as Record<string, unknown>;
+      const entries = parseAllocationLines(text);
       let draft: AllocationDraft;
-      if (item.type === 'set-merkle-root' && Object.keys(item).length === 2 && typeof item.root === 'string')
-        draft = { type: item.type, root: item.root };
-      else if (
-        item.type === 'set-allowlist' &&
-        Object.keys(item).length === 3 &&
-        typeof item.amount === 'string' &&
-        Array.isArray(item.addresses) &&
-        item.addresses.every((address) => typeof address === 'string')
-      )
-        draft = { type: item.type, addresses: item.addresses, amount: item.amount };
-      else if (
-        item.type === 'minter-batch-mint' &&
-        Object.keys(item).length === 3 &&
-        Array.isArray(item.recipients) &&
-        item.recipients.every((address) => typeof address === 'string') &&
-        Array.isArray(item.amounts) &&
-        item.amounts.every((amount) => typeof amount === 'string')
-      )
-        draft = { type: item.type, recipients: item.recipients, amounts: item.amounts };
-      else throw new Error('Use an exact supported draft shape. Amounts must be decimal strings, not JSON numbers.');
+      if (mode === 'round') {
+        // Build the tree here, publish the full list, then propose its root with the list's address.
+        const tree = buildClaimTree(entries, {
+          network: config.passphrase,
+          token: config.tokenContractId,
+          round: (state.merkle.round ?? 0) + 1
+        });
+        setResult(`Publishing the claim list (${entries.length} people, ${tree.tokenTotal} tokens)…`);
+        const file = new File([claimTreeJson(tree)], `claim-list-round-${tree.round}.json`, {
+          type: 'application/json'
+        });
+        const { ipfsUri } = await uploadFile(file, 'claim-list');
+        if (ticket !== epoch.current) return;
+        draft = { type: 'set-merkle-root', root: tree.merkleRoot, treeUri: ipfsUri };
+      } else {
+        draft = {
+          type: 'minter-batch-mint',
+          recipients: entries.map((entry) => entry.address),
+          amounts: entries.map((entry) => entry.amount)
+        };
+      }
       setResult(
         JSON.stringify(
           buildAllocationDraft(draft, state, DEPLOYMENT_ID, config.tokenContractId, config.treasuryContractId),
@@ -113,14 +128,16 @@ export function AllocationDraftForm({ state }: { state?: ClaimState }) {
         action,
         source: 'claims/allocations',
         metadata: {
-          title: 'Update token allocation',
+          title: mode === 'round' ? 'Open a claim round' : 'Allocate tokens',
           description:
-            'Review the registered Minter allocation, claim round changes, recipients and exact amounts before governance execution.',
+            mode === 'round'
+              ? 'Opens a claim round. The full claim list is published so anyone can check who can claim and how much.'
+              : 'Mints tokens directly to the listed people when the proposal runs.',
           url: ''
         }
       });
     } catch (error) {
-      setResult(error instanceof Error ? error.message : 'Invalid allocation JSON.');
+      setResult(error instanceof Error ? error.message : 'Invalid allocation list.');
     } finally {
       locked.current = false;
       setBusy(false);
@@ -128,34 +145,41 @@ export function AllocationDraftForm({ state }: { state?: ClaimState }) {
   }
   return (
     <div className={styles.review}>
-      <h2>Validate an allocation draft</h2>
+      <h2>Prepare an allocation</h2>
+      <SegmentedControl
+        label="Allocation type"
+        value={mode}
+        onValueChange={(value) => {
+          setMode(value as Mode);
+          setResult('');
+          cancelReview();
+        }}
+        options={[
+          { value: 'round', label: 'Claim round' },
+          { value: 'batch', label: 'Mint now' }
+        ]}
+      />
       <p>
-        Review an allocation and add it to this community’s proposal queue. No signature is requested here. Governance
-        voting, queueing and Treasury execution are required; no Merkle trees or proofs are generated.
-      </p>
-      <p className={styles.address}>
-        {'{"type":"set-merkle-root","root":"64-character hex"}'}
-        <br />
-        {'{"type":"set-allowlist","addresses":["G…"],"amount":"5"}'}
-        <br />
-        {'{"type":"minter-batch-mint","recipients":["G…"],"amounts":["5"]}'}
-      </p>
-      <p>
-        Review limit: 100 recipients. Replacing a root/list starts a new round and permits repeat claims. Batch mint is
-        immediate admin allocation, not a claim round.
+        {mode === 'round'
+          ? `People claim their own tokens. Up to ${MAX_TREE_CLAIMS.toLocaleString()} people; the full list is published to IPFS so anyone can check it. A new round lets earlier claimers claim again.`
+          : 'Tokens are minted straight to up to 18 people when the proposal runs.'}{' '}
+        Nothing is signed here: the allocation goes into a proposal members vote on.
       </p>
       <Field>
-        <FieldLabel htmlFor="allocation-json">Allocation JSON</FieldLabel>
+        <FieldLabel htmlFor="allocation-list">Recipients</FieldLabel>
         <Textarea
-          id="allocation-json"
+          id="allocation-list"
           className={css({ textStyle: 'mono', fontSize: '0.8125rem' })}
+          rows={8}
           value={text}
+          placeholder={'GABC… 5\nGDEF… 2'}
           onChange={(event) => {
             setText(event.target.value);
             setResult('');
             cancelReview();
           }}
         />
+        <FieldHelperText>One per line: a Stellar address and a whole-token amount.</FieldHelperText>
       </Field>
       <div>
         <Button
@@ -164,7 +188,7 @@ export function AllocationDraftForm({ state }: { state?: ClaimState }) {
           loading={busy}
           onClick={() => void review()}
         >
-          Review allocation proposal
+          {mode === 'round' ? 'Publish the list and add to a proposal' : 'Add to a proposal'}
         </Button>
       </div>
       {result ? (

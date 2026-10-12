@@ -12,6 +12,7 @@
 import type { AppProposalDetail, AppProposalList, TokenMember } from '@prisma/client';
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
+import { getDeploymentNetwork, verifyRows } from '@/lib/dao-db';
 import { prisma } from '@/lib/prisma';
 
 /**
@@ -685,15 +686,8 @@ export async function getDashboardData(address: string, params: { limit?: number
   ]);
   const daoById = new Map(myDaoCandidates.map((row) => [row.daoId, row]));
   const paymentAssets = await feedPaymentAssets(deploymentId, feedRows);
-  // Collection images live on the metadata configuration, not the manager row.
-  const images = new Map(
-    (
-      await prisma.metadataConfiguration.findMany({
-        where: { deploymentId, daoId: { in: myDaos.map((row) => row.daoId) } },
-        select: { daoId: true, contractImage: true }
-      })
-    ).map((item) => [item.daoId, item.contractImage])
-  );
+  // The image and description come from the verified community profile.
+  const profiles = await verifyRows(getDeploymentNetwork(), myDaos);
 
   return {
     myDaos: myDaos.map((row) => ({
@@ -702,8 +696,8 @@ export async function getDashboardData(address: string, params: { limit?: number
       slug: row.slugClaimed ? row.claimedSlug : null,
       token_name: row.tokenName,
       token_symbol: row.tokenSymbol,
-      token_description: row.tokenDescription,
-      contract_image: images.get(row.daoId) ?? null,
+      description: profiles.get(row.daoId)?.profile.description ?? '',
+      image: profiles.get(row.daoId)?.profile.image ?? '',
       status: row.status
     })),
     feed: {
@@ -747,7 +741,7 @@ export async function getGoldskyMintingHistory(
   params: {
     limit?: number;
     offset?: number;
-    kind?: 'batch_mint' | 'merkle_claim' | 'allowlist_claim';
+    kind?: 'batch_mint' | 'merkle_claim';
   } = {}
 ) {
   const { limit = 50, offset = 0, kind } = params;
@@ -794,7 +788,7 @@ export async function getGoldskyMintingHistory(
 /**
  * Minter Claims
  *
- * Returns all successful claims (merkle and allowlist) for a token
+ * Returns all successful claims for a token (claims are merkle-only)
  */
 export async function getGoldskyMinterClaims(
   daoId: string,
@@ -812,7 +806,7 @@ export async function getGoldskyMinterClaims(
     deploymentId,
     daoId: daoIdFromUrl,
     contractRole: 'minter',
-    kind: { in: ['minter.merkle_claim', 'minter.allowlist_claim'] },
+    kind: 'minter.merkle_claim',
     ...(recipient ? { actor: { equals: recipient, mode: 'insensitive' as const } } : {})
   };
 
@@ -831,7 +825,7 @@ export async function getGoldskyMinterClaims(
       claim_id: row.activityId,
       recipient: row.actor,
       amount: row.amount,
-      claim_type: row.kind === 'minter.merkle_claim' ? 'merkle' : 'allowlist',
+      claim_type: 'merkle',
       transaction_hash: row.transactionHash,
       ledger_sequence: Number(row.ledgerSequence),
       timestamp: row.ledgerClosedAt

@@ -11,7 +11,8 @@ export type HomeDao = { id: string; name: string };
 export type LocalLaunch = {
   auction: boolean;
   marketplace: boolean;
-  minter: boolean;
+  /** The shared Minter the launch admin reviewed (pinned in the launch config). */
+  minter: string | null;
   status?: SubmissionStatus;
   reviewedConfig?: LaunchConfig;
 } & SignedSubmission;

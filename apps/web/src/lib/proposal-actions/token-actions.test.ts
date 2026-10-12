@@ -38,15 +38,15 @@ const spec = new TokenClient({
 
 const rename = getActionHandler('set-token-metadata');
 const give = getActionHandler('transfer-dao-token');
-const draft = { name: 'Lantern Club', symbol: 'LANTERN', uri: 'https://example.com/api/dao/x/token/' };
+const draft = { name: 'Lantern Club', symbol: 'LANTERN' };
 
 describe('set-token-metadata', () => {
-  it('encodes token.set_metadata(uri, name, symbol) against the real token spec', () => {
+  it('encodes token.set_metadata(name, symbol) against the real token spec', () => {
     const call = rename.buildCallVector(draft, build);
     expect(call).toEqual({
       target: config.tokenContractId,
       function: 'set_metadata',
-      args: [draft.uri, draft.name, draft.symbol]
+      args: [draft.name, draft.symbol]
     });
     const encoded = encodeSupportedCall(call.target, call.function, call.args, config);
     expect(encoded.map((arg) => arg.toXDR('base64'))).toEqual(
@@ -54,14 +54,16 @@ describe('set-token-metadata', () => {
     );
   });
 
-  it("enforces the token's on-chain limits (name 40 bytes, symbol 10, URI 200 bytes)", () => {
+  it("enforces the token's on-chain limits (name 40 bytes, safe characters, symbol 10)", () => {
     expect(rename.validate(draft, form).valid).toBe(true);
     expect(rename.validate({ ...draft, name: 'x'.repeat(41) }, form).valid).toBe(false);
     // Multi-byte characters count as bytes on chain.
     expect(rename.validate({ ...draft, name: 'é'.repeat(21) }, form).valid).toBe(false);
     expect(rename.validate({ ...draft, symbol: 'ABCDEFGHIJK' }, form).valid).toBe(false);
     expect(rename.validate({ ...draft, symbol: 'abc' }, form).valid).toBe(false);
-    expect(rename.validate({ ...draft, uri: `https://e.com/${'a'.repeat(190)}` }, form).valid).toBe(false);
+    // The token JSON copies the name verbatim (InvalidName, 7207).
+    expect(rename.validate({ ...draft, name: 'The "Club"' }, form).valid).toBe(false);
+    expect(rename.validate({ ...draft, name: 'Back\\slash' }, form).valid).toBe(false);
   });
 
   it('is one resource per DAO, high risk, and reads as a rename', () => {

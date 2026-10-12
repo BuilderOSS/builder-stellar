@@ -91,9 +91,7 @@ export function DaoShell({ children }: { children: ReactNode }) {
   return (
     <ShellFrame
       rail={<NavRail label={`${name} sections`} items={rail} footerItems={railFooter} activeKey={active} />}
-      topStart={
-        <DaoSwitcher current={{ id: daoId, name, image: daoConfig.contractImage, seed: daoConfig.tokenContractId }} />
-      }
+      topStart={<DaoSwitcher current={{ id: daoId, name, image: daoConfig.image, seed: daoConfig.tokenContractId }} />}
       topEnd={<WalletButton onOpenYou={() => setYouOpen(true)} />}
       tabBar={
         <TabBar

@@ -8,6 +8,7 @@ import {
   type CreationNetwork,
   validateCreationAssets
 } from './create-dao-schema';
+import { serializeProfile } from './dao-profile';
 export type { CreateDaoFormData } from './create-dao-schema';
 
 export function formDataToCreationParams(
@@ -27,10 +28,12 @@ export function formDataToCreationParams(
     initial_config: {
       token_name: data.basicInfo.tokenName,
       token_symbol: data.basicInfo.tokenSymbol,
-      token_uri: data.basicInfo.tokenUri,
-      project_uri: data.basicInfo.projectUri,
-      description: data.basicInfo.description,
-      contract_image: data.basicInfo.contractImage,
+      // The profile is event-only on chain: Metadata stores its hash (docs/STORAGE_DIET.md § 6).
+      profile: serializeProfile({
+        description: data.basicInfo.description,
+        links: data.basicInfo.links,
+        image: data.basicInfo.contractImage
+      }),
       renderer_base: data.basicInfo.rendererBase,
       slug: data.basicInfo.slug,
       // Disabled modules still require valid initialization. Enablement happens only at launch.

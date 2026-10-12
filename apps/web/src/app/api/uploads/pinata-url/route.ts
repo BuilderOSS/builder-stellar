@@ -10,7 +10,7 @@ import { storeAuthorization } from '@/lib/pinata-upload-auth';
  * Request validation schema for signed URL generation
  */
 const PinataUrlRequestSchema = z.object({
-  uploadType: z.enum(['dao-image', 'markdown-image', 'artwork-directory']),
+  uploadType: z.enum(['dao-image', 'markdown-image', 'claim-list', 'artwork-directory']),
   mimeType: z.string(),
   sizeBytes: z.number().int().positive(),
   filename: z.string().min(1)

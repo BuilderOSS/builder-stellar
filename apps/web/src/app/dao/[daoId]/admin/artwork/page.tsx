@@ -32,7 +32,7 @@ import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
-// The image, description and website live in Community profile; only the renderer stays here.
+// The image, description and links live in Community profile; only the renderer stays here.
 const fields = [{ type: 'set-artwork-renderer', key: 'renderer_base', label: 'Renderer URL' }] as const;
 
 export default function ArtworkAdminPage() {
@@ -95,14 +95,7 @@ export default function ArtworkAdminPage() {
             networkPassphrase: config.passphrase
           })
       });
-      const assembled =
-        type === 'set-artwork-renderer'
-          ? await client.update_renderer_base({ new_renderer_base: value })
-          : type === 'set-artwork-description'
-            ? await client.update_description({ new_description: value })
-            : type === 'set-artwork-project-uri'
-              ? await client.update_project_uri({ new_project_uri: value })
-              : await client.update_contract_image({ new_contract_image: value });
+      const assembled = await client.update_renderer_base({ new_renderer_base: value });
       assembled.result.unwrap();
       const sent = await assembled.signAndSend();
       const hash = sent.sendTransactionResponse?.hash ?? '';
@@ -221,7 +214,7 @@ export default function ArtworkAdminPage() {
                   <Heading size="heading">Renderer</Heading>
                   <Text>
                     Where token images are drawn from. Changing it can affect existing token images. The community's
-                    image, description and website are in{' '}
+                    image, description and links are in{' '}
                     <NextLink href={daoAdminRoute(routeId, '/profile')}>Community profile</NextLink>.
                   </Text>
                   {fields.map(({ type, key, label }) => {

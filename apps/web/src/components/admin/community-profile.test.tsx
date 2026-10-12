@@ -20,9 +20,13 @@ vi.mock('@/contexts/dao-context', () => {
       slug: 'lantern-club',
       tokenName: 'Lantern Club',
       tokenSymbol: 'LANTERN',
-      tokenUri: 'https://example.com/token/',
-      tokenDescription: 'Evening walks.',
-      contractImage: 'https://example.com/a.png',
+      profile: {
+        description: 'Evening walks.',
+        links: [{ label: 'Website', url: 'https://lantern.club' }],
+        image: 'https://example.com/a.png'
+      },
+      profileStatus: 'verified',
+      profileSeq: 2,
       tokenContractId: 'CTOKEN',
       metadataContractId: 'CMETA',
       treasuryContractId: `C${'T'.repeat(55)}`,
@@ -40,11 +44,7 @@ vi.mock('@/lib/admin-surfaces', () => ({
   useAdminArtwork: () => ({
     data: {
       admin: state.admin,
-      settings: {
-        contract_image: 'https://example.com/a.png',
-        description: 'Evening walks.',
-        project_uri: 'https://lantern.club'
-      }
+      profileSeq: 2
     },
     mutate: vi.fn()
   })
@@ -85,7 +85,8 @@ describe('CommunityProfileEditor', () => {
     expect(html).toContain('During setup, changes apply right away.');
     expect(input(html, 'profile-name')).toContain('value="Lantern Club"');
     expect(input(html, 'profile-name')).not.toContain('disabled');
-    expect(input(html, 'profile-website')).toContain('value="https://lantern.club"');
+    expect(html).toContain('value="https://lantern.club"');
+    expect(input(html, 'profile-links-label-0')).toContain('value="Website"');
     expect(input(html, 'profile-link')).toContain('value="lantern-club"');
     expect(html).toContain('Yours once you launch.');
   });
@@ -108,6 +109,6 @@ describe('CommunityProfileEditor', () => {
     state.address = `G${'B'.repeat(55)}`;
     const html = render();
     expect(html).toContain('Read only');
-    expect(input(html, 'profile-website')).toContain('disabled');
+    expect(input(html, 'profile-links-label-0')).toContain('disabled');
   });
 });

@@ -70,5 +70,9 @@ export function launchReadinessIssues(readiness: LaunchReadiness, launchAdmin: s
     issues.push(`Another community launched first with /dao/${readiness.pending.slug}. Pick another link below.`);
   if (!readiness.paymentAssetsMatch)
     issues.push('Restore the payment assets pinned at creation in both modules before launch.');
+  if (!readiness.platformMinter)
+    issues.push(
+      'No shared claims minter is registered on this network yet. Launch is possible once the platform registers one.'
+    );
   return issues;
 }

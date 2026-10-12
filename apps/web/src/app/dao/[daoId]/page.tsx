@@ -7,6 +7,7 @@ import useSWR from 'swr';
 
 import { ActivityList } from '@/components/activity/activity-list';
 import { ContractUpdatesNotice } from '@/components/admin/contract-updates-notice';
+import { CommunityProfileView } from '@/components/community/community-profile-view';
 import { DaoContractList } from '@/components/dao-contract-list';
 import { MembershipCard } from '@/components/dao-home/membership-card';
 import { type HomeAuction, NowCard } from '@/components/dao-home/now-card';
@@ -50,7 +51,6 @@ const PROPOSAL_PREVIEW = 5;
 const intro = css({ display: 'grid', gap: '3', mb: { base: '5', md: '7' } });
 const introRow = css({ display: 'flex', alignItems: 'center', gap: '4' });
 const name = css({ textStyle: 'display', fontSize: { base: '1.875rem', md: '2.5rem' }, m: '0' });
-const description = css({ textStyle: 'body', color: 'ink.muted', m: '0', maxW: '62ch' });
 const columns = css({
   display: 'grid',
   gap: { base: '8', lg: '10' },
@@ -123,7 +123,7 @@ export default function Page() {
     return (
       <div className={intro}>
         <div className={introRow}>
-          <Crest name={config.tokenName} seed={config.tokenContractId} src={config.contractImage} size="lg" />
+          <Crest name={config.tokenName} seed={config.tokenContractId} src={config.image} size="lg" />
           <h1 className={name}>{config.tokenName}</h1>
         </div>
         <Callout
@@ -138,13 +138,13 @@ export default function Page() {
     <>
       <header className={intro}>
         <div className={introRow}>
-          <Crest name={config.tokenName} seed={config.tokenContractId} src={config.contractImage} size="lg" />
+          <Crest name={config.tokenName} seed={config.tokenContractId} src={config.image} size="lg" />
           <div className={css({ display: 'grid', gap: '2', minW: '0' })}>
             <CrestStripe seed={config.tokenContractId} />
             <h1 className={name}>{config.tokenName}</h1>
           </div>
         </div>
-        {config.tokenDescription ? <p className={description}>{config.tokenDescription}</p> : null}
+        <CommunityProfileView profile={config.profile} status={config.profileStatus} />
         {isLaunchSetup ? (
           <div>
             <Chip tone="yours">You are the launch admin</Chip>

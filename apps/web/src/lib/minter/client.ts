@@ -2,10 +2,6 @@ import { contract, rpc } from '@stellar/stellar-sdk';
 
 type ClaimArgs = { token_id: string; recipient: string; amount: bigint };
 export interface MinterMethods {
-  mint_allowlist(
-    args: ClaimArgs,
-    options?: contract.MethodOptions
-  ): Promise<contract.AssembledTransaction<contract.Result<null>>>;
   mint_merkle(
     args: ClaimArgs & { proof: Uint8Array[] },
     options?: contract.MethodOptions
@@ -24,10 +20,8 @@ function typeShape(type: import('@stellar/stellar-sdk').xdr.ScSpecTypeDef): stri
 /** Fail closed on old or incompatible RPC specs; names alone are not an ABI. */
 export function assertMinterSpec(spec: contract.Spec) {
   const signatures = {
-    mint_allowlist: ['token_id:address', 'recipient:address', 'amount:u128'],
     mint_merkle: ['token_id:address', 'recipient:address', 'amount:u128', 'proof:vec<bytes32>'],
-    set_merkle_root: ['token_id:address', 'root:bytes32'],
-    set_allowlist: ['token_id:address', 'addresses:vec<address>', 'fixed_amount:u128'],
+    set_merkle_root: ['token_id:address', 'root:bytes32', 'tree_uri:string'],
     mint_batch: ['token_id:address', 'recipients:vec<address>', 'amounts:vec<u128>']
   };
   for (const [method, expected] of Object.entries(signatures)) {
@@ -47,12 +41,12 @@ export function assertMinterSpec(spec: contract.Spec) {
     InvalidTokenId: 7802,
     BatchTooLarge: 7803,
     MerkleRootNotSet: 7804,
-    AllowlistNotSet: 7805,
-    NotInAllowlist: 7806,
     AlreadyClaimed: 7807,
     MerkleProofInvalid: 7808,
     InvalidInput: 7809,
-    TokenNotLive: 7810
+    TokenNotLive: 7810,
+    ManagerAdminNotSet: 7811,
+    InvalidTreeUri: 7812
   };
   const cases = new Map(errors.udtErrorEnumV0.cases.map((item) => [item.name.toString(), item.value]));
   for (const [name, code] of Object.entries(required))

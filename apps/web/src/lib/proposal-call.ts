@@ -2,6 +2,7 @@ import { keccak_256 } from '@noble/hashes/sha3.js';
 import { nativeToScVal, xdr } from '@stellar/stellar-sdk';
 import { Buffer } from 'buffer';
 
+import { parseProfile, plainSummary } from '@/lib/dao-profile';
 import { MODULE_LABELS, moduleLabelInSentence } from '@/lib/module-updates';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import type {
@@ -171,9 +172,7 @@ export function getProposalActionLabel(type: ProposalActionType) {
     'cancel-primary-listing': 'Cancel Primary Listing',
     'add-artwork-properties': 'Append Artwork Properties and Items',
     'set-artwork-renderer': 'Update Artwork Renderer',
-    'set-artwork-description': 'Update Collection Description',
-    'set-artwork-project-uri': 'Update Project URI',
-    'set-artwork-contract-image': 'Update Collection Image',
+    'update-dao-profile': 'Update Community Profile',
     'set-token-metadata': 'Rename Community',
     'transfer-dao-token': 'Give Treasury Token',
     'change-dao-slug': 'Change Community Link',
@@ -182,8 +181,7 @@ export function getProposalActionLabel(type: ProposalActionType) {
     'regenerate-token-traits': 'Seed Token Traits',
     'treasury-authorize': 'Authorize Next Action (Treasury)',
     'treasury-buy-listing': 'Treasury Buys Listing',
-    'set-merkle-root': 'Set Minter Merkle Root',
-    'set-allowlist': 'Replace Minter Allowlist',
+    'set-merkle-root': 'Open a Claim Round',
     'minter-batch-mint': 'Minter Batch Allocation'
   };
 
@@ -202,6 +200,14 @@ function moduleLabel(module: unknown) {
   return key in MODULE_LABELS ? moduleLabelInSentence(key as keyof typeof MODULE_LABELS) : key;
 }
 
+function profileSummary(raw: string) {
+  const profile = parseProfile(raw);
+  const parts = [profile.description ? `“${plainSummary(profile.description, 80)}”` : 'no description'];
+  if (profile.links.length) parts.push(`${profile.links.length} ${profile.links.length === 1 ? 'link' : 'links'}`);
+  if (profile.image) parts.push('an image');
+  return parts.join(', ');
+}
+
 export function getProposalActionSummary(action: ProposalQueuedAction) {
   if (action.type === 'set-token-metadata') return `Rename to ${action.name} (${action.symbol})`;
   if (action.type === 'change-dao-slug')
@@ -209,9 +215,7 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
   if (action.type === 'transfer-dao-token')
     return `Give token #${action.tokenId} from the treasury to ${action.recipient}`;
   if (action.type === 'set-merkle-root')
-    return `Set Merkle root ${action.root} for ${action.tokenContractId}; starts a new Merkle claim round`;
-  if (action.type === 'set-allowlist')
-    return `Replace allowlist for ${action.tokenContractId}: ${action.addresses?.length ?? 0} recipients, ${action.amount} tokens each; starts a new allowlist round`;
+    return `Open a claim round for ${action.tokenContractId} with root ${action.root} and the claim list at ${action.treeUri}; earlier claimers may claim again`;
   if (action.type === 'minter-batch-mint')
     return `Batch allocate to ${action.recipients?.length ?? 0} recipients for ${action.tokenContractId}; ordered amounts ${JSON.stringify(action.amounts)}`;
   if (action.type === 'add-artwork-properties')
@@ -225,13 +229,9 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
     return `Authorize the next action: ${Array.isArray(action.nodes) ? describeAuthNodes(action.nodes).join('; ') : 'no nodes'}`;
   if (action.type === 'treasury-buy-listing')
     return `Treasury buys listed token #${action.tokenId} for at most ${action.maxPrice} base units`;
-  if (
-    action.type === 'set-artwork-renderer' ||
-    action.type === 'set-artwork-description' ||
-    action.type === 'set-artwork-project-uri' ||
-    action.type === 'set-artwork-contract-image'
-  )
-    return `${getProposalActionLabel(action.type)} to ${action.value}`;
+  if (action.type === 'set-artwork-renderer') return `${getProposalActionLabel(action.type)} to ${action.value}`;
+  if (action.type === 'update-dao-profile')
+    return `Replace the community profile (revision ${action.expectedSeq}) with: ${profileSummary(String(action.profile ?? ''))}`;
   if (action.type === 'set-mint-authority') {
     return `${action.enabled === false ? 'Revoke' : 'Grant'} ${getProposalActionLabel(action.type)} for ${action.authority || action.recipient}`;
   }

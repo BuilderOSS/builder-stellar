@@ -19,7 +19,7 @@ export function retireCreatedDraft(draft: LocalDaoDraft) {
     prefs.setLaunch(key, {
       auction: draft.configuration.auction.enabled,
       marketplace: draft.configuration.marketplace.enabled,
-      minter: false
+      minter: null
     });
   useCreateDaoStore.getState().deleteDraft(draft.id);
 }

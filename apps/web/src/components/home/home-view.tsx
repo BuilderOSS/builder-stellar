@@ -12,6 +12,7 @@ import { useWalletSession } from '@/components/shell/wallet-session';
 import { Button, ButtonLink, Callout, EmptyState, Section, Skeleton } from '@/components/ui';
 import { useHomeDao } from '@/hooks/use-home-dao';
 import type { DaoConfig } from '@/lib/dao-db';
+import { plainSummary } from '@/lib/dao-profile';
 import { useDashboardData } from '@/lib/goldsky-queries';
 
 import { HomeDrafts } from './home-drafts';
@@ -153,8 +154,8 @@ function SignedInHome({ daos, pendingDaos }: { daos: DaoConfig[]; pendingDaos: D
           id: dao.dao_id,
           name: dao.token_name || dao.token_symbol || 'Unnamed community',
           symbol: dao.token_symbol,
-          description: dao.token_description,
-          image: dao.contract_image,
+          description: plainSummary(dao.description),
+          image: dao.image,
           status: dao.status
         };
     return { ...summary, yours: dao.dao_id === home?.id ? 'Home' : 'Member' };

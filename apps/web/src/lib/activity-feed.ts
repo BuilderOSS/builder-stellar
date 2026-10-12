@@ -184,7 +184,6 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
       };
     }
     case 'merkleclaimevent':
-    case 'allowlistclaimevent':
       return {
         category: 'Membership',
         title: `${shortAddress(firstValue(topics.recipient, args.recipient))} claimed ${firstValue(item.amount, args.amount) ?? 'their'} token${firstValue(item.amount, args.amount) === '1' ? '' : 's'}`

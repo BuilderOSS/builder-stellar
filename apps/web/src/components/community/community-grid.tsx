@@ -5,6 +5,7 @@ import { css } from 'styled-system/css';
 
 import { Button, EmptyState, SearchInput, Select } from '@/components/ui';
 import type { DaoConfig } from '@/lib/dao-db';
+import { plainSummary } from '@/lib/dao-profile';
 import { daoRouteId } from '@/lib/dao-routes';
 
 import { CommunityCard, type CommunitySummary } from './community-card';
@@ -15,8 +16,8 @@ export function toCommunitySummary(dao: DaoConfig, yours?: string): CommunitySum
     routeId: daoRouteId({ daoId: dao.dao_id, slug: dao.slug }),
     name: dao.token_name || dao.label || dao.token_symbol || 'Unnamed community',
     symbol: dao.token_symbol,
-    description: dao.token_description,
-    image: dao.contract_image,
+    description: plainSummary(dao.description),
+    image: dao.image,
     status: dao.status,
     hasAuction: Boolean(dao.auction_contract) && dao.auction_enabled !== false,
     hasMarket: Boolean(dao.marketplace_contract) && dao.marketplace_enabled !== false,
@@ -79,7 +80,7 @@ export function CommunityGrid({ daos }: { daos: DaoConfig[] }) {
         if (filter === 'auction' && !summary.auctionLive) return false;
         if (filter === 'market' && !summary.forSale) return false;
         if (!normalized) return true;
-        return [summary.name, dao.token_symbol, dao.token_description, dao.dao_id].some((value) =>
+        return [summary.name, dao.token_symbol, dao.description, dao.dao_id].some((value) =>
           value?.toLowerCase().includes(normalized)
         );
       })

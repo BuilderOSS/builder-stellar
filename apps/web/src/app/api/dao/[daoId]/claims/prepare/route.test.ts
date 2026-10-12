@@ -33,8 +33,9 @@ describe('claim prepare API session boundary', () => {
       }),
       { params: Promise.resolve({ daoId }) }
     );
+  const valid = { method: 'merkle', round: 3, amount: '5', proof: ['ab'.repeat(32)] };
   it('prepares only with session identity for each DAO and prevents shared caching', async () => {
-    const action = { method: 'allowlist', round: 3 };
+    const action = valid;
     const response = await post(action);
     expect(response.status).toBe(200);
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
@@ -42,34 +43,35 @@ describe('claim prepare API session boundary', () => {
     await post(action, 'http://localhost', 'dao-b');
     expect(mocks.prepare.mock.calls[1][0]).toBe('dao-b');
   });
-  it.each(['address', 'recipient', 'token_id', 'minterContractId', 'network', 'rpcUrl', 'amount'])(
-    'rejects body-supplied %s on allowlist claims',
+  it.each(['address', 'recipient', 'token_id', 'minterContractId', 'network', 'rpcUrl', 'treeUri'])(
+    'rejects body-supplied %s on claims',
     async (key) => {
-      expect((await post({ method: 'allowlist', round: 3, [key]: 'attacker-input' })).status).toBe(400);
+      expect((await post({ ...valid, [key]: 'attacker-input' })).status).toBe(400);
       expect(mocks.prepare).not.toHaveBeenCalled();
     }
   );
   it.each([
     { method: 'merkle', round: 2, amount: 5, proof: [] },
     { method: 'merkle', round: 2, amount: '5', proof: ['bad'] },
-    { method: 'allowlist', round: '3' },
-    { method: 'allowlist', round: 4294967296 },
+    { ...valid, round: '3' },
+    { ...valid, round: 4294967296 },
+    { method: 'allowlist', round: 3 },
     { method: 'paid', round: 1 }
   ])('rejects malformed or unsupported ABI input %j', async (body) => {
     expect((await post(body)).status).toBe(400);
     expect(mocks.prepare).not.toHaveBeenCalled();
   });
   it('rejects cross-origin and unauthenticated requests before preparing', async () => {
-    expect((await post({ method: 'allowlist', round: 3 }, 'http://attacker')).status).toBe(403);
+    expect((await post(valid, 'http://attacker')).status).toBe(403);
     expect(mocks.session).not.toHaveBeenCalled();
     const { AuthError } = await import('@/lib/auth/server');
     mocks.session.mockRejectedValue(new AuthError('UNAUTHENTICATED', 'Authentication required.'));
-    expect((await post({ method: 'allowlist', round: 3 })).status).toBe(401);
+    expect((await post(valid)).status).toBe(401);
     expect(mocks.prepare).not.toHaveBeenCalled();
   });
   it('does not return a transaction on failed simulation or oversized proof input', async () => {
     mocks.prepare.mockRejectedValue(new Error('Error(Contract, #8)'));
-    const response = await post({ method: 'allowlist', round: 3 });
+    const response = await post(valid);
     expect(response.status).toBe(422);
     expect(await response.json()).not.toHaveProperty('xdr');
     mocks.prepare.mockClear();

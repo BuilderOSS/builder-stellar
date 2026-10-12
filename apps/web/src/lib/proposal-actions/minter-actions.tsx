@@ -6,33 +6,24 @@ import type { ActionHandler } from './types';
 type ScopedDraft = AllocationDraft & { tokenContractId?: string; minterContractId?: string };
 
 export const minterAllocationHandlers: ActionHandler<ScopedDraft>[] = (
-  ['set-merkle-root', 'set-allowlist', 'minter-batch-mint'] as const
+  ['set-merkle-root', 'minter-batch-mint'] as const
 ).map((type) => ({
   type,
-  label:
-    type === 'set-merkle-root'
-      ? 'Set a claim list (Merkle root)'
-      : type === 'set-allowlist'
-        ? 'Replace the claim allowlist'
-        : 'Allocate tokens in a batch',
+  label: type === 'set-merkle-root' ? 'Open a claim round' : 'Allocate tokens in a batch',
   description:
     'Prepare allocations in Claims Admin after current registration, Token admin, Live state and mint authority are verified.',
   group: 'Allocations',
   FormComponent: ({ value }) => (
     <>
       <Text>
-        Prepare this structured allocation in Claims Admin. Replacing a root/list starts a new claim round. Batch
-        allocation mints immediately on execution.
+        Prepare this allocation in Claims Admin. A new claim list starts a new claim round, and its full list is
+        published so anyone can check it. Batch allocation mints immediately on execution.
       </Text>
       <CodeBlock>{JSON.stringify(value, null, 2)}</CodeBlock>
     </>
   ),
   getDefaultValues: () =>
-    type === 'set-merkle-root'
-      ? { type, root: '' }
-      : type === 'set-allowlist'
-        ? { type, addresses: [], amount: '' }
-        : { type, recipients: [], amounts: [] },
+    type === 'set-merkle-root' ? { type, root: '', treeUri: '' } : { type, recipients: [], amounts: [] },
   validate: (data, context) => {
     try {
       if (data.type !== type) throw new Error('Allocation action type mismatch.');
@@ -54,15 +45,14 @@ export const minterAllocationHandlers: ActionHandler<ScopedDraft>[] = (
     id: crypto.randomUUID(),
     type,
     recipient: '',
-    amount: data.type === 'set-allowlist' ? data.amount : '',
+    amount: '',
     tokenContractId: context.config.tokenContractId,
     minterContractId: context.config.minterContractId
   }),
   deserialize: (action) => {
     const scope = { tokenContractId: action.tokenContractId, minterContractId: action.minterContractId };
-    if (action.type === 'set-merkle-root') return { ...scope, type: action.type, root: action.root };
-    if (action.type === 'set-allowlist')
-      return { ...scope, type: action.type, addresses: action.addresses, amount: action.amount };
+    if (action.type === 'set-merkle-root')
+      return { ...scope, type: action.type, root: action.root, treeUri: action.treeUri };
     if (action.type === 'minter-batch-mint')
       return { ...scope, type: action.type, recipients: action.recipients, amounts: action.amounts };
     throw new Error('Invalid allocation action type.');
@@ -78,18 +68,11 @@ export const minterAllocationHandlers: ActionHandler<ScopedDraft>[] = (
       throw new Error('Allocation DAO or current Minter changed; review again.');
     const args =
       data.type === 'set-merkle-root'
-        ? [context.tokenContractId, data.root]
-        : data.type === 'set-allowlist'
-          ? [context.tokenContractId, data.addresses, data.amount]
-          : [context.tokenContractId, data.recipients, data.amounts];
+        ? [context.tokenContractId, data.root, data.treeUri]
+        : [context.tokenContractId, data.recipients, data.amounts];
     return {
       target: context.config.minterContractId,
-      function:
-        data.type === 'set-merkle-root'
-          ? 'set_merkle_root'
-          : data.type === 'set-allowlist'
-            ? 'set_allowlist'
-            : 'mint_batch',
+      function: data.type === 'set-merkle-root' ? 'set_merkle_root' : 'mint_batch',
       args
     };
   }

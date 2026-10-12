@@ -1,6 +1,8 @@
 'use client';
-import { Input, Textarea } from '@/components/ui';
+import { ProfileLinksEditor } from '@/components/admin/profile-links-editor';
+import { Input, MarkdownField } from '@/components/ui';
 import { followsName, suggestSlug, suggestSymbol } from '@/lib/create-dao-identity';
+import { MAX_PROFILE_BYTES, profileBytes } from '@/lib/dao-profile';
 import { MAX_TOKEN_NAME_BYTES, MAX_TOKEN_SYMBOL_LENGTH } from '@/lib/validation';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
 
@@ -93,28 +95,32 @@ export function BasicInfoStep() {
         </div>
         <DaoImageField />
       </div>
-      <CreationField id="description" label="Description" hint="12–240 characters">
-        <Textarea
+      <CreationField
+        id="description"
+        label="Description"
+        hint={`What your community is about. Markdown works. ${profileBytes({ description: basicInfo.description, links: basicInfo.links, image: basicInfo.contractImage }).toLocaleString()} of ${MAX_PROFILE_BYTES.toLocaleString()} bytes used with the links and image.`}
+      >
+        <MarkdownField
           id="description"
-          rows={3}
-          maxLength={240}
+          rows={5}
           value={basicInfo.description}
-          {...fieldAccessibility('description', errors)}
-          onChange={(e) => {
-            update({ description: e.target.value });
+          images={false}
+          invalid={Boolean(errors.description) || undefined}
+          describedBy={errors.description ? 'description-error' : 'description-hint'}
+          onChange={(description) => {
+            update({ description });
             clear('description');
           }}
         />
       </CreationField>
-      <CreationField id="projectUri" label="Website">
-        <Input
-          id="projectUri"
-          type="url"
-          value={basicInfo.projectUri}
-          {...fieldAccessibility('projectUri', errors)}
-          onChange={(e) => update({ projectUri: e.target.value })}
-        />
-      </CreationField>
+      <ProfileLinksEditor
+        id="links"
+        links={basicInfo.links}
+        onChange={(links) => {
+          update({ links });
+          clear('links');
+        }}
+      />
     </div>
   );
 }

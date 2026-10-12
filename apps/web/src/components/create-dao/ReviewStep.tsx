@@ -74,19 +74,10 @@ export function ReviewStep({ connectedAddress }: { connectedAddress?: string }) 
       </p>
       <Disclosure
         title="Advanced: metadata links"
-        open={metadataOpen || Boolean(errors.tokenUri || errors.rendererBase)}
+        open={metadataOpen || Boolean(errors.rendererBase)}
         onOpenChange={setMetadataOpen}
       >
         <div className={styles.stack}>
-          <CreationField id="tokenUri" label="Token metadata URL" hint="Use {daoId} for the predicted token address">
-            <Input
-              id="tokenUri"
-              type="url"
-              value={basic.tokenUri}
-              {...fieldAccessibility('tokenUri', errors)}
-              onChange={(e) => update({ tokenUri: e.target.value })}
-            />
-          </CreationField>
           <CreationField id="rendererBase" label="Renderer base URL">
             <Input
               id="rendererBase"

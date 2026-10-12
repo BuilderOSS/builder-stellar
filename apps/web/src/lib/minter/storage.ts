@@ -6,14 +6,7 @@ import { namespacedKey } from '@/lib/storage-key';
 
 import type { ClaimState } from './types';
 
-type KeyName =
-  | 'MerkleRoot'
-  | 'MerkleRound'
-  | 'AllowlistVersion'
-  | 'AllowlistAmount'
-  | 'Allowlisted'
-  | 'MerkleClaimed'
-  | 'AllowlistClaimed';
+type KeyName = 'MerkleRoot' | 'MerkleRound' | 'MerkleClaimed';
 
 /** Exact persistent `common::ns(MinterKey::..)` encoding from contracts/minter/src/storage.rs. */
 export function minterStorageKey(minter: string, token: string, name: KeyName, round?: number, recipient?: string) {
@@ -52,48 +45,43 @@ function markerValue(value: xdr.ScVal | null): boolean | null {
   if (value.type !== 'scvBool') throw new Error('Invalid Minter marker encoding.');
   return value.b;
 }
+/** `MerkleConfig { root: BytesN<32>, tree_uri: String }`. */
+function configValue(value: xdr.ScVal | null): { root: string; treeUri: string } | null {
+  if (value === null) return null;
+  const native = value.type === 'scvMap' ? (scValToNative(value) as { root?: unknown; tree_uri?: unknown }) : null;
+  if (
+    !native ||
+    !(native.root instanceof Uint8Array) ||
+    native.root.length !== 32 ||
+    typeof native.tree_uri !== 'string'
+  )
+    throw new Error('Invalid Minter root encoding.');
+  return { root: Buffer.from(native.root).toString('hex'), treeUri: native.tree_uri };
+}
 
 export async function readClaimStorage(
   server: Pick<Server, 'getLedgerEntries'>,
   minter: string,
   token: string,
   recipient: string | null
-) {
+): Promise<{ ledger: number; merkle: ClaimState['merkle'] }> {
   const key = (name: KeyName, round?: number) =>
     minterStorageKey(minter, token, name, round, round === undefined ? undefined : (recipient ?? undefined));
-  const initialKeys = [key('MerkleRoot'), key('MerkleRound'), key('AllowlistAmount'), key('AllowlistVersion')];
+  const initialKeys = [key('MerkleRoot'), key('MerkleRound')];
   const first = await values(server, initialKeys);
-  const [rootVal, merkleRoundVal, amountVal, versionVal] = first.values;
-  if (rootVal && (rootVal.type !== 'scvBytes' || rootVal.bytes.value.length !== 32))
-    throw new Error('Invalid Minter root encoding.');
-  if (amountVal && amountVal.type !== 'scvU128') throw new Error('Invalid Minter amount encoding.');
+  const [configVal, roundVal] = first.values;
+  const config = configValue(configVal ?? null);
   const merkle: ClaimState['merkle'] = {
-    root: rootVal ? Buffer.from(rootVal.bytes.value).toString('hex') : null,
-    round: roundValue(merkleRoundVal),
+    root: config?.root ?? null,
+    treeUri: config?.treeUri ?? null,
+    round: roundValue(roundVal ?? null),
     claimed: null
   };
-  const allowlist: ClaimState['allowlist'] = {
-    amount: amountVal ? String(scValToNative(amountVal)) : null,
-    round: roundValue(versionVal),
-    member: null,
-    claimed: null
-  };
-  const keys: xdr.LedgerKey[] = [];
-  if (recipient && merkle.round !== null) keys.push(key('MerkleClaimed', merkle.round));
-  if (recipient && allowlist.round !== null)
-    keys.push(key('Allowlisted', allowlist.round), key('AllowlistClaimed', allowlist.round));
-  if (keys.length) {
-    // Include config again: if a round changes between RPC reads, fail rather than mixing rounds.
-    const second = await values(server, [...initialKeys, ...keys]);
-    if (first.values.some((value, i) => value?.toXDR('base64') !== second.values[i]?.toXDR('base64')))
-      throw new Error('Allocation changed while reading. Refresh the claim rounds.');
-    let i = 4;
-    if (merkle.round !== null) merkle.claimed = markerValue(second.values[i++]);
-    if (allowlist.round !== null) {
-      allowlist.member = markerValue(second.values[i++]);
-      allowlist.claimed = markerValue(second.values[i]);
-    }
-    return { ledger: second.ledger, merkle, allowlist };
-  }
-  return { ledger: first.ledger, merkle, allowlist };
+  if (!recipient || merkle.round === null) return { ledger: first.ledger, merkle };
+  // Include config again: if the round changes between RPC reads, fail rather than mixing rounds.
+  const second = await values(server, [...initialKeys, key('MerkleClaimed', merkle.round)]);
+  if (first.values.some((value, i) => value?.toXDR('base64') !== second.values[i]?.toXDR('base64')))
+    throw new Error('The claim round changed while reading. Refresh the claims.');
+  merkle.claimed = markerValue(second.values[2] ?? null);
+  return { ledger: second.ledger, merkle };
 }

@@ -35,21 +35,22 @@ describe('Minter exact ABI and identity isolation', () => {
     expect(args.map((val) => val.toXDR('hex'))).toEqual(claimCallArgs(prepared, action).map((val) => val.toXDR('hex')));
     expect(args[2].type).toBe('scvU128');
     expect(scValToNative(args[2])).toBe(9007199254740993n);
-    const allocation = encodeAllocation(
-      minterSpec(),
-      { type: 'set-allowlist', addresses: [ALICE, BOB], amount: prepared.amount },
-      TOKEN
-    );
-    expect(allocation.map(scValToNative)).toEqual([TOKEN, [ALICE, BOB], 9007199254740993n]);
     const batch = encodeAllocation(
       minterSpec(),
       { type: 'minter-batch-mint', recipients: [ALICE], amounts: ['43'] },
       TOKEN
     );
     expect(batch.map(scValToNative)).toEqual([TOKEN, [ALICE], [43n]]);
-    expect(encodeAllocation(minterSpec(), { type: 'set-merkle-root', root: 'ab'.repeat(32) }, TOKEN)[1].type).toBe(
-      'scvBytes'
+    const root = encodeAllocation(
+      minterSpec(),
+      { type: 'set-merkle-root', root: 'ab'.repeat(32), treeUri: 'ipfs://bafytree' },
+      TOKEN
     );
+    expect(root[1].type).toBe('scvBytes');
+    expect(scValToNative(root[2])).toBe('ipfs://bafytree');
+    expect(() =>
+      encodeAllocation(minterSpec(), { type: 'set-merkle-root', root: 'ab'.repeat(32), treeUri: 'https://x' }, TOKEN)
+    ).toThrow('ipfs://');
   });
   it('does not equate a fulfilled promise with simulation/Result success', () => {
     const tx = {
@@ -107,11 +108,11 @@ describe('Minter exact ABI and identity isolation', () => {
     expect(claimQueryKey('dep-a', TOKEN, ALICE, 'state')).not.toEqual(claimQueryKey('dep-a', TOKEN, BOB, 'state'));
   });
   it('builds scoped governance allocation descriptors and rejects setup/foreign/owner/authority input', () => {
-    const draft = { type: 'set-allowlist' as const, addresses: [ALICE], amount: '5' };
+    const draft = { type: 'minter-batch-mint' as const, recipients: [ALICE], amounts: ['5'] };
     expect(buildAllocationDraft(draft, state, 'deployment-a', TOKEN, TREASURY)).toMatchObject({
       target: MINTER,
-      function: 'set_allowlist',
-      args: [TOKEN, [ALICE], '5'],
+      function: 'mint_batch',
+      args: [TOKEN, [ALICE], ['5']],
       submissionEnabled: true
     });
     for (const change of [
@@ -123,13 +124,15 @@ describe('Minter exact ABI and identity isolation', () => {
       { tokenContractId: TREASURY }
     ])
       expect(() => buildAllocationDraft(draft, { ...state, ...change }, 'deployment-a', TOKEN, TREASURY)).toThrow();
-    expect(() => encodeAllocation(minterSpec(), { ...draft, addresses: [ALICE, ALICE] }, TOKEN)).toThrow('Duplicate');
+    expect(() =>
+      encodeAllocation(minterSpec(), { ...draft, recipients: [ALICE, ALICE], amounts: ['1', '1'] }, TOKEN)
+    ).toThrow('Duplicate');
     expect(() =>
       encodeAllocation(minterSpec(), { type: 'minter-batch-mint', recipients: [ALICE], amounts: [] }, TOKEN)
     ).toThrow('lengths');
   });
   it('validates the actual envelope, rejecting swapped token/recipient/u64/operations/time bounds', () => {
-    const action = { method: 'allowlist' as const, round: 3 };
+    const action = { method: 'merkle' as const, round: 3, amount: '9007199254740993', proof: ['ab'.repeat(32)] };
     const p = {
       tokenContractId: TOKEN,
       minterContractId: MINTER,
@@ -137,28 +140,33 @@ describe('Minter exact ABI and identity isolation', () => {
       amount: '9007199254740993',
       method: action.method,
       round: 3
-    } as PreparedClaim;
+    } as unknown as PreparedClaim;
     const build = (args = claimCallArgs(p, action), target = MINTER, feeBump = false) => {
       const builder = new TransactionBuilder(new Account(ALICE, '9007199254740993'), {
         fee: '100',
         networkPassphrase: config.passphrase
       })
-        .addOperation(new Contract(target).call('mint_allowlist', ...args))
+        .addOperation(new Contract(target).call('mint_merkle', ...args))
         .setTimeout(180);
-      if (feeBump) builder.addOperation(new Contract(target).call('mint_allowlist', ...args));
+      if (feeBump) builder.addOperation(new Contract(target).call('mint_merkle', ...args));
       return builder.build();
     };
     assertClaimEnvelope(build(), p, action);
     expect(build().sequence).toBe('9007199254740994');
     const args = claimCallArgs(p, action);
     expect(() =>
-      assertClaimEnvelope(build([args[0], args[1], nativeToScVal(9007199254740993n, { type: 'u64' })]), p, action)
+      assertClaimEnvelope(
+        build([args[0]!, args[1]!, nativeToScVal(9007199254740993n, { type: 'u64' }), args[3]!]),
+        p,
+        action
+      )
     ).toThrow('arguments');
     expect(() => assertClaimEnvelope(build(), { ...p, address: BOB }, action)).toThrow('source');
     expect(() => assertClaimEnvelope(build(), { ...p, tokenContractId: TREASURY }, action)).toThrow('arguments');
     expect(() => assertClaimEnvelope(build(args, TOKEN), p, action)).toThrow('contract');
     expect(() => assertClaimEnvelope(build(args, MINTER, true), p, action)).toThrow('operations');
     expect(() => assertClaimEnvelope(build(), p, { ...action, round: 4 })).toThrow('round');
+    expect(() => assertClaimEnvelope(build(), p, { ...action, amount: '1' })).toThrow('amount');
     expect(() => assertClaimEnvelope(build(), p, action, Math.floor(Date.now() / 1000) + 181)).toThrow('expired');
   });
 });

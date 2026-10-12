@@ -45,20 +45,23 @@ export function useAdminArtwork(config: DaoNetworkConfig, address?: string | nul
       : null,
     async () => {
       const client = new MetadataClient(adminReadOptions(config, config.metadataContractId, address));
-      const [settings, count, groups, admin] = await Promise.all([
+      // One read for every property's name and item count; never fetch all items for a summary.
+      const [settings, headers, groups, admin, profileSeq] = await Promise.all([
         client.get_settings(),
-        client.properties_count(),
+        client.property_headers(),
         client.ipfs_data_count(),
-        client.admin()
+        client.admin(),
+        client.profile_seq()
       ]);
-      // Count headers first; never fetch all artwork items to render a summary.
-      const properties = await Promise.all(
-        Array.from({ length: count.result }, async (_, property_id) => {
-          const items = await client.items_count({ property_id });
-          return { id: property_id, count: items.result };
-        })
-      );
-      return { settings: settings.result.unwrap(), properties, groupCount: groups.result, admin: admin.result };
+      const properties = headers.result.map((header, id) => ({ id, name: header.name, count: header.item_count }));
+      return {
+        settings: settings.result.unwrap(),
+        properties,
+        groupCount: groups.result,
+        admin: admin.result,
+        /** The profile revision on chain: update_profile must name it. */
+        profileSeq: profileSeq.result.isOk() ? profileSeq.result.unwrap() : null
+      };
     }
   );
 }

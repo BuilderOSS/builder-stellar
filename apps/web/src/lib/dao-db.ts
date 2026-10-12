@@ -11,6 +11,8 @@
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { getNetworkConfig, type NetworkName } from '@/config/networks';
+import { type DaoProfile, EMPTY_PROFILE } from '@/lib/dao-profile';
+import { type ProfileView, verifyProfiles } from '@/lib/dao-profile-server';
 import { prisma } from '@/lib/prisma';
 
 /**
@@ -42,13 +44,23 @@ export interface DaoConfig {
   marketplace_contract: string | null;
   treasury_contract: string | null;
   metadata_contract: string | null;
-  contract_image: string | null;
+  /** The shared Minter pinned at launch; null while pending. */
+  minter_contract: string | null;
 
   // Token Metadata (from DaoCreationParams)
   token_name: string | null;
   token_symbol: string | null;
-  token_description: string | null;
-  token_uri: string | null;
+
+  /**
+   * The community profile, verified against the chain's profile_hash(); empty
+   * (status `unavailable`) when the index and chain disagree or the chain could
+   * not be read. `image` and `description` are shortcuts into it.
+   */
+  profile: DaoProfile;
+  profile_status: ProfileView['status'];
+  profile_seq: number | null;
+  image: string;
+  description: string;
 
   // Admin & Configuration
   admin_address: string | null; // current admin: launch admin in setup, the Treasury after launch
@@ -103,7 +115,7 @@ export interface DaoConfig {
  * Get the network for this deployment
  * Determined by NEXT_PUBLIC_NETWORK env var
  */
-function getDeploymentNetwork(): NetworkName {
+export function getDeploymentNetwork(): NetworkName {
   const network = (process.env.NEXT_PUBLIC_NETWORK || 'testnet') as NetworkName;
 
   // Validate it's a real network
@@ -173,11 +185,8 @@ export async function getDaoConfigFromDatabase(daoId: string): Promise<DaoConfig
     throw new Error(`DAO not found: ${daoId}`);
   }
 
-  const metadata = await prisma.metadataConfiguration.findFirst({
-    where: { deploymentId, daoId }
-  });
-
-  return mapDaoConfig(row, network, metadata?.contractImage ?? null);
+  const views = await verifyRows(network, [row]);
+  return mapDaoConfig(row, network, views.get(row.daoId));
 }
 
 /**
@@ -198,12 +207,8 @@ export async function getAllDaosFromDatabase(status?: 'pending' | 'operational')
     where: { deploymentId, ...(status ? { status } : {}) },
     orderBy: { createdLedger: 'desc' }
   });
-  const metadata = await prisma.metadataConfiguration.findMany({
-    where: { deploymentId }
-  });
-  const images = new Map(metadata.map((item) => [item.daoId, item.contractImage]));
-
-  return rows.map((row) => mapDaoConfig(row, network, images.get(row.daoId) ?? null));
+  const views = await verifyRows(network, rows);
+  return rows.map((row) => mapDaoConfig(row, network, views.get(row.daoId)));
 }
 
 export async function getPendingDaosForLaunchAdmin(address: string): Promise<DaoConfig[]> {
@@ -220,19 +225,27 @@ export async function getPendingDaosForLaunchAdmin(address: string): Promise<Dao
     },
     orderBy: { createdLedger: 'desc' }
   });
-  const metadata = await prisma.metadataConfiguration.findMany({
-    where: { deploymentId, daoId: { in: rows.map((row) => row.daoId) } }
-  });
-  const images = new Map(metadata.map((item) => [item.daoId, item.contractImage]));
-
-  return rows.map((row) => mapDaoConfig(row, network, images.get(row.daoId) ?? null));
+  const views = await verifyRows(network, rows);
+  return rows.map((row) => mapDaoConfig(row, network, views.get(row.daoId)));
 }
 
-function mapDaoConfig(
-  row: Awaited<ReturnType<typeof prisma.managerDao.findFirst>> extends infer T ? Exclude<T, null> : never,
-  network: NetworkName,
-  contractImage: string | null
-): DaoConfig {
+type DaoRow = Awaited<ReturnType<typeof prisma.managerDao.findFirst>> extends infer T ? Exclude<T, null> : never;
+
+/** Verify each row's indexed profile against the chain (cached per contract and revision). */
+export function verifyRows(network: NetworkName, rows: DaoRow[]) {
+  return verifyProfiles(
+    network,
+    rows.map((row) => ({
+      key: row.daoId,
+      metadataContract: row.metadataContract,
+      profile: row.profile,
+      profileSeq: row.profileSeq
+    }))
+  );
+}
+
+function mapDaoConfig(row: DaoRow, network: NetworkName, view: ProfileView | undefined): DaoConfig {
+  const profile = view?.profile ?? { ...EMPTY_PROFILE };
   return {
     deployment_id: row.deploymentId,
     dao_id: row.daoId,
@@ -249,11 +262,14 @@ function mapDaoConfig(
     marketplace_contract: row.marketplaceContract,
     treasury_contract: row.treasuryContract,
     metadata_contract: row.metadataContract,
-    contract_image: contractImage,
+    minter_contract: row.minterContract,
     token_name: row.tokenName,
     token_symbol: row.tokenSymbol,
-    token_description: row.tokenDescription,
-    token_uri: row.tokenUri,
+    profile,
+    profile_status: view?.status ?? 'unavailable',
+    profile_seq: view?.seq ?? (row.profileSeq === null ? null : Number(row.profileSeq)),
+    image: profile.image,
+    description: profile.description,
     admin_address: row.adminAddress,
     label: '',
     status: row.status === 'operational' ? 'operational' : 'pending',

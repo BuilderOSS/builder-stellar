@@ -12,7 +12,7 @@ function readiness(patch: Partial<LaunchReadiness> = {}): LaunchReadiness {
     admin: ADMIN,
     live: false,
     paymentAssetsMatch: true,
-    platformMinter: null,
+    platformMinter: 'CMINTER',
     slugTaken: false,
     ...patch
   };

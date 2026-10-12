@@ -36,10 +36,12 @@ const config: DaoNetworkConfig = {
   label: '',
   tokenName: '',
   tokenSymbol: '',
-  tokenDescription: '',
+  profile: { description: '', links: [], image: '' },
+  profileStatus: 'verified',
+  profileSeq: 0,
   adminAddress: '',
   launchAdmin: '',
-  contractImage: '',
+  image: '',
   auctionEnabled: true,
   auctionPaused: false,
   marketplaceEnabled: null,
@@ -258,7 +260,8 @@ describe('Metadata and module upgrade registry integration', () => {
     expect(
       encodeSupportedCall(config.metadataContractId, 'upgrade', [values.fromHash, values.toHash], config)
     ).toHaveLength(2);
-    expect(encodeSupportedCall(config.metadataContractId, 'sync_version', [], config)).toHaveLength(0);
+    // Versions follow the registry (D6); there is no sync_version to call.
+    expect(() => encodeSupportedCall(config.metadataContractId, 'sync_version', [], config)).toThrow(/Unsupported/);
     expect(handler.validate({ ...values, module: 'external' }, context).valid).toBe(false);
     expect(handler.validate({ ...values, module: 'token', fromHash: 'bad' }, context).valid).toBe(false);
     expect(() =>

@@ -29,8 +29,8 @@ export const state: ClaimState = {
   mintAuthority: true,
   admin: TREASURY,
   ledger: 123,
-  merkle: { root: '00'.repeat(32), round: 2, claimed: null },
-  allowlist: { amount: '9007199254740993', round: 3, member: true, claimed: null }
+  merkle: { root: '00'.repeat(32), treeUri: 'ipfs://bafytree', round: 2, claimed: null },
+  claimList: { status: 'none' }
 };
 
 /** Contract source ABI fixture (contract.rs and errors.rs); not production bindings. */
@@ -64,19 +64,14 @@ export function minterSpec(
     InvalidTokenId: 7802,
     BatchTooLarge: 7803,
     MerkleRootNotSet: 7804,
-    AllowlistNotSet: 7805,
-    NotInAllowlist: 7806,
     AlreadyClaimed: 7807,
     MerkleProofInvalid: 7808,
     InvalidInput: 7809,
-    TokenNotLive: overrides.liveError ?? 7810
+    TokenNotLive: overrides.liveError ?? 7810,
+    ManagerAdminNotSet: 7811,
+    InvalidTreeUri: 7812
   };
   return new contract.Spec([
-    fn('mint_allowlist', [
-      ['token_id', address],
-      ['recipient', address],
-      ['amount', u128]
-    ]),
     fn('mint_merkle', [
       ['token_id', address],
       ['recipient', address],
@@ -85,12 +80,8 @@ export function minterSpec(
     ]),
     fn('set_merkle_root', [
       ['token_id', address],
-      ['root', bytes32]
-    ]),
-    fn('set_allowlist', [
-      ['token_id', address],
-      ['addresses', vec(address)],
-      ['fixed_amount', u128]
+      ['root', bytes32],
+      ['tree_uri', xdr.ScSpecTypeDef.scSpecTypeString()]
     ]),
     fn('mint_batch', [
       ['token_id', address],

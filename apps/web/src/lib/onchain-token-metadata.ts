@@ -1,8 +1,10 @@
-import type { IpfsGroup, Property, Settings } from '@builder-stellar/metadata-bindings';
+import type { IpfsGroup, Item, PropertyHeader } from '@builder-stellar/metadata-bindings';
 import { Client as MetadataClient } from '@builder-stellar/metadata-bindings';
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
+import { type ArtworkReader, tokenLayers } from '@/lib/chain-reads/token-layers';
 import { type DaoNetworkConfig, readSource } from '@/lib/dao-config';
+import { plainSummary } from '@/lib/dao-profile';
 import { prisma } from '@/lib/prisma';
 import { cached } from '@/lib/server-cache';
 
@@ -20,10 +22,6 @@ export type OnchainTokenMetadata = {
   artwork: ResolvedArtwork[];
 };
 
-function joinUrl(base: string, property: string, item: string, extension: string) {
-  return `${base.replace(/\/$/, '')}/${property}/${item}${extension}`;
-}
-
 function unwrapResult<T>(result: unknown, label: string): T {
   if (result && typeof result === 'object') {
     if ('value' in result) return (result as { value: T }).value;
@@ -36,8 +34,6 @@ function unwrapResult<T>(result: unknown, label: string): T {
   return result as T;
 }
 
-type Collection = { properties: Property[]; ipfsGroups: IpfsGroup[]; description: string };
-
 function metadataClient(config: DaoNetworkConfig) {
   return new MetadataClient({
     contractId: config.metadataContractId,
@@ -48,26 +44,32 @@ function metadataClient(config: DaoNetworkConfig) {
   });
 }
 
-/**
- * Property/item names and IPFS groups are not indexed, so they come from RPC,
- * cached per Metadata contract: artwork is append-only and changes only by an
- * admin action. NOTE: get_properties()/get_ipfs_data() are O(collection size).
- */
-function collection(config: DaoNetworkConfig): Promise<Collection> {
-  return cached(`artwork:${config.metadataContractId}`, 5 * 60_000, async () => {
-    const metadata = metadataClient(config);
-    const [settingsResponse, propertiesResponse, ipfsResponse] = await Promise.all([
-      metadata.get_settings(),
-      metadata.get_properties(),
-      metadata.get_ipfs_data()
-    ]);
-    const settings = unwrapResult<Settings>(settingsResponse.result, 'Unable to read metadata settings');
-    return {
-      properties: propertiesResponse.result as Property[],
-      ipfsGroups: ipfsResponse.result as IpfsGroup[],
-      description: settings.description
-    };
-  });
+/** A Metadata reader for `tokenLayers`, with each read cached per contract. */
+function artworkReader(config: DaoNetworkConfig): ArtworkReader {
+  const metadata = metadataClient(config);
+  const contract = config.metadataContractId;
+  return {
+    getAttributes: (tokenId) => tokenAttributes(config, tokenId),
+    // Names and items change only by an artwork reset; groups are append-only.
+    propertyNames: () =>
+      cached(`artwork-names:${contract}`, 5 * 60_000, async () =>
+        (await metadata.property_headers()).result.map((header: PropertyHeader) => header.name)
+      ),
+    getItem: (propertyId, index) =>
+      cached(`artwork-item:${contract}:${propertyId}:${index}`, 5 * 60_000, async () => {
+        const items = unwrapResult<Item[]>(
+          (await metadata.get_items({ property_id: propertyId, start: index, limit: 1 })).result,
+          `Unable to read item ${index} of property ${propertyId}`
+        );
+        const item = items[0];
+        return item ? { name: item.name, referenceSlot: item.reference_slot } : null;
+      }),
+    getIpfsGroup: (slot) =>
+      cached(`artwork-group:${contract}:${slot}`, 60 * 60_000, async () => {
+        const group = (await metadata.get_ipfs_group({ index: slot })).result as IpfsGroup | null;
+        return group ? { baseUri: group.base_uri, extension: group.extension } : null;
+      })
+  };
 }
 
 /**
@@ -98,40 +100,12 @@ export async function resolveOnchainTokenMetadata(
   if (!config.metadataContractId) {
     throw new Error('Missing metadata contract id in the active deployment.');
   }
-
-  const [{ properties, ipfsGroups, description }, attributes] = await Promise.all([
-    collection(config),
-    tokenAttributes(config, tokenId)
-  ]);
-  const settings = { description: config.tokenDescription || description };
-
-  if (!attributes?.length || !properties || !ipfsGroups) {
-    throw new Error(`No metadata found for token ${tokenId}`);
-  }
-
-  const propertyCount = attributes[0];
-  const artwork = properties.slice(0, propertyCount).map((property, propertyId) => {
-    const itemIndex = attributes[propertyId + 1];
-    const item = property.items[itemIndex];
-    if (!item) {
-      throw new Error(`Invalid artwork selection for token ${tokenId}`);
-    }
-
-    const ipfsGroup = ipfsGroups[item.reference_slot];
-    if (!ipfsGroup) {
-      throw new Error(`Invalid artwork IPFS group for token ${tokenId}`);
-    }
-
-    return {
-      property: property.name,
-      item: item.name,
-      url: joinUrl(ipfsGroup.base_uri, property.name, item.name, ipfsGroup.extension)
-    };
-  });
-
+  const artwork = await tokenLayers(artworkReader(config), tokenId);
+  if (!artwork.length) throw new Error(`No metadata found for token ${tokenId}`);
   return {
     name: `${config.tokenName} #${tokenId}`,
-    description: settings.description,
+    // The on-chain token JSON omits the description (it lives in the profile).
+    description: plainSummary(config.profile.description),
     image: imageUrl,
     attributes: [
       { trait_type: 'Token ID', value: String(tokenId) },

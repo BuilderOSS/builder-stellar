@@ -28,7 +28,8 @@ import {
 import {
   addArtworkPropertiesHandler,
   type ArtworkPropertiesDraft,
-  artworkSettingHandlers
+  artworkSettingHandlers,
+  updateDaoProfileHandler
 } from './artwork-admin-actions';
 import { minterAllocationHandlers } from './minter-actions';
 import { moduleUpgradeHandler } from './module-upgrade-actions';
@@ -81,6 +82,7 @@ const REGISTERED_HANDLERS: ActionHandler[] = [
   cancelPrimaryListingHandler,
   registeredArtworkPropertiesHandler,
   ...artworkSettingHandlers,
+  updateDaoProfileHandler,
   ...minterAllocationHandlers,
   registeredModuleUpgradeHandler,
   ...reviewFixHandlers

@@ -4,8 +4,10 @@ import {
   addArtworkPropertiesHandler,
   type ArtworkPropertiesDraft,
   artworkSettingHandlers,
+  updateDaoProfileHandler,
   validateArtworkProperties,
-  validateArtworkSetting
+  validateArtworkSetting,
+  validateDaoProfileDraft
 } from './artwork-admin-actions';
 import type { BuildContext } from './types';
 
@@ -39,10 +41,9 @@ describe('metadata admin ABI handlers for lead registration', () => {
       }).valid
     ).toBe(true);
   });
-  it('restricts metadata URLs and maps all four settings to the current ABI', () => {
+  it('restricts the renderer URL and maps it to the current ABI', () => {
     expect(validateArtworkSetting('javascript:alert(1)', 'set-artwork-renderer').valid).toBe(false);
     expect(validateArtworkSetting('https://renderer.example', 'set-artwork-renderer').valid).toBe(true);
-    expect(validateArtworkSetting('ipfs://image', 'set-artwork-contract-image').valid).toBe(true);
     expect(
       artworkSettingHandlers.map(
         (handler) =>
@@ -50,6 +51,20 @@ describe('metadata admin ABI handlers for lead registration', () => {
             config: { metadataContractId: 'metadata' }
           } as BuildContext).function
       )
-    ).toEqual(['update_renderer_base', 'update_description', 'update_project_uri', 'update_contract_image']);
+    ).toEqual(['update_renderer_base']);
+  });
+  it('replaces the whole profile at a named revision', () => {
+    const profile = JSON.stringify({ description: 'Hi', links: [], image: 'ipfs://img' });
+    expect(validateDaoProfileDraft({ expectedSeq: 3, profile }).valid).toBe(true);
+    expect(validateDaoProfileDraft({ expectedSeq: -1, profile }).valid).toBe(false);
+    expect(validateDaoProfileDraft({ expectedSeq: 3, profile: '' }).valid).toBe(false);
+    expect(
+      validateDaoProfileDraft({ expectedSeq: 3, profile: JSON.stringify({ description: 'x'.repeat(5000) }) }).valid
+    ).toBe(false);
+    expect(
+      updateDaoProfileHandler.buildCallVector({ expectedSeq: 3, profile }, {
+        config: { metadataContractId: 'metadata' }
+      } as BuildContext)
+    ).toEqual({ target: 'metadata', function: 'update_profile', args: [3, profile] });
   });
 });

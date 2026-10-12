@@ -43,3 +43,22 @@ async function loadRegisteredMinterConfig(network: NetworkConfig, publicKey: str
   const client = await minterClient({ ...options, contractId: address });
   return { minterContractId: address, minterSpec: client.spec.entries.map((entry) => entry.toXDR('base64')) };
 }
+
+/**
+ * The Minter a launched DAO pinned at launch (DaoLaunched.minter, also
+ * `token.minter()` on chain). A later change of the Manager's platform Minter
+ * does not move an existing DAO, so launched DAOs use this, not the registration.
+ */
+export async function pinnedMinterConfig(network: NetworkConfig, publicKey: string, address: string) {
+  if (!StrKey.isValidContract(address)) throw new Error('Invalid pinned Minter.');
+  return cached(`minter-pinned:${network.name}:${address}`, 10 * 60_000, async () => {
+    const client = await minterClient({
+      rpcUrl: network.rpcUrl,
+      networkPassphrase: network.networkPassphrase,
+      publicKey: readSource(publicKey),
+      allowHttp: network.name === 'local',
+      contractId: address
+    });
+    return { minterContractId: address, minterSpec: client.spec.entries.map((entry) => entry.toXDR('base64')) };
+  });
+}

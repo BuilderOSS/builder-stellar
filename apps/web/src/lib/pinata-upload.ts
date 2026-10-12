@@ -37,6 +37,12 @@ export const UPLOAD_POLICIES = {
     requiresSquare: false,
     description: 'Image in a proposal (PNG, JPEG, WebP or GIF)'
   },
+  'claim-list': {
+    // A published claim tree (builder-stellar-merkle-v1): ~9 MB at 10,000 recipients.
+    allowedMimes: ['application/json'],
+    maxBytes: 12 * 1024 * 1024,
+    description: 'Claim list file (JSON)'
+  },
   'artwork-directory': {
     allowedMimes: ['image/png', 'image/jpeg', 'image/webp'],
     maxBytesPerFile: 2 * 1024 * 1024, // 2MB per file
@@ -138,6 +144,8 @@ export function validateImageDimensions(
   height: number,
   policy: (typeof UPLOAD_POLICIES)[UploadType]
 ): { valid: boolean; error?: string } {
+  // Files without pixels (claim lists) have no dimension rules.
+  if (!('minDimensionPixels' in policy)) return { valid: true };
   if (width < policy.minDimensionPixels || height < policy.minDimensionPixels) {
     return {
       valid: false,
@@ -261,7 +269,7 @@ export const UploadCompletionSchema = z.object({
   filename: z.string(),
   mimeType: z.string(),
   sizeBytes: z.number().int().positive(),
-  uploadType: z.enum(['dao-image', 'artwork-directory'])
+  uploadType: z.enum(['dao-image', 'markdown-image', 'claim-list', 'artwork-directory'])
 });
 
 export type UploadCompletion = z.infer<typeof UploadCompletionSchema>;

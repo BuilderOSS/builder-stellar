@@ -98,12 +98,15 @@ describe('one current creation configuration', () => {
     expect(generateNonce()).toBeLessThan(1n << 64n);
     expect(() => formDataToCreationParams(valid(), wallet, 1n << 64n)).toThrow('u64');
   });
-  it('checks Manager UTF-8 string bounds including resolved DAO placeholders before preparing a nonce', () => {
+  it('checks the profile byte budget and token-name characters before preparing a nonce', () => {
     const config = valid();
+    // 300 UTF-8 bytes used to be the cap; the whole profile now has 4 KB.
     config.basicInfo.description = '界'.repeat(100);
+    expect(createDaoSchema.safeParse(config).success).toBe(true);
+    config.basicInfo.description = '界'.repeat(1400);
     expect(createDaoSchema.safeParse(config).success).toBe(false);
     config.basicInfo.description = 'A community of builders.';
-    config.basicInfo.tokenUri = `https://example.com/${'a'.repeat(190)}/{daoId}`;
+    config.basicInfo.tokenName = 'The "Quoted" Club';
     expect(createDaoSchema.safeParse(config).success).toBe(false);
   });
 });

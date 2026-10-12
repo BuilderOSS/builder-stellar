@@ -64,21 +64,23 @@ export function Claims({ admin = false }: { admin?: boolean }) {
   );
   const base = `/dao/${encodeURIComponent(routeId)}`;
 
-  async function prepare(method: ClaimAction['method']) {
+  /** Claim with the verified list's entry for this wallet, or with a pasted proof file. */
+  async function prepare(source: 'list' | 'file') {
     if (!allowed || !data || lock.current || hash) return;
     lock.current = true;
     setBusy(true);
     setReview(null);
     setMessage('Checking current allocation and simulating…');
     try {
-      const round = data[method].round;
+      const round = data.merkle.round;
       if (round === null) throw new Error('Current round is unavailable. Refresh before claiming.');
+      const entry = data.claimList.status === 'verified' ? data.claimList.entry : null;
+      if (source === 'list' && !entry) throw new Error('You are not on the current claim list.');
       const action: ClaimAction =
-        method === 'allowlist' ? { method, round } : { method, round, ...parseProofFile(proofText) };
-      if (
-        action.method === 'merkle' &&
-        (!data.merkle.root || !address || !verifyClaimProof(address, action.amount, action.proof, data.merkle.root))
-      )
+        source === 'list' && entry
+          ? { method: 'merkle', round, amount: entry.amount, proof: entry.proof }
+          : { method: 'merkle', round, ...parseProofFile(proofText) };
+      if (!data.merkle.root || !address || !verifyClaimProof(address, action.amount, action.proof, data.merkle.root))
         throw new Error(
           'This proof doesn’t match your account, amount or the current claim list. Ask whoever runs the claim for a new one.'
         );
@@ -90,8 +92,6 @@ export function Claims({ admin = false }: { admin?: boolean }) {
       const nowSession = useAuthSessionStore.getState();
       if (nowSession.authStatus !== 'authenticated') throw new Error('Authenticate again before reviewing.');
       assertPreparedIdentity(prepared, config, DEPLOYMENT_ID, nowSession.address, data.minterContractId!);
-      if (method === 'allowlist' && prepared.amount !== data.allowlist.amount)
-        throw new Error('The allowlist amount changed. Refresh and review again.');
       const { TransactionBuilder } = await import('@stellar/stellar-sdk');
       assertClaimEnvelope(TransactionBuilder.fromXDR(prepared.xdr, config.passphrase), prepared, action);
       setReview({ action, prepared, state: data });
@@ -127,11 +127,9 @@ export function Claims({ admin = false }: { admin?: boolean }) {
         latest.daoId !== prepared.daoId ||
         !latest.live ||
         !latest.mintAuthority ||
-        latest[action.method].round !== prepared.round ||
-        latest[action.method].claimed === true ||
-        (action.method === 'merkle'
-          ? latest.merkle.root !== state.merkle.root
-          : latest.allowlist.amount !== prepared.amount)
+        latest.merkle.round !== prepared.round ||
+        latest.merkle.claimed === true ||
+        latest.merkle.root !== state.merkle.root
       )
         throw new Error('Eligibility or allocation changed. Refresh and simulate again.');
       const unsigned = TransactionBuilder.fromXDR(prepared.xdr, config.passphrase);
@@ -223,9 +221,11 @@ export function Claims({ admin = false }: { admin?: boolean }) {
               <Address value={data.tokenContractId} label="Token" />
               <Address value={data.admin} label="Admin" />
               {data.authenticated && data.address ? <Address value={data.address} label="Signed in as" /> : null}
+              <p className={styles.address}>Root: {data.merkle.root ?? 'none'}</p>
+              {data.merkle.treeUri ? <p className={styles.address}>Claim list: {data.merkle.treeUri}</p> : null}
               <p className={styles.muted}>
-                A missing entry may be absent or archived, not proof it&apos;s unclaimed; we check before you sign. Each
-                method has its own round, and a new allocation lets earlier recipients claim again.
+                A missing entry may be absent or archived, not proof it&apos;s unclaimed; we check before you sign. A
+                new claim list opens a new round, and earlier recipients may claim again.
               </p>
             </Disclosure>
           </>
@@ -242,112 +242,95 @@ export function Claims({ admin = false }: { admin?: boolean }) {
       ) : (
         <div className={styles.grid}>
           <section className={styles.panel}>
-            <h2>On the list</h2>
-            <p>
-              {data?.allowlist.amount != null ? `${data.allowlist.amount} tokens each` : 'Amount unavailable'} · round{' '}
-              {data?.allowlist.round ?? '–'}
-            </p>
-            <p>
-              You: {marker(data?.allowlist.member, 'on the list', 'not on the list')}
-              <br />
-              Status: {marker(data?.allowlist.claimed, 'already claimed', 'not claimed yet')}
-            </p>
-            <div>
-              <Button
-                disabled={
-                  !allowed ||
-                  busy ||
-                  Boolean(hash) ||
-                  data?.allowlist.round == null ||
-                  data?.allowlist.amount == null ||
-                  data?.allowlist.claimed === true
-                }
-                onClick={() => prepare('allowlist')}
-              >
-                Claim
-              </Button>
-            </div>
+            <h2>Your claim</h2>
+            <ClaimListSummary state={data} />
+            {data?.claimList.status === 'verified' && data.claimList.entry ? (
+              <div>
+                <Button
+                  disabled={!allowed || busy || Boolean(hash) || data.merkle.claimed === true}
+                  onClick={() => prepare('list')}
+                >
+                  {data.merkle.claimed === true ? 'Already claimed' : `Claim ${data.claimList.entry.amount} tokens`}
+                </Button>
+              </div>
+            ) : null}
           </section>
           <section className={styles.panel}>
-            <h2>Claim with a proof</h2>
-            <p>
-              Status: {marker(data?.merkle.claimed, 'already claimed', 'not claimed yet')} · round{' '}
-              {data?.merkle.round ?? '–'}
-            </p>
-            <p className={styles.address}>Root: {data?.merkle.root ?? 'unavailable'}</p>
-            <p>
-              The organizer gives you a small proof file with your amount. Upload it or paste it below; we check it
-              before you sign.
-            </p>
-            <Field>
-              <FieldLabel htmlFor="claim-proof-file">Proof file</FieldLabel>
+            <Disclosure title="Have a proof file instead?">
+              <p>
+                If the claim list can&apos;t be loaded, the organizer can give you a small proof file with your amount.
+                We check it against the current round before you sign.
+              </p>
+              <Field>
+                <FieldLabel htmlFor="claim-proof-file">Proof file</FieldLabel>
+                <div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={busy || Boolean(hash)}
+                    onClick={() => proofInput.current?.click()}
+                  >
+                    <Upload aria-hidden="true" />
+                    Choose a proof file
+                  </Button>
+                </div>
+                <input
+                  ref={proofInput}
+                  id="claim-proof-file"
+                  type="file"
+                  hidden
+                  accept=".json,application/json"
+                  disabled={busy || Boolean(hash)}
+                  onChange={async (event) => {
+                    setReview(null);
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      if (file.size > 8192) throw new Error('Proof file exceeds 8 KB.');
+                      const text = await file.text();
+                      parseProofFile(text);
+                      setProofText(text);
+                      setMessage('Proof loaded. Review to validate against the current round.');
+                    } catch (error) {
+                      setProofText('');
+                      setMessage(error instanceof Error ? error.message : 'Invalid proof file.');
+                    }
+                    event.target.value = '';
+                  }}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="claim-proof-text">Or paste it</FieldLabel>
+                <Textarea
+                  id="claim-proof-text"
+                  className={css({ textStyle: 'mono', fontSize: '0.8125rem' })}
+                  value={proofText}
+                  placeholder={'{"amount":"5","proof":[]}'}
+                  disabled={busy || Boolean(hash)}
+                  onChange={(event) => {
+                    setProofText(event.target.value);
+                    setReview(null);
+                  }}
+                />
+              </Field>
               <div>
                 <Button
                   variant="secondary"
-                  size="sm"
-                  disabled={busy || Boolean(hash)}
-                  onClick={() => proofInput.current?.click()}
+                  disabled={
+                    !allowed ||
+                    busy ||
+                    Boolean(hash) ||
+                    !proofText ||
+                    !data?.merkle.root ||
+                    data.merkle.round === null ||
+                    data.merkle.claimed === true
+                  }
+                  onClick={() => prepare('file')}
                 >
-                  <Upload aria-hidden="true" />
-                  Choose a proof file
+                  Check proof
                 </Button>
               </div>
-              <input
-                ref={proofInput}
-                id="claim-proof-file"
-                type="file"
-                hidden
-                accept=".json,application/json"
-                disabled={busy || Boolean(hash)}
-                onChange={async (event) => {
-                  setReview(null);
-                  const file = event.target.files?.[0];
-                  if (!file) return;
-                  try {
-                    if (file.size > 8192) throw new Error('Proof file exceeds 8 KB.');
-                    const text = await file.text();
-                    parseProofFile(text);
-                    setProofText(text);
-                    setMessage('Proof loaded. Review to validate against the current root.');
-                  } catch (error) {
-                    setProofText('');
-                    setMessage(error instanceof Error ? error.message : 'Invalid proof file.');
-                  }
-                  event.target.value = '';
-                }}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="claim-proof-text">Or paste it</FieldLabel>
-              <Textarea
-                id="claim-proof-text"
-                className={css({ textStyle: 'mono', fontSize: '0.8125rem' })}
-                value={proofText}
-                placeholder={'{"amount":"5","proof":[]}'}
-                disabled={busy || Boolean(hash)}
-                onChange={(event) => {
-                  setProofText(event.target.value);
-                  setReview(null);
-                }}
-              />
-            </Field>
-            <div>
-              <Button
-                variant="secondary"
-                disabled={
-                  !allowed ||
-                  busy ||
-                  Boolean(hash) ||
-                  !proofText ||
-                  !data?.merkle.root ||
-                  data.merkle.round === null ||
-                  data.merkle.claimed === true
-                }
-                onClick={() => prepare('merkle')}
-              >
-                Check proof
-              </Button>
-            </div>
+            </Disclosure>
           </section>
         </div>
       )}
@@ -357,8 +340,8 @@ export function Claims({ admin = false }: { admin?: boolean }) {
           <p>Network fee: {formatStroops(review.prepared.fee)} XLM. The tokens themselves are free.</p>
           <Disclosure title="Technical details">
             <p>
-              Method: {review.prepared.method} · round {review.prepared.round}. Signing authorizes the Minter claim and
-              its batch mint; smart-account signing isn&apos;t supported.
+              Claim round {review.prepared.round}. Signing authorizes the Minter claim and its mint; smart-account
+              signing isn&apos;t supported.
             </p>
             <Address value={review.prepared.address} label="Recipient and signer" />
             <Address value={review.prepared.tokenContractId} label="Token" />
@@ -404,9 +387,7 @@ export function Claims({ admin = false }: { admin?: boolean }) {
               <ul className={styles.history}>
                 {history.data.items.map((item) => (
                   <li key={item.claim_id}>
-                    <p>
-                      {item.amount ?? 'Some'} tokens · {item.claim_type === 'merkle' ? 'with a proof' : 'from the list'}
-                    </p>
+                    <p>{item.amount ?? 'Some'} tokens</p>
                     {item.recipient ? <Address value={item.recipient} label="Recipient" compact /> : null}
                     {item.transaction_hash ? (
                       <Address value={item.transaction_hash} label="Transaction" compact />
@@ -436,27 +417,52 @@ function marker(value: boolean | null | undefined, yes: string, no: string) {
   return value === true ? yes : value === false ? no : 'unknown (we check before you sign)';
 }
 
+/** What the current claim list says about the connected wallet. */
+function ClaimListSummary({ state }: { state?: ClaimState }) {
+  if (!state) return null;
+  const list = state.claimList;
+  if (list.status === 'none') return <p>No claim round is open right now.</p>;
+  if (list.status === 'unavailable')
+    return (
+      <Callout
+        variant="warning"
+        title="Claim list unavailable"
+        description={`${list.reason} You can still claim with a proof file from the organizer.`}
+      />
+    );
+  if (!state.authenticated) return <p>Connect the wallet that was given tokens to see your claim.</p>;
+  if (!list.entry)
+    return (
+      <p>
+        You&apos;re not on this round&apos;s list. {list.recipients.toLocaleString()} people can claim {list.tokenTotal}{' '}
+        tokens in round {state.merkle.round}.
+      </p>
+    );
+  return (
+    <p>
+      {list.entry.amount} tokens are waiting for you in round {state.merkle.round}. Status:{' '}
+      {marker(state.merkle.claimed, 'already claimed', 'not claimed yet')}.
+    </p>
+  );
+}
+
 function AllocationInfo({ state }: { state?: ClaimState }) {
   return (
     <section className={styles.panel}>
-      <h2>Admin / governance allocation configuration</h2>
+      <h2>Claim rounds</h2>
       <p>
-        Only the current Token admin can set an allowlist, set a Merkle root, or batch mint. These methods require a
-        Live token; setup allocations cannot be configured before launch. After launch the admin is normally the
-        Treasury, so changes must execute through governance.
+        A claim round gives listed people tokens they claim themselves. You build the list here; it is published to IPFS
+        so anyone can check it, and a proposal opens the round with its root. Batch allocation mints to up to 18 people
+        at once instead. Both need the community to be live, and after launch they go through a vote.
       </p>
       <p>
-        Setting a root starts a new Merkle round only. Replacing the allowlist starts a new allowlist round only; every
-        listed address receives the same fixed positive amount. Neither method accepts payment currency.
-      </p>
-      <p>
-        Current rounds: Merkle {state?.merkle.round ?? 'unavailable'}, allowlist{' '}
-        {state?.allowlist.round ?? 'unavailable'}.
-      </p>
-      <p role="note">
-        Governance submission is not enabled on this page: the shared proposal encoder/registry does not support Minter
-        targets yet. Validated, unregistered allocation action descriptors are available for lead integration. No admin
-        transaction is signed here.
+        Current round: {state?.merkle.round ?? 'none'}
+        {state?.claimList.status === 'verified'
+          ? ` · ${state.claimList.recipients.toLocaleString()} people, ${state.claimList.tokenTotal} tokens`
+          : state?.claimList.status === 'unavailable'
+            ? ' · claim list unavailable'
+            : ''}
+        .
       </p>
       <AllocationDraftForm state={state} />
     </section>

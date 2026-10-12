@@ -17,12 +17,7 @@ const ADDRESS_FIELDS = new Set(['recipient', 'authority', 'paymentToken', 'asset
 const IGNORED_FIELDS = new Set(['id']);
 const HASH_FIELDS = new Set(['fromHash', 'toHash', 'root']);
 const ARTWORK_STRING_FIELDS = new Set(['names', 'name', 'base_uri', 'extension']);
-const ARTWORK_SETTINGS = new Set([
-  'set-artwork-renderer',
-  'set-artwork-description',
-  'set-artwork-project-uri',
-  'set-artwork-contract-image'
-]);
+const ARTWORK_SETTINGS = new Set(['set-artwork-renderer']);
 
 function normalizeValue(key: string, value: unknown): unknown {
   if (typeof value === 'string') {
@@ -73,7 +68,6 @@ export function getProposalActionIdentity(action: ProposalQueuedAction): Proposa
 export function getProposalActionResourceKey(action: ProposalQueuedAction): string {
   switch (action.type) {
     case 'set-merkle-root':
-    case 'set-allowlist':
       return `minter:${action.minterContractId}:${action.tokenContractId}:${action.type}`;
     case 'minter-batch-mint':
       return `minter:${action.minterContractId}:${action.tokenContractId}:batch:${action.id}`;
@@ -110,6 +104,10 @@ export function getProposalActionResourceKey(action: ProposalQueuedAction): stri
       return 'auction:reserve-price';
     case 'set-token-metadata':
       return 'token:metadata';
+    case 'update-dao-profile':
+      // One profile per community: two updates in one proposal conflict (the
+      // second would fail its revision check).
+      return 'metadata:profile';
     case 'change-dao-slug':
       return 'manager:slug';
     case 'transfer-dao-token':
@@ -147,7 +145,7 @@ export function isHighRiskProposalAction(action: ProposalQueuedAction) {
     action.type === 'upgrade-dao-module' ||
     action.type === 'add-artwork-properties' ||
     action.type === 'set-merkle-root' ||
-    action.type === 'set-allowlist' ||
+    action.type === 'update-dao-profile' ||
     action.type === 'minter-batch-mint' ||
     ARTWORK_SETTINGS.has(action.type)
   );
