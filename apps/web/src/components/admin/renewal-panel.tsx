@@ -159,7 +159,15 @@ export function RenewalPanel({ config }: { config: DaoNetworkConfig }) {
       await submitRenewal(
         config,
         quote,
-        async (xdr) => (await signWithWallet(xdr, { address, networkPassphrase: config.passphrase })).signedTxXdr,
+        // The member saw this price before choosing to renew; the guard allows up to it.
+        async (xdr) =>
+          (
+            await signWithWallet(
+              xdr,
+              { address, networkPassphrase: config.passphrase },
+              { maxFeeStroops: quote.totalFee }
+            )
+          ).signedTxXdr,
         (done, total) => setProgress(total > 1 ? `${done} of ${total} done` : '')
       );
       tx.success(`Storage renewed for ${quote.days} days`, '');

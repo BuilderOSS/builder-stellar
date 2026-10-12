@@ -2,6 +2,7 @@
 
 import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk';
 
+import { assertFeeWithinGuard, FEE_GUARD_STROOPS } from '@/lib/fee/fee-guard';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 export class WalletNetworkError extends Error {
@@ -29,13 +30,19 @@ export function assertWalletNetworkReady() {
 /**
  * Every app transaction signs through here. Reading screens stay usable on a
  * mismatched wallet network, so this is the one place that refuses to sign
- * until the wallet matches the deployment network.
+ * until the wallet matches the deployment network, and the one place that
+ * refuses a fee above the guard (docs/STORAGE_DIET.md § 8). A screen that has
+ * already shown the member its price (the Renewal tab) passes that price as
+ * `maxFeeStroops`.
  */
 export async function signWithWallet(
-  ...args: Parameters<typeof StellarWalletsKit.signTransaction>
+  xdr: string,
+  opts?: Parameters<typeof StellarWalletsKit.signTransaction>[1],
+  guard: { maxFeeStroops?: bigint } = {}
 ): ReturnType<typeof StellarWalletsKit.signTransaction> {
   assertWalletNetworkReady();
-  return StellarWalletsKit.signTransaction(...args);
+  assertFeeWithinGuard(xdr, opts?.networkPassphrase, guard.maxFeeStroops ?? FEE_GUARD_STROOPS);
+  return StellarWalletsKit.signTransaction(xdr, opts);
 }
 
 /**
