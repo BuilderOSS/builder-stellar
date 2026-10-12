@@ -111,7 +111,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
           hasMore: page.hasMore,
           generatedAt: new Date().toISOString(),
           source: 'chain',
-          message: 'Titles and vote totals are unavailable right now. States come straight from the chain.'
+          message:
+            'Titles and vote totals are unavailable right now. States come straight from the chain.' +
+            (status ? ' The status filter is applied to each page after it is cut, so pages may run short.' : '')
         },
         { headers: { 'Cache-Control': 'no-store' } }
       );
