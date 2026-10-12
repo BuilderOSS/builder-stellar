@@ -90,6 +90,37 @@ export function parseCodeTtlDays(raw) {
   return days;
 }
 
+/**
+ * The first positional argument: anything not a `--flag` and not the value of one. Flags in
+ * `valueless` take no value, so the argument after them is positional.
+ */
+export function positionalArg(args, valueless = []) {
+  return args.find((a, i) => {
+    if (a.startsWith('--')) return false;
+    const prev = args[i - 1];
+    return !(prev?.startsWith('--') && !valueless.includes(prev));
+  });
+}
+
+/**
+ * What the Manager's latest pointers name, for renewal. `view(method, name)` reads the Manager.
+ * The `LatestImplementation(name)` entry outlives a revoke (`latest_pointer` still returns it,
+ * `get_latest_implementation` filters the hash out), and `upgrade_manager`, `minter.upgrade`
+ * and the app all read that entry, so every existing pointer is renewed; only an unrevoked
+ * hash is worth keeping alive.
+ */
+export function collectLatest(view, names) {
+  const hashes = [];
+  const pointerNames = [];
+  for (const name of names) {
+    const pointer = view('latest_pointer', name);
+    if (pointer && typeof pointer === 'object') pointerNames.push(name);
+    const latest = view('get_latest_implementation', name);
+    if (latest && typeof latest === 'object') hashes.push({ hash: latest.wasm_hash, label: `${name} (latest)` });
+  }
+  return { hashes, pointerNames };
+}
+
 // ---------------------------------------------------------------------------
 // Minimal ScVal XDR encoding for storage keys passed to `stellar contract extend --key-xdr`
 // ---------------------------------------------------------------------------

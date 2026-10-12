@@ -25,11 +25,13 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import {
+  collectLatest,
   DEFAULT_CODE_TTL_DAYS,
   extendWithinFeeCap,
   invokeView,
   namespacedKeyXdr,
   parseCodeTtlDays,
+  positionalArg,
   runQuiet,
   scv
 } from './lib.mjs';
@@ -37,7 +39,7 @@ import {
 const MODULE_NAMES = ['Manager', 'Token', 'Metadata', 'Auction', 'Governor', 'Treasury', 'Marketplace', 'Minter'];
 
 const args = process.argv.slice(2);
-const artifactPath = args.find((a, i) => !a.startsWith('--') && !args[i - 1]?.startsWith('--'));
+const artifactPath = positionalArg(args, ['--dry-run']);
 const flag = (name, fallback) => {
   const i = args.indexOf(name);
   return i >= 0 ? args[i + 1] : fallback;
@@ -94,14 +96,8 @@ const current = tryView(manager, 'current_implementations');
 if (current && typeof current === 'object') {
   for (const [module, hash] of Object.entries(current)) add(hash, `${module} (current)`);
 }
-const latestNames = [];
-for (const name of MODULE_NAMES) {
-  const latest = tryView(manager, 'get_latest_implementation', ['--name', name]);
-  if (latest && typeof latest === 'object') {
-    add(latest.wasm_hash, `${name} (latest)`);
-    latestNames.push(name);
-  }
-}
+const latest = collectLatest((method, name) => tryView(manager, method, ['--name', name]), MODULE_NAMES);
+for (const { hash, label } of latest.hashes) add(hash, label);
 
 // DAOs: artifacts for this Manager, --token, and the indexer.
 const tokens = new Set(flags('--token'));
@@ -176,7 +172,7 @@ for (const [hash, label] of hashes) {
     extend(`${label} registry record`, ['--id', manager, '--key-xdr', key]);
   }
 }
-for (const name of latestNames) {
+for (const name of latest.pointerNames) {
   extend(`latest ${name} pointer`, [
     '--id',
     manager,

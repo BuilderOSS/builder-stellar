@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  collectLatest,
   LEDGERS_PER_DAY,
   namespacedKeyXdr,
   nextExtendTarget,
   parseCodeTtlDays,
+  positionalArg,
   SAFE_RESOURCE_FEE_STROOPS,
   scv
 } from './lib.mjs';
@@ -67,4 +69,22 @@ test('namespaced keys match the bytes pinned in contracts/common', () => {
     hex(namespacedKeyXdr('Listing', scv.u32(7))),
     '0000001000000001000000020000000f000000076275696c646572000000001000000001000000020000000f000000074c697374696e67000000000300000007'
   );
+});
+
+test('the artifact is found after a valueless flag and never as a flag value', () => {
+  assert.equal(positionalArg(['--dry-run', 'deploys/x.json'], ['--dry-run']), 'deploys/x.json');
+  assert.equal(positionalArg(['--days', '30', 'deploys/x.json', '--dry-run'], ['--dry-run']), 'deploys/x.json');
+  assert.equal(positionalArg(['--identity', 'ops'], ['--dry-run']), undefined);
+});
+
+test('a revoked latest still has its pointer renewed, but not its hash', () => {
+  const h = 'ab'.repeat(32);
+  const view = (method, name) => {
+    if (name === 'Minter') return null;
+    if (method === 'latest_pointer') return { wasm_hash: h, set_ledger: 1 };
+    return name === 'Token' ? { wasm_hash: h, revoked: false } : null; // Manager: revoked
+  };
+  const got = collectLatest(view, ['Manager', 'Token', 'Minter']);
+  assert.deepEqual(got.pointerNames, ['Manager', 'Token']);
+  assert.deepEqual(got.hashes, [{ hash: h, label: 'Token (latest)' }]);
 });
