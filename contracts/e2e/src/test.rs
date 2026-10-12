@@ -4464,8 +4464,7 @@ fn dao_renewal_inventory(
     let mut keys = std::vec::Vec::new();
     let u = |n: u32| -> Val { n.into_val(e) };
 
-    // Token: the canonical mint grants (OZ checkpoints of the total supply
-    // are binary-searched, so every one of them is listed too).
+    // Token: the canonical mint grants, then the latest supply checkpoint.
     let mut minters = std::vec![token.treasury()];
     minters.extend(token.auction());
     minters.extend(token.marketplace());
