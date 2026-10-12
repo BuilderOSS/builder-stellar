@@ -162,7 +162,10 @@ export interface DaoLaunchedEvent {
     modules?: DaoAddresses;
     launch_auction?: boolean;
     launch_marketplace?: boolean;
-    enable_minter?: boolean;
+    /**
+     * The shared platform Minter granted mint authority.
+     */
+    minter?: string;
   };
 }
 
@@ -394,20 +397,14 @@ export interface DaoAddresses {
  * Struct: LaunchConfig
  */
 export interface LaunchConfig {
-  /**
-   * Grant mint authority to the Manager-registered PlatformMinter. The
-   * caller can never name an arbitrary minter address.
-   */
-  enable_minter: boolean;
-  /**
-   * The platform minter the launch admin saw and approves. Required (and
-   * must equal the registered PlatformMinter) when `enable_minter` is set,
-   * so a Manager admin cannot swap the minter between signing and launch.
-   * Ignored when `enable_minter` is false.
-   */
-  expected_minter: string | null;
   launch_auction: boolean;
   launch_marketplace: boolean;
+  /**
+   * The shared platform Minter the launch admin saw and approves. Every
+   * DAO launches with it; it must equal the registered PlatformMinter, so a
+   * Manager admin cannot swap the minter between signing and launch.
+   */
+  minter: string;
 }
 
 /**
@@ -480,11 +477,17 @@ export interface ImplementationVersion {
  */
 export interface InitialDaoConfigValues {
   auction: AuctionConfig;
-  contract_image: string;
-  description: string;
   governance: GovernanceConfig;
   marketplace: MarketplaceConfig;
-  project_uri: string;
+  /**
+   * DAO profile JSON (description, links, image), 1 to
+   * `common::MAX_PROFILE_LENGTH` bytes. Event-only: the Metadata contract
+   * emits it and stores its hash.
+   */
+  profile: string;
+  /**
+   * Base URL of the image compositor used by the on-chain `token_uri`.
+   */
   renderer_base: string;
   /**
    * Requested human-friendly DAO identifier (`[a-z0-9-]`, 4-63 chars).
@@ -494,7 +497,6 @@ export interface InitialDaoConfigValues {
   slug: string;
   token_name: string;
   token_symbol: string;
-  token_uri: string;
 }
 
 /**
@@ -534,7 +536,7 @@ export const CommonError = {
    */
   7008 : { message: "AdminNotSet" },
   /**
-   * `CurrentVersion` missing from storage.
+   * The Manager's own `CurrentManagerVersion` missing from storage.
    */
   7009 : { message: "VersionNotSet" },
   /**

@@ -221,7 +221,6 @@ export interface AuctionInitializedEvent {
     min_bid_increment_percent?: number;
     time_buffer?: bigint;
     payment_token?: string;
-    version?: string;
   };
 }
 
@@ -420,7 +419,7 @@ export const CommonError = {
    */
   7008 : { message: "AdminNotSet" },
   /**
-   * `CurrentVersion` missing from storage.
+   * The Manager's own `CurrentManagerVersion` missing from storage.
    */
   7009 : { message: "VersionNotSet" },
   /**
@@ -465,16 +464,6 @@ export interface UpgradedEvent {
 }
 
 /**
- * Emitted by `sync_version`.
- */
-export interface VersionSyncedEvent {
-  name: "VersionSynced";
-  data: {
-    version?: string;
-  };
-}
-
-/**
  * Event emitted when the contract is paused.
  */
 export interface PausedEvent {
@@ -507,5 +496,5 @@ export const PausableError = {
    */
   1001 : { message: "ExpectedPause" }
 }
-    export type ContractEvent = BidPlacedEvent | BidRefundedEvent | AuctionCreatedEvent | AuctionSettledEvent | RefundDeferredEvent | AuctionLaunchedEvent | DurationUpdatedEvent | RefundWithdrawnEvent | AuctionCancelledEvent | TimeBufferUpdatedEvent | AuctionInitializedEvent | PaymentTokenUpdatedEvent | ReservePriceUpdatedEvent | MinBidIncrementUpdatedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VersionSyncedEvent | PausedEvent | UnpausedEvent;
+    export type ContractEvent = BidPlacedEvent | BidRefundedEvent | AuctionCreatedEvent | AuctionSettledEvent | RefundDeferredEvent | AuctionLaunchedEvent | DurationUpdatedEvent | RefundWithdrawnEvent | AuctionCancelledEvent | TimeBufferUpdatedEvent | AuctionInitializedEvent | PaymentTokenUpdatedEvent | ReservePriceUpdatedEvent | MinBidIncrementUpdatedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | PausedEvent | UnpausedEvent;
     

@@ -219,7 +219,6 @@ export interface MarketplaceInitializedEvent {
     admin: string;
     treasury?: string;
     payment_asset?: string;
-    version?: string;
     default_secondary_fee_bps?: number;
   };
 }
@@ -367,7 +366,7 @@ export const CommonError = {
    */
   7008 : { message: "AdminNotSet" },
   /**
-   * `CurrentVersion` missing from storage.
+   * The Manager's own `CurrentManagerVersion` missing from storage.
    */
   7009 : { message: "VersionNotSet" },
   /**
@@ -410,15 +409,5 @@ export interface UpgradedEvent {
     version?: string;
   };
 }
-
-/**
- * Emitted by `sync_version`.
- */
-export interface VersionSyncedEvent {
-  name: "VersionSynced";
-  data: {
-    version?: string;
-  };
-}
-    export type ContractEvent = ListingExpiredEvent | ListingCancelledEvent | ListingCommentedEvent | ListingPurchasedEvent | MarketplacePausedEvent | MarketplaceLaunchedEvent | MarketplaceUnpausedEvent | PaymentAssetUpdatedEvent | SecondaryFeeUpdatedEvent | PrimaryListingCreatedEvent | PrimaryListingExpiredEvent | MarketplaceInitializedEvent | PrimaryListingCancelledEvent | PrimaryListingCommentedEvent | PrimaryListingPurchasedEvent | SecondaryListingCreatedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VersionSyncedEvent;
+    export type ContractEvent = ListingExpiredEvent | ListingCancelledEvent | ListingCommentedEvent | ListingPurchasedEvent | MarketplacePausedEvent | MarketplaceLaunchedEvent | MarketplaceUnpausedEvent | PaymentAssetUpdatedEvent | SecondaryFeeUpdatedEvent | PrimaryListingCreatedEvent | PrimaryListingExpiredEvent | MarketplaceInitializedEvent | PrimaryListingCancelledEvent | PrimaryListingCommentedEvent | PrimaryListingPurchasedEvent | SecondaryListingCreatedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent;
     

@@ -23,7 +23,15 @@ export const TokenError = {
   /**
    * `batch_mint` exceeds the event budget (`common::batch_mint_fits`)
    */
-  7205 : { message: "BatchTooLarge" }
+  7205 : { message: "BatchTooLarge" },
+  /**
+   * `launch` minters list does not contain the pinned platform Minter
+   */
+  7206 : { message: "MinterNotGranted" },
+  /**
+   * The collection name contains `"`, `\` or a control character
+   */
+  7207 : { message: "InvalidName" }
 }
 
 /**
@@ -60,7 +68,6 @@ export interface MetadataUpdatedEvent {
   data: {
     name?: string;
     symbol?: string;
-    uri?: string;
   };
 }
 
@@ -71,10 +78,8 @@ export interface TokenInitializedEvent {
   name: "TokenInitialized";
   data: {
     admin: string;
-    uri?: string;
     name?: string;
     symbol?: string;
-    version?: string;
   };
 }
 
@@ -157,7 +162,7 @@ export const CommonError = {
    */
   7008 : { message: "AdminNotSet" },
   /**
-   * `CurrentVersion` missing from storage.
+   * The Manager's own `CurrentManagerVersion` missing from storage.
    */
   7009 : { message: "VersionNotSet" },
   /**
@@ -197,16 +202,6 @@ export interface UpgradedEvent {
   data: {
     from_hash: Uint8Array;
     to_hash: Uint8Array;
-    version?: string;
-  };
-}
-
-/**
- * Emitted by `sync_version`.
- */
-export interface VersionSyncedEvent {
-  name: "VersionSynced";
-  data: {
     version?: string;
   };
 }
@@ -316,6 +311,18 @@ export interface TransferEvent {
 }
 
 /**
+ * Event emitted when approval for all tokens is granted.
+ */
+export interface ApproveForAllEvent {
+  name: "ApproveForAll";
+  data: {
+    owner: string;
+    operator?: string;
+    live_until_ledger?: number;
+  };
+}
+
+/**
  * Error Enum: NonFungibleTokenError
  */
 export const NonFungibleTokenError = {
@@ -383,5 +390,5 @@ export const NonFungibleTokenError = {
    */
   214 : { message: "SymbolMaxLenExceeded" }
 }
-    export type ContractEvent = TokenLaunchedEvent | MintWithMinterEvent | MetadataUpdatedEvent | TokenInitializedEvent | MintBatchWithMinterEvent | MintAuthorityChangedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VersionSyncedEvent | DelegateChangedEvent | DelegateVotesChangedEvent | MintEvent | ApproveEvent | TransferEvent;
+    export type ContractEvent = TokenLaunchedEvent | MintWithMinterEvent | MetadataUpdatedEvent | TokenInitializedEvent | MintBatchWithMinterEvent | MintAuthorityChangedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | DelegateChangedEvent | DelegateVotesChangedEvent | MintEvent | ApproveEvent | TransferEvent | ApproveForAllEvent;
     

@@ -49,9 +49,33 @@ export const Error = {
    */
   7311 : { message: "AlreadySeeded" },
   /**
-   * A settings string is longer than `common::MAX_STRING_LENGTH`
+   * A settings or artwork string is longer than its cap
    */
-  7312 : { message: "StringTooLong" }
+  7312 : { message: "StringTooLong" },
+  /**
+   * An artwork name contains `"`, `\` or a control character
+   */
+  7313 : { message: "InvalidName" },
+  /**
+   * More than `MAX_IPFS_GROUPS` distinct IPFS groups
+   */
+  7314 : { message: "TooManyIpfsGroups" },
+  /**
+   * A property would exceed `MAX_ITEMS_PER_PROPERTY` items
+   */
+  7315 : { message: "PropertyFull" },
+  /**
+   * A profile is empty or longer than `common::MAX_PROFILE_LENGTH`
+   */
+  7316 : { message: "InvalidProfile" },
+  /**
+   * `update_profile` was given a stale `expected_seq`
+   */
+  7317 : { message: "ProfileSeqMismatch" },
+  /**
+   * The token JSON would exceed its buffer (a string over its cap)
+   */
+  7318 : { message: "TokenUriTooLong" }
 }
 
 /**
@@ -74,6 +98,20 @@ export interface SeedGeneratedEvent {
     token_id: number;
     num_properties?: number;
     selections?: Array<number>;
+  };
+}
+
+/**
+ * The DAO profile (serialized JSON: description, links, image). This event
+ * is the only copy of the text; the chain keeps `hash` and `seq`. `seq` is 0
+ * at creation and increases by one per update.
+ */
+export interface ProfileUpdatedEvent {
+  name: "ProfileUpdated";
+  data: {
+    seq: number;
+    hash?: Uint8Array;
+    profile?: string;
   };
 }
 
@@ -118,28 +156,6 @@ export interface MetadataLaunchedEvent {
 }
 
 /**
- * Event: ProjectURIUpdated
- */
-export interface ProjectURIUpdatedEvent {
-  name: "ProjectURIUpdated";
-  data: {
-    old_uri?: string;
-    new_uri?: string;
-  };
-}
-
-/**
- * Event: DescriptionUpdated
- */
-export interface DescriptionUpdatedEvent {
-  name: "DescriptionUpdated";
-  data: {
-    old_description?: string;
-    new_description?: string;
-  };
-}
-
-/**
  * Event: MetadataInitialized
  */
 export interface MetadataInitializedEvent {
@@ -147,11 +163,7 @@ export interface MetadataInitializedEvent {
   data: {
     token: string;
     renderer_base?: string;
-    version?: string;
     admin?: string;
-    project_uri?: string;
-    description?: string;
-    contract_image?: string;
   };
 }
 
@@ -163,17 +175,6 @@ export interface RendererBaseUpdatedEvent {
   data: {
     old_base?: string;
     new_base?: string;
-  };
-}
-
-/**
- * Event: ContractImageUpdated
- */
-export interface ContractImageUpdatedEvent {
-  name: "ContractImageUpdated";
-  data: {
-    old_image?: string;
-    new_image?: string;
   };
 }
 
@@ -197,9 +198,9 @@ export interface Property {
  * Struct: Settings
  */
 export interface Settings {
-  contract_image: string;
-  description: string;
-  project_uri: string;
+  /**
+   * Base URL of the image compositor; `token_uri` points `image` here.
+   */
   renderer_base: string;
   token: string;
 }
@@ -219,6 +220,14 @@ export interface ItemParam {
   is_new_property: boolean;
   name: string;
   property_id: number;
+}
+
+/**
+ * A property's name and item count, without its items.
+ */
+export interface PropertyHeader {
+  item_count: number;
+  name: string;
 }
 
 /**
@@ -272,7 +281,7 @@ export const CommonError = {
    */
   7008 : { message: "AdminNotSet" },
   /**
-   * `CurrentVersion` missing from storage.
+   * The Manager's own `CurrentManagerVersion` missing from storage.
    */
   7009 : { message: "VersionNotSet" },
   /**
@@ -315,15 +324,5 @@ export interface UpgradedEvent {
     version?: string;
   };
 }
-
-/**
- * Emitted by `sync_version`.
- */
-export interface VersionSyncedEvent {
-  name: "VersionSynced";
-  data: {
-    version?: string;
-  };
-}
-    export type ContractEvent = PropertyAddedEvent | SeedGeneratedEvent | SeedsGeneratedEvent | PropertiesResetEvent | MetadataLaunchedEvent | ProjectURIUpdatedEvent | DescriptionUpdatedEvent | MetadataInitializedEvent | RendererBaseUpdatedEvent | ContractImageUpdatedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VersionSyncedEvent;
+    export type ContractEvent = PropertyAddedEvent | SeedGeneratedEvent | ProfileUpdatedEvent | SeedsGeneratedEvent | PropertiesResetEvent | MetadataLaunchedEvent | MetadataInitializedEvent | RendererBaseUpdatedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent;
     
