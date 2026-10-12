@@ -145,8 +145,9 @@ then each DAO.
      needs the new code, e.g. a rename), then propose, vote, queue after `voting_period`, and execute through the
      **Treasury** after `queue_delay` (Governor.execute fails with `UseTreasuryExecute`). A succeeded proposal
      that isn't queued expires 14 days after voting ends; a queued one 14 days after its ETA.
-   - Treasury and Governor upgrade themselves through the Treasury's self-call allowlist (`upgrade`, `migrate`,
-     `sync_version`). If `sync_version` in the same execute still sees old code, put it in a second proposal.
+   - Treasury and Governor upgrade themselves through the Treasury's self-call allowlist (`upgrade`, `migrate`).
+     Nothing needs syncing afterwards: every module's `version()` looks its current hash up in the Manager
+     registry on each read.
    - Manage puts every module upgrade in **one** proposal except the Treasury's, which goes alone: the Treasury
      runs the proposal, so later calls in the same run would still use its old code. The Governor batches safely
      (it has finished with the proposal before the Treasury makes the calls); see
@@ -182,3 +183,12 @@ stellar contract invoke --id <module-address> --network <network> --source-accou
 `LEGACY_MANAGER_VERSION=<active release>`: registers the old Manager hash if needed, registers and approves the
 new one, then calls `upgrade_manager` directly (Manager admin). Upgrade the Manager **before** modules whenever
 module upgrades rely on new Manager reads (the script checks `get_implementation_version` exists).
+
+## Shared Minter upgrades
+
+Every DAO uses one platform Minter, pinned on its Token at launch, so a Minter upgrade reaches every DAO at once
+and needs no proposal. `node scripts/upgrade-contract.mjs minter configs/<network>-manager.json <from-hash>`
+registers and approves the new hash, then the Manager admin calls `minter.upgrade(from, to)` and, for a storage
+change, `minter.migrate()`; both require the Manager admin (`ManagerAdminNotSet`, 7811, when none is set).
+Claim roots, rounds and markers are kept; e2e `shared_minter_upgrades_then_claims_against_the_existing_root`
+covers it. A different Minter address would need every DAO to re-pin it, which this release does not support.

@@ -10,7 +10,7 @@ Scope: the Soroban contracts under `contracts/` after the contract review fixes 
 | Deployer | `params.deployer` of `create_dao` | Authorizes `create_dao` (together with the launch admin); no standing authority afterward |
 | Launch admin | `params.launch_admin` of `create_dao` | Admin of every module (Token, Governor, Treasury, Auction, Marketplace, Metadata) during the setup window. Must also authorize `create_dao`; authorizes `launch_dao` and `update_pending_slug` |
 | Treasury | The DAO Treasury contract | Admin of every module (including itself) from launch onward; acts only through passed proposals |
-| Anyone | Any account | `treasury.execute` for a Queued proposal, auction bid/settle, `marketplace.expire` / `expire_primary`, `metadata.bump_artwork_ttl`, `manager.bump_slug_ttl`, token holders' own actions |
+| Anyone | Any account | `treasury.execute` for a Queued proposal, auction bid/settle, `marketplace.expire` / `expire_primary`, the DAO storage sweep (`ExtendFootprintTTL` / `RestoreFootprint`, no contract call), token holders' own actions |
 
 ## One admin model
 
@@ -46,7 +46,7 @@ Before launch, `token.set_mint_authority`, `auction.unpause`, primary listing cr
 - every module's current `wasm_hash()` is registered and not revoked (`PendingDaoUsesRevokedImplementation`, 7121), checked before any launch call;
 - the Token's voting supply is greater than zero (`LaunchSupplyZero`, 7120): at least one token is held by someone other than the Treasury, Auction or Marketplace;
 - the Auction and Marketplace payment assets equal those recorded at `create_dao` (`PaymentTokenMismatch` / `PaymentAssetMismatch`);
-- the mint-authority set is fixed by the Manager: Treasury and Marketplace always, Auction if `launch_auction`, and the admin-registered platform minter if `enable_minter` (`PlatformMinterNotSet`, 7108; `PlatformMinterMismatch`, 7110, unless `expected_minter` equals it).
+- the mint-authority set is fixed by the Manager: Treasury and Marketplace always, Auction if `launch_auction`, and the admin-registered platform Minter, always (`PlatformMinterNotSet`, 7108; `PlatformMinterMismatch`, 7110, unless the launch config's `minter` equals it). The Token pins that Minter at launch (`token.minter()`); it cannot be changed afterwards.
 
 ## Voting supply and quorum
 
@@ -67,7 +67,7 @@ These behaviors are covered by `contracts/token` (`delegation_security`) and the
 3. The Treasury calls `governor.consume(...)`, which requires the Treasury's auth, checks the proposal is Queued, past its ETA (`ProposalNotReady`, 7513) and unexpired, marks it Executed and emits `ProposalExecuted`.
 4. The Treasury dispatches each action in order and emits one `Execute` event per action:
    - target = Treasury, function `authorize`: stores extra authorization trees for the next action (see below);
-   - target = Treasury, any other function: the allowlist `upgrade(from, to)`, `migrate()`, `sync_version()`; anything else fails with `UnknownSelfCall` (7602) or `InvalidSelfCallArgs` (7603);
+   - target = Treasury, any other function: the allowlist `upgrade(from, to)`, `migrate()`; anything else fails with `UnknownSelfCall` (7602) or `InvalidSelfCallArgs` (7603);
    - any other target: invoked with the Treasury authorizing exactly that call, plus any trees from a preceding `authorize`.
 5. Any failing action reverts the whole transaction, including the Executed mark. The proposal stays Queued and can be retried until it expires.
 
@@ -138,7 +138,7 @@ A code therefore identifies its crate even when it surfaces through a cross-cont
 
 ## TTL and archival
 
-See [TTL_ECONOMICS.md](./TTL_ECONOMICS.md) for the policy. In short: instances are extended to ~170 days when fewer than 60 days remain; long-lived persistent entries (registry, slugs, delegations, mint authorities, artwork, refunds, minter claims) to the network cap when fewer than 30 days remain; proposals to 120 days (covers the longest lifecycle of 104 days) when fewer than 30 remain; listings to 30 days when fewer than 7 remain. Every Minter entry point extends the Minter's own instance. `metadata.bump_artwork_ttl` and `manager.bump_slug_ttl` are permissionless renewals.
+See [TTL_ECONOMICS.md](./TTL_ECONOMICS.md) for the policy. In short: instances are extended to ~170 days when fewer than 60 days remain; long-lived persistent entries (registry, slugs, delegations, mint authorities, artwork, refunds, minter claims) to the network cap when fewer than 30 days remain; proposals to 120 days (covers the longest lifecycle of 104 days) when fewer than 30 remain; listings to 30 days when fewer than 7 remain. Every Minter entry point extends the Minter's own instance. Contracts bump shared code only to 4 days (when under 2), so a caller never pays more than a few days of code rent; the platform prepays code. Everything else a DAO owns is renewed by a permissionless sweep built from chain reads; the payer is whoever signs.
 
 ## Known limitations
 
@@ -153,7 +153,7 @@ These are behaviors of the current contracts, not planned fixes.
 - Proposal ids do not include the proposer. An identical-payload proposal can be front-run and then cancelled by its proposer; an honest proposer changes the description.
 - Slug front-running at launch (see [Slugs](#slugs)).
 - Payment assets must be plain, non-regulated Stellar Asset Contracts. AUTH_REQUIRED, clawback, fee-on-transfer or rebasing assets can freeze or misprice settlement.
-- Manager admin trust. The admin selects the hashes future DAOs deploy, can revoke implementations, pause the factory and register the platform minter (pinned by `expected_minter`). Creators should verify `DaoCreated.wasm_hashes` before launch. The admin is a single address with a two-step handover and no timelock; `PendingAdmin` has no expiry (withdraw with `cancel_pending_admin`).
+- Manager admin trust. The admin selects the hashes future DAOs deploy, can revoke implementations, pause the factory and register the platform Minter (pinned by the launch config's `minter`). Because every DAO shares one Minter, the Manager admin can also upgrade it (`minter.upgrade`, registry-approved hashes only) for every DAO at once; Minter state (roots, rounds, markers) survives the upgrade. Creators should verify `DaoCreated.wasm_hashes` before launch. The admin is a single address with a two-step handover and no timelock; `PendingAdmin` has no expiry (withdraw with `cancel_pending_admin`).
 - Archival assumptions. The design assumes protocol 23+ automatic restoration where footprints allow, plus periodic maintenance (see MONITORING.md).
 
 ## Application trust boundaries
@@ -194,11 +194,18 @@ governance. Holder preparation rechecks current on-chain NFT owner, not merely
 indexed ownership. Delegation applies to the account's owned voting units;
 single-token approval revocation is not collection-wide permission revocation.
 
-Minter claims use current registered Minter, Live/mint authority, method/round and
-recipient-bound proof; restoration-required simulations are rejected. The client
-rechecks reviewed state before signing. Allocation descriptors currently validate
-only and cannot be submitted through the shared governance encoder. This limitation
-must not be confused with implemented claimant signing.
+Minter claims use the Minter pinned on the Token, Live/mint authority, the current
+round and a recipient-bound Merkle proof; restoration-required simulations are
+rejected. The claim list is fetched from the root's `tree_uri` and rebuilt: the app
+offers a proof only when the rebuilt root equals the chain's, and uses the rebuilt
+proof, never the file's. The client rechecks reviewed state before signing.
+Allocations (`set_merkle_root`, `mint_batch`) are governance actions with exact-spec
+encoding.
+
+Display text is not authenticated by storage: the DAO profile is shown only when the
+indexed text hashes to Metadata's `profile_hash()`; otherwise the app says the profile
+is unavailable. Every app signature passes a fee guard that refuses a transaction able
+to charge more than 50 XLM.
 
 Creation/launch recovery saves finite signed envelopes separately from RPC
 acceptance. Rebroadcast preserves exact bytes/hash; reviewed configuration and

@@ -189,7 +189,7 @@ share topics (enforced by `contractEvents()`). Each module's launch event has it
 | `PaymentAssetUpdated` / `SecondaryFeeUpdated` / `MarketplacePaused` / `MarketplaceUnpaused` | marketplace | `changed_by` | unchanged | `changed_by` topic added |
 | `ManagerInitialized` / `ImplementationRegistered` / `UpgradeApproved` / `ImplementationRevoked` / `ManagerUpgraded` | manager | unchanged | `*_ledger` replaces `*_at` | fields hold ledger numbers |
 | `MintAuthorityChanged` | token | `authority` | `old_enabled`, `enabled`, `changed_by` | also emitted per minter at launch |
-| `DaoLaunched` | manager | `token_address` | `launched_ledger`, `modules`, `launch_auction`, `launch_marketplace`, `enable_minter` | `enable_minter` added |
+| `DaoLaunched` | manager | `token_address` | `launched_ledger`, `modules`, `launch_auction`, `launch_marketplace`, `minter` | `minter` (the pinned shared Minter) replaces `enable_minter` (0.3.0) |
 | `AdminProposed` | manager | `current_admin`, `proposed_admin` | none | new |
 | `AdminChanged` | manager | `old_admin`, `new_admin` | none | new |
 | `PlatformMinterSet` | manager | `minter` | none | new |
@@ -206,10 +206,13 @@ share topics (enforced by `contractEvents()`). Each module's launch event has it
 | `ListingPurchased` / `ListingCancelled` / `ListingExpired` | marketplace | `token_id` (+`buyer`) | unchanged | secondary only |
 | `MarketplacePaused` | marketplace | none | none | may be emitted at launch |
 | `Upgraded` | token, governor, treasury, auction, marketplace, metadata (defined once in `contracts/common/src/upgrade.rs`) | `from_hash`, `to_hash` | `version` | new; replaces marketplace-only `MarketplaceUpgraded`; public activity row `<role>.upgraded` ("Contract upgraded to version V (from -> to)", hashes shortened to 8 chars) |
-| `VersionSynced` | same six modules | none | `version` | new; admin activity row `<role>.version_synced` |
+| `ProfileUpdated` | metadata | `seq` | `hash`, `profile` | new (0.3.0); the profile JSON lives only here. Public activity row except seq 0 (the initial profile, admin) |
+| `MetadataInitialized` | metadata | `token` | `renderer_base`, `admin` | description, project URI and contract image removed (0.3.0) |
+| `MerkleRootSetEvent` | minter | `token_id` | `root`, `round`, `tree_uri` | `tree_uri` added (0.3.0); public row "Claim round N opened" |
 | `AdminProposalCancelled` | manager | `current_admin`, `cancelled_admin` | none | new; admin activity row `manager.admin_proposal_cancelled` |
 | `DaoCreated` | manager | `token_address`, `deployer`, `launch_admin` | `created_ledger`, `modules`, `wasm_hashes` | `wasm_hashes` (struct of six BytesN<32>: token, metadata, auction, governor, treasury, marketplace) decodes to a nested object in `args` |
 | `PropertiesReset` | metadata | none | `old_num_properties` | renamed from `num_properties` |
+| removed (0.3.0) | `VersionSynced` (versions follow the registry); metadata `DescriptionUpdated`, `ProjectURIUpdated`, `ContractImageUpdated`; Minter `AllowlistSetEvent`, `AllowlistClaimEvent` | | | no longer emitted or decoded |
 | removed | shared `Launched`; OpenZeppelin `OwnershipTransfer`, `OwnershipTransferCompleted`, `OwnershipRenounced`; marketplace `MarketplaceUpgraded`; governor `TreasuryChanged`, `TokenContractChanged`, `GovernorAuthorityChanged`; treasury `GovernorChanged`; auction `TreasuryUpdated` | | | no longer emitted or decoded |
 
 ### Common-crate events

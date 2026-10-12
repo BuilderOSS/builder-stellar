@@ -53,7 +53,7 @@ The timestamp helper accepts epoch milliseconds, epoch seconds, ISO timestamps, 
 
 ## Maintenance and investigation
 
-Use [TTL maintenance](TTL_ECONOMICS.md) for shared-code renewal and explicit artwork windows. Manager registry entries (implementations, approvals, latest selection, pending admin, slugs) are persistent and renewed only when touched; `bump_slug_ttl(slug)` renews a claimed slug permissionlessly. Artwork reads page at most 50 entries (`LimitTooHigh`, 7309). The admin report is code/artwork-specific and not an automatic sweep of all persistent rights. No renewal scheduler is installed.
+Use [storage and TTL](TTL_ECONOMICS.md) for renewal. The platform renews shared code, the Manager registry and the shared Minter with `scripts/renew-code-ttl.mjs`; each DAO renews everything it owns (slug included) with one sweep from Manage → Storage renewal or `scripts/renew-dao.mjs`, which also restores archived keys. Watch the Renewal tab's expiry dates or run `renew-dao.mjs --dry-run` per DAO; per-holder entries (owners, balances, refunds, claim markers) renew on use. No renewal scheduler is installed.
 
 For missing indexed data, first compare artifact/network/start ledger and scoped contract IDs; then inspect pipeline processing/transform errors with the configured Goldsky CLI. The wrapper and CLI prerequisite caveat are in [the package README](../packages/goldsky/README.md). Do not print secrets to diagnose configuration.
 

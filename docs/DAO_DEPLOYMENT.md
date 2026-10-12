@@ -28,14 +28,14 @@ The default signing identity is `<network>-admin`; `DEPLOY_IDENTITY` overrides i
 
 | Section | Fields and meaning |
 | --- | --- |
-| Identity | `deployer`, `launchAdmin`, nonnegative `nonce`; `token.name`, `symbol`, `uri` |
-| Slug | top-level `slug`: unique DAO identifier (4-63 chars `[a-z0-9-]`, no leading/trailing/double hyphen). `create_dao` only **requests** it (rejecting a slug a launched DAO holds; several pending DAOs may request the same one); `launch_dao` **claims** it, first launch wins (`SlugTaken`, 7123; rename with `manager.update_pending_slug(token, slug)` and retry). After launch it changes only by vote: `manager.change_slug(token, new_slug)` from the Treasury (Manager 0.2.0+), which frees the old slug at once. Renew its storage with the permissionless `bump_slug_ttl(slug)`. **Before production:** decide on slug pricing (ENS-style length-tiered rent / brand reserve); see `TODO(pricing)` in `validate_slug` |
-| Metadata | `projectUri`, `description`, `contractImage`, `rendererBase` (each at most 256 characters, `StringTooLong` 7312); artwork `properties` and `ipfs.baseUri`/`extension` |
+| Identity | `deployer`, `launchAdmin`, nonnegative `nonce`; `token.name` (no quotes, backslashes or control characters: the token JSON copies it, `InvalidName` 7207), `token.symbol`. There is no token URI: `token_uri` is built on-chain |
+| Slug | top-level `slug`: unique DAO identifier (4-63 chars `[a-z0-9-]`, no leading/trailing/double hyphen). `create_dao` only **requests** it (rejecting a slug a launched DAO holds; several pending DAOs may request the same one); `launch_dao` **claims** it, first launch wins (`SlugTaken`, 7123; rename with `manager.update_pending_slug(token, slug)` and retry). After launch it changes only by vote: `manager.change_slug(token, new_slug)` from the Treasury (Manager 0.2.0+), which frees the old slug at once. Its two storage entries renew with the DAO's storage sweep (`scripts/renew-dao.mjs` or Manage → Storage renewal). **Before production:** decide on slug pricing (ENS-style length-tiered rent / brand reserve); see `TODO(pricing)` in `validate_slug` |
+| Metadata | `profile`: `{ description, links: [{ label, url }], image }`, serialized to JSON of at most 4,096 bytes (markdown description, up to 8 links); it is emitted in a `ProfileUpdated` event and only its hash is stored. `rendererBase` (at most 256 characters, `StringTooLong` 7312) is the image compositor `token_uri` points at, normally `<web origin>/api/render`. Artwork `properties` and `ipfs.baseUri`/`extension` |
 | Auction | `duration` (300–2,592,000 seconds), `reservePrice` (integer base units, at least 1,000), `timeBuffer` (1–86,400 seconds), `paymentAsset` (contract address). Violations: `InvalidConfig` (7408) / Manager `InvalidConfig` |
 | Marketplace | `paymentAsset` (defaults to auction asset in CLI), `secondaryFeeBps` (0–2,500 = at most 25%, `InvalidFee` 7125; CLI default 250) |
 | Governance | `votingDelay`, `votingPeriod`, `queueDelay` (each 300–2,592,000 seconds), `quorumBps` (1–10,000), `proposalThreshold` (absolute votes, not basis points; at most the voting supply) |
 | Founders | Array of `{ "address": "<funded account>", "amount": 1 }`; CLI requires positive supply and threshold no greater than founder total |
-| Launch | `launchAuction`, `launchMarketplace`, `enableMinter`; enablement is applied at launch, not module deployment |
+| Launch | `launchAuction`, `launchMarketplace`; applied at launch, not module deployment. Every DAO launches with the shared platform Minter; the CLI reads and pins it |
 
 Prefer decimal strings for large base-unit amounts. For the native SAC, `10000000` base units is 1 XLM; `1000000000` is 100 XLM. The CLI requires a SAC contract address, not the literal string `native`. The repository's [e2e template](../configs/e2e-testnet-dao.json) documents native-SAC resolution.
 
@@ -61,9 +61,9 @@ During Setup, admin setters and approved module upgrades are available. Minter o
 - Nonzero **voting** supply (`LaunchSupplyZero`, 7120): founders minted only to the Treasury, Auction or Marketplace do not count.
 - Every module's current hash registered and not revoked.
 - Auction/Marketplace assets matching creation.
-- If Minter is enabled, `expected_minter` matching the Manager-registered platform Minter. The CLI reads and pins it automatically.
+- `minter` equal to the Manager-registered platform Minter (`PlatformMinterMismatch`, 7110). The CLI reads and pins it automatically; the web shows it in the launch review.
 
-Manager launches Token → Governor → Treasury → Marketplace → Auction → Metadata. Every module becomes Live with the Treasury as admin (`AdminChanged`). Treasury/Marketplace are Token minters; Auction is included when started; the optional platform Minter is included when enabled. The slug is claimed (`SlugClaimed`) and `PendingDao` is deleted.
+Manager launches Token → Governor → Treasury → Marketplace → Auction → Metadata. Every module becomes Live with the Treasury as admin (`AdminChanged`). Treasury/Marketplace are Token minters; Auction is included when started; the shared Minter is always included and pinned on the Token (`token.minter()`). The slug is claimed (`SlugClaimed`) and `PendingDao` is deleted.
 
 A failed launch reverts that transaction and leaves the DAO pending. It does not undo earlier setup transactions. A second Manager launch has no pending record to consume.
 
@@ -95,6 +95,16 @@ WHERE deployment_id = 'manager:<Manager contract address>'
 SQL names are `launched_*`; frontend DTO aliases may be `finalized_*`. `GET /api/dao/<Token contract address>` returns lookup status. For missing rows, inspect the selected artifact/start ledger and pipeline status from `packages/goldsky`; see [indexer setup](GOLDSKY_SETUP.md). Do not manually change the view's lifecycle status.
 
 Launch errors include `LaunchSupplyZero` (7120), `SlugTaken` (7123), `LaunchAdminNotOwner` (7126), `FactoryPaused` (7111), `PendingDaoUsesRevokedImplementation` (7121), `PlatformMinterNotSet` (7108), `PlatformMinterMismatch` (7110), and module payment-asset mismatch errors. A revoked pending module can be upgraded along an approved transition before retrying launch. Error codes are unique across contracts (one 100-code block per contract, 7000-7899).
+
+## Storage renewal
+
+A DAO's state lives for a paid stretch of time. Anyone can renew everything the DAO owns in one transaction:
+
+```bash
+node scripts/renew-dao.mjs --network testnet --token <Token contract address> --days 90 --source <identity> [--dry-run]
+```
+
+The web app offers the same under Manage → Storage renewal, with expiry dates and a simulated price. Shared contract code is the platform's to renew. Costs and the full key list are in [TTL_ECONOMICS](TTL_ECONOMICS.md).
 
 ## Tests and testnet rehearsal
 

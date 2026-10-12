@@ -50,7 +50,7 @@ The canonical `daoId` is the Token contract address. The DAO layout also resolve
 
 ## Creation, local drafts, and recovery
 
-Identity collects image/name/symbol and the unique DAO slug. Membership adds description, project URL, Auction settings, and Marketplace settings; Governance includes queue delay, voting delay/period, quorum, and an absolute vote threshold. There is no separate purpose step. Disabled modules still receive valid constructor configuration and are deployed.
+Identity collects image/name/symbol and the unique DAO slug. Membership adds the markdown description and up to eight links (the profile is at most 4 KB), Auction settings, and Marketplace settings; Governance includes queue delay, voting delay/period, quorum, and an absolute vote threshold. There is no separate purpose step. Disabled modules still receive valid constructor configuration and are deployed.
 
 Guest drafts can be prepared before sign-in. Multiple drafts support resume, duplicate, and guarded delete. Creation captures a normalized reviewed configuration and fingerprint, compares it with durable state after locking/rehydration, and freezes it with the nonce and predicted addresses. A changed configuration requires review again; recovery cannot silently substitute different settings.
 
@@ -77,15 +77,15 @@ Sources: [funding](src/lib/treasury-service/funding.ts), [holder preparation](sr
 
 ## Minter claims and allocation capability
 
-`/claims` reads the current Manager platform Minter, Live Token/mint authority, per-method rounds, membership/claim markers, and separate indexed history. Claims are free token allocations; the wallet pays XLM network fees, not a mint price. Allowlist uses the configured fixed amount; Merkle claims require an organizer-supplied proof bound to the authenticated recipient, amount, current root and round. Proofs contain at most 32 siblings. The app does not generate the Merkle tree or distribute proofs.
+`/claims` reads the Minter pinned on the Token (`token.minter()`), Live Token/mint authority, the current round, root and `tree_uri`, the connected wallet's claim marker, and separate indexed history. Claims are free token allocations; the wallet pays XLM network fees, not a mint price. Claims are Merkle-only: the app fetches the published claim list from `tree_uri`, rebuilds the tree, and offers the connected wallet's amount and proof only when the rebuilt root equals the chain's (a proof file can be supplied by hand as a fallback). Proofs contain at most 32 siblings. Tree format: `builder-stellar-merkle-v1` ([tree](src/lib/minter/tree.ts)).
 
 The preparation API loads/checks the deployed Minter ABI, simulates eligibility, rejects restoration-required simulations, then rechecks Minter/round/root/amount/authority. The client reviews and verifies the unsigned claim envelope, rechecks wallet/session/state before signing, submits it, and distinguishes confirmation from indexed history. No body-supplied recipient or contract chooses the claim authority.
 
-`/admin/claims` reviews Merkle-root updates, allowlist replacement, and batch allocations before adding registered actions to the scoped governance draft. The current Manager registration and RPC-validated Minter spec establish the trusted target; Token Live state, Treasury as Token admin, and Minter mint authority are rechecked. Batch allocations take at most 18 recipients and must fit the batch-mint event budget. Adding an action does not sign or execute it: proposal creation, voting, queueing, and Treasury execution remain separate. Sources: [claim service](src/lib/minter/service.ts), [allocation review](src/components/minter/allocation-draft.tsx), [allocation action adapter](src/lib/minter/allocation-proposal.ts), and [action registry](src/lib/proposal-actions/registry.ts).
+`/admin/claims` builds a claim round from `address amount` lines (up to 10,000 recipients): it builds the tree in the browser, uploads the file to IPFS, and adds `set_merkle_root(token, root, tree_uri)` to the governance draft. Batch allocations (`mint_batch`) go the same way. The Minter pinned on the Token and its RPC-validated spec establish the trusted target; Token Live state, Treasury as Token admin, and Minter mint authority are rechecked. Batch allocations take at most 18 recipients and must fit the batch-mint event budget. Adding an action does not sign or execute it: proposal creation, voting, queueing, and Treasury execution remain separate. Sources: [claim service](src/lib/minter/service.ts), [allocation review](src/components/minter/allocation-draft.tsx), [allocation action adapter](src/lib/minter/allocation-proposal.ts), and [action registry](src/lib/proposal-actions/registry.ts).
 
 ## Artwork and module upgrades
 
-Artwork administration reads Metadata's `admin()`/wired Token, supports paginated item/IPFS inspection, direct setup settings, registered post-launch setting/append proposals, and lists tokens minted without traits for `regenerate` (direct in setup, proposal after launch; `/api/dao/:id/tokens/unseeded`). Settings strings are capped at 256 bytes. Destructive resets are not registered in the composer. Append review includes current property counts and ordering; state can change before governance execution.
+Artwork administration reads Metadata's `admin()`/wired Token, supports paginated item/IPFS inspection, the renderer base setting, registered post-launch renderer/append proposals, and lists tokens minted without traits for `regenerate` (direct in setup, proposal after launch; `/api/dao/:id/tokens/unseeded`). Settings strings are capped at 256 bytes. Destructive resets are not registered in the composer. Append review includes current property counts and ordering; state can change before governance execution.
 
 Upgrade cards read current module hash/version/storage version/admin, Manager registration, candidate hash/revocation, and exact directional approval. They can prepare a registered upgrade or `migrate` proposal after rechecking admin/approval (Metadata included), but do not upload WASM, register implementations, or grant approval. Manager latest lookup is only a candidate convenience, not approval evidence. See [upgrade cards](src/components/admin/module-version-card.tsx) and [action registry](src/lib/proposal-actions/registry.ts).
 
@@ -122,6 +122,24 @@ The auction route serves the open auction, its bids and its extended end time
 from the index, with a cached RPC fallback. Bidding, settlement and trades still
 recheck live state when prepared.
 
+Some reads come from chain on purpose ([`lib/chain-reads`](src/lib/chain-reads)):
+- the community profile is the indexed `ProfileUpdated` JSON, shown only when its
+  sha256 equals Metadata's `profile_hash()` (cached 60 s per contract and seq);
+  otherwise the page says "Profile unavailable right now";
+- token JSON is the on-chain `token_uri`, and images are composited from the
+  on-chain layer registry (`/api/render?contract=&token=` is the renderer base a
+  DAO's `token_uri` points at);
+- the proposal list falls back to `proposal_count` / `ProposalId(seq)` /
+  `proposal(id)` when the indexer is down (no titles or vote totals);
+- Manage → Storage renewal builds the DAO's whole key inventory from RPC, quotes
+  the sweep by simulation and renews it in one transaction
+  ([TTL_ECONOMICS](../../docs/TTL_ECONOMICS.md)).
+
+Every signature goes through `signWithWallet`, which refuses a transaction able to
+charge more than 50 XLM ([fee guard](src/lib/fee/fee-guard.ts)). The stellar-sdk
+is patched (`patches/`) so `AssembledTransaction.sign` no longer counts the
+resource fee twice.
+
 The activity feed shows curated public/governance rows only (see
 `docs/DATABASE_SCHEMA.md`), formatted by `lib/activity-feed.ts` into a category,
 a plain sentence, a relative time and a link.
@@ -138,7 +156,7 @@ All DAO reads are deployment-scoped. Private trading helpers require a session.
 | Treasury `GET history?page=0`, `GET readiness?assetCode=XLM`, `POST prepare` | 12 execution calls/page (0–1000); funding request `{ assetCode: "XLM" | "USDC", amount: "decimal" }`; same-origin/session-derived unsigned transfer |
 | `GET /api/dao/[daoId]/tokens/[tokenId]`, `POST /tokens/prepare` | Current/indexed holder source; strict transfer/approve/revoke/delegate requests, session-derived actor |
 | `GET /api/dao/[daoId]/auctions/history` | Scoped terminal history with limit/offset and optional matching network |
-| Claims `GET`, `GET history`, `POST prepare` | Live allocation state, separate indexed claims, unsigned allowlist/Merkle claim preparation; not allocation writes |
+| Claims `GET`, `GET history`, `POST prepare` | Live allocation state, separate indexed claims, unsigned Merkle claim preparation; not allocation writes |
 | `GET /api/marketplace` | Community directory |
 | `GET /api/marketplace/offers` | Primary/secondary offers across scoped communities, not bid/offer-making support |
 | `GET /api/dao/[daoId]/marketplace` | DAO listings, sales and verified live config |
@@ -149,7 +167,8 @@ All DAO reads are deployment-scoped. Private trading helpers require a session.
 | `GET /api/auth/sep10/challenge`, `POST /api/auth/sep10/verify` | Transaction-proof fallback; unsupported-message signing differs from wallet rejection |
 | `GET /api/health`, `/api/goldsky/health` | Different health semantics; see [monitoring](../../docs/MONITORING.md) |
 | `/api/uploads/*`, `/api/pinata/*` | Upload services; feature flags and server credentials apply; no AI generation endpoint |
-| `GET /api/render/[daoId]/[tokenId]` | Token artwork renderer |
+| `GET /api/render/[daoId]/[tokenId]`, `GET /api/render?contract=&token=` | Token artwork renderer; the query form is the `renderer_base` on-chain `token_uri` points at |
+| `GET /api/dao/[daoId]/token/[tokenId]` | The decoded on-chain `token_uri` JSON |
 
 Marketplace query filters are `search` (≤120 characters), `page` (0–500), `kind=all|primary|secondary`, `status=all|open|purchased|cancelled|expired`, and `capability=all|marketplace|auction|metadata`. Community pages use 24 rows; combined offers page each kind independently (12 per kind, or 24 for one kind). Expired open rows can display `awaiting-expiry` until recovery is indexed. Successful responses are private/no-store. Route handlers and `src/lib/marketplace` are the full request/response authority.
 
@@ -172,6 +191,6 @@ pnpm typecheck
 pnpm build
 ```
 
-Run after generation prerequisites. Tests cover creation envelope acceptance/rebroadcast/frozen review, local stores, artwork, theme, proposal ABI/receipts, marketplace, Treasury funding, holder controls, member pagination, auction state/history, Minter proof/spec/storage, and weighted SEP-10 accounts. The TTL live test is opt-in; do not point tests at live services without reviewing their environment gates. No full-suite passing count or live UX verification is asserted here. CI runs web codegen before lint/typecheck/tests and a separate Build Web job; it no longer uses the old DAO build/bindings aliases.
+Run after generation prerequisites. Tests cover creation envelope acceptance/rebroadcast/frozen review, local stores, artwork, theme, proposal ABI/receipts, marketplace, Treasury funding, holder controls, member pagination, auction state/history, Minter proof/tree/spec/storage, renewal inventory, fee guard, and weighted SEP-10 accounts. do not point tests at live services without reviewing their environment gates. No full-suite passing count or live UX verification is asserted here. CI runs web codegen before lint/typecheck/tests and a separate Build Web job; it no longer uses the old DAO build/bindings aliases.
 
 Read model availability, RPC, wallet, supported assets, and upload configuration are separate dependencies. Browser-local storage is not an access-control boundary on a shared browser. Submission can be confirmed before discovery/receipts appear. TTL reporting/renewal is limited to the implemented code/artwork paths; see [TTL maintenance](../../docs/TTL_ECONOMICS.md).
