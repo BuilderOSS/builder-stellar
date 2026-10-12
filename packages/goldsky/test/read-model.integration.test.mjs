@@ -153,6 +153,12 @@ function buildScenario() {
   emit('manager', 'CMANAGER', 'implementation_registered', { topics: [bytes('a31')], data: { name: str('Governor'), version: str('0.1.0'), published_ledger: u64(100) }, ledger: 100, evt: 2 });
   emit('auction', d1.auction, 'migrated', { data: { from_storage_version: u32(1), to_storage_version: u32(2) }, ledger: 119 });
   emit('manager', 'CMANAGER', 'platform_minter_set', { topics: [addr(MINTER)], ledger: 106 });
+  // Platform events (no DAO of their own): fanned out to every DAO's feed by app.activity_feed (0015).
+  emit('manager', 'CMANAGER', 'upgrade_delay_changed', { data: { from_ledgers: u32(720), to_ledgers: u32(120), effective_ledger: u32(880) }, ledger: 200 });
+  emit('manager', 'CMANAGER', 'manager_upgraded', { topics: [bytes('mg1'), bytes('mg2')], data: { from_version: str('0.1.0'), to_version: str('0.2.0'), upgraded_ledger: u64(201) }, ledger: 201 });
+  emit('minter', MINTER, 'upgraded', { topics: [bytes('mi1'), bytes('mi2')], data: { version: str('0.2.0') }, ledger: 202 });
+  emit('minter', MINTER, 'migrated', { data: { from_storage_version: u32(1), to_storage_version: u32(2) }, ledger: 202, evt: 1 });
+  emit('minter', MINTER, 'upgrade_delay_changed', { data: { from_ledgers: u32(120), to_ledgers: u32(720), effective_ledger: u32(203) }, ledger: 203 });
   emit('auction', d1.auction, 'unpaused', { ledger: 130 });
   // After launch: a rename (token 0.2.0 MetadataUpdated) and a vote that closes the market.
   emit('token', d1.token, 'metadata_updated', { data: { name: str('Alpha Club'), symbol: str('ALPHA') }, ledger: 150, tx: 7 });
@@ -698,10 +704,10 @@ test('module upgrades and wasm hashes: keyed by emitting contract, filtered by d
   assert.equal(one(`SELECT current_version FROM manager.module_versions WHERE dao_id = 'CTOK1' AND module_role = 'governor'`).current_version, '0.1.0');
   assert.equal(one(`SELECT current_version FROM manager.module_versions WHERE dao_id = 'CTOK1' AND module_role = 'treasury'`).current_version, null, 'an unregistered hash has no version (on chain: ImplementationNotFound)');
   assert.equal(one(`SELECT count(*)::int AS n FROM manager.module_versions WHERE dao_id = 'CTOK2'`).n, 6);
-  const upgradedFeed = one(`SELECT kind, visibility, summary FROM app.activity_feed WHERE event_name = 'upgraded'`);
+  const upgradedFeed = one(`SELECT kind, visibility, summary FROM app.activity_feed WHERE event_name = 'upgraded' AND contract_role = 'auction'`);
   assert.deepEqual(upgradedFeed, { kind: 'auction.upgraded', visibility: 'public', summary: 'Contract upgraded to version 0.2.0 (a20 -> b20)' });
   assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'admin_proposal_cancelled'`).kind, 'manager.admin_proposal_cancelled');
-  assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'migrated'`).kind, 'auction.migrated');
+  assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'migrated' AND contract_role = 'auction'`).kind, 'auction.migrated');
   assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'admin_changed' AND contract_role = 'manager'`).kind, 'manager.admin_changed');
   assert.equal(one(`SELECT dao_id FROM app.activity_feed WHERE event_name = 'dao_launched' AND contract_role = 'manager'`).dao_id, 'CTOK1', 'launch rows belong to their DAO feed');
   assert.equal(one(`SELECT dao_id FROM app.activity_feed WHERE event_name = 'admin_changed' AND contract_role = 'manager'`).dao_id, null, 'deployment-wide Manager events have no DAO');
@@ -725,17 +731,33 @@ test('minter: claims resolve to the DAO by token_id and foreign tokens are dropp
 test('activity feed: tenant resolution and kinds', { skip }, () => {
   const feed = (where) => rows(`SELECT * FROM app.activity_feed WHERE ${where} ORDER BY ledger_sequence, event_index`);
   const perDao = ['dao_created', 'dao_launched', 'slug_claimed', 'pending_slug_updated', 'slug_changed'];
+  const platform = ['upgrade_delay_changed', 'manager_upgraded', 'upgraded', 'migrated'];
   assert.ok(
-    feed(`contract_role = 'manager'`).every((r) => (perDao.includes(r.event_name) ? r.dao_id !== null : r.dao_id === null)),
-    'per-DAO manager events resolve to their DAO; deployment-wide ones have none'
+    feed(`contract_role = 'manager'`).every((r) => (perDao.includes(r.event_name) || platform.includes(r.event_name) ? r.dao_id !== null : r.dao_id === null)),
+    'per-DAO manager events resolve to their DAO, platform ones to every DAO; deployment-wide ones have none'
   );
   assert.ok(feed(`contract_role = 'governor'`).every((r) => r.dao_id === 'CTOK1'));
-  assert.ok(feed(`contract_role = 'minter'`).every((r) => r.dao_id === 'CTOK1'));
-  assert.equal(feed(`contract_role = 'minter'`).length, 4, 'the foreign-token claim is not visible to any DAO');
-  assert.equal(one(`SELECT count(*)::int AS n FROM app.activity_feed_events WHERE contract_role = 'minter'`).n, 5);
+  assert.ok(feed(`contract_role = 'minter' AND event_name NOT IN ('upgraded', 'migrated', 'upgrade_delay_changed')`).every((r) => r.dao_id === 'CTOK1'));
+  assert.equal(feed(`contract_role = 'minter' AND event_name NOT IN ('upgraded', 'migrated', 'upgrade_delay_changed')`).length, 4, 'the foreign-token claim is not visible to any DAO');
+  assert.equal(one(`SELECT count(*)::int AS n FROM app.activity_feed_events WHERE contract_role = 'minter'`).n, 8);
+
+  // Platform events: one row per DAO in the registry, unique activity ids, public kinds.
+  assert.deepEqual(
+    rows(`SELECT dao_id, count(*)::int AS n FROM app.activity_feed WHERE event_name IN ('upgrade_delay_changed', 'manager_upgraded') OR (contract_role = 'minter' AND event_name IN ('upgraded', 'migrated')) GROUP BY dao_id ORDER BY dao_id`),
+    [{ dao_id: 'CTOK1', n: 5 }, { dao_id: 'CTOK2', n: 5 }]
+  );
+  assert.equal(one(`SELECT (count(*) = count(DISTINCT activity_id)) AS unique_ids FROM app.activity_feed`).unique_ids, true);
+  assert.deepEqual(
+    rows(`SELECT DISTINCT kind, visibility, summary FROM app.activity_feed WHERE event_name = 'upgrade_delay_changed' ORDER BY kind`),
+    [
+      { kind: 'manager.upgrade_delay_changed', visibility: 'public', summary: 'Upgrade notice shortened from 720 to 120 ledgers, in force from ledger 880' },
+      { kind: 'minter.upgrade_delay_changed', visibility: 'public', summary: 'Upgrade notice lengthened from 120 to 720 ledgers' }
+    ]
+  );
+  assert.equal(one(`SELECT count(*)::int AS n FROM app.activity_feed WHERE dao_id IS NULL AND contract_role = 'minter'`).n, 0, 'no Minter row is left without a DAO');
 
   const kinds = rows(`SELECT kind, count(*)::int AS n FROM app.activity_feed WHERE contract_role = 'minter' GROUP BY kind ORDER BY kind`);
-  assert.deepEqual(kinds.map((k) => k.kind), ['minter.batch_mint', 'minter.merkle_claim', 'minter.merkle_root_set']);
+  assert.deepEqual(kinds.map((k) => k.kind), ['minter.batch_mint', 'minter.merkle_claim', 'minter.merkle_root_set', 'minter.migrated', 'minter.upgrade_delay_changed', 'minter.upgraded']);
   const merkle = one(`SELECT actor, amount, token_id, summary FROM app.activity_feed WHERE kind = 'minter.merkle_claim'`);
   assert.deepEqual([merkle.actor, merkle.amount, merkle.token_id], ['GALICE', '3', 'CTOK1']);
   assert.equal(one(`SELECT amount FROM app.activity_feed WHERE kind = 'minter.batch_mint'`).amount, '8');
@@ -748,7 +770,7 @@ test('activity feed: tenant resolution and kinds', { skip }, () => {
 test('indexer status exposes progress without raw events', { skip }, () => {
   const status = one(`SELECT * FROM app.indexer_status`);
   assert.equal(status.deployment_id, DEPLOYMENT);
-  assert.equal(status.latest_ledger, 195);
+  assert.equal(status.latest_ledger, 203);
   assert.equal(status.event_count, events.length);
 });
 
