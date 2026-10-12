@@ -110,6 +110,59 @@ describe('activity feed rows', () => {
     ).toMatchObject({ category: 'Membership', title: '30 tokens allocated', detail: 'Tokens #0–#29' });
   });
 
+  it('names the module in an upgrade and says what a notice change means', () => {
+    expect(
+      formatActivity(
+        item({ event_name: 'upgraded', title: 'Auction upgraded', args: JSON.stringify({ version: '0.3.0' }) })
+      ).title
+    ).toBe('Auction upgraded to version 0.3.0');
+    expect(
+      formatActivity(
+        item({
+          event_name: 'upgrade_delay_changed',
+          title: 'Minter upgrade notice changed',
+          args: JSON.stringify({ from_ledgers: 120960, to_ledgers: 17280, effective_ledger: 5000 })
+        })
+      )
+    ).toMatchObject({
+      category: 'DAO',
+      title: 'Minter upgrade notice changed',
+      detail: 'Shortened from 7d to 1d (120960 → 17280 ledgers), in force from ledger 5000'
+    });
+  });
+
+  it('writes renames, link changes, claim rounds and profile updates as sentences', () => {
+    expect(
+      formatActivity(
+        item({ event_name: 'metadata_updated', args: JSON.stringify({ name: 'Lantern Club', symbol: 'LC' }) })
+      ).title
+    ).toBe('Renamed to Lantern Club (LC)');
+    expect(
+      formatActivity(
+        item({
+          event_name: 'slug_changed',
+          topics: JSON.stringify({ new_slug: 'alpha-club' }),
+          args: JSON.stringify({ old_slug: 'dao-uno' })
+        }),
+        'dao-uno'
+      )
+    ).toMatchObject({
+      title: 'Community link is now /dao/alpha-club',
+      detail: 'Was /dao/dao-uno',
+      href: '/dao/alpha-club'
+    });
+    expect(
+      formatActivity(item({ event_name: 'merkle_root_set_event', topics: JSON.stringify({ round: 2 }) }), 'alpha-club')
+    ).toMatchObject({
+      category: 'Membership',
+      title: 'Claim round 2 opened',
+      href: '/dao/alpha-club/claims'
+    });
+    expect(formatActivity(item({ event_name: 'profile_updated', args: JSON.stringify({ seq: 3 }) })).title).toBe(
+      'Community profile updated'
+    );
+  });
+
   it('explains an unsold auction', () => {
     expect(formatActivity(item({ event_name: 'auction_settled', token_id: '9' })).title).toBe(
       '#9 closed with no bids; it went to the treasury'
