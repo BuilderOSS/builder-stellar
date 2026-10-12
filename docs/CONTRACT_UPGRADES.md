@@ -130,8 +130,8 @@ then each DAO.
       stellar contract invoke --id <manager> --network <network> --source-account <admin> -- \
         set_latest_implementation --name <Name> --wasm_hash <to-hash>
       ```
-   3. New DAOs: set the factory's current hashes (all six, unchanged ones repeated; read them from the
-      `manager.current_implementations` view or the deploy record):
+   3. New DAOs: set the factory's current hashes (all six, unchanged ones repeated; read them with
+      `current_implementations` on the Manager or from the deploy record):
       ```sh
       stellar contract invoke --id <manager> --network <network> --source-account <admin> -- \
         set_current_implementations --token <h> --metadata <h> --auction <h> --governor <h> --treasury <h> --marketplace <h>

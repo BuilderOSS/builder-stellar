@@ -358,7 +358,7 @@ async function addLiveAvailability(daos: DaoConfig[]): Promise<DaoConfig[]> {
     auctionScopes.length
       ? prisma.auctionAuction.findMany({
           where: { deploymentId: DEPLOYMENT_ID, OR: auctionScopes, settled: false, cancelled: false },
-          select: { daoId: true, tokenId: true, endSeconds: true },
+          select: { daoId: true, currentEndSeconds: true },
           orderBy: { createdLedger: 'desc' }
         })
       : [],
@@ -370,24 +370,11 @@ async function addLiveAvailability(daos: DaoConfig[]): Promise<DaoConfig[]> {
       : []
   ]);
 
-  // The newest unsettled auction per community. Late bids push its end out, so an
-  // auction past its first end time is still live if a bid extended it beyond now.
+  // The newest unsettled auction per community is live until its end including
+  // any extensions (auction.auctions.current_end_seconds).
   const current = new Map<string, (typeof auctions)[number]>();
   for (const auction of auctions) if (!current.has(auction.daoId)) current.set(auction.daoId, auction);
-  const live = new Set([...current.values()].filter((a) => a.endSeconds > now).map((a) => a.daoId));
-  const pastFirstEnd = [...current.values()].filter((a) => a.endSeconds <= now);
-  if (pastFirstEnd.length) {
-    const extended = await prisma.auctionBid.findMany({
-      where: {
-        deploymentId: DEPLOYMENT_ID,
-        OR: pastFirstEnd.map((a) => ({ daoId: a.daoId, tokenId: a.tokenId })),
-        newEndSeconds: { gt: now }
-      },
-      select: { daoId: true },
-      distinct: ['daoId']
-    });
-    for (const bid of extended) live.add(bid.daoId);
-  }
+  const live = new Set([...current.values()].filter((a) => a.currentEndSeconds > now).map((a) => a.daoId));
 
   const listings = new Map<string, number>();
   for (const row of [...primary, ...secondary])

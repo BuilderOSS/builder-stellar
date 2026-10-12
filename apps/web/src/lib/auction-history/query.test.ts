@@ -28,7 +28,7 @@ describe('scoped auction history read', () => {
     mocks.config.mockResolvedValue({ tokenContractId: 'DAO_A', auctionContractId: 'AUCTION_A', name: 'testnet' });
     mocks.raw.mockResolvedValue([row]);
   });
-  it('reads existing scoped views, joins settlement identity, and keeps exact strings', async () => {
+  it('reads the scoped auctions view with its outcome columns and keeps exact strings', async () => {
     const result = await readAuctionHistory('url-dao', new URLSearchParams('limit=1&offset=12&network=testnet'));
     expect(result).toMatchObject({
       deploymentId: 'manager:DEPLOYMENT_A',
@@ -49,12 +49,11 @@ describe('scoped auction history read', () => {
     const [parts, ...values] = mocks.raw.mock.calls[0];
     expect(values).toEqual(['manager:DEPLOYMENT_A', 'DAO_A', 'AUCTION_A', 2, 12]);
     const sql = parts.join('?');
-    expect(sql).toContain('s.deployment_id = a.deployment_id AND s.dao_id = a.dao_id');
-    expect(sql).toContain('s.contract_id = a.contract_id AND s.token_id = a.token_id');
+    expect(sql).toContain('FROM auction.auctions a');
     expect(sql).toContain('a.deployment_id = ? AND a.dao_id = ?');
     expect(sql).toContain('a.contract_id = ?');
     expect(sql).toContain('a.token_id::text');
-    expect(sql).toContain('s.amount::text');
+    expect(sql).toContain('a.settled_amount::text AS amount');
     expect(sql).not.toMatch(/INSERT|UPDATE|DELETE/);
   });
   it('does not leak scope across two DAOs, networks or deployment identities', async () => {

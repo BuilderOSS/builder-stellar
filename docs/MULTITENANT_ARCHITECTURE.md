@@ -25,8 +25,8 @@ Manager also retains slug mappings. `DaoCreated.slug` is only a
 request (several pending DAOs may request the same slug); `SlugClaimed` at launch
 makes it unique, and `SlugChanged` (a vote, Manager 0.2.0) moves it and releases the
 old one. `manager.daos.slug` is the current claimed slug once launched, else the
-latest request (`slug_claimed`, `requested_slug`, `claimed_slug` disambiguate;
-`manager.dao_slugs` lists both). Layout resolution filters by deployment, prefers
+latest request (`slug_claimed`, `requested_slug`, `claimed_slug` disambiguate).
+Layout resolution filters by deployment, prefers
 the current claimed slug, then the latest DAO that moved away from it
 (`manager.dao_previous_slugs`, so old links redirect while unclaimed), then an
 unambiguous request, and maps to canonical Token ID. Direct service/API validation still requires its actual documented ID

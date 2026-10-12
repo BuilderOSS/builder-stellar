@@ -620,7 +620,11 @@ transforms:
           // Contract upgrades are the most security-relevant DAO action: public.
           Upgraded: true,
           // A shorter platform notice narrows the window members have to react: public.
-          UpgradeDelayChanged: true
+          UpgradeDelayChanged: true,
+          // The Manager's own upgrade changes who can approve the shared Minter's code: public.
+          ManagerUpgraded: true,
+          // A revoked implementation reaches the feed of every DAO running it (app.activity_feed).
+          ImplementationRevoked: true
         };
 
         var kindMap = {
@@ -942,6 +946,11 @@ transforms:
           PendingSlugUpdated: function() { return 'Requested slug changed to "' + (pick(data, ['slug']) || 'unknown') + '"'; },
           MetadataUpdated: function() { return 'Renamed to ' + (pick(data, ['name']) || 'unknown') + ' (' + (pick(data, ['symbol']) || '?') + ')'; },
           Migrated: function() { return 'Storage migrated from version ' + (pick(data, ['from_storage_version']) || '?') + ' to ' + (pick(data, ['to_storage_version']) || '?'); },
+          ManagerUpgraded: function() { return 'Manager upgraded to version ' + (pick(data, ['to_version']) || '?') + ' (was ' + (pick(data, ['from_version']) || '?') + ')'; },
+          ImplementationRevoked: function() {
+            var h = pick(data, ['wasm_hash']);
+            return 'Contract code ' + (h ? String(h).slice(0, 8) : '?') + ' withdrawn by the platform; communities running it should upgrade when a replacement is announced';
+          },
           // A reduction is in force from effective_ledger; a raise at once.
           UpgradeDelayChanged: function() {
             var from = pick(data, ['from_ledgers']);

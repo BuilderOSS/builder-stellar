@@ -1,39 +1,34 @@
 -- =============================================================================
 -- TREASURY VIEWS
 --
--- Source events (treasury contract):
---   execute  topics governor, target, proposal_id; data { function, index }
---            One event per call executed for a proposal. Treasury.execute is
---            permissionless: it consumes the proposal on the Governor, then
---            dispatches the calls in order (index 0..n-1, same transaction).
---   treasury_launched topic treasury (see manager.module_launches)
---   Proposals may include `authorize` actions aimed at the Treasury itself; they emit an
---   execute row like any other action (function 'authorize').
---
--- The Treasury no longer has a governor setter (GovernorChanged is gone): the
--- Governor is fixed at launch. Per-proposal execution detail with call
--- arguments lives in governance.proposal_execution_calls.
+-- Treasury events (contracts/treasury/src/events.rs):
+--   execute   topics governor, target, proposal_id; data { function, index }
+--             one per call of an executed proposal, all in one transaction;
+--             Treasury.execute is permissionless and consumes the proposal on the
+--             Governor first (proposal_executed, same tx)
+-- Not projected: treasury_initialized (the governor is in DaoCreated),
+-- treasury_launched (manager.module_launches).
 -- =============================================================================
 
+-- One row per executed call. The call's arguments are in the proposal's
+-- proposal_created event (app.proposal_detail.actions), matched by call_index.
 CREATE VIEW treasury.calls AS
 SELECT
   e.event_id,
   e.deployment_id,
-  i.dao_id,
+  e.dao_id,
   e.contract_id,
-  e.topics::jsonb ->> 'governor' AS governor,
-  e.topics::jsonb ->> 'target' AS target,
-  e.topics::jsonb ->> 'proposal_id' AS proposal_id,
-  e.args::jsonb ->> 'function' AS function,
-  (e.args::jsonb ->> 'index')::integer AS call_index,
+  e.t ->> 'governor' AS governor,
+  e.t ->> 'target' AS target,
+  e.t ->> 'proposal_id' AS proposal_id,
+  e.a ->> 'function' AS function,
+  (e.a ->> 'index')::integer AS call_index,
   e.ledger_sequence AS event_ledger,
   e.transaction_index,
   e.operation_index,
   e.event_index,
-  extract(epoch FROM chain.ledger_closed_at_ts(e.ledger_closed_at))::bigint AS event_timestamp_seconds,
-  chain.ledger_closed_at_ts(e.ledger_closed_at) AS event_at,
+  e.closed_at AS event_at,
   e.transaction_hash
-FROM chain.decoded_events e
-JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
+FROM manager.module_events e
 WHERE e.contract_role = 'treasury'
   AND e.event_name = 'execute';

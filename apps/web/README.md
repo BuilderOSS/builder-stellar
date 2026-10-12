@@ -97,7 +97,7 @@ Proposing uses previous-ledger voting power; voting uses the proposal snapshot. 
 
 Detail combines indexed actions/votes with live Governor state/timing/quorum; the indexed `vote_start_seconds` and `quorum_votes` (from `ProposalScheduled`) are the labeled fallback, not sufficient for mutation buttons. The list uses the indexed state, which mirrors `Governor.proposal_state`. `Governor.execute` always rejects; Treasury consumes on Governor, then dispatches in order. Any failing action reverts execution.
 
-Successful Treasury `Execute` events yield an ordered receipt scoped to Treasury, Governor, proposal, target/function, and call index. After refresh, the API can reconstruct it from `governance.proposal_execution_calls`, requiring complete matching calls in one transaction/ledger. Confirmed execution with pending/unavailable receipt is shown separately; missing indexed events do not mean execution failed.
+Successful Treasury `Execute` events yield an ordered receipt scoped to Treasury, Governor, proposal, target/function, and call index. After refresh, the API can reconstruct it from `treasury.calls`, requiring complete matching calls in one transaction/ledger. Confirmed execution with pending/unavailable receipt is shown separately; missing indexed events do not mean execution failed.
 
 ## Marketplace
 

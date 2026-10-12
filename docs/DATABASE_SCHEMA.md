@@ -27,60 +27,62 @@ by `dao_id` (the DAO token contract address).
 
 ## Views
 
+Every domain view reads `chain.events` (the decoded events with `t` = topics and
+`a` = data as jsonb, `pos` = `chain.event_position(...)`, `closed_at`) or
+`manager.module_events` (the same rows joined to their DAO through
+`manager.event_identity`). "Latest" and "first" lookups order by `pos`, then
+`event_id`. Views exist only for what the app reads or what a replay must be
+able to answer; configuration the app reads from chain (auction and marketplace
+settings, artwork definitions, the renderer, platform registry pointers) has no view.
+
 ### manager
 
 | View | Reads | Notes |
 | --- | --- | --- |
-| `dao_registry` | `dao_created` | one row per DAO: deployer, launch admin, six module contracts, the six `<module>_wasm_hash` columns from `dao_created.wasm_hashes`, and `created_slug` (the slug requested at creation, not unique) |
-| `dao_slugs` **Prisma** | `dao_created`, `pending_slug_updated`, `slug_claimed`, `slug_changed` | per DAO: `requested_slug` (latest request, not unique), `claimed_slug` (unique; set by `launch_dao`, then the latest `change_slug`; NULL while pending), `claimed_ledger`, `claimed_at` (the original launch claim) |
+| `dao_registry` | `dao_created` | one row per DAO: deployer, launch admin, six module contracts, the six `<module>_wasm_hash` columns, `created_slug` (the slug requested at creation, not unique) |
+| `dao_modules`, `event_identity`, `module_events` | registry | one row per module contract with its creation hash; contract → DAO lookup; every module event with its DAO |
+| `dao_launches` | `dao_launched` | per launched DAO: `launch_auction`, `launch_marketplace`, `minter` (the shared Minter pinned at launch), `launched_*` |
 | `dao_previous_slugs` **Prisma** | `slug_changed` | one row per slug a DAO moved away from, with its event position. Not reserved: the app redirects an old link only while no DAO holds it |
-| `dao_modules` | registry | one row per module contract |
-| `event_identity` | modules | contract → DAO lookup used by every domain view |
-| `daos` **Prisma** | registry + `dao_slugs`, `dao_launched`, `token_initialized`, metadata, auction `paused`/`unpaused` | `status` pending/operational; `slug` (claimed slug once launched, else the requested one), `slug_claimed`, `requested_slug`, `claimed_slug`; `auction_enabled`, `auction_paused`; `minter_contract` (the shared Minter pinned at launch); `profile`, `profile_hash`, `profile_seq` from `metadata.profiles` (the app shows `profile` only after hashing it and matching Metadata's on-chain `profile_hash()`); `admin_address` is the DAO's current admin: the token's latest `admin_changed` (the Treasury after launch), else the launch admin |
-| `module_launches` **Prisma** | each module's `<module>_launched` event (`token_launched`, `governor_launched`, …) | one row per DAO module: `is_live`, `treasury`, `started` (auction), `opened` (marketplace), `minters` (token) |
-| `module_admins` **Prisma** | module `admin_changed` + `dao_registry` | one row per DAO module: current `admin` (the launch admin, then the Treasury), `handed_to_treasury`, `changed_*` |
-| `dao_lifecycle` | `dao_launched` + `module_launches` | per DAO: `is_live` (all six modules launched), `<module>_live`, `launch_auction`, `launch_marketplace`, `minter` (the pinned Minter address), `auction_started`, `marketplace_opened` |
-| `module_upgrades` | `upgraded`, `migrated` (every module) | per DAO module: `event_type`, `module_role`, `contract_id`, `from_hash`/`to_hash` (upgraded only), `version`, `from_storage_version`/`to_storage_version` (migrated only), `event_seq`, ledger/tx/time |
-| `module_versions` | `module_upgrades` + `dao_registry` | one row per DAO module: `current_hash` (latest `to_hash`, else the `dao_created` hash), `current_version` (the registry version of `current_hash`, from `implementations`, as the contracts' `version()` reads it), `storage_version` (latest `migrated`, else 1), `upgrade_count`, `last_upgraded_*` |
-| `admin_history` | Manager `admin_proposed`, `admin_proposal_cancelled`, `admin_changed`, `platform_minter_set` | deployment-wide; `event_type`, `previous_admin`, `new_admin`, `platform_minter` (module `admin_changed` events are in `module_admins`) |
-| `settings` | `manager_initialized` + admin events | current `admin`, `pending_admin` (NULL after an accept or a cancel), `platform_minter` per deployment |
-| `implementations` | `implementation_registered`, `implementation_revoked` | `published_ledger`, `revoked`, `revoked_ledger` |
-| `latest_implementations` | `latest_implementation_set` | admin-selected latest `wasm_hash` and `version` per `name` (registration does not move it) |
-| `current_implementations` | `current_implementations_updated` | latest default implementation hashes |
+| `daos` **Prisma** | registry, `dao_launches`, `dao_created`/`pending_slug_updated` (request), `slug_claimed`/`slug_changed` (claimed), `token_initialized`/`metadata_updated`, token `admin_changed`, `profile_updated`, auction `paused`/`unpaused`, `marketplace_paused`/`unpaused` | `status` pending/operational; `slug` (claimed once launched, else requested; `slug_claimed`, `requested_slug`, `claimed_slug` disambiguate); `token_name`/`token_symbol`; `profile`, `profile_hash`, `profile_seq` (highest seq; the app shows `profile` only after hashing it and matching Metadata's on-chain `profile_hash()`); `admin_address` (launch admin, then the Treasury); `minter_contract`; `auction_enabled`, `auction_paused`, `marketplace_enabled` from the pause events after launch |
+| `module_launches` **Prisma** | each module's `<module>_launched` | per DAO module: `is_live`, `treasury`, `started` (auction), `opened` (marketplace), `minters` (token) |
+| `implementations` | `implementation_registered`, `implementation_revoked` | `name`, `version`, `published_ledger`, `revoked`, `revoked_ledger` |
+| `module_versions` | `upgraded`, `migrated` (every module) + registry | per DAO module: `current_hash` (latest `to_hash`, else the creation hash), `current_version` (the registry version of `current_hash`, as the module's `version()` reads it), `storage_version`, `upgrade_count`, `last_upgraded_*`. `scripts/renew-code-ttl.mjs` reads `current_hash` |
+| `settings` | `manager_initialized`, `admin_proposed`, `admin_proposal_cancelled`, `admin_changed`, `platform_minter_set`, `factory_paused`/`factory_unpaused` | one row per deployment: `admin`, `pending_admin` (NULL after an accept or a cancel), `platform_minter`, `factory_paused` (the contract has no getter; a pause blocks `create_dao`, `launch_dao` and `change_slug`) |
+
+Not projected: `latest_implementation_set`, `current_implementations_updated`,
+`upgrade_approved`, `manager_upgraded`, `upgrade_delay_changed` (the app reads
+the registry pointers and the upgrade notice from chain; the last two are feed rows).
 
 ### token
 
 | View | Reads | Notes |
 | --- | --- | --- |
 | `transfers` | `mint`, `transfer` | `transfer_type`, `from_address` NULL for mints |
-| `mints` | `mint_with_minter` (single mint) and `mint_batch_with_minter` (one per `batch_mint`, expanded over its id range and joined to each token's `mint` for the recipient and event id) | who performed each mint, one row per token |
 | `inventory` **Prisma** | transfers | current owner per token |
-| `members` **Prisma** | inventory, `delegate_changed`, `delegate_votes_changed` | owned count, delegate, voting power |
-| `delegations`, `mint_authority_history` | token events | history; `launch_grant` marks grants made by the Manager at launch (`changed_by` = manager); later changes are governance |
-| `mint_authorities` **Prisma** | history | currently enabled authorities (set at launch, then only via governance) |
-| `supply` **Prisma** | inventory + registry | per DAO: `minted_supply`, `system_held_supply` (held by the Treasury, Auction or Marketplace), `voting_supply` (the supply quorum is computed from) |
+| `members` **Prisma** | inventory, `delegate_changed`, `delegate_votes_changed` | owned count, delegate, voting power, `last_activity_ledger` (latest ledger of a held token) |
+| `mint_authorities` **Prisma** | `mint_authority_changed` | currently enabled authorities with `changed_by` (the Manager at launch, governance after) |
+| `supply` **Prisma** | inventory + registry | per DAO: `minted_supply`, `system_held_supply` (held by the Treasury, Auction or Marketplace), `voting_supply` |
+| `approvals`, `operator_approvals` | `approve`, `approve_for_all` | single-token approvals still in force (latest per token, not cleared, token not moved since) and collection-wide operator approvals (latest per owner and operator, not cleared); expiry against the current ledger is the reader's call |
 
 Tokens held by the Treasury, Auction and Marketplace carry no votes: they appear
 in `inventory` and `members` (with `voting_power` 0) but never emit
-`delegate_votes_changed` for the system holder.
+`delegate_votes_changed` for the system holder. `mint_with_minter` /
+`mint_batch_with_minter` (who performed a mint) are feed rows only.
 
 ### governance
 
 | View | Reads | Notes |
 | --- | --- | --- |
-| `proposals` | `proposal_created` + `proposal_scheduled` + lifecycle + votes | `vote_start_seconds`, `vote_end_seconds`, `quorum_votes`; `state` mirrors `Governor.proposal_state`: pending, active, succeeded, defeated, queued, executed, canceled, expired (computed from the clock; see below); `eta_seconds` kept after execution |
 | `proposal_votes` **Prisma** | `vote_cast` | `support` 0 against, 1 for, 2 abstain |
-| `proposal_lifecycle` **Prisma** | queued / executed / cancelled | |
-| `proposal_actions` | `proposal_created` | one row per call (parallel arrays unnested) |
-| `settings` **Prisma** | `governor_initialized` + `voting_delay_changed` / `voting_period_changed` / `queue_delay_changed` / `proposal_threshold_changed` / `quorum_bps_changed` + `admin_changed` | current Governor configuration per DAO: `admin`, `voting_delay_seconds`, `voting_period_seconds`, `queue_delay_seconds`, `proposal_threshold` (absolute votes), `quorum_bps` (of the voting supply at each snapshot), `version` (from `manager.module_versions`), `updated_ledger` |
-| `proposal_execution_calls` | Treasury `execute` + `proposal_actions` | one row per executed call, ordered by `call_index`, keyed by `proposal_id`; carries `target`, `function`, `args`, tx |
+| `proposals` | `proposal_created` + `proposal_scheduled` + `proposal_queued`/`executed`/`cancelled` + votes | `vote_start_seconds`, `vote_end_seconds`, `quorum_votes`, `eta_seconds` (kept after execution), `state` (mirrors `Governor.proposal_state` from the clock, see below), `for_votes`/`against_votes`/`abstain_votes` |
+| `settings` **Prisma** | `governor_initialized` + the five `*_changed` setters + `admin_changed` | current Governor configuration per DAO: `admin`, `voting_delay_seconds`, `voting_period_seconds`, `queue_delay_seconds`, `proposal_threshold`, `quorum_bps`, `updated_ledger` |
+| `proposal_comments` **Prisma** | `proposal_commented` | event-only threads |
 
 Execution: `Treasury.execute` is permissionless; it consumes the proposal on the
 Governor (`proposal_executed`, same tx) and emits one `execute` per call
-(topics governor, target, proposal_id; data function, index). The Governor
-authority role and its views (`governor_authority_*`) were removed together with
-`governor_authority_changed`, `treasury_changed`, `token_contract_changed`
-(Governor) and `governor_changed` (Treasury).
+(`treasury.calls`). The call arguments live in the proposal's `proposal_created`
+event (`app.proposal_detail.actions`), matched by `call_index`. OpenZeppelin's
+`quorum_changed` is basis points and duplicates `quorum_bps_changed`; it is not read.
 
 `snapshot_ledger` is the vote snapshot ledger; `vote_start_seconds` /
 `vote_end_seconds` are unix timestamps and `quorum_votes` the For + Abstain total
@@ -93,40 +95,33 @@ and for > against) until `vote_end + 14d` and expired after, or defeated.
 
 | View | Reads |
 | --- | --- |
-| `auction.auctions` **Prisma** | `auction_created` + settlements/cancellations + config at creation time |
-| `auction.bids` **Prisma**, `settlements`, `cancellations` | auction events (`winner` is NULL when no bids; `cancel_auction` also sends the unsold NFT to the treasury, visible in `token.transfers`) |
-| `auction.bid_refunds` | `bid_refunded` (`refund_status` refunded) and `refund_deferred` (`deferred`, amount is the increment) |
-| `auction.refund_withdrawals` | `refund_withdrawn` (topic `bidder`, no token) |
-| `auction.pending_refunds` | per bidder: `deferred_amount`, `withdrawn_amount`, `pending_amount` = sum(deferred) - sum(withdrawn), rows with a positive balance only |
-| `metadata.configuration` **Prisma** | `metadata_initialized` overlaid with the latest `renderer_base_updated`; `admin` is the metadata module's current admin (launch admin, then the Treasury) |
-| `metadata.profiles` **Prisma** | `profile_updated`: the highest `seq` per Metadata contract, with `profile` (the JSON string byte-for-byte), `profile_hash`, `profile_seq` |
-| `metadata.properties` | `property_added` since the latest `properties_reset` |
-| `metadata.token_seeds` | `seed_generated` (single mint and `regenerate`) and `seeds_generated` (one per batch, `selections[i]` is token `first_token_id + i`; batch rows share the event id); `is_current` marks the latest seed per token across both |
-| `treasury.calls` | `execute`: one row per action with `proposal_id`, `call_index` (`authorize` actions appear with function `authorize`) |
-| `marketplace.primary_listings` **Prisma** | `primary_listing_created` closed by `primary_listing_purchased/cancelled/expired`; keyed by `listing_id`; `token_id` and `buyer` only once purchased; `payment_asset` |
-| `marketplace.secondary_listings` **Prisma** | `secondary_listing_created` closed by `listing_purchased/cancelled/expired`; keyed by `token_id`; `seller`, `fee_bps`, `payment_asset` |
-| `marketplace.purchases` | `listing_purchased` (secondary only) |
-| `marketplace.sales` **Prisma** | primary purchases (`token_id` only exists in `primary_listing_purchased`) plus secondary purchases; `sale_type`, `listing_id` NULL for secondary |
+| `auction.auctions` **Prisma** | `auction_created` + the first `auction_settled`/`auction_cancelled` after it + its bids: `duration_seconds` (end - start), `highest_bidder`/`highest_bid`/`current_end_seconds`/`extension_count` (the latest bid is the highest and carries the end), `settled`, `cancelled`, `winner` (NULL when unsold), `settled_amount`, `closed_at`, `closed_transaction_hash` |
+| `auction.bids` **Prisma** | `bid_placed` with its `comment` |
+| `metadata.profiles` | `profile_updated`: the highest `seq` per Metadata contract, with `profile` (the JSON string byte-for-byte), `profile_hash`, `profile_seq` (also joined into `manager.daos`) |
+| `metadata.token_seeds` | `seed_generated` (single mint) and `seeds_generated` (one per batch, `selections[i]` is token `first_token_id + i`; batch rows share the event id); a token is seeded once |
+| `treasury.calls` | `execute`: one row per action with `proposal_id`, `call_index` |
+| `marketplace.primary_listings` **Prisma** | `primary_listing_created` closed by `primary_listing_purchased/cancelled/expired`; keyed by `listing_id`; `token_id` and `buyer` only once purchased |
+| `marketplace.secondary_listings` **Prisma** | `secondary_listing_created` closed by `listing_purchased/cancelled/expired`; keyed by `token_id`; `seller`, `fee_bps`, `payment_asset`, `buyer` and `closed_*` once closed |
+| `marketplace.sales` **Prisma** | primary and secondary purchases; `sale_type`, `listing_id` NULL for secondary, `seller`/`fee` NULL for primary |
+| `marketplace.primary_listing_comments` **Prisma**, `marketplace.listing_comments` **Prisma** | event-only threads per primary listing and per token |
 
-`marketplace.listings` and its `kind` were replaced by the two listing views.
+Auction refunds (`bid_refunded`, `refund_deferred`, `refund_withdrawn`) and the
+auction/marketplace configuration setters are feed rows only; the app reads
+`pending_refund` and `get_config` from chain.
 
 ### minter
 
-Shared contract; each view resolves `dao_id` from the `token_id` topic and drops
-other tokens.
-
-| View | Reads |
-| --- | --- |
-| `merkle_claim_events` **Prisma** | `merkle_claim_event` |
-| `batch_mint_events` **Prisma** | `mint_batch_event` |
-| `allocation_updates` | `merkle_root_set_event`: `merkle_root`, `round`, `tree_uri` (the published claim list) |
+The shared Minter has no view: its claims and batches are feed rows
+(`minter.merkle_claim`, `minter.batch_mint`, `minter.merkle_root_set`) and the
+claims page reads the round, root and tree URI from the Minter's ledger entries.
 
 ### app
 
 | View | Notes |
 | --- | --- |
-| `activity_feed` **Prisma** | activity rows with `dao_id` resolved (per-DAO Manager events such as `dao_launched` via their `token_address` topic; Minter claims via token; platform events, the upgrade notice and the Manager's and shared Minter's own upgrades, fanned out to every DAO with `activity_id` suffixed by the DAO; other Manager events none) |
-| `proposal_list` **Prisma**, `proposal_detail` **Prisma** | proposals with vote tallies; detail adds `actions` and `votes` JSON |
+| `activity_feed` **Prisma** | activity rows with `dao_id` resolved, one `UNION ALL` branch per source so a per-DAO filter pushes down: module events by contract; Minter claims by the DAO token in `token_id`; per-DAO Manager events (`dao_created`, `dao_launched`, `slug_claimed`, `pending_slug_updated`, `slug_changed`) by their `token_address` topic; platform events (`upgrade_delay_changed`, `manager_upgraded`, the Minter's `upgraded`/`migrated`/`upgrade_delay_changed`) fanned out to every DAO that existed at the time, and `implementation_revoked` to every DAO running that hash, with `activity_id` suffixed by the DAO; other Manager events with no DAO |
+| `proposal_list` **Prisma** | `governance.proposals` with `proposal_number` |
+| `proposal_detail` **Prisma** | `proposal_list` plus `actions` (`[{action_index, target, function, args}]` from `proposal_created`); votes come from `governance.proposal_votes` |
 | `indexer_status` **Prisma** | latest ledger / event count / last ingestion, so the app never reads raw events |
 
 ## Activity kinds
@@ -157,7 +152,7 @@ display `awaiting-expiry`; terminal state still comes from contract events.
 Indexed proposal state mirrors `Governor.proposal_state`, with `vote_start_seconds`
 and `quorum_votes` from `proposal_scheduled`; proposal detail still rechecks live
 chain state before enabling submission (indexed data cannot establish eligibility). Ordered execution
-receipts read `governance.proposal_execution_calls` through a parameterized query
+receipts read `treasury.calls` through a parameterized query
 binding deployment, DAO, Treasury, Governor, and proposal ID. Complete matching
 actions must share one transaction/ledger. Receipt absence is separate from failed
 execution. See [web reference](../apps/web/README.md).

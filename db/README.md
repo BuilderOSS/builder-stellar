@@ -47,30 +47,29 @@ transaction together with its row in `public.schema_migrations` (name + SHA-256)
 
 | Migration | Contents |
 | --- | --- |
-| `0001_landing_tables` | schemas, helper functions (incl. `chain.ledger_closed_at_ts`, which reads the pipeline's epoch-millisecond closed-at values), the 3 landing tables, indexes, triggers |
-| `0002_manager_views` | DAO registry, modules, identity, `manager.daos`, per-module launch status and `dao_lifecycle`, module upgrade history and current module versions, admin history/settings (incl. cancelled proposals), implementations |
-| `0003_token_views` | transfers, mints, inventory, delegations, mint authorities, members, supply (voting vs system-held) |
-| `0004_governance_views` | proposals (state computed from `proposal_scheduled` and the clock), votes, actions, lifecycle, per-proposal execution calls |
-| `0005_auction_views` | auctions, bids, refunds (pushed and deferred), withdrawals, pending refunds, settlements, cancellations |
-| `0006_metadata_views` | properties, token seeds, configuration |
+| `0001_landing_tables` | schemas, helper functions (`chain.ledger_closed_at_ts` for the pipeline's epoch-millisecond closed-at values, `chain.event_position`), the 3 landing tables, indexes, triggers, and `chain.events` (decoded events with jsonb topics/data and a total position: the base of every view) |
+| `0002_manager_views` | DAO registry, modules and identity, `manager.module_events`, launches, `manager.daos`, per-module launch status, implementations, module versions, Manager settings (admin, pending admin, platform Minter, factory pause) |
+| `0003_token_views` | transfers, inventory, members, mint authorities, supply (voting vs system-held), approvals |
+| `0004_governance_views` | votes, proposals (state from `proposal_scheduled` and the clock, tallies), settings, comments |
+| `0005_auction_views` | bids, auctions (outcome and current bid state) |
+| `0006_metadata_views` | profiles, token seeds |
 | `0007_treasury_views` | treasury calls (one per executed proposal action) |
-| `0008_marketplace_views` | primary listings (by `listing_id`), secondary listings (by `token_id`), purchases, sales |
-| `0009_minter_views` | merkle/allowlist claims, batch mints, allocation updates |
-| `0010_app_views` | activity feed, proposal list/detail, indexer status |
+| `0008_marketplace_views` | primary listings (by `listing_id`), secondary listings (by `token_id`), sales, comments |
+| `0009_app_views` | activity feed (per-DAO, with platform events fanned out), proposal list/detail, indexer status |
 
 Launch model: every module emits its own launch event (`token_launched`,
 `governor_launched`, ...) and hands its admin to the Treasury (`admin_changed`,
-the same name and shape as the Manager's own admin event), so launch and admin
-state are keyed by the emitting contract (`manager.module_launches`,
-`manager.module_admins`). Slugs are requested at `dao_created` and claimed at
-launch (`manager.dao_slugs`).
+the same name and shape as the Manager's own admin event), so launch state is
+keyed by the emitting contract (`manager.module_launches`). Slugs are requested
+at `dao_created` and claimed at launch (`manager.daos`).
 
 Rules:
 
-- Migrations are **append-only once deployed**. `migrate.sh` aborts if an applied
-  file's checksum changed. Add `0011_…` instead of editing.
-- Pre-release exception: until the first production deploy the migrations are
-  edited in place (reset the database with `reset-database.sh` and redeploy).
+- These files are the 2026-10-13 baseline (pre-mainnet): the database is reset
+  on every redeploy, so the schema is kept as one clean set of files and edited
+  in place (`reset-database.sh`, then `migrate.sh`). Once a database must be
+  preserved, migrations become **append-only**: `migrate.sh` aborts if an
+  applied file's checksum changed, so add `0010_…` instead of editing.
 - No `CONCURRENTLY`, no grants. Roles and privileges live in `grant-permissions.sh`.
 - Every migration has a matching `rollback/NNNN_name_rollback.sql`.
 - Views never reference roles or deployment ids; they work for any deployment.
