@@ -31,6 +31,8 @@ export type PendingUpgrade = {
   announcedLedger: number;
   /** First ledger at which the upgrade may apply: the later of the two, plus the notice. */
   earliestLedger: number;
+  /** The announced hash was revoked since: it is still "latest" but can never apply. */
+  revoked: boolean;
 };
 
 export type PlatformContractState = {
@@ -56,7 +58,7 @@ export type PlatformUpgrades = {
 /** The pending upgrade of a contract, given what the registry and the chain say. */
 export function describePending(
   running: string | null,
-  latest: { hash: string; version: string | null; announcedLedger: number } | null,
+  latest: { hash: string; version: string | null; announcedLedger: number; revoked?: boolean } | null,
   approvedLedger: number | null,
   notice: number
 ): PendingUpgrade | null {
@@ -66,8 +68,42 @@ export function describePending(
     version: latest.version,
     approvedLedger,
     announcedLedger: latest.announcedLedger,
-    earliestLedger: Math.max(approvedLedger, latest.announcedLedger) + notice
+    earliestLedger: Math.max(approvedLedger, latest.announcedLedger) + notice,
+    revoked: latest.revoked ?? false
   };
+}
+
+export type MemberNotice =
+  | { kind: 'pending'; contract: PlatformContract; version: string | null; toHash: string; earliestLedger: number }
+  | { kind: 'unchecked' };
+
+/**
+ * What members should hear on the community home page. A pending Manager
+ * upgrade counts as a pending Minter upgrade: the Minter takes its approval
+ * and notice answers from the Manager, so new Manager code controls minting
+ * for every DAO (final review, issue 1). Nothing is said once the Minter
+ * holds no mint authority here, since that is the opt-out. When a read
+ * failed, say so rather than show the same empty space as "nothing pending".
+ */
+export function memberNotice(
+  data: Pick<PlatformUpgrades, 'manager' | 'minter' | 'minterAuthority' | 'errors'>
+): MemberNotice | null {
+  if (data.minterAuthority === false) return null;
+  const pending = [data.manager, data.minter]
+    .flatMap((state) =>
+      state?.pending && !state.pending.revoked ? [{ contract: state.contract, ...state.pending }] : []
+    )
+    .sort((a, b) => a.earliestLedger - b.earliestLedger);
+  const first = pending[0];
+  if (first)
+    return {
+      kind: 'pending',
+      contract: first.contract,
+      version: first.version,
+      toHash: first.toHash,
+      earliestLedger: first.earliestLedger
+    };
+  return data.errors.length ? { kind: 'unchecked' } : null;
 }
 
 export async function loadPlatformUpgrades(
@@ -166,11 +202,13 @@ export async function loadPlatformUpgrades(
 async function latestOf(manager: ManagerClient, name: string) {
   const pointer = (await manager.latest_pointer({ name })).result;
   if (!pointer) return null;
+  // get_latest_implementation filters a revoked hash out; the pointer keeps it.
   const record = (await manager.get_latest_implementation({ name })).result as { version?: string } | null;
   return {
     hash: Buffer.from(pointer.wasm_hash).toString('hex'),
     version: record?.version ?? null,
-    announcedLedger: Number(pointer.set_ledger)
+    announcedLedger: Number(pointer.set_ledger),
+    revoked: record === null
   };
 }
 

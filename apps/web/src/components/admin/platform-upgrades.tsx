@@ -6,7 +6,7 @@ import { ButtonLink, Callout, Chip, ListRow, Section } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { estimateDate } from '@/lib/chain-reads/renewal';
 import { daoAdminRoute } from '@/lib/dao-routes';
-import { type PlatformContractState, usePlatformUpgrades } from '@/lib/platform-upgrades';
+import { memberNotice, type PlatformContractState, usePlatformUpgrades } from '@/lib/platform-upgrades';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 const rows = css({ display: 'grid' });
@@ -30,13 +30,23 @@ function Row({ state, latestLedger }: { state: PlatformContractState; latestLedg
     <ListRow
       title={LABELS[state.contract]}
       meta={
-        pending
-          ? `Upgrade to ${pending.version ?? pending.toHash.slice(0, 8)} approved · can apply from about ${when(pending.earliestLedger, latestLedger)} (${days}-day notice)`
-          : state.running
-            ? `Running ${state.running.slice(0, 8)}… · upgrades need ${days} days' notice`
-            : 'Could not be read'
+        pending?.revoked
+          ? `The announced upgrade ${pending.version ?? pending.toHash.slice(0, 8)} was withdrawn and cannot apply`
+          : pending
+            ? `Upgrade to ${pending.version ?? pending.toHash.slice(0, 8)} approved · can apply from about ${when(pending.earliestLedger, latestLedger)} (${days}-day notice)${state.contract === 'manager' ? ' · new Builder code also controls the shared Minter' : ''}`
+            : state.running
+              ? `Running ${state.running.slice(0, 8)}… · upgrades need ${days} days' notice`
+              : 'Could not be read'
       }
-      trailing={pending ? <Chip tone="warning">Upgrade pending</Chip> : <Chip tone="success">No change pending</Chip>}
+      trailing={
+        pending?.revoked ? (
+          <Chip tone="danger">Withdrawn</Chip>
+        ) : pending ? (
+          <Chip tone="warning">Upgrade pending</Chip>
+        ) : (
+          <Chip tone="success">No change pending</Chip>
+        )
+      }
     />
   );
 }
@@ -97,22 +107,34 @@ export function PlatformUpgrades({ enabled }: { enabled: boolean }) {
 }
 
 /**
- * A member-visible heads-up on the community home page: a Minter upgrade is
- * pending and the shared Minter still mints for this community. Members are
- * the ones who vote on removing it, so they see it, not only Manage.
+ * A member-visible heads-up on the community home page: a platform upgrade
+ * (Builder's Manager, or the shared Minter) is pending while the shared
+ * Minter still mints for this community. Members are the ones who vote on
+ * removing it, so they see it, not only Manage. A Manager upgrade counts:
+ * new Manager code controls the Minter's approvals and notice.
  */
 export function PlatformUpgradeNotice({ enabled }: { enabled: boolean }) {
   const { routeId, daoConfig: config } = useDaoContext();
   const session = useAuthSessionStore();
   const address = session.authStatus === 'authenticated' ? session.address : null;
   const report = usePlatformUpgrades(config, address, enabled);
-  const pending = report.data?.minter?.pending ?? null;
-  if (!enabled || !report.data || !pending || report.data.minterAuthority === false) return null;
+  if (!enabled || !report.data) return null;
+  const notice = memberNotice(report.data);
+  if (!notice) return null;
+  if (notice.kind === 'unchecked')
+    return (
+      <Callout
+        variant="warning"
+        title="Couldn't check for platform upgrades"
+        description="Some chain reads failed, so a pending upgrade of Builder's shared contracts may not be shown. Try again in a moment."
+      />
+    );
+  const what = notice.contract === 'manager' ? 'Builder (which also controls the shared Minter)' : 'the shared Minter';
   return (
     <Callout
       variant="info"
-      title="A shared Minter upgrade is pending"
-      description={`Builder will upgrade the shared Minter to ${pending.version ?? pending.toHash.slice(0, 8)} from about ${when(pending.earliestLedger, report.data.latestLedger)}. To opt out, members can propose removing it from the mint authorities before then.`}
+      title="A platform upgrade is pending"
+      description={`Builder will upgrade ${what} to ${notice.version ?? notice.toHash.slice(0, 8)} from about ${when(notice.earliestLedger, report.data.latestLedger)}. To opt out of minting under the new code, members can propose removing the shared Minter from the mint authorities before then.`}
     >
       <div>
         <ButtonLink href={daoAdminRoute(routeId, '')} variant="secondary" size="sm">
