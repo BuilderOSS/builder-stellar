@@ -204,6 +204,10 @@ export interface ProposalInfo {
   eta: bigint;
   id: Uint8Array;
   proposer: string;
+  /**
+   * For + Abstain votes the proposal needs (fixed at creation).
+   */
+  quorum: bigint;
   seq: number;
   state: ProposalState;
   vote_end: bigint;

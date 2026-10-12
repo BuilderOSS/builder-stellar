@@ -8,7 +8,12 @@
  * they cover every persistent key a full DAO lifecycle writes.
  *
  * Per-holder keys (owners, balances, delegations, refunds, claim markers) are
- * the holder's and stay out. Shared code is the platform's (scripts/renew-code-ttl.mjs).
+ * the holder's and stay out, except where the holder is the DAO itself: the
+ * Treasury's, Auction's and Marketplace's tokens and asset balances, which
+ * OpenZeppelin and the asset contract renew only 30 days per touch. Only the
+ * latest supply and quorum checkpoints are kept: proposals store their quorum
+ * (D33), so history may archive. Shared code is the platform's
+ * (scripts/renew-code-ttl.mjs).
  */
 import {
   type Account,
@@ -34,7 +39,16 @@ const BATCH_BYTES = 180_000;
 /** Proposal and queued-execution windows past which a proposal is over (PROPOSAL_EXPIRATION_PERIOD). */
 const PROPOSAL_EXPIRY_SECONDS = 1_209_600;
 
-export const RENEWAL_CLASSES = ['contracts', 'artwork', 'tokens', 'proposals', 'listings', 'slug', 'claims'] as const;
+export const RENEWAL_CLASSES = [
+  'contracts',
+  'artwork',
+  'tokens',
+  'proposals',
+  'listings',
+  'holdings',
+  'slug',
+  'claims'
+] as const;
 export type RenewalClass = (typeof RENEWAL_CLASSES)[number];
 
 export const CLASS_LABELS: Record<RenewalClass, string> = {
@@ -43,6 +57,7 @@ export const CLASS_LABELS: Record<RenewalClass, string> = {
   tokens: 'Token records',
   proposals: 'Proposals',
   listings: 'Listings',
+  holdings: 'Treasury holdings',
   slug: 'Community link',
   claims: 'Claim rounds'
 };
@@ -64,7 +79,10 @@ export type DaoInventory = {
   latestLedger: number;
   /** Keys that exist: what the sweep extends. */
   present: Array<InventoryKey & LedgerEntryInfo>;
-  /** Required keys the RPC did not return: archived (restore first) or absent. */
+  /**
+   * Keys to restore first: required ones the RPC did not return, and any the
+   * RPC returned with a live-until ledger already past (archived).
+   */
   missing: InventoryKey[];
 };
 
@@ -189,20 +207,45 @@ export async function buildDaoInventory(
   const slugEntry = entry(ns(scope.manager, 'DaoSlug', addr(scope.token)));
   const slug = slugEntry ? (scValToNative(dataValue(slugEntry)) as string) : null;
 
-  // C: artwork, token pages and checkpoints, listings, the governor instance.
+  // The asset contracts the DAO is paid in, from the auction and market configs.
+  const assets = new Set<string>();
+  const auctionConfig = auction
+    ? native<{ payment_token?: string }>(nsGet(instanceStorage(entry(instanceKey(auction))), 'Config'))
+    : undefined;
+  const marketConfig = marketplace
+    ? native<{ payment_asset?: string }>(nsGet(instanceStorage(entry(instanceKey(marketplace))), 'Config'))
+    : undefined;
+  if (auctionConfig?.payment_token) assets.add(auctionConfig.payment_token);
+  if (marketConfig?.payment_asset) assets.add(marketConfig.payment_asset);
+  const holders = [treasury, auction, marketplace].filter((a): a is string => Boolean(a));
+
+  // C: artwork, token pages and checkpoints, listings, holdings, the governor instance.
   const c: InventoryKey[] = [];
   if (governor) c.push(add('contracts', 'Governor', instanceKey(governor)));
   if (slug) c.push(add('slug', 'SlugToDao', ns(scope.manager, 'SlugToDao', xdr.ScVal.scvString(slug))));
+  if (itemCounts.length) {
+    c.push(add('artwork', 'PropertyNames', ns(metadata, 'PropertyNames')));
+    c.push(add('artwork', 'IpfsGroups', ns(metadata, 'IpfsGroups')));
+  }
   itemCounts.forEach((items, property) => {
-    c.push(add('artwork', `PropertyName(${property})`, ns(metadata, 'PropertyName', u32(property))));
     for (let page = 0; page < Math.ceil(items / ITEMS_PER_PAGE); page += 1)
       c.push(add('artwork', `Items(${property}, ${page})`, ns(metadata, 'Items', u32(property), u32(page))));
   });
-  if (itemCounts.length) c.push(add('artwork', 'IpfsGroups', ns(metadata, 'IpfsGroups')));
+  // Every mint writes its token's record (empty before artwork), so each page up to the count exists.
   for (let page = 0; minted > 0 && page <= Math.floor((minted - 1) / TOKENS_PER_ATTRIBUTE_PAGE); page += 1)
     c.push(add('artwork', `AttributesPage(${page})`, ns(metadata, 'AttributesPage', u32(page))));
-  for (let i = 0; i < supplyCheckpoints; i += 1)
-    c.push(add('tokens', `TotalSupplyCheckpoint(${i})`, oz(scope.token, 'TotalSupplyCheckpoint', u32(i))));
+  if (supplyCheckpoints > 0)
+    c.push(
+      add(
+        'tokens',
+        `TotalSupplyCheckpoint(${supplyCheckpoints - 1})`,
+        oz(scope.token, 'TotalSupplyCheckpoint', u32(supplyCheckpoints - 1))
+      )
+    );
+  for (const holder of holders) {
+    c.push(add('holdings', 'Token balance', oz(scope.token, 'Balance', addr(holder)), false));
+    for (const asset of assets) c.push(add('holdings', 'Asset balance', oz(asset, 'Balance', addr(holder)), false));
+  }
   if (marketplace) {
     for (let t = 0; t < minted; t += 1)
       c.push(add('listings', `Listing(${t})`, ns(marketplace, 'Listing', u32(t)), false));
@@ -211,17 +254,34 @@ export async function buildDaoInventory(
   }
   await fetch(c);
 
+  // Tokens the DAO itself holds: read every ownership entry, keep the DAO's.
+  // A holder's entry that archived is simply not returned; it is theirs to restore.
+  if (minted > 0) {
+    const owners = Array.from({ length: minted }, (_, t) => oz(scope.token, 'Owner', u32(t)));
+    const ownerRead = await read(owners);
+    latestLedger = Math.max(latestLedger, ownerRead.latestLedger);
+    const held: InventoryKey[] = [];
+    owners.forEach((key, t) => {
+      const info = ownerRead.entries.get(keyId(key));
+      if (info && holders.includes(scValToNative(dataValue(info)) as string))
+        held.push(add('holdings', `Token #${t}`, key));
+    });
+    await fetch(held);
+  }
+
   // D/E: proposals (ids, then cores and tallies) and quorum checkpoints.
   if (governor) {
     const gov = instanceStorage(entry(instanceKey(governor)));
     const proposals = count(native(nsGet(gov, 'ProposalCount')));
     const quorumCheckpoints = count(native(ozGet(gov, 'NumQuorumCheckpoints')));
+    const latestQuorum = quorumCheckpoints - 1;
     const ids = Array.from({ length: proposals }, (_, seq) =>
       add('proposals', `ProposalId(${seq})`, ns(governor, 'ProposalId', u32(seq)), false)
     );
-    const checkpoints = Array.from({ length: quorumCheckpoints }, (_, i) =>
-      add('proposals', `QuorumCheckpoint(${i})`, oz(governor, 'QuorumCheckpoint', u32(i)))
-    );
+    const checkpoints =
+      latestQuorum >= 0
+        ? [add('proposals', `QuorumCheckpoint(${latestQuorum})`, oz(governor, 'QuorumCheckpoint', u32(latestQuorum)))]
+        : [];
     // Proposal entries are fetched first and kept only while the proposal is live.
     const idRead = await read(ids.map((k) => k.key));
     latestLedger = Math.max(latestLedger, idRead.latestLedger);
@@ -264,8 +324,8 @@ export async function buildDaoInventory(
     if (seen.has(id)) continue;
     seen.add(id);
     const info = found.get(id);
-    if (info) present.push({ ...k, ...info });
-    else if (k.required) missing.push(k);
+    if (info && info.liveUntil >= latestLedger) present.push({ ...k, ...info });
+    else if (info || k.required) missing.push(k);
   }
   return { latestLedger, present, missing };
 }
@@ -385,4 +445,29 @@ export function instanceWasmHash(value: xdr.ScVal): string | null {
   if (value.type !== 'scvContractInstance' || value.instance.executable.type !== 'contractExecutableWasm') return null;
   const hash = value.instance.executable.wasmHash as unknown as Uint8Array | { value: Uint8Array };
   return Buffer.from(hash instanceof Uint8Array ? hash : hash.value).toString('hex');
+}
+
+/**
+ * What keeping every present key alive for a year costs at the rate a quote
+ * implies, in stroops; null when the quote added no time to anything. The
+ * extend fee is rent for the ledgers each key gains, so the rate is the fee
+ * over `sum(bytes * ledgers added)`. Rent is linear in time: renewing for 180
+ * days twice costs what renewing for 30 days twelve times does, minus the
+ * transaction overhead, so a longer renewal is never more expensive per year.
+ */
+export function yearlyRentEstimate(
+  inventory: Pick<DaoInventory, 'present' | 'latestLedger'>,
+  extendTo: number,
+  extendFee: bigint
+): bigint | null {
+  let byteLedgers = 0;
+  let bytes = 0;
+  for (const key of inventory.present) {
+    const remaining = key.liveUntil - inventory.latestLedger;
+    byteLedgers += key.bytes * Math.max(0, extendTo - remaining);
+    bytes += key.bytes;
+  }
+  if (byteLedgers === 0 || extendFee <= 0n) return null;
+  const year = BigInt(bytes) * BigInt(365 * LEDGERS_PER_DAY);
+  return (extendFee * year) / BigInt(byteLedgers);
 }

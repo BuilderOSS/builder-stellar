@@ -47,12 +47,15 @@ const mono = css({ textStyle: 'mono', fontSize: '0.8125rem' });
 const actions = css({ display: 'flex', gap: '2', flexWrap: 'wrap', alignItems: 'center' });
 
 const PRESETS = ['30', '90', '180'];
+// Rent is linear in time, so the longest renewal costs no more per year and needs the fewest signatures.
+const DEFAULT_PRESET = '180';
 const CLASS_HINTS: Record<RenewalClass, string> = {
   contracts: 'The community’s six contracts',
   artwork: 'Layer names, images and each token’s traits',
-  tokens: 'Supply history and who may mint',
-  proposals: 'Open proposals and quorum history',
+  tokens: 'Current supply and who may mint',
+  proposals: 'Open proposals and the quorum rate',
   listings: 'Open market listings',
+  holdings: 'Tokens and funds the treasury, auction and market hold',
   slug: 'Your /dao link',
   claims: 'The current claim round'
 };
@@ -121,7 +124,7 @@ export function RenewalPanel({ config }: { config: DaoNetworkConfig }) {
   const session = useAuthSessionStore();
   const report = useDaoRenewal(config);
   const tx = useTransactionFeedback(config.name);
-  const [preset, setPreset] = useState('90');
+  const [preset, setPreset] = useState(DEFAULT_PRESET);
   const [custom, setCustom] = useState('');
   const [quote, setQuote] = useState<RenewalQuote | null>(null);
   const [busy, setBusy] = useState<'quote' | 'renew' | null>(null);
@@ -250,6 +253,11 @@ export function RenewalPanel({ config }: { config: DaoNetworkConfig }) {
               ? `One transaction, about ${xlm(quote.totalFee)} in network fees.`
               : `${quote.transactions.length} transactions, about ${xlm(quote.totalFee)} in network fees.`}
           </p>
+          {quote.yearlyFee !== null ? (
+            <p className={muted}>
+              At this rate, keeping everything alive costs about {xlm(quote.yearlyFee)} a year, however often you renew.
+            </p>
+          ) : null}
           <Disclosure title="Price by part">
             <ul className={css({ m: '0', pl: '5', display: 'grid', gap: '1' })}>
               {quote.classFees.map((item) => (

@@ -16,7 +16,8 @@ import {
   planBatches,
   type RenewalClass,
   restoreTransaction,
-  rpcLedgerRead
+  rpcLedgerRead,
+  yearlyRentEstimate
 } from '@/lib/chain-reads/renewal';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { getDeploymentConfig } from '@/lib/deployment-config';
@@ -94,6 +95,8 @@ export type RenewalQuote = {
   totalFee: bigint;
   /** Each class priced on its own, for the breakdown; the sweep itself bundles them. */
   classFees: Array<{ cls: RenewalClass; label: string; fee: bigint }>;
+  /** Keeping everything alive for a year at this quote's rate (stroops), when it can be inferred. */
+  yearlyFee: bigint | null;
 };
 
 /** Build and simulate the sweep. Nothing is signed. */
@@ -148,7 +151,12 @@ export async function quoteRenewal(
     extendTo,
     transactions,
     totalFee: transactions.reduce((sum, { tx }) => sum + BigInt(tx.fee), 0n),
-    classFees
+    classFees,
+    yearlyFee: yearlyRentEstimate(
+      report.inventory,
+      extendTo,
+      transactions.filter((t) => t.kind === 'extend').reduce((sum, { tx }) => sum + BigInt(tx.fee), 0n)
+    )
   };
 }
 

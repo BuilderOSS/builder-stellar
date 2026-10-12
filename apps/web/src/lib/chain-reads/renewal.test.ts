@@ -13,11 +13,16 @@ import {
   type LedgerRead,
   planBatches,
   proposalIsLive,
-  summarizeInventory
+  summarizeInventory,
+  yearlyRentEstimate
 } from './renewal';
 
 const contract = () => Address.contract(Keypair.random().rawPublicKey()).toString();
-const [MANAGER, TOKEN, METADATA, TREASURY, AUCTION, MARKET, GOVERNOR, MINTER] = Array.from({ length: 8 }, contract);
+const [MANAGER, TOKEN, METADATA, TREASURY, AUCTION, MARKET, GOVERNOR, MINTER, ASSET] = Array.from(
+  { length: 9 },
+  contract
+);
+const MEMBER = Keypair.random().publicKey();
 const NOW = 2_000_000_000;
 
 const data = (owner: string, key: xdr.ScVal) =>
@@ -107,8 +112,18 @@ function ledger(omit: string[] = []) {
     'metadata'
   );
   put(TREASURY, inst, instance([[ns('Governor'), addr(GOVERNOR)]]), 'treasury');
-  put(AUCTION, inst, instance([]), 'auction');
-  put(MARKET, inst, instance([[ns('NextListingId'), xdr.ScVal.scvU64(2n)]]), 'market');
+  const config = (field: string) =>
+    nativeToScVal({ [field]: ASSET }, { type: { [field]: ['symbol', 'address'] } }) as xdr.ScVal;
+  put(AUCTION, inst, instance([[ns('Config'), config('payment_token')]]), 'auction');
+  put(
+    MARKET,
+    inst,
+    instance([
+      [ns('NextListingId'), xdr.ScVal.scvU64(2n)],
+      [ns('Config'), config('payment_asset')]
+    ]),
+    'market'
+  );
   put(
     GOVERNOR,
     inst,
@@ -118,11 +133,11 @@ function ledger(omit: string[] = []) {
     ]),
     'governor'
   );
+  put(METADATA, ns('PropertyNames'), xdr.ScVal.scvVoid(), 'names');
   for (const [i, pages] of [
     [0, 2],
     [1, 1]
   ] as const) {
-    put(METADATA, ns('PropertyName', u32(i)), xdr.ScVal.scvString('p'), `name${i}`);
     for (let page = 0; page < pages; page += 1)
       put(METADATA, ns('Items', u32(i), u32(page)), xdr.ScVal.scvVoid(), `items${i}.${page}`);
   }
@@ -138,6 +153,13 @@ function ledger(omit: string[] = []) {
   put(MANAGER, ns('SlugToDao', xdr.ScVal.scvString('lantern-club')), addr(TOKEN), 'slugtodao');
   put(MINTER, ns('MerkleRoot', addr(TOKEN)), xdr.ScVal.scvVoid(), 'root');
   put(MINTER, ns('MerkleRound', addr(TOKEN)), u32(1), 'round');
+  // Holdings: token 3 sits in the treasury and 69 in the auction; the rest are members'.
+  for (let t = 0; t < 70; t += 1)
+    put(TOKEN, oz('Owner', u32(t)), addr(t === 3 ? TREASURY : t === 69 ? AUCTION : MEMBER), `owner${t}`);
+  put(TOKEN, oz('Balance', addr(TREASURY)), u32(1), 'treasuryTokens');
+  put(TOKEN, oz('Balance', addr(MEMBER)), u32(68), 'memberTokens');
+  put(ASSET, oz('Balance', addr(TREASURY)), xdr.ScVal.scvVoid(), 'treasuryFunds');
+  put(ASSET, oz('Balance', addr(AUCTION)), xdr.ScVal.scvVoid(), 'auctionFunds');
   // Proposal 0 executed, 1 queued and live, 2 pending and live (with a tally).
   [
     [7, NOW - 10],
@@ -174,16 +196,19 @@ describe('DAO renewal inventory', () => {
         'Auction',
         'Marketplace',
         'Governor',
-        'PropertyName(0)',
-        'PropertyName(1)',
+        'PropertyNames',
         'Items(0, 0)',
         'Items(0, 1)',
         'Items(1, 0)',
         'IpfsGroups',
         'AttributesPage(0)',
         'AttributesPage(1)',
-        'TotalSupplyCheckpoint(0)',
         'TotalSupplyCheckpoint(1)',
+        'Token #3',
+        'Token #69',
+        'Token balance',
+        'Asset balance',
+        'Asset balance',
         'MintAuthority',
         'MintAuthority',
         'MintAuthority',
@@ -204,10 +229,11 @@ describe('DAO renewal inventory', () => {
     const classes = summarizeInventory(inventory).map((summary) => [summary.cls, summary.keys]);
     expect(classes).toEqual([
       ['contracts', 6],
-      ['artwork', 8],
-      ['tokens', 5],
+      ['artwork', 7],
+      ['tokens', 4],
       ['proposals', 6],
       ['listings', 2],
+      ['holdings', 5],
       ['slug', 2],
       ['claims', 2]
     ]);
@@ -221,6 +247,43 @@ describe('DAO renewal inventory', () => {
     });
     expect(labels(inventory.missing)).toEqual(['Items(0, 1)']);
     expect(labels(inventory.present)).not.toContain('Listing(5)');
+  });
+
+  it('restores entries the RPC returns with a live-until already past', async () => {
+    const base = ledger();
+    // The RPC reports the DAO's asset balances as archived.
+    const read: LedgerRead = async (keys) => {
+      const result = await base(keys);
+      for (const [id, info] of result.entries) {
+        const key = xdr.LedgerKey.fromXDR(id, 'base64');
+        const owner = key.type === 'contractData' ? Address.fromScAddress(key.contractData.contract).toString() : '';
+        if (owner === ASSET) result.entries.set(id, { ...info, liveUntil: 899 });
+      }
+      return result;
+    };
+    const inventory = await buildDaoInventory(read, { manager: MANAGER, token: TOKEN, nowSeconds: NOW });
+    expect(labels(inventory.missing)).toEqual(['Asset balance', 'Asset balance']);
+    expect(labels(inventory.present)).not.toContain('Asset balance');
+  });
+
+  it('keeps history checkpoints and members’ tokens out of the sweep', async () => {
+    const inventory = await buildDaoInventory(ledger(), { manager: MANAGER, token: TOKEN, nowSeconds: NOW });
+    const all = labels([...inventory.present, ...inventory.missing]);
+    expect(all).not.toContain('TotalSupplyCheckpoint(0)');
+    expect(all.filter((l) => l.startsWith('Token #'))).toEqual(['Token #3', 'Token #69']);
+  });
+
+  it('estimates a year of rent from the quote’s rate', () => {
+    const present = [
+      { bytes: 1_000, liveUntil: 10_000 },
+      { bytes: 3_000, liveUntil: 10_000 + 17_280 * 100 }
+    ] as unknown as Parameters<typeof yearlyRentEstimate>[0]['present'];
+    const inventory = { present, latestLedger: 10_000 };
+    const extendTo = 17_280 * 180;
+    // 1,000 B gain 180 days and 3,000 B gain 80: 420,000 byte-days for 4.2 XLM, 0.00001 XLM per byte-day.
+    const fee = 42_000_000n;
+    expect(yearlyRentEstimate(inventory, extendTo, fee)).toBe((fee * 4_000n * 365n) / 420_000n);
+    expect(yearlyRentEstimate(inventory, 0, fee)).toBeNull();
   });
 
   it('fails loudly when the token instance itself is gone', async () => {
