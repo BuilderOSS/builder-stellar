@@ -1,15 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  ARTWORK_BUMP_MAX_WINDOW,
-  artworkEntryTotal,
   assessEntries,
   classifyRemainingLedgers,
   describeMissing,
   estimateExpiryDate,
-  expectedNextStart,
   LEDGERS_PER_DAY,
-  planArtworkBumpWindows,
   pluralDays,
   worstTtlStatus
 } from './ttl-expiry';
@@ -152,80 +148,5 @@ describe('worstTtlStatus and copy helpers', () => {
   it('estimates expiry at 5 seconds per ledger', () => {
     const now = Date.UTC(2026, 9, 8);
     expect(estimateExpiryDate(DAY, now).getTime()).toBe(now + 86_400_000);
-  });
-});
-
-describe('artworkEntryTotal', () => {
-  it('counts every item in property order plus the IPFS groups', () => {
-    expect(artworkEntryTotal([2, 3, 3], 1)).toBe(9);
-    expect(artworkEntryTotal([], 0)).toBe(0);
-    expect(artworkEntryTotal([0, 0], 4)).toBe(4);
-  });
-
-  it('rejects negative or fractional counts', () => {
-    expect(() => artworkEntryTotal([-1], 0)).toThrow();
-    expect(() => artworkEntryTotal([1.5], 0)).toThrow();
-    expect(() => artworkEntryTotal([1], -1)).toThrow();
-  });
-});
-
-describe('planArtworkBumpWindows', () => {
-  it('uses at most 50 entries per window', () => {
-    expect(ARTWORK_BUMP_MAX_WINDOW).toBe(50);
-  });
-
-  it('plans one instance-only window for an empty artwork range', () => {
-    expect(planArtworkBumpWindows(0)).toEqual([{ start: 0, limit: 0 }]);
-  });
-
-  it('keeps a single window when the range fits', () => {
-    expect(planArtworkBumpWindows(1)).toEqual([{ start: 0, limit: 1 }]);
-    expect(planArtworkBumpWindows(50)).toEqual([{ start: 0, limit: 50 }]);
-  });
-
-  it('splits 51 entries into a full window and a remainder', () => {
-    expect(planArtworkBumpWindows(51)).toEqual([
-      { start: 0, limit: 50 },
-      { start: 50, limit: 1 }
-    ]);
-  });
-
-  it('plans 120 entries as 50, 50 and 20', () => {
-    expect(planArtworkBumpWindows(120)).toEqual([
-      { start: 0, limit: 50 },
-      { start: 50, limit: 50 },
-      { start: 100, limit: 20 }
-    ]);
-  });
-
-  it('covers every entry exactly once, contiguously, for many sizes', () => {
-    for (let total = 0; total <= 260; total++) {
-      const windows = planArtworkBumpWindows(total);
-      let cursor = 0;
-      for (const window of windows) {
-        expect(window.start).toBe(cursor);
-        expect(window.limit).toBeLessThanOrEqual(ARTWORK_BUMP_MAX_WINDOW);
-        expect(window.limit).toBeGreaterThanOrEqual(total === 0 ? 0 : 1);
-        expect(expectedNextStart(window, total)).toBe(Math.min(window.start + window.limit, total));
-        cursor = window.start + window.limit;
-      }
-      expect(cursor).toBe(total);
-      expect(expectedNextStart(windows[windows.length - 1], total)).toBe(total);
-    }
-  });
-
-  it('honours a smaller window size', () => {
-    expect(planArtworkBumpWindows(7, 3)).toEqual([
-      { start: 0, limit: 3 },
-      { start: 3, limit: 3 },
-      { start: 6, limit: 1 }
-    ]);
-  });
-
-  it('rejects windows above the contract limit and non-positive sizes', () => {
-    expect(() => planArtworkBumpWindows(10, 51)).toThrow();
-    expect(() => planArtworkBumpWindows(10, 0)).toThrow();
-    expect(() => planArtworkBumpWindows(-1)).toThrow();
-    expect(() => planArtworkBumpWindows(1.5)).toThrow();
   });
 });

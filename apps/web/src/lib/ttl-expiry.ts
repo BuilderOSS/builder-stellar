@@ -1,8 +1,6 @@
 /**
- * TTL expiry math for DAO state (shared module code and artwork entries).
- *
- * Pure logic only: no network access. The RPC reads live in `ttl-expiry-rpc.ts`.
- * Economics and the operator runbook are in docs/TTL_ECONOMICS.md.
+ * TTL expiry math for DAO state. Pure logic only: the inventory and RPC reads
+ * live in `lib/chain-reads/renewal.ts`. Costs and runbooks: docs/TTL_ECONOMICS.md.
  */
 
 /** Soroban ledger cadence used throughout docs/TTL_ECONOMICS.md (5 s per ledger). */
@@ -13,9 +11,6 @@ export const SECONDS_PER_LEDGER = 5;
 export const TTL_SOON_DAYS = 45;
 /** Escalate to critical when an entry has fewer days than this left. */
 export const TTL_CRITICAL_DAYS = 14;
-
-/** Largest window accepted by `metadata.bump_artwork_ttl` (MAX_PAGE in the contract). */
-export const ARTWORK_BUMP_MAX_WINDOW = 50;
 
 export type TtlStatus = 'healthy' | 'soon' | 'critical' | 'expired';
 
@@ -130,60 +125,4 @@ export function estimateExpiryDate(remainingLedgers: number, nowMs: number): Dat
 
 export function pluralDays(days: number): string {
   return `${days} ${days === 1 ? 'day' : 'days'}`;
-}
-
-// ---------------------------------------------------------------------------
-// Artwork bump windows
-// ---------------------------------------------------------------------------
-
-export type ArtworkBumpWindow = {
-  /** Flat index of the first entry in the window (the contract's `start`). */
-  start: number;
-  /** Number of flat entries in the window (the contract's `limit`, <= 50). */
-  limit: number;
-};
-
-/**
- * The flat artwork space that `bump_artwork_ttl` walks: every item in property order,
- * then every IPFS group. Must match the contract: an unreadable property header adds 0 items.
- */
-export function artworkEntryTotal(itemCounts: number[], ipfsGroupCount: number): number {
-  assertCount(ipfsGroupCount, 'ipfsGroupCount');
-  let items = 0;
-  for (const count of itemCounts) {
-    assertCount(count, 'itemCount');
-    items += count;
-  }
-  return items + ipfsGroupCount;
-}
-
-/**
- * Split `total` flat entries into consecutive windows of at most `maxWindow`.
- *
- * A total of 0 still yields one `{ start: 0, limit: 0 }` window: the contract bumps the
- * metadata instance on every call, so the instance is renewed even with no entries.
- */
-export function planArtworkBumpWindows(total: number, maxWindow = ARTWORK_BUMP_MAX_WINDOW): ArtworkBumpWindow[] {
-  assertCount(total, 'total');
-  if (!Number.isInteger(maxWindow) || maxWindow < 1 || maxWindow > ARTWORK_BUMP_MAX_WINDOW) {
-    throw new Error(`maxWindow must be an integer in 1..=${ARTWORK_BUMP_MAX_WINDOW}, got ${maxWindow}`);
-  }
-  if (total === 0) return [{ start: 0, limit: 0 }];
-
-  const windows: ArtworkBumpWindow[] = [];
-  for (let start = 0; start < total; start += maxWindow) {
-    windows.push({ start, limit: Math.min(maxWindow, total - start) });
-  }
-  return windows;
-}
-
-/** The `next start` the contract must return for a window (`min(start + limit, total)`). */
-export function expectedNextStart(window: ArtworkBumpWindow, total: number): number {
-  return Math.min(window.start + window.limit, total);
-}
-
-function assertCount(value: number, name: string) {
-  if (!Number.isInteger(value) || value < 0) {
-    throw new Error(`${name} must be a non-negative integer, got ${value}`);
-  }
 }

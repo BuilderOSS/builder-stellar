@@ -3,10 +3,9 @@
 import { css } from 'styled-system/css';
 
 import { ContractUpdatesNotice } from '@/components/admin/contract-updates-notice';
-import { TtlExpiryPanel } from '@/components/admin/ttl-expiry-panel';
 import { PageSection } from '@/components/page-section';
 import { ProposalDraftPanel } from '@/components/proposal/proposal-draft-panel';
-import { Avatar, Chip, Disclosure, ListRow, Section } from '@/components/ui';
+import { Avatar, Chip, ListRow, Section } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryHasAuthority, treasuryIsAdmin } from '@/lib/admin-proposals';
 import { useContractAdmin } from '@/lib/admin-queries';
@@ -127,6 +126,13 @@ export default function AdminPage() {
       meta: 'Review and propose upgrades',
       href: daoAdminRoute(routeId, '/upgrades'),
       access: 'open'
+    },
+    {
+      key: 'renewal',
+      title: 'Storage renewal',
+      meta: 'When data expires, and renewing it in one go',
+      href: daoAdminRoute(routeId, '/renewal'),
+      access: 'open'
     }
   ];
 
@@ -189,10 +195,6 @@ export default function AdminPage() {
           ))}
         </div>
       </Section>
-
-      <Disclosure title="Storage renewal">
-        <TtlExpiryPanel config={config} />
-      </Disclosure>
     </PageSection>
   );
 }
