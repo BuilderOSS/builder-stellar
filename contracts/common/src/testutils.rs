@@ -31,6 +31,7 @@ pub fn empty_wasm(e: &Env) -> BytesN<32> {
 pub enum MockKey {
     Approved(BytesN<32>, BytesN<32>),
     Version(BytesN<32>),
+    Admin,
 }
 
 #[contract]
@@ -56,6 +57,12 @@ impl MockManager {
     }
     pub fn get_implementation_version(e: Env, hash: BytesN<32>) -> Option<String> {
         e.storage().instance().get(&MockKey::Version(hash))
+    }
+    pub fn set_admin(e: Env, admin: Address) {
+        e.storage().instance().set(&MockKey::Admin, &admin);
+    }
+    pub fn get_admin(e: Env) -> Option<Address> {
+        e.storage().instance().get(&MockKey::Admin)
     }
 }
 

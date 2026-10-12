@@ -8,7 +8,7 @@ use soroban_sdk::contracterror;
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub enum MinterError {
-    /// Amount is zero or does not match the allowlist amount
+    /// Amount is zero
     InvalidAmount = 7801,
     /// `token_id` is not a token contract
     InvalidTokenId = 7802,
@@ -16,10 +16,7 @@ pub enum MinterError {
     BatchTooLarge = 7803,
     /// No merkle root configured for this token
     MerkleRootNotSet = 7804,
-    /// No allowlist configured for this token
-    AllowlistNotSet = 7805,
-    /// Address is not on the current allowlist
-    NotInAllowlist = 7806,
+    // 7805 and 7806 (allowlist) are retired with the allowlist mode.
     /// Address already claimed in this round
     AlreadyClaimed = 7807,
     /// Merkle proof verification failed
@@ -29,4 +26,9 @@ pub enum MinterError {
     /// The token has not been launched yet, so setup-window minter
     /// configuration and claims are refused
     TokenNotLive = 7810,
+    /// The Manager has no admin, so nobody can upgrade or migrate the Minter
+    ManagerAdminNotSet = 7811,
+    /// `tree_uri` is empty, longer than `common::MAX_STRING_LENGTH`, or not
+    /// an `ipfs://` URI
+    InvalidTreeUri = 7812,
 }

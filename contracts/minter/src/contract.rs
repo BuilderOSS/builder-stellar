@@ -1,17 +1,27 @@
 //! Core Minter contract implementation.
 
-use soroban_sdk::{contract, contractimpl, vec, xdr::ToXdr, Address, Bytes, BytesN, Env, Vec};
+use soroban_sdk::{
+    contract, contractimpl, vec, xdr::ToXdr, Address, Bytes, BytesN, Env, String, Vec,
+};
 
 use crate::errors::MinterError;
 use crate::events::*;
 use crate::storage::*;
-use common::clients::NftClient;
+use common::clients::{ManagerRegistryClient, NftClient};
 
 #[contract]
 pub struct MinterContract;
 
 #[contractimpl]
 impl MinterContract {
+    /// * `manager` - the Manager: registry for `version()` and upgrade
+    ///   approvals; its admin is the Minter's upgrade authority
+    /// * `current_hash` - this implementation's WASM hash
+    pub fn __constructor(e: &Env, manager: Address, current_hash: BytesN<32>) {
+        set_manager(e, &manager);
+        common::upgrade::init(e, &current_hash, STORAGE_VERSION);
+    }
+
     /// Batch mints tokens to multiple recipients.
     /// Only callable by the token's admin.
     ///
@@ -77,7 +87,9 @@ impl MinterContract {
         common::ttl::extend_instance(e);
         require_token_live(e, &token_id)?;
 
-        let merkle_root = get_merkle_root(e, &token_id).ok_or(MinterError::MerkleRootNotSet)?;
+        let merkle_root = get_merkle_config(e, &token_id)
+            .ok_or(MinterError::MerkleRootNotSet)?
+            .root;
 
         let round = get_merkle_round(e, &token_id);
         if is_merkle_claimed(e, &token_id, round, &recipient) {
@@ -94,109 +106,90 @@ impl MinterContract {
         Ok(())
     }
 
-    /// Mints tokens to a recipient from the allowlist.
-    /// User self-service claiming with fixed amount.
+    /// Sets the merkle root for a token, stores where its full tree is
+    /// published, and starts a new claim round: earlier claimers may claim
+    /// again under the new root. Only callable by the token's admin, and only
+    /// once the token is live.
     ///
-    /// # Authorization
-    ///
-    /// Requires authentication from recipient
-    pub fn mint_allowlist(
-        e: &Env,
-        token_id: Address,
-        recipient: Address,
-        amount: u128,
-    ) -> Result<(), MinterError> {
-        recipient.require_auth();
-        common::ttl::extend_instance(e);
-        require_token_live(e, &token_id)?;
-
-        let fixed_amount =
-            get_allowlist_amount(e, &token_id).ok_or(MinterError::AllowlistNotSet)?;
-        let version = get_allowlist_version(e, &token_id);
-
-        if !is_allowlisted(e, &token_id, version, &recipient) {
-            return Err(MinterError::NotInAllowlist);
-        }
-
-        if amount != fixed_amount {
-            return Err(MinterError::InvalidAmount);
-        }
-
-        if is_allowlist_claimed(e, &token_id, version, &recipient) {
-            return Err(MinterError::AlreadyClaimed);
-        }
-
-        mark_allowlist_claimed(e, &token_id, version, &recipient);
-        mint_claim(e, &token_id, &recipient, amount)?;
-
-        emit_allowlist_claim(e, &token_id, &recipient, amount);
-
-        Ok(())
-    }
-
-    /// Sets the merkle root for a token and starts a new MERKLE claim round only
-    /// (allowlist claims are unaffected); earlier merkle claimers may claim again
-    /// under the new root. Claim markers are per method, so a recipient can claim
-    /// once on each method per round; admins control both lists.
-    /// Only callable by the token's admin.
-    ///
-    /// # Authorization
-    ///
-    /// Requires authentication from the token's admin
+    /// `tree_uri` is the `ipfs://<cid>` of the full tree in the
+    /// `builder-stellar-merkle-v1` format (docs/STORAGE_DIET.md § 4 Minter).
+    /// The chain cannot check it against the root; consumers recompute the
+    /// root from the file before offering a claim.
     pub fn set_merkle_root(
         e: &Env,
         token_id: Address,
         root: BytesN<32>,
+        tree_uri: String,
     ) -> Result<(), MinterError> {
         common::ttl::extend_instance(e);
         // Roots set during setup would otherwise survive launch.
         require_token_live(e, &token_id)?;
         let admin = get_admin(e, &token_id)?;
         admin.require_auth();
+        check_tree_uri(&tree_uri)?;
 
-        set_merkle_root(e, &token_id, &root);
-        bump_merkle_round(e, &token_id);
+        set_merkle_config(
+            e,
+            &token_id,
+            &MerkleConfig {
+                root: root.clone(),
+                tree_uri: tree_uri.clone(),
+            },
+        );
+        let round = bump_merkle_round(e, &token_id);
 
-        emit_merkle_root_set(e, &token_id);
+        emit_merkle_root_set(e, &token_id, &root, round, &tree_uri);
 
         Ok(())
     }
 
-    /// Sets the allowlist for a token, replacing any previous allowlist.
-    /// Only callable by the token's admin.
-    ///
-    /// Each address gets its own persistent entry under a fresh version, so the
-    /// previous list is invalidated without deleting its entries. Claim markers
-    /// are keyed by round; this call starts a new ALLOWLIST round only
-    /// (merkle claims are unaffected), so earlier allowlist claimers may claim
-    /// again under the new list.
-    ///
-    /// # Authorization
-    ///
-    /// Requires authentication from the token's admin
-    pub fn set_allowlist(
-        e: &Env,
-        token_id: Address,
-        addresses: Vec<Address>,
-        fixed_amount: u128,
-    ) -> Result<(), MinterError> {
-        common::ttl::extend_instance(e);
-        require_token_live(e, &token_id)?;
-        let admin = get_admin(e, &token_id)?;
-        admin.require_auth();
-
-        let count = addresses.len();
-        let version = get_allowlist_version(e, &token_id) + 1;
-
-        for addr in addresses.iter() {
-            add_allowlisted(e, &token_id, version, &addr);
+    /// The token's current root, round and tree URI, and whether `recipient`
+    /// already claimed in this round. Read-only.
+    pub fn claim_status(e: &Env, token_id: Address, recipient: Address) -> ClaimStatus {
+        let config = get_merkle_config(e, &token_id);
+        let round = get_merkle_round(e, &token_id);
+        ClaimStatus {
+            claimed: config.is_some() && is_merkle_claimed(e, &token_id, round, &recipient),
+            root: config.as_ref().map(|c| c.root.clone()),
+            tree_uri: config.map(|c| c.tree_uri),
+            round,
         }
-        set_allowlist_version(e, &token_id, version);
-        set_allowlist_amount(e, &token_id, &fixed_amount);
+    }
 
-        emit_allowlist_set(e, &token_id, count);
+    // ========== Upgrades (common::upgrade, Manager admin) ==========
 
+    /// Upgrade the shared Minter to a registry-approved WASM. The Manager
+    /// admin authorizes it, as for every platform contract.
+    pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) -> Result<(), MinterError> {
+        let manager = require_manager_admin(e)?;
+        common::upgrade::apply(e, &manager, &from_hash, &to_hash);
         Ok(())
+    }
+
+    /// Advance the storage layout after an upgrade (Manager admin).
+    pub fn migrate(e: &Env) -> Result<(), MinterError> {
+        require_manager_admin(e)?;
+        common::upgrade::migrate(e, STORAGE_VERSION);
+        Ok(())
+    }
+
+    /// The registry version of the running code.
+    pub fn version(e: &Env) -> String {
+        common::upgrade::version(e, &get_manager(e))
+    }
+
+    pub fn wasm_hash(e: &Env) -> BytesN<32> {
+        common::upgrade::current_hash(e)
+    }
+
+    /// Storage-layout version of the data held by this contract.
+    pub fn storage_version(e: &Env) -> u32 {
+        common::upgrade::storage_version(e)
+    }
+
+    /// The Manager this Minter answers to.
+    pub fn manager(e: &Env) -> Address {
+        get_manager(e)
     }
 }
 
@@ -219,6 +212,36 @@ fn require_token_live(e: &Env, token_id: &Address) -> Result<(), MinterError> {
         Ok(Ok(false)) => Err(MinterError::TokenNotLive),
         _ => Err(MinterError::InvalidTokenId),
     }
+}
+
+/// Require the Manager admin's auth; returns the Manager.
+fn require_manager_admin(e: &Env) -> Result<Address, MinterError> {
+    common::ttl::extend_instance(e);
+    let manager = get_manager(e);
+    let admin = ManagerRegistryClient::new(e, &manager)
+        .get_admin()
+        .ok_or(MinterError::ManagerAdminNotSet)?;
+    admin.require_auth();
+    Ok(manager)
+}
+
+/// `tree_uri` must be an `ipfs://` URI with a non-empty path, at most
+/// `common::MAX_STRING_LENGTH` bytes.
+fn check_tree_uri(tree_uri: &String) -> Result<(), MinterError> {
+    const PREFIX: &[u8; 7] = b"ipfs://";
+    let len = tree_uri.len();
+    if len <= PREFIX.len() as u32 || len > common::MAX_STRING_LENGTH {
+        return Err(MinterError::InvalidTreeUri);
+    }
+    let mut head = [0u8; 7];
+    tree_uri
+        .to_bytes()
+        .slice(0..PREFIX.len() as u32)
+        .copy_into_slice(&mut head);
+    if head != *PREFIX {
+        return Err(MinterError::InvalidTreeUri);
+    }
+    Ok(())
 }
 
 /// Mint `amount` tokens to `recipient` with a single token call, so delegation

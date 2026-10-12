@@ -1,15 +1,15 @@
 //! # Minter Contract
 //!
-//! A direct minting contract supporting three minting methods:
-//! batch minting (admin-only), merkle proof-based claims, and allowlist-based claims.
+//! The shared platform Minter: one instance for every DAO.
 //!
-//! ## Features
-//!
-//! - **Three Direct Methods**: mint_batch, mint_merkle, mint_allowlist
-//! - **Token-based Admin**: Admin derived from the token's admin, not stored
-//! - **Per-Token Configuration**: Separate merkle roots and allowlists per token
-//! - **Double-Claim Prevention**: Tracks claimed addresses per token
-//! - **Flexible**: Works with any token contract that has admin() and batch_mint()
+//! - **Two methods**: `mint_batch` (the token's admin) and `mint_merkle`
+//!   (self-service claims against a merkle root).
+//! - **Token-based admin**: derived from the token's admin, not stored.
+//! - **Published trees**: every root carries the `ipfs://` URI of its full
+//!   tree; `claim_status` reads root, round, URI and claim marker at once.
+//! - **Rounds**: a new root opens a new round; one claim per round.
+//! - **Upgradeable**: `common::upgrade` with the Manager admin as authority;
+//!   `version()` is read from the Manager registry.
 
 #![no_std]
 

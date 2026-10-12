@@ -1,12 +1,19 @@
 //! Storage definitions for the Minter contract.
 //!
-//! All per-token configuration and claim state lives in persistent storage as
-//! one entry per key, so the Minter's instance entry stays tiny and every call
-//! only loads the entries it touches. Entries follow the shared long-lived
-//! persistent TTL policy (`common::ttl`) and are renewed on use; every entry
-//! point also renews the Minter's own instance (and code) TTL.
+//! The Minter is one shared platform contract. Its instance holds only the
+//! Manager address and the common upgrade keys; per-token claim state lives in
+//! persistent storage, one entry per key, renewed on use with the shared
+//! long-lived persistent TTL policy (`common::ttl`). Every entry point also
+//! renews the Minter's own instance (and, briefly, its code).
+//!
+//! Per-token keys: `MerkleRoot(token)` (root and `tree_uri`) and
+//! `MerkleRound(token)` are DAO-owned and in the DAO's renewal sweep;
+//! `MerkleClaimed(token, round, recipient)` markers are per claimer.
 
-use soroban_sdk::{contracttype, Address, BytesN, Env};
+use soroban_sdk::{contracttype, Address, BytesN, Env, String};
+
+/// Layout version of the Minter's storage (`common::upgrade`).
+pub const STORAGE_VERSION: u32 = 1;
 
 /// Maximum number of recipients in a single batch mint (one token each). The
 /// token additionally requires the whole batch to fit its event budget
@@ -16,37 +23,40 @@ pub const MAX_BATCH_RECIPIENTS: u32 = common::MAX_BATCH_RECIPIENTS;
 /// Maximum merkle proof depth (supports 2^32 leaves).
 pub const MAX_PROOF_LEN: u32 = 32;
 
-/// Storage keys for the Minter contract (persistent storage).
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MinterKey {
-    /// Merkle root for proof-based claims: token_id -> BytesN<32>
+    /// Instance: the Manager (registry and upgrade authority).
+    Manager,
+    /// Persistent: token -> [`MerkleConfig`] for the current round.
     MerkleRoot(Address),
-
-    /// Fixed amount for allowlist claims: token_id -> u128
-    AllowlistAmount(Address),
-
-    /// Current allowlist version: token_id -> u32. Bumped on every
-    /// `set_allowlist`, which invalidates all entries of older versions. It is
-    /// also the allowlist claim round: `AllowlistClaimed` is keyed by it.
-    AllowlistVersion(Address),
-
-    /// Allowlist membership: (token_id, version, address) -> true
-    Allowlisted(Address, u32, Address),
-
-    /// Merkle claim round: token_id -> u32 (default 0). Bumped ONLY by
+    /// Persistent: token -> u32 (default 0). Bumped by every
     /// `set_merkle_root`, so a new root lets earlier claimers claim again while
     /// a re-claim within the same round stays blocked.
     MerkleRound(Address),
-
-    /// Merkle claim marker: (token_id, merkle_round, recipient) -> true
+    /// Persistent: (token, round, recipient) -> true.
     MerkleClaimed(Address, u32, Address),
+}
 
-    /// Allowlist claim marker: (token_id, allowlist_version, recipient) -> true.
-    /// Markers are per method: a recipient may claim once per method per round
-    /// (this replaces the old single marker shared by both methods; admins
-    /// control both lists).
-    AllowlistClaimed(Address, u32, Address),
+/// The current merkle root of a token and where its full tree is published.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MerkleConfig {
+    pub root: BytesN<32>,
+    /// `ipfs://<cid>` of the full tree (docs/STORAGE_DIET.md § 4 Minter). A
+    /// hint: consumers recompute the root from it before offering a claim.
+    pub tree_uri: String,
+}
+
+/// `claim_status` result. `root` and `tree_uri` are `None` before the first
+/// root; `round` is 0 then.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ClaimStatus {
+    pub root: Option<BytesN<32>>,
+    pub round: u32,
+    pub tree_uri: Option<String>,
+    pub claimed: bool,
 }
 
 fn get<V: soroban_sdk::TryFromVal<Env, soroban_sdk::Val>>(env: &Env, key: &MinterKey) -> Option<V> {
@@ -64,28 +74,27 @@ fn set<V: soroban_sdk::IntoVal<Env, soroban_sdk::Val>>(env: &Env, key: &MinterKe
     common::ttl::extend_persistent(env, &key);
 }
 
-/// Load merkle root from storage.
-pub fn get_merkle_root(env: &Env, token_id: &Address) -> Option<BytesN<32>> {
+/// The Manager wired at construction.
+pub fn get_manager(env: &Env) -> Address {
+    env.storage()
+        .instance()
+        .get(&common::ns(env, MinterKey::Manager))
+        .unwrap_or_else(|| soroban_sdk::panic_with_error!(env, common::CommonError::ManagerNotSet))
+}
+
+pub fn set_manager(env: &Env, manager: &Address) {
+    env.storage()
+        .instance()
+        .set(&common::ns(env, MinterKey::Manager), manager);
+}
+
+/// The token's current root and tree URI.
+pub fn get_merkle_config(env: &Env, token_id: &Address) -> Option<MerkleConfig> {
     get(env, &MinterKey::MerkleRoot(token_id.clone()))
 }
 
-/// Load allowlist amount from storage.
-pub fn get_allowlist_amount(env: &Env, token_id: &Address) -> Option<u128> {
-    get(env, &MinterKey::AllowlistAmount(token_id.clone()))
-}
-
-/// Current allowlist version (0 if never set).
-pub fn get_allowlist_version(env: &Env, token_id: &Address) -> u32 {
-    get(env, &MinterKey::AllowlistVersion(token_id.clone())).unwrap_or(0)
-}
-
-/// Whether `recipient` is on the current allowlist.
-pub fn is_allowlisted(env: &Env, token_id: &Address, version: u32, recipient: &Address) -> bool {
-    get::<bool>(
-        env,
-        &MinterKey::Allowlisted(token_id.clone(), version, recipient.clone()),
-    )
-    .unwrap_or(false)
+pub fn set_merkle_config(env: &Env, token_id: &Address, config: &MerkleConfig) {
+    set(env, &MinterKey::MerkleRoot(token_id.clone()), config);
 }
 
 /// Current merkle claim round (0 if no root was ever set).
@@ -100,7 +109,7 @@ pub fn bump_merkle_round(env: &Env, token_id: &Address) -> u32 {
     round
 }
 
-/// Whether `recipient` already claimed via merkle in `round`.
+/// Whether `recipient` already claimed in `round`.
 pub fn is_merkle_claimed(env: &Env, token_id: &Address, round: u32, recipient: &Address) -> bool {
     get::<bool>(
         env,
@@ -109,62 +118,11 @@ pub fn is_merkle_claimed(env: &Env, token_id: &Address, round: u32, recipient: &
     .unwrap_or(false)
 }
 
-/// Whether `recipient` already claimed via allowlist in `round`.
-pub fn is_allowlist_claimed(
-    env: &Env,
-    token_id: &Address,
-    round: u32,
-    recipient: &Address,
-) -> bool {
-    get::<bool>(
-        env,
-        &MinterKey::AllowlistClaimed(token_id.clone(), round, recipient.clone()),
-    )
-    .unwrap_or(false)
-}
-
-/// Save merkle root to storage.
-pub fn set_merkle_root(env: &Env, token_id: &Address, root: &BytesN<32>) {
-    set(env, &MinterKey::MerkleRoot(token_id.clone()), root);
-}
-
-/// Save allowlist amount to storage.
-pub fn set_allowlist_amount(env: &Env, token_id: &Address, amount: &u128) {
-    set(env, &MinterKey::AllowlistAmount(token_id.clone()), amount);
-}
-
-/// Save allowlist version to storage.
-pub fn set_allowlist_version(env: &Env, token_id: &Address, version: u32) {
-    set(
-        env,
-        &MinterKey::AllowlistVersion(token_id.clone()),
-        &version,
-    );
-}
-
-/// Add an address to the allowlist of the given version.
-pub fn add_allowlisted(env: &Env, token_id: &Address, version: u32, recipient: &Address) {
-    set(
-        env,
-        &MinterKey::Allowlisted(token_id.clone(), version, recipient.clone()),
-        &true,
-    );
-}
-
-/// Mark a recipient as having claimed via merkle in `round`.
+/// Mark a recipient as having claimed in `round`.
 pub fn mark_merkle_claimed(env: &Env, token_id: &Address, round: u32, recipient: &Address) {
     set(
         env,
         &MinterKey::MerkleClaimed(token_id.clone(), round, recipient.clone()),
-        &true,
-    );
-}
-
-/// Mark a recipient as having claimed via allowlist in `round`.
-pub fn mark_allowlist_claimed(env: &Env, token_id: &Address, round: u32, recipient: &Address) {
-    set(
-        env,
-        &MinterKey::AllowlistClaimed(token_id.clone(), round, recipient.clone()),
         &true,
     );
 }

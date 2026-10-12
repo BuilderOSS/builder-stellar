@@ -71,6 +71,8 @@ pub trait WasmHashApi {
 pub trait ManagerRegistryApi {
     fn is_upgrade_approved(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) -> bool;
     fn get_implementation_version(e: &Env, wasm_hash: BytesN<32>) -> Option<String>;
+    /// The Manager admin: the shared Minter's upgrade authority.
+    fn get_admin(e: &Env) -> Option<Address>;
 }
 
 /// Governor `consume`, called by the Treasury from `execute`.

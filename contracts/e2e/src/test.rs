@@ -3779,7 +3779,7 @@ fn every_protocol_storage_key_is_namespaced() {
     let token = DaoTokenContractClient::new(e, &f.dao.token);
     let metadata = MetadataContractClient::new(e, &f.dao.metadata);
     let marketplace = MarketplaceContractClient::new(e, &f.dao.marketplace);
-    let minter_id = e.register(minter::MinterContract, ());
+    let (minter_id, _) = shared_minter(&f);
     let minter = minter::MinterContractClient::new(e, &minter_id);
     f.manager.set_platform_minter(&minter_id);
 
@@ -3808,11 +3808,11 @@ fn every_protocol_storage_key_is_namespaced() {
         },
     );
 
-    // Minter: a merkle round and an allowlist claim.
-    minter.set_merkle_root(&f.dao.token, &BytesN::from_array(e, &[7; 32]));
+    // Minter: a merkle round and a claim.
     let claimer = Address::generate(e);
-    minter.set_allowlist(&f.dao.token, &vec![e, claimer.clone()], &1u128);
-    minter.mint_allowlist(&f.dao.token, &claimer, &1u128);
+    let (root, proof, _) = merkle_pair(e, &claimer, 1, &Address::generate(e), 1);
+    minter.set_merkle_root(&f.dao.token, &root, &String::from_str(e, "ipfs://bafytree"));
+    minter.mint_merkle(&f.dao.token, &claimer, &1u128, &proof);
 
     // Marketplace: a secondary and a primary listing.
     let payment_asset = marketplace.get_config().payment_asset;
@@ -3862,4 +3862,108 @@ fn every_protocol_storage_key_is_namespaced() {
         ],
     );
     std::println!("checked {checked} storage keys");
+}
+
+// ============================================================================
+// Shared Minter (docs/STORAGE_DIET.md § 4 Minter, eng review D8)
+// ============================================================================
+
+/// The shared Minter, registered in the Manager registry as "Minter" 0.1.0 on
+/// a placeholder hash (it runs as native test code until upgraded).
+fn shared_minter(f: &DaoFixture) -> (Address, BytesN<32>) {
+    let e = &f.e;
+    let hash = BytesN::from_array(e, &[0x51; 32]);
+    f.manager.register_implementation(
+        &String::from_str(e, "Minter"),
+        &String::from_str(e, "0.1.0"),
+        &hash,
+    );
+    let id = e.register(
+        minter::MinterContract,
+        (f.manager.address.clone(), hash.clone()),
+    );
+    (id, hash)
+}
+
+/// The Minter's leaf: `sha256(scval_xdr(address) || u128_be(amount))`.
+fn merkle_leaf(e: &Env, who: &Address, amount: u128) -> BytesN<32> {
+    use soroban_sdk::xdr::ToXdr;
+    let mut bytes = soroban_sdk::Bytes::new(e);
+    bytes.append(&who.clone().to_xdr(e));
+    bytes.extend_from_array(&amount.to_be_bytes());
+    e.crypto().sha256(&bytes).into()
+}
+
+/// A two-leaf tree: (root, proof for `a`, proof for `b`).
+fn merkle_pair(
+    e: &Env,
+    a: &Address,
+    amount_a: u128,
+    b: &Address,
+    amount_b: u128,
+) -> (BytesN<32>, Vec<BytesN<32>>, Vec<BytesN<32>>) {
+    let (la, lb) = (merkle_leaf(e, a, amount_a), merkle_leaf(e, b, amount_b));
+    let (lo, hi) = if la.to_array() <= lb.to_array() {
+        (la.clone(), lb.clone())
+    } else {
+        (lb.clone(), la.clone())
+    };
+    let mut pair = soroban_sdk::Bytes::new(e);
+    pair.extend_from_array(&lo.to_array());
+    pair.extend_from_array(&hi.to_array());
+    let root: BytesN<32> = e.crypto().sha256(&pair).into();
+    (root, vec![e, lb], vec![e, la])
+}
+
+/// Eng review D8: the shared Minter upgrades through the registry under the
+/// Manager admin, and claims keep working against the root set before the
+/// upgrade, on the real built WASM.
+#[test]
+fn shared_minter_upgrades_then_claims_against_the_existing_root() {
+    let f = factory_dao();
+    let e = &f.e;
+    let token = DaoTokenContractClient::new(e, &f.dao.token);
+    let (minter_id, from) = shared_minter(&f);
+    let minter = minter::MinterContractClient::new(e, &minter_id);
+    f.manager.set_platform_minter(&minter_id);
+    f.manager.launch_dao(
+        &f.dao.token,
+        &manager::LaunchConfig {
+            launch_auction: false,
+            launch_marketplace: false,
+            minter: minter_id.clone(),
+        },
+    );
+    assert_eq!(minter.version(), String::from_str(e, "0.1.0"));
+
+    let alice = Address::generate(e);
+    let bob = Address::generate(e);
+    let (root, alice_proof, bob_proof) = merkle_pair(e, &alice, 2, &bob, 3);
+    let tree_uri = String::from_str(e, "ipfs://bafyallocation");
+    minter.set_merkle_root(&f.dao.token, &root, &tree_uri);
+    minter.mint_merkle(&f.dao.token, &alice, &2u128, &alice_proof);
+
+    let to = upload_module_wasm(e, "minter");
+    f.manager.register_implementation(
+        &String::from_str(e, "Minter"),
+        &String::from_str(e, "0.2.0"),
+        &to,
+    );
+    f.manager.approve_upgrade(&from, &to);
+    minter.upgrade(&from, &to);
+
+    // Now running the built WASM against the same storage.
+    assert_eq!(minter.wasm_hash(), to);
+    assert_eq!(minter.version(), String::from_str(e, "0.2.0"));
+    let status = minter.claim_status(&f.dao.token, &bob);
+    assert_eq!(status.root, Some(root));
+    assert_eq!(status.round, 1);
+    assert_eq!(status.tree_uri, Some(tree_uri));
+    assert!(!status.claimed);
+    minter.mint_merkle(&f.dao.token, &bob, &3u128, &bob_proof);
+    assert_eq!(token.balance(&bob), 3);
+    assert!(minter
+        .try_mint_merkle(&f.dao.token, &alice, &2u128, &alice_proof)
+        .is_err());
+    assert_eq!(token.balance(&alice), 2);
 }
