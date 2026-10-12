@@ -1,12 +1,16 @@
 import { Networks, TransactionBuilder } from '@stellar/stellar-sdk';
 
 /**
- * Fee guard (docs/STORAGE_DIET.md § 8, D29). An everyday action costs well under
- * a cent; a fee in the tens or hundreds of XLM means the transaction is paying
- * rent on shared contract code the platform should have renewed. Refuse to sign
- * and say so, instead of a silent charge or the SDK's u32 overflow error.
+ * Fee guard (docs/STORAGE_DIET.md § 8, D29). A fee in the hundreds of XLM means
+ * the transaction is paying rent on shared contract code the platform should have
+ * renewed (~300 XLM per code entry before D27). Refuse to sign and say so, instead
+ * of a silent charge or the SDK's u32 overflow error.
+ *
+ * The threshold is 50 XLM, not the 10 XLM first planned: testnet rent measured
+ * 2026-10-12 is ~0.01 XLM per KB-day, so creating a DAO (six ~1 KB instances
+ * extended to 170 days) already costs about 10 XLM. See docs/TTL_ECONOMICS.md.
  */
-export const FEE_GUARD_STROOPS = 100_000_000n; // 10 XLM
+export const FEE_GUARD_STROOPS = 500_000_000n; // 50 XLM
 
 export class FeeGuardError extends Error {
   constructor(readonly fee: bigint) {

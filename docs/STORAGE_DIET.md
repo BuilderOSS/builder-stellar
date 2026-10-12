@@ -1,6 +1,6 @@
 # Storage diet: chain-complete operation, smaller hot state, one-sweep renewal
 
-Status: **APPROVED 2026-10-12 (design), engineering review 2026-10-12 applied; not implemented.** Revised 2026-10-12. Supersedes the two earlier drafts (the
+Status: **APPROVED 2026-10-12 (design), engineering review 2026-10-12 applied; implemented on `feat/markdown-text`; testnet redeploy pending.** Revised 2026-10-12. Supersedes the two earlier drafts (the
 event-only diet and the compaction rewrite) and their ledgers. It does not authorize a deployment or a database
 reset; the testnet redeploy needs its own go-ahead.
 
@@ -450,10 +450,13 @@ from `Upgraded` / `ImplementationRegistered`; claims merkle-only. Activity feed:
 - Governance: the proposal list and states can be built from `proposal_ids` and `proposal(id)` when the indexer
   is down; queue and execute use the preimage from the indexer or the proposer's saved draft.
 - Renewal: the Manage tab of § 7.
-- **Fee guard.** Before signing, if the simulated resource fee exceeds a threshold (10 XLM), stop and explain
-  ("This action would pay ~N XLM to renew shared contract code. The platform renews this; please report it.")
-  instead of the SDK's u32 overflow error or a silent charge. Investigate the reported 2× resource fee in the web
-  assemble path (`docs/STORAGE_DIET_REVIEW.md` § 3 open item).
+- **Fee guard.** Before signing, if the transaction's maximum fee exceeds a threshold, stop and explain
+  ("This action would pay ~N XLM in network fees, most of it to renew shared contract code…") instead of the SDK's
+  u32 overflow error or a silent charge. **Implemented at 50 XLM, not the 10 XLM first planned:** testnet rent
+  measured at implementation is ~0.0098 XLM per KB-day, so creating a DAO already pays ~10 XLM of instance rent
+  (TTL_ECONOMICS.md). The 2× resource fee was stellar-sdk 17.1.0 `AssembledTransaction.sign` passing
+  `fee: this.built.fee` to `cloneFrom`, so `build()` added the resource fee again; fixed by a pnpm patch with a
+  regression test.
 - **Platform admin dashboard: deferred** to its own wave (eng review D2; TODOS.md). In this release the platform's
   renewal duty is covered by extending `scripts/renew-code-ttl.mjs` to the Manager instance, every
   `Implementation(hash)` record and the shared Minter instance and code hash.
@@ -602,7 +605,7 @@ One PR on one branch (eng review D5), reviewable commits:
 | D26 | No storage key may encode like a linked OpenZeppelin key; token hook key renamed, governor `Proposal(id)` renamed; a guard test per module | The token collision broke minting on testnet DAO 0 after a rename (`STORAGE_DIET_REVIEW.md` Finding 1) | Rely on review |
 | D27 | Instance and code TTL bumps decoupled: instances 60 → 170 days, code under 2 → 4 days | `instance().extend_ttl` bumps code too, so callers paid ~300 XLM of shared code rent (Finding 2) | Operations only (one missed renewal costs a member ~300 XLM) |
 | D28 | Platform code renewal: 170-day default, refuse values at or below the code threshold, hash list from chain, extend at upload; code stays out of DAO sweeps | Renewals ≤ 60 days were paid twice; upgrade hashes were missed; code entries exceed the sweep's read-bytes limit | 30-day default from the deploy artifact |
-| D29 | Fee guard before signing; investigate the 2× resource fee | A rent bump surfaced as a u32 overflow error | Leave to the SDK |
+| D29 | Fee guard before signing (50 XLM after measuring testnet rent); the 2× resource fee was an SDK double count, patched | A rent bump surfaced as a u32 overflow error | Leave to the SDK; 10 XLM (blocks DAO creation at testnet rent) |
 | D31 | Every OZ total-supply and quorum checkpoint is in the DAO sweep | OZ binary-searches checkpoints and renews only what it reads, so an untouched midpoint can archive and break `proposal_state` years later. Supply checkpoints grow about one per auction day, so after roughly a year the sweep needs a second transaction (the batch splitter) | Renew only the latest checkpoints (breaks old lookups); compact checkpoints in the token |
 | D30 | Every Builder storage key is wrapped as `("buildeross", Variant)`; OZ keys untouched; an e2e test walks the ledger and rejects any other shape | Separates Builder keys from OZ keys by construction instead of by review; readable in explorers. Costs 32 bytes per key (DAO instances +1.5 KB, § 4) | Bare variants plus the D26 guard only; a shorter prefix |
 

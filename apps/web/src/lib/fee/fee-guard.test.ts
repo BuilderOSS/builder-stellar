@@ -27,6 +27,8 @@ function txWithResourceFee(resourceFee: bigint) {
 describe('fee guard', () => {
   it('passes everyday fees and refuses one that pays for shared code', () => {
     expect(() => assertFeeWithinGuard(txWithResourceFee(250_000n), Networks.TESTNET)).not.toThrow();
+    // Creating a DAO pays ~10 XLM of instance rent on testnet; it must pass.
+    expect(() => assertFeeWithinGuard(txWithResourceFee(150_000_000n), Networks.TESTNET)).not.toThrow();
     // The governor.propose fee measured on testnet before the diet (STORAGE_DIET_REVIEW § 3).
     const xdr = txWithResourceFee(2_998_799_289n);
     expect(transactionMaxFee(xdr, Networks.TESTNET)).toBe(2_998_799_389n);

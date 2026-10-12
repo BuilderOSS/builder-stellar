@@ -4308,6 +4308,28 @@ fn instance_u32(e: &Env, contract: &Address, variant: &str) -> u32 {
         .unwrap_or(0)
 }
 
+/// The variant name of a storage key: the inner symbol of a namespaced
+/// `("buildeross", [Variant, ..])` key, or the first symbol of an OZ key.
+fn key_variant(key: &soroban_sdk::xdr::ScVal) -> std::string::String {
+    use soroban_sdk::xdr::ScVal;
+    let name = |s: &soroban_sdk::xdr::ScSymbol| {
+        std::string::String::from_utf8_lossy(s.0.as_slice()).into_owned()
+    };
+    let ScVal::Vec(Some(items)) = key else {
+        return std::format!("{key:?}");
+    };
+    match (items.first(), items.get(1)) {
+        (Some(ScVal::Symbol(ns)), Some(ScVal::Vec(Some(inner)))) if name(ns) == "buildeross" => {
+            match inner.first() {
+                Some(ScVal::Symbol(v)) => name(v),
+                _ => "buildeross(?)".into(),
+            }
+        }
+        (Some(ScVal::Symbol(v)), _) => std::format!("oz:{}", name(v)),
+        _ => std::format!("{key:?}"),
+    }
+}
+
 /// The persistent keys a DAO renews in its one-transaction sweep, built only
 /// from the token address, the Manager and contract reads. Instances are
 /// listed separately by every client (seven `LedgerKeyContractInstance`s).
@@ -4734,9 +4756,20 @@ fn reference_dao_sweep_fits_one_transaction() {
         entries += 1;
         bytes += size_of(module, &ScVal::LedgerKeyContractInstance);
     }
+    // Bytes per key variant, so docs/TTL_ECONOMICS.md can say where the rent goes.
+    let mut by_variant = std::collections::BTreeMap::<std::string::String, (u32, u32)>::new();
+    by_variant.insert("(instances)".into(), (entries, bytes));
     for (owner, key) in &listed {
+        let key = ScVal::try_from_val(e, key).unwrap();
+        let size = size_of(owner, &key);
         entries += 1;
-        bytes += size_of(owner, &ScVal::try_from_val(e, key).unwrap());
+        bytes += size;
+        let row = by_variant.entry(key_variant(&key)).or_default();
+        row.0 += 1;
+        row.1 += size;
+    }
+    for (variant, (n, b)) in &by_variant {
+        std::println!("BUDGET   {variant}: {n} entries, {b} bytes");
     }
     std::println!("BUDGET reference DAO sweep: {entries} entries, {bytes} bytes");
     assert!(entries <= TX_MAX_FOOTPRINT_ENTRIES, "{entries} entries");
