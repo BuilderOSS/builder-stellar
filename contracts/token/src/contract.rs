@@ -63,11 +63,11 @@ impl DaoTokenContract {
         Self::set_name_and_symbol(e, &name, &symbol);
         common::admin::init(e, &admin);
         let instance = e.storage().instance();
-        instance.set(&TokenKey::MetadataContract, &metadata);
-        instance.set(&TokenKey::Manager, &manager);
-        instance.set(&TokenKey::Treasury, &treasury);
-        instance.set(&TokenKey::Auction, &auction);
-        instance.set(&TokenKey::Marketplace, &marketplace);
+        instance.set(&common::ns(e, TokenKey::MetadataContract), &metadata);
+        instance.set(&common::ns(e, TokenKey::Manager), &manager);
+        instance.set(&common::ns(e, TokenKey::Treasury), &treasury);
+        instance.set(&common::ns(e, TokenKey::Auction), &auction);
+        instance.set(&common::ns(e, TokenKey::Marketplace), &marketplace);
         common::upgrade::init(e, &current_hash, &version, STORAGE_VERSION);
         emit_token_initialized(e, &admin, &name, &symbol, &version);
     }
@@ -133,7 +133,7 @@ impl DaoTokenContract {
     /// Whether `authority` holds explicit minting authority. The admin always
     /// has implicit authority without an entry.
     pub fn mint_authority(e: &Env, authority: Address) -> bool {
-        let key = TokenKey::MintAuthority(authority);
+        let key = common::ns(e, TokenKey::MintAuthority(authority));
         let enabled: Option<bool> = e.storage().persistent().get(&key);
         if enabled.is_some() {
             common::ttl::extend_persistent(e, &key);
@@ -161,7 +161,9 @@ impl DaoTokenContract {
         if !minters.contains(&minter) {
             panic_with_error!(e, TokenError::MinterNotGranted);
         }
-        e.storage().instance().set(&TokenKey::Minter, &minter);
+        e.storage()
+            .instance()
+            .set(&common::ns(e, TokenKey::Minter), &minter);
         common::admin::handoff(e, &treasury);
         for minter in minters.iter() {
             let old_enabled = Self::mint_authority(e, minter.clone());
@@ -179,7 +181,9 @@ impl DaoTokenContract {
 
     /// Returns the metadata contract used for mint hooks.
     pub fn metadata(e: &Env) -> Option<Address> {
-        e.storage().instance().get(&TokenKey::MetadataContract)
+        e.storage()
+            .instance()
+            .get(&common::ns(e, TokenKey::MetadataContract))
     }
 
     /// SEP-50 collection name.
@@ -206,7 +210,9 @@ impl DaoTokenContract {
     pub fn manager(e: &Env) -> Address {
         common::error::require(
             e,
-            e.storage().instance().get(&TokenKey::Manager),
+            e.storage()
+                .instance()
+                .get(&common::ns(e, TokenKey::Manager)),
             common::CommonError::ManagerNotSet,
         )
     }
@@ -215,24 +221,30 @@ impl DaoTokenContract {
     pub fn treasury(e: &Env) -> Address {
         common::error::require(
             e,
-            e.storage().instance().get(&TokenKey::Treasury),
+            e.storage()
+                .instance()
+                .get(&common::ns(e, TokenKey::Treasury)),
             common::CommonError::TreasuryNotSet,
         )
     }
 
     /// The DAO Auction (holds no voting power).
     pub fn auction(e: &Env) -> Option<Address> {
-        e.storage().instance().get(&TokenKey::Auction)
+        e.storage()
+            .instance()
+            .get(&common::ns(e, TokenKey::Auction))
     }
 
     /// The DAO Marketplace (escrow; holds no voting power).
     pub fn marketplace(e: &Env) -> Option<Address> {
-        e.storage().instance().get(&TokenKey::Marketplace)
+        e.storage()
+            .instance()
+            .get(&common::ns(e, TokenKey::Marketplace))
     }
 
     /// The shared platform Minter this DAO launched with (`None` before launch).
     pub fn minter(e: &Env) -> Option<Address> {
-        e.storage().instance().get(&TokenKey::Minter)
+        e.storage().instance().get(&common::ns(e, TokenKey::Minter))
     }
 
     /// Voting-capable supply: every minted token except those held by the
@@ -442,7 +454,7 @@ impl DaoTokenContract {
     fn voting_holder<'a>(e: &Env, account: &'a Address) -> Option<&'a Address> {
         let instance = e.storage().instance();
         for key in [TokenKey::Treasury, TokenKey::Auction, TokenKey::Marketplace] {
-            if instance.get::<TokenKey, Address>(&key).as_ref() == Some(account) {
+            if instance.get::<_, Address>(&common::ns(e, key)).as_ref() == Some(account) {
                 return None;
             }
         }
@@ -458,7 +470,7 @@ impl DaoTokenContract {
     }
 
     fn write_mint_authority(e: &Env, authority: &Address, enabled: bool) {
-        let key = TokenKey::MintAuthority(authority.clone());
+        let key = common::ns(e, TokenKey::MintAuthority(authority.clone()));
         e.storage().persistent().set(&key, &enabled);
         common::ttl::extend_persistent(e, &key);
     }

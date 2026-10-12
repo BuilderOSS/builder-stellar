@@ -61,20 +61,20 @@ pub struct VersionSynced {
 pub fn init(e: &Env, current_hash: &BytesN<32>, version: &String, storage_version: u32) {
     e.storage()
         .instance()
-        .set(&UpgradeKey::CurrentHash, current_hash);
+        .set(&crate::ns(e, UpgradeKey::CurrentHash), current_hash);
     e.storage()
         .instance()
-        .set(&UpgradeKey::CurrentVersion, version);
+        .set(&crate::ns(e, UpgradeKey::CurrentVersion), version);
     e.storage()
         .instance()
-        .set(&UpgradeKey::StorageVersion, &storage_version);
+        .set(&crate::ns(e, UpgradeKey::StorageVersion), &storage_version);
 }
 
 /// Storage-layout version of the data currently held by this contract.
 pub fn storage_version(e: &Env) -> u32 {
     e.storage()
         .instance()
-        .get(&UpgradeKey::StorageVersion)
+        .get(&crate::ns(e, UpgradeKey::StorageVersion))
         .unwrap_or_else(|| panic_with_error!(e, CommonError::StorageVersionNotSet))
 }
 
@@ -88,9 +88,10 @@ pub fn migrate(e: &Env, code_storage_version: u32) -> u32 {
     if from >= code_storage_version {
         panic_with_error!(e, CommonError::NothingToMigrate);
     }
-    e.storage()
-        .instance()
-        .set(&UpgradeKey::StorageVersion, &code_storage_version);
+    e.storage().instance().set(
+        &crate::ns(e, UpgradeKey::StorageVersion),
+        &code_storage_version,
+    );
     Migrated {
         from_storage_version: from,
         to_storage_version: code_storage_version,
@@ -102,14 +103,14 @@ pub fn migrate(e: &Env, code_storage_version: u32) -> u32 {
 pub fn current_hash(e: &Env) -> BytesN<32> {
     e.storage()
         .instance()
-        .get(&UpgradeKey::CurrentHash)
+        .get(&crate::ns(e, UpgradeKey::CurrentHash))
         .unwrap_or_else(|| panic_with_error!(e, CommonError::CurrentHashNotSet))
 }
 
 pub fn version(e: &Env) -> String {
     e.storage()
         .instance()
-        .get(&UpgradeKey::CurrentVersion)
+        .get(&crate::ns(e, UpgradeKey::CurrentVersion))
         .unwrap_or_else(|| panic_with_error!(e, CommonError::VersionNotSet))
 }
 
@@ -127,7 +128,9 @@ fn implementation_version(e: &Env, manager: &Address, hash: &BytesN<32>) -> Stri
 pub fn sync_version(e: &Env, manager: &Address) -> String {
     ttl::extend_instance(e);
     let v = implementation_version(e, manager, &current_hash(e));
-    e.storage().instance().set(&UpgradeKey::CurrentVersion, &v);
+    e.storage()
+        .instance()
+        .set(&crate::ns(e, UpgradeKey::CurrentVersion), &v);
     VersionSynced { version: v.clone() }.publish(e);
     v
 }
@@ -151,8 +154,12 @@ pub fn apply(e: &Env, manager: &Address, from: &BytesN<32>, to: &BytesN<32>) {
         panic_with_error!(e, CommonError::UpgradeNotApproved);
     }
     let v = implementation_version(e, manager, to);
-    e.storage().instance().set(&UpgradeKey::CurrentHash, to);
-    e.storage().instance().set(&UpgradeKey::CurrentVersion, &v);
+    e.storage()
+        .instance()
+        .set(&crate::ns(e, UpgradeKey::CurrentHash), to);
+    e.storage()
+        .instance()
+        .set(&crate::ns(e, UpgradeKey::CurrentVersion), &v);
     Upgraded {
         from_hash: from.clone(),
         to_hash: to.clone(),

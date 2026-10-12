@@ -82,7 +82,7 @@ the allowlist markers and the four display strings, which § 4 removes.
 | Wiring and counters | **Getters added** so a fresh client can discover every module and scan finite ranges (§ 4). |
 | Byte-level codecs for attributes and items (compaction C) | **Optional, last.** Only if measurements say so. |
 | In-contract bump entrypoints | **Removed** (`bump_artwork_ttl`, `bump_slug_ttl`) in favour of footprint TTL operations (§ 7). |
-| Storage keys | **No module key may encode like an OpenZeppelin key the module links** (`NFTStorageKey`, `VotesStorageKey`, `GovernorStorageKey`, and any OZ module added later): a unit or tuple variant encodes as `[Symbol(name), args…]`, so the enum's type name does not separate them. The token's metadata-hook key is renamed (`TokenKey::MetadataContract`) and the governor's `Proposal(id)` becomes `ProposalTime(id)`. A per-module guard test enforces it (§ 9). Source: `docs/STORAGE_DIET_REVIEW.md` Finding 1. |
+| Storage keys | **No module key may encode like an OpenZeppelin key the module links** (`NFTStorageKey`, `VotesStorageKey`, `GovernorStorageKey`, and any OZ module added later): a unit or tuple variant encodes as `[Symbol(name), args…]`, so the enum's type name does not separate them. The token's metadata-hook key is renamed (`TokenKey::MetadataContract`) and the governor's `Proposal(id)` becomes `ProposalTime(id)`. A per-module guard test enforces it (§ 9). Source: `docs/STORAGE_DIET_REVIEW.md` Finding 1. On top of that, every Builder key is wrapped as `("buildeross", variant)` (D30, § 4), so Builder and OZ keys cannot collide by construction. |
 | Shared code rent | **Callers never pay for long code renewals.** The instance bump and the code bump are separate: instances keep 60 → 170 days; code is bumped only when under 2 days left, to 4 days, so a member pays a few days of shared code rent at most. The platform keeps code at 170 days, extends every new hash at upload, and builds its renewal list from the chain. Source: `docs/STORAGE_DIET_REVIEW.md` Finding 2. |
 | Rollout | **One fresh testnet redeploy**, no migration code (pre-mainnet rule). `STORAGE_VERSION` stays 1 everywhere. |
 
@@ -179,6 +179,25 @@ mint counter (no burn extension).
   token's `TokenKey::Metadata` already collided with `NFTStorageKey::Metadata` (the hook address overwrote the
   collection name at construction; a rename overwrote the hook, so minting trapped). Fixed as
   `TokenKey::MetadataContract`.
+- **Namespace (D30).** Every key a Builder contract writes is `common::ns(e, Key::Variant(..))`, which encodes as
+  `(Symbol("buildeross"), [Symbol("Variant"), args…])`. OpenZeppelin keys stay as OZ writes them. A Builder key
+  is therefore a two-element vector starting with `buildeross`, and no OZ key can take that shape, so the two
+  sets cannot collide whatever OZ adds later. This applies to the DAO modules, `common` (admin, upgrade,
+  lifecycle), the Manager and the Minter. Off-chain readers build keys with `apps/web/src/lib/storage-key.ts`;
+  a Rust test and a web test pin the same XDR bytes. The per-module guard still runs, because all Builder enums
+  share one namespace and must stay disjoint inside it.
+- **Namespace cost (measured, e2e factory DAO).** Each key grows by 32 bytes of XDR (a 12-byte vector header and a
+  20-byte symbol). Rent is charged per byte, so:
+
+  | Entry | Namespaced keys | Bytes after | Overhead |
+  |---|---|---|---|
+  | Six DAO instances together | 48 | 6,320 | +1,536 (32 %) |
+  | Manager instance | 10 | 1,160 | +320 (38 %) |
+  | A small persistent entry (slug, minter, Minter marker) | 1 | 164–360 | +32 (10–24 %) |
+  | An artwork item page (32 items) | 1 | several KB | +32 (under 1 %) |
+
+  OZ per-holder entries (owners, balances, checkpoints) are unchanged. A 3-letter namespace would save 8 bytes per
+  key; the vector header is the unavoidable part.
 
 ### Manager
 
@@ -462,6 +481,11 @@ indexer and API are off. Mocks that return indexed data invalidate the run.
   `set_metadata(name, symbol)`, `metadata()` still returns the hook and `mint`/`batch_mint` still seed attributes.
 - Key-collision guard per module: the `ScVal` of every variant of the module's key enums, with dummy arguments,
   is disjoint by `(first symbol, length)` from the OZ key enums that module links.
+- Namespace walk (D30, e2e `every_protocol_storage_key_is_namespaced`): after artwork, a launch with auction and
+  marketplace, Minter claims, both listing kinds and a governed rename, every key the Manager, the Minter and the
+  six modules own is `("buildeross", variant)` or a listed OZ shape (`common::testutils::OZ_KEY_SHAPES`). The
+  namespaced key XDR is pinned in Rust (`common` `namespaced_key_xdr_is_pinned`) and in the app
+  (`storage-key.test.ts`).
 - e2e: a live DAO renames its token by proposal, then settles an auction; the minted token has attributes.
 - `common::ttl`: with code under the code threshold and the instance above its own, a call bumps code to
   `CODE_TTL_EXTEND_TO` only; with the instance under 60 days, the instance goes to 170 days and code is untouched
@@ -571,6 +595,7 @@ One PR on one branch (eng review D5), reviewable commits:
 | D27 | Instance and code TTL bumps decoupled: instances 60 → 170 days, code under 2 → 4 days | `instance().extend_ttl` bumps code too, so callers paid ~300 XLM of shared code rent (Finding 2) | Operations only (one missed renewal costs a member ~300 XLM) |
 | D28 | Platform code renewal: 170-day default, refuse values at or below the code threshold, hash list from chain, extend at upload; code stays out of DAO sweeps | Renewals ≤ 60 days were paid twice; upgrade hashes were missed; code entries exceed the sweep's read-bytes limit | 30-day default from the deploy artifact |
 | D29 | Fee guard before signing; investigate the 2× resource fee | A rent bump surfaced as a u32 overflow error | Leave to the SDK |
+| D30 | Every Builder storage key is wrapped as `("buildeross", Variant)`; OZ keys untouched; an e2e test walks the ledger and rejects any other shape | Separates Builder keys from OZ keys by construction instead of by review; readable in explorers. Costs 32 bytes per key (DAO instances +1.5 KB, § 4) | Bare variants plus the D26 guard only; a shorter prefix |
 
 ## 13. Review record
 

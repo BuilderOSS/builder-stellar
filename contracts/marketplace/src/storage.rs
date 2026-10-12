@@ -14,7 +14,7 @@ pub const MAX_FEE_BPS: u32 = common::MAX_FEE_BPS;
 const LISTING_TTL_EXTEND_TO: u32 = 30 * common::ttl::DAY_IN_LEDGERS;
 const LISTING_TTL_THRESHOLD: u32 = 7 * common::ttl::DAY_IN_LEDGERS;
 
-fn extend_listing(e: &Env, key: &DataKey) {
+fn extend_listing<K: soroban_sdk::IntoVal<Env, soroban_sdk::Val>>(e: &Env, key: &K) {
     common::ttl::extend_persistent_for(e, key, LISTING_TTL_THRESHOLD, LISTING_TTL_EXTEND_TO);
 }
 
@@ -66,16 +66,18 @@ pub enum DataKey {
 pub fn get_config(e: &Env) -> MarketplaceConfig {
     e.storage()
         .instance()
-        .get(&DataKey::Config)
+        .get(&common::ns(e, DataKey::Config))
         .unwrap_or_else(|| panic_with_error!(e, MarketplaceError::NotInitialized))
 }
 
 pub fn set_config(e: &Env, config: &MarketplaceConfig) {
-    e.storage().instance().set(&DataKey::Config, config);
+    e.storage()
+        .instance()
+        .set(&common::ns(e, DataKey::Config), config);
 }
 
 pub fn get_listing(e: &Env, token_id: u32) -> Option<Listing> {
-    let key = DataKey::Listing(token_id);
+    let key = common::ns(e, DataKey::Listing(token_id));
     let listing = e.storage().persistent().get(&key);
     if listing.is_some() {
         extend_listing(e, &key);
@@ -84,17 +86,19 @@ pub fn get_listing(e: &Env, token_id: u32) -> Option<Listing> {
 }
 
 pub fn set_listing(e: &Env, token_id: u32, listing: &Listing) {
-    let key = DataKey::Listing(token_id);
+    let key = common::ns(e, DataKey::Listing(token_id));
     e.storage().persistent().set(&key, listing);
     extend_listing(e, &key);
 }
 
 pub fn remove_listing(e: &Env, token_id: u32) {
-    e.storage().persistent().remove(&DataKey::Listing(token_id));
+    e.storage()
+        .persistent()
+        .remove(&common::ns(e, DataKey::Listing(token_id)));
 }
 
 pub fn get_primary_listing(e: &Env, listing_id: u64) -> Option<PrimaryListing> {
-    let key = DataKey::PrimaryListing(listing_id);
+    let key = common::ns(e, DataKey::PrimaryListing(listing_id));
     let listing = e.storage().persistent().get(&key);
     if listing.is_some() {
         extend_listing(e, &key);
@@ -103,7 +107,7 @@ pub fn get_primary_listing(e: &Env, listing_id: u64) -> Option<PrimaryListing> {
 }
 
 pub fn set_primary_listing(e: &Env, listing_id: u64, listing: &PrimaryListing) {
-    let key = DataKey::PrimaryListing(listing_id);
+    let key = common::ns(e, DataKey::PrimaryListing(listing_id));
     e.storage().persistent().set(&key, listing);
     extend_listing(e, &key);
 }
@@ -111,7 +115,7 @@ pub fn set_primary_listing(e: &Env, listing_id: u64, listing: &PrimaryListing) {
 pub fn remove_primary_listing(e: &Env, listing_id: u64) {
     e.storage()
         .persistent()
-        .remove(&DataKey::PrimaryListing(listing_id));
+        .remove(&common::ns(e, DataKey::PrimaryListing(listing_id)));
 }
 
 /// Returns the next listing id and advances the counter (ids start at 0).
@@ -119,17 +123,17 @@ pub fn take_next_listing_id(e: &Env) -> u64 {
     let id: u64 = e
         .storage()
         .instance()
-        .get(&DataKey::NextListingId)
+        .get(&common::ns(e, DataKey::NextListingId))
         .unwrap_or(0);
     e.storage()
         .instance()
-        .set(&DataKey::NextListingId, &(id + 1));
+        .set(&common::ns(e, DataKey::NextListingId), &(id + 1));
     id
 }
 
 pub fn peek_next_listing_id(e: &Env) -> u64 {
     e.storage()
         .instance()
-        .get(&DataKey::NextListingId)
+        .get(&common::ns(e, DataKey::NextListingId))
         .unwrap_or(0)
 }

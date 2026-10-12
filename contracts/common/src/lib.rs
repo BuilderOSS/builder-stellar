@@ -23,6 +23,19 @@ pub mod upgrade;
 
 pub use error::CommonError;
 
+/// Every storage key this protocol owns is wrapped as `("buildeross", key)`:
+/// `[Symbol("buildeross"), [Symbol(variant), args...]]`. A `#[contracttype]`
+/// key encodes only its variant name and arguments, so without the wrapper a
+/// module key can address the same slot as an OpenZeppelin key with the same
+/// variant (docs/STORAGE_DIET_REVIEW.md Finding 1). OpenZeppelin's own keys
+/// (owners, balances, votes, approvals) are not ours and stay unwrapped.
+pub const STORAGE_NAMESPACE: &str = "buildeross";
+
+/// Namespace `key` for storage (see `STORAGE_NAMESPACE`).
+pub fn ns<K>(e: &soroban_sdk::Env, key: K) -> (soroban_sdk::Symbol, K) {
+    (soroban_sdk::Symbol::new(e, STORAGE_NAMESPACE), key)
+}
+
 // Parameter bounds shared by the Manager (validated once at `create_dao`) and
 // the module that owns each parameter (validated again by its constructor and
 // setters). Keeping one definition here means the two can never disagree.

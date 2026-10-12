@@ -497,7 +497,7 @@ fn launch_is_one_shot_and_moves_upgrade_authority() {
     let treasury: Address = env.as_contract(&client.address, || {
         env.storage()
             .instance()
-            .get(&crate::storage::DataKey::Treasury)
+            .get(&common::ns(&env, crate::storage::DataKey::Treasury))
             .unwrap()
     });
     assert_eq!(client.admin(), owner);
@@ -804,9 +804,9 @@ fn m6_mint_never_reads_item_entries() {
     // because it only needs the instance item counts.
     env.as_contract(&client.address, || {
         let p = env.storage().persistent();
-        p.remove(&crate::storage::DataKey::Items(0, 0));
-        p.remove(&crate::storage::DataKey::PropertyName(0));
-        p.remove(&crate::storage::DataKey::IpfsGroups);
+        p.remove(&common::ns(&env, crate::storage::DataKey::Items(0, 0)));
+        p.remove(&common::ns(&env, crate::storage::DataKey::PropertyName(0)));
+        p.remove(&common::ns(&env, crate::storage::DataKey::IpfsGroups));
     });
     assert!(client.on_minted(&1));
     let attrs = client.get_attributes(&1);
@@ -1230,7 +1230,7 @@ fn artwork_admin_moves_to_treasury_at_launch() {
     let treasury = env.as_contract(&client.address, || {
         env.storage()
             .instance()
-            .get::<_, Address>(&crate::storage::DataKey::Treasury)
+            .get::<_, Address>(&common::ns(&env, crate::storage::DataKey::Treasury))
             .unwrap()
     });
     client.launch(&treasury);
@@ -1530,12 +1530,12 @@ fn artwork_layout_is_a_handful_of_entries() {
         let p = env.storage().persistent();
         let mut n = 0u32;
         for pid in 0..16u32 {
-            n += p.has(&DataKey::PropertyName(pid)) as u32;
+            n += p.has(&common::ns(&env, DataKey::PropertyName(pid))) as u32;
             for page in 0..crate::MAX_ITEM_PAGES {
-                n += p.has(&DataKey::Items(pid, page)) as u32;
+                n += p.has(&common::ns(&env, DataKey::Items(pid, page))) as u32;
             }
         }
-        n + p.has(&DataKey::IpfsGroups) as u32
+        n + p.has(&common::ns(&env, DataKey::IpfsGroups)) as u32
     });
     // 16 names + 16 item pages + 1 group vector, not 304 item keys.
     assert_eq!(entries, 33);
@@ -1563,7 +1563,7 @@ fn attributes_share_pages_and_batches_cross_them() {
     let pages = env.as_contract(&client.address, || {
         let p = env.storage().persistent();
         (0..4u32)
-            .filter(|i| p.has(&DataKey::AttributesPage(*i)))
+            .filter(|i| p.has(&common::ns(&env, DataKey::AttributesPage(*i))))
             .count()
     });
     assert_eq!(pages, 2);

@@ -2,6 +2,8 @@ import { Address, scValToNative, xdr } from '@stellar/stellar-sdk';
 import type { Server } from '@stellar/stellar-sdk/rpc';
 import { Buffer } from 'buffer';
 
+import { namespacedKey } from '@/lib/storage-key';
+
 import type { ClaimState } from './types';
 
 type KeyName =
@@ -13,15 +15,15 @@ type KeyName =
   | 'MerkleClaimed'
   | 'AllowlistClaimed';
 
-/** Exact persistent MinterKey tuple encoding from contracts/minter/src/storage.rs. */
+/** Exact persistent `common::ns(MinterKey::..)` encoding from contracts/minter/src/storage.rs. */
 export function minterStorageKey(minter: string, token: string, name: KeyName, round?: number, recipient?: string) {
-  const args = [xdr.ScVal.scvSymbol(name), new Address(token).toScVal()];
+  const args = [new Address(token).toScVal()];
   if (round !== undefined) args.push(xdr.ScVal.scvU32(round));
   if (recipient !== undefined) args.push(new Address(recipient).toScVal());
   return xdr.LedgerKey.contractData(
     new xdr.LedgerKeyContractData({
       contract: new Address(minter).toScAddress(),
-      key: xdr.ScVal.scvVec(args),
+      key: namespacedKey(name, ...args),
       durability: xdr.ContractDataDurability.persistent
     })
   );

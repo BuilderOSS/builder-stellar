@@ -55,12 +55,14 @@ impl ManagerContract {
         write_admin(&env, &admin);
         extend_instance_ttl(&env);
         set_factory_paused(&env, false);
-        env.storage()
-            .instance()
-            .set(&ManagerKey::CurrentManagerWasm, &current_hash);
-        env.storage()
-            .instance()
-            .set(&ManagerKey::CurrentManagerVersion, &version);
+        env.storage().instance().set(
+            &common::ns(&env, ManagerKey::CurrentManagerWasm),
+            &current_hash,
+        );
+        env.storage().instance().set(
+            &common::ns(&env, ManagerKey::CurrentManagerVersion),
+            &version,
+        );
 
         // Emit initialization event
         emit_manager_initialized(&env, &admin, &version, env.ledger().sequence() as u64);
@@ -333,7 +335,7 @@ impl ManagerContract {
             &env,
             env.storage()
                 .instance()
-                .get(&ManagerKey::CurrentManagerVersion),
+                .get(&common::ns(&env, ManagerKey::CurrentManagerVersion)),
             common::CommonError::VersionNotSet,
         )
     }
@@ -345,7 +347,7 @@ impl ManagerContract {
             &env,
             env.storage()
                 .instance()
-                .get(&ManagerKey::CurrentManagerWasm),
+                .get(&common::ns(&env, ManagerKey::CurrentManagerWasm)),
             common::CommonError::CurrentHashNotSet,
         )
     }
@@ -431,22 +433,26 @@ impl ManagerContract {
 
         env.storage()
             .instance()
-            .set(&ManagerKey::CurrentTokenWasm, &token);
+            .set(&common::ns(&env, ManagerKey::CurrentTokenWasm), &token);
+        env.storage().instance().set(
+            &common::ns(&env, ManagerKey::CurrentMetadataWasm),
+            &metadata,
+        );
         env.storage()
             .instance()
-            .set(&ManagerKey::CurrentMetadataWasm, &metadata);
-        env.storage()
-            .instance()
-            .set(&ManagerKey::CurrentAuctionWasm, &auction);
-        env.storage()
-            .instance()
-            .set(&ManagerKey::CurrentGovernorWasm, &governor);
-        env.storage()
-            .instance()
-            .set(&ManagerKey::CurrentTreasuryWasm, &treasury);
-        env.storage()
-            .instance()
-            .set(&ManagerKey::CurrentMarketplaceWasm, &marketplace);
+            .set(&common::ns(&env, ManagerKey::CurrentAuctionWasm), &auction);
+        env.storage().instance().set(
+            &common::ns(&env, ManagerKey::CurrentGovernorWasm),
+            &governor,
+        );
+        env.storage().instance().set(
+            &common::ns(&env, ManagerKey::CurrentTreasuryWasm),
+            &treasury,
+        );
+        env.storage().instance().set(
+            &common::ns(&env, ManagerKey::CurrentMarketplaceWasm),
+            &marketplace,
+        );
 
         emit_current_implementations_updated(
             &env,
@@ -989,7 +995,7 @@ impl ManagerContract {
         extend_instance_ttl(&env);
         env.storage()
             .persistent()
-            .get(&ManagerKey::SlugToDao(slug))
+            .get(&common::ns(&env, ManagerKey::SlugToDao(slug)))
             .ok_or(ManagerError::SlugNotFound)
     }
 
@@ -999,7 +1005,7 @@ impl ManagerContract {
         extend_instance_ttl(&env);
         env.storage()
             .persistent()
-            .get(&ManagerKey::DaoSlug(token_address))
+            .get(&common::ns(&env, ManagerKey::DaoSlug(token_address)))
     }
 
     /// Permissionless TTL renewal for a DAO's slug registry entries.
@@ -1016,7 +1022,7 @@ impl ManagerContract {
         let token: Address = env
             .storage()
             .persistent()
-            .get(&ManagerKey::SlugToDao(slug.clone()))
+            .get(&common::ns(&env, ManagerKey::SlugToDao(slug.clone())))
             .ok_or(ManagerError::SlugNotFound)?;
         bump_persistent(&env, &ManagerKey::SlugToDao(slug));
         bump_persistent(&env, &ManagerKey::DaoSlug(token));
@@ -1104,13 +1110,13 @@ impl ManagerContract {
         let current_hash: BytesN<32> = env
             .storage()
             .instance()
-            .get(&ManagerKey::CurrentManagerWasm)
+            .get(&common::ns(&env, ManagerKey::CurrentManagerWasm))
             .ok_or(ManagerError::InvalidVersion)?;
 
         let current_version: String = env
             .storage()
             .instance()
-            .get(&ManagerKey::CurrentManagerVersion)
+            .get(&common::ns(&env, ManagerKey::CurrentManagerVersion))
             .ok_or(ManagerError::InvalidVersion)?;
 
         // Verify from_hash matches current hash
@@ -1138,10 +1144,11 @@ impl ManagerContract {
         // Update Manager's stored hash and version
         env.storage()
             .instance()
-            .set(&ManagerKey::CurrentManagerWasm, &to_hash);
-        env.storage()
-            .instance()
-            .set(&ManagerKey::CurrentManagerVersion, &to_impl.version.clone());
+            .set(&common::ns(&env, ManagerKey::CurrentManagerWasm), &to_hash);
+        env.storage().instance().set(
+            &common::ns(&env, ManagerKey::CurrentManagerVersion),
+            &to_impl.version.clone(),
+        );
 
         // Emit upgrade event
         emit_manager_upgraded(
@@ -1252,7 +1259,7 @@ impl ManagerContract {
         let hash: BytesN<32> = env
             .storage()
             .instance()
-            .get(key)
+            .get(&common::ns(env, key.clone()))
             .ok_or(ManagerError::CurrentImplementationsNotSet)?;
         let implementation = Self::active_implementation(env, &hash)?;
         if implementation.name != String::from_str(env, expected_name) {

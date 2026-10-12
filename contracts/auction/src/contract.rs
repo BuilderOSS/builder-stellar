@@ -128,7 +128,7 @@ impl DaoAuctionContract {
     fn manager(e: &Env) -> Address {
         common::error::require(
             e,
-            e.storage().instance().get(&DataKey::Manager),
+            e.storage().instance().get(&common::ns(e, DataKey::Manager)),
             common::CommonError::ManagerNotSet,
         )
     }
@@ -216,7 +216,9 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
             payment_token: payment_token.clone(),
         };
         set_config(e, &config);
-        e.storage().instance().set(&DataKey::Manager, &manager);
+        e.storage()
+            .instance()
+            .set(&common::ns(e, DataKey::Manager), &manager);
         common::upgrade::init(e, &current_hash, &version, STORAGE_VERSION);
 
         emit_auction_initialized(

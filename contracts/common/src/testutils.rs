@@ -119,3 +119,127 @@ pub fn shapes(list: &[(&str, u32)]) -> std::vec::Vec<(std::string::String, u32)>
         .map(|(n, l)| (std::string::String::from(*n), *l))
         .collect()
 }
+
+/// Every OpenZeppelin key shape a Builder module may write outside the
+/// `buildeross` namespace, at stellar-contracts rev fbfde38: the
+/// non-fungible token and its sequential counter, votes, governor and
+/// pausable. Update on an OZ upgrade.
+pub const OZ_KEY_SHAPES: &[(&str, u32)] = &[
+    // NFTStorageKey
+    ("Owner", 2),
+    ("Balance", 2),
+    ("Approval", 2),
+    ("ApprovalForAll", 3),
+    ("Metadata", 1),
+    // NFTSequentialStorageKey
+    ("TokenIdCounter", 1),
+    // VotesStorageKey
+    ("Delegatee", 2),
+    ("NumCheckpoints", 2),
+    ("DelegateCheckpoint", 3),
+    ("NumTotalSupplyCheckpoints", 1),
+    ("TotalSupplyCheckpoint", 2),
+    ("VotingUnits", 2),
+    // GovernorStorageKey
+    ("Name", 1),
+    ("Version", 1),
+    ("VotingDelay", 1),
+    ("VotingPeriod", 1),
+    ("ProposalThreshold", 1),
+    ("Proposal", 2),
+    ("NumQuorumCheckpoints", 1),
+    ("QuorumCheckpoint", 2),
+    ("ProposalVote", 2),
+    ("HasVoted", 3),
+    ("TokenContract", 1),
+    // PausableStorageKey
+    ("Paused", 1),
+];
+
+/// Walk every ledger entry `contracts` own (instance storage and persistent
+/// and temporary entries) and panic unless each key is either
+/// `(Symbol("buildeross"), <enum variant>)` or a known OpenZeppelin shape
+/// ([`OZ_KEY_SHAPES`]). Also panics if a contract has no namespaced key at
+/// all, so a contract the walk silently misses cannot pass.
+///
+/// Returns the number of keys checked.
+pub fn assert_storage_namespaced(e: &Env, contracts: &[(&str, soroban_sdk::Address)]) -> u32 {
+    use soroban_sdk::xdr::{LedgerEntryData, LedgerKey, ScAddress, ScVal};
+
+    fn variant(v: &ScVal) -> Option<(std::string::String, u32)> {
+        match v {
+            ScVal::Vec(Some(items)) => match items.first() {
+                Some(ScVal::Symbol(sym)) => {
+                    Some((sym.to_utf8_string().unwrap(), items.len() as u32))
+                }
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+    // Some(true) = namespaced, Some(false) = known OZ shape, None = stray.
+    fn classify(key: &ScVal) -> Option<bool> {
+        if let ScVal::Vec(Some(items)) = key {
+            if items.len() == 2 {
+                if let (ScVal::Symbol(sym), inner) = (&items[0], &items[1]) {
+                    if sym.to_utf8_string().unwrap() == crate::STORAGE_NAMESPACE {
+                        return variant(inner).map(|_| true);
+                    }
+                }
+            }
+        }
+        let (name, len) = variant(key)?;
+        OZ_KEY_SHAPES
+            .iter()
+            .any(|(n, l)| *n == name && *l == len)
+            .then_some(false)
+    }
+
+    let owners: std::vec::Vec<(&str, ScAddress)> = contracts
+        .iter()
+        .map(|(name, addr)| (*name, ScAddress::from(addr)))
+        .collect();
+    let mut keys: std::vec::Vec<(&str, ScVal)> = std::vec::Vec::new();
+    let snapshot = e.to_ledger_snapshot();
+    for (key, (entry, _)) in snapshot.ledger_entries.iter() {
+        let LedgerKey::ContractData(data_key) = key.as_ref() else {
+            continue;
+        };
+        let Some((owner, _)) = owners.iter().find(|(_, a)| *a == data_key.contract) else {
+            continue;
+        };
+        // Authorization nonces are written by the host, not by contract code.
+        if matches!(data_key.key, ScVal::LedgerKeyNonce(_)) {
+            continue;
+        }
+        if data_key.key != ScVal::LedgerKeyContractInstance {
+            keys.push((owner, data_key.key.clone()));
+            continue;
+        }
+        if let LedgerEntryData::ContractData(d) = &entry.data {
+            if let ScVal::ContractInstance(instance) = &d.val {
+                for item in instance.storage.iter().flat_map(|m| m.iter()) {
+                    keys.push((owner, item.key.clone()));
+                }
+            }
+        }
+    }
+
+    let mut namespaced = std::collections::BTreeMap::<&str, u32>::new();
+    let mut strays = std::vec::Vec::new();
+    for (owner, key) in &keys {
+        match classify(key) {
+            Some(true) => *namespaced.entry(owner).or_default() += 1,
+            Some(false) => {}
+            None => strays.push(std::format!("{owner}: {key:?}")),
+        }
+    }
+    assert!(strays.is_empty(), "keys outside the namespace: {strays:#?}");
+    for (name, _) in contracts {
+        assert!(
+            namespaced.get(name).copied().unwrap_or(0) > 0,
+            "{name} has no namespaced storage key; is it in the ledger?"
+        );
+    }
+    keys.len() as u32
+}

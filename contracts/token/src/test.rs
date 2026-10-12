@@ -132,7 +132,7 @@ fn wired_treasury(e: &Env, client: &DaoTokenContractClient) -> Address {
     e.as_contract(&client.address, || {
         e.storage()
             .instance()
-            .get(&crate::storage::TokenKey::Treasury)
+            .get(&common::ns(e, crate::storage::TokenKey::Treasury))
             .unwrap()
     })
 }
@@ -754,7 +754,7 @@ fn launch_requires_manager_auth() {
 /// Address wired under `key` in the token's instance storage.
 fn wired(e: &Env, client: &DaoTokenContractClient, key: crate::storage::TokenKey) -> Address {
     e.as_contract(&client.address, || {
-        e.storage().instance().get(&key).unwrap()
+        e.storage().instance().get(&common::ns(e, key)).unwrap()
     })
 }
 
@@ -950,7 +950,7 @@ fn mint_authority_lives_in_persistent_storage() {
     let (e, client, _owner, _m) = setup_with_manager();
     let minter = Address::generate(&e);
     launch(&e, &client, std::slice::from_ref(&minter));
-    let key = crate::storage::TokenKey::MintAuthority(minter.clone());
+    let key = common::ns(&e, crate::storage::TokenKey::MintAuthority(minter.clone()));
     e.as_contract(&client.address, || {
         assert!(!e.storage().instance().has(&key));
         assert_eq!(e.storage().persistent().get::<_, bool>(&key), Some(true));

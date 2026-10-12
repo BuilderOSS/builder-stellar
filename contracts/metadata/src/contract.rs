@@ -30,7 +30,10 @@ impl MetadataContract {
         let manager = Self::manager(&env);
         manager.require_auth();
         common::lifecycle::mark_live(&env);
-        let wired: Option<Address> = env.storage().instance().get(&DataKey::Treasury);
+        let wired: Option<Address> = env
+            .storage()
+            .instance()
+            .get(&common::ns(&env, DataKey::Treasury));
         if wired != Some(treasury.clone()) {
             soroban_sdk::panic_with_error!(&env, Error::TreasuryMismatch);
         }
@@ -87,9 +90,13 @@ impl MetadataContract {
                 soroban_sdk::panic_with_error!(&env, err);
             }
         }
-        env.storage().instance().set(&DataKey::Manager, &manager);
+        env.storage()
+            .instance()
+            .set(&common::ns(&env, DataKey::Manager), &manager);
         common::admin::init(&env, &admin);
-        env.storage().instance().set(&DataKey::Treasury, &treasury);
+        env.storage()
+            .instance()
+            .set(&common::ns(&env, DataKey::Treasury), &treasury);
         common::upgrade::init(&env, &current_hash, &version, STORAGE_VERSION);
 
         emit_metadata_initialized(&env, &token, &renderer_base, &version, &admin);
@@ -134,7 +141,7 @@ impl MetadataContract {
     fn manager(env: &Env) -> Address {
         env.storage()
             .instance()
-            .get(&DataKey::Manager)
+            .get(&common::ns(env, DataKey::Manager))
             .unwrap_or_else(|| {
                 soroban_sdk::panic_with_error!(env, common::CommonError::ManagerNotSet)
             })

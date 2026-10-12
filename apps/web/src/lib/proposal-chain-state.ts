@@ -4,15 +4,16 @@ import { Server } from '@stellar/stellar-sdk/rpc';
 
 import { type DaoNetworkConfig, readSource } from '@/lib/dao-config';
 import { proposalIdToBuffer } from '@/lib/proposal-id';
+import { namespacedKey } from '@/lib/storage-key';
 
 export const PROPOSAL_EXPIRATION_SECONDS = 1_209_600;
 
 export function proposalCoreKey(governor: string, proposalId: string) {
-  // contracts/governor/src/storage.rs: GovernorKey::ProposalTime(BytesN<32>).
+  // contracts/governor/src/storage.rs: common::ns(GovernorKey::ProposalTime(BytesN<32>)).
   return xdr.LedgerKey.contractData(
     new xdr.LedgerKeyContractData({
       contract: new Address(governor).toScAddress(),
-      key: xdr.ScVal.scvVec([xdr.ScVal.scvSymbol('ProposalTime'), xdr.ScVal.scvBytes(proposalIdToBuffer(proposalId))]),
+      key: namespacedKey('ProposalTime', xdr.ScVal.scvBytes(proposalIdToBuffer(proposalId))),
       durability: xdr.ContractDataDurability.persistent
     })
   );

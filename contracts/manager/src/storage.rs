@@ -164,24 +164,28 @@ pub enum ManagerKey {
 }
 
 pub fn get_admin(env: &Env) -> Option<Address> {
-    env.storage().instance().get(&ManagerKey::Admin)
+    env.storage()
+        .instance()
+        .get(&common::ns(env, ManagerKey::Admin))
 }
 
 pub fn write_admin(env: &Env, admin: &Address) {
-    env.storage().instance().set(&ManagerKey::Admin, admin);
+    env.storage()
+        .instance()
+        .set(&common::ns(env, ManagerKey::Admin), admin);
 }
 
 pub fn is_factory_paused(env: &Env) -> bool {
     env.storage()
         .instance()
-        .get(&ManagerKey::FactoryPaused)
+        .get(&common::ns(env, ManagerKey::FactoryPaused))
         .unwrap_or(false)
 }
 
 pub fn set_factory_paused(env: &Env, paused: bool) {
     env.storage()
         .instance()
-        .set(&ManagerKey::FactoryPaused, &paused);
+        .set(&common::ns(env, ManagerKey::FactoryPaused), &paused);
 }
 
 /// Extend the Manager instance entry. Called by every entrypoint.
@@ -194,31 +198,38 @@ pub fn extend_instance_ttl(env: &Env) {
 
 /// Read a persistent entry and extend its TTL when present.
 pub fn get_persistent<V: TryFromVal<Env, Val>>(env: &Env, key: &ManagerKey) -> Option<V> {
-    let value = env.storage().persistent().get(key);
+    let key = common::ns(env, key.clone());
+    let value = env.storage().persistent().get(&key);
     if value.is_some() {
-        common::ttl::extend_persistent(env, key);
+        common::ttl::extend_persistent(env, &key);
     }
     value
 }
 
 /// Write a persistent entry and extend its TTL.
 pub fn set_persistent<V: IntoVal<Env, Val>>(env: &Env, key: &ManagerKey, value: &V) {
-    env.storage().persistent().set(key, value);
-    common::ttl::extend_persistent(env, key);
+    let key = common::ns(env, key.clone());
+    env.storage().persistent().set(&key, value);
+    common::ttl::extend_persistent(env, &key);
 }
 
 pub fn remove_persistent(env: &Env, key: &ManagerKey) {
-    env.storage().persistent().remove(key);
+    env.storage()
+        .persistent()
+        .remove(&common::ns(env, key.clone()));
 }
 
 /// Extend a persistent entry's TTL without reading it. No-op when absent.
 pub fn bump_persistent(env: &Env, key: &ManagerKey) {
-    if env.storage().persistent().has(key) {
-        common::ttl::extend_persistent(env, key);
+    let key = common::ns(env, key.clone());
+    if env.storage().persistent().has(&key) {
+        common::ttl::extend_persistent(env, &key);
     }
 }
 
 /// Whether a live persistent entry exists. Does not extend TTL.
 pub fn has_persistent(env: &Env, key: &ManagerKey) -> bool {
-    env.storage().persistent().has(key)
+    env.storage()
+        .persistent()
+        .has(&common::ns(env, key.clone()))
 }

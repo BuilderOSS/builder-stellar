@@ -3776,3 +3776,100 @@ fn rename_by_proposal_then_settle_mints_with_artwork() {
     let uri = token.token_uri(&next);
     assert!(!uri.is_empty());
 }
+
+/// D30: every key a launched DAO, the Manager and the shared Minter write is
+/// either `("buildeross", <variant>)` or a known OpenZeppelin shape. The DAO
+/// runs every module first (artwork, launch with auction and marketplace,
+/// Minter claims, a secondary and a primary listing, a governed rename), so
+/// the walk sees the keys real use creates.
+#[test]
+fn every_protocol_storage_key_is_namespaced() {
+    let f = factory_dao();
+    let e = &f.e;
+    let token = DaoTokenContractClient::new(e, &f.dao.token);
+    let metadata = MetadataContractClient::new(e, &f.dao.metadata);
+    let marketplace = MarketplaceContractClient::new(e, &f.dao.marketplace);
+    let minter_id = e.register(minter::MinterContract, ());
+    let minter = minter::MinterContractClient::new(e, &minter_id);
+    f.manager.set_platform_minter(&minter_id);
+
+    metadata.add_properties(
+        &vec![e, String::from_str(e, "Background")],
+        &vec![
+            e,
+            ItemParam {
+                property_id: 0,
+                name: String::from_str(e, "Blue"),
+                is_new_property: true,
+            },
+        ],
+        &IpfsGroup {
+            base_uri: String::from_str(e, "ipfs://art/"),
+            extension: String::from_str(e, ".png"),
+        },
+    );
+    let listed = token.mint(&f.deployer, &f.deployer);
+    f.manager.launch_dao(
+        &f.dao.token,
+        &manager::LaunchConfig {
+            launch_auction: true,
+            launch_marketplace: true,
+            minter: minter_id.clone(),
+        },
+    );
+
+    // Minter: a merkle round and an allowlist claim.
+    minter.set_merkle_root(&f.dao.token, &BytesN::from_array(e, &[7; 32]));
+    let claimer = Address::generate(e);
+    minter.set_allowlist(&f.dao.token, &vec![e, claimer.clone()], &1u128);
+    minter.mint_allowlist(&f.dao.token, &claimer, &1u128);
+
+    // Marketplace: a secondary and a primary listing.
+    let payment_asset = marketplace.get_config().payment_asset;
+    token.approve(
+        &f.deployer,
+        &f.dao.marketplace,
+        &listed,
+        &(e.ledger().sequence() + 10_000),
+    );
+    marketplace.list(
+        &listed,
+        &f.deployer,
+        &100,
+        &1_000_000,
+        &10_000,
+        &payment_asset,
+    );
+    marketplace.create_primary_listing(&100, &1_000_000);
+
+    // Governor and Treasury: a proposal through execution.
+    let (_id, desc_hash, targets, functions, args) = queue_single_action(
+        &f,
+        &f.dao.token,
+        "set_metadata",
+        vec![
+            e,
+            String::from_str(e, "Lantern Club").into_val(e),
+            String::from_str(e, "LANTERN").into_val(e),
+        ],
+        "Rename the club",
+    );
+    DaoTreasuryContractClient::new(e, &f.dao.treasury)
+        .execute(&targets, &functions, &args, &desc_hash);
+    assert_eq!(token.name(), String::from_str(e, "Lantern Club"));
+
+    let checked = common::testutils::assert_storage_namespaced(
+        e,
+        &[
+            ("manager", f.manager.address.clone()),
+            ("minter", minter_id.clone()),
+            ("token", f.dao.token.clone()),
+            ("metadata", f.dao.metadata.clone()),
+            ("auction", f.dao.auction.clone()),
+            ("governor", f.dao.governor.clone()),
+            ("treasury", f.dao.treasury.clone()),
+            ("marketplace", f.dao.marketplace.clone()),
+        ],
+    );
+    std::println!("checked {checked} storage keys");
+}

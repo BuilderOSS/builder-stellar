@@ -25,7 +25,7 @@ fn extend_instance_ttl(env: &Env) {
 }
 
 /// Artwork entries use the shared long-lived persistent policy.
-fn extend_persistent_ttl(env: &Env, key: &DataKey) {
+fn extend_persistent_ttl<K: soroban_sdk::IntoVal<Env, soroban_sdk::Val>>(env: &Env, key: &K) {
     common::ttl::extend_persistent(env, key);
 }
 
@@ -121,7 +121,7 @@ pub fn get_settings(env: &Env) -> Result<Settings, Error> {
     let settings = env
         .storage()
         .instance()
-        .get(&DataKey::Settings)
+        .get(&common::ns(env, DataKey::Settings))
         .ok_or(Error::NotInitialized);
     if settings.is_ok() {
         extend_instance_ttl(env);
@@ -130,31 +130,37 @@ pub fn get_settings(env: &Env) -> Result<Settings, Error> {
 }
 
 pub fn set_settings(env: &Env, settings: &Settings) {
-    env.storage().instance().set(&DataKey::Settings, settings);
+    env.storage()
+        .instance()
+        .set(&common::ns(env, DataKey::Settings), settings);
     extend_instance_ttl(env);
 }
 
 pub fn get_profile_state(env: &Env) -> Result<ProfileState, Error> {
     env.storage()
         .instance()
-        .get(&DataKey::Profile)
+        .get(&common::ns(env, DataKey::Profile))
         .ok_or(Error::NotInitialized)
 }
 
 pub fn set_profile_state(env: &Env, state: &ProfileState) {
-    env.storage().instance().set(&DataKey::Profile, state);
+    env.storage()
+        .instance()
+        .set(&common::ns(env, DataKey::Profile), state);
     extend_instance_ttl(env);
 }
 
 pub fn get_item_counts(env: &Env) -> Vec<u32> {
     env.storage()
         .instance()
-        .get(&DataKey::ItemCounts)
+        .get(&common::ns(env, DataKey::ItemCounts))
         .unwrap_or(Vec::new(env))
 }
 
 pub fn set_item_counts(env: &Env, counts: &Vec<u32>) {
-    env.storage().instance().set(&DataKey::ItemCounts, counts);
+    env.storage()
+        .instance()
+        .set(&common::ns(env, DataKey::ItemCounts), counts);
     extend_instance_ttl(env);
 }
 
@@ -170,14 +176,14 @@ pub fn get_item_count(env: &Env, index: u32) -> Option<u32> {
 pub fn get_ipfs_group_count(env: &Env) -> u32 {
     env.storage()
         .instance()
-        .get(&DataKey::IpfsGroupCount)
+        .get(&common::ns(env, DataKey::IpfsGroupCount))
         .unwrap_or(0)
 }
 
 pub fn set_ipfs_group_count(env: &Env, count: u32) {
     env.storage()
         .instance()
-        .set(&DataKey::IpfsGroupCount, &count);
+        .set(&common::ns(env, DataKey::IpfsGroupCount), &count);
     extend_instance_ttl(env);
 }
 
@@ -186,7 +192,7 @@ pub fn get_property_name(env: &Env, index: u32) -> Option<String> {
     if index >= get_property_count(env) {
         return None;
     }
-    let key = DataKey::PropertyName(index);
+    let key = common::ns(env, DataKey::PropertyName(index));
     let value = env.storage().persistent().get(&key);
     if value.is_some() {
         extend_persistent_ttl(env, &key);
@@ -195,7 +201,7 @@ pub fn get_property_name(env: &Env, index: u32) -> Option<String> {
 }
 
 pub fn set_property_name(env: &Env, index: u32, name: &String) {
-    let key = DataKey::PropertyName(index);
+    let key = common::ns(env, DataKey::PropertyName(index));
     env.storage().persistent().set(&key, name);
     extend_persistent_ttl(env, &key);
 }
@@ -203,13 +209,13 @@ pub fn set_property_name(env: &Env, index: u32, name: &String) {
 pub fn remove_property_name(env: &Env, index: u32) {
     env.storage()
         .persistent()
-        .remove(&DataKey::PropertyName(index));
+        .remove(&common::ns(env, DataKey::PropertyName(index)));
 }
 
 /// Raw page read; callers bound it by the property's item count (a page past
 /// the count may hold stale items from before a reset).
 pub fn get_item_page(env: &Env, property_index: u32, page: u32) -> Vec<Item> {
-    let key = DataKey::Items(property_index, page);
+    let key = common::ns(env, DataKey::Items(property_index, page));
     let value: Option<Vec<Item>> = env.storage().persistent().get(&key);
     if value.is_some() {
         extend_persistent_ttl(env, &key);
@@ -218,7 +224,7 @@ pub fn get_item_page(env: &Env, property_index: u32, page: u32) -> Vec<Item> {
 }
 
 pub fn set_item_page(env: &Env, property_index: u32, page: u32, items: &Vec<Item>) {
-    let key = DataKey::Items(property_index, page);
+    let key = common::ns(env, DataKey::Items(property_index, page));
     env.storage().persistent().set(&key, items);
     extend_persistent_ttl(env, &key);
 }
@@ -229,7 +235,7 @@ pub fn get_ipfs_data(env: &Env) -> Vec<IpfsGroup> {
     if count == 0 {
         return Vec::new(env);
     }
-    let key = DataKey::IpfsGroups;
+    let key = common::ns(env, DataKey::IpfsGroups);
     let groups: Vec<IpfsGroup> = env
         .storage()
         .persistent()
@@ -245,7 +251,7 @@ pub fn get_ipfs_group(env: &Env, index: u32) -> Option<IpfsGroup> {
 }
 
 pub fn set_ipfs_data(env: &Env, groups: &Vec<IpfsGroup>) {
-    let key = DataKey::IpfsGroups;
+    let key = common::ns(env, DataKey::IpfsGroups);
     env.storage().persistent().set(&key, groups);
     extend_persistent_ttl(env, &key);
     set_ipfs_group_count(env, groups.len());
@@ -285,7 +291,7 @@ pub fn set_attributes_range(env: &Env, first_token_id: u32, attributes: &Vec<Vec
     let mut i = 0;
     while i < n {
         let page_index = (first_token_id + i) / TOKENS_PER_ATTRIBUTE_PAGE;
-        let key = DataKey::AttributesPage(page_index);
+        let key = common::ns(env, DataKey::AttributesPage(page_index));
         let mut page: Vec<Vec<u32>> = env
             .storage()
             .persistent()
@@ -317,7 +323,10 @@ pub fn set_attributes(env: &Env, token_id: u32, attributes: &Vec<u32>) {
 
 /// A token's attributes, or an empty vector when it has none.
 pub fn get_attributes(env: &Env, token_id: u32) -> Vec<u32> {
-    let key = DataKey::AttributesPage(token_id / TOKENS_PER_ATTRIBUTE_PAGE);
+    let key = common::ns(
+        env,
+        DataKey::AttributesPage(token_id / TOKENS_PER_ATTRIBUTE_PAGE),
+    );
     let page: Option<Vec<Vec<u32>>> = env.storage().persistent().get(&key);
     if page.is_some() {
         extend_persistent_ttl(env, &key);

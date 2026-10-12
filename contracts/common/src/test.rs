@@ -240,3 +240,33 @@ fn error_codes_sit_in_the_common_block() {
         assert!(c > codes::COMMON && c < codes::COMMON + codes::BLOCK_SIZE);
     }
 }
+
+/// D30: the exact XDR of a namespaced key. apps/web/src/lib/storage-key.test.ts
+/// pins the same bytes, so the off-chain readers and the contracts agree.
+#[test]
+fn namespaced_key_xdr_is_pinned() {
+    use soroban_sdk::xdr::{Limits, ScVal, WriteXdr};
+    use soroban_sdk::{contracttype, Env, IntoVal, TryFromVal, Val};
+    #[contracttype]
+    enum Probe {
+        Admin,
+        Listing(u32),
+    }
+    let e = Env::default();
+    let hex = |v: Val| {
+        let sc = ScVal::try_from_val(&e, &v).unwrap();
+        let bytes = sc.to_xdr(Limits::none()).unwrap();
+        bytes
+            .iter()
+            .map(|b| std::format!("{b:02x}"))
+            .collect::<std::string::String>()
+    };
+    assert_eq!(
+        hex(crate::ns(&e, Probe::Admin).into_val(&e)),
+        "0000001000000001000000020000000f0000000a6275696c6465726f737300000000001000000001000000010000000f0000000541646d696e000000"
+    );
+    assert_eq!(
+        hex(crate::ns(&e, Probe::Listing(7)).into_val(&e)),
+        "0000001000000001000000020000000f0000000a6275696c6465726f737300000000001000000001000000020000000f000000074c697374696e67000000000300000007"
+    );
+}

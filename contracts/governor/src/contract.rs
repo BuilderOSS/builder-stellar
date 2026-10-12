@@ -95,7 +95,9 @@ impl DaoGovernorContract {
         );
 
         common::admin::init(e, &admin);
-        e.storage().instance().set(&GovernorKey::Manager, &manager);
+        e.storage()
+            .instance()
+            .set(&common::ns(e, GovernorKey::Manager), &manager);
         common::upgrade::init(e, &current_hash, &version, STORAGE_VERSION);
 
         let name = String::from_str(e, "MvpDaoGovernor");
@@ -106,12 +108,12 @@ impl DaoGovernorContract {
         governor::set_voting_period(e, voting_period);
         e.storage()
             .instance()
-            .set(&GovernorKey::QueueDelay, &queue_delay);
+            .set(&common::ns(e, GovernorKey::QueueDelay), &queue_delay);
         governor::set_proposal_threshold(e, proposal_threshold);
         governor::set_quorum(e, quorum_bps as u128);
         e.storage()
             .instance()
-            .set(&GovernorKey::Treasury, &treasury_contract);
+            .set(&common::ns(e, GovernorKey::Treasury), &treasury_contract);
 
         emit_governor_initialized(
             e,
@@ -164,7 +166,7 @@ impl DaoGovernorContract {
     fn manager(e: &Env) -> Address {
         e.storage()
             .instance()
-            .get(&GovernorKey::Manager)
+            .get(&common::ns(e, GovernorKey::Manager))
             .unwrap_or_else(|| {
                 soroban_sdk::panic_with_error!(e, common::CommonError::ManagerNotSet)
             })
@@ -179,7 +181,7 @@ impl DaoGovernorContract {
 
         e.storage()
             .instance()
-            .set(&GovernorKey::QueueDelay, &queue_delay);
+            .set(&common::ns(e, GovernorKey::QueueDelay), &queue_delay);
 
         emit_queue_delay_changed(e, &admin, old_value, queue_delay);
     }
@@ -288,7 +290,7 @@ impl DaoGovernorContract {
         if !e
             .storage()
             .persistent()
-            .has(&Self::proposal_key(&proposal_id))
+            .has(&Self::proposal_key(e, &proposal_id))
         {
             panic_with_error!(e, GovernorError::ProposalNotFound);
         }
@@ -302,7 +304,9 @@ impl DaoGovernorContract {
     pub fn treasury(e: &Env) -> Address {
         common::error::require(
             e,
-            e.storage().instance().get(&GovernorKey::Treasury),
+            e.storage()
+                .instance()
+                .get(&common::ns(e, GovernorKey::Treasury)),
             common::CommonError::TreasuryNotSet,
         )
     }
@@ -310,7 +314,7 @@ impl DaoGovernorContract {
     fn queue_delay(e: &Env) -> u32 {
         e.storage()
             .instance()
-            .get(&GovernorKey::QueueDelay)
+            .get(&common::ns(e, GovernorKey::QueueDelay))
             .unwrap_or(0)
     }
 
@@ -383,13 +387,13 @@ impl DaoGovernorContract {
         }
     }
 
-    fn proposal_key(proposal_id: &BytesN<32>) -> GovernorKey {
-        GovernorKey::ProposalTime(proposal_id.clone())
+    fn proposal_key(e: &Env, proposal_id: &BytesN<32>) -> (soroban_sdk::Symbol, GovernorKey) {
+        common::ns(e, GovernorKey::ProposalTime(proposal_id.clone()))
     }
 
     /// Extends the TTL of a proposal to ensure it doesn't expire before execution
     fn extend_proposal_ttl(e: &Env, proposal_id: &BytesN<32>) {
-        let key = Self::proposal_key(proposal_id);
+        let key = Self::proposal_key(e, proposal_id);
         e.storage()
             .persistent()
             .extend_ttl(&key, PROPOSAL_TTL_THRESHOLD, PROPOSAL_TTL_EXTEND_TO);
@@ -399,7 +403,7 @@ impl DaoGovernorContract {
         let proposal = e
             .storage()
             .persistent()
-            .get(&Self::proposal_key(proposal_id))
+            .get(&Self::proposal_key(e, proposal_id))
             .unwrap_or_else(|| panic_with_error!(e, GovernorError::ProposalNotFound));
 
         // Extend TTL when proposal is accessed
@@ -411,7 +415,7 @@ impl DaoGovernorContract {
     fn set_proposal(e: &Env, proposal_id: &BytesN<32>, proposal: &ProposalCoreTime) {
         e.storage()
             .persistent()
-            .set(&Self::proposal_key(proposal_id), proposal);
+            .set(&Self::proposal_key(e, proposal_id), proposal);
 
         // Extend TTL when proposal is updated
         Self::extend_proposal_ttl(e, proposal_id);
@@ -614,7 +618,7 @@ impl Governor for DaoGovernorContract {
 
         if e.storage()
             .persistent()
-            .has(&Self::proposal_key(&proposal_id))
+            .has(&Self::proposal_key(e, &proposal_id))
         {
             panic_with_error!(e, GovernorError::ProposalAlreadyExists);
         }

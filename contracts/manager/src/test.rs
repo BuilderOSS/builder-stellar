@@ -1572,10 +1572,10 @@ mod real_dao {
     fn launch_without_platform_minter_fails_and_launches_nothing() {
         let dao = build();
         dao.env.as_contract(&dao.client.address, || {
-            dao.env
-                .storage()
-                .persistent()
-                .remove(&crate::storage::ManagerKey::PlatformMinter);
+            dao.env.storage().persistent().remove(&common::ns(
+                &dao.env,
+                crate::storage::ManagerKey::PlatformMinter,
+            ));
         });
         let r = dao
             .client

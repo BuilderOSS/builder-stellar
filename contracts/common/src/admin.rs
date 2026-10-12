@@ -33,14 +33,16 @@ pub struct AdminChanged {
 
 /// Record the initial (setup-phase) admin at construction time.
 pub fn init(e: &Env, admin: &Address) {
-    e.storage().instance().set(&AdminKey::Admin, admin);
+    e.storage()
+        .instance()
+        .set(&crate::ns(e, AdminKey::Admin), admin);
 }
 
 /// Current admin. Panics `AdminNotSet` if the module was never initialized.
 pub fn admin(e: &Env) -> Address {
     require(
         e,
-        e.storage().instance().get(&AdminKey::Admin),
+        e.storage().instance().get(&crate::ns(e, AdminKey::Admin)),
         CommonError::AdminNotSet,
     )
 }
@@ -55,7 +57,9 @@ pub fn require_admin(e: &Env) -> Address {
 /// Move the admin to `new_admin` (the launch handoff) and emit `AdminChanged`.
 pub fn handoff(e: &Env, new_admin: &Address) {
     let previous = admin(e);
-    e.storage().instance().set(&AdminKey::Admin, new_admin);
+    e.storage()
+        .instance()
+        .set(&crate::ns(e, AdminKey::Admin), new_admin);
     AdminChanged {
         old_admin: previous,
         new_admin: new_admin.clone(),

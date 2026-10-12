@@ -53,8 +53,10 @@ impl DaoTreasuryContract {
         common::admin::init(e, &admin);
         e.storage()
             .instance()
-            .set(&TreasuryKey::Governor, &governor);
-        e.storage().instance().set(&TreasuryKey::Manager, &manager);
+            .set(&common::ns(e, TreasuryKey::Governor), &governor);
+        e.storage()
+            .instance()
+            .set(&common::ns(e, TreasuryKey::Manager), &manager);
         common::upgrade::init(e, &current_hash, &version, STORAGE_VERSION);
 
         emit_treasury_initialized(e, &admin, &governor, &version);
@@ -114,7 +116,9 @@ impl DaoTreasuryContract {
     pub fn governor(e: &Env) -> Address {
         common::error::require(
             e,
-            e.storage().instance().get(&TreasuryKey::Governor),
+            e.storage()
+                .instance()
+                .get(&common::ns(e, TreasuryKey::Governor)),
             common::CommonError::GovernorNotSet,
         )
     }
@@ -217,7 +221,9 @@ impl DaoTreasuryContract {
     fn manager(e: &Env) -> Address {
         common::error::require(
             e,
-            e.storage().instance().get(&TreasuryKey::Manager),
+            e.storage()
+                .instance()
+                .get(&common::ns(e, TreasuryKey::Manager)),
             common::CommonError::ManagerNotSet,
         )
     }

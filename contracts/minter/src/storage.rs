@@ -50,16 +50,18 @@ pub enum MinterKey {
 }
 
 fn get<V: soroban_sdk::TryFromVal<Env, soroban_sdk::Val>>(env: &Env, key: &MinterKey) -> Option<V> {
-    let value = env.storage().persistent().get(key);
+    let key = common::ns(env, key.clone());
+    let value = env.storage().persistent().get(&key);
     if value.is_some() {
-        common::ttl::extend_persistent(env, key);
+        common::ttl::extend_persistent(env, &key);
     }
     value
 }
 
 fn set<V: soroban_sdk::IntoVal<Env, soroban_sdk::Val>>(env: &Env, key: &MinterKey, value: &V) {
-    env.storage().persistent().set(key, value);
-    common::ttl::extend_persistent(env, key);
+    let key = common::ns(env, key.clone());
+    env.storage().persistent().set(&key, value);
+    common::ttl::extend_persistent(env, &key);
 }
 
 /// Load merkle root from storage.

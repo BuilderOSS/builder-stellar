@@ -5,6 +5,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { minterStorageKey, readClaimStorage } from './storage';
 import { ALICE, BOB, MINTER, TOKEN, TREASURY } from './test-fixtures';
 
+/** The `MinterKey` variant inside `("buildeross", [Variant, ..args])`. */
+function variant(key: xdr.ScVal): unknown[] {
+  const [namespace, inner] = scValToNative(key) as [string, unknown[]];
+  if (namespace !== 'buildeross') throw new Error('Key is not namespaced');
+  return inner;
+}
+
 function entry(key: xdr.LedgerKey, val: xdr.ScVal): Api.LedgerEntryResult {
   if (key.type !== 'contractData') throw new Error('Expected contractData');
   return {
@@ -25,7 +32,7 @@ describe('persistent Minter storage reads', () => {
   it('encodes per-token/method/round/recipient tuples, never shared-Minter-only identity', () => {
     const key = minterStorageKey(MINTER, TOKEN, 'AllowlistClaimed', 0xffffffff, ALICE);
     if (key.type !== 'contractData') throw new Error('Unexpected key');
-    expect(scValToNative(key.contractData.key)).toEqual(['AllowlistClaimed', TOKEN, 0xffffffff, ALICE]);
+    expect(scValToNative(key.contractData.key)).toEqual(['buildeross', ['AllowlistClaimed', TOKEN, 0xffffffff, ALICE]]);
     const keys = [
       key,
       minterStorageKey(MINTER, TREASURY, 'AllowlistClaimed', 0xffffffff, ALICE),
@@ -40,7 +47,7 @@ describe('persistent Minter storage reads', () => {
       latestLedger: 321,
       entries: keys.flatMap((key) => {
         if (key.type !== 'contractData') throw new Error('Unexpected key');
-        const name = (scValToNative(key.contractData.key) as unknown[])[0];
+        const name = variant(key.contractData.key)[0];
         const values: Record<string, xdr.ScVal> = {
           MerkleRoot: xdr.ScVal.scvBytes(Buffer.alloc(32, 9)),
           MerkleRound: xdr.ScVal.scvU32(2),
@@ -67,7 +74,7 @@ describe('persistent Minter storage reads', () => {
     for (const call of getLedgerEntries.mock.calls)
       for (const key of call) {
         if (key.type !== 'contractData') throw new Error('Unexpected key');
-        expect((scValToNative(key.contractData.key) as unknown[])[1]).toBe(TOKEN);
+        expect(variant(key.contractData.key)[1]).toBe(TOKEN);
       }
   });
   it('does not invent rounds or eligibility from missing/archived entries', async () => {
@@ -86,9 +93,7 @@ describe('persistent Minter storage reads', () => {
           latestLedger: read,
           entries: keys.flatMap((key) => {
             if (key.type !== 'contractData') throw new Error('Unexpected key');
-            return (scValToNative(key.contractData.key) as unknown[])[0] === 'MerkleRound'
-              ? [entry(key, xdr.ScVal.scvU32(read))]
-              : [];
+            return variant(key.contractData.key)[0] === 'MerkleRound' ? [entry(key, xdr.ScVal.scvU32(read))] : [];
           })
         };
       })

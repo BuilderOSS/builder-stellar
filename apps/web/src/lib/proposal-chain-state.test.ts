@@ -64,7 +64,8 @@ describe('critical chain state versus optional reads', () => {
     expect(decodeProposalCore(value)).toEqual({ voteStart: 1000, voteEnd: 2000, snapshot: 50, eta: 3000 });
     const key = proposalCoreKey(config.governorContractId, id);
     if (key.type !== 'contractData') throw new Error('Wrong key');
-    const decoded = scValToNative(key.contractData.key);
+    const [namespace, decoded] = scValToNative(key.contractData.key);
+    expect(namespace).toBe('buildeross');
     expect(decoded[0]).toBe('ProposalTime');
     expect(Buffer.from(decoded[1]).toString('hex')).toBe(id);
     expect(() => decodeProposalCore(nativeToScVal({ vote_end: 2000n }))).toThrow();
