@@ -3013,9 +3013,8 @@ fn full_factory_flow_create_setup_launch_with_slug() {
         String::from_str(&e, "flow-dao-2")
     );
 
-    // The slug registry is permanent: it outlives the pending record, and its
-    // TTL can be renewed by anyone.
-    manager.bump_slug_ttl(&slug);
+    // The slug registry is permanent: it outlives the pending record (the
+    // renewal sweep keeps it alive).
     assert_eq!(manager.get_dao_by_slug(&slug), dao.token);
     assert_eq!(manager.get_slug(&dao.token), Some(slug));
 }
@@ -3433,6 +3432,8 @@ struct DaoFixture {
     deployer: Address,
     /// The shared platform Minter registered on the Manager.
     minter: Address,
+    /// The payment asset (auction and marketplace), with its issuer.
+    payment: soroban_sdk::testutils::StellarAssetContract,
 }
 
 impl DaoFixture {
@@ -3488,9 +3489,8 @@ fn factory_dao() -> DaoFixture {
     manager.set_platform_minter(&minter);
 
     let deployer = Address::generate(&e);
-    let asset = e
-        .register_stellar_asset_contract_v2(Address::generate(&e))
-        .address();
+    let payment = e.register_stellar_asset_contract_v2(Address::generate(&e));
+    let asset = payment.address();
     let dao = manager.create_dao(&slug_params(&e, &deployer, 1, "upgrade-dao", &asset));
     DaoTokenContractClient::new(&e, &dao.token).mint(&deployer, &deployer);
 
@@ -3500,6 +3500,7 @@ fn factory_dao() -> DaoFixture {
         dao,
         deployer,
         minter,
+        payment,
     }
 }
 
@@ -3966,4 +3967,592 @@ fn shared_minter_upgrades_then_claims_against_the_existing_root() {
         .try_mint_merkle(&f.dao.token, &alice, &2u128, &alice_proof)
         .is_err());
     assert_eq!(token.balance(&alice), 2);
+}
+
+// ============================================================================
+// The guarantee (docs/STORAGE_DIET.md § 9): the protocol runs on chain state
+// ============================================================================
+
+/// A byte-different copy of a built module: the same code with a custom
+/// section appended, so it uploads under a new hash. Lets a test upgrade a
+/// module to real code without a second build.
+fn module_wasm_variant(e: &Env, name: &str, tag: &str) -> BytesN<32> {
+    let path = std::format!(
+        "{}/../../target/wasm32v1-none/release/{name}.wasm",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let mut bytes = std::fs::read(&path).expect("built module WASM");
+    let section_name = b"variant";
+    let payload_len = 1 + section_name.len() + tag.len();
+    assert!(payload_len < 128, "single-byte LEB128 length");
+    bytes.push(0); // custom section id
+    bytes.push(payload_len as u8);
+    bytes.push(section_name.len() as u8);
+    bytes.extend_from_slice(section_name);
+    bytes.extend_from_slice(tag.as_bytes());
+    e.deployer()
+        .upload_contract_wasm(soroban_sdk::Bytes::from_slice(e, &bytes))
+}
+
+/// Advance the ledger by `seconds` and a few ledgers.
+fn advance(e: &Env, seconds: u64) {
+    e.ledger().with_mut(|l| {
+        l.timestamp += seconds;
+        l.sequence_number += 10;
+    });
+}
+
+/// Propose a one-action proposal, vote it through and queue it; the caller
+/// keeps the preimage (exception 3) and executes through the Treasury.
+#[allow(clippy::too_many_arguments)]
+fn pass_one_action(
+    e: &Env,
+    governor: &DaoGovernorContractClient,
+    voter: &Address,
+    target: &Address,
+    function: &str,
+    call_args: Vec<Val>,
+    description: &str,
+) -> (
+    BytesN<32>,
+    Vec<Address>,
+    Vec<Symbol>,
+    Vec<Vec<Val>>,
+    BytesN<32>,
+) {
+    let targets = vec![e, target.clone()];
+    let functions = vec![e, Symbol::new(e, function)];
+    let args = vec![e, call_args];
+    let description = String::from_str(e, description);
+    let desc_hash = description_hash(e, &description);
+    let id = governor.propose(&targets, &functions, &args, &description, voter);
+    advance(e, 301);
+    governor.cast_vote(&id, &1, &String::from_str(e, ""), voter);
+    advance(e, 301);
+    governor.queue(&targets, &functions, &args, &desc_hash, &0u32, voter);
+    advance(e, 301);
+    (id, targets, functions, args, desc_hash)
+}
+
+/// The § 9 guarantee: contract clients only, no event as an input, no
+/// database. Every address is discovered from the token and the Manager;
+/// the only off-chain inputs are a merkle proof the claimer computes and the
+/// proposal preimages the proposer keeps.
+#[test]
+fn protocol_runs_on_chain_state_only() {
+    let f = factory_dao();
+    let e = &f.e;
+    let (minter_id, _) = shared_minter(&f);
+    f.manager.set_platform_minter(&minter_id);
+
+    // --- Discovery from the token address alone.
+    let token = DaoTokenContractClient::new(e, &f.dao.token);
+    let metadata = MetadataContractClient::new(e, &token.metadata().unwrap());
+    let treasury = DaoTreasuryContractClient::new(e, &token.treasury());
+    let auction = DaoAuctionContractClient::new(e, &token.auction().unwrap());
+    let marketplace = MarketplaceContractClient::new(e, &token.marketplace().unwrap());
+    let governor = DaoGovernorContractClient::new(e, &treasury.governor());
+    assert_eq!(token.manager(), f.manager.address);
+    assert_eq!(metadata.address, f.dao.metadata);
+    assert_eq!(governor.address, f.dao.governor);
+    assert_eq!(auction.address, f.dao.auction);
+    assert_eq!(marketplace.address, f.dao.marketplace);
+    // The profile was created with the DAO: only its hash and seq are stored.
+    assert_eq!(metadata.profile_seq(), 0);
+
+    // --- Artwork in two sessions; the second resumes from chain.
+    let group = |base: &str| IpfsGroup {
+        base_uri: String::from_str(e, base),
+        extension: String::from_str(e, ".png"),
+    };
+    let item = |property_id: u32, name: &str, is_new_property: bool| ItemParam {
+        property_id,
+        name: String::from_str(e, name),
+        is_new_property,
+    };
+    metadata.add_properties(
+        &vec![
+            e,
+            String::from_str(e, "Background"),
+            String::from_str(e, "Body"),
+        ],
+        &vec![e, item(0, "Blue", true), item(1, "Round", true)],
+        &group("ipfs://first/"),
+    );
+    let headers = metadata.property_headers();
+    assert_eq!(headers.len(), 2);
+    let body = headers
+        .iter()
+        .position(|h| h.name == String::from_str(e, "Body"))
+        .unwrap() as u32;
+    let before = headers.get(body).unwrap().item_count;
+    metadata.add_properties(
+        &Vec::new(e),
+        &vec![e, item(body, "Square", false)],
+        &group("ipfs://second/"),
+    );
+    assert_eq!(
+        metadata.property_headers().get(body).unwrap().item_count,
+        before + 1
+    );
+
+    // --- Founder mint (factory_dao minted one) and launch.
+    let founder = f.deployer.clone();
+    assert_eq!(token.balance(&founder), 1);
+    f.manager.launch_dao(
+        &f.dao.token,
+        &manager::LaunchConfig {
+            launch_auction: true,
+            launch_marketplace: true,
+            minter: minter_id.clone(),
+        },
+    );
+    assert_eq!(token.minter(), Some(minter_id.clone()));
+    let minter = minter::MinterContractClient::new(e, &token.minter().unwrap());
+
+    // --- Auction: bid, a deferred refund recovered, settle, next auction.
+    let pay = auction.get_config().payment_token;
+    let sac = StellarAssetClient::new(e, &pay);
+    f.payment.issuer().set_flag(AccountFlags::RevocableFlag);
+    let (alice, bob) = (Address::generate(e), Address::generate(e));
+    for who in [&alice, &bob] {
+        sac.mint(who, &1_000_000_000);
+    }
+    let first = auction.get_auction();
+    auction.create_bid(
+        &alice,
+        &first.token_id,
+        &10_000_000,
+        &String::from_str(e, ""),
+    );
+    sac.set_authorized(&alice, &false);
+    auction.create_bid(&bob, &first.token_id, &20_000_000, &String::from_str(e, ""));
+    assert_eq!(auction.pending_refund(&alice), 10_000_000);
+    sac.set_authorized(&alice, &true);
+    auction.withdraw_refund(&alice);
+    assert_eq!(auction.pending_refund(&alice), 0);
+    advance(e, 400);
+    auction.settle_and_create_new();
+    let won = u32::try_from(first.token_id).unwrap();
+    assert_eq!(token.owner_of(&won), bob);
+    assert_ne!(auction.get_auction().token_id, first.token_id);
+    // The token's artwork and JSON come from chain.
+    assert_eq!(metadata.get_attributes(&won).len(), 3);
+    assert!(!token.token_uri(&won).is_empty());
+
+    // --- Primary and secondary sales.
+    let carol = Address::generate(e);
+    sac.mint(&carol, &1_000_000_000);
+    let expires = e.ledger().timestamp() + 100_000;
+    let listing_id = marketplace.create_primary_listing(&1_000, &expires);
+    let primary = marketplace.buy_primary(&listing_id, &carol, &1_000);
+    assert_eq!(token.owner_of(&primary), carol);
+    token.approve(
+        &bob,
+        &marketplace.address,
+        &won,
+        &(e.ledger().sequence() + 10_000),
+    );
+    marketplace.list(&won, &bob, &5_000, &expires, &250, &pay);
+    marketplace.buy(&won, &carol, &5_000);
+    assert_eq!(token.owner_of(&won), carol);
+
+    // --- A merkle claim with a locally computed proof.
+    let erin = Address::generate(e);
+    let (root, erin_proof, _) = merkle_pair(e, &erin, 2, &Address::generate(e), 1);
+    minter.set_merkle_root(&f.dao.token, &root, &String::from_str(e, "ipfs://bafytree"));
+    let status = minter.claim_status(&f.dao.token, &erin);
+    assert_eq!(status.root, Some(root));
+    minter.mint_merkle(&f.dao.token, &erin, &2u128, &erin_proof);
+    assert_eq!(token.balance(&erin), 2);
+
+    // --- Governance through the Treasury: profile, artwork, an upgrade, a cancel.
+    advance(e, 1);
+    let profile = String::from_str(e, r#"{"v":1,"description":"Renewed"}"#);
+    let p1 = pass_one_action(
+        e,
+        &governor,
+        &founder,
+        &metadata.address,
+        "update_profile",
+        vec![e, 0u32.into_val(e), profile.into_val(e)],
+        "Update the profile",
+    );
+    treasury.execute(&p1.1, &p1.2, &p1.3, &p1.4);
+    assert_eq!(metadata.profile_seq(), 1);
+
+    let p2 = pass_one_action(
+        e,
+        &governor,
+        &founder,
+        &metadata.address,
+        "add_properties",
+        vec![
+            e,
+            Vec::<String>::new(e).into_val(e),
+            vec![e, item(body, "Star", false)].into_val(e),
+            group("ipfs://third/").into_val(e),
+        ],
+        "More artwork",
+    );
+    treasury.execute(&p2.1, &p2.2, &p2.3, &p2.4);
+    assert_eq!(
+        metadata.property_headers().get(body).unwrap().item_count,
+        before + 2
+    );
+
+    let from = auction.wasm_hash();
+    let to = module_wasm_variant(e, "auction", "0.2.0");
+    f.manager.register_implementation(
+        &String::from_str(e, "Auction"),
+        &String::from_str(e, "0.2.0"),
+        &to,
+    );
+    f.manager.approve_upgrade(&from, &to);
+    let p3 = pass_one_action(
+        e,
+        &governor,
+        &founder,
+        &auction.address,
+        "upgrade",
+        vec![e, from.into_val(e), to.clone().into_val(e)],
+        "Upgrade the auction",
+    );
+    treasury.execute(&p3.1, &p3.2, &p3.3, &p3.4);
+    assert_eq!(auction.wasm_hash(), to);
+    assert_eq!(auction.version(), String::from_str(e, "0.2.0"));
+
+    let targets = vec![e, metadata.address.clone()];
+    let functions = vec![e, Symbol::new(e, "update_profile")];
+    let args = vec![
+        e,
+        vec![e, 1u32.into_val(e), String::from_str(e, "{}").into_val(e)],
+    ];
+    let description = String::from_str(e, "Changed my mind");
+    let cancelled = governor.propose(&targets, &functions, &args, &description, &founder);
+    governor.cancel(
+        &targets,
+        &functions,
+        &args,
+        &description_hash(e, &description),
+        &founder,
+    );
+
+    // --- The proposal list, from chain.
+    assert_eq!(governor.proposal_count(), 4);
+    let ids = governor.proposal_ids(&0, &10);
+    assert_eq!(
+        ids,
+        vec![
+            e,
+            p1.0.clone(),
+            p2.0.clone(),
+            p3.0.clone(),
+            cancelled.clone()
+        ]
+    );
+    let states: std::vec::Vec<ProposalState> =
+        ids.iter().map(|id| governor.proposal(&id).state).collect();
+    assert_eq!(
+        states,
+        [
+            ProposalState::Executed,
+            ProposalState::Executed,
+            ProposalState::Executed,
+            ProposalState::Canceled
+        ]
+    );
+
+    // The upgraded auction still runs: the next auction settles.
+    advance(e, 400);
+    auction.settle_and_create_new();
+
+    // Every DAO-owned key the flow wrote is in the renewal inventory a
+    // client builds from chain reads, and nothing in it is missing.
+    let listed = dao_renewal_inventory(e, &f.manager, &f.dao.token);
+    assert_inventory_matches_ledger(e, &f.manager, &f.dao, &minter_id, &listed);
+}
+
+// ----------------------------------------------------------------------------
+// Renewal inventory (docs/STORAGE_DIET.md § 7): the reference rules that
+// apps/web/src/lib/chain-reads mirrors.
+// ----------------------------------------------------------------------------
+
+/// `(Symbol("buildeross"), [Symbol(variant), args..])`, built as a client does.
+fn ns_key(e: &Env, variant: &str, args: std::vec::Vec<Val>) -> Val {
+    let head: Val = Symbol::new(e, variant).into_val(e);
+    let mut inner = vec![e, head];
+    for a in args {
+        inner.push_back(a);
+    }
+    let ns: Val = Symbol::new(e, "buildeross").into_val(e);
+    let inner: Val = inner.into_val(e);
+    vec![e, ns, inner].into_val(e)
+}
+
+/// An OpenZeppelin key: `[Symbol(variant), args..]`.
+fn oz_key(e: &Env, variant: &str, args: std::vec::Vec<Val>) -> Val {
+    let head: Val = Symbol::new(e, variant).into_val(e);
+    let mut key = vec![e, head];
+    for a in args {
+        key.push_back(a);
+    }
+    key.into_val(e)
+}
+
+/// A u32 an OpenZeppelin module keeps in its instance under a unit key, read
+/// the way a client reads the instance entry.
+fn instance_u32(e: &Env, contract: &Address, variant: &str) -> u32 {
+    let key = oz_key(e, variant, std::vec![]);
+    e.as_contract(contract, || e.storage().instance().get::<Val, u32>(&key))
+        .unwrap_or(0)
+}
+
+/// The persistent keys a DAO renews in its one-transaction sweep, built only
+/// from the token address, the Manager and contract reads. Instances are
+/// listed separately by every client (seven `LedgerKeyContractInstance`s).
+fn dao_renewal_inventory(
+    e: &Env,
+    manager: &ManagerContractClient,
+    token_id: &Address,
+) -> std::vec::Vec<(Address, Val)> {
+    let token = DaoTokenContractClient::new(e, token_id);
+    let metadata = MetadataContractClient::new(e, &token.metadata().unwrap());
+    let treasury = DaoTreasuryContractClient::new(e, &token.treasury());
+    let governor = DaoGovernorContractClient::new(e, &treasury.governor());
+    let mut keys = std::vec::Vec::new();
+    let u = |n: u32| -> Val { n.into_val(e) };
+
+    // Token: the canonical mint grants (OZ checkpoints of the total supply
+    // are binary-searched, so every one of them is listed too).
+    let mut minters = std::vec![token.treasury()];
+    minters.extend(token.auction());
+    minters.extend(token.marketplace());
+    minters.extend(token.minter());
+    for m in minters {
+        if token.mint_authority(&m) {
+            keys.push((
+                token_id.clone(),
+                ns_key(e, "MintAuthority", std::vec![m.into_val(e)]),
+            ));
+        }
+    }
+    for i in 0..instance_u32(e, token_id, "NumTotalSupplyCheckpoints") {
+        keys.push((
+            token_id.clone(),
+            oz_key(e, "TotalSupplyCheckpoint", std::vec![u(i)]),
+        ));
+    }
+
+    // Metadata: names, item pages, the groups vector, attribute pages.
+    let m = metadata.address.clone();
+    let headers = metadata.property_headers();
+    for (i, h) in headers.iter().enumerate() {
+        let i = i as u32;
+        keys.push((m.clone(), ns_key(e, "PropertyName", std::vec![u(i)])));
+        for page in 0..h.item_count.div_ceil(metadata::ITEMS_PER_PAGE) {
+            keys.push((m.clone(), ns_key(e, "Items", std::vec![u(i), u(page)])));
+        }
+    }
+    if !headers.is_empty() {
+        keys.push((m.clone(), ns_key(e, "IpfsGroups", std::vec![])));
+    }
+    let minted = instance_u32(e, token_id, "TokenIdCounter");
+    if minted > 0 {
+        for page in 0..=((minted - 1) / metadata::TOKENS_PER_ATTRIBUTE_PAGE) {
+            keys.push((m.clone(), ns_key(e, "AttributesPage", std::vec![u(page)])));
+        }
+    }
+
+    // Governor: live proposals (core, id entry, vote tally) and quorum
+    // checkpoints.
+    let g = governor.address.clone();
+    let count = governor.proposal_count();
+    let mut start = 0;
+    while start < count {
+        for id in governor
+            .proposal_ids(&start, &governor::MAX_PROPOSAL_IDS_PAGE)
+            .iter()
+        {
+            let info = governor.proposal(&id);
+            let live = matches!(
+                info.state,
+                ProposalState::Pending
+                    | ProposalState::Active
+                    | ProposalState::Succeeded
+                    | ProposalState::Queued
+            );
+            if live {
+                keys.push((
+                    g.clone(),
+                    ns_key(e, "ProposalTime", std::vec![id.clone().into_val(e)]),
+                ));
+                keys.push((g.clone(), ns_key(e, "ProposalId", std::vec![u(info.seq)])));
+                keys.push((
+                    g.clone(),
+                    oz_key(e, "ProposalVote", std::vec![id.into_val(e)]),
+                ));
+            }
+        }
+        start += governor::MAX_PROPOSAL_IDS_PAGE;
+    }
+    for i in 0..instance_u32(e, &g, "NumQuorumCheckpoints") {
+        keys.push((g.clone(), oz_key(e, "QuorumCheckpoint", std::vec![u(i)])));
+    }
+
+    // Marketplace: open secondary and primary listings.
+    if let Some(mk) = token.marketplace() {
+        let market = MarketplaceContractClient::new(e, &mk);
+        for t in 0..minted {
+            if market.get_listing(&t).is_some() {
+                keys.push((mk.clone(), ns_key(e, "Listing", std::vec![u(t)])));
+            }
+        }
+        for l in 0..market.next_listing_id() {
+            if market.get_primary_listing(&l).is_some() {
+                keys.push((
+                    mk.clone(),
+                    ns_key(e, "PrimaryListing", std::vec![l.into_val(e)]),
+                ));
+            }
+        }
+    }
+
+    // The shared Minter's per-DAO round.
+    if let Some(minter) = token.minter() {
+        let status = minter::MinterContractClient::new(e, &minter).claim_status(token_id, token_id);
+        if status.round > 0 {
+            keys.push((
+                minter.clone(),
+                ns_key(e, "MerkleRoot", std::vec![token_id.into_val(e)]),
+            ));
+            keys.push((
+                minter,
+                ns_key(e, "MerkleRound", std::vec![token_id.into_val(e)]),
+            ));
+        }
+    }
+
+    // The Manager's slug pair.
+    if let Some(slug) = manager.get_slug(token_id) {
+        let mgr = manager.address.clone();
+        keys.push((
+            mgr.clone(),
+            ns_key(e, "SlugToDao", std::vec![slug.into_val(e)]),
+        ));
+        keys.push((mgr, ns_key(e, "DaoSlug", std::vec![token_id.into_val(e)])));
+    }
+    keys
+}
+
+/// Every persistent key the DAO's contracts hold is either in the inventory
+/// or a per-holder key renewed by its holder, and every inventory key exists.
+fn assert_inventory_matches_ledger(
+    e: &Env,
+    manager: &ManagerContractClient,
+    dao: &manager::DaoAddresses,
+    minter: &Address,
+    listed: &[(Address, Val)],
+) {
+    use soroban_sdk::xdr::{ContractDataDurability, LedgerKey, ScAddress, ScVal};
+    use soroban_sdk::TryFromVal;
+    let token_sc = ScVal::from(&dao.token);
+    // Per-holder (or per-claimer, per-voter, platform) keys: renewed on use or
+    // by their owner, never by the DAO sweep.
+    let holder_variant = |owner: &Address, key: &ScVal| -> bool {
+        let (ns, items) = match key {
+            ScVal::Vec(Some(v)) => match (v.first(), v.get(1)) {
+                (Some(ScVal::Symbol(s)), Some(ScVal::Vec(Some(inner))))
+                    if s.to_utf8_string().unwrap() == "buildeross" =>
+                {
+                    (true, inner.to_vec())
+                }
+                _ => (false, v.to_vec()),
+            },
+            _ => return false,
+        };
+        let Some(ScVal::Symbol(name)) = items.first() else {
+            return false;
+        };
+        let name = name.to_utf8_string().unwrap();
+        if !ns {
+            return [
+                "Owner",
+                "Balance",
+                "Approval",
+                "ApprovalForAll",
+                "Delegatee",
+                "NumCheckpoints",
+                "DelegateCheckpoint",
+                "VotingUnits",
+                "HasVoted",
+            ]
+            .contains(&name.as_str());
+        }
+        if *owner == *minter {
+            // Claim markers, and other DAOs' rounds.
+            return name == "MerkleClaimed" || items.get(1) != Some(&token_sc);
+        }
+        if *owner == manager.address {
+            // Platform registry and other DAOs' slugs.
+            return !matches!(name.as_str(), "SlugToDao" | "DaoSlug")
+                || (name == "DaoSlug" && items.get(1) != Some(&token_sc));
+        }
+        name == "PendingRefund"
+    };
+    let owners = [
+        &dao.token,
+        &dao.metadata,
+        &dao.auction,
+        &dao.governor,
+        &dao.treasury,
+        &dao.marketplace,
+        minter,
+        &manager.address,
+    ];
+    let as_bytes = |owner: &Address, key: &ScVal| {
+        use soroban_sdk::xdr::{Limits, WriteXdr};
+        (ScAddress::from(owner), key.to_xdr(Limits::none()).unwrap())
+    };
+    let expected: std::collections::BTreeSet<_> = listed
+        .iter()
+        .map(|(a, k)| as_bytes(a, &ScVal::try_from_val(e, k).unwrap()))
+        .collect();
+    let mut on_ledger = std::collections::BTreeSet::new();
+    let mut unlisted = std::vec::Vec::new();
+    for (key, _) in e.to_ledger_snapshot().ledger_entries.iter() {
+        let LedgerKey::ContractData(d) = key.as_ref() else {
+            continue;
+        };
+        // Instances are listed separately (one per contract).
+        if d.durability != ContractDataDurability::Persistent
+            || d.key == ScVal::LedgerKeyContractInstance
+        {
+            continue;
+        }
+        let Some(owner) = owners.iter().find(|a| ScAddress::from(**a) == d.contract) else {
+            continue;
+        };
+        let id = as_bytes(owner, &d.key);
+        on_ledger.insert(id.clone());
+        if !expected.contains(&id) && !holder_variant(owner, &d.key) {
+            // Terminal proposals leave the sweep by design.
+            unlisted.push(std::format!("{:?}", d.key));
+        }
+    }
+    let unlisted: std::vec::Vec<_> = unlisted
+        .into_iter()
+        .filter(|k| {
+            !(k.contains("ProposalTime") || k.contains("ProposalId") || k.contains("ProposalVote"))
+        })
+        .collect();
+    assert!(
+        unlisted.is_empty(),
+        "DAO keys missing from the inventory: {unlisted:#?}"
+    );
+    let phantom: std::vec::Vec<_> = expected.difference(&on_ledger).collect();
+    assert!(
+        phantom.is_empty(),
+        "inventory lists keys that do not exist: {phantom:?}"
+    );
 }

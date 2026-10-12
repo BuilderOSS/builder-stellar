@@ -351,14 +351,22 @@ DAO-owned key can be **listed from chain state**.
 | 7 module instances | `manager.get_dao_by_slug(slug)` → token (existing); `token.metadata()` (existing), `manager()`, `treasury()`, `auction()`, `marketplace()`, `minter()` (added); `treasury.governor()` (existing) |
 | Metadata `PropertyName(i)`, `Items(i, page)` (16 + ≤ 16 × pages keys; ~5–16 pages for the reference DAO), `IpfsGroups` (1 key) | `property_headers()` (added) |
 | Metadata `AttributesPage(p)` (`total_supply / 64` keys) | `total_supply` |
-| Governor `Proposal(id)`, `ProposalId(seq)` | `proposal_count()`, `proposal_ids(start, limit)`; terminal proposals are skipped |
+| Governor `ProposalTime(id)`, `ProposalId(seq)`, OZ `ProposalVote(id)` | `proposal_count()`, `proposal_ids(start, limit)`, `proposal(id).state`; terminal proposals are skipped |
+| Governor OZ `QuorumCheckpoint(i)` | `NumQuorumCheckpoints` in the governor instance (read with the instance entry) |
+| Token `MintAuthority(addr)` for the canonical grants | `token.treasury()`, `auction()`, `marketplace()`, `minter()`, kept if `mint_authority(addr)` |
+| Token OZ `TotalSupplyCheckpoint(i)` | `NumTotalSupplyCheckpoints` in the token instance (D31) |
 | Marketplace listings | `next_listing_id`, per-token `get_listing` |
 | Minter `MerkleRoot(token)` (root + `tree_uri`), `MerkleRound(token)` | `token.minter()` (the launch-pinned shared Minter, not the mutable platform setting), keyed by the token address |
 | Manager `SlugToDao(slug)`, `DaoSlug(token)` | the slug |
 | Shared WASM code (modules and Minter), the Manager instance and its `Implementation(hash)` records, the shared Minter instance | platform duty: `scripts/renew-code-ttl.mjs` extended to these keys in this release; a `/platform` dashboard follows in its own wave (TODOS.md); `version()`, upgrades and claims depend on them |
 
-Per-holder keys (OZ `Owner(t)`, balances, delegations, checkpoints, approvals, refunds, vote records, claim
-markers) are the holder's state, not the DAO's: they renew on use (OZ extends ownership on read and transfer) and
+The reference rules live in the e2e test `protocol_runs_on_chain_state_only` (`dao_renewal_inventory`), which
+asserts that the list equals the DAO's persistent keys on the ledger minus the per-holder ones; `lib/chain-reads`
+mirrors them. Writing that test found four classes the first draft of this table missed (vote tallies, quorum and
+total-supply checkpoints, mint grants).
+
+Per-holder keys (OZ `Owner(t)`, balances, delegations, per-account checkpoints, approvals, refunds, vote records,
+claim markers) are the holder's state, not the DAO's: they renew on use (OZ extends ownership on read and transfer) and
 anyone holding the key can restore them. They are not in the DAO sweep.
 
 **Is it one transaction? Yes, by design.** Live testnet settings (`stellar network settings --network testnet`,
@@ -595,6 +603,7 @@ One PR on one branch (eng review D5), reviewable commits:
 | D27 | Instance and code TTL bumps decoupled: instances 60 → 170 days, code under 2 → 4 days | `instance().extend_ttl` bumps code too, so callers paid ~300 XLM of shared code rent (Finding 2) | Operations only (one missed renewal costs a member ~300 XLM) |
 | D28 | Platform code renewal: 170-day default, refuse values at or below the code threshold, hash list from chain, extend at upload; code stays out of DAO sweeps | Renewals ≤ 60 days were paid twice; upgrade hashes were missed; code entries exceed the sweep's read-bytes limit | 30-day default from the deploy artifact |
 | D29 | Fee guard before signing; investigate the 2× resource fee | A rent bump surfaced as a u32 overflow error | Leave to the SDK |
+| D31 | Every OZ total-supply and quorum checkpoint is in the DAO sweep | OZ binary-searches checkpoints and renews only what it reads, so an untouched midpoint can archive and break `proposal_state` years later. Supply checkpoints grow about one per auction day, so after roughly a year the sweep needs a second transaction (the batch splitter) | Renew only the latest checkpoints (breaks old lookups); compact checkpoints in the token |
 | D30 | Every Builder storage key is wrapped as `("buildeross", Variant)`; OZ keys untouched; an e2e test walks the ledger and rejects any other shape | Separates Builder keys from OZ keys by construction instead of by review; readable in explorers. Costs 32 bytes per key (DAO instances +1.5 KB, § 4) | Bare variants plus the D26 guard only; a shorter prefix |
 
 ## 13. Review record

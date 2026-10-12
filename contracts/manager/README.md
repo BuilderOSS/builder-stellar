@@ -18,7 +18,7 @@ A slug is 4-63 characters of `[a-z0-9-]`, no leading, trailing or doubled hyphen
 - `launch_dao` claims it: unique, permanent. If another DAO launched with it first, `launch_dao` fails with `SlugTaken`.
 - `update_pending_slug(token_address, slug)` (launch admin) renames a pending DAO's request.
 - `get_dao_by_slug(slug)` / `get_slug(token_address)` resolve launched DAOs only (`SlugNotFound`); a pending request is in `get_pending_dao`. Neither read extends TTL.
-- `bump_slug_ttl(slug)` is permissionless; call it periodically (`node scripts/deploy-dao.mjs bump_slug_ttl <dao-config> <network-config>`).
+- The slug pair (`SlugToDao`, `DaoSlug`) is renewed by the DAO's renewal sweep (docs/STORAGE_DIET.md § 7).
 - TODO before production: decide on slug pricing (`TODO(pricing)` in `validate_slug`).
 
 ## Registry/admin

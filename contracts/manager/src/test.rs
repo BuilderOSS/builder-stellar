@@ -2575,36 +2575,22 @@ fn invalid_slugs_are_rejected() {
 }
 
 #[test]
-fn unknown_slug_is_not_found_and_bump_requires_registration() {
+fn unknown_slug_is_not_found() {
     let (env, client, _a) = setup();
     let slug = String::from_str(&env, "nope");
     assert_eq!(
         client.try_get_dao_by_slug(&slug),
         Err(Ok(crate::ManagerError::SlugNotFound))
     );
-    assert_eq!(
-        client.try_bump_slug_ttl(&slug),
-        Err(Ok(crate::ManagerError::SlugNotFound))
-    );
 }
 
-#[test]
-fn slug_survives_ttl_bump_past_original_expiry() {
-    use soroban_sdk::testutils::Ledger;
-    let (env, client, _a) = setup();
-    register_stub_implementations(&env, &client);
-    env.mock_all_auths();
-    let token = seed_mock_pending(&env, &client, "durable");
-    client.launch_dao(&token, &launch_cfg(&env));
-    let slug = String::from_str(&env, "durable");
-    let step = 100 * 17_280;
-    for _ in 0..3 {
-        env.ledger().with_mut(|l| l.sequence_number += step);
-        client.bump_slug_ttl(&slug); // permissionless, no auth
-    }
-    assert_eq!(client.get_dao_by_slug(&slug), token);
-    assert_eq!(client.get_slug(&token), Some(slug));
-}
+// Retired: slug_survives_ttl_bump_past_original_expiry.
+// Value: protects=(none now) the permissionless `bump_slug_ttl` renewal of the
+// slug pair; retired_because=`bump_slug_ttl` is removed by docs/STORAGE_DIET.md
+// § 7: the slug pair is renewed with every other DAO key by one
+// ExtendFootprintTTL sweep; replacement=e2e `protocol_runs_on_chain_state_only`
+// (the renewal inventory lists `SlugToDao` and `DaoSlug` and must match the
+// ledger).
 
 // ============================================================================
 // change_slug
@@ -2651,11 +2637,6 @@ fn change_slug_moves_the_dao_and_releases_the_old_slug() {
         client.try_get_dao_by_slug(&s(&env, "old-name")),
         Err(Ok(crate::ManagerError::SlugNotFound))
     );
-    assert_eq!(
-        client.try_bump_slug_ttl(&s(&env, "old-name")),
-        Err(Ok(crate::ManagerError::SlugNotFound))
-    );
-    client.bump_slug_ttl(&s(&env, "new-name"));
 
     // The freed slug is claimable by another DAO at launch.
     let other = seed_mock_pending(&env, &client, "old-name");

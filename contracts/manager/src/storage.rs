@@ -156,10 +156,10 @@ pub enum ManagerKey {
     PendingAdmin,
     PlatformMinter,
     /// slug -> token address, written at `launch_dao`, moved by `change_slug` (the old
-    /// slug is removed). Renewed via `bump_slug_ttl`.
+    /// slug is removed). Renewed by the DAO's renewal sweep.
     SlugToDao(String),
     /// token address -> current slug, written at `launch_dao` and `change_slug`.
-    /// Renewed via `bump_slug_ttl`.
+    /// Renewed by the DAO's renewal sweep.
     DaoSlug(Address),
 }
 
@@ -217,14 +217,6 @@ pub fn remove_persistent(env: &Env, key: &ManagerKey) {
     env.storage()
         .persistent()
         .remove(&common::ns(env, key.clone()));
-}
-
-/// Extend a persistent entry's TTL without reading it. No-op when absent.
-pub fn bump_persistent(env: &Env, key: &ManagerKey) {
-    let key = common::ns(env, key.clone());
-    if env.storage().persistent().has(&key) {
-        common::ttl::extend_persistent(env, &key);
-    }
 }
 
 /// Whether a live persistent entry exists. Does not extend TTL.

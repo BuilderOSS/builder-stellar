@@ -997,27 +997,6 @@ impl ManagerContract {
             .get(&common::ns(&env, ManagerKey::DaoSlug(token_address)))
     }
 
-    /// Permissionless TTL renewal for a DAO's slug registry entries.
-    ///
-    /// Anyone (DAO operators, the platform admin) can pay to keep a slug live.
-    /// The network clamps `extend_to` to its max entry TTL (~180 days), so call
-    /// this periodically. Archived entries must be restored first.
-    ///
-    /// # Errors
-    ///
-    /// * `SlugNotFound` - no DAO is registered under this slug
-    pub fn bump_slug_ttl(env: Env, slug: String) -> Result<(), ManagerError> {
-        extend_instance_ttl(&env);
-        let token: Address = env
-            .storage()
-            .persistent()
-            .get(&common::ns(&env, ManagerKey::SlugToDao(slug.clone())))
-            .ok_or(ManagerError::SlugNotFound)?;
-        bump_persistent(&env, &ManagerKey::SlugToDao(slug));
-        bump_persistent(&env, &ManagerKey::DaoSlug(token));
-        Ok(())
-    }
-
     /// Predict DAO addresses without deploying.
     ///
     /// Useful for frontends to show addresses before user confirms deployment.

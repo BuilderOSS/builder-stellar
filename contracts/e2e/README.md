@@ -11,7 +11,7 @@ pnpm contracts:test
 
 Coverage includes mint hooks, voting snapshots, ordered Treasury execution, failed-action atomicity, replay/expiry, admin setters and upgrades, Treasury self-dispatch, auctions/refunds (including no early settlement while paused), and primary/secondary marketplace authorization. Review-fix tests:
 
-- `full_factory_flow_create_setup_launch_with_slug`: real factory path with the compiled WASMs from `target/wasm32v1-none/release`: a slug requested by two pending DAOs, setup-window founder mint and artwork, `launch_dao` claiming the slug, the rival failing `SlugTaken` and renaming, and `bump_slug_ttl`. Panics with a build hint if the WASMs are missing.
+- `full_factory_flow_create_setup_launch_with_slug`: real factory path with the compiled WASMs from `target/wasm32v1-none/release`: a slug requested by two pending DAOs, setup-window founder mint and artwork, `launch_dao` claiming the slug, the rival failing `SlugTaken` and renaming. Panics with a build hint if the WASMs are missing.
 - `batches_at_the_event_budget_fit_one_transaction`: the largest batches `common::batch_mint_fits` allows (43 tokens to one recipient, 18 recipients × 1, 5 recipients × 7) against real 16-trait metadata, each under 90% of the 16 KiB event limit, with a mainnet-like `max_entry_ttl`.
 - `treasury_buys_a_marketplace_listing_through_an_authorized_proposal`: nested authorization via an `authorize` action.
 - `system_held_tokens_and_votes_through_a_real_proposal`: voting supply, quorum, delegation and system contracts never voting.
