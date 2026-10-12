@@ -69,14 +69,14 @@ test('preserves Goldsky ordering fields and timestamp strings through the decode
 });
 
 test('metadata initialization fields and PropertiesReset remain in the decoded payload', () => {
+  // 0.3.0: MetadataInitialized { topic token; data renderer_base, admin } (no version, URI, description or image).
   const initialized = decodeEvent({
     event_id: 'metadata-init', deployment_id: 'd', contract_id: 'M', contract_role: 'metadata',
     topics: '[{"symbol":"MetadataInitialized"},{"address":"TOKEN"}]',
-    data: '{"map":[{"key":{"symbol":"renderer_base"},"val":{"string":"base"}},{"key":{"symbol":"version"},"val":{"string":"1"}},{"key":{"symbol":"admin"},"val":{"address":"OWNER"}},{"key":{"symbol":"project_uri"},"val":{"string":"uri"}},{"key":{"symbol":"description"},"val":{"string":"desc"}},{"key":{"symbol":"contract_image"},"val":{"string":"image"}}]}'
+    data: '{"map":[{"key":{"symbol":"renderer_base"},"val":{"string":"base"}},{"key":{"symbol":"admin"},"val":{"address":"OWNER"}}]}'
   });
-  assert.equal(argsOf(initialized).version, '1');
-  assert.equal(argsOf(initialized).admin, 'OWNER');
-  assert.equal(argsOf(initialized).project_uri, 'uri');
+  assert.deepEqual(topicsOf(initialized), { token: 'TOKEN' });
+  assert.deepEqual(argsOf(initialized), { renderer_base: 'base', admin: 'OWNER' });
   const reset = decodeEvent({
     event_id: 'properties-reset', deployment_id: 'd', contract_id: 'M', contract_role: 'metadata',
     topics: '[{"symbol":"PropertiesReset"}]', data: '{"map":[{"key":{"symbol":"old_num_properties"},"val":{"u32":3}}]}'
@@ -92,17 +92,17 @@ test('DaoLaunched uses the token address as the DAO identity topic', () => {
     ]),
     data: JSON.stringify({
       map: [
-        { key: { symbol: 'launched_ledger' }, val: { u32: 42 } },
+        { key: { symbol: 'launched_ledger' }, val: { u64: '42' } },
         { key: { symbol: 'modules' }, val: { map: [] } },
         { key: { symbol: 'launch_auction' }, val: { bool: true } },
         { key: { symbol: 'launch_marketplace' }, val: { bool: false } },
-        { key: { symbol: 'enable_minter' }, val: { bool: true } }
+        { key: { symbol: 'minter' }, val: { address: 'CMINTER' } }
       ]
     })
   });
 
   assert.deepEqual(topicsOf(decoded), { token_address: 'TOKEN_ADDR' });
-  assert.deepEqual(argsOf(decoded), { launched_ledger: 42, modules: {}, launch_auction: true, launch_marketplace: false, enable_minter: true });
+  assert.deepEqual(argsOf(decoded), { launched_ledger: '42', modules: {}, launch_auction: true, launch_marketplace: false, minter: 'CMINTER' });
 });
 
 // XDR-JSON Flattening Tests
@@ -778,7 +778,7 @@ test('decodes TreasuryInitialized event', () => {
 test('decodes the Minter events with the exact events.rs topics and payloads', () => {
   const cases = [
     ['MerkleClaimEvent', [{ symbol: 'MerkleClaimEvent' }, { address: 'TOKEN_CONTRACT' }, { address: 'RECIPIENT' }], { map: [{ key: { symbol: 'amount' }, val: { u128: '5' } }] }, { token_id: 'TOKEN_CONTRACT', recipient: 'RECIPIENT' }],
-    ['MintBatchEvent', [{ symbol: 'MintBatchEvent' }, { address: 'TOKEN_CONTRACT' }], { recipient_count: { u32: 3 }, total_amount: { u128: '9' } }, { token_id: 'TOKEN_CONTRACT' }],
+    ['MintBatchEvent', [{ symbol: 'MintBatchEvent' }, { address: 'TOKEN_CONTRACT' }], { map: [{ key: { symbol: 'recipient_count' }, val: { u32: 3 } }, { key: { symbol: 'total_amount' }, val: { u128: '9' } }, { key: { symbol: 'first_token_id' }, val: { u32: 7 } }] }, { token_id: 'TOKEN_CONTRACT' }],
     ['MerkleRootSetEvent', [{ symbol: 'MerkleRootSetEvent' }, { address: 'TOKEN_CONTRACT' }], { map: [{ key: { symbol: 'root' }, val: { bytes: 'ab' } }, { key: { symbol: 'round' }, val: { u32: 2 } }, { key: { symbol: 'tree_uri' }, val: { string: 'ipfs://bafytree' } }] }, { token_id: 'TOKEN_CONTRACT' }]
   ];
   for (const [name, topics, data, expectedTopics] of cases) {
@@ -879,11 +879,11 @@ test('token MintAuthorityChanged at launch is emitted per minter with changed_by
   assert.equal(activity.kind, 'token.mint_authority_changed');
 });
 
-test('DaoLaunched activity row keeps token identity; flags stay in args', () => {
+test('DaoLaunched activity row keeps token identity; flags and the pinned Minter stay in args', () => {
   const { decoded, activity } = run('manager', 'CMANAGER', 'DaoLaunched', [A('TOKEN')], {
-    launched_ledger: { u64: '9' }, modules: dm({ token: A('TOKEN') }), launch_auction: { bool: true }, launch_marketplace: { bool: true }, enable_minter: { bool: true }
+    launched_ledger: { u64: '9' }, modules: dm({ token: A('TOKEN') }), launch_auction: { bool: true }, launch_marketplace: { bool: true }, minter: A('CMINTER')
   });
-  assert.equal(argsOf(decoded).enable_minter, true);
+  assert.equal(argsOf(decoded).minter, 'CMINTER');
   assert.equal(activity.kind, 'manager.dao_launched');
   assert.equal(activity.summary, 'DAO launched for token TOKEN');
   assert.equal(activity.visibility, 'public');
@@ -1089,10 +1089,11 @@ test('marketplace secondary listings: payment_asset on create, ListingPurchased 
   assert.equal(bought.activity.summary, 'Token 9 purchased for 50');
 });
 
-test('MarketplacePaused emitted at launch has no topics or data', () => {
-  const { decoded, activity } = run('marketplace', 'MKT', 'MarketplacePaused', []);
-  assert.deepEqual(topicsOf(decoded), {});
+test('MarketplacePaused carries who paused (the Manager when launch forces it) as its topic', () => {
+  const { decoded, activity } = run('marketplace', 'MKT', 'MarketplacePaused', [A('CMANAGER')]);
+  assert.deepEqual(topicsOf(decoded), { changed_by: 'CMANAGER' });
   assert.equal(activity.kind, 'marketplace.paused');
+  assert.equal(activity.actor, 'CMANAGER');
 });
 
 test('activity feed picks token identifiers from topics even when args is an empty object', () => {

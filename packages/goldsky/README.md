@@ -304,7 +304,7 @@ packages/goldsky/
 1. Add the event's topics to `topicNames` in `src/decoded-events.script.js` (checked against the contracts) and update the role fallback if needed
 2. Update `src/activity-feed.script.js` with kind/title/summary/visibility
 3. Add or update views if the read model needs it (new migration in `db/migrations/`)
-4. Add a test in `test/dao-events-transform.test.mjs` and update `REQUIRED_EVENTS` in `test/event-coverage.test.mjs` (add removed names to `test/removed-events.mjs`)
+4. Add a test in `test/dao-events-transform.test.mjs` and update `REQUIRED_EVENTS` in `test/event-coverage.test.mjs` (add removed names to `test/removed-events.mjs`). `test/every-event.test.mjs` already runs every `#[contractevent]` through the decoder and the activity transform and fails on a missing kind, title or topic name, or a summary with a hole; a library event needs its emitting role in `LIBRARY_ROLES` there.
 5. Run `pnpm test && pnpm validate`
 6. Regenerate (`GOLDSKY_START_AT=<ledger> pnpm generate` when the artifact has no ledger) and redeploy: `./scripts/deploy.sh redeploy`. The checked-in pipeline test fails if it is stale.
 
