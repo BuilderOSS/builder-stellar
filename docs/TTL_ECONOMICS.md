@@ -269,7 +269,9 @@ above the guard. The Renewal tab passes the price the member already saw as the 
 
 stellar-sdk 17.1.0 counted the resource fee twice when `AssembledTransaction.sign` rebuilt a transaction, which
 doubled every displayed Soroban fee and overflowed u32 above ~214 XLM. `patches/@stellar__stellar-sdk@17.1.0.patch`
-fixes it; `apps/web/src/lib/fee/sdk-sign-fee.test.ts` fails if a new SDK version brings it back.
+fixes it; `apps/web/src/lib/fee/sdk-sign-fee.test.ts` fails if a new SDK version brings it back. Reported
+upstream as [stellar/js-stellar-sdk#1807](https://github.com/stellar/js-stellar-sdk/issues/1807) with fix
+[#1808](https://github.com/stellar/js-stellar-sdk/pull/1808); drop the patch once a release includes it.
 
 ## Archival boundary
 

@@ -370,7 +370,9 @@ DAO-owned key can be **listed from chain state**.
 The reference rules live in the e2e test `protocol_runs_on_chain_state_only` (`dao_renewal_inventory`), which
 asserts that the list equals the DAO's persistent keys on the ledger minus the per-holder ones; `lib/chain-reads`
 mirrors them. Writing that test found four classes the first draft of this table missed (vote tallies, quorum and
-total-supply checkpoints, mint grants).
+total-supply checkpoints, mint grants). The two inventories are kept equal by hand, each against its own fixture;
+a shared fixture (the Rust test dumps its key list, the TypeScript test asserts against it) is a follow-up
+(open question 4).
 
 Per-holder keys (OZ `Owner(t)`, balances, delegations, per-account checkpoints, approvals, refunds, vote records,
 claim markers) are the holder's state, not the DAO's: they renew on use (OZ extends ownership on read and transfer) and
@@ -653,6 +655,9 @@ collision was already fixed on this branch.
 2. **Profile `v` policy.** Read `v: 1` forever (default) or a one-time rewrite proposal per DAO on schema change.
 3. **Renewal cadence.** Should the app nudge members when any DAO class drops under 45 days, as it does for
    artwork today? Default: yes, same thresholds, one button.
+4. **One inventory fixture.** `dao_renewal_inventory` (Rust) and `buildDaoInventory` (TypeScript) are equivalent by
+   hand. Dump the Rust key list from the e2e test and assert the TypeScript inventory against it, so a class added
+   to one cannot be missed by the other.
 
 <!-- gstack:office-hours:concerns:start -->
 ## Reviewer Concerns

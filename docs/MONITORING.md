@@ -53,7 +53,11 @@ The timestamp helper accepts epoch milliseconds, epoch seconds, ISO timestamps, 
 
 ## Maintenance and investigation
 
-**Shared contract code is the platform's to renew, and nothing renews it automatically.** Check it at least weekly:
+**Shared contract code is the platform's to renew, and nothing renews it automatically.** Owner: whoever holds the
+Manager admin identity (`DEPLOY_IDENTITY`, `<network>-admin` by default); the renewal is a plain extend, so a
+non-admin funded key can run it too. Cadence: a dry run every Monday, a renewal whenever any hash is under 60
+days. The backstop is short: contracts bump their own code only to 4 days, so a DAO with no state-changing call
+for 4 days after the platform lapses has its code archived and every call fails until a permissionless restore.
 
 ```bash
 node scripts/renew-code-ttl.mjs deploys/builder-testnet-manager.json --dry-run   # quotes; sends nothing

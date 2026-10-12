@@ -3,7 +3,9 @@
  * simulated resource fee. stellar-sdk 17.1.0 `AssembledTransaction.sign` rebuilds
  * with `fee: this.built.fee` (which already includes the resource fee), and
  * `build()` adds the resource fee again. patches/@stellar__stellar-sdk@17.1.0.patch
- * drops that override; this test pins the fixed behavior.
+ * drops that override; this test pins the fixed behavior. Upstream:
+ * https://github.com/stellar/js-stellar-sdk/issues/1807 (fix in PR #1808); the
+ * patch can go once a released SDK includes it.
  */
 import {
   Account,
