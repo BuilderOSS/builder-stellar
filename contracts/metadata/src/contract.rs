@@ -1,6 +1,6 @@
 #![allow(clippy::too_many_arguments)] // constructors take every wired address/param explicitly
 
-use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, String, Vec};
+use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Map, String, Vec};
 
 use crate::error::Error;
 use crate::events::*;
@@ -8,7 +8,7 @@ use crate::storage::*;
 
 /// Max items written by one `add_properties` call (bounds write entries).
 pub const MAX_ITEMS_PER_CALL: u32 = 30;
-/// Max page size for `get_items` and window for `bump_artwork_ttl`.
+/// Max page size for `get_items`.
 pub const MAX_PAGE: u32 = 50;
 
 /// Metadata Contract
@@ -201,15 +201,16 @@ impl MetadataContract {
         // Check authorization
         Self::require_admin(&env);
 
-        // Reset the counts and drop the (<= 16) property headers. Item and
-        // IPFS group entries are not deleted: every getter is bounded by the
-        // counts/headers, so they are unreachable and get overwritten as new
-        // data is added. Reset is therefore O(#properties), not O(#items).
+        // Reset the counts and drop the (<= 16) property names. Item pages and
+        // the IPFS group vector are not deleted: every read is bounded by the
+        // counts, and appends start a fresh page or vector at a count of zero,
+        // so stale entries are never read and get overwritten as data is
+        // added. Reset is therefore O(#properties), not O(#items).
         let old_count = get_property_count(&env);
         for i in 0..old_count {
-            remove_stored_property(&env, i);
+            remove_property_name(&env, i);
         }
-        set_property_count(&env, 0);
+        set_item_counts(&env, &Vec::new(&env));
         set_ipfs_group_count(&env, 0);
 
         emit_properties_reset(&env, old_count);
@@ -235,13 +236,14 @@ impl MetadataContract {
         // Verify caller is token contract
         Self::require_token(&env)?;
 
-        let num_properties = get_property_count(&env);
+        let counts = Self::item_counts(&env);
+        let num_properties = counts.len();
         if num_properties == 0 {
             return Ok(false);
         }
 
-        let counts = Self::item_counts(&env, num_properties);
         let selections = Self::seed_token(&env, &counts, token_id);
+        set_attributes(&env, token_id, &selections);
         emit_seed_generated(&env, token_id, num_properties, &selections);
         Ok(true)
     }
@@ -269,12 +271,13 @@ impl MetadataContract {
         if !get_attributes(&env, token_id).is_empty() {
             return Err(Error::AlreadySeeded);
         }
-        let num_properties = get_property_count(&env);
+        let counts = Self::item_counts(&env);
+        let num_properties = counts.len();
         if num_properties == 0 {
             return Err(Error::NoProperties);
         }
-        let counts = Self::item_counts(&env, num_properties);
         let selections = Self::seed_token(&env, &counts, token_id);
+        set_attributes(&env, token_id, &selections);
         emit_seed_generated(&env, token_id, num_properties, &selections);
         Ok(())
     }
@@ -293,16 +296,18 @@ impl MetadataContract {
         common::ttl::extend_instance(&env);
         Self::require_token(&env)?;
 
-        let num_properties = get_property_count(&env);
+        let counts = Self::item_counts(&env);
+        let num_properties = counts.len();
         if num_properties == 0 {
             return Ok(false);
         }
 
-        let counts = Self::item_counts(&env, num_properties);
         let mut selections = Vec::new(&env);
         for i in 0..count {
             selections.push_back(Self::seed_token(&env, &counts, first_token_id + i));
         }
+        // One write per touched attributes page (a batch may span two).
+        set_attributes_range(&env, first_token_id, &selections);
         emit_seeds_generated(&env, first_token_id, count, num_properties, &selections);
         Ok(true)
     }
@@ -324,12 +329,22 @@ impl MetadataContract {
             return Err(Error::LimitTooHigh);
         }
         let mut out = Vec::new(&env);
-        let Some(header) = get_stored_property(&env, property_id) else {
+        let Some(count) = get_item_count(&env, property_id) else {
             return Ok(out);
         };
-        let end = start.saturating_add(limit).min(header.item_count);
+        let end = start.saturating_add(limit).min(count);
+        let mut loaded: Option<(u32, Vec<Item>)> = None;
         for j in start..end {
-            if let Some(item) = get_item_raw(&env, property_id, j) {
+            let page = j / ITEMS_PER_PAGE;
+            let items = match &loaded {
+                Some((p, items)) if *p == page => items.clone(),
+                _ => {
+                    let items = get_item_page(&env, property_id, page);
+                    loaded = Some((page, items.clone()));
+                    items
+                }
+            };
+            if let Some(item) = items.get(j % ITEMS_PER_PAGE) {
                 out.push_back(item);
             }
         }
@@ -341,57 +356,25 @@ impl MetadataContract {
         get_ipfs_group(&env, index)
     }
 
-    /// Permissionless TTL renewal for artwork entries.
-    ///
-    /// The flat space is every item `(property, item)` in order, followed by
-    /// every IPFS group. Extends entries in `[start, start + limit)` (plus the
-    /// property headers walked and the instance) and returns the next start,
-    /// or `total` when done. Callers loop until the returned value equals the
-    /// total. `limit` must be <= `MAX_PAGE` (`LimitTooHigh`).
-    ///
-    /// Note: the network clamps `extend_to` to its max entry TTL (~180 days),
-    /// so the effective lifetime after a write or bump is ~180 days, not the
-    /// nominal 365; call this periodically to renew.
-    pub fn bump_artwork_ttl(env: Env, start: u32, limit: u32) -> Result<u32, Error> {
-        if limit > MAX_PAGE {
-            return Err(Error::LimitTooHigh);
-        }
-        bump_instance(&env);
-        let end = start.saturating_add(limit);
-        let mut offset = 0u32;
-        let num_properties = get_property_count(&env);
-        for p in 0..num_properties {
-            let Some(header) = get_stored_property(&env, p) else {
-                continue;
-            };
-            let next = offset + header.item_count;
-            if next > start && offset < end {
-                bump_key(&env, &DataKey::Property(p));
-                let from = start.max(offset) - offset;
-                let to = end.min(next) - offset;
-                for j in from..to {
-                    bump_key(&env, &DataKey::Item(p, j));
-                }
-            }
-            offset = next;
-        }
-        let groups = get_ipfs_group_count(&env);
-        let total = offset + groups;
-        if end > offset && start < total {
-            let from = start.max(offset) - offset;
-            let to = end.min(total) - offset;
-            for g in from..to {
-                bump_key(&env, &DataKey::IpfsGroup(g));
-            }
-        }
-        Ok(end.min(total))
-    }
-
     /// Get items count for a property
     pub fn items_count(env: Env, property_id: u32) -> u32 {
-        get_stored_property(&env, property_id)
-            .map(|p| p.item_count)
-            .unwrap_or(0)
+        get_item_count(&env, property_id).unwrap_or(0)
+    }
+
+    /// Every property's name and item count (at most 16), without items:
+    /// enough for a client to resume artwork setup from chain state alone.
+    pub fn property_headers(env: Env) -> Vec<PropertyHeader> {
+        let counts = get_item_counts(&env);
+        let mut out = Vec::new(&env);
+        for i in 0..counts.len() {
+            if let Some(name) = get_property_name(&env, i) {
+                out.push_back(PropertyHeader {
+                    name,
+                    item_count: counts.get(i).unwrap(),
+                });
+            }
+        }
+        out
     }
 
     /// Get IPFS data count
@@ -530,7 +513,8 @@ impl MetadataContract {
         items: Vec<ItemParam>,
         ipfs_group: IpfsGroup,
     ) -> Result<(), Error> {
-        let num_stored_properties = get_property_count(env);
+        let mut counts = get_item_counts(env);
+        let num_stored_properties = counts.len();
         let num_new_properties = names.len();
         let num_new_items = items.len();
 
@@ -539,9 +523,7 @@ impl MetadataContract {
             return Err(Error::OnePropertyAndItemRequired);
         }
 
-        // Every call must add at least one item (also rejects an empty call
-        // that would only append an empty IPFS group), and new properties
-        // need items.
+        // Every call must add at least one item, and new properties need items.
         if num_new_items == 0 {
             return Err(Error::PropertyHasNoItems);
         }
@@ -555,32 +537,29 @@ impl MetadataContract {
             return Err(Error::TooManyProperties);
         }
 
-        // Append the IPFS group; its absolute index is stable forever.
-        let data_length = get_ipfs_group_count(env);
-        set_ipfs_group(env, data_length, &ipfs_group);
-        set_ipfs_group_count(env, data_length + 1);
-
-        // Property headers (<= 16) are held in memory while items are appended.
-        let total_properties = num_stored_properties + num_new_properties;
-        let mut headers: Vec<StoredProperty> = Vec::new(env);
-        let mut dirty: Vec<bool> = Vec::new(env);
-        for i in 0..num_stored_properties {
-            headers.push_back(get_stored_property(env, i).ok_or(Error::InvalidPropertySelected)?);
-            dirty.push_back(false);
+        Self::check_length_max(&ipfs_group.base_uri, common::MAX_STRING_LENGTH)?;
+        Self::check_length_max(&ipfs_group.extension, common::MAX_EXTENSION_LENGTH)?;
+        for name in names.iter() {
+            Self::check_name(&name)?;
         }
+        for item in items.iter() {
+            Self::check_name(&item.name)?;
+        }
+
+        let reference_slot = Self::append_ipfs_group(env, &ipfs_group)?;
+
         for i in 0..num_new_properties {
             let name = names.get(i).unwrap();
-            headers.push_back(StoredProperty {
-                name: name.clone(),
-                item_count: 0,
-            });
-            dirty.push_back(true);
-            emit_property_added(env, num_stored_properties + i, &name);
+            let index = num_stored_properties + i;
+            counts.push_back(0);
+            set_property_name(env, index, &name);
+            emit_property_added(env, index, &name);
         }
+        let total_properties = counts.len();
 
-        for i in 0..num_new_items {
-            let item_param = items.get(i).unwrap();
-
+        // Touched pages are held in memory and each is written once.
+        let mut pages: Map<(u32, u32), Vec<Item>> = Map::new(env);
+        for item_param in items.iter() {
             let mut property_id = item_param.property_id;
 
             // Offset the id if the item is for a new property
@@ -595,51 +574,70 @@ impl MetadataContract {
                 return Err(Error::InvalidPropertySelected);
             }
 
-            let mut header = headers.get(property_id).unwrap();
-            let item = Item {
-                name: item_param.name,
-                reference_slot: data_length,
+            let count = counts.get(property_id).unwrap();
+            if count >= MAX_ITEMS_PER_PROPERTY {
+                return Err(Error::PropertyFull);
+            }
+            let page = count / ITEMS_PER_PAGE;
+            let slot = count % ITEMS_PER_PAGE;
+            let mut page_items = match pages.get((property_id, page)) {
+                Some(page_items) => page_items,
+                // A fresh page never reads stale entries left by a reset.
+                None if slot == 0 => Vec::new(env),
+                None => get_item_page(env, property_id, page).slice(0..slot),
             };
-            set_item(env, property_id, header.item_count, &item);
-            header.item_count += 1;
-            headers.set(property_id, header);
-            dirty.set(property_id, true);
+            page_items.push_back(Item {
+                name: item_param.name,
+                reference_slot,
+            });
+            pages.set((property_id, page), page_items);
+            counts.set(property_id, count + 1);
         }
 
         // Validate all newly-added properties have at least one item
         for i in num_stored_properties..total_properties {
-            if headers.get(i).unwrap().item_count == 0 {
+            if counts.get(i).unwrap() == 0 {
                 return Err(Error::PropertyHasNoItems);
             }
         }
 
-        // Persist only headers that are new or whose item count changed.
-        for i in 0..total_properties {
-            if dirty.get(i).unwrap() {
-                set_stored_property(env, i, &headers.get(i).unwrap());
-            }
+        for ((property_id, page), page_items) in pages.iter() {
+            set_item_page(env, property_id, page, &page_items);
         }
-        set_property_count(env, total_properties);
+        set_item_counts(env, &counts);
 
         Ok(())
     }
 
-    /// Mint-path seeding: reads only the property count and each property's
-    /// header (item count). Never reads individual items.
-    fn item_counts(env: &Env, num_properties: u32) -> Vec<u32> {
+    /// Append `group` and return its absolute index. A group equal to the
+    /// last one is reused, so an upload split across several calls from one
+    /// IPFS folder occupies one slot.
+    fn append_ipfs_group(env: &Env, group: &IpfsGroup) -> Result<u32, Error> {
+        let mut groups = get_ipfs_data(env);
+        let count = groups.len();
+        if count > 0 && groups.get(count - 1).as_ref() == Some(group) {
+            return Ok(count - 1);
+        }
+        if count >= MAX_IPFS_GROUPS {
+            return Err(Error::TooManyIpfsGroups);
+        }
+        groups.push_back(group.clone());
+        set_ipfs_data(env, &groups);
+        Ok(count)
+    }
+
+    /// Mint-path seeding: reads only the instance `ItemCounts`. Never reads
+    /// names or items.
+    fn item_counts(env: &Env) -> Vec<u32> {
         let mut counts = Vec::new(env);
-        for i in 0..num_properties {
-            let n = get_stored_property(env, i)
-                .map(|p| p.item_count)
-                .unwrap_or(0)
-                .max(1);
-            counts.push_back(n);
+        for n in get_item_counts(env).iter() {
+            counts.push_back(n.max(1));
         }
         counts
     }
 
-    /// Derives and stores `token_id`'s attributes and returns them
-    /// (`[num_properties, idx...]`). Callers emit the seed event.
+    /// Derives `token_id`'s attributes (`[num_properties, idx...]`). Callers
+    /// store them and emit the seed event.
     fn seed_token(env: &Env, counts: &Vec<u32>, token_id: u32) -> Vec<u32> {
         let num_properties = counts.len();
         let seed = Self::generate_seed(env, token_id);
@@ -660,7 +658,6 @@ impl MetadataContract {
             attr_vec.push_back(item_index);
         }
 
-        set_attributes(env, token_id, &attr_vec);
         attr_vec
     }
 
@@ -700,8 +697,28 @@ impl MetadataContract {
     /// Settings strings are bounded so the instance entry (loaded on every
     /// mint hook) stays small.
     fn check_length(value: &String) -> Result<(), Error> {
-        if value.len() > common::MAX_STRING_LENGTH {
+        Self::check_length_max(value, common::MAX_STRING_LENGTH)
+    }
+
+    fn check_length_max(value: &String, max: u32) -> Result<(), Error> {
+        if value.len() > max {
             return Err(Error::StringTooLong);
+        }
+        Ok(())
+    }
+
+    /// Artwork names are copied verbatim into the on-chain token JSON, so
+    /// they are capped and may not contain `"`, `\` or control characters.
+    fn check_name(value: &String) -> Result<(), Error> {
+        Self::check_length_max(value, common::MAX_ARTWORK_NAME_LENGTH)?;
+        let len = value.len() as usize;
+        let mut buf = [0u8; common::MAX_ARTWORK_NAME_LENGTH as usize];
+        value.copy_into_slice(&mut buf[..len]);
+        if buf[..len]
+            .iter()
+            .any(|b| *b == b'"' || *b == b'\\' || *b < 0x20)
+        {
+            return Err(Error::InvalidName);
         }
         Ok(())
     }

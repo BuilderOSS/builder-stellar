@@ -71,7 +71,7 @@ the allowlist markers and the four display strings, which § 4 removes.
 | DAO profile (description, links, image) | **Event-only JSON** (§ 6) with `ProfileState { hash, seq }` on-chain and compare-and-swap updates. The four display strings and their setters are removed from Metadata. |
 | `renderer_base` | **Stays on-chain.** `token_uri` needs it. |
 | `token_uri` | **On-chain `data:` JSON** (§ 5), built from on-chain names like the Nouns Builder Solidity renderer, without embedded layer URLs (compositors derive them from the per-trait getters). Collection level: SEP-50 has only `name` and `symbol`; nothing more is stored. |
-| Artwork names, items, groups, attributes | **Stay on-chain**, laid out for one-transaction renewal: item counts hot; items in pages of 64 per property (`Items(property_id, page)`, ≤ 16 pages per property) instead of one key per item; one `IpfsGroups` vector; attributes paged 64 tokens per key. Public getters keep their shapes. No hash chain, no event-only artwork. |
+| Artwork names, items, groups, attributes | **Stay on-chain**, laid out for one-transaction renewal: item counts hot; items in pages of 32 per property (`Items(property_id, page)`, ≤ 32 pages per property) instead of one key per item; one `IpfsGroups` vector; attributes paged 64 tokens per key. Public getters keep their shapes. No hash chain, no event-only artwork. |
 | SEP-50 completion (G1) | **In this release**: `name`, `symbol`, `token_uri`, `get_approved`, `approve_for_all`, `is_approved_for_all`. |
 | Module `version()` (S3) | **Derived from the registry on read.** `CurrentVersion`, the constructor argument, `sync_version` and `VersionSynced` are removed from the seven DAO modules. The Manager keeps its own stored version (it is the registry). |
 | Manager registry slimming (S4) | **Dropped.** `get_latest_implementation` callers and `upgrade_manager` read the fields it would remove. |
@@ -111,11 +111,15 @@ quorum snapshot per proposal; compaction C = byte-level codecs for attributes an
 - Instance `ItemCounts: Vec<u32>` (≤ 16) replaces `PropertyCount`; its length is the property count. Mint and
   batch mint read it once and nothing else from the artwork.
 - Persistent `PropertyName(property_id)` (16 small keys) replaces the `name` half of `StoredProperty`.
-- Persistent `Items(property_id, page) -> Vec<Item>`, 64 items per page (~6.4 KB), `MAX_ITEM_PAGES = 16` (1,024
-  items per property). `add_properties` appends to the last page and rewrites at most one page per touched
-  property, so a 30-item call touching all 16 properties writes ≤ 16 × 6.4 KB ≈ 102 KB, under the live
-  `tx_max_write_bytes` of 132,096 (eng review D6; one vector per property would have written 160 KB at a 400-item
-  cap). Mint never reads items; `get_items` pages over pages. Today `item_count` is unbounded, a latent problem.
+- Persistent `Items(property_id, page) -> Vec<Item>`, 32 items per page, `MAX_ITEM_PAGES = 32` (1,024 items per
+  property). `add_properties` appends to the last page and rewrites at most one page per touched property.
+  **Measured** worst case (16 properties each one item short of a full page, 64-byte names, a maximum-length new
+  group): 89,496 bytes written, against the live `tx_max_write_bytes` of 132,096. The approved 64-item pages
+  (eng review D6) measured 155,032 bytes and did not fit, so pages are 32 items; D6's intent (a bounded write
+  under the limit) is unchanged. Test: `worst_case_add_properties_fits_the_write_limit`. Mint never reads items;
+  `get_items` pages over pages. Today `item_count` is unbounded, a latent problem.
+- IPFS groups: an upload split across several calls from one folder reuses the last group instead of appending a
+  copy, so the 64-group cap limits distinct folders, not upload batches.
 - Persistent `IpfsGroups -> Vec<IpfsGroup>`: one key, append-only; `get_ipfs_group(k)` indexes into it. Cap
   `MAX_IPFS_GROUPS = 64`.
 - Persistent `AttributesPage(page) -> Vec<[u32; 17]>`, 64 tokens per page (~4.4 KB): a mint reads, extends and
@@ -130,7 +134,7 @@ quorum snapshot per proposal; compaction C = byte-level codecs for attributes an
   setup without reading every item.
 - `add_properties` and `delete_and_recreate_properties` update names, counts, items and groups atomically with
   today's authorization, validation rollback and reset semantics (reset removes the pages and re-adds in batches).
-  New caps (§ 5): names ≤ 64 bytes, group `base_uri` ≤ 256, `extension` ≤ 16, items per property ≤ 1,024 (16 pages),
+  New caps (§ 5): names ≤ 64 bytes, group `base_uri` ≤ 256, `extension` ≤ 16, items per property ≤ 1,024 (32 pages),
   groups ≤ 64; these were unvalidated before. Names containing `"`, `\` or a control character (U+0000–U+001F)
   are rejected with `InvalidName` so the on-chain JSON needs no escaping (eng review D7); the token name is
   validated the same way in `set_metadata`.
@@ -507,7 +511,7 @@ One PR on one branch (eng review D5), reviewable commits:
 | D18 | Every merkle root is published with its full tree at an on-chain `tree_uri` (IPFS), in the Uniswap merkle-distributor shape with an explicit algorithm header; consumers recompute the root before offering claims | Common practice (Uniswap-style files on IPFS; Sablier and thirdweb store the URI beside the root); removes the organizer as a single point of failure for ~60 bytes per round | Organizer-supplied proofs only; OZ `StandardMerkleTree` dump (no per-claim proofs, EVM hashing); leaves in events (16 KiB limit) |
 | D19 | Artwork items chunked per property, IPFS groups in one vector, attributes paged 64 tokens per key, per-holder OZ entries out of the sweep | Makes the DAO sweep one transaction (≈ 60–80 keys against a 400-entry limit) at ~0.0035 XLM per `add_properties` rewrite and ~0.0004 XLM per mint | Per-key layouts with a seven-transaction sweep; a platform renewal service as the only path; whole catalogue in the instance (64 KB cliff) |
 | D20 | Engineering review (2026-10-12): `/platform` dashboard deferred to its own wave; acceptance is automated tests, not a CLI; one `chain-reads` module owns key shapes; base64 in metadata | Scope and structure answers D2–D4 | Keep the dashboard; a published CLI; separate libs |
-| D21 | Items in pages of 64 per property (≤ 16 pages) | One vector per property writes 160 KB at a 400-item cap, over the 132 KB per-transaction limit (eng review D6) | One vector with an 80-item cap; one key per item |
+| D21 | Items in pages of 32 per property (≤ 32 pages) | One vector per property writes 160 KB at a 400-item cap, over the 132 KB per-transaction limit (eng review D6); 64-item pages measured 155,032 bytes, 32-item pages 89,496 | One vector with an 80-item cap; one key per item |
 | D22 | Names with `"`, `\` or control characters rejected at setup | Keeps the on-chain JSON builder a plain concatenation (eng review D7) | Escape on output |
 | D23 | The shared Minter gets the common upgrade path | It is required for every DAO and had no upgrade path (eng review D8) | Rotation playbook |
 | D24 | Token drops the `uri` argument; OZ `base_uri` stored empty | Dead state once `token_uri` forwards to Metadata (eng review D9); removing the OZ field is not worth the divergence | Keep the argument |

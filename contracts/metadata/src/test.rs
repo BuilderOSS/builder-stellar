@@ -1,5 +1,7 @@
 #![cfg(test)]
 
+extern crate std;
+
 use soroban_sdk::{
     testutils::{Address as _, Events as _, Ledger},
     Address, BytesN, Env, Event as _, String, Vec,
@@ -783,14 +785,13 @@ fn m6_mint_never_reads_item_entries() {
     initialize_metadata(&env, &client, &token, &owner);
     add_new_property(&env, &client, "Background", 50, "ipfs://x");
 
-    // Delete every item entry: the mint path must still succeed because it
-    // only needs the property count and each property's item count.
+    // Delete every item page and the name: the mint path must still succeed
+    // because it only needs the instance item counts.
     env.as_contract(&client.address, || {
-        for j in 0..50u32 {
-            env.storage()
-                .persistent()
-                .remove(&crate::storage::DataKey::Item(0, j));
-        }
+        let p = env.storage().persistent();
+        p.remove(&crate::storage::DataKey::Items(0, 0));
+        p.remove(&crate::storage::DataKey::PropertyName(0));
+        p.remove(&crate::storage::DataKey::IpfsGroups);
     });
     assert!(client.on_minted(&1));
     let attrs = client.get_attributes(&1);
@@ -1100,53 +1101,13 @@ fn get_items_pagination_and_cap() {
     assert!(client.get_ipfs_group(&99).is_none());
 }
 
-#[test]
-fn bump_artwork_ttl_renews_window_and_is_bounded() {
-    let (env, client, _o, _t) = setup();
-    add_new_property(&env, &client, "A", 40, "ipfs://a"); // 40 items, 2 groups
-    let total = 40 + 2;
-    assert_eq!(
-        client.try_bump_artwork_ttl(&0, &51).err().unwrap().unwrap(),
-        crate::Error::LimitTooHigh
-    );
-
-    use crate::storage::DataKey;
-    use soroban_sdk::testutils::storage::Persistent as _;
-    let ttls = |env: &Env| {
-        env.as_contract(&client.address, || {
-            let p = env.storage().persistent();
-            (
-                p.get_ttl(&DataKey::Item(0, 0)),
-                p.get_ttl(&DataKey::Item(0, 39)),
-                p.get_ttl(&DataKey::IpfsGroup(1)),
-                p.get_ttl(&DataKey::Property(0)),
-            )
-        })
-    };
-    let before = ttls(&env);
-
-    // Age every entry below the renewal threshold, then renew the whole flat
-    // space (permissionless). Entries above the threshold are left alone.
-    let seq = env.ledger().sequence();
-    let youngest = before.0.min(before.1).min(before.2).min(before.3);
-    let oldest = before.0.max(before.1).max(before.2).max(before.3);
-    assert!(oldest - youngest < common::ttl::PERSISTENT_TTL_THRESHOLD);
-    env.ledger()
-        .set_sequence_number(seq + (oldest - common::ttl::PERSISTENT_TTL_THRESHOLD) + 1);
-    let aged = ttls(&env);
-    assert!(aged.0 < before.0 && aged.1 < before.1 && aged.2 < before.2);
-    env.set_auths(&[]);
-    let mut next = 0;
-    let mut calls = 0;
-    while next < total {
-        next = client.bump_artwork_ttl(&next, &20);
-        calls += 1;
-    }
-    assert_eq!(calls, 3);
-    assert_eq!(next, total);
-    let after = ttls(&env);
-    assert!(after.0 > aged.0 && after.1 > aged.1 && after.2 > aged.2 && after.3 > aged.3);
-}
+// Retired: bump_artwork_ttl_renews_window_and_is_bounded.
+// Value: protects=(none now) the permissionless per-item artwork TTL window;
+// retired_because=`bump_artwork_ttl` is removed by docs/STORAGE_DIET.md (D11,
+// eng review D10): artwork is a handful of paged entries renewed with every
+// other DAO key by one ExtendFootprintTTL sweep; replacement=the renewal
+// inventory enumeration test in apps/web (chain-reads) and
+// `artwork_layout_is_a_handful_of_entries` below.
 
 #[test]
 fn on_minted_batch_after_reset_uses_new_counts() {
@@ -1259,4 +1220,346 @@ fn artwork_admin_moves_to_treasury_at_launch() {
     }]);
     client.update_description(&text);
     assert_eq!(client.description(), text);
+}
+
+// ---- Storage diet: paged artwork layout, caps and name rules ----
+
+fn long_name(env: &Env, c: char) -> String {
+    String::from_str(
+        env,
+        &core::iter::repeat_n(c, common::MAX_ARTWORK_NAME_LENGTH as usize)
+            .collect::<std::string::String>(),
+    )
+}
+
+#[test]
+fn items_cross_page_boundaries_and_read_back_in_order() {
+    let (env, client, _o, _t) = setup();
+    let per_page = crate::ITEMS_PER_PAGE;
+    add_new_property(&env, &client, "A", per_page + 5, "ipfs://a");
+    assert_eq!(client.items_count(&0), per_page + 5);
+    let property = client.get_property(&0).unwrap();
+    assert_eq!(property.items.len(), per_page + 5);
+    // get_items spans the page boundary.
+    let window = client.get_items(&0, &(per_page - 2), &4);
+    assert_eq!(window.len(), 4);
+    assert_eq!(client.get_items(&0, &(per_page + 4), &50).len(), 1);
+    assert_eq!(client.get_items(&0, &(per_page + 5), &50).len(), 0);
+    let headers = client.property_headers();
+    assert_eq!(headers.len(), 1);
+    assert_eq!(headers.get(0).unwrap().item_count, per_page + 5);
+    assert_eq!(headers.get(0).unwrap().name, String::from_str(&env, "A"));
+}
+
+#[test]
+fn split_upload_from_one_folder_uses_one_ipfs_group() {
+    let (env, client, _o, _t) = setup();
+    add_new_property(&env, &client, "A", 90, "ipfs://same");
+    assert_eq!(client.ipfs_data_count(), 1);
+    add_items(&env, &client, 0, 1, "ipfs://other");
+    assert_eq!(client.ipfs_data_count(), 2);
+    let items = client.get_items(&0, &89, &2);
+    assert_eq!(items.get(0).unwrap().reference_slot, 0);
+    assert_eq!(items.get(1).unwrap().reference_slot, 1);
+}
+
+#[test]
+fn ipfs_group_cap() {
+    let (env, client, _o, _t) = setup();
+    add_new_property(&env, &client, "A", 1, "ipfs://g0");
+    for i in 1..crate::MAX_IPFS_GROUPS {
+        let uri = std::format!("ipfs://g{i}");
+        add_items(&env, &client, 0, 1, &uri);
+    }
+    assert_eq!(client.ipfs_data_count(), crate::MAX_IPFS_GROUPS);
+    let mut items = Vec::new(&env);
+    items.push_back(ItemParam {
+        property_id: 0,
+        name: String::from_str(&env, "x"),
+        is_new_property: false,
+    });
+    assert_eq!(
+        client
+            .try_add_properties(&Vec::new(&env), &items, &group(&env, "ipfs://one-too-many"))
+            .err()
+            .unwrap()
+            .unwrap(),
+        crate::Error::TooManyIpfsGroups
+    );
+    // Reusing the last group is still fine.
+    let last = std::format!("ipfs://g{}", crate::MAX_IPFS_GROUPS - 1);
+    add_items(&env, &client, 0, 1, &last);
+}
+
+#[test]
+fn property_item_cap() {
+    let (env, client, _o, _t) = setup();
+    add_new_property(
+        &env,
+        &client,
+        "A",
+        crate::MAX_ITEMS_PER_PROPERTY,
+        "ipfs://a",
+    );
+    assert_eq!(client.items_count(&0), crate::MAX_ITEMS_PER_PROPERTY);
+    let mut items = Vec::new(&env);
+    items.push_back(ItemParam {
+        property_id: 0,
+        name: String::from_str(&env, "x"),
+        is_new_property: false,
+    });
+    assert_eq!(
+        client
+            .try_add_properties(&Vec::new(&env), &items, &group(&env, "ipfs://a"))
+            .err()
+            .unwrap()
+            .unwrap(),
+        crate::Error::PropertyFull
+    );
+}
+
+#[test]
+fn artwork_names_and_group_strings_are_validated() {
+    let (env, client, _o, _t) = setup();
+    add_new_property(&env, &client, "A", 1, "ipfs://a");
+    let try_name = |name: String| {
+        let mut items = Vec::new(&env);
+        items.push_back(ItemParam {
+            property_id: 0,
+            name,
+            is_new_property: false,
+        });
+        client
+            .try_add_properties(&Vec::new(&env), &items, &group(&env, "ipfs://a"))
+            .err()
+            .map(|e| e.unwrap())
+    };
+    // The longest valid name, including non-ASCII bytes, is accepted.
+    assert_eq!(try_name(long_name(&env, 'a')), None);
+    assert_eq!(try_name(String::from_str(&env, "5'10 caf\u{e9}")), None);
+    let too_long = String::from_str(
+        &env,
+        &"a".repeat(common::MAX_ARTWORK_NAME_LENGTH as usize + 1),
+    );
+    assert_eq!(try_name(too_long), Some(crate::Error::StringTooLong));
+    for bad in ["say \"hi\"", "back\\slash", "tab\there", "nul\u{0}"] {
+        assert_eq!(
+            try_name(String::from_str(&env, bad)),
+            Some(crate::Error::InvalidName)
+        );
+    }
+    // New property names follow the same rules.
+    let mut names = Vec::new(&env);
+    names.push_back(String::from_str(&env, "bad\"name"));
+    let mut items = Vec::new(&env);
+    items.push_back(ItemParam {
+        property_id: 0,
+        name: String::from_str(&env, "ok"),
+        is_new_property: true,
+    });
+    assert_eq!(
+        client
+            .try_add_properties(&names, &items, &group(&env, "ipfs://a"))
+            .err()
+            .unwrap()
+            .unwrap(),
+        crate::Error::InvalidName
+    );
+    // Group strings are capped.
+    let long_uri = String::from_str(&env, &"u".repeat(common::MAX_STRING_LENGTH as usize + 1));
+    let long_ext = String::from_str(&env, &"e".repeat(common::MAX_EXTENSION_LENGTH as usize + 1));
+    for g in [
+        IpfsGroup {
+            base_uri: long_uri,
+            extension: String::from_str(&env, ".png"),
+        },
+        IpfsGroup {
+            base_uri: String::from_str(&env, "ipfs://a"),
+            extension: long_ext,
+        },
+    ] {
+        let mut items = Vec::new(&env);
+        items.push_back(ItemParam {
+            property_id: 0,
+            name: String::from_str(&env, "ok"),
+            is_new_property: false,
+        });
+        assert_eq!(
+            client
+                .try_add_properties(&Vec::new(&env), &items, &g)
+                .err()
+                .unwrap()
+                .unwrap(),
+            crate::Error::StringTooLong
+        );
+    }
+    assert_eq!(client.items_count(&0), 3);
+}
+
+/// The worst `add_properties` call: 16 properties each one item short of a
+/// full page, 64-byte names, a maximum-length new group. Every touched page is
+/// rewritten in full, so this is the most bytes one call can write.
+#[test]
+fn worst_case_add_properties_fits_the_write_limit() {
+    let (env, client, _o, _t) = setup();
+    let per_page = crate::ITEMS_PER_PAGE;
+    // 16 properties, each filled to per_page - 1 items with 64-byte names.
+    let mut names = Vec::new(&env);
+    let mut first = Vec::new(&env);
+    for i in 0..16 {
+        names.push_back(long_name(&env, 'p'));
+        first.push_back(ItemParam {
+            property_id: i,
+            name: long_name(&env, 'i'),
+            is_new_property: true,
+        });
+    }
+    client.add_properties(&names, &first, &group(&env, "ipfs://a"));
+    for pid in 0..16u32 {
+        let mut left = per_page - 2;
+        while left > 0 {
+            let n = left.min(crate::MAX_ITEMS_PER_CALL);
+            let mut items = Vec::new(&env);
+            for _ in 0..n {
+                items.push_back(ItemParam {
+                    property_id: pid,
+                    name: long_name(&env, 'i'),
+                    is_new_property: false,
+                });
+            }
+            client.add_properties(&Vec::new(&env), &items, &group(&env, "ipfs://a"));
+            left -= n;
+        }
+    }
+    // 62 more maximum-length groups so the group vector is near its cap.
+    for g in 1..(crate::MAX_IPFS_GROUPS - 1) {
+        let mut items = Vec::new(&env);
+        items.push_back(ItemParam {
+            property_id: 0,
+            name: long_name(&env, 'i'),
+            is_new_property: false,
+        });
+        let uri = std::format!("{g:0>256}");
+        client.add_properties(
+            &Vec::new(&env),
+            &items,
+            &IpfsGroup {
+                base_uri: String::from_str(&env, &uri),
+                extension: String::from_str(&env, ".abcdefghijklmno"),
+            },
+        );
+    }
+    // The measured call: one item into every property's (nearly full) page,
+    // with a new maximum-length group.
+    let mut items = Vec::new(&env);
+    for pid in 0..16 {
+        items.push_back(ItemParam {
+            property_id: pid,
+            name: long_name(&env, 'i'),
+            is_new_property: false,
+        });
+    }
+    client.add_properties(
+        &Vec::new(&env),
+        &items,
+        &IpfsGroup {
+            base_uri: String::from_str(&env, &"z".repeat(256)),
+            extension: String::from_str(&env, ".abcdefghijklmno"),
+        },
+    );
+    let r = env.cost_estimate().resources();
+    std::println!(
+        "worst-case add_properties: write_bytes={} write_entries={}",
+        r.write_bytes,
+        r.write_entries
+    );
+    // Live testnet tx_max_write_bytes (stellar network settings, 2026-10-12).
+    assert!(
+        r.write_bytes < 132_096,
+        "write_bytes {} over the limit",
+        r.write_bytes
+    );
+}
+
+/// The renewal sweep depends on the whole catalogue being a few entries.
+#[test]
+fn artwork_layout_is_a_handful_of_entries() {
+    let (env, client, _o, _t) = setup();
+    add_n_properties(&env, &client, 16, 1);
+    for pid in 0..16u32 {
+        add_items(&env, &client, pid, 18, "ipfs://n"); // 19 items each, 304 total
+    }
+    use crate::storage::DataKey;
+    let entries = env.as_contract(&client.address, || {
+        let p = env.storage().persistent();
+        let mut n = 0u32;
+        for pid in 0..16u32 {
+            n += p.has(&DataKey::PropertyName(pid)) as u32;
+            for page in 0..crate::MAX_ITEM_PAGES {
+                n += p.has(&DataKey::Items(pid, page)) as u32;
+            }
+        }
+        n + p.has(&DataKey::IpfsGroups) as u32
+    });
+    // 16 names + 16 item pages + 1 group vector, not 304 item keys.
+    assert_eq!(entries, 33);
+}
+
+#[test]
+fn attributes_share_pages_and_batches_cross_them() {
+    let (env, client, _o, _t) = setup();
+    add_new_property(&env, &client, "A", 3, "ipfs://a");
+    let per_page = crate::TOKENS_PER_ATTRIBUTE_PAGE;
+    // A batch straddling the first page boundary.
+    assert!(client.on_minted_batch(&(per_page - 2), &5));
+    for id in (per_page - 2)..(per_page + 3) {
+        assert_eq!(client.get_attributes(&id).len(), 2);
+    }
+    assert!(client.try_get_attributes(&(per_page - 3)).is_err());
+    assert!(client.try_get_attributes(&(per_page + 3)).is_err());
+    // A single mint later in a page leaves the gap empty.
+    assert!(client.on_minted(&(per_page + 10)));
+    assert!(client.try_get_attributes(&(per_page + 9)).is_err());
+    assert_eq!(client.get_attributes(&(per_page + 10)).len(), 2);
+    // Earlier tokens on the same page keep their attributes.
+    assert_eq!(client.get_attributes(&per_page).len(), 2);
+    use crate::storage::DataKey;
+    let pages = env.as_contract(&client.address, || {
+        let p = env.storage().persistent();
+        (0..4u32)
+            .filter(|i| p.has(&DataKey::AttributesPage(*i)))
+            .count()
+    });
+    assert_eq!(pages, 2);
+}
+
+#[test]
+fn reset_never_reads_stale_pages() {
+    let (env, client, _o, _t) = setup();
+    add_new_property(&env, &client, "A", 70, "ipfs://old");
+    let mut names = Vec::new(&env);
+    names.push_back(String::from_str(&env, "B"));
+    let mut items = Vec::new(&env);
+    items.push_back(ItemParam {
+        property_id: 0,
+        name: String::from_str(&env, "fresh"),
+        is_new_property: true,
+    });
+    client.delete_and_recreate_properties(&names, &items, &group(&env, "ipfs://new"));
+    let property = client.get_property(&0).unwrap();
+    assert_eq!(property.items.len(), 1);
+    assert_eq!(
+        property.items.get(0).unwrap().name,
+        String::from_str(&env, "fresh")
+    );
+    assert_eq!(client.ipfs_data_count(), 1);
+    assert_eq!(
+        client.get_ipfs_group(&0).unwrap().base_uri,
+        String::from_str(&env, "ipfs://new")
+    );
+    // Appending after the reset keeps only the new items in page 0.
+    add_items(&env, &client, 0, 2, "ipfs://new");
+    let items = client.get_items(&0, &0, &50);
+    assert_eq!(items.len(), 3);
+    assert_eq!(items.get(1).unwrap().name, String::from_str(&env, "it"));
 }

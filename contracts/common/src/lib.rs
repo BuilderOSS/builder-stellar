@@ -52,6 +52,13 @@ pub const MAX_FEE_BPS: u32 = 2_500;
 /// Maximum length of a configurable string (names, URIs, descriptions).
 pub const MAX_STRING_LENGTH: u32 = 256;
 
+/// Maximum length in bytes of an artwork property or item name. Names are
+/// written verbatim into the on-chain token JSON, so they also exclude `"`,
+/// `\` and control characters (checked by the Metadata contract).
+pub const MAX_ARTWORK_NAME_LENGTH: u32 = 64;
+/// Maximum length in bytes of an artwork IPFS group file extension.
+pub const MAX_EXTENSION_LENGTH: u32 = 16;
+
 /// Maximum length in bytes of a proposal comment or vote reason (~1,350
 /// English words). Comments are event-only, and a transaction may publish at
 /// most 16 KiB of contract events, so this leaves room for the event envelope.
