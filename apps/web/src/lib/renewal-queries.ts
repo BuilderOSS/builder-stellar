@@ -26,7 +26,12 @@ import { waitForConfirmation } from '@/lib/transaction-confirmation';
 /** Used when the network's archival settings cannot be read (testnet, 2026-10-12). */
 const FALLBACK_MAX_ENTRY_TTL = 3_110_400;
 
-export type CodeHealth = { liveUntil: number | null; hashes: number };
+export type CodeHealth = {
+  liveUntil: number | null;
+  hashes: number;
+  /** Code hashes the RPC did not return at all: evicted, so no call to that module works. */
+  evicted: string[];
+};
 
 export type RenewalReport = {
   inventory: DaoInventory;
@@ -61,13 +66,16 @@ async function readCodeHealth(rpc: Server, inventory: DaoInventory): Promise<Cod
     const hash = instanceWasmHash(key.val.contractData.val);
     if (hash) hashes.add(hash);
   }
-  if (!hashes.size) return { liveUntil: null, hashes: 0 };
-  const keys = [...hashes].map((hash) =>
+  if (!hashes.size) return { liveUntil: null, hashes: 0, evicted: [] };
+  const list = [...hashes];
+  const keys = list.map((hash) =>
     xdr.LedgerKey.contractCode(new xdr.LedgerKeyContractCode({ hash: Buffer.from(hash, 'hex') }))
   );
   const response = await rpc.getLedgerEntries(...keys);
+  const returned = new Set(response.entries.map((entry) => entry.key.toXDR('base64')));
+  const evicted = list.filter((_, i) => !returned.has(keys[i]!.toXDR('base64')));
   const lives = response.entries.map((entry) => entry.liveUntilLedgerSeq ?? 0);
-  return { liveUntil: lives.length === keys.length ? Math.min(...lives) : null, hashes: hashes.size };
+  return { liveUntil: lives.length ? Math.min(...lives) : null, hashes: hashes.size, evicted };
 }
 
 export async function loadRenewalReport(config: DaoNetworkConfig): Promise<RenewalReport> {
@@ -88,7 +96,7 @@ export async function loadRenewalReport(config: DaoNetworkConfig): Promise<Renew
   });
   const [maxEntryTtl, code] = await Promise.all([
     readMaxEntryTtl(rpc),
-    inventory.bootstrap ? Promise.resolve({ liveUntil: null, hashes: 0 }) : readCodeHealth(rpc, inventory)
+    inventory.bootstrap ? Promise.resolve({ liveUntil: null, hashes: 0, evicted: [] }) : readCodeHealth(rpc, inventory)
   ]);
   return { inventory, maxEntryTtl, code };
 }

@@ -94,7 +94,10 @@ const CODE_STATUS_TEXT: Record<
 
 function Classes({ report }: { report: RenewalReport }) {
   const { latestLedger } = report.inventory;
-  const codeStatus = codeHealthStatus(report.code.liveUntil, latestLedger);
+  // Code the RPC does not return has been evicted: the worst state, not an unknown one.
+  const codeStatus: CodeStatus = report.code.evicted.length
+    ? 'expired'
+    : codeHealthStatus(report.code.liveUntil, latestLedger);
   return (
     <div className={rows}>
       {summarizeInventory(report.inventory).map((summary) => {
@@ -118,11 +121,13 @@ function Classes({ report }: { report: RenewalReport }) {
       <ListRow
         title="Shared contract code"
         meta={
-          report.code.liveUntil === null
-            ? 'Renewed by Builder for every community. Its expiry could not be read.'
-            : `Renewed by Builder for every community · expires about ${when(report.code.liveUntil, latestLedger)}${
-                codeStatus === 'healthy' ? '' : ' · if it lapses, your next transaction pays a few days of its rent'
-              }`
+          report.code.evicted.length
+            ? `Renewed by Builder for every community · ${report.code.evicted.length} of ${report.code.hashes} code entries archived (${report.code.evicted.map((h) => h.slice(0, 8)).join(', ')}); those contracts cannot run until Builder restores them`
+            : report.code.liveUntil === null
+              ? 'Renewed by Builder for every community. Its expiry could not be read.'
+              : `Renewed by Builder for every community · expires about ${when(report.code.liveUntil, latestLedger)}${
+                  codeStatus === 'healthy' ? '' : ' · if it lapses, your next transaction pays a few days of its rent'
+                }`
         }
         trailing={
           codeStatus === 'unknown' ? (

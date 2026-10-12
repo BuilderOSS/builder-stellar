@@ -77,6 +77,7 @@ const ERRORS: Record<number, string> = {
   7205: 'Batch too large for one transaction: mint at most 43 tokens to one recipient, fewer when spread over several (18 recipients with one token each).',
   7206: 'The shared Minter was not granted mint authority at launch (MinterNotGranted).',
   7207: 'Names may not contain quotes, backslashes or control characters (InvalidName).',
+  7208: 'This community has no minter guardian, so nobody can pause the shared Minter without a proposal (NoMinterGuardian).',
   // metadata
   7301: 'Metadata is not initialized.',
   7302: 'Treasury mismatch.',

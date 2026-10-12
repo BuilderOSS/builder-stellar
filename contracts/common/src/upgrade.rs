@@ -79,6 +79,10 @@ pub fn delay(e: &Env) -> u32 {
 pub fn set_delay(e: &Env, ledgers: u32) {
     let current = delay(e);
     let instance = e.storage().instance();
+    // Commit a reduction that has taken effect, so a later reduction measures
+    // its wait from the value in force, not from the one before it.
+    instance.set(&crate::ns(e, UpgradeKey::UpgradeDelay), &current);
+    instance.remove(&crate::ns(e, UpgradeKey::PendingUpgradeDelay));
     if ledgers >= current {
         instance.set(&crate::ns(e, UpgradeKey::UpgradeDelay), &ledgers);
         instance.remove(&crate::ns(e, UpgradeKey::PendingUpgradeDelay));

@@ -49,3 +49,11 @@ Errors: block 7200 (`MintAuthorityNotAllowed` 7201, `InvalidInput` 7202, `Treasu
 ## Tests and related
 
 `cargo test -p token` (includes `voting_supply` and `delegation_security` suites). [Source](src/contract.rs), [Metadata](../metadata/README.md), [shared Minter](../minter/README.md), [deployment](../../docs/DAO_DEPLOYMENT.md).
+
+## Minter guardian
+
+`launch` records a guardian (the launch admin, as the Manager passes it). `pause_platform_minter()` (guardian auth)
+revokes the pinned shared Minter's mint authority at once and emits `MintAuthorityChanged` with the guardian as
+`changed_by`; it is the only thing a guardian can do, and only closes a door. `set_minter_guardian(Option<Address>)`
+(admin) changes or clears it; `minter_guardian()` reads it. Re-granting is `set_mint_authority(minter, true)` by the
+admin. `NoMinterGuardian` (7208) when none is set. Rationale: docs/STORAGE_DIET.md D41.

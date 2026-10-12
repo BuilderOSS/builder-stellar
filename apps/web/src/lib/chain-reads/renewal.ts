@@ -535,3 +535,17 @@ export function codeHealthStatus(liveUntil: number | null, latestLedger: number)
   if (remaining <= CODE_WARN_DAYS * LEDGERS_PER_DAY) return 'soon';
   return 'healthy';
 }
+
+/**
+ * A platform contract's upgrade notice in force, from its instance storage
+ * (`common::upgrade::delay`): a pending reduction once its ledger has come,
+ * else the recorded value, else the recommended 7 days.
+ */
+export const RECOMMENDED_UPGRADE_DELAY = 7 * LEDGERS_PER_DAY;
+export function effectiveUpgradeDelay(instance: LedgerEntryInfo | undefined, latestLedger: number): number {
+  const storage = instanceStorage(instance);
+  const pending = native<{ ledgers: number; effective_ledger: number }>(nsGet(storage, 'PendingUpgradeDelay'));
+  if (pending && latestLedger >= Number(pending.effective_ledger)) return Number(pending.ledgers);
+  const recorded = native<number>(nsGet(storage, 'UpgradeDelay'));
+  return recorded === undefined ? RECOMMENDED_UPGRADE_DELAY : Number(recorded);
+}

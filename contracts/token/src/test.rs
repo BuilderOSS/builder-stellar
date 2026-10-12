@@ -147,7 +147,7 @@ fn launch(e: &Env, client: &DaoTokenContractClient, minters: &[Address]) -> Addr
     for m in minters {
         v.push_back(m.clone());
     }
-    client.launch(&treasury, &v, &platform_minter);
+    client.launch(&treasury, &v, &platform_minter, &Address::generate(e));
     assert_eq!(client.minter(), Some(platform_minter));
     treasury
 }
@@ -172,7 +172,7 @@ fn second_launch_panics_already_live() {
     let (e, client, _owner, _m) = setup_with_manager();
     launch(&e, &client, &[]);
     let other = Address::generate(&e);
-    let r = client.try_launch(&other, &vec![&e, other.clone()], &other);
+    let r = client.try_launch(&other, &vec![&e, other.clone()], &other, &other);
     assert_eq!(r.err().unwrap().unwrap(), CommonError::AlreadyLive.into());
 }
 
@@ -695,25 +695,30 @@ fn launch_rejects_unwired_treasury_and_minters_without_treasury() {
     let wired = wired_treasury(&e, &client);
     let other = Address::generate(&e);
 
-    let r = client.try_launch(&other, &vec![&e, other.clone()], &other);
+    let r = client.try_launch(&other, &vec![&e, other.clone()], &other, &other);
     assert_eq!(
         r.err().unwrap().unwrap(),
         crate::error::TokenError::TreasuryMismatch.into()
     );
-    let r = client.try_launch(&wired, &vec![&e, other.clone()], &other);
+    let r = client.try_launch(&wired, &vec![&e, other.clone()], &other, &other);
     assert_eq!(
         r.err().unwrap().unwrap(),
         crate::error::TokenError::TreasuryNotMinter.into()
     );
     // The pinned minter must be granted.
-    let r = client.try_launch(&wired, &vec![&e, wired.clone()], &other);
+    let r = client.try_launch(&wired, &vec![&e, wired.clone()], &other, &other);
     assert_eq!(
         r.err().unwrap().unwrap(),
         crate::error::TokenError::MinterNotGranted.into()
     );
     assert!(!client.is_live());
     assert_eq!(client.minter(), None);
-    client.launch(&wired, &vec![&e, wired.clone(), other.clone()], &other);
+    client.launch(
+        &wired,
+        &vec![&e, wired.clone(), other.clone()],
+        &other,
+        &other,
+    );
     assert!(client.is_live());
     assert_eq!(client.minter(), Some(other.clone()));
     assert!(client.mint_authority(&other));
@@ -740,11 +745,13 @@ fn launch_requires_manager_auth() {
         invoke: &MockAuthInvoke {
             contract: &id,
             fn_name: "launch",
-            args: (&treasury, &minters, &treasury).into_val(&e),
+            args: (&treasury, &minters, &treasury, &treasury).into_val(&e),
             sub_invokes: &[],
         },
     }]);
-    assert!(client.try_launch(&treasury, &minters, &treasury).is_err());
+    assert!(client
+        .try_launch(&treasury, &minters, &treasury, &treasury)
+        .is_err());
     assert!(!client.is_live());
     // The manager's own authorization succeeds.
     e.mock_auths(&[MockAuth {
@@ -752,11 +759,11 @@ fn launch_requires_manager_auth() {
         invoke: &MockAuthInvoke {
             contract: &id,
             fn_name: "launch",
-            args: (&treasury, &minters, &treasury).into_val(&e),
+            args: (&treasury, &minters, &treasury, &treasury).into_val(&e),
             sub_invokes: &[],
         },
     }]);
-    client.launch(&treasury, &minters, &treasury);
+    client.launch(&treasury, &minters, &treasury, &treasury);
     assert!(client.is_live());
 }
 
@@ -1456,4 +1463,34 @@ impl HookCounter {
     pub fn batch(e: Env) -> u32 {
         e.storage().instance().get(&2u32).unwrap_or(0)
     }
+}
+
+/// The minter guardian: the DAO's fast exit from a shared-Minter upgrade.
+#[test]
+fn guardian_pauses_the_shared_minter_and_the_admin_re_grants() {
+    let (e, client, _owner) = setup();
+    let treasury = wired_treasury(&e, &client);
+    let platform_minter = Address::generate(&e);
+    let guardian = Address::generate(&e);
+    client.launch(
+        &treasury,
+        &vec![&e, treasury.clone(), platform_minter.clone()],
+        &platform_minter,
+        &guardian,
+    );
+    assert_eq!(client.minter_guardian(), Some(guardian.clone()));
+    assert!(client.mint_authority(&platform_minter));
+
+    client.pause_platform_minter();
+    assert!(!client.mint_authority(&platform_minter));
+    // Only the admin re-grants (a proposal after launch).
+    client.set_mint_authority(&platform_minter, &true);
+    assert!(client.mint_authority(&platform_minter));
+    // The admin can clear the guardian; then nobody can pause.
+    client.set_minter_guardian(&None);
+    assert_eq!(client.minter_guardian(), None);
+    assert_eq!(
+        client.try_pause_platform_minter().err().unwrap().unwrap(),
+        soroban_sdk::Error::from_contract_error(7208) // NoMinterGuardian
+    );
 }

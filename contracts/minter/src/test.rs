@@ -30,6 +30,7 @@ fn launch_token(env: &Env, token: &token::DaoTokenContractClient, minter: &Addre
         &t,
         &Vec::from_array(env, [t.clone(), minter.clone()]),
         minter,
+        minter,
     );
 }
 
@@ -1042,4 +1043,13 @@ fn upgrade_delay_is_configurable_but_a_reduction_waits() {
     // A later raise clears the pending reduction.
     minter.set_upgrade_delay(&20);
     assert_eq!(minter.upgrade_delay(), 20);
+    // Two reductions in a row: the second waits out the first's value (20),
+    // and the notice never jumps back to an older one (review 3, issue 2).
+    minter.set_upgrade_delay(&5);
+    env.ledger().with_mut(|l| l.sequence_number += 20);
+    assert_eq!(minter.upgrade_delay(), 5);
+    minter.set_upgrade_delay(&2);
+    assert_eq!(minter.upgrade_delay(), 5);
+    env.ledger().with_mut(|l| l.sequence_number += 5);
+    assert_eq!(minter.upgrade_delay(), 2);
 }

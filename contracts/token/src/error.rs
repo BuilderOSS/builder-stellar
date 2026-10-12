@@ -19,4 +19,6 @@ pub enum TokenError {
     MinterNotGranted = 7206,
     /// The collection name contains `"`, `\` or a control character
     InvalidName = 7207,
+    /// `pause_platform_minter` with no guardian set
+    NoMinterGuardian = 7208,
 }

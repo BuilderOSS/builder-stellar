@@ -8,6 +8,7 @@ import { namespacedKey } from '@/lib/storage-key';
 import {
   buildDaoInventory,
   codeHealthStatus,
+  effectiveUpgradeDelay,
   extendToLedgers,
   instanceKey,
   instanceWasmHash,
@@ -338,5 +339,29 @@ describe('codeHealthStatus', () => {
     expect(codeHealthStatus(1_000 + 60 * day, 1_000)).toBe('soon');
     expect(codeHealthStatus(1_000 + 14 * day, 1_000)).toBe('critical');
     expect(codeHealthStatus(999, 1_000)).toBe('expired');
+  });
+});
+
+describe('effectiveUpgradeDelay', () => {
+  const info = (storage: Array<[xdr.ScVal, xdr.ScVal]>) =>
+    ({
+      liveUntil: 1,
+      bytes: 1,
+      val: entryData(TOKEN, xdr.ScVal.scvLedgerKeyContractInstance(), instance(storage))
+    }) as const;
+  const pending = (ledgers: number, effective: number) =>
+    nativeToScVal(
+      { ledgers, effective_ledger: effective },
+      { type: { ledgers: ['symbol', 'u32'], effective_ledger: ['symbol', 'u32'] } }
+    ) as xdr.ScVal;
+  it('mirrors common::upgrade::delay', () => {
+    expect(effectiveUpgradeDelay(undefined, 100)).toBe(7 * 17_280);
+    expect(effectiveUpgradeDelay(info([[ns('UpgradeDelay'), u32(720)]]), 100)).toBe(720);
+    const reducing = info([
+      [ns('UpgradeDelay'), u32(720)],
+      [ns('PendingUpgradeDelay'), pending(60, 1_000)]
+    ]);
+    expect(effectiveUpgradeDelay(reducing, 999)).toBe(720);
+    expect(effectiveUpgradeDelay(reducing, 1_000)).toBe(60);
   });
 });
