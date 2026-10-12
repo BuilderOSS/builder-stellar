@@ -69,4 +69,6 @@ export type ProposalListResponse = {
   hasMore: boolean;
   generatedAt: string;
   message?: string;
+  /** 'chain' when the indexer was unavailable and the list came from Governor state (no titles or totals). */
+  source?: 'indexer' | 'chain';
 };

@@ -20,6 +20,7 @@ import {
   TransactionBuilder,
   xdr
 } from '@stellar/stellar-sdk';
+import { Buffer } from 'buffer';
 
 import { namespacedKey } from '@/lib/storage-key';
 
@@ -373,4 +374,15 @@ export function rpcLedgerRead(server: {
     }
     return { latestLedger, entries };
   };
+}
+
+/**
+ * The wasm hash a contract instance runs, as hex; null for a Stellar Asset
+ * Contract or a value that is not an instance. In this SDK `wasmHash` is an
+ * XDR `Hash` wrapper whose bytes are `.value`.
+ */
+export function instanceWasmHash(value: xdr.ScVal): string | null {
+  if (value.type !== 'scvContractInstance' || value.instance.executable.type !== 'contractExecutableWasm') return null;
+  const hash = value.instance.executable.wasmHash as unknown as Uint8Array | { value: Uint8Array };
+  return Buffer.from(hash instanceof Uint8Array ? hash : hash.value).toString('hex');
 }

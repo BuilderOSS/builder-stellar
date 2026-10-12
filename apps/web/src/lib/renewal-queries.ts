@@ -11,6 +11,7 @@ import {
   type DaoInventory,
   extendToLedgers,
   extendTransaction,
+  instanceWasmHash,
   type InventoryKey,
   planBatches,
   type RenewalClass,
@@ -56,9 +57,8 @@ async function readCodeHealth(rpc: Server, inventory: DaoInventory): Promise<Cod
   const hashes = new Set<string>();
   for (const key of inventory.present) {
     if (key.cls !== 'contracts' || key.val.type !== 'contractData') continue;
-    const val = key.val.contractData.val;
-    if (val.type === 'scvContractInstance' && val.instance.executable.type === 'contractExecutableWasm')
-      hashes.add(Buffer.from(val.instance.executable.wasmHash as unknown as Uint8Array).toString('hex'));
+    const hash = instanceWasmHash(key.val.contractData.val);
+    if (hash) hashes.add(hash);
   }
   if (!hashes.size) return { liveUntil: null, hashes: 0 };
   const keys = [...hashes].map((hash) =>

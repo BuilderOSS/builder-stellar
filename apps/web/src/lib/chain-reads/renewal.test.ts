@@ -1,4 +1,5 @@
 import { Address, Keypair, nativeToScVal, xdr } from '@stellar/stellar-sdk';
+import { Buffer } from 'buffer';
 import { describe, expect, it } from 'vitest';
 
 import { namespacedKey } from '@/lib/storage-key';
@@ -7,6 +8,7 @@ import {
   buildDaoInventory,
   extendToLedgers,
   instanceKey,
+  instanceWasmHash,
   type LedgerEntryInfo,
   type LedgerRead,
   planBatches,
@@ -249,5 +251,28 @@ describe('DAO renewal inventory', () => {
     expect(instanceKey(TOKEN).toXDR('base64')).toBe(
       data(TOKEN, xdr.ScVal.scvLedgerKeyContractInstance()).toXDR('base64')
     );
+  });
+});
+
+describe('instanceWasmHash', () => {
+  it('reads the hash bytes out of the XDR Hash wrapper', () => {
+    const instance = xdr.ScVal.scvContractInstance(
+      new xdr.ScContractInstance({
+        executable: xdr.ContractExecutable.contractExecutableWasm(Buffer.alloc(32, 5)),
+        storage: null
+      })
+    );
+    expect(instanceWasmHash(instance)).toBe('05'.repeat(32));
+    expect(
+      instanceWasmHash(
+        xdr.ScVal.scvContractInstance(
+          new xdr.ScContractInstance({
+            executable: xdr.ContractExecutable.contractExecutableStellarAsset(),
+            storage: null
+          })
+        )
+      )
+    ).toBeNull();
+    expect(instanceWasmHash(xdr.ScVal.scvU32(1))).toBeNull();
   });
 });

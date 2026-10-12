@@ -114,6 +114,9 @@ export default function ProposalsPage() {
       </div>
 
       {error ? <Callout variant="error" title="Proposals didn't load" description={error.message} /> : null}
+      {data?.source === 'chain' ? (
+        <Callout variant="info" title="Showing proposals from the chain" description={data.message} />
+      ) : null}
 
       {isLoading && !data ? (
         <div className={skeletons} role="status" aria-busy="true">
