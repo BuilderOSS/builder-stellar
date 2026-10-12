@@ -183,7 +183,8 @@ stellar contract invoke --id <module-address> --network <network> --source-accou
 `LEGACY_MANAGER_VERSION=<active release>`: registers the old Manager hash if needed, registers and approves the
 new one, then calls `upgrade_manager` (Manager admin). The Manager's own upgrade waits out its notice
 (`manager.upgrade_delay()` ledgers after the approval, D39): on the first run the script approves and prints the
-ledger from which the upgrade may run; rerun it then. Upgrade the Manager **before** modules whenever
+ledger from which the upgrade may run; rerun it then. The same latest-only rule applies (`UpgradeNotLatest`,
+7131): the script announces the hash as latest for `Manager` first. Upgrade the Manager **before** modules whenever
 module upgrades rely on new Manager reads (the script checks `get_implementation_version` exists).
 
 ## Shared Minter upgrades
@@ -195,9 +196,23 @@ change, `minter.migrate()`; both require the Manager admin (`ManagerAdminNotSet`
 upgrade applies only `minter.upgrade_delay()` ledgers after the approval (`UpgradeDelayNotElapsed`, 7813, before
 that; D39): the script approves on its first run, prints the earliest ledger, and is rerun then. Approvals are
 idempotent (the first ledger counts), and the admin can lengthen the notice at once but shorten it only after the
-notice in force has passed (`set_upgrade_delay`). During the notice a DAO that distrusts the upgrade removes the
-Minter from its mint authorities by proposal (`set_mint_authority(minter, false)`); Manage shows the pending
-upgrade and the ledger it can apply from. A DAO whose governance cycle is longer than the notice cannot finish
+notice in force has passed (`set_upgrade_delay`). The upgrade must also be to the hash announced as latest for
+`Minter` (`set_latest_implementation`; `UpgradeNotLatest`, 7814, otherwise), and the notice counts from the later
+of the approval and the announcement (D42), so the script announces before approving. During the notice a DAO
+that distrusts the upgrade removes the Minter from its mint authorities by proposal
+(`set_mint_authority(minter, false)`); Manage shows the pending upgrade and the ledger it can apply from, and
+members see it on the community home page. A DAO whose governance cycle is longer than the notice cannot finish
 that in time (SECURITY_MODEL, known limitation). Re-enabling is `set_mint_authority(minter, true)` by proposal.
 Claim roots, rounds and markers are kept; e2e `shared_minter_upgrades_then_claims_against_the_existing_root`
 covers it. A different Minter address would need every DAO to re-pin it, which this release does not support.
+
+## Approving upgrade paths for DAO modules
+
+DAO modules keep directional approvals (`approve_upgrade(from, to)`) and no latest-only rule, because a DAO's
+own proposal is its notice and a migration may have to pass through intermediate versions. The rule for the
+Manager admin: **approve only the paths the `migrate` code supports.** Approve v1 → v2 and v2 → v3 when v3's
+`migrate` assumes the v2 layout; approve v1 → v3 directly only when v3's `migrate` handles the v1 layout. A DAO
+two releases behind then chains the steps: one proposal can carry `upgrade(v1, v2)`, `migrate()`,
+`upgrade(v2, v3)`, `migrate()` for any module except the Treasury, whose own upgrade goes alone (e2e
+`dao_module_chains_two_upgrades_in_one_proposal`). `migrate()` refuses a no-op (`NothingToMigrate`), so include
+it only for steps that change the storage version.
