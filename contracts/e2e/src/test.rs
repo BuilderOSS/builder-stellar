@@ -4388,10 +4388,12 @@ fn dao_renewal_inventory(
                     ns_key(e, "ProposalTime", std::vec![id.clone().into_val(e)]),
                 ));
                 keys.push((g.clone(), ns_key(e, "ProposalId", std::vec![u(info.seq)])));
-                keys.push((
-                    g.clone(),
-                    oz_key(e, "ProposalVote", std::vec![id.into_val(e)]),
-                ));
+                // The tally exists once someone voted; a client learns that
+                // from the same getLedgerEntries read that gives it the TTLs.
+                let tally = oz_key(e, "ProposalVote", std::vec![id.into_val(e)]);
+                if e.as_contract(&g, || e.storage().persistent().has(&tally)) {
+                    keys.push((g.clone(), tally));
+                }
             }
         }
         start += governor::MAX_PROPOSAL_IDS_PAGE;
@@ -4555,4 +4557,188 @@ fn assert_inventory_matches_ledger(
         phantom.is_empty(),
         "inventory lists keys that do not exist: {phantom:?}"
     );
+}
+
+// ============================================================================
+// Budget gates (docs/STORAGE_DIET.md § 10), measured against live testnet
+// limits read 2026-10-12 (`stellar network settings --network testnet`).
+// ============================================================================
+
+const TX_MAX_INSTRUCTIONS: u64 = 400_000_000;
+const TX_MAX_WRITE_BYTES: u32 = 132_096;
+const TX_MAX_EVENTS_BYTES: u32 = 16_384;
+const TX_MAX_FOOTPRINT_ENTRIES: u32 = 400;
+const TX_MAX_DISK_READ_BYTES: u32 = 200_000;
+
+/// Resources of the last invocation, asserted against the live limits.
+fn assert_within_limits(e: &Env, what: &str) {
+    let r = e.cost_estimate().resources();
+    let cpu = e.cost_estimate().budget().cpu_instruction_cost();
+    std::println!(
+        "BUDGET {what}: cpu {cpu}, write bytes {}, entries read {} written {}, events {}",
+        r.write_bytes,
+        r.disk_read_entries + r.memory_read_entries,
+        r.write_entries,
+        r.contract_events_size_bytes
+    );
+    assert!(cpu < TX_MAX_INSTRUCTIONS, "{what}: cpu {cpu}");
+    assert!(
+        r.write_bytes < TX_MAX_WRITE_BYTES,
+        "{what}: write bytes {}",
+        r.write_bytes
+    );
+    assert!(
+        r.contract_events_size_bytes < TX_MAX_EVENTS_BYTES,
+        "{what}: events {}",
+        r.contract_events_size_bytes
+    );
+}
+
+/// `create_dao` with a maximum-length profile, and `propose` with a maximum
+/// description, fit one transaction.
+#[test]
+fn largest_create_dao_and_propose_fit_the_live_limits() {
+    let f = factory_dao();
+    let e = &f.e;
+    let asset = f.payment.address();
+    let mut params = slug_params(e, &f.deployer, 2, "big-profile", &asset);
+    let filler = "x".repeat(common::MAX_PROFILE_LENGTH as usize - 30);
+    params.initial_config.profile =
+        String::from_str(e, &std::format!(r#"{{"v":1,"description":"{filler}"}}"#));
+    assert!(params.initial_config.profile.len() <= common::MAX_PROFILE_LENGTH);
+    e.cost_estimate().budget().reset_default();
+    f.manager.create_dao(&params);
+    assert_within_limits(e, "create_dao (4 KB profile)");
+
+    e.cost_estimate().budget().reset_unlimited();
+    f.manager.launch_dao(&f.dao.token, &f.no_launch_modules());
+    let governor = DaoGovernorContractClient::new(e, &f.dao.governor);
+    advance(e, 1);
+    let mut targets = Vec::new(e);
+    let mut functions = Vec::new(e);
+    let mut args: Vec<Vec<Val>> = Vec::new(e);
+    for i in 0..governor::MAX_PROPOSAL_ACTIONS {
+        targets.push_back(f.dao.metadata.clone());
+        functions.push_back(Symbol::new(e, "update_renderer_base"));
+        args.push_back(vec![
+            e,
+            String::from_str(e, &std::format!("https://r{i}.example/")).into_val(e),
+        ]);
+    }
+    let description = String::from_str(
+        e,
+        &"d".repeat(stellar_governance::governor::MAX_DESCRIPTION_LENGTH as usize),
+    );
+    e.cost_estimate().budget().reset_default();
+    governor.propose(&targets, &functions, &args, &description, &f.deployer);
+    assert_within_limits(e, "propose (20 actions, max description)");
+}
+
+/// The reference DAO (16 properties, ~300 items, 500 tokens, 50 proposals of
+/// which 10 are live) renews in one `ExtendFootprintTTL`: its six instances
+/// plus the inventory fit the footprint and read-bytes limits.
+#[test]
+fn reference_dao_sweep_fits_one_transaction() {
+    use soroban_sdk::xdr::{LedgerKey, Limits, ScAddress, ScVal, WriteXdr};
+    use soroban_sdk::TryFromVal;
+    let f = factory_dao();
+    let e = &f.e;
+    let token = DaoTokenContractClient::new(e, &f.dao.token);
+    let metadata = MetadataContractClient::new(e, &f.dao.metadata);
+    let (minter_id, _) = shared_minter(&f);
+    f.manager.set_platform_minter(&minter_id);
+
+    // 16 properties of 19 items each (304 items), one property per call.
+    for p in 0..16u32 {
+        let mut items = Vec::new(e);
+        for i in 0..19u32 {
+            items.push_back(ItemParam {
+                property_id: 0,
+                name: String::from_str(e, &std::format!("item {p}-{i}")),
+                is_new_property: true,
+            });
+        }
+        metadata.add_properties(
+            &vec![e, String::from_str(e, &std::format!("Property {p}"))],
+            &items,
+            &IpfsGroup {
+                base_uri: String::from_str(e, &std::format!("ipfs://art{p}/")),
+                extension: String::from_str(e, ".png"),
+            },
+        );
+    }
+    // 500 tokens (one already minted), in event-budget-sized batches.
+    let holders: std::vec::Vec<Address> = (0..12).map(|_| Address::generate(e)).collect();
+    let mut left = 499u32;
+    for h in holders.iter().cycle() {
+        if left == 0 {
+            break;
+        }
+        let n = left.min(40);
+        token.batch_mint(&f.deployer, &vec![e, h.clone()], &vec![e, n as u128]);
+        left -= n;
+    }
+    f.manager.launch_dao(
+        &f.dao.token,
+        &manager::LaunchConfig {
+            launch_auction: true,
+            launch_marketplace: true,
+            minter: minter_id,
+        },
+    );
+
+    // 50 proposals, 40 of them cancelled.
+    let governor = DaoGovernorContractClient::new(e, &f.dao.governor);
+    advance(e, 1);
+    for i in 0..50u32 {
+        let targets = vec![e, f.dao.metadata.clone()];
+        let functions = vec![e, Symbol::new(e, "update_renderer_base")];
+        let args = vec![
+            e,
+            vec![e, String::from_str(e, "https://r.example/").into_val(e)],
+        ];
+        let description = String::from_str(e, &std::format!("proposal {i}"));
+        governor.propose(&targets, &functions, &args, &description, &f.deployer);
+        if i >= 10 {
+            governor.cancel(
+                &targets,
+                &functions,
+                &args,
+                &description_hash(e, &description),
+                &f.deployer,
+            );
+        }
+    }
+
+    let listed = dao_renewal_inventory(e, &f.manager, &f.dao.token);
+    let snapshot = e.to_ledger_snapshot();
+    let size_of = |owner: &Address, key: &ScVal| -> u32 {
+        let owner = ScAddress::from(owner);
+        snapshot
+            .ledger_entries
+            .iter()
+            .find(|(k, _)| matches!(k.as_ref(), LedgerKey::ContractData(d) if d.contract == owner && d.key == *key))
+            .map(|(_, (entry, _))| entry.to_xdr(Limits::none()).unwrap().len() as u32)
+            .unwrap_or_else(|| panic!("{key:?} not on the ledger"))
+    };
+    let mut entries = 0u32;
+    let mut bytes = 0u32;
+    for module in [
+        &f.dao.token,
+        &f.dao.metadata,
+        &f.dao.auction,
+        &f.dao.governor,
+        &f.dao.treasury,
+        &f.dao.marketplace,
+    ] {
+        entries += 1;
+        bytes += size_of(module, &ScVal::LedgerKeyContractInstance);
+    }
+    for (owner, key) in &listed {
+        entries += 1;
+        bytes += size_of(owner, &ScVal::try_from_val(e, key).unwrap());
+    }
+    std::println!("BUDGET reference DAO sweep: {entries} entries, {bytes} bytes");
+    assert!(entries <= TX_MAX_FOOTPRINT_ENTRIES, "{entries} entries");
+    assert!(bytes <= TX_MAX_DISK_READ_BYTES, "{bytes} bytes");
 }

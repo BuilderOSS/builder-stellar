@@ -47,7 +47,8 @@ mod storage;
 pub use contract::*;
 pub use error::CustomGovernorError;
 pub use storage::{
-    ProposalInfo, MAX_PROPOSAL_IDS_PAGE, MAX_QUEUE_DELAY, MAX_VOTING_DELAY, MAX_VOTING_PERIOD,
+    ProposalInfo, MAX_PROPOSAL_ACTIONS, MAX_PROPOSAL_IDS_PAGE, MAX_QUEUE_DELAY, MAX_VOTING_DELAY,
+    MAX_VOTING_PERIOD,
 };
 
 #[cfg(test)]
