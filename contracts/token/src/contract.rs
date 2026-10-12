@@ -260,6 +260,38 @@ impl DaoTokenContract {
         <Self as Votes>::get_total_supply(e) as i128
     }
 
+    /// The voting supply at the previous ledger: the ledger a proposal's
+    /// votes are snapshotted at, so the Governor's quorum and the voters'
+    /// weights describe the same supply (contract review H1). Reads only the
+    /// latest checkpoint, or the one before it when the latest was written in
+    /// this ledger (that one was read, and so renewed, by the write). Never a
+    /// binary search over history that the sweep lets archive.
+    pub fn voting_supply_at_previous_ledger(e: &Env) -> u128 {
+        use stellar_governance::votes::{get_checkpoint, CheckpointType, VotesStorageKey};
+        let n: u32 = e
+            .storage()
+            .instance()
+            .get(&VotesStorageKey::NumTotalSupplyCheckpoints)
+            .unwrap_or(0);
+        if n == 0 {
+            return 0;
+        }
+        let latest = get_checkpoint(e, &CheckpointType::TotalSupply, n - 1);
+        if latest.ledger < e.ledger().sequence() {
+            return latest.votes;
+        }
+        if n == 1 {
+            return 0;
+        }
+        get_checkpoint(e, &CheckpointType::TotalSupply, n - 2).votes
+    }
+
+    /// Tokens minted so far (the next id). Ids are sequential and never
+    /// burned, so a token exists exactly when its id is below this.
+    pub fn minted(e: &Env) -> u32 {
+        next_token_id(e)
+    }
+
     /// Mints the next sequential token id to `to` (minter auth; the minter must
     /// be the admin or, once live, hold mint authority). A recipient without a
     /// delegate is self-delegated so it can vote immediately. Emits

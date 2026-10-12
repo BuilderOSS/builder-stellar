@@ -22,6 +22,8 @@ pub const MAX_BATCH_RECIPIENTS: u32 = common::MAX_BATCH_RECIPIENTS;
 
 /// Maximum merkle proof depth (supports 2^32 leaves).
 pub const MAX_PROOF_LEN: u32 = 32;
+/// The upgrade notice lives in `common::upgrade` (shared with the Manager).
+pub use common::upgrade::RECOMMENDED_UPGRADE_DELAY;
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]

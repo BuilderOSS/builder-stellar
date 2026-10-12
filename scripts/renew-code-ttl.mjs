@@ -78,7 +78,17 @@ const hashes = new Map(); // hash -> label
 const add = (hash, label) => {
   if (typeof hash === 'string' && /^[0-9a-f]{64}$/i.test(hash) && !hashes.has(hash)) hashes.set(hash, label);
 };
-add(tryView(manager, 'wasm_hash'), 'Manager (running)');
+// The Manager must answer: if its code or instance has archived, a silent run would renew only
+// what the artifact names and report success (STORAGE_DIET contract review L5).
+const managerHash = tryView(manager, 'wasm_hash');
+if (typeof managerHash !== 'string') {
+  console.error(
+    `Cannot read manager.wasm_hash() on ${manager}: its code or instance may have archived. ` +
+      'Restore it (stellar contract restore --id <manager>, then --wasm-hash <hash>) before renewing.'
+  );
+  process.exit(1);
+}
+add(managerHash, 'Manager (running)');
 if (minter) add(tryView(minter, 'wasm_hash'), 'Minter (running)');
 const current = tryView(manager, 'current_implementations');
 if (current && typeof current === 'object') {

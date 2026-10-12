@@ -17,9 +17,28 @@ impl MinterContract {
     /// * `manager` - the Manager: registry for `version()` and upgrade
     ///   approvals; its admin is the Minter's upgrade authority
     /// * `current_hash` - this implementation's WASM hash
-    pub fn __constructor(e: &Env, manager: Address, current_hash: BytesN<32>) {
+    /// * `upgrade_delay` - ledgers between a Manager approval and the earliest
+    ///   upgrade of this Minter (`RECOMMENDED_UPGRADE_DELAY` on a public
+    ///   network; short on testnet). Changeable with `set_upgrade_delay`.
+    pub fn __constructor(e: &Env, manager: Address, current_hash: BytesN<32>, upgrade_delay: u32) {
         set_manager(e, &manager);
+        common::upgrade::init_delay(e, upgrade_delay);
         common::upgrade::init(e, &current_hash, STORAGE_VERSION);
+    }
+
+    /// The upgrade notice in force: ledgers between a Manager approval and
+    /// the earliest upgrade.
+    pub fn upgrade_delay(e: &Env) -> u32 {
+        common::upgrade::delay(e)
+    }
+
+    /// Change the upgrade notice (Manager admin). A longer notice applies at
+    /// once; a shorter one only after the notice in force has passed, so a
+    /// compromised admin cannot shorten it to rush a hostile upgrade through.
+    pub fn set_upgrade_delay(e: &Env, ledgers: u32) -> Result<(), MinterError> {
+        require_manager_admin(e)?;
+        common::upgrade::set_delay(e, ledgers);
+        Ok(())
     }
 
     /// Batch mints tokens to multiple recipients.
@@ -159,9 +178,19 @@ impl MinterContract {
     // ========== Upgrades (common::upgrade, Manager admin) ==========
 
     /// Upgrade the shared Minter to a registry-approved WASM. The Manager
-    /// admin authorizes it, as for every platform contract.
+    /// admin authorizes it, as for every platform contract, but only
+    /// `upgrade_delay()` ledgers after the approval was recorded: every DAO
+    /// pins this Minter as a mint authority, so a hostile upgrade could mint
+    /// against all of them, and the notice gives DAOs time to revoke that
+    /// authority by proposal (contract review M1).
     pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) -> Result<(), MinterError> {
         let manager = require_manager_admin(e)?;
+        let approved = ManagerRegistryClient::new(e, &manager)
+            .upgrade_approved_ledger(&from_hash, &to_hash)
+            .ok_or(MinterError::UpgradeDelayNotElapsed)?;
+        if !common::upgrade::notice_passed(e, approved) {
+            return Err(MinterError::UpgradeDelayNotElapsed);
+        }
         common::upgrade::apply(e, &manager, &from_hash, &to_hash);
         Ok(())
     }

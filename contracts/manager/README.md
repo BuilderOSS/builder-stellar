@@ -35,3 +35,11 @@ Ledger-number fields in events end in `_ledger` (`published_ledger`, `approved_l
 ## Source and tests
 
 [Contract](src/contract.rs), [structs/storage](src/storage.rs), [events](src/events.rs), [errors](src/error.rs). `cargo test -p manager`. [Deployment](../../docs/MANAGER_DEPLOYMENT.md) and [security](../../docs/SECURITY_MODEL.md).
+
+## Upgrade notice
+
+`upgrade_manager(from, to)` requires an `approve_upgrade(from, to)` record at least `upgrade_delay()` ledgers old
+(constructor argument `upgrade_delay`; `UpgradeDelayNotElapsed`, 7130, before that). Re-approving keeps the first
+approval's ledger. `set_upgrade_delay(ledgers)` (admin) lengthens the notice at once; a reduction takes effect only
+after the notice in force has passed. `upgrade_approved_ledger(from, to)` and `current_implementations()` are
+read-only views for the platform renewal and upgrade scripts.

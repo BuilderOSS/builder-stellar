@@ -124,7 +124,11 @@ export const ManagerError = {
   /**
    * `change_slug` to the slug the DAO already has
    */
-  7129 : { message: "SlugUnchanged" }
+  7129 : { message: "SlugUnchanged" },
+  /**
+   * The Manager's own upgrade was approved less than `upgrade_delay()` ledgers ago.
+   */
+  7130 : { message: "UpgradeDelayNotElapsed" }
 }
 
 export type ManagerError = typeof ManagerError[keyof typeof ManagerError];

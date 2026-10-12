@@ -61,10 +61,16 @@ fn uri(env: &Env) -> String {
 }
 
 /// A shared Minter wired to a mock Manager that knows its hash.
+/// Short on purpose: the notice is a deploy-time choice (long on mainnet).
+const TEST_UPGRADE_DELAY: u32 = 1_000;
+
 fn register_minter<'a>(env: &Env) -> (MinterContractClient<'a>, MockManagerClient<'a>) {
     let mgr = MockManagerClient::new(env, &env.register(MockManager, ()));
     mgr.register(&minter_hash(env), &String::from_str(env, "0.1.0"));
-    let id = env.register(MinterContract, (mgr.address.clone(), minter_hash(env)));
+    let id = env.register(
+        MinterContract,
+        (mgr.address.clone(), minter_hash(env), TEST_UPGRADE_DELAY),
+    );
     (MinterContractClient::new(env, &id), mgr)
 }
 
@@ -953,6 +959,21 @@ fn shared_minter_upgrades_under_the_manager_admin() {
             sub_invokes: &[],
         },
     }]);
+    // Approved just now: the 7-day notice has not passed (contract review M1).
+    assert_eq!(
+        minter
+            .try_upgrade(&minter_hash(&env), &to)
+            .err()
+            .unwrap()
+            .unwrap(),
+        MinterError::UpgradeDelayNotElapsed
+    );
+    {
+        use soroban_sdk::testutils::Ledger as _;
+        assert_eq!(minter.upgrade_delay(), TEST_UPGRADE_DELAY);
+        env.ledger()
+            .with_mut(|l| l.sequence_number += TEST_UPGRADE_DELAY);
+    }
     minter.upgrade(&minter_hash(&env), &to);
     env.as_contract(&minter.address, || {
         assert_eq!(common::upgrade::current_hash(&env), to);
@@ -990,4 +1011,35 @@ fn storage_keys_do_not_collide() {
         ),
         ("common", common_key_shapes(&e)),
     ]);
+}
+
+/// The notice can be changed by the Manager admin, but a reduction waits out
+/// the notice in force, so it cannot be used to rush an upgrade.
+#[test]
+fn upgrade_delay_is_configurable_but_a_reduction_waits() {
+    use soroban_sdk::testutils::Ledger as _;
+    let env = Env::default();
+    env.mock_all_auths();
+    let (minter, mgr) = register_minter(&env);
+    assert_eq!(minter.upgrade_delay(), TEST_UPGRADE_DELAY);
+    // Nobody but the Manager admin.
+    assert_eq!(
+        minter.try_set_upgrade_delay(&5).err().unwrap().unwrap(),
+        MinterError::ManagerAdminNotSet
+    );
+    mgr.set_admin(&Address::generate(&env));
+    // Longer: at once.
+    minter.set_upgrade_delay(&(TEST_UPGRADE_DELAY * 3));
+    assert_eq!(minter.upgrade_delay(), TEST_UPGRADE_DELAY * 3);
+    // Shorter: only after the 3,000 ledgers now in force.
+    minter.set_upgrade_delay(&10);
+    assert_eq!(minter.upgrade_delay(), TEST_UPGRADE_DELAY * 3);
+    env.ledger()
+        .with_mut(|l| l.sequence_number += TEST_UPGRADE_DELAY * 3 - 1);
+    assert_eq!(minter.upgrade_delay(), TEST_UPGRADE_DELAY * 3);
+    env.ledger().with_mut(|l| l.sequence_number += 1);
+    assert_eq!(minter.upgrade_delay(), 10);
+    // A later raise clears the pending reduction.
+    minter.set_upgrade_delay(&20);
+    assert_eq!(minter.upgrade_delay(), 20);
 }

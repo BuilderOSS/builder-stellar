@@ -18,6 +18,9 @@ use stellar_governance::governor::ProposalState;
 use token::{DaoTokenContract, DaoTokenContractClient};
 use treasury::{DaoTreasuryContract, DaoTreasuryContractClient};
 
+/// Platform upgrade notice used by these tests (short; a deploy-time choice).
+const TEST_UPGRADE_DELAY: u32 = 1_000;
+
 #[contract]
 pub struct TargetContract;
 
@@ -330,6 +333,7 @@ fn manager_registry_and_predictions_are_creator_scoped() {
             admin.clone(),
             manager_wasm_hash.clone(),
             String::from_str(&e, "0.1.0"),
+            TEST_UPGRADE_DELAY,
         ),
     );
     let manager = ManagerContractClient::new(&e, &manager_id);
@@ -2912,6 +2916,7 @@ fn full_factory_flow_create_setup_launch_with_slug() {
             admin,
             BytesN::from_array(&e, &[0; 32]),
             String::from_str(&e, "0.1.0"),
+            TEST_UPGRADE_DELAY,
         ),
     );
     let manager = ManagerContractClient::new(&e, &manager_id);
@@ -3462,6 +3467,7 @@ fn factory_dao() -> DaoFixture {
             Address::generate(&e),
             BytesN::from_array(&e, &[0; 32]),
             String::from_str(&e, "0.1.0"),
+            TEST_UPGRADE_DELAY,
         ),
     );
     let manager = ManagerContractClient::new(&e, &manager_id);
@@ -3921,7 +3927,11 @@ fn shared_minter(f: &DaoFixture) -> (Address, BytesN<32>) {
     );
     let id = e.register(
         minter::MinterContract,
-        (f.manager.address.clone(), hash.clone()),
+        (
+            f.manager.address.clone(),
+            hash.clone(),
+            minter::RECOMMENDED_UPGRADE_DELAY,
+        ),
     );
     (id, hash)
 }
@@ -3991,6 +4001,14 @@ fn shared_minter_upgrades_then_claims_against_the_existing_root() {
         &to,
     );
     f.manager.approve_upgrade(&from, &to);
+    // Every DAO pins this Minter: an upgrade waits 7 days after the approval
+    // so a DAO can revoke the Minter's mint authority first (review M1).
+    assert_eq!(
+        minter.try_upgrade(&from, &to).err().unwrap().unwrap() as u32,
+        7813
+    );
+    let notice = minter.upgrade_delay();
+    e.ledger().with_mut(|l| l.sequence_number += notice);
     minter.upgrade(&from, &to);
 
     // Now running the built WASM against the same storage.
@@ -4412,11 +4430,18 @@ fn dao_payment_assets(e: &Env, token: &DaoTokenContractClient) -> std::vec::Vec<
         );
     }
     if let Some(m) = token.marketplace() {
-        let asset = MarketplaceContractClient::new(e, &m)
-            .get_config()
-            .payment_asset;
+        let market = MarketplaceContractClient::new(e, &m);
+        let asset = market.get_config().payment_asset;
         if !assets.contains(&asset) {
             assets.push(asset);
+        }
+        // An open listing settles in the asset of its day (review M2).
+        for t in 0..instance_u32(e, &token.address, "TokenIdCounter") {
+            if let Some(listing) = market.get_listing(&t) {
+                if !assets.contains(&listing.payment_asset) {
+                    assets.push(listing.payment_asset);
+                }
+            }
         }
     }
     assets
@@ -4591,14 +4616,19 @@ fn dao_renewal_inventory(
         }
     }
 
-    // The Manager's slug pair.
+    // The Manager's slug pair, or the pending record before launch (review L6).
+    let mgr = manager.address.clone();
     if let Some(slug) = manager.get_slug(token_id) {
-        let mgr = manager.address.clone();
         keys.push((
             mgr.clone(),
             ns_key(e, "SlugToDao", std::vec![slug.into_val(e)]),
         ));
         keys.push((mgr, ns_key(e, "DaoSlug", std::vec![token_id.into_val(e)])));
+    } else {
+        keys.push((
+            mgr,
+            ns_key(e, "PendingDao", std::vec![token_id.into_val(e)]),
+        ));
     }
     keys
 }
@@ -5096,8 +5126,84 @@ fn a_mint_in_the_proposing_ledger_counts_toward_the_quorum_supply() {
     );
     let info = governor.proposal(&id);
     assert_eq!(info.vote_snapshot, 199);
-    // ceil(20 * 10%) = 2, not ceil(10 * 10%) = 1.
-    assert_eq!(info.quorum, 2);
+    // The quorum supply is the snapshot ledger's (199): ceil(10 * 10%) = 1.
+    // The ten tokens minted in ledger 200 neither vote nor count.
+    assert_eq!(info.quorum, 1);
+}
+
+/// Contract review H1: a holder who parks tokens in a non-voting holder (the
+/// Marketplace escrow, reversible by `cancel`) in the proposing ledger must
+/// not lower the quorum while still voting with those tokens at the
+/// snapshot. The quorum supply is the snapshot ledger's, so it does not move.
+#[test]
+fn escrow_in_the_proposing_ledger_does_not_lower_the_quorum() {
+    let (e, token, _treasury, governor, target, owner) = setup();
+    // The attacker holds 8 of 20 (40 %) under a 50 % quorum: alone they can
+    // never pass a proposal. Escrowing their 8 in the proposing ledger would
+    // have made the quorum ceil(12 * 50 %) = 6 <= 8.
+    let attacker = Address::generate(&e);
+    e.ledger().set_sequence_number(110);
+    let mut mine = std::vec::Vec::new();
+    for _ in 0..8 {
+        mine.push(token.mint(&owner, &attacker));
+    }
+    mint_history(&e, &token, &owner, 111, 12); // twelve other holders
+    e.ledger().set_sequence_number(150);
+    governor.set_quorum_bps(&5_000);
+    assert_eq!(token.total_supply(), 20);
+
+    // Ledger 200: escrow all eight (the Marketplace address is a non-voting
+    // holder; moving a token there burns its voting unit) and propose.
+    e.ledger().set_sequence_number(200);
+    e.ledger().set_timestamp(2_000);
+    let market = token.marketplace().unwrap();
+    for t in &mine {
+        token.transfer(&attacker, &market, t);
+    }
+    assert_eq!(token.total_supply(), 12);
+    assert_eq!(token.voting_supply_at_previous_ledger(), 20);
+    let id = governor.propose(
+        &vec![&e, target.address.clone()],
+        &vec![&e, symbol_short!("set_value")],
+        &proposal_args(&e),
+        &String::from_str(&e, "escrow and propose"),
+        &attacker,
+    );
+    let info = governor.proposal(&id);
+    assert_eq!(info.vote_snapshot, 199);
+    // ceil(20 * 50%) = 10, not ceil(12 * 50%) = 6.
+    assert_eq!(info.quorum, 10);
+    // The attacker's eight votes (the escrowed tokens still count at the
+    // snapshot) cannot pass it.
+    e.ledger().set_timestamp(2_301);
+    governor.cast_vote(&id, &1, &String::from_str(&e, "yes"), &attacker);
+    e.ledger().set_timestamp(2_601);
+    assert_eq!(governor.proposal_state(&id), ProposalState::Defeated);
+}
+
+#[test]
+fn voting_supply_at_previous_ledger_reads_only_the_latest_checkpoints() {
+    let (e, token, _t, _g, _target, owner) = setup();
+    assert_eq!(token.voting_supply_at_previous_ledger(), 0);
+    e.ledger().set_sequence_number(110);
+    token.mint(&owner, &Address::generate(&e));
+    // Written this ledger: the previous ledger had none.
+    assert_eq!(token.voting_supply_at_previous_ledger(), 0);
+    e.ledger().set_sequence_number(111);
+    assert_eq!(token.voting_supply_at_previous_ledger(), 1);
+    token.mint(&owner, &Address::generate(&e));
+    token.mint(&owner, &Address::generate(&e));
+    assert_eq!(token.voting_supply_at_previous_ledger(), 1);
+    e.ledger().set_sequence_number(500);
+    assert_eq!(token.voting_supply_at_previous_ledger(), 3);
+    // Only the two latest checkpoints are ever read: drop the rest.
+    archive_old_checkpoints(
+        &e,
+        &token.address,
+        "NumTotalSupplyCheckpoints",
+        "TotalSupplyCheckpoint",
+    );
+    assert_eq!(token.voting_supply_at_previous_ledger(), 3);
 }
 
 // ============================================================================
@@ -5211,6 +5317,12 @@ trait WasmHashProbe {
 }
 
 /// Archive what has expired. Returns how many entries were archived.
+///
+/// Approximation (review M4): on the network a contract call that reads an
+/// archived key fails as a whole, while this deletes the entry so the read
+/// sees "absent". The flows below read only swept or freshly written keys, so
+/// the conclusion holds; a flow that *depends* on the absent-vs-failed
+/// distinction would not be caught here.
 fn archive_expired(e: &Env, f: &DaoFixture) -> usize {
     use soroban_sdk::xdr::{ContractDataDurability, LedgerKey, ScAddress, ScVal};
     use soroban_sdk::TryFromVal;

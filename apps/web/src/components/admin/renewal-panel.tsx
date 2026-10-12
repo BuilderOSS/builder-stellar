@@ -223,7 +223,13 @@ export function RenewalPanel({ config }: { config: DaoNetworkConfig }) {
         Stellar keeps a community&apos;s data for a paid stretch of time. Renewing pays for more, for everything below
         at once. Anyone can renew; the wallet that signs pays the network fee.
       </p>
-      {inventory.missing.length ? (
+      {inventory.bootstrap ? (
+        <Callout
+          variant="warning"
+          title="This community's contracts were archived"
+          description="Nothing can be read until they are restored. Get a price to restore the contracts first; once they are back, this screen lists everything else and renews it."
+        />
+      ) : inventory.missing.length ? (
         <Callout
           variant="warning"
           title={`${inventory.missing.length} ${inventory.missing.length === 1 ? 'item was' : 'items were'} archived`}

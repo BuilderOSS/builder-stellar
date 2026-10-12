@@ -75,9 +75,21 @@ export async function loadRenewalReport(config: DaoNetworkConfig): Promise<Renew
   const inventory = await buildDaoInventory(rpcLedgerRead(rpc), {
     manager: getDeploymentConfig().managerAddress,
     token: config.tokenContractId,
-    nowSeconds: Math.floor(Date.now() / 1000)
+    nowSeconds: Math.floor(Date.now() / 1000),
+    // Known from the deployment record: lets the tab restore evicted instances
+    // (bootstrap) before anything can be read from chain.
+    modules: [
+      config.metadataContractId,
+      config.treasuryContractId,
+      config.governorContractId,
+      config.auctionContractId,
+      config.marketplaceContractId
+    ].filter((a): a is string => Boolean(a))
   });
-  const [maxEntryTtl, code] = await Promise.all([readMaxEntryTtl(rpc), readCodeHealth(rpc, inventory)]);
+  const [maxEntryTtl, code] = await Promise.all([
+    readMaxEntryTtl(rpc),
+    inventory.bootstrap ? Promise.resolve({ liveUntil: null, hashes: 0 }) : readCodeHealth(rpc, inventory)
+  ]);
   return { inventory, maxEntryTtl, code };
 }
 

@@ -75,7 +75,11 @@ export const Error = {
   /**
    * The token JSON would exceed its buffer (a string over its cap)
    */
-  7318 : { message: "TokenUriTooLong" }
+  7318 : { message: "TokenUriTooLong" },
+  /**
+   * The token exists but was minted before any artwork; `regenerate` seeds it.
+   */
+  7319 : { message: "NotSeeded" }
 }
 
 /**

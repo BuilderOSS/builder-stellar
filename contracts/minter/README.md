@@ -31,3 +31,10 @@ The web dynamically loads/checks the deployed Minter spec for claimant preparati
 and signing. It separates current RPC eligibility from indexed history. The current
 allocation admin form only validates review descriptors; its methods are not yet
 registered for shared governance submission. See [web capabilities](../../apps/web/README.md).
+
+## Upgrade notice
+
+`upgrade(from, to)` applies only `upgrade_delay()` ledgers after the Manager's `approve_upgrade` (constructor
+argument `upgrade_delay`; `UpgradeDelayNotElapsed`, 7813, before that). `set_upgrade_delay(ledgers)` (Manager admin)
+lengthens the notice at once; a reduction takes effect only after the notice in force has passed. Every DAO pins
+this Minter as a mint authority, so the notice is the window in which a DAO can revoke it by proposal.

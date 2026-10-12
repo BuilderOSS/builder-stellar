@@ -31,4 +31,6 @@ pub enum MinterError {
     /// `tree_uri` is empty, longer than `common::MAX_STRING_LENGTH`, or not
     /// an `ipfs://` URI
     InvalidTreeUri = 7812,
+    /// The Manager approved this upgrade less than `upgrade_delay()` ledgers ago.
+    UpgradeDelayNotElapsed = 7813,
 }

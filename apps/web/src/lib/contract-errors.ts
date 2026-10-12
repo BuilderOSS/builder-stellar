@@ -96,6 +96,7 @@ const ERRORS: Record<number, string> = {
   7316: 'The profile must be 1 to 4,096 bytes (InvalidProfile).',
   7317: 'The profile changed since this was prepared: another update landed first. Review the current profile and propose again (ProfileSeqMismatch).',
   7318: "This token's description is too long to build on chain (TokenUriTooLong).",
+  7319: 'This token has no artwork yet; the community can seed it with regenerate (NotSeeded).',
   // auction
   7401: 'Invalid token id.',
   7402: 'The auction is over.',
@@ -166,6 +167,8 @@ const ERRORS: Record<number, string> = {
   7810: 'The token has not been launched yet (TokenNotLive).',
   7811: 'The Manager has no admin, so the shared Minter cannot be upgraded (ManagerAdminNotSet).',
   7812: 'The claim list address must be an ipfs:// link of at most 256 characters (InvalidTreeUri).',
+  7813: 'The Minter upgrade was approved too recently; its upgrade notice has not passed (UpgradeDelayNotElapsed).',
+  7130: 'The Manager upgrade was approved too recently; its upgrade notice has not passed (UpgradeDelayNotElapsed).',
   // OpenZeppelin (shared library codes)
   1000: 'This contract is paused.',
   1001: 'This contract is not paused.',

@@ -41,4 +41,6 @@ pub enum Error {
     ProfileSeqMismatch = 7317,
     /// The token JSON would exceed its buffer (a string over its cap)
     TokenUriTooLong = 7318,
+    /// The token exists but was minted before any artwork; `regenerate` seeds it.
+    NotSeeded = 7319,
 }

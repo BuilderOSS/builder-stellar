@@ -31,6 +31,7 @@ fn setup() -> (Env, ManagerContractClient<'static>, Address) {
             admin.clone(),
             BytesN::from_array(&env, &[0u8; 32]),
             String::from_str(&env, "0.1.0"),
+            TEST_UPGRADE_DELAY,
         ),
     );
     let client = ManagerContractClient::new(&env, &contract_id);
@@ -623,6 +624,9 @@ use crate::storage::{
     ManagerKey, MarketplaceConfig, PendingDao,
 };
 
+/// Platform upgrade notice used by these tests (short; a deploy-time choice).
+const TEST_UPGRADE_DELAY: u32 = 1_000;
+
 /// Minimal valid Soroban WASM exporting `__constructor(ctor_arity)` and
 /// `initialize(init_arity)` (unused now that every module has a constructor), both returning void. Lets `create_dao` run its real
 /// deploy path without the full module WASMs.
@@ -1058,6 +1062,7 @@ fn test_set_platform_minter_requires_admin() {
             admin,
             BytesN::from_array(&env, &[0u8; 32]),
             String::from_str(&env, "0.1.0"),
+            TEST_UPGRADE_DELAY,
         ),
     );
     // No mocked auths: admin auth is not provided.
@@ -2821,4 +2826,72 @@ fn storage_keys_do_not_collide() {
         ),
         ("common", common_key_shapes(&e)),
     ]);
+}
+
+/// The Manager's own upgrade waits out the notice, re-approval cannot restart
+/// the clock, and the notice is changeable with a reduction that waits.
+#[test]
+fn manager_upgrade_waits_out_its_notice() {
+    use crate::error::ManagerError;
+    use common::testutils::empty_wasm;
+    use soroban_sdk::testutils::Ledger as _;
+    let (env, client, _admin) = setup();
+    assert_eq!(client.upgrade_delay(), TEST_UPGRADE_DELAY);
+    let from = BytesN::from_array(&env, &[0u8; 32]);
+    let to = empty_wasm(&env);
+    client.register_implementation(
+        &String::from_str(&env, "Manager"),
+        &String::from_str(&env, "0.1.0"),
+        &from,
+    );
+    client.register_implementation(
+        &String::from_str(&env, "Manager"),
+        &String::from_str(&env, "0.2.0"),
+        &to,
+    );
+    // Not approved at all.
+    assert_eq!(
+        client
+            .try_upgrade_manager(&from, &to)
+            .err()
+            .unwrap()
+            .unwrap(),
+        ManagerError::InvalidUpgradePath
+    );
+    let t0 = env.ledger().sequence();
+    client.approve_upgrade(&from, &to);
+    assert_eq!(client.upgrade_approved_ledger(&from, &to), Some(t0 as u64));
+    assert_eq!(
+        client
+            .try_upgrade_manager(&from, &to)
+            .err()
+            .unwrap()
+            .unwrap(),
+        ManagerError::UpgradeDelayNotElapsed
+    );
+    // Re-approving later keeps the first ledger.
+    env.ledger().with_mut(|l| l.sequence_number += 10);
+    client.approve_upgrade(&from, &to);
+    assert_eq!(client.upgrade_approved_ledger(&from, &to), Some(t0 as u64));
+    // A reduction waits out the notice in force; a raise applies at once.
+    client.set_upgrade_delay(&1);
+    assert_eq!(client.upgrade_delay(), TEST_UPGRADE_DELAY);
+    // Requested at t0 + 10 under a 1,000-ledger notice: effective at t0 + 1,010.
+    env.ledger()
+        .with_mut(|l| l.sequence_number = t0 + 10 + TEST_UPGRADE_DELAY - 1);
+    assert_eq!(client.upgrade_delay(), TEST_UPGRADE_DELAY);
+    env.ledger().with_mut(|l| l.sequence_number += 1);
+    assert_eq!(client.upgrade_delay(), 1);
+    client.upgrade_manager(&from, &to);
+    // The empty test wasm exports nothing, so read the stored hash directly.
+    let stored: BytesN<32> = env.as_contract(&client.address, || {
+        env.storage()
+            .instance()
+            .get(&common::ns(
+                &env,
+                crate::storage::ManagerKey::CurrentManagerWasm,
+            ))
+            .unwrap()
+    });
+    assert_eq!(stored, to);
 }

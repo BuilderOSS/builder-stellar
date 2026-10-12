@@ -51,8 +51,18 @@ impl ManagerContract {
     /// * `admin` - The address that will control implementation management and factory settings
     /// * `current_hash` - Current Manager WASM hash for upgrade tracking
     /// * `version` - Current Manager version (e.g., "0.1.0")
-    pub fn __constructor(env: Env, admin: Address, current_hash: BytesN<32>, version: String) {
+    /// `upgrade_delay`: ledgers between an approval and the earliest
+    /// `upgrade_manager` (`common::upgrade::RECOMMENDED_UPGRADE_DELAY` on a
+    /// public network; short on testnet). Changeable with `set_upgrade_delay`.
+    pub fn __constructor(
+        env: Env,
+        admin: Address,
+        current_hash: BytesN<32>,
+        version: String,
+        upgrade_delay: u32,
+    ) {
         write_admin(&env, &admin);
+        common::upgrade::init_delay(&env, upgrade_delay);
         extend_instance_ttl(&env);
         set_factory_paused(&env, false);
         env.storage().instance().set(
@@ -215,6 +225,17 @@ impl ManagerContract {
         }
 
         // Create approval record
+        // Re-approving keeps the first ledger: the notice a platform upgrade
+        // waits for counts from the earliest approval and cannot be restarted.
+        if get_persistent::<UpgradeApproval>(
+            &env,
+            &ManagerKey::UpgradeApproval(from_hash.clone(), to_hash.clone()),
+        )
+        .is_some()
+        {
+            return Ok(());
+        }
+
         let approval = UpgradeApproval {
             from_hash: from_hash.clone(),
             to_hash: to_hash.clone(),
@@ -896,7 +917,7 @@ impl ManagerContract {
         );
         TreasuryLaunchClient::new(&env, &addresses.metadata).launch(&treasury);
 
-        // Claim the slug (held until `change_slug`, renewed via `bump_slug_ttl`) and delete
+        // Claim the slug (held until `change_slug`, renewed by the DAO's storage sweep) and delete
         // the pending DAO state.
         set_persistent(
             &env,
@@ -979,7 +1000,7 @@ impl ManagerContract {
 
     /// Token address of the launched DAO that claimed `slug`.
     ///
-    /// Plain read: does not extend TTL (renewal is explicit via `bump_slug_ttl`).
+    /// Plain read: does not extend TTL (the DAO's storage sweep renews the slug entries).
     pub fn get_dao_by_slug(env: Env, slug: String) -> Result<Address, ManagerError> {
         extend_instance_ttl(&env);
         env.storage()
@@ -1105,8 +1126,14 @@ impl ManagerContract {
         if to_impl.name != String::from_str(&env, "Manager") {
             return Err(ManagerError::InvalidUpgradePath);
         }
-        if !Self::is_upgrade_approved(env.clone(), from_hash.clone(), to_hash.clone()) {
-            return Err(ManagerError::InvalidUpgradePath);
+        // The approval must exist and its notice must have passed: the Manager
+        // is every DAO's registry and factory, so its code never changes
+        // without warning (same rule as the shared Minter).
+        let approved =
+            Self::upgrade_approved_ledger(env.clone(), from_hash.clone(), to_hash.clone())
+                .ok_or(ManagerError::InvalidUpgradePath)?;
+        if !common::upgrade::notice_passed(&env, approved) {
+            return Err(ManagerError::UpgradeDelayNotElapsed);
         }
 
         // Update Manager's stored hash and version
@@ -1233,6 +1260,31 @@ impl ManagerContract {
             treasury: read(ManagerKey::CurrentTreasuryWasm)?,
             marketplace: read(ManagerKey::CurrentMarketplaceWasm)?,
         })
+    }
+
+    /// The upgrade notice in force for `upgrade_manager`.
+    pub fn upgrade_delay(env: Env) -> u32 {
+        common::upgrade::delay(&env)
+    }
+
+    /// Change the Manager's upgrade notice (admin). A longer notice applies
+    /// at once; a shorter one only after the notice in force has passed.
+    pub fn set_upgrade_delay(env: Env, ledgers: u32) -> Result<(), ManagerError> {
+        Self::require_admin(&env)?;
+        common::upgrade::set_delay(&env, ledgers);
+        Ok(())
+    }
+
+    /// Ledger at which `approve_upgrade(from, to)` was recorded, if it was.
+    /// The shared Minter waits `MINTER_UPGRADE_DELAY` after it before an
+    /// upgrade applies, so DAOs can see a Minter upgrade coming.
+    pub fn upgrade_approved_ledger(
+        env: Env,
+        from_hash: BytesN<32>,
+        to_hash: BytesN<32>,
+    ) -> Option<u64> {
+        get_persistent::<UpgradeApproval>(&env, &ManagerKey::UpgradeApproval(from_hash, to_hash))
+            .map(|approval| approval.approved_ledger)
     }
 
     /// Load a `Current*Wasm` hash, verify it is an active implementation with the

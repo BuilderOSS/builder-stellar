@@ -1661,7 +1661,7 @@ fn token_uri_is_sep50_json_built_on_chain() {
             .err()
             .unwrap()
             .unwrap(),
-        crate::Error::TokenNotMinted
+        crate::Error::NotSeeded
     );
     assert_eq!(
         client

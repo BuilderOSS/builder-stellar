@@ -354,16 +354,16 @@ impl DaoGovernorContract {
     }
 
     /// The quorum a proposal created now needs: `ceil(voting_supply *
-    /// quorum_bps / 10_000)` from the current supply and rate. Both reads hit
-    /// the latest checkpoint only (OZ checks it before any binary search), so
-    /// proposing never touches old checkpoints. Tokens minted earlier in the
-    /// same ledger count toward the supply but cannot vote (the vote snapshot
-    /// is the previous ledger): the requirement can only be higher, by those
-    /// tokens' share.
+    /// quorum_bps / 10_000)` from the voting supply **at the previous
+    /// ledger** (the ledger votes are snapshotted at) and the current rate.
+    /// Using this ledger's supply instead would let a holder escrow tokens
+    /// in the Marketplace in the proposing ledger (lowering the supply) while
+    /// still voting with them (contract review H1). Both reads touch only
+    /// the latest checkpoints, never archived history.
     fn quorum_now(e: &Env) -> u128 {
         let token = governor::get_token_contract(e);
-        let total_supply = VotesClient::new(e, &token).get_total_supply();
-        Self::quorum_of(e, total_supply, Self::quorum_bps(e) as u128)
+        let supply = common::clients::NftClient::new(e, &token).voting_supply_at_previous_ledger();
+        Self::quorum_of(e, supply, Self::quorum_bps(e) as u128)
     }
 
     fn quorum_of(e: &Env, total_supply: u128, quorum_bps: u128) -> u128 {

@@ -2017,3 +2017,39 @@ fn stored_proposals_are_packed_and_round_trip() {
     );
     assert_eq!(info.eta, 0);
 }
+
+/// D38: every `ProposalState` discriminant survives packing; an OpenZeppelin
+/// reorder would be caught here before it corrupted stored states.
+#[test]
+fn every_proposal_state_code_round_trips() {
+    use crate::storage::{ProposalCoreTime, PACKED_PROPOSAL_LEN};
+    let e = Env::default();
+    let proposer = Address::generate(&e);
+    let states = [
+        (ProposalState::Pending, 0u8),
+        (ProposalState::Active, 1),
+        (ProposalState::Defeated, 2),
+        (ProposalState::Canceled, 3),
+        (ProposalState::Succeeded, 4),
+        (ProposalState::Queued, 5),
+        (ProposalState::Expired, 6),
+        (ProposalState::Executed, 7),
+    ];
+    for (state, code) in states {
+        let core = ProposalCoreTime {
+            proposer: proposer.clone(),
+            vote_snapshot: 1,
+            vote_start: 2,
+            vote_end: 3,
+            eta: 4,
+            state,
+            seq: 5,
+            quorum: 6,
+        };
+        let stored = core.pack(&e);
+        let mut buf = [0u8; PACKED_PROPOSAL_LEN];
+        stored.1.copy_into_slice(&mut buf);
+        assert_eq!(buf[28], code);
+        assert_eq!(ProposalCoreTime::unpack(&e, &stored).state, state);
+    }
+}

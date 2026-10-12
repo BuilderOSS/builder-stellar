@@ -78,6 +78,13 @@ export type LedgerRead = (
 
 export type DaoInventory = {
   latestLedger: number;
+  /**
+   * True when the token instance itself was not returned: the DAO's instances
+   * have been evicted and nothing else can be listed until they are restored.
+   * `missing` then holds exactly the module instances to restore (from the
+   * addresses the caller supplied).
+   */
+  bootstrap?: boolean;
   /** Keys that exist: what the sweep extends. */
   present: Array<InventoryKey & LedgerEntryInfo>;
   /**
@@ -143,7 +150,12 @@ const count = (value: unknown) => (value === undefined || value === null ? 0 : N
 // Inventory
 // ---------------------------------------------------------------------------
 
-/** A proposal leaves the sweep once it can no longer change state. */
+/**
+ * A proposal leaves the sweep once it can no longer change state. A client
+ * cannot tell Defeated from Succeeded without the tally, so a proposal whose
+ * vote ended stays until the 14-day window after `vote_end` has passed: a
+ * harmless superset of the contract's rule.
+ */
 export function proposalIsLive(core: { state: number; vote_end: bigint | number; eta: bigint | number }, now: number) {
   if ([3, 6, 7].includes(core.state)) return false; // Canceled, Expired, Executed
   if (core.state === 5) return now < Number(core.eta) + PROPOSAL_EXPIRY_SECONDS; // Queued
@@ -152,7 +164,15 @@ export function proposalIsLive(core: { state: number; vote_end: bigint | number;
 
 export async function buildDaoInventory(
   read: LedgerRead,
-  scope: { manager: string; token: string; nowSeconds: number }
+  scope: {
+    manager: string;
+    token: string;
+    nowSeconds: number;
+    /** Every module address, for restoring the instances when the token's own is evicted. */
+    modules?: string[];
+    /** Extra asset contracts whose DAO balances to sweep (beyond the payment assets found on chain). */
+    assets?: string[];
+  }
 ): Promise<DaoInventory> {
   const keys: InventoryKey[] = [];
   const found = new Map<string, LedgerEntryInfo>();
@@ -180,7 +200,19 @@ export async function buildDaoInventory(
   const auction = native<string>(nsGet(token, 'Auction'));
   const marketplace = native<string>(nsGet(token, 'Marketplace'));
   const minter = native<string>(nsGet(token, 'Minter'));
-  if (!metadata || !treasury) throw new Error('The token instance is missing its wiring. Is it archived?');
+  if (!metadata || !treasury) {
+    // Evicted instances: nothing can be read, but the addresses are known.
+    if (scope.modules?.length && !entry(instanceKey(scope.token))) {
+      const unique = [...new Set([scope.token, ...scope.modules])];
+      return {
+        latestLedger,
+        bootstrap: true,
+        present: [],
+        missing: unique.map((address, i) => add('contracts', i === 0 ? 'Token' : `Module ${i}`, instanceKey(address)))
+      };
+    }
+    throw new Error('The token instance is missing its wiring. Is it archived?');
+  }
   const minted = count(native(ozGet(token, 'TokenIdCounter')));
   const supplyCheckpoints = count(native(ozGet(token, 'NumTotalSupplyCheckpoints')));
 
@@ -218,12 +250,15 @@ export async function buildDaoInventory(
     : undefined;
   if (auctionConfig?.payment_token) assets.add(auctionConfig.payment_token);
   if (marketConfig?.payment_asset) assets.add(marketConfig.payment_asset);
+  for (const asset of scope.assets ?? []) assets.add(asset);
   const holders = [treasury, auction, marketplace].filter((a): a is string => Boolean(a));
 
   // C: artwork, token pages and checkpoints, listings, holdings, the governor instance.
   const c: InventoryKey[] = [];
   if (governor) c.push(add('contracts', 'Governor', instanceKey(governor)));
   if (slug) c.push(add('slug', 'SlugToDao', ns(scope.manager, 'SlugToDao', xdr.ScVal.scvString(slug))));
+  // Before launch the Manager holds the pending record launch_dao consumes.
+  if (!slug) c.push(add('slug', 'PendingDao', ns(scope.manager, 'PendingDao', addr(scope.token)), false));
   if (itemCounts.length) {
     c.push(add('artwork', 'PropertyNames', ns(metadata, 'PropertyNames')));
     c.push(add('artwork', 'IpfsGroups', ns(metadata, 'IpfsGroups')));
@@ -254,6 +289,22 @@ export async function buildDaoInventory(
       c.push(add('listings', `PrimaryListing(${l})`, ns(marketplace, 'PrimaryListing', u64(l)), false));
   }
   await fetch(c);
+
+  // An open listing was priced in the asset of its day; the escrow and the fee
+  // are paid in it even after the market's asset changes.
+  const listingAssets = new Set<string>();
+  for (const k of c) {
+    if (k.cls !== 'listings') continue;
+    const info = entry(k.key);
+    if (!info) continue;
+    const listing = scValToNative(dataValue(info)) as { payment_asset?: string } | null;
+    if (listing?.payment_asset && !assets.has(listing.payment_asset)) listingAssets.add(listing.payment_asset);
+  }
+  const extraBalances: InventoryKey[] = [];
+  for (const asset of listingAssets)
+    for (const holder of holders)
+      extraBalances.push(add('holdings', 'Asset balance', oz(asset, 'Balance', addr(holder)), false));
+  await fetch(extraBalances);
 
   // Tokens the DAO itself holds: read every ownership entry, keep the DAO's.
   // A holder's entry that archived is simply not returned; it is theirs to restore.

@@ -30,6 +30,72 @@ use crate::{clients::ManagerRegistryClient, error::CommonError, ttl};
 pub enum UpgradeKey {
     CurrentHash,
     StorageVersion,
+    /// Instance (platform contracts): ledgers between a Manager approval and
+    /// the earliest upgrade. See [`delay`].
+    UpgradeDelay,
+    /// Instance: a reduction of `UpgradeDelay` waiting for its ledger.
+    PendingUpgradeDelay,
+}
+
+/// A lowered upgrade notice that applies only once the notice in force when
+/// it was requested has passed, so it cannot be used to skip that notice.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PendingUpgradeDelay {
+    pub ledgers: u32,
+    pub effective_ledger: u32,
+}
+
+/// The upgrade notice recommended for a public network (~7 days). It is a
+/// constructor argument of the platform contracts (short on testnet).
+pub const RECOMMENDED_UPGRADE_DELAY: u32 = 7 * crate::ttl::DAY_IN_LEDGERS;
+
+/// Record the notice at construction.
+pub fn init_delay(e: &Env, ledgers: u32) {
+    e.storage()
+        .instance()
+        .set(&crate::ns(e, UpgradeKey::UpgradeDelay), &ledgers);
+}
+
+/// The notice in force now: a pending reduction once its ledger has come,
+/// else the recorded value (the recommended one if never recorded).
+pub fn delay(e: &Env) -> u32 {
+    let instance = e.storage().instance();
+    if let Some(pending) =
+        instance.get::<_, PendingUpgradeDelay>(&crate::ns(e, UpgradeKey::PendingUpgradeDelay))
+    {
+        if e.ledger().sequence() >= pending.effective_ledger {
+            return pending.ledgers;
+        }
+    }
+    instance
+        .get(&crate::ns(e, UpgradeKey::UpgradeDelay))
+        .unwrap_or(RECOMMENDED_UPGRADE_DELAY)
+}
+
+/// Change the notice. A longer one applies at once; a shorter one only after
+/// the notice in force has passed, so a compromised authority cannot shorten
+/// it to rush a hostile upgrade through. The caller checks authority.
+pub fn set_delay(e: &Env, ledgers: u32) {
+    let current = delay(e);
+    let instance = e.storage().instance();
+    if ledgers >= current {
+        instance.set(&crate::ns(e, UpgradeKey::UpgradeDelay), &ledgers);
+        instance.remove(&crate::ns(e, UpgradeKey::PendingUpgradeDelay));
+    } else {
+        instance.set(
+            &crate::ns(e, UpgradeKey::PendingUpgradeDelay),
+            &PendingUpgradeDelay {
+                ledgers,
+                effective_ledger: e.ledger().sequence().saturating_add(current),
+            },
+        );
+    }
+}
+
+/// Whether an upgrade approved at `approved_ledger` may apply now.
+pub fn notice_passed(e: &Env, approved_ledger: u64) -> bool {
+    (e.ledger().sequence() as u64) >= approved_ledger.saturating_add(delay(e) as u64)
 }
 
 /// Emitted by `apply`. The emitting contract address is the event's contract id.

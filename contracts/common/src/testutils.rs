@@ -30,6 +30,7 @@ pub fn empty_wasm(e: &Env) -> BytesN<32> {
 #[contracttype]
 pub enum MockKey {
     Approved(BytesN<32>, BytesN<32>),
+    ApprovedAt(BytesN<32>, BytesN<32>),
     Version(BytesN<32>),
     Admin,
 }
@@ -42,7 +43,14 @@ impl MockManager {
     pub fn approve(e: Env, from: BytesN<32>, to: BytesN<32>) {
         e.storage()
             .instance()
-            .set(&MockKey::Approved(from, to), &true);
+            .set(&MockKey::Approved(from.clone(), to.clone()), &true);
+        e.storage().instance().set(
+            &MockKey::ApprovedAt(from, to),
+            &(e.ledger().sequence() as u64),
+        );
+    }
+    pub fn upgrade_approved_ledger(e: Env, from: BytesN<32>, to: BytesN<32>) -> Option<u64> {
+        e.storage().instance().get(&MockKey::ApprovedAt(from, to))
     }
     pub fn register(e: Env, hash: BytesN<32>, version: String) {
         e.storage()
@@ -120,7 +128,12 @@ pub fn common_keys(e: &Env) -> std::vec::Vec<soroban_sdk::Val> {
             .collect::<std::vec::Vec<_>>(),
         1,
     );
-    let upgrade = [UpgradeKey::CurrentHash, UpgradeKey::StorageVersion];
+    let upgrade = [
+        UpgradeKey::CurrentHash,
+        UpgradeKey::StorageVersion,
+        UpgradeKey::UpgradeDelay,
+        UpgradeKey::PendingUpgradeDelay,
+    ];
     assert_every_variant_sampled(
         "UpgradeKey",
         &upgrade
@@ -128,9 +141,11 @@ pub fn common_keys(e: &Env) -> std::vec::Vec<soroban_sdk::Val> {
             .map(|k| match k {
                 UpgradeKey::CurrentHash => 0,
                 UpgradeKey::StorageVersion => 1,
+                UpgradeKey::UpgradeDelay => 2,
+                UpgradeKey::PendingUpgradeDelay => 3,
             })
             .collect::<std::vec::Vec<_>>(),
-        2,
+        4,
     );
     let lifecycle = [LifecycleKey::Live];
     assert_every_variant_sampled(

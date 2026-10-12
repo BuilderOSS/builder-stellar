@@ -2,7 +2,7 @@
  * RPC-only DAO renewal sweep (docs/STORAGE_DIET.md § 7): the Renewal tab's
  * logic on the command line, from network settings, a token address and a signer.
  *
- *   node scripts/renew-dao.mjs --token C… [--network testnet] [--days 90] [--source <identity>] [--dry-run]
+ *   node scripts/renew-dao.mjs --token C… [--network testnet] [--days 180] [--source <identity>] [--dao <dao artifact>] [--asset C…]... [--dry-run]
  *
  * --network reads deploys/builder-<network>-manager.json for the Manager, RPC and passphrase
  * (--artifact overrides the path). --source is a `stellar keys` identity; it signs and pays.
@@ -48,11 +48,26 @@ async function main() {
   const dryRun = process.argv.includes('--dry-run');
   const server = new Server(artifact.config.rpcUrl, { allowHttp: artifact.config.rpcUrl.startsWith('http://') });
 
+  // --dao <deploys/...-dao-N.json> supplies the module addresses so an evicted DAO can be restored;
+  // --asset <C...> (repeatable) adds asset contracts whose DAO balances to renew.
+  const daoArtifact = flag('dao');
+  const modules = daoArtifact
+    ? Object.values(
+        (JSON.parse(readFileSync(daoArtifact, 'utf8')) as { addresses?: Record<string, string> }).addresses ?? {}
+      )
+    : [];
+  const assets = process.argv.flatMap((a, i, all) => (a === '--asset' && all[i + 1] ? [all[i + 1]!] : []));
   const inventory = await buildDaoInventory(rpcLedgerRead(server), {
     manager: flag('manager', artifact.manager)!,
     token,
-    nowSeconds: Math.floor(Date.now() / 1000)
+    nowSeconds: Math.floor(Date.now() / 1000),
+    modules,
+    assets
   });
+  if (inventory.bootstrap)
+    console.info(
+      `The DAO's contract instances are archived; restoring ${inventory.missing.length} of them first. Run again afterwards to renew the rest.`
+    );
   console.info(`DAO ${token} at ledger ${inventory.latestLedger}`);
   for (const summary of summarizeInventory(inventory)) {
     const first =

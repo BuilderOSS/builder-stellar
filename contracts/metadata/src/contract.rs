@@ -249,11 +249,9 @@ impl MetadataContract {
         Self::require_admin(&env);
 
         let settings = get_settings(&env)?;
-        let exists = matches!(
-            common::clients::NftClient::new(&env, &settings.token).try_owner_of(&token_id),
-            Ok(Ok(_))
-        );
-        if !exists {
+        // Existence by the id counter, not `owner_of`: a holder's ownership
+        // entry may have archived, which would fail the whole call.
+        if token_id >= common::clients::NftClient::new(&env, &settings.token).minted() {
             return Err(Error::TokenNotMinted);
         }
         if !get_attributes(&env, token_id).is_empty() {
@@ -468,12 +466,12 @@ impl MetadataContract {
     ///
     /// # Errors
     ///
-    /// * `TokenNotMinted` - the token has no attributes
+    /// * `NotSeeded` - the token has no attributes yet (minted before artwork)
     /// * `InvalidName` - `token_name` contains `"`, `\` or a control character
     pub fn token_uri(env: Env, token_id: u32, token_name: String) -> Result<String, Error> {
         let attributes = get_attributes(&env, token_id);
         if attributes.is_empty() {
-            return Err(Error::TokenNotMinted);
+            return Err(Error::NotSeeded);
         }
         // The token passes its validated name; a direct caller is held to the
         // same rule so the document is always valid JSON.

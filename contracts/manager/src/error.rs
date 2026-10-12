@@ -75,4 +75,6 @@ pub enum ManagerError {
     SlugNotFound = 7128,
     /// `change_slug` to the slug the DAO already has
     SlugUnchanged = 7129,
+    /// The Manager's own upgrade was approved less than `upgrade_delay()` ledgers ago.
+    UpgradeDelayNotElapsed = 7130,
 }
