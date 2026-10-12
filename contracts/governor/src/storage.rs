@@ -114,6 +114,29 @@ pub enum GovernorKey {
     /// `GovernorStorageKey::Proposal(id)`, which holds a different type.
     ProposalTime(BytesN<32>),
     Manager,
+    /// Instance: number of proposals ever created (the next sequence number).
+    ProposalCount,
+    /// Persistent: sequence number -> proposal id. Written by `propose`
+    /// (proposer-paid, ~60 bytes) and renewed with the proposal core, so a
+    /// client can list proposals from chain state alone (D10).
+    ProposalId(u32),
+}
+
+/// Most ids `proposal_ids` returns per call (each is one persistent read).
+pub const MAX_PROPOSAL_IDS_PAGE: u32 = 50;
+
+/// `proposal(id)`: the stored core plus the state computed now.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProposalInfo {
+    pub id: BytesN<32>,
+    pub seq: u32,
+    pub proposer: Address,
+    pub vote_snapshot: u32,
+    pub vote_start: u64,
+    pub vote_end: u64,
+    pub eta: u64,
+    pub state: ProposalState,
 }
 
 /// Core proposal data using timestamps instead of ledger sequences.
@@ -148,4 +171,6 @@ pub struct ProposalCoreTime {
     pub eta: u64,
     /// Current state in the proposal lifecycle.
     pub state: ProposalState,
+    /// Creation order: the key of this proposal's `ProposalId(seq)` entry.
+    pub seq: u32,
 }

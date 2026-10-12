@@ -1873,3 +1873,106 @@ fn storage_keys_do_not_collide() {
         ),
     ]);
 }
+
+// ============================================================================
+// Proposal list from chain state (docs/STORAGE_DIET.md D10)
+// ============================================================================
+
+/// Propose `n` distinct proposals from one voter; returns their ids.
+fn propose_n(
+    e: &Env,
+    token: &DaoTokenContractClient,
+    governor: &DaoGovernorContractClient,
+    target: &TargetContractClient,
+    owner: &Address,
+    n: u32,
+) -> std::vec::Vec<BytesN<32>> {
+    let proposer = Address::generate(e);
+    token.mint(owner, &proposer);
+    e.ledger().set_sequence_number(e.ledger().sequence() + 10);
+    (0..n)
+        .map(|i| {
+            let description = String::from_str(e, &std::format!("proposal {i}"));
+            governor.propose(
+                &vec![e, target.address.clone()],
+                &vec![e, symbol_short!("set_value")],
+                &proposal_args(e),
+                &description,
+                &proposer,
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn proposals_are_listed_in_creation_order_from_chain_state() {
+    let (e, token, _treasury, governor, target, owner) = setup();
+    assert_eq!(governor.proposal_count(), 0);
+    assert_eq!(governor.proposal_ids(&0, &10).len(), 0);
+
+    let ids = propose_n(&e, &token, &governor, &target, &owner, 3);
+    assert_eq!(governor.proposal_count(), 3);
+    let listed = governor.proposal_ids(&0, &10);
+    assert_eq!(listed.len(), 3);
+    for (i, id) in ids.iter().enumerate() {
+        assert_eq!(listed.get(i as u32).unwrap(), *id);
+        let info = governor.proposal(id);
+        assert_eq!(info.id, *id);
+        assert_eq!(info.seq, i as u32);
+        assert_eq!(info.state, ProposalState::Pending);
+        assert_eq!(info.eta, 0);
+        assert!(info.vote_end > info.vote_start);
+    }
+    // Pages: an offset, a short tail and a start past the end.
+    assert_eq!(governor.proposal_ids(&1, &1), vec![&e, ids[1].clone()]);
+    assert_eq!(governor.proposal_ids(&2, &10), vec![&e, ids[2].clone()]);
+    assert_eq!(governor.proposal_ids(&5, &10).len(), 0);
+    assert_eq!(governor.proposal_ids(&u32::MAX, &u32::MAX).len(), 0);
+}
+
+#[test]
+fn proposal_ids_pages_are_capped() {
+    let (e, token, _treasury, governor, target, owner) = setup();
+    e.cost_estimate().budget().reset_unlimited();
+    let n = crate::MAX_PROPOSAL_IDS_PAGE + 2;
+    let ids = propose_n(&e, &token, &governor, &target, &owner, n);
+    let page = governor.proposal_ids(&0, &u32::MAX);
+    assert_eq!(page.len(), crate::MAX_PROPOSAL_IDS_PAGE);
+    let rest = governor.proposal_ids(&crate::MAX_PROPOSAL_IDS_PAGE, &u32::MAX);
+    assert_eq!(rest, vec![&e, ids[50].clone(), ids[51].clone()]);
+}
+
+#[test]
+fn proposal_of_an_unknown_id_is_not_found() {
+    let (e, _token, _treasury, governor, _target, _owner) = setup();
+    assert!(governor
+        .try_proposal(&BytesN::from_array(&e, &[7u8; 32]))
+        .is_err());
+}
+
+/// The id entry renews with the proposal core on every lifecycle touch.
+#[test]
+fn proposal_id_entry_renews_with_the_core() {
+    use soroban_sdk::testutils::storage::Persistent as _;
+    let (e, token, _treasury, governor, target, owner) = setup();
+    let id = propose_n(&e, &token, &governor, &target, &owner, 1).remove(0);
+    let ttl_of = |key: crate::storage::GovernorKey| {
+        e.as_contract(&governor.address, || {
+            e.storage().persistent().get_ttl(&common::ns(&e, key))
+        })
+    };
+    let fresh = ttl_of(crate::storage::GovernorKey::ProposalId(0));
+    assert!(fresh >= crate::storage::PROPOSAL_TTL_EXTEND_TO - 1);
+    // Age past the renewal threshold, then touch the proposal.
+    let age = crate::storage::PROPOSAL_TTL_EXTEND_TO - crate::storage::PROPOSAL_TTL_THRESHOLD + 1;
+    e.ledger().with_mut(|l| l.sequence_number += age);
+    governor.proposal_state(&id);
+    assert_eq!(
+        ttl_of(crate::storage::GovernorKey::ProposalId(0)),
+        crate::storage::PROPOSAL_TTL_EXTEND_TO
+    );
+    assert_eq!(
+        ttl_of(crate::storage::GovernorKey::ProposalTime(id.clone())),
+        crate::storage::PROPOSAL_TTL_EXTEND_TO
+    );
+}

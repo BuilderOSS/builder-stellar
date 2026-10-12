@@ -148,6 +148,47 @@ impl DaoGovernorContract {
         common::upgrade::storage_version(e)
     }
 
+    /// Number of proposals ever created; ids have sequence numbers
+    /// `0..proposal_count()`.
+    pub fn proposal_count(e: &Env) -> u32 {
+        Self::next_proposal_seq(e)
+    }
+
+    /// Ids of the proposals with sequence numbers `start..start + limit`, in
+    /// creation order. `limit` is capped at `MAX_PROPOSAL_IDS_PAGE`; the page
+    /// ends early at `proposal_count()`. An id entry archived after its
+    /// proposal ended must be restored before it can be read.
+    pub fn proposal_ids(e: &Env, start: u32, limit: u32) -> Vec<BytesN<32>> {
+        let end = start
+            .saturating_add(limit.min(MAX_PROPOSAL_IDS_PAGE))
+            .min(Self::next_proposal_seq(e));
+        let mut ids = Vec::new(e);
+        let persistent = e.storage().persistent();
+        for seq in start..end {
+            if let Some(id) = persistent.get(&Self::proposal_id_key(e, seq)) {
+                ids.push_back(id);
+            }
+        }
+        ids
+    }
+
+    /// The proposal's stored window, eta and sequence number, and its state
+    /// now. Panics `ProposalNotFound` for an unknown id.
+    pub fn proposal(e: &Env, proposal_id: BytesN<32>) -> ProposalInfo {
+        let core = Self::get_proposal(e, &proposal_id);
+        let state = Self::proposal_state_internal(e, &proposal_id, &core);
+        ProposalInfo {
+            id: proposal_id,
+            seq: core.seq,
+            proposer: core.proposer,
+            vote_snapshot: core.vote_snapshot,
+            vote_start: core.vote_start,
+            vote_end: core.vote_end,
+            eta: core.eta,
+            state,
+        }
+    }
+
     /// Module admin: the launch admin during setup, the Treasury once live.
     pub fn admin(e: &Env) -> Address {
         common::admin::admin(e)
@@ -381,23 +422,35 @@ impl DaoGovernorContract {
         common::ns(e, GovernorKey::ProposalTime(proposal_id.clone()))
     }
 
-    /// Extends the TTL of a proposal to ensure it doesn't expire before execution
-    fn extend_proposal_ttl(e: &Env, proposal_id: &BytesN<32>) {
-        let key = Self::proposal_key(e, proposal_id);
-        e.storage()
-            .persistent()
-            .extend_ttl(&key, PROPOSAL_TTL_THRESHOLD, PROPOSAL_TTL_EXTEND_TO);
+    fn proposal_id_key(e: &Env, seq: u32) -> (soroban_sdk::Symbol, GovernorKey) {
+        common::ns(e, GovernorKey::ProposalId(seq))
+    }
+
+    /// Extends the TTL of a proposal and its `ProposalId(seq)` entry so
+    /// neither expires before the proposal's lifecycle ends.
+    fn extend_proposal_ttl(e: &Env, proposal_id: &BytesN<32>, seq: u32) {
+        let persistent = e.storage().persistent();
+        persistent.extend_ttl(
+            &Self::proposal_key(e, proposal_id),
+            PROPOSAL_TTL_THRESHOLD,
+            PROPOSAL_TTL_EXTEND_TO,
+        );
+        persistent.extend_ttl(
+            &Self::proposal_id_key(e, seq),
+            PROPOSAL_TTL_THRESHOLD,
+            PROPOSAL_TTL_EXTEND_TO,
+        );
     }
 
     fn get_proposal(e: &Env, proposal_id: &BytesN<32>) -> ProposalCoreTime {
-        let proposal = e
+        let proposal: ProposalCoreTime = e
             .storage()
             .persistent()
             .get(&Self::proposal_key(e, proposal_id))
             .unwrap_or_else(|| panic_with_error!(e, GovernorError::ProposalNotFound));
 
         // Extend TTL when proposal is accessed
-        Self::extend_proposal_ttl(e, proposal_id);
+        Self::extend_proposal_ttl(e, proposal_id, proposal.seq);
 
         proposal
     }
@@ -408,7 +461,15 @@ impl DaoGovernorContract {
             .set(&Self::proposal_key(e, proposal_id), proposal);
 
         // Extend TTL when proposal is updated
-        Self::extend_proposal_ttl(e, proposal_id);
+        Self::extend_proposal_ttl(e, proposal_id, proposal.seq);
+    }
+
+    /// Next proposal sequence number (= proposals created so far).
+    fn next_proposal_seq(e: &Env) -> u32 {
+        e.storage()
+            .instance()
+            .get(&common::ns(e, GovernorKey::ProposalCount))
+            .unwrap_or(0)
     }
 
     fn proposal_state_internal(
@@ -632,6 +693,7 @@ impl Governor for DaoGovernorContract {
             .checked_add(Self::voting_period(e) as u64)
             .unwrap_or_else(|| panic_with_error!(e, GovernorError::MathOverflow));
 
+        let seq = Self::next_proposal_seq(e);
         let proposal = ProposalCoreTime {
             proposer: proposer.clone(),
             vote_snapshot: snapshot_ledger,
@@ -639,9 +701,20 @@ impl Governor for DaoGovernorContract {
             vote_end,   // No conversion needed - already u64
             eta: 0,
             state: ProposalState::Pending,
+            seq,
         };
 
+        // The id list entry first: set_proposal renews both.
+        e.storage()
+            .persistent()
+            .set(&Self::proposal_id_key(e, seq), &proposal_id);
         Self::set_proposal(e, &proposal_id, &proposal);
+        let Some(next) = seq.checked_add(1) else {
+            panic_with_error!(e, GovernorError::MathOverflow);
+        };
+        e.storage()
+            .instance()
+            .set(&common::ns(e, GovernorKey::ProposalCount), &next);
 
         // OpenZeppelin's ProposalCreated documents `vote_end` as a ledger number; this governor
         // passes the unix-seconds deadline instead. Read the vote window from ProposalScheduled.
