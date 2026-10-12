@@ -2636,7 +2636,7 @@ impl PanickingAdminToken {
 /// "treasury" address, as the real launch does. Returns (token, treasury).
 fn launch_mock(env: &Env, client: &ManagerContractClient, slug: &str) -> (Address, Address) {
     let token = seed_mock_pending(env, client, slug);
-    client.launch_dao(&token, &launch_cfg(&env));
+    client.launch_dao(&token, &launch_cfg(env));
     let treasury = Address::generate(env);
     env.as_contract(&token, || {
         env.storage().instance().set(&1u32, &treasury);
