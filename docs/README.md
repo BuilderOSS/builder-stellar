@@ -18,7 +18,8 @@ These pages describe the current repository source, including the frontend worki
 - [Database migrations, roles, and reset](../db/README.md)
 - [Bindings generation](../BINDINGS_GENERATION_ISSUE.md)
 - [Monitor the application](MONITORING.md)
-- [Maintain TTLs](TTL_ECONOMICS.md)
+- [Who pays for storage, role by role](STORAGE_COSTS.md)
+- [Storage, TTL and rent reference](TTL_ECONOMICS.md)
 - [Configure artwork during Setup](ARTWORK_PLAYGROUND_INTEGRATION.md)
 
 ## Reference and explanation

@@ -82,7 +82,7 @@ the allowlist markers and the four display strings, which § 4 removes.
 | Wiring and counters | **Getters added** so a fresh client can discover every module and scan finite ranges (§ 4). |
 | Byte-level codecs for attributes and items (compaction C) | **Optional, last.** Only if measurements say so. |
 | In-contract bump entrypoints | **Removed** (`bump_artwork_ttl`, `bump_slug_ttl`) in favour of footprint TTL operations (§ 7). |
-| Storage keys | **No module key may encode like an OpenZeppelin key the module links** (`NFTStorageKey`, `VotesStorageKey`, `GovernorStorageKey`, and any OZ module added later): a unit or tuple variant encodes as `[Symbol(name), args…]`, so the enum's type name does not separate them. The token's metadata-hook key is renamed (`TokenKey::MetadataContract`) and the governor's `Proposal(id)` becomes `ProposalTime(id)`. A per-module guard test enforces it (§ 9). Source: `docs/STORAGE_DIET_REVIEW.md` Finding 1. On top of that, every Builder key is wrapped as `("buildeross", variant)` (D30, § 4), so Builder and OZ keys cannot collide by construction. |
+| Storage keys | **No module key may encode like an OpenZeppelin key the module links** (`NFTStorageKey`, `VotesStorageKey`, `GovernorStorageKey`, and any OZ module added later): a unit or tuple variant encodes as `[Symbol(name), args…]`, so the enum's type name does not separate them. The token's metadata-hook key is renamed (`TokenKey::MetadataContract`) and the governor's `Proposal(id)` becomes `ProposalTime(id)`. A per-module guard test enforces it (§ 9). Source: `docs/STORAGE_DIET_REVIEW.md` Finding 1. On top of that, every Builder key is wrapped as `("builder", variant)` (D30, § 4), so Builder and OZ keys cannot collide by construction. |
 | Shared code rent | **Callers never pay for long code renewals.** The instance bump and the code bump are separate: instances keep 60 → 170 days; code is bumped only when under 2 days left, to 4 days, so a member pays a few days of shared code rent at most. The platform keeps code at 170 days, extends every new hash at upload, and builds its renewal list from the chain. Source: `docs/STORAGE_DIET_REVIEW.md` Finding 2. |
 | Rollout | **One fresh testnet redeploy**, no migration code (pre-mainnet rule). `STORAGE_VERSION` stays 1 everywhere. |
 
@@ -179,15 +179,16 @@ mint counter (no burn extension).
   token's `TokenKey::Metadata` already collided with `NFTStorageKey::Metadata` (the hook address overwrote the
   collection name at construction; a rename overwrote the hook, so minting trapped). Fixed as
   `TokenKey::MetadataContract`.
-- **Namespace (D30).** Every key a Builder contract writes is `common::ns(e, Key::Variant(..))`, which encodes as
-  `(Symbol("buildeross"), [Symbol("Variant"), args…])`. OpenZeppelin keys stay as OZ writes them. A Builder key
-  is therefore a two-element vector starting with `buildeross`, and no OZ key can take that shape, so the two
+- **Namespace (D30, name changed by D37).** Every key a Builder contract writes is `common::ns(e, Key::Variant(..))`,
+  which encodes as `(Symbol("builder"), [Symbol("Variant"), args…])`. OpenZeppelin keys stay as OZ writes them. A Builder key
+  is therefore a two-element vector starting with `builder`, and no OZ key can take that shape, so the two
   sets cannot collide whatever OZ adds later. This applies to the DAO modules, `common` (admin, upgrade,
   lifecycle), the Manager and the Minter. Off-chain readers build keys with `apps/web/src/lib/storage-key.ts`;
   a Rust test and a web test pin the same XDR bytes. The per-module guard still runs, because all Builder enums
   share one namespace and must stay disjoint inside it.
-- **Namespace cost (measured, e2e factory DAO).** Each key grows by 32 bytes of XDR (a 12-byte vector header and a
-  20-byte symbol). Rent is charged per byte, so:
+- **Namespace cost (measured, e2e factory DAO, with the original 10-character name).** Each key grew by 32 bytes
+  of XDR (a 12-byte vector header and a 20-byte symbol); D37's 7-character name makes that 28. Rent is charged per
+  byte, so:
 
   | Entry | Namespaced keys | Bytes after | Overhead |
   |---|---|---|---|
@@ -196,8 +197,9 @@ mint counter (no burn extension).
   | A small persistent entry (slug, minter, Minter marker) | 1 | 164–360 | +32 (10–24 %) |
   | An artwork item page (32 items) | 1 | several KB | +32 (under 1 %) |
 
-  OZ per-holder entries (owners, balances, checkpoints) are unchanged. A 3-letter namespace would save 8 bytes per
-  key; the vector header is the unavoidable part.
+  OZ per-holder entries (owners, balances, checkpoints) are unchanged. The vector header is the unavoidable part;
+  a symbol of 9 characters or fewer also stays inline in a `Val` (no host object per key build), which is why the
+  name is now `builder` (D37).
 
 ### Manager
 
@@ -495,7 +497,7 @@ indexer and API are off. Mocks that return indexed data invalidate the run.
   is disjoint by `(first symbol, length)` from the OZ key enums that module links.
 - Namespace walk (D30, e2e `every_protocol_storage_key_is_namespaced`): after artwork, a launch with auction and
   marketplace, Minter claims, both listing kinds and a governed rename, every key the Manager, the Minter and the
-  six modules own is `("buildeross", variant)` or a listed OZ shape (`common::testutils::OZ_KEY_SHAPES`). The
+  six modules own is `("builder", variant)` or a listed OZ shape (`common::testutils::OZ_KEY_SHAPES`). The
   namespaced key XDR is pinned in Rust (`common` `namespaced_key_xdr_is_pinned`) and in the app
   (`storage-key.test.ts`).
 - e2e: a live DAO renames its token by proposal, then settles an auction; the minted token has attributes.
@@ -608,12 +610,14 @@ One PR on one branch (eng review D5), reviewable commits:
 | D28 | Platform code renewal: 170-day default, refuse values at or below the code threshold, hash list from chain, extend at upload; code stays out of DAO sweeps | Renewals ≤ 60 days were paid twice; upgrade hashes were missed; code entries exceed the sweep's read-bytes limit | 30-day default from the deploy artifact |
 | D29 | Fee guard before signing (50 XLM after measuring testnet rent); the 2× resource fee was an SDK double count, patched | A rent bump surfaced as a u32 overflow error | Leave to the SDK; 10 XLM (blocks DAO creation at testnet rent) |
 | D31 | ~~Every OZ total-supply and quorum checkpoint is in the DAO sweep~~ (superseded by D33) | OZ binary-searches checkpoints and renews only what it reads, so an untouched midpoint can archive and break `proposal_state` years later. Supply checkpoints grow about one per auction day, so after roughly a year the sweep needs a second transaction (the batch splitter) | Renew only the latest checkpoints (breaks old lookups); compact checkpoints in the token |
-| D30 | Every Builder storage key is wrapped as `("buildeross", Variant)`; OZ keys untouched; an e2e test walks the ledger and rejects any other shape | Separates Builder keys from OZ keys by construction instead of by review; readable in explorers. Costs 32 bytes per key (DAO instances +1.5 KB, § 4) | Bare variants plus the D26 guard only; a shorter prefix |
+| D30 | Every Builder storage key is wrapped as `("builder", Variant)` (named `builder` until D37); OZ keys untouched; an e2e test walks the ledger and rejects any other shape | Separates Builder keys from OZ keys by construction instead of by review; readable in explorers. Costs 32 bytes per key (DAO instances +1.5 KB, § 4) | Bare variants plus the D26 guard only; a shorter prefix |
 | D32 | Compact Metadata storage: attribute pages as packed bytes (count byte + one byte per trait, two past 256 items), item pages as names + one group byte each, all property names in one key; every mint writes its record (empty before artwork) | Attribute pages were 64 % of the sweep at ~150 B per token (u32 value tags); item structs spent ~60 B per item on field names. Reference sweep 117 KB → 34 KB; a full attribute page 9.4 KB → 1.2 KB | Keep the u32 vectors; a seed per token (counts change after mint) |
 | D33 | Proposals store the quorum fixed at creation (current voting supply × current rate); only the latest supply and quorum checkpoints are swept | `proposal_state` binary-searched every checkpoint, so all had to stay live and the sweep grew ~180 B per auction day (~240 XLM more per year per year). Supply minted in the proposing ledger counts toward the quorum but cannot vote, so the requirement can only be higher | Keep every checkpoint live (D31) |
 | D34 | The sweep covers what the DAO itself holds: tokens and balances of the Treasury, Auction and Marketplace, including asset-contract balances; `token_uri` checks existence by the id counter | OZ and the asset contract renew these 30 days per touch, so an idle DAO's funds and unsold tokens archived about a month after last use (e2e negative control); a 30-day ownership entry made idle members' tokens unrenderable | Leave them to whoever touches them |
 | D35 | The app restores a member's archived records before their transaction (SDK `restore` for wallet-built calls; a 409 restore payload for server-prepared ones) | Members' entries renew 30 days per touch; without this every flow failed for a member back after a month | Extend member entries longer at the actor's cost |
 | D36 | Platform renewal finds every running hash (current implementations, latest, each DAO module) and steps any extension whose fee would exceed 300 XLM | DAOs that skipped an upgrade ran code no pointer named; a fresh 43 KB code entry to 170 days simulates at ~360 XLM, 84 % of the u32 fee cap (STORAGE_DIET_FIX_REVIEW issues 1, 2) | Artifact hashes only; one extension per entry |
+| D37 | The namespace symbol is `builder` (7 characters) instead of `buildeross` (10) | At most 9 characters the host keeps the symbol inline in a `Val`, so building a key allocates no host object; the XDR is 4 bytes shorter per key. Lowercase cannot equal a PascalCase OZ variant. Pinned bytes updated in Rust, the app and the scripts | Keep the 10-character name (readable, but a host object per key build) |
+| D38 | A proposal is stored as `(proposer, 49 packed bytes)` instead of a field-named map; the app decodes it with one shared decoder | 424 → 268 bytes per live proposal (37 % of the proposals class); the map spent ~170 bytes on field names and value tags | Keep the map (self-describing in explorers) |
 
 ## 13. Review record
 

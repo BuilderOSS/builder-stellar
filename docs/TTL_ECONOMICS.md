@@ -40,11 +40,11 @@ per-transaction overhead. The Renewal tab defaults to 180 days for that reason.
 |---|---|---|---|---|
 | 1 KB of data | 0.29 XLM | 1.2 XLM | 1.8 XLM | 3.6 XLM |
 | A DAO's six instances (6.4 KB) | 1.9 XLM | 7.5 XLM | 11.2 XLM | 23 XLM |
-| Reference DAO sweep (34 KB, below) | 10 XLM | 40 XLM | 60 XLM | **~122 XLM** |
+| Reference DAO sweep (32 KB, below) | 9.5 XLM | 38 XLM | 57 XLM | **~115 XLM** |
 | One token's artwork record (~19 B) | | | | ~0.07 XLM |
 
 The reference sweep was 117 KB (~420 XLM a year, plus ~240 XLM a year more for every year of daily auctions)
-before D32 and D33 (below).
+before D32–D38 (below). Who pays which part of all this, role by role, is in [STORAGE_COSTS.md](STORAGE_COSTS.md).
 
 Creating a DAO pays the six new instances up to 170 days (about 10.6 XLM at this rate), because a new entry is
 born at 7 days, under the 60-day instance threshold. The app's fee guard is therefore 50 XLM, not 10 (see
@@ -68,9 +68,10 @@ are not transactions and renew nothing.
 
 ## Key reference
 
-Every Builder key is namespaced: `(Symbol("buildeross"), [Symbol(Variant), args…])` (D30). OpenZeppelin keys keep
-OZ's own shape. Off-chain code builds Builder keys with `apps/web/src/lib/storage-key.ts`, whose bytes are pinned
-against the Rust encoding. The namespace adds 32 bytes per key. Each crate's `storage::key_samples` lists every
+Every Builder key is namespaced: `(Symbol("builder"), [Symbol(Variant), args…])` (D30, D37). OpenZeppelin keys
+keep OZ's own shape. Off-chain code builds Builder keys with `apps/web/src/lib/storage-key.ts`, whose bytes are
+pinned against the Rust encoding. The namespace adds 28 bytes per key and no host allocation (the symbol stays
+inline in a `Val`). Each crate's `storage::key_samples` lists every
 variant through an exhaustive match, and its `storage_keys_do_not_collide` test keeps Builder enums disjoint.
 
 "Sweep" means the DAO's renewal sweep covers the key. "Holder" means it renews when its owner acts and is restored
@@ -122,7 +123,7 @@ until artwork exists, so the pages up to the minted count always exist and an ar
 | Key | Class | Holds | Size | Renewed by |
 |---|---|---|---|---|
 | `Treasury`, `QueueDelay`, `Manager`, `ProposalCount` | instance | Wiring, settings, the proposal counter | | instance |
-| `ProposalTime(id)` | persistent | Timing, status and the quorum fixed at creation | ~420 B | Sweep while live |
+| `ProposalTime(id)` | persistent | `(proposer, 49 packed bytes)`: snapshot, window, eta, state, seq and the quorum fixed at creation (D38) | ~270 B | Sweep while live |
 | `ProposalId(seq)` | persistent | The id of proposal `seq`, so proposals are listable from chain | ~170 B | Sweep while live |
 | OZ `VotingDelay`, `VotingPeriod`, `ProposalThreshold`, `NumQuorumCheckpoints`, `TokenContract` | instance | Governance settings | | instance |
 | OZ `QuorumCheckpoint(i)` | persistent | Quorum rate history | ~170 B each | Sweep: **the latest only** (D33) |
@@ -170,21 +171,21 @@ chain-read proposal list skips (`apps/web/src/lib/chain-reads/proposals.ts`).
 16 properties of 19 items, 500 tokens, 50 proposals of which 10 are live, one token and one balance held by the
 DAO (e2e `reference_dao_sweep_fits_one_transaction`, which prints this table):
 
-| Class | Entries | Bytes | Before D32/D33 |
+| Class | Entries | Bytes | Before D32–D38 |
 |---|---|---|---|
-| Six module instances | 6 | 6,372 | 6,372 |
-| `AttributesPage` | 8 | 9,624 | 75,164 |
-| `Items` | 16 | 8,624 | 25,008 |
-| `ProposalTime` + `ProposalId` | 20 | 5,920 | 5,560 |
-| `PropertyNames` | 1 | 456 | 2,368 (16 keys) |
-| `IpfsGroups` | 1 | 1,436 | 1,436 |
-| `MintAuthority` | 4 | 688 | 688 |
+| Six module instances | 6 | 6,188 | 6,372 |
+| `AttributesPage` | 8 | 9,592 | 75,164 |
+| `Items` | 16 | 8,560 | 25,008 |
+| `ProposalTime` + `ProposalId` | 20 | 4,320 | 5,560 |
+| `PropertyNames` | 1 | 452 | 2,368 (16 keys) |
+| `IpfsGroups` | 1 | 1,432 | 1,436 |
+| `MintAuthority` | 4 | 672 | 688 |
 | DAO holdings (`Owner`, `Balance`) | 2 | 264 | not covered |
-| Slug (both keys) | 2 | 356 | 356 |
+| Slug (both keys) | 2 | 348 | 356 |
 | Latest supply and quorum checkpoints | 2 | 352 | 352, growing ~180 B per auction day |
-| **Total** | **62** | **34,092** | **117,304** |
+| **Total** | **62** | **32,180** | **117,304** |
 
-One `ExtendFootprintTTL` transaction holds it: 62 of 400 entries and 34 KB of the 200 KB read limit. At about 19
+One `ExtendFootprintTTL` transaction holds it: 62 of 400 entries and 32 KB of the 200 KB read limit. At about 19
 bytes per token, roughly 9,000 tokens fit before the read limit splits the sweep into a second transaction, and
 the sweep no longer grows with time.
 
@@ -192,8 +193,8 @@ Other measured budgets on the same fixtures:
 
 | Call | CPU | Write bytes | Entries read / written | Event bytes |
 |---|---|---|---|---|
-| `create_dao` with a 4 KB profile | 9.3 M | 6,168 | 25 / 9 | 7,380 |
-| `propose`, 20 actions, longest description | 3.3 M | 1,728 | 12 / 4 | 6,856 |
+| `create_dao` with a 4 KB profile | 9.2 M | 6,024 | 25 / 9 | 7,380 |
+| `propose`, 20 actions, longest description | 3.3 M | 1,536 | 12 / 4 | 6,856 |
 
 ## Who renews what
 
