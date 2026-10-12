@@ -1975,3 +1975,34 @@ fn a_full_item_page_costs_names_plus_a_byte() {
     std::println!("32-item page: {bytes} bytes for {names} bytes of names");
     assert!(bytes <= names + 32 * (8 + 3 + 1) + 200, "{bytes}");
 }
+
+#[test]
+fn mints_before_artwork_write_empty_records_so_pages_always_exist() {
+    let (env, client, _o, _t) = setup();
+    assert!(!client.on_minted(&0));
+    assert!(!client.on_minted_batch(&1, &3));
+    let raw: soroban_sdk::Bytes = env.as_contract(&client.address, || {
+        env.storage()
+            .persistent()
+            .get(&common::ns(
+                &env,
+                crate::storage::DataKey::AttributesPage(0),
+            ))
+            .unwrap()
+    });
+    // Four empty one-byte records.
+    assert_eq!(raw.len(), 4);
+    for id in 0..4u32 {
+        assert!(client.try_get_attributes(&id).is_err());
+    }
+    // Seeding later (what `regenerate` stores) fills the record in place.
+    let mut seeded = Vec::new(&env);
+    seeded.push_back(1u32);
+    seeded.push_back(2u32);
+    env.as_contract(&client.address, || {
+        crate::storage::set_attributes(&env, 2, &seeded)
+    });
+    assert_eq!(client.get_attributes(&2), seeded);
+    assert!(client.try_get_attributes(&1).is_err());
+    assert!(client.try_get_attributes(&3).is_err());
+}

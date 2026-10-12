@@ -4483,12 +4483,9 @@ fn dao_renewal_inventory(
     let minted = instance_u32(e, token_id, "TokenIdCounter");
     if minted > 0 {
         for page in 0..=((minted - 1) / metadata::TOKENS_PER_ATTRIBUTE_PAGE) {
-            // A page exists once a token on it was minted with artwork (or
-            // regenerated); a client learns which from the same entry read.
-            let key = ns_key(e, "AttributesPage", std::vec![u(page)]);
-            if e.as_contract(&m, || e.storage().persistent().has(&key)) {
-                keys.push((m.clone(), key));
-            }
+            // Every mint writes its token's record (empty before artwork), so
+            // each page up to the minted count exists.
+            keys.push((m.clone(), ns_key(e, "AttributesPage", std::vec![u(page)])));
         }
     }
 

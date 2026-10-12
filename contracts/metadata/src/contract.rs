@@ -224,6 +224,9 @@ impl MetadataContract {
         let counts = Self::item_counts(&env);
         let num_properties = counts.len();
         if num_properties == 0 {
+            // An empty record, so every minted token's page exists and a
+            // client can tell an archived page from an unwritten one.
+            set_attributes(&env, token_id, &Vec::new(&env));
             return Ok(false);
         }
 
@@ -284,6 +287,12 @@ impl MetadataContract {
         let counts = Self::item_counts(&env);
         let num_properties = counts.len();
         if num_properties == 0 {
+            // Empty records: see `on_minted`.
+            let mut empty = Vec::new(&env);
+            for _ in 0..count {
+                empty.push_back(Vec::new(&env));
+            }
+            set_attributes_range(&env, first_token_id, &empty);
             return Ok(false);
         }
 
