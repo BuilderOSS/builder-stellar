@@ -33,6 +33,8 @@ From the repository root, an administrator runs `db/setup-roles.sh`, `db/migrate
 
 Align the web's newest-artifact deployment selection with the pipeline's explicit artifact and `NEXT_PUBLIC_NETWORK`. New DAO addresses enter six dynamic allowlists from `DaoCreated`. Minter is a configured shared contract, not a seventh DAO child.
 
+Why six allowlists when `manager.daos` already lists every module: `manager.daos` is a view over `chain.decoded_events`, the pipeline's own output, and a Goldsky SQL transform cannot read our tables or views. Its only lookup outside the stream is `dynamic_table_check(table, value)`, a membership test on one key column, so the role of an address has to be encoded by which table holds it. The tables (`streamling.dao_<module>`) are append-only and survive redeploys; after a database reset they are rebuilt from the replayed `DaoCreated` events on top of what is there, which is harmless (an obsolete address only lets its events through the filter). A Manager change needs `DROP SCHEMA streamling CASCADE` with the pipeline stopped ([DB operations](../db/README.md)).
+
 ## Validation and deployment boundary
 
 `pnpm validate` checks contract-event alignment locally. `pnpm turbo:validate` invokes `goldsky turbo validate` and requires a usable CLI. `scripts/deploy.sh` still invokes `pnpm goldsky pipeline ...` commands and loads `.env`; its CLI compatibility is not established by local transform tests. Confirm the installed CLI command family before using it to validate/apply/delete a remote pipeline. This page does not claim remote deployment was verified.

@@ -34,6 +34,14 @@ function getDeploymentId(): string {
 const PUBLIC_VISIBILITY = ['public', 'governance'];
 /** The indexer curates visibility: public feeds read only the public/governance rows. */
 const PUBLIC_FEED_FILTER = { visibility: { in: PUBLIC_VISIBILITY } };
+/** Chain order, newest first: ledger, then position inside the ledger (filled by the DB trigger), then the id. */
+const FEED_ORDER = [
+  { ledgerSequence: 'desc' as const },
+  { transactionIndex: 'desc' as const },
+  { operationIndex: 'desc' as const },
+  { eventIndex: 'desc' as const },
+  { activityId: 'desc' as const }
+];
 
 type FeedRowForAsset = { daoId: string | null; contractRole: string; tokenId: string | null; args: string };
 
@@ -224,7 +232,7 @@ export async function getGoldskyActivityFeed(
   const [rows, total] = await Promise.all([
     prisma.appActivityFeed.findMany({
       where,
-      orderBy: [{ ledgerSequence: 'desc' }, { activityId: 'desc' }],
+      orderBy: FEED_ORDER,
       take: limit,
       skip: offset
     }),
@@ -368,7 +376,12 @@ export async function getGoldskyProposalVotes(
   const [rows, total, tallyRows] = await Promise.all([
     prisma.governanceProposalVote.findMany({
       where,
-      orderBy: { eventLedger: 'desc' },
+      orderBy: [
+        { eventLedger: 'desc' },
+        { transactionIndex: 'desc' },
+        { operationIndex: 'desc' },
+        { eventIndex: 'desc' }
+      ],
       take: limit,
       skip: offset
     }),
@@ -676,7 +689,7 @@ export async function getDashboardData(address: string, params: { limit?: number
   const [feedRows, total] = await Promise.all([
     prisma.appActivityFeed.findMany({
       where: { deploymentId, daoId: { in: daoIds }, ...PUBLIC_FEED_FILTER },
-      orderBy: [{ ledgerSequence: 'desc' }, { activityId: 'desc' }],
+      orderBy: FEED_ORDER,
       take: limit,
       skip: offset
     }),
@@ -757,7 +770,7 @@ export async function getGoldskyMintingHistory(
   const [rows, total] = await Promise.all([
     prisma.appActivityFeed.findMany({
       where,
-      orderBy: { ledgerSequence: 'desc' },
+      orderBy: FEED_ORDER,
       take: limit,
       skip: offset
     }),
@@ -813,7 +826,7 @@ export async function getGoldskyMinterClaims(
   const [rows, total] = await Promise.all([
     prisma.appActivityFeed.findMany({
       where,
-      orderBy: { ledgerSequence: 'desc' },
+      orderBy: FEED_ORDER,
       take: limit,
       skip: offset
     }),

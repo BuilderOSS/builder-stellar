@@ -466,13 +466,15 @@ test('pipeline generator renders the current deployment and scripts', { skip: !e
   assert.match(yaml, /CAST\(NULL AS BIGINT\) AS operation_index/);
   assert.match(yaml, /CAST\(NULL AS BIGINT\) AS event_index/);
   assert.match(yaml, /contract_role/);
-  for (const table of ['dao_tokens', 'dao_metadata', 'dao_auctions', 'dao_governors', 'dao_treasuries']) {
+  for (const table of ['dao_tokens', 'dao_metadata', 'dao_auctions', 'dao_governors', 'dao_treasuries', 'dao_marketplaces']) {
     assert.match(yaml, new RegExp(`${table}:`));
     assert.match(yaml, new RegExp(`dynamic_table_check\\('${table}', contract_id\\)`));
   }
-  for (const role of ['manager', 'token', 'metadata', 'auction', 'governor', 'treasury']) {
-    assert.match(yaml, new RegExp(`'${role}'`));
+  for (const role of ['manager', 'minter', 'token', 'metadata', 'auction', 'governor', 'treasury', 'marketplace']) {
+    assert.match(yaml, new RegExp(`THEN '${role}'`));
   }
+  // System events (executable_update) and diagnostics are not contract events.
+  assert.match(yaml, /AND type = 'contract'\n\s+AND \(/);
   assert.match(yaml, /topics LIKE '%dao_created%'/);
   assert.doesNotMatch(yaml, /topics LIKE '%dao_registered%'/);
   assert.match(yaml, /function invoke\(data\)/);

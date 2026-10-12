@@ -11,8 +11,16 @@ sources:
     start_at: 5117938
 
 transforms:
-  # Each DAO-created event contains the five newly deployed module addresses.
-  # Dynamic tables keep these allowlists live while the pipeline is running.
+  # Each DaoCreated event carries the six newly deployed module addresses. The six dynamic
+  # tables below (Postgres, schema `streamling`) are the stream's allowlist: the only lookup a
+  # Goldsky SQL transform can make outside the stream is dynamic_table_check(table, value),
+  # which answers membership of one key column and nothing else (no joins, no reading our own
+  # views: manager.daos is built from this pipeline's output, one hop later). One table per
+  # module because the role has to be encoded by which table holds the address; the
+  # contract_role it yields drives every Manager view, app.activity_feed's DAO assignment and
+  # the kinds of the common events (Upgraded, Migrated, AdminChanged, Paused, UpgradeDelayChanged).
+  # The tables persist across redeploys and are append-only; a Manager change needs
+  # `DROP SCHEMA streamling CASCADE` (db/README.md).
   dao_tokens:
     type: dynamic_table
     backend_type: Postgres
@@ -138,6 +146,7 @@ transforms:
         _gs_op
       FROM stellar_events
        WHERE ledger_sequence >= 5117938
+         AND type = 'contract'
          AND (
            contract_id = 'CDFQIOSA3JJWV3HIZ5XVMXBMTEL7BRZWZVUW72OQN6O3EM35OVT6PD5W'
            OR contract_id = 'CC5TEMQCHDJ2MNR25NZVFNSAHKAHD43MVU47PZIAPCT5ODLYVEJWYB6R'
@@ -510,10 +519,16 @@ transforms:
 
           var topics = ensureString(data.topics, '{}');
           var args = ensureString(data.args, '{}');
+          // The SQL transform leaves the positions NULL on purpose; the chain.fill_event_positions
+          // trigger parses them from the event id, and only fires on NULL. A 0 here would freeze
+          // every feed row at position 0 and lose the order inside a transaction.
+          function position(val) {
+            return val === null || val === undefined ? null : ensureNumber(val, null);
+          }
           var ledger_sequence = ensureNumber(data.ledger_sequence, 0);
-          var transaction_index = ensureNumber(data.transaction_index, 0);
-          var operation_index = ensureNumber(data.operation_index, 0);
-          var event_index = ensureNumber(data.event_index, 0);
+          var transaction_index = position(data.transaction_index);
+          var operation_index = position(data.operation_index);
+          var event_index = position(data.event_index);
 
           function parsePayload(value) {
             try {

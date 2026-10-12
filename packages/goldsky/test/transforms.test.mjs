@@ -194,9 +194,13 @@ const activityRows = [
 const activityResults = activityRows.map(row => invokeActivityFeed(row));
 const activityTypeMap = {};
 
+// Position columns are int64 and nullable: NULL when the source left them NULL (the
+// database trigger fills them), a number otherwise. Every other column keeps one type.
+const nullablePositions = new Set(['transaction_index', 'operation_index', 'event_index']);
 for (const result of activityResults) {
   if (result === null) continue;
   for (const field of activityFeedFields) {
+    if (nullablePositions.has(field) && result[field] === null) continue;
     const currentType = typeof result[field];
     if (!activityTypeMap[field]) {
       activityTypeMap[field] = currentType;
@@ -221,12 +225,18 @@ for (const field of stringFields) {
 }
 console.log('✅ Passed\n');
 
-// Test 10: Activity feed - numeric fields are numbers
+// Test 10: Activity feed - numeric fields are numbers, and NULL positions stay NULL
+// (the database trigger fills them from the event id; a 0 would never be filled).
 console.log('Test 10: Activity feed - numeric fields are numbers');
 const numericFields = ['ledger_sequence', 'transaction_index', 'operation_index', 'event_index'];
-for (const field of numericFields) {
-  assert.strictEqual(typeof activityStringResult[field], 'number', `${field} should be number, not ${typeof activityStringResult[field]}`);
+assert.strictEqual(typeof activityStringResult.ledger_sequence, 'number', 'ledger_sequence should be a number');
+const positioned = invokeActivityFeed({ event_id: 'test', event_name: 'Transfer', deployment_id: 'test', contract_id: 'test', transaction_index: 3, operation_index: 1, event_index: 2 });
+for (const field of ['transaction_index', 'operation_index', 'event_index']) {
+  assert.strictEqual(typeof positioned[field], 'number', `${field} should be number, not ${typeof positioned[field]}`);
 }
+const nullPositions = invokeActivityFeed({ event_id: 'test', event_name: 'Transfer', deployment_id: 'test', contract_id: 'test', operation_index: null, event_index: null });
+assert.strictEqual(nullPositions.operation_index, null, 'a NULL operation_index must pass through');
+assert.strictEqual(nullPositions.event_index, null, 'a NULL event_index must pass through');
 console.log('✅ Passed\n');
 
 // Test 11: new events keep every column type stable across decoder and activity feed

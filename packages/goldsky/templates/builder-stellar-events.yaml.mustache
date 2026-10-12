@@ -11,8 +11,16 @@ sources:
     start_at: {{START_AT}}
 
 transforms:
-  # Each DAO-created event contains the five newly deployed module addresses.
-  # Dynamic tables keep these allowlists live while the pipeline is running.
+  # Each DaoCreated event carries the six newly deployed module addresses. The six dynamic
+  # tables below (Postgres, schema `streamling`) are the stream's allowlist: the only lookup a
+  # Goldsky SQL transform can make outside the stream is dynamic_table_check(table, value),
+  # which answers membership of one key column and nothing else (no joins, no reading our own
+  # views: manager.daos is built from this pipeline's output, one hop later). One table per
+  # module because the role has to be encoded by which table holds the address; the
+  # contract_role it yields drives every Manager view, app.activity_feed's DAO assignment and
+  # the kinds of the common events (Upgraded, Migrated, AdminChanged, Paused, UpgradeDelayChanged).
+  # The tables persist across redeploys and are append-only; a Manager change needs
+  # `DROP SCHEMA streamling CASCADE` (db/README.md).
   dao_tokens:
     type: dynamic_table
     backend_type: Postgres
@@ -138,6 +146,7 @@ transforms:
         _gs_op
       FROM stellar_events
        WHERE ledger_sequence >= {{START_AT}}
+         AND type = 'contract'
          AND (
            contract_id = '{{MANAGER_CONTRACT_ID}}'
            OR contract_id = '{{MINTER_CONTRACT_ID}}'

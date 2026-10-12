@@ -96,11 +96,12 @@ console.log('✅ Passed\n');
 
 // Test 5: Type consistency - all numeric fields
 console.log('Test 5: Type consistency for numeric fields');
-const numericFields = ['ledger_sequence', 'transaction_index', 'operation_index', 'event_index'];
-for (const field of numericFields) {
-  testTypeConsistency(minimalResult, field, 'number');
-  testNoNull(minimalResult, field);
-  assert.ok(Number.isFinite(minimalResult[field]), `Field "${field}" should be a finite number`);
+// ledger_sequence is always a number; the position columns are NULL when the source left
+// them NULL (the database trigger fills them from the event id) and numbers otherwise.
+testTypeConsistency(minimalResult, 'ledger_sequence', 'number');
+testNoNull(minimalResult, 'ledger_sequence');
+for (const field of ['transaction_index', 'operation_index', 'event_index']) {
+  assert.ok(minimalResult[field] === null || Number.isFinite(minimalResult[field]), `Field "${field}" should be null or a finite number`);
 }
 console.log('✅ Passed\n');
 
@@ -123,7 +124,7 @@ assert.strictEqual(withNullsResult.contract_id, '', 'Undefined contract_id shoul
 assert.strictEqual(withNullsResult.topics, '{}', 'Null topics should default to "{}"');
 assert.strictEqual(withNullsResult.args, '{}', 'Undefined args should default to "{}"');
 assert.strictEqual(withNullsResult.ledger_sequence, 0, 'Null ledger_sequence should default to 0');
-assert.strictEqual(withNullsResult.transaction_index, 0, 'Undefined transaction_index should default to 0');
+assert.strictEqual(withNullsResult.transaction_index, null, 'Undefined transaction_index stays NULL for the database trigger');
 console.log('✅ Passed\n');
 
 // Test 7: JSON fields are valid JSON strings

@@ -19,10 +19,16 @@ function invoke(data) {
 
     var topics = ensureString(data.topics, '{}');
     var args = ensureString(data.args, '{}');
+    // The SQL transform leaves the positions NULL on purpose; the chain.fill_event_positions
+    // trigger parses them from the event id, and only fires on NULL. A 0 here would freeze
+    // every feed row at position 0 and lose the order inside a transaction.
+    function position(val) {
+      return val === null || val === undefined ? null : ensureNumber(val, null);
+    }
     var ledger_sequence = ensureNumber(data.ledger_sequence, 0);
-    var transaction_index = ensureNumber(data.transaction_index, 0);
-    var operation_index = ensureNumber(data.operation_index, 0);
-    var event_index = ensureNumber(data.event_index, 0);
+    var transaction_index = position(data.transaction_index);
+    var operation_index = position(data.operation_index);
+    var event_index = position(data.event_index);
 
     function parsePayload(value) {
       try {

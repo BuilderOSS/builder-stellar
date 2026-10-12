@@ -127,9 +127,12 @@ cd packages/goldsky && pnpm generate && ./scripts/deploy.sh deploy
 ```
 
 Goldsky's dynamic tables (the DAO module allowlists) live in the `streamling`
-schema of the same database and are not touched by the reset; they are rebuilt
-from `DaoCreated` events on replay. If the Manager address changed, drop that
-schema too (`DROP SCHEMA streamling CASCADE`) while the pipeline is stopped.
+schema of the same database and are not touched by the reset; they are append-only
+and are refilled from `DaoCreated` events on replay, so rows from an earlier run stay
+(harmless: an obsolete address only lets its events through the filter; nothing
+downstream reads these tables). If the Manager address changed, drop that schema too
+(`DROP SCHEMA streamling CASCADE`) while the pipeline is stopped, or the old DAOs'
+events keep flowing in under the new deployment id.
 
 That command is destructive and applies only to a confirmed obsolete dynamic-table
 schema. A shared database may have other pipelines using it. The deployment wrapper's

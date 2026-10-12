@@ -55,4 +55,6 @@ the app or indexer at a deployment: no DAO created from a build before commit `f
 packed proposals) may remain on it; the Metadata and Governor on such a DAO would read their own entries as empty or
 trap. Then: every code TTL about 170 days (`renew-code-ttl.mjs --dry-run`), `token.metadata()` and `token.name()`
 answer, a rename-then-settle mints a token with artwork, a minimal `propose` simulates at well under 50 XLM, and
-`renew-dao.mjs --dry-run` lists the reference classes for a launched DAO.
+`renew-dao.mjs --dry-run` lists the reference classes for a launched DAO. On the indexer side, a fresh Manager means
+a database reset **and** `DROP SCHEMA streamling CASCADE` with the pipeline stopped (the DAO allowlists persist
+across redeploys; [DB operations](../db/README.md)), then `goldsky turbo delete` and a fresh `apply`.
