@@ -195,7 +195,8 @@ change, `minter.migrate()`; both require the Manager admin (`ManagerAdminNotSet`
 upgrade applies only `minter.upgrade_delay()` ledgers after the approval (`UpgradeDelayNotElapsed`, 7813, before
 that; D39): the script approves on its first run, prints the earliest ledger, and is rerun then. Approvals are
 idempotent (the first ledger counts), and the admin can lengthen the notice at once but shorten it only after the
-notice in force has passed (`set_upgrade_delay`). The notice is what lets a DAO revoke the Minter's mint
-authority by proposal before an upgrade it distrusts lands.
+notice in force has passed (`set_upgrade_delay`). During the notice a DAO that distrusts the upgrade pulls the
+plug with one signature: its minter guardian calls `token.pause_platform_minter()` (D41); Manage shows the
+pending upgrade and the guardian's button. Re-enabling is `set_mint_authority(minter, true)` by proposal.
 Claim roots, rounds and markers are kept; e2e `shared_minter_upgrades_then_claims_against_the_existing_root`
 covers it. A different Minter address would need every DAO to re-pin it, which this release does not support.
