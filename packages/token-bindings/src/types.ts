@@ -31,11 +31,7 @@ export const TokenError = {
   /**
    * The collection name contains `"`, `\` or a control character
    */
-  7207 : { message: "InvalidName" },
-  /**
-   * `pause_platform_minter` with no guardian set
-   */
-  7208 : { message: "NoMinterGuardian" }
+  7207 : { message: "InvalidName" }
 }
 
 /**

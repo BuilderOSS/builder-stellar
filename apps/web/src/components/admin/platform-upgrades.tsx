@@ -1,19 +1,16 @@
 'use client';
 
-import { useState } from 'react';
 import { css } from 'styled-system/css';
 
-import { Button, ButtonLink, Callout, Chip, ListRow, Section } from '@/components/ui';
+import { ButtonLink, Callout, Chip, ListRow, Section } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
 import { estimateDate } from '@/lib/chain-reads/renewal';
 import { daoAdminRoute } from '@/lib/dao-routes';
-import { pausePlatformMinter, type PlatformContractState, usePlatformUpgrades } from '@/lib/platform-upgrades';
-import { useTransactionFeedback } from '@/lib/transaction-feedback';
+import { type PlatformContractState, usePlatformUpgrades } from '@/lib/platform-upgrades';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 const rows = css({ display: 'grid' });
 const muted = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
-const actions = css({ display: 'flex', gap: '2', flexWrap: 'wrap', alignItems: 'center' });
 
 const LABELS = { manager: 'Builder (registry and factory)', minter: 'Shared Minter (claims and batch mints)' };
 
@@ -45,43 +42,26 @@ function Row({ state, latestLedger }: { state: PlatformContractState; latestLedg
 }
 
 /**
- * Manage → Platform contracts (docs/STORAGE_DIET.md D39, D41): what every
- * community depends on, whether an upgrade of it is pending, and the minter
- * guardian's one-signature exit from a Minter upgrade the community distrusts.
+ * Manage → Platform contracts (docs/STORAGE_DIET.md D39): what every community
+ * depends on and whether an upgrade of it is pending, with the date it can
+ * apply. A community that distrusts a pending Minter upgrade revokes the
+ * Minter's mint authority by proposal; the notice is its window.
  */
 export function PlatformUpgrades({ enabled }: { enabled: boolean }) {
   const { routeId, daoConfig: config } = useDaoContext();
   const session = useAuthSessionStore();
   const address = session.authStatus === 'authenticated' ? session.address : null;
   const report = usePlatformUpgrades(config, address, enabled);
-  const tx = useTransactionFeedback(config.name);
-  const [busy, setBusy] = useState(false);
   if (!enabled || !report.data) return null;
   const data = report.data;
-  const isGuardian = Boolean(address && data.guardian === address);
   const minterPending = data.minter?.pending ?? null;
-  // Quiet unless something is happening or the viewer can act.
-  if (!data.manager.pending && !minterPending && !isGuardian && data.minterAuthority !== false) return null;
-
-  async function pause() {
-    if (!address) return;
-    setBusy(true);
-    tx.start('Pause the shared Minter');
-    try {
-      await pausePlatformMinter(config, address);
-      tx.success('Shared Minter paused for this community', '');
-      await report.mutate();
-    } catch (error) {
-      tx.fail(error, 'The Minter was not paused');
-    } finally {
-      setBusy(false);
-    }
-  }
+  // Quiet unless something is happening.
+  if (!data.manager.pending && !minterPending && data.minterAuthority !== false) return null;
 
   return (
     <Section
       title="Platform contracts"
-      description="Shared by every community. Builder can only upgrade them after a notice; during it, this community's minter guardian can pause the shared Minter with one signature."
+      description="Shared by every community. Builder can only upgrade them after a notice. A community that does not trust a pending Minter upgrade can revoke the Minter's mint authority by proposal before it applies."
     >
       <div className={rows}>
         <Row state={data.manager} latestLedger={data.latestLedger} />
@@ -90,8 +70,8 @@ export function PlatformUpgrades({ enabled }: { enabled: boolean }) {
       {data.minterAuthority === false ? (
         <Callout
           variant="warning"
-          title="The shared Minter is paused for this community"
-          description="Claims and batch mints through it fail until a proposal re-grants its mint authority."
+          title="The shared Minter has no mint authority for this community"
+          description="Claims and batch mints through it fail until a proposal re-grants it."
         >
           <div>
             <ButtonLink href={daoAdminRoute(routeId, '/token')} variant="secondary" size="sm">
@@ -99,26 +79,11 @@ export function PlatformUpgrades({ enabled }: { enabled: boolean }) {
             </ButtonLink>
           </div>
         </Callout>
-      ) : null}
-      <p className={muted}>
-        Minter guardian: {data.guardian ? (isGuardian ? 'you' : data.guardian) : 'none (set one by proposal)'}
-      </p>
-      {isGuardian && data.minterAuthority ? (
-        <div className={actions}>
-          <Button
-            variant={minterPending ? 'primary' : 'secondary'}
-            loading={busy}
-            disabled={busy}
-            onClick={() => void pause()}
-          >
-            Pause the shared Minter
-          </Button>
-          <span className={muted}>
-            {minterPending
-              ? 'Stops the pending upgrade from minting for this community. Reversible by proposal.'
-              : 'Only if you distrust an upcoming upgrade. Reversible by proposal.'}
-          </span>
-        </div>
+      ) : minterPending ? (
+        <p className={muted}>
+          To opt out of this Minter upgrade, propose removing the shared Minter from the mint authorities before it
+          applies. A proposal takes this community&apos;s full voting and queue cycle, so start early.
+        </p>
       ) : null}
     </Section>
   );

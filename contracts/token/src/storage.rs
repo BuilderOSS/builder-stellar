@@ -31,10 +31,6 @@ pub enum TokenKey {
     /// Instance: the shared platform Minter granted mint authority at launch
     /// (the claim contract this DAO pinned). Set once by `launch`.
     Minter,
-    /// Instance: `Option<Address>` allowed to revoke the shared Minter's mint
-    /// authority at once (`pause_platform_minter`), without a proposal. The
-    /// launch admin at launch; the admin (Treasury) can change or clear it.
-    MinterGuardian,
 }
 
 /// Every `TokenKey` variant with sample arguments, for the key guard test.
@@ -48,7 +44,7 @@ pub(crate) mod key_samples {
     use soroban_sdk::testutils::Address as _;
     use soroban_sdk::{Env, IntoVal, Val};
 
-    pub const VARIANTS: usize = 8;
+    pub const VARIANTS: usize = 7;
 
     pub fn index(key: &TokenKey) -> usize {
         match key {
@@ -59,7 +55,6 @@ pub(crate) mod key_samples {
             TokenKey::Auction => 4,
             TokenKey::Marketplace => 5,
             TokenKey::Minter => 6,
-            TokenKey::MinterGuardian => 7,
         }
     }
 
@@ -76,7 +71,6 @@ pub(crate) mod key_samples {
             TokenKey::Auction,
             TokenKey::Marketplace,
             TokenKey::Minter,
-            TokenKey::MinterGuardian,
         ];
         common::testutils::assert_every_variant_sampled(
             "TokenKey",

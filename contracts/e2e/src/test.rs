@@ -215,7 +215,6 @@ fn setup_with(
         &treasury_id,
         &vec![&e, treasury_id.clone(), owner.clone()],
         &owner,
-        &owner,
     );
     // Governor and treasury only process proposals once live.
     governor.launch(&treasury_id);
@@ -932,7 +931,6 @@ fn setup_auction() -> AuctionFixture {
         &treasury.address,
         &vec![&e, treasury.address.clone(), auction.address.clone()],
         &treasury.address, // stands in for the platform Minter
-        &treasury.address,
     );
     auction.launch(&treasury.address, &false, &payment_token);
     let _ = launch_admin;
@@ -1107,7 +1105,6 @@ fn test_auction_launch_starts_first_auction_and_hands_off_to_treasury() {
         &treasury.address,
         &vec![&e, treasury.address.clone(), auction.address.clone()],
         &treasury.address, // stands in for the platform Minter
-        &treasury.address,
     );
     auction.launch(&treasury.address, &true, &payment_token);
 
@@ -1892,7 +1889,6 @@ fn marketplace_primary_sale_uses_real_token_and_sac() {
         &treasury,
         &vec![&e, treasury.clone(), marketplace_id.clone()],
         &treasury, // stands in for the platform Minter
-        &treasury,
     );
     marketplace.launch(&treasury, &true, &payment.address());
 
@@ -2729,7 +2725,6 @@ fn real_auth_marketplace_primary_and_secondary_flows() {
         &treasury,
         &vec![&e, treasury.clone(), marketplace_id.clone()],
         &treasury, // stands in for the platform Minter
-        &treasury,
     );
     marketplace.launch(&treasury, &true, &pay);
 
@@ -3344,7 +3339,6 @@ fn system_held_tokens_and_votes_through_a_real_proposal() {
         &treasury_id,
         &vec![&e, treasury_id.clone(), marketplace_id.clone()],
         &treasury_id, // stands in for the platform Minter
-        &treasury_id,
     );
     governor.launch(&treasury_id);
     treasury.launch(&treasury_id);
@@ -5547,68 +5541,4 @@ fn without_dao_holdings_in_the_sweep_an_idle_treasury_balance_archives() {
         archive_expired(e, &f);
     }
     assert_eq!(xlm.balance(&f.dao.treasury), 0);
-}
-
-/// Review 3, issue 1: a DAO whose governance cycle is longer than the
-/// platform's notice still has a fast exit. The guardian (the launch admin,
-/// set by `launch_dao`) revokes the shared Minter's mint authority at once;
-/// after the upgrade lands, claims fail; the Treasury re-grants by proposal.
-#[test]
-fn guardian_revokes_the_shared_minter_before_an_upgrade_lands() {
-    let mut f = factory_dao();
-    let (minter_id, from) = shared_minter(&f);
-    f.manager.set_platform_minter(&minter_id);
-    f.minter = minter_id.clone();
-    let e = &f.e;
-    let token = DaoTokenContractClient::new(e, &f.dao.token);
-    let treasury = DaoTreasuryContractClient::new(e, &f.dao.treasury);
-    let governor = DaoGovernorContractClient::new(e, &f.dao.governor);
-    let minter = minter::MinterContractClient::new(e, &minter_id);
-    f.manager.launch_dao(&f.dao.token, &f.no_launch_modules());
-    assert_eq!(token.minter_guardian(), Some(f.deployer.clone()));
-
-    let (alice, bob) = (Address::generate(e), Address::generate(e));
-    let (root, alice_proof, bob_proof) = merkle_pair(e, &alice, 2, &bob, 1);
-    minter.set_merkle_root(&f.dao.token, &root, &String::from_str(e, "ipfs://bafytree"));
-    minter.mint_merkle(&f.dao.token, &alice, &2u128, &alice_proof);
-
-    // The platform approves a Minter upgrade; the DAO's guardian pulls the
-    // plug within the notice, with one signature.
-    let to = upload_module_wasm(e, "minter");
-    f.manager.register_implementation(
-        &String::from_str(e, "Minter"),
-        &String::from_str(e, "0.2.0"),
-        &to,
-    );
-    f.manager.approve_upgrade(&from, &to);
-    token.pause_platform_minter();
-    assert!(!token.mint_authority(&minter_id));
-
-    let notice = minter.upgrade_delay();
-    e.ledger().with_mut(|l| l.sequence_number += notice);
-    minter.upgrade(&from, &to);
-    // The upgraded Minter can no longer mint for this DAO.
-    // The token's MintAuthorityNotAllowed (7201) surfaces through the Minter.
-    assert!(matches!(
-        minter
-            .try_mint_merkle(&f.dao.token, &bob, &1u128, &bob_proof)
-            .err()
-            .unwrap(),
-        Err(soroban_sdk::InvokeError::Contract(7201))
-    ));
-
-    // Once the DAO trusts the new code, the Treasury re-grants by proposal.
-    advance(e, 1);
-    let p = pass_one_action(
-        e,
-        &governor,
-        &f.deployer,
-        &f.dao.token,
-        "set_mint_authority",
-        vec![e, minter_id.clone().into_val(e), true.into_val(e)],
-        "Re-enable the shared Minter",
-    );
-    treasury.execute(&p.1, &p.2, &p.3, &p.4);
-    minter.mint_merkle(&f.dao.token, &bob, &1u128, &bob_proof);
-    assert_eq!(token.balance(&bob), 1);
 }

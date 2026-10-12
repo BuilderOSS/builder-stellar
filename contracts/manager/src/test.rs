@@ -786,7 +786,6 @@ impl MockModule {
         _treasury: Address,
         _minters: soroban_sdk::Vec<Address>,
         _minter: Address,
-        _guardian: Address,
     ) {
     }
 }
@@ -1283,7 +1282,7 @@ mod real_dao {
             (
                 "token",
                 dao.token
-                    .try_launch(&attacker, &no_minters, &attacker, &attacker)
+                    .try_launch(&attacker, &no_minters, &attacker)
                     .err()
                     .unwrap()
                     .unwrap(),
@@ -1369,12 +1368,7 @@ mod real_dao {
             (
                 "token",
                 dao.token
-                    .try_launch(
-                        &attacker,
-                        &vec![env, attacker.clone()],
-                        &attacker,
-                        &attacker,
-                    )
+                    .try_launch(&attacker, &vec![env, attacker.clone()], &attacker)
                     .err()
                     .and_then(|e| e.ok()),
             ),
@@ -1902,7 +1896,7 @@ mod real_dao {
             };
         }
         only_stranger!(&dao.addresses.token, "launch", (&t, &minters));
-        assert!(dao.token.try_launch(&t, &minters, &t, &t).is_err());
+        assert!(dao.token.try_launch(&t, &minters, &t).is_err());
         only_stranger!(&dao.addresses.governor, "launch", (&t,));
         assert!(dao.governor.try_launch(&t).is_err());
         only_stranger!(&dao.addresses.treasury, "launch", (&t,));

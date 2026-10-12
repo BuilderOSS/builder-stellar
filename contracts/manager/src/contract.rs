@@ -902,7 +902,7 @@ impl ManagerContract {
         // One-shot handoff. The token launches first so the auction holds mint
         // authority when it creates its first auction. After these calls every
         // module is Live and the Manager has no further authority over the DAO.
-        nft.launch(&treasury, &minters, &minter, &pending.launch_admin);
+        nft.launch(&treasury, &minters, &minter);
         TreasuryLaunchClient::new(&env, &addresses.governor).launch(&treasury);
         TreasuryLaunchClient::new(&env, &addresses.treasury).launch(&treasury);
         MarketplaceLaunchClient::new(&env, &addresses.marketplace).launch(

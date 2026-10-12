@@ -68,8 +68,9 @@ itself (its code or instance archived): restore the Manager first.
 **Your upgrades are on notice.** The Manager's own upgrade and the shared Minter's apply only `upgrade_delay()`
 ledgers after you approve them (set at deployment with `upgradeDelayLedgers`; 7 days recommended on a public
 network). You can lengthen the notice at once; shortening it waits out the notice in force. Every DAO pins the
-Minter as a mint authority; during the notice each DAO's minter guardian can revoke it with one signature, so
-the notice only needs to be long enough for someone to notice, not for a vote.
+Minter as a mint authority; a DAO that distrusts a pending upgrade revokes it by proposal within the notice. A
+DAO whose governance cycle is longer than the notice cannot, and is trusting you for the Minter as it does for
+the Manager. Pick the notice with that in mind.
 
 ## DAO creator (launch admin)
 
@@ -86,8 +87,6 @@ property) for 180 days; each founder mint writes about 17 bytes of traits; launc
 | **Total** | **~29 XLM** |
 
 Everything you write is handed to the DAO at launch; from then on it is renewed by the DAO's sweep, not by you.
-You stay the community's minter guardian until the Treasury changes that by proposal: if the platform announces
-a Minter upgrade the community distrusts, you can pause the shared Minter at once (one signature, no rent).
 Until launch, the Manager's pending record of your DAO is part of the same sweep (Manage → Storage renewal lists
 it while the DAO has no link), so a setup that takes longer than 180 days is renewable too.
 

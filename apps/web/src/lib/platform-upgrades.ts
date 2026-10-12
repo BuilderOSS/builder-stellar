@@ -10,15 +10,13 @@ import { adminReadOptions } from '@/lib/admin-surfaces';
 import { effectiveUpgradeDelay, instanceKey, instanceWasmHash, rpcLedgerRead } from '@/lib/chain-reads/renewal';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { getDeploymentConfig } from '@/lib/deployment-config';
-import { restoreArchivedState } from '@/lib/restore-archived-client';
-import { signWithWallet } from '@/lib/wallet-sign';
 
 /**
  * Upgrades of the platform contracts every DAO depends on (docs/STORAGE_DIET.md
- * D39, D41): the Manager (registry and factory) and the shared Minter (a mint
+ * D39): the Manager (registry and factory) and the shared Minter (a mint
  * authority on every Token). Both apply only `upgrade_delay()` ledgers after
- * the Manager's approval; during that notice the DAO's minter guardian can
- * revoke the Minter's mint authority with one signature.
+ * the Manager's approval; a DAO that distrusts a pending Minter upgrade
+ * revokes the Minter's mint authority by proposal within that notice.
  */
 export type PlatformContract = 'manager' | 'minter';
 
@@ -44,8 +42,6 @@ export type PlatformUpgrades = {
   latestLedger: number;
   manager: PlatformContractState;
   minter: PlatformContractState | null;
-  /** The DAO's minter guardian, if any. */
-  guardian: string | null;
   /** Whether the shared Minter currently holds mint authority on this DAO's token. */
   minterAuthority: boolean | null;
 };
@@ -75,12 +71,11 @@ export async function loadPlatformUpgrades(
 
   const minterAddress = config.minterContractId || (await token.minter()).result || null;
   const keys = [instanceKey(managerAddress), ...(minterAddress ? [instanceKey(minterAddress)] : [])];
-  const [entries, managerNotice, managerLatest, minterLatest, guardian, authority] = await Promise.all([
+  const [entries, managerNotice, managerLatest, minterLatest, authority] = await Promise.all([
     read(keys),
     manager.upgrade_delay().then((r) => Number(r.result)),
     manager.get_latest_implementation({ name: 'Manager' }).then((r) => r.result),
     manager.get_latest_implementation({ name: 'Minter' }).then((r) => r.result),
-    token.minter_guardian().then((r) => r.result ?? null),
     minterAddress ? token.mint_authority({ authority: minterAddress }).then((r) => r.result) : Promise.resolve(null)
   ]);
   const running = (contract: string) => {
@@ -135,7 +130,6 @@ export async function loadPlatformUpgrades(
     latestLedger: entries.latestLedger,
     manager: managerState,
     minter: minterState,
-    guardian,
     minterAuthority: authority
   };
 }
@@ -148,17 +142,4 @@ export function usePlatformUpgrades(config: DaoNetworkConfig, address?: string |
     () => loadPlatformUpgrades(config, address),
     { revalidateOnFocus: false, dedupingInterval: 60_000 }
   );
-}
-
-/** The guardian revokes the shared Minter's mint authority: one signature, no proposal. */
-export async function pausePlatformMinter(config: DaoNetworkConfig, address: string) {
-  const token = new TokenClient({
-    ...adminReadOptions(config, config.tokenContractId, address),
-    publicKey: address,
-    ...restoreArchivedState,
-    signTransaction: (xdr, opts) => signWithWallet(xdr, { ...opts, address, networkPassphrase: config.passphrase })
-  });
-  const tx = await token.pause_platform_minter();
-  const sent = await tx.signAndSend();
-  return sent.sendTransactionResponse?.hash ?? '';
 }

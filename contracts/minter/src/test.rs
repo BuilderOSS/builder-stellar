@@ -30,7 +30,6 @@ fn launch_token(env: &Env, token: &token::DaoTokenContractClient, minter: &Addre
         &t,
         &Vec::from_array(env, [t.clone(), minter.clone()]),
         minter,
-        minter,
     );
 }
 

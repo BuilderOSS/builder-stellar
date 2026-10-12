@@ -126,41 +126,6 @@ impl DaoTokenContract {
         emit_mint_authority_changed(e, &authority, old_enabled, enabled, &changed_by);
     }
 
-    /// Who may pause the shared Minter without a proposal, if anyone.
-    pub fn minter_guardian(e: &Env) -> Option<Address> {
-        e.storage()
-            .instance()
-            .get(&common::ns(e, TokenKey::MinterGuardian))
-            .unwrap_or(None)
-    }
-
-    /// Change or clear the minter guardian (admin: the Treasury, by proposal).
-    pub fn set_minter_guardian(e: &Env, guardian: Option<Address>) {
-        common::admin::require_admin(e);
-        common::lifecycle::require_live(e);
-        common::ttl::extend_instance(e);
-        e.storage()
-            .instance()
-            .set(&common::ns(e, TokenKey::MinterGuardian), &guardian);
-    }
-
-    /// Revoke the shared Minter's mint authority at once (guardian auth). The
-    /// only thing a guardian can do, and it only closes a door: claims and
-    /// batch mints through the Minter stop until the admin re-grants it with
-    /// `set_mint_authority(minter, true)` by proposal.
-    pub fn pause_platform_minter(e: &Env) {
-        let guardian = Self::minter_guardian(e)
-            .unwrap_or_else(|| panic_with_error!(e, TokenError::NoMinterGuardian));
-        guardian.require_auth();
-        common::lifecycle::require_live(e);
-        common::ttl::extend_instance(e);
-        let minter =
-            Self::minter(e).unwrap_or_else(|| panic_with_error!(e, TokenError::MinterNotGranted));
-        let old_enabled = Self::mint_authority(e, minter.clone());
-        Self::write_mint_authority(e, &minter, false);
-        emit_mint_authority_changed(e, &minter, old_enabled, false, &guardian);
-    }
-
     /// Whether `authority` holds explicit minting authority. The admin always
     /// has implicit authority without an entry.
     pub fn mint_authority(e: &Env, authority: Address) -> bool {
@@ -179,18 +144,7 @@ impl DaoTokenContract {
     /// `minter` as this DAO's claim contract, marks the token live and emits
     /// `TokenLaunched`. A second call panics with `AlreadyLive`, so after
     /// launch the Manager has no authority over the token.
-    ///
-    /// `guardian` (the launch admin, as the Manager passes it) may revoke the
-    /// shared Minter's mint authority at once with `pause_platform_minter`:
-    /// the DAO's fast exit from a Minter upgrade it distrusts, which a full
-    /// proposal cycle could not reach within the platform's notice.
-    pub fn launch(
-        e: &Env,
-        treasury: Address,
-        minters: Vec<Address>,
-        minter: Address,
-        guardian: Address,
-    ) {
+    pub fn launch(e: &Env, treasury: Address, minters: Vec<Address>, minter: Address) {
         let manager = Self::manager(e);
         manager.require_auth();
         common::lifecycle::mark_live(e);
@@ -206,9 +160,6 @@ impl DaoTokenContract {
         e.storage()
             .instance()
             .set(&common::ns(e, TokenKey::Minter), &minter);
-        e.storage()
-            .instance()
-            .set(&common::ns(e, TokenKey::MinterGuardian), &Some(guardian));
         common::admin::handoff(e, &treasury);
         for minter in minters.iter() {
             let old_enabled = Self::mint_authority(e, minter.clone());
