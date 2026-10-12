@@ -18,6 +18,7 @@ import {
   confirmMarketplaceTransaction
 } from '@/lib/marketplace/transaction';
 import type { MarketplaceAction, MarketplacePrepared } from '@/lib/marketplace/types';
+import { withArchivedRestore } from '@/lib/restore-archived-client';
 import { readSigningWallet, signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
@@ -66,12 +67,18 @@ export function TradeReview({
     setHash('');
     setMessage('Checking ownership, listing terms, balances and network fees…');
     try {
-      const result = await marketplaceFetch<MarketplacePrepared>(
-        `/api/dao/${encodeURIComponent(daoId)}/marketplace/prepare`,
+      const result = await withArchivedRestore(
+        () =>
+          marketplaceFetch<MarketplacePrepared>(`/api/dao/${encodeURIComponent(daoId)}/marketplace/prepare`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(action)
+          }),
         {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(action)
+          address: session.address ?? '',
+          rpcUrl: network.rpcUrl,
+          networkPassphrase: network.networkPassphrase,
+          onRestoring: setMessage
         }
       );
       if (

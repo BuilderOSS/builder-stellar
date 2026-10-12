@@ -19,6 +19,7 @@ import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { BatchMintGovernanceTokenForm } from '@/lib/proposal-actions/actions/batch-mint-governance-token/component';
 import type { BatchMintGovernanceTokenData } from '@/lib/proposal-actions/actions/batch-mint-governance-token/types';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
+import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
@@ -131,6 +132,7 @@ export default function TokenAdminPage() {
         rpcUrl: config.rpcUrl,
         networkPassphrase: config.passphrase,
         publicKey: session.address,
+        ...restoreArchivedState,
         signTransaction: async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
           signWithWallet(xdr, {
             networkPassphrase: opts?.networkPassphrase ?? config.passphrase,

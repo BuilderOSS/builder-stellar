@@ -17,6 +17,7 @@ import {
 import { adminReadOptions } from '@/lib/admin-surfaces';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { classifyModule, MODULE_ORDER, type ModuleUpdate, planModuleUpdates } from '@/lib/module-updates';
+import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { signWithWallet } from '@/lib/wallet-sign';
 
 export type ModuleRow =
@@ -70,6 +71,7 @@ export async function upgradeModuleDirectly(
   if (!contractId) throw new Error('No module address configured.');
   const client = new CLIENTS[module]({
     ...adminReadOptions(config, contractId, address),
+    ...restoreArchivedState,
     signTransaction: (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
       signWithWallet(xdr, { ...opts, address, networkPassphrase: config.passphrase })
   });

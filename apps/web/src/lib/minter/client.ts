@@ -1,5 +1,7 @@
 import { contract, rpc } from '@stellar/stellar-sdk';
 
+import { throwIfRestoreNeeded } from '@/lib/restore-required';
+
 type ClaimArgs = { token_id: string; recipient: string; amount: bigint };
 export interface MinterMethods {
   mint_merkle(
@@ -60,6 +62,7 @@ export async function minterClient(options: contract.ClientOptions) {
 }
 
 export function assertClaimSimulation(tx: contract.AssembledTransaction<contract.Result<null>>) {
+  throwIfRestoreNeeded(tx);
   if (!tx.simulation || !rpc.Api.isSimulationSuccess(tx.simulation) || rpc.Api.isSimulationRestore(tx.simulation))
     throw new Error('Claim simulation failed or requires archived state restoration. Nothing was signed.');
   void tx.simulationData;

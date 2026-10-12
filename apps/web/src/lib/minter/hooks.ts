@@ -3,6 +3,7 @@
 import useSWR from 'swr';
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
+import { restoreFromBody } from '@/lib/restore-required';
 
 import { claimQueryKey } from './identity';
 import type { ClaimHistory, ClaimState } from './types';
@@ -10,7 +11,7 @@ import type { ClaimHistory, ClaimState } from './types';
 export async function claimFetch<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...options, credentials: 'same-origin', cache: 'no-store' });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.message ?? 'Claims are unavailable.');
+  if (!response.ok) throw restoreFromBody(data) ?? new Error(data.message ?? 'Claims are unavailable.');
   return data as T;
 }
 

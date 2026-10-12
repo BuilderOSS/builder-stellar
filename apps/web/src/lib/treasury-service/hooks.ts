@@ -4,6 +4,7 @@ import useSWR from 'swr';
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
+import { restoreFromBody } from '@/lib/restore-required';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import type { TreasuryHistory, TreasuryReadiness, TreasuryScope } from './types';
@@ -32,7 +33,7 @@ export function treasuryKey(scope: TreasuryScope, resource: string, url: string,
 export async function treasuryFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, cache: 'no-store', credentials: 'same-origin' });
   const body = await response.json();
-  if (!response.ok) throw new Error(body.message || 'Treasury request failed.');
+  if (!response.ok) throw restoreFromBody(body) ?? new Error(body.message || 'Treasury request failed.');
   return body as T;
 }
 export async function treasuryFetchKey<T extends TreasuryScope>(key: ReturnType<typeof treasuryKey>): Promise<T> {

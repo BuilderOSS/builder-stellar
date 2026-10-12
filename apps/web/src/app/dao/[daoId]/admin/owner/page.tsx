@@ -16,6 +16,7 @@ import { useAdminTokenState } from '@/lib/admin-surfaces';
 import { type DaoNetworkConfig } from '@/lib/dao-config';
 import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
+import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
@@ -35,6 +36,7 @@ async function submitAuthorityUpdate(
     rpcUrl: config.rpcUrl,
     networkPassphrase: config.passphrase,
     publicKey: sessionAddress,
+    ...restoreArchivedState,
     signTransaction: async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
       signWithWallet(xdr, {
         networkPassphrase: opts?.networkPassphrase ?? config.passphrase,

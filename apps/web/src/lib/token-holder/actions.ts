@@ -7,6 +7,7 @@ import { type DaoNetworkConfig, readSource } from '@/lib/dao-config';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { directoryScope } from '@/lib/member-directory/query';
 import { holderTokenId, memberAddress } from '@/lib/member-directory/validation';
+import { throwIfRestoreNeeded } from '@/lib/restore-required';
 
 import { currentTokenHolder, holderBalance, holderDelegate, holderVotes, readHolderValue } from './read';
 import type { HolderAction, HolderPrepared } from './types';
@@ -61,6 +62,7 @@ export async function assertHolderOwner(client: Pick<TokenClient, 'owner_of'>, t
   if (owner !== address) throw new HolderError('You no longer own this token. Refresh before trying again.', 409);
 }
 export function holderXdr(tx: AssembledTransaction<void>) {
+  throwIfRestoreNeeded(tx);
   void tx.simulationData;
   if (tx.needsNonInvokerSigningBy().some((address) => StrKey.isValidEd25519PublicKey(address)))
     throw new HolderError('This action needs another account signature. Nothing was submitted.');

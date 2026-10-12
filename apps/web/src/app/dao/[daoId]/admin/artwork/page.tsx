@@ -26,6 +26,7 @@ import {
   validateArtworkSetting
 } from '@/lib/proposal-actions/artwork-admin-actions';
 import { getAllActionHandlers } from '@/lib/proposal-actions/registry';
+import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
@@ -88,6 +89,7 @@ export default function ArtworkAdminPage() {
     try {
       const client = new MetadataClient({
         ...adminReadOptions(config, config.metadataContractId, session.address),
+        ...restoreArchivedState,
         signTransaction: (xdr, opts) =>
           signWithWallet(xdr, {
             ...opts,

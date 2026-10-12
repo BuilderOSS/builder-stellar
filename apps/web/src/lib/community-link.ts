@@ -5,6 +5,7 @@ import useSWR from 'swr';
 import { isValidSlug } from '@/lib/create-dao-schema';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { getDeploymentConfig } from '@/lib/deployment-config';
+import { restoreArchivedState } from '@/lib/restore-archived-client';
 
 /** `change_slug` (a launched community's link, by vote) arrived in Manager 0.2.0. */
 export function managerClient(
@@ -18,6 +19,7 @@ export function managerClient(
     networkPassphrase: config.passphrase,
     publicKey,
     allowHttp: config.rpcUrl.startsWith('http://'),
+    ...restoreArchivedState,
     signTransaction
   });
 }

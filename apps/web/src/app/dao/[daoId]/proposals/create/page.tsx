@@ -41,6 +41,7 @@ import {
   proposalDescriptionBytes,
   validateProposalMetadataDraft
 } from '@/lib/proposal-metadata';
+import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { signWithWallet } from '@/lib/wallet-sign';
@@ -183,6 +184,7 @@ export default function ProposalCreatePage() {
         rpcUrl: config.rpcUrl,
         networkPassphrase: config.passphrase,
         publicKey: session.address,
+        ...restoreArchivedState,
         signTransaction: async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
           signWithWallet(xdr, {
             networkPassphrase: opts?.networkPassphrase ?? config.passphrase,

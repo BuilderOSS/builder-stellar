@@ -25,6 +25,7 @@ import {
   validateVotingPeriod
 } from '@/lib/governance-limits';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
+import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
@@ -144,6 +145,7 @@ export default function GovernanceAdminPage() {
       rpcUrl: config.rpcUrl,
       networkPassphrase: config.passphrase,
       publicKey: session.address,
+      ...restoreArchivedState,
       signTransaction: (async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
         signWithWallet(xdr, {
           networkPassphrase: opts?.networkPassphrase ?? config.passphrase,

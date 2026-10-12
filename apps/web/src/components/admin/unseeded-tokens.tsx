@@ -10,6 +10,7 @@ import { adminReadOptions } from '@/lib/admin-surfaces';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { MAX_PROPOSAL_ACTIONS } from '@/lib/governance-limits';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
+import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import type { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
@@ -55,6 +56,7 @@ export function UnseededTokens({
     try {
       const client = new MetadataClient({
         ...adminReadOptions(config, config.metadataContractId, address),
+        ...restoreArchivedState,
         signTransaction: (xdr, opts) => signWithWallet(xdr, { ...opts, address, networkPassphrase: config.passphrase })
       });
       // One transaction per token: regenerate seeds a single token id.

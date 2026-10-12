@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 
 import { AuthError, getAuthOrigin, requireAuthenticatedSession } from '@/lib/auth/server';
+import { RestoreRequiredError, restoreResponseBody } from '@/lib/restore-required';
 import { holderActionSchema, HolderError, prepareHolderAction } from '@/lib/token-holder/actions';
 
 export async function POST(request: Request, { params }: { params: Promise<{ daoId: string }> }) {
@@ -21,6 +22,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ dao
     const action = holderActionSchema.parse(body);
     return NextResponse.json(await prepareHolderAction((await params).daoId, actor, action), { headers });
   } catch (error) {
+    if (error instanceof RestoreRequiredError)
+      return NextResponse.json(restoreResponseBody(error), {
+        status: error.status,
+        headers: { 'Cache-Control': 'private, no-store' }
+      });
     const status =
       error instanceof AuthError
         ? 401

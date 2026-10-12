@@ -13,6 +13,7 @@ import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
 import { directoryFetch } from '@/lib/member-directory/hooks';
 import { holderTokenId, memberAddress } from '@/lib/member-directory/validation';
+import { withArchivedRestore } from '@/lib/restore-archived-client';
 import { currentTokenHolder } from '@/lib/token-holder/read';
 import { assertHolderEnvelope, assertHolderSignedEnvelope, assertHolderWallet } from '@/lib/token-holder/transaction';
 import type { HolderAction, HolderPrepared } from '@/lib/token-holder/types';
@@ -88,11 +89,20 @@ export function HolderControls({
                 expirationLedger: String(holderTokenId(expiry))
               }
             : { action: kind, tokenId: String(tokenId), destination: memberAddress(destination) };
-      const prepared = await directoryFetch<HolderPrepared>(`/api/dao/${encodeURIComponent(daoId)}/tokens/prepare`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(action)
-      });
+      const prepared = await withArchivedRestore(
+        () =>
+          directoryFetch<HolderPrepared>(`/api/dao/${encodeURIComponent(daoId)}/tokens/prepare`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(action)
+          }),
+        {
+          address: useAuthSessionStore.getState().address ?? '',
+          rpcUrl: config.rpcUrl,
+          networkPassphrase: config.passphrase,
+          onRestoring: setMessage
+        }
+      );
       if (
         prepared.deploymentId !== DEPLOYMENT_ID ||
         prepared.daoId !== config.tokenContractId ||

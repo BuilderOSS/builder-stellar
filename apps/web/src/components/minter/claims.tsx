@@ -25,6 +25,7 @@ import { assertPreparedIdentity } from '@/lib/minter/identity';
 import { parseProofFile, verifyClaimProof } from '@/lib/minter/proof';
 import { assertClaimEnvelope } from '@/lib/minter/transaction';
 import type { ClaimAction, ClaimState, PreparedClaim } from '@/lib/minter/types';
+import { withArchivedRestore } from '@/lib/restore-archived-client';
 import { assertHolderSignedEnvelope, assertHolderWallet } from '@/lib/token-holder/transaction';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { readSigningWallet, signWithWallet } from '@/lib/wallet-sign';
@@ -84,11 +85,15 @@ export function Claims({ admin = false }: { admin?: boolean }) {
         throw new Error(
           'This proof doesn’t match your account, amount or the current claim list. Ask whoever runs the claim for a new one.'
         );
-      const prepared = await claimFetch<PreparedClaim>(`${base.replace('/dao/', '/api/dao/')}/claims/prepare`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(action)
-      });
+      const prepared = await withArchivedRestore(
+        () =>
+          claimFetch<PreparedClaim>(`${base.replace('/dao/', '/api/dao/')}/claims/prepare`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(action)
+          }),
+        { address, rpcUrl: config.rpcUrl, networkPassphrase: config.passphrase, onRestoring: setMessage }
+      );
       const nowSession = useAuthSessionStore.getState();
       if (nowSession.authStatus !== 'authenticated') throw new Error('Authenticate again before reviewing.');
       assertPreparedIdentity(prepared, config, DEPLOYMENT_ID, nowSession.address, data.minterContractId!);

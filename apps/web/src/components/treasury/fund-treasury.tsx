@@ -14,6 +14,7 @@ import {
   assertMarketplaceWallet,
   assertUnchangedMarketplaceEnvelope
 } from '@/lib/marketplace/transaction';
+import { withArchivedRestore } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { treasuryFetch, useTreasuryFundingReadiness } from '@/lib/treasury-service/hooks';
 import type { TreasuryPrepared, TreasuryScope } from '@/lib/treasury-service/types';
@@ -50,12 +51,18 @@ export function FundTreasury({ scope, onConfirmed }: { scope: TreasuryScope; onC
     setMessage('Checking balances, reserve, trustline and simulated network fee…');
     try {
       const input = fundingSchema.parse({ assetCode: code, amount });
-      const result = await treasuryFetch<TreasuryPrepared>(
-        `/api/dao/${encodeURIComponent(scope.daoId)}/treasury/prepare`,
+      const result = await withArchivedRestore(
+        () =>
+          treasuryFetch<TreasuryPrepared>(`/api/dao/${encodeURIComponent(scope.daoId)}/treasury/prepare`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(input)
+          }),
         {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(input)
+          address: session.address ?? '',
+          rpcUrl: network.rpcUrl,
+          networkPassphrase: network.networkPassphrase,
+          onRestoring: setMessage
         }
       );
       assertTreasuryIdentity(result, scope);

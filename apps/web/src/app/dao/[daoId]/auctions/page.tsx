@@ -43,6 +43,7 @@ import {
 import { commentBytes, MAX_COMMENT_BYTES, toOneLine } from '@/lib/comments';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { daoRoute } from '@/lib/dao-routes';
+import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { readSigningWallet, signWithWallet } from '@/lib/wallet-sign';
@@ -163,6 +164,7 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
         networkPassphrase: config.passphrase,
         publicKey: bidder,
         allowHttp: config.name === 'local',
+        ...restoreArchivedState,
         signTransaction: async (xdr, opts) => {
           await assertWallet();
           if (opts?.networkPassphrase && opts.networkPassphrase !== config.passphrase)

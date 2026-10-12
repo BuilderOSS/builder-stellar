@@ -6,6 +6,7 @@ import { Button, Callout, Field, FieldHelperText, FieldLabel, Input } from '@/co
 import { isValidSlug } from '@/lib/create-dao-schema';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { getDeploymentConfig } from '@/lib/deployment-config';
+import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { signWithWallet } from '@/lib/wallet-sign';
@@ -48,6 +49,7 @@ export function SlugRename({
         networkPassphrase: config.passphrase,
         publicKey: address,
         allowHttp: config.rpcUrl.startsWith('http://'),
+        ...restoreArchivedState,
         signTransaction: (xdr, opts) => signWithWallet(xdr, { ...opts, address, networkPassphrase: config.passphrase })
       });
       tx.start('Change the link');

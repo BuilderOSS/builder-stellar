@@ -7,6 +7,7 @@ import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { commentBytes, MAX_COMMENT_BYTES } from '@/lib/comments';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import { prisma } from '@/lib/prisma';
+import { throwIfRestoreNeeded } from '@/lib/restore-required';
 
 import { formatMarketplaceAmount, marketplaceFee, marketplaceId, parseMarketplaceAmount } from './amount';
 import { assertMarketplacePurchaseAuthorization, STALE_PURCHASE } from './purchase-authorization';
@@ -49,6 +50,7 @@ export const marketplaceActionSchema = z.union([
 
 /** toXdr alone does not throw on a failed simulation. Validate simulation data first. */
 export function marketplaceTransactionXdr<T>(transaction: AssembledTransaction<T>) {
+  throwIfRestoreNeeded(transaction);
   void transaction.simulationData;
   if (transaction.needsNonInvokerSigningBy().some((address) => address.startsWith('G'))) {
     throw new MarketplaceError('This trade unexpectedly requires another account signature. Nothing was submitted.');

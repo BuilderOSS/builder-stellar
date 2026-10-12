@@ -80,4 +80,16 @@ describe('claim prepare API session boundary', () => {
     ).toBe(400);
     expect(mocks.prepare).not.toHaveBeenCalled();
   });
+  it('returns archived state as a restore the client signs first', async () => {
+    const { RestoreRequiredError } = await import('@/lib/restore-required');
+    mocks.prepare.mockRejectedValue(new RestoreRequiredError({ xdr: 'AAAA', fee: '12445' }));
+    const response = await post(valid);
+    expect(response.status).toBe(409);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(await response.json()).toEqual({
+      code: 'restore-required',
+      message: expect.stringContaining('archived'),
+      restore: { xdr: 'AAAA', fee: '12445' }
+    });
+  });
 });

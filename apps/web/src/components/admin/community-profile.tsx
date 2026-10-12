@@ -21,6 +21,7 @@ import { type DaoProfile, MAX_PROFILE_BYTES, profileBytes, profileProblems } fro
 import { validateDaoProfileDraft } from '@/lib/proposal-actions/artwork-admin-actions';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { getProposalActionSummary } from '@/lib/proposal-call';
+import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
@@ -284,12 +285,14 @@ export function CommunityProfileEditor() {
         if (step.type === 'set-token-metadata') {
           const client = new TokenClient({
             ...adminReadOptions(config, config.tokenContractId, session.address),
+            ...restoreArchivedState,
             signTransaction: sign
           });
           assembled = await client.set_metadata(step.values);
         } else {
           const client = new MetadataClient({
             ...adminReadOptions(config, config.metadataContractId, session.address),
+            ...restoreArchivedState,
             signTransaction: sign
           });
           await assertProfileRevision(step);
