@@ -804,7 +804,7 @@ fn m6_mint_never_reads_item_entries() {
     env.as_contract(&client.address, || {
         let p = env.storage().persistent();
         p.remove(&common::ns(&env, crate::storage::DataKey::Items(0, 0)));
-        p.remove(&common::ns(&env, crate::storage::DataKey::PropertyName(0)));
+        p.remove(&common::ns(&env, crate::storage::DataKey::PropertyNames));
         p.remove(&common::ns(&env, crate::storage::DataKey::IpfsGroups));
     });
     assert!(client.on_minted(&1));
@@ -1528,16 +1528,16 @@ fn artwork_layout_is_a_handful_of_entries() {
     let entries = env.as_contract(&client.address, || {
         let p = env.storage().persistent();
         let mut n = 0u32;
+        n += p.has(&common::ns(&env, DataKey::PropertyNames)) as u32;
         for pid in 0..16u32 {
-            n += p.has(&common::ns(&env, DataKey::PropertyName(pid))) as u32;
             for page in 0..crate::MAX_ITEM_PAGES {
                 n += p.has(&common::ns(&env, DataKey::Items(pid, page))) as u32;
             }
         }
         n + p.has(&common::ns(&env, DataKey::IpfsGroups)) as u32
     });
-    // 16 names + 16 item pages + 1 group vector, not 304 item keys.
-    assert_eq!(entries, 33);
+    // 1 names vector + 16 item pages + 1 group vector, not 304 item keys.
+    assert_eq!(entries, 18);
 }
 
 #[test]
@@ -1755,23 +1755,223 @@ fn token_uri_worst_case_fits_the_limits() {
 #[test]
 fn storage_keys_do_not_collide() {
     use common::testutils::{assert_keys_disjoint, common_key_shapes, key_shape};
+    #[allow(unused_imports)]
     use soroban_sdk::{testutils::Address as _, Address, Env, IntoVal, Val};
     let e = Env::default();
     let _a = Address::generate(&e);
     let all = |keys: std::vec::Vec<Val>| -> std::vec::Vec<(std::string::String, u32)> {
         keys.into_iter().map(|k| key_shape(&e, k)).collect()
     };
-    let module = all(std::vec![
-        crate::storage::DataKey::Settings.into_val(&e),
-        crate::storage::DataKey::Profile.into_val(&e),
-        crate::storage::DataKey::ItemCounts.into_val(&e),
-        crate::storage::DataKey::IpfsGroupCount.into_val(&e),
-        crate::storage::DataKey::PropertyName(0).into_val(&e),
-        crate::storage::DataKey::Items(0, 0).into_val(&e),
-        crate::storage::DataKey::IpfsGroups.into_val(&e),
-        crate::storage::DataKey::AttributesPage(0).into_val(&e),
-        crate::storage::DataKey::Manager.into_val(&e),
-        crate::storage::DataKey::Treasury.into_val(&e),
-    ]);
+    // Every variant, checked exhaustively next to the enum.
+    let module = all(crate::storage::key_samples::all(&e));
     assert_keys_disjoint(&[("DataKey", module), ("common", common_key_shapes(&e))]);
+}
+
+// ---------------------------------------------------------------------------
+// Compact storage (docs/STORAGE_DIET.md D32): packed attribute pages, item
+// pages as names plus slot bytes, one property-names entry.
+// ---------------------------------------------------------------------------
+
+fn stored_bytes<K: soroban_sdk::IntoVal<Env, soroban_sdk::Val>>(
+    env: &Env,
+    contract: &Address,
+    key: K,
+) -> u32 {
+    use soroban_sdk::xdr::{Limits, WriteXdr};
+    let key: soroban_sdk::Val = key.into_val(env);
+    let key =
+        <soroban_sdk::xdr::ScVal as soroban_sdk::TryFromVal<Env, soroban_sdk::Val>>::try_from_val(
+            env, &key,
+        )
+        .unwrap();
+    let snapshot = env.to_ledger_snapshot();
+    let owner = soroban_sdk::xdr::ScAddress::from(contract);
+    snapshot
+        .ledger_entries
+        .iter()
+        .find(|(k, _)| {
+            matches!(k.as_ref(), soroban_sdk::xdr::LedgerKey::ContractData(d) if d.contract == owner && d.key == key)
+        })
+        .map(|(_, (entry, _))| entry.to_xdr(Limits::none()).unwrap().len() as u32)
+        .expect("entry on the ledger")
+}
+
+#[test]
+fn packed_attributes_roundtrip_full_width_and_largest_index() {
+    let (env, client, _o, _t) = setup();
+    let mut selections = Vec::new(&env);
+    selections.push_back(16u32);
+    for k in 0..16u32 {
+        // The largest index a property can hold, and a few in between.
+        selections.push_back(if k % 2 == 0 {
+            crate::MAX_ITEMS_PER_PROPERTY - 1
+        } else {
+            k * 37
+        });
+    }
+    env.as_contract(&client.address, || {
+        crate::storage::set_attributes(&env, 5, &selections);
+    });
+    assert_eq!(client.get_attributes(&5), selections);
+    // Tokens 0..5 of the page were never written: they read as unseeded.
+    for id in 0..5u32 {
+        assert!(client.try_get_attributes(&id).is_err());
+    }
+    assert!(client.try_get_attributes(&6).is_err());
+}
+
+#[test]
+fn packed_attributes_splice_keeps_neighbours() {
+    let (env, client, _o, _t) = setup();
+    let sel = |n: u32, base: u32| {
+        let mut v = Vec::new(&env);
+        v.push_back(n);
+        for k in 0..n {
+            v.push_back(base + k);
+        }
+        v
+    };
+    let (a, c) = (sel(3, 10), sel(16, 100));
+    env.as_contract(&client.address, || {
+        crate::storage::set_attributes(&env, 0, &a);
+        crate::storage::set_attributes(&env, 1, &Vec::new(&env)); // minted without artwork
+        crate::storage::set_attributes(&env, 2, &c);
+    });
+    assert!(client.try_get_attributes(&1).is_err());
+    // Seeding the empty record in the middle grows it from 1 to 11 bytes.
+    let b = sel(5, 7);
+    env.as_contract(&client.address, || {
+        crate::storage::set_attributes(&env, 1, &b)
+    });
+    assert_eq!(client.get_attributes(&0), a);
+    assert_eq!(client.get_attributes(&1), b);
+    assert_eq!(client.get_attributes(&2), c);
+    // And overwriting it with fewer properties shrinks it again.
+    let b2 = sel(1, 3);
+    env.as_contract(&client.address, || {
+        crate::storage::set_attributes(&env, 1, &b2)
+    });
+    assert_eq!(client.get_attributes(&0), a);
+    assert_eq!(client.get_attributes(&1), b2);
+    assert_eq!(client.get_attributes(&2), c);
+}
+
+#[test]
+fn packed_attributes_reject_out_of_range_input() {
+    let (env, client, _o, _t) = setup();
+    let mut too_many = Vec::new(&env);
+    too_many.push_back(17u32);
+    for k in 0..17u32 {
+        too_many.push_back(k);
+    }
+    let mut big_index = Vec::new(&env);
+    big_index.push_back(1u32);
+    big_index.push_back(crate::MAX_ITEMS_PER_PROPERTY);
+    let mut short = Vec::new(&env);
+    short.push_back(3u32);
+    short.push_back(0u32);
+    for bad in [too_many, big_index, short] {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            env.as_contract(&client.address, || {
+                crate::storage::set_attributes(&env, 0, &bad)
+            });
+        }));
+        assert!(result.is_err());
+    }
+}
+
+#[test]
+fn a_full_attributes_page_is_about_2_kb() {
+    let (env, client, _o, _t) = setup();
+    add_n_properties(&env, &client, 16, 1);
+    let per_page = crate::TOKENS_PER_ATTRIBUTE_PAGE;
+    // Two batches of 32 fill the first page with 16-property records.
+    assert!(client.on_minted_batch(&0, &32));
+    assert!(client.on_minted_batch(&32, &32));
+    for id in 0..per_page {
+        assert_eq!(client.get_attributes(&id).len(), 17);
+    }
+    let bytes = stored_bytes(
+        &env,
+        &client.address,
+        common::ns(&env, crate::storage::DataKey::AttributesPage(0)),
+    );
+    // 64 records of 17 bytes is 1,088; the rest is the key and entry overhead.
+    // The u32-vector layout measured ~9,400 bytes for the same page.
+    std::println!("full attributes page: {bytes} bytes");
+    assert!(bytes <= 1_088 + 160, "{bytes}");
+}
+
+#[test]
+fn wide_records_mix_with_narrow_ones_on_a_page() {
+    let (env, client, _o, _t) = setup();
+    let record = |indexes: &[u32]| {
+        let mut v = Vec::new(&env);
+        v.push_back(indexes.len() as u32);
+        for &i in indexes {
+            v.push_back(i);
+        }
+        v
+    };
+    // Narrow, wide (an index of 256 forces two bytes), narrow at the edge (255).
+    let a = record(&[0, 255, 7]);
+    let b = record(&[1, 256, 1_023]);
+    let c = record(&[255; 16]);
+    env.as_contract(&client.address, || {
+        crate::storage::set_attributes(&env, 0, &a);
+        crate::storage::set_attributes(&env, 1, &b);
+        crate::storage::set_attributes(&env, 2, &c);
+    });
+    assert_eq!(client.get_attributes(&0), a);
+    assert_eq!(client.get_attributes(&1), b);
+    assert_eq!(client.get_attributes(&2), c);
+    // Records: 1 + 3, 1 + 2 * 3, 1 + 16 bytes.
+    let raw: soroban_sdk::Bytes = env.as_contract(&client.address, || {
+        env.storage()
+            .persistent()
+            .get(&common::ns(
+                &env,
+                crate::storage::DataKey::AttributesPage(0),
+            ))
+            .unwrap()
+    });
+    assert_eq!(raw.len(), 4 + 7 + 17);
+    assert_eq!(raw.get(4), Some(0x80 | 3)); // the wide header
+}
+
+#[test]
+fn item_pages_keep_names_and_slots() {
+    let (env, client, _o, _t) = setup();
+    add_new_property(&env, &client, "Head", 3, "ipfs://first/");
+    add_items(&env, &client, 0, 2, "ipfs://second/");
+    let items = client.get_items(&0, &0, &10);
+    assert_eq!(items.len(), 5);
+    let slots: std::vec::Vec<u32> = items.iter().map(|i| i.reference_slot).collect();
+    assert_eq!(slots, std::vec![0, 0, 0, 1, 1]);
+    assert_eq!(
+        client.get_ipfs_group(&1).unwrap().base_uri,
+        String::from_str(&env, "ipfs://second/")
+    );
+    let headers = client.property_headers();
+    assert_eq!(headers.len(), 1);
+    assert_eq!(headers.get(0).unwrap().item_count, 5);
+}
+
+#[test]
+fn a_full_item_page_costs_names_plus_a_byte() {
+    let (env, client, _o, _t) = setup();
+    add_new_property(&env, &client, "Head", 32, "ipfs://x/");
+    let bytes = stored_bytes(
+        &env,
+        &client.address,
+        common::ns(&env, crate::storage::DataKey::Items(0, 0)),
+    );
+    let names: u32 = client
+        .get_items(&0, &0, &32)
+        .iter()
+        .map(|i| i.name.len())
+        .sum();
+    // Per item: an 8-byte string header, the name padded to 4, and 1 slot byte.
+    std::println!("32-item page: {bytes} bytes for {names} bytes of names");
+    assert!(bytes <= names + 32 * (8 + 3 + 1) + 200, "{bytes}");
 }

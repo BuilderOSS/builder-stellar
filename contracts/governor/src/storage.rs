@@ -137,6 +137,8 @@ pub struct ProposalInfo {
     pub vote_end: u64,
     pub eta: u64,
     pub state: ProposalState,
+    /// For + Abstain votes the proposal needs (fixed at creation).
+    pub quorum: u128,
 }
 
 /// Core proposal data using timestamps instead of ledger sequences.
@@ -173,4 +175,55 @@ pub struct ProposalCoreTime {
     pub state: ProposalState,
     /// Creation order: the key of this proposal's `ProposalId(seq)` entry.
     pub seq: u32,
+    /// For + Abstain votes needed, fixed when the proposal is created from the
+    /// voting supply and `quorum_bps` at that moment. Storing it means no
+    /// later call looks up historical supply or quorum checkpoints, so only
+    /// the latest checkpoint of each has to stay live (D33).
+    pub quorum: u128,
+}
+
+/// Every `GovernorKey` variant with sample arguments, for the key guard test.
+/// `index` fails to compile when a variant is added: give it the next index,
+/// raise `VARIANTS` and add a sample to `all`, or the guard test fails.
+#[cfg(test)]
+pub(crate) mod key_samples {
+    extern crate std;
+    use super::*;
+    #[allow(unused_imports)]
+    use soroban_sdk::testutils::Address as _;
+    use soroban_sdk::{Env, IntoVal, Val};
+
+    pub const VARIANTS: usize = 6;
+
+    pub fn index(key: &GovernorKey) -> usize {
+        match key {
+            GovernorKey::Treasury => 0,
+            GovernorKey::QueueDelay => 1,
+            GovernorKey::ProposalTime(_) => 2,
+            GovernorKey::Manager => 3,
+            GovernorKey::ProposalCount => 4,
+            GovernorKey::ProposalId(_) => 5,
+        }
+    }
+
+    #[allow(unused_variables)]
+    pub fn all(e: &Env) -> std::vec::Vec<Val> {
+        let a = soroban_sdk::Address::generate(e);
+        let id = soroban_sdk::BytesN::<32>::from_array(e, &[0; 32]);
+        let text = soroban_sdk::String::from_str(e, "x");
+        let keys = std::vec![
+            GovernorKey::Treasury,
+            GovernorKey::QueueDelay,
+            GovernorKey::ProposalTime(id.clone()),
+            GovernorKey::Manager,
+            GovernorKey::ProposalCount,
+            GovernorKey::ProposalId(0),
+        ];
+        common::testutils::assert_every_variant_sampled(
+            "GovernorKey",
+            &keys.iter().map(index).collect::<std::vec::Vec<_>>(),
+            VARIANTS,
+        );
+        keys.into_iter().map(|k| k.into_val(e)).collect()
+    }
 }

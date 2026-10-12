@@ -270,3 +270,194 @@ fn namespaced_key_xdr_is_pinned() {
         "0000001000000001000000020000000f0000000a6275696c6465726f737300000000001000000001000000020000000f000000074c697374696e67000000000300000007"
     );
 }
+
+// ---------------------------------------------------------------------------
+// TTL policy (`crate::ttl`), with every starting TTL set explicitly.
+// ---------------------------------------------------------------------------
+
+mod ttl_policy {
+    extern crate std;
+    use crate::ttl::*;
+    use soroban_sdk::{
+        contract, contractimpl,
+        testutils::{storage::Persistent as _, Deployer as _, Ledger as _},
+        Env,
+    };
+
+    #[contract]
+    struct TtlProbe;
+
+    #[contractimpl]
+    impl TtlProbe {
+        /// What every module's state-changing entry point does first.
+        pub fn touch(e: Env) {
+            extend_instance(&e);
+        }
+        /// Set the instance or the code TTL to exactly `to` (test setup).
+        pub fn set_instance_ttl(e: Env, to: u32) {
+            e.deployer()
+                .extend_ttl_for_contract_instance(e.current_contract_address(), to, to);
+        }
+        pub fn set_code_ttl(e: Env, to: u32) {
+            e.deployer()
+                .extend_ttl_for_code(e.current_contract_address(), to, to);
+        }
+        pub fn put(e: Env, key: u32) {
+            e.storage().persistent().set(&key, &key);
+        }
+        pub fn renew(e: Env, key: u32) {
+            extend_persistent(&e, &key);
+        }
+        pub fn renew_for(e: Env, key: u32, threshold: u32, extend_to: u32) {
+            extend_persistent_for(&e, &key, threshold, extend_to);
+        }
+    }
+
+    const MAX_ENTRY_TTL: u32 = 3_110_400; // testnet, 2026-10-12
+
+    /// A probe whose instance and code are born with one day of TTL, under
+    /// testnet's maximum entry TTL.
+    fn probe() -> (Env, TtlProbeClient<'static>) {
+        let e = Env::default();
+        e.ledger().with_mut(|l| {
+            l.sequence_number = 1_000;
+            l.min_persistent_entry_ttl = DAY_IN_LEDGERS;
+            l.max_entry_ttl = MAX_ENTRY_TTL;
+        });
+        let id = e.register(TtlProbe, ());
+        let client = TtlProbeClient::new(&e, &id);
+        (e, client)
+    }
+
+    fn ttls(e: &Env, c: &TtlProbeClient) -> (u32, u32) {
+        (
+            e.deployer().get_contract_instance_ttl(&c.address),
+            e.deployer().get_contract_code_ttl(&c.address),
+        )
+    }
+
+    fn persistent_ttl(e: &Env, c: &TtlProbeClient, key: u32) -> u32 {
+        e.as_contract(&c.address, || e.storage().persistent().get_ttl(&key))
+    }
+
+    #[test]
+    fn code_below_its_threshold_gets_four_days_and_the_instance_is_untouched() {
+        let (e, c) = probe();
+        c.set_instance_ttl(&(100 * DAY_IN_LEDGERS));
+        let (instance, code) = ttls(&e, &c);
+        assert_eq!(instance, 100 * DAY_IN_LEDGERS);
+        assert!(code < CODE_TTL_THRESHOLD, "{code}");
+        c.touch();
+        assert_eq!(ttls(&e, &c), (100 * DAY_IN_LEDGERS, CODE_TTL_EXTEND_TO));
+    }
+
+    #[test]
+    fn instance_below_its_threshold_gets_170_days_and_the_code_is_untouched() {
+        let (e, c) = probe();
+        c.set_code_ttl(&(30 * DAY_IN_LEDGERS));
+        let (instance, code) = ttls(&e, &c);
+        assert!(instance < INSTANCE_TTL_THRESHOLD, "{instance}");
+        assert_eq!(code, 30 * DAY_IN_LEDGERS);
+        c.touch();
+        assert_eq!(ttls(&e, &c), (INSTANCE_TTL_EXTEND_TO, 30 * DAY_IN_LEDGERS));
+    }
+
+    /// The original bug (STORAGE_DIET_REVIEW Finding 2): with both low, the
+    /// old `instance().extend_ttl` pushed code to 170 days at the caller's cost.
+    #[test]
+    fn both_below_never_push_code_past_four_days() {
+        let (e, c) = probe();
+        c.touch();
+        assert_eq!(ttls(&e, &c), (INSTANCE_TTL_EXTEND_TO, CODE_TTL_EXTEND_TO));
+    }
+
+    #[test]
+    fn both_above_their_thresholds_change_nothing() {
+        let (e, c) = probe();
+        c.set_instance_ttl(&(61 * DAY_IN_LEDGERS));
+        c.set_code_ttl(&(30 * DAY_IN_LEDGERS));
+        c.touch();
+        assert_eq!(ttls(&e, &c), (61 * DAY_IN_LEDGERS, 30 * DAY_IN_LEDGERS));
+    }
+
+    /// The host extends when the TTL is at or below the threshold.
+    #[test]
+    fn thresholds_include_their_bound() {
+        // One ledger above each threshold: untouched.
+        let (e, c) = probe();
+        c.set_instance_ttl(&(INSTANCE_TTL_THRESHOLD + 1));
+        c.set_code_ttl(&(CODE_TTL_THRESHOLD + 1));
+        c.touch();
+        assert_eq!(
+            ttls(&e, &c),
+            (INSTANCE_TTL_THRESHOLD + 1, CODE_TTL_THRESHOLD + 1)
+        );
+        // One ledger later both sit exactly at their thresholds: renewed.
+        e.ledger().with_mut(|l| l.sequence_number += 1);
+        assert_eq!(ttls(&e, &c), (INSTANCE_TTL_THRESHOLD, CODE_TTL_THRESHOLD));
+        c.touch();
+        assert_eq!(ttls(&e, &c), (INSTANCE_TTL_EXTEND_TO, CODE_TTL_EXTEND_TO));
+    }
+
+    #[test]
+    fn code_ages_out_of_four_days_and_is_bumped_again_on_the_next_touch() {
+        let (e, c) = probe();
+        c.touch();
+        assert_eq!(ttls(&e, &c).1, CODE_TTL_EXTEND_TO);
+        // Two days later code is at its threshold; a bit later it is below.
+        e.ledger()
+            .with_mut(|l| l.sequence_number += CODE_TTL_EXTEND_TO - CODE_TTL_THRESHOLD + 10);
+        assert!(ttls(&e, &c).1 < CODE_TTL_THRESHOLD);
+        c.touch();
+        assert_eq!(ttls(&e, &c).1, CODE_TTL_EXTEND_TO);
+        // The instance (170 days, minus 2 days) was not renewed.
+        assert_eq!(
+            ttls(&e, &c).0,
+            INSTANCE_TTL_EXTEND_TO - (CODE_TTL_EXTEND_TO - CODE_TTL_THRESHOLD + 10)
+        );
+    }
+
+    #[test]
+    fn long_lived_entries_renew_to_the_network_cap_only_under_30_days() {
+        let (e, c) = probe();
+        c.put(&7);
+        assert!(persistent_ttl(&e, &c, 7) < PERSISTENT_TTL_THRESHOLD);
+        c.renew(&7);
+        // One year requested; the host clamps it to the network maximum.
+        let renewed = persistent_ttl(&e, &c, 7);
+        assert_eq!(renewed, MAX_ENTRY_TTL - 1);
+        // 31 days left: a read does not renew (and pays no rent).
+        e.ledger()
+            .with_mut(|l| l.sequence_number += renewed - 31 * DAY_IN_LEDGERS);
+        c.renew(&7);
+        assert_eq!(persistent_ttl(&e, &c, 7), 31 * DAY_IN_LEDGERS);
+        // 29 days left: it does.
+        e.ledger()
+            .with_mut(|l| l.sequence_number += 2 * DAY_IN_LEDGERS);
+        c.renew(&7);
+        assert_eq!(persistent_ttl(&e, &c, 7), renewed);
+    }
+
+    #[test]
+    fn bounded_entries_use_their_own_values() {
+        // The Governor's proposal policy: 30 -> 120 days.
+        let (e, c) = probe();
+        c.put(&1);
+        c.renew_for(&1, &(30 * DAY_IN_LEDGERS), &(120 * DAY_IN_LEDGERS));
+        assert_eq!(persistent_ttl(&e, &c, 1), 120 * DAY_IN_LEDGERS);
+        e.ledger()
+            .with_mut(|l| l.sequence_number += 80 * DAY_IN_LEDGERS);
+        c.renew_for(&1, &(30 * DAY_IN_LEDGERS), &(120 * DAY_IN_LEDGERS));
+        assert_eq!(persistent_ttl(&e, &c, 1), 40 * DAY_IN_LEDGERS);
+        e.ledger()
+            .with_mut(|l| l.sequence_number += 11 * DAY_IN_LEDGERS);
+        c.renew_for(&1, &(30 * DAY_IN_LEDGERS), &(120 * DAY_IN_LEDGERS));
+        assert_eq!(persistent_ttl(&e, &c, 1), 120 * DAY_IN_LEDGERS);
+    }
+}
+
+#[test]
+#[should_panic(expected = "sample every variant")]
+fn a_storage_variant_missing_from_the_samples_fails_the_guard() {
+    crate::testutils::assert_every_variant_sampled("Example", &[0, 2], 3);
+}

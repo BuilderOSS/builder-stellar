@@ -166,6 +166,7 @@ fn test_factory_pause() {
 #[test]
 fn test_set_current_implementations() {
     let (env, client, admin) = setup();
+    assert_eq!(client.current_implementations(), None);
 
     // Register implementations first
     let token_name = String::from_str(&env, "Token");
@@ -206,6 +207,19 @@ fn test_set_current_implementations() {
     // Verify they were set correctly
     let token_impl = client.get_implementation(&token_wasm).unwrap();
     assert_eq!(token_impl.name, token_name);
+    let expected = crate::storage::DaoWasmHashes {
+        token: token_wasm.clone(),
+        metadata: metadata_wasm,
+        auction: auction_wasm,
+        governor: governor_wasm,
+        treasury: treasury_wasm,
+        marketplace: marketplace_wasm,
+    };
+    assert_eq!(client.current_implementations(), Some(expected.clone()));
+    // Revoking a current hash does not hide it: DAOs created from it still run
+    // it, and platform code renewal must keep finding it.
+    client.revoke_implementation(&token_wasm);
+    assert_eq!(client.current_implementations(), Some(expected));
 
     let _ = admin;
 }
@@ -2789,4 +2803,22 @@ fn pending_dao_requesting_the_new_slug_is_blocked_and_can_recover() {
     client.update_pending_slug(&pending, &s(&env, "launched-one"));
     client.launch_dao(&pending, &launch_cfg(&env));
     assert_eq!(client.get_dao_by_slug(&s(&env, "launched-one")), pending);
+}
+
+#[test]
+fn storage_keys_do_not_collide() {
+    use common::testutils::{assert_keys_disjoint, common_key_shapes, key_shapes};
+    use soroban_sdk::Env;
+    let e = Env::default();
+    // The Manager links no OZ storage. Its keys share the `buildeross`
+    // namespace with `common`'s, so keep them disjoint even though it uses
+    // none of them today (it would clash on adopting `common::admin` if its
+    // admin key were still `Admin`).
+    assert_keys_disjoint(&[
+        (
+            "ManagerKey",
+            key_shapes(&e, crate::storage::key_samples::all(&e)),
+        ),
+        ("common", common_key_shapes(&e)),
+    ]);
 }

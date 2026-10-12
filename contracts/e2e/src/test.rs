@@ -3672,6 +3672,13 @@ fn factory_token_serves_sep50_metadata_and_records_the_minter() {
     uri.copy_into_slice(&mut bytes);
     assert!(bytes.starts_with(b"data:application/json;base64,"));
 
+    // The holder's ownership entry (30-day TTL per touch) has archived: the
+    // token still renders, and an id past the counter still does not.
+    let owner_key = oz_key(e, "Owner", std::vec![id.into_val(e)]);
+    e.as_contract(&f.dao.token, || e.storage().persistent().remove(&owner_key));
+    assert_eq!(token.token_uri(&id), uri);
+    assert!(token.try_token_uri(&(id + 1)).is_err());
+
     assert_eq!(token.minter(), None);
     f.manager.launch_dao(&f.dao.token, &f.no_launch_modules());
     assert_eq!(token.minter(), Some(f.minter.clone()));
@@ -3683,26 +3690,59 @@ fn factory_token_serves_sep50_metadata_and_records_the_minter() {
 /// gets at most `CODE_TTL_EXTEND_TO`.
 #[test]
 fn calls_bump_instance_long_and_shared_code_only_briefly() {
+    use common::ttl::*;
     use soroban_sdk::testutils::Deployer as _;
     let f = factory_dao();
     let e = &f.e;
     let token = DaoTokenContractClient::new(e, &f.dao.token);
-    // Age everything well past the code threshold but keep the instance alive.
-    let age = common::ttl::INSTANCE_TTL_EXTEND_TO - common::ttl::INSTANCE_TTL_THRESHOLD + 1;
-    e.ledger().with_mut(|l| l.sequence_number += age);
-    let code_before = e.deployer().get_contract_code_ttl(&f.dao.token);
-    std::println!("code ttl before: {code_before}");
-    token.mint(&f.deployer, &f.deployer); // state-changing: calls extend_instance
-    let instance = e.deployer().get_contract_instance_ttl(&f.dao.token);
-    let code = e.deployer().get_contract_code_ttl(&f.dao.token);
-    assert_eq!(instance, common::ttl::INSTANCE_TTL_EXTEND_TO);
-    if code_before < common::ttl::CODE_TTL_THRESHOLD {
-        assert_eq!(code, common::ttl::CODE_TTL_EXTEND_TO);
-    }
-    assert!(
-        code <= common::ttl::CODE_TTL_EXTEND_TO.max(code_before),
-        "code bumped to {code} ledgers (instance target {})",
-        common::ttl::INSTANCE_TTL_EXTEND_TO
+    let ttls = |c: &Address| {
+        (
+            e.deployer().get_contract_instance_ttl(c),
+            e.deployer().get_contract_code_ttl(c),
+        )
+    };
+    // Pinned start: one state-changing call so the token's instance is at 170
+    // days and its code at the in-contract 4 days.
+    token.mint(&f.deployer, &f.deployer);
+    assert_eq!(
+        ttls(&f.dao.token),
+        (INSTANCE_TTL_EXTEND_TO, CODE_TTL_EXTEND_TO)
+    );
+
+    // Phase 1, the platform let code lapse: three days on, code (1 day) is
+    // under its threshold, the instance (167 days) is not. A member's call
+    // pays for 3 more days of code, never 170.
+    let three_days = 3 * DAY_IN_LEDGERS;
+    e.ledger().with_mut(|l| l.sequence_number += three_days);
+    assert_eq!(
+        ttls(&f.dao.token),
+        (
+            INSTANCE_TTL_EXTEND_TO - three_days,
+            CODE_TTL_EXTEND_TO - three_days
+        )
+    );
+    token.mint(&f.deployer, &f.deployer);
+    assert_eq!(
+        ttls(&f.dao.token),
+        (INSTANCE_TTL_EXTEND_TO - three_days, CODE_TTL_EXTEND_TO)
+    );
+
+    // Phase 2, the platform renewed code to 170 days; 110 days on, the
+    // instance (57 days) is under its threshold and code (60) is not. The
+    // call renews the instance only.
+    let platform = 170 * DAY_IN_LEDGERS;
+    e.as_contract(&f.dao.token, || {
+        e.deployer()
+            .extend_ttl_for_code(f.dao.token.clone(), platform, platform)
+    });
+    let later = 110 * DAY_IN_LEDGERS;
+    e.ledger().with_mut(|l| l.sequence_number += later);
+    let (instance, code) = ttls(&f.dao.token);
+    assert!(instance < INSTANCE_TTL_THRESHOLD && code > CODE_TTL_THRESHOLD);
+    token.mint(&f.deployer, &f.deployer);
+    assert_eq!(
+        ttls(&f.dao.token),
+        (INSTANCE_TTL_EXTEND_TO, platform - later)
     );
 }
 
@@ -4270,6 +4310,23 @@ fn protocol_runs_on_chain_state_only() {
     // Every DAO-owned key the flow wrote is in the renewal inventory a
     // client builds from chain reads, and nothing in it is missing.
     let listed = dao_renewal_inventory(e, &f.manager, &f.dao.token);
+    // The flow left the DAO holding funds and tokens: they are in the sweep.
+    let holdings = |variant: &str| {
+        listed
+            .iter()
+            .filter(|(_, k)| {
+                use soroban_sdk::TryFromVal;
+                key_variant(&soroban_sdk::xdr::ScVal::try_from_val(e, k).unwrap())
+                    == std::format!("oz:{variant}")
+            })
+            .count()
+    };
+    std::println!(
+        "DAO holdings in the sweep: {} Owner, {} Balance",
+        holdings("Owner"),
+        holdings("Balance")
+    );
+    assert!(holdings("Owner") > 0 && holdings("Balance") > 0);
     assert_inventory_matches_ledger(e, &f.manager, &f.dao, &minter_id, &listed);
 }
 
@@ -4330,6 +4387,41 @@ fn key_variant(key: &soroban_sdk::xdr::ScVal) -> std::string::String {
     }
 }
 
+/// The OpenZeppelin `Owner(t)` entry, if it is live.
+fn stored_owner(e: &Env, token: &Address, t: u32) -> Option<Address> {
+    let key = oz_key(e, "Owner", std::vec![t.into_val(e)]);
+    e.as_contract(token, || e.storage().persistent().get::<Val, Address>(&key))
+}
+
+/// The DAO contracts that hold tokens and funds.
+fn dao_holders(token: &DaoTokenContractClient) -> std::vec::Vec<Address> {
+    let mut holders = std::vec![token.treasury()];
+    holders.extend(token.auction());
+    holders.extend(token.marketplace());
+    holders
+}
+
+/// The asset contracts the DAO is paid in (auction and marketplace), deduplicated.
+fn dao_payment_assets(e: &Env, token: &DaoTokenContractClient) -> std::vec::Vec<Address> {
+    let mut assets = std::vec::Vec::new();
+    if let Some(a) = token.auction() {
+        assets.push(
+            DaoAuctionContractClient::new(e, &a)
+                .get_config()
+                .payment_token,
+        );
+    }
+    if let Some(m) = token.marketplace() {
+        let asset = MarketplaceContractClient::new(e, &m)
+            .get_config()
+            .payment_asset;
+        if !assets.contains(&asset) {
+            assets.push(asset);
+        }
+    }
+    assets
+}
+
 /// The persistent keys a DAO renews in its one-transaction sweep, built only
 /// from the token address, the Manager and contract reads. Instances are
 /// listed separately by every client (seven `LedgerKeyContractInstance`s).
@@ -4359,19 +4451,28 @@ fn dao_renewal_inventory(
             ));
         }
     }
-    for i in 0..instance_u32(e, token_id, "NumTotalSupplyCheckpoints") {
+    // Only the latest supply checkpoint: proposals store their quorum (D33),
+    // so nothing looks up an older one and history may archive.
+    let supply_checkpoints = instance_u32(e, token_id, "NumTotalSupplyCheckpoints");
+    if supply_checkpoints > 0 {
         keys.push((
             token_id.clone(),
-            oz_key(e, "TotalSupplyCheckpoint", std::vec![u(i)]),
+            oz_key(
+                e,
+                "TotalSupplyCheckpoint",
+                std::vec![u(supply_checkpoints - 1)],
+            ),
         ));
     }
 
-    // Metadata: names, item pages, the groups vector, attribute pages.
+    // Metadata: the names vector, item pages, the groups vector, attribute pages.
     let m = metadata.address.clone();
     let headers = metadata.property_headers();
+    if !headers.is_empty() {
+        keys.push((m.clone(), ns_key(e, "PropertyNames", std::vec![])));
+    }
     for (i, h) in headers.iter().enumerate() {
         let i = i as u32;
-        keys.push((m.clone(), ns_key(e, "PropertyName", std::vec![u(i)])));
         for page in 0..h.item_count.div_ceil(metadata::ITEMS_PER_PAGE) {
             keys.push((m.clone(), ns_key(e, "Items", std::vec![u(i), u(page)])));
         }
@@ -4382,12 +4483,17 @@ fn dao_renewal_inventory(
     let minted = instance_u32(e, token_id, "TokenIdCounter");
     if minted > 0 {
         for page in 0..=((minted - 1) / metadata::TOKENS_PER_ATTRIBUTE_PAGE) {
-            keys.push((m.clone(), ns_key(e, "AttributesPage", std::vec![u(page)])));
+            // A page exists once a token on it was minted with artwork (or
+            // regenerated); a client learns which from the same entry read.
+            let key = ns_key(e, "AttributesPage", std::vec![u(page)]);
+            if e.as_contract(&m, || e.storage().persistent().has(&key)) {
+                keys.push((m.clone(), key));
+            }
         }
     }
 
-    // Governor: live proposals (core, id entry, vote tally) and quorum
-    // checkpoints.
+    // Governor: live proposals (core, id entry, vote tally) and the latest
+    // quorum checkpoint.
     let g = governor.address.clone();
     let count = governor.proposal_count();
     let mut start = 0;
@@ -4420,8 +4526,12 @@ fn dao_renewal_inventory(
         }
         start += governor::MAX_PROPOSAL_IDS_PAGE;
     }
-    for i in 0..instance_u32(e, &g, "NumQuorumCheckpoints") {
-        keys.push((g.clone(), oz_key(e, "QuorumCheckpoint", std::vec![u(i)])));
+    let quorum_checkpoints = instance_u32(e, &g, "NumQuorumCheckpoints");
+    if quorum_checkpoints > 0 {
+        keys.push((
+            g.clone(),
+            oz_key(e, "QuorumCheckpoint", std::vec![u(quorum_checkpoints - 1)]),
+        ));
     }
 
     // Marketplace: open secondary and primary listings.
@@ -4457,6 +4567,33 @@ fn dao_renewal_inventory(
         }
     }
 
+    // DAO holdings: tokens and asset balances held by the Treasury, Auction
+    // and Marketplace. OpenZeppelin and the asset contract renew these only
+    // 30 days per touch, so an idle DAO's funds and unsold tokens would
+    // archive without the sweep.
+    let holders = dao_holders(&token);
+    for t in 0..minted {
+        // Raw entry reads, as a client batches them: an archived holder's
+        // entry is simply absent.
+        if stored_owner(e, token_id, t).is_some_and(|o| holders.contains(&o)) {
+            keys.push((token_id.clone(), oz_key(e, "Owner", std::vec![u(t)])));
+        }
+    }
+    for holder in &holders {
+        let key = oz_key(e, "Balance", std::vec![holder.into_val(e)]);
+        if e.as_contract(token_id, || e.storage().persistent().has(&key)) {
+            keys.push((token_id.clone(), key));
+        }
+    }
+    for asset in dao_payment_assets(e, &token) {
+        for holder in &holders {
+            let key = oz_key(e, "Balance", std::vec![holder.into_val(e)]);
+            if e.as_contract(&asset, || e.storage().persistent().has(&key)) {
+                keys.push((asset.clone(), key));
+            }
+        }
+    }
+
     // The Manager's slug pair.
     if let Some(slug) = manager.get_slug(token_id) {
         let mgr = manager.address.clone();
@@ -4481,6 +4618,19 @@ fn assert_inventory_matches_ledger(
     use soroban_sdk::xdr::{ContractDataDurability, LedgerKey, ScAddress, ScVal};
     use soroban_sdk::TryFromVal;
     let token_sc = ScVal::from(&dao.token);
+    let token_client = DaoTokenContractClient::new(e, &dao.token);
+    let holders: std::vec::Vec<ScVal> =
+        dao_holders(&token_client).iter().map(ScVal::from).collect();
+    let assets = dao_payment_assets(e, &token_client);
+    let dao_held = |owner: &Address, name: &str, arg: Option<&ScVal>| -> bool {
+        match (name, arg) {
+            ("Balance", Some(holder)) => holders.contains(holder),
+            ("Owner", Some(ScVal::U32(t))) if *owner == dao.token => {
+                stored_owner(e, &dao.token, *t).is_some_and(|o| holders.contains(&ScVal::from(&o)))
+            }
+            _ => false,
+        }
+    };
     // Per-holder (or per-claimer, per-voter, platform) keys: renewed on use or
     // by their owner, never by the DAO sweep.
     let holder_variant = |owner: &Address, key: &ScVal| -> bool {
@@ -4499,6 +4649,13 @@ fn assert_inventory_matches_ledger(
             return false;
         };
         let name = name.to_utf8_string().unwrap();
+        if assets.contains(owner) {
+            // An asset contract: only the DAO's own balances are the DAO's.
+            return !(name == "Balance" && dao_held(owner, &name, items.get(1)));
+        }
+        if !ns && dao_held(owner, &name, items.get(1)) {
+            return false;
+        }
         if !ns {
             return [
                 "Owner",
@@ -4524,7 +4681,7 @@ fn assert_inventory_matches_ledger(
         }
         name == "PendingRefund"
     };
-    let owners = [
+    let mut owners = std::vec![
         &dao.token,
         &dao.metadata,
         &dao.auction,
@@ -4534,6 +4691,7 @@ fn assert_inventory_matches_ledger(
         minter,
         &manager.address,
     ];
+    owners.extend(assets.iter());
     let as_bytes = |owner: &Address, key: &ScVal| {
         use soroban_sdk::xdr::{Limits, WriteXdr};
         (ScAddress::from(owner), key.to_xdr(Limits::none()).unwrap())
@@ -4567,7 +4725,13 @@ fn assert_inventory_matches_ledger(
     let unlisted: std::vec::Vec<_> = unlisted
         .into_iter()
         .filter(|k| {
-            !(k.contains("ProposalTime") || k.contains("ProposalId") || k.contains("ProposalVote"))
+            // Terminal proposals leave the sweep, and so do supply and quorum
+            // history: only the latest checkpoint of each is read (D33).
+            !(k.contains("ProposalTime")
+                || k.contains("ProposalId")
+                || k.contains("ProposalVote")
+                || k.contains("TotalSupplyCheckpoint")
+                || k.contains("QuorumCheckpoint"))
         })
         .collect();
     assert!(
@@ -4774,4 +4938,498 @@ fn reference_dao_sweep_fits_one_transaction() {
     std::println!("BUDGET reference DAO sweep: {entries} entries, {bytes} bytes");
     assert!(entries <= TX_MAX_FOOTPRINT_ENTRIES, "{entries} entries");
     assert!(bytes <= TX_MAX_DISK_READ_BYTES, "{bytes} bytes");
+}
+
+// ============================================================================
+// Quorum fixed at creation (D33): only the latest supply and quorum
+// checkpoints are ever read, so history can archive without breaking anything.
+// ============================================================================
+
+/// Mint one token to each of `n` fresh holders, one ledger apart (one supply
+/// checkpoint per ledger, as daily auctions produce). Returns the holders.
+fn mint_history(
+    e: &Env,
+    token: &DaoTokenContractClient,
+    owner: &Address,
+    from_ledger: u32,
+    n: u32,
+) -> std::vec::Vec<Address> {
+    (0..n)
+        .map(|i| {
+            e.ledger().set_sequence_number(from_ledger + i);
+            let holder = Address::generate(e);
+            token.mint(owner, &holder);
+            holder
+        })
+        .collect()
+}
+
+fn checkpoint_count(e: &Env, contract: &Address, counter: &str) -> u32 {
+    instance_u32(e, contract, counter)
+}
+
+/// Remove every checkpoint but the latest, the way archival makes them
+/// unreadable.
+fn archive_old_checkpoints(e: &Env, contract: &Address, counter: &str, variant: &str) -> u32 {
+    let n = checkpoint_count(e, contract, counter);
+    e.as_contract(contract, || {
+        for i in 0..n.saturating_sub(1) {
+            let key = oz_key(e, variant, std::vec![i.into_val(e)]);
+            assert!(e.storage().persistent().has(&key), "{variant}({i}) missing");
+            e.storage().persistent().remove(&key);
+        }
+    });
+    n.saturating_sub(1)
+}
+
+#[test]
+fn governance_runs_with_supply_and_quorum_history_archived() {
+    let (e, token, treasury, governor, target, owner) = setup();
+    let voters = mint_history(&e, &token, &owner, 110, 21);
+    // A second quorum checkpoint (same rate), so quorum history exists too.
+    e.ledger().set_sequence_number(150);
+    governor.set_quorum_bps(&1_000);
+
+    e.ledger().set_sequence_number(200);
+    e.ledger().set_timestamp(2_000);
+    let targets = vec![&e, target.address.clone()];
+    let functions = vec![&e, symbol_short!("set_value")];
+    let args = proposal_args(&e);
+    let description = String::from_str(&e, "Runs on the latest checkpoints only");
+    let desc_hash = description_hash(&e, &description);
+    let id = governor.propose(&targets, &functions, &args, &description, &voters[0]);
+    let info = governor.proposal(&id);
+    // ceil(21 * 10%) = 3, fixed now.
+    assert_eq!(info.quorum, 3);
+
+    // More supply history after the snapshot: a lookup at the snapshot would
+    // now have to binary-search.
+    mint_history(&e, &token, &owner, 210, 10);
+    let supply_gone = archive_old_checkpoints(
+        &e,
+        &token.address,
+        "NumTotalSupplyCheckpoints",
+        "TotalSupplyCheckpoint",
+    );
+    let quorum_gone = archive_old_checkpoints(
+        &e,
+        &governor.address,
+        "NumQuorumCheckpoints",
+        "QuorumCheckpoint",
+    );
+    assert!(supply_gone >= 30 && quorum_gone >= 1);
+    // The historical view really needed that history.
+    assert!(governor.try_quorum(&info.vote_snapshot).is_err());
+
+    e.ledger().set_timestamp(2_301);
+    for voter in voters.iter().take(3) {
+        governor.cast_vote(&id, &1, &String::from_str(&e, "yes"), voter);
+    }
+    e.ledger().set_timestamp(2_601);
+    assert_eq!(governor.proposal_state(&id), ProposalState::Succeeded);
+    assert_eq!(governor.proposal(&id).state, ProposalState::Succeeded);
+    governor.queue(
+        &targets, &functions, &args, &desc_hash, &2_901_u32, &voters[0],
+    );
+    e.ledger().set_timestamp(2_901);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
+    assert_eq!(target.get_value(), 42);
+    assert_eq!(governor.proposal_state(&id), ProposalState::Executed);
+
+    // New proposals, mints and threshold checks keep working.
+    e.ledger().set_sequence_number(300);
+    token.mint(&owner, &Address::generate(&e));
+    e.ledger().set_sequence_number(301);
+    let next = governor.propose(
+        &targets,
+        &functions,
+        &args,
+        &String::from_str(&e, "next"),
+        &voters[1],
+    );
+    // ceil(32 * 10%) = 4.
+    assert_eq!(governor.proposal(&next).quorum, 4);
+    governor.set_proposal_threshold(&2);
+}
+
+#[test]
+fn quorum_does_not_follow_later_supply_or_rate_changes() {
+    let (e, token, _treasury, governor, target, owner) = setup();
+    let voters = mint_history(&e, &token, &owner, 110, 10);
+    e.ledger().set_sequence_number(200);
+    e.ledger().set_timestamp(2_000);
+    let targets = vec![&e, target.address.clone()];
+    let functions = vec![&e, symbol_short!("set_value")];
+    let id = governor.propose(
+        &targets,
+        &functions,
+        &proposal_args(&e),
+        &String::from_str(&e, "fixed quorum"),
+        &voters[0],
+    );
+    assert_eq!(governor.proposal(&id).quorum, 1);
+    // Supply grows tenfold and the rate goes to 50 % while it is open.
+    mint_history(&e, &token, &owner, 201, 90);
+    governor.set_quorum_bps(&5_000);
+    assert_eq!(governor.proposal(&id).quorum, 1);
+
+    e.ledger().set_timestamp(2_301);
+    governor.cast_vote(&id, &1, &String::from_str(&e, "yes"), &voters[0]);
+    e.ledger().set_timestamp(2_601);
+    assert_eq!(governor.proposal_state(&id), ProposalState::Succeeded);
+}
+
+#[test]
+fn a_mint_in_the_proposing_ledger_counts_toward_the_quorum_supply() {
+    let (e, token, _treasury, governor, target, owner) = setup();
+    let voters = mint_history(&e, &token, &owner, 110, 10);
+    e.ledger().set_sequence_number(200);
+    e.ledger().set_timestamp(2_000);
+    // Ten more tokens in the same ledger as the proposal: they cannot vote
+    // (the snapshot is ledger 199) but they count toward its quorum.
+    for _ in 0..10 {
+        token.mint(&owner, &Address::generate(&e));
+    }
+    let id = governor.propose(
+        &vec![&e, target.address.clone()],
+        &vec![&e, symbol_short!("set_value")],
+        &proposal_args(&e),
+        &String::from_str(&e, "same ledger"),
+        &voters[0],
+    );
+    let info = governor.proposal(&id);
+    assert_eq!(info.vote_snapshot, 199);
+    // ceil(20 * 10%) = 2, not ceil(10 * 10%) = 1.
+    assert_eq!(info.quorum, 2);
+}
+
+// ============================================================================
+// A DAO kept alive by the sweep alone (docs/STORAGE_DIET.md § 7). The test
+// host does not archive, so `archive_expired` does: it deletes every expired
+// persistent or temporary entry, and fails the test if the code or instance of
+// a contract the DAO runs on has expired.
+// ============================================================================
+
+const TESTNET_MAX_ENTRY_TTL: u32 = 3_110_400;
+const TESTNET_MIN_PERSISTENT_TTL: u32 = 120_960;
+
+fn advance_days(e: &Env, days: u32) {
+    e.ledger().with_mut(|l| {
+        l.sequence_number += days * common::ttl::DAY_IN_LEDGERS;
+        l.timestamp += days as u64 * 86_400;
+    });
+}
+
+/// `ExtendFootprintTTL` over the inventory and the six module instances, to
+/// the network maximum (what the Renewal tab and `renew-dao.mjs` submit).
+fn run_dao_sweep(e: &Env, f: &DaoFixture) -> usize {
+    run_dao_sweep_of(e, f, dao_renewal_inventory(e, &f.manager, &f.dao.token))
+}
+
+fn run_dao_sweep_of(e: &Env, f: &DaoFixture, listed: std::vec::Vec<(Address, Val)>) -> usize {
+    for (owner, key) in &listed {
+        e.as_contract(owner, || {
+            e.storage()
+                .persistent()
+                .extend_ttl(key, TESTNET_MAX_ENTRY_TTL, TESTNET_MAX_ENTRY_TTL)
+        });
+    }
+    for module in dao_modules(&f.dao) {
+        e.as_contract(&module, || {
+            e.deployer().extend_ttl_for_contract_instance(
+                module.clone(),
+                TESTNET_MAX_ENTRY_TTL,
+                TESTNET_MAX_ENTRY_TTL,
+            )
+        });
+    }
+    listed.len()
+}
+
+fn dao_modules(dao: &manager::DaoAddresses) -> [Address; 6] {
+    [
+        dao.token.clone(),
+        dao.metadata.clone(),
+        dao.auction.clone(),
+        dao.governor.clone(),
+        dao.treasury.clone(),
+        dao.marketplace.clone(),
+    ]
+}
+
+/// What `scripts/renew-code-ttl.mjs` does: code of every running hash, the
+/// Manager and Minter instances, the registry records `version()` reads, the
+/// platform Minter pointer and the latest-implementation records. The asset
+/// contract's instance is the network's; it is kept alive here as it is in use.
+fn run_platform_renewal(e: &Env, f: &DaoFixture) {
+    let max = TESTNET_MAX_ENTRY_TTL;
+    let mut running = dao_modules(&f.dao).to_vec();
+    running.push(f.manager.address.clone());
+    running.push(f.minter.clone());
+    for c in &running {
+        e.as_contract(c, || e.deployer().extend_ttl_for_code(c.clone(), max, max));
+    }
+    for c in [&f.manager.address, &f.minter, &f.payment.address()] {
+        e.as_contract(c, || {
+            e.deployer()
+                .extend_ttl_for_contract_instance(c.clone(), max, max)
+        });
+    }
+    let mut records: std::vec::Vec<Val> = std::vec::Vec::new();
+    for c in &running {
+        let hash = WasmHashProbeClient::new(e, c).wasm_hash();
+        records.push(ns_key(e, "Implementation", std::vec![hash.into_val(e)]));
+    }
+    records.push(ns_key(e, "PlatformMinter", std::vec![]));
+    for name in [
+        "Token",
+        "Metadata",
+        "Auction",
+        "Governor",
+        "Treasury",
+        "Marketplace",
+        "Manager",
+        "Minter",
+    ] {
+        records.push(ns_key(
+            e,
+            "LatestImplementation",
+            std::vec![String::from_str(e, name).into_val(e)],
+        ));
+    }
+    let m = &f.manager.address;
+    for key in records {
+        e.as_contract(m, || {
+            if e.storage().persistent().has(&key) {
+                e.storage().persistent().extend_ttl(&key, max, max);
+            }
+        });
+    }
+}
+
+#[soroban_sdk::contractclient(name = "WasmHashProbeClient")]
+#[allow(dead_code)]
+trait WasmHashProbe {
+    fn wasm_hash(e: Env) -> BytesN<32>;
+}
+
+/// Archive what has expired. Returns how many entries were archived.
+fn archive_expired(e: &Env, f: &DaoFixture) -> usize {
+    use soroban_sdk::xdr::{ContractDataDurability, LedgerKey, ScAddress, ScVal};
+    use soroban_sdk::TryFromVal;
+    let now = e.ledger().sequence();
+    let mut must_live: std::vec::Vec<ScAddress> =
+        dao_modules(&f.dao).iter().map(ScAddress::from).collect();
+    must_live.push(ScAddress::from(&f.manager.address));
+    must_live.push(ScAddress::from(&f.minter));
+    let running_code: std::vec::Vec<_> = dao_modules(&f.dao)
+        .iter()
+        .chain([f.manager.address.clone(), f.minter.clone()].iter())
+        .map(|c| WasmHashProbeClient::new(e, c).wasm_hash().to_array())
+        .collect();
+    let mut archived = 0;
+    for (key, (_, live_until)) in e.to_ledger_snapshot().ledger_entries.iter() {
+        let Some(live_until) = live_until else {
+            continue;
+        };
+        if *live_until >= now {
+            continue;
+        }
+        match key.as_ref() {
+            LedgerKey::ContractCode(c) => {
+                assert!(
+                    !running_code.contains(&c.hash.0),
+                    "running contract code archived"
+                );
+            }
+            LedgerKey::ContractData(d) if d.key == ScVal::LedgerKeyContractInstance => {
+                assert!(
+                    !must_live.contains(&d.contract),
+                    "instance {:?} archived",
+                    d.contract
+                );
+            }
+            // Auth nonces are host bookkeeping, not contract state.
+            LedgerKey::ContractData(d) if matches!(d.key, ScVal::LedgerKeyNonce(_)) => {}
+            LedgerKey::ContractData(d) => {
+                let owner = Address::try_from_val(e, &ScVal::Address(d.contract.clone())).unwrap();
+                let k = Val::try_from_val(e, &d.key).unwrap();
+                e.as_contract(&owner, || match d.durability {
+                    ContractDataDurability::Persistent => e.storage().persistent().remove(&k),
+                    ContractDataDurability::Temporary => e.storage().temporary().remove(&k),
+                });
+                archived += 1;
+            }
+            _ => {}
+        }
+    }
+    archived
+}
+
+#[test]
+fn a_dao_kept_alive_by_the_sweep_alone_works_after_a_year() {
+    let mut f = factory_dao();
+    f.e.ledger().with_mut(|l| {
+        l.max_entry_ttl = TESTNET_MAX_ENTRY_TTL;
+        l.min_persistent_entry_ttl = TESTNET_MIN_PERSISTENT_TTL;
+    });
+    let (minter_id, _) = shared_minter(&f);
+    f.manager.set_platform_minter(&minter_id);
+    f.minter = minter_id.clone();
+    let e = &f.e;
+    let token = DaoTokenContractClient::new(e, &f.dao.token);
+    let metadata = MetadataContractClient::new(e, &f.dao.metadata);
+    let treasury = DaoTreasuryContractClient::new(e, &f.dao.treasury);
+    let auction = DaoAuctionContractClient::new(e, &f.dao.auction);
+    let governor = DaoGovernorContractClient::new(e, &f.dao.governor);
+    let minter = minter::MinterContractClient::new(e, &minter_id);
+    let sac = StellarAssetClient::new(e, &f.payment.address());
+    let xlm = TokenClient::new(e, &f.payment.address());
+
+    // --- Day 0: artwork, launch, one unsold auction, treasury funds, a claim round.
+    metadata.add_properties(
+        &vec![
+            e,
+            String::from_str(e, "Background"),
+            String::from_str(e, "Body"),
+        ],
+        &vec![
+            e,
+            ItemParam {
+                property_id: 0,
+                name: String::from_str(e, "Blue"),
+                is_new_property: true,
+            },
+            ItemParam {
+                property_id: 1,
+                name: String::from_str(e, "Round"),
+                is_new_property: true,
+            },
+        ],
+        &IpfsGroup {
+            base_uri: String::from_str(e, "ipfs://art/"),
+            extension: String::from_str(e, ".png"),
+        },
+    );
+    // The founder token was minted before the artwork: seed it, as setup does.
+    metadata.regenerate(&0);
+    f.manager.launch_dao(
+        &f.dao.token,
+        &manager::LaunchConfig {
+            launch_auction: true,
+            launch_marketplace: true,
+            minter: minter_id.clone(),
+        },
+    );
+    let unsold = u32::try_from(auction.get_auction().token_id).unwrap();
+    advance(e, 400);
+    auction.settle_and_create_new();
+    assert_eq!(token.owner_of(&unsold), f.dao.treasury);
+    sac.mint(&f.dao.treasury, &500_000_000);
+    let erin = Address::generate(e);
+    let (root, erin_proof, _) = merkle_pair(e, &erin, 2, &Address::generate(e), 1);
+    minter.set_merkle_root(&f.dao.token, &root, &String::from_str(e, "ipfs://bafytree"));
+
+    // --- A year with no activity but the sweep and the platform renewal.
+    let mut archived = 0;
+    for days in [150, 150, 65] {
+        let swept = run_dao_sweep(e, &f);
+        run_platform_renewal(e, &f);
+        advance_days(e, days);
+        archived += archive_expired(e, &f);
+        std::println!("swept {swept} keys; {archived} entries archived so far");
+    }
+    // Member and history state did archive: the sweep is not covering by accident.
+    assert!(archived > 0);
+    assert!(
+        token.try_owner_of(&0).is_err(),
+        "the founder's ownership entry archived"
+    );
+
+    // --- Day 365: a fresh member wins the open auction, proposes and spends.
+    // An old token still renders from chain.
+    assert!(!token.token_uri(&0).is_empty());
+    let open = auction.get_auction();
+    advance(e, 400); // the auction opened on day 0 has long ended
+    auction.settle_and_create_new(); // no bids: to the treasury
+    let dave = Address::generate(e);
+    sac.mint(&dave, &100_000_000);
+    let lot = auction.get_auction().token_id;
+    assert_ne!(lot, open.token_id);
+    auction.create_bid(&dave, &lot, &20_000_000, &String::from_str(e, ""));
+    advance(e, 400);
+    auction.settle_and_create_new();
+    let lot = u32::try_from(lot).unwrap();
+    assert_eq!(token.owner_of(&lot), dave);
+    assert_eq!(metadata.get_attributes(&lot).len(), 3);
+    advance(e, 1);
+
+    let treasury_before = xlm.balance(&f.dao.treasury);
+    assert_eq!(treasury_before, 500_000_000 + 20_000_000);
+    let targets = vec![e, f.payment.address(), f.dao.token.clone()];
+    let functions = vec![e, Symbol::new(e, "transfer"), Symbol::new(e, "transfer")];
+    let args = vec![
+        e,
+        vec![
+            e,
+            f.dao.treasury.into_val(e),
+            dave.into_val(e),
+            10_000_000i128.into_val(e),
+        ],
+        vec![
+            e,
+            f.dao.treasury.into_val(e),
+            dave.into_val(e),
+            unsold.into_val(e),
+        ],
+    ];
+    let description = String::from_str(e, "Spend after a quiet year");
+    let desc_hash = description_hash(e, &description);
+    let id = governor.propose(&targets, &functions, &args, &description, &dave);
+    advance(e, 301);
+    governor.cast_vote(&id, &1, &String::from_str(e, ""), &dave);
+    advance(e, 301);
+    governor.queue(&targets, &functions, &args, &desc_hash, &0u32, &dave);
+    advance(e, 301);
+    treasury.execute(&targets, &functions, &args, &desc_hash);
+    assert_eq!(xlm.balance(&f.dao.treasury), treasury_before - 10_000_000);
+    assert_eq!(token.owner_of(&unsold), dave);
+
+    // The claim round set a year ago is still open.
+    minter.mint_merkle(&f.dao.token, &erin, &2u128, &erin_proof);
+    assert_eq!(token.balance(&erin), 2);
+}
+
+/// Negative control for the test above: the same quiet year with the DAO's
+/// holdings left out of the sweep loses the Treasury's balance (archived until
+/// someone restores it), so the holdings class is load-bearing.
+#[test]
+fn without_dao_holdings_in_the_sweep_an_idle_treasury_balance_archives() {
+    use soroban_sdk::TryFromVal;
+    let mut f = factory_dao();
+    f.e.ledger().with_mut(|l| {
+        l.max_entry_ttl = TESTNET_MAX_ENTRY_TTL;
+        l.min_persistent_entry_ttl = TESTNET_MIN_PERSISTENT_TTL;
+    });
+    let (minter_id, _) = shared_minter(&f);
+    f.manager.set_platform_minter(&minter_id);
+    f.minter = minter_id.clone();
+    let e = &f.e;
+    f.manager.launch_dao(&f.dao.token, &f.no_launch_modules());
+    StellarAssetClient::new(e, &f.payment.address()).mint(&f.dao.treasury, &500_000_000);
+    let xlm = TokenClient::new(e, &f.payment.address());
+    for days in [150, 150, 65] {
+        let without_holdings: std::vec::Vec<_> = dao_renewal_inventory(e, &f.manager, &f.dao.token)
+            .into_iter()
+            .filter(|(_, k)| {
+                let v = key_variant(&soroban_sdk::xdr::ScVal::try_from_val(e, k).unwrap());
+                v != "oz:Balance" && v != "oz:Owner"
+            })
+            .collect();
+        run_dao_sweep_of(e, &f, without_holdings);
+        run_platform_renewal(e, &f);
+        advance_days(e, days);
+        archive_expired(e, &f);
+    }
+    assert_eq!(xlm.balance(&f.dao.treasury), 0);
 }

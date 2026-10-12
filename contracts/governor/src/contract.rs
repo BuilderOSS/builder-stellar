@@ -186,6 +186,7 @@ impl DaoGovernorContract {
             vote_end: core.vote_end,
             eta: core.eta,
             state,
+            quorum: core.quorum,
         }
     }
 
@@ -247,8 +248,7 @@ impl DaoGovernorContract {
         // A threshold above the voting supply would lock governance. Only
         // checked once votes exist (setup may configure before minting).
         let token = governor::get_token_contract(e);
-        let total_supply = VotesClient::new(e, &token)
-            .get_total_supply_at_checkpoint(&e.ledger().sequence().saturating_sub(1));
+        let total_supply = VotesClient::new(e, &token).get_total_supply();
         if total_supply > 0 && proposal_threshold > total_supply {
             panic_with_error!(e, CustomGovernorError::InvalidProposalThreshold);
         }
@@ -351,6 +351,33 @@ impl DaoGovernorContract {
 
     pub fn quorum_bps(e: &Env) -> u32 {
         governor::get_quorum(e, e.ledger().sequence()) as u32
+    }
+
+    /// The quorum a proposal created now needs: `ceil(voting_supply *
+    /// quorum_bps / 10_000)` from the current supply and rate. Both reads hit
+    /// the latest checkpoint only (OZ checks it before any binary search), so
+    /// proposing never touches old checkpoints. Tokens minted earlier in the
+    /// same ledger count toward the supply but cannot vote (the vote snapshot
+    /// is the previous ledger): the requirement can only be higher, by those
+    /// tokens' share.
+    fn quorum_now(e: &Env) -> u128 {
+        let token = governor::get_token_contract(e);
+        let total_supply = VotesClient::new(e, &token).get_total_supply();
+        Self::quorum_of(e, total_supply, Self::quorum_bps(e) as u128)
+    }
+
+    fn quorum_of(e: &Env, total_supply: u128, quorum_bps: u128) -> u128 {
+        if quorum_bps == 0 || total_supply == 0 {
+            return 0;
+        }
+        // Ceiling division: never less than the intended percentage.
+        let Some(product) = total_supply.checked_mul(quorum_bps) else {
+            panic_with_error!(e, GovernorError::MathOverflow);
+        };
+        let Some(adjusted) = product.checked_add(BPS_ROUNDING_ADJUSTMENT) else {
+            panic_with_error!(e, GovernorError::MathOverflow);
+        };
+        adjusted / BPS_DENOMINATOR
     }
 
     /// Single source of truth for governance parameter bounds. Used by the
@@ -508,7 +535,7 @@ impl DaoGovernorContract {
             return ProposalState::Active;
         }
 
-        let quorum = Self::quorum(e, proposal.vote_snapshot);
+        let quorum = proposal.quorum;
         let counts = governor::get_proposal_vote_counts(e, proposal_id);
         let Some(participation) = counts.for_votes.checked_add(counts.abstain_votes) else {
             panic_with_error!(e, GovernorError::MathOverflow);
@@ -555,26 +582,16 @@ impl Governor for DaoGovernorContract {
     /// `ceil(voting_supply(ledger) * quorum_bps / 10_000)`. The voting supply
     /// excludes tokens held by the Treasury, Auction and Marketplace (see the
     /// token), so system-held tokens never inflate the requirement.
+    ///
+    /// A view for any past ledger. Proposals do not use it: each stores the
+    /// quorum it was created with. A lookup far in the past binary-searches
+    /// supply and quorum checkpoints, which may have archived (only the
+    /// latest of each is renewed by the DAO sweep); restore them to read.
     fn quorum(e: &Env, ledger: u32) -> u128 {
         let quorum_bps = governor::get_quorum(e, ledger);
         let token = governor::get_token_contract(e);
         let total_supply = VotesClient::new(e, &token).get_total_supply_at_checkpoint(&ledger);
-
-        if quorum_bps == 0 || total_supply == 0 {
-            return 0;
-        }
-
-        // Calculate quorum with ceiling division (rounds up)
-        // Formula: (total_supply * quorum_bps + (BPS_DENOMINATOR - 1)) / BPS_DENOMINATOR
-        // Example: 1% of 100 = (100 * 100 + 9999) / 10000 = 10999 / 10000 = 1 (rounds up)
-        // This ensures we never require less than the intended quorum percentage
-        let Some(product) = total_supply.checked_mul(quorum_bps) else {
-            panic_with_error!(e, GovernorError::MathOverflow);
-        };
-        let Some(adjusted) = product.checked_add(BPS_ROUNDING_ADJUSTMENT) else {
-            panic_with_error!(e, GovernorError::MathOverflow);
-        };
-        adjusted / BPS_DENOMINATOR
+        Self::quorum_of(e, total_supply, quorum_bps)
     }
 
     fn proposals_need_queuing(_e: &Env) -> bool {
@@ -702,6 +719,7 @@ impl Governor for DaoGovernorContract {
             eta: 0,
             state: ProposalState::Pending,
             seq,
+            quorum: Self::quorum_now(e),
         };
 
         // The id list entry first: set_proposal renews both.
@@ -741,7 +759,7 @@ impl Governor for DaoGovernorContract {
             proposal.vote_start,
             proposal.vote_end,
             proposal.vote_snapshot,
-            Self::quorum(e, proposal.vote_snapshot),
+            proposal.quorum,
         );
 
         proposal_id

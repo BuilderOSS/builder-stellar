@@ -139,7 +139,7 @@ pub struct PendingDao {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ManagerKey {
-    Admin,
+    ManagerAdmin,
     FactoryPaused,
     Implementation(BytesN<32>),
     LatestImplementation(String),
@@ -166,13 +166,13 @@ pub enum ManagerKey {
 pub fn get_admin(env: &Env) -> Option<Address> {
     env.storage()
         .instance()
-        .get(&common::ns(env, ManagerKey::Admin))
+        .get(&common::ns(env, ManagerKey::ManagerAdmin))
 }
 
 pub fn write_admin(env: &Env, admin: &Address) {
     env.storage()
         .instance()
-        .set(&common::ns(env, ManagerKey::Admin), admin);
+        .set(&common::ns(env, ManagerKey::ManagerAdmin), admin);
 }
 
 pub fn is_factory_paused(env: &Env) -> bool {
@@ -224,4 +224,74 @@ pub fn has_persistent(env: &Env, key: &ManagerKey) -> bool {
     env.storage()
         .persistent()
         .has(&common::ns(env, key.clone()))
+}
+
+/// Every `ManagerKey` variant with sample arguments, for the key guard test.
+/// `index` fails to compile when a variant is added: give it the next index,
+/// raise `VARIANTS` and add a sample to `all`, or the guard test fails.
+#[cfg(test)]
+pub(crate) mod key_samples {
+    extern crate std;
+    use super::*;
+    #[allow(unused_imports)]
+    use soroban_sdk::testutils::Address as _;
+    use soroban_sdk::{Env, IntoVal, Val};
+
+    pub const VARIANTS: usize = 18;
+
+    pub fn index(key: &ManagerKey) -> usize {
+        match key {
+            ManagerKey::ManagerAdmin => 0,
+            ManagerKey::FactoryPaused => 1,
+            ManagerKey::Implementation(_) => 2,
+            ManagerKey::LatestImplementation(_) => 3,
+            ManagerKey::UpgradeApproval(..) => 4,
+            ManagerKey::CurrentTokenWasm => 5,
+            ManagerKey::CurrentMetadataWasm => 6,
+            ManagerKey::CurrentAuctionWasm => 7,
+            ManagerKey::CurrentGovernorWasm => 8,
+            ManagerKey::CurrentTreasuryWasm => 9,
+            ManagerKey::CurrentMarketplaceWasm => 10,
+            ManagerKey::CurrentManagerWasm => 11,
+            ManagerKey::CurrentManagerVersion => 12,
+            ManagerKey::PendingDao(_) => 13,
+            ManagerKey::PendingAdmin => 14,
+            ManagerKey::PlatformMinter => 15,
+            ManagerKey::SlugToDao(_) => 16,
+            ManagerKey::DaoSlug(_) => 17,
+        }
+    }
+
+    #[allow(unused_variables)]
+    pub fn all(e: &Env) -> std::vec::Vec<Val> {
+        let a = soroban_sdk::Address::generate(e);
+        let id = soroban_sdk::BytesN::<32>::from_array(e, &[0; 32]);
+        let text = soroban_sdk::String::from_str(e, "x");
+        let keys = std::vec![
+            ManagerKey::ManagerAdmin,
+            ManagerKey::FactoryPaused,
+            ManagerKey::Implementation(id.clone()),
+            ManagerKey::LatestImplementation(text.clone()),
+            ManagerKey::UpgradeApproval(id.clone(), id.clone()),
+            ManagerKey::CurrentTokenWasm,
+            ManagerKey::CurrentMetadataWasm,
+            ManagerKey::CurrentAuctionWasm,
+            ManagerKey::CurrentGovernorWasm,
+            ManagerKey::CurrentTreasuryWasm,
+            ManagerKey::CurrentMarketplaceWasm,
+            ManagerKey::CurrentManagerWasm,
+            ManagerKey::CurrentManagerVersion,
+            ManagerKey::PendingDao(a.clone()),
+            ManagerKey::PendingAdmin,
+            ManagerKey::PlatformMinter,
+            ManagerKey::SlugToDao(text.clone()),
+            ManagerKey::DaoSlug(a.clone()),
+        ];
+        common::testutils::assert_every_variant_sampled(
+            "ManagerKey",
+            &keys.iter().map(index).collect::<std::vec::Vec<_>>(),
+            VARIANTS,
+        );
+        keys.into_iter().map(|k| k.into_val(e)).collect()
+    }
 }

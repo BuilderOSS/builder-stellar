@@ -1365,7 +1365,6 @@ fn wiring_getters_expose_every_module() {
 /// OpenZeppelin key the token links (the old `TokenKey::MetadataContract` did).
 #[test]
 fn storage_keys_do_not_collide() {
-    use crate::storage::TokenKey;
     use common::testutils::{
         assert_keys_disjoint, common_key_shapes, key_shape, shapes, OZ_SEQUENTIAL_SHAPES,
     };
@@ -1375,15 +1374,8 @@ fn storage_keys_do_not_collide() {
     let e = Env::default();
     let a = Address::generate(&e);
     let all = |keys: std::vec::Vec<Val>| keys.into_iter().map(|k| key_shape(&e, k)).collect();
-    let token = all(std::vec![
-        TokenKey::MintAuthority(a.clone()).into_val(&e),
-        TokenKey::MetadataContract.into_val(&e),
-        TokenKey::Manager.into_val(&e),
-        TokenKey::Treasury.into_val(&e),
-        TokenKey::Auction.into_val(&e),
-        TokenKey::Marketplace.into_val(&e),
-        TokenKey::Minter.into_val(&e),
-    ]);
+    // Every variant, checked exhaustively next to the enum.
+    let token = all(crate::storage::key_samples::all(&e));
     let nft = all(std::vec![
         NFTStorageKey::Owner(0).into_val(&e),
         NFTStorageKey::Balance(a.clone()).into_val(&e),

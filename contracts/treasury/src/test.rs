@@ -703,15 +703,14 @@ mod nested_authorization {
 #[test]
 fn storage_keys_do_not_collide() {
     use common::testutils::{assert_keys_disjoint, common_key_shapes, key_shape};
+    #[allow(unused_imports)]
     use soroban_sdk::{testutils::Address as _, Address, Env, IntoVal, Val};
     let e = Env::default();
     let _a = Address::generate(&e);
     let all = |keys: std::vec::Vec<Val>| -> std::vec::Vec<(std::string::String, u32)> {
         keys.into_iter().map(|k| key_shape(&e, k)).collect()
     };
-    let module = all(std::vec![
-        crate::storage::TreasuryKey::Governor.into_val(&e),
-        crate::storage::TreasuryKey::Manager.into_val(&e),
-    ]);
+    // Every variant, checked exhaustively next to the enum.
+    let module = all(crate::storage::key_samples::all(&e));
     assert_keys_disjoint(&[("TreasuryKey", module), ("common", common_key_shapes(&e))]);
 }

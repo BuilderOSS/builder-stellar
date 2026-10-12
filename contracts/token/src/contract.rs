@@ -6,7 +6,9 @@ use stellar_governance::votes::{
     transfer_voting_units, Votes, VotesStorageKey,
 };
 use stellar_tokens::non_fungible::{
-    emit_mint, sequential::increment_token_id, Base, NFTStorageKey,
+    emit_mint,
+    sequential::{increment_token_id, next_token_id},
+    Base, NFTStorageKey,
 };
 
 use common::clients::{MetadataHookClient, TokenUriClient};
@@ -193,8 +195,18 @@ impl DaoTokenContract {
     /// SEP-50 token metadata, built on-chain by the Metadata contract (a
     /// `data:application/json;base64` document). Panics if the token does not
     /// exist or has no artwork yet.
+    ///
+    /// Existence is `token_id < next id` (ids are sequential and never burned),
+    /// not `owner_of`: OpenZeppelin renews an ownership entry for 30 days per
+    /// touch, so reading it would make an idle holder's token unrenderable
+    /// once the entry archives.
     pub fn token_uri(e: &Env, token_id: u32) -> String {
-        Base::owner_of(e, token_id);
+        if token_id >= next_token_id(e) {
+            panic_with_error!(
+                e,
+                stellar_tokens::non_fungible::NonFungibleTokenError::NonExistentToken
+            );
+        }
         let metadata =
             common::error::require(e, Self::metadata(e), common::CommonError::ManagerNotSet);
         TokenUriClient::new(e, &metadata).token_uri(&token_id, &Base::name(e))

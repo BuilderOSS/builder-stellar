@@ -216,3 +216,47 @@ pub fn clear_pending_refund(e: &Env, bidder: &Address) {
         .persistent()
         .remove(&common::ns(e, DataKey::PendingRefund(bidder.clone())));
 }
+
+/// Every `DataKey` variant with sample arguments, for the key guard test.
+/// `index` fails to compile when a variant is added: give it the next index,
+/// raise `VARIANTS` and add a sample to `all`, or the guard test fails.
+#[cfg(test)]
+pub(crate) mod key_samples {
+    extern crate std;
+    use super::*;
+    #[allow(unused_imports)]
+    use soroban_sdk::testutils::Address as _;
+    use soroban_sdk::{Env, IntoVal, Val};
+
+    pub const VARIANTS: usize = 5;
+
+    pub fn index(key: &DataKey) -> usize {
+        match key {
+            DataKey::Config => 0,
+            DataKey::Auction => 1,
+            DataKey::Manager => 2,
+            DataKey::PaymentTokenLocked => 3,
+            DataKey::PendingRefund(_) => 4,
+        }
+    }
+
+    #[allow(unused_variables)]
+    pub fn all(e: &Env) -> std::vec::Vec<Val> {
+        let a = soroban_sdk::Address::generate(e);
+        let id = soroban_sdk::BytesN::<32>::from_array(e, &[0; 32]);
+        let text = soroban_sdk::String::from_str(e, "x");
+        let keys = std::vec![
+            DataKey::Config,
+            DataKey::Auction,
+            DataKey::Manager,
+            DataKey::PaymentTokenLocked,
+            DataKey::PendingRefund(a.clone()),
+        ];
+        common::testutils::assert_every_variant_sampled(
+            "DataKey",
+            &keys.iter().map(index).collect::<std::vec::Vec<_>>(),
+            VARIANTS,
+        );
+        keys.into_iter().map(|k| k.into_val(e)).collect()
+    }
+}

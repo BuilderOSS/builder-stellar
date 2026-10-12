@@ -976,3 +976,18 @@ fn minter_migrate_needs_a_newer_layout() {
         ))
     );
 }
+
+#[test]
+fn storage_keys_do_not_collide() {
+    use common::testutils::{assert_keys_disjoint, common_key_shapes, key_shapes};
+    use soroban_sdk::Env;
+    let e = Env::default();
+    // The Minter writes `common::upgrade` keys beside its own.
+    assert_keys_disjoint(&[
+        (
+            "MinterKey",
+            key_shapes(&e, crate::storage::key_samples::all(&e)),
+        ),
+        ("common", common_key_shapes(&e)),
+    ]);
+}

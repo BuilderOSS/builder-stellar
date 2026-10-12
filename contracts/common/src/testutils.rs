@@ -81,18 +81,86 @@ pub fn key_shape(e: &Env, key: soroban_sdk::Val) -> (std::string::String, u32) {
     }
 }
 
+/// Panic unless `indexes` (one per sample key, from the enum's exhaustive
+/// `index` match) covers every variant `0..variants`. Pair it with a match that
+/// fails to compile when a variant is added, so a new variant cannot reach the
+/// key guard tests unsampled.
+pub fn assert_every_variant_sampled(name: &str, indexes: &[usize], variants: usize) {
+    let covered: std::collections::BTreeSet<usize> = indexes.iter().copied().collect();
+    let all: std::collections::BTreeSet<usize> = (0..variants).collect();
+    assert_eq!(
+        covered, all,
+        "{name}: sample every variant (indexes from its exhaustive match)"
+    );
+}
+
+/// The shapes of a list of sample keys.
+pub fn key_shapes(
+    e: &Env,
+    keys: std::vec::Vec<soroban_sdk::Val>,
+) -> std::vec::Vec<(std::string::String, u32)> {
+    keys.into_iter().map(|k| key_shape(e, k)).collect()
+}
+
+/// Every `common` key (admin, upgrade, lifecycle), each enum checked
+/// exhaustively.
+pub fn common_keys(e: &Env) -> std::vec::Vec<soroban_sdk::Val> {
+    use crate::admin::AdminKey;
+    use crate::lifecycle::LifecycleKey;
+    use crate::upgrade::UpgradeKey;
+    use soroban_sdk::IntoVal;
+    let admin = [AdminKey::Admin];
+    assert_every_variant_sampled(
+        "AdminKey",
+        &admin
+            .iter()
+            .map(|k| match k {
+                AdminKey::Admin => 0,
+            })
+            .collect::<std::vec::Vec<_>>(),
+        1,
+    );
+    let upgrade = [UpgradeKey::CurrentHash, UpgradeKey::StorageVersion];
+    assert_every_variant_sampled(
+        "UpgradeKey",
+        &upgrade
+            .iter()
+            .map(|k| match k {
+                UpgradeKey::CurrentHash => 0,
+                UpgradeKey::StorageVersion => 1,
+            })
+            .collect::<std::vec::Vec<_>>(),
+        2,
+    );
+    let lifecycle = [LifecycleKey::Live];
+    assert_every_variant_sampled(
+        "LifecycleKey",
+        &lifecycle
+            .iter()
+            .map(|k| match k {
+                LifecycleKey::Live => 0,
+            })
+            .collect::<std::vec::Vec<_>>(),
+        1,
+    );
+    let mut keys: std::vec::Vec<soroban_sdk::Val> =
+        admin.into_iter().map(|k| k.into_val(e)).collect();
+    keys.extend(
+        upgrade
+            .into_iter()
+            .map(|k| -> soroban_sdk::Val { k.into_val(e) }),
+    );
+    keys.extend(
+        lifecycle
+            .into_iter()
+            .map(|k| -> soroban_sdk::Val { k.into_val(e) }),
+    );
+    keys
+}
+
 /// Shapes of the `common` keys a module uses (admin, upgrade, lifecycle).
 pub fn common_key_shapes(e: &Env) -> std::vec::Vec<(std::string::String, u32)> {
-    use soroban_sdk::IntoVal;
-    [
-        crate::admin::AdminKey::Admin.into_val(e),
-        crate::upgrade::UpgradeKey::CurrentHash.into_val(e),
-        crate::upgrade::UpgradeKey::StorageVersion.into_val(e),
-        crate::lifecycle::LifecycleKey::Live.into_val(e),
-    ]
-    .into_iter()
-    .map(|k| key_shape(e, k))
-    .collect()
+    key_shapes(e, common_keys(e))
 }
 
 /// OpenZeppelin key shapes the crate cannot construct (their enums are not

@@ -39,6 +39,13 @@ pub const CODE_TTL_THRESHOLD: u32 = 2 * DAY_IN_LEDGERS;
 /// it is used, sized so a caller pays a few days of rent at most.
 pub const CODE_TTL_EXTEND_TO: u32 = 4 * DAY_IN_LEDGERS;
 
+// Thresholds sit well below their targets, and instances never ask for more
+// than testnet's maximum entry TTL (3,110,400 ledgers, 2026-10-12).
+const _: () = assert!(INSTANCE_TTL_THRESHOLD * 2 < INSTANCE_TTL_EXTEND_TO);
+const _: () = assert!(CODE_TTL_THRESHOLD * 2 <= CODE_TTL_EXTEND_TO);
+const _: () = assert!(PERSISTENT_TTL_THRESHOLD * 2 < 3_110_400);
+const _: () = assert!(INSTANCE_TTL_EXTEND_TO < 3_110_400);
+
 /// Extend this contract's instance (60 -> 170 days) and, separately, its code
 /// (`CODE_TTL_THRESHOLD` -> `CODE_TTL_EXTEND_TO`).
 ///

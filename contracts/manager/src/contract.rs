@@ -1217,6 +1217,24 @@ impl ManagerContract {
         Ok(implementation)
     }
 
+    /// The six module hashes `create_dao` deploys from, or `None` before
+    /// `set_current_implementations`. Raw values: a hash revoked since it was
+    /// set is still returned (DAOs created from it still run it), which is what
+    /// platform code renewal needs. `create_dao` itself rechecks each one.
+    pub fn current_implementations(env: Env) -> Option<DaoWasmHashes> {
+        let read = |key: ManagerKey| -> Option<BytesN<32>> {
+            env.storage().instance().get(&common::ns(&env, key))
+        };
+        Some(DaoWasmHashes {
+            token: read(ManagerKey::CurrentTokenWasm)?,
+            metadata: read(ManagerKey::CurrentMetadataWasm)?,
+            auction: read(ManagerKey::CurrentAuctionWasm)?,
+            governor: read(ManagerKey::CurrentGovernorWasm)?,
+            treasury: read(ManagerKey::CurrentTreasuryWasm)?,
+            marketplace: read(ManagerKey::CurrentMarketplaceWasm)?,
+        })
+    }
+
     /// Load a `Current*Wasm` hash, verify it is an active implementation with the
     /// expected name, and return it with its registered version.
     fn current_wasm(

@@ -126,3 +126,45 @@ pub fn mark_merkle_claimed(env: &Env, token_id: &Address, round: u32, recipient:
         &true,
     );
 }
+
+/// Every `MinterKey` variant with sample arguments, for the key guard test.
+/// `index` fails to compile when a variant is added: give it the next index,
+/// raise `VARIANTS` and add a sample to `all`, or the guard test fails.
+#[cfg(test)]
+pub(crate) mod key_samples {
+    extern crate std;
+    use super::*;
+    #[allow(unused_imports)]
+    use soroban_sdk::testutils::Address as _;
+    use soroban_sdk::{Env, IntoVal, Val};
+
+    pub const VARIANTS: usize = 4;
+
+    pub fn index(key: &MinterKey) -> usize {
+        match key {
+            MinterKey::Manager => 0,
+            MinterKey::MerkleRoot(_) => 1,
+            MinterKey::MerkleRound(_) => 2,
+            MinterKey::MerkleClaimed(..) => 3,
+        }
+    }
+
+    #[allow(unused_variables)]
+    pub fn all(e: &Env) -> std::vec::Vec<Val> {
+        let a = soroban_sdk::Address::generate(e);
+        let id = soroban_sdk::BytesN::<32>::from_array(e, &[0; 32]);
+        let text = soroban_sdk::String::from_str(e, "x");
+        let keys = std::vec![
+            MinterKey::Manager,
+            MinterKey::MerkleRoot(a.clone()),
+            MinterKey::MerkleRound(a.clone()),
+            MinterKey::MerkleClaimed(a.clone(), 0, a.clone()),
+        ];
+        common::testutils::assert_every_variant_sampled(
+            "MinterKey",
+            &keys.iter().map(index).collect::<std::vec::Vec<_>>(),
+            VARIANTS,
+        );
+        keys.into_iter().map(|k| k.into_val(e)).collect()
+    }
+}

@@ -190,15 +190,11 @@ impl MetadataContract {
         // Check authorization
         Self::require_admin(&env);
 
-        // Reset the counts and drop the (<= 16) property names. Item pages and
-        // the IPFS group vector are not deleted: every read is bounded by the
-        // counts, and appends start a fresh page or vector at a count of zero,
-        // so stale entries are never read and get overwritten as data is
-        // added. Reset is therefore O(#properties), not O(#items).
+        // Reset the counts. Names, item pages and the IPFS group vector are
+        // not deleted: every read is bounded by the counts, and appends start
+        // a fresh vector or page at a count of zero, so stale entries are
+        // never read and get overwritten as data is added. Reset is O(1).
         let old_count = get_property_count(&env);
-        for i in 0..old_count {
-            remove_property_name(&env, i);
-        }
         set_item_counts(&env, &Vec::new(&env));
         set_ipfs_group_count(&env, 0);
 
@@ -354,14 +350,13 @@ impl MetadataContract {
     /// enough for a client to resume artwork setup from chain state alone.
     pub fn property_headers(env: Env) -> Vec<PropertyHeader> {
         let counts = get_item_counts(&env);
+        let names = get_property_names(&env);
         let mut out = Vec::new(&env);
-        for i in 0..counts.len() {
-            if let Some(name) = get_property_name(&env, i) {
-                out.push_back(PropertyHeader {
-                    name,
-                    item_count: counts.get(i).unwrap(),
-                });
-            }
+        for (i, name) in names.iter().enumerate() {
+            out.push_back(PropertyHeader {
+                name,
+                item_count: counts.get(i as u32).unwrap(),
+            });
         }
         out
     }
@@ -490,6 +485,7 @@ impl MetadataContract {
         json.push_u32(token_id);
         json.push(b"\",\"attributes\":[");
         let num_properties = attributes.get(0).unwrap_or(0);
+        let names = get_property_names(&env);
         let mut first = true;
         for i in 0..num_properties {
             let Some(index) = attributes.get(i + 1) else {
@@ -498,10 +494,7 @@ impl MetadataContract {
             if index >= counts.get(i).unwrap_or(0) {
                 continue;
             }
-            let (Some(property), Some(item)) = (
-                get_property_name(&env, i),
-                get_item_page(&env, i, index / ITEMS_PER_PAGE).get(index % ITEMS_PER_PAGE),
-            ) else {
+            let (Some(property), Some(item)) = (names.get(i), get_item_name(&env, i, index)) else {
                 continue;
             };
             if !first {
@@ -511,7 +504,7 @@ impl MetadataContract {
             json.push(b"{\"trait_type\":\"");
             json.push_string(&property);
             json.push(b"\",\"value\":\"");
-            json.push_string(&item.name);
+            json.push_string(&item);
             json.push(b"\"}");
         }
         json.push(b"]}");
@@ -551,7 +544,7 @@ impl MetadataContract {
         }
 
         // Check if not too many properties
-        if num_stored_properties + num_new_properties > 16 {
+        if num_stored_properties + num_new_properties > MAX_PROPERTIES {
             return Err(Error::TooManyProperties);
         }
 
@@ -566,12 +559,16 @@ impl MetadataContract {
 
         let reference_slot = Self::append_ipfs_group(env, &ipfs_group)?;
 
-        for i in 0..num_new_properties {
-            let name = names.get(i).unwrap();
-            let index = num_stored_properties + i;
-            counts.push_back(0);
-            set_property_name(env, index, &name);
-            emit_property_added(env, index, &name);
+        if num_new_properties > 0 {
+            let mut stored_names = get_property_names(env);
+            for i in 0..num_new_properties {
+                let name = names.get(i).unwrap();
+                let index = num_stored_properties + i;
+                counts.push_back(0);
+                stored_names.push_back(name.clone());
+                emit_property_added(env, index, &name);
+            }
+            set_property_names(env, &stored_names);
         }
         let total_properties = counts.len();
 
