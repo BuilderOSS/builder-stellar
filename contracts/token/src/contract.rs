@@ -46,7 +46,8 @@ impl DaoTokenContract {
     ///   characters because the on-chain token JSON copies it verbatim)
     /// * `metadata` - metadata contract called on every mint to seed artwork
     /// * `manager` - Manager contract (upgrade approvals, launch)
-    /// * `current_hash`, `version` - this implementation's WASM hash and release
+    /// * `current_hash` - this implementation's WASM hash (the release version is
+    ///   read from the Manager registry, see `version`)
     pub fn __constructor(
         e: &Env,
         admin: Address,
@@ -58,7 +59,6 @@ impl DaoTokenContract {
         metadata: Address,
         manager: Address,
         current_hash: BytesN<32>,
-        version: String,
     ) {
         Self::set_name_and_symbol(e, &name, &symbol);
         common::admin::init(e, &admin);
@@ -68,8 +68,8 @@ impl DaoTokenContract {
         instance.set(&common::ns(e, TokenKey::Treasury), &treasury);
         instance.set(&common::ns(e, TokenKey::Auction), &auction);
         instance.set(&common::ns(e, TokenKey::Marketplace), &marketplace);
-        common::upgrade::init(e, &current_hash, &version, STORAGE_VERSION);
-        emit_token_initialized(e, &admin, &name, &symbol, &version);
+        common::upgrade::init(e, &current_hash, STORAGE_VERSION);
+        emit_token_initialized(e, &admin, &name, &symbol);
     }
 
     pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
@@ -83,15 +83,9 @@ impl DaoTokenContract {
         common::upgrade::migrate(e, STORAGE_VERSION);
     }
 
-    /// Re-reads the version for the active WASM hash from the Manager registry.
-    pub fn sync_version(e: &Env) {
-        common::admin::require_admin(e);
-        common::upgrade::sync_version(e, &Self::manager(e));
-    }
-
     /// Returns the release version registered for the active token WASM.
     pub fn version(e: &Env) -> String {
-        common::upgrade::version(e)
+        common::upgrade::version(e, &Self::manager(e))
     }
 
     /// Returns the active token WASM hash.

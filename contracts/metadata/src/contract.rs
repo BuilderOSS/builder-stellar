@@ -70,7 +70,6 @@ impl MetadataContract {
         property_names: Vec<String>,
         items: Vec<ItemParam>,
         ipfs_group: IpfsGroup,
-        version: String,
     ) {
         if let Err(err) = Self::check_text(&renderer_base, common::MAX_STRING_LENGTH) {
             soroban_sdk::panic_with_error!(&env, err);
@@ -97,9 +96,9 @@ impl MetadataContract {
         env.storage()
             .instance()
             .set(&common::ns(&env, DataKey::Treasury), &treasury);
-        common::upgrade::init(&env, &current_hash, &version, STORAGE_VERSION);
+        common::upgrade::init(&env, &current_hash, STORAGE_VERSION);
 
-        emit_metadata_initialized(&env, &token, &renderer_base, &version, &admin);
+        emit_metadata_initialized(&env, &token, &renderer_base, &admin);
     }
 
     pub fn upgrade(env: Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
@@ -125,17 +124,11 @@ impl MetadataContract {
     }
 
     pub fn version(env: Env) -> String {
-        common::upgrade::version(&env)
+        common::upgrade::version(&env, &Self::manager(&env))
     }
 
     pub fn wasm_hash(env: Env) -> BytesN<32> {
         common::upgrade::current_hash(&env)
-    }
-
-    pub fn sync_version(env: Env) {
-        common::admin::require_admin(&env);
-        let manager = Self::manager(&env);
-        common::upgrade::sync_version(&env, &manager);
     }
 
     fn manager(env: &Env) -> Address {

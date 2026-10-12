@@ -10,7 +10,7 @@ use crate::{
     admin::{self, AdminChanged},
     lifecycle,
     testutils::{empty_wasm, MockManager, MockManagerClient},
-    upgrade::{self, Migrated, Upgraded, VersionSynced},
+    upgrade::{self, Migrated, Upgraded},
     CommonError,
 };
 
@@ -19,8 +19,8 @@ struct Harness;
 
 #[contractimpl]
 impl Harness {
-    pub fn __constructor(e: Env, hash: BytesN<32>, version: String, admin: Address) {
-        upgrade::init(&e, &hash, &version, 1);
+    pub fn __constructor(e: Env, hash: BytesN<32>, admin: Address) {
+        upgrade::init(&e, &hash, 1);
         admin::init(&e, &admin);
     }
     pub fn migrate(e: Env, code_storage_version: u32) -> u32 {
@@ -41,14 +41,11 @@ impl Harness {
     pub fn upgrade(e: Env, manager: Address, from: BytesN<32>, to: BytesN<32>) {
         upgrade::apply(&e, &manager, &from, &to);
     }
-    pub fn sync_version(e: Env, manager: Address) -> String {
-        upgrade::sync_version(&e, &manager)
+    pub fn state(e: Env, manager: Address) -> (BytesN<32>, String) {
+        (upgrade::current_hash(&e), upgrade::version(&e, &manager))
     }
-    pub fn state(e: Env) -> (BytesN<32>, String) {
-        (upgrade::current_hash(&e), upgrade::version(&e))
-    }
-    pub fn version(e: Env) -> String {
-        upgrade::version(&e)
+    pub fn version(e: Env, manager: Address) -> String {
+        upgrade::version(&e, &manager)
     }
     pub fn need_live(e: Env) {
         lifecycle::require_live(&e);
@@ -70,15 +67,16 @@ fn setup() -> (Env, HarnessClient<'static>, MockManagerClient<'static>) {
     e.mock_all_auths();
     let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
     let admin = Address::generate(&e);
-    let c = HarnessClient::new(
-        &e,
-        &e.register(Harness, (h(&e, 1), String::from_str(&e, "0.1.0"), admin)),
-    );
+    let c = HarnessClient::new(&e, &e.register(Harness, (h(&e, 1), admin)));
+    mgr.register(&h(&e, 1), &String::from_str(&e, "0.1.0"));
     (e, c, mgr)
 }
 
-fn assert_unchanged(e: &Env, c: &HarnessClient) {
-    assert_eq!(c.state(), (h(e, 1), String::from_str(e, "0.1.0")));
+fn assert_unchanged(e: &Env, c: &HarnessClient, mgr: &MockManagerClient) {
+    assert_eq!(
+        c.state(&mgr.address),
+        (h(e, 1), String::from_str(e, "0.1.0"))
+    );
 }
 
 #[test]
@@ -88,7 +86,7 @@ fn upgrade_hash_mismatch() {
     mgr.register(&h(&e, 2), &String::from_str(&e, "0.2.0"));
     let r = c.try_upgrade(&mgr.address, &h(&e, 9), &h(&e, 2));
     assert_eq!(r.err().unwrap().unwrap(), CommonError::HashMismatch.into());
-    assert_unchanged(&e, &c);
+    assert_unchanged(&e, &c, &mgr);
 }
 
 #[test]
@@ -100,7 +98,7 @@ fn upgrade_not_approved() {
         r.err().unwrap().unwrap(),
         CommonError::UpgradeNotApproved.into()
     );
-    assert_unchanged(&e, &c);
+    assert_unchanged(&e, &c, &mgr);
 }
 
 #[test]
@@ -112,7 +110,7 @@ fn upgrade_missing_registry_entry() {
         r.err().unwrap().unwrap(),
         CommonError::ImplementationNotFound.into()
     );
-    assert_unchanged(&e, &c);
+    assert_unchanged(&e, &c, &mgr);
 }
 
 #[test]
@@ -135,24 +133,26 @@ fn upgrade_ok_updates_hash_and_version() {
     // Contract code is replaced; verify the stored keys directly.
     e.as_contract(&c.address, || {
         assert_eq!(upgrade::current_hash(&e), to);
-        assert_eq!(upgrade::version(&e), String::from_str(&e, "0.2.0"));
+        assert_eq!(
+            upgrade::version(&e, &mgr.address),
+            String::from_str(&e, "0.2.0")
+        );
     });
 }
 
+/// D6: nothing to sync. `version()` follows the registry record of the
+/// running hash on every read, and fails loudly for an unknown hash.
 #[test]
-fn sync_version_reads_registry() {
+fn version_is_read_from_the_registry() {
     let (e, c, mgr) = setup();
-    assert_eq!(c.version(), String::from_str(&e, "0.1.0"));
+    assert_eq!(c.version(&mgr.address), String::from_str(&e, "0.1.0"));
     mgr.register(&h(&e, 1), &String::from_str(&e, "0.1.1"));
-    assert_eq!(c.sync_version(&mgr.address), String::from_str(&e, "0.1.1"));
+    assert_eq!(c.version(&mgr.address), String::from_str(&e, "0.1.1"));
+    let empty = MockManagerClient::new(&e, &e.register(MockManager, ()));
     assert_eq!(
-        e.events().all().events().last().unwrap(),
-        &VersionSynced {
-            version: String::from_str(&e, "0.1.1"),
-        }
-        .to_xdr(&e, &c.address)
+        c.try_version(&empty.address).err().unwrap().unwrap(),
+        CommonError::ImplementationNotFound.into()
     );
-    assert_eq!(c.version(), String::from_str(&e, "0.1.1"));
 }
 
 #[test]

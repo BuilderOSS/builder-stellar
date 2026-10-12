@@ -30,7 +30,6 @@ impl MarketplaceContract {
         payment_asset: Address,
         manager: Address,
         current_hash: BytesN<32>,
-        version: String,
         default_secondary_fee_bps: u32,
     ) {
         if default_secondary_fee_bps > MAX_FEE_BPS {
@@ -48,14 +47,13 @@ impl MarketplaceContract {
             },
         );
         common::admin::init(e, &admin);
-        common::upgrade::init(e, &current_hash, &version, STORAGE_VERSION);
+        common::upgrade::init(e, &current_hash, STORAGE_VERSION);
         emit_marketplace_initialized(
             e,
             &token,
             &admin,
             &treasury,
             &payment_asset,
-            &version,
             default_secondary_fee_bps,
         );
     }
@@ -471,16 +469,11 @@ impl MarketplaceContract {
     }
 
     pub fn version(e: &Env) -> String {
-        common::upgrade::version(e)
+        common::upgrade::version(e, &Self::get_config(e).manager)
     }
 
     pub fn wasm_hash(e: &Env) -> BytesN<32> {
         common::upgrade::current_hash(e)
-    }
-
-    pub fn sync_version(e: &Env) {
-        let (config, _) = Self::require_admin(e);
-        common::upgrade::sync_version(e, &config.manager);
     }
 
     /// Require the admin's auth (launch admin in setup, Treasury once live);

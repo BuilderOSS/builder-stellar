@@ -11,11 +11,11 @@ check_authorization(nodes: Vec<AuthNode>) -> u32   // read-only, simulate before
 governor() -> Address
 admin() -> Address
 launch(treasury: Address)                           // Manager only, one shot
-upgrade(from_hash, to_hash); migrate(); sync_version()
+upgrade(from_hash, to_hash); migrate()
 version(); wasm_hash(); storage_version()
 ```
 
-The constructor receives the admin (launch admin), Governor, Manager, current hash, and version. Governor wiring is immutable.
+The constructor receives the admin (launch admin), Governor, Manager and current hash. Governor wiring is immutable.
 
 Anyone may submit `execute` once the proposal is Queued, past ETA, and unexpired:
 
@@ -27,7 +27,7 @@ Any failure reverts the entire transaction, including consumption and earlier ac
 
 ## Actions aimed at the Treasury
 
-- `upgrade(from_hash, to_hash)`, `migrate()`, `sync_version()`: internal dispatch (no re-entry). Anything else fails with `UnknownSelfCall` (7602); bad arguments with `InvalidSelfCallArgs` (7603).
+- `upgrade(from_hash, to_hash)`, `migrate()`: internal dispatch (no re-entry). Anything else fails with `UnknownSelfCall` (7602); bad arguments with `InvalidSelfCallArgs` (7603).
 - `authorize(nodes: Vec<AuthNode>)`: adds authorization trees to the **next** action. Use it when the next call needs the Treasury's authorization deeper than the Treasury's own call, for example `marketplace.buy(token, treasury, max_price)` (the marketplace pulls the payment from the Treasury) or a router swap. `AuthNode { contract, fn_name, args, sub }` describes one exact invocation and the invocations below it. Trees are part of the proposal, so voters approve them. A dangling, repeated, empty or malformed `authorize`, or one followed by a self call, fails with `InvalidAuthorization` (7605). Bounds: depth 4, 16 nodes.
 
 Example: buy listing `nft` at price 1,000 with a 2.5% fee:

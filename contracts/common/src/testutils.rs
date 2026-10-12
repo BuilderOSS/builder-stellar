@@ -80,7 +80,6 @@ pub fn common_key_shapes(e: &Env) -> std::vec::Vec<(std::string::String, u32)> {
     [
         crate::admin::AdminKey::Admin.into_val(e),
         crate::upgrade::UpgradeKey::CurrentHash.into_val(e),
-        crate::upgrade::UpgradeKey::CurrentVersion.into_val(e),
         crate::upgrade::UpgradeKey::StorageVersion.into_val(e),
         crate::lifecycle::LifecycleKey::Live.into_val(e),
     ]
@@ -140,9 +139,8 @@ pub const OZ_KEY_SHAPES: &[(&str, u32)] = &[
     ("NumTotalSupplyCheckpoints", 1),
     ("TotalSupplyCheckpoint", 2),
     ("VotingUnits", 2),
-    // GovernorStorageKey
-    ("Name", 1),
-    ("Version", 1),
+    // GovernorStorageKey (`Name` and `Version` are never written: the
+    // governor overrides `name()` and `version()`, D6)
     ("VotingDelay", 1),
     ("VotingPeriod", 1),
     ("ProposalThreshold", 1),

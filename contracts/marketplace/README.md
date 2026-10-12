@@ -32,8 +32,8 @@ The seller approves the Marketplace (`Token.approve`), then lists with seller au
 
 Price must be positive; expiry must be future, with no maximum. The fee is 0–2,500 bps (25%, `common::MAX_FEE_BPS`; `InvalidFee`). Primary `listing_id` and secondary `token_id` are separate keyspaces.
 
-The constructor receives Token, the admin (launch admin), Treasury, payment asset, Manager, current hash/version, and default secondary fee. Manager-only `launch(treasury, open, expected_payment_asset)` validates wiring/asset, hands the admin to the Treasury (`AdminChanged`), sets open/paused state and emits `MarketplaceLaunched`.
+The constructor receives Token, the admin (launch admin), Treasury, payment asset, Manager, current hash and default secondary fee. Manager-only `launch(treasury, open, expected_payment_asset)` validates wiring/asset, hands the admin to the Treasury (`AdminChanged`), sets open/paused state and emits `MarketplaceLaunched`.
 
-Admin functions (`pause`, `unpause`, `set_payment_asset`, `set_secondary_fee_bps`, `upgrade`, `migrate`, `sync_version`) require the launch admin in setup and the Treasury after launch; their events carry the admin as `changed_by`. Pausing blocks new listings/purchases, not cancellation or expiry. Terminal listings are deleted; history lives in events/indexed views. Listing TTL is extended to 30 days when fewer than 7 remain.
+Admin functions (`pause`, `unpause`, `set_payment_asset`, `set_secondary_fee_bps`, `upgrade`, `migrate`) require the launch admin in setup and the Treasury after launch; their events carry the admin as `changed_by`. Pausing blocks new listings/purchases, not cancellation or expiry. Terminal listings are deleted; history lives in events/indexed views. Listing TTL is extended to 30 days when fewer than 7 remain.
 
 Errors: block 7700. [Events](src/events.rs), [implementation](src/contract.rs), [storage](src/storage.rs). `cargo test -p marketplace`; cross-contract sales tests live in [dao-e2e](../e2e/README.md).

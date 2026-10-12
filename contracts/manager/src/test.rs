@@ -486,7 +486,7 @@ fn test_revoked_source_can_be_approved_and_migrate_away() {
     client.revoke_implementation(&b);
     client.approve_upgrade(&b, &c);
     assert!(client.is_upgrade_approved(&b, &c));
-    // The revoked version is still readable for sync_version.
+    // The revoked version is still readable, so the module's version() keeps working.
     assert_eq!(
         client.get_implementation_version(&b),
         Some(String::from_str(&env, "2"))
@@ -653,12 +653,12 @@ fn stub_wasm(env: &Env, tag: &str, ctor_arity: usize, init_arity: usize) -> Byte
 /// sets them as the factory defaults.
 fn register_stub_implementations(env: &Env, client: &ManagerContractClient) {
     let specs: [(&str, usize, usize); 6] = [
-        ("Token", 10, 0),
-        ("Metadata", 11, 0),
-        ("Auction", 11, 0),
-        ("Governor", 11, 0),
-        ("Treasury", 5, 0),
-        ("Marketplace", 8, 0),
+        ("Token", 9, 0),
+        ("Metadata", 10, 0),
+        ("Auction", 10, 0),
+        ("Governor", 10, 0),
+        ("Treasury", 4, 0),
+        ("Marketplace", 7, 0),
     ];
     let mut hashes = std::vec::Vec::new();
     for (name, ctor, init) in specs {
@@ -1087,7 +1087,6 @@ mod real_dao {
         let manager = client.address.clone();
         let launch_admin = Address::generate(&env);
         let hash = BytesN::from_array(&env, &[0u8; 32]);
-        let version = String::from_str(&env, "0.1.0");
 
         let addresses = crate::storage::DaoAddresses {
             token: Address::generate(&env),
@@ -1114,7 +1113,6 @@ mod real_dao {
                 addresses.metadata.clone(),
                 manager.clone(),
                 hash.clone(),
-                version.clone(),
             ),
         );
         env.register_at(
@@ -1134,7 +1132,6 @@ mod real_dao {
                     base_uri: String::from_str(&env, ""),
                     extension: String::from_str(&env, ""),
                 },
-                version.clone(),
             ),
         );
         env.register_at(
@@ -1145,7 +1142,6 @@ mod real_dao {
                 addresses.governor.clone(),
                 manager.clone(),
                 hash.clone(),
-                version.clone(),
             ),
         );
         env.register_at(
@@ -1162,7 +1158,6 @@ mod real_dao {
                 1_000_u32,
                 manager.clone(),
                 hash.clone(),
-                version.clone(),
             ),
         );
         env.register_at(
@@ -1179,7 +1174,6 @@ mod real_dao {
                 payment.clone(),
                 manager.clone(),
                 hash.clone(),
-                version.clone(),
             ),
         );
         env.register_at(
@@ -1192,7 +1186,6 @@ mod real_dao {
                 payment.clone(),
                 manager.clone(),
                 hash.clone(),
-                version.clone(),
                 250_u32,
             ),
         );
@@ -1606,7 +1599,6 @@ mod real_dao {
                 Address::generate(env),
                 dao.client.address.clone(),
                 BytesN::from_array(env, &[0u8; 32]),
-                String::from_str(env, "0.1.0"),
             ),
         );
         let mut addresses = dao.addresses.clone();
@@ -1973,9 +1965,9 @@ fn create_dao_emits_dao_created_with_module_wasm_hashes() {
 }
 
 /// Module on a REVOKED hash can still migrate to an approved active hash, and
-/// can `sync_version`; a revoked TARGET is rejected by the module.
+/// still answers `version()`; a revoked TARGET is rejected by the module.
 #[test]
-fn module_on_revoked_hash_migrates_away_and_syncs() {
+fn module_on_revoked_hash_migrates_away_and_keeps_its_version() {
     use common::testutils::empty_wasm;
     use common::CommonError;
     use marketplace::MarketplaceContractClient;
@@ -1999,7 +1991,6 @@ fn module_on_revoked_hash_migrates_away_and_syncs() {
                 Address::generate(&env),
                 client.address.clone(),
                 b.clone(),
-                String::from_str(&env, "stale"),
                 250u32,
             ),
         );
@@ -2013,8 +2004,7 @@ fn module_on_revoked_hash_migrates_away_and_syncs() {
     client.approve_upgrade(&b, &c);
     client.revoke_implementation(&bad);
 
-    // sync_version still works for a module whose current hash is revoked.
-    m.sync_version();
+    // version() still answers for a module whose current hash is revoked.
     assert_eq!(m.version(), String::from_str(&env, "0.2.0"));
 
     // Revoked target is rejected.
@@ -2030,7 +2020,7 @@ fn module_on_revoked_hash_migrates_away_and_syncs() {
     env.as_contract(&id, || {
         assert_eq!(common::upgrade::current_hash(&env), c);
         assert_eq!(
-            common::upgrade::version(&env),
+            common::upgrade::version(&env, &client.address),
             String::from_str(&env, "0.3.0")
         );
     });

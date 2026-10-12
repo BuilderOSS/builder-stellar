@@ -23,7 +23,7 @@ quorum(ledger); quorum_bps(); has_voted(id, account)
 set_voting_delay(v); set_voting_period(v); set_queue_delay(v)
 set_proposal_threshold(v); set_quorum_bps(v)
 admin(); treasury(); launch(treasury)
-upgrade(from_hash, to_hash); migrate(); sync_version(); version(); wasm_hash(); storage_version()
+upgrade(from_hash, to_hash); migrate(); version(); wasm_hash(); storage_version()
 ```
 
 `targets` is `Vec<Address>`, `functions` is `Vec<Symbol>`, `args` is `Vec<Vec<Val>>`, and `description_hash` is `BytesN<32>`. `vote_type` is 0 against, 1 for, 2 abstain.

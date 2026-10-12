@@ -17,6 +17,6 @@ Token calls `on_minted(token_id)` (emits `SeedGenerated`) / `on_minted_batch(fir
 - `get_properties` and `get_ipfs_data` assemble entire collections; prefer bounded reads.
 - `get_attributes(token_id)`, `get_settings`, `token`, `renderer_base`, `description`, `contract_image`, `project_uri`.
 - Permissionless `bump_artwork_ttl(start, limit)` (≤50) walks items in property order, then IPFS groups, and returns the next start. Repeat to cover the range.
-- Manager-only `launch(treasury)` (`AdminChanged`, `MetadataLaunched`); `admin()`; admin `upgrade(from_hash, to_hash)` / `migrate()` / `sync_version()`; `version()`, `wasm_hash()`, `storage_version()`.
+- Manager-only `launch(treasury)` (`AdminChanged`, `MetadataLaunched`); `admin()`; admin `upgrade(from_hash, to_hash)` / `migrate()`; `version()` (read from the Manager registry), `wasm_hash()`, `storage_version()`.
 
 Errors: block 7300. See [TTL policy](../../docs/TTL_ECONOMICS.md) and [web artwork setup](../../docs/ARTWORK_PLAYGROUND_INTEGRATION.md). `cargo test -p metadata`. [Implementation](src/contract.rs), [storage](src/storage.rs), [types](../../packages/metadata-bindings/src/types.ts).

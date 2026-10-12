@@ -46,7 +46,6 @@ pub trait DaoAuctionContractTrait {
         payment_token: Address,
         manager: Address,
         current_hash: BytesN<32>,
-        version: String,
     );
 
     /// Create a bid with SAC token. `comment` is optional (empty for none),
@@ -89,7 +88,6 @@ pub trait DaoAuctionContractTrait {
     fn wasm_hash(e: &Env) -> BytesN<32>;
     /// Storage-layout version of the data held by this contract.
     fn storage_version(e: &Env) -> u32;
-    fn sync_version(e: &Env);
     /// Module admin: the launch admin during setup, the Treasury once live.
     fn admin(e: &Env) -> Address;
 }
@@ -177,7 +175,6 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         payment_token: Address,
         manager: Address,
         current_hash: BytesN<32>,
-        version: String,
     ) {
         // Validate config
         if !(MIN_AUCTION_DURATION..=MAX_AUCTION_DURATION).contains(&duration)
@@ -219,7 +216,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         e.storage()
             .instance()
             .set(&common::ns(e, DataKey::Manager), &manager);
-        common::upgrade::init(e, &current_hash, &version, STORAGE_VERSION);
+        common::upgrade::init(e, &current_hash, STORAGE_VERSION);
 
         emit_auction_initialized(
             e,
@@ -231,7 +228,6 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
             min_bid_increment_percent,
             time_buffer,
             &payment_token,
-            &version,
         );
     }
 
@@ -254,16 +250,11 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     }
 
     fn version(e: &Env) -> String {
-        common::upgrade::version(e)
+        common::upgrade::version(e, &Self::manager(e))
     }
 
     fn wasm_hash(e: &Env) -> BytesN<32> {
         common::upgrade::current_hash(e)
-    }
-
-    fn sync_version(e: &Env) {
-        common::admin::require_admin(e);
-        common::upgrade::sync_version(e, &Self::manager(e));
     }
 
     #[when_not_paused]

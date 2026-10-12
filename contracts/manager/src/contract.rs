@@ -319,8 +319,8 @@ impl ManagerContract {
     }
 
     /// Returns the registered release version for a WASM hash, including
-    /// revoked hashes (a module still running a revoked hash must be able to
-    /// `sync_version`). Callers that must reject revoked targets rely on
+    /// revoked hashes (a module still running a revoked hash keeps answering
+    /// `version()`, which reads this). Callers that must reject revoked targets rely on
     /// `is_upgrade_approved`, which checks the target is not revoked.
     pub fn get_implementation_version(env: Env, wasm_hash: BytesN<32>) -> Option<String> {
         extend_instance_ttl(&env);
@@ -560,17 +560,12 @@ impl ManagerContract {
         let marketplace_payment_asset = config.marketplace.payment_asset.clone();
 
         // Load current implementation hashes, rejecting unset or revoked ones in one pass.
-        let (token_wasm, token_version) =
-            Self::current_wasm(&env, &ManagerKey::CurrentTokenWasm, "Token")?;
-        let (metadata_wasm, metadata_version) =
-            Self::current_wasm(&env, &ManagerKey::CurrentMetadataWasm, "Metadata")?;
-        let (auction_wasm, auction_version) =
-            Self::current_wasm(&env, &ManagerKey::CurrentAuctionWasm, "Auction")?;
-        let (governor_wasm, governor_version) =
-            Self::current_wasm(&env, &ManagerKey::CurrentGovernorWasm, "Governor")?;
-        let (treasury_wasm, treasury_version) =
-            Self::current_wasm(&env, &ManagerKey::CurrentTreasuryWasm, "Treasury")?;
-        let (marketplace_wasm, marketplace_version) =
+        let token_wasm = Self::current_wasm(&env, &ManagerKey::CurrentTokenWasm, "Token")?;
+        let metadata_wasm = Self::current_wasm(&env, &ManagerKey::CurrentMetadataWasm, "Metadata")?;
+        let auction_wasm = Self::current_wasm(&env, &ManagerKey::CurrentAuctionWasm, "Auction")?;
+        let governor_wasm = Self::current_wasm(&env, &ManagerKey::CurrentGovernorWasm, "Governor")?;
+        let treasury_wasm = Self::current_wasm(&env, &ManagerKey::CurrentTreasuryWasm, "Treasury")?;
+        let marketplace_wasm =
             Self::current_wasm(&env, &ManagerKey::CurrentMarketplaceWasm, "Marketplace")?;
 
         let wasm_hashes = DaoWasmHashes {
@@ -621,7 +616,6 @@ impl ManagerContract {
                 governor_addr.clone(),
                 env.current_contract_address(),
                 treasury_wasm.clone(),
-                treasury_version,
             ),
         );
 
@@ -640,7 +634,6 @@ impl ManagerContract {
                 metadata_addr.clone(),
                 env.current_contract_address(),
                 token_wasm.clone(),
-                token_version,
             ),
         );
 
@@ -664,7 +657,6 @@ impl ManagerContract {
                     base_uri: String::from_str(&env, ""),
                     extension: String::from_str(&env, ""),
                 },
-                metadata_version,
             ),
         );
 
@@ -684,7 +676,6 @@ impl ManagerContract {
                 governance.quorum_bps,
                 env.current_contract_address(),
                 governor_wasm.clone(),
-                governor_version,
             ),
         );
 
@@ -706,7 +697,6 @@ impl ManagerContract {
                 payment_asset.clone(),
                 env.current_contract_address(),
                 auction_wasm.clone(),
-                auction_version,
             ),
         );
 
@@ -722,7 +712,6 @@ impl ManagerContract {
                 marketplace_payment_asset.clone(),
                 env.current_contract_address(),
                 marketplace_wasm,
-                marketplace_version,
                 config.marketplace.secondary_fee_bps,
             ),
         );
@@ -1255,7 +1244,7 @@ impl ManagerContract {
         env: &Env,
         key: &ManagerKey,
         expected_name: &str,
-    ) -> Result<(BytesN<32>, String), ManagerError> {
+    ) -> Result<BytesN<32>, ManagerError> {
         let hash: BytesN<32> = env
             .storage()
             .instance()
@@ -1265,7 +1254,7 @@ impl ManagerContract {
         if implementation.name != String::from_str(env, expected_name) {
             return Err(ManagerError::ImplementationNotFound);
         }
-        Ok((hash, implementation.version))
+        Ok(hash)
     }
 
     /// Require caller to be admin.

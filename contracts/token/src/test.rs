@@ -30,7 +30,6 @@ fn deploy(
             Address::generate(e),
             manager,
             hash,
-            String::from_str(e, "0.1.0"),
         ),
     )
 }
@@ -546,10 +545,11 @@ mod upgrade_via_common {
             from.clone(),
         );
         let client = DaoTokenContractClient::new(&e, &id);
+        mgr.register(&from, &String::from_str(&e, "0.1.0"));
         assert_eq!(client.version(), String::from_str(&e, "0.1.0"));
         assert_eq!(client.wasm_hash(), from);
+        // No sync step (D6): the registry record is the version.
         mgr.register(&from, &String::from_str(&e, "0.1.1"));
-        client.sync_version();
         assert_eq!(client.version(), String::from_str(&e, "0.1.1"));
         mgr.approve(&from, &to);
         mgr.register(&to, &String::from_str(&e, "0.2.0"));
@@ -558,7 +558,10 @@ mod upgrade_via_common {
         // Contract code is swapped to an empty module; read the stored keys directly.
         e.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&e), to);
-            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.2.0"));
+            assert_eq!(
+                common::upgrade::version(&e, &mgr.address),
+                String::from_str(&e, "0.2.0")
+            );
         });
     }
 
@@ -577,10 +580,11 @@ mod upgrade_via_common {
             from.clone(),
         );
         let client = DaoTokenContractClient::new(&e, &id);
+        mgr.register(&from, &String::from_str(&e, "0.1.0"));
         assert_eq!(client.version(), String::from_str(&e, "0.1.0"));
         assert_eq!(client.wasm_hash(), from);
+        // No sync step (D6): the registry record is the version.
         mgr.register(&from, &String::from_str(&e, "0.1.1"));
-        client.sync_version();
         assert_eq!(client.version(), String::from_str(&e, "0.1.1"));
         mgr.register(&to, &String::from_str(&e, "0.2.0"));
         let r = client.try_upgrade(&from, &to);
@@ -591,7 +595,7 @@ mod upgrade_via_common {
     }
 
     #[test]
-    fn upgrade_and_sync_version_reject_unauthorized_caller() {
+    fn upgrade_rejects_unauthorized_caller() {
         let e = Env::default();
         e.mock_all_auths();
         let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
@@ -611,11 +615,13 @@ mod upgrade_via_common {
         // Drop mock_all_auths: no authorization is provided for any address.
         e.set_auths(&[]);
         assert!(client.try_upgrade(&from, &to).is_err());
-        assert!(client.try_sync_version().is_err());
         e.mock_all_auths();
         e.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&e), from);
-            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.1.0"));
+            assert_eq!(
+                common::upgrade::version(&e, &mgr.address),
+                String::from_str(&e, "0.1.1")
+            );
         });
     }
 
@@ -635,6 +641,7 @@ mod upgrade_via_common {
         );
         let client = DaoTokenContractClient::new(&e, &id);
         let wrong = BytesN::from_array(&e, &[9u8; 32]);
+        mgr.register(&from, &String::from_str(&e, "0.1.0"));
         mgr.approve(&wrong, &to);
         mgr.register(&to, &String::from_str(&e, "0.2.0"));
         let r = client.try_upgrade(&wrong, &to);
@@ -644,12 +651,15 @@ mod upgrade_via_common {
         );
         e.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&e), from);
-            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.1.0"));
+            assert_eq!(
+                common::upgrade::version(&e, &mgr.address),
+                String::from_str(&e, "0.1.0")
+            );
         });
     }
 
     #[test]
-    fn version_and_sync_version_work_after_upgrade() {
+    fn version_follows_the_registry_after_upgrade() {
         let e = Env::default();
         e.mock_all_auths();
         let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
@@ -674,7 +684,6 @@ mod upgrade_via_common {
         });
         mgr.register(&to, &String::from_str(&e, "0.2.1"));
         e.as_contract(&id, || {
-            DaoTokenContract::sync_version(&e);
             assert_eq!(DaoTokenContract::version(&e), String::from_str(&e, "0.2.1"));
         });
     }
@@ -1420,7 +1429,6 @@ fn mint_and_batch_mint_seed_attributes_after_a_rename() {
             metadata.clone(),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     e.register_at(&metadata, HookCounter, ());

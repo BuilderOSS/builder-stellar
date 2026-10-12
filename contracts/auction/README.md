@@ -4,7 +4,7 @@ Continuous English auctions for one governance NFT at a time. Payment uses a con
 
 ## Constructor and launch
 
-The constructor receives the admin (launch admin), Token, Treasury, duration, reserve price, bid increment, time buffer, payment SAC, Manager, current hash, and version. All wiring is fixed at construction.
+The constructor receives the admin (launch admin), Token, Treasury, duration, reserve price, bid increment, time buffer, payment SAC, Manager and current hash. `version()` is read from the Manager registry. All wiring is fixed at construction.
 
 The module starts paused in Setup. Manager-only `launch(treasury, start, expected_payment_token)` sets Live, validates wiring/asset, hands the admin to the Treasury (`AdminChanged`) and emits `AuctionLaunched`. `start=true` unpauses and creates the first auction; otherwise governance grants Auction mint authority and unpauses later.
 
@@ -17,7 +17,7 @@ The module starts paused in Setup. Manager-only `launch(treasury, start, expecte
 - `get_auction()` (fails `NotLaunched` before the first auction) / `get_config()`.
 - `pending_refund(bidder)`; `withdraw_refund(bidder)` requires bidder auth.
 - Paused admin setters: `set_duration`, `set_reserve_price`, `set_min_bid_increment`, `set_time_buffer`, `set_payment_token`.
-- `admin()`, `upgrade(from_hash, to_hash)`, `migrate()`, `sync_version()`, `version()`, `wasm_hash()`, `storage_version()`.
+- `admin()`, `upgrade(from_hash, to_hash)`, `migrate()`, `version()`, `wasm_hash()`, `storage_version()`.
 
 Duration is 300–2,592,000 seconds, reserve at least 1,000 base units, increment 1–100%, and time buffer 1–86,400 seconds. Late bids extend the deadline subject to an extension-count cap. The payment token locks after the first bid.
 

@@ -24,7 +24,6 @@ pub struct GovernorInitialized {
     pub queue_delay: u32,
     pub proposal_threshold: u128,
     pub quorum_bps: u32,
-    pub version: String,
 }
 
 /// Emitted by `propose` next to OpenZeppelin's `ProposalCreated`.
@@ -119,7 +118,6 @@ pub struct GovernorLaunched {
 pub fn emit_governor_initialized(
     e: &Env,
     admin: &Address,
-    version: &String,
     token_contract: &Address,
     treasury_contract: &Address,
     voting_delay: u32,
@@ -137,7 +135,6 @@ pub fn emit_governor_initialized(
         queue_delay,
         proposal_threshold,
         quorum_bps,
-        version: version.clone(),
     }
     .publish(e);
 }

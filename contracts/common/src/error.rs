@@ -41,7 +41,7 @@ pub enum CommonError {
     ImplementationNotFound = 7007,
     /// Module admin missing from storage.
     AdminNotSet = 7008,
-    /// `CurrentVersion` missing from storage.
+    /// The Manager's own `CurrentManagerVersion` missing from storage.
     VersionNotSet = 7009,
     /// Treasury address missing from storage.
     TreasuryNotSet = 7010,

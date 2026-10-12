@@ -21,6 +21,9 @@ use crate::events::{
 };
 use crate::storage::*;
 
+/// The governor's `name()`.
+pub const GOVERNOR_NAME: &str = "MvpDaoGovernor";
+
 /// Main contract for DAO governance with timestamp-based voting.
 ///
 /// This contract manages the complete proposal lifecycle from creation through execution,
@@ -83,7 +86,6 @@ impl DaoGovernorContract {
         quorum_bps: u32,
         manager: Address,
         current_hash: BytesN<32>,
-        version: String,
     ) {
         Self::validate_params(
             e,
@@ -98,11 +100,8 @@ impl DaoGovernorContract {
         e.storage()
             .instance()
             .set(&common::ns(e, GovernorKey::Manager), &manager);
-        common::upgrade::init(e, &current_hash, &version, STORAGE_VERSION);
+        common::upgrade::init(e, &current_hash, STORAGE_VERSION);
 
-        let name = String::from_str(e, "MvpDaoGovernor");
-        governor::set_name(e, name.clone());
-        governor::set_version(e, version.clone());
         governor::set_token_contract(e, &token_contract);
         governor::set_voting_delay(e, voting_delay);
         governor::set_voting_period(e, voting_period);
@@ -118,7 +117,6 @@ impl DaoGovernorContract {
         emit_governor_initialized(
             e,
             &admin,
-            &version,
             &token_contract,
             &treasury_contract,
             voting_delay,
@@ -133,7 +131,6 @@ impl DaoGovernorContract {
         common::admin::require_admin(e);
         let manager = Self::manager(e);
         common::upgrade::apply(e, &manager, &from_hash, &to_hash);
-        governor::set_version(e, common::upgrade::version(e));
     }
 
     /// Advance the storage layout after an upgrade (admin only).
@@ -149,13 +146,6 @@ impl DaoGovernorContract {
     /// Storage-layout version of the data held by this contract.
     pub fn storage_version(e: &Env) -> u32 {
         common::upgrade::storage_version(e)
-    }
-
-    pub fn sync_version(e: &Env) {
-        common::admin::require_admin(e);
-        let manager = Self::manager(e);
-        let version = common::upgrade::sync_version(e, &manager);
-        governor::set_version(e, version);
     }
 
     /// Module admin: the launch admin during setup, the Treasury once live.
@@ -481,6 +471,17 @@ impl DaoGovernorContract {
 
 #[contractimpl(contracttrait)]
 impl Governor for DaoGovernorContract {
+    /// A constant, not stored (D6): OZ would keep it in an instance entry.
+    fn name(e: &Env) -> String {
+        String::from_str(e, GOVERNOR_NAME)
+    }
+
+    /// The registry version of the running code (D6), as for every module.
+    /// OZ would store it and need a sync after every upgrade.
+    fn version(e: &Env) -> String {
+        common::upgrade::version(e, &Self::manager(e))
+    }
+
     fn voting_delay(e: &Env) -> u32 {
         governor::get_voting_delay(e)
     }

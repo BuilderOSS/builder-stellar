@@ -70,7 +70,6 @@ fn setup_live(
             governor.address.clone(),
             manager,
             BytesN::from_array(e, &[1u8; 32]),
-            String::from_str(e, "0.1.0"),
         ),
     );
     let treasury = DaoTreasuryContractClient::new(e, &treasury_id);
@@ -88,7 +87,6 @@ fn treasury_executes_arbitrary_call_after_consume() {
     let (treasury, _gov) = setup_live(&e, Address::generate(&e));
     let target = TargetContractClient::new(&e, &e.register(TargetContract, ()));
 
-    assert_eq!(treasury.version(), String::from_str(&e, "0.1.0"));
     let id = treasury.execute(
         &vec![&e, target.address.clone()],
         &vec![&e, symbol_short!("set_value")],
@@ -150,7 +148,7 @@ fn self_call_with_bad_args_is_rejected() {
 }
 
 #[test]
-fn self_dispatch_upgrade_and_sync_version() {
+fn self_dispatch_upgrade_and_no_sync_version() {
     use common::testutils::{empty_wasm, MockManager, MockManagerClient};
     let e = Env::default();
     e.mock_all_auths();
@@ -162,14 +160,19 @@ fn self_dispatch_upgrade_and_sync_version() {
     mgr.register(&from, &String::from_str(&e, "0.1.5"));
     mgr.register(&to, &String::from_str(&e, "0.2.0"));
 
-    // sync_version first (uses the registry entry of the current hash).
-    treasury.execute(
+    // version() follows the registry (D6); `sync_version` is no longer a
+    // self call a proposal can reach.
+    assert_eq!(treasury.version(), String::from_str(&e, "0.1.5"));
+    let r = treasury.try_execute(
         &vec![&e, treasury.address.clone()],
         &vec![&e, Symbol::new(&e, "sync_version")],
         &vec![&e, Vec::<Val>::new(&e)],
         &desc(&e),
     );
-    assert_eq!(treasury.version(), String::from_str(&e, "0.1.5"));
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        crate::error::TreasuryError::UnknownSelfCall.into()
+    );
 
     treasury.execute(
         &vec![&e, treasury.address.clone()],
@@ -179,7 +182,10 @@ fn self_dispatch_upgrade_and_sync_version() {
     );
     e.as_contract(&treasury.address, || {
         assert_eq!(common::upgrade::current_hash(&e), to);
-        assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.2.0"));
+        assert_eq!(
+            common::upgrade::version(&e, &mgr.address),
+            String::from_str(&e, "0.2.0")
+        );
     });
 }
 
@@ -194,7 +200,6 @@ fn admin_is_treasury_after_launch_so_admin_fns_need_self_auth() {
     let from = BytesN::from_array(&e, &[1u8; 32]);
     assert!(treasury.try_upgrade(&from, &from).is_err());
     assert!(treasury.try_migrate().is_err());
-    assert!(treasury.try_sync_version().is_err());
 }
 
 #[test]
@@ -211,7 +216,6 @@ fn launch_is_one_shot_and_hands_admin_to_self() {
             Address::generate(&e),
             manager,
             soroban_sdk::BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
@@ -238,7 +242,6 @@ fn launch_rejects_treasury_other_than_self() {
             Address::generate(&e),
             Address::generate(&e),
             soroban_sdk::BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let treasury = DaoTreasuryContractClient::new(&e, &id);
@@ -261,7 +264,6 @@ fn execute_before_launch_is_not_live() {
             governor,
             Address::generate(&e),
             soroban_sdk::BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let treasury = DaoTreasuryContractClient::new(&e, &id);
@@ -297,7 +299,6 @@ mod upgrade_via_common {
                 Address::generate(&e),
                 mgr.address.clone(),
                 from.clone(),
-                String::from_str(&e, "0.1.0"),
             ),
         );
         let client = DaoTreasuryContractClient::new(&e, &id);
@@ -308,7 +309,10 @@ mod upgrade_via_common {
         // Contract code is swapped to an empty module; read the stored keys directly.
         e.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&e), to);
-            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.2.0"));
+            assert_eq!(
+                common::upgrade::version(&e, &mgr.address),
+                String::from_str(&e, "0.2.0")
+            );
         });
     }
 
@@ -326,7 +330,6 @@ mod upgrade_via_common {
                 Address::generate(&e),
                 mgr.address.clone(),
                 from.clone(),
-                String::from_str(&e, "0.1.0"),
             ),
         );
         let client = DaoTreasuryContractClient::new(&e, &id);
@@ -339,7 +342,7 @@ mod upgrade_via_common {
     }
 
     #[test]
-    fn upgrade_and_sync_version_reject_unauthorized_caller() {
+    fn upgrade_rejects_unauthorized_caller() {
         let e = Env::default();
         e.mock_all_auths();
         let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
@@ -352,7 +355,6 @@ mod upgrade_via_common {
                 Address::generate(&e),
                 mgr.address.clone(),
                 from.clone(),
-                String::from_str(&e, "0.1.0"),
             ),
         );
         let client = DaoTreasuryContractClient::new(&e, &id);
@@ -362,11 +364,13 @@ mod upgrade_via_common {
         // Drop mock_all_auths: no authorization is provided for any address.
         e.set_auths(&[]);
         assert!(client.try_upgrade(&from, &to).is_err());
-        assert!(client.try_sync_version().is_err());
         e.mock_all_auths();
         e.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&e), from);
-            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.1.0"));
+            assert_eq!(
+                common::upgrade::version(&e, &mgr.address),
+                String::from_str(&e, "0.1.1")
+            );
         });
     }
 
@@ -384,10 +388,10 @@ mod upgrade_via_common {
                 Address::generate(&e),
                 mgr.address.clone(),
                 from.clone(),
-                String::from_str(&e, "0.1.0"),
             ),
         );
         let client = DaoTreasuryContractClient::new(&e, &id);
+        mgr.register(&from, &String::from_str(&e, "0.1.0"));
         let wrong = BytesN::from_array(&e, &[9u8; 32]);
         mgr.approve(&wrong, &to);
         mgr.register(&to, &String::from_str(&e, "0.2.0"));
@@ -398,31 +402,21 @@ mod upgrade_via_common {
         );
         e.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&e), from);
-            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.1.0"));
+            assert_eq!(
+                common::upgrade::version(&e, &mgr.address),
+                String::from_str(&e, "0.1.0")
+            );
         });
     }
 }
 
-#[test]
-fn sync_version_extends_instance_ttl() {
-    use common::testutils::{advance_ledgers, instance_ttl, MockManager, MockManagerClient};
-    let e = Env::default();
-    e.mock_all_auths();
-    let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
-    let (treasury, _gov) = setup_live(&e, mgr.address.clone());
-    mgr.register(
-        &BytesN::from_array(&e, &[1u8; 32]),
-        &String::from_str(&e, "0.1.5"),
-    );
-    advance_ledgers(&e, 120 * 17_280);
-    let before = instance_ttl(&e, &treasury.address);
-    treasury.sync_version();
-    let after = instance_ttl(&e, &treasury.address);
-    assert!(
-        after > before,
-        "instance TTL not extended: {before} -> {after}"
-    );
-}
+// Retired: sync_version_extends_instance_ttl.
+// Value: protects=(none now) that the admin-gated `sync_version` renewed the
+// Treasury instance; retired_because=`sync_version` is removed by
+// docs/STORAGE_DIET.md (D6): `version()` reads the Manager registry on every
+// call, so there is nothing to sync; replacement=the common
+// `version_is_read_from_the_registry` test and every state-changing entry
+// point's own `extend_instance` coverage.
 
 #[test]
 fn self_dispatch_migrate_requires_a_newer_layout() {

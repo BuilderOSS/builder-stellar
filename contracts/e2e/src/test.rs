@@ -116,7 +116,6 @@ fn register_metadata(e: &Env, metadata_id: &Address, token_id: &Address, owner: 
                 base_uri: String::from_str(e, "ipfs://"),
                 extension: String::from_str(e, ".png"),
             },
-            String::from_str(e, "0.1.0"),
         ),
     );
 }
@@ -164,7 +163,6 @@ fn setup_with(
             metadata_id.clone(),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
@@ -181,7 +179,6 @@ fn setup_with(
             governor_id.clone(),
             manager.clone(),
             treasury_hash,
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
@@ -200,7 +197,6 @@ fn setup_with(
             1_000_u32,
             manager.clone(),
             governor_hash,
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let governor = DaoGovernorContractClient::new(&e, &governor_id);
@@ -980,7 +976,6 @@ fn setup_auction_setup_phase() -> (
             metadata_id.clone(),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
@@ -995,7 +990,6 @@ fn setup_auction_setup_phase() -> (
             Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
@@ -1021,7 +1015,6 @@ fn setup_auction_setup_phase() -> (
             Some(payment_token.clone()), // payment token
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let auction = DaoAuctionContractClient::new(&e, &auction_id);
@@ -1685,7 +1678,6 @@ fn test_governor_treasury_bidirectional_verification() {
             metadata_id.clone(),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     register_metadata(&e, &metadata_id, &token_id, &owner);
@@ -1700,7 +1692,6 @@ fn test_governor_treasury_bidirectional_verification() {
             governor_id.clone(),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
@@ -1719,7 +1710,6 @@ fn test_governor_treasury_bidirectional_verification() {
             1_000_u32,
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let governor = DaoGovernorContractClient::new(&e, &governor_id);
@@ -1870,7 +1860,6 @@ fn marketplace_primary_sale_uses_real_token_and_sac() {
             metadata_id.clone(),
             manager.clone(),
             BytesN::from_array(&e, &[0; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     register_metadata(&e, &metadata_id, &token_id, &treasury);
@@ -1885,7 +1874,6 @@ fn marketplace_primary_sale_uses_real_token_and_sac() {
             payment.address(),
             manager,
             BytesN::from_array(&e, &[0; 32]),
-            String::from_str(&e, "0.1.0"),
             250u32,
         ),
     );
@@ -2009,7 +1997,10 @@ fn proposal_upgrades_governor_through_manager_approval() {
 
     e.as_contract(&governor.address, || {
         assert_eq!(common::upgrade::current_hash(&e), to);
-        assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.2.0"));
+        assert_eq!(
+            common::upgrade::version(&e, &mgr.address),
+            String::from_str(&e, "0.2.0")
+        );
     });
 }
 
@@ -2053,7 +2044,10 @@ fn proposal_upgrades_treasury_via_self_dispatch() {
     assert_eq!(governor.proposal_state(&id), ProposalState::Executed);
     e.as_contract(&treasury.address, || {
         assert_eq!(common::upgrade::current_hash(&e), to);
-        assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.2.0"));
+        assert_eq!(
+            common::upgrade::version(&e, &mgr.address),
+            String::from_str(&e, "0.2.0")
+        );
     });
 }
 
@@ -2346,29 +2340,33 @@ fn tampered_args_or_hash_are_unknown_proposals() {
     assert_eq!(target.get_value(), 0);
 }
 
+/// D6: a module's `version()` is the registry record of its running hash, so
+/// a re-labelled release shows up with no proposal and no sync call. The
+/// governor's OZ `version()` and `name()` are overridden the same way.
 #[test]
-fn proposal_syncs_treasury_version_via_self_call() {
+fn versions_follow_the_registry_without_a_proposal() {
     use common::testutils::{MockManager, MockManagerClient};
     let e = Env::default();
     e.mock_all_auths();
     let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
+    let governor_hash = BytesN::from_array(&e, &[1u8; 32]);
     let treasury_hash = BytesN::from_array(&e, &[2u8; 32]);
+    mgr.register(&governor_hash, &String::from_str(&e, "0.1.8"));
     mgr.register(&treasury_hash, &String::from_str(&e, "0.1.9"));
-    let (e, token, treasury, governor, _target, owner) = setup_with(
+    let (e, _token, treasury, governor, _target, _owner) = setup_with(
         e.clone(),
         mgr.address.clone(),
-        BytesN::from_array(&e, &[1u8; 32]),
-        treasury_hash,
+        governor_hash.clone(),
+        treasury_hash.clone(),
     );
-    let targets = vec![&e, treasury.address.clone()];
-    let functions = vec![&e, Symbol::new(&e, "sync_version")];
-    let args = vec![&e, Vec::<Val>::new(&e)];
-    let (_id, hash) = queue_proposal(
-        &e, &token, &governor, &owner, &targets, &functions, &args, "sync",
-    );
-    e.set_auths(&[]);
-    treasury.execute(&targets, &functions, &args, &hash);
     assert_eq!(treasury.version(), String::from_str(&e, "0.1.9"));
+    assert_eq!(governor.version(), String::from_str(&e, "0.1.8"));
+    assert_eq!(
+        governor.name(),
+        String::from_str(&e, governor::GOVERNOR_NAME)
+    );
+    mgr.register(&treasury_hash, &String::from_str(&e, "0.1.10"));
+    assert_eq!(treasury.version(), String::from_str(&e, "0.1.10"));
 }
 
 #[test]
@@ -2701,7 +2699,6 @@ fn real_auth_marketplace_primary_and_secondary_flows() {
             metadata_id.clone(),
             manager.clone(),
             BytesN::from_array(&e, &[0; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     register_metadata(&e, &metadata_id, &token_id, &treasury);
@@ -2715,7 +2712,6 @@ fn real_auth_marketplace_primary_and_secondary_flows() {
             pay.clone(),
             manager,
             BytesN::from_array(&e, &[0; 32]),
-            String::from_str(&e, "0.1.0"),
             250u32,
         ),
     );
@@ -3126,7 +3122,6 @@ fn treasury_buys_a_marketplace_listing_through_an_authorized_proposal() {
             sac.clone(),
             Address::generate(&e),
             BytesN::from_array(&e, &[0; 32]),
-            String::from_str(&e, "0.1.0"),
             250u32,
         ),
     );
@@ -3258,7 +3253,6 @@ fn system_held_tokens_and_votes_through_a_real_proposal() {
     let admin = Address::generate(&e);
     let manager = Address::generate(&e);
     let zero = BytesN::from_array(&e, &[0u8; 32]);
-    let v = String::from_str(&e, "0.1.0");
     let (treasury_id, governor_id, auction_id, marketplace_id, metadata_id) = (
         Address::generate(&e),
         Address::generate(&e),
@@ -3278,7 +3272,6 @@ fn system_held_tokens_and_votes_through_a_real_proposal() {
             metadata_id.clone(),
             manager.clone(),
             zero.clone(),
-            v.clone(),
         ),
     );
     register_metadata(&e, &metadata_id, &token_id, &admin);
@@ -3290,7 +3283,6 @@ fn system_held_tokens_and_votes_through_a_real_proposal() {
             governor_id.clone(),
             manager.clone(),
             zero.clone(),
-            v.clone(),
         ),
     );
     e.register_at(
@@ -3307,7 +3299,6 @@ fn system_held_tokens_and_votes_through_a_real_proposal() {
             5_000_u32, // 50% quorum
             manager.clone(),
             zero.clone(),
-            v.clone(),
         ),
     );
     let pay = e
@@ -3323,7 +3314,6 @@ fn system_held_tokens_and_votes_through_a_real_proposal() {
             pay.clone(),
             manager.clone(),
             zero.clone(),
-            v.clone(),
             250u32,
         ),
     );

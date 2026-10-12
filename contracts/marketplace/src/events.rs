@@ -9,7 +9,6 @@ pub struct MarketplaceInitialized {
     pub admin: Address,
     pub treasury: Address,
     pub payment_asset: Address,
-    pub version: String,
     pub default_secondary_fee_bps: u32,
 }
 
@@ -169,7 +168,6 @@ pub fn emit_marketplace_initialized(
     admin: &Address,
     treasury: &Address,
     payment_asset: &Address,
-    version: &String,
     default_secondary_fee_bps: u32,
 ) {
     MarketplaceInitialized {
@@ -177,7 +175,6 @@ pub fn emit_marketplace_initialized(
         admin: admin.clone(),
         treasury: treasury.clone(),
         payment_asset: payment_asset.clone(),
-        version: version.clone(),
         default_secondary_fee_bps,
     }
     .publish(e);

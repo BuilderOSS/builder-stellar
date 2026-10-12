@@ -23,7 +23,6 @@ pub struct MetadataInitialized {
     #[topic]
     pub token: Address,
     pub renderer_base: String,
-    pub version: String,
     pub admin: Address,
 }
 
@@ -31,13 +30,11 @@ pub fn emit_metadata_initialized(
     env: &Env,
     token: &Address,
     renderer_base: &String,
-    version: &String,
     admin: &Address,
 ) {
     MetadataInitialized {
         token: token.clone(),
         renderer_base: renderer_base.clone(),
-        version: version.clone(),
         admin: admin.clone(),
     }
     .publish(env);

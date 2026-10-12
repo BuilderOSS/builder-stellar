@@ -43,7 +43,6 @@ fn create_token_contract(env: &Env, owner: &Address) -> Address {
             Address::generate(env), // metadata address (placeholder)
             Address::generate(env), // manager address (placeholder)
             BytesN::from_array(env, &[0u8; 32]),
-            String::from_str(env, "0.1.0"),
         ),
     )
 }

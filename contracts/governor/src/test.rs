@@ -89,7 +89,6 @@ fn setup() -> (
             Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
@@ -104,7 +103,6 @@ fn setup() -> (
             governor_id.clone(),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
@@ -123,7 +121,6 @@ fn setup() -> (
             1_000_u32,
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let governor = DaoGovernorContractClient::new(&e, &governor_id);
@@ -152,7 +149,6 @@ fn full_governance_flow_executes_treasury_call() {
     let (e, token, treasury, governor, target, owner) = setup();
     let proposer = Address::generate(&e);
 
-    assert_eq!(governor.version(), String::from_str(&e, "0.1.0"));
     assert_eq!(governor.wasm_hash(), BytesN::from_array(&e, &[0u8; 32]));
     let token_id = token.mint(&owner, &proposer);
     assert_eq!(token_id, 0);
@@ -321,7 +317,6 @@ fn quorum_uses_total_supply_bps() {
             Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
@@ -333,7 +328,6 @@ fn quorum_uses_total_supply_bps() {
             Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let governor_id = e.register(
@@ -349,7 +343,6 @@ fn quorum_uses_total_supply_bps() {
             3_000_u32,
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let governor = DaoGovernorContractClient::new(&e, &governor_id);
@@ -988,7 +981,6 @@ mod upgrade_via_common {
                 1_000_u32,
                 mgr.address.clone(),
                 from.clone(),
-                String::from_str(&e, "0.1.0"),
             ),
         );
         let client = DaoGovernorContractClient::new(&e, &id);
@@ -999,7 +991,10 @@ mod upgrade_via_common {
         // Contract code is swapped to an empty module; read the stored keys directly.
         e.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&e), to);
-            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.2.0"));
+            assert_eq!(
+                common::upgrade::version(&e, &mgr.address),
+                String::from_str(&e, "0.2.0")
+            );
         });
     }
 
@@ -1023,7 +1018,6 @@ mod upgrade_via_common {
                 1_000_u32,
                 mgr.address.clone(),
                 from.clone(),
-                String::from_str(&e, "0.1.0"),
             ),
         );
         let client = DaoGovernorContractClient::new(&e, &id);
@@ -1036,7 +1030,7 @@ mod upgrade_via_common {
     }
 
     #[test]
-    fn upgrade_and_sync_version_reject_unauthorized_caller() {
+    fn upgrade_rejects_unauthorized_caller() {
         let e = Env::default();
         e.mock_all_auths();
         let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
@@ -1055,21 +1049,24 @@ mod upgrade_via_common {
                 1_000_u32,
                 mgr.address.clone(),
                 from.clone(),
-                String::from_str(&e, "0.1.0"),
             ),
         );
         let client = DaoGovernorContractClient::new(&e, &id);
         mgr.approve(&from, &to);
         mgr.register(&to, &String::from_str(&e, "0.2.0"));
         mgr.register(&from, &String::from_str(&e, "0.1.1"));
+        // The module's own version() reads its Manager (D6).
+        assert_eq!(client.version(), String::from_str(&e, "0.1.1"));
         // Drop mock_all_auths: no authorization is provided for any address.
         e.set_auths(&[]);
         assert!(client.try_upgrade(&from, &to).is_err());
-        assert!(client.try_sync_version().is_err());
         e.mock_all_auths();
         e.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&e), from);
-            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.1.0"));
+            assert_eq!(
+                common::upgrade::version(&e, &mgr.address),
+                String::from_str(&e, "0.1.1")
+            );
         });
     }
 
@@ -1093,10 +1090,10 @@ mod upgrade_via_common {
                 1_000_u32,
                 mgr.address.clone(),
                 from.clone(),
-                String::from_str(&e, "0.1.0"),
             ),
         );
         let client = DaoGovernorContractClient::new(&e, &id);
+        mgr.register(&from, &String::from_str(&e, "0.1.0"));
         let wrong = BytesN::from_array(&e, &[9u8; 32]);
         mgr.approve(&wrong, &to);
         mgr.register(&to, &String::from_str(&e, "0.2.0"));
@@ -1107,7 +1104,10 @@ mod upgrade_via_common {
         );
         e.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&e), from);
-            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.1.0"));
+            assert_eq!(
+                common::upgrade::version(&e, &mgr.address),
+                String::from_str(&e, "0.1.0")
+            );
         });
     }
 }
@@ -1153,7 +1153,6 @@ fn register_with_treasury(
             quorum_bps,
             manager.clone(),
             BytesN::from_array(e, &[0u8; 32]),
-            String::from_str(e, "0.1.0"),
         ),
     );
     DaoGovernorContractClient::new(e, &id)
@@ -1481,7 +1480,6 @@ fn register_timing(
             1_000_u32,
             Address::generate(e),
             BytesN::from_array(e, &[0u8; 32]),
-            String::from_str(e, "0.1.0"),
         ),
     );
     DaoGovernorContractClient::new(e, &id)
@@ -1670,7 +1668,6 @@ fn treasury_held_tokens_never_raise_quorum() {
             governor_id.clone(),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let token_id = e.register(
@@ -1685,7 +1682,6 @@ fn treasury_held_tokens_never_raise_quorum() {
             Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
@@ -1703,7 +1699,6 @@ fn treasury_held_tokens_never_raise_quorum() {
             5_000_u32, // 50% quorum
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let governor = DaoGovernorContractClient::new(&e, &governor_id);

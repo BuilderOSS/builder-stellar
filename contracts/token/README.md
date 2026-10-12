@@ -37,10 +37,10 @@ get_votes(account); get_votes_at_checkpoint(account, ledger)
 total_supply(); get_total_supply(); get_total_supply_at_checkpoint(ledger)
 num_checkpoints(account); metadata(); set_metadata(uri, name, symbol)
 admin(); is_live(); launch(treasury, minters)
-upgrade(from_hash, to_hash); migrate(); sync_version(); version(); wasm_hash(); storage_version()
+upgrade(from_hash, to_hash); migrate(); version(); wasm_hash(); storage_version()
 ```
 
-The constructor takes the admin (launch admin), Treasury, Auction, Marketplace, collection metadata, Metadata contract, Manager, current hash and version. `launch` is Manager-only and one-shot: it checks the wired Treasury and that it is among the minters, hands the admin to the Treasury (`AdminChanged`), and emits `TokenLaunched`. There is no ownership transfer or renounce.
+The constructor takes the admin (launch admin), Treasury, Auction, Marketplace, collection metadata, Metadata contract, Manager and current hash. `launch` is Manager-only and one-shot: it checks the wired Treasury and that it is among the minters, hands the admin to the Treasury (`AdminChanged`), and emits `TokenLaunched`. There is no ownership transfer or renounce.
 
 `mint_authority` reports the explicit stored flag; the admin's implicit mint permission is checked separately by the mint path.
 

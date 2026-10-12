@@ -48,7 +48,6 @@ impl DaoTreasuryContract {
         governor: Address,
         manager: Address,
         current_hash: BytesN<32>,
-        version: String,
     ) {
         common::admin::init(e, &admin);
         e.storage()
@@ -57,9 +56,9 @@ impl DaoTreasuryContract {
         e.storage()
             .instance()
             .set(&common::ns(e, TreasuryKey::Manager), &manager);
-        common::upgrade::init(e, &current_hash, &version, STORAGE_VERSION);
+        common::upgrade::init(e, &current_hash, STORAGE_VERSION);
 
-        emit_treasury_initialized(e, &admin, &governor, &version);
+        emit_treasury_initialized(e, &admin, &governor);
     }
 
     /// Setup-phase upgrade by the launch admin. After launch the admin is the
@@ -77,14 +76,8 @@ impl DaoTreasuryContract {
         Self::do_migrate(e);
     }
 
-    /// Setup-phase only in practice, see `upgrade`.
-    pub fn sync_version(e: &Env) {
-        common::admin::require_admin(e);
-        Self::do_sync_version(e);
-    }
-
     pub fn version(e: &Env) -> String {
-        common::upgrade::version(e)
+        common::upgrade::version(e, &Self::manager(e))
     }
 
     pub fn wasm_hash(e: &Env) -> BytesN<32> {
@@ -236,10 +229,6 @@ impl DaoTreasuryContract {
         common::upgrade::migrate(e, STORAGE_VERSION);
     }
 
-    fn do_sync_version(e: &Env) {
-        common::upgrade::sync_version(e, &Self::manager(e));
-    }
-
     /// Allowlisted calls a proposal may aim at the Treasury itself. Authorized
     /// by the proposal (already consumed from the Governor), so no admin auth.
     fn self_dispatch(e: &Env, function: &Symbol, args: &Vec<Val>) {
@@ -255,11 +244,6 @@ impl DaoTreasuryContract {
                 panic_with_error!(e, TreasuryError::InvalidSelfCallArgs);
             }
             Self::do_migrate(e);
-        } else if *function == Symbol::new(e, "sync_version") {
-            if !args.is_empty() {
-                panic_with_error!(e, TreasuryError::InvalidSelfCallArgs);
-            }
-            Self::do_sync_version(e);
         } else {
             panic_with_error!(e, TreasuryError::UnknownSelfCall);
         }

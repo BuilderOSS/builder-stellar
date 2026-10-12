@@ -15,7 +15,6 @@ pub struct TokenInitialized {
     pub admin: Address,
     pub name: String,
     pub symbol: String,
-    pub version: String,
 }
 
 /// Emitted when minting authority is granted or revoked for an address.
@@ -73,18 +72,11 @@ pub struct TokenLaunched {
     pub minters: Vec<Address>,
 }
 
-pub fn emit_token_initialized(
-    e: &Env,
-    admin: &Address,
-    name: &String,
-    symbol: &String,
-    version: &String,
-) {
+pub fn emit_token_initialized(e: &Env, admin: &Address, name: &String, symbol: &String) {
     TokenInitialized {
         admin: admin.clone(),
         name: name.clone(),
         symbol: symbol.clone(),
-        version: version.clone(),
     }
     .publish(e);
 }

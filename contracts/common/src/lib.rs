@@ -5,7 +5,7 @@
 //!
 //! - [`admin`]: the single admin model (launch admin in setup, Treasury once live).
 //! - [`lifecycle`]: the `Live` instance flag (setup vs. live phase).
-//! - [`upgrade`]: manager-approved WASM upgrade, `CurrentHash` / `CurrentVersion`,
+//! - [`upgrade`]: manager-approved WASM upgrade, `CurrentHash`, the registry-derived `version`,
 //!   and the `StorageVersion` / `migrate` convention.
 //! - [`ttl`]: the shared instance and persistent TTL policy.
 //! - [`clients`]: typed `#[contractclient]` traits for cross-contract calls (no linked exports).

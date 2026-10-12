@@ -1,5 +1,5 @@
-//! Manager-approved upgrade flow, the standard `CurrentHash` /
-//! `CurrentVersion` instance keys, and the storage-layout migration convention.
+//! Manager-approved upgrade flow, the standard `CurrentHash` instance key, the
+//! registry-derived `version()`, and the storage-layout migration convention.
 //!
 //! Authorization (who may call `upgrade` / `migrate`) stays in each module;
 //! this crate only performs the checks that follow it.
@@ -14,8 +14,10 @@
 //! proposal runs `upgrade` and then `migrate` as consecutive actions; the new
 //! code is active for the second call.
 //!
-//! Storage: three instance entries (`CurrentHash`: 32 bytes, `CurrentVersion`:
-//! string, `StorageVersion`: u32). Cross-contract calls:
+//! Storage: two instance entries (`CurrentHash`: 32 bytes, `StorageVersion`:
+//! u32). The release version is not stored: [`version`] looks `CurrentHash` up
+//! in the Manager registry on every read, so the version string lives once, in
+//! the Manager, which the platform renews (D6). Cross-contract calls:
 //! `manager.is_upgrade_approved` and `manager.get_implementation_version`,
 //! both read-only.
 
@@ -27,7 +29,6 @@ use crate::{clients::ManagerRegistryClient, error::CommonError, ttl};
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UpgradeKey {
     CurrentHash,
-    CurrentVersion,
     StorageVersion,
 }
 
@@ -50,21 +51,11 @@ pub struct Migrated {
     pub to_storage_version: u32,
 }
 
-/// Emitted by `sync_version`.
-#[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct VersionSynced {
-    pub version: String,
-}
-
-/// Record hash, release version and storage-layout version at construction time.
-pub fn init(e: &Env, current_hash: &BytesN<32>, version: &String, storage_version: u32) {
+/// Record the code hash and storage-layout version at construction time.
+pub fn init(e: &Env, current_hash: &BytesN<32>, storage_version: u32) {
     e.storage()
         .instance()
         .set(&crate::ns(e, UpgradeKey::CurrentHash), current_hash);
-    e.storage()
-        .instance()
-        .set(&crate::ns(e, UpgradeKey::CurrentVersion), version);
     e.storage()
         .instance()
         .set(&crate::ns(e, UpgradeKey::StorageVersion), &storage_version);
@@ -107,11 +98,11 @@ pub fn current_hash(e: &Env) -> BytesN<32> {
         .unwrap_or_else(|| panic_with_error!(e, CommonError::CurrentHashNotSet))
 }
 
-pub fn version(e: &Env) -> String {
-    e.storage()
-        .instance()
-        .get(&crate::ns(e, UpgradeKey::CurrentVersion))
-        .unwrap_or_else(|| panic_with_error!(e, CommonError::VersionNotSet))
+/// The release version of the running code: `CurrentHash` looked up in the
+/// Manager registry. Read-only; panics `ImplementationNotFound` if the
+/// registry has no record of the hash.
+pub fn version(e: &Env, manager: &Address) -> String {
+    implementation_version(e, manager, &current_hash(e))
 }
 
 fn is_approved(e: &Env, manager: &Address, from: &BytesN<32>, to: &BytesN<32>) -> bool {
@@ -123,25 +114,12 @@ fn implementation_version(e: &Env, manager: &Address, hash: &BytesN<32>) -> Stri
     version.unwrap_or_else(|| panic_with_error!(e, CommonError::ImplementationNotFound))
 }
 
-/// Re-read this contract's version from the Manager registry (by
-/// `CurrentHash`) and store it. Authorization is the caller's responsibility.
-pub fn sync_version(e: &Env, manager: &Address) -> String {
-    ttl::extend_instance(e);
-    let v = implementation_version(e, manager, &current_hash(e));
-    e.storage()
-        .instance()
-        .set(&crate::ns(e, UpgradeKey::CurrentVersion), &v);
-    VersionSynced { version: v.clone() }.publish(e);
-    v
-}
-
 /// Perform an upgrade. The caller must already have authorized the upgrade.
 ///
 /// 1. `from` must equal the stored `CurrentHash`.
 /// 2. `manager.is_upgrade_approved(from, to)` must be true.
 /// 3. Version of `to` is read from the registry.
-/// 4. `CurrentHash` / `CurrentVersion` are updated, `Upgraded` is emitted and
-///    the WASM is swapped.
+/// 4. `CurrentHash` is updated, `Upgraded` is emitted and the WASM is swapped.
 ///
 /// A revoked target is rejected by `is_upgrade_approved`; a revoked `from` may
 /// still migrate away.
@@ -157,9 +135,6 @@ pub fn apply(e: &Env, manager: &Address, from: &BytesN<32>, to: &BytesN<32>) {
     e.storage()
         .instance()
         .set(&crate::ns(e, UpgradeKey::CurrentHash), to);
-    e.storage()
-        .instance()
-        .set(&crate::ns(e, UpgradeKey::CurrentVersion), &v);
     Upgraded {
         from_hash: from.clone(),
         to_hash: to.clone(),

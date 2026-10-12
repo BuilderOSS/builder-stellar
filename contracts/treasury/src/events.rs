@@ -1,7 +1,7 @@
 //! Events published by the Treasury contract. Admin changes are
 //! `common::admin::AdminChanged`.
 
-use soroban_sdk::{contractevent, Address, BytesN, Env, String, Symbol};
+use soroban_sdk::{contractevent, Address, BytesN, Env, Symbol};
 
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -9,7 +9,6 @@ pub struct TreasuryInitialized {
     #[topic]
     pub admin: Address,
     pub governor: Address,
-    pub version: String,
 }
 
 /// Emitted once when the Manager launches the treasury (Setup -> Live).
@@ -36,11 +35,10 @@ pub struct Execute {
     pub index: u32,
 }
 
-pub fn emit_treasury_initialized(e: &Env, admin: &Address, governor: &Address, version: &String) {
+pub fn emit_treasury_initialized(e: &Env, admin: &Address, governor: &Address) {
     TreasuryInitialized {
         admin: admin.clone(),
         governor: governor.clone(),
-        version: version.clone(),
     }
     .publish(e);
 }

@@ -45,7 +45,6 @@ fn register_metadata(
                 base_uri: String::from_str(env, "ipfs://"),
                 extension: String::from_str(env, ".png"),
             },
-            String::from_str(env, "0.1.0"),
         ),
     );
 }
@@ -63,7 +62,6 @@ fn create_token_contract(env: &Env, owner: &Address) -> Address {
             Address::generate(env), // metadata address (placeholder)
             Address::generate(env), // manager address (placeholder)
             BytesN::from_array(env, &[0u8; 32]),
-            String::from_str(env, "0.1.0"),
         ),
     )
 }
@@ -93,7 +91,6 @@ fn test_initialize() {
 
     initialize_metadata(&env, &client, &token, &owner);
 
-    assert_eq!(client.version(), String::from_str(&env, "0.1.0"));
     assert_eq!(client.wasm_hash(), BytesN::from_array(&env, &[0u8; 32]));
     let settings = client.get_settings();
     assert_eq!(settings.token, token);
@@ -540,7 +537,7 @@ mod upgrade_via_common {
         env.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&env), to);
             assert_eq!(
-                common::upgrade::version(&env),
+                common::upgrade::version(&env, &mgr.address),
                 String::from_str(&env, "0.2.0")
             );
         });
@@ -572,7 +569,7 @@ mod upgrade_via_common {
     }
 
     #[test]
-    fn upgrade_and_sync_version_reject_unauthorized_caller() {
+    fn upgrade_rejects_unauthorized_caller() {
         let env = Env::default();
         env.mock_all_auths();
         let mgr = MockManagerClient::new(&env, &env.register(MockManager, ()));
@@ -592,16 +589,17 @@ mod upgrade_via_common {
         mgr.approve(&from, &to);
         mgr.register(&to, &String::from_str(&env, "0.2.0"));
         mgr.register(&from, &String::from_str(&env, "0.1.1"));
+        // The module's own version() reads its Manager (D6).
+        assert_eq!(client.version(), String::from_str(&env, "0.1.1"));
         // Drop mock_all_auths: no authorization is provided for any address.
         env.set_auths(&[]);
         assert!(client.try_upgrade(&from, &to).is_err());
-        assert!(client.try_sync_version().is_err());
         env.mock_all_auths();
         env.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&env), from);
             assert_eq!(
-                common::upgrade::version(&env),
-                String::from_str(&env, "0.1.0")
+                common::upgrade::version(&env, &mgr.address),
+                String::from_str(&env, "0.1.1")
             );
         });
     }
@@ -624,6 +622,7 @@ mod upgrade_via_common {
             &from,
             &owner,
         );
+        mgr.register(&from, &String::from_str(&env, "0.1.0"));
         let wrong = BytesN::from_array(&env, &[9u8; 32]);
         mgr.approve(&wrong, &to);
         mgr.register(&to, &String::from_str(&env, "0.2.0"));
@@ -635,7 +634,7 @@ mod upgrade_via_common {
         env.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&env), from);
             assert_eq!(
-                common::upgrade::version(&env),
+                common::upgrade::version(&env, &mgr.address),
                 String::from_str(&env, "0.1.0")
             );
         });
@@ -1718,7 +1717,6 @@ fn token_uri_worst_case_fits_the_limits() {
             Address::generate(&env),
             Address::generate(&env),
             BytesN::from_array(&env, &[0u8; 32]),
-            String::from_str(&env, "0.1.0"),
         ),
     );
     let client = create_contract(&env);
