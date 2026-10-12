@@ -29,9 +29,9 @@ import { Buffer } from 'buffer';
 
 import { decodeStoredProposal } from '@/lib/chain-reads/proposal-core';
 import { namespacedKey } from '@/lib/storage-key';
+import { LEDGERS_PER_DAY, SECONDS_PER_LEDGER } from '@/lib/ttl-expiry';
 
-export const LEDGERS_PER_DAY = 17_280;
-export const SECONDS_PER_LEDGER = 5;
+export { LEDGERS_PER_DAY, SECONDS_PER_LEDGER };
 /** Live testnet limits read 2026-10-12; a batch keeps a margin under each. */
 export const TX_MAX_FOOTPRINT_ENTRIES = 400;
 export const TX_MAX_READ_BYTES = 200_000;

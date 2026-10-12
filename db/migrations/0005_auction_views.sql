@@ -39,6 +39,43 @@ FROM manager.module_events e
 WHERE e.contract_role = 'auction'
   AND e.event_name = 'bid_placed';
 
+-- The outcome and bid state of one auction, keyed on the indexed topic column
+-- (the token id as emitted) and bounded by the auction's own position: the
+-- first settlement or cancellation after it, and the latest bid before that.
+CREATE FUNCTION auction.auction_state(dep text, contract text, token text, created bigint[])
+RETURNS TABLE (
+  closing_event text, winner text, settled_amount numeric(78, 0), closed_at timestamptz,
+  closed_transaction_hash text, highest_bidder text, highest_bid numeric(78, 0),
+  new_end_seconds bigint, extension_count integer
+)
+LANGUAGE sql STABLE
+AS $$
+  SELECT
+    x.event_name, x.a ->> 'winner', (x.a ->> 'amount')::numeric(78, 0), x.closed_at, x.transaction_hash,
+    b.bidder, b.amount, b.new_end_seconds, b.extension_count
+  FROM (SELECT 1) one
+  LEFT JOIN LATERAL (
+    SELECT x.event_name, x.a, x.pos, x.closed_at, x.transaction_hash
+    FROM chain.events x
+    WHERE x.deployment_id = dep AND x.contract_id = contract
+      AND x.event_name IN ('auction_settled', 'auction_cancelled')
+      AND x.topic_0 = token AND x.pos > created
+    ORDER BY x.pos, x.event_id
+    LIMIT 1
+  ) x ON true
+  LEFT JOIN LATERAL (
+    SELECT
+      (array_agg(y.t ->> 'bidder' ORDER BY y.pos DESC, y.event_id DESC))[1] AS bidder,
+      (array_agg((y.a ->> 'amount')::numeric(78, 0) ORDER BY y.pos DESC, y.event_id DESC))[1] AS amount,
+      (array_agg((y.a ->> 'new_end_time')::bigint ORDER BY y.pos DESC, y.event_id DESC))[1] AS new_end_seconds,
+      (count(*) FILTER (WHERE (y.a ->> 'extended')::boolean))::integer AS extension_count
+    FROM chain.events y
+    WHERE y.deployment_id = dep AND y.contract_id = contract
+      AND y.event_name = 'bid_placed' AND y.topic_0 = token
+      AND y.pos > created AND (x.pos IS NULL OR y.pos < x.pos)
+  ) b ON true
+$$;
+
 -- One row per auction with its outcome and its current bid state.
 CREATE VIEW auction.auctions AS
 SELECT
@@ -52,41 +89,54 @@ SELECT
   (c.a ->> 'end_time')::bigint - (c.a ->> 'start_time')::bigint AS duration_seconds,
   (c.a ->> 'reserve_price')::numeric(78, 0) AS reserve_price,
   c.a ->> 'payment_token' AS payment_token,
-  b.bidder AS highest_bidder,
-  b.amount AS highest_bid,
-  COALESCE(b.new_end_seconds, (c.a ->> 'end_time')::bigint) AS current_end_seconds,
-  COALESCE(b.extension_count, 0)::integer AS extension_count,
-  x.event_name = 'auction_settled' AS settled,
-  x.event_name = 'auction_cancelled' AS cancelled,
-  x.a ->> 'winner' AS winner,
-  (x.a ->> 'amount')::numeric(78, 0) AS settled_amount,
-  x.closed_at AS closed_at,
-  x.transaction_hash AS closed_transaction_hash,
+  s.highest_bidder,
+  s.highest_bid,
+  COALESCE(s.new_end_seconds, (c.a ->> 'end_time')::bigint) AS current_end_seconds,
+  COALESCE(s.extension_count, 0) AS extension_count,
+  COALESCE(s.closing_event = 'auction_settled', false) AS settled,
+  COALESCE(s.closing_event = 'auction_cancelled', false) AS cancelled,
+  s.winner,
+  s.settled_amount,
+  s.closed_at,
+  s.closed_transaction_hash,
   c.ledger_sequence AS created_ledger,
   c.transaction_hash
 FROM manager.module_events c
--- The first settlement or cancellation after the auction was created.
-LEFT JOIN LATERAL (
-  SELECT x.event_name, x.a, x.pos, x.closed_at, x.transaction_hash
-  FROM chain.events x
-  WHERE x.deployment_id = c.deployment_id AND x.contract_id = c.contract_id
-    AND x.event_name IN ('auction_settled', 'auction_cancelled')
-    AND x.topic_0 = c.topic_0 AND x.pos > c.pos
-  ORDER BY x.pos, x.event_id
-  LIMIT 1
-) x ON true
--- The latest bid (highest, and carrying the current end), and how many bids extended the end.
-LEFT JOIN LATERAL (
-  SELECT b.bidder, b.amount, b.new_end_seconds,
-    (SELECT count(*) FROM auction.bids y
-     WHERE y.deployment_id = c.deployment_id AND y.contract_id = c.contract_id
-       AND y.token_id = b.token_id AND y.extended AND y.pos > c.pos) AS extension_count
-  FROM auction.bids b
-  WHERE b.deployment_id = c.deployment_id AND b.contract_id = c.contract_id
-    AND b.token_id = (c.t ->> 'token_id')::bigint AND b.pos > c.pos
-    AND (x.pos IS NULL OR b.pos < x.pos)
-  ORDER BY b.pos DESC, b.event_id DESC
-  LIMIT 1
-) b ON true
+CROSS JOIN LATERAL auction.auction_state(c.deployment_id, c.contract_id, c.topic_0, c.pos) s
 WHERE c.contract_role = 'auction'
   AND c.event_name = 'auction_created';
+
+-- The newest auction of every auction contract (the one that can be live),
+-- found before the state is computed so a directory page costs one lookup
+-- per community, not one per auction ever created.
+CREATE VIEW auction.current_auctions AS
+SELECT
+  c.event_id,
+  c.deployment_id,
+  c.dao_id,
+  c.contract_id,
+  (c.t ->> 'token_id')::bigint AS token_id,
+  (c.a ->> 'start_time')::bigint AS start_seconds,
+  (c.a ->> 'end_time')::bigint AS end_seconds,
+  (c.a ->> 'end_time')::bigint - (c.a ->> 'start_time')::bigint AS duration_seconds,
+  (c.a ->> 'reserve_price')::numeric(78, 0) AS reserve_price,
+  c.a ->> 'payment_token' AS payment_token,
+  s.highest_bidder,
+  s.highest_bid,
+  COALESCE(s.new_end_seconds, (c.a ->> 'end_time')::bigint) AS current_end_seconds,
+  COALESCE(s.extension_count, 0) AS extension_count,
+  COALESCE(s.closing_event = 'auction_settled', false) AS settled,
+  COALESCE(s.closing_event = 'auction_cancelled', false) AS cancelled,
+  s.winner,
+  s.settled_amount,
+  s.closed_at,
+  s.closed_transaction_hash,
+  c.ledger_sequence AS created_ledger,
+  c.transaction_hash
+FROM (
+  SELECT DISTINCT ON (e.deployment_id, e.contract_id) e.*
+  FROM manager.module_events e
+  WHERE e.contract_role = 'auction' AND e.event_name = 'auction_created'
+  ORDER BY e.deployment_id, e.contract_id, e.pos DESC, e.event_id DESC
+) c
+CROSS JOIN LATERAL auction.auction_state(c.deployment_id, c.contract_id, c.topic_0, c.pos) s;

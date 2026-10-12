@@ -73,16 +73,17 @@ function artworkReader(config: DaoNetworkConfig): ArtworkReader {
 }
 
 /**
- * A token's selections come from the index (metadata.token_seeds, latest
- * seed), falling back to RPC for a token minted moments ago. Seeded traits only
- * change by regenerate on an unseeded token, so a found value is cached.
+ * A token's selections come from the index (metadata.token_seeds; a token is
+ * seeded once), falling back to RPC for a token minted moments ago. Seeded
+ * traits only change by regenerate on an unseeded token, so a found value is
+ * cached.
  */
 async function tokenAttributes(config: DaoNetworkConfig, tokenId: number): Promise<number[]> {
   return cached(`attributes:${config.metadataContractId}:${tokenId}`, 60 * 60_000, async () => {
     const rows = await prisma.$queryRaw<{ selections: unknown }[]>`
       SELECT selections FROM metadata.token_seeds
       WHERE deployment_id = ${DEPLOYMENT_ID} AND dao_id = ${config.tokenContractId}
-        AND metadata_contract = ${config.metadataContractId} AND token_id = ${tokenId} AND is_current
+        AND metadata_contract = ${config.metadataContractId} AND token_id = ${tokenId}
       LIMIT 1`;
     const indexed = rows[0]?.selections;
     if (Array.isArray(indexed) && indexed.length > 0 && indexed.every((value) => Number.isInteger(value)))

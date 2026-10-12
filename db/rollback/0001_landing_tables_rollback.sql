@@ -5,6 +5,7 @@ DROP TABLE IF EXISTS chain.raw_events;
 DROP FUNCTION IF EXISTS chain.reject_event_mutation();
 DROP FUNCTION IF EXISTS chain.fill_event_positions();
 DROP FUNCTION IF EXISTS chain.event_position(bigint, bigint, bigint, bigint);
+DROP FUNCTION IF EXISTS chain.jsonb_safe(text);
 DROP FUNCTION IF EXISTS chain.ledger_closed_at_ts(text);
 DROP SCHEMA IF EXISTS app;
 DROP SCHEMA IF EXISTS marketplace;

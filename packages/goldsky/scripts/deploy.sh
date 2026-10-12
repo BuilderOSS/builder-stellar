@@ -11,7 +11,12 @@
 #   status        - Show the deployed Turbo pipelines
 #   logs          - Tail the pipeline logs
 #   delete        - Delete the pipeline
-#   redeploy      - Delete and apply again (see the replay notes below)
+#   redeploy      - Delete and apply again (see the replay notes below).
+#                   Refuses while the read model still holds events unless
+#                   --force is given, because a replay cannot overwrite the
+#                   immutable landing tables; with DATABASE_URL set the check
+#                   is real (SELECT 1 FROM chain.raw_events), without it the
+#                   script cannot tell and also wants --force.
 #
 # The pipeline is a Goldsky *Turbo* pipeline. Its name is the `name:` line of
 # pipelines/builder-stellar-events.yaml (`builder-stellar-<network>`, set by
@@ -142,9 +147,42 @@ cmd_delete() {
   echo ""
 }
 
+# A redeploy replays the chain into the landing tables, which reject updates
+# (chain.reject_event_mutation). Replaying over a populated read model either
+# duplicates nothing (same ids, rows refused) or, after a changed transform,
+# leaves old rows next to new ones. Refuse unless the database is empty or the
+# operator says --force.
+redeploy_guard() {
+  if [ "$FORCE" = "1" ]; then
+    echo -e "${YELLOW}--force: skipping the empty-read-model check${NC}"
+    return 0
+  fi
+  if [ -z "${DATABASE_URL:-}" ]; then
+    echo -e "${RED}✗ DATABASE_URL is not set, so the read model cannot be checked for leftover events.${NC}"
+    echo "  Set DATABASE_URL (admin role) or pass --force after resetting the database yourself."
+    exit 1
+  fi
+  if ! command -v psql &> /dev/null; then
+    echo -e "${RED}✗ psql not installed; cannot check the read model. Pass --force after resetting it yourself.${NC}"
+    exit 1
+  fi
+  local populated
+  populated=$(psql "$DATABASE_URL" -X -t -A -c "SELECT EXISTS (SELECT 1 FROM chain.raw_events)" 2>/dev/null || echo "")
+  if [ "$populated" = "t" ]; then
+    echo -e "${RED}✗ chain.raw_events still holds events. A replay cannot overwrite them.${NC}"
+    echo "  With the pipeline stopped: DROP SCHEMA streamling CASCADE; db/reset-database.sh --yes && db/migrate.sh && db/grant-permissions.sh"
+    echo "  then run redeploy again (or pass --force to skip this check)."
+    exit 1
+  fi
+  if [ "$populated" != "f" ]; then
+    echo -e "${YELLOW}chain.raw_events is absent (fresh database): continuing${NC}"
+  fi
+}
+
 cmd_redeploy() {
   banner "Redeploy Turbo pipeline"
   echo -e "${YELLOW}→ This deletes and re-applies: $PIPELINE_NAME${NC}"
+  redeploy_guard
   echo ""
   echo -e "${YELLOW}The landing tables (chain.raw_events, chain.decoded_events, app.activity_feed_events)${NC}"
   echo -e "${YELLOW}are immutable, and the DAO allowlists in schema streamling persist across pipelines.${NC}"
@@ -180,13 +218,20 @@ cmd_help() {
   echo "  status        List the deployed Turbo pipelines"
   echo "  logs          Tail the pipeline logs"
   echo "  delete        Delete the pipeline"
-  echo "  redeploy      Delete and apply again"
+  echo "  redeploy      Delete and apply again; refuses over a populated read model unless --force"
   echo "  help          Show this help"
   echo ""
   echo "Pipeline name: $PIPELINE_NAME (from the YAML; pnpm generate sets it)"
 }
 
 COMMAND="${1:-help}"
+FORCE=0
+for arg in "${@:2}"; do
+  case "$arg" in
+    --force) FORCE=1 ;;
+    *) echo -e "${RED}Error: Unknown option '$arg'${NC}"; exit 1 ;;
+  esac
+done
 
 case "$COMMAND" in
   deploy) cmd_deploy ;;

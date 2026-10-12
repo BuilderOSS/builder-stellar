@@ -57,24 +57,27 @@ SELECT DISTINCT ON (t.deployment_id, t.contract_id, t.token_id)
 FROM token.transfers t
 ORDER BY t.deployment_id, t.contract_id, t.token_id, t.pos DESC, t.event_id DESC;
 
--- Holders and delegates: owned count, current delegation and voting power.
--- Both delegation events key on topic_0 (delegator / delegate), so one scan
--- gives the latest of each per address.
-CREATE VIEW token.members AS
-WITH latest AS (
+-- The latest delegation and vote count per address (both events key on
+-- topic_0: delegator / delegate), one scan.
+CREATE VIEW token.delegate_state AS
+SELECT
+  deployment_id, dao_id, contract_id, address,
+  max(a ->> 'to_delegate') FILTER (WHERE event_name = 'delegate_changed') AS delegated_to,
+  COALESCE(max((a ->> 'new_votes')::bigint) FILTER (WHERE event_name = 'delegate_votes_changed'), 0)::bigint AS voting_power
+FROM (
   SELECT DISTINCT ON (deployment_id, contract_id, event_name, topic_0)
     deployment_id, dao_id, contract_id, event_name, topic_0 AS address, a
   FROM manager.module_events
   WHERE contract_role = 'token' AND event_name IN ('delegate_changed', 'delegate_votes_changed')
   ORDER BY deployment_id, contract_id, event_name, topic_0, pos DESC, event_id DESC
-), votes AS (
-  SELECT
-    deployment_id, dao_id, contract_id, address,
-    max(a ->> 'to_delegate') FILTER (WHERE event_name = 'delegate_changed') AS delegated_to,
-    COALESCE(max((a ->> 'new_votes')::bigint) FILTER (WHERE event_name = 'delegate_votes_changed'), 0) AS voting_power
-  FROM latest
-  GROUP BY deployment_id, dao_id, contract_id, address
-), owned AS (
+) latest
+GROUP BY deployment_id, dao_id, contract_id, address;
+
+-- Holders and delegates: owned count, current delegation and voting power.
+-- Holders first, then delegates who hold nothing; the tenant keys stay plain
+-- columns on both sides so a per-DAO filter pushes into each.
+CREATE VIEW token.members AS
+WITH owned AS (
   SELECT deployment_id, dao_id, contract_id, owner AS address,
     count(*)::bigint AS owned_token_count,
     max(event_ledger)::bigint AS last_activity_ledger
@@ -82,18 +85,27 @@ WITH latest AS (
   GROUP BY deployment_id, dao_id, contract_id, owner
 )
 SELECT
-  COALESCE(o.deployment_id, v.deployment_id) AS deployment_id,
-  COALESCE(o.dao_id, v.dao_id) AS dao_id,
-  COALESCE(o.contract_id, v.contract_id) AS contract_id,
-  COALESCE(o.address, v.address) AS address,
-  COALESCE(o.owned_token_count, 0)::bigint AS owned_token_count,
+  o.deployment_id, o.dao_id, o.contract_id, o.address,
+  o.owned_token_count,
   v.delegated_to,
   COALESCE(v.voting_power, 0)::bigint AS voting_power,
   o.last_activity_ledger
 FROM owned o
-FULL JOIN votes v
+LEFT JOIN token.delegate_state v
   ON v.deployment_id = o.deployment_id AND v.contract_id = o.contract_id AND v.address = o.address
-WHERE o.address IS NOT NULL OR v.voting_power <> 0;
+UNION ALL
+SELECT
+  v.deployment_id, v.dao_id, v.contract_id, v.address,
+  0::bigint AS owned_token_count,
+  v.delegated_to,
+  v.voting_power,
+  NULL::bigint AS last_activity_ledger
+FROM token.delegate_state v
+WHERE v.voting_power <> 0
+  AND NOT EXISTS (
+    SELECT 1 FROM token.inventory i
+    WHERE i.deployment_id = v.deployment_id AND i.contract_id = v.contract_id AND i.owner = v.address
+  );
 
 -- Addresses currently allowed to mint (the admin has implicit authority and is
 -- not listed). Granted at launch by the Manager, afterwards only by governance.
@@ -125,15 +137,17 @@ SELECT
   r.deployment_id,
   r.dao_id,
   r.token_contract AS contract_id,
-  count(inv.token_id)::bigint AS minted_supply,
-  (count(inv.token_id) FILTER (
-    WHERE inv.owner IN (r.treasury_contract, r.auction_contract, r.marketplace_contract)))::bigint AS system_held_supply,
-  (count(inv.token_id) - count(inv.token_id) FILTER (
-    WHERE inv.owner IN (r.treasury_contract, r.auction_contract, r.marketplace_contract)))::bigint AS voting_supply
+  s.minted_supply,
+  s.system_held_supply,
+  (s.minted_supply - s.system_held_supply)::bigint AS voting_supply
 FROM manager.dao_registry r
-LEFT JOIN token.inventory inv
-  ON inv.deployment_id = r.deployment_id AND inv.contract_id = r.token_contract
-GROUP BY r.deployment_id, r.dao_id, r.token_contract;
+CROSS JOIN LATERAL (
+  SELECT
+    count(*)::bigint AS minted_supply,
+    (count(*) FILTER (WHERE inv.owner IN (r.treasury_contract, r.auction_contract, r.marketplace_contract)))::bigint AS system_held_supply
+  FROM token.inventory inv
+  WHERE inv.deployment_id = r.deployment_id AND inv.contract_id = r.token_contract
+) s;
 
 -- Single-token approvals still in force: the latest approve per token, unless
 -- the token moved since (a transfer clears the approval on chain) or the

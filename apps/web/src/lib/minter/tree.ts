@@ -21,6 +21,8 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { StrKey } from '@stellar/stellar-sdk';
 import { Buffer } from 'buffer';
 
+import { MAX_BATCH_MINT } from '@/lib/batch-mint-budget';
+
 import { claimAmount, claimLeaf } from './proof';
 
 export const TREE_FORMAT = 'builder-stellar-merkle-v1';
@@ -66,9 +68,9 @@ function buildLayers(leaves: Buffer[]): Buffer[][] {
   return layers;
 }
 
-function proofFor(layers: Buffer[][], leaf: Buffer): string[] {
-  let index = layers[0]!.findIndex((node) => node.equals(leaf));
-  if (index < 0) throw new Error('Leaf not in tree.');
+function proofFor(layers: Buffer[][], leafIndex: Map<string, number>, leaf: Buffer): string[] {
+  let index = leafIndex.get(leaf.toString('hex'));
+  if (index === undefined) throw new Error('Leaf not in tree.');
   const proof: string[] = [];
   for (const layer of layers.slice(0, -1)) {
     const sibling = index ^ 1;
@@ -78,7 +80,11 @@ function proofFor(layers: Buffer[][], leaf: Buffer): string[] {
   return proof;
 }
 
-/** Validate a claim list: valid addresses, positive amounts, no duplicates, within the cap. */
+/**
+ * Validate a claim list: valid addresses, positive amounts, no duplicates,
+ * within the cap. A claim mints its whole amount in one `batch_mint`, so an
+ * amount over `MAX_BATCH_MINT` could never be claimed (`BatchTooLarge`).
+ */
 export function validateClaimEntries(entries: ClaimEntry[]) {
   if (!entries.length) throw new Error('Add at least one recipient.');
   if (entries.length > MAX_TREE_CLAIMS) throw new Error(`Use at most ${MAX_TREE_CLAIMS.toLocaleString()} recipients.`);
@@ -88,7 +94,8 @@ export function validateClaimEntries(entries: ClaimEntry[]) {
       throw new Error(`${address || 'An empty address'} is not a Stellar address.`);
     if (seen.has(address)) throw new Error(`${address} appears twice. Combine its amounts into one line.`);
     seen.add(address);
-    claimAmount(amount);
+    if (claimAmount(amount) > BigInt(MAX_BATCH_MINT))
+      throw new Error(`${address} would claim ${amount} tokens; one claim mints at most ${MAX_BATCH_MINT}.`);
   }
 }
 
@@ -100,9 +107,10 @@ export function buildClaimTree(
   validateClaimEntries(entries);
   const leaves = entries.map(({ address, amount }) => claimLeaf(address, amount));
   const layers = buildLayers(leaves);
+  const leafIndex = new Map(layers[0]!.map((leaf, i) => [leaf.toString('hex'), i]));
   const claims: ClaimTreeFile['claims'] = {};
   entries.forEach(({ address, amount }, i) => {
-    claims[address] = { amount, proof: proofFor(layers, leaves[i]!) };
+    claims[address] = { amount, proof: proofFor(layers, leafIndex, leaves[i]!) };
   });
   return {
     format: TREE_FORMAT,

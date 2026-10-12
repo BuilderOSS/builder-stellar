@@ -33,6 +33,7 @@ transforms:
       FROM stellar_events
       WHERE contract_id = '{{MANAGER_CONTRACT_ID}}'
         AND type = 'contract'
+        AND in_successful_contract_call
         AND topics LIKE '%dao_created%'
 
   dao_metadata:
@@ -47,6 +48,7 @@ transforms:
       FROM stellar_events
       WHERE contract_id = '{{MANAGER_CONTRACT_ID}}'
         AND type = 'contract'
+        AND in_successful_contract_call
         AND topics LIKE '%dao_created%'
 
   dao_auctions:
@@ -61,6 +63,7 @@ transforms:
       FROM stellar_events
       WHERE contract_id = '{{MANAGER_CONTRACT_ID}}'
         AND type = 'contract'
+        AND in_successful_contract_call
         AND topics LIKE '%dao_created%'
 
   dao_governors:
@@ -75,6 +78,7 @@ transforms:
       FROM stellar_events
       WHERE contract_id = '{{MANAGER_CONTRACT_ID}}'
         AND type = 'contract'
+        AND in_successful_contract_call
         AND topics LIKE '%dao_created%'
 
   dao_treasuries:
@@ -89,6 +93,7 @@ transforms:
       FROM stellar_events
       WHERE contract_id = '{{MANAGER_CONTRACT_ID}}'
         AND type = 'contract'
+        AND in_successful_contract_call
         AND topics LIKE '%dao_created%'
 
   dao_marketplaces:
@@ -103,6 +108,7 @@ transforms:
       FROM stellar_events
       WHERE contract_id = '{{MANAGER_CONTRACT_ID}}'
         AND type = 'contract'
+        AND in_successful_contract_call
         AND topics LIKE '%dao_created%'
 
   dao_events:
@@ -147,6 +153,7 @@ transforms:
       FROM stellar_events
        WHERE ledger_sequence >= {{START_AT}}
          AND type = 'contract'
+         AND in_successful_contract_call
          AND (
            contract_id = '{{MANAGER_CONTRACT_ID}}'
            OR contract_id = '{{MINTER_CONTRACT_ID}}'

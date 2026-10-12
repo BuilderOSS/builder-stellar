@@ -12,6 +12,7 @@
 import type { AppProposalDetail, AppProposalList } from '@prisma/client';
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
+import { parseList } from '@/lib/api-pagination';
 import { getDeploymentNetwork, verifyRows } from '@/lib/dao-db';
 import { prisma } from '@/lib/prisma';
 
@@ -170,7 +171,6 @@ export async function getGoldskyAuctionBids(daoId: string, tokenId: string, limi
     event_id: row.eventId,
     bidder: row.bidder,
     amount: row.amount.toString(),
-    payment_type: null,
     ledger_sequence: Number(row.eventLedger),
     timestamp: row.eventAt,
     transaction_hash: row.transactionHash,
@@ -206,16 +206,7 @@ export async function getGoldskyActivityFeed(
     ...(contractRole ? { contractRole } : {}),
     ...(actor ? { actor } : {}),
     ...(visibility === 'all' ? {} : PUBLIC_FEED_FILTER),
-    ...(kind
-      ? {
-          kind: {
-            in: kind
-              .split(',')
-              .map((value) => value.trim())
-              .filter(Boolean)
-          }
-        }
-      : {})
+    ...(kind ? { kind: { in: parseList(kind) } } : {})
   };
   const [rows, total] = await Promise.all([
     prisma.appActivityFeed.findMany({
@@ -593,6 +584,42 @@ export async function getDashboardData(address: string, params: { limit?: number
     },
     generatedAt: new Date().toISOString()
   };
+}
+
+/**
+ * Whether the index holds a `minter.merkle_claim` by `recipient` since the
+ * `minter.merkle_root_set` that opened `round`. A second line of defence for
+ * the claims flow when the chain read found no claim marker: the Minter
+ * refuses a double claim itself, so a hit here means the page is stale.
+ * Unknown round (not indexed yet): false.
+ */
+export async function hasIndexedClaim(daoId: string, recipient: string, round: number): Promise<boolean> {
+  const deploymentId = getDeploymentId();
+  const opened = await prisma.appActivityFeed.findMany({
+    where: { deploymentId, daoId, contractRole: 'minter', kind: 'minter.merkle_root_set' },
+    orderBy: FEED_ORDER,
+    take: 20,
+    select: { args: true, ledgerSequence: true }
+  });
+  const openedAt = opened.find((row) => {
+    try {
+      return Number((JSON.parse(row.args) as { round?: unknown }).round) === round;
+    } catch {
+      return false;
+    }
+  });
+  if (!openedAt) return false;
+  const claims = await prisma.appActivityFeed.count({
+    where: {
+      deploymentId,
+      daoId,
+      contractRole: 'minter',
+      kind: 'minter.merkle_claim',
+      actor: { equals: recipient, mode: 'insensitive' },
+      ledgerSequence: { gte: openedAt.ledgerSequence }
+    }
+  });
+  return claims > 0;
 }
 
 /**

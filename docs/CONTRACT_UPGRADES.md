@@ -83,8 +83,9 @@ DAOs keep their addresses and history only through upgrades.
 ## 4. Indexer and read model (if events or views change)
 
 1. New `#[contractevent]` structs are picked up from `contracts/*/src/events.rs` automatically. Also:
-   - add the event's topic names to `packages/goldsky/src/decoded-events.script.js`;
-   - add it to `REQUIRED_EVENTS` in `packages/goldsky/test/event-coverage.test.mjs`;
+   - add the event's topic names to `packages/goldsky/src/decoded-events.script.js` (`test/contract-alignment.test.mjs`
+     fails on a struct the decoder does not name, and `test/every-event.test.mjs` runs every struct through the
+     decoder and the feed transform);
    - if members should see it, map it in `src/activity-feed.script.js` (kind, title, summary, visibility);
    - `pnpm --filter @builder-stellar/goldsky generate && node --test packages/goldsky/test/*.test.mjs`.
 2. View changes: a **new** append-only migration in `db/migrations/` (never edit an applied one; the ledger

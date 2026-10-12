@@ -7,14 +7,11 @@
  * holes. It replaces eyeballing the kind, title and summary maps event by event.
  */
 import test from 'node:test';
+import { loadInvoke } from './load-script.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { contractEventList, LIBRARY_EVENTS } from '../src/contract-events.mjs';
 
-function loadInvoke(name) {
-  const source = readFileSync(new URL(`../src/${name}`, import.meta.url), 'utf8');
-  return new Function(`${source}\nreturn invoke;`)();
-}
 const decode = loadInvoke('decoded-events.script.js');
 const feed = loadInvoke('activity-feed.script.js');
 

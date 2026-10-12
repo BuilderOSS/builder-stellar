@@ -41,6 +41,15 @@ AS $$
   END
 $$;
 
+-- jsonb refuses the \u0000 escape, and the decoder stores free text (profile
+-- JSON, comments, descriptions) as it was emitted. One NUL in one DAO's text
+-- must not make every view that casts the column raise, so the views cast
+-- through this: the escape becomes U+FFFD.
+CREATE FUNCTION chain.jsonb_safe(raw text)
+RETURNS jsonb
+LANGUAGE sql IMMUTABLE PARALLEL SAFE
+AS $$ SELECT replace(raw, '\u0000', '\ufffd')::jsonb $$;
+
 -- Total ordering key for an event inside the chain. A missing index sorts first.
 -- Every "latest" or "first" lookup in the views orders by this, then event_id.
 CREATE FUNCTION chain.event_position(ledger bigint, tx bigint, op bigint, evt bigint)
@@ -172,8 +181,8 @@ SELECT
   e.topic_0,
   e.topic_1,
   e.topic_2,
-  e.topics::jsonb AS t,
-  e.args::jsonb AS a,
+  chain.jsonb_safe(e.topics) AS t,
+  chain.jsonb_safe(e.args) AS a,
   chain.event_position(e.ledger_sequence, e.transaction_index, e.operation_index, e.event_index) AS pos,
   e.ledger_sequence,
   e.transaction_index,

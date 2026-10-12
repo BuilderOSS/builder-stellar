@@ -7,7 +7,22 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { contractEventList, contractEvents, contractEventsByContract, decoderTopicNames, findDecoderDrift } from '../src/contract-events.mjs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
+import { contractEventList, contractEvents, contractEventsByContract, decoderTopicNames, findDecoderDrift, repoRoot } from '../src/contract-events.mjs';
+
+test('every #[contractevent] lives in a file the alignment parser reads', () => {
+  const walk = (dir) => readdirSync(dir).flatMap((f) => {
+    const p = join(dir, f);
+    if (statSync(p).isDirectory()) return f === 'target' ? [] : walk(p);
+    return p.endsWith('.rs') ? [p] : [];
+  });
+  const files = walk(join(repoRoot, 'contracts'))
+    .filter((f) => /^#\[contractevent/m.test(readFileSync(f, 'utf8')))
+    .map((f) => relative(repoRoot, f));
+  const unparsed = files.filter((f) => !/^contracts\/[^/]+\/src\/events\.rs$/.test(f) && !/^contracts\/common\/src\/[^/]+\.rs$/.test(f));
+  assert.deepEqual(unparsed, [], 'move the event to events.rs or teach contractEventList() about the file');
+});
 
 test('contracts define events', () => {
   assert.ok(Object.keys(contractEvents()).length > 50);

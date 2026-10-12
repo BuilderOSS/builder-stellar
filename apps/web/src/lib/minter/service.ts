@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { getDaoNetworkConfigById, readSource } from '@/lib/dao-config';
 import { getDeploymentConfig } from '@/lib/deployment-config';
-import { getGoldskyMinterClaims } from '@/lib/goldsky';
+import { getGoldskyMinterClaims, hasIndexedClaim } from '@/lib/goldsky';
 import { readHolderValue, requireHolderAddress } from '@/lib/token-holder/read';
 
 import { claimListState } from './claim-list';
@@ -127,6 +127,12 @@ export async function prepareClaim(
   if (current.round === null || current.round !== action.round)
     throw new ClaimError('The claim round is unavailable or changed. Refresh before reviewing.', 409);
   if (current.claimed === true) throw new ClaimError('You already claimed in the current round.', 409);
+  // No claim marker on chain: the index is the second opinion before simulating.
+  if (current.claimed === null && (await hasIndexedClaim(config.tokenContractId, actor.address, current.round)))
+    throw new ClaimError(
+      'The index shows a claim by this address in the current round. Refresh before reviewing.',
+      409
+    );
   const amount = action.amount;
   if (!state.merkle.root || !verifyClaimProof(actor.address, amount, action.proof, state.merkle.root))
     throw new ClaimError('This proof does not match your address, amount and the current root.');

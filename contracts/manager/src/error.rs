@@ -26,7 +26,7 @@ pub enum ManagerError {
     PlatformMinterNotSet = 7108,
     /// An implementation is already registered for this WASM hash
     ImplementationAlreadyRegistered = 7109,
-    /// `enable_minter` requires `expected_minter` to equal the registered platform minter
+    /// The launch config's `minter` is not the registered platform Minter
     PlatformMinterMismatch = 7110,
 
     // Factory

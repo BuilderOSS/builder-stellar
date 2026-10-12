@@ -6,12 +6,21 @@ function invoke(data) {
       return name.charAt(0).toUpperCase() + name.slice(1).replace(/_([a-z])/g, function (_, c) { return c.toUpperCase(); });
     }
 
+    // PostgreSQL jsonb refuses U+0000, and a profile, comment or description is
+    // free text no contract filters, so one NUL would make every view that reads
+    // the row raise. Replace it with U+FFFD before the text reaches the sink.
+    function text(value) {
+      return String(value).replace(/\u0000/g, '\uFFFD');
+    }
+
     function native(value) {
       if (value === null || value === undefined || value === 'void') return null;
+      if (typeof value === 'string') return text(value);
       if (typeof value !== 'object') return value;
-      if (value.symbol !== undefined) return String(value.symbol);
+      if (value.symbol !== undefined) return text(value.symbol);
       if (value.address !== undefined) return String(value.address);
-      var scalar = ['u32', 'i32', 'u64', 'i64', 'u128', 'i128', 'u256', 'i256', 'bytes', 'string', 'bool'];
+      if (value.string !== undefined) return text(value.string);
+      var scalar = ['u32', 'i32', 'u64', 'i64', 'u128', 'i128', 'u256', 'i256', 'bytes', 'bool'];
       for (var i = 0; i < scalar.length; i += 1) {
         if (value[scalar[i]] !== undefined) return scalar[i].match(/^[ui](64|128|256)$/) ? String(value[scalar[i]]) : value[scalar[i]];
       }
@@ -167,8 +176,9 @@ function invoke(data) {
   };
     return result;
 
-    // Fallback only: the pipeline normally assigns contract_role from the DAO
-    // module allowlists before decoding. Names mirror the topicNames groups.
+    // Fallback only: the pipeline assigns contract_role from the DAO module
+    // allowlists before decoding, and the common events (Upgraded, Migrated,
+    // AdminChanged, UpgradeDelayChanged) cannot be resolved by name at all.
     function roleForEvent(name) {
       var canonical = toCanonical(name);
       if (canonical === 'MintBatchWithMinter' || canonical === 'MetadataUpdated') return 'token';

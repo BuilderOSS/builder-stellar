@@ -33,6 +33,7 @@ transforms:
       FROM stellar_events
       WHERE contract_id = 'CDFQIOSA3JJWV3HIZ5XVMXBMTEL7BRZWZVUW72OQN6O3EM35OVT6PD5W'
         AND type = 'contract'
+        AND in_successful_contract_call
         AND topics LIKE '%dao_created%'
 
   dao_metadata:
@@ -47,6 +48,7 @@ transforms:
       FROM stellar_events
       WHERE contract_id = 'CDFQIOSA3JJWV3HIZ5XVMXBMTEL7BRZWZVUW72OQN6O3EM35OVT6PD5W'
         AND type = 'contract'
+        AND in_successful_contract_call
         AND topics LIKE '%dao_created%'
 
   dao_auctions:
@@ -61,6 +63,7 @@ transforms:
       FROM stellar_events
       WHERE contract_id = 'CDFQIOSA3JJWV3HIZ5XVMXBMTEL7BRZWZVUW72OQN6O3EM35OVT6PD5W'
         AND type = 'contract'
+        AND in_successful_contract_call
         AND topics LIKE '%dao_created%'
 
   dao_governors:
@@ -75,6 +78,7 @@ transforms:
       FROM stellar_events
       WHERE contract_id = 'CDFQIOSA3JJWV3HIZ5XVMXBMTEL7BRZWZVUW72OQN6O3EM35OVT6PD5W'
         AND type = 'contract'
+        AND in_successful_contract_call
         AND topics LIKE '%dao_created%'
 
   dao_treasuries:
@@ -89,6 +93,7 @@ transforms:
       FROM stellar_events
       WHERE contract_id = 'CDFQIOSA3JJWV3HIZ5XVMXBMTEL7BRZWZVUW72OQN6O3EM35OVT6PD5W'
         AND type = 'contract'
+        AND in_successful_contract_call
         AND topics LIKE '%dao_created%'
 
   dao_marketplaces:
@@ -103,6 +108,7 @@ transforms:
       FROM stellar_events
       WHERE contract_id = 'CDFQIOSA3JJWV3HIZ5XVMXBMTEL7BRZWZVUW72OQN6O3EM35OVT6PD5W'
         AND type = 'contract'
+        AND in_successful_contract_call
         AND topics LIKE '%dao_created%'
 
   dao_events:
@@ -147,6 +153,7 @@ transforms:
       FROM stellar_events
        WHERE ledger_sequence >= 5117938
          AND type = 'contract'
+         AND in_successful_contract_call
          AND (
            contract_id = 'CDFQIOSA3JJWV3HIZ5XVMXBMTEL7BRZWZVUW72OQN6O3EM35OVT6PD5W'
            OR contract_id = 'CC5TEMQCHDJ2MNR25NZVFNSAHKAHD43MVU47PZIAPCT5ODLYVEJWYB6R'
@@ -282,12 +289,21 @@ transforms:
             return name.charAt(0).toUpperCase() + name.slice(1).replace(/_([a-z])/g, function (_, c) { return c.toUpperCase(); });
           }
 
+          // PostgreSQL jsonb refuses U+0000, and a profile, comment or description is
+          // free text no contract filters, so one NUL would make every view that reads
+          // the row raise. Replace it with U+FFFD before the text reaches the sink.
+          function text(value) {
+            return String(value).replace(/\u0000/g, '\uFFFD');
+          }
+
           function native(value) {
             if (value === null || value === undefined || value === 'void') return null;
+            if (typeof value === 'string') return text(value);
             if (typeof value !== 'object') return value;
-            if (value.symbol !== undefined) return String(value.symbol);
+            if (value.symbol !== undefined) return text(value.symbol);
             if (value.address !== undefined) return String(value.address);
-            var scalar = ['u32', 'i32', 'u64', 'i64', 'u128', 'i128', 'u256', 'i256', 'bytes', 'string', 'bool'];
+            if (value.string !== undefined) return text(value.string);
+            var scalar = ['u32', 'i32', 'u64', 'i64', 'u128', 'i128', 'u256', 'i256', 'bytes', 'bool'];
             for (var i = 0; i < scalar.length; i += 1) {
               if (value[scalar[i]] !== undefined) return scalar[i].match(/^[ui](64|128|256)$/) ? String(value[scalar[i]]) : value[scalar[i]];
             }
@@ -443,8 +459,9 @@ transforms:
         };
           return result;
 
-          // Fallback only: the pipeline normally assigns contract_role from the DAO
-          // module allowlists before decoding. Names mirror the topicNames groups.
+          // Fallback only: the pipeline assigns contract_role from the DAO module
+          // allowlists before decoding, and the common events (Upgraded, Migrated,
+          // AdminChanged, UpgradeDelayChanged) cannot be resolved by name at all.
           function roleForEvent(name) {
             var canonical = toCanonical(name);
             if (canonical === 'MintBatchWithMinter' || canonical === 'MetadataUpdated') return 'token';
@@ -699,8 +716,6 @@ transforms:
           MerkleClaimEvent: 'minter.merkle_claim',
           MintBatchEvent: 'minter.batch_mint',
           MerkleRootSetEvent: 'minter.merkle_root_set',
-          Paused: 'contract.paused',
-          Unpaused: 'contract.unpaused',
           ManagerInitialized: 'manager.initialized',
           ManagerUpgraded: 'manager.upgraded',
           UpgradeDelayChanged: 'manager.upgrade_delay_changed',
@@ -794,8 +809,6 @@ transforms:
           MerkleClaimEvent: 'Merkle claim completed',
           MintBatchEvent: 'Batch mint completed',
           MerkleRootSetEvent: 'Claim round opened',
-          Paused: 'Contract paused',
-          Unpaused: 'Contract unpaused',
           ManagerInitialized: 'Manager initialized',
           ManagerUpgraded: 'Manager upgraded',
           UpgradeDelayChanged: 'Manager upgrade notice changed',
@@ -1036,12 +1049,6 @@ transforms:
         if (normalizedEventName === 'ProfileUpdated' && String(pick(data, ['seq'])) === '0') visibility = 'admin';
 
         // Helper to safely convert to number
-        function toNumber(val) {
-          if (typeof val === 'number') return isFinite(val) ? val : 0;
-          var n = Number(val);
-          return isFinite(n) ? n : 0;
-        }
-
         // Helper to safely convert to string
         function toString(val) {
           if (val === null || val === undefined || val === '') return '';

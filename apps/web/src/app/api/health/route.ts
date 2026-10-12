@@ -7,9 +7,9 @@ import { prisma } from '@/lib/prisma';
  * Health check endpoint for monitoring production deployment
  *
  * Returns:
- * - Goldsky pipeline status (latest event ledger)
+ * - Goldsky pipeline status (latest feed ledger, from app.feed_status)
  * - DAO count
- * - Recent activity count
+ * - Recent activity count (feed rows in the last 720 ledgers)
  * - Overall health status
  *
  * Usage: GET /api/health
@@ -41,20 +41,19 @@ export async function GET() {
       console.error('Failed to check RPC latest ledger:', e);
     }
 
-    // Check 2: Latest event for this deployment (event processing lag)
-    let latestLedger = null;
+    // Check 2: Feed freshness for this deployment (app.feed_status: the latest
+    // feed ledger and the rows of the last 720 ledgers, ~1 h, from the index).
+    let latestLedger: number | null = null;
+    let recentActivityCount = 0;
     let eventProcessingTime = 0;
     try {
       const t1 = Date.now();
-      const result = await prisma.appActivityFeed.findFirst({
-        where: { deploymentId: DEPLOYMENT_ID },
-        orderBy: { ledgerSequence: 'desc' },
-        select: { ledgerSequence: true }
-      });
-      latestLedger = result ? Number(result.ledgerSequence) : null;
+      const result = await prisma.appFeedStatus.findFirst({ where: { deploymentId: DEPLOYMENT_ID } });
+      latestLedger = result ? Number(result.latestLedger) : null;
+      recentActivityCount = result ? Number(result.lastHourCount) : 0;
       eventProcessingTime = Date.now() - t1;
     } catch (e) {
-      console.error('Failed to check latest event:', e);
+      console.error('Failed to check feed status:', e);
     }
 
     // Check 2: DAO count
@@ -66,31 +65,6 @@ export async function GET() {
       daoCheckTime = Date.now() - t1;
     } catch (e) {
       console.error('Failed to count DAOs:', e);
-    }
-
-    // Check 3: Recent activity (last hour)
-    let recentActivityCount = 0;
-    let activityCheckTime = 0;
-    try {
-      const t1 = Date.now();
-      const activity: Array<{ ledgerClosedAt: string | null }> = await prisma.appActivityFeed.findMany({
-        where: { deploymentId: DEPLOYMENT_ID },
-        select: { ledgerClosedAt: true }
-      });
-      const hourAgo = Date.now() - 60 * 60 * 1000;
-      recentActivityCount = activity.filter((row) => {
-        const raw = row.ledgerClosedAt ?? '';
-        const numeric = Number(raw);
-        const timestamp = Number.isFinite(numeric)
-          ? numeric < 10_000_000_000
-            ? numeric * 1000
-            : numeric
-          : Date.parse(raw);
-        return Number.isFinite(timestamp) && timestamp > hourAgo;
-      }).length;
-      activityCheckTime = Date.now() - t1;
-    } catch (e) {
-      console.error('Failed to check recent activity:', e);
     }
 
     const totalTime = Date.now() - startTime;
@@ -117,7 +91,6 @@ export async function GET() {
           rpc_check: rpcCheckTime,
           event_check: eventProcessingTime,
           dao_check: daoCheckTime,
-          activity_check: activityCheckTime,
           total: totalTime
         },
         alerts: {

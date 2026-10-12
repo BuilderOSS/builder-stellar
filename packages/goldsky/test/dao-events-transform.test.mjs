@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { loadInvoke } from './load-script.mjs';
 import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -7,10 +8,6 @@ import { buildGoldskyPipelineYaml, resolveDeploymentSelection, resolvePipelineNa
 
 const deploymentFixture = new URL('../../../deploys/builder-testnet-manager.json', import.meta.url);
 
-function loadInvoke(scriptName) {
-  const source = readFileSync(new URL(`../src/${scriptName}`, import.meta.url), 'utf8');
-  return new Function(`${source}\nreturn invoke;`)();
-}
 
 const decodeEvent = loadInvoke('decoded-events.script.js');
 const buildActivityFeed = loadInvoke('activity-feed.script.js');
@@ -477,8 +474,10 @@ test('pipeline generator renders the current deployment and scripts', { skip: !e
   for (const role of ['manager', 'minter', 'token', 'metadata', 'auction', 'governor', 'treasury', 'marketplace']) {
     assert.match(yaml, new RegExp(`THEN '${role}'`));
   }
-  // System events (executable_update) and diagnostics are not contract events.
-  assert.match(yaml, /AND type = 'contract'\n\s+AND \(/);
+  // System events (executable_update) and diagnostics are not contract events, and a
+  // failed call's events are not state.
+  assert.match(yaml, /AND type = 'contract'\n\s+AND in_successful_contract_call\n\s+AND \(/);
+  assert.equal((yaml.match(/AND in_successful_contract_call/g) || []).length, 7, 'the six allowlists and dao_events');
   assert.match(yaml, /topics LIKE '%dao_created%'/);
   assert.doesNotMatch(yaml, /topics LIKE '%dao_registered%'/);
   assert.match(yaml, /function invoke\(data\)/);

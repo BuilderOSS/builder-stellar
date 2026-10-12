@@ -27,14 +27,34 @@ async function fetchJson(uri: string): Promise<unknown> {
   throw last instanceof Error ? last : new Error('The claim list could not be fetched.');
 }
 
+/** How long a failed fetch or verification is remembered before the file is tried again. */
+const FAILURE_TTL_MS = 60_000;
+const failures = new Map<string, { reason: string; until: number }>();
+
 /**
  * The verified tree behind a root. IPFS content is immutable, so a verified
- * (uri, root) pair is cached for an hour; failures are not cached.
+ * (uri, root) pair is cached for an hour. A failure (unreachable gateway, a
+ * file that does not match the root) is remembered for a minute, so a broken
+ * root cannot make every claims-page view re-download and re-hash the file.
  */
-export function loadClaimTree(uri: string, scope: { network: string; token: string; root: string }) {
-  return cached<ClaimTreeFile>(`claim-tree:${uri}:${scope.root}`, 60 * 60_000, async () =>
-    verifyClaimTree(await fetchJson(uri), scope)
-  );
+export async function loadClaimTree(uri: string, scope: { network: string; token: string; root: string }) {
+  const key = `claim-tree:${uri}:${scope.root}`;
+  const failed = failures.get(key);
+  if (failed && failed.until > Date.now()) throw new Error(failed.reason);
+  failures.delete(key);
+  try {
+    return await cached<ClaimTreeFile>(key, 60 * 60_000, async () => verifyClaimTree(await fetchJson(uri), scope));
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'The claim list could not be checked.';
+    if (failures.size >= 500) failures.delete(failures.keys().next().value!);
+    failures.set(key, { reason, until: Date.now() + FAILURE_TTL_MS });
+    throw error;
+  }
+}
+
+/** Test helper. */
+export function clearClaimTreeFailures() {
+  failures.clear();
 }
 
 /** The claim list as a member sees it, with their own allocation when they have one. */

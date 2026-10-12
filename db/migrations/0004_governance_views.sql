@@ -82,27 +82,6 @@ WITH created AS (
    AND s.event_name = 'proposal_scheduled' AND s.topic_0 = e.topic_0
   WHERE e.contract_role = 'governor'
     AND e.event_name = 'proposal_created'
-), lifecycle AS (
-  -- The latest lifecycle event wins; the eta recorded when the proposal was
-  -- queued is kept after it is executed or canceled.
-  SELECT
-    deployment_id, contract_id, topic_0 AS proposal_id,
-    (array_agg(event_name ORDER BY pos DESC, event_id DESC))[1] AS last_event,
-    (array_agg((a ->> 'eta')::bigint ORDER BY pos DESC, event_id DESC) FILTER (WHERE event_name = 'proposal_queued'))[1] AS eta_seconds,
-    max(ledger_sequence) AS updated_ledger,
-    (array_agg(closed_at ORDER BY pos DESC, event_id DESC))[1] AS updated_at
-  FROM chain.events
-  WHERE contract_role = 'governor'
-    AND event_name IN ('proposal_queued', 'proposal_executed', 'proposal_cancelled')
-  GROUP BY deployment_id, contract_id, topic_0
-), tally AS (
-  SELECT
-    deployment_id, contract_id, proposal_id,
-    COALESCE(sum(weight) FILTER (WHERE support = 1), 0)::numeric(78, 0) AS for_votes,
-    COALESCE(sum(weight) FILTER (WHERE support = 0), 0)::numeric(78, 0) AS against_votes,
-    COALESCE(sum(weight) FILTER (WHERE support = 2), 0)::numeric(78, 0) AS abstain_votes
-  FROM governance.proposal_votes
-  GROUP BY deployment_id, contract_id, proposal_id
 )
 SELECT
   c.*,
@@ -125,10 +104,31 @@ SELECT
   COALESCE(t.against_votes, 0)::numeric(78, 0) AS against_votes,
   COALESCE(t.abstain_votes, 0)::numeric(78, 0) AS abstain_votes
 FROM created c
-LEFT JOIN lifecycle l
-  ON l.deployment_id = c.deployment_id AND l.contract_id = c.contract_id AND l.proposal_id = c.proposal_id
-LEFT JOIN tally t
-  ON t.deployment_id = c.deployment_id AND t.contract_id = c.contract_id AND t.proposal_id = c.proposal_id;
+-- Both laterals key on the indexed topic columns of the proposal's own events
+-- (proposal_id is topic_0 of the lifecycle events and topic_1 of vote_cast),
+-- so a per-DAO or per-proposal filter never sorts another DAO's votes.
+-- The latest lifecycle event wins; the eta recorded when the proposal was
+-- queued is kept after it is executed or canceled.
+LEFT JOIN LATERAL (
+  SELECT
+    (array_agg(x.event_name ORDER BY x.pos DESC, x.event_id DESC))[1] AS last_event,
+    (array_agg((x.a ->> 'eta')::bigint ORDER BY x.pos DESC, x.event_id DESC) FILTER (WHERE x.event_name = 'proposal_queued'))[1] AS eta_seconds,
+    max(x.ledger_sequence) AS updated_ledger,
+    (array_agg(x.closed_at ORDER BY x.pos DESC, x.event_id DESC))[1] AS updated_at
+  FROM chain.events x
+  WHERE x.deployment_id = c.deployment_id AND x.contract_id = c.contract_id
+    AND x.event_name IN ('proposal_queued', 'proposal_executed', 'proposal_cancelled')
+    AND x.topic_0 = c.proposal_id
+) l ON true
+LEFT JOIN LATERAL (
+  SELECT
+    COALESCE(sum((v.a ->> 'weight')::numeric) FILTER (WHERE (v.a ->> 'vote_type')::integer = 1), 0)::numeric(78, 0) AS for_votes,
+    COALESCE(sum((v.a ->> 'weight')::numeric) FILTER (WHERE (v.a ->> 'vote_type')::integer = 0), 0)::numeric(78, 0) AS against_votes,
+    COALESCE(sum((v.a ->> 'weight')::numeric) FILTER (WHERE (v.a ->> 'vote_type')::integer = 2), 0)::numeric(78, 0) AS abstain_votes
+  FROM chain.events v
+  WHERE v.deployment_id = c.deployment_id AND v.contract_id = c.contract_id
+    AND v.event_name = 'vote_cast' AND v.topic_1 = c.proposal_id
+) t ON true;
 
 -- Current Governor configuration per DAO: the constructor values overlaid with
 -- the latest *_changed event of each parameter, and the current admin.

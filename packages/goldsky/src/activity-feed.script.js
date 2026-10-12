@@ -204,8 +204,6 @@ function invoke(data) {
     MerkleClaimEvent: 'minter.merkle_claim',
     MintBatchEvent: 'minter.batch_mint',
     MerkleRootSetEvent: 'minter.merkle_root_set',
-    Paused: 'contract.paused',
-    Unpaused: 'contract.unpaused',
     ManagerInitialized: 'manager.initialized',
     ManagerUpgraded: 'manager.upgraded',
     UpgradeDelayChanged: 'manager.upgrade_delay_changed',
@@ -299,8 +297,6 @@ function invoke(data) {
     MerkleClaimEvent: 'Merkle claim completed',
     MintBatchEvent: 'Batch mint completed',
     MerkleRootSetEvent: 'Claim round opened',
-    Paused: 'Contract paused',
-    Unpaused: 'Contract unpaused',
     ManagerInitialized: 'Manager initialized',
     ManagerUpgraded: 'Manager upgraded',
     UpgradeDelayChanged: 'Manager upgrade notice changed',
@@ -541,12 +537,6 @@ function invoke(data) {
   if (normalizedEventName === 'ProfileUpdated' && String(pick(data, ['seq'])) === '0') visibility = 'admin';
 
   // Helper to safely convert to number
-  function toNumber(val) {
-    if (typeof val === 'number') return isFinite(val) ? val : 0;
-    var n = Number(val);
-    return isFinite(n) ? n : 0;
-  }
-
   // Helper to safely convert to string
   function toString(val) {
     if (val === null || val === undefined || val === '') return '';

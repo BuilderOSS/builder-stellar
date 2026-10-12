@@ -1,6 +1,8 @@
 import { Keypair } from '@stellar/stellar-sdk';
 import { describe, expect, it } from 'vitest';
 
+import { MAX_BATCH_MINT } from '@/lib/batch-mint-budget';
+
 import { verifyClaimProof } from './proof';
 import { buildClaimTree, type ClaimEntry, MAX_TREE_CLAIMS, validateClaimEntries, verifyClaimTree } from './tree';
 
@@ -40,7 +42,7 @@ describe('published claim trees', () => {
       tree.claims[list[0]!.address]!.proof
     );
     const inflated = structuredClone(tree);
-    inflated.claims[list[0]!.address]!.amount = '999';
+    inflated.claims[list[0]!.address]!.amount = '2';
     expect(() => verifyClaimTree(inflated, scope)).toThrow('does not match the root');
     expect(() => verifyClaimTree({ ...tree, token: 'CX' }, scope)).toThrow('different community');
     expect(() => verifyClaimTree({ ...tree, format: 'uniswap' }, scope)).toThrow('unknown format');
@@ -52,6 +54,9 @@ describe('published claim trees', () => {
     expect(() => validateClaimEntries([a!, a!])).toThrow('appears twice');
     expect(() => validateClaimEntries([{ address: 'nope', amount: '1' }])).toThrow('not a Stellar address');
     expect(() => validateClaimEntries([{ ...a!, amount: '0' }])).toThrow();
+    // One claim is one batch_mint; the contract refuses a batch over the event budget.
+    expect(() => validateClaimEntries([{ ...a!, amount: String(MAX_BATCH_MINT + 1) }])).toThrow('at most');
+    expect(() => validateClaimEntries([{ ...a!, amount: String(MAX_BATCH_MINT) }])).not.toThrow();
     expect(MAX_TREE_CLAIMS).toBe(10_000);
   });
 });

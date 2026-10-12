@@ -19,9 +19,10 @@
 -- Not projected (read from chain, or only a feed row): latest_implementation_set,
 -- current_implementations_updated, upgrade_approved, manager_upgraded, upgrade_delay_changed.
 --
--- Module events read here (contracts/common): <role>_launched (topic treasury),
--- admin_changed (topics old_admin, new_admin), upgraded (topics from_hash, to_hash;
--- data version), migrated (data from_storage_version, to_storage_version).
+-- Module events read here: <role>_launched (topic treasury; each module's own
+-- events.rs) and, from contracts/common, admin_changed (topics old_admin,
+-- new_admin), upgraded (topics from_hash, to_hash; data version), migrated
+-- (data from_storage_version, to_storage_version).
 -- =============================================================================
 
 -- One row per DAO. DaoCreated.slug is only the slug *requested* at creation.
@@ -47,6 +48,7 @@ SELECT DISTINCT ON (e.deployment_id, e.topic_0)
   e.a #>> '{wasm_hashes,metadata}'    AS metadata_wasm_hash,
   e.a #>> '{wasm_hashes,marketplace}' AS marketplace_wasm_hash,
   e.ledger_sequence                AS created_ledger,
+  e.pos                            AS created_pos,
   e.closed_at                      AS created_at,
   e.transaction_hash               AS created_tx_hash,
   e.ingested_at                    AS indexed_at

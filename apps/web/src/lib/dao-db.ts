@@ -356,10 +356,9 @@ async function addLiveAvailability(daos: DaoConfig[]): Promise<DaoConfig[]> {
   const listingWhere = { deploymentId: DEPLOYMENT_ID, OR: marketScopes, status: 'open', expiresAt: { gt: now } };
   const [auctions, primary, secondary] = await Promise.all([
     auctionScopes.length
-      ? prisma.auctionAuction.findMany({
+      ? prisma.auctionCurrentAuction.findMany({
           where: { deploymentId: DEPLOYMENT_ID, OR: auctionScopes, settled: false, cancelled: false },
-          select: { daoId: true, currentEndSeconds: true },
-          orderBy: { createdLedger: 'desc' }
+          select: { daoId: true, currentEndSeconds: true }
         })
       : [],
     marketScopes.length
@@ -370,11 +369,9 @@ async function addLiveAvailability(daos: DaoConfig[]): Promise<DaoConfig[]> {
       : []
   ]);
 
-  // The newest unsettled auction per community is live until its end including
-  // any extensions (auction.auctions.current_end_seconds).
-  const current = new Map<string, (typeof auctions)[number]>();
-  for (const auction of auctions) if (!current.has(auction.daoId)) current.set(auction.daoId, auction);
-  const live = new Set([...current.values()].filter((a) => a.currentEndSeconds > now).map((a) => a.daoId));
+  // auction.current_auctions is the newest auction per contract; an open one is
+  // live until its end including any extensions (current_end_seconds).
+  const live = new Set(auctions.filter((a) => a.currentEndSeconds > now).map((a) => a.daoId));
 
   const listings = new Map<string, number>();
   for (const row of [...primary, ...secondary])

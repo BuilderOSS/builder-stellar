@@ -47,15 +47,15 @@ transaction together with its row in `public.schema_migrations` (name + SHA-256)
 
 | Migration | Contents |
 | --- | --- |
-| `0001_landing_tables` | schemas, helper functions (`chain.ledger_closed_at_ts` for the pipeline's epoch-millisecond closed-at values, `chain.event_position`), the 3 landing tables, indexes, triggers, and `chain.events` (decoded events with jsonb topics/data and a total position: the base of every view) |
+| `0001_landing_tables` | schemas, helper functions (`chain.ledger_closed_at_ts` for the pipeline's epoch-millisecond closed-at values, `chain.event_position`, `chain.jsonb_safe` for a stray `\u0000`), the 3 landing tables, indexes, triggers, and `chain.events` (decoded events with jsonb topics/data and a total position: the base of every view) |
 | `0002_manager_views` | DAO registry, modules and identity, `manager.module_events`, launches, `manager.daos`, per-module launch status, implementations, module versions, Manager settings (admin, pending admin, platform Minter, factory pause) |
-| `0003_token_views` | transfers, inventory, members, mint authorities, supply (voting vs system-held), approvals |
+| `0003_token_views` | transfers, inventory, delegate state, members, mint authorities, supply (voting vs system-held), approvals |
 | `0004_governance_views` | votes, proposals (state from `proposal_scheduled` and the clock, tallies), settings, comments |
-| `0005_auction_views` | bids, auctions (outcome and current bid state) |
-| `0006_metadata_views` | profiles, token seeds |
+| `0005_auction_views` | bids, `auction.auction_state()` (outcome and current bid state per auction), auctions, current auctions (newest per contract) |
+| `0006_metadata_views` | token seeds (the profile is a column of `manager.daos`) |
 | `0007_treasury_views` | treasury calls (one per executed proposal action) |
 | `0008_marketplace_views` | primary listings (by `listing_id`), secondary listings (by `token_id`), sales, comments |
-| `0009_app_views` | activity feed (per-DAO, with platform events fanned out), proposal list/detail, indexer status |
+| `0009_app_views` | activity feed (per-DAO, with platform events fanned out), proposal list/detail, feed status (health), indexer status |
 
 Launch model: every module emits its own launch event (`token_launched`,
 `governor_launched`, ...) and hands its admin to the Treasury (`admin_changed`,

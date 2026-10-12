@@ -67,7 +67,9 @@ SELECT
   p.kind, p.title, p.summary, p.actor, p.addresses, p.proposal_id, p.token_id, p.amount, p.visibility,
   p.ledger_sequence, p.transaction_index, p.operation_index, p.event_index, p.ledger_closed_at, p.transaction_hash
 FROM platform p
-JOIN manager.dao_registry d ON d.deployment_id = p.deployment_id AND d.created_ledger <= p.ledger_sequence
+JOIN manager.dao_registry d
+  ON d.deployment_id = p.deployment_id
+ AND d.created_pos < chain.event_position(p.ledger_sequence, p.transaction_index, p.operation_index, p.event_index)
 UNION ALL
 SELECT
   e.activity_id || ':' || m.dao_id, e.deployment_id, m.dao_id, e.contract_id, e.contract_role, e.event_name, e.topics, e.args,
@@ -101,6 +103,21 @@ SELECT
   ), '[]'::jsonb) AS actions
 FROM app.proposal_list p
 JOIN chain.events c ON c.event_id = p.created_event_id;
+
+-- Feed freshness for the health endpoint: the latest feed ledger and how many
+-- rows landed in the last hour (720 ledgers of ~5 s), both from the index on
+-- (deployment_id, ledger_sequence), never from the whole feed.
+CREATE VIEW app.feed_status AS
+SELECT
+  l.deployment_id,
+  l.latest_ledger,
+  (SELECT count(*) FROM app.activity_feed_events e
+   WHERE e.deployment_id = l.deployment_id AND e.ledger_sequence > l.latest_ledger - 720)::bigint AS last_hour_count
+FROM (
+  SELECT deployment_id, max(ledger_sequence) AS latest_ledger
+  FROM app.activity_feed_events
+  GROUP BY deployment_id
+) l;
 
 CREATE VIEW app.indexer_status AS
 SELECT

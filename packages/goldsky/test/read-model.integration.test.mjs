@@ -10,6 +10,7 @@
  * (db/test-migrations.sh with TEST_DATABASE_URL sets one up). Skipped otherwise.
  */
 import test from 'node:test';
+import { loadInvoke } from './load-script.mjs';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -18,10 +19,6 @@ import { allEvents, contractEventsByContract } from '../src/contract-events.mjs'
 const DATABASE_URL = process.env.TEST_DATABASE_URL;
 const skip = !DATABASE_URL && 'set TEST_DATABASE_URL to a migrated empty database';
 
-function loadInvoke(name) {
-  const source = readFileSync(new URL(`../src/${name}`, import.meta.url), 'utf8');
-  return new Function(`${source}\nreturn invoke;`)();
-}
 const rawScript = loadInvoke('raw-events.script.js');
 const decodeScript = loadInvoke('decoded-events.script.js');
 const activityScript = loadInvoke('activity-feed.script.js');
@@ -167,6 +164,16 @@ function buildScenario() {
   emit('manager', 'CMANAGER', 'factory_paused', { ledger: 207 });
   // A third DAO created after the platform events: it must not inherit them.
   emit('manager', 'CMANAGER', 'dao_created', { topics: [addr('CTOK3'), addr('GDEPLOYER3'), addr('GLAUNCH3')], data: { created_ledger: u64(208), modules: modules(3), wasm_hashes: wasmHashes(3), slug: str('dao-three') }, ledger: 208 });
+  // A fourth DAO launched with the auction started (the auction's own `unpaused`
+  // lands in the launch transaction, before DaoLaunched), then paused by vote;
+  // its marketplace closed and reopened by vote.
+  const d4 = dao(4);
+  emit('manager', 'CMANAGER', 'dao_created', { topics: [addr('CTOK4'), addr('GDEPLOYER4'), addr('GLAUNCH4')], data: { created_ledger: u64(300), modules: modules(4), wasm_hashes: wasmHashes(4), slug: str('dao-four') }, ledger: 300 });
+  emit('auction', d4.auction, 'unpaused', { ledger: 301, evt: 0 });
+  emit('manager', 'CMANAGER', 'dao_launched', { topics: [addr('CTOK4')], data: { launched_ledger: u64(301), modules: modules(4), launch_auction: bool(true), launch_marketplace: bool(true), minter: addr(MINTER) }, ledger: 301, evt: 1 });
+  emit('auction', d4.auction, 'paused', { ledger: 310 });
+  emit('marketplace', d4.marketplace, 'marketplace_paused', { topics: [addr(d4.treasury)], ledger: 311 });
+  emit('marketplace', d4.marketplace, 'marketplace_unpaused', { topics: [addr(d4.treasury)], ledger: 312 });
   emit('auction', d1.auction, 'unpaused', { ledger: 130 });
   // After launch: a rename (token 0.2.0 MetadataUpdated) and a vote that closes the market.
   emit('token', d1.token, 'metadata_updated', { data: { name: str('Alpha Club'), symbol: str('ALPHA') }, ledger: 150, tx: 7 });
@@ -254,6 +261,8 @@ function buildScenario() {
   // Event-only comments (governor 0.2.0), in any proposal state.
   emit('governor', d1.governor, 'proposal_commented', { topics: [bytes('p1'), addr('GBOB')], data: { body: str('Shipped, thanks all') }, ledger: 147, evt: 1 });
   emit('governor', d1.governor, 'proposal_commented', { topics: [bytes('p3'), addr('GALICE')], data: { body: str('Withdrawn for now') }, ledger: 147, evt: 2 });
+  // Free text with a NUL: jsonb refuses U+0000, so the decoder replaces it with U+FFFD.
+  emit('governor', d1.governor, 'proposal_commented', { topics: [bytes('p3'), addr('GCAROL')], data: { body: str('nul\u0000byte') }, ledger: 147, evt: 3 });
   // Never queued, quorum met and for > against, 14 days past vote_end -> expired.
   created('p4', 148, { quorum: 3 });
   emit('governor', d1.governor, 'vote_cast', { topics: [addr('GALICE'), bytes('p4')], data: { vote_type: u32(1), weight: u128(5), reason: str('') }, ledger: 148, evt: 1 });
@@ -288,8 +297,9 @@ function buildScenario() {
   emit('auction', d1.auction, 'auction_cancelled', { topics: [u128(8)], data: { reason: u32(1), cancelled_by: addr('GOWNER') }, ledger: 163 });
   auctionCreated(9, 164);
   emit('auction', d1.auction, 'auction_settled', { topics: [u128(9)], data: { winner: VOID, amount: i128(0) }, ledger: 165 });
-  // An outstanding deferred refund (never withdrawn) stays in pending_refunds.
   emit('auction', d1.auction, 'refund_deferred', { topics: [u128(9), addr('GBID4')], data: { amount: i128(7) }, ledger: 166 });
+  // The current auction: open, no bids yet.
+  auctionCreated(10, 167);
 
   // --- metadata ----------------------------------------------------------------
   emit('metadata', d1.metadata, 'property_added', { topics: [u32(0)], data: { name: str('bg') }, ledger: 170 });
@@ -318,6 +328,7 @@ function buildScenario() {
   emit('marketplace', d1.marketplace, 'primary_listing_cancelled', { topics: [u64(2)], ledger: 188 });
   primary(3, 189);
   emit('marketplace', d1.marketplace, 'primary_listing_expired', { topics: [u64(3)], ledger: 189, evt: 1 });
+  primary(4, 196); // still open
   const secondary = (id, ledger) => emit('marketplace', d1.marketplace, 'secondary_listing_created', {
     topics: [u32(id)], data: { seller: addr('GSELLER'), price: i128(100), expires_at: u64(5000), fee_bps: u32(250), payment_asset: addr('CXLM') }, ledger
   });
@@ -424,8 +435,8 @@ test('landing tables fill operation/event positions from the event id and stay i
 
 test('manager: registry, launches, slugs and implementations', { skip }, () => {
   const daos = rows(`SELECT * FROM manager.daos ORDER BY created_ledger`);
-  assert.equal(daos.length, 3);
-  const [a, b, c] = daos;
+  assert.equal(daos.length, 4);
+  const [a, b, c, d] = daos;
   assert.equal(a.dao_id, 'CTOK1');
   assert.equal(a.deployer, 'GDEPLOYER');
   assert.equal(a.launch_admin, 'GLAUNCH');
@@ -459,12 +470,15 @@ test('manager: registry, launches, slugs and implementations', { skip }, () => {
   assert.deepEqual([a.auction_enabled, a.auction_paused, a.marketplace_enabled], [true, false, false], 'a market opened at launch and closed by vote is off');
   assert.ok(a.indexed_at);
   assert.deepEqual([b.status, b.auction_enabled, b.auction_paused, b.marketplace_enabled], ['pending', null, null, null]);
+  // Launched with the auction started (its launch-tx `unpaused` is not a reactivation),
+  // then paused by vote; marketplace closed then reopened by vote.
+  assert.deepEqual([d.dao_id, d.auction_enabled, d.auction_paused, d.marketplace_enabled], ['CTOK4', true, true, true]);
 
   assert.deepEqual(
     rows(`SELECT module_role, created_wasm_hash FROM manager.dao_modules WHERE dao_id = 'CTOK1' ORDER BY module_role`).map((r) => [r.module_role, r.created_wasm_hash]),
     [['auction', 'a21'], ['governor', 'a31'], ['marketplace', 'a51'], ['metadata', 'a11'], ['token', 'a01'], ['treasury', 'a41']]
   );
-  assert.equal(one(`SELECT count(*)::int AS n FROM manager.event_identity`).n, 18);
+  assert.equal(one(`SELECT count(*)::int AS n FROM manager.event_identity`).n, 24);
   assert.deepEqual(
     one(`SELECT launch_auction, launch_marketplace, minter, launched_ledger FROM manager.dao_launches WHERE dao_id = 'CTOK1'`),
     { launch_auction: false, launch_marketplace: true, minter: 'CMINTER', launched_ledger: 116 }
@@ -563,8 +577,11 @@ test('governance: proposals, votes, state, settings and comments', { skip }, () 
   );
   assert.deepEqual(
     rows(`SELECT proposal_id, author, body, dao_id FROM governance.proposal_comments ORDER BY event_ledger, event_index`).map((r) => [r.author, r.body, r.dao_id]),
-    [['GBOB', 'Shipped, thanks all', 'CTOK1'], ['GALICE', 'Withdrawn for now', 'CTOK1']]
+    [['GBOB', 'Shipped, thanks all', 'CTOK1'], ['GALICE', 'Withdrawn for now', 'CTOK1'], ['GCAROL', 'nul\uFFFDbyte', 'CTOK1']],
+    'a NUL in free text becomes U+FFFD before the sink'
   );
+  // The views cast through chain.jsonb_safe, so a NUL that reaches the table still reads.
+  assert.equal(one(`SELECT chain.jsonb_safe('{"a":"x\\u0000y"}') ->> 'a' AS v`).v, 'x\uFFFDy');
 });
 
 test('auction: auctions carry their outcome and bid state; bids keep their comment', { skip }, () => {
@@ -572,8 +589,15 @@ test('auction: auctions carry their outcome and bid state; bids keep their comme
   assert.deepEqual(auctions.map((a) => [a.token_id, a.duration_seconds, a.settled, a.cancelled, a.winner, a.settled_amount === null ? null : Number(a.settled_amount)]), [
     [7, 1000, true, false, 'GBID2', 30],
     [8, 1000, false, true, null, null],
-    [9, 1000, true, false, null, 0]
-  ]);
+    [9, 1000, true, false, null, 0],
+    [10, 1000, false, false, null, null]
+  ], 'an open auction is false/false, never NULL');
+  assert.equal(one(`SELECT count(*)::int AS n FROM auction.auctions WHERE settled = false AND cancelled = false`).n, 1);
+  assert.deepEqual(
+    rows(`SELECT dao_id, token_id, settled, cancelled, highest_bidder FROM auction.current_auctions ORDER BY dao_id`),
+    [{ dao_id: 'CTOK1', token_id: 10, settled: false, cancelled: false, highest_bidder: null }],
+    'the newest auction per contract'
+  );
   assert.deepEqual([auctions[0].highest_bidder, Number(auctions[0].highest_bid), auctions[0].current_end_seconds, auctions[0].extension_count], ['GBID3', 40, 2300, 1]);
   assert.deepEqual([auctions[2].highest_bidder, auctions[2].highest_bid, auctions[2].current_end_seconds, auctions[2].extension_count], [null, null, 2000, 0]);
   assert.equal(auctions[0].closed_transaction_hash, 'tx160-0');
@@ -581,21 +605,20 @@ test('auction: auctions carry their outcome and bid state; bids keep their comme
   assert.deepEqual(rows(`SELECT bidder, amount, extended, comment FROM auction.bids ORDER BY event_ledger`).map((b) => [b.bidder, Number(b.amount), b.extended, b.comment]), [['GBID1', 20, false, 'gm'], ['GBID2', 30, true, null], ['GBID3', 40, false, null]]);
 });
 
-test('metadata: profiles and seeds', { skip }, () => {
+test('metadata: seeds', { skip }, () => {
   assert.deepEqual(rows(`SELECT token_id, num_properties, selections FROM metadata.token_seeds ORDER BY token_id`), [
     { token_id: 3, num_properties: 1, selections: [2] },
     { token_id: 4, num_properties: 1, selections: [1, 0] },
     { token_id: 5, num_properties: 1, selections: [1, 1] }
   ]);
   assert.equal(new Set(rows(`SELECT event_id FROM metadata.token_seeds WHERE token_id IN (4, 5)`).map((r) => r.event_id)).size, 1, 'batch rows share their event id');
-  const profile = one(`SELECT dao_id, metadata_contract, profile_seq, profile_hash, updated_ledger FROM metadata.profiles`);
-  assert.deepEqual({ ...profile, profile_seq: Number(profile.profile_seq) }, { dao_id: 'CTOK1', metadata_contract: 'CMETA1', profile_seq: 1, profile_hash: 'p1', updated_ledger: 174 });
+  assert.equal(one(`SELECT to_regclass('metadata.profiles') AS v`).v, null, 'the profile is a column of manager.daos');
 });
 
 test('marketplace: primary listings by listing_id, secondary by token_id, sales', { skip }, () => {
   assert.deepEqual(
     rows(`SELECT listing_id, status, token_id, buyer, payment_asset, closed_transaction_hash FROM marketplace.primary_listings ORDER BY listing_id`).map((r) => [Number(r.listing_id), r.status, r.token_id, r.buyer, r.payment_asset, r.closed_transaction_hash]),
-    [[1, 'purchased', 9, 'GBUYER', 'CXLM', 'tx181-0'], [2, 'cancelled', null, null, 'CXLM', 'tx188-0'], [3, 'expired', null, null, 'CXLM', 'tx189-0']]
+    [[1, 'purchased', 9, 'GBUYER', 'CXLM', 'tx181-0'], [2, 'cancelled', null, null, 'CXLM', 'tx188-0'], [3, 'expired', null, null, 'CXLM', 'tx189-0'], [4, 'open', null, null, 'CXLM', null]]
   );
   assert.deepEqual(
     rows(`SELECT token_id, status, buyer, seller, payment_asset, closed_transaction_hash FROM marketplace.secondary_listings ORDER BY token_id`),
@@ -622,6 +645,7 @@ test('marketplace: primary listings by listing_id, secondary by token_id, sales'
   assert.deepEqual(feed.map((r) => [r.kind, r.visibility, r.actor]), [
     ['governance.proposal_commented', 'governance', 'GBOB'],
     ['governance.proposal_commented', 'governance', 'GALICE'],
+    ['governance.proposal_commented', 'governance', 'GCAROL'],
     ['marketplace.primary_listing_commented', 'public', 'GBUYER'],
     ['marketplace.listing_commented', 'public', 'GBUYER']
   ]);
@@ -653,7 +677,7 @@ test('activity feed: tenant resolution, platform fan-out and kinds', { skip }, (
     feed(`contract_role = 'manager'`).every((r) => (perDao.includes(r.event_name) || platform.includes(r.event_name) ? r.dao_id !== null : r.dao_id === null)),
     'per-DAO manager events resolve to their DAO, platform ones to every DAO; deployment-wide ones have none'
   );
-  assert.equal(one(`SELECT dao_id FROM app.activity_feed WHERE event_name = 'dao_launched'`).dao_id, 'CTOK1', 'launch rows belong to their DAO feed');
+  assert.deepEqual(rows(`SELECT dao_id FROM app.activity_feed WHERE event_name = 'dao_launched' ORDER BY ledger_sequence`).map((r) => r.dao_id), ['CTOK1', 'CTOK4'], 'launch rows belong to their DAO feed');
   assert.equal(one(`SELECT dao_id FROM app.activity_feed WHERE event_name = 'admin_changed' AND contract_role = 'manager'`).dao_id, null, 'deployment-wide Manager events have no DAO');
   assert.ok(feed(`contract_role = 'governor'`).every((r) => r.dao_id === 'CTOK1'));
   assert.ok(feed(`contract_role = 'minter' AND event_name NOT IN ('upgraded', 'migrated', 'upgrade_delay_changed')`).every((r) => r.dao_id === 'CTOK1'));
@@ -701,7 +725,7 @@ test('activity feed: tenant resolution, platform fan-out and kinds', { skip }, (
   assert.equal(renamed[1].summary, 'Link changed to /dao/alpha-club (was /dao/dao-uno)');
   assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'proposal_cancelled'`).kind, 'governance.proposal_cancelled');
   assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'listing_purchased'`).kind, 'marketplace.listing_purchased');
-  assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'unpaused'`).kind, 'auction.unpaused');
+  assert.equal(one(`SELECT kind FROM app.activity_feed WHERE event_name = 'unpaused' AND dao_id = 'CTOK1'`).kind, 'auction.unpaused');
   assert.deepEqual(rows(`SELECT DISTINCT kind FROM app.activity_feed WHERE kind LIKE 'contract.%'`), [], 'every event has a module- or contract-specific kind');
   // Feed rows keep their position inside a ledger (filled by the trigger from the id).
   assert.deepEqual(
@@ -713,8 +737,10 @@ test('activity feed: tenant resolution, platform fan-out and kinds', { skip }, (
 test('indexer status exposes progress without raw events', { skip }, () => {
   const status = one(`SELECT * FROM app.indexer_status`);
   assert.equal(status.deployment_id, DEPLOYMENT);
-  assert.equal(status.latest_ledger, 208);
+  assert.equal(status.latest_ledger, 312);
   assert.equal(status.event_count, events.length);
+  const feed = one(`SELECT latest_ledger, last_hour_count FROM app.feed_status`);
+  assert.deepEqual({ latest_ledger: feed.latest_ledger, last_hour_count: Number(feed.last_hour_count) }, { latest_ledger: 312, last_hour_count: events.length }, 'every fixture ledger is within 720 of the latest');
 });
 
 // ---------------------------------------------------------------------------

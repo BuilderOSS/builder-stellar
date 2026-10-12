@@ -202,6 +202,16 @@ view AppActivityFeed {
   @@schema("app")
 }
 
+/// Feed freshness from the index, for the health endpoint.
+view AppFeedStatus {
+  deploymentId  String @map("deployment_id")
+  latestLedger  BigInt @map("latest_ledger")
+  lastHourCount BigInt @map("last_hour_count")
+
+  @@map("feed_status")
+  @@schema("app")
+}
+
 view AppIndexerStatus {
   deploymentId   String   @map("deployment_id")
   latestLedger   BigInt   @map("latest_ledger")
@@ -374,8 +384,8 @@ view AuctionAuction {
   highestBid        Decimal?  @map("highest_bid")
   currentEndSeconds BigInt    @map("current_end_seconds")
   extensionCount    Int       @map("extension_count")
-  settled           Boolean?
-  cancelled         Boolean?
+  settled           Boolean
+  cancelled         Boolean
   /** Settlement outcome: winner NULL when unsold; settledAmount 0 then. */
   winner            String?
   settledAmount     Decimal?  @map("settled_amount")
@@ -385,6 +395,37 @@ view AuctionAuction {
   transactionHash   String  @map("transaction_hash")
 
   @@map("auctions")
+  @@schema("auction")
+}
+
+/// The newest auction per auction contract (the one that can be live).
+view AuctionCurrentAuction {
+  eventId           String  @map("event_id")
+  deploymentId      String  @map("deployment_id")
+  daoId             String  @map("dao_id")
+  contractId        String  @map("contract_id")
+  tokenId           BigInt  @map("token_id")
+  startSeconds      BigInt  @map("start_seconds")
+  endSeconds        BigInt  @map("end_seconds")
+  durationSeconds   BigInt? @map("duration_seconds")
+  reservePrice      Decimal @map("reserve_price")
+  paymentToken      String? @map("payment_token")
+  /** The latest bid is the highest and carries the current end (bids only grow, ends only extend). */
+  highestBidder     String?   @map("highest_bidder")
+  highestBid        Decimal?  @map("highest_bid")
+  currentEndSeconds BigInt    @map("current_end_seconds")
+  extensionCount    Int       @map("extension_count")
+  settled           Boolean
+  cancelled         Boolean
+  /** Settlement outcome: winner NULL when unsold; settledAmount 0 then. */
+  winner            String?
+  settledAmount     Decimal?  @map("settled_amount")
+  closedAt          DateTime? @map("closed_at")
+  closedTransactionHash String? @map("closed_transaction_hash")
+  createdLedger     BigInt  @map("created_ledger")
+  transactionHash   String  @map("transaction_hash")
+
+  @@map("current_auctions")
   @@schema("auction")
 }
 
