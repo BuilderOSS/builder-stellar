@@ -366,7 +366,7 @@ function prepareConfigs(ctx) {
     founders: [{ address: owner, amount: 3 }, { address: ctx.id('BIDDER_A'), amount: 2 }],
     auction: { ...template.auction, paymentAsset: sac },
     marketplace: { ...template.marketplace, paymentAsset: sac },
-    launch: { launchAuction: true, launchMarketplace: true, enableMinter: true }
+    launch: { launchAuction: true, launchMarketplace: true }
   };
   delete config.$comment;
   const e2eDir = join(ctx.root, '.e2e');
@@ -534,8 +534,8 @@ async function launch(ctx) {
   }
   ctx.check('manager.get_pending_dao is gone', view(ctx, s.manager, 'get_pending_dao', { token_address: dao.token }) === null);
   ctx.check('slug claimed at launch (registry is permanent)', view(ctx, s.manager, 'get_dao_by_slug', { slug: s.config.slug }) === dao.token, s.config.slug);
-  runScript(ctx, 'deploy-dao.mjs', ['bump_slug_ttl', s.daoConfigPath, s.networkConfigPath], 'DAO_OWNER');
-  ctx.check('deploy-dao.mjs bump_slug_ttl succeeds (permissionless renewal)', true, s.config.slug);
+  runScript(ctx, 'renew-dao.mjs', ['--network', NETWORK, '--token', dao.token, '--days', '30', '--source', ctx.name('DAO_OWNER')], 'DAO_OWNER');
+  ctx.check('renew-dao.mjs sweep succeeds (one ExtendFootprintTTL from any wallet)', true, s.config.slug);
   for (const [label, module] of [['governor', dao.governor], ['auction', dao.auction], ['treasury', dao.treasury], ['marketplace', dao.marketplace], ['metadata', dao.metadata]]) {
     ctx.check(`${label}.admin == treasury`, view(ctx, module, 'admin') === dao.treasury);
   }

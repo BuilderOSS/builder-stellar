@@ -1,14 +1,15 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { runQuiet } from './lib.mjs';
+import { DEFAULT_CODE_TTL_DAYS, LEDGERS_PER_DAY, parseCodeTtlDays, runQuiet } from './lib.mjs';
 
 /**
  * Upgrade tooling for the hardened contracts.
  *
  * - manager: Manager admin calls upgrade_manager directly.
+ * - minter (the shared platform Minter): the Manager admin calls minter.upgrade directly.
  * - DAO modules: the Manager admin registers the new implementation and approves the (from, to)
  *   path (register_implementation / approve_upgrade). The module upgrade itself is `upgrade(from_hash,
- *   to_hash)` followed by `sync_version()`, owner-only:
+ *   to_hash)`, admin-only (version() then follows the registry; there is nothing to sync):
  *     * before launch (token.is_live() == false) the owner is the launch admin: this script calls them
  *       directly with DEPLOY_IDENTITY;
  *     * after launch the owner of every module is the Treasury, so a direct call can never succeed.
@@ -16,7 +17,11 @@ import { runQuiet } from './lib.mjs';
  *       prints the propose -> cast_vote -> queue -> treasury.execute commands. Nothing is sent to the
  *       Governor by this script.
  *   Treasury and Governor self-upgrades use the same payload: Treasury-targeted actions are handled by
- *   its self-dispatch (only `upgrade(from,to)` and `sync_version()` are allowed).
+ *   its self-dispatch (only `upgrade(from,to)` and `migrate()` are allowed).
+ *
+ * Every uploaded hash is extended to 170 days right after upload (EXTEND_CODE_TTL_DAYS overrides;
+ * docs/STORAGE_DIET.md D28): new code is born at the network minimum and contracts never bump shared
+ * code far.
  *
  * Registry notes: records are write-once (a wrong name/version for a hash can never be fixed or
  * un-revoked). Use get_implementation(hash) and the Manager's Current* hashes for security decisions,
@@ -75,17 +80,19 @@ function keccak256(input) {
 
 const USAGE = [
   'Usage:',
-  '  node scripts/upgrade-contract.mjs manager <network-config.json> <from-wasm-hash>',
+  '  node scripts/upgrade-contract.mjs <manager|minter> <network-config.json> <from-wasm-hash>',
   '  node scripts/upgrade-contract.mjs <token|metadata|auction|governor|treasury|marketplace> <dao-config.json> <network-config.json> <from-wasm-hash>',
   'See docs/CONTRACT_UPGRADES.md.'
 ].join('\n');
-const moduleNames = ['manager', 'token', 'metadata', 'auction', 'governor', 'treasury', 'marketplace'];
+const moduleNames = ['manager', 'minter', 'token', 'metadata', 'auction', 'governor', 'treasury', 'marketplace'];
+const platformModules = ['manager', 'minter'];
 const [moduleName, ...rest] = process.argv.slice(2);
 if (!moduleNames.includes(moduleName)) throw new Error(USAGE);
 // Manager: <network-config> <from-hash>. DAO modules: <dao-config> <network-config> <from-hash>.
-const [daoConfigPath, networkConfigPath, fromHash] =
-  moduleName === 'manager' ? [null, rest[0], rest[1]] : [rest[0], rest[1], rest[2]];
-if (!networkConfigPath || !fromHash || (moduleName !== 'manager' && !daoConfigPath)) throw new Error(USAGE);
+const platform = platformModules.includes(moduleName);
+const [daoConfigPath, networkConfigPath, fromHash] = platform ? [null, rest[0], rest[1]] : [rest[0], rest[1], rest[2]];
+if (!networkConfigPath || !fromHash || (!platform && !daoConfigPath)) throw new Error(USAGE);
+const codeTtlDays = parseCodeTtlDays(process.env.EXTEND_CODE_TTL_DAYS || DEFAULT_CODE_TTL_DAYS);
 
 const networkConfig = JSON.parse(readFileSync(networkConfigPath, 'utf8'));
 const releaseManifest = JSON.parse(readFileSync('releases/contracts.json', 'utf8'));
@@ -147,6 +154,14 @@ const installResult = runQuiet('stellar', [
 if (!installResult.ok && !installResult.stderr.includes('already exists') && !installResult.stdout.includes(targetHash)) {
   throw new Error(`Failed to install ${moduleName} WASM: ${installResult.stderr || installResult.stdout}`);
 }
+const extendResult = runQuiet('stellar', [
+  'contract', 'extend', '--wasm-hash', targetHash, '--ledgers-to-extend', String(codeTtlDays * LEDGERS_PER_DAY),
+  '--durability', 'persistent', '--source-account', identityName, '--network', networkConfig.network
+]);
+if (!extendResult.ok) {
+  throw new Error(`Failed to extend ${moduleName} code to ${codeTtlDays} days: ${extendResult.stderr || extendResult.stdout}`);
+}
+console.log(`Extended ${moduleName} code ${targetHash.slice(0, 12)}... to ~${codeTtlDays} days.`);
 
 const implementationName = moduleName[0].toUpperCase() + moduleName.slice(1);
 if (moduleName === 'manager') {
@@ -181,6 +196,13 @@ if (moduleName === 'manager') {
   process.exit(0);
 }
 
+if (moduleName === 'minter') {
+  // The shared Minter's upgrade authority is the Manager admin (DEPLOY_IDENTITY).
+  invoke(managerArtifact.minter, 'upgrade', { from_hash: fromHash, to_hash: targetHash });
+  console.log(`Shared Minter upgraded to ${releaseManifest.minter} (${targetHash}).`);
+  process.exit(0);
+}
+
 const daoConfig = JSON.parse(readFileSync(daoConfigPath, 'utf8'));
 const daoArtifactPath = `deploys/${networkConfig.label}-${networkConfig.network}-dao-${daoConfig.nonce}.json`;
 if (!existsSync(daoArtifactPath)) throw new Error(`DAO artifact not found: ${daoArtifactPath}`);
@@ -200,7 +222,6 @@ const live = (() => {
 if (!live) {
   // Setup window: the launch admin still owns the module.
   invoke(target, 'upgrade', { from_hash: fromHash, to_hash: targetHash });
-  invoke(target, 'sync_version', {});
   console.log(`Pre-launch: upgraded ${moduleName} directly as the launch admin (${fromHash} -> ${targetHash}).`);
   process.exit(0);
 }
@@ -212,9 +233,9 @@ const description =
 const descriptionHash = keccak256(Buffer.from(description, 'utf8'));
 const bytes = (hex) => ({ bytes: hex });
 const payload = {
-  targets: [target, target],
-  functions: ['upgrade', 'sync_version'],
-  args: [[bytes(fromHash), bytes(targetHash)], []],
+  targets: [target],
+  functions: ['upgrade'],
+  args: [[bytes(fromHash), bytes(targetHash)]],
   description,
   description_hash: descriptionHash
 };
@@ -259,6 +280,5 @@ console.log(`stellar contract invoke --id ${plan.treasury} --source-account <ANY
   --description_hash ${descriptionHash}\n`);
 console.log('A Succeeded proposal that is not queued expires 14 days after voting ends; a Queued one expires 14 days after its ETA.');
 if (moduleName === 'treasury' || moduleName === 'governor') {
-  console.log(`NOTE: ${moduleName} self-upgrade. Treasury-targeted actions run through its self-dispatch (upgrade/sync_version only).`);
-  console.log('If sync_version fails in the same execute (it may still run the old code in-transaction), split it into a second proposal.');
+  console.log(`NOTE: ${moduleName} self-upgrade. Treasury-targeted actions run through its self-dispatch (upgrade/migrate only).`);
 }

@@ -6,13 +6,19 @@
   "slug": "e2e-dao",
   "token": {
     "name": "E2E Rehearsal DAO",
-    "symbol": "E2E",
-    "uri": "https://builder-stellar-web.vercel.app/api/dao/{daoId}/token/"
+    "symbol": "E2E"
   },
   "metadata": {
-    "projectUri": "https://builder-stellar-web.vercel.app",
-    "description": "Testnet end-to-end rehearsal DAO (disposable)",
-    "contractImage": "https://builder-stellar-web.vercel.app/images/dao-logo.png",
+    "profile": {
+      "description": "Testnet end-to-end rehearsal DAO (disposable)",
+      "links": [
+        {
+          "label": "Website",
+          "url": "https://builder-stellar-web.vercel.app"
+        }
+      ],
+      "image": "https://builder-stellar-web.vercel.app/images/dao-logo.png"
+    },
     "rendererBase": "https://builder-stellar-web.vercel.app/api/render/",
     "artwork": {
       "ipfs": {
@@ -22,7 +28,11 @@
       "properties": [
         {
           "name": "0-backgrounds",
-          "items": ["bg-cool", "bg-warm", "bg-gray"]
+          "items": [
+            "bg-cool",
+            "bg-warm",
+            "bg-gray"
+          ]
         }
       ]
     }
@@ -45,12 +55,17 @@
     "proposalThreshold": 1
   },
   "founders": [
-    { "address": "GDQB6R74Q5K4MOCKPB3NLB7SX4BQR7DTXA3BGNKIVMZEXBEKCK4NQPFU", "amount": 3 },
-    { "address": "GBCHDAHPSQH6OLWFTV5HEEDKATZ3ITBBJXICJSSDFGXIRI6HJXH7RASI", "amount": 2 }
+    {
+      "address": "GDQB6R74Q5K4MOCKPB3NLB7SX4BQR7DTXA3BGNKIVMZEXBEKCK4NQPFU",
+      "amount": 3
+    },
+    {
+      "address": "GBCHDAHPSQH6OLWFTV5HEEDKATZ3ITBBJXICJSSDFGXIRI6HJXH7RASI",
+      "amount": 2
+    }
   ],
   "launch": {
     "launchAuction": true,
-    "launchMarketplace": true,
-    "enableMinter": true
+    "launchMarketplace": true
   }
 }

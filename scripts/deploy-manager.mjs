@@ -1,7 +1,14 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import readline from 'node:readline/promises';
-import { enrichTransactionMetadata, run, runQuiet } from './lib.mjs';
+import {
+  DEFAULT_CODE_TTL_DAYS,
+  LEDGERS_PER_DAY,
+  enrichTransactionMetadata,
+  parseCodeTtlDays,
+  run,
+  runQuiet
+} from './lib.mjs';
 
 const args = process.argv.slice(2);
 const force = args.includes('--force');
@@ -251,21 +258,15 @@ function installWasm(packageName) {
   throw new Error(`Failed to install ${packageName} WASM after 3 attempts`);
 }
 
-// Contract code (WASM) entries are shared by every DAO deployed from the same hash, and rent for
-// extending them is charged to whoever's transaction pushes the TTL up: measured on testnet, extending
-// a 34 KB code entry to 170 days cost ~213 XLM (the first create_dao paid ~223 XLM, the second 2.5 XLM).
-// OPT-IN: set EXTEND_CODE_TTL_DAYS (max 170; the network caps entries at max_entry_ttl, ~180 days) to have
-// the platform operator pre-pay that rent here. Repeat before the code TTL runs out:
-// `stellar contract extend --wasm-hash <hash> --ledgers-to-extend <ledgers>`. Budget accordingly:
-// total rent scales with the sum of WASM sizes (~215 KB for all eight contracts).
-const CODE_TTL_DAYS = Number(process.env.EXTEND_CODE_TTL_DAYS || 0);
-const CODE_TTL_LEDGERS = Math.min(CODE_TTL_DAYS, 170) * 17280;
+// Contract code (WASM) entries are shared by every DAO deployed from the same hash. New code is born at the
+// network minimum (~7 days) and contracts only bump their own code a few days (`common::ttl`), so the
+// platform extends every uploaded hash to 170 days here (docs/STORAGE_DIET.md D28) and renews it with
+// `node scripts/renew-code-ttl.mjs <artifact>`. EXTEND_CODE_TTL_DAYS overrides the lifetime; values at or
+// below the 4 days contracts bump code to are refused (the next caller would pay again).
+const CODE_TTL_DAYS = parseCodeTtlDays(process.env.EXTEND_CODE_TTL_DAYS || DEFAULT_CODE_TTL_DAYS);
+const CODE_TTL_LEDGERS = CODE_TTL_DAYS * LEDGERS_PER_DAY;
 
 function extendCodeTtl(label, hash) {
-  if (!(CODE_TTL_DAYS > 0)) {
-    console.log(`Skipping ${label} code TTL extension (set EXTEND_CODE_TTL_DAYS to pre-pay shared code rent)`);
-    return;
-  }
   const result = runQuiet('stellar', [
     'contract',
     'extend',
@@ -281,11 +282,11 @@ function extendCodeTtl(label, hash) {
     networkName
   ]);
   if (result.ok) {
-    console.log(`Extended ${label} code TTL to ~${Math.min(CODE_TTL_DAYS, 170)} days (${hash.slice(0, 12)}...)`);
+    console.log(`Extended ${label} code TTL to ~${CODE_TTL_DAYS} days (${hash.slice(0, 12)}...)`);
   } else {
     console.warn(
       `WARNING: could not extend ${label} code TTL: ${(result.stderr || result.stdout).trim().split('\n').slice(-2).join(' ')}\n` +
-        '  The contracts still work, but the first DAO creator will pay the code rent.'
+        '  Re-run, or run scripts/renew-code-ttl.mjs: until then the code is at the network minimum.'
     );
   }
 }
@@ -440,8 +441,8 @@ function viewManager(managerAddress, method) {
   return (result.stdout + result.stderr).replace(/\x1b\[[0-9;]*m/g, '').trim().split('\n').pop().replace(/"/g, '');
 }
 
-// Admin-only. launch_dao(enable_minter = true) grants mint authority to this address; without it
-// launch fails with PlatformMinterNotSet (1008). Idempotent: skipped when already registered.
+// Admin-only. Every launch_dao pins and grants mint authority to this address (LaunchConfig.minter);
+// without it launch fails with PlatformMinterNotSet. Idempotent: skipped when already registered.
 function setPlatformMinter(managerAddress, minterAddress) {
   const current = viewManager(managerAddress, 'get_platform_minter');
   if (current === minterAddress) {
@@ -516,8 +517,9 @@ async function writeDeployArtifact(
 
 async function main() {
   // Sequence: build -> deploy Manager(admin, current_hash, version) -> upload + register all module
-  // implementations (+ Minter) -> set_current_implementations (six DAO modules) -> deploy shared Minter
-  // (no constructor) -> set_platform_minter. Each step is idempotent, so re-running resumes.
+  // implementations (+ Minter) -> extend all code to 170 days -> set_current_implementations (six DAO
+  // modules) -> deploy shared Minter(manager, current_hash) -> set_platform_minter. Each step is
+  // idempotent, so re-running resumes.
   // Build all deployable contracts with the real deployable build (spec shaking v2 on).
   // The legacy SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=0 build embeds every unused
   // library type: WASMs are 2-4x larger (token ~138 KB) and exceed the network's 131072-byte
@@ -585,7 +587,7 @@ async function main() {
   );
   registerImplementation(managerDeploy.id, implementations.minter, 'Minter', versions.minter);
 
-  // Optionally pre-pay the shared contract-code rent (see extendCodeTtl): DAO creators then pay ~2.5 XLM, not ~223.
+  // Pre-pay the shared contract-code rent (see extendCodeTtl): callers never pay to extend shared code.
   console.log('\n=== Extending Shared Code TTL ===\n');
   for (const [label, hash] of Object.entries({
     Manager: implementations.manager,
@@ -606,10 +608,15 @@ async function main() {
 
   // Deploy shared Minter instance
   console.log('\n=== Deploying Shared Minter ===\n');
-  const minterDeploy = deployIfMissing('minter', 'shared-minter', []);
+  const minterDeploy = deployIfMissing('minter', 'shared-minter', [
+    '--manager',
+    managerDeploy.id,
+    '--current_hash',
+    implementations.minter
+  ]);
   console.log(`Shared Minter deployed: ${minterDeploy.id}`);
 
-  // Register it as the Manager's platform minter (needed for launch_config.enable_minter).
+  // Register it as the Manager's platform minter (every launch pins it).
   console.log('\n=== Registering Platform Minter ===\n');
   setPlatformMinter(managerDeploy.id, minterDeploy.id);
 

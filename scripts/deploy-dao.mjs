@@ -9,7 +9,7 @@ const networkConfigPath = args[2];
  * DAO Deployment Script (hardened-contract flow)
  *
  * Usage:
- *   node scripts/deploy-dao.mjs <create_dao|admin_checklist|launch_dao|bump_slug_ttl> <dao-config.json> <network-config.json>
+ *   node scripts/deploy-dao.mjs <create_dao|admin_checklist|launch_dao> <dao-config.json> <network-config.json>
  *   node scripts/deploy-dao.mjs --validate-only <dao-config.json>      (no network, no artifacts)
  *
  * Three phases, each resumable:
@@ -31,36 +31,39 @@ const networkConfigPath = args[2];
  *      18 founders with one token each. Progress is derived from token ownership (owner_of).
  *    - verify every founder token has traits and seed any that do not with metadata.regenerate
  *      (safety net for tokens minted before the artwork).
- *    Not possible before launch: token.set_mint_authority (NotLive), Minter merkle/allowlist
+ *    Not possible before launch: token.set_mint_authority (NotLive), Minter merkle roots
  *    (Minter requires a Live token), auction.unpause, marketplace primary listings, any governance
  *    action. Settings are NOT re-applied here: the constructors already hold them.
  *    Changing auction/marketplace payment assets in setup makes launch_dao fail.
  *
  * 3. launch_dao: Manager.launch_dao(token_address, launch_config{launch_auction, launch_marketplace,
- *    enable_minter, expected_minter}; expected_minter is pinned to get_platform_minter when
- *    enable_minter is set). It grants mint authority itself (Treasury, Marketplace, Auction if launched,
- *    and the Manager's registered PlatformMinter if enable_minter), hands the admin of every module
+ *    minter}; minter is pinned to get_platform_minter). It grants mint authority itself (Treasury,
+ *    Marketplace, Auction if launched, and the shared platform Minter), hands the admin of every module
  *    to the Treasury, claims the slug and deletes the pending state. The Manager has no authority
  *    afterwards.
  *
  * Slug: `slug` in the config is requested by create_dao and claimed permanently by launch_dao (unique
  * per Manager; 4-63 chars of [a-z0-9-]). Both phases pre-check that no launched DAO holds it; launch
  * fails with SlugTaken if another DAO launched with it first (rename with manager.update_pending_slug
- * and update the config). The claimed slug registry entries expire unless renewed: run the permissionless `bump_slug_ttl` phase periodically
- * (the network caps each extension at ~180 days). It needs no auth beyond paying the fee.
+ * and update the config). The claimed slug entries are renewed with every other DAO key by the DAO's
+ * renewal sweep (scripts/renew-dao.mjs or the Renewal tab in Manage).
  *
- * Prerequisites: Manager deployed with deploy-manager.mjs (which also registers the platform
- * minter used by enable_minter). create_dao requires auth from BOTH deployer and launchAdmin, so the
+ * Profile: `metadata.profile` ({ description, links: [{ label, url }], image }) is serialized as the
+ * profile JSON of docs/STORAGE_DIET.md § 6 ({"v":1,...}) and must fit common::MAX_PROFILE_LENGTH
+ * (4,096 bytes). It is event-only on chain: Metadata stores its hash and sequence number.
+ *
+ * Prerequisites: Manager deployed with deploy-manager.mjs (which also registers the shared platform
+ * minter every launch pins). create_dao requires auth from BOTH deployer and launchAdmin, so the
  * config must use the same address for both (enforced by validation). The identity (DEPLOY_IDENTITY, default <network>-admin) must be
  * the config deployer (create_dao) and launchAdmin (checklist/launch).
  */
 
-const phases = ['create_dao', 'admin_checklist', 'launch_dao', 'bump_slug_ttl'];
+const phases = ['create_dao', 'admin_checklist', 'launch_dao'];
 const validateOnly = args[0] === '--validate-only';
 
 if (validateOnly ? !args[1] : (!phases.includes(phase) || !daoConfigPath || !networkConfigPath)) {
   throw new Error(
-    'Usage: node scripts/deploy-dao.mjs <create_dao|admin_checklist|launch_dao|bump_slug_ttl> <dao-config.json> <network-config.json>\n' +
+    'Usage: node scripts/deploy-dao.mjs <create_dao|admin_checklist|launch_dao> <dao-config.json> <network-config.json>\n' +
       '       node scripts/deploy-dao.mjs --validate-only <dao-config.json>'
   );
 }
@@ -71,6 +74,17 @@ function loadJson(path, label) {
 }
 
 // Contract bounds (contracts/manager/src/contract.rs validate_initial_config, governor/auction constants).
+/** The profile JSON of docs/STORAGE_DIET.md § 6, exactly as create_dao receives it. */
+function profileJson(config) {
+  const profile = config.metadata?.profile ?? {};
+  return JSON.stringify({
+    v: 1,
+    description: profile.description ?? '',
+    links: profile.links ?? [],
+    ...(profile.image ? { image: profile.image } : {})
+  });
+}
+
 const LIMITS = {
   minGovernanceDelay: 300,
   maxGovernanceDelay: 2_592_000,
@@ -80,6 +94,7 @@ const LIMITS = {
   minReservePrice: 1000n,
   maxTimeBuffer: 86_400,
   maxString: 256,
+  maxProfileBytes: 4_096, // common::MAX_PROFILE_LENGTH
   maxArtworkItemsPerCall: 30,
   maxProperties: 16,
   // common::batch_mint_fits: estimated event bytes per batch_mint call.
@@ -125,12 +140,25 @@ function validateDaoConfig(config) {
     );
   }
   if (!Number.isSafeInteger(config.nonce) || config.nonce < 0) err('nonce must be a non-negative integer');
-  for (const key of ['name', 'symbol', 'uri']) str(`token.${key}`, config.token?.[key]);
+  for (const key of ['name', 'symbol']) str(`token.${key}`, config.token?.[key]);
+  if (config.token?.uri !== undefined) err('token.uri was removed: token_uri is built on chain from metadata.rendererBase');
+  if (/["\\\u0000-\u001f]/.test(config.token?.name ?? '')) err('token.name may not contain ", \\ or control characters');
   str('slug', config.slug);
   if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(config.slug) || config.slug.length < 4 || config.slug.length > 63) {
     err('slug must be 4-63 chars of lowercase letters, numbers and single hyphens');
   }
-  for (const key of ['projectUri', 'description', 'contractImage', 'rendererBase']) str(`metadata.${key}`, config.metadata?.[key]);
+  str('metadata.rendererBase', config.metadata?.rendererBase);
+  for (const key of ['projectUri', 'description', 'contractImage']) {
+    if (config.metadata?.[key] !== undefined) err(`metadata.${key} was replaced by metadata.profile ({ description, links, image })`);
+  }
+  const profileBytes = Buffer.byteLength(profileJson(config), 'utf8');
+  if (profileBytes > LIMITS.maxProfileBytes) err(`metadata.profile serializes to ${profileBytes} bytes; the limit is ${LIMITS.maxProfileBytes}`);
+  const links = config.metadata?.profile?.links ?? [];
+  if (!Array.isArray(links) || links.length > 8) err('metadata.profile.links must be an array of at most 8 { label, url }');
+  for (const link of Array.isArray(links) ? links : []) {
+    if (typeof link?.label !== 'string' || [...link.label].length > 32) err('each profile link label must be a string of at most 32 characters');
+    if (!/^(https?:\/\/|mailto:|ipfs:\/\/)/.test(link?.url ?? '')) err(`profile link URL must be https, http, mailto or ipfs: ${link?.url}`);
+  }
 
   const gov = config.governance ?? {};
   if ('proposalThresholdBps' in gov) {
@@ -253,9 +281,8 @@ const marketplacePaymentAsset = marketplaceConfig.paymentAsset ?? daoConfig.auct
 const launchFlags = {
   launch_auction: daoConfig.launch?.launchAuction ?? daoConfig.auction.enabled ?? true,
   launch_marketplace: daoConfig.launch?.launchMarketplace ?? true,
-  enable_minter: daoConfig.launch?.enableMinter ?? false,
-  // Pinned at launch time from get_platform_minter (see launch_dao phase); required when enable_minter.
-  expected_minter: null
+  // Pinned at launch time from get_platform_minter (see launch_dao phase).
+  minter: null
 };
 const founderBatches = planFounderBatches(daoConfig.founders);
 const artworkBatches = planArtworkBatches(artworkProperties);
@@ -429,10 +456,7 @@ function initialConfig() {
   return {
     token_name: daoConfig.token.name,
     token_symbol: daoConfig.token.symbol,
-    token_uri: daoConfig.token.uri,
-    project_uri: daoConfig.metadata.projectUri,
-    description: daoConfig.metadata.description,
-    contract_image: daoConfig.metadata.contractImage,
+    profile: profileJson(daoConfig),
     renderer_base: daoConfig.metadata.rendererBase,
     slug: daoConfig.slug,
     governance: {
@@ -476,13 +500,6 @@ function assertSlugUnclaimed() {
     if (!/SlugNotFound|#7128/.test(String(e.message))) throw e;
   }
   if (claimedBy) throw new Error(`Slug "${daoConfig.slug}" is already claimed by ${claimedBy}; choose another slug in the DAO config`);
-}
-
-if (phase === 'bump_slug_ttl') {
-  console.log(`\n=== Renewing slug "${daoConfig.slug}" storage TTL ===\n`);
-  invoke(managerAddress, 'bump_slug_ttl', { slug: daoConfig.slug });
-  console.log('Slug TTL renewed.');
-  process.exit(0);
 }
 
 if (phase === 'create_dao') {
@@ -606,7 +623,7 @@ if (phase === 'admin_checklist') {
     }, null, 2));
     console.log(`launch_config for launch_dao: ${JSON.stringify(launchFlags)}`);
     console.log('\nNOTES:');
-    console.log('  - Minter merkle roots / allowlists CANNOT be configured now: the Minter requires a Live token. Set them after launch_dao (launch admin is the Treasury afterwards, so use governance or the admin recorded by the Minter).');
+    console.log('  - Minter merkle roots CANNOT be configured now: the Minter requires a Live token. Set them after launch_dao by governance (set_merkle_root(token, root, tree_uri)).');
     console.log('  - Mint authority (Treasury, Marketplace, Auction, platform Minter) is granted by launch_dao itself. Do not call token.set_mint_authority now (NotLive).');
     console.log('  - Do not change auction/marketplace payment assets in setup: launch_dao would fail with PaymentTokenMismatch/PaymentAssetMismatch.');
 
@@ -636,14 +653,12 @@ if (phase === 'launch_dao') {
     throw new Error(`Pending DAO requests slug "${pending.slug}" but the config has "${daoConfig.slug}"; update one of them first.`);
   }
   assertSlugUnclaimed();
-  if (launchFlags.enable_minter) {
-    const minter = invokeView(managerAddress, 'get_platform_minter');
-    if (!minter) throw new Error('enable_minter is set but the Manager has no platform minter (PlatformMinterNotSet). The Manager admin must run set_platform_minter (deploy-manager.mjs does this).');
-    console.log(`Platform minter to be granted mint authority (pinned as expected_minter): ${minter}`);
-    // The Manager reverts with PlatformMinterMismatch if the admin swaps the minter before this
-    // transaction lands, so what the launch admin saw is what gets mint authority.
-    launchFlags.expected_minter = minter;
-  }
+  const minter = invokeView(managerAddress, 'get_platform_minter');
+  if (!minter) throw new Error('The Manager has no platform minter (PlatformMinterNotSet). The Manager admin must run set_platform_minter (deploy-manager.mjs does this).');
+  console.log(`Shared platform Minter to be granted mint authority (pinned in launch_config): ${minter}`);
+  // The Manager reverts if the admin swaps the minter before this transaction lands, so what the
+  // launch admin saw is what gets mint authority.
+  launchFlags.minter = minter;
 
   const launchOutput = invoke(managerAddress, 'launch_dao', {
     token_address: addresses.token,
