@@ -135,6 +135,7 @@ function invoke(data) {
     MintAuthorityChanged: 'token.mint_authority_changed',
     MetadataUpdated: 'token.metadata_updated',
     Approve: 'token.approve',
+    ApproveForAll: 'token.approve_for_all',
     Transfer: 'token.transfer',
     DelegateChanged: 'token.delegate_changed',
     DelegateVotesChanged: 'token.delegate_votes_changed',
@@ -229,6 +230,7 @@ function invoke(data) {
     MintAuthorityChanged: 'Mint authority changed',
     MetadataUpdated: 'Community renamed',
     Approve: 'Token approval granted',
+    ApproveForAll: 'Operator approval changed',
     Transfer: 'Token transferred',
     DelegateChanged: 'Delegation changed',
     DelegateVotesChanged: 'Voting power changed',
@@ -338,11 +340,16 @@ function invoke(data) {
     titleMap.AdminChanged = moduleLabel + ' admin handed to the Treasury';
   }
 
+  // Every address field any event carries (contracts/*/src/events.rs and the OpenZeppelin
+  // library events), the emitting contract last. Order is the order inside `addresses`.
   var addresses = unique([
     pick(data, ['actor']),
     pick(data, ['proposer']),
+    pick(data, ['voter']),
     pick(data, ['bidder']),
+    pick(data, ['winner']),
     pick(data, ['minter']),
+    pick(data, ['authority']),
     pick(data, ['current_admin']),
     pick(data, ['proposed_admin']),
     pick(data, ['cancelled_admin']),
@@ -350,33 +357,41 @@ function invoke(data) {
     pick(data, ['new_admin']),
     pick(data, ['admin']),
     pick(data, ['owner']),
+    pick(data, ['from']),
+    pick(data, ['to']),
+    pick(data, ['approver']),
+    pick(data, ['operator']),
+    pick(data, ['delegator']),
+    pick(data, ['from_delegate']),
+    pick(data, ['to_delegate']),
+    pick(data, ['delegate']),
     pick(data, ['changed_by']),
     pick(data, ['cancelled_by']),
-    pick(data, ['executor']),
     pick(data, ['governor']),
     pick(data, ['treasury']),
-    pick(data, ['new_treasury']),
-    pick(data, ['new_governor']),
+    pick(data, ['target']),
     pick(data, ['token_contract']),
-    pick(data, ['token_contract_id']),
-    pick(data, ['contract_id']),
-    pick(data, ['creator']),
     pick(data, ['token_address']),
+    pick(data, ['deployer']),
+    pick(data, ['launch_admin']),
     pick(data, ['recipient']),
     pick(data, ['buyer']),
     pick(data, ['seller']),
-    pick(data, ['author'])
+    pick(data, ['author']),
+    pick(data, ['contract_id'])
   ]);
 
   var proposalId = pick(data, ['proposal_id']);
-  var amount = pick(data, ['amount', 'total_amount', 'price']);
+  // A money amount only (vote weights and token counts have their own fields in args).
+  var amount = pick(data, ['amount', 'total_amount', 'price', 'reserve_price']);
   var listingId = pick(data, ['listing_id']);
   var callIndex = pick(data, ['index']);
-  var tokenId = pick(data, ['token_id']);
+  // Batch events (SeedsGenerated, MintBatchWithMinter) carry the first id of their range.
+  var tokenId = pick(data, ['token_id', 'first_token_id']);
   var func = pick(data, ['function']);
   var target = pick(data, ['target']);
   var owner = pick(data, ['to', 'owner', 'recipient']);
-  var creator = pick(data, ['creator']);
+  var deployer = pick(data, ['deployer']);
   var tokenAddress = pick(data, ['token_address']);
   var name = pick(data, ['name']);
   // Comment text (bid comment or comment body), shortened for the summary line.
@@ -453,7 +468,7 @@ function invoke(data) {
     ListingPurchased: function() { return 'Token ' + (tokenId || 'unknown') + ' purchased for ' + (amount || 'unknown price'); },
     MerkleClaimEvent: function() { return 'Claimed ' + (amount || 'tokens') + ' via merkle proof for ' + (owner || 'recipient'); },
     DelegateChanged: function() { return (pick(data, ['delegator']) || 'A holder') + ' delegated votes to ' + (pick(data, ['to_delegate']) || 'a delegate'); },
-    DaoCreated: function() { return 'DAO created by ' + (creator || 'unknown'); },
+    DaoCreated: function() { return 'DAO created by ' + (deployer || 'unknown') + (pick(data, ['launch_admin']) ? ', launch admin ' + pick(data, ['launch_admin']) : ''); },
     DaoLaunched: function() { return 'DAO launched for token ' + (tokenAddress || 'unknown'); },
     ImplementationRegistered: function() { return 'Implementation "' + (name || 'unknown') + '" registered'; },
     SeedGenerated: function() { return 'Seed generated for token ' + (tokenId || 'unknown'); },
@@ -530,7 +545,8 @@ function invoke(data) {
     proposal_id: toString(proposalId),
     token_id: toString(tokenId),
     amount: toString(amount),
-    actor: toString(pick(data, ['actor', 'proposer', 'voter', 'author', 'bidder', 'minter', 'recipient', 'owner', 'changed_by', 'cancelled_by', 'executor', 'governor', 'treasury', 'new_treasury', 'new_governor', 'delegator', 'delegate', 'creator', 'buyer', 'seller', 'current_admin', 'old_admin', 'admin'])),
+    // The account that acted, first match wins: a person before a contract, a sender before a receiver.
+    actor: toString(pick(data, ['actor', 'proposer', 'voter', 'author', 'bidder', 'buyer', 'seller', 'deployer', 'winner', 'minter', 'recipient', 'from', 'approver', 'owner', 'to', 'operator', 'authority', 'changed_by', 'cancelled_by', 'governor', 'treasury', 'delegator', 'delegate', 'current_admin', 'old_admin', 'admin'])),
     addresses: JSON.stringify(addresses || []),
     ledger_sequence: ledger_sequence,
     transaction_index: transaction_index,

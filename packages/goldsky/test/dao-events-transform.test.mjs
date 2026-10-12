@@ -686,7 +686,7 @@ test('decodes GovernorInitialized event', () => {
 
   assert.ok(decoded);
   assert.equal(decoded.event_name, 'GovernorInitialized');
-  assert.equal(decoded.admin, 'OWNER_ADDR');
+  assert.equal(topicsOf(decoded).admin, 'OWNER_ADDR');
 
   const payload = JSON.parse(decoded.payload);
   assert.equal(payload.voting_delay, 300);

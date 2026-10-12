@@ -49,7 +49,8 @@ export const COMMON_EVENT_EMITTERS = { UpgradeDelayChanged: ['manager', 'minter'
 export function contractEventList() {
   const list = [];
   const contractsDir = join(repoRoot, 'contracts');
-  // The common crate emits events on behalf of every module (Upgraded, VersionSynced).
+  // The common crate's events (AdminChanged, Upgraded, Migrated, UpgradeDelayChanged) are
+  // emitted by the roles in COMMON_EVENT_ROLES, or by COMMON_EVENT_EMITTERS[name] when set.
   const files = [];
   for (const dir of readdirSync(contractsDir).sort()) {
     const file = join(contractsDir, dir, 'src', 'events.rs');

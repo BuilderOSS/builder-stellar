@@ -63,15 +63,16 @@ function invoke(data) {
     // Each module's launch handoff (topic `treasury`).
     TokenLaunched: ['treasury'], GovernorLaunched: ['treasury'], TreasuryLaunched: ['treasury'],
     AuctionLaunched: ['treasury'], MarketplaceLaunched: ['treasury'], MetadataLaunched: ['treasury'],
-    // contracts/common/src/upgrade.rs: emitted by EVERY module (token, governor, treasury, auction,
-    // marketplace, metadata); the emitting module is identified by contract_id/contract_role.
+    // contracts/common/src/upgrade.rs: emitted by every DAO module and by the shared Minter;
+    // the emitting contract is identified by contract_id/contract_role.
     // version() is read from the Manager registry since 0.3.0 (no sync event).
     Upgraded: ['from_hash', 'to_hash'], Migrated: [],
-    // Token (custom + OpenZeppelin non-fungible/votes/pausable)
+    // Token (custom + OpenZeppelin non-fungible/votes)
     // MetadataUpdated (token 0.2.0+): rename; all data, no topics.
     TokenInitialized: ['admin'], MetadataUpdated: [], MintAuthorityChanged: ['authority'], MintWithMinter: ['minter', 'to'], MintBatchWithMinter: ['minter'],
     Mint: ['to'], Transfer: ['from', 'to'], Approve: ['approver', 'token_id'], ApproveForAll: ['owner'],
     DelegateChanged: ['delegator'], DelegateVotesChanged: ['delegate'],
+    // OpenZeppelin pausable: only the Auction uses it (paused at construction, unpaused at launch).
     Paused: [], Unpaused: [],
     // Governor (custom + OpenZeppelin governor)
     GovernorInitialized: ['admin'], ProposalCreated: ['proposal_id', 'proposer'], ProposalScheduled: ['proposal_id'],
@@ -149,6 +150,8 @@ function invoke(data) {
     topic_3: toStringOrEmpty(topicValues[3]),
     topics: JSON.stringify(topics),
     args: JSON.stringify(args),
+    // Not in the sink schema (chain.decoded_events has topics and args); kept for local
+    // fixtures and the activity script's pick(), which reads it when present.
     payload: JSON.stringify(Object.assign({}, topics, args)),
     transaction_hash: toStringOrEmpty(data.transaction_hash),
     transaction_successful: toBoolean(data.transaction_successful),
@@ -162,22 +165,14 @@ function invoke(data) {
     _gs_op: toStringOrEmpty(data._gs_op),
     decoder_version: 'v2'
   };
-  // These aliases are intentionally not declared in the Goldsky schema. They keep
-  // local transform fixtures useful while consumers migrate to topics/args.
-  // Note: Schema fields (args, topics, payload) must stay as JSON strings for JSONB columns.
-  // Only convert non-schema field aliases to strings for type safety.
-  Object.keys(topics).forEach(function (key) { result[key] = toStringOrEmpty(topics[key]); });
-  Object.keys(args).forEach(function (key) {
-    if (key !== 'args' && key !== 'topics' && key !== 'payload') result[key] = toStringOrEmpty(args[key]);
-  });
     return result;
 
     // Fallback only: the pipeline normally assigns contract_role from the DAO
     // module allowlists before decoding. Names mirror the topicNames groups.
     function roleForEvent(name) {
       var canonical = toCanonical(name);
-      if (canonical === 'MintBatchWithMinter') return 'token';
-      if (/^(Manager|Implementation|CurrentImplementations|LatestImplementation|UpgradeApproved|Dao|Factory|Admin|PlatformMinter|PendingSlug|SlugClaimed)/.test(canonical)) return 'manager';
+      if (canonical === 'MintBatchWithMinter' || canonical === 'MetadataUpdated') return 'token';
+      if (/^(Manager|Implementation|CurrentImplementations|LatestImplementation|UpgradeApproved|Dao|Factory|Admin|PlatformMinter|PendingSlug|Slug)/.test(canonical)) return 'manager';
       if (/^(MerkleClaim|MintBatch|MerkleRoot)/.test(canonical)) return 'minter';
       if (/^(Marketplace|Listing|Primary|Secondary|PaymentAsset)/.test(canonical)) return 'marketplace';
       if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue)/.test(canonical)) return 'governor';
