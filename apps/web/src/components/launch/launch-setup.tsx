@@ -21,7 +21,7 @@ import { buildLaunchPlan } from '@/lib/launch-steps';
 import { useModuleUpdates } from '@/lib/use-module-updates';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
-import { LaunchCard } from './launch-card';
+import { LaunchCard, LaunchDriveCard } from './launch-card';
 import { LaunchStepRow } from './launch-step-row';
 import { SetupProgress } from './setup-progress';
 
@@ -79,8 +79,11 @@ export function LaunchSetup({ daoId, config }: { daoId: string; config: DaoNetwo
   const refresh = () => Promise.all([readiness.mutate(), artwork.mutate()]);
   const loadError = readiness.error || artwork.error;
   const name = config.tokenName || 'This community';
-  // An open drive hands everything to the treasury: nothing on this page can change until it ends.
-  const drive = Boolean(readiness.data?.assurance && !readiness.data.live);
+
+  // An open drive hands everything to the treasury, so nothing here can change until it ends. Everyone,
+  // launch admin or not, sees the same thing: claim, launch or refund.
+  if (readiness.data?.assurance && !readiness.data.live)
+    return <LaunchDriveCard assurance={readiness.data.assurance} name={name} />;
 
   if (!isAdmin)
     return (
@@ -122,11 +125,7 @@ export function LaunchSetup({ daoId, config }: { daoId: string; config: DaoNetwo
             <h2 id="setup-title" className={title}>
               Required to launch
             </h2>
-            <p className={muted}>
-              {drive
-                ? 'Locked in when you opened the launch drive.'
-                : 'Do these in order. Changes apply right away while you set up.'}
-            </p>
+            <p className={muted}>Do these in order. Changes apply right away while you set up.</p>
           </div>
           <IconButton
             label="Check again"
@@ -191,76 +190,74 @@ export function LaunchSetup({ daoId, config }: { daoId: string; config: DaoNetwo
         </ol>
       </section>
 
-      {drive ? null : (
-        <section className={card} aria-labelledby="review-title">
-          <div>
-            <h2 id="review-title" className={title}>
-              Review (optional)
-            </h2>
-            <p className={muted}>Prefilled from when you created it. Change now, or later by a vote.</p>
-          </div>
-          <ul className={steps}>
-            {optionalUpdates.length ? (
-              <LaunchStepRow
-                status="todo"
-                title="Contract upgrades"
-                detail={`${optionalUpdates.length === 1 ? '1 upgrade is' : `${optionalUpdates.length} upgrades are`} available. Easiest to apply before launch, while you can sign directly.`}
-                action={
-                  <ButtonLink href={daoAdminRoute(routeId, '/upgrades')} variant="secondary" size="sm">
-                    Review
-                  </ButtonLink>
-                }
-              />
-            ) : null}
-            {config.auctionContractId ? (
-              <LaunchStepRow
-                status="done"
-                title="Auctions"
-                detail={auctionSummary}
-                action={
-                  <ButtonLink href={daoAdminRoute(routeId, '/auction')} variant="ghost" size="sm">
-                    Edit
-                  </ButtonLink>
-                }
-              />
-            ) : null}
+      <section className={card} aria-labelledby="review-title">
+        <div>
+          <h2 id="review-title" className={title}>
+            Review (optional)
+          </h2>
+          <p className={muted}>Prefilled from when you created it. Change now, or later by a vote.</p>
+        </div>
+        <ul className={steps}>
+          {optionalUpdates.length ? (
+            <LaunchStepRow
+              status="todo"
+              title="Contract upgrades"
+              detail={`${optionalUpdates.length === 1 ? '1 upgrade is' : `${optionalUpdates.length} upgrades are`} available. Easiest to apply before launch, while you can sign directly.`}
+              action={
+                <ButtonLink href={daoAdminRoute(routeId, '/upgrades')} variant="secondary" size="sm">
+                  Review
+                </ButtonLink>
+              }
+            />
+          ) : null}
+          {config.auctionContractId ? (
             <LaunchStepRow
               status="done"
-              title="Voting rules"
-              detail={governanceSummary}
+              title="Auctions"
+              detail={auctionSummary}
               action={
-                <ButtonLink href={daoAdminRoute(routeId, '/governance')} variant="ghost" size="sm">
+                <ButtonLink href={daoAdminRoute(routeId, '/auction')} variant="ghost" size="sm">
                   Edit
                 </ButtonLink>
               }
             />
-            {config.marketplaceContractId ? (
-              <LaunchStepRow
-                status="done"
-                title="Market"
-                detail="Resale fee and how tokens are listed."
-                action={
-                  <ButtonLink href={daoAdminRoute(routeId, '/marketplace')} variant="ghost" size="sm">
-                    Edit
-                  </ButtonLink>
-                }
-              />
-            ) : null}
-            {config.claimsContractId ? (
-              <LaunchStepRow
-                status="done"
-                title="Claims"
-                detail="Lists of people who can claim a token."
-                action={
-                  <ButtonLink href={daoAdminRoute(routeId, '/claims')} variant="ghost" size="sm">
-                    Edit
-                  </ButtonLink>
-                }
-              />
-            ) : null}
-          </ul>
-        </section>
-      )}
+          ) : null}
+          <LaunchStepRow
+            status="done"
+            title="Voting rules"
+            detail={governanceSummary}
+            action={
+              <ButtonLink href={daoAdminRoute(routeId, '/governance')} variant="ghost" size="sm">
+                Edit
+              </ButtonLink>
+            }
+          />
+          {config.marketplaceContractId ? (
+            <LaunchStepRow
+              status="done"
+              title="Market"
+              detail="Resale fee and how tokens are listed."
+              action={
+                <ButtonLink href={daoAdminRoute(routeId, '/marketplace')} variant="ghost" size="sm">
+                  Edit
+                </ButtonLink>
+              }
+            />
+          ) : null}
+          {config.claimsContractId ? (
+            <LaunchStepRow
+              status="done"
+              title="Claims"
+              detail="Lists of people who can claim a token."
+              action={
+                <ButtonLink href={daoAdminRoute(routeId, '/claims')} variant="ghost" size="sm">
+                  Edit
+                </ButtonLink>
+              }
+            />
+          ) : null}
+        </ul>
+      </section>
 
       <LaunchCard
         daoId={daoId}

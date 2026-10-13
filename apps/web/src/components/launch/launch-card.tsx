@@ -48,7 +48,13 @@ const hint = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
  * A launch drive is open: settings are frozen and the community launches once enough people claim,
  * with the choices made when the drive opened. Past the deadline it can never launch, only refund.
  */
-function LaunchDriveCard({ assurance, name }: { assurance: NonNullable<LaunchReadiness['assurance']>; name: string }) {
+export function LaunchDriveCard({
+  assurance,
+  name
+}: {
+  assurance: NonNullable<LaunchReadiness['assurance']>;
+  name: string;
+}) {
   const { routeId } = useDaoContext();
   const [now] = useState(() => Date.now());
   const deadline = Number(assurance.deadline);
@@ -201,9 +207,6 @@ export function LaunchCard({
       operation.current = false;
     }
   };
-
-  // An open launch drive replaces the launch action: the community launches from the claims page.
-  if (readiness?.assurance && !readiness.live) return <LaunchDriveCard assurance={readiness.assurance} name={name} />;
 
   if (confirmed)
     return (

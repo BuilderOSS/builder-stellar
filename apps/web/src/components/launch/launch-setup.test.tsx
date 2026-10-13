@@ -156,6 +156,22 @@ describe('LaunchSetup', () => {
     expect(html).not.toContain('Review (optional)');
   });
 
+  it('shows visitors the drive too, not "being set up"', () => {
+    state.address = `G${'B'.repeat(55)}`;
+    state.readiness = readiness({
+      supply: 2n,
+      assurance: {
+        claim_minter: 'CCLAIMS',
+        deadline: BigInt(Math.floor(Date.now() / 1000) + 86_400),
+        list_id: 0,
+        launch_config: { launch_auction: false, launch_marketplace: false }
+      }
+    });
+    const html = render();
+    expect(html).toContain('Launch drive open');
+    expect(html).not.toContain('is being set up');
+  });
+
   it('points to refunds once the drive deadline has passed', () => {
     state.readiness = readiness({
       supply: 2n,
