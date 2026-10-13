@@ -158,11 +158,15 @@ impl DaoTokenContract {
 
     /// A module gives back `amount` of its own allowance (module auth),
     /// saturating at 0: for example a closed pool's unstocked remainder.
-    /// Emits `MintAllowanceChanged`.
+    /// Emits `MintAllowanceChanged`. An unlimited allowance (`u32::MAX`) stays
+    /// unlimited: it was never spent, so there is nothing to give back.
     pub fn release_mint_allowance(e: &Env, module: Address, amount: u32) {
         module.require_auth();
         common::ttl::extend_instance(e);
         let old = Self::mint_allowance(e, module.clone());
+        if old == u32::MAX || amount == 0 {
+            return;
+        }
         Self::set_allowance(e, &module, old, old.saturating_sub(amount), &module);
     }
 

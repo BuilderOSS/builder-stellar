@@ -115,6 +115,16 @@ pub const MAX_BATCH_MINT: u32 =
 pub const MAX_BATCH_RECIPIENTS: u32 =
     BATCH_MINT_EVENT_BUDGET / (BATCH_MINT_BYTES_PER_TOKEN + BATCH_MINT_BYTES_PER_RECIPIENT);
 
+/// Event bytes a pool `restock` adds beside its `batch_mint` (the
+/// `PoolRestocked` event; rounded up).
+pub const RESTOCK_EVENT_BYTES: u32 = 300;
+/// Most tokens one Marketplace `restock` mints into custody: one recipient
+/// (the Marketplace) plus the restock event within `BATCH_MINT_EVENT_BUDGET`
+/// (42). The e2e suite restocks at the edge against 16-trait metadata.
+pub const MAX_RESTOCK: u32 =
+    (BATCH_MINT_EVENT_BUDGET - BATCH_MINT_BYTES_PER_RECIPIENT - RESTOCK_EVENT_BYTES)
+        / BATCH_MINT_BYTES_PER_TOKEN;
+
 /// Whether a batch of `tokens` tokens over `recipients` recipient entries fits
 /// `BATCH_MINT_EVENT_BUDGET`. Entries are counted as new recipients even when
 /// an address repeats or already has a delegate (conservative).

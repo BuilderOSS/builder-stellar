@@ -16,6 +16,9 @@ pub trait NftApi {
     /// Manager-only early handoff (stays in Setup).
     fn handoff(e: &Env, treasury: Address);
     fn increase_mint_allowance(e: &Env, module: Address, amount: u32);
+    fn mint_allowance(e: &Env, module: Address) -> u32;
+    /// A module gives back part of its own allowance (module auth).
+    fn release_mint_allowance(e: &Env, module: Address, amount: u32);
     fn treasury(e: &Env) -> Address;
     fn metadata(e: &Env) -> Option<Address>;
     fn modules(e: &Env) -> Vec<crate::modules::ModuleEntry>;

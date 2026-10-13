@@ -1856,7 +1856,7 @@ fn test_governor_proposal_threshold_exceeds_supply() {
 // Tests for batch minting should be in minter contract tests
 
 #[test]
-fn marketplace_primary_sale_uses_real_token_and_sac() {
+fn marketplace_pool_sale_uses_real_token_and_sac() {
     let e = Env::default();
     e.mock_all_auths();
     e.ledger().set_timestamp(1_000);
@@ -1900,17 +1900,25 @@ fn marketplace_primary_sale_uses_real_token_and_sac() {
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
     let marketplace = MarketplaceContractClient::new(&e, &marketplace_id);
-    // Manager-style launch: token first (marketplace is a canonical minter),
-    // then the marketplace itself (open).
+    // Manager-style launch: token first, then the marketplace itself (open).
+    // The proposal that opens a pool funds the Marketplace's allowance.
     token.register_module(&Symbol::new(&e, "marketplace"), &marketplace_id, &true);
-    token.launch(&treasury, &grant(&e, &marketplace_id));
+    token.launch(&treasury, &Vec::new(&e));
     marketplace.launch(&treasury, &true);
+    token.increase_mint_allowance(&marketplace_id, &1);
 
-    let listing_id = marketplace.create_primary_listing(&100, &2_000);
-    let token_id = marketplace.buy_primary(&listing_id, &buyer, &i128::MAX);
+    let pool = marketplace.open_pool(&100, &payment.address(), &2_000, &1, &1, &1, &60);
+    marketplace.restock(&pool);
+    let token_id = marketplace.pool_stock(&pool, &0).get(0).unwrap();
+    assert_eq!(token.owner_of(&token_id), marketplace_id);
+    // Custody holds no votes.
+    assert_eq!(token.total_supply(), 0);
+    marketplace.buy_from_pool(&pool, &0, &token_id, &buyer, &i128::MAX);
 
     assert_eq!(token.owner_of(&token_id), buyer);
     assert_eq!(sac.balance(&treasury), 100);
+    assert_eq!(token.total_supply(), 1);
+    assert_eq!(token.mint_allowance(&marketplace_id), 0);
 }
 
 // ============================================================================
@@ -2688,7 +2696,7 @@ fn real_auth_auction_settle_auction_when_paused_moves_nft_and_payment() {
 }
 
 #[test]
-fn real_auth_marketplace_primary_and_secondary_flows() {
+fn real_auth_marketplace_pool_and_secondary_flows() {
     let e = Env::default();
     e.mock_all_auths();
     e.ledger().set_timestamp(1_000);
@@ -2744,30 +2752,45 @@ fn real_auth_marketplace_primary_and_secondary_flows() {
         sub_invokes: &[],
     };
 
-    // Primary: admin (treasury) lists, buyer pays; the marketplace mints.
+    // Pool: the admin (treasury) opens it, anyone restocks (no signature),
+    // the buyer pays for the id they pick.
     only_auth(
         &e,
         &treasury,
         &marketplace_id,
-        "create_primary_listing",
-        vec![&e, 100_i128.into_val(&e), 2_000_u64.into_val(&e)],
+        "open_pool",
+        vec![
+            &e,
+            100_i128.into_val(&e),
+            pay.into_val(&e),
+            2_000_u64.into_val(&e),
+            1u32.into_val(&e),
+            1u32.into_val(&e),
+            1u32.into_val(&e),
+            60u64.into_val(&e),
+        ],
         &[],
     );
-    let listing_id = marketplace.create_primary_listing(&100, &2_000);
+    let pool = marketplace.open_pool(&100, &pay, &2_000, &1, &1, &1, &60);
+    e.set_auths(&[]);
+    marketplace.restock(&pool);
+    let nft = marketplace.pool_stock(&pool, &0).get(0).unwrap();
     only_auth(
         &e,
         &seller,
         &marketplace_id,
-        "buy_primary",
+        "buy_from_pool",
         vec![
             &e,
-            listing_id.into_val(&e),
+            pool.into_val(&e),
+            0u32.into_val(&e),
+            nft.into_val(&e),
             seller.into_val(&e),
             100_i128.into_val(&e),
         ],
         &[pay_sub(&seller, &treasury, 100)],
     );
-    let nft = marketplace.buy_primary(&listing_id, &seller, &100);
+    marketplace.buy_from_pool(&pool, &0, &nft, &seller, &100);
     assert_eq!(token.owner_of(&nft), seller);
     assert_eq!(sac.balance(&treasury), 100);
 
@@ -3828,7 +3851,7 @@ fn rename_by_proposal_then_settle_mints_with_artwork() {
 /// D30: every key a launched DAO and the Manager write is either
 /// `("builder", <variant>)` or a known OpenZeppelin shape. The DAO runs every
 /// module first (artwork, launch with auction and marketplace, a ClaimMinter
-/// list and claim, a secondary and a primary listing, a governed rename), so
+/// list and claim, a secondary listing, a pool sale, a governed rename), so
 /// the walk sees the keys real use creates.
 #[test]
 fn every_protocol_storage_key_is_namespaced() {
@@ -3880,7 +3903,7 @@ fn every_protocol_storage_key_is_namespaced() {
     );
     minter.claim(&list, &claimer, &1u128, &1, &proof, &0);
 
-    // Marketplace: a secondary and a primary listing.
+    // Marketplace: a secondary listing and a pool with a sale.
     let payment_asset = marketplace.get_config().payment_asset;
     token.approve(
         &f.deployer,
@@ -3896,7 +3919,13 @@ fn every_protocol_storage_key_is_namespaced() {
         &10_000,
         &payment_asset,
     );
-    marketplace.create_primary_listing(&100, &1_000_000);
+    token.increase_mint_allowance(&marketplace.address, &3);
+    let pool = marketplace.open_pool(&100, &payment_asset, &1_000_000, &3, &1, &3, &60);
+    marketplace.restock(&pool);
+    let pool_buyer = Address::generate(e);
+    StellarAssetClient::new(e, &f.payment.address()).mint(&pool_buyer, &100);
+    let picked = marketplace.pool_stock(&pool, &0).get(1).unwrap();
+    marketplace.buy_from_pool(&pool, &0, &picked, &pool_buyer, &100);
 
     // Governor and Treasury: a proposal through execution.
     let (_id, desc_hash, targets, functions, args) = queue_single_action(
@@ -4276,13 +4305,19 @@ fn protocol_runs_on_chain_state_only() {
     assert_eq!(metadata.get_attributes(&won).len(), 3);
     assert!(!token.token_uri(&won).is_empty());
 
-    // --- Primary and secondary sales.
+    // --- A pool sale and a secondary sale; the pool's ids are read from
+    //     the chain, never from an event.
     let carol = Address::generate(e);
     sac.mint(&carol, &1_000_000_000);
     let expires = e.ledger().timestamp() + 100_000;
-    let listing_id = marketplace.create_primary_listing(&1_000, &expires);
-    let primary = marketplace.buy_primary(&listing_id, &carol, &1_000);
-    assert_eq!(token.owner_of(&primary), carol);
+    token.increase_mint_allowance(&marketplace.address, &2);
+    let pool = marketplace.open_pool(&1_000, &pay, &expires, &2, &1, &2, &3_600);
+    marketplace.restock(&pool);
+    let slot = marketplace.open_pools().get(0).unwrap();
+    assert_eq!(slot.pages, 1);
+    let picked = marketplace.pool_stock(&pool, &0).get(0).unwrap();
+    marketplace.buy_from_pool(&pool, &0, &picked, &carol, &1_000);
+    assert_eq!(token.owner_of(&picked), carol);
     token.approve(
         &bob,
         &marketplace.address,
@@ -4639,35 +4674,19 @@ fn dao_renewal_inventory(
         ));
     }
 
-    // Marketplace: open secondary and primary listings.
-    if let Some(mk) = token.marketplace() {
-        let market = MarketplaceContractClient::new(e, &mk);
-        for t in 0..minted {
-            if market.get_listing(&t).is_some() {
-                keys.push((mk.clone(), ns_key(e, "Listing", std::vec![u(t)])));
-            }
-        }
-        for l in 0..market.next_listing_id() {
-            if market.get_primary_listing(&l).is_some() {
-                keys.push((
-                    mk.clone(),
-                    ns_key(e, "PrimaryListing", std::vec![l.into_val(e)]),
-                ));
-            }
-        }
-    }
-
-    // The ClaimMinter lists its own keys (`DaoModule::renewal_keys`, eng
-    // review R3); a listed slot may hold nothing, so only present entries.
-    if let Some(cm) = token.module(&Symbol::new(e, "claims")) {
-        let client = minter::ClaimMinterClient::new(e, &cm);
+    // Registered modules list their own keys (`DaoModule::renewal_keys`, eng
+    // review R3): the Marketplace's listing slots and pool pages, the
+    // ClaimMinter's lists. A listed slot may hold nothing, so only present
+    // entries are renewed.
+    for entry in token.modules().iter() {
+        let module = common::clients::DaoModuleClient::new(e, &entry.address);
         let mut cursor = Some(0u32);
         while let Some(c) = cursor {
-            let page = client.renewal_keys(&c, &50);
+            let page = module.renewal_keys(&c, &50);
             for (key, persistent) in page.keys.iter() {
                 assert!(persistent);
-                if e.as_contract(&cm, || e.storage().persistent().has(&key)) {
-                    keys.push((cm.clone(), key));
+                if e.as_contract(&entry.address, || e.storage().persistent().has(&key)) {
+                    keys.push((entry.address.clone(), key));
                 }
             }
             cursor = page.next_cursor;
@@ -4790,7 +4809,8 @@ fn assert_inventory_matches_ledger(
             return !matches!(name.as_str(), "SlugToDao" | "DaoSlug")
                 || (name == "DaoSlug" && items.get(1) != Some(&token_sc));
         }
-        name == "PendingRefund"
+        // Bidders' refunds and buyers' pool counts are theirs.
+        matches!(name.as_str(), "PendingRefund" | "PoolBuyer")
     };
     let contracts = dao_modules(dao);
     let mut owners: std::vec::Vec<&Address> = contracts.iter().collect();

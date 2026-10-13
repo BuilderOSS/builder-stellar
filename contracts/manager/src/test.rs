@@ -1524,10 +1524,11 @@ mod real_dao {
             .launch_dao(&dao.addresses.token, &cfg(&dao.env, true, true));
 
         let a = &dao.addresses;
-        // The Treasury mints as admin without an allowance; the Auction and the
-        // Marketplace get unlimited ones (Phase 1, docs/designs/membership-models.md).
+        // The Treasury mints as admin without an allowance; only the started
+        // Auction gets one at launch (docs/designs/membership-models.md §1).
         assert_eq!(dao.token.mint_allowance(&a.treasury), 0);
-        assert_eq!(dao.token.mint_allowance(&dao.marketplace.address), u32::MAX);
+        // The Marketplace is funded per pool, by proposal.
+        assert_eq!(dao.token.mint_allowance(&dao.marketplace.address), 0);
         assert_eq!(dao.token.mint_allowance(&dao.auction.address), u32::MAX);
         assert_eq!(dao.token.mint_allowance(&dao.claims.address), 25);
         assert_eq!(dao.token.mint_allowance(&dao.launch_admin), 0);
@@ -1555,7 +1556,7 @@ mod real_dao {
         dao.client
             .launch_dao(&dao.addresses.token, &cfg(&dao.env, false, false));
         assert_eq!(dao.token.mint_allowance(&dao.auction.address), 0);
-        assert_eq!(dao.token.mint_allowance(&dao.marketplace.address), u32::MAX);
+        assert_eq!(dao.token.mint_allowance(&dao.marketplace.address), 0);
         assert!(dao.auction.paused());
         assert!(dao.marketplace.get_config().paused);
     }
@@ -1649,7 +1650,7 @@ mod real_dao {
 
     /// Acceptance (g): nothing can start before launch.
     #[test]
-    fn auction_unpause_and_marketplace_primary_listing_are_not_live_before_launch() {
+    fn auction_unpause_and_marketplace_pools_are_not_live_before_launch() {
         let dao = build();
         let not_live: soroban_sdk::Error = CommonError::NotLive.into();
         assert_eq!(
@@ -1662,7 +1663,7 @@ mod real_dao {
         );
         assert_eq!(
             dao.marketplace
-                .try_create_primary_listing(&100, &10_000)
+                .try_open_pool(&100, &dao.payment, &10_000, &1, &1, &1, &60)
                 .err()
                 .unwrap()
                 .unwrap(),

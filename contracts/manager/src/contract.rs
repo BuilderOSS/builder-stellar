@@ -878,9 +878,9 @@ impl ManagerContract {
     ///
     /// # Effects
     ///
-    /// 1. `token.launch` with unlimited allowances for the Marketplace (primary
-    ///    listings, until pools replace them) and, if `launch_auction`, the
-    ///    Auction; ClaimMinter keeps what the launch admin granted
+    /// 1. `token.launch` with an unlimited allowance for the Auction if
+    ///    `launch_auction`; the Marketplace is funded per pool by proposal and
+    ///    the ClaimMinter keeps what the launch admin granted
     /// 2. `launch` on the Governor and Treasury, then `DaoModule::launch` on
     ///    every registered module (the Auction opens with `launch_auction`, the
     ///    Marketplace with `launch_marketplace`), then the Metadata
@@ -1469,14 +1469,15 @@ impl ManagerContract {
             }
         }
 
-        // The Marketplace keeps an unlimited allowance for primary listings
-        // until pools replace them (Phase 3); the Auction gets one only when
-        // it starts. The Treasury needs none (as admin it mints without limit).
+        // Only a started Auction gets an allowance at launch (unlimited: it
+        // sells one token per auction). The Marketplace mints only pool stock,
+        // funded by the proposal that opens each pool; the ClaimMinter keeps
+        // what the launch admin granted. The Treasury needs none (as admin it
+        // mints without limit).
         let mut grants: Vec<MintGrant> = Vec::new(&env);
         for entry in registry.iter() {
-            let unlimited = common::modules::kind_is(&env, &entry.kind, KIND_MARKETPLACE)
-                || (launch_config.launch_auction
-                    && common::modules::kind_is(&env, &entry.kind, KIND_AUCTION));
+            let unlimited = launch_config.launch_auction
+                && common::modules::kind_is(&env, &entry.kind, KIND_AUCTION);
             if unlimited {
                 grants.push_back(MintGrant {
                     module: entry.address,

@@ -1686,3 +1686,19 @@ fn an_unlimited_allowance_is_never_spent() {
     client.batch_mint(&shop, &vec![&e, Address::generate(&e)], &vec![&e, 3u128]);
     assert_eq!(client.mint_allowance(&shop), u32::MAX);
 }
+
+#[test]
+fn releasing_from_an_unlimited_allowance_keeps_it_unlimited() {
+    let (e, client, _owner, manager) = setup_with_manager();
+    let pool_module = module(&e, &client, "custom_pool", true);
+    launch(&e, &client, &[(&pool_module, u32::MAX)]);
+    // A closed pool gives back its unstocked rest: nothing to give back from
+    // an allowance that was never spent.
+    client.release_mint_allowance(&pool_module, &30);
+    assert_eq!(client.mint_allowance(&pool_module), u32::MAX);
+    // A finite one is lowered, saturating at zero.
+    client.decrease_mint_allowance(&pool_module, &(u32::MAX - 10));
+    client.release_mint_allowance(&pool_module, &30);
+    assert_eq!(client.mint_allowance(&pool_module), 0);
+    let _ = manager;
+}

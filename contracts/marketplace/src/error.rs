@@ -39,4 +39,25 @@ pub enum MarketplaceError {
     CommentEmpty = 7716,
     /// Comment body exceeds `MAX_COMMENT_LENGTH`
     CommentTooLong = 7717,
+    /// The Marketplace's allowance not reserved by open pools is below the
+    /// pool size (grant the allowance first)
+    AllowanceNotReserved = 7718,
+    /// No such pool
+    PoolNotFound = 7719,
+    /// The pool is closed or past its expiry
+    PoolClosed = 7720,
+    /// The buyer reached the pool's `max_per_buyer`
+    BuyerLimitReached = 7721,
+    /// The pool sold `max_sold_per_period` this period
+    PoolRateLimited = 7722,
+    /// The token is not in that pool stock page (sold, or another page)
+    NotInPool = 7723,
+    /// `MAX_OPEN_POOLS` pools are open (close and sweep one first)
+    TooManyPools = 7724,
+    /// `sweep_pool` on a pool that is still open
+    PoolOpen = 7725,
+    /// A pool size, buyer cap, sales rate or period of zero
+    InvalidPool = 7726,
+    /// The pool has stocked its whole size
+    PoolFullyStocked = 7727,
 }

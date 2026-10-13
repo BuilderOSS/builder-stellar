@@ -30,40 +30,62 @@ pub fn emit_launched(e: &Env, treasury: &Address, opened: bool) {
     .publish(e);
 }
 
+/// A quick-buy pool opened (by proposal).
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PrimaryListingCreated {
+pub struct PoolOpened {
     #[topic]
-    pub listing_id: u64,
+    pub pool_id: u32,
     pub price: i128,
+    pub asset: Address,
     pub expires_at: u64,
-    pub payment_asset: Address,
+    pub size: u32,
+    pub max_per_buyer: u32,
+    pub max_sold_per_period: u32,
+    pub period_secs: u64,
 }
 
+/// `count` tokens from `first_token_id` minted into the pool's custody.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PrimaryListingPurchased {
+pub struct PoolRestocked {
     #[topic]
-    pub listing_id: u64,
+    pub pool_id: u32,
+    pub first_token_id: u32,
+    pub count: u32,
+    pub stocked: u32,
+}
+
+/// A buyer picked `token_id` from a pool.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PoolPurchased {
+    #[topic]
+    pub pool_id: u32,
     #[topic]
     pub buyer: Address,
     pub token_id: u32,
     pub price: i128,
-    pub payment_asset: Address,
+    pub asset: Address,
 }
 
+/// A pool closed; `released` is the unstocked allowance given back.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PrimaryListingCancelled {
+pub struct PoolClosed {
     #[topic]
-    pub listing_id: u64,
+    pub pool_id: u32,
+    pub released: u32,
 }
 
+/// `count` unsold tokens returned to the Treasury; `pages_left` 0 when done.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PrimaryListingExpired {
+pub struct PoolSwept {
     #[topic]
-    pub listing_id: u64,
+    pub pool_id: u32,
+    pub count: u32,
+    pub pages_left: u32,
 }
 
 #[contractevent]
@@ -105,17 +127,6 @@ pub struct ListingExpired {
     #[topic]
     pub token_id: u32,
     pub seller: Address,
-}
-
-/// A comment on a primary listing. Event-only: the body is never stored.
-#[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PrimaryListingCommented {
-    #[topic]
-    pub listing_id: u64,
-    #[topic]
-    pub author: Address,
-    pub body: String,
 }
 
 /// A comment on a token's secondary listings. Keyed by token, so the thread
