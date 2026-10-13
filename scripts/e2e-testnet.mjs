@@ -494,7 +494,8 @@ async function createDao(ctx) {
     ctx.check('pending payment assets == native SAC (no claims asset)', pending.auction_payment_asset === s.nativeSac && pending.marketplace_payment_asset === s.nativeSac && pending.claims_payment_asset === null);
   }
   ctx.check('token.is_live == false', view(ctx, dao.token, 'is_live') === false);
-  ctx.check('manager.get_dao_by_slug resolves the slug to the token', view(ctx, s.manager, 'get_dao_by_slug', { slug: s.config.slug }) === dao.token, s.config.slug);
+  // create_dao only requests the slug; launch claims it (checked after launch_dao below).
+  ctx.check('pending.slug == the requested slug (claimed only at launch)', pending?.slug === s.config.slug, s.config.slug);
 
   // Pre-launch guards: each simulation must fail with CommonError::NotLive (7001). Nothing is submitted.
   const owner = ctx.id('DAO_OWNER');
