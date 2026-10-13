@@ -3197,7 +3197,7 @@ fn error_codes_are_unique_per_crate_block() {
     use manager::ManagerError as M;
     use marketplace::MarketplaceError as K;
     use metadata::Error as D;
-    use minter::MinterError as N;
+    use minter::ClaimMinterError as N;
     use treasury::TreasuryError as T;
     check(
         codes::MANAGER,
@@ -3807,10 +3807,10 @@ fn rename_by_proposal_then_settle_mints_with_artwork() {
     assert!(!uri.is_empty());
 }
 
-/// D30: every key a launched DAO, the Manager and the shared Minter write is
-/// either `("builder", <variant>)` or a known OpenZeppelin shape. The DAO
-/// runs every module first (artwork, launch with auction and marketplace,
-/// Minter claims, a secondary and a primary listing, a governed rename), so
+/// D30: every key a launched DAO and the Manager write is either
+/// `("builder", <variant>)` or a known OpenZeppelin shape. The DAO runs every
+/// module first (artwork, launch with auction and marketplace, a ClaimMinter
+/// list and claim, a secondary and a primary listing, a governed rename), so
 /// the walk sees the keys real use creates.
 #[test]
 fn every_protocol_storage_key_is_namespaced() {
@@ -3819,8 +3819,8 @@ fn every_protocol_storage_key_is_namespaced() {
     let token = DaoTokenContractClient::new(e, &f.dao.token);
     let metadata = MetadataContractClient::new(e, &f.dao.metadata);
     let marketplace = MarketplaceContractClient::new(e, &f.dao.marketplace);
-    let (minter_id, _) = shared_minter(&f);
-    let minter = minter::MinterContractClient::new(e, &minter_id);
+    let (minter_id, _) = claim_minter(&f);
+    let minter = minter::ClaimMinterClient::new(e, &minter_id);
     f.manager.set_platform_minter(&minter_id);
 
     metadata.add_properties(
@@ -3848,11 +3848,19 @@ fn every_protocol_storage_key_is_namespaced() {
         },
     );
 
-    // Minter: a merkle round and a claim.
+    // ClaimMinter: a list and a claim.
     let claimer = Address::generate(e);
     let (root, proof, _) = merkle_pair(e, &claimer, 1, &Address::generate(e), 1);
-    minter.set_merkle_root(&f.dao.token, &root, &String::from_str(e, "ipfs://bafytree"));
-    minter.mint_merkle(&f.dao.token, &claimer, &1u128, &proof);
+    let list = minter.open_list(
+        &root,
+        &String::from_str(e, "ipfs://bafytree"),
+        &marketplace.get_config().payment_asset,
+        &0,
+        &(e.ledger().timestamp() + 86_400),
+        &2,
+        &None,
+    );
+    minter.claim(&list, &claimer, &1u128, &1, &proof, &0);
 
     // Marketplace: a secondary and a primary listing.
     let payment_asset = marketplace.get_config().payment_asset;
@@ -3905,25 +3913,31 @@ fn every_protocol_storage_key_is_namespaced() {
 }
 
 // ============================================================================
-// Shared Minter (docs/STORAGE_DIET.md § 4 Minter, eng review D8)
+// ClaimMinter (docs/designs/membership-models.md §3)
 // ============================================================================
 
-/// The shared Minter, registered in the Manager registry as "Minter" 0.1.0 on
-/// a placeholder hash (it runs as native test code until upgraded).
-fn shared_minter(f: &DaoFixture) -> (Address, BytesN<32>) {
+/// This DAO's ClaimMinter, registered in the Manager registry as
+/// "ClaimMinter" 0.1.0 on a placeholder hash (it runs as native test code
+/// until upgraded). Interim (Phase 1): the Manager attaches it at launch as
+/// the pinned `claims` module until `create_dao` deploys it.
+fn claim_minter(f: &DaoFixture) -> (Address, BytesN<32>) {
     let e = &f.e;
     let hash = BytesN::from_array(e, &[0x51; 32]);
     f.manager.register_implementation(
-        &String::from_str(e, "Minter"),
+        &String::from_str(e, "ClaimMinter"),
         &String::from_str(e, "0.1.0"),
         &hash,
     );
+    let marketplace = MarketplaceContractClient::new(e, &f.dao.marketplace);
     let id = e.register(
-        minter::MinterContract,
+        minter::ClaimMinter,
         (
+            f.deployer.clone(), // the launch admin
+            f.dao.token.clone(),
+            f.dao.treasury.clone(),
             f.manager.address.clone(),
+            marketplace.get_config().payment_asset,
             hash.clone(),
-            minter::RECOMMENDED_UPGRADE_DELAY,
         ),
     );
     (id, hash)
@@ -3959,16 +3973,16 @@ fn merkle_pair(
     (root, vec![e, lb], vec![e, la])
 }
 
-/// Eng review D8: the shared Minter upgrades through the registry under the
-/// Manager admin, and claims keep working against the root set before the
-/// upgrade, on the real built WASM.
+/// A ClaimMinter upgrades by the DAO's own vote (its admin is the Treasury
+/// after launch), to a registry-approved hash, and claims keep working
+/// against the list opened before the upgrade, on the real built WASM.
 #[test]
-fn shared_minter_upgrades_then_claims_against_the_existing_root() {
+fn claim_minter_upgrades_by_the_dao_then_claims_against_the_existing_list() {
     let f = factory_dao();
     let e = &f.e;
     let token = DaoTokenContractClient::new(e, &f.dao.token);
-    let (minter_id, from) = shared_minter(&f);
-    let minter = minter::MinterContractClient::new(e, &minter_id);
+    let (minter_id, from) = claim_minter(&f);
+    let minter = minter::ClaimMinterClient::new(e, &minter_id);
     f.manager.set_platform_minter(&minter_id);
     f.manager.launch_dao(
         &f.dao.token,
@@ -3978,46 +3992,49 @@ fn shared_minter_upgrades_then_claims_against_the_existing_root() {
             minter: minter_id.clone(),
         },
     );
+    // Interim (Phase 1): the Manager registers the pinned module but does not
+    // launch it yet, so do what `launch_dao` will.
+    minter.launch(&f.dao.treasury, &false);
     assert_eq!(minter.version(), String::from_str(e, "0.1.0"));
+    assert_eq!(minter.admin(), f.dao.treasury);
 
     let alice = Address::generate(e);
     let bob = Address::generate(e);
     let (root, alice_proof, bob_proof) = merkle_pair(e, &alice, 2, &bob, 3);
     let tree_uri = String::from_str(e, "ipfs://bafyallocation");
-    minter.set_merkle_root(&f.dao.token, &root, &tree_uri);
-    minter.mint_merkle(&f.dao.token, &alice, &2u128, &alice_proof);
+    let asset = minter.payment_asset();
+    let list = minter.open_list(
+        &root,
+        &tree_uri,
+        &asset,
+        &0,
+        &(e.ledger().timestamp() + 30 * 86_400),
+        &5,
+        &None,
+    );
+    minter.claim(&list, &alice, &2u128, &2, &alice_proof, &0);
 
     let to = upload_module_wasm(e, "minter");
     f.manager.register_implementation(
-        &String::from_str(e, "Minter"),
+        &String::from_str(e, "ClaimMinter"),
         &String::from_str(e, "0.2.0"),
         &to,
     );
-    f.manager
-        .set_latest_implementation(&String::from_str(e, "Minter"), &to);
     f.manager.approve_upgrade(&from, &to);
-    // Every DAO pins this Minter: an upgrade waits 7 days after the approval
-    // so a DAO can revoke the Minter's mint authority first (review M1).
-    assert_eq!(
-        minter.try_upgrade(&from, &to).err().unwrap().unwrap() as u32,
-        7813
-    );
-    let notice = minter.upgrade_delay();
-    e.ledger().with_mut(|l| l.sequence_number += notice);
     minter.upgrade(&from, &to);
 
     // Now running the built WASM against the same storage.
     assert_eq!(minter.wasm_hash(), to);
     assert_eq!(minter.version(), String::from_str(e, "0.2.0"));
-    let status = minter.claim_status(&f.dao.token, &bob);
-    assert_eq!(status.root, Some(root));
-    assert_eq!(status.round, 1);
-    assert_eq!(status.tree_uri, Some(tree_uri));
-    assert!(!status.claimed);
-    minter.mint_merkle(&f.dao.token, &bob, &3u128, &bob_proof);
+    let stored = minter.get_list(&list).unwrap();
+    assert_eq!(
+        (stored.root, stored.tree_uri, stored.minted),
+        (root, tree_uri, 2)
+    );
+    minter.claim(&list, &bob, &3u128, &3, &bob_proof, &0);
     assert_eq!(token.balance(&bob), 3);
     assert!(minter
-        .try_mint_merkle(&f.dao.token, &alice, &2u128, &alice_proof)
+        .try_claim(&list, &alice, &2u128, &1, &alice_proof, &0)
         .is_err());
     assert_eq!(token.balance(&alice), 2);
 }
@@ -4095,7 +4112,7 @@ fn pass_one_action(
 fn protocol_runs_on_chain_state_only() {
     let f = factory_dao();
     let e = &f.e;
-    let (minter_id, _) = shared_minter(&f);
+    let (minter_id, _) = claim_minter(&f);
     f.manager.set_platform_minter(&minter_id);
 
     // --- Discovery from the token address alone.
@@ -4162,7 +4179,7 @@ fn protocol_runs_on_chain_state_only() {
     );
     let claims = Symbol::new(e, "claims");
     assert_eq!(token.module(&claims), Some(minter_id.clone()));
-    let minter = minter::MinterContractClient::new(e, &token.module(&claims).unwrap());
+    let minter = minter::ClaimMinterClient::new(e, &token.module(&claims).unwrap());
 
     // --- Auction: bid, a deferred refund recovered, settle, next auction.
     let pay = auction.get_config().payment_token;
@@ -4214,10 +4231,17 @@ fn protocol_runs_on_chain_state_only() {
     // --- A merkle claim with a locally computed proof.
     let erin = Address::generate(e);
     let (root, erin_proof, _) = merkle_pair(e, &erin, 2, &Address::generate(e), 1);
-    minter.set_merkle_root(&f.dao.token, &root, &String::from_str(e, "ipfs://bafytree"));
-    let status = minter.claim_status(&f.dao.token, &erin);
-    assert_eq!(status.root, Some(root));
-    minter.mint_merkle(&f.dao.token, &erin, &2u128, &erin_proof);
+    let list = minter.open_list(
+        &root,
+        &String::from_str(e, "ipfs://bafytree"),
+        &pay,
+        &0,
+        &(e.ledger().timestamp() + 86_400),
+        &3,
+        &None,
+    );
+    assert_eq!(minter.get_list(&list).unwrap().root, root);
+    minter.claim(&list, &erin, &2u128, &2, &erin_proof, &0);
     assert_eq!(token.balance(&erin), 2);
 
     // --- Governance through the Treasury: profile, artwork, an upgrade, a cancel.
@@ -4566,18 +4590,20 @@ fn dao_renewal_inventory(
         }
     }
 
-    // The shared Minter's per-DAO round (registered as the `claims` module).
-    if let Some(minter) = token.module(&Symbol::new(e, "claims")) {
-        let status = minter::MinterContractClient::new(e, &minter).claim_status(token_id, token_id);
-        if status.round > 0 {
-            keys.push((
-                minter.clone(),
-                ns_key(e, "MerkleRoot", std::vec![token_id.into_val(e)]),
-            ));
-            keys.push((
-                minter,
-                ns_key(e, "MerkleRound", std::vec![token_id.into_val(e)]),
-            ));
+    // The ClaimMinter lists its own keys (`DaoModule::renewal_keys`, eng
+    // review R3); a listed slot may hold nothing, so only present entries.
+    if let Some(cm) = token.module(&Symbol::new(e, "claims")) {
+        let client = minter::ClaimMinterClient::new(e, &cm);
+        let mut cursor = Some(0u32);
+        while let Some(c) = cursor {
+            let page = client.renewal_keys(&c, &50);
+            for (key, persistent) in page.keys.iter() {
+                assert!(persistent);
+                if e.as_contract(&cm, || e.storage().persistent().has(&key)) {
+                    keys.push((cm.clone(), key));
+                }
+            }
+            cursor = page.next_cursor;
         }
     }
 
@@ -4850,7 +4876,7 @@ fn reference_dao_sweep_fits_one_transaction() {
     let e = &f.e;
     let token = DaoTokenContractClient::new(e, &f.dao.token);
     let metadata = MetadataContractClient::new(e, &f.dao.metadata);
-    let (minter_id, _) = shared_minter(&f);
+    let (minter_id, _) = claim_minter(&f);
     f.manager.set_platform_minter(&minter_id);
 
     // 16 properties of 19 items each (304 items), one property per call.
@@ -5374,7 +5400,7 @@ fn a_dao_kept_alive_by_the_sweep_alone_works_after_a_year() {
         l.max_entry_ttl = TESTNET_MAX_ENTRY_TTL;
         l.min_persistent_entry_ttl = TESTNET_MIN_PERSISTENT_TTL;
     });
-    let (minter_id, _) = shared_minter(&f);
+    let (minter_id, _) = claim_minter(&f);
     f.manager.set_platform_minter(&minter_id);
     f.minter = minter_id.clone();
     let e = &f.e;
@@ -5383,7 +5409,7 @@ fn a_dao_kept_alive_by_the_sweep_alone_works_after_a_year() {
     let treasury = DaoTreasuryContractClient::new(e, &f.dao.treasury);
     let auction = DaoAuctionContractClient::new(e, &f.dao.auction);
     let governor = DaoGovernorContractClient::new(e, &f.dao.governor);
-    let minter = minter::MinterContractClient::new(e, &minter_id);
+    let minter = minter::ClaimMinterClient::new(e, &minter_id);
     let sac = StellarAssetClient::new(e, &f.payment.address());
     let xlm = TokenClient::new(e, &f.payment.address());
 
@@ -5429,7 +5455,15 @@ fn a_dao_kept_alive_by_the_sweep_alone_works_after_a_year() {
     sac.mint(&f.dao.treasury, &500_000_000);
     let erin = Address::generate(e);
     let (root, erin_proof, _) = merkle_pair(e, &erin, 2, &Address::generate(e), 1);
-    minter.set_merkle_root(&f.dao.token, &root, &String::from_str(e, "ipfs://bafytree"));
+    let list = minter.open_list(
+        &root,
+        &String::from_str(e, "ipfs://bafytree"),
+        &f.payment.address(),
+        &0,
+        &(e.ledger().timestamp() + 400 * 86_400),
+        &3,
+        &None,
+    );
 
     // --- A year with no activity but the sweep and the platform renewal.
     let mut archived = 0;
@@ -5496,8 +5530,8 @@ fn a_dao_kept_alive_by_the_sweep_alone_works_after_a_year() {
     assert_eq!(xlm.balance(&f.dao.treasury), treasury_before - 10_000_000);
     assert_eq!(token.owner_of(&unsold), dave);
 
-    // The claim round set a year ago is still open.
-    minter.mint_merkle(&f.dao.token, &erin, &2u128, &erin_proof);
+    // The list opened a year ago is still open.
+    minter.claim(&list, &erin, &2u128, &2, &erin_proof, &0);
     assert_eq!(token.balance(&erin), 2);
 }
 
@@ -5512,7 +5546,7 @@ fn without_dao_holdings_in_the_sweep_an_idle_treasury_balance_archives() {
         l.max_entry_ttl = TESTNET_MAX_ENTRY_TTL;
         l.min_persistent_entry_ttl = TESTNET_MIN_PERSISTENT_TTL;
     });
-    let (minter_id, _) = shared_minter(&f);
+    let (minter_id, _) = claim_minter(&f);
     f.manager.set_platform_minter(&minter_id);
     f.minter = minter_id.clone();
     let e = &f.e;
@@ -5533,49 +5567,6 @@ fn without_dao_holdings_in_the_sweep_an_idle_treasury_balance_archives() {
         archive_expired(e, &f);
     }
     assert_eq!(xlm.balance(&f.dao.treasury), 0);
-}
-
-/// D42, end to end: a Minter hash approved but not announced as latest never
-/// applies, and announcing it restarts the notice, so the app's
-/// "running → latest" display sees every possible platform upgrade for the
-/// full notice.
-#[test]
-fn platform_upgrade_needs_the_announced_latest_and_the_notice_counts_from_it() {
-    let f = factory_dao();
-    let e = &f.e;
-    let (minter_id, from) = shared_minter(&f);
-    f.manager.set_platform_minter(&minter_id);
-    let minter = minter::MinterContractClient::new(e, &minter_id);
-    let hidden = upload_module_wasm(e, "minter");
-    f.manager.register_implementation(
-        &String::from_str(e, "Minter"),
-        &String::from_str(e, "0.2.0"),
-        &hidden,
-    );
-    f.manager.approve_upgrade(&from, &hidden);
-    let notice = minter.upgrade_delay();
-    e.ledger().with_mut(|l| l.sequence_number += notice + 1);
-    assert_eq!(
-        minter.try_upgrade(&from, &hidden).err().unwrap().unwrap() as u32,
-        7814 // UpgradeNotLatest
-    );
-    let announced = e.ledger().sequence() as u64;
-    f.manager
-        .set_latest_implementation(&String::from_str(e, "Minter"), &hidden);
-    assert_eq!(
-        f.manager
-            .latest_pointer(&String::from_str(e, "Minter"))
-            .unwrap()
-            .set_ledger,
-        announced
-    );
-    assert_eq!(
-        minter.try_upgrade(&from, &hidden).err().unwrap().unwrap() as u32,
-        7813 // UpgradeDelayNotElapsed: the notice restarted at the announcement
-    );
-    e.ledger().with_mut(|l| l.sequence_number += notice);
-    minter.upgrade(&from, &hidden);
-    assert_eq!(minter.wasm_hash(), hidden);
 }
 
 /// A DAO module can chain upgrades with approved step paths in one proposal

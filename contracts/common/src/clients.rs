@@ -14,6 +14,7 @@ use soroban_sdk::{contractclient, Address, BytesN, Env, String, Symbol, Val, Vec
 pub trait NftApi {
     fn launch(e: &Env, treasury: Address, grants: Vec<crate::modules::MintGrant>);
     fn treasury(e: &Env) -> Address;
+    fn metadata(e: &Env) -> Option<Address>;
     fn modules(e: &Env) -> Vec<crate::modules::ModuleEntry>;
     fn module(e: &Env, kind: Symbol) -> Option<Address>;
     /// Module registry (Manager in Setup, admin once live).
@@ -74,6 +75,12 @@ pub trait DaoModuleApi {
     /// entries it lists, so it still answers once they have archived.
     fn renewal_keys(e: &Env, cursor: u32, limit: u32) -> crate::modules::RenewalPage;
     fn wasm_hash(e: &Env) -> BytesN<32>;
+}
+
+/// Metadata artwork reads (ClaimMinter refuses Setup lists without artwork).
+#[contractclient(name = "ArtworkClient")]
+pub trait ArtworkApi {
+    fn properties_count(e: &Env) -> u32;
 }
 
 /// Metadata mint hooks called by the token.

@@ -1,43 +1,30 @@
-# Shared Minter contract
+# ClaimMinter module
 
-One platform Minter supports every DAO Token. It is deployed separately from the six DAO modules, keeps per-token merkle allocations, and stores no per-token administrator. Every DAO launches with it (the Manager's registered platform Minter, pinned in the launch config).
+A per-DAO module, registry kind `claims`, that mints a DAO's tokens against merkle claim lists ([design §3](../../docs/designs/membership-models.md)). It replaces the shared platform Minter: every DAO has its own ClaimMinter, wired to its Token and Treasury at construction and upgraded only by that DAO. The crate keeps its `contracts/minter` path, error block 7800 and the merkle leaf, proof and `tree_uri` formats.
 
 ## Interface
 
 ```text
-__constructor(manager: Address, current_hash: BytesN<32>)
-mint_batch(token_id: Address, recipients: Vec<Address>, amounts: Vec<u128>)
-set_merkle_root(token_id: Address, root: BytesN<32>, tree_uri: String)
-mint_merkle(token_id: Address, recipient: Address, amount: u128, proof: Vec<BytesN<32>>)
-claim_status(token_id: Address, recipient: Address) -> ClaimStatus { root, round, tree_uri, claimed }
-upgrade(from_hash, to_hash); migrate(); version(); wasm_hash(); storage_version(); manager()
+__constructor(admin, token, treasury, manager, payment_asset, current_hash)
+open_list(root, tree_uri, asset, price, expires_at, total, assurance: Option<{threshold_claimers, deadline}>) -> list_id
+claim(list_id, claimer, leaf_amount, mint_now, proof, max_price) -> Vec<u32>
+assurance_state(list_id) -> Open | Met | Failed
+release(list_id) -> i128;  refund(list_id, claimer) -> i128
+get_list(list_id); get_claim(list_id, claimer); next_list_id(); assurance_list(); get_config()
+launch(treasury, open); handoff(treasury); payment_asset(); renewal_keys(cursor, limit)   // DaoModule
+upgrade(from, to); recovery_upgrade(from, to); migrate(); version(); wasm_hash(); storage_version(); admin()
 ```
 
-Here `token_id` means the **Token contract address**, not an NFT number. Every operation requires a Live token. The token's admin (`token.admin()`, the Treasury after launch) authorizes batch and configuration operations, so they require governance. Claims require recipient auth and Minter mint authority on the Token.
+**Lists.** Each list is a root of `(claimer, amount)` leaves with an asset, a price per token (0 for free), an expiry and a total across claimers. A claimer proves the full leaf and claims it in parts: `mint_now` is at most what is left of the leaf and at most `common::MAX_BATCH_MINT` (43) per call. Each claim pays `price × mint_now` and mints through the Token's `batch_mint`, spending this module's mint allowance (the Token's `AllowanceExceeded` propagates). The leaf is `sha256(claimer_xdr || amount_be_u128)`; each internal node hashes its sorted pair; proofs have at most 32 siblings.
 
-`mint_batch` accepts 1–18 recipient entries (`common::MAX_BATCH_RECIPIENTS`, `BatchTooLarge`); the Token also requires the whole batch to fit its event budget (`common::batch_mint_fits`: up to 43 tokens to one recipient, fewer across several). Errors raised by the Token (for example its `BatchTooLarge` 7205 or a missing mint authority) propagate unchanged. Merkle proofs have at most 32 siblings. The leaf is `sha256(recipient_xdr || amount_be_u128)`; each internal node hashes its sorted pair. Each `set_merkle_root` opens a new round: a recipient claims once per round. Claims are merkle-only; the allowlist mode was removed (docs/STORAGE_DIET.md D8).
+**Who opens a list.**
+- Setup: the launch admin opens free lists. A list with a price or assurance terms also needs the Manager's authorization, so only `manager.open_assurance` opens it. Setup lists use the configured payment asset (`PaymentAssetMismatch`) and need artwork (`ArtworkMissing`).
+- Live: the Treasury, by proposal, with any asset and price and no assurance terms (`AssuranceNotAllowed`).
 
-`tree_uri` is the `ipfs://<cid>` of the full tree in the `builder-stellar-merkle-v1` file format (Uniswap merkle-distributor shape with an explicit algorithm header, docs/STORAGE_DIET.md § 4 Minter). It is stored with the root and emitted in `MerkleRootSet { root, round, tree_uri }`. The chain cannot check the file against the root, so every consumer recomputes the root before offering a claim. It must start with `ipfs://` and fit `common::MAX_STRING_LENGTH` (`InvalidTreeUri` 7812).
+**The assurance list** (at most one, `AssuranceExists`). Before launch its payments stay in escrow here. It is `Met` once `threshold_claimers` distinct addresses have claimed, and `Failed` once the deadline passes while the DAO is not Live, whether it was met or not. `Failed` is computed from the deadline and the Token's `is_live()`, never stored. So `release` (needs Live, `TokenNotLive`) and `refund` (needs `Failed`, `NotFailed`) exclude each other. `claim` refuses a failed list (`AssuranceFailed`). `launch` releases the escrow to the Treasury in the launch transaction; after launch, claims pay the Treasury directly.
 
-The Minter adopts `common::upgrade`: the Manager admin authorizes `upgrade` and `migrate` (`ManagerAdminNotSet` 7811 if the Manager has none), the registry must approve the hash pair, and `version()` is read from the registry entry of the running hash (registered under the name "Minter").
+**DaoModule.** `launch` and `handoff` are Manager-only. `handoff` moves the admin to the Treasury and stays in Setup, which freezes list opening and upgrades during an assurance drive. `renewal_keys` lists `List(0..next_list_id)` from the instance counter and the payment asset (the escrow balance). `Claim(list, claimer)` records belong to their claimers (holder class) and are left out; a claimer's next claim or refund restores theirs.
 
-Every entry point extends the Minter's own instance TTL, so the shared contract stays live while used; per-token entries follow the long-lived persistent policy.
+**Upgrades.** `upgrade` needs the module admin (the launch admin in Setup, the Treasury by proposal once handed over) and a registry-approved hash pair. `recovery_upgrade` is the Manager's path for a failed, frozen drive whose refunds are broken (`manager.recover_claims`): it checks only the Manager's authorization and that the module is still in Setup.
 
-Before launch founders mint directly through the Token; the Minter is not a setup tool. The Manager registers the platform address and launch grants it authority after checking the launch config's pinned `minter`. Only DAO governance can revoke that grant.
-
-Errors: block 7800. No Minter binding package is generated by the seven-package generator. [Implementation](src/contract.rs), [storage](src/storage.rs), [events](src/events.rs). `cargo test -p minter`. [Database Minter projections](../../docs/DATABASE_SCHEMA.md).
-
-The web dynamically loads/checks the deployed Minter spec for claimant preparation
-and signing. It separates current RPC eligibility from indexed history. The current
-allocation admin form only validates review descriptors; its methods are not yet
-registered for shared governance submission. See [web capabilities](../../apps/web/README.md).
-
-## Upgrade notice
-
-`upgrade(from, to)` applies only `upgrade_delay()` ledgers after the Manager's `approve_upgrade` (constructor
-argument `upgrade_delay`; `UpgradeDelayNotElapsed`, 7813, before that). `set_upgrade_delay(ledgers)` (Manager admin)
-lengthens the notice at once; a reduction takes effect only after the notice in force has passed; either emits
-`UpgradeDelayChanged` (`from_ledgers`, `to_ledgers`, `effective_ledger`). The target must
-be the hash announced as latest for `Minter` (`UpgradeNotLatest`, 7814), and the notice counts from the later of
-the approval and the announcement (D42). Every DAO pins this Minter as a mint authority, so the notice is the
-window in which a DAO can revoke it by proposal.
+Errors: block 7800 (7802, 7804, 7811, 7813 and 7814 belonged to the shared Minter and are retired). [Implementation](src/contract.rs), [storage](src/storage.rs), [events](src/events.rs). `cargo test -p minter`.
