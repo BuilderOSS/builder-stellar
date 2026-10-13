@@ -8,15 +8,6 @@ export function treasuryIsAdmin(config: DaoNetworkConfig, admin: string | null |
   return Boolean(config.treasuryContractId && admin === config.treasuryContractId);
 }
 
-export function treasuryHasAuthority(
-  treasuryContractId: string,
-  authorities: Array<{ authority: string; enabled?: boolean }> | undefined
-) {
-  return Boolean(
-    treasuryContractId && authorities?.some((item) => item.authority === treasuryContractId && item.enabled !== false)
-  );
-}
-
 export function startAdminProposal({
   address,
   daoId,

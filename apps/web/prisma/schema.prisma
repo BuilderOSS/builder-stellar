@@ -360,18 +360,6 @@ view TokenMember {
   @@schema("token")
 }
 
-view TokenMintAuthority {
-  deploymentId String  @map("deployment_id")
-  daoId        String  @map("dao_id")
-  contractId   String  @map("contract_id")
-  authority    String
-  enabled      Boolean
-  eventLedger  BigInt  @map("event_ledger")
-
-  @@map("mint_authorities")
-  @@schema("token")
-}
-
 view AuctionAuction {
   eventId               String    @map("event_id")
   deploymentId          String    @map("deployment_id")

@@ -5,27 +5,7 @@ import { validateStellarAddress } from '@/lib/validate-address';
 import type { FormContext, ValidationResult } from '../../types';
 import type { MintGovernanceTokenData } from './types';
 
-export function validateMintGovernanceToken(data: MintGovernanceTokenData, context: FormContext): ValidationResult {
-  // Check mint authority first
-  const treasuryHasMintAuthority = Boolean(
-    context.config.treasuryContractId &&
-    context.mintAuthorities?.some((item) => item.authority === context.config.treasuryContractId && item.enabled)
-  );
-
-  if (context.mintAuthoritiesLoading) {
-    return {
-      valid: false,
-      message: 'Checking mint authority…'
-    };
-  }
-
-  if (!treasuryHasMintAuthority) {
-    return {
-      valid: false,
-      message: 'Grant mint authority to the treasury before creating mint proposals.'
-    };
-  }
-
+export function validateMintGovernanceToken(data: MintGovernanceTokenData, _context: FormContext): ValidationResult {
   const fields: Record<string, string> = {};
 
   // Validate recipient

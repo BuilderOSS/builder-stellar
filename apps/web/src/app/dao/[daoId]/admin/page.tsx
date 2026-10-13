@@ -8,11 +8,10 @@ import { PageSection } from '@/components/page-section';
 import { ProposalDraftPanel } from '@/components/proposal/proposal-draft-panel';
 import { Avatar, Chip, ListRow, Section } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
-import { treasuryHasAuthority, treasuryIsAdmin } from '@/lib/admin-proposals';
+import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { useContractAdmin } from '@/lib/admin-queries';
 import { useAdminTokenState } from '@/lib/admin-surfaces';
 import { daoAdminRoute } from '@/lib/dao-routes';
-import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 const accessCard = css({
@@ -47,7 +46,6 @@ const access = (direct: boolean, vote: boolean): Access => (direct ? 'direct' : 
 export default function AdminPage() {
   const { daoId, daoConfig: config, routeId } = useDaoContext();
   const session = useAuthSessionStore();
-  const { data: mintAuthorities } = useGoldskyMintAuthorities(config.tokenContractId);
   const { data: tokenAdmin } = useContractAdmin(config, 'token', session.address || undefined);
   const { data: governorAdmin } = useContractAdmin(config, 'governor', session.address || undefined);
   const { data: auctionAdmin } = useContractAdmin(config, 'auction', session.address || undefined);
@@ -58,8 +56,8 @@ export default function AdminPage() {
   const hasMintAccess = Boolean(isAdmin);
   const hasGovernanceAccess = Boolean(session.address && governorAdmin === session.address);
   const canProposeAdminActions = treasuryIsAdmin(config, tokenAdmin) || treasuryIsAdmin(config, governorAdmin);
-  const canProposeMint =
-    treasuryIsAdmin(config, tokenAdmin) || treasuryHasAuthority(config.treasuryContractId, mintAuthorities?.items);
+  // The Treasury mints as the Token admin; modules mint against their allowances.
+  const canProposeMint = treasuryIsAdmin(config, tokenAdmin);
   const canProposeGovernance = treasuryIsAdmin(config, governorAdmin);
   const canProposeAuction = treasuryIsAdmin(config, auctionAdmin);
   const hasAnyAccess = Boolean(

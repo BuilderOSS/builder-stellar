@@ -42,30 +42,14 @@ export const batchMintGovernanceTokenHandler: ActionHandler<BatchMintGovernanceT
   }),
 
   checkPreconditions: (context) => {
-    // Check if still loading
-    if (context.mintAuthoritiesLoading) {
+    // The Treasury mints as the Token admin (no allowance needed), so a mint proposal needs it to be the admin.
+    if (!context.config.treasuryContractId || context.config.adminAddress !== context.config.treasuryContractId) {
       return {
         canExecute: false,
-        reason: 'Checking mint authority…',
-        loading: true
-      };
-    }
-
-    // Check if treasury has mint authority
-    const treasuryHasMintAuthority = Boolean(
-      context.config.treasuryContractId &&
-      context.mintAuthorities?.some((item) => item.authority === context.config.treasuryContractId && item.enabled)
-    );
-
-    if (!treasuryHasMintAuthority) {
-      return {
-        canExecute: false,
-        reason: 'Grant mint authority to the treasury before creating mint proposals.'
+        reason: 'Minting by proposal works once the community has launched and its Treasury is the token admin.'
       };
     }
 
     return { canExecute: true };
-  },
-
-  requiresMintAuthority: false
+  }
 };

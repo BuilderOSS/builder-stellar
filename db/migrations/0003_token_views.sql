@@ -142,22 +142,6 @@ FROM (
   ORDER BY deployment_id, contract_id, topic_0, pos DESC, event_id DESC
 ) h;
 
--- Compatibility for the web until it reads token.mint_allowances: modules whose
--- last set allowance is above zero (the admin mints without one and is not listed).
-CREATE VIEW token.mint_authorities AS
-SELECT
-  a.deployment_id,
-  a.dao_id,
-  a.contract_id,
-  a.module AS authority,
-  true AS enabled,
-  a.changed_by,
-  a.event_ledger,
-  a.event_at,
-  a.transaction_hash
-FROM token.mint_allowances a
-WHERE a.allowance > 0;
-
 -- Registered modules: the latest registration of each address on each Token,
 -- unless a later unregistration removed it.
 CREATE VIEW token.modules AS

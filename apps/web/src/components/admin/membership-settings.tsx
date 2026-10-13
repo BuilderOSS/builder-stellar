@@ -68,7 +68,15 @@ function assemble(client: TokenClient, call: DirectCall) {
   }
 }
 
-type ModuleView = { kind: string; address: string; nonVoting: boolean; allowance: number; agent: boolean };
+type ModuleView = {
+  kind: string;
+  address: string;
+  nonVoting: boolean;
+  allowance: number;
+  agent: boolean;
+  /** Votes the module holds, its own and delegated to it (review 2 C3: modules can be delegates). */
+  votes: bigint;
+};
 type MembershipState = {
   admin: string;
   live: boolean;
@@ -89,9 +97,12 @@ function useMembershipState(config: DaoNetworkConfig, address?: string | null) {
         token.modules(),
         token.transfer_agents()
       ]);
-      const allowances = await Promise.all(
-        modules.result.map((entry) => token.mint_allowance({ module: entry.address }).then((tx) => tx.result))
-      );
+      const [allowances, votes] = await Promise.all([
+        Promise.all(
+          modules.result.map((entry) => token.mint_allowance({ module: entry.address }).then((tx) => tx.result))
+        ),
+        Promise.all(modules.result.map((entry) => token.get_votes({ account: entry.address }).then((tx) => tx.result)))
+      ]);
       return {
         admin: admin.result,
         live: live.result,
@@ -105,7 +116,8 @@ function useMembershipState(config: DaoNetworkConfig, address?: string | null) {
           address: entry.address,
           nonVoting: entry.non_voting,
           allowance: allowances[index] ?? 0,
-          agent: agents.result.includes(entry.address)
+          agent: agents.result.includes(entry.address),
+          votes: votes[index] ?? 0n
         }))
       };
     }
@@ -333,6 +345,11 @@ export function MembershipSettings() {
                         <span className={row}>
                           {module.nonVoting ? <Badge>Holds tokens without votes</Badge> : null}
                           {module.agent ? <Badge>Can move memberships</Badge> : null}
+                          {module.votes > 0n ? (
+                            <Badge tone="warning">
+                              {module.votes.toString()} {module.votes === 1n ? 'vote' : 'votes'}
+                            </Badge>
+                          ) : null}
                           <Badge>
                             {module.allowance >= UNLIMITED
                               ? 'Unlimited'

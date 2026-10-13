@@ -639,8 +639,7 @@ test('token: ownership, members, voting power, allowances, switches and approval
     one(`SELECT minted_supply, system_held_supply, voting_supply FROM token.supply WHERE dao_id = 'CTOK2'`),
     { minted_supply: 0, system_held_supply: 0, voting_supply: 0 }
   );
-  assert.deepEqual(rows(`SELECT authority, enabled, changed_by FROM token.mint_authorities`), [{ authority: 'CCLM1', enabled: true, changed_by: 'CTRE1' }]);
-  assert.deepEqual(rows(`SELECT module, allowance FROM token.mint_allowances`), [{ module: 'CCLM1', allowance: 10 }]);
+  assert.deepEqual(rows(`SELECT module, allowance, changed_by FROM token.mint_allowances`), [{ module: 'CCLM1', allowance: 10, changed_by: 'CTRE1' }]);
   assert.deepEqual(rows(`SELECT kind, module, non_voting FROM token.modules WHERE dao_id = 'CTOK1' ORDER BY kind`), [
     { kind: 'auction', module: 'CAUC1', non_voting: true },
     { kind: 'claims', module: 'CCLM1', non_voting: false },

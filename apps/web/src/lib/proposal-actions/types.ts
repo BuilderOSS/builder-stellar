@@ -102,8 +102,6 @@ export interface FormContext {
   balances?: AssetBalance[];
   balancesLoading?: boolean;
   balancesError?: string;
-  mintAuthorities?: Array<{ authority: string; enabled: boolean }>;
-  mintAuthoritiesLoading?: boolean;
   // Allow custom extensions per action type
   [key: string]: any;
 }
@@ -165,7 +163,6 @@ export interface ActionHandler<TData = any> {
   checkPreconditions?: (context: FormContext) => PreconditionResult;
 
   // Optional metadata
-  requiresMintAuthority?: boolean;
 }
 
 /**

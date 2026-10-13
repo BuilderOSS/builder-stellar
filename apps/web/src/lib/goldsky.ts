@@ -469,30 +469,6 @@ export async function getGoldskyProposalComments(
   };
 }
 
-/**
- * Mint Authorities
- *
- * Returns all addresses with mint authority
- */
-export async function getGoldskyMintAuthorities(daoId: string) {
-  const deploymentId = getDeploymentId();
-  const daoIdFromUrl = await getDaoIdFromUrl(daoId);
-  const rows = await prisma.tokenMintAuthority.findMany({
-    where: { deploymentId, daoId: daoIdFromUrl, enabled: true },
-    orderBy: { authority: 'asc' }
-  });
-
-  return {
-    items: rows.map((row) => ({
-      authority: row.authority,
-      enabled: row.enabled,
-      last_updated_ledger: Number(row.eventLedger)
-    })),
-    total: rows.length,
-    generatedAt: new Date().toISOString()
-  };
-}
-
 export async function getDashboardData(address: string, params: { limit?: number; offset?: number } = {}) {
   const { limit = 20, offset = 0 } = params;
   const deploymentId = getDeploymentId();

@@ -77,19 +77,6 @@ export type GoldskyMemberLookupResponse = {
   message?: string;
 };
 
-export type GoldskyAuthority = {
-  authority: string;
-  enabled: boolean;
-  last_updated_ledger: number;
-};
-
-export type GoldskyAuthorityResponse = {
-  items: GoldskyAuthority[];
-  total: number;
-  generatedAt: string;
-  message?: string;
-};
-
 export type GoldskyHealthResponse = {
   status: 'healthy' | 'unhealthy';
   latestLedger?: number;
@@ -180,14 +167,6 @@ export function useGoldskyMember(daoTokenAddress: string, address: string) {
       : null,
     fetchJson,
     {}
-  );
-}
-
-export function useGoldskyMintAuthorities(daoTokenAddress: string) {
-  return useSWR<GoldskyAuthorityResponse>(
-    `/api/dao/${encodeURIComponent(daoTokenAddress)}/authorities/mint`,
-    fetchJson,
-    { keepPreviousData: true }
   );
 }
 

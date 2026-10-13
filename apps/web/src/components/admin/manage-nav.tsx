@@ -58,7 +58,12 @@ const GROUPS: Array<{ title: string; items: ManageItem[] }> = [
     title: 'Rules',
     items: [
       { key: 'governance', label: 'Voting rules', meta: 'Timing, quorum and who can propose', section: '/governance' },
-      { key: 'owner', label: 'Who can mint', meta: 'Accounts allowed to mint tokens', section: '/owner' }
+      {
+        key: 'owner',
+        label: 'Membership',
+        meta: 'How tokens move, delegation and module allowances',
+        section: '/owner'
+      }
     ]
   },
   {

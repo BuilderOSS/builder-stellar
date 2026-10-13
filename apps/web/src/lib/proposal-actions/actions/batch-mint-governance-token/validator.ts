@@ -8,28 +8,8 @@ import type { BatchMintGovernanceTokenData } from './types';
 
 export function validateBatchMintGovernanceToken(
   data: BatchMintGovernanceTokenData,
-  context: FormContext
+  _context: FormContext
 ): ValidationResult {
-  // Check mint authority first
-  const treasuryHasMintAuthority = Boolean(
-    context.config.treasuryContractId &&
-    context.mintAuthorities?.some((item) => item.authority === context.config.treasuryContractId && item.enabled)
-  );
-
-  if (context.mintAuthoritiesLoading) {
-    return {
-      valid: false,
-      message: 'Checking mint authority…'
-    };
-  }
-
-  if (!treasuryHasMintAuthority) {
-    return {
-      valid: false,
-      message: 'Grant mint authority to the treasury before creating mint proposals.'
-    };
-  }
-
   const fields: Record<string, string> = {};
 
   // Validate recipient
