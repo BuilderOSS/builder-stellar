@@ -120,6 +120,8 @@ function invoke(data) {
     // The Minter's own row (MintBatchEvent / MerkleClaimEvent) tells the story of a batch;
     // the token's MintBatchWithMinter in the same call stays admin so a mint is not announced twice.
     MerkleClaimEvent: true, MintBatchEvent: true,
+    // A module joining or leaving changes who can mint and whose tokens vote: public.
+    ModuleRegistered: true, ModuleUnregistered: true,
     // A new claim round and a profile change are things members act on.
     MerkleRootSetEvent: true, ProfileUpdated: true,
     // Contract upgrades are the most security-relevant DAO action: public.
@@ -137,7 +139,9 @@ function invoke(data) {
     Mint: 'token.mint',
     MintWithMinter: 'token.mint',
     MintBatchWithMinter: 'token.batch_mint',
-    MintAuthorityChanged: 'token.mint_authority_changed',
+    MintAllowanceChanged: 'token.mint_allowance_changed',
+    ModuleRegistered: 'token.module_registered',
+    ModuleUnregistered: 'token.module_unregistered',
     MetadataUpdated: 'token.metadata_updated',
     Approve: 'token.approve',
     ApproveForAll: 'token.approve_for_all',
@@ -230,7 +234,9 @@ function invoke(data) {
     Mint: 'Token minted',
     MintWithMinter: 'Token minted',
     MintBatchWithMinter: 'Tokens batch minted',
-    MintAuthorityChanged: 'Mint authority changed',
+    MintAllowanceChanged: 'Mint allowance changed',
+    ModuleRegistered: 'Module added',
+    ModuleUnregistered: 'Module removed',
     MetadataUpdated: 'Community renamed',
     Approve: 'Token approval granted',
     ApproveForAll: 'Operator approval changed',
@@ -355,6 +361,7 @@ function invoke(data) {
     pick(data, ['winner']),
     pick(data, ['minter']),
     pick(data, ['authority']),
+    pick(data, ['module']),
     pick(data, ['current_admin']),
     pick(data, ['proposed_admin']),
     pick(data, ['cancelled_admin']),
@@ -381,6 +388,7 @@ function invoke(data) {
     pick(data, ['payment_token']),
     pick(data, ['payment_asset']),
     pick(data, ['token_address']),
+    pick(data, ['address']),
     pick(data, ['deployer']),
     pick(data, ['launch_admin']),
     pick(data, ['recipient']),
@@ -471,6 +479,17 @@ function invoke(data) {
     AdminProposalCancelled: function() { return 'Admin proposal for ' + (pick(data, ['cancelled_admin']) || 'unknown') + ' cancelled'; },
     Mint: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
     MintWithMinter: function() { return 'Minted token ' + (tokenId || '') + ' to ' + (owner || 'recipient'); },
+    // u32::MAX (4294967295) is the unlimited allowance the Auction holds.
+    MintAllowanceChanged: function() {
+      function allowance(v) { return String(v) === '4294967295' ? 'unlimited' : (v || '0'); }
+      return 'Mint allowance of ' + (pick(data, ['module']) || 'unknown') + ' changed from ' +
+        allowance(pick(data, ['old_allowance'])) + ' to ' + allowance(pick(data, ['allowance']));
+    },
+    ModuleRegistered: function() {
+      return 'Module ' + (pick(data, ['kind']) || 'unknown') + ' added at ' + (pick(data, ['address']) || 'unknown') +
+        (pick(data, ['non_voting']) === 'true' ? ' (tokens it holds carry no votes)' : '');
+    },
+    ModuleUnregistered: function() { return 'Module ' + (pick(data, ['kind']) || 'unknown') + ' removed (' + (pick(data, ['address']) || 'unknown') + ')'; },
     // One event per batch_mint: the range [first_token_id, first_token_id + count).
     MintBatchWithMinter: function() { return 'Minted ' + describeRange() + ' by ' + (pick(data, ['minter']) || 'minter'); },
     MintBatchEvent: function() { var count = pick(data, ['recipient_count']); return 'Minted ' + (amount || 'tokens') + ' to ' + (count || 'multiple') + ' recipients'; },

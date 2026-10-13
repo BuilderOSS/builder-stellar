@@ -127,14 +127,15 @@ function buildScenario() {
   });
   // Every module emits its own `<module>_launched` event (topic treasury) and hands
   // its admin from the launch admin to the Treasury (admin_changed).
-  emit('token', d1.token, 'token_launched', { topics: [addr(d1.treasury)], data: { minters: vec(addr(MINTER)) }, ledger: 116, evt: 1 });
+  emit('token', d1.token, 'token_launched', { topics: [addr(d1.treasury)], data: { grants: vec(dataMap({ module: addr(MINTER), allowance: u32(4294967295) })) }, ledger: 116, evt: 1 });
   emit('governor', d1.governor, 'governor_launched', { topics: [addr(d1.treasury)], ledger: 116, evt: 2 });
   emit('treasury', d1.treasury, 'treasury_launched', { topics: [addr(d1.treasury)], ledger: 116, evt: 3 });
   emit('metadata', d1.metadata, 'metadata_launched', { topics: [addr(d1.treasury)], ledger: 116, evt: 4 });
   emit('auction', d1.auction, 'auction_launched', { topics: [addr(d1.treasury)], data: { started: bool(false) }, ledger: 116, evt: 5 });
   emit('marketplace', d1.marketplace, 'marketplace_launched', { topics: [addr(d1.treasury)], data: { opened: bool(true) }, ledger: 116, evt: 6 });
   // Token launch grants each minter (changed_by = manager) in the same transaction.
-  emit('token', d1.token, 'mint_authority_changed', { topics: [addr(MINTER)], data: { old_enabled: bool(false), enabled: bool(true), changed_by: addr('CMANAGER') }, ledger: 116, evt: 7 });
+  emit('token', d1.token, 'module_registered', { topics: [sym('claims')], data: { address: addr(MINTER), non_voting: bool(false) }, ledger: 116, evt: 40 });
+  emit('token', d1.token, 'mint_allowance_changed', { topics: [addr(MINTER)], data: { old_allowance: u32(0), allowance: u32(4294967295), changed_by: addr('CMANAGER') }, ledger: 116, evt: 7 });
   ['token', 'governor', 'treasury', 'metadata', 'auction', 'marketplace'].forEach((role, k) => {
     emit(role, d1[role], 'admin_changed', { topics: [addr('GLAUNCH'), addr(d1.treasury)], ledger: 116, evt: 8 + k });
   });
@@ -490,7 +491,7 @@ test('manager: registry, launches, slugs and implementations', { skip }, () => {
       is_live: true, treasury: 'CTRE1', started: role === 'auction' ? false : null, opened: role === 'marketplace' ? true : null
     }))
   );
-  assert.deepEqual(one(`SELECT minters FROM manager.module_launches WHERE dao_id = 'CTOK1' AND module_role = 'token'`).minters, ['CMINTER']);
+  assert.deepEqual(one(`SELECT grants FROM manager.module_launches WHERE dao_id = 'CTOK1' AND module_role = 'token'`).grants, [{ module: 'CMINTER', allowance: 4294967295 }]);
   assert.equal(one(`SELECT count(*)::int AS n FROM manager.module_launches WHERE dao_id = 'CTOK2' AND is_live`).n, 0);
 
   const impls = rows(`SELECT wasm_hash, name, published_ledger, revoked, revoked_ledger FROM manager.implementations ORDER BY wasm_hash`);
@@ -528,6 +529,8 @@ test('token: ownership, members, voting power, authorities and approvals', { ski
     { minted_supply: 0, system_held_supply: 0, voting_supply: 0 }
   );
   assert.deepEqual(rows(`SELECT authority, enabled, changed_by FROM token.mint_authorities`), [{ authority: 'CMINTER', enabled: true, changed_by: 'CMANAGER' }]);
+  assert.deepEqual(rows(`SELECT module, allowance FROM token.mint_allowances`), [{ module: 'CMINTER', allowance: 4294967295 }]);
+  assert.deepEqual(rows(`SELECT kind, module, non_voting FROM token.modules WHERE dao_id = 'CTOK1'`), [{ kind: 'claims', module: 'CMINTER', non_voting: false }]);
   // Token 4's approval was cleared (live_until_ledger 0); token 5 moved after it was approved.
   assert.deepEqual(rows(`SELECT token_id, owner, approved, live_until_ledger FROM token.approvals ORDER BY token_id`), [
     { token_id: 3, owner: 'GALICE', approved: 'GOPER', live_until_ledger: 900000 }

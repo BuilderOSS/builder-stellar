@@ -16,5 +16,7 @@ export const REMOVED_EVENTS = [
   'DescriptionUpdated',         // ditto
   'ContractImageUpdated',       // ditto
   'AllowlistClaimEvent',        // Minter is merkle-only
-  'AllowlistSetEvent'           // ditto
+  'AllowlistSetEvent',          // ditto
+  // Membership models (docs/designs/membership-models.md): mint allowances replace mint authority.
+  'MintAuthorityChanged'        // replaced by MintAllowanceChanged
 ];

@@ -635,22 +635,46 @@ test('decodes TokenInitialized event', () => {
   assert.equal(payload.symbol, 'TEST');
 });
 
-test('decodes MintAuthorityChanged event', () => {
+test('decodes MintAllowanceChanged event', () => {
   const decoded = decodeEvent({
-    event_id: 'test-mint-auth',
+    event_id: 'test-mint-allowance',
     deployment_id: 'test',
     contract_id: 'TOKEN',
     contract_role: 'token',
-    topics: '[{"symbol":"MintAuthorityChanged"},{"address":"AUTHORITY_ADDR"}]',
-    data: '{"map":[{"key":{"symbol":"old_enabled"},"val":{"bool":false}},{"key":{"symbol":"enabled"},"val":{"bool":true}},{"key":{"symbol":"changed_by"},"val":{"address":"ADMIN_ADDR"}}]}',
+    topics: '[{"symbol":"MintAllowanceChanged"},{"address":"MODULE_ADDR"}]',
+    data: '{"map":[{"key":{"symbol":"old_allowance"},"val":{"u32":0}},{"key":{"symbol":"allowance"},"val":{"u32":5}},{"key":{"symbol":"changed_by"},"val":{"address":"ADMIN_ADDR"}}]}',
     transaction_hash: 'tx-1',
     ledger_sequence: 100
   });
 
   assert.ok(decoded);
-  assert.equal(decoded.event_name, 'MintAuthorityChanged');
-  assert.equal(topicsOf(decoded).authority, 'AUTHORITY_ADDR');
+  assert.equal(decoded.event_name, 'MintAllowanceChanged');
+  assert.equal(topicsOf(decoded).module, 'MODULE_ADDR');
+  assert.equal(argsOf(decoded).allowance, 5);
   assert.equal(argsOf(decoded).changed_by, 'ADMIN_ADDR');
+});
+
+test('decodes ModuleRegistered and ModuleUnregistered with the kind as topic', () => {
+  const registered = decodeEvent({
+    event_id: 'test-module-registered', deployment_id: 'test', contract_id: 'TOKEN', contract_role: 'token',
+    topics: '[{"symbol":"ModuleRegistered"},{"symbol":"custom_shop"}]',
+    data: '{"map":[{"key":{"symbol":"address"},"val":{"address":"CSHOP"}},{"key":{"symbol":"non_voting"},"val":{"bool":true}}]}',
+    transaction_hash: 'tx-1', ledger_sequence: 100
+  });
+  assert.equal(topicsOf(registered).kind, 'custom_shop');
+  assert.deepEqual(argsOf(registered), { address: 'CSHOP', non_voting: true });
+  const activity = buildActivityFeed(registered);
+  assert.equal(activity.kind, 'token.module_registered');
+  assert.equal(activity.visibility, 'public');
+  assert.match(activity.summary, /custom_shop added at CSHOP \(tokens it holds carry no votes\)/);
+
+  const unregistered = decodeEvent({
+    event_id: 'test-module-unregistered', deployment_id: 'test', contract_id: 'TOKEN', contract_role: 'token',
+    topics: '[{"symbol":"ModuleUnregistered"},{"symbol":"custom_shop"}]',
+    data: '{"map":[{"key":{"symbol":"address"},"val":{"address":"CSHOP"}}]}',
+    transaction_hash: 'tx-2', ledger_sequence: 101
+  });
+  assert.equal(buildActivityFeed(unregistered).summary, 'Module custom_shop removed (CSHOP)');
 });
 
 test('decodes Approve event', () => {
@@ -853,7 +877,7 @@ function run(role, contract, name, topics, data = {}, extra = {}) {
 
 test('each module launch event decodes with topic treasury; data differs per module', () => {
   const cases = [
-    ['token', 'TOKEN', 'TokenLaunched', { minters: { vec: [A('MINTER_A'), A('MINTER_B')] } }, { minters: ['MINTER_A', 'MINTER_B'] }, 'token.launched', 'Token launched'],
+    ['token', 'TOKEN', 'TokenLaunched', { grants: { vec: [{ map: [{ key: { symbol: 'allowance' }, val: { u32: 7 } }, { key: { symbol: 'module' }, val: A('MINTER_A') }] }] } }, { grants: [{ allowance: 7, module: 'MINTER_A' }] }, 'token.launched', 'Token launched'],
     ['governor', 'GOV', 'GovernorLaunched', {}, {}, 'governance.launched', 'Governor launched'],
     ['treasury', 'TRE', 'TreasuryLaunched', {}, {}, 'treasury.launched', 'Treasury launched'],
     ['metadata', 'META', 'MetadataLaunched', {}, {}, 'metadata.launched', 'Metadata launched'],
@@ -872,15 +896,16 @@ test('each module launch event decodes with topic treasury; data differs per mod
     assert.equal(activity.actor, 'TREASURY_ADDR');
   }
   // Goldsky also emits snake_case event names.
-  assert.deepEqual(topicsOf(run('token', 'TOKEN', 'token_launched', [A('T')], { minters: { vec: [] } }).decoded), { treasury: 'T' });
+  assert.deepEqual(topicsOf(run('token', 'TOKEN', 'token_launched', [A('T')], { grants: { vec: [] } }).decoded), { treasury: 'T' });
 });
 
-test('token MintAuthorityChanged at launch is emitted per minter with changed_by = manager', () => {
-  const { decoded, activity } = run('token', 'TOKEN', 'MintAuthorityChanged', [A('MINTER')],
-    { old_enabled: { bool: false }, enabled: { bool: true }, changed_by: A('MANAGER') });
-  assert.deepEqual(topicsOf(decoded), { authority: 'MINTER' });
-  assert.deepEqual(argsOf(decoded), { old_enabled: false, enabled: true, changed_by: 'MANAGER' });
-  assert.equal(activity.kind, 'token.mint_authority_changed');
+test('token MintAllowanceChanged at launch is emitted per grant with changed_by = manager', () => {
+  const { decoded, activity } = run('token', 'TOKEN', 'MintAllowanceChanged', [A('MINTER')],
+    { old_allowance: { u32: 0 }, allowance: { u32: 4294967295 }, changed_by: A('MANAGER') });
+  assert.deepEqual(topicsOf(decoded), { module: 'MINTER' });
+  assert.deepEqual(argsOf(decoded), { old_allowance: 0, allowance: 4294967295, changed_by: 'MANAGER' });
+  assert.equal(activity.kind, 'token.mint_allowance_changed');
+  assert.equal(activity.summary, 'Mint allowance of MINTER changed from 0 to unlimited');
 });
 
 test('DaoLaunched activity row keeps token identity; flags and the pinned Minter stay in args', () => {

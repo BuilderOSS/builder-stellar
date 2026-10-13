@@ -194,7 +194,7 @@ share topics (enforced by `contractEvents()`). Each module's launch event has it
 
 | Event | Contract | Topics | Data | Change |
 |---|---|---|---|---|
-| `<Module>Launched` | every module | `treasury` | token `minters`; auction `started`; marketplace `opened`; others none | replaces the shared `Launched` |
+| `<Module>Launched` | every module | `treasury` | token `grants` (`[{module, allowance}]`); auction `started`; marketplace `opened`; others none | replaces the shared `Launched` |
 | `AdminChanged` | every module (common) and manager | `old_admin`, `new_admin` | none | module launch handoff to the Treasury; replaces OpenZeppelin `Ownership*` events |
 | `Migrated` | every module (common) | none | `from_storage_version`, `to_storage_version` | new (storage-layout migration) |
 | `ProposalScheduled` | governor | `proposal_id` | `vote_start`, `vote_end`, `snapshot_ledger`, `quorum_votes` | new; same tx as `ProposalCreated` |
@@ -207,7 +207,9 @@ share topics (enforced by `contractEvents()`). Each module's launch event has it
 | `*Changed` (governor setters) | governor | `changed_by` | `old_value`, `new_value` | topic renamed from `caller` |
 | `PaymentAssetUpdated` / `SecondaryFeeUpdated` / `MarketplacePaused` / `MarketplaceUnpaused` | marketplace | `changed_by` | unchanged | `changed_by` topic added |
 | `ManagerInitialized` / `ImplementationRegistered` / `UpgradeApproved` / `ImplementationRevoked` / `ManagerUpgraded` | manager | unchanged | `*_ledger` replaces `*_at` | fields hold ledger numbers |
-| `MintAuthorityChanged` | token | `authority` | `old_enabled`, `enabled`, `changed_by` | also emitted per minter at launch |
+| `MintAllowanceChanged` | token | `module` | `old_allowance`, `allowance`, `changed_by` | per grant at launch; `4294967295` is unlimited; replaces `MintAuthorityChanged` |
+| `ModuleRegistered` | token | `kind` | `address`, `non_voting` | public; the constructor registers the Auction and Marketplace |
+| `ModuleUnregistered` | token | `kind` | `address` | public |
 | `DaoLaunched` | manager | `token_address` | `launched_ledger`, `modules`, `launch_auction`, `launch_marketplace`, `minter` | `minter` (the pinned shared Minter) replaces `enable_minter` (0.3.0) |
 | `AdminProposed` | manager | `current_admin`, `proposed_admin` | none | new |
 | `PlatformMinterSet` | manager | `minter` | none | new |

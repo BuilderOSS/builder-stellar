@@ -1,7 +1,9 @@
 DROP VIEW IF EXISTS token.operator_approvals;
 DROP VIEW IF EXISTS token.approvals;
 DROP VIEW IF EXISTS token.supply;
+DROP VIEW IF EXISTS token.modules;
 DROP VIEW IF EXISTS token.mint_authorities;
+DROP VIEW IF EXISTS token.mint_allowances;
 DROP VIEW IF EXISTS token.members;
 DROP VIEW IF EXISTS token.delegate_state;
 DROP VIEW IF EXISTS token.inventory;

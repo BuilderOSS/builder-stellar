@@ -8,15 +8,19 @@
 --   approve_for_all         topic owner;              data { operator, live_until_ledger }
 --   delegate_changed        topic delegator;          data { from_delegate, to_delegate }
 --   delegate_votes_changed  topic delegate;           data { previous_votes, new_votes }
---   mint_authority_changed  topic authority;          data { old_enabled, enabled, changed_by }
---                           once per minter at launch (changed_by = the Manager), then by governance
+--   mint_allowance_changed  topic module;             data { old_allowance, allowance, changed_by }
+--                           per grant at launch (changed_by = the Manager), then by governance,
+--                           an unregistration (to 0) or the module releasing its own; a mint
+--                           spends allowance silently (the remaining amount is token.mint_allowance())
+--   module_registered       topic kind;               data { address, non_voting }
+--   module_unregistered     topic kind;               data { address }
 -- Not projected: mint_with_minter / mint_batch_with_minter (who performed a mint;
 -- ownership comes from mint and transfer), token_initialized / metadata_updated
 -- (manager.daos), token_launched (manager.module_launches).
 --
--- Voting supply: tokens held by the DAO's Treasury, Auction and Marketplace carry
--- no votes (no delegate_votes_changed for the receiver). token.supply splits the
--- minted supply accordingly.
+-- Voting supply: tokens held by the DAO's Treasury and by non-voting modules (the
+-- Auction and Marketplace) carry no votes (no delegate_votes_changed for the
+-- receiver). token.supply splits the minted supply accordingly.
 -- =============================================================================
 
 -- Ownership changes: every mint (from_address NULL) and transfer.
@@ -107,15 +111,16 @@ WHERE v.voting_power <> 0
     WHERE i.deployment_id = v.deployment_id AND i.contract_id = v.contract_id AND i.owner = v.address
   );
 
--- Addresses currently allowed to mint (the admin has implicit authority and is
--- not listed). Granted at launch by the Manager, afterwards only by governance.
-CREATE VIEW token.mint_authorities AS
+-- The last allowance each module was set to (docs/designs/membership-models.md
+-- §1). Mints spend allowance without an event, so this is an upper bound; the
+-- live amount is token.mint_allowance(). 4294967295 is unlimited (the Auction).
+CREATE VIEW token.mint_allowances AS
 SELECT
   h.deployment_id,
   h.dao_id,
   h.contract_id,
-  h.topic_0 AS authority,
-  (h.a ->> 'enabled')::boolean AS enabled,
+  h.topic_0 AS module,
+  (h.a ->> 'allowance')::bigint AS allowance,
   h.a ->> 'changed_by' AS changed_by,
   h.ledger_sequence AS event_ledger,
   h.closed_at AS event_at,
@@ -123,10 +128,53 @@ SELECT
 FROM (
   SELECT DISTINCT ON (deployment_id, contract_id, topic_0) *
   FROM manager.module_events
-  WHERE contract_role = 'token' AND event_name = 'mint_authority_changed'
+  WHERE contract_role = 'token' AND event_name = 'mint_allowance_changed'
   ORDER BY deployment_id, contract_id, topic_0, pos DESC, event_id DESC
-) h
-WHERE (h.a ->> 'enabled')::boolean;
+) h;
+
+-- Compatibility for the web until it reads token.mint_allowances: modules whose
+-- last set allowance is above zero (the admin mints without one and is not listed).
+CREATE VIEW token.mint_authorities AS
+SELECT
+  a.deployment_id,
+  a.dao_id,
+  a.contract_id,
+  a.module AS authority,
+  true AS enabled,
+  a.changed_by,
+  a.event_ledger,
+  a.event_at,
+  a.transaction_hash
+FROM token.mint_allowances a
+WHERE a.allowance > 0;
+
+-- Registered modules: the latest registration of each address on each Token,
+-- unless a later unregistration removed it.
+CREATE VIEW token.modules AS
+SELECT
+  r.deployment_id,
+  r.dao_id,
+  r.contract_id,
+  r.t ->> 'kind' AS kind,
+  r.a ->> 'address' AS module,
+  (r.a ->> 'non_voting')::boolean AS non_voting,
+  r.ledger_sequence AS registered_ledger,
+  r.closed_at AS registered_at
+FROM (
+  SELECT DISTINCT ON (deployment_id, contract_id, a ->> 'address') *
+  FROM manager.module_events
+  WHERE contract_role = 'token' AND event_name = 'module_registered'
+  ORDER BY deployment_id, contract_id, a ->> 'address', pos DESC, event_id DESC
+) r
+WHERE NOT EXISTS (
+  SELECT 1 FROM manager.module_events u
+  WHERE u.deployment_id = r.deployment_id
+    AND u.contract_id = r.contract_id
+    AND u.contract_role = 'token'
+    AND u.event_name = 'module_unregistered'
+    AND u.a ->> 'address' = r.a ->> 'address'
+    AND u.pos > r.pos
+);
 
 -- Supply per DAO token. Tokens are never burned.
 --   minted_supply       every minted token

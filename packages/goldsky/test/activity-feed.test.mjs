@@ -267,13 +267,13 @@ assert.strictEqual(tokenResult.visibility, 'admin', 'Per-token Mint stays off th
 
 const adminResult = invoke({
   event_id: '8',
-  event_name: 'MintAuthorityChanged',
+  event_name: 'MintAllowanceChanged',
   deployment_id: 'test',
   contract_id: 'test',
-  topics: JSON.stringify({ authority: 'CAUCTION' }),
-  args: JSON.stringify({ old_enabled: false, enabled: true, changed_by: 'GADMIN' })
+  topics: JSON.stringify({ module: 'CAUCTION' }),
+  args: JSON.stringify({ old_allowance: 0, allowance: 3, changed_by: 'GADMIN' })
 });
-assert.strictEqual(adminResult.visibility, 'admin', 'MintAuthorityChanged should have admin visibility');
+assert.strictEqual(adminResult.visibility, 'admin', 'MintAllowanceChanged should have admin visibility');
 assert.strictEqual(adminResult.actor, 'GADMIN', 'the caller is the actor, not the granted authority');
 assert.deepStrictEqual(JSON.parse(adminResult.addresses), ['CAUCTION', 'GADMIN', 'test']);
 

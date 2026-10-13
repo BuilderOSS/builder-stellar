@@ -80,12 +80,18 @@ test('topic orders of new and changed events', () => {
   assert.ok(!('OwnershipTransfer' in t));
   assert.deepEqual(t.AdminProposalCancelled, ['current_admin', 'cancelled_admin']);
   assert.ok(!('MarketplaceUpgraded' in t));
-  assert.deepEqual(t.MintAuthorityChanged, ['authority']);
+  assert.ok(!('MintAuthorityChanged' in t));
+  assert.deepEqual(t.MintAllowanceChanged, ['module']);
+  assert.deepEqual(t.ModuleRegistered, ['kind']);
+  assert.deepEqual(t.ModuleUnregistered, ['kind']);
 });
 
 test('data fields of new and changed events match events.rs', () => {
   const e = contractEventsByContract();
-  assert.deepEqual(e['token:TokenLaunched'].data, ['minters']);
+  assert.deepEqual(e['token:TokenLaunched'].data, ['grants']);
+  assert.deepEqual(e['token:MintAllowanceChanged'].data, ['old_allowance', 'allowance', 'changed_by']);
+  assert.deepEqual(e['token:ModuleRegistered'].data, ['address', 'non_voting']);
+  assert.deepEqual(e['token:ModuleUnregistered'].data, ['address']);
   assert.deepEqual(e['auction:AuctionLaunched'].data, ['started']);
   assert.deepEqual(e['marketplace:MarketplaceLaunched'].data, ['opened']);
   assert.deepEqual(e['governor:ProposalScheduled'].data, ['vote_start', 'vote_end', 'snapshot_ledger', 'quorum_votes']);

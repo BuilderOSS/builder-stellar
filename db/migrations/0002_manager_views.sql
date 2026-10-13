@@ -120,7 +120,8 @@ WHERE e.contract_role = 'manager'
   AND e.event_name = 'slug_changed';
 
 -- Each module's own launch event: is_live, the Treasury it was handed to,
--- and the launch flags (auction `started`, marketplace `opened`, token `minters`).
+-- and the launch flags (auction `started`, marketplace `opened`, token `grants`:
+-- the initial mint allowances, [{module, allowance}]).
 CREATE VIEW manager.module_launches AS
 SELECT
   m.deployment_id,
@@ -131,7 +132,7 @@ SELECT
   l.t ->> 'treasury' AS treasury,
   (l.a ->> 'started')::boolean AS started,
   (l.a ->> 'opened')::boolean AS opened,
-  l.a -> 'minters' AS minters,
+  l.a -> 'grants' AS grants,
   l.ledger_sequence AS launched_ledger,
   l.closed_at AS launched_at,
   l.transaction_hash AS launched_tx_hash

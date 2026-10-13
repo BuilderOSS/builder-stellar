@@ -78,7 +78,7 @@ function invoke(data) {
     Upgraded: ['from_hash', 'to_hash'], Migrated: [],
     // Token (custom + OpenZeppelin non-fungible/votes)
     // MetadataUpdated (token 0.2.0+): rename; all data, no topics.
-    TokenInitialized: ['admin'], MetadataUpdated: [], MintAuthorityChanged: ['authority'], MintWithMinter: ['minter', 'to'], MintBatchWithMinter: ['minter'],
+    TokenInitialized: ['admin'], MetadataUpdated: [], MintAllowanceChanged: ['module'], ModuleRegistered: ['kind'], ModuleUnregistered: ['kind'], MintWithMinter: ['minter', 'to'], MintBatchWithMinter: ['minter'],
     Mint: ['to'], Transfer: ['from', 'to'], Approve: ['approver', 'token_id'], ApproveForAll: ['owner'],
     DelegateChanged: ['delegator'], DelegateVotesChanged: ['delegate'],
     // OpenZeppelin pausable: only the Auction uses it (paused at construction, unpaused at launch).

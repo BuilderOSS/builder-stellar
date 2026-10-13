@@ -25,7 +25,7 @@ test('every module emits its own <Module>Launched event with topic treasury', ()
   ]);
   for (const e of launched) assert.deepStrictEqual(e.topics, ['treasury'], `${e.contract}.${e.name} topics`);
   const dataByContract = Object.fromEntries(launched.map((e) => [e.contract, e.data]));
-  assert.deepStrictEqual(dataByContract.token, ['minters']);
+  assert.deepStrictEqual(dataByContract.token, ['grants']);
   assert.deepStrictEqual(dataByContract.auction, ['started']);
   assert.deepStrictEqual(dataByContract.marketplace, ['opened']);
   for (const c of ['governor', 'treasury', 'metadata']) assert.deepStrictEqual(dataByContract[c], []);
