@@ -52,14 +52,15 @@ const PRESETS = ['30', '90', '180'];
 // Rent is linear in time, so the longest renewal costs no more per year and needs the fewest signatures.
 const DEFAULT_PRESET = '180';
 const CLASS_HINTS: Record<RenewalClass, string> = {
-  contracts: 'The community’s six contracts',
+  contracts: 'The community’s contracts and modules',
   artwork: 'Layer names, images and each token’s traits',
-  tokens: 'Current supply and who may mint',
+  tokens: 'Current supply and what each module may mint',
   proposals: 'Open proposals and the quorum rate',
-  listings: 'Open market listings',
-  holdings: 'Tokens and funds the treasury, auction and market hold',
-  slug: 'Your /dao link',
-  claims: 'The current claim round'
+  listings: 'Open market listings and pools',
+  holdings: 'Tokens and funds the treasury and modules hold',
+  slug: 'Your /dao link and launch records',
+  claims: 'Claim lists',
+  modules: 'Records other modules keep'
 };
 const STATUS_TEXT: Record<TtlStatus, { label: string; tone: 'success' | 'warning' | 'danger' }> = {
   healthy: { label: 'Healthy', tone: 'success' },
@@ -234,7 +235,15 @@ export function RenewalPanel({ config }: { config: DaoNetworkConfig }) {
           title="This community's contracts were archived"
           description="Nothing can be read until they are restored. Get a price to restore the contracts first; once they are back, this screen lists everything else and renews it."
         />
-      ) : inventory.missing.length ? (
+      ) : null}
+      {inventory.uncovered.length ? (
+        <Callout
+          variant="warning"
+          title={`${inventory.uncovered.length} ${inventory.uncovered.length === 1 ? 'module is' : 'modules are'} not covered by one-click renewal`}
+          description="These modules don't list their own records, so only the contracts themselves are renewed here. Ask whoever added them how their records are kept alive."
+        />
+      ) : null}
+      {inventory.bootstrap ? null : inventory.missing.length ? (
         <Callout
           variant="warning"
           title={`${inventory.missing.length} ${inventory.missing.length === 1 ? 'item was' : 'items were'} archived`}

@@ -10,6 +10,7 @@ import { ContractUpdatesNotice } from '@/components/admin/contract-updates-notic
 import { PlatformUpgradeNotice } from '@/components/admin/platform-upgrades';
 import { CommunityProfileView } from '@/components/community/community-profile-view';
 import { DaoContractList } from '@/components/dao-contract-list';
+import { HomePool } from '@/components/dao-home/home-pool';
 import { MembershipCard } from '@/components/dao-home/membership-card';
 import { type HomeAuction, NowCard } from '@/components/dao-home/now-card';
 import { ProposalRow } from '@/components/proposal/proposal-row';
@@ -169,11 +170,25 @@ export default function Page() {
         now={now}
       />
 
+      {config.assuranceOutcome === 'open' ? (
+        <Callout
+          variant="info"
+          title="This community launches once enough people claim"
+          description="If you're on its claim list, claim your tokens now. If the drive ends first, everyone who paid can take their payment back."
+        >
+          <div>
+            <ButtonLink href={daoRoute(routeId, 'claims')} size="sm">
+              Go to claims
+            </ButtonLink>
+          </div>
+        </Callout>
+      ) : null}
       {config.status !== 'pending' ? <ContractUpdatesNotice enabled={membership.isMember} /> : null}
       {config.status !== 'pending' ? <PlatformUpgradeNotice enabled={membership.isMember} /> : null}
 
       <div className={columns}>
         <div className={mainColumn}>
+          {hasMarketplace(config) && config.status !== 'pending' ? <HomePool /> : null}
           <Section
             title="Proposals"
             action={

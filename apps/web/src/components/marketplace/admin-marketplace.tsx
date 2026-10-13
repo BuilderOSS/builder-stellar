@@ -1,18 +1,22 @@
 'use client';
 
+import { Client as TokenClient } from '@builder-stellar/token-bindings';
 import { ChevronLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import useSWR from 'swr';
 
 import type { OpenPoolDraft } from '@/components/admin/admin-action-forms';
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
 import { AmountInput, Button, ButtonLink, Callout, Field, FieldLabel, Input } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
+import { adminReadOptions } from '@/lib/admin-surfaces';
 import { daoRoute } from '@/lib/dao-routes';
 import { formatMarketplaceAmount, marketplaceId, parseMarketplaceAmount } from '@/lib/marketplace/amount';
 import { marketplaceAssetLabel } from '@/lib/marketplace/asset-label';
 import { marketplaceGovernanceAction, marketplaceSettingHandlers } from '@/lib/marketplace/governance';
 import { useDaoMarketplace } from '@/lib/marketplace/hooks';
+import { largestBuyerShare } from '@/lib/marketplace/pool-share';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import type { ActionHandler } from '@/lib/proposal-actions/types';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
@@ -38,6 +42,15 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
   });
   const [poolId, setPoolId] = useState('');
   const [message, setMessage] = useState('');
+  const votingSupply = useSWR(['voting-supply', daoConfig.tokenContractId, daoConfig.rpcUrl], async () => {
+    const token = new TokenClient(adminReadOptions(daoConfig, daoConfig.tokenContractId, address));
+    return (await token.voting_supply_at_previous_ledger()).result;
+  });
+  const share =
+    votingSupply.data === undefined ? null : largestBuyerShare(votingSupply.data, pool.size, pool.maxPerBuyer);
+  const shareText = share
+    ? `One wallet could buy ${share.bought} of them: ${share.percent}% of the votes if nobody else buys (${votingSupply.data} votes today).`
+    : '';
   const enabled = Boolean(authenticated && address && data?.launched && data.config);
   function queue(kind: 'open' | 'close' | 'sweep') {
     setMessage('');
@@ -84,7 +97,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
               action: { ...open.action, targetRole: 'marketplace' },
               metadata: {
                 title: 'Open a quick-buy pool',
-                description: `Sell ${pool.size} new tokens at ${formatMarketplaceAmount(amount)} ${unit} each, at most ${pool.maxPerBuyer} per wallet and ${pool.maxSoldPerPeriod} every ${pool.periodHours}h, until ${new Date(expiry).toISOString()}. Proceeds go to the Treasury. Each token sold adds a vote: a pool larger than the voting supply could let buyers outvote today's members.`,
+                description: `Sell ${pool.size} new tokens at ${formatMarketplaceAmount(amount)} ${unit} each, at most ${pool.maxPerBuyer} per wallet and ${pool.maxSoldPerPeriod} every ${pool.periodHours}h, until ${new Date(expiry).toISOString()}. Proceeds go to the Treasury. Each token sold adds a vote: a pool larger than the voting supply could let buyers outvote today's members.${shareText ? ` ${shareText}` : ''}`,
                 url: ''
               },
               source: 'Marketplace administration'
@@ -235,7 +248,7 @@ export function AdminMarketplaceView({ daoId }: { daoId: string }) {
             <Callout
               variant="warning"
               title="Each token sold adds a vote"
-              description="A pool larger than the current voting supply could let buyers outvote today's members. Keep pools small and the per-wallet limit low."
+              description={`A pool larger than the current voting supply could let buyers outvote today's members. Keep pools small and the per-wallet limit low.${shareText ? ` ${shareText}` : ''}`}
             />
             <div>
               <Button disabled={!enabled} onClick={() => queue('open')}>

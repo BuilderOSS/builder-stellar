@@ -8,6 +8,8 @@ import { Address, Button, ChoiceGroup, Disclosure, Field, FieldHelperText, Field
 import { card, muted, review as reviewBox, reviewTitle, title } from '@/components/ui/panel-styles';
 
 const form = css({ display: 'grid', gap: '4' });
+/** About 120 days of ledgers: a proposal's longest timeline is 104 days, under the 180-day approval cap. */
+const VOTE_APPROVAL_LEDGERS = 120 * 17_280;
 const buttons = css({ display: 'flex', justifyContent: 'flex-end', gap: '2' });
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
@@ -35,8 +37,13 @@ export function HolderControls({
   const { daoId, daoConfig: config } = useDaoContext();
   const session = useAuthSessionStore();
   const { mutate } = useSWRConfig();
+  const locked = config.tokenSettings.transfersLocked;
+  const membersOnly = config.tokenSettings.membersOnlyDelegation;
   const [kind, setKind] = useState<HolderAction['action']>('transfer');
-  const [destination, setDestination] = useState('');
+  const [typed, setDestination] = useState('');
+  // A locked community: a token moves only back to the Treasury, or by a vote the Treasury runs.
+  const fixedToTreasury = locked && (kind === 'transfer' || kind === 'approve');
+  const destination = fixedToTreasury ? config.treasuryContractId : typed;
   const [expiry, setExpiry] = useState('');
   const [review, setReview] = useState<{ action: HolderAction; prepared: HolderPrepared } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -53,6 +60,24 @@ export function HolderControls({
   function clearReview() {
     setReview(null);
     setMessage('');
+  }
+  /** An approval long enough for a proposal's whole timeline (delay, vote, queue, execution window). */
+  async function useVoteApproval() {
+    if (!allowed || inFlight.current || hash) return;
+    inFlight.current = true;
+    setBusy(true);
+    clearReview();
+    try {
+      const { rpc } = await import('@stellar/stellar-sdk');
+      const latest = await new rpc.Server(config.rpcUrl, { allowHttp: config.name === 'local' }).getLatestLedger();
+      setExpiry(String(holderTokenId(String(latest.sequence + VOTE_APPROVAL_LEDGERS))));
+      setMessage('Set to last about 120 days, long enough for a proposal to pass and run. Check it before signing.');
+    } catch {
+      setMessage("We couldn't read the network's current position. Try again, or enter an end point yourself.");
+    } finally {
+      setBusy(false);
+      inFlight.current = false;
+    }
   }
   async function useShortApproval() {
     if (!allowed || inFlight.current || hash) return;
@@ -231,15 +256,33 @@ export function HolderControls({
           setKind(value as typeof kind);
           clearReview();
         }}
-        options={[
-          { value: 'transfer', label: 'Send', description: 'Give this token to someone' },
-          { value: 'delegate', label: 'Delegate votes', description: 'Let someone vote with your tokens' },
-          { value: 'approve', label: 'Approve', description: 'Let an app move this token' },
-          { value: 'revoke', label: 'Revoke', description: 'Remove that approval' }
-        ]}
+        options={
+          locked
+            ? [
+                { value: 'transfer', label: 'Give back', description: 'Return this token to the community' },
+                { value: 'delegate', label: 'Delegate votes', description: 'Let someone vote with your tokens' },
+                { value: 'approve', label: 'Approve the community', description: 'Let a vote move this token' },
+                { value: 'revoke', label: 'Revoke', description: 'Remove that approval' }
+              ]
+            : [
+                { value: 'transfer', label: 'Send', description: 'Give this token to someone' },
+                { value: 'delegate', label: 'Delegate votes', description: 'Let someone vote with your tokens' },
+                { value: 'approve', label: 'Approve', description: 'Let an app move this token' },
+                { value: 'revoke', label: 'Revoke', description: 'Remove that approval' }
+              ]
+        }
       />
       <div className={form}>
-        {kind !== 'revoke' ? (
+        {fixedToTreasury ? (
+          <div>
+            <p className={muted}>
+              {kind === 'transfer'
+                ? 'Memberships here are locked, so a token can only go back to the community. You stop being a member if it was your last one.'
+                : 'Memberships here are locked. Approving the community lets a proposal members pass move this token, for example to a new wallet of yours.'}
+            </p>
+            <Address value={config.treasuryContractId} label="Community Treasury" compact />
+          </div>
+        ) : kind !== 'revoke' ? (
           <Field>
             <FieldLabel htmlFor="holder-destination">
               {kind === 'delegate' ? 'Delegate address' : kind === 'approve' ? 'Spender address' : 'Recipient address'}
@@ -259,6 +302,9 @@ export function HolderControls({
             {kind === 'delegate' ? (
               <FieldHelperText>
                 Applies to every token you hold here, not just this one. You keep the tokens; only votes move.
+                {membersOnly
+                  ? ' This community only lets you delegate to members: someone who holds a token that isn’t listed for sale.'
+                  : ''}
               </FieldHelperText>
             ) : null}
           </Field>
@@ -285,9 +331,25 @@ export function HolderControls({
               A ledger number, not a date. The spender can move your token until then or until you revoke it.
             </FieldHelperText>
             <div>
-              <Button variant="ghost" size="sm" disabled={!allowed || busy || Boolean(hash)} onClick={useShortApproval}>
-                Use a short approval (about 10 minutes)
-              </Button>
+              {locked ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={!allowed || busy || Boolean(hash)}
+                  onClick={useVoteApproval}
+                >
+                  Last long enough for a vote (about 120 days)
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={!allowed || busy || Boolean(hash)}
+                  onClick={useShortApproval}
+                >
+                  Use a short approval (about 10 minutes)
+                </Button>
+              )}
             </div>
           </Field>
         ) : null}

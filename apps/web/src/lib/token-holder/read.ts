@@ -32,6 +32,21 @@ export function holderBalance(value: unknown): number {
   return value;
 }
 
+export type HolderSettings = { transfers_locked: boolean; members_only_delegation: boolean; dao_recovery: boolean };
+
+/** The Token's membership switches (`settings()`); every field must be a boolean. */
+export function holderSettings(value: unknown): HolderSettings {
+  const item = value as Partial<HolderSettings> | null;
+  if (
+    !item ||
+    typeof item.transfers_locked !== 'boolean' ||
+    typeof item.members_only_delegation !== 'boolean' ||
+    typeof item.dao_recovery !== 'boolean'
+  )
+    throw new Error('The token contract did not return valid membership settings.');
+  return item as HolderSettings;
+}
+
 export function holderVotes(value: unknown): bigint {
   if (typeof value !== 'bigint' || value < 0n || value >= 1n << 128n)
     throw new Error('The token contract did not return valid voting power.');

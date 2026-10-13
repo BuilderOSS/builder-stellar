@@ -14,6 +14,8 @@ import {
   instanceWasmHash,
   type LedgerEntryInfo,
   type LedgerRead,
+  type ModuleRenewalRead,
+  parseRenewalPage,
   planBatches,
   proposalIsLive,
   summarizeInventory,
@@ -21,8 +23,8 @@ import {
 } from './renewal';
 
 const contract = () => Address.contract(Keypair.random().rawPublicKey()).toString();
-const [MANAGER, TOKEN, METADATA, TREASURY, AUCTION, MARKET, GOVERNOR, MINTER, ASSET] = Array.from(
-  { length: 9 },
+const [MANAGER, TOKEN, METADATA, TREASURY, AUCTION, MARKET, GOVERNOR, CLAIMS, ASSET, POOL_ASSET, OUTSIDE] = Array.from(
+  { length: 11 },
   contract
 );
 const MEMBER = Keypair.random().publicKey();
@@ -70,8 +72,38 @@ const core = (seq: number, state: number, voteEnd: number, eta = 0) =>
     quorum: 1n
   });
 
+const moduleEntry = (kind: string, address: string, nonVoting: boolean) =>
+  nativeToScVal(
+    { address, kind, non_voting: nonVoting },
+    { type: { address: ['symbol', 'address'], kind: ['symbol', 'symbol'], non_voting: ['symbol', 'bool'] } }
+  ) as xdr.ScVal;
+
+/**
+ * Each module's renewal_keys pages: the Marketplace lists a listing slot and one pool over two
+ * pages, the ClaimMinter one list, the Auction nothing but the asset it holds. An outside
+ * module has no renewal_keys.
+ */
+const renewalKeys: ModuleRenewalRead = async (module, cursor) => {
+  if (module === MARKET)
+    return cursor === 0
+      ? {
+          keys: [ns('Listing', u32(5)), ns('Listing', u32(6))].map((key) => ({ key, persistent: true })),
+          assets: [],
+          nextCursor: 2
+        }
+      : {
+          keys: [ns('Pool', u32(1)), ns('PoolStock', u32(1), u32(0))].map((key) => ({ key, persistent: true })),
+          assets: [],
+          nextCursor: null
+        };
+  if (module === CLAIMS)
+    return { keys: [{ key: ns('List', u32(0)), persistent: true }], assets: [ASSET], nextCursor: null };
+  if (module === AUCTION) return { keys: [], assets: [ASSET, TOKEN], nextCursor: null };
+  return null;
+};
+
 /** A ledger with one launched DAO: 2 properties (40 + 3 items), 70 minted tokens, 3 proposals. */
-function ledger(omit: string[] = []) {
+function ledger(omit: string[] = [], withOutside = false) {
   const entries = new Map<string, LedgerEntryInfo>();
   const put = (owner: string, key: xdr.ScVal, val: xdr.ScVal, label: string) => {
     if (omit.includes(label)) return;
@@ -88,9 +120,15 @@ function ledger(omit: string[] = []) {
     instance([
       [ns('MetadataContract'), addr(METADATA)],
       [ns('Treasury'), addr(TREASURY)],
-      [ns('Auction'), addr(AUCTION)],
-      [ns('Marketplace'), addr(MARKET)],
-      [ns('Minter'), addr(MINTER)],
+      [
+        ns('Modules'),
+        xdr.ScVal.scvVec([
+          moduleEntry('auction', AUCTION, true),
+          moduleEntry('marketplace', MARKET, true),
+          moduleEntry('claims', CLAIMS, false),
+          ...(withOutside ? [moduleEntry('custom_vault', OUTSIDE, false)] : [])
+        ])
+      ],
       [oz('TokenIdCounter'), u32(70)],
       [oz('NumTotalSupplyCheckpoints'), u32(2)]
     ]),
@@ -106,15 +144,9 @@ function ledger(omit: string[] = []) {
   const config = (field: string) =>
     nativeToScVal({ [field]: ASSET }, { type: { [field]: ['symbol', 'address'] } }) as xdr.ScVal;
   put(AUCTION, inst, instance([[ns('Config'), config('payment_token')]]), 'auction');
-  put(
-    MARKET,
-    inst,
-    instance([
-      [ns('NextListingId'), xdr.ScVal.scvU64(2n)],
-      [ns('Config'), config('payment_asset')]
-    ]),
-    'market'
-  );
+  put(MARKET, inst, instance([[ns('Config'), config('payment_asset')]]), 'market');
+  put(CLAIMS, inst, instance([]), 'claims');
+  put(OUTSIDE, inst, instance([]), 'outside');
   put(
     GOVERNOR,
     inst,
@@ -136,14 +168,20 @@ function ledger(omit: string[] = []) {
   put(METADATA, ns('AttributesPage', u32(0)), xdr.ScVal.scvVoid(), 'attrs0');
   put(METADATA, ns('AttributesPage', u32(1)), xdr.ScVal.scvVoid(), 'attrs1');
   for (const i of [0, 1]) put(TOKEN, oz('TotalSupplyCheckpoint', u32(i)), xdr.ScVal.scvVoid(), `supply${i}`);
-  for (const holder of [TREASURY, AUCTION, MINTER])
-    put(TOKEN, ns('MintAuthority', addr(holder)), xdr.ScVal.scvBool(true), 'grant');
+  for (const holder of [AUCTION, CLAIMS]) put(TOKEN, ns('MintAllowance', addr(holder)), u32(10), 'allowance');
   put(MARKET, ns('Listing', u32(5)), xdr.ScVal.scvVoid(), 'listing5');
-  put(MARKET, ns('PrimaryListing', xdr.ScVal.scvU64(1n)), xdr.ScVal.scvVoid(), 'primary1');
+  // The pool is priced in an asset the Marketplace no longer uses for new sales.
+  put(
+    MARKET,
+    ns('Pool', u32(1)),
+    nativeToScVal({ asset: POOL_ASSET }, { type: { asset: ['symbol', 'address'] } }) as xdr.ScVal,
+    'pool1'
+  );
+  put(MARKET, ns('PoolStock', u32(1), u32(0)), xdr.ScVal.scvVoid(), 'stock1');
+  put(CLAIMS, ns('List', u32(0)), xdr.ScVal.scvVoid(), 'list0');
   put(MANAGER, ns('DaoSlug', addr(TOKEN)), xdr.ScVal.scvString('lantern-club'), 'daoslug');
   put(MANAGER, ns('SlugToDao', xdr.ScVal.scvString('lantern-club')), addr(TOKEN), 'slugtodao');
-  put(MINTER, ns('MerkleRoot', addr(TOKEN)), xdr.ScVal.scvVoid(), 'root');
-  put(MINTER, ns('MerkleRound', addr(TOKEN)), u32(1), 'round');
+  put(MANAGER, ns('ModuleCount', addr(TOKEN), xdr.ScVal.scvSymbol('auction')), u32(1), 'count');
   // Holdings: token 3 sits in the treasury and 69 in the auction; the rest are members'.
   for (let t = 0; t < 70; t += 1)
     put(TOKEN, oz('Owner', u32(t)), addr(t === 3 ? TREASURY : t === 69 ? AUCTION : MEMBER), `owner${t}`);
@@ -151,6 +189,7 @@ function ledger(omit: string[] = []) {
   put(TOKEN, oz('Balance', addr(MEMBER)), u32(68), 'memberTokens');
   put(ASSET, oz('Balance', addr(TREASURY)), xdr.ScVal.scvVoid(), 'treasuryFunds');
   put(ASSET, oz('Balance', addr(AUCTION)), xdr.ScVal.scvVoid(), 'auctionFunds');
+  put(POOL_ASSET, oz('Balance', addr(MARKET)), xdr.ScVal.scvVoid(), 'poolFunds');
   // Proposal 0 executed, 1 queued and live, 2 pending and live (with a tally).
   [
     [7, NOW - 10],
@@ -176,9 +215,15 @@ function ledger(omit: string[] = []) {
 const labels = (keys: Array<{ label: string }>) => keys.map((k) => k.label).sort();
 
 describe('DAO renewal inventory', () => {
-  it('lists every DAO-owned key from ledger reads alone, live proposals only', async () => {
-    const inventory = await buildDaoInventory(ledger(), { manager: MANAGER, token: TOKEN, nowSeconds: NOW });
+  it('lists every DAO-owned key: core reads plus each module’s own pages, live proposals only', async () => {
+    const inventory = await buildDaoInventory(ledger(), {
+      manager: MANAGER,
+      token: TOKEN,
+      nowSeconds: NOW,
+      renewalKeys
+    });
     expect(inventory.missing).toEqual([]);
+    expect(inventory.uncovered).toEqual([]);
     expect(labels(inventory.present)).toEqual(
       [
         'Token',
@@ -186,6 +231,7 @@ describe('DAO renewal inventory', () => {
         'Treasury',
         'Auction',
         'Marketplace',
+        'Claims',
         'Governor',
         'PropertyNames',
         'Items(0, 0)',
@@ -200,15 +246,16 @@ describe('DAO renewal inventory', () => {
         'Token balance',
         'Asset balance',
         'Asset balance',
-        'MintAuthority',
-        'MintAuthority',
-        'MintAuthority',
+        'Asset balance',
+        'MintAllowance',
+        'MintAllowance',
         'Listing(5)',
-        'PrimaryListing(1)',
+        'Pool(1)',
+        'PoolStock(1, 0)',
+        'List(0)',
         'DaoSlug',
         'SlugToDao',
-        'MerkleRoot',
-        'MerkleRound',
+        'ModuleCount(auction)',
         'ProposalId(1)',
         'ProposalTime(1)',
         'ProposalId(2)',
@@ -219,22 +266,57 @@ describe('DAO renewal inventory', () => {
     );
     const classes = summarizeInventory(inventory).map((summary) => [summary.cls, summary.keys]);
     expect(classes).toEqual([
-      ['contracts', 6],
+      ['contracts', 7],
       ['artwork', 7],
-      ['tokens', 4],
+      ['tokens', 3],
       ['proposals', 6],
-      ['listings', 2],
-      ['holdings', 5],
-      ['slug', 2],
-      ['claims', 2]
+      ['listings', 3],
+      ['holdings', 6],
+      ['slug', 3],
+      ['claims', 1]
     ]);
+  });
+
+  it('renews an outside module’s instance and reports its records as not covered', async () => {
+    const inventory = await buildDaoInventory(ledger([], true), {
+      manager: MANAGER,
+      token: TOKEN,
+      nowSeconds: NOW,
+      renewalKeys
+    });
+    expect(inventory.uncovered).toEqual([OUTSIDE]);
+    expect(labels(inventory.present)).toContain('Vault');
+  });
+
+  it('decodes a RenewalPage, keeping keys as raw XDR', () => {
+    const key = ns('Pool', u32(1));
+    const page = xdr.ScVal.scvMap([
+      new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('assets'), val: xdr.ScVal.scvVec([addr(ASSET)]) }),
+      new xdr.ScMapEntry({
+        key: xdr.ScVal.scvSymbol('keys'),
+        val: xdr.ScVal.scvVec([xdr.ScVal.scvVec([key, xdr.ScVal.scvBool(true)])])
+      }),
+      new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('next_cursor'), val: u32(200) })
+    ]);
+    const parsed = parseRenewalPage(page);
+    expect(parsed.assets).toEqual([ASSET]);
+    expect(parsed.nextCursor).toBe(200);
+    expect(parsed.keys[0]!.key.toXDR('base64')).toBe(key.toXDR('base64'));
+    expect(parsed.keys[0]!.persistent).toBe(true);
+    const last = xdr.ScVal.scvMap([
+      new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('assets'), val: xdr.ScVal.scvVec([]) }),
+      new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('keys'), val: xdr.ScVal.scvVec([]) }),
+      new xdr.ScMapEntry({ key: xdr.ScVal.scvSymbol('next_cursor'), val: xdr.ScVal.scvVoid() })
+    ]);
+    expect(parseRenewalPage(last).nextCursor).toBeNull();
   });
 
   it('reports a required key the ledger does not return, and ignores absent optional ones', async () => {
     const inventory = await buildDaoInventory(ledger(['items0.1', 'listing5']), {
       manager: MANAGER,
       token: TOKEN,
-      nowSeconds: NOW
+      nowSeconds: NOW,
+      renewalKeys
     });
     expect(labels(inventory.missing)).toEqual(['Items(0, 1)']);
     expect(labels(inventory.present)).not.toContain('Listing(5)');

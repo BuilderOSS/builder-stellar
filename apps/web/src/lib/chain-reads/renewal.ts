@@ -1,22 +1,25 @@
 /**
- * The DAO renewal sweep (docs/STORAGE_DIET.md § 7).
+ * The DAO renewal sweep (docs/STORAGE_DIET.md § 7, membership-models eng review R3).
  *
- * Every key a DAO owns is listed from chain state alone, with ledger reads
- * only (no simulation): module instances give the wiring and counts, then the
- * candidate keys are read to learn which exist and when they expire. The rules
- * mirror `dao_renewal_inventory` in contracts/e2e/src/test.rs, which asserts
- * they cover every persistent key a full DAO lifecycle writes.
+ * Every key a DAO owns is listed from chain state: the core contracts (Token,
+ * Metadata, Governor, Treasury) by ledger reads of their instances and counts,
+ * and every module in the Token's registry by its own `renewal_keys(cursor,
+ * limit)` pages, read by simulation. The candidate keys are then read to learn
+ * which exist and when they expire. The rules mirror `dao_renewal_inventory` in
+ * contracts/e2e/src/test.rs, which asserts they cover every persistent key a
+ * full DAO lifecycle writes.
  *
- * Per-holder keys (owners, balances, delegations, refunds, claim markers) are
- * the holder's and stay out, except where the holder is the DAO itself: the
- * Treasury's, Auction's and Marketplace's tokens and asset balances, which
+ * Per-holder keys (owners, balances, delegations, claim records) are the
+ * holder's and stay out, except where the holder is the DAO itself: tokens and
+ * asset balances of the Treasury and every registered module, which
  * OpenZeppelin and the asset contract renew only 30 days per touch. Only the
  * latest supply and quorum checkpoints are kept: proposals store their quorum
  * (D33), so history may archive. Shared code is the platform's
- * (scripts/renew-code-ttl.mjs).
+ * (scripts/renew-code-ttl.mjs). A module without `renewal_keys` (one deployed
+ * outside the Manager) gets its instance renewed and is reported as `uncovered`.
  */
 import {
-  type Account,
+  Account,
   Address,
   Operation,
   scValToNative,
@@ -25,6 +28,7 @@ import {
   TransactionBuilder,
   xdr
 } from '@stellar/stellar-sdk';
+import { Api as RpcApi } from '@stellar/stellar-sdk/rpc';
 import { Buffer } from 'buffer';
 
 import { decodeStoredProposal } from '@/lib/chain-reads/proposal-core';
@@ -48,7 +52,8 @@ export const RENEWAL_CLASSES = [
   'listings',
   'holdings',
   'slug',
-  'claims'
+  'claims',
+  'modules'
 ] as const;
 export type RenewalClass = (typeof RENEWAL_CLASSES)[number];
 
@@ -60,7 +65,8 @@ export const CLASS_LABELS: Record<RenewalClass, string> = {
   listings: 'Listings',
   holdings: 'Treasury holdings',
   slug: 'Community link',
-  claims: 'Claim rounds'
+  claims: 'Claim lists',
+  modules: 'Module records'
 };
 
 export type InventoryKey = {
@@ -69,6 +75,8 @@ export type InventoryKey = {
   key: xdr.LedgerKey;
   /** A required key that is missing must be restored; an optional one may simply not exist. */
   required: boolean;
+  /** A temporary entry: extended while it lives, never restored. */
+  temporary?: boolean;
 };
 
 export type LedgerEntryInfo = { liveUntil: number; bytes: number; val: xdr.LedgerEntryData };
@@ -87,6 +95,11 @@ export type DaoInventory = {
   bootstrap?: boolean;
   /** Keys that exist: what the sweep extends. */
   present: Array<InventoryKey & LedgerEntryInfo>;
+  /**
+   * Registered modules whose own records the sweep cannot list (no `renewal_keys`):
+   * their instance is renewed, the rest is not.
+   */
+  uncovered: string[];
   /**
    * Keys to restore first: required ones the RPC did not return, and any the
    * RPC returned with a live-until ledger already past (archived).
@@ -116,7 +129,6 @@ const ns = (contract: string, variant: string, ...args: xdr.ScVal[]) =>
 const ozKey = (variant: string, ...args: xdr.ScVal[]) => xdr.ScVal.scvVec([xdr.ScVal.scvSymbol(variant), ...args]);
 const oz = (contract: string, variant: string, ...args: xdr.ScVal[]) => dataKey(contract, ozKey(variant, ...args));
 const u32 = (n: number) => xdr.ScVal.scvU32(n);
-const u64 = (n: bigint | number) => xdr.ScVal.scvU64(BigInt(n));
 const addr = (a: string) => new Address(a).toScVal();
 
 // ---------------------------------------------------------------------------
@@ -162,6 +174,55 @@ export function proposalIsLive(core: { state: number; vote_end: bigint | number;
   return now < Number(core.vote_end) + PROPOSAL_EXPIRY_SECONDS; // Pending/Active/Succeeded not yet expired
 }
 
+/** One `renewal_keys` page: storage keys (already namespaced), held assets, next cursor. */
+export type ModuleRenewalPage = {
+  keys: Array<{ key: xdr.ScVal; persistent: boolean }>;
+  assets: string[];
+  nextCursor: number | null;
+};
+/** Reads one page by simulation; null when the module has no `renewal_keys`. */
+export type ModuleRenewalRead = (module: string, cursor: number) => Promise<ModuleRenewalPage | null>;
+
+/** common::modules::MAX_RENEWAL_PAGE: a page never holds more, whatever the limit asks. */
+export const MAX_RENEWAL_PAGE = 200;
+/** A module may not list more pages than this; past it the sweep stops and reports it uncovered. */
+const MAX_RENEWAL_PAGES = 100;
+
+type ModuleEntry = { kind: string; address: string; non_voting: boolean };
+
+/** Where a module's own records are counted on the Renewal tab. */
+function moduleClass(kind: string): RenewalClass {
+  return kind === 'marketplace' ? 'listings' : kind === 'claims' ? 'claims' : 'modules';
+}
+
+function moduleLabel(kind: string) {
+  const name = kind.replace(/^custom_/, '').replace(/_/g, ' ');
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+function moduleDataKey(contract: string, key: xdr.ScVal, persistent: boolean): xdr.LedgerKey {
+  return xdr.LedgerKey.contractData(
+    new xdr.LedgerKeyContractData({
+      contract: new Address(contract).toScAddress(),
+      key,
+      durability: persistent ? xdr.ContractDataDurability.persistent : xdr.ContractDataDurability.temporary
+    })
+  );
+}
+
+/** A readable label for a module key: its variant and arguments (`Pool(2)`, `PoolStock(2, 0)`). */
+function keyLabel(key: xdr.ScVal): string {
+  try {
+    const value = scValToNative(key) as unknown;
+    const parts = Array.isArray(value) && value[0] === 'builder' && Array.isArray(value[1]) ? value[1] : value;
+    if (Array.isArray(parts) && typeof parts[0] === 'string')
+      return parts.length > 1 ? `${parts[0]}(${parts.slice(1).map(String).join(', ')})` : parts[0];
+  } catch {
+    // fall through
+  }
+  return 'Record';
+}
+
 export async function buildDaoInventory(
   read: LedgerRead,
   scope: {
@@ -170,8 +231,10 @@ export async function buildDaoInventory(
     nowSeconds: number;
     /** Every module address, for restoring the instances when the token's own is evicted. */
     modules?: string[];
-    /** Extra asset contracts whose DAO balances to sweep (beyond the payment assets found on chain). */
+    /** Extra asset contracts whose DAO balances to sweep (beyond the ones found on chain). */
     assets?: string[];
+    /** Pages each registered module's `renewal_keys`; without it only module instances are renewed. */
+    renewalKeys?: ModuleRenewalRead;
   }
 ): Promise<DaoInventory> {
   const keys: InventoryKey[] = [];
@@ -192,14 +255,11 @@ export async function buildDaoInventory(
     required
   });
 
-  // A: the token instance holds the wiring.
+  // A: the token instance holds the wiring and the module registry.
   await fetch([add('contracts', 'Token', instanceKey(scope.token))]);
   const token = instanceStorage(entry(instanceKey(scope.token)));
   const metadata = native<string>(nsGet(token, 'MetadataContract'));
   const treasury = native<string>(nsGet(token, 'Treasury'));
-  const auction = native<string>(nsGet(token, 'Auction'));
-  const marketplace = native<string>(nsGet(token, 'Marketplace'));
-  const minter = native<string>(nsGet(token, 'Minter'));
   if (!metadata || !treasury) {
     // Evicted instances: nothing can be read, but the addresses are known.
     if (scope.modules?.length && !entry(instanceKey(scope.token))) {
@@ -208,57 +268,89 @@ export async function buildDaoInventory(
         latestLedger,
         bootstrap: true,
         present: [],
-        missing: unique.map((address, i) => add('contracts', i === 0 ? 'Token' : `Module ${i}`, instanceKey(address)))
+        missing: unique.map((address, i) => add('contracts', i === 0 ? 'Token' : `Module ${i}`, instanceKey(address))),
+        uncovered: []
       };
     }
     throw new Error('The token instance is missing its wiring. Is it archived?');
   }
+  const modules = (native<ModuleEntry[]>(nsGet(token, 'Modules')) ?? []).map((registered) => ({
+    ...registered,
+    kind: String(registered.kind)
+  }));
   const minted = count(native(ozGet(token, 'TokenIdCounter')));
   const supplyCheckpoints = count(native(ozGet(token, 'NumTotalSupplyCheckpoints')));
 
-  // B: the other instances, the slug, the claim round and the canonical mint grants.
+  // B: the other instances, each module's allowance, and the Manager's records of this DAO.
   const b: InventoryKey[] = [
     add('contracts', 'Metadata', instanceKey(metadata)),
     add('contracts', 'Treasury', instanceKey(treasury)),
-    add('slug', 'DaoSlug', ns(scope.manager, 'DaoSlug', addr(scope.token)), false)
+    add('slug', 'DaoSlug', ns(scope.manager, 'DaoSlug', addr(scope.token)), false),
+    add('slug', 'PendingDao', ns(scope.manager, 'PendingDao', addr(scope.token)), false),
+    add('slug', 'Assurance', ns(scope.manager, 'Assurance', addr(scope.token)), false)
   ];
-  if (auction) b.push(add('contracts', 'Auction', instanceKey(auction)));
-  if (marketplace) b.push(add('contracts', 'Marketplace', instanceKey(marketplace)));
-  if (minter) {
-    b.push(add('claims', 'MerkleRoot', ns(minter, 'MerkleRoot', addr(scope.token)), false));
-    b.push(add('claims', 'MerkleRound', ns(minter, 'MerkleRound', addr(scope.token)), false));
+  for (const registered of modules) {
+    b.push(add('contracts', moduleLabel(registered.kind), instanceKey(registered.address)));
+    b.push(add('tokens', 'MintAllowance', ns(scope.token, 'MintAllowance', addr(registered.address)), false));
   }
-  for (const holder of [treasury, auction, marketplace, minter].filter((a): a is string => Boolean(a)))
-    b.push(add('tokens', 'MintAuthority', ns(scope.token, 'MintAuthority', addr(holder)), false));
+  for (const kind of new Set(modules.map((registered) => registered.kind)))
+    b.push(
+      add(
+        'slug',
+        `ModuleCount(${kind})`,
+        ns(scope.manager, 'ModuleCount', addr(scope.token), xdr.ScVal.scvSymbol(kind)),
+        false
+      )
+    );
   await fetch(b);
   const governor = native<string>(nsGet(instanceStorage(entry(instanceKey(treasury))), 'Governor'));
   const meta = instanceStorage(entry(instanceKey(metadata)));
   const itemCounts = (native<unknown[]>(nsGet(meta, 'ItemCounts')) ?? []).map(Number);
-  const nextListing = marketplace
-    ? count(native(nsGet(instanceStorage(entry(instanceKey(marketplace))), 'NextListingId')))
-    : 0;
   const slugEntry = entry(ns(scope.manager, 'DaoSlug', addr(scope.token)));
   const slug = slugEntry ? (scValToNative(dataValue(slugEntry)) as string) : null;
 
-  // The asset contracts the DAO is paid in, from the auction and market configs.
-  const assets = new Set<string>();
-  const auctionConfig = auction
-    ? native<{ payment_token?: string }>(nsGet(instanceStorage(entry(instanceKey(auction))), 'Config'))
-    : undefined;
-  const marketConfig = marketplace
-    ? native<{ payment_asset?: string }>(nsGet(instanceStorage(entry(instanceKey(marketplace))), 'Config'))
-    : undefined;
+  // The asset contracts the DAO is paid in: the auction's, and every asset a module reports holding.
+  const assets = new Set<string>(scope.assets ?? []);
+  const auction = modules.find((registered) => registered.kind === 'auction')?.address;
+  const auctionConfig =
+    auction && entry(instanceKey(auction))
+      ? native<{ payment_token?: string }>(nsGet(instanceStorage(entry(instanceKey(auction))), 'Config'))
+      : undefined;
   if (auctionConfig?.payment_token) assets.add(auctionConfig.payment_token);
-  if (marketConfig?.payment_asset) assets.add(marketConfig.payment_asset);
-  for (const asset of scope.assets ?? []) assets.add(asset);
-  const holders = [treasury, auction, marketplace].filter((a): a is string => Boolean(a));
+  const holders = [treasury, ...modules.map((registered) => registered.address)];
 
-  // C: artwork, token pages and checkpoints, listings, holdings, the governor instance.
+  // C: each live module's own records, from its renewal_keys pages.
+  const uncovered: string[] = [];
   const c: InventoryKey[] = [];
+  for (const registered of modules) {
+    if (!entry(instanceKey(registered.address))) continue; // archived: restored first, listed on the next run
+    if (!scope.renewalKeys) continue;
+    let cursor: number | null = 0;
+    let pages = 0;
+    while (cursor !== null) {
+      const page: ModuleRenewalPage | null = await scope.renewalKeys(registered.address, cursor);
+      if (!page || (pages += 1) > MAX_RENEWAL_PAGES) {
+        uncovered.push(registered.address);
+        break;
+      }
+      for (const asset of page.assets) if (asset !== scope.token) assets.add(asset);
+      for (const item of page.keys)
+        c.push({
+          ...add(
+            moduleClass(registered.kind),
+            keyLabel(item.key),
+            moduleDataKey(registered.address, item.key, item.persistent),
+            false
+          ),
+          temporary: !item.persistent
+        });
+      cursor = page.nextCursor !== null && page.nextCursor > cursor ? page.nextCursor : null;
+    }
+  }
+
+  // D: artwork, token pages and checkpoints, the governor instance, the slug pair.
   if (governor) c.push(add('contracts', 'Governor', instanceKey(governor)));
   if (slug) c.push(add('slug', 'SlugToDao', ns(scope.manager, 'SlugToDao', xdr.ScVal.scvString(slug))));
-  // Before launch the Manager holds the pending record launch_dao consumes.
-  if (!slug) c.push(add('slug', 'PendingDao', ns(scope.manager, 'PendingDao', addr(scope.token)), false));
   if (itemCounts.length) {
     c.push(add('artwork', 'PropertyNames', ns(metadata, 'PropertyNames')));
     c.push(add('artwork', 'IpfsGroups', ns(metadata, 'IpfsGroups')));
@@ -278,33 +370,29 @@ export async function buildDaoInventory(
         oz(scope.token, 'TotalSupplyCheckpoint', u32(supplyCheckpoints - 1))
       )
     );
-  for (const holder of holders) {
-    c.push(add('holdings', 'Token balance', oz(scope.token, 'Balance', addr(holder)), false));
-    for (const asset of assets) c.push(add('holdings', 'Asset balance', oz(asset, 'Balance', addr(holder)), false));
-  }
-  if (marketplace) {
-    for (let t = 0; t < minted; t += 1)
-      c.push(add('listings', `Listing(${t})`, ns(marketplace, 'Listing', u32(t)), false));
-    for (let l = 0; l < nextListing; l += 1)
-      c.push(add('listings', `PrimaryListing(${l})`, ns(marketplace, 'PrimaryListing', u64(l)), false));
-  }
   await fetch(c);
 
-  // An open listing was priced in the asset of its day; the escrow and the fee
-  // are paid in it even after the market's asset changes.
-  const listingAssets = new Set<string>();
+  // An open listing or pool was priced in the asset of its day; its escrow and fee are paid in it
+  // even after the module's asset changes.
   for (const k of c) {
-    if (k.cls !== 'listings') continue;
+    if (k.cls !== 'listings' && k.cls !== 'claims') continue;
     const info = entry(k.key);
     if (!info) continue;
-    const listing = scValToNative(dataValue(info)) as { payment_asset?: string } | null;
-    if (listing?.payment_asset && !assets.has(listing.payment_asset)) listingAssets.add(listing.payment_asset);
+    try {
+      const record = scValToNative(dataValue(info)) as { payment_asset?: unknown; asset?: unknown } | null;
+      for (const asset of [record?.payment_asset, record?.asset])
+        if (typeof asset === 'string' && asset.startsWith('C')) assets.add(asset);
+    } catch {
+      // Not a record with an asset (a stock page).
+    }
   }
-  const extraBalances: InventoryKey[] = [];
-  for (const asset of listingAssets)
-    for (const holder of holders)
-      extraBalances.push(add('holdings', 'Asset balance', oz(asset, 'Balance', addr(holder)), false));
-  await fetch(extraBalances);
+  const balances: InventoryKey[] = [];
+  for (const holder of holders) {
+    balances.push(add('holdings', 'Token balance', oz(scope.token, 'Balance', addr(holder)), false));
+    for (const asset of assets)
+      balances.push(add('holdings', 'Asset balance', oz(asset, 'Balance', addr(holder)), false));
+  }
+  await fetch(balances);
 
   // Tokens the DAO itself holds: read every ownership entry, keep the DAO's.
   // A holder's entry that archived is simply not returned; it is theirs to restore.
@@ -321,7 +409,7 @@ export async function buildDaoInventory(
     await fetch(held);
   }
 
-  // D/E: proposals (ids, then cores and tallies) and quorum checkpoints.
+  // E: proposals (ids, then cores and tallies) and quorum checkpoints.
   if (governor) {
     const gov = instanceStorage(entry(instanceKey(governor)));
     const proposals = count(native(nsGet(gov, 'ProposalCount')));
@@ -372,9 +460,9 @@ export async function buildDaoInventory(
     seen.add(id);
     const info = found.get(id);
     if (info && info.liveUntil >= latestLedger) present.push({ ...k, ...info });
-    else if (info || k.required) missing.push(k);
+    else if ((info || k.required) && !k.temporary) missing.push(k);
   }
-  return { latestLedger, present, missing };
+  return { latestLedger, present, missing, uncovered };
 }
 
 /** metadata::ITEMS_PER_PAGE and TOKENS_PER_ATTRIBUTE_PAGE (contracts/metadata/src/storage.rs). */
@@ -480,6 +568,60 @@ export function rpcLedgerRead(server: {
       }
     }
     return { latestLedger, entries };
+  };
+}
+
+/** The account read-only simulations use as their source (the SDK's own null account). */
+const NULL_SOURCE = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
+
+function field(map: xdr.ScMapEntry[], name: string) {
+  const item = map.find((entry) => entry.key.type === 'scvSymbol' && String(entry.key.value) === name);
+  if (!item) throw new Error(`renewal_keys returned no ${name}.`);
+  return item.val;
+}
+
+/** Decode a `common::modules::RenewalPage` return value, keeping each key as raw XDR. */
+export function parseRenewalPage(value: xdr.ScVal): ModuleRenewalPage {
+  if (value.type !== 'scvMap' || !value.value) throw new Error('renewal_keys did not return a page.');
+  const map = value.value as xdr.ScMapEntry[];
+  const keys = field(map, 'keys');
+  const assets = field(map, 'assets');
+  const next = field(map, 'next_cursor');
+  if (keys.type !== 'scvVec' || assets.type !== 'scvVec') throw new Error('Malformed renewal_keys page.');
+  return {
+    keys: ((keys.value ?? []) as xdr.ScVal[]).map((pair) => {
+      const items = (pair.type === 'scvVec' ? pair.value : null) as xdr.ScVal[] | null;
+      if (!items || items.length !== 2 || items[1]!.type !== 'scvBool') throw new Error('Malformed renewal key.');
+      return { key: items[0]!, persistent: scValToNative(items[1]!) as boolean };
+    }),
+    assets: ((assets.value ?? []) as xdr.ScVal[]).map((asset) => Address.fromScVal(asset).toString()),
+    nextCursor: next.type === 'scvVoid' ? null : Number(scValToNative(next))
+  };
+}
+
+/**
+ * A `ModuleRenewalRead` over Soroban RPC simulation of `renewal_keys(cursor, MAX_RENEWAL_PAGE)`.
+ * A simulation error (no such function, or a module that panics) reads as null: the module is
+ * then reported as not covered by the sweep, and only its instance is renewed.
+ */
+export function rpcModuleRenewal(
+  server: { simulateTransaction: (tx: Transaction) => Promise<RpcApi.SimulateTransactionResponse> },
+  networkPassphrase: string
+): ModuleRenewalRead {
+  return async (module, cursor) => {
+    const tx = new TransactionBuilder(new Account(NULL_SOURCE, '0'), { fee: '100', networkPassphrase })
+      .addOperation(
+        Operation.invokeContractFunction({
+          contract: module,
+          function: 'renewal_keys',
+          args: [u32(cursor), u32(MAX_RENEWAL_PAGE)]
+        })
+      )
+      .setTimeout(30)
+      .build();
+    const simulation = await server.simulateTransaction(tx);
+    if (!RpcApi.isSimulationSuccess(simulation) || !simulation.result) return null;
+    return parseRenewalPage(simulation.result.retval);
   };
 }
 

@@ -44,7 +44,7 @@ const GROUPS: Array<{ title: string; items: ManageItem[] }> = [
         section: '/founders',
         requiredForLaunch: true
       },
-      { key: 'claims', label: 'Claim allocations', meta: 'Free tokens people can claim', section: '/claims' },
+      { key: 'claims', label: 'Claim lists', meta: 'Tokens listed people can claim', section: '/claims' },
       {
         key: 'artwork',
         label: 'Artwork',

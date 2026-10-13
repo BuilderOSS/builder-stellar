@@ -1,4 +1,4 @@
-import { Account, Keypair, Networks, TransactionBuilder } from '@stellar/stellar-sdk';
+import { Account, Address, Keypair, Networks, TransactionBuilder } from '@stellar/stellar-sdk';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -12,7 +12,9 @@ const mocks = vi.hoisted(() => ({
   votes: vi.fn(),
   delegation: vi.fn(),
   Client: vi.fn(),
-  network: vi.fn()
+  network: vi.fn(),
+  settings: vi.fn(),
+  modules: vi.fn()
 }));
 vi.mock('@builder-stellar/token-bindings', () => ({
   Client: class {
@@ -26,6 +28,8 @@ vi.mock('@builder-stellar/token-bindings', () => ({
     balance = mocks.balance;
     get_votes = mocks.votes;
     get_delegate = mocks.delegation;
+    settings = mocks.settings;
+    modules = mocks.modules;
   }
 }));
 vi.mock('@stellar/stellar-sdk', async (original) => ({
@@ -46,6 +50,13 @@ describe('holder binding actions', () => {
   const owner = Keypair.random().publicKey();
   const destination = Keypair.random().publicKey();
   const actor = { address: owner, network: 'testnet' };
+  const treasury = Address.contract(Keypair.random().rawPublicKey()).toString();
+  const vault = Address.contract(Keypair.random().rawPublicKey()).toString();
+  const switches = (on: Partial<Record<'transfers_locked' | 'members_only_delegation', boolean>> = {}) =>
+    mocks.settings.mockResolvedValue({
+      simulationData: {},
+      result: { transfers_locked: false, members_only_delegation: false, dao_recovery: false, ...on }
+    });
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.network.mockReturnValue({ name: 'testnet', networkPassphrase: Networks.TESTNET });
@@ -56,8 +67,14 @@ describe('holder binding actions', () => {
         name: 'testnet',
         passphrase: Networks.TESTNET,
         rpcUrl: 'https://rpc.example',
-        tokenContractId: 'token-a'
+        tokenContractId: 'token-a',
+        treasuryContractId: treasury
       }
+    });
+    switches();
+    mocks.modules.mockResolvedValue({
+      simulationData: {},
+      result: [{ kind: 'marketplace', address: vault, non_voting: true }]
     });
     mocks.owner.mockResolvedValue({ simulationData: {}, result: owner });
     mocks.latest.mockResolvedValue({ sequence: 1000 });
@@ -173,4 +190,41 @@ describe('holder binding actions', () => {
       expect(mocks.delegate).not.toHaveBeenCalled();
     }
   );
+  it('on a locked DAO, transfers only back to the Treasury and approves only the Treasury', async () => {
+    switches({ transfers_locked: true });
+    await expect(
+      prepareHolderAction('dao-a', actor, { action: 'transfer', tokenId: '0', destination })
+    ).rejects.toThrow('locked');
+    await expect(
+      prepareHolderAction('dao-a', actor, { action: 'approve', tokenId: '0', destination, expirationLedger: '1120' })
+    ).rejects.toThrow('only approve the community Treasury');
+    expect(mocks.transfer).not.toHaveBeenCalled();
+    expect(mocks.approve).not.toHaveBeenCalled();
+    const back = await prepareHolderAction('dao-a', actor, { action: 'transfer', tokenId: '0', destination: treasury });
+    expect(mocks.transfer).toHaveBeenCalledWith({ from: owner, to: treasury, token_id: 0 }, { timeoutInSeconds: 180 });
+    expect(back.summary).toContain('back to the community Treasury');
+    const approval = await prepareHolderAction('dao-a', actor, {
+      action: 'approve',
+      tokenId: '0',
+      destination: treasury,
+      expirationLedger: '1120'
+    });
+    expect(approval.summary).toContain('so a proposal members pass can move it');
+  });
+  it('with members-only delegation, delegates only to someone who holds a voting token', async () => {
+    switches({ members_only_delegation: true });
+    mocks.balance.mockImplementation(async ({ account }: { account: string }) => ({
+      simulationData: {},
+      result: account === destination || account === vault ? 2 : account === owner ? 3 : 0
+    }));
+    await prepareHolderAction('dao-a', actor, { action: 'delegate', tokenId: '0', destination });
+    expect(mocks.delegate).toHaveBeenCalledTimes(1);
+    for (const other of [treasury, vault, Keypair.random().publicKey()])
+      await expect(
+        prepareHolderAction('dao-a', actor, { action: 'delegate', tokenId: '0', destination: other })
+      ).rejects.toThrow('only lets you delegate to members');
+    expect(mocks.delegate).toHaveBeenCalledTimes(1);
+    await prepareHolderAction('dao-a', actor, { action: 'delegate', tokenId: '0', destination: owner });
+    expect(mocks.delegate).toHaveBeenCalledTimes(2);
+  });
 });

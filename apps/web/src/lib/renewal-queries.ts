@@ -17,6 +17,7 @@ import {
   type RenewalClass,
   restoreTransaction,
   rpcLedgerRead,
+  rpcModuleRenewal,
   yearlyRentEstimate
 } from '@/lib/chain-reads/renewal';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
@@ -91,8 +92,10 @@ export async function loadRenewalReport(config: DaoNetworkConfig): Promise<Renew
       config.treasuryContractId,
       config.governorContractId,
       config.auctionContractId,
-      config.marketplaceContractId
-    ].filter((a): a is string => Boolean(a))
+      config.marketplaceContractId,
+      config.claimsContractId
+    ].filter((a): a is string => Boolean(a)),
+    renewalKeys: rpcModuleRenewal(rpc, config.passphrase)
   });
   const [maxEntryTtl, code] = await Promise.all([
     readMaxEntryTtl(rpc),

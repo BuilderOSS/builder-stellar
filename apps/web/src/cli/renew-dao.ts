@@ -23,6 +23,7 @@ import {
   planBatches,
   restoreTransaction,
   rpcLedgerRead,
+  rpcModuleRenewal,
   summarizeInventory
 } from '../lib/chain-reads/renewal';
 
@@ -62,13 +63,16 @@ async function main() {
     token,
     nowSeconds: Math.floor(Date.now() / 1000),
     modules,
-    assets
+    assets,
+    renewalKeys: rpcModuleRenewal(server, artifact.config.networkPassphrase)
   });
   if (inventory.bootstrap)
     console.info(
       `The DAO's contract instances are archived; restoring ${inventory.missing.length} of them first. Run again afterwards to renew the rest.`
     );
   console.info(`DAO ${token} at ledger ${inventory.latestLedger}`);
+  for (const address of inventory.uncovered)
+    console.warn(`  Module ${address} lists no renewal keys: only its instance is renewed.`);
   for (const summary of summarizeInventory(inventory)) {
     const first =
       summary.earliestLiveUntil === null
