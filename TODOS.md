@@ -14,6 +14,24 @@
 **Priority:** P2
 **Depends on:** storage-diet release merged (chain-reads module, Renewal tab)
 
+## Membership
+
+### Vote delay for pool purchases
+
+**What:** Tokens bought from a Marketplace quick-buy pool start voting only T days after purchase (a delay on their voting units), so a buyer who drains a pool can't swing a proposal right away.
+
+**Why:** Per-buyer caps can be dodged with extra wallets; the pool-wide sales rate only slows a funded buyer. A vote delay is the one defense that holds against a buyer splitting purchases across wallets. Deferred in the membership-models design (Open Question 1; owner chose caps, sales rate and size warning, D4, 2026-10-13).
+
+**Pros:** Closes the remaining takeover path for open sales; pools can then be larger.
+
+**Cons:** Touches Token checkpoints and delegation, and every holder view must explain "votes from <date>"; the biggest change in that design for a risk not yet seen.
+
+**Context:** Trigger: a testnet pool drained by one wallet cluster, or a planned mainnet pool larger than 10% of voting supply. Start from `docs/designs/membership-models.md` §4 and the Token's `transfer_voting_units` path (`contracts/token/src/contract.rs` voting_holder/move_voting_unit).
+
+**Effort:** L
+**Priority:** P3
+**Depends on:** membership-models Phase 3 (quick-buy pools) shipped on testnet
+
 ## Token
 
 ### Verify `data:` token URIs in Stellar wallets
