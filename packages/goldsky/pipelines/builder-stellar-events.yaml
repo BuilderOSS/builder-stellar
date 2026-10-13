@@ -87,8 +87,14 @@ transforms:
         AND in_successful_contract_call
         AND topics LIKE '%dao_created%'
 
-  # Module tables: ModuleRegistered (topics: module_registered, kind; data: address, non_voting)
-  # from a known DAO Token. Kind symbols are quoted in `topics`, so `"claims"` matches only the kind.
+  # Module tables, one per known kind. Filled from the Manager's own events (DaoCreated's
+  # modules.<kind>, ModuleCreated) and from the Token's ModuleRegistered when the Token is a
+  # known DAO Token. create_dao registers modules before it emits DaoCreated, so its modules
+  # rely on the Manager branch: a ModuleRegistered there precedes the DaoCreated that puts the
+  # Token in dao_tokens (one dynamic table filled before the same batch is filtered works; one
+  # table reading another's same-batch write is not something Goldsky documents). The
+  # registry branch covers modules registered later by vote. Kind symbols are quoted in
+  # `topics`, so `"claims"` matches only the kind; a DaoCreated without the kind yields ''.
   dao_auctions:
     type: dynamic_table
     backend_type: Postgres
@@ -97,13 +103,19 @@ transforms:
     schema: streamling
     column: contract_id
     sql: |
-      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      SELECT CASE WHEN topics LIKE '%dao_created%'
+          THEN regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"auction"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+          ELSE regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+        END AS contract_id
       FROM stellar_events
       WHERE type = 'contract'
         AND in_successful_contract_call
-        AND topics LIKE '%module_registered%'
-        AND dynamic_table_check('dao_tokens', contract_id)
-        AND topics LIKE '%"auction"%'
+        AND (
+          (contract_id = 'CCNEFTUXPZVJ2BLVOFFKZME277BERR5V2IMVARO6MVNJLWOBMPR256UE' AND topics LIKE '%dao_created%')
+          OR (contract_id = 'CCNEFTUXPZVJ2BLVOFFKZME277BERR5V2IMVARO6MVNJLWOBMPR256UE' AND topics LIKE '%module_created%' AND topics LIKE '%"auction"%')
+          OR
+          (topics LIKE '%module_registered%' AND topics LIKE '%"auction"%' AND dynamic_table_check('dao_tokens', contract_id))
+        )
 
   dao_marketplaces:
     type: dynamic_table
@@ -113,13 +125,19 @@ transforms:
     schema: streamling
     column: contract_id
     sql: |
-      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      SELECT CASE WHEN topics LIKE '%dao_created%'
+          THEN regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"marketplace"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+          ELSE regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+        END AS contract_id
       FROM stellar_events
       WHERE type = 'contract'
         AND in_successful_contract_call
-        AND topics LIKE '%module_registered%'
-        AND dynamic_table_check('dao_tokens', contract_id)
-        AND topics LIKE '%"marketplace"%'
+        AND (
+          (contract_id = 'CCNEFTUXPZVJ2BLVOFFKZME277BERR5V2IMVARO6MVNJLWOBMPR256UE' AND topics LIKE '%dao_created%')
+          OR (contract_id = 'CCNEFTUXPZVJ2BLVOFFKZME277BERR5V2IMVARO6MVNJLWOBMPR256UE' AND topics LIKE '%module_created%' AND topics LIKE '%"marketplace"%')
+          OR
+          (topics LIKE '%module_registered%' AND topics LIKE '%"marketplace"%' AND dynamic_table_check('dao_tokens', contract_id))
+        )
 
   dao_claims:
     type: dynamic_table
@@ -129,13 +147,19 @@ transforms:
     schema: streamling
     column: contract_id
     sql: |
-      SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
+      SELECT CASE WHEN topics LIKE '%dao_created%'
+          THEN regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"claims"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+          ELSE regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+        END AS contract_id
       FROM stellar_events
       WHERE type = 'contract'
         AND in_successful_contract_call
-        AND topics LIKE '%module_registered%'
-        AND dynamic_table_check('dao_tokens', contract_id)
-        AND topics LIKE '%"claims"%'
+        AND (
+          (contract_id = 'CCNEFTUXPZVJ2BLVOFFKZME277BERR5V2IMVARO6MVNJLWOBMPR256UE' AND topics LIKE '%dao_created%')
+          OR (contract_id = 'CCNEFTUXPZVJ2BLVOFFKZME277BERR5V2IMVARO6MVNJLWOBMPR256UE' AND topics LIKE '%module_created%' AND topics LIKE '%"claims"%')
+          OR
+          (topics LIKE '%module_registered%' AND topics LIKE '%"claims"%' AND dynamic_table_check('dao_tokens', contract_id))
+        )
 
   dao_circles:
     type: dynamic_table
@@ -149,9 +173,9 @@ transforms:
       FROM stellar_events
       WHERE type = 'contract'
         AND in_successful_contract_call
-        AND topics LIKE '%module_registered%'
-        AND dynamic_table_check('dao_tokens', contract_id)
-        AND topics LIKE '%"circle"%'
+        AND (
+          (topics LIKE '%module_registered%' AND topics LIKE '%"circle"%' AND dynamic_table_check('dao_tokens', contract_id))
+        )
 
   # Every registered module of any kind, built-in, `custom_<name>` or an unknown future kind.
   dao_modules:
@@ -220,6 +244,10 @@ transforms:
            OR dynamic_table_check('dao_metadata', contract_id)
            OR dynamic_table_check('dao_governors', contract_id)
            OR dynamic_table_check('dao_treasuries', contract_id)
+           OR dynamic_table_check('dao_auctions', contract_id)
+           OR dynamic_table_check('dao_marketplaces', contract_id)
+           OR dynamic_table_check('dao_claims', contract_id)
+           OR dynamic_table_check('dao_circles', contract_id)
            OR dynamic_table_check('dao_modules', contract_id)
          )
 
@@ -525,7 +553,7 @@ transforms:
           event_index: toNumber(data.event_index),
           operation_type: toStringOrEmpty(data.operation_type),
           _gs_op: toStringOrEmpty(data._gs_op),
-          decoder_version: 'v2'
+          decoder_version: 'v3'
         };
           return result;
 
@@ -1207,7 +1235,10 @@ transforms:
         }
 
         // Strictly type all fields to ensure no mixed types in Arrow table
-        var visibility = foreignModule ? 'admin' : userFacing[normalizedEventName] ? (normalizedEventName.indexOf('Proposal') === 0 || normalizedEventName === 'VoteCast' || normalizedEventName === 'DelegateChanged' ? 'governance' : 'public') : (kindMap[normalizedEventName] ? 'admin' : 'system');
+        // A module the platform did not write can emit any event shape, `upgraded` with any hashes
+        // included: none of its rows is public news (role module, or a contract registered as circle).
+        var unvouched = emitterRole === 'module' || emitterRole === 'circle';
+        var visibility = foreignModule || unvouched ? 'admin' : userFacing[normalizedEventName] ? (normalizedEventName.indexOf('Proposal') === 0 || normalizedEventName === 'VoteCast' || normalizedEventName === 'DelegateChanged' ? 'governance' : 'public') : (kindMap[normalizedEventName] ? 'admin' : 'system');
         // The token self-delegates a holder on their first token: automatic, not a
         // choice anyone made. Only real delegation changes reach the public feed.
         if (normalizedEventName === 'DelegateChanged') {

@@ -15,7 +15,8 @@
 --                      by their token_address topic
 --   platform events    the upgrade notice and the Manager's own upgrades: one row
 --                      for every DAO that existed when the event happened; a revoked
---                      implementation: one row for every DAO running that hash
+--                      implementation: one row for every DAO with a registered
+--                      module running that hash
 --   other Manager      no DAO (dao_id NULL): registry and admin bookkeeping
 -- Fanned-out rows suffix activity_id with the DAO so it stays unique.
 CREATE VIEW app.activity_feed AS
@@ -68,7 +69,7 @@ SELECT
   e.kind, e.title, e.summary, e.actor, e.addresses, e.proposal_id, e.token_id, e.amount, e.visibility,
   e.ledger_sequence, e.transaction_index, e.operation_index, e.event_index, e.ledger_closed_at, e.transaction_hash
 FROM app.activity_feed_events e
-JOIN (SELECT DISTINCT deployment_id, dao_id, current_hash FROM manager.module_versions) m
+JOIN (SELECT DISTINCT deployment_id, dao_id, current_hash FROM manager.module_versions WHERE registered) m
   ON m.deployment_id = e.deployment_id AND m.current_hash = e.topics::jsonb ->> 'wasm_hash'
 WHERE e.contract_role = 'manager'
   AND e.event_name = 'implementation_revoked';

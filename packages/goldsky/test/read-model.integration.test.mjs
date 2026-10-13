@@ -97,11 +97,12 @@ function emit(role, contract, name, { topics = [], data = {}, ledger, tx = 0, ev
   });
 }
 
-// create_dao: the Token registers each module it was created with (ModuleRegistered, in the
-// same transaction as DaoCreated; the registration window starts at the transaction).
+// create_dao: the Token registers each module it was created with (ModuleRegistered) before
+// the Manager emits DaoCreated, in the same transaction (contracts/manager/src/contract.rs);
+// the registration window starts at the transaction.
 function createDao(n, ledger, { deployer, launch, slug, kinds = KINDS }) {
-  emit('manager', 'CMANAGER', 'dao_created', { topics: [addr(`CTOK${n}`), addr(deployer), addr(launch)], data: { created_ledger: u64(ledger), modules: modules(n, kinds), wasm_hashes: wasmHashes(n, kinds), slug: str(slug) }, ledger });
-  kinds.forEach((kind, k) => emit('token', `CTOK${n}`, 'module_registered', { topics: [sym(kind)], data: { address: addr(dao(n)[kind]), non_voting: bool(NON_VOTING[kind]) }, ledger, evt: 20 + k }));
+  kinds.forEach((kind, k) => emit('token', `CTOK${n}`, 'module_registered', { topics: [sym(kind)], data: { address: addr(dao(n)[kind]), non_voting: bool(NON_VOTING[kind]) }, ledger, evt: k }));
+  emit('manager', 'CMANAGER', 'dao_created', { topics: [addr(`CTOK${n}`), addr(deployer), addr(launch)], data: { created_ledger: u64(ledger), modules: modules(n, kinds), wasm_hashes: wasmHashes(n, kinds), slug: str(slug) }, ledger, evt: 10 });
 }
 
 function buildScenario() {
@@ -121,7 +122,7 @@ function buildScenario() {
   // A second pending DAO first requests the same slug (allowed: nothing is claimed
   // until launch or an assurance drive), then renames its request.
   createDao(2, 111, { deployer: 'GDEPLOYER2', launch: 'GLAUNCH2', slug: 'dao-one' });
-  emit('manager', 'CMANAGER', 'pending_slug_updated', { topics: [addr('CTOK2')], data: { slug: str('dao-two') }, ledger: 111, evt: 1 });
+  emit('manager', 'CMANAGER', 'pending_slug_updated', { topics: [addr('CTOK2')], data: { slug: str('dao-two') }, ledger: 111, evt: 11 });
   emit('token', d1.token, 'token_initialized', {
     topics: [addr('GOWNER')],
     data: { name: str('Alpha'), symbol: str('ALP'), settings: dataMap({ transfers_locked: bool(false), members_only_delegation: bool(false), dao_recovery: bool(false) }) },
@@ -370,6 +371,13 @@ function buildScenario() {
   emit('token', d1.token, 'transfer', { topics: [addr(d1.marketplace), addr(d1.treasury)], data: { token_id: u32(22) }, ledger: 189, evt: 1 });
   emit('marketplace', d1.marketplace, 'pool_swept', { topics: [u32(0)], data: { count: u32(1), pages_left: u32(1) }, ledger: 189, evt: 2 });
   poolOpened(2, 196, 2); // still open, nothing stocked
+  // The pool buyer relists token 21: the Marketplace escrows it again, as a secondary listing,
+  // which must not make it pool stock again.
+  emit('token', d1.token, 'transfer', { topics: [addr('GBUYER'), addr(d1.marketplace)], data: { token_id: u32(21) }, ledger: 197, evt: 0 });
+  emit('token', d1.token, 'delegate_votes_changed', { topics: [addr('GBUYER')], data: { previous_votes: u128(1), new_votes: u128(0) }, ledger: 197, evt: 1 });
+  emit('marketplace', d1.marketplace, 'secondary_listing_created', {
+    topics: [u32(21)], data: { seller: addr('GBUYER'), price: i128(150), expires_at: u64(5000), fee_bps: u32(250), payment_asset: addr('CXLM') }, ledger: 197, evt: 2
+  });
   const secondary = (id, ledger) => emit('marketplace', d1.marketplace, 'secondary_listing_created', {
     topics: [u32(id)], data: { seller: addr('GSELLER'), price: i128(100), expires_at: u64(5000), fee_bps: u32(250), payment_asset: addr('CXLM') }, ledger
   });
@@ -609,24 +617,23 @@ test('token: ownership, members, voting power, allowances, switches and approval
   const inventory = rows(`SELECT token_id, owner FROM token.inventory WHERE dao_id = 'CTOK1' ORDER BY token_id`);
   assert.equal(inventory.length, 9, 'a mint is counted once although a minter event accompanies it');
   assert.deepEqual(inventory.map((r) => [Number(r.token_id), r.owner]), [
-    [1, 'GBOB'], [2, 'CTRE1'], [3, 'GALICE'], [4, 'GALICE'], [5, 'GERIN'], [6, 'GBOB'], [20, 'CMKT1'], [21, 'GBUYER'], [22, 'CTRE1']
-  ]);
-  assert.equal(one(`SELECT count(*)::int AS n FROM token.transfers WHERE transfer_type = 'transfer'`).n, 7);
+    [1, 'GBOB'], [2, 'CTRE1'], [3, 'GALICE'], [4, 'GALICE'], [5, 'GERIN'], [6, 'GBOB'], [20, 'CMKT1'], [21, 'CMKT1'], [22, 'CTRE1']
+  ], 'token 21 is listed for resale (escrowed by the Marketplace)');
+  assert.equal(one(`SELECT count(*)::int AS n FROM token.transfers WHERE transfer_type = 'transfer'`).n, 8);
 
   const members = rows(`SELECT address, owned_token_count, voting_power, delegated_to, last_activity_ledger FROM token.members ORDER BY address`);
   assert.deepEqual(members, [
-    { address: 'CMKT1', owned_token_count: 1, voting_power: 0, delegated_to: null, last_activity_ledger: 180 },
+    { address: 'CMKT1', owned_token_count: 2, voting_power: 0, delegated_to: null, last_activity_ledger: 197 },
     { address: 'CTRE1', owned_token_count: 2, voting_power: 0, delegated_to: null, last_activity_ledger: 189 },
     { address: 'GALICE', owned_token_count: 2, voting_power: 2, delegated_to: null, last_activity_ledger: 120 },
     { address: 'GBOB', owned_token_count: 2, voting_power: 2, delegated_to: 'GBOB', last_activity_ledger: 231 },
-    { address: 'GBUYER', owned_token_count: 1, voting_power: 1, delegated_to: null, last_activity_ledger: 181 },
     { address: 'GDAVE', owned_token_count: 0, voting_power: 12, delegated_to: null, last_activity_ledger: null },
     { address: 'GERIN', owned_token_count: 1, voting_power: 0, delegated_to: null, last_activity_ledger: 242 }
   ]);
-  // The Treasury's tokens and the Marketplace's pool stock carry no votes.
+  // The Treasury's tokens, the Marketplace's pool stock and its escrowed listing carry no votes.
   assert.deepEqual(
     one(`SELECT minted_supply, system_held_supply, voting_supply FROM token.supply WHERE dao_id = 'CTOK1'`),
-    { minted_supply: 9, system_held_supply: 3, voting_supply: 6 }
+    { minted_supply: 9, system_held_supply: 4, voting_supply: 5 }
   );
   assert.deepEqual(
     one(`SELECT minted_supply, system_held_supply, voting_supply FROM token.supply WHERE dao_id = 'CTOK2'`),
@@ -671,7 +678,6 @@ test('token: ownership, members, voting power, allowances, switches and approval
       { address: 'CTRE1', voting_power: 0, delegator_count: 0, custody: true, is_member: false },
       { address: 'GALICE', voting_power: 2, delegator_count: 0, custody: false, is_member: true },
       { address: 'GBOB', voting_power: 2, delegator_count: 0, custody: false, is_member: true },
-      { address: 'GBUYER', voting_power: 1, delegator_count: 0, custody: false, is_member: true },
       { address: 'GDAVE', voting_power: 12, delegator_count: 0, custody: false, is_member: false },
       { address: 'GERIN', voting_power: 0, delegator_count: 0, custody: false, is_member: true }
     ]
@@ -771,14 +777,15 @@ test('marketplace: pools by pool_id, secondary listings by token_id, sales', { s
   assert.deepEqual(
     rows(`SELECT pool_id, token_id FROM marketplace.pool_stock ORDER BY token_id`).map((r) => [Number(r.pool_id), Number(r.token_id)]),
     [[0, 20]],
-    'the sold token went to its buyer and the swept one to the Treasury'
+    'the sold token went to its buyer (and is now relisted, not stock) and the swept one to the Treasury'
   );
   assert.deepEqual(
     rows(`SELECT token_id, status, buyer, seller, payment_asset, closed_transaction_hash FROM marketplace.secondary_listings ORDER BY token_id`),
     [
       { token_id: 10, status: 'cancelled', buyer: null, seller: 'GSELLER', payment_asset: 'CXLM', closed_transaction_hash: 'tx183-0' },
       { token_id: 11, status: 'open', buyer: null, seller: 'GSELLER', payment_asset: 'CXLM', closed_transaction_hash: null },
-      { token_id: 12, status: 'purchased', buyer: 'GBUYER', seller: 'GSELLER', payment_asset: 'CXLM', closed_transaction_hash: 'tx186-0' }
+      { token_id: 12, status: 'purchased', buyer: 'GBUYER', seller: 'GSELLER', payment_asset: 'CXLM', closed_transaction_hash: 'tx186-0' },
+      { token_id: 21, status: 'open', buyer: null, seller: 'GBUYER', payment_asset: 'CXLM', closed_transaction_hash: null }
     ]
   );
   assert.deepEqual(

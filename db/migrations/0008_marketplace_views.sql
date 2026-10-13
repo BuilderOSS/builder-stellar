@@ -69,10 +69,12 @@ LEFT JOIN LATERAL (
 WHERE o.contract_role = 'marketplace'
   AND o.event_name = 'pool_opened';
 
--- The tokens a pool has in stock: every id its restocks minted that the
--- Marketplace still holds (a sale sends it to the buyer, a sweep to the
--- Treasury). Which stock page holds an id depends on sales between restocks:
--- read it on chain (marketplace.pool_stock(pool_id, page)) before buying.
+-- The tokens a pool has in stock: every id its restocks minted into the
+-- Marketplace that has not moved since (a sale sends it to the buyer, a sweep
+-- to the Treasury). Owning it is not enough: a token bought from a pool and
+-- relisted is escrowed by the Marketplace again, as a secondary listing. Which
+-- stock page holds an id depends on sales between restocks: read it on chain
+-- (marketplace.pool_stock(pool_id, page)) before buying.
 CREATE VIEW marketplace.pool_stock AS
 SELECT
   r.deployment_id,
@@ -91,7 +93,12 @@ JOIN token.inventory inv
   ON inv.deployment_id = r.deployment_id AND inv.contract_id = d.token_contract
  AND inv.token_id = ids.token_id AND inv.owner = r.contract_id
 WHERE r.contract_role = 'marketplace'
-  AND r.event_name = 'pool_restocked';
+  AND r.event_name = 'pool_restocked'
+  AND NOT EXISTS (
+    SELECT 1 FROM token.transfers x
+    WHERE x.deployment_id = r.deployment_id AND x.contract_id = d.token_contract
+      AND x.token_id = ids.token_id AND x.transfer_type = 'transfer'
+  );
 
 CREATE VIEW marketplace.secondary_listings AS
 SELECT

@@ -407,7 +407,7 @@ const newEventCases = [
   ['Upgraded', 'token', 'token.upgraded', 'Token upgraded', 'public'],
   ['Upgraded', 'governor', 'governance.upgraded', 'Governor upgraded', 'public'],
   ['Upgraded', 'claims', 'claims.upgraded', 'Claim minter upgraded', 'public'],
-  ['Upgraded', 'module', 'module.upgraded', 'Module upgraded', 'public'],
+  ['Upgraded', 'module', 'module.upgraded', 'Module upgraded', 'admin'],
   ['SeatAssigned', 'module', 'module.seatassigned', 'Module event', 'admin'],
   ['Upgraded', 'treasury', 'treasury.upgraded', 'Treasury upgraded', 'public'],
   ['Upgraded', 'auction', 'auction.upgraded', 'Auction upgraded', 'public'],

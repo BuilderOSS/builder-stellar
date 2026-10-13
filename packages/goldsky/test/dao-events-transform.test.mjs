@@ -25,7 +25,7 @@ test('decoded events use the canonical envelope and preserve unknown fields', ()
   assert.equal(decoded.topic_1, 'TO');
   assert.deepEqual(JSON.parse(decoded.topics), { from: 'FROM', to: 'TO' });
   assert.deepEqual(JSON.parse(decoded.args), { custom_field: '99' });
-  assert.equal(decoded.decoder_version, 'v2');
+  assert.equal(decoded.decoder_version, 'v3');
 });
 
 test('manager topics preserve token address, deployer, and launch_admin order for both event name styles', () => {
@@ -1002,7 +1002,7 @@ test('Upgraded decodes for every module role, the ClaimMinter and external modul
     assert.equal(up.decoded.contract_id, contract);
     assert.equal(up.decoded.contract_role, role);
     assert.equal(up.activity.kind, `${prefix}.upgraded`);
-    assert.equal(up.activity.visibility, 'public');
+    assert.equal(up.activity.visibility, role === 'module' ? 'admin' : 'public', 'an external module\'s upgrade is never public news');
     assert.equal(up.activity.contract_id, contract);
     assert.equal(up.activity.summary, 'Contract upgraded to version 1.1.0 (aaaaaaaa -> bbbbbbbb)');
   }

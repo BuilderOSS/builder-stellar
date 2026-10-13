@@ -158,4 +158,5 @@ test('an external module event is decoded positionally and shown as a module eve
     topics: JSON.stringify([{ symbol: 'upgraded' }, { bytes: 'aa' }, { bytes: 'bb' }]), data: JSON.stringify({ map: [{ key: { symbol: 'version' }, val: { string: '1.0.0' } }] }) }));
   assert.equal(upgraded.kind, 'module.upgraded');
   assert.equal(upgraded.title, 'Module upgraded');
+  assert.equal(upgraded.visibility, 'admin', 'an external module can claim any hashes: never public news');
 });

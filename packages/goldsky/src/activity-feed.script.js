@@ -625,7 +625,10 @@ function invoke(data) {
   }
 
   // Strictly type all fields to ensure no mixed types in Arrow table
-  var visibility = foreignModule ? 'admin' : userFacing[normalizedEventName] ? (normalizedEventName.indexOf('Proposal') === 0 || normalizedEventName === 'VoteCast' || normalizedEventName === 'DelegateChanged' ? 'governance' : 'public') : (kindMap[normalizedEventName] ? 'admin' : 'system');
+  // A module the platform did not write can emit any event shape, `upgraded` with any hashes
+  // included: none of its rows is public news (role module, or a contract registered as circle).
+  var unvouched = emitterRole === 'module' || emitterRole === 'circle';
+  var visibility = foreignModule || unvouched ? 'admin' : userFacing[normalizedEventName] ? (normalizedEventName.indexOf('Proposal') === 0 || normalizedEventName === 'VoteCast' || normalizedEventName === 'DelegateChanged' ? 'governance' : 'public') : (kindMap[normalizedEventName] ? 'admin' : 'system');
   // The token self-delegates a holder on their first token: automatic, not a
   // choice anyone made. Only real delegation changes reach the public feed.
   if (normalizedEventName === 'DelegateChanged') {

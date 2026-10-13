@@ -184,7 +184,7 @@ function invoke(data) {
     event_index: toNumber(data.event_index),
     operation_type: toStringOrEmpty(data.operation_type),
     _gs_op: toStringOrEmpty(data._gs_op),
-    decoder_version: 'v2'
+    decoder_version: 'v3'
   };
     return result;
 
