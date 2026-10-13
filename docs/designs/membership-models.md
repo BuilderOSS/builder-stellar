@@ -1283,6 +1283,22 @@ before applying it. The review file has been deleted; this section is its record
 | D1–D6 Tests | **Added** to Success Criteria and The Assignment | Success Criteria, The Assignment |
 | E Confirmed items (6) | **Confirmed**, no change | — |
 
+## Implementation notes (2026-10-13)
+
+Choices made while building Next Steps 2–3 and Phase 2. Each refines the approved design without changing what it guarantees.
+
+- **`create_module(token, spec, expected_n)`.** The kind comes from the `ModuleSpec` variant, so a kind and a config can never disagree. `module_count` and `predict_module_address` still take the kind. The salt is `sha256(xdr(token) || xdr(kind) || n_be)`.
+- **A module created after launch is launched with `open = false`.** The proposal grants its allowance after creating it, so an Auction that opened at creation would try to mint without one. The proposal opens the module once it is funded.
+- **The payment-asset check lives in the Manager (R5).** `DaoModule` has `payment_asset()`. Before any launch call, `launch_dao` compares each registered module's current asset with the one `PendingDao` recorded at creation (`PaymentAssetMismatch`, 7132). The module-side errors (Auction 7415) are retired.
+- **ClaimMinter releases its own escrow in `launch` (R4).** The Manager launches the Token first and then every module, so the ClaimMinter's `launch` sees a Live Token and moves the assurance escrow to the Treasury in the same transaction. `release` stays public.
+- **No `ManagerRequired` error.** Soroban can't tell a contract who invoked it, so a launch admin's direct `open_list` with a price or assurance terms fails the Manager's `require_auth` (an authorization error) instead of a named code.
+- **Claim records are holder class.** `Claim(list, claimer)` belongs to the claimer; their next claim or refund restores it (automatic since protocol 23). `renewal_keys` lists the DAO-owned `List(id)` entries and the escrow balance. Read the renewal Success Criterion as "lists and escrow balances".
+- **No contract re-entry in recovery.** `recover_claims` → ClaimMinter → `manager.is_upgrade_approved` would re-enter the Manager, which Soroban forbids. So the Manager checks the approval and passes the target version, and `recovery_upgrade` applies it (`common::upgrade::apply_checked_by_manager`). The gate is unchanged: Manager authorization, Setup only, an approved hash.
+- **Storage shapes.** A `#[contracttype]` field can't hold `Option<struct>`, so a `ClaimList` stores its assurance terms flattened (a threshold of 0 means none). The Manager keeps a drive under its own `Assurance(token)` key rather than inside `PendingDao`, and drops it at launch.
+- **`open_assurance` takes `AssuranceListParams`** without an asset: the list is priced in the `claims_payment_asset` recorded at creation.
+- **`DaoLaunched.registry`** is the launch-time module list (`Vec<ModuleEntry>`). `modules` keeps the `DaoAddresses`, whose module fields are now optional, so Phase 4 changes no shape.
+- **`LaunchAdminNotOwner` stays for launches without a drive.** With a drive, the admins are already the Treasury's and the recorded launch admin is checked instead.
+
 ## GSTACK REVIEW REPORT
 
 | Review | Trigger | Why | Runs | Status | Findings |
