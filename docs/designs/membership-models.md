@@ -437,12 +437,22 @@ would still pass with its old role; and external modules emit event names the de
   table. The role CASE tries the known kinds first and falls back to `module`. The core four (token, metadata,
   governor, treasury) stay in `DaoCreated` and keep their tables. Custom kinds match
   `"kind":{"symbol":"custom_[A-Za-z0-9_]{1,25}"}` (review 2 A4).
-  - **To verify before Next Steps 2 (review 2 B8):** today's dynamic tables filter their source on the fixed
-    Manager address. The new ones must filter on `dynamic_table_check('dao_tokens', contract_id)` *inside a
-    dynamic-table definition*. Confirm Goldsky allows that, against its docs or a scratch pipeline. If it
-    doesn't, the fallback is to match the `module_registered` topic alone. That is safe: identity in SQL still
-    requires the event to come from a known DAO Token, so a stranger's contract only adds noise rows to the
-    landing tables and can't attach a module to anyone's DAO.
+  - **How the per-kind tables are filled (review 2 B8, resolved 2026-10-13).** Goldsky's docs allow a dynamic
+    table's `sql` to read an *earlier transform*, not only the raw source, with projections and filters only (no
+    joins or aggregations). Their "factory pattern" decodes `PoolCreated` in one SQL transform, populates a
+    `factory_pools` dynamic table from it, and filters a later transform with
+    `dynamic_table_check('factory_pools', address)` ([dynamic tables](https://docs.goldsky.com/turbo-pipelines/transforms/dynamic-tables),
+    [SQL functions](https://docs.goldsky.com/turbo-pipelines/reference/sql-functions)). So the design uses two
+    stages:
+    1. A SQL transform `module_registrations` selects `stellar_events` with `topics LIKE '%module_registered%'`
+       `AND dynamic_table_check('dao_tokens', contract_id)`, which is supported in an ordinary transform.
+    2. `dao_claims`, `dao_circles`, `dao_auctions`, `dao_marketplaces` and the catch-all `dao_modules` each read
+       from `module_registrations`, with a `regexp_extract` projection and a kind filter only.
+
+    Only registrations emitted by known DAO Tokens reach the allowlists, so the topic-only fallback isn't needed.
+    It's still to be confirmed on a scratch pipeline when step 2's events exist; the docs don't show this exact
+    two-stage chain end to end. Same-transaction ordering (a module's constructor events before its
+    `ModuleRegistered`) behaves like today's `DaoCreated` population (review 2 E).
 - **Identity in SQL.**
   - `manager.dao_modules` and `manager.event_identity` are built from `ModuleRegistered` (dao_id = the emitting
     Token's DAO, kind, address, non_voting, `registered_pos`) and `ModuleUnregistered` (`unregistered_pos`).
@@ -567,8 +577,8 @@ The existing pipeline covers this:
 ## Next Steps
 
 1. **The invariant first:** write the voting-units property test against today's Token (see The Assignment),
-   with all three clauses. **Also verify the Goldsky capability in §7 (review 2 B8)** before designing step 2's
-   events and tables, because a negative answer changes §7.
+   with all three clauses (done: `contracts/e2e/src/voting_invariant.rs`). The Goldsky capability in §7
+   (review 2 B8) is settled from the docs; confirm it on a scratch pipeline once step 2's events exist.
 2. **Token:** allowances, the registry (registration moves held votes, contract-only, allowance only for
    modules), the `ModuleRegistered` / `ModuleUnregistered` events and core-only constructor wiring. Design the
    indexer's dynamic tables and identity views (§7) in the same step, because the event shapes are their API.
@@ -1265,7 +1275,7 @@ before applying it. The review file has been deleted; this section is its record
 | B5 `renewal_keys` must return the stored key | **Fixed.** Exact namespaced `Val`s with durability | §1, T16 |
 | B6 Launch may need a restore | **Fixed, with a correction.** The escrow balance *is* renewable before launch (`renewal_keys` reports held assets and the sweep covers pending DAOs), but nobody has to renew, so launch restores automatically and an e2e covers it | §2, Success Criteria, T16 |
 | B7 `module` role for common events | **Fixed** | §7, T16 |
-| B8 Verify the Goldsky capability | **Open: to verify before Next Steps 2.** A design can't settle it. The fallback (topic-only match) is safe, because SQL identity still requires a known DAO Token | §7, Next Steps 1, T16 |
+| B8 Verify the Goldsky capability | **Resolved from the docs (2026-10-13), by a better route than either option the review gave.** A dynamic table may be populated from an earlier SQL transform (the documented factory pattern), so `module_registrations` filters with `dynamic_table_check('dao_tokens', …)` and the per-kind tables only project and filter it. To be confirmed on a scratch pipeline once step 2's events exist | §7, T16 |
 | B9 Phases versus steps | **Fixed.** Phase 1 ships `Vec<ModuleSpec>` with Auction and Marketplace still required; Phase 4 drops the rule | Next Steps 3, Cut line |
 | C1 Assurance proves a launch, not a community | **Stated** as a trust limitation; the claim page shows tree size and concentration | §6, Next Steps 9, T16 |
 | C2 Issuer-controlled payment assets | **Stated** (extends the existing SECURITY_MODEL line to escrow and pools); the web shows asset flags | §6, Next Steps 9 |
