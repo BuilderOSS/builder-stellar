@@ -62,8 +62,6 @@ impl Dao {
             (
                 launch_admin.clone(),
                 treasury.clone(),
-                env.register(MockMetadata, ()), // auction stand-in
-                env.register(MockMetadata, ()), // marketplace stand-in
                 String::from_str(&env, "Claims"),
                 String::from_str(&env, "CLM"),
                 metadata.clone(),

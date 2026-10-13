@@ -22,6 +22,7 @@ auction = { path = "../auction" }
 governor = { path = "../governor" }
 treasury = { path = "../treasury" }
 marketplace = { path = "../marketplace" }
+minter = { path = "../minter" }
 
 [features]
 testutils = ["soroban-sdk/testutils"]

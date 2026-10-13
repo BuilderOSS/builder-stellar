@@ -22,12 +22,10 @@ pub enum ManagerError {
     AdminNotSet = 7106,
     /// No admin handover is pending
     NoPendingAdmin = 7107,
-    /// Platform minter not configured
-    PlatformMinterNotSet = 7108,
+    // 7108 (PlatformMinterNotSet) and 7110 (PlatformMinterMismatch) are
+    // retired with the shared Minter.
     /// An implementation is already registered for this WASM hash
     ImplementationAlreadyRegistered = 7109,
-    /// The launch config's `minter` is not the registered platform Minter
-    PlatformMinterMismatch = 7110,
 
     // Factory
     /// Factory is paused (no `create_dao` or `launch_dao`)
@@ -82,4 +80,10 @@ pub enum ManagerError {
     /// A module's payment asset differs from the one recorded when it was
     /// created (the launch admin changed it in Setup); change it back first
     PaymentAssetMismatch = 7132,
+    /// `modules` lists a kind twice, or lacks the Auction or Marketplace
+    /// Phase 1 still requires
+    InvalidModules = 7133,
+    /// `create_module`'s `expected_n` is not `module_count(token, kind)`: a
+    /// module of this kind was created since the proposal was drafted
+    StaleModuleIndex = 7134,
 }

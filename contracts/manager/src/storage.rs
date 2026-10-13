@@ -1,6 +1,8 @@
 //! Storage keys and data structures for the Manager contract.
 
-use soroban_sdk::{contracttype, Address, BytesN, Env, IntoVal, String, TryFromVal, Val};
+use soroban_sdk::{
+    contracttype, Address, BytesN, Env, IntoVal, String, Symbol, TryFromVal, Val, Vec,
+};
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -55,6 +57,66 @@ pub struct MarketplaceConfig {
     pub secondary_fee_bps: u32,
 }
 
+/// ClaimMinter creation config: the asset Setup lists are priced in.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ClaimsConfig {
+    pub payment_asset: Address,
+}
+
+/// A module the Manager deploys for a DAO (`create_dao` / `create_module`),
+/// with its creation config. Each variant is one registry kind.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ModuleSpec {
+    Auction(AuctionConfig),
+    Marketplace(MarketplaceConfig),
+    Claims(ClaimsConfig),
+}
+
+impl ModuleSpec {
+    /// The registry kind (`common::modules::KIND_*`).
+    pub fn kind_str(&self) -> &'static str {
+        match self {
+            ModuleSpec::Auction(_) => common::modules::KIND_AUCTION,
+            ModuleSpec::Marketplace(_) => common::modules::KIND_MARKETPLACE,
+            ModuleSpec::Claims(_) => common::modules::KIND_CLAIMS,
+        }
+    }
+
+    pub fn kind(&self, env: &Env) -> Symbol {
+        Symbol::new(env, self.kind_str())
+    }
+
+    /// The asset fixed in the creation config; the Manager compares the
+    /// module's `payment_asset()` with it before launch.
+    pub fn payment_asset(&self) -> Address {
+        match self {
+            ModuleSpec::Auction(c) => c.payment_asset.clone(),
+            ModuleSpec::Marketplace(c) => c.payment_asset.clone(),
+            ModuleSpec::Claims(c) => c.payment_asset.clone(),
+        }
+    }
+
+    /// The registry name its implementations are registered under.
+    pub fn implementation_name(&self) -> &'static str {
+        match self {
+            ModuleSpec::Auction(_) => "Auction",
+            ModuleSpec::Marketplace(_) => "Marketplace",
+            ModuleSpec::Claims(_) => "ClaimMinter",
+        }
+    }
+
+    /// The `Current*Wasm` key `create_dao` / `create_module` deploy from.
+    pub fn current_wasm_key(&self) -> ManagerKey {
+        match self {
+            ModuleSpec::Auction(_) => ManagerKey::CurrentAuctionWasm,
+            ModuleSpec::Marketplace(_) => ManagerKey::CurrentMarketplaceWasm,
+            ModuleSpec::Claims(_) => ManagerKey::CurrentClaimsWasm,
+        }
+    }
+}
+
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InitialDaoConfigValues {
@@ -71,31 +133,46 @@ pub struct InitialDaoConfigValues {
     /// slug by vote (`change_slug`).
     pub slug: String,
     pub governance: GovernanceConfig,
-    pub auction: AuctionConfig,
-    pub marketplace: MarketplaceConfig,
+    /// The modules to deploy with the DAO, each kind at most once. Phase 1
+    /// (docs/designs/membership-models.md, cut line) still requires an
+    /// Auction and a Marketplace; ClaimMinter is optional.
+    pub modules: Vec<ModuleSpec>,
 }
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LaunchConfig {
+    /// Start the Auction (if the DAO has one) and grant it an allowance.
     pub launch_auction: bool,
+    /// Open the Marketplace (if the DAO has one).
     pub launch_marketplace: bool,
-    /// The shared platform Minter the launch admin saw and approves. Every
-    /// DAO launches with it; it must equal the registered PlatformMinter, so a
-    /// Manager admin cannot swap the minter between signing and launch.
-    pub minter: Address,
 }
 
-/// WASM hashes the six modules were deployed from (emitted in `DaoCreated`).
+/// WASM hashes a DAO's contracts were deployed from (emitted in
+/// `DaoCreated`); a module the DAO was created without is `None`.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DaoWasmHashes {
+    pub token: BytesN<32>,
+    pub metadata: BytesN<32>,
+    pub governor: BytesN<32>,
+    pub treasury: BytesN<32>,
+    pub auction: Option<BytesN<32>>,
+    pub marketplace: Option<BytesN<32>>,
+    pub claims: Option<BytesN<32>>,
+}
+
+/// The implementation hashes `create_dao` and `create_module` deploy from.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CurrentImplementations {
     pub token: BytesN<32>,
     pub metadata: BytesN<32>,
     pub auction: BytesN<32>,
     pub governor: BytesN<32>,
     pub treasury: BytesN<32>,
     pub marketplace: BytesN<32>,
+    pub claims: BytesN<32>,
 }
 
 #[contracttype]
@@ -112,10 +189,14 @@ pub struct DaoCreationParams {
 pub struct DaoAddresses {
     pub token: Address,
     pub metadata: Address,
-    pub auction: Address,
     pub governor: Address,
     pub treasury: Address,
-    pub marketplace: Address,
+    /// Modules deployed with the DAO (or added in Setup by `create_module`);
+    /// `None` for a kind it does not have. The Token's registry is the
+    /// source of truth for modules added later.
+    pub auction: Option<Address>,
+    pub marketplace: Option<Address>,
+    pub claims: Option<Address>,
 }
 
 /// The only factory state retained until the launch administrator finalizes a DAO.
@@ -130,10 +211,12 @@ pub struct PendingDao {
     pub launch_admin: Address,
     /// Requested slug; claimed at `launch_dao`, changeable with `update_pending_slug`.
     pub slug: String,
-    /// Auction payment token chosen at create_dao; launch refuses if it changed.
-    pub auction_payment_asset: Address,
-    /// Marketplace payment asset chosen at create_dao; launch refuses if it changed.
-    pub marketplace_payment_asset: Address,
+    /// Payment assets fixed in each module's creation config; launch refuses
+    /// a module whose `payment_asset()` changed (`PaymentAssetMismatch`).
+    /// `None` for a kind the DAO does not have.
+    pub auction_payment_asset: Option<Address>,
+    pub marketplace_payment_asset: Option<Address>,
+    pub claims_payment_asset: Option<Address>,
 }
 
 #[contracttype]
@@ -154,13 +237,17 @@ pub enum ManagerKey {
     CurrentManagerVersion,
     PendingDao(Address),
     PendingAdmin,
-    PlatformMinter,
     /// slug -> token address, written at `launch_dao`, moved by `change_slug` (the old
     /// slug is removed). Renewed by the DAO's renewal sweep.
     SlugToDao(String),
     /// token address -> current slug, written at `launch_dao` and `change_slug`.
     /// Renewed by the DAO's renewal sweep.
     DaoSlug(Address),
+    /// Instance: the ClaimMinter implementation `create_dao` deploys.
+    CurrentClaimsWasm,
+    /// (token, kind) -> u32: modules of `kind` `create_module` deployed for
+    /// the DAO, the `n` in its salt. Persistent, renewed by the DAO's sweep.
+    ModuleCount(Address, Symbol),
 }
 
 pub fn get_admin(env: &Env) -> Option<Address> {
@@ -237,7 +324,7 @@ pub(crate) mod key_samples {
     use soroban_sdk::testutils::Address as _;
     use soroban_sdk::{Env, IntoVal, Val};
 
-    pub const VARIANTS: usize = 18;
+    pub const VARIANTS: usize = 19;
 
     pub fn index(key: &ManagerKey) -> usize {
         match key {
@@ -256,9 +343,10 @@ pub(crate) mod key_samples {
             ManagerKey::CurrentManagerVersion => 12,
             ManagerKey::PendingDao(_) => 13,
             ManagerKey::PendingAdmin => 14,
-            ManagerKey::PlatformMinter => 15,
-            ManagerKey::SlugToDao(_) => 16,
-            ManagerKey::DaoSlug(_) => 17,
+            ManagerKey::SlugToDao(_) => 15,
+            ManagerKey::DaoSlug(_) => 16,
+            ManagerKey::CurrentClaimsWasm => 17,
+            ManagerKey::ModuleCount(..) => 18,
         }
     }
 
@@ -283,9 +371,10 @@ pub(crate) mod key_samples {
             ManagerKey::CurrentManagerVersion,
             ManagerKey::PendingDao(a.clone()),
             ManagerKey::PendingAdmin,
-            ManagerKey::PlatformMinter,
             ManagerKey::SlugToDao(text.clone()),
             ManagerKey::DaoSlug(a.clone()),
+            ManagerKey::CurrentClaimsWasm,
+            ManagerKey::ModuleCount(a.clone(), soroban_sdk::Symbol::new(e, "claims")),
         ];
         common::testutils::assert_every_variant_sampled(
             "ManagerKey",

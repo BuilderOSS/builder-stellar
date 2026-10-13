@@ -160,8 +160,6 @@ fn setup_with(
         (
             owner.clone(),
             treasury_id.clone(),
-            Address::generate(&e),
-            Address::generate(&e),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
             metadata_id.clone(),
@@ -214,6 +212,15 @@ fn setup_with(
     // docs/designs/membership-models.md §1); it is returned as `owner`.
     let minter = e.register(TargetContract, ());
     token.register_module(&Symbol::new(&e, "custom_minter"), &minter, &false);
+    // Stand-ins for the Auction and Marketplace the Manager registers: the
+    // non-voting holders tests escrow into.
+    for kind in ["auction", "marketplace"] {
+        token.register_module(
+            &Symbol::new(&e, kind),
+            &e.register(TargetContract, ()),
+            &true,
+        );
+    }
     token.launch(&treasury_id, &grant(&e, &minter));
     // Governor and treasury only process proposals once live.
     governor.launch(&treasury_id);
@@ -373,9 +380,20 @@ fn manager_registry_and_predictions_are_creator_scoped() {
             hash,
         );
     }
-    manager.set_current_implementations(
-        &hashes[0], &hashes[1], &hashes[2], &hashes[3], &hashes[4], &hashes[5],
+    manager.register_implementation(
+        &String::from_str(&e, "ClaimMinter"),
+        &String::from_str(&e, "0.1.0"),
+        &BytesN::from_array(&e, &[7; 32]),
     );
+    manager.set_current_implementations(&manager::CurrentImplementations {
+        token: hashes[0].clone(),
+        metadata: hashes[1].clone(),
+        auction: hashes[2].clone(),
+        governor: hashes[3].clone(),
+        treasury: hashes[4].clone(),
+        marketplace: hashes[5].clone(),
+        claims: BytesN::from_array(&e, &[7; 32]),
+    });
     manager.set_latest_implementation(&String::from_str(&e, "Token"), &hashes[0]);
     assert_eq!(
         manager
@@ -980,8 +998,6 @@ fn setup_auction_setup_phase() -> (
         (
             owner.clone(),
             treasury_id.clone(),
-            auction_id.clone(),
-            Address::generate(&e),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
             metadata_id.clone(),
@@ -1031,6 +1047,8 @@ fn setup_auction_setup_phase() -> (
     let auction = DaoAuctionContractClient::new(&e, &auction_id);
 
     e.mock_all_auths();
+    // The Manager registers each module after deploying it.
+    token.register_module(&Symbol::new(&e, "auction"), &auction_id, &true);
 
     (
         e,
@@ -1678,8 +1696,6 @@ fn test_governor_treasury_bidirectional_verification() {
         (
             owner.clone(),
             Address::generate(&e),
-            Address::generate(&e),
-            Address::generate(&e),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
             metadata_id.clone(),
@@ -1860,8 +1876,6 @@ fn marketplace_primary_sale_uses_real_token_and_sac() {
         (
             treasury.clone(),
             treasury.clone(),
-            Address::generate(&e),
-            marketplace_id.clone(),
             String::from_str(&e, "Marketplace DAO"),
             String::from_str(&e, "MDAO"),
             metadata_id.clone(),
@@ -1888,6 +1902,7 @@ fn marketplace_primary_sale_uses_real_token_and_sac() {
     let marketplace = MarketplaceContractClient::new(&e, &marketplace_id);
     // Manager-style launch: token first (marketplace is a canonical minter),
     // then the marketplace itself (open).
+    token.register_module(&Symbol::new(&e, "marketplace"), &marketplace_id, &true);
     token.launch(&treasury, &grant(&e, &marketplace_id));
     marketplace.launch(&treasury, &true);
 
@@ -2695,8 +2710,6 @@ fn real_auth_marketplace_primary_and_secondary_flows() {
         (
             treasury.clone(),
             treasury.clone(),
-            Address::generate(&e),
-            marketplace_id.clone(),
             String::from_str(&e, "Marketplace DAO"),
             String::from_str(&e, "MDAO"),
             metadata_id.clone(),
@@ -2720,6 +2733,7 @@ fn real_auth_marketplace_primary_and_secondary_flows() {
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
     let marketplace = MarketplaceContractClient::new(&e, &marketplace_id);
+    token.register_module(&Symbol::new(&e, "marketplace"), &marketplace_id, &true);
     token.launch(&treasury, &grant(&e, &marketplace_id));
     marketplace.launch(&treasury, &true);
 
@@ -2880,18 +2894,58 @@ fn slug_params(
                 proposal_threshold: 1,
                 quorum_bps: 1000,
             },
-            auction: manager::AuctionConfig {
-                duration: 300,
-                reserve_price: 10_000_000,
-                time_buffer: 60,
-                payment_asset: asset.clone(),
-            },
-            marketplace: manager::MarketplaceConfig {
-                payment_asset: asset.clone(),
-                secondary_fee_bps: 250,
-            },
+            modules: vec![
+                e,
+                manager::ModuleSpec::Auction(manager::AuctionConfig {
+                    duration: 300,
+                    reserve_price: 10_000_000,
+                    time_buffer: 60,
+                    payment_asset: asset.clone(),
+                }),
+                manager::ModuleSpec::Marketplace(manager::MarketplaceConfig {
+                    payment_asset: asset.clone(),
+                    secondary_fee_bps: 250,
+                }),
+                manager::ModuleSpec::Claims(manager::ClaimsConfig {
+                    payment_asset: asset.clone(),
+                }),
+            ],
         },
     }
+}
+
+/// Upload the built module WASMs, register each as 0.1.0 and make them the
+/// factory's current implementations. Returns the hashes by registry name.
+fn register_factory(e: &Env, manager: &ManagerContractClient) -> manager::CurrentImplementations {
+    let mut hashes = std::vec::Vec::new();
+    for (registry_name, wasm_name) in [
+        ("Token", "token"),
+        ("Metadata", "metadata"),
+        ("Auction", "auction"),
+        ("Governor", "governor"),
+        ("Treasury", "treasury"),
+        ("Marketplace", "marketplace"),
+        ("ClaimMinter", "minter"),
+    ] {
+        let hash = upload_module_wasm(e, wasm_name);
+        manager.register_implementation(
+            &String::from_str(e, registry_name),
+            &String::from_str(e, "0.1.0"),
+            &hash,
+        );
+        hashes.push(hash);
+    }
+    let current = manager::CurrentImplementations {
+        token: hashes[0].clone(),
+        metadata: hashes[1].clone(),
+        auction: hashes[2].clone(),
+        governor: hashes[3].clone(),
+        treasury: hashes[4].clone(),
+        marketplace: hashes[5].clone(),
+        claims: hashes[6].clone(),
+    };
+    manager.set_current_implementations(&current);
+    current
 }
 
 /// Manager.create_dao -> setup window (founder mint + artwork, launch admin
@@ -2915,29 +2969,7 @@ fn full_factory_flow_create_setup_launch_with_slug() {
         ),
     );
     let manager = ManagerContractClient::new(&e, &manager_id);
-    let platform_minter = e.register(TargetContract, ()); // a deployed stand-in: it becomes the `claims` module
-    manager.set_platform_minter(&platform_minter);
-
-    let mut hashes = std::vec::Vec::new();
-    for (registry_name, wasm_name) in [
-        ("Token", "token"),
-        ("Metadata", "metadata"),
-        ("Auction", "auction"),
-        ("Governor", "governor"),
-        ("Treasury", "treasury"),
-        ("Marketplace", "marketplace"),
-    ] {
-        let hash = upload_module_wasm(&e, wasm_name);
-        manager.register_implementation(
-            &String::from_str(&e, registry_name),
-            &String::from_str(&e, "0.1.0"),
-            &hash,
-        );
-        hashes.push(hash);
-    }
-    manager.set_current_implementations(
-        &hashes[0], &hashes[1], &hashes[2], &hashes[3], &hashes[4], &hashes[5],
-    );
+    register_factory(&e, &manager);
 
     let deployer = Address::generate(&e);
     let asset = e
@@ -2984,7 +3016,6 @@ fn full_factory_flow_create_setup_launch_with_slug() {
         &manager::LaunchConfig {
             launch_auction: true,
             launch_marketplace: true,
-            minter: platform_minter.clone(),
         },
     );
     assert!(manager.get_pending_dao(&dao.token).is_none());
@@ -3001,7 +3032,6 @@ fn full_factory_flow_create_setup_launch_with_slug() {
     let launch_all = manager::LaunchConfig {
         launch_auction: true,
         launch_marketplace: true,
-        minter: platform_minter.clone(),
     };
     assert_eq!(
         manager.try_launch_dao(&rival.token, &launch_all),
@@ -3264,8 +3294,6 @@ fn system_held_tokens_and_votes_through_a_real_proposal() {
         (
             admin.clone(),
             treasury_id.clone(),
-            auction_id.clone(),
-            marketplace_id.clone(),
             String::from_str(&e, "n"),
             String::from_str(&e, "s"),
             metadata_id.clone(),
@@ -3330,6 +3358,7 @@ fn system_held_tokens_and_votes_through_a_real_proposal() {
         &vec![&e, alice.clone(), bob.clone(), treasury_id.clone()],
         &vec![&e, 3u128, 2u128, 5u128],
     );
+    token.register_module(&Symbol::new(&e, "marketplace"), &marketplace_id, &true);
     token.launch(&treasury_id, &grant(&e, &marketplace_id));
     governor.launch(&treasury_id);
     treasury.launch(&treasury_id);
@@ -3426,19 +3455,27 @@ struct DaoFixture {
     manager: ManagerContractClient<'static>,
     dao: manager::DaoAddresses,
     deployer: Address,
-    /// The shared platform Minter registered on the Manager.
-    minter: Address,
-    /// The payment asset (auction and marketplace), with its issuer.
+    /// The payment asset (auction, marketplace and claims), with its issuer.
     payment: soroban_sdk::testutils::StellarAssetContract,
 }
 
 impl DaoFixture {
+    /// The factory DAO's modules (`slug_params` creates all three).
+    fn auction(&self) -> Address {
+        self.dao.auction.clone().unwrap()
+    }
+    fn marketplace(&self) -> Address {
+        self.dao.marketplace.clone().unwrap()
+    }
+    fn claims(&self) -> Address {
+        self.dao.claims.clone().unwrap()
+    }
+
     /// Launch config that starts neither the auction nor the marketplace.
     fn no_launch_modules(&self) -> manager::LaunchConfig {
         manager::LaunchConfig {
             launch_auction: false,
             launch_marketplace: false,
-            minter: self.minter.clone(),
         }
     }
 }
@@ -3462,29 +3499,7 @@ fn factory_dao() -> DaoFixture {
         ),
     );
     let manager = ManagerContractClient::new(&e, &manager_id);
-    let mut hashes = std::vec::Vec::new();
-    for (registry_name, wasm_name) in [
-        ("Token", "token"),
-        ("Metadata", "metadata"),
-        ("Auction", "auction"),
-        ("Governor", "governor"),
-        ("Treasury", "treasury"),
-        ("Marketplace", "marketplace"),
-    ] {
-        let hash = upload_module_wasm(&e, wasm_name);
-        manager.register_implementation(
-            &String::from_str(&e, registry_name),
-            &String::from_str(&e, "0.1.0"),
-            &hash,
-        );
-        hashes.push(hash);
-    }
-    manager.set_current_implementations(
-        &hashes[0], &hashes[1], &hashes[2], &hashes[3], &hashes[4], &hashes[5],
-    );
-    // A deployed stand-in: `launch_dao` registers it as the `claims` module.
-    let minter = e.register(TargetContract, ());
-    manager.set_platform_minter(&minter);
+    register_factory(&e, &manager);
 
     let deployer = Address::generate(&e);
     let payment = e.register_stellar_asset_contract_v2(Address::generate(&e));
@@ -3497,7 +3512,6 @@ fn factory_dao() -> DaoFixture {
         manager,
         dao,
         deployer,
-        minter,
         payment,
     }
 }
@@ -3677,11 +3691,16 @@ fn factory_token_serves_sep50_metadata_and_records_the_minter() {
     assert_eq!(token.token_uri(&id), uri);
     assert!(token.try_token_uri(&(id + 1)).is_err());
 
+    // The ClaimMinter was created and registered with the DAO; launch hands
+    // it to the Treasury and grants it nothing (the launch admin may).
     let claims = Symbol::new(e, "claims");
-    assert_eq!(token.module(&claims), None);
+    assert_eq!(token.module(&claims), Some(f.claims()));
     f.manager.launch_dao(&f.dao.token, &f.no_launch_modules());
-    assert_eq!(token.module(&claims), Some(f.minter.clone()));
-    assert_eq!(token.mint_allowance(&f.minter), u32::MAX);
+    assert_eq!(token.mint_allowance(&f.claims()), 0);
+    assert_eq!(
+        minter::ClaimMinterClient::new(e, &f.claims()).admin(),
+        f.dao.treasury
+    );
 }
 
 /// docs/STORAGE_DIET_REVIEW.md Finding 2: a state-changing call must never push
@@ -3754,7 +3773,7 @@ fn rename_by_proposal_then_settle_mints_with_artwork() {
     let e = &f.e;
     let token = DaoTokenContractClient::new(e, &f.dao.token);
     let metadata = MetadataContractClient::new(e, &f.dao.metadata);
-    let auction = DaoAuctionContractClient::new(e, &f.dao.auction);
+    let auction = DaoAuctionContractClient::new(e, &f.auction());
     metadata.add_properties(
         &vec![e, String::from_str(e, "Background")],
         &vec![
@@ -3775,7 +3794,6 @@ fn rename_by_proposal_then_settle_mints_with_artwork() {
         &manager::LaunchConfig {
             launch_auction: true,
             launch_marketplace: false,
-            minter: f.minter.clone(),
         },
     );
     let first = auction.get_auction().token_id;
@@ -3818,10 +3836,9 @@ fn every_protocol_storage_key_is_namespaced() {
     let e = &f.e;
     let token = DaoTokenContractClient::new(e, &f.dao.token);
     let metadata = MetadataContractClient::new(e, &f.dao.metadata);
-    let marketplace = MarketplaceContractClient::new(e, &f.dao.marketplace);
+    let marketplace = MarketplaceContractClient::new(e, &f.marketplace());
     let (minter_id, _) = claim_minter(&f);
     let minter = minter::ClaimMinterClient::new(e, &minter_id);
-    f.manager.set_platform_minter(&minter_id);
 
     metadata.add_properties(
         &vec![e, String::from_str(e, "Background")],
@@ -3844,11 +3861,12 @@ fn every_protocol_storage_key_is_namespaced() {
         &manager::LaunchConfig {
             launch_auction: true,
             launch_marketplace: true,
-            minter: minter_id.clone(),
         },
     );
 
     // ClaimMinter: a list and a claim.
+    // The Treasury grants the ClaimMinter its allowance (by proposal).
+    token.increase_mint_allowance(&minter.address, &10);
     let claimer = Address::generate(e);
     let (root, proof, _) = merkle_pair(e, &claimer, 1, &Address::generate(e), 1);
     let list = minter.open_list(
@@ -3866,7 +3884,7 @@ fn every_protocol_storage_key_is_namespaced() {
     let payment_asset = marketplace.get_config().payment_asset;
     token.approve(
         &f.deployer,
-        &f.dao.marketplace,
+        &f.marketplace(),
         &listed,
         &(e.ledger().sequence() + 10_000),
     );
@@ -3903,10 +3921,10 @@ fn every_protocol_storage_key_is_namespaced() {
             ("minter", minter_id.clone()),
             ("token", f.dao.token.clone()),
             ("metadata", f.dao.metadata.clone()),
-            ("auction", f.dao.auction.clone()),
+            ("auction", f.auction()),
             ("governor", f.dao.governor.clone()),
             ("treasury", f.dao.treasury.clone()),
-            ("marketplace", f.dao.marketplace.clone()),
+            ("marketplace", f.marketplace()),
         ],
     );
     std::println!("checked {checked} storage keys");
@@ -3916,30 +3934,11 @@ fn every_protocol_storage_key_is_namespaced() {
 // ClaimMinter (docs/designs/membership-models.md §3)
 // ============================================================================
 
-/// This DAO's ClaimMinter, registered in the Manager registry as
-/// "ClaimMinter" 0.1.0 on a placeholder hash (it runs as native test code
-/// until upgraded). Interim (Phase 1): the Manager attaches it at launch as
-/// the pinned `claims` module until `create_dao` deploys it.
+/// The factory DAO's ClaimMinter (created with it, from the built WASM
+/// registered as "ClaimMinter" 0.1.0) and the hash it runs.
 fn claim_minter(f: &DaoFixture) -> (Address, BytesN<32>) {
-    let e = &f.e;
-    let hash = BytesN::from_array(e, &[0x51; 32]);
-    f.manager.register_implementation(
-        &String::from_str(e, "ClaimMinter"),
-        &String::from_str(e, "0.1.0"),
-        &hash,
-    );
-    let marketplace = MarketplaceContractClient::new(e, &f.dao.marketplace);
-    let id = e.register(
-        minter::ClaimMinter,
-        (
-            f.deployer.clone(), // the launch admin
-            f.dao.token.clone(),
-            f.dao.treasury.clone(),
-            f.manager.address.clone(),
-            marketplace.get_config().payment_asset,
-            hash.clone(),
-        ),
-    );
+    let id = f.claims();
+    let hash = minter::ClaimMinterClient::new(&f.e, &id).wasm_hash();
     (id, hash)
 }
 
@@ -3975,7 +3974,7 @@ fn merkle_pair(
 
 /// A ClaimMinter upgrades by the DAO's own vote (its admin is the Treasury
 /// after launch), to a registry-approved hash, and claims keep working
-/// against the list opened before the upgrade, on the real built WASM.
+/// against the list opened before the upgrade.
 #[test]
 fn claim_minter_upgrades_by_the_dao_then_claims_against_the_existing_list() {
     let f = factory_dao();
@@ -3983,18 +3982,13 @@ fn claim_minter_upgrades_by_the_dao_then_claims_against_the_existing_list() {
     let token = DaoTokenContractClient::new(e, &f.dao.token);
     let (minter_id, from) = claim_minter(&f);
     let minter = minter::ClaimMinterClient::new(e, &minter_id);
-    f.manager.set_platform_minter(&minter_id);
     f.manager.launch_dao(
         &f.dao.token,
         &manager::LaunchConfig {
             launch_auction: false,
             launch_marketplace: false,
-            minter: minter_id.clone(),
         },
     );
-    // Interim (Phase 1): the Manager registers the pinned module but does not
-    // launch it yet, so do what `launch_dao` will.
-    minter.launch(&f.dao.treasury, &false);
     assert_eq!(minter.version(), String::from_str(e, "0.1.0"));
     assert_eq!(minter.admin(), f.dao.treasury);
 
@@ -4003,6 +3997,9 @@ fn claim_minter_upgrades_by_the_dao_then_claims_against_the_existing_list() {
     let (root, alice_proof, bob_proof) = merkle_pair(e, &alice, 2, &bob, 3);
     let tree_uri = String::from_str(e, "ipfs://bafyallocation");
     let asset = minter.payment_asset();
+    // The Treasury grants the ClaimMinter its allowance (by proposal).
+    token.increase_mint_allowance(&minter.address, &10);
+
     let list = minter.open_list(
         &root,
         &tree_uri,
@@ -4014,7 +4011,7 @@ fn claim_minter_upgrades_by_the_dao_then_claims_against_the_existing_list() {
     );
     minter.claim(&list, &alice, &2u128, &2, &alice_proof, &0);
 
-    let to = upload_module_wasm(e, "minter");
+    let to = module_wasm_variant(e, "minter", "v2");
     f.manager.register_implementation(
         &String::from_str(e, "ClaimMinter"),
         &String::from_str(e, "0.2.0"),
@@ -4037,6 +4034,76 @@ fn claim_minter_upgrades_by_the_dao_then_claims_against_the_existing_list() {
         .try_claim(&list, &alice, &2u128, &1, &alice_proof, &0)
         .is_err());
     assert_eq!(token.balance(&alice), 2);
+}
+
+/// docs/designs/membership-models.md §2 (review 2 D3): a module created by
+/// the Treasury after launch is launched at once, so the same proposal can
+/// register it, fund its allowance and use it. A stale `expected_n` reverts
+/// before anything is deployed, registered or funded.
+#[test]
+fn a_module_created_after_launch_works_in_the_next_call() {
+    let f = factory_dao();
+    let e = &f.e;
+    let token = DaoTokenContractClient::new(e, &f.dao.token);
+    MetadataContractClient::new(e, &f.dao.metadata).add_properties(
+        &vec![e, String::from_str(e, "Background")],
+        &vec![
+            e,
+            ItemParam {
+                property_id: 0,
+                name: String::from_str(e, "Blue"),
+                is_new_property: true,
+            },
+        ],
+        &IpfsGroup {
+            base_uri: String::from_str(e, "ipfs://art/"),
+            extension: String::from_str(e, ".png"),
+        },
+    );
+    f.manager.launch_dao(&f.dao.token, &f.no_launch_modules());
+    let claims = Symbol::new(e, "claims");
+    // The Treasury retires the DAO's first ClaimMinter (one per kind).
+    token.unregister_module(&f.claims());
+    assert_eq!(token.module(&claims), None);
+
+    let spec = manager::ModuleSpec::Claims(manager::ClaimsConfig {
+        payment_asset: f.payment.address(),
+    });
+    assert_eq!(f.manager.module_count(&f.dao.token, &claims), 0);
+    // Drafted against a stale count: nothing happens.
+    assert_eq!(
+        f.manager.try_create_module(&f.dao.token, &spec, &1),
+        Err(Ok(manager::ManagerError::StaleModuleIndex))
+    );
+    assert_eq!(f.manager.module_count(&f.dao.token, &claims), 0);
+    let predicted = f.manager.predict_module_address(&f.dao.token, &claims, &0);
+    assert!(!predicted.exists());
+
+    // The proposal's actions: create (launched at once), register, fund.
+    let created = f.manager.create_module(&f.dao.token, &spec, &0);
+    assert_eq!(created, predicted);
+    let module = minter::ClaimMinterClient::new(e, &created);
+    assert_eq!(module.admin(), f.dao.treasury);
+    assert!(module.try_launch(&f.dao.treasury, &false).is_err());
+    token.register_module(&claims, &created, &false);
+    token.increase_mint_allowance(&created, &5);
+
+    // The next call: a list and a claim.
+    let alice = Address::generate(e);
+    let (root, proof, _) = merkle_pair(e, &alice, 2, &Address::generate(e), 1);
+    let list = module.open_list(
+        &root,
+        &String::from_str(e, "ipfs://bafytree"),
+        &f.payment.address(),
+        &0,
+        &(e.ledger().timestamp() + 86_400),
+        &3,
+        &None,
+    );
+    module.claim(&list, &alice, &2u128, &2, &proof, &0);
+    assert_eq!(token.balance(&alice), 2);
+    assert_eq!(token.mint_allowance(&created), 3);
+    assert_eq!(f.manager.module_count(&f.dao.token, &claims), 1);
 }
 
 // ============================================================================
@@ -4113,7 +4180,6 @@ fn protocol_runs_on_chain_state_only() {
     let f = factory_dao();
     let e = &f.e;
     let (minter_id, _) = claim_minter(&f);
-    f.manager.set_platform_minter(&minter_id);
 
     // --- Discovery from the token address alone.
     let token = DaoTokenContractClient::new(e, &f.dao.token);
@@ -4125,8 +4191,8 @@ fn protocol_runs_on_chain_state_only() {
     assert_eq!(token.manager(), f.manager.address);
     assert_eq!(metadata.address, f.dao.metadata);
     assert_eq!(governor.address, f.dao.governor);
-    assert_eq!(auction.address, f.dao.auction);
-    assert_eq!(marketplace.address, f.dao.marketplace);
+    assert_eq!(auction.address, f.auction());
+    assert_eq!(marketplace.address, f.marketplace());
     // The profile was created with the DAO: only its hash and seq are stored.
     assert_eq!(metadata.profile_seq(), 0);
 
@@ -4174,7 +4240,6 @@ fn protocol_runs_on_chain_state_only() {
         &manager::LaunchConfig {
             launch_auction: true,
             launch_marketplace: true,
-            minter: minter_id.clone(),
         },
     );
     let claims = Symbol::new(e, "claims");
@@ -4229,6 +4294,8 @@ fn protocol_runs_on_chain_state_only() {
     assert_eq!(token.owner_of(&won), carol);
 
     // --- A merkle claim with a locally computed proof.
+    // The Treasury grants the ClaimMinter its allowance (by proposal).
+    token.increase_mint_allowance(&minter.address, &10);
     let erin = Address::generate(e);
     let (root, erin_proof, _) = merkle_pair(e, &erin, 2, &Address::generate(e), 1);
     let list = minter.open_list(
@@ -4365,7 +4432,7 @@ fn protocol_runs_on_chain_state_only() {
         holdings("Balance")
     );
     assert!(holdings("Owner") > 0 && holdings("Balance") > 0);
-    assert_inventory_matches_ledger(e, &f.manager, &f.dao, &minter_id, &listed);
+    assert_inventory_matches_ledger(e, &f.manager, &f.dao, &listed);
 }
 
 // ----------------------------------------------------------------------------
@@ -4657,7 +4724,6 @@ fn assert_inventory_matches_ledger(
     e: &Env,
     manager: &ManagerContractClient,
     dao: &manager::DaoAddresses,
-    minter: &Address,
     listed: &[(Address, Val)],
 ) {
     use soroban_sdk::xdr::{ContractDataDurability, LedgerKey, ScAddress, ScVal};
@@ -4715,9 +4781,9 @@ fn assert_inventory_matches_ledger(
             ]
             .contains(&name.as_str());
         }
-        if *owner == *minter {
-            // Claim markers, and other DAOs' rounds.
-            return name == "MerkleClaimed" || items.get(1) != Some(&token_sc);
+        if dao.claims.as_ref() == Some(owner) {
+            // Each claimer's record on a list.
+            return name == "Claim";
         }
         if *owner == manager.address {
             // Platform registry and other DAOs' slugs.
@@ -4726,16 +4792,9 @@ fn assert_inventory_matches_ledger(
         }
         name == "PendingRefund"
     };
-    let mut owners = std::vec![
-        &dao.token,
-        &dao.metadata,
-        &dao.auction,
-        &dao.governor,
-        &dao.treasury,
-        &dao.marketplace,
-        minter,
-        &manager.address,
-    ];
+    let contracts = dao_modules(dao);
+    let mut owners: std::vec::Vec<&Address> = contracts.iter().collect();
+    owners.push(&manager.address);
     owners.extend(assets.iter());
     let as_bytes = |owner: &Address, key: &ScVal| {
         use soroban_sdk::xdr::{Limits, WriteXdr};
@@ -4876,8 +4935,6 @@ fn reference_dao_sweep_fits_one_transaction() {
     let e = &f.e;
     let token = DaoTokenContractClient::new(e, &f.dao.token);
     let metadata = MetadataContractClient::new(e, &f.dao.metadata);
-    let (minter_id, _) = claim_minter(&f);
-    f.manager.set_platform_minter(&minter_id);
 
     // 16 properties of 19 items each (304 items), one property per call.
     for p in 0..16u32 {
@@ -4914,7 +4971,6 @@ fn reference_dao_sweep_fits_one_transaction() {
         &manager::LaunchConfig {
             launch_auction: true,
             launch_marketplace: true,
-            minter: minter_id,
         },
     );
 
@@ -4957,10 +5013,10 @@ fn reference_dao_sweep_fits_one_transaction() {
     for module in [
         &f.dao.token,
         &f.dao.metadata,
-        &f.dao.auction,
+        &f.auction(),
         &f.dao.governor,
         &f.dao.treasury,
-        &f.dao.marketplace,
+        &f.marketplace(),
     ] {
         entries += 1;
         bytes += size_of(module, &ScVal::LedgerKeyContractInstance);
@@ -5267,30 +5323,32 @@ fn run_dao_sweep_of(e: &Env, f: &DaoFixture, listed: std::vec::Vec<(Address, Val
     listed.len()
 }
 
-fn dao_modules(dao: &manager::DaoAddresses) -> [Address; 6] {
-    [
+/// The DAO's contracts: the four core ones and every module it has.
+fn dao_modules(dao: &manager::DaoAddresses) -> std::vec::Vec<Address> {
+    let mut all = std::vec![
         dao.token.clone(),
         dao.metadata.clone(),
-        dao.auction.clone(),
         dao.governor.clone(),
         dao.treasury.clone(),
-        dao.marketplace.clone(),
-    ]
+    ];
+    all.extend(dao.auction.clone());
+    all.extend(dao.marketplace.clone());
+    all.extend(dao.claims.clone());
+    all
 }
 
 /// What `scripts/renew-code-ttl.mjs` does: code of every running hash, the
-/// Manager and Minter instances, the registry records `version()` reads, the
-/// platform Minter pointer and the latest-implementation records. The asset
+/// Manager instance, the registry records `version()` reads and the
+/// latest-implementation records. The asset
 /// contract's instance is the network's; it is kept alive here as it is in use.
 fn run_platform_renewal(e: &Env, f: &DaoFixture) {
     let max = TESTNET_MAX_ENTRY_TTL;
-    let mut running = dao_modules(&f.dao).to_vec();
+    let mut running = dao_modules(&f.dao);
     running.push(f.manager.address.clone());
-    running.push(f.minter.clone());
     for c in &running {
         e.as_contract(c, || e.deployer().extend_ttl_for_code(c.clone(), max, max));
     }
-    for c in [&f.manager.address, &f.minter, &f.payment.address()] {
+    for c in [&f.manager.address, &f.payment.address()] {
         e.as_contract(c, || {
             e.deployer()
                 .extend_ttl_for_contract_instance(c.clone(), max, max)
@@ -5301,7 +5359,6 @@ fn run_platform_renewal(e: &Env, f: &DaoFixture) {
         let hash = WasmHashProbeClient::new(e, c).wasm_hash();
         records.push(ns_key(e, "Implementation", std::vec![hash.into_val(e)]));
     }
-    records.push(ns_key(e, "PlatformMinter", std::vec![]));
     for name in [
         "Token",
         "Metadata",
@@ -5310,7 +5367,7 @@ fn run_platform_renewal(e: &Env, f: &DaoFixture) {
         "Treasury",
         "Marketplace",
         "Manager",
-        "Minter",
+        "ClaimMinter",
     ] {
         records.push(ns_key(
             e,
@@ -5348,10 +5405,9 @@ fn archive_expired(e: &Env, f: &DaoFixture) -> usize {
     let mut must_live: std::vec::Vec<ScAddress> =
         dao_modules(&f.dao).iter().map(ScAddress::from).collect();
     must_live.push(ScAddress::from(&f.manager.address));
-    must_live.push(ScAddress::from(&f.minter));
     let running_code: std::vec::Vec<_> = dao_modules(&f.dao)
         .iter()
-        .chain([f.manager.address.clone(), f.minter.clone()].iter())
+        .chain([f.manager.address.clone()].iter())
         .map(|c| WasmHashProbeClient::new(e, c).wasm_hash().to_array())
         .collect();
     let mut archived = 0;
@@ -5395,19 +5451,17 @@ fn archive_expired(e: &Env, f: &DaoFixture) -> usize {
 
 #[test]
 fn a_dao_kept_alive_by_the_sweep_alone_works_after_a_year() {
-    let mut f = factory_dao();
+    let f = factory_dao();
     f.e.ledger().with_mut(|l| {
         l.max_entry_ttl = TESTNET_MAX_ENTRY_TTL;
         l.min_persistent_entry_ttl = TESTNET_MIN_PERSISTENT_TTL;
     });
     let (minter_id, _) = claim_minter(&f);
-    f.manager.set_platform_minter(&minter_id);
-    f.minter = minter_id.clone();
     let e = &f.e;
     let token = DaoTokenContractClient::new(e, &f.dao.token);
     let metadata = MetadataContractClient::new(e, &f.dao.metadata);
     let treasury = DaoTreasuryContractClient::new(e, &f.dao.treasury);
-    let auction = DaoAuctionContractClient::new(e, &f.dao.auction);
+    let auction = DaoAuctionContractClient::new(e, &f.auction());
     let governor = DaoGovernorContractClient::new(e, &f.dao.governor);
     let minter = minter::ClaimMinterClient::new(e, &minter_id);
     let sac = StellarAssetClient::new(e, &f.payment.address());
@@ -5445,7 +5499,6 @@ fn a_dao_kept_alive_by_the_sweep_alone_works_after_a_year() {
         &manager::LaunchConfig {
             launch_auction: true,
             launch_marketplace: true,
-            minter: minter_id.clone(),
         },
     );
     let unsold = u32::try_from(auction.get_auction().token_id).unwrap();
@@ -5453,6 +5506,8 @@ fn a_dao_kept_alive_by_the_sweep_alone_works_after_a_year() {
     auction.settle_and_create_new();
     assert_eq!(token.owner_of(&unsold), f.dao.treasury);
     sac.mint(&f.dao.treasury, &500_000_000);
+    // The Treasury grants the ClaimMinter its allowance (by proposal).
+    token.increase_mint_allowance(&minter.address, &10);
     let erin = Address::generate(e);
     let (root, erin_proof, _) = merkle_pair(e, &erin, 2, &Address::generate(e), 1);
     let list = minter.open_list(
@@ -5541,14 +5596,12 @@ fn a_dao_kept_alive_by_the_sweep_alone_works_after_a_year() {
 #[test]
 fn without_dao_holdings_in_the_sweep_an_idle_treasury_balance_archives() {
     use soroban_sdk::TryFromVal;
-    let mut f = factory_dao();
+    let f = factory_dao();
     f.e.ledger().with_mut(|l| {
         l.max_entry_ttl = TESTNET_MAX_ENTRY_TTL;
         l.min_persistent_entry_ttl = TESTNET_MIN_PERSISTENT_TTL;
     });
-    let (minter_id, _) = claim_minter(&f);
-    f.manager.set_platform_minter(&minter_id);
-    f.minter = minter_id.clone();
+
     let e = &f.e;
     f.manager.launch_dao(&f.dao.token, &f.no_launch_modules());
     StellarAssetClient::new(e, &f.payment.address()).mint(&f.dao.treasury, &500_000_000);
@@ -5579,7 +5632,7 @@ fn dao_module_chains_two_upgrades_in_one_proposal() {
     let f = factory_dao();
     let e = &f.e;
     f.manager.launch_dao(&f.dao.token, &f.no_launch_modules());
-    let auction = DaoAuctionContractClient::new(e, &f.dao.auction);
+    let auction = DaoAuctionContractClient::new(e, &f.auction());
     let treasury = DaoTreasuryContractClient::new(e, &f.dao.treasury);
     let governor = DaoGovernorContractClient::new(e, &f.dao.governor);
     let v1 = auction.wasm_hash();
@@ -5596,7 +5649,7 @@ fn dao_module_chains_two_upgrades_in_one_proposal() {
     f.manager.approve_upgrade(&v1, &v2);
     f.manager.approve_upgrade(&v2, &v3);
     advance(e, 1);
-    let targets = vec![e, f.dao.auction.clone(), f.dao.auction.clone()];
+    let targets = vec![e, f.auction(), f.auction()];
     let functions = vec![e, Symbol::new(e, "upgrade"), Symbol::new(e, "upgrade")];
     let args = vec![
         e,

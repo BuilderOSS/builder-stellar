@@ -4,7 +4,7 @@ NFT governance token with one voting unit per token, delegation/checkpoints, and
 
 ## Voting supply
 
-Tokens held by the DAO's Treasury and by every registered module marked `non_voting` (the Auction and Marketplace, registered by the constructor) carry no votes. Moving a token into one of them burns its voting unit (it leaves the votes `TotalSupply` checkpoint); moving it out mints the unit for the receiver's delegate. Registering or unregistering a non-voting module moves the votes of whatever it already holds the same way (unregistering self-delegates the module first), so voting units always equal balances and the account checkpoints add up to `TotalSupply` ([design](../../docs/designs/membership-models.md) §1). So:
+Tokens held by the DAO's Treasury and by every registered module marked `non_voting` (the Auction and Marketplace, which the Manager registers at `create_dao`) carry no votes. Moving a token into one of them burns its voting unit (it leaves the votes `TotalSupply` checkpoint); moving it out mints the unit for the receiver's delegate. Registering or unregistering a non-voting module moves the votes of whatever it already holds the same way (unregistering self-delegates the module first), so voting units always equal balances and the account checkpoints add up to `TotalSupply` ([design](../../docs/designs/membership-models.md) §1). So:
 
 - `total_supply()` / `get_total_supply()` return the voting-capable supply, which the Governor's quorum and proposal threshold use. Unsold auction tokens and escrowed listings never raise the quorum.
 - System holders are never auto-delegated and always have `get_votes == 0`, even if they call `delegate`.
@@ -47,7 +47,7 @@ admin(); is_live(); launch(treasury, grants: Vec<MintGrant>)
 upgrade(from_hash, to_hash); migrate(); version(); wasm_hash(); storage_version()
 ```
 
-The constructor takes the admin (launch admin), Treasury, Auction, Marketplace, collection metadata, Metadata contract, Manager and current hash. The constructor registers the Auction and Marketplace as non-voting modules. `launch` is Manager-only and one-shot: it checks the wired Treasury, hands the admin to the Treasury (`AdminChanged`), writes each grant (registered modules only, `NotAModule`), and emits `TokenLaunched { treasury, grants }`. There is no ownership transfer or renounce.
+The constructor takes only core wiring: the admin (launch admin), Treasury, collection metadata, Metadata contract, Manager and current hash. The Manager registers each module right after deploying it. `launch` is Manager-only and one-shot: it checks the wired Treasury, hands the admin to the Treasury (`AdminChanged`), writes each grant (registered modules only, `NotAModule`), and emits `TokenLaunched { treasury, grants }`. There is no ownership transfer or renounce.
 
 Errors: block 7200 (`MintAuthorityNotAllowed` 7201, `InvalidInput` 7202, `TreasuryMismatch` 7203, `BatchTooLarge` 7205, `InvalidName` 7207, `MetadataNotSet` 7208, `NotAModule` 7209, `NotAContract` 7210, `InvalidKind` 7211, `KindTaken` 7212, `ModuleAlreadyRegistered` 7213, `TooManyModules` 7214, `AllowanceExceeded` 7215; 7204 and 7206 retired).
 

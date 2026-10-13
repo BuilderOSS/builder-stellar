@@ -67,16 +67,12 @@ impl World {
         e.ledger().set_timestamp(1_000);
         let admin = Address::generate(&e);
         let treasury = Address::generate(&e);
-        let auction = Address::generate(&e);
-        let marketplace = Address::generate(&e);
         let metadata_id = Address::generate(&e);
         let token_id = e.register(
             DaoTokenContract,
             (
                 admin.clone(),
                 treasury.clone(),
-                auction.clone(),
-                marketplace.clone(),
                 String::from_str(&e, "Invariant"),
                 String::from_str(&e, "INV"),
                 metadata_id.clone(),
@@ -112,6 +108,12 @@ impl World {
             &minter,
             &false,
         );
+        // The Auction and Marketplace hold tokens in custody (non-voting).
+        let auction = e.register(MinterStub, ());
+        let marketplace = e.register(MinterStub, ());
+        for (kind, module) in [("auction", &auction), ("marketplace", &marketplace)] {
+            token.register_module(&soroban_sdk::Symbol::new(&e, kind), module, &true);
+        }
         token.launch(
             &treasury,
             &vec![

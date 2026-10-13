@@ -52,10 +52,6 @@ impl DaoTokenContract {
     ///
     /// * `admin` - setup-phase admin (the launch admin); becomes the Treasury at launch
     /// * `treasury` - DAO Treasury; `launch` must be called with exactly this address
-    /// * `auction` - DAO Auction (holds the token being auctioned); registered
-    ///   as the non-voting module of kind `auction`
-    /// * `marketplace` - DAO Marketplace (escrows listed tokens); registered as
-    ///   the non-voting module of kind `marketplace`
     /// * `name`, `symbol` - collection name and symbol (OpenZeppelin caps them
     ///   at 40 and 10 bytes; the name may not contain `"`, `\` or control
     ///   characters because the on-chain token JSON copies it verbatim)
@@ -63,12 +59,14 @@ impl DaoTokenContract {
     /// * `manager` - Manager contract (upgrade approvals, launch)
     /// * `current_hash` - this implementation's WASM hash (the release version is
     ///   read from the Manager registry, see `version`)
+    ///
+    /// Core wiring only: the Manager registers the DAO's modules (Auction,
+    /// Marketplace, ClaimMinter) with `register_module` right after deploying
+    /// them.
     pub fn __constructor(
         e: &Env,
         admin: Address,
         treasury: Address,
-        auction: Address,
-        marketplace: Address,
         name: String,
         symbol: String,
         metadata: Address,
@@ -83,23 +81,6 @@ impl DaoTokenContract {
         instance.set(&common::ns(e, TokenKey::Treasury), &treasury);
         common::upgrade::init(e, &current_hash, STORAGE_VERSION);
         emit_token_initialized(e, &admin, &name, &symbol);
-        // Constructor wiring is trusted (the Manager deploys these next, at
-        // predicted addresses), so it skips `register_module`'s checks. They
-        // hold nothing yet, so no votes move.
-        let mut entries = Vec::new(e);
-        for (kind, address) in [
-            (modules::KIND_AUCTION, auction),
-            (modules::KIND_MARKETPLACE, marketplace),
-        ] {
-            let kind = Symbol::new(e, kind);
-            emit_module_registered(e, &kind, &address, true);
-            entries.push_back(ModuleEntry {
-                kind,
-                address,
-                non_voting: true,
-            });
-        }
-        Self::write_modules(e, &entries);
     }
 
     pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {

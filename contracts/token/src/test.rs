@@ -44,8 +44,9 @@ fn grants(e: &Env, pairs: &[(&Address, u32)]) -> soroban_sdk::Vec<MintGrant> {
     v
 }
 
-/// Register a token with `admin`, `treasury`, `manager` and `hash`; the
-/// auction, marketplace and metadata addresses are fresh dummies.
+/// Register a token with `admin`, `treasury`, `manager` and `hash` (the
+/// metadata address is a dummy), then register stub Auction and Marketplace
+/// modules the way the Manager's `create_dao` does.
 fn deploy(
     e: &Env,
     admin: Address,
@@ -53,20 +54,23 @@ fn deploy(
     manager: Address,
     hash: BytesN<32>,
 ) -> Address {
-    e.register(
+    let id = e.register(
         DaoTokenContract,
         (
             admin,
             treasury,
-            Address::generate(e),
-            Address::generate(e),
             String::from_str(e, "DAO Vote NFT"),
             String::from_str(e, "vDAO"),
             Address::generate(e),
             manager,
             hash,
         ),
-    )
+    );
+    let client = DaoTokenContractClient::new(e, &id).mock_all_auths();
+    for kind in ["auction", "marketplace"] {
+        client.register_module(&Symbol::new(e, kind), &stub(e), &true);
+    }
+    id
 }
 
 fn setup() -> (Env, DaoTokenContractClient<'static>, Address) {
@@ -1427,8 +1431,6 @@ fn mint_and_batch_mint_seed_attributes_after_a_rename() {
         (
             owner.clone(),
             treasury,
-            Address::generate(&e),
-            Address::generate(&e),
             String::from_str(&e, "Before"),
             String::from_str(&e, "B"),
             metadata.clone(),

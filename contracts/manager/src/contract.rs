@@ -6,8 +6,8 @@
 //! 3. DAO Lifecycle - Deployment and launch handoff
 
 use common::clients::{DaoModuleClient, NftClient, TreasuryLaunchClient, WasmHashClient};
-use common::modules::{MintGrant, KIND_CLAIMS};
-use soroban_sdk::{contract, contractimpl, vec, Address, BytesN, Env, String, Symbol, Val, Vec};
+use common::modules::{MintGrant, KIND_AUCTION, KIND_CLAIMS, KIND_MARKETPLACE};
+use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, String, Symbol, Val, Vec};
 
 use crate::error::ManagerError;
 use crate::events::*;
@@ -37,6 +37,8 @@ use common::{
 /// (leaves room for `<slug>.example.com` subdomains later).
 const MIN_SLUG_LENGTH: u32 = 4;
 const MAX_SLUG_LENGTH: u32 = 63;
+/// Minimum bid increment every Manager-built Auction starts with (10%).
+const MIN_BID_INCREMENT_PERCENT: u32 = 10;
 
 #[contractimpl]
 impl ManagerContract {
@@ -417,20 +419,10 @@ impl ManagerContract {
         get_persistent::<ImplementationVersion>(&env, &ManagerKey::Implementation(wasm_hash))
     }
 
-    /// Set the current implementation WASM hashes used by the factory.
-    ///
-    /// # Authorization
-    ///
-    /// Only callable by admin.
-    ///
-    /// # Arguments
-    ///
-    /// * `token` - Token implementation WASM hash
-    /// * `metadata` - Metadata implementation WASM hash
-    /// * `auction` - Auction implementation WASM hash
-    /// * `governor` - Governor implementation WASM hash
-    /// * `treasury` - Treasury implementation WASM hash
-    /// * `marketplace` - Marketplace implementation WASM hash
+    /// Set the current implementation WASM hashes used by the factory and by
+    /// `create_module` (admin only). Each hash must be registered, not
+    /// revoked, and registered under its slot's name (`Token`, `Metadata`,
+    /// `Auction`, `Governor`, `Treasury`, `Marketplace`, `ClaimMinter`).
     ///
     /// # Errors
     ///
@@ -438,63 +430,48 @@ impl ManagerContract {
     /// * `InvalidImplementationName` - A hash is registered under the wrong module name
     pub fn set_current_implementations(
         env: Env,
-        token: BytesN<32>,
-        metadata: BytesN<32>,
-        auction: BytesN<32>,
-        governor: BytesN<32>,
-        treasury: BytesN<32>,
-        marketplace: BytesN<32>,
+        current: CurrentImplementations,
     ) -> Result<(), ManagerError> {
-        // Check authorization
         Self::require_admin(&env)?;
-
-        for (hash, expected_name) in [
-            (&token, "Token"),
-            (&metadata, "Metadata"),
-            (&auction, "Auction"),
-            (&governor, "Governor"),
-            (&treasury, "Treasury"),
-            (&marketplace, "Marketplace"),
-        ] {
+        let slots = [
+            (&current.token, "Token", ManagerKey::CurrentTokenWasm),
+            (
+                &current.metadata,
+                "Metadata",
+                ManagerKey::CurrentMetadataWasm,
+            ),
+            (&current.auction, "Auction", ManagerKey::CurrentAuctionWasm),
+            (
+                &current.governor,
+                "Governor",
+                ManagerKey::CurrentGovernorWasm,
+            ),
+            (
+                &current.treasury,
+                "Treasury",
+                ManagerKey::CurrentTreasuryWasm,
+            ),
+            (
+                &current.marketplace,
+                "Marketplace",
+                ManagerKey::CurrentMarketplaceWasm,
+            ),
+            (
+                &current.claims,
+                "ClaimMinter",
+                ManagerKey::CurrentClaimsWasm,
+            ),
+        ];
+        for (hash, expected_name, _) in &slots {
             let implementation = Self::active_implementation(&env, hash)?;
             if implementation.name != String::from_str(&env, expected_name) {
                 return Err(ManagerError::InvalidImplementationName);
             }
         }
-
-        env.storage()
-            .instance()
-            .set(&common::ns(&env, ManagerKey::CurrentTokenWasm), &token);
-        env.storage().instance().set(
-            &common::ns(&env, ManagerKey::CurrentMetadataWasm),
-            &metadata,
-        );
-        env.storage()
-            .instance()
-            .set(&common::ns(&env, ManagerKey::CurrentAuctionWasm), &auction);
-        env.storage().instance().set(
-            &common::ns(&env, ManagerKey::CurrentGovernorWasm),
-            &governor,
-        );
-        env.storage().instance().set(
-            &common::ns(&env, ManagerKey::CurrentTreasuryWasm),
-            &treasury,
-        );
-        env.storage().instance().set(
-            &common::ns(&env, ManagerKey::CurrentMarketplaceWasm),
-            &marketplace,
-        );
-
-        emit_current_implementations_updated(
-            &env,
-            &token,
-            &metadata,
-            &auction,
-            &governor,
-            &treasury,
-            &marketplace,
-        );
-
+        for (hash, _, key) in slots {
+            env.storage().instance().set(&common::ns(&env, key), hash);
+        }
+        emit_current_implementations_updated(&env, &current);
         Ok(())
     }
 
@@ -536,24 +513,18 @@ impl ManagerContract {
     // DAO Factory
     // ========================================================================
 
-    /// Create a new DAO with all 6 modules atomically deployed.
+    /// Create a new DAO: the four core contracts (Token, Metadata, Governor,
+    /// Treasury) and the modules listed in `initial_config.modules`, deployed
+    /// atomically, with each module registered on the Token.
     ///
-    /// This deploys all six modules with safe defaults. The launch administrator
-    /// owns the setup window and may configure the modules before `launch_dao`.
-    ///
-    /// # Arguments
-    ///
-    /// * `params` - Deployer, deterministic nonce, and launch administrator
+    /// The launch administrator owns the setup window and may configure the
+    /// contracts before `launch_dao`.
     ///
     /// # Authorization
     ///
     /// Requires BOTH `params.deployer` and `params.launch_admin` to authorize
     /// the call (one signature if they are the same address). Module
     /// constructors do not require auth.
-    ///
-    /// # Returns
-    ///
-    /// All deployed contract addresses
     ///
     /// The requested slug is validated and must not belong to a launched DAO,
     /// but it is only claimed at `launch_dao` (pending DAOs hold no slug, so an
@@ -563,6 +534,7 @@ impl ManagerContract {
     ///
     /// * `FactoryPaused` - Factory is paused
     /// * `CurrentImplementationsNotSet` - Current WASM hashes not configured
+    /// * `InvalidModules` - A kind listed twice, or no Auction or Marketplace
     /// * `InvalidSlug` / `SlugTaken` - Malformed slug, or claimed by a launched DAO
     pub fn create_dao(env: Env, params: DaoCreationParams) -> Result<DaoAddresses, ManagerError> {
         // The deployer owns the newly-created modules and must authorize the
@@ -576,70 +548,43 @@ impl ManagerContract {
         if params.launch_admin != params.deployer {
             params.launch_admin.require_auth();
         }
-
-        // Check factory not paused
         if is_factory_paused(&env) {
             return Err(ManagerError::FactoryPaused);
         }
 
         // Validate configuration; the slug is claimed only at launch.
         let config = &params.initial_config;
-        Self::validate_initial_config(config)?;
+        Self::validate_initial_config(&env, config)?;
         Self::require_slug_unclaimed(&env, &config.slug)?;
         let governance = &config.governance;
-        let payment_asset = config.auction.payment_asset.clone();
-        let marketplace_payment_asset = config.marketplace.payment_asset.clone();
 
         // Load current implementation hashes, rejecting unset or revoked ones in one pass.
         let token_wasm = Self::current_wasm(&env, &ManagerKey::CurrentTokenWasm, "Token")?;
         let metadata_wasm = Self::current_wasm(&env, &ManagerKey::CurrentMetadataWasm, "Metadata")?;
-        let auction_wasm = Self::current_wasm(&env, &ManagerKey::CurrentAuctionWasm, "Auction")?;
         let governor_wasm = Self::current_wasm(&env, &ManagerKey::CurrentGovernorWasm, "Governor")?;
         let treasury_wasm = Self::current_wasm(&env, &ManagerKey::CurrentTreasuryWasm, "Treasury")?;
-        let marketplace_wasm =
-            Self::current_wasm(&env, &ManagerKey::CurrentMarketplaceWasm, "Marketplace")?;
+        let mut module_wasms: Vec<BytesN<32>> = Vec::new(&env);
+        for spec in config.modules.iter() {
+            module_wasms.push_back(Self::current_wasm(
+                &env,
+                &spec.current_wasm_key(),
+                spec.implementation_name(),
+            )?);
+        }
 
-        let wasm_hashes = DaoWasmHashes {
-            token: token_wasm.clone(),
-            metadata: metadata_wasm.clone(),
-            auction: auction_wasm.clone(),
-            governor: governor_wasm.clone(),
-            treasury: treasury_wasm.clone(),
-            marketplace: marketplace_wasm.clone(),
-        };
-
-        // Generate deterministic salts
-        let token_salt = Self::generate_salt(&env, &params.deployer, params.nonce, "token");
-        let metadata_salt = Self::generate_salt(&env, &params.deployer, params.nonce, "metadata");
-        let auction_salt = Self::generate_salt(&env, &params.deployer, params.nonce, "auction");
-        let governor_salt = Self::generate_salt(&env, &params.deployer, params.nonce, "governor");
-        let treasury_salt = Self::generate_salt(&env, &params.deployer, params.nonce, "treasury");
-        let marketplace_salt =
-            Self::generate_salt(&env, &params.deployer, params.nonce, "marketplace");
-
-        // Deploy contracts using deploy_v2 which handles constructor initialization atomically.
-        // Deployment order matters due to circular dependencies between contracts.
-        // We use predict_addresses internally to pass addresses before deployment.
-
-        // First, predict all addresses so we can pass them to constructors
-        let token_deployer = env.deployer().with_current_contract(token_salt);
+        // Predict the core addresses so each constructor can be given the
+        // others (Token, Metadata, Governor and Treasury reference each other).
+        let salt = |module: &str| Self::generate_salt(&env, &params.deployer, params.nonce, module);
+        let token_deployer = env.deployer().with_current_contract(salt("token"));
         let token_addr = token_deployer.deployed_address();
-
-        let metadata_deployer = env.deployer().with_current_contract(metadata_salt);
+        let metadata_deployer = env.deployer().with_current_contract(salt("metadata"));
         let metadata_addr = metadata_deployer.deployed_address();
-
-        let treasury_deployer = env.deployer().with_current_contract(treasury_salt);
+        let treasury_deployer = env.deployer().with_current_contract(salt("treasury"));
         let treasury_addr = treasury_deployer.deployed_address();
-
-        let governor_deployer = env.deployer().with_current_contract(governor_salt);
+        let governor_deployer = env.deployer().with_current_contract(salt("governor"));
         let governor_addr = governor_deployer.deployed_address();
 
-        let auction_deployer = env.deployer().with_current_contract(auction_salt);
-        let auction_addr = auction_deployer.deployed_address();
-        let marketplace_deployer = env.deployer().with_current_contract(marketplace_salt);
-        let marketplace_addr = marketplace_deployer.deployed_address();
-
-        // Step 1: Deploy and initialize Treasury (needs admin and governor)
+        // Treasury (needs the governor).
         treasury_deployer.deploy_v2(
             treasury_wasm.clone(),
             (
@@ -650,16 +595,12 @@ impl ManagerContract {
             ),
         );
 
-        // Step 2: Deploy and initialize Token with launch_admin as admin.
-        // The launch_admin configures the token, governance, and auction before
-        // launch. Treasury, Auction and Marketplace hold no voting power.
+        // Token with the launch admin as admin; modules are registered below.
         token_deployer.deploy_v2(
             token_wasm.clone(),
             (
                 params.launch_admin.clone(),
                 treasury_addr.clone(),
-                auction_addr.clone(),
-                marketplace_addr.clone(),
                 config.token_name.clone(),
                 config.token_symbol.clone(),
                 metadata_addr.clone(),
@@ -668,8 +609,8 @@ impl ManagerContract {
             ),
         );
 
-        // Step 3: Deploy Metadata with empty artwork. The launch administrator can
-        // replace the settings and add artwork before launch.
+        // Metadata with empty artwork. The launch administrator can replace the
+        // settings and add artwork before launch.
         let empty_property_names: Vec<String> = Vec::new(&env);
         let empty_items: Vec<Val> = Vec::new(&env);
         metadata_deployer.deploy_v2(
@@ -691,9 +632,8 @@ impl ManagerContract {
             ),
         );
 
-        // Step 4: Deploy and initialize Governor
-        // Governor starts with minimum valid timing and permissive thresholds;
-        // launch_admin may replace them before launch.
+        // Governor with the requested timing; the launch admin may replace
+        // it before launch.
         governor_deployer.deploy_v2(
             governor_wasm.clone(),
             (
@@ -710,65 +650,66 @@ impl ManagerContract {
             ),
         );
 
-        // Step 5: Deploy and initialize Auction
-        // Auction starts with safe defaults and uses launch_admin as a temporary
-        // payment address until it is configured before launch.
-        let min_bid_increment = 10u32; // 10% default
-
-        auction_deployer.deploy_v2(
-            auction_wasm.clone(),
-            (
-                params.launch_admin.clone(),
-                token_addr.clone(),
-                treasury_addr.clone(),
-                config.auction.duration,
-                config.auction.reserve_price,
-                min_bid_increment,
-                config.auction.time_buffer,
-                payment_asset.clone(),
-                env.current_contract_address(),
-                auction_wasm.clone(),
-            ),
-        );
-
-        // Marketplace is deployed paused; it is wired to the real (predicted)
-        // treasury and receives mint authority at launch. `launch_admin` gates
-        // its param setters until launch.
-        marketplace_deployer.deploy_v2(
-            marketplace_wasm.clone(),
-            (
-                token_addr.clone(),
-                params.launch_admin.clone(),
-                treasury_addr.clone(),
-                marketplace_payment_asset.clone(),
-                env.current_contract_address(),
-                marketplace_wasm,
-                config.marketplace.secondary_fee_bps,
-            ),
-        );
-
-        // Create DAO addresses
-        let addresses = DaoAddresses {
+        let mut addresses = DaoAddresses {
             token: token_addr.clone(),
             metadata: metadata_addr.clone(),
-            auction: auction_addr.clone(),
             governor: governor_addr.clone(),
             treasury: treasury_addr.clone(),
-            marketplace: marketplace_addr.clone(),
+            auction: None,
+            marketplace: None,
+            claims: None,
         };
-
-        let pending = PendingDao {
+        let mut wasm_hashes = DaoWasmHashes {
+            token: token_wasm,
+            metadata: metadata_wasm,
+            governor: governor_wasm,
+            treasury: treasury_wasm,
+            auction: None,
+            marketplace: None,
+            claims: None,
+        };
+        let mut pending = PendingDao {
             addresses: addresses.clone(),
             launch_admin: params.launch_admin.clone(),
             slug: config.slug.clone(),
-            auction_payment_asset: payment_asset,
-            marketplace_payment_asset,
+            auction_payment_asset: None,
+            marketplace_payment_asset: None,
+            claims_payment_asset: None,
         };
+
+        // Modules: deployed paused or empty, wired to the real (predicted)
+        // Token and Treasury, then registered on the Token. They receive
+        // allowances at launch (or from the launch admin, for ClaimMinter).
+        let nft = NftClient::new(&env, &token_addr);
+        for (spec, wasm) in config.modules.iter().zip(module_wasms.iter()) {
+            let address = Self::deploy_module(
+                &env,
+                salt(spec.kind_str()),
+                &spec,
+                &wasm,
+                &params.launch_admin,
+                &token_addr,
+                &treasury_addr,
+            );
+            let kind = spec.kind(&env);
+            nft.register_module(
+                &kind,
+                &address,
+                &common::modules::builtin_non_voting(&env, &kind),
+            );
+            Self::record_module(&mut pending, &spec, &address);
+            match spec {
+                ModuleSpec::Auction(_) => wasm_hashes.auction = Some(wasm),
+                ModuleSpec::Marketplace(_) => wasm_hashes.marketplace = Some(wasm),
+                ModuleSpec::Claims(_) => wasm_hashes.claims = Some(wasm),
+            }
+        }
+        addresses = pending.addresses.clone();
+
         // One persistent entry per pending DAO; no expiry semantics. Archived
         // entries are restorable, so an abandoned creation only costs its creator's rent.
         set_persistent(&env, &ManagerKey::PendingDao(token_addr.clone()), &pending);
 
-        // Emit events
         emit_dao_created(
             &env,
             &token_addr,
@@ -781,6 +722,101 @@ impl ManagerContract {
         );
 
         Ok(addresses)
+    }
+
+    /// Deploy a module for an existing DAO from the current implementation
+    /// of `spec`'s kind (docs/designs/membership-models.md §2). Needs the
+    /// authorization of the Token's admin: the launch admin in Setup, the
+    /// Treasury (by proposal) once Live.
+    ///
+    /// The module lands at `predict_module_address(token, kind, n)` with
+    /// `n = module_count(token, kind)`, and `expected_n` must equal that `n`
+    /// (`StaleModuleIndex`). A proposal reads `module_count` while drafting
+    /// and bakes the same `n` into this action, so it either deploys exactly
+    /// the module its later actions target or the whole execution reverts.
+    ///
+    /// - **Setup:** the module is registered on the Token, and its payment
+    ///   asset recorded for the launch check; `launch_dao` launches it.
+    /// - **Live:** the module is launched at once (its admin is the
+    ///   Treasury); the same proposal then registers it on the Token and
+    ///   grants its allowance. A module created after launch is not opened:
+    ///   the proposal opens it once it holds an allowance.
+    ///
+    /// # Errors
+    ///
+    /// * `FactoryPaused` - Factory is paused
+    /// * `DaoNotFound` - `token` is not a DAO this Manager created
+    /// * `StaleModuleIndex` - `expected_n` is not `module_count(token, kind)`
+    /// * `CurrentImplementationsNotSet` / `ImplementationNotFound` - no usable
+    ///   implementation for the kind
+    pub fn create_module(
+        env: Env,
+        token: Address,
+        spec: ModuleSpec,
+        expected_n: u32,
+    ) -> Result<Address, ManagerError> {
+        extend_instance_ttl(&env);
+        if is_factory_paused(&env) {
+            return Err(ManagerError::FactoryPaused);
+        }
+        let pending: Option<PendingDao> =
+            get_persistent(&env, &ManagerKey::PendingDao(token.clone()));
+        if pending.is_none() && !has_persistent(&env, &ManagerKey::DaoSlug(token.clone())) {
+            return Err(ManagerError::DaoNotFound);
+        }
+        let nft = NftClient::new(&env, &token);
+        let admin = nft.admin();
+        admin.require_auth();
+        let kind = spec.kind(&env);
+        let n = Self::module_count(env.clone(), token.clone(), kind.clone());
+        if expected_n != n {
+            return Err(ManagerError::StaleModuleIndex);
+        }
+        Self::validate_module_spec(&spec)?;
+        let wasm = Self::current_wasm(&env, &spec.current_wasm_key(), spec.implementation_name())?;
+        let treasury = nft.treasury();
+        let address = Self::deploy_module(
+            &env,
+            Self::module_salt(&env, &token, &kind, n),
+            &spec,
+            &wasm,
+            &admin,
+            &token,
+            &treasury,
+        );
+        set_persistent(
+            &env,
+            &ManagerKey::ModuleCount(token.clone(), kind.clone()),
+            &(n + 1),
+        );
+        match pending {
+            Some(mut pending) => {
+                nft.register_module(
+                    &kind,
+                    &address,
+                    &common::modules::builtin_non_voting(&env, &kind),
+                );
+                Self::record_module(&mut pending, &spec, &address);
+                set_persistent(&env, &ManagerKey::PendingDao(token.clone()), &pending);
+            }
+            None => DaoModuleClient::new(&env, &address).launch(&treasury, &false),
+        }
+        emit_module_created(&env, &token, &kind, n, &address);
+        Ok(address)
+    }
+
+    /// Modules of `kind` `create_module` deployed for `token` so far: the `n`
+    /// the next one is deployed with.
+    pub fn module_count(env: Env, token: Address, kind: Symbol) -> u32 {
+        get_persistent(&env, &ManagerKey::ModuleCount(token, kind)).unwrap_or(0)
+    }
+
+    /// Where `create_module(token, <kind>, n)` deploys. A pure function of
+    /// its inputs and this Manager's address.
+    pub fn predict_module_address(env: Env, token: Address, kind: Symbol, n: u32) -> Address {
+        env.deployer()
+            .with_current_contract(Self::module_salt(&env, &token, &kind, n))
+            .deployed_address()
     }
 
     /// Change the requested slug of a pending DAO (launch admin only), for
@@ -814,37 +850,32 @@ impl ManagerContract {
     ///
     /// Only callable by the launch_admin who created the DAO.
     ///
-    /// # Arguments
-    ///
-    /// * `token_address` - Address of the DAO's token contract
-    /// * `launch_config` - Configuration for what to enable at launch
-    ///   - `launch_auction` - Whether to unpause the auction
-    ///   - `launch_marketplace` - Whether to unpause the marketplace
-    ///   - `minter` - The shared platform Minter the launch admin approves; must equal the
-    ///     registered PlatformMinter (`PlatformMinterNotSet` when none is registered,
-    ///     `PlatformMinterMismatch` otherwise)
-    ///
     /// # Validation
     ///
     /// - The factory must not be paused (`FactoryPaused`)
     /// - Token voting supply must be > 0 (at least one token minted to a holder
-    ///   other than the Treasury, Auction or Marketplace)
+    ///   other than the Treasury or a non-voting module)
     /// - launch_admin must be the current token admin (`LaunchAdminNotOwner`)
     /// - The requested slug must still be unclaimed (`SlugTaken`; change it with
     ///   `update_pending_slug`)
-    /// - Every module's CURRENT `wasm_hash()` must be registered and not revoked
-    ///   (`PendingDaoUsesRevokedImplementation`); checked before any launch call
+    /// - The core contracts and every registered module must CURRENTLY run a
+    ///   registered, non-revoked hash (`PendingDaoUsesRevokedImplementation`)
+    /// - Every module's `payment_asset()` must equal the asset recorded at its
+    ///   creation (`PaymentAssetMismatch`)
+    ///
+    /// All checks run before any launch call, so a refusal launches nothing.
     ///
     /// # Effects
     ///
-    /// 1. Validates launch preconditions and claims the slug (`SlugClaimed`)
-    /// 2. Registers the pinned PlatformMinter as the token's `claims` module, calls
-    ///    `token.launch` with unlimited allowances for the Marketplace, the Minter and
-    ///    [Auction if launch_auction], then `launch` on Governor,
-    ///    Treasury, Marketplace, Auction, Metadata
-    /// 3. Each module becomes Live: its admin moves to the Treasury and the Manager
-    ///    has no further authority over the DAO (a second launch panics `AlreadyLive`)
-    /// 4. Deletes the temporary PendingDao state
+    /// 1. `token.launch` with unlimited allowances for the Marketplace (primary
+    ///    listings, until pools replace them) and, if `launch_auction`, the
+    ///    Auction; ClaimMinter keeps what the launch admin granted
+    /// 2. `launch` on the Governor and Treasury, then `DaoModule::launch` on
+    ///    every registered module (the Auction opens with `launch_auction`, the
+    ///    Marketplace with `launch_marketplace`), then the Metadata
+    /// 3. Every contract is Live with the Treasury as admin; the Manager has no
+    ///    further authority over the DAO (a second launch panics `AlreadyLive`)
+    /// 4. Claims the slug and deletes the PendingDao state
     pub fn launch_dao(
         env: Env,
         token_address: Address,
@@ -865,23 +896,27 @@ impl ManagerContract {
         // Typed clients (common::clients) rather than the module crates:
         // linking those would export their functions from the Manager WASM.
         let nft = NftClient::new(&env, &addresses.token);
-        // launch_admin must still be the token admin.
         if nft.admin() != pending.launch_admin {
             return Err(ManagerError::LaunchAdminNotOwner);
         }
-        // Every module must currently run a registered, non-revoked hash. The
-        // CURRENT hash is read from each module (not the one recorded at
-        // create_dao) so a pre-launch `upgrade` to an approved hash is honored.
-        // Runs before any launch call so a rejection leaves nothing launched.
-        for module in [
-            &addresses.token,
-            &addresses.metadata,
-            &addresses.auction,
-            &addresses.governor,
-            &addresses.treasury,
-            &addresses.marketplace,
-        ] {
-            let current = WasmHashClient::new(&env, module).wasm_hash();
+        let registry = nft.modules();
+        // Every contract must currently run a registered, non-revoked hash. The
+        // CURRENT hash is read from each (not the one recorded at create_dao)
+        // so a pre-launch `upgrade` to an approved hash is honored.
+        let mut contracts: Vec<Address> = Vec::from_array(
+            &env,
+            [
+                addresses.token.clone(),
+                addresses.metadata.clone(),
+                addresses.governor.clone(),
+                addresses.treasury.clone(),
+            ],
+        );
+        for entry in registry.iter() {
+            contracts.push_back(entry.address);
+        }
+        for contract in contracts.iter() {
+            let current = WasmHashClient::new(&env, &contract).wasm_hash();
             let record =
                 get_persistent::<ImplementationVersion>(&env, &ManagerKey::Implementation(current));
             match record {
@@ -895,53 +930,45 @@ impl ManagerContract {
         }
         // Payment assets are tunable in Setup; each module launches only with
         // the asset recorded when it was created.
-        let auction = DaoModuleClient::new(&env, &addresses.auction);
-        let marketplace = DaoModuleClient::new(&env, &addresses.marketplace);
-        if auction.payment_asset() != pending.auction_payment_asset
-            || marketplace.payment_asset() != pending.marketplace_payment_asset
-        {
-            return Err(ManagerError::PaymentAssetMismatch);
+        for entry in registry.iter() {
+            let recorded = Self::recorded_asset(&env, &pending, &entry.kind);
+            let current = DaoModuleClient::new(&env, &entry.address).payment_asset();
+            if recorded != Some(current) {
+                return Err(ManagerError::PaymentAssetMismatch);
+            }
         }
 
-        // Mint allowances are exactly this canonical set; the launch_admin
-        // cannot add to it. The Treasury needs none (as admin it mints without
-        // limit). Interim (Phase 1, docs/designs/membership-models.md): the
-        // admin-registered platform Minter is registered as this DAO's
-        // `claims` module with an unlimited allowance until the per-DAO
-        // ClaimMinter replaces it; the Marketplace keeps an unlimited
-        // allowance for primary listings until pools replace them (Phase 3).
-        let minter: Address = get_persistent(&env, &ManagerKey::PlatformMinter)
-            .ok_or(ManagerError::PlatformMinterNotSet)?;
-        if launch_config.minter != minter {
-            return Err(ManagerError::PlatformMinterMismatch);
-        }
-        nft.register_module(&Symbol::new(&env, KIND_CLAIMS), &minter, &false);
-        let mut grants: Vec<MintGrant> = vec![
-            &env,
-            MintGrant {
-                module: addresses.marketplace.clone(),
-                allowance: u32::MAX,
-            },
-            MintGrant {
-                module: minter.clone(),
-                allowance: u32::MAX,
-            },
-        ];
-        if launch_config.launch_auction {
-            grants.push_back(MintGrant {
-                module: addresses.auction.clone(),
-                allowance: u32::MAX,
-            });
+        // The Marketplace keeps an unlimited allowance for primary listings
+        // until pools replace them (Phase 3); the Auction gets one only when
+        // it starts. The Treasury needs none (as admin it mints without limit).
+        let mut grants: Vec<MintGrant> = Vec::new(&env);
+        for entry in registry.iter() {
+            let unlimited = common::modules::kind_is(&env, &entry.kind, KIND_MARKETPLACE)
+                || (launch_config.launch_auction
+                    && common::modules::kind_is(&env, &entry.kind, KIND_AUCTION));
+            if unlimited {
+                grants.push_back(MintGrant {
+                    module: entry.address,
+                    allowance: u32::MAX,
+                });
+            }
         }
 
         // One-shot handoff. The token launches first so the auction holds an
-        // allowance when it creates its first auction. After these calls every
-        // module is Live and the Manager has no further authority over the DAO.
+        // allowance when it creates its first auction.
         nft.launch(&treasury, &grants);
         TreasuryLaunchClient::new(&env, &addresses.governor).launch(&treasury);
         TreasuryLaunchClient::new(&env, &addresses.treasury).launch(&treasury);
-        marketplace.launch(&treasury, &launch_config.launch_marketplace);
-        auction.launch(&treasury, &launch_config.launch_auction);
+        for entry in registry.iter() {
+            let open = if common::modules::kind_is(&env, &entry.kind, KIND_AUCTION) {
+                launch_config.launch_auction
+            } else if common::modules::kind_is(&env, &entry.kind, KIND_MARKETPLACE) {
+                launch_config.launch_marketplace
+            } else {
+                false
+            };
+            DaoModuleClient::new(&env, &entry.address).launch(&treasury, &open);
+        }
         TreasuryLaunchClient::new(&env, &addresses.metadata).launch(&treasury);
 
         // Claim the slug (held until `change_slug`, renewed by the DAO's storage sweep) and delete
@@ -959,7 +986,6 @@ impl ManagerContract {
         emit_slug_claimed(&env, &token_address, &pending.slug);
         remove_persistent(&env, &ManagerKey::PendingDao(token_address.clone()));
 
-        // Emit launch event
         emit_dao_launched(
             &env,
             &token_address,
@@ -967,7 +993,7 @@ impl ManagerContract {
             &pending.addresses,
             launch_config.launch_auction,
             launch_config.launch_marketplace,
-            &minter,
+            &registry,
         );
         Ok(())
     }
@@ -1048,54 +1074,27 @@ impl ManagerContract {
     /// Predict DAO addresses without deploying.
     ///
     /// Useful for frontends to show addresses before user confirms deployment.
-    ///
-    /// # Arguments
-    ///
-    /// * `creator` - Creator address
-    /// * `nonce` - Nonce value
-    ///
-    /// # Returns
-    ///
-    /// Predicted addresses for all 6 modules
+    /// Every module kind `create_dao` can deploy is predicted; a DAO created
+    /// without one simply never uses its address.
     pub fn predict_addresses(
         env: Env,
         creator: Address,
         nonce: u64,
     ) -> Result<DaoAddresses, ManagerError> {
         extend_instance_ttl(&env);
-        // Generate deterministic salts
-        let token_salt = Self::generate_salt(&env, &creator, nonce, "token");
-        let metadata_salt = Self::generate_salt(&env, &creator, nonce, "metadata");
-        let auction_salt = Self::generate_salt(&env, &creator, nonce, "auction");
-        let governor_salt = Self::generate_salt(&env, &creator, nonce, "governor");
-        let treasury_salt = Self::generate_salt(&env, &creator, nonce, "treasury");
-        let marketplace_salt = Self::generate_salt(&env, &creator, nonce, "marketplace");
-
-        // Predict addresses using deployer
-        let deployer = env.deployer().with_current_contract(token_salt);
-        let token_addr = deployer.deployed_address();
-
-        let deployer = env.deployer().with_current_contract(metadata_salt);
-        let metadata_addr = deployer.deployed_address();
-
-        let deployer = env.deployer().with_current_contract(auction_salt);
-        let auction_addr = deployer.deployed_address();
-
-        let deployer = env.deployer().with_current_contract(governor_salt);
-        let governor_addr = deployer.deployed_address();
-
-        let deployer = env.deployer().with_current_contract(treasury_salt);
-        let treasury_addr = deployer.deployed_address();
-        let deployer = env.deployer().with_current_contract(marketplace_salt);
-        let marketplace_addr = deployer.deployed_address();
-
+        let predict = |module: &str| {
+            env.deployer()
+                .with_current_contract(Self::generate_salt(&env, &creator, nonce, module))
+                .deployed_address()
+        };
         Ok(DaoAddresses {
-            token: token_addr,
-            metadata: metadata_addr,
-            auction: auction_addr,
-            governor: governor_addr,
-            treasury: treasury_addr,
-            marketplace: marketplace_addr,
+            token: predict("token"),
+            metadata: predict("metadata"),
+            governor: predict("governor"),
+            treasury: predict("treasury"),
+            auction: Some(predict(KIND_AUCTION)),
+            marketplace: Some(predict(KIND_MARKETPLACE)),
+            claims: Some(predict(KIND_CLAIMS)),
         })
     }
 
@@ -1155,7 +1154,7 @@ impl ManagerContract {
         }
         // The approval must exist and its notice must have passed: the Manager
         // is every DAO's registry and factory, so its code never changes
-        // without warning (same rule as the shared Minter).
+        // without warning.
         let approved =
             Self::upgrade_approved_ledger(env.clone(), from_hash.clone(), to_hash.clone())
                 .ok_or(ManagerError::InvalidUpgradePath)?;
@@ -1247,20 +1246,6 @@ impl ManagerContract {
         get_persistent(&env, &ManagerKey::PendingAdmin)
     }
 
-    /// Register the platform minter granted mint authority at launch (admin only).
-    pub fn set_platform_minter(env: Env, minter: Address) -> Result<(), ManagerError> {
-        Self::require_admin(&env)?;
-        set_persistent(&env, &ManagerKey::PlatformMinter, &minter);
-        emit_platform_minter_set(&env, &minter);
-        Ok(())
-    }
-
-    /// The registered platform minter, if any.
-    pub fn get_platform_minter(env: Env) -> Option<Address> {
-        extend_instance_ttl(&env);
-        get_persistent(&env, &ManagerKey::PlatformMinter)
-    }
-
     // ========================================================================
     // Helper Functions
     // ========================================================================
@@ -1279,21 +1264,22 @@ impl ManagerContract {
         Ok(implementation)
     }
 
-    /// The six module hashes `create_dao` deploys from, or `None` before
-    /// `set_current_implementations`. Raw values: a hash revoked since it was
-    /// set is still returned (DAOs created from it still run it), which is what
-    /// platform code renewal needs. `create_dao` itself rechecks each one.
-    pub fn current_implementations(env: Env) -> Option<DaoWasmHashes> {
+    /// The hashes `create_dao` and `create_module` deploy from, or `None`
+    /// before `set_current_implementations`. Raw values: a hash revoked since
+    /// it was set is still returned (DAOs created from it still run it), which
+    /// is what platform code renewal needs. `create_dao` itself rechecks each.
+    pub fn current_implementations(env: Env) -> Option<CurrentImplementations> {
         let read = |key: ManagerKey| -> Option<BytesN<32>> {
             env.storage().instance().get(&common::ns(&env, key))
         };
-        Some(DaoWasmHashes {
+        Some(CurrentImplementations {
             token: read(ManagerKey::CurrentTokenWasm)?,
             metadata: read(ManagerKey::CurrentMetadataWasm)?,
             auction: read(ManagerKey::CurrentAuctionWasm)?,
             governor: read(ManagerKey::CurrentGovernorWasm)?,
             treasury: read(ManagerKey::CurrentTreasuryWasm)?,
             marketplace: read(ManagerKey::CurrentMarketplaceWasm)?,
+            claims: read(ManagerKey::CurrentClaimsWasm)?,
         })
     }
 
@@ -1319,8 +1305,7 @@ impl ManagerContract {
     }
 
     /// Ledger at which `approve_upgrade(from, to)` was recorded, if it was.
-    /// The shared Minter waits `MINTER_UPGRADE_DELAY` after it before an
-    /// upgrade applies, so DAOs can see a Minter upgrade coming.
+    /// `upgrade_manager` waits `upgrade_delay()` after it.
     pub fn upgrade_approved_ledger(
         env: Env,
         from_hash: BytesN<32>,
@@ -1375,6 +1360,102 @@ impl ManagerContract {
         // Hash to create salt and convert to BytesN<32>
         let hash = env.crypto().keccak256(&bytes_to_hash);
         BytesN::from_array(env, &hash.to_array())
+    }
+
+    /// `create_module`'s salt: `sha256(xdr(token) || xdr(kind) || n_be)`.
+    fn module_salt(env: &Env, token: &Address, kind: &Symbol, n: u32) -> BytesN<32> {
+        use soroban_sdk::xdr::ToXdr;
+        let mut bytes = token.clone().to_xdr(env);
+        bytes.append(&kind.clone().to_xdr(env));
+        bytes.append(&Bytes::from_array(env, &n.to_be_bytes()));
+        env.crypto().sha256(&bytes).into()
+    }
+
+    /// Deploy `spec` at `salt` from `wasm`, wired to `token` and `treasury`,
+    /// with `admin` as its admin and this Manager as its launcher.
+    fn deploy_module(
+        env: &Env,
+        salt: BytesN<32>,
+        spec: &ModuleSpec,
+        wasm: &BytesN<32>,
+        admin: &Address,
+        token: &Address,
+        treasury: &Address,
+    ) -> Address {
+        let deployer = env.deployer().with_current_contract(salt);
+        let manager = env.current_contract_address();
+        match spec {
+            ModuleSpec::Auction(c) => deployer.deploy_v2(
+                wasm.clone(),
+                (
+                    admin.clone(),
+                    token.clone(),
+                    treasury.clone(),
+                    c.duration,
+                    c.reserve_price,
+                    MIN_BID_INCREMENT_PERCENT,
+                    c.time_buffer,
+                    c.payment_asset.clone(),
+                    manager,
+                    wasm.clone(),
+                ),
+            ),
+            ModuleSpec::Marketplace(c) => deployer.deploy_v2(
+                wasm.clone(),
+                (
+                    token.clone(),
+                    admin.clone(),
+                    treasury.clone(),
+                    c.payment_asset.clone(),
+                    manager,
+                    wasm.clone(),
+                    c.secondary_fee_bps,
+                ),
+            ),
+            ModuleSpec::Claims(c) => deployer.deploy_v2(
+                wasm.clone(),
+                (
+                    admin.clone(),
+                    token.clone(),
+                    treasury.clone(),
+                    manager,
+                    c.payment_asset.clone(),
+                    wasm.clone(),
+                ),
+            ),
+        }
+    }
+
+    /// Record a Setup module's address and creation asset in `pending`.
+    fn record_module(pending: &mut PendingDao, spec: &ModuleSpec, address: &Address) {
+        let asset = Some(spec.payment_asset());
+        match spec {
+            ModuleSpec::Auction(_) => {
+                pending.addresses.auction = Some(address.clone());
+                pending.auction_payment_asset = asset;
+            }
+            ModuleSpec::Marketplace(_) => {
+                pending.addresses.marketplace = Some(address.clone());
+                pending.marketplace_payment_asset = asset;
+            }
+            ModuleSpec::Claims(_) => {
+                pending.addresses.claims = Some(address.clone());
+                pending.claims_payment_asset = asset;
+            }
+        }
+    }
+
+    /// The asset recorded in `pending` for a module of `kind`.
+    fn recorded_asset(env: &Env, pending: &PendingDao, kind: &Symbol) -> Option<Address> {
+        if common::modules::kind_is(env, kind, KIND_AUCTION) {
+            pending.auction_payment_asset.clone()
+        } else if common::modules::kind_is(env, kind, KIND_MARKETPLACE) {
+            pending.marketplace_payment_asset.clone()
+        } else if common::modules::kind_is(env, kind, KIND_CLAIMS) {
+            pending.claims_payment_asset.clone()
+        } else {
+            None
+        }
     }
 
     /// The profile is event-only and may be longer than other strings.
@@ -1434,7 +1515,10 @@ impl ManagerContract {
         Ok(())
     }
 
-    fn validate_initial_config(config: &InitialDaoConfigValues) -> Result<(), ManagerError> {
+    fn validate_initial_config(
+        env: &Env,
+        config: &InitialDaoConfigValues,
+    ) -> Result<(), ManagerError> {
         for value in [
             &config.token_name,
             &config.token_symbol,
@@ -1466,19 +1550,47 @@ impl ManagerContract {
             return Err(ManagerError::InvalidProposalThreshold);
         }
 
-        if config.auction.duration < MIN_AUCTION_DURATION
-            || config.auction.duration > MAX_AUCTION_DURATION
-        {
-            return Err(ManagerError::InvalidDuration);
+        // Each kind at most once. Phase 1 (cut line) still requires the
+        // Auction and the Marketplace; Phase 4 drops this rule.
+        let mut kinds: Vec<Symbol> = Vec::new(env);
+        for spec in config.modules.iter() {
+            let kind = spec.kind(env);
+            if kinds.contains(&kind) {
+                return Err(ManagerError::InvalidModules);
+            }
+            kinds.push_back(kind);
+            Self::validate_module_spec(&spec)?;
         }
-        if config.auction.reserve_price < MIN_RESERVE_PRICE {
-            return Err(ManagerError::InvalidParamBounds);
+        for required in [KIND_AUCTION, KIND_MARKETPLACE] {
+            if !kinds.contains(Symbol::new(env, required)) {
+                return Err(ManagerError::InvalidModules);
+            }
         }
-        if config.auction.time_buffer == 0 || config.auction.time_buffer > MAX_AUCTION_TIME_BUFFER {
-            return Err(ManagerError::InvalidTimeBuffer);
-        }
-        if config.marketplace.secondary_fee_bps > MAX_FEE_BPS {
-            return Err(ManagerError::InvalidFee);
+        Ok(())
+    }
+
+    /// Bounds on a module's creation config (each module checks them again).
+    fn validate_module_spec(spec: &ModuleSpec) -> Result<(), ManagerError> {
+        match spec {
+            ModuleSpec::Auction(auction) => {
+                if auction.duration < MIN_AUCTION_DURATION
+                    || auction.duration > MAX_AUCTION_DURATION
+                {
+                    return Err(ManagerError::InvalidDuration);
+                }
+                if auction.reserve_price < MIN_RESERVE_PRICE {
+                    return Err(ManagerError::InvalidParamBounds);
+                }
+                if auction.time_buffer == 0 || auction.time_buffer > MAX_AUCTION_TIME_BUFFER {
+                    return Err(ManagerError::InvalidTimeBuffer);
+                }
+            }
+            ModuleSpec::Marketplace(marketplace) => {
+                if marketplace.secondary_fee_bps > MAX_FEE_BPS {
+                    return Err(ManagerError::InvalidFee);
+                }
+            }
+            ModuleSpec::Claims(_) => {}
         }
         Ok(())
     }

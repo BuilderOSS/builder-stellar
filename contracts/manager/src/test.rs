@@ -11,35 +11,6 @@ use soroban_sdk::{
 
 use crate::{ManagerContract, ManagerContractClient};
 
-/// Stand-in for the shared platform Minter: `launch_dao` registers it as the
-/// DAO's `claims` module, which requires a deployed Wasm contract.
-#[contract]
-pub struct StubMinter;
-
-#[contractimpl]
-impl StubMinter {
-    pub fn ping() {}
-}
-
-/// The shared platform Minter every test DAO launches with (a fixed address so
-/// launch configs can be built without the Manager at hand), deployed on first
-/// use.
-fn test_minter(env: &Env) -> Address {
-    let address = Address::from_str(
-        env,
-        "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
-    );
-    if !address.exists() {
-        env.register_at(&address, StubMinter, ());
-    }
-    address
-}
-
-/// A fresh deployed stand-in Minter.
-fn stub_minter(env: &Env) -> Address {
-    env.register(StubMinter, ())
-}
-
 fn setup() -> (Env, ManagerContractClient<'static>, Address) {
     let env = Env::default();
     env.mock_all_auths();
@@ -55,7 +26,6 @@ fn setup() -> (Env, ManagerContractClient<'static>, Address) {
         ),
     );
     let client = ManagerContractClient::new(&env, &contract_id);
-    client.set_platform_minter(&test_minter(&env));
 
     (env, client, admin)
 }
@@ -184,62 +154,69 @@ fn test_factory_pause() {
     let _ = admin;
 }
 
+/// Registers one placeholder hash per factory slot (bytes 1..=7) and returns
+/// them as the `CurrentImplementations` to set.
+fn register_placeholder_implementations(
+    env: &Env,
+    client: &ManagerContractClient,
+) -> crate::storage::CurrentImplementations {
+    let names = [
+        "Token",
+        "Metadata",
+        "Auction",
+        "Governor",
+        "Treasury",
+        "Marketplace",
+        "ClaimMinter",
+    ];
+    let hashes: std::vec::Vec<BytesN<32>> = (1..=7u8)
+        .map(|b| BytesN::from_array(env, &[b; 32]))
+        .collect();
+    for (name, hash) in names.iter().zip(hashes.iter()) {
+        client.register_implementation(
+            &String::from_str(env, name),
+            &String::from_str(env, "1"),
+            hash,
+        );
+    }
+    placeholder_hashes(env)
+}
+
+/// The placeholder hashes `register_placeholder_implementations` registers.
+fn placeholder_hashes(env: &Env) -> crate::storage::CurrentImplementations {
+    let h = |b: u8| BytesN::from_array(env, &[b; 32]);
+    crate::storage::CurrentImplementations {
+        token: h(1),
+        metadata: h(2),
+        auction: h(3),
+        governor: h(4),
+        treasury: h(5),
+        marketplace: h(6),
+        claims: h(7),
+    }
+}
+
 #[test]
 fn test_set_current_implementations() {
     let (env, client, admin) = setup();
     assert_eq!(client.current_implementations(), None);
-
-    // Register implementations first
-    let token_name = String::from_str(&env, "Token");
-    let metadata_name = String::from_str(&env, "Metadata");
-    let auction_name = String::from_str(&env, "Auction");
-    let governor_name = String::from_str(&env, "Governor");
-    let treasury_name = String::from_str(&env, "Treasury");
-    let marketplace_name = String::from_str(&env, "Marketplace");
-
-    let token_wasm = BytesN::from_array(&env, &[1u8; 32]);
-    let metadata_wasm = BytesN::from_array(&env, &[2u8; 32]);
-    let auction_wasm = BytesN::from_array(&env, &[3u8; 32]);
-    let governor_wasm = BytesN::from_array(&env, &[4u8; 32]);
-    let treasury_wasm = BytesN::from_array(&env, &[5u8; 32]);
-    let marketplace_wasm = BytesN::from_array(&env, &[6u8; 32]);
-
-    client.register_implementation(&token_name, &String::from_str(&env, "1"), &token_wasm);
-    client.register_implementation(&metadata_name, &String::from_str(&env, "1"), &metadata_wasm);
-    client.register_implementation(&auction_name, &String::from_str(&env, "1"), &auction_wasm);
-    client.register_implementation(&governor_name, &String::from_str(&env, "1"), &governor_wasm);
-    client.register_implementation(&treasury_name, &String::from_str(&env, "1"), &treasury_wasm);
-    client.register_implementation(
-        &marketplace_name,
-        &String::from_str(&env, "1"),
-        &marketplace_wasm,
-    );
-
-    // Set current implementations
-    client.set_current_implementations(
-        &token_wasm,
-        &metadata_wasm,
-        &auction_wasm,
-        &governor_wasm,
-        &treasury_wasm,
-        &marketplace_wasm,
-    );
-
-    // Verify they were set correctly
-    let token_impl = client.get_implementation(&token_wasm).unwrap();
-    assert_eq!(token_impl.name, token_name);
-    let expected = crate::storage::DaoWasmHashes {
-        token: token_wasm.clone(),
-        metadata: metadata_wasm,
-        auction: auction_wasm,
-        governor: governor_wasm,
-        treasury: treasury_wasm,
-        marketplace: marketplace_wasm,
-    };
+    let expected = register_placeholder_implementations(&env, &client);
+    client.set_current_implementations(&expected);
+    let token_impl = client.get_implementation(&expected.token).unwrap();
+    assert_eq!(token_impl.name, String::from_str(&env, "Token"));
     assert_eq!(client.current_implementations(), Some(expected.clone()));
+
+    // A hash under another slot's name is refused.
+    let mut swapped = expected.clone();
+    swapped.claims = expected.marketplace.clone();
+    assert_eq!(
+        client.try_set_current_implementations(&swapped),
+        Err(Ok(crate::ManagerError::InvalidImplementationName))
+    );
+
     // Revoking a current hash does not hide it: DAOs created from it still run
     // it, and platform code renewal must keep finding it.
-    client.revoke_implementation(&token_wasm);
+    client.revoke_implementation(&expected.token);
     assert_eq!(client.current_implementations(), Some(expected));
 
     let _ = admin;
@@ -249,65 +226,16 @@ fn test_set_current_implementations() {
 #[should_panic]
 fn test_set_current_implementations_rejects_unknown_hash() {
     let (env, client, admin) = setup();
-
     // Unknown implementation hashes must not become deployable defaults.
-    let token_wasm = BytesN::from_array(&env, &[1u8; 32]);
-    let metadata_wasm = BytesN::from_array(&env, &[2u8; 32]);
-    let auction_wasm = BytesN::from_array(&env, &[3u8; 32]);
-    let governor_wasm = BytesN::from_array(&env, &[4u8; 32]);
-    let treasury_wasm = BytesN::from_array(&env, &[5u8; 32]);
-    let marketplace_wasm = BytesN::from_array(&env, &[6u8; 32]);
-
-    client.set_current_implementations(
-        &token_wasm,
-        &metadata_wasm,
-        &auction_wasm,
-        &governor_wasm,
-        &treasury_wasm,
-        &marketplace_wasm,
-    );
-
+    client.set_current_implementations(&placeholder_hashes(&env));
     let _ = admin;
 }
 
 #[test]
 fn test_predict_addresses() {
     let (env, client, admin) = setup();
-
-    // Need to set current implementations first before predict can work
-    let token_name = String::from_str(&env, "Token");
-    let metadata_name = String::from_str(&env, "Metadata");
-    let auction_name = String::from_str(&env, "Auction");
-    let governor_name = String::from_str(&env, "Governor");
-    let treasury_name = String::from_str(&env, "Treasury");
-    let marketplace_name = String::from_str(&env, "Marketplace");
-
-    let token_wasm = BytesN::from_array(&env, &[1u8; 32]);
-    let metadata_wasm = BytesN::from_array(&env, &[2u8; 32]);
-    let auction_wasm = BytesN::from_array(&env, &[3u8; 32]);
-    let governor_wasm = BytesN::from_array(&env, &[4u8; 32]);
-    let treasury_wasm = BytesN::from_array(&env, &[5u8; 32]);
-    let marketplace_wasm = BytesN::from_array(&env, &[6u8; 32]);
-
-    client.register_implementation(&token_name, &String::from_str(&env, "1"), &token_wasm);
-    client.register_implementation(&metadata_name, &String::from_str(&env, "1"), &metadata_wasm);
-    client.register_implementation(&auction_name, &String::from_str(&env, "1"), &auction_wasm);
-    client.register_implementation(&governor_name, &String::from_str(&env, "1"), &governor_wasm);
-    client.register_implementation(&treasury_name, &String::from_str(&env, "1"), &treasury_wasm);
-    client.register_implementation(
-        &marketplace_name,
-        &String::from_str(&env, "1"),
-        &marketplace_wasm,
-    );
-
-    client.set_current_implementations(
-        &token_wasm,
-        &metadata_wasm,
-        &auction_wasm,
-        &governor_wasm,
-        &treasury_wasm,
-        &marketplace_wasm,
-    );
+    let current = register_placeholder_implementations(&env, &client);
+    client.set_current_implementations(&current);
 
     let creator = Address::generate(&env);
     let nonce = 123u64;
@@ -317,7 +245,8 @@ fn test_predict_addresses() {
 
     // Verify all addresses are returned
     assert_ne!(addresses.token, addresses.metadata);
-    assert_ne!(addresses.token, addresses.auction);
+    assert_ne!(Some(addresses.token.clone()), addresses.auction);
+    assert_ne!(addresses.auction, addresses.claims);
     assert_ne!(addresses.token, addresses.governor);
     assert_ne!(addresses.token, addresses.treasury);
 
@@ -365,16 +294,19 @@ fn test_create_dao_when_paused_fails() {
                 proposal_threshold: 1,
                 quorum_bps: 1,
             },
-            auction: crate::storage::AuctionConfig {
-                duration: 1,
-                reserve_price: 1,
-                time_buffer: 1,
-                payment_asset: Address::generate(&env),
-            },
-            marketplace: crate::storage::MarketplaceConfig {
-                payment_asset: Address::generate(&env),
-                secondary_fee_bps: 1,
-            },
+            modules: soroban_sdk::vec![
+                &env,
+                crate::storage::ModuleSpec::Auction(crate::storage::AuctionConfig {
+                    duration: 1,
+                    reserve_price: 1,
+                    time_buffer: 1,
+                    payment_asset: Address::generate(&env),
+                }),
+                crate::storage::ModuleSpec::Marketplace(crate::storage::MarketplaceConfig {
+                    payment_asset: Address::generate(&env),
+                    secondary_fee_bps: 1,
+                }),
+            ],
         },
     };
 
@@ -641,16 +573,18 @@ fn test_get_latest_implementation_with_revoked() {
 
 use crate::storage::{
     AuctionConfig, DaoCreationParams, GovernanceConfig, InitialDaoConfigValues, LaunchConfig,
-    ManagerKey, MarketplaceConfig, PendingDao,
+    ManagerKey, MarketplaceConfig, ModuleSpec, PendingDao,
 };
 
 /// Platform upgrade notice used by these tests (short; a deploy-time choice).
 const TEST_UPGRADE_DELAY: u32 = 1_000;
 
-/// Minimal valid Soroban WASM exporting `__constructor(ctor_arity)` and
-/// `initialize(init_arity)` (unused now that every module has a constructor), both returning void. Lets `create_dao` run its real
-/// deploy path without the full module WASMs.
-fn stub_wasm(env: &Env, tag: &str, ctor_arity: usize, init_arity: usize) -> Bytes {
+/// Minimal valid Soroban WASM exporting `__constructor(ctor_arity)` and one
+/// more function (`second`: name and arity), both returning void. Lets
+/// `create_dao` run its real deploy path without the full module WASMs (the
+/// Token stub exports `register_module`, which `create_dao` calls).
+fn stub_wasm(env: &Env, tag: &str, ctor_arity: usize, second: (&str, usize)) -> Bytes {
+    let (second_name, init_arity) = second;
     fn func_type(out: &mut std::vec::Vec<u8>, arity: usize) {
         out.push(0x60);
         out.push(arity as u8);
@@ -675,8 +609,8 @@ fn stub_wasm(env: &Env, tag: &str, ctor_arity: usize, init_arity: usize) -> Byte
     section(&mut m, 3, &[2, 0, 1]);
     let mut exports = std::vec![2u8, 13];
     exports.extend(b"__constructor");
-    exports.extend([0x00, 0x00, 10]);
-    exports.extend(b"initialize");
+    exports.extend([0x00, 0x00, second_name.len() as u8]);
+    exports.extend(second_name.as_bytes());
     exports.extend([0x00, 0x01]);
     section(&mut m, 7, &exports);
     section(&mut m, 10, &[2, 4, 0, 0x42, 2, 0x0b, 4, 0, 0x42, 2, 0x0b]);
@@ -690,19 +624,20 @@ fn stub_wasm(env: &Env, tag: &str, ctor_arity: usize, init_arity: usize) -> Byte
 /// Registers stub implementations matching the current constructor arities and
 /// sets them as the factory defaults.
 fn register_stub_implementations(env: &Env, client: &ManagerContractClient) {
-    let specs: [(&str, usize, usize); 6] = [
-        ("Token", 9, 0),
-        ("Metadata", 10, 0),
-        ("Auction", 10, 0),
-        ("Governor", 10, 0),
-        ("Treasury", 4, 0),
-        ("Marketplace", 7, 0),
+    let specs: [(&str, usize, (&str, usize)); 7] = [
+        ("Token", 7, ("register_module", 3)),
+        ("Metadata", 10, ("initialize", 0)),
+        ("Auction", 10, ("initialize", 0)),
+        ("Governor", 10, ("initialize", 0)),
+        ("Treasury", 4, ("initialize", 0)),
+        ("Marketplace", 7, ("initialize", 0)),
+        ("ClaimMinter", 6, ("initialize", 0)),
     ];
     let mut hashes = std::vec::Vec::new();
-    for (name, ctor, init) in specs {
+    for (name, ctor, second) in specs {
         let hash = env
             .deployer()
-            .upload_contract_wasm(stub_wasm(env, name, ctor, init));
+            .upload_contract_wasm(stub_wasm(env, name, ctor, second));
         client.register_implementation(
             &String::from_str(env, name),
             &String::from_str(env, "1"),
@@ -711,9 +646,15 @@ fn register_stub_implementations(env: &Env, client: &ManagerContractClient) {
         client.set_latest_implementation(&String::from_str(env, name), &hash);
         hashes.push(hash);
     }
-    client.set_current_implementations(
-        &hashes[0], &hashes[1], &hashes[2], &hashes[3], &hashes[4], &hashes[5],
-    );
+    client.set_current_implementations(&crate::storage::CurrentImplementations {
+        token: hashes[0].clone(),
+        metadata: hashes[1].clone(),
+        auction: hashes[2].clone(),
+        governor: hashes[3].clone(),
+        treasury: hashes[4].clone(),
+        marketplace: hashes[5].clone(),
+        claims: hashes[6].clone(),
+    });
 }
 
 /// Unique per-nonce slug ("dao-<nonce>") so tests can create many DAOs.
@@ -754,18 +695,37 @@ fn dao_params(env: &Env, deployer: &Address, nonce: u64) -> DaoCreationParams {
                 proposal_threshold: 1,
                 quorum_bps: 1000,
             },
-            auction: AuctionConfig {
-                duration: 300,
-                reserve_price: 1000,
-                time_buffer: 1,
-                payment_asset: Address::generate(env),
-            },
-            marketplace: MarketplaceConfig {
-                payment_asset: Address::generate(env),
-                secondary_fee_bps: 100,
-            },
+            modules: soroban_sdk::vec![
+                env,
+                ModuleSpec::Auction(AuctionConfig {
+                    duration: 300,
+                    reserve_price: 1000,
+                    time_buffer: 1,
+                    payment_asset: Address::generate(env),
+                }),
+                ModuleSpec::Marketplace(MarketplaceConfig {
+                    payment_asset: Address::generate(env),
+                    secondary_fee_bps: 100,
+                }),
+            ],
         },
     }
+}
+
+/// The auction spec in `params` (tests tweak its bounds).
+fn auction_spec(params: &mut DaoCreationParams) -> AuctionConfig {
+    match params.initial_config.modules.get(0) {
+        Some(ModuleSpec::Auction(config)) => config,
+        _ => panic!("dao_params lists the auction first"),
+    }
+}
+
+/// Replace the auction spec in `params`.
+fn set_auction_spec(params: &mut DaoCreationParams, config: AuctionConfig) {
+    params
+        .initial_config
+        .modules
+        .set(0, ModuleSpec::Auction(config));
 }
 
 /// XDR length of the Manager contract instance ledger entry.
@@ -814,6 +774,37 @@ impl MockModule {
         _non_voting: bool,
     ) {
     }
+    /// A fixed Treasury stand-in for `create_module`'s wiring.
+    pub fn treasury(e: Env) -> Address {
+        e.current_contract_address()
+    }
+    /// The registry `seed_registry` wrote (empty by default).
+    pub fn modules(e: Env) -> soroban_sdk::Vec<common::modules::ModuleEntry> {
+        e.storage()
+            .instance()
+            .get(&3u32)
+            .unwrap_or(soroban_sdk::Vec::new(&e))
+    }
+}
+
+/// Give a mock token a registry holding mock Auction and Marketplace modules,
+/// as `create_dao` registers them.
+fn seed_registry(env: &Env, token: &Address, auction: &Address, marketplace: &Address) {
+    use common::modules::ModuleEntry;
+    let entries = soroban_sdk::vec![
+        env,
+        ModuleEntry {
+            kind: soroban_sdk::Symbol::new(env, "auction"),
+            address: auction.clone(),
+            non_voting: true,
+        },
+        ModuleEntry {
+            kind: soroban_sdk::Symbol::new(env, "marketplace"),
+            address: marketplace.clone(),
+            non_voting: true,
+        },
+    ];
+    env.as_contract(token, || env.storage().instance().set(&3u32, &entries));
 }
 
 #[contract]
@@ -1010,19 +1001,22 @@ fn test_pending_dao_launches_after_500_unrelated_create_dao() {
     env.as_contract(&token, || {
         env.storage().instance().set(&1u32, &launch_admin);
     });
+    seed_registry(&env, &token, &auction, &marketplace);
     let pending = PendingDao {
         addresses: crate::storage::DaoAddresses {
             token: token.clone(),
             metadata,
-            auction: auction.clone(),
+            auction: Some(auction.clone()),
             governor,
             treasury,
-            marketplace: marketplace.clone(),
+            marketplace: Some(marketplace.clone()),
+            claims: None,
         },
         launch_admin: launch_admin.clone(),
         slug: String::from_str(&env, "mock-dao"),
-        auction_payment_asset: auction,
-        marketplace_payment_asset: marketplace,
+        auction_payment_asset: Some(auction),
+        marketplace_payment_asset: Some(marketplace),
+        claims_payment_asset: None,
     };
     env.as_contract(&client.address, || {
         crate::storage::set_persistent(&env, &ManagerKey::PendingDao(token.clone()), &pending);
@@ -1040,14 +1034,13 @@ fn test_pending_dao_launches_after_500_unrelated_create_dao() {
         &LaunchConfig {
             launch_auction: true,
             launch_marketplace: true,
-            minter: test_minter(&env),
         },
     );
     assert!(client.get_pending_dao(&token).is_none());
 }
 
 // ============================================================================
-// Admin handover and platform minter
+// Admin handover
 // ============================================================================
 
 #[test]
@@ -1070,33 +1063,6 @@ fn test_two_step_admin_handover() {
 fn test_accept_admin_without_proposal_fails() {
     let (_env, client, _admin) = setup();
     client.accept_admin();
-}
-
-#[test]
-fn test_set_platform_minter() {
-    let (env, client, _admin) = setup();
-    assert_eq!(client.get_platform_minter(), Some(test_minter(&env)));
-    let minter = Address::generate(&env);
-    client.set_platform_minter(&minter);
-    assert_eq!(client.get_platform_minter(), Some(minter));
-}
-
-#[test]
-#[should_panic]
-fn test_set_platform_minter_requires_admin() {
-    let env = Env::default();
-    let admin = Address::generate(&env);
-    let id = env.register(
-        ManagerContract,
-        (
-            admin,
-            BytesN::from_array(&env, &[0u8; 32]),
-            String::from_str(&env, "0.1.0"),
-            TEST_UPGRADE_DELAY,
-        ),
-    );
-    // No mocked auths: admin auth is not provided.
-    ManagerContractClient::new(&env, &id).set_platform_minter(&Address::generate(&env));
 }
 
 // ============================================================================
@@ -1122,13 +1088,15 @@ mod real_dao {
         pub treasury: treasury::DaoTreasuryContractClient<'static>,
         pub auction: auction::DaoAuctionContractClient<'static>,
         pub marketplace: marketplace::MarketplaceContractClient<'static>,
+        pub claims: minter::ClaimMinterClient<'static>,
         pub metadata: metadata::MetadataContractClient<'static>,
         pub payment: Address,
     }
 
-    /// Deploys all six real modules at pre-generated addresses (constructor-only
-    /// wiring, as `create_dao` does with predicted addresses), mints one founder
-    /// token as launch_admin, and seeds the Manager's PendingDao.
+    /// Deploys the four core contracts and three modules (Auction,
+    /// Marketplace, ClaimMinter) at pre-generated addresses, registers the
+    /// modules on the Token as `create_dao` does, mints one founder token as
+    /// launch_admin, and seeds the Manager's PendingDao.
     pub fn build() -> RealDao {
         let (env, client, _admin) = setup();
         env.ledger().set_sequence_number(100);
@@ -1137,13 +1105,17 @@ mod real_dao {
         let launch_admin = Address::generate(&env);
         let hash = BytesN::from_array(&env, &[0u8; 32]);
 
+        let auction_id = Address::generate(&env);
+        let marketplace_id = Address::generate(&env);
+        let claims_id = Address::generate(&env);
         let addresses = crate::storage::DaoAddresses {
             token: Address::generate(&env),
             metadata: Address::generate(&env),
-            auction: Address::generate(&env),
             governor: Address::generate(&env),
             treasury: Address::generate(&env),
-            marketplace: Address::generate(&env),
+            auction: Some(auction_id.clone()),
+            marketplace: Some(marketplace_id.clone()),
+            claims: Some(claims_id.clone()),
         };
         let payment = env
             .register_stellar_asset_contract_v2(Address::generate(&env))
@@ -1155,8 +1127,6 @@ mod real_dao {
             (
                 launch_admin.clone(),
                 addresses.treasury.clone(),
-                addresses.auction.clone(),
-                addresses.marketplace.clone(),
                 String::from_str(&env, "DAO"),
                 String::from_str(&env, "DAO"),
                 addresses.metadata.clone(),
@@ -1210,7 +1180,7 @@ mod real_dao {
             ),
         );
         env.register_at(
-            &addresses.auction,
+            &auction_id,
             auction::DaoAuctionContract,
             (
                 launch_admin.clone(),
@@ -1226,7 +1196,7 @@ mod real_dao {
             ),
         );
         env.register_at(
-            &addresses.marketplace,
+            &marketplace_id,
             marketplace::MarketplaceContract,
             (
                 addresses.token.clone(),
@@ -1238,6 +1208,18 @@ mod real_dao {
                 250_u32,
             ),
         );
+        env.register_at(
+            &claims_id,
+            minter::ClaimMinter,
+            (
+                launch_admin.clone(),
+                addresses.token.clone(),
+                addresses.treasury.clone(),
+                manager.clone(),
+                payment.clone(),
+                hash.clone(),
+            ),
+        );
 
         // The modules report the all-zero hash; launch_dao requires it registered.
         client.register_implementation(
@@ -1246,14 +1228,22 @@ mod real_dao {
             &hash,
         );
         let token = token::DaoTokenContractClient::new(&env, &addresses.token);
+        for (kind, module, non_voting) in [
+            ("auction", &auction_id, true),
+            ("marketplace", &marketplace_id, true),
+            ("claims", &claims_id, false),
+        ] {
+            token.register_module(&Symbol::new(&env, kind), module, &non_voting);
+        }
         token.mint(&launch_admin, &launch_admin);
 
         let pending = PendingDao {
             addresses: addresses.clone(),
             launch_admin: launch_admin.clone(),
             slug: String::from_str(&env, "real-dao"),
-            auction_payment_asset: payment.clone(),
-            marketplace_payment_asset: payment.clone(),
+            auction_payment_asset: Some(payment.clone()),
+            marketplace_payment_asset: Some(payment.clone()),
+            claims_payment_asset: Some(payment.clone()),
         };
         env.as_contract(&manager, || {
             crate::storage::set_persistent(
@@ -1266,8 +1256,9 @@ mod real_dao {
         RealDao {
             governor: governor::DaoGovernorContractClient::new(&env, &addresses.governor),
             treasury: treasury::DaoTreasuryContractClient::new(&env, &addresses.treasury),
-            auction: auction::DaoAuctionContractClient::new(&env, &addresses.auction),
-            marketplace: marketplace::MarketplaceContractClient::new(&env, &addresses.marketplace),
+            auction: auction::DaoAuctionContractClient::new(&env, &auction_id),
+            marketplace: marketplace::MarketplaceContractClient::new(&env, &marketplace_id),
+            claims: minter::ClaimMinterClient::new(&env, &claims_id),
             metadata: metadata::MetadataContractClient::new(&env, &addresses.metadata),
             token,
             addresses,
@@ -1278,19 +1269,10 @@ mod real_dao {
         }
     }
 
-    fn cfg(env: &Env, launch_auction: bool, launch_marketplace: bool) -> LaunchConfig {
+    fn cfg(_env: &Env, launch_auction: bool, launch_marketplace: bool) -> LaunchConfig {
         LaunchConfig {
             launch_auction,
             launch_marketplace,
-            minter: test_minter(env),
-        }
-    }
-
-    fn cfg_pinned(minter: &Address) -> LaunchConfig {
-        LaunchConfig {
-            launch_auction: true,
-            launch_marketplace: true,
-            minter: minter.clone(),
         }
     }
 
@@ -1387,7 +1369,7 @@ mod real_dao {
                 },
                 metadata_owner(),
                 dao.token.mint_allowance(&attacker),
-                dao.token.mint_allowance(&dao.addresses.auction),
+                dao.token.mint_allowance(&dao.auction.address),
             )
         };
         let before = snapshot();
@@ -1453,8 +1435,8 @@ mod real_dao {
             (&dao.addresses.token, "minter"),
             (&dao.addresses.governor, "finalize_ownership"),
             (&dao.addresses.treasury, "finalize_ownership"),
-            (&dao.addresses.auction, "finalize_ownership"),
-            (&dao.addresses.marketplace, "finalize_ownership"),
+            (&dao.auction.address, "finalize_ownership"),
+            (&dao.marketplace.address, "finalize_ownership"),
             (&dao.addresses.metadata, "finalize_upgrade_authority"),
         ] {
             assert!(
@@ -1487,7 +1469,7 @@ mod real_dao {
             (&dao.addresses.governor, "set_governor_authority"),
             (&dao.addresses.governor, "governor_authority"),
             (&dao.addresses.treasury, "set_governor"),
-            (&dao.addresses.auction, "set_treasury"),
+            (&dao.auction.address, "set_treasury"),
             (&dao.addresses.metadata, "initialize"),
         ] {
             assert!(
@@ -1528,35 +1510,31 @@ mod real_dao {
         }
     }
 
-    /// Acceptance (d): exactly the canonical mint set, including the shared
-    /// platform Minter, which the token records.
+    /// Acceptance (d): exactly the canonical mint set. The ClaimMinter keeps
+    /// what the launch admin granted it in Setup.
     #[test]
     fn launch_grants_exactly_the_canonical_mint_set() {
         let dao = build();
-        let minter = stub_minter(&dao.env);
-        dao.client.set_platform_minter(&minter);
+        dao.token.increase_mint_allowance(&dao.claims.address, &25);
         dao.client
-            .launch_dao(&dao.addresses.token, &cfg_pinned(&minter));
+            .launch_dao(&dao.addresses.token, &cfg(&dao.env, true, true));
 
         let a = &dao.addresses;
-        // The Treasury mints as admin without an allowance; the canonical
-        // modules get unlimited ones (Phase 1, docs/designs/membership-models.md).
+        // The Treasury mints as admin without an allowance; the Auction and the
+        // Marketplace get unlimited ones (Phase 1, docs/designs/membership-models.md).
         assert_eq!(dao.token.mint_allowance(&a.treasury), 0);
-        assert_eq!(dao.token.mint_allowance(&a.marketplace), u32::MAX);
-        assert_eq!(dao.token.mint_allowance(&a.auction), u32::MAX);
-        assert_eq!(dao.token.mint_allowance(&minter), u32::MAX);
-        assert_eq!(
-            dao.token
-                .module(&soroban_sdk::Symbol::new(&dao.env, "claims")),
-            Some(minter.clone())
-        );
+        assert_eq!(dao.token.mint_allowance(&dao.marketplace.address), u32::MAX);
+        assert_eq!(dao.token.mint_allowance(&dao.auction.address), u32::MAX);
+        assert_eq!(dao.token.mint_allowance(&dao.claims.address), 25);
         assert_eq!(dao.token.mint_allowance(&dao.launch_admin), 0);
         assert_eq!(dao.token.mint_allowance(&a.governor), 0);
+        // Every contract, core and registered module, is the Treasury's.
         assert_eq!(dao.token.admin(), a.treasury.clone());
         assert_eq!(dao.governor.admin(), a.treasury.clone());
         assert_eq!(dao.treasury.admin(), a.treasury.clone());
         assert_eq!(dao.auction.admin(), a.treasury.clone());
         assert_eq!(dao.marketplace.admin(), a.treasury.clone());
+        assert_eq!(dao.claims.admin(), a.treasury.clone());
         assert_eq!(dao.metadata.admin(), a.treasury.clone());
         assert!(!dao.auction.paused());
         assert!(!dao.marketplace.get_config().paused);
@@ -1572,70 +1550,58 @@ mod real_dao {
         let dao = build();
         dao.client
             .launch_dao(&dao.addresses.token, &cfg(&dao.env, false, false));
-        let a = &dao.addresses;
-        assert_eq!(dao.token.mint_allowance(&a.auction), 0);
-        assert_eq!(dao.token.mint_allowance(&a.marketplace), u32::MAX);
+        assert_eq!(dao.token.mint_allowance(&dao.auction.address), 0);
+        assert_eq!(dao.token.mint_allowance(&dao.marketplace.address), u32::MAX);
         assert!(dao.auction.paused());
         assert!(dao.marketplace.get_config().paused);
     }
 
+    /// `DaoLaunched` carries the registry, so the indexer knows the launch
+    /// set (review 2 B3).
     #[test]
-    fn launch_requires_the_pinned_minter_to_match() {
+    fn dao_launched_lists_the_registered_modules() {
+        use soroban_sdk::testutils::Events as _;
+        use soroban_sdk::Event as _;
         let dao = build();
-        let minter = stub_minter(&dao.env);
-        dao.client.set_platform_minter(&minter);
-        let token = &dao.addresses.token;
-
-        // A minter other than the registered one is rejected.
-        let r = dao
-            .client
-            .try_launch_dao(token, &cfg_pinned(&stub_minter(&dao.env)));
+        dao.client
+            .launch_dao(&dao.addresses.token, &cfg(&dao.env, true, false));
+        let events = dao.env.events().all();
+        let registry = dao.token.modules();
+        assert_eq!(registry.len(), 3);
         assert_eq!(
-            r.err().unwrap().unwrap(),
-            ManagerError::PlatformMinterMismatch
+            events.events().last().unwrap(),
+            &crate::events::DaoLaunched {
+                token_address: dao.addresses.token.clone(),
+                launched_ledger: dao.env.ledger().sequence() as u64,
+                modules: dao.addresses.clone(),
+                launch_auction: true,
+                launch_marketplace: false,
+                registry,
+            }
+            .to_xdr(&dao.env, &dao.client.address)
         );
-
-        // A stale pin is rejected after the Manager admin swaps the minter.
-        let swapped = stub_minter(&dao.env);
-        dao.client.set_platform_minter(&swapped);
-        let r = dao.client.try_launch_dao(token, &cfg_pinned(&minter));
-        assert_eq!(
-            r.err().unwrap().unwrap(),
-            ManagerError::PlatformMinterMismatch
-        );
-        assert!(dao.client.get_pending_dao(token).is_some());
-
-        // The current minter pinned explicitly succeeds.
-        dao.client.launch_dao(token, &cfg_pinned(&swapped));
-        assert_eq!(dao.token.mint_allowance(&swapped), u32::MAX);
-        assert_eq!(dao.token.mint_allowance(&minter), 0);
     }
 
-    // Retired: expected_minter_is_ignored_when_enable_minter_is_false.
-    // Value: protects=(none now) launching without a platform Minter;
-    // retired_because=the Minter is required for every DAO (docs/STORAGE_DIET.md
-    // D15) and `enable_minter`/`expected_minter` are removed (eng review D10);
-    // replacement=launch_requires_the_pinned_minter_to_match.
-
+    /// A ClaimMinter whose asset changed in Setup blocks the launch like the
+    /// Auction and Marketplace do.
     #[test]
-    fn launch_without_platform_minter_fails_and_launches_nothing() {
+    fn launch_checks_every_registered_modules_payment_asset() {
         let dao = build();
+        let mut pending = dao.client.get_pending_dao(&dao.addresses.token).unwrap();
+        pending.claims_payment_asset = Some(Address::generate(&dao.env));
         dao.env.as_contract(&dao.client.address, || {
-            dao.env.storage().persistent().remove(&common::ns(
+            crate::storage::set_persistent(
                 &dao.env,
-                crate::storage::ManagerKey::PlatformMinter,
-            ));
+                &ManagerKey::PendingDao(dao.addresses.token.clone()),
+                &pending,
+            );
         });
-        let r = dao
-            .client
-            .try_launch_dao(&dao.addresses.token, &cfg(&dao.env, true, true));
         assert_eq!(
-            r.err().unwrap().unwrap(),
-            ManagerError::PlatformMinterNotSet
+            dao.client
+                .try_launch_dao(&dao.addresses.token, &cfg(&dao.env, true, true)),
+            Err(Ok(ManagerError::PaymentAssetMismatch))
         );
-        // Nothing launched: still pending, token still owned by launch_admin.
-        assert!(dao.client.get_pending_dao(&dao.addresses.token).is_some());
-        assert_eq!(dao.token.admin(), dao.launch_admin.clone());
+        assert_eq!(dao.claims.admin(), dao.launch_admin);
     }
 
     #[test]
@@ -1648,8 +1614,6 @@ mod real_dao {
             (
                 dao.launch_admin.clone(),
                 dao.addresses.treasury.clone(),
-                dao.addresses.auction.clone(),
-                dao.addresses.marketplace.clone(),
                 String::from_str(env, "n"),
                 String::from_str(env, "s"),
                 Address::generate(env),
@@ -1667,8 +1631,9 @@ mod real_dao {
                     addresses,
                     launch_admin: dao.launch_admin.clone(),
                     slug: String::from_str(env, "empty-dao"),
-                    auction_payment_asset: dao.payment.clone(),
-                    marketplace_payment_asset: dao.payment.clone(),
+                    auction_payment_asset: Some(dao.payment.clone()),
+                    marketplace_payment_asset: Some(dao.payment.clone()),
+                    claims_payment_asset: None,
                 },
             );
         });
@@ -1728,8 +1693,9 @@ mod real_dao {
             &a.token,
             &a.governor,
             &a.treasury,
-            &a.auction,
-            &a.marketplace,
+            &dao.auction.address,
+            &dao.marketplace.address,
+            &dao.claims.address,
             &a.metadata,
         ] {
             for function in [
@@ -1835,14 +1801,18 @@ mod real_dao {
 
         for (nonce, bad) in [(0u64, u64::MAX), (1, 86_401), (2, 0)] {
             let mut p = dao_params(&env, &deployer, nonce);
-            p.initial_config.auction.time_buffer = bad;
+            let mut auction = auction_spec(&mut p);
+            auction.time_buffer = bad;
+            set_auction_spec(&mut p, auction);
             assert_eq!(
                 client.try_create_dao(&p).err().unwrap().unwrap(),
                 ManagerError::InvalidTimeBuffer
             );
         }
         let mut ok = dao_params(&env, &deployer, 3);
-        ok.initial_config.auction.time_buffer = 86_400;
+        let mut auction = auction_spec(&mut ok);
+        auction.time_buffer = 86_400;
+        set_auction_spec(&mut ok, auction);
         client.create_dao(&ok);
     }
 
@@ -1940,13 +1910,9 @@ mod real_dao {
         assert!(dao.governor.try_launch(&t).is_err());
         only_stranger!(&dao.addresses.treasury, "launch", (&t,));
         assert!(dao.treasury.try_launch(&t).is_err());
-        only_stranger!(&dao.addresses.auction, "launch", (&t, true, &dao.payment));
+        only_stranger!(&dao.auction.address, "launch", (&t, true, &dao.payment));
         assert!(dao.auction.try_launch(&t, &true).is_err());
-        only_stranger!(
-            &dao.addresses.marketplace,
-            "launch",
-            (&t, true, &dao.payment)
-        );
+        only_stranger!(&dao.marketplace.address, "launch", (&t, true, &dao.payment));
         assert!(dao.marketplace.try_launch(&t, &true).is_err());
         only_stranger!(&dao.addresses.metadata, "launch", (&t,));
         assert!(dao.metadata.try_launch(&t).is_err());
@@ -1969,7 +1935,9 @@ fn create_dao_rejects_auction_duration_above_30_days() {
     let deployer = Address::generate(&env);
 
     let mut params = dao_params(&env, &deployer, 1);
-    params.initial_config.auction.duration = 2_592_001;
+    let mut auction = auction_spec(&mut params);
+    auction.duration = 2_592_001;
+    set_auction_spec(&mut params, auction.clone());
     let r = client.try_create_dao(&params);
     assert_eq!(
         r.err().unwrap().unwrap(),
@@ -1977,7 +1945,8 @@ fn create_dao_rejects_auction_duration_above_30_days() {
     );
 
     // The boundary itself is accepted.
-    params.initial_config.auction.duration = 2_592_000;
+    auction.duration = 2_592_000;
+    set_auction_spec(&mut params, auction);
     env.cost_estimate().budget().reset_unlimited();
     client.create_dao(&params);
 }
@@ -2011,10 +1980,11 @@ fn create_dao_emits_dao_created_with_module_wasm_hashes() {
         wasm_hashes: DaoWasmHashes {
             token: hash_of("Token"),
             metadata: hash_of("Metadata"),
-            auction: hash_of("Auction"),
             governor: hash_of("Governor"),
             treasury: hash_of("Treasury"),
-            marketplace: hash_of("Marketplace"),
+            auction: Some(hash_of("Auction")),
+            marketplace: Some(hash_of("Marketplace")),
+            claims: None,
         },
         slug: String::from_str(&env, "dao-7"),
     }
@@ -2225,24 +2195,29 @@ mod admin_auth {
                 &h(&env, i as u8 + 1),
             );
         }
-        let hs: std::vec::Vec<BytesN<32>> = (1..=6).map(|i| h(&env, i)).collect();
+        client.register_implementation(
+            &String::from_str(&env, "ClaimMinter"),
+            &String::from_str(&env, "1"),
+            &h(&env, 7),
+        );
+        let current = crate::storage::CurrentImplementations {
+            token: h(&env, 1),
+            metadata: h(&env, 2),
+            auction: h(&env, 3),
+            governor: h(&env, 4),
+            treasury: h(&env, 5),
+            marketplace: h(&env, 6),
+            claims: h(&env, 7),
+        };
         check(
             &env,
             &client,
             &admin,
             "set_current_implementations",
-            (
-                hs[0].clone(),
-                hs[1].clone(),
-                hs[2].clone(),
-                hs[3].clone(),
-                hs[4].clone(),
-                hs[5].clone(),
-            )
-                .into_val(&env),
+            (current.clone(),).into_val(&env),
             || {
                 client
-                    .try_set_current_implementations(&hs[0], &hs[1], &hs[2], &hs[3], &hs[4], &hs[5])
+                    .try_set_current_implementations(&current)
                     .map(|_| ())
                     .map_err(|_| ())
             },
@@ -2297,19 +2272,22 @@ mod launch_revocation {
         env.as_contract(&token, || {
             env.storage().instance().set(&1u32, &launch_admin);
         });
+        seed_registry(env, &token, &auction, &marketplace);
         let pending = PendingDao {
             addresses: crate::storage::DaoAddresses {
                 token: token.clone(),
                 metadata: metadata.clone(),
-                auction: auction.clone(),
+                auction: Some(auction.clone()),
                 governor: governor.clone(),
                 treasury: treasury.clone(),
-                marketplace: marketplace.clone(),
+                marketplace: Some(marketplace.clone()),
+                claims: None,
             },
             launch_admin: launch_admin.clone(),
             slug: String::from_str(env, "mock-dao"),
-            auction_payment_asset: auction.clone(),
-            marketplace_payment_asset: marketplace.clone(),
+            auction_payment_asset: Some(auction.clone()),
+            marketplace_payment_asset: Some(marketplace.clone()),
+            claims_payment_asset: None,
         };
         env.as_contract(&client.address, || {
             crate::storage::set_persistent(env, &ManagerKey::PendingDao(token.clone()), &pending);
@@ -2328,11 +2306,10 @@ mod launch_revocation {
         }
     }
 
-    fn cfg(env: &Env) -> LaunchConfig {
+    fn cfg(_env: &Env) -> LaunchConfig {
         LaunchConfig {
             launch_auction: true,
             launch_marketplace: true,
-            minter: test_minter(env),
         }
     }
 
@@ -2446,19 +2423,22 @@ fn seed_mock_pending(env: &Env, client: &ManagerContractClient, slug: &str) -> A
     });
     let auction = env.register(MockToggleModule, ());
     let marketplace = env.register(MockToggleModule, ());
+    seed_registry(env, &token, &auction, &marketplace);
     let pending = PendingDao {
         addresses: crate::storage::DaoAddresses {
             token: token.clone(),
             metadata: env.register(MockLaunchModule, ()),
-            auction: auction.clone(),
+            auction: Some(auction.clone()),
             governor: env.register(MockLaunchModule, ()),
             treasury: env.register(MockLaunchModule, ()),
-            marketplace: marketplace.clone(),
+            marketplace: Some(marketplace.clone()),
+            claims: None,
         },
         launch_admin,
         slug: String::from_str(env, slug),
-        auction_payment_asset: auction,
-        marketplace_payment_asset: marketplace,
+        auction_payment_asset: Some(auction),
+        marketplace_payment_asset: Some(marketplace),
+        claims_payment_asset: None,
     };
     env.as_contract(&client.address, || {
         crate::storage::set_persistent(env, &ManagerKey::PendingDao(token.clone()), &pending);
@@ -2466,11 +2446,10 @@ fn seed_mock_pending(env: &Env, client: &ManagerContractClient, slug: &str) -> A
     token
 }
 
-fn launch_cfg(env: &Env) -> LaunchConfig {
+fn launch_cfg(_env: &Env) -> LaunchConfig {
     LaunchConfig {
         launch_auction: true,
         launch_marketplace: true,
-        minter: test_minter(env),
     }
 }
 
@@ -2979,4 +2958,130 @@ fn manager_upgrade_waits_out_its_notice() {
             .unwrap()
     });
     assert_eq!(stored, to);
+}
+
+// ============================================================================
+// create_module (docs/designs/membership-models.md §2)
+// ============================================================================
+
+fn claims_spec(env: &Env) -> ModuleSpec {
+    ModuleSpec::Claims(crate::storage::ClaimsConfig {
+        payment_asset: Address::generate(env),
+    })
+}
+
+#[test]
+fn create_module_deploys_at_the_predicted_address_and_records_it_in_setup() {
+    let (env, client, _a) = setup();
+    register_stub_implementations(&env, &client);
+    let token = seed_mock_pending(&env, &client, "mock-dao");
+    assert_eq!(
+        client.get_pending_dao(&token).unwrap().addresses.claims,
+        None
+    );
+    let claims = soroban_sdk::Symbol::new(&env, "claims");
+    assert_eq!(client.module_count(&token, &claims), 0);
+    let predicted = client.predict_module_address(&token, &claims, &0);
+
+    let spec = claims_spec(&env);
+    let address = client.create_module(&token, &spec, &0);
+    assert_eq!(address, predicted);
+    assert_eq!(client.module_count(&token, &claims), 1);
+    // Setup: recorded for the launch checks.
+    let pending = client.get_pending_dao(&token).unwrap();
+    assert_eq!(pending.addresses.claims, Some(address.clone()));
+    let ModuleSpec::Claims(config) = spec else {
+        unreachable!()
+    };
+    assert_eq!(pending.claims_payment_asset, Some(config.payment_asset));
+    // The next one has its own address, and so does another DAO's.
+    assert_ne!(client.predict_module_address(&token, &claims, &1), address);
+    assert_ne!(
+        client.predict_module_address(&Address::generate(&env), &claims, &0),
+        address
+    );
+}
+
+#[test]
+fn create_module_refuses_a_stale_index_and_unknown_tokens() {
+    let (env, client, _a) = setup();
+    register_stub_implementations(&env, &client);
+    let token = seed_mock_pending(&env, &client, "mock-dao");
+    let claims = soroban_sdk::Symbol::new(&env, "claims");
+    // A proposal drafted for n = 1 while the count is 0, or the reverse.
+    assert_eq!(
+        client.try_create_module(&token, &claims_spec(&env), &1),
+        Err(Ok(crate::ManagerError::StaleModuleIndex))
+    );
+    client.create_module(&token, &claims_spec(&env), &0);
+    assert_eq!(
+        client.try_create_module(&token, &claims_spec(&env), &0),
+        Err(Ok(crate::ManagerError::StaleModuleIndex))
+    );
+    assert_eq!(client.module_count(&token, &claims), 1);
+    // Only DAOs this Manager created.
+    assert_eq!(
+        client.try_create_module(&Address::generate(&env), &claims_spec(&env), &0),
+        Err(Ok(crate::ManagerError::DaoNotFound))
+    );
+}
+
+#[test]
+fn create_module_needs_the_token_admin_and_an_unpaused_factory() {
+    use soroban_sdk::{
+        testutils::{MockAuth, MockAuthInvoke},
+        IntoVal,
+    };
+    let (env, client, _a) = setup();
+    register_stub_implementations(&env, &client);
+    let token = seed_mock_pending(&env, &client, "mock-dao");
+    let spec = claims_spec(&env);
+    let stranger = Address::generate(&env);
+    env.mock_auths(&[MockAuth {
+        address: &stranger,
+        invoke: &MockAuthInvoke {
+            contract: &client.address,
+            fn_name: "create_module",
+            args: (token.clone(), spec.clone(), 0u32).into_val(&env),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(client.try_create_module(&token, &spec, &0).is_err());
+    env.mock_all_auths();
+    client.pause_factory();
+    assert_eq!(
+        client.try_create_module(&token, &spec, &0),
+        Err(Ok(crate::ManagerError::FactoryPaused))
+    );
+}
+
+#[test]
+fn create_dao_requires_one_auction_and_one_marketplace_and_no_repeats() {
+    let (env, client, _a) = setup();
+    register_stub_implementations(&env, &client);
+    let deployer = Address::generate(&env);
+    env.cost_estimate().budget().reset_unlimited();
+    let mut missing = dao_params(&env, &deployer, 1);
+    missing.initial_config.modules.remove(1);
+    assert_eq!(
+        client.try_create_dao(&missing),
+        Err(Ok(crate::ManagerError::InvalidModules))
+    );
+    let mut repeated = dao_params(&env, &deployer, 2);
+    let first = repeated.initial_config.modules.get(0).unwrap();
+    repeated.initial_config.modules.push_back(first);
+    assert_eq!(
+        client.try_create_dao(&repeated),
+        Err(Ok(crate::ManagerError::InvalidModules))
+    );
+    // A ClaimMinter is optional and registered with the rest.
+    let mut with_claims = dao_params(&env, &deployer, 3);
+    with_claims
+        .initial_config
+        .modules
+        .push_back(claims_spec(&env));
+    let dao = client.create_dao(&with_claims);
+    assert!(dao.claims.is_some());
+    let pending = client.get_pending_dao(&dao.token).unwrap();
+    assert!(pending.claims_payment_asset.is_some());
 }

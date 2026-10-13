@@ -82,8 +82,6 @@ fn setup() -> (
         (
             owner.clone(),
             Address::generate(&e),
-            Address::generate(&e),
-            Address::generate(&e),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
             Address::generate(&e),
@@ -309,8 +307,6 @@ fn quorum_uses_total_supply_bps() {
         DaoTokenContract,
         (
             owner.clone(),
-            Address::generate(&e),
-            Address::generate(&e),
             Address::generate(&e),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
@@ -1675,8 +1671,6 @@ fn treasury_held_tokens_never_raise_quorum() {
         (
             owner.clone(),
             treasury_id.clone(),
-            Address::generate(&e),
-            Address::generate(&e),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
             Address::generate(&e),

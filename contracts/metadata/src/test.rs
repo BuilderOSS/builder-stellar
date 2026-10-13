@@ -55,8 +55,6 @@ fn create_token_contract(env: &Env, owner: &Address) -> Address {
         (
             owner.clone(),
             Address::generate(env), // treasury
-            Address::generate(env), // auction
-            Address::generate(env), // marketplace
             String::from_str(env, "Test Token"),
             String::from_str(env, "TEST"),
             Address::generate(env), // metadata address (placeholder)
@@ -1708,8 +1706,6 @@ fn token_uri_worst_case_fits_the_limits() {
         DaoTokenContract,
         (
             owner.clone(),
-            Address::generate(&env),
-            Address::generate(&env),
             Address::generate(&env),
             // OpenZeppelin caps the collection name at 40 bytes.
             String::from_str(&env, &"N".repeat(40)),
