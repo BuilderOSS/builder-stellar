@@ -7,6 +7,7 @@ use soroban_sdk::{
 };
 
 use common::clients::NftClient;
+use common::modules::RenewalPage;
 use soroban_sdk::token::TokenClient;
 
 use crate::{
@@ -66,24 +67,24 @@ impl MarketplaceContract {
         storage::get_listing(e, token_id)
     }
 
-    /// One-shot, Manager-only launch handoff (Setup -> Live).
+    /// One-shot, Manager-only launch (Setup -> Live), `DaoModule::launch`.
     ///
     /// `treasury` must equal the treasury wired at construction (wiring is
-    /// immutable). Hands the admin to the treasury. The marketplace is left
-    /// unpaused when `open` is true and forced paused otherwise. Panics
-    /// `PaymentAssetMismatch` if the payment asset differs from
-    /// `expected_payment_asset`. A second call panics with `AlreadyLive`.
-    pub fn launch(e: &Env, treasury: Address, open: bool, expected_payment_asset: Address) {
+    /// immutable). Hands the admin to the treasury unless `handoff` already
+    /// did. The marketplace is left unpaused when `open` is true and forced
+    /// paused otherwise. The Manager checks the payment asset against the one
+    /// recorded at `create_dao` before calling. A second call panics with
+    /// `AlreadyLive`.
+    pub fn launch(e: &Env, treasury: Address, open: bool) {
         let mut config = Self::get_config(e);
         config.manager.require_auth();
         common::lifecycle::mark_live(e);
         if treasury != config.treasury {
             panic_with_error!(e, MarketplaceError::TreasuryMismatch);
         }
-        if expected_payment_asset != config.payment_asset {
-            panic_with_error!(e, MarketplaceError::PaymentAssetMismatch);
+        if common::admin::admin(e) != treasury {
+            common::admin::handoff(e, &treasury);
         }
-        common::admin::handoff(e, &treasury);
         // `open == false` forces paused even if the launch admin unpaused in setup.
         let was_paused = config.paused;
         config.paused = !open;
@@ -101,6 +102,58 @@ impl MarketplaceContract {
         }
         common::ttl::extend_instance(e);
         emit_launched(e, &treasury, open);
+    }
+
+    /// Manager-only early handoff: the admin moves to `treasury` and the
+    /// module stays in Setup, so its setters and upgrades are frozen until
+    /// launch. Panics `AlreadyLive` once launched.
+    pub fn handoff(e: &Env, treasury: Address) {
+        let config = Self::get_config(e);
+        config.manager.require_auth();
+        common::lifecycle::require_setup(e);
+        if treasury != config.treasury {
+            panic_with_error!(e, MarketplaceError::TreasuryMismatch);
+        }
+        if common::admin::admin(e) != treasury {
+            common::admin::handoff(e, &treasury);
+        }
+        common::ttl::extend_instance(e);
+    }
+
+    /// The configured payment asset (`DaoModule::payment_asset`).
+    pub fn payment_asset(e: &Env) -> Address {
+        Self::get_config(e).payment_asset
+    }
+
+    /// DAO-owned keys for the renewal sweep (`DaoModule::renewal_keys`).
+    ///
+    /// The key space is `Listing(0..minted)` followed by
+    /// `PrimaryListing(0..next_listing_id)`. Both bounds come from instance
+    /// storage, so the page answers even when the listings have archived.
+    /// Most slots hold no listing; the sweep renews only what it finds. The
+    /// balances held are the escrowed tokens and the payment asset (a listing
+    /// created before `set_payment_asset` may be priced in an older one; the
+    /// sweep reads those from the listings it finds).
+    pub fn renewal_keys(e: &Env, cursor: u32, limit: u32) -> RenewalPage {
+        let config = Self::get_config(e);
+        let minted = NftClient::new(e, &config.token).minted();
+        let primaries = u32::try_from(storage::peek_next_listing_id(e)).unwrap_or(u32::MAX);
+        let total = minted.saturating_add(primaries);
+        let (end, next_cursor) = common::modules::renewal_window(cursor, limit, total);
+        let mut keys = Vec::new(e);
+        for slot in cursor..end {
+            let key: Val = if slot < minted {
+                common::ns(e, DataKey::Listing(slot)).into_val(e)
+            } else {
+                common::ns(e, DataKey::PrimaryListing(u64::from(slot - minted))).into_val(e)
+            };
+            keys.push_back((key, true));
+        }
+        RenewalPage {
+            keys,
+            assets: vec![e, config.token, config.payment_asset],
+            next_cursor,
+        }
     }
 
     pub fn get_primary_listing(e: &Env, listing_id: u64) -> Option<PrimaryListing> {

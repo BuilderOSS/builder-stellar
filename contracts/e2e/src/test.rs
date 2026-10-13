@@ -939,7 +939,7 @@ fn setup_auction() -> AuctionFixture {
     // Unpause/pause/setters are therefore exercised as the treasury, which is
     // returned as `owner`.
     token.launch(&treasury.address, &grant(&e, &auction.address));
-    auction.launch(&treasury.address, &false, &payment_token);
+    auction.launch(&treasury.address, &false);
     let _ = launch_admin;
     let treasury_address = treasury.address.clone();
     (
@@ -1103,13 +1103,13 @@ fn test_auction_full_lifecycle() {
 
 #[test]
 fn test_auction_launch_starts_first_auction_and_hands_off_to_treasury() {
-    let (e, token, treasury, auction, launch_admin, payment_token, _payment_client) =
+    let (e, token, treasury, auction, launch_admin, _payment_token, _payment_client) =
         setup_auction_setup_phase();
 
     assert_eq!(auction.admin(), launch_admin.clone());
     // The token launches first so the auction holds mint authority.
     token.launch(&treasury.address, &grant(&e, &auction.address));
-    auction.launch(&treasury.address, &true, &payment_token);
+    auction.launch(&treasury.address, &true);
 
     assert_eq!(auction.admin(), treasury.address.clone());
     assert!(!auction.paused());
@@ -1118,10 +1118,10 @@ fn test_auction_launch_starts_first_auction_and_hands_off_to_treasury() {
 
 #[test]
 fn test_auction_launch_can_remain_paused() {
-    let (_e, _token, treasury, auction, _owner, payment_token, _payment_client) =
+    let (_e, _token, treasury, auction, _owner, _payment_token, _payment_client) =
         setup_auction_setup_phase();
 
-    auction.launch(&treasury.address, &false, &payment_token);
+    auction.launch(&treasury.address, &false);
 
     assert_eq!(auction.admin(), treasury.address);
     assert!(auction.paused());
@@ -1889,7 +1889,7 @@ fn marketplace_primary_sale_uses_real_token_and_sac() {
     // Manager-style launch: token first (marketplace is a canonical minter),
     // then the marketplace itself (open).
     token.launch(&treasury, &grant(&e, &marketplace_id));
-    marketplace.launch(&treasury, &true, &payment.address());
+    marketplace.launch(&treasury, &true);
 
     let listing_id = marketplace.create_primary_listing(&100, &2_000);
     let token_id = marketplace.buy_primary(&listing_id, &buyer, &i128::MAX);
@@ -2721,7 +2721,7 @@ fn real_auth_marketplace_primary_and_secondary_flows() {
     let token = DaoTokenContractClient::new(&e, &token_id);
     let marketplace = MarketplaceContractClient::new(&e, &marketplace_id);
     token.launch(&treasury, &grant(&e, &marketplace_id));
-    marketplace.launch(&treasury, &true, &pay);
+    marketplace.launch(&treasury, &true);
 
     let pay_sub = |from: &Address, to: &Address, amount: i128| MockAuthInvoke {
         contract: &pay,
@@ -3125,7 +3125,7 @@ fn treasury_buys_a_marketplace_listing_through_an_authorized_proposal() {
         ),
     );
     let marketplace = MarketplaceContractClient::new(&e, &marketplace_id);
-    marketplace.launch(&t, &true, &sac);
+    marketplace.launch(&t, &true);
 
     let seller = Address::generate(&e);
     let nft = token.mint(&owner, &seller);
@@ -3333,7 +3333,7 @@ fn system_held_tokens_and_votes_through_a_real_proposal() {
     token.launch(&treasury_id, &grant(&e, &marketplace_id));
     governor.launch(&treasury_id);
     treasury.launch(&treasury_id);
-    marketplace.launch(&treasury_id, &true, &pay);
+    marketplace.launch(&treasury_id, &true);
     assert_eq!(token.get_total_supply(), 5);
 
     // alice delegates to carol, then lists one token before the proposal.

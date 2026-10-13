@@ -5,10 +5,13 @@ extern crate std;
 use soroban_sdk::{
     contract, contractimpl,
     testutils::{Address as _, Ledger, MockAuth, MockAuthInvoke},
-    Address, BytesN, Env, IntoVal, String,
+    xdr::ToXdr,
+    Address, BytesN, Env, IntoVal, String, Val,
 };
 
-use crate::{contract::MarketplaceContract, error::MarketplaceError, MarketplaceConfig};
+use crate::{
+    contract::MarketplaceContract, error::MarketplaceError, storage::DataKey, MarketplaceConfig,
+};
 
 #[contract]
 struct MockToken;
@@ -51,6 +54,10 @@ impl MockToken {
             .instance()
             .get(&soroban_sdk::symbol_short!("next"))
             .unwrap_or(0)
+    }
+
+    pub fn minted(e: &Env) -> u32 {
+        Self::total_supply(e)
     }
 
     pub fn owner_of(e: &Env, token_id: u32) -> Address {
@@ -105,9 +112,7 @@ struct Fixture {
 /// Fully launched (live, open) marketplace.
 fn fixture() -> Fixture {
     let fixture = fixture_setup();
-    fixture
-        .marketplace
-        .launch(&fixture.treasury, &true, &fixture.payment.address);
+    fixture.marketplace.launch(&fixture.treasury, &true);
     fixture
 }
 
@@ -194,14 +199,10 @@ fn launch_opens_marketplace_and_is_one_shot() {
     let fixture = fixture_setup();
     assert!(fixture.marketplace.get_config().paused);
 
-    fixture
-        .marketplace
-        .launch(&fixture.treasury, &true, &fixture.payment.address);
+    fixture.marketplace.launch(&fixture.treasury, &true);
     assert!(!fixture.marketplace.get_config().paused);
 
-    let r = fixture
-        .marketplace
-        .try_launch(&fixture.treasury, &true, &fixture.payment.address);
+    let r = fixture.marketplace.try_launch(&fixture.treasury, &true);
     assert_eq!(
         r.err().unwrap().unwrap(),
         common::CommonError::AlreadyLive.into()
@@ -211,9 +212,7 @@ fn launch_opens_marketplace_and_is_one_shot() {
 #[test]
 fn launch_without_open_keeps_marketplace_paused() {
     let fixture = fixture_setup();
-    fixture
-        .marketplace
-        .launch(&fixture.treasury, &false, &fixture.payment.address);
+    fixture.marketplace.launch(&fixture.treasury, &false);
     assert!(fixture.marketplace.get_config().paused);
 }
 
@@ -221,9 +220,7 @@ fn launch_without_open_keeps_marketplace_paused() {
 fn launch_rejects_treasury_other_than_wired() {
     let fixture = fixture_setup();
     let other = Address::generate(&fixture.env);
-    let r = fixture
-        .marketplace
-        .try_launch(&other, &true, &fixture.payment.address);
+    let r = fixture.marketplace.try_launch(&other, &true);
     assert_eq!(
         r.err().unwrap().unwrap(),
         MarketplaceError::TreasuryMismatch.into()
@@ -294,7 +291,7 @@ fn setters_are_gated_by_launch_admin_then_treasury() {
 
     // Live: the treasury authorizes; launch_admin no longer can.
     env.mock_all_auths();
-    mp.launch(&fixture.treasury, &true, &fixture.payment.address);
+    mp.launch(&fixture.treasury, &true);
     env.mock_auths(&[MockAuth {
         address: &fixture.launch_admin,
         invoke: &MockAuthInvoke {
@@ -915,19 +912,96 @@ mod upgrade_via_common {
 }
 
 #[test]
-fn launch_rejects_changed_payment_asset_and_succeeds_when_unchanged() {
+fn payment_asset_reports_the_configured_asset() {
+    // The Manager compares this with the asset recorded at create_dao.
     let fixture = fixture_setup();
     let mp = &fixture.marketplace;
-    let original = fixture.payment.address.clone();
+    assert_eq!(mp.payment_asset(), fixture.payment.address);
     let other = Address::generate(&fixture.env);
     mp.set_payment_asset(&other);
-    let r = mp.try_launch(&fixture.treasury, &true, &original);
+    assert_eq!(mp.payment_asset(), other);
+}
+
+#[test]
+fn handoff_moves_the_admin_and_freezes_setup_setters() {
+    let fixture = fixture_setup();
+    let env = &fixture.env;
+    let mp = &fixture.marketplace;
+    assert_eq!(mp.admin(), fixture.launch_admin);
+    mp.handoff(&fixture.treasury);
+    assert_eq!(mp.admin(), fixture.treasury);
+    // The launch admin's setter now needs the Treasury, which cannot act
+    // before launch.
+    env.mock_auths(&[MockAuth {
+        address: &fixture.launch_admin,
+        invoke: &MockAuthInvoke {
+            contract: &mp.address,
+            fn_name: "set_secondary_fee_bps",
+            args: (100u32,).into_val(env),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(mp.try_set_secondary_fee_bps(&100).is_err());
+    env.mock_all_auths();
     assert_eq!(
-        r.err().unwrap().unwrap(),
-        MarketplaceError::PaymentAssetMismatch.into()
+        mp.try_handoff(&Address::generate(env))
+            .err()
+            .unwrap()
+            .unwrap(),
+        MarketplaceError::TreasuryMismatch.into()
     );
-    mp.set_payment_asset(&original);
-    mp.launch(&fixture.treasury, &true, &original);
+    mp.launch(&fixture.treasury, &true);
+    assert_eq!(mp.admin(), fixture.treasury);
+    assert_eq!(
+        mp.try_handoff(&fixture.treasury).err().unwrap().unwrap(),
+        common::CommonError::AlreadyLive.into()
+    );
+}
+
+#[test]
+fn renewal_keys_pages_listings_then_primary_listings() {
+    let fixture = fixture();
+    let env = &fixture.env;
+    let mp = &fixture.marketplace;
+    fixture.token.mint(&fixture.treasury, &fixture.seller);
+    fixture.token.mint(&fixture.treasury, &fixture.seller);
+    mp.create_primary_listing(&10, &5_000);
+    // Compare encoded keys: a `Val` holding a vector is an object handle.
+    let encoded = |keys: soroban_sdk::Vec<(Val, bool)>| {
+        let mut vals: soroban_sdk::Vec<Val> = soroban_sdk::Vec::new(env);
+        for (key, persistent) in keys.iter() {
+            assert!(persistent);
+            vals.push_back(key);
+        }
+        vals.to_xdr(env)
+    };
+    let expect = |ks: &[DataKey]| {
+        let mut vals: soroban_sdk::Vec<Val> = soroban_sdk::Vec::new(env);
+        for k in ks {
+            vals.push_back(common::ns(env, k.clone()).into_val(env));
+        }
+        vals.to_xdr(env)
+    };
+    let first = mp.renewal_keys(&0, &2);
+    assert_eq!(first.next_cursor, Some(2));
+    assert_eq!(
+        encoded(first.keys.clone()),
+        expect(&[DataKey::Listing(0), DataKey::Listing(1)])
+    );
+    assert_eq!(
+        first.assets,
+        soroban_sdk::vec![
+            env,
+            fixture.token.address.clone(),
+            fixture.payment.address.clone()
+        ]
+    );
+    let last = mp.renewal_keys(&2, &50);
+    assert_eq!(last.next_cursor, None);
+    assert_eq!(
+        encoded(last.keys.clone()),
+        expect(&[DataKey::PrimaryListing(0)])
+    );
 }
 
 #[test]
@@ -936,7 +1010,7 @@ fn launch_without_open_forces_paused_even_if_unpaused_in_setup() {
     let mp = &fixture.marketplace;
     mp.unpause();
     assert!(!mp.get_config().paused);
-    mp.launch(&fixture.treasury, &false, &fixture.payment.address);
+    mp.launch(&fixture.treasury, &false);
     assert!(mp.get_config().paused);
 }
 
@@ -945,17 +1019,16 @@ fn launch_requires_manager_auth() {
     let fixture = fixture_setup();
     let env = &fixture.env;
     let mp = &fixture.marketplace;
-    let asset = fixture.payment.address.clone();
     env.mock_auths(&[MockAuth {
         address: &fixture.launch_admin,
         invoke: &MockAuthInvoke {
             contract: &mp.address,
             fn_name: "launch",
-            args: (&fixture.treasury, true, &asset).into_val(env),
+            args: (&fixture.treasury, true).into_val(env),
             sub_invokes: &[],
         },
     }]);
-    assert!(mp.try_launch(&fixture.treasury, &true, &asset).is_err());
+    assert!(mp.try_launch(&fixture.treasury, &true).is_err());
     assert!(mp.get_config().paused);
 }
 
@@ -1086,7 +1159,7 @@ mod bounds {
         let fixture = fixture_setup();
         let mp = &fixture.marketplace;
         assert_eq!(mp.admin(), fixture.launch_admin);
-        mp.launch(&fixture.treasury, &true, &fixture.payment.address);
+        mp.launch(&fixture.treasury, &true);
         assert_eq!(mp.admin(), fixture.treasury);
         assert_eq!(
             mp.try_migrate().err().unwrap().unwrap(),

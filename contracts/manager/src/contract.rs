@@ -5,9 +5,7 @@
 //! 2. DAO Factory - Atomic deployment of new DAOs
 //! 3. DAO Lifecycle - Deployment and launch handoff
 
-use common::clients::{
-    AuctionLaunchClient, MarketplaceLaunchClient, NftClient, TreasuryLaunchClient, WasmHashClient,
-};
+use common::clients::{DaoModuleClient, NftClient, TreasuryLaunchClient, WasmHashClient};
 use common::modules::{MintGrant, KIND_CLAIMS};
 use soroban_sdk::{contract, contractimpl, vec, Address, BytesN, Env, String, Symbol, Val, Vec};
 
@@ -895,6 +893,15 @@ impl ManagerContract {
         if nft.total_supply() <= 0 {
             return Err(ManagerError::LaunchSupplyZero);
         }
+        // Payment assets are tunable in Setup; each module launches only with
+        // the asset recorded when it was created.
+        let auction = DaoModuleClient::new(&env, &addresses.auction);
+        let marketplace = DaoModuleClient::new(&env, &addresses.marketplace);
+        if auction.payment_asset() != pending.auction_payment_asset
+            || marketplace.payment_asset() != pending.marketplace_payment_asset
+        {
+            return Err(ManagerError::PaymentAssetMismatch);
+        }
 
         // Mint allowances are exactly this canonical set; the launch_admin
         // cannot add to it. The Treasury needs none (as admin it mints without
@@ -933,16 +940,8 @@ impl ManagerContract {
         nft.launch(&treasury, &grants);
         TreasuryLaunchClient::new(&env, &addresses.governor).launch(&treasury);
         TreasuryLaunchClient::new(&env, &addresses.treasury).launch(&treasury);
-        MarketplaceLaunchClient::new(&env, &addresses.marketplace).launch(
-            &treasury,
-            &launch_config.launch_marketplace,
-            &pending.marketplace_payment_asset,
-        );
-        AuctionLaunchClient::new(&env, &addresses.auction).launch(
-            &treasury,
-            &launch_config.launch_auction,
-            &pending.auction_payment_asset,
-        );
+        marketplace.launch(&treasury, &launch_config.launch_marketplace);
+        auction.launch(&treasury, &launch_config.launch_auction);
         TreasuryLaunchClient::new(&env, &addresses.metadata).launch(&treasury);
 
         // Claim the slug (held until `change_slug`, renewed by the DAO's storage sweep) and delete

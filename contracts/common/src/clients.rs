@@ -13,6 +13,9 @@ use soroban_sdk::{contractclient, Address, BytesN, Env, String, Symbol, Val, Vec
 #[contractclient(name = "NftClient")]
 pub trait NftApi {
     fn launch(e: &Env, treasury: Address, grants: Vec<crate::modules::MintGrant>);
+    fn treasury(e: &Env) -> Address;
+    fn modules(e: &Env) -> Vec<crate::modules::ModuleEntry>;
+    fn module(e: &Env, kind: Symbol) -> Option<Address>;
     /// Module registry (Manager in Setup, admin once live).
     fn register_module(e: &Env, kind: Symbol, address: Address, non_voting: bool);
     fn admin(e: &Env) -> Address;
@@ -49,14 +52,28 @@ pub trait TreasuryLaunchApi {
     fn launch(e: &Env, treasury: Address);
 }
 
-#[contractclient(name = "MarketplaceLaunchClient")]
-pub trait MarketplaceLaunchApi {
-    fn launch(e: &Env, treasury: Address, open: bool, expected_payment_asset: Address);
-}
-
-#[contractclient(name = "AuctionLaunchClient")]
-pub trait AuctionLaunchApi {
-    fn launch(e: &Env, treasury: Address, start: bool, expected_payment_token: Address);
+/// The interface every Manager-built module implements (Auction,
+/// Marketplace, ClaimMinter; docs/designs/membership-models.md §2, eng review
+/// R5). `launch` and `handoff` are Manager-only. Modules a DAO deploys itself
+/// and registers by proposal never receive them, and `renewal_keys` is
+/// optional for those.
+#[contractclient(name = "DaoModuleClient")]
+pub trait DaoModuleApi {
+    /// Setup -> Live: hands the admin to `treasury` unless `handoff` already
+    /// did. `open` starts the module (the Auction's first auction, the
+    /// Marketplace unpaused); a module without a pause ignores it.
+    fn launch(e: &Env, treasury: Address, open: bool);
+    /// Hands the admin to `treasury` and stays in Setup, which freezes the
+    /// module's setters and upgrades until launch.
+    fn handoff(e: &Env, treasury: Address);
+    /// The asset the module is paid in. The Manager compares it with the
+    /// asset recorded at creation before launching the module.
+    fn payment_asset(e: &Env) -> Address;
+    /// The module's DAO-owned storage keys from `cursor` (see
+    /// `crate::modules::RenewalPage`). Reads only instance storage, never the
+    /// entries it lists, so it still answers once they have archived.
+    fn renewal_keys(e: &Env, cursor: u32, limit: u32) -> crate::modules::RenewalPage;
+    fn wasm_hash(e: &Env) -> BytesN<32>;
 }
 
 /// Metadata mint hooks called by the token.

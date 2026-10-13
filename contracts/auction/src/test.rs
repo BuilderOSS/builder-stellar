@@ -404,11 +404,11 @@ fn launch_without_start_is_one_shot_and_hands_admin_to_treasury() {
     let auction = DaoAuctionContractClient::new(&e, &id);
 
     assert_eq!(auction.admin(), owner);
-    auction.launch(&treasury, &false, &payment_token);
+    auction.launch(&treasury, &false);
     assert_eq!(auction.admin(), treasury.clone());
     assert!(auction.paused());
     let _ = attacker;
-    let r = auction.try_launch(&treasury, &true, &payment_token);
+    let r = auction.try_launch(&treasury, &true);
     assert_eq!(
         r.err().unwrap().unwrap(),
         common::CommonError::AlreadyLive.into()
@@ -768,35 +768,87 @@ mod upgrade_via_common {
 }
 
 #[test]
-fn launch_rejects_changed_payment_token_and_succeeds_when_unchanged() {
+fn payment_asset_reports_the_configured_token() {
+    // The Manager compares this with the token recorded at create_dao.
     let e = Env::default();
     e.mock_all_auths();
     let (auction, _owner, treasury, _token, _id, original) = setup_with_payment_token(&e);
-    auction.set_payment_token(&Address::generate(&e));
-    let r = auction.try_launch(&treasury, &false, &original);
+    assert_eq!(auction.payment_asset(), original);
+    let other = Address::generate(&e);
+    auction.set_payment_token(&other);
+    assert_eq!(auction.payment_asset(), other);
+    auction.launch(&treasury, &false);
+}
+
+#[test]
+fn handoff_moves_the_admin_and_stays_in_setup() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let (auction, owner, treasury, _token, _id, _payment) = setup_with_payment_token(&e);
+    assert_eq!(auction.admin(), owner);
+    auction.handoff(&treasury);
+    assert_eq!(auction.admin(), treasury);
+    // Still in Setup: launch works, and does not hand off again.
+    auction.launch(&treasury, &false);
+    assert_eq!(auction.admin(), treasury);
     assert_eq!(
-        r.err().unwrap().unwrap(),
-        AuctionError::PaymentTokenMismatch.into()
+        auction.try_handoff(&treasury).err().unwrap().unwrap(),
+        common::CommonError::AlreadyLive.into()
     );
-    auction.set_payment_token(&original);
-    auction.launch(&treasury, &false, &original);
+}
+
+#[test]
+fn handoff_requires_manager_auth_and_the_wired_treasury() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let (auction, owner, treasury, _token, id, _payment) = setup_with_payment_token(&e);
+    assert_eq!(
+        auction
+            .try_handoff(&Address::generate(&e))
+            .err()
+            .unwrap()
+            .unwrap(),
+        AuctionError::TreasuryMismatch.into()
+    );
+    e.mock_auths(&[MockAuth {
+        address: &owner,
+        invoke: &MockAuthInvoke {
+            contract: &id,
+            fn_name: "handoff",
+            args: (&treasury,).into_val(&e),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(auction.try_handoff(&treasury).is_err());
+    assert_eq!(auction.admin(), owner);
+}
+
+#[test]
+fn renewal_keys_lists_the_held_balances() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let (auction, _owner, _treasury, token, _id, payment) = setup_with_payment_token(&e);
+    let page = auction.renewal_keys(&0, &50);
+    assert!(page.keys.is_empty());
+    assert_eq!(page.assets, soroban_sdk::vec![&e, token, payment]);
+    assert_eq!(page.next_cursor, None);
 }
 
 #[test]
 fn launch_requires_manager_auth() {
     let e = Env::default();
     e.mock_all_auths();
-    let (auction, owner, treasury, _token, id, payment) = setup_with_payment_token(&e);
+    let (auction, owner, treasury, _token, id, _payment) = setup_with_payment_token(&e);
     e.mock_auths(&[MockAuth {
         address: &owner,
         invoke: &MockAuthInvoke {
             contract: &id,
             fn_name: "launch",
-            args: (&treasury, false, &payment).into_val(&e),
+            args: (&treasury, false).into_val(&e),
             sub_invokes: &[],
         },
     }]);
-    assert!(auction.try_launch(&treasury, &false, &payment).is_err());
+    assert!(auction.try_launch(&treasury, &false).is_err());
     assert!(auction.paused());
 }
 
@@ -872,7 +924,7 @@ mod refunds {
             ),
         );
         let auction = DaoAuctionContractClient::new(&e, &addr);
-        auction.launch(&treasury, &true, &sac_addr);
+        auction.launch(&treasury, &true);
         let sac = StellarAssetClient::new(&e, &sac_addr);
         let token = TokenClient::new(&e, &sac_addr);
         Ctx {

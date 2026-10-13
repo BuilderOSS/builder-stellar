@@ -34,8 +34,8 @@ pub enum AuctionError {
     NotInitialized = 7413,
     /// `launch` treasury differs from the treasury wired at construction
     TreasuryMismatch = 7414,
-    /// `launch` expected payment token differs from the configured one
-    PaymentTokenMismatch = 7415,
+    // 7415 (PaymentTokenMismatch) is retired: the Manager compares the
+    // payment token with the one recorded at create_dao before launch.
     /// `withdraw_refund` called with no pending refund balance
     NoPendingRefund = 7416,
     /// `time_buffer` outside 1..=86400 seconds

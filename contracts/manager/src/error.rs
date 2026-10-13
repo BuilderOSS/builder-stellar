@@ -79,4 +79,7 @@ pub enum ManagerError {
     UpgradeDelayNotElapsed = 7130,
     /// `upgrade_manager` to a hash that is not the latest Manager implementation.
     UpgradeNotLatest = 7131,
+    /// A module's payment asset differs from the one recorded when it was
+    /// created (the launch admin changed it in Setup); change it back first
+    PaymentAssetMismatch = 7132,
 }

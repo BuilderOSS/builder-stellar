@@ -841,7 +841,11 @@ impl MockToggleModule {
             .get(&2u32)
             .unwrap_or(BytesN::from_array(&e, &[0u8; 32]))
     }
-    pub fn launch(_e: Env, _treasury: Address, _flag: bool, _asset: Address) {}
+    pub fn launch(_e: Env, _treasury: Address, _flag: bool) {}
+    /// Mocks are paid in themselves; seeded PendingDaos record the same.
+    pub fn payment_asset(e: Env) -> Address {
+        e.current_contract_address()
+    }
 }
 
 /// Provide auth for `create_dao` from exactly the given signers.
@@ -1010,15 +1014,15 @@ fn test_pending_dao_launches_after_500_unrelated_create_dao() {
         addresses: crate::storage::DaoAddresses {
             token: token.clone(),
             metadata,
-            auction,
+            auction: auction.clone(),
             governor,
             treasury,
-            marketplace,
+            marketplace: marketplace.clone(),
         },
         launch_admin: launch_admin.clone(),
         slug: String::from_str(&env, "mock-dao"),
-        auction_payment_asset: Address::generate(&env),
-        marketplace_payment_asset: Address::generate(&env),
+        auction_payment_asset: auction,
+        marketplace_payment_asset: marketplace,
     };
     env.as_contract(&client.address, || {
         crate::storage::set_persistent(&env, &ManagerKey::PendingDao(token.clone()), &pending);
@@ -1324,7 +1328,7 @@ mod real_dao {
             (
                 "auction",
                 dao.auction
-                    .try_launch(&attacker, &true, &dao.payment)
+                    .try_launch(&attacker, &true)
                     .err()
                     .unwrap()
                     .unwrap(),
@@ -1332,7 +1336,7 @@ mod real_dao {
             (
                 "marketplace",
                 dao.marketplace
-                    .try_launch(&attacker, &true, &dao.payment)
+                    .try_launch(&attacker, &true)
                     .err()
                     .unwrap()
                     .unwrap(),
@@ -1415,14 +1419,14 @@ mod real_dao {
             (
                 "auction",
                 dao.auction
-                    .try_launch(&attacker, &false, &dao.payment)
+                    .try_launch(&attacker, &false)
                     .err()
                     .and_then(|e| e.ok()),
             ),
             (
                 "marketplace",
                 dao.marketplace
-                    .try_launch(&attacker, &false, &dao.payment)
+                    .try_launch(&attacker, &false)
                     .err()
                     .and_then(|e| e.ok()),
             ),
@@ -1853,7 +1857,7 @@ mod real_dao {
         let r = dao
             .client
             .try_launch_dao(&dao.addresses.token, &cfg(&dao.env, true, true));
-        assert!(r.is_err());
+        assert_eq!(r, Err(Ok(ManagerError::PaymentAssetMismatch)));
         assert!(dao.client.get_pending_dao(&dao.addresses.token).is_some());
         assert_eq!(dao.token.admin(), dao.launch_admin.clone());
         dao.auction.set_payment_token(&dao.payment);
@@ -1863,7 +1867,7 @@ mod real_dao {
         let r = dao
             .client
             .try_launch_dao(&dao.addresses.token, &cfg(&dao.env, true, true));
-        assert!(r.is_err());
+        assert_eq!(r, Err(Ok(ManagerError::PaymentAssetMismatch)));
         assert!(dao.client.get_pending_dao(&dao.addresses.token).is_some());
         dao.marketplace.set_payment_asset(&dao.payment);
 
@@ -1937,13 +1941,13 @@ mod real_dao {
         only_stranger!(&dao.addresses.treasury, "launch", (&t,));
         assert!(dao.treasury.try_launch(&t).is_err());
         only_stranger!(&dao.addresses.auction, "launch", (&t, true, &dao.payment));
-        assert!(dao.auction.try_launch(&t, &true, &dao.payment).is_err());
+        assert!(dao.auction.try_launch(&t, &true).is_err());
         only_stranger!(
             &dao.addresses.marketplace,
             "launch",
             (&t, true, &dao.payment)
         );
-        assert!(dao.marketplace.try_launch(&t, &true, &dao.payment).is_err());
+        assert!(dao.marketplace.try_launch(&t, &true).is_err());
         only_stranger!(&dao.addresses.metadata, "launch", (&t,));
         assert!(dao.metadata.try_launch(&t).is_err());
 
@@ -2304,8 +2308,8 @@ mod launch_revocation {
             },
             launch_admin: launch_admin.clone(),
             slug: String::from_str(env, "mock-dao"),
-            auction_payment_asset: Address::generate(env),
-            marketplace_payment_asset: Address::generate(env),
+            auction_payment_asset: auction.clone(),
+            marketplace_payment_asset: marketplace.clone(),
         };
         env.as_contract(&client.address, || {
             crate::storage::set_persistent(env, &ManagerKey::PendingDao(token.clone()), &pending);
@@ -2440,19 +2444,21 @@ fn seed_mock_pending(env: &Env, client: &ManagerContractClient, slug: &str) -> A
     env.as_contract(&token, || {
         env.storage().instance().set(&1u32, &launch_admin);
     });
+    let auction = env.register(MockToggleModule, ());
+    let marketplace = env.register(MockToggleModule, ());
     let pending = PendingDao {
         addresses: crate::storage::DaoAddresses {
             token: token.clone(),
             metadata: env.register(MockLaunchModule, ()),
-            auction: env.register(MockToggleModule, ()),
+            auction: auction.clone(),
             governor: env.register(MockLaunchModule, ()),
             treasury: env.register(MockLaunchModule, ()),
-            marketplace: env.register(MockToggleModule, ()),
+            marketplace: marketplace.clone(),
         },
         launch_admin,
         slug: String::from_str(env, slug),
-        auction_payment_asset: Address::generate(env),
-        marketplace_payment_asset: Address::generate(env),
+        auction_payment_asset: auction,
+        marketplace_payment_asset: marketplace,
     };
     env.as_contract(&client.address, || {
         crate::storage::set_persistent(env, &ManagerKey::PendingDao(token.clone()), &pending);
