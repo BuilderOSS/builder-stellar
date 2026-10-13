@@ -1,9 +1,47 @@
-import { CodeBlock, Text } from '@/components/ui';
+import { ButtonLink, CodeBlock, Disclosure, Text } from '@/components/ui';
+import { useOptionalDaoContext } from '@/contexts/dao-context';
+import { getConfiguredAuctionNetwork } from '@/lib/auction-values';
+import { daoRoute } from '@/lib/dao-routes';
+import { claimPriceLabel, formatClaimDate } from '@/lib/minter/display';
 import { claimListCall, type ClaimListDraft, validateClaimListDraft } from '@/lib/minter/proposal-actions';
 
-import type { ActionHandler } from './types';
+import type { ActionFormProps, ActionHandler } from './types';
 
 type ScopedDraft = ClaimListDraft & { claimsContractId?: string };
+
+/** The list in words; the raw draft stays under Technical details. Lists are prepared in Claims admin. */
+function ClaimListSummary({ value, network = getConfiguredAuctionNetwork() }: ActionFormProps<ScopedDraft>) {
+  const routeId = useOptionalDaoContext()?.routeId;
+  if (!value.total)
+    return (
+      <>
+        <Text>
+          Prepare a claim list in Manage → Claims. It publishes the full list so anyone can check it, then adds this
+          action to your proposal for you, after the allowance it needs.
+        </Text>
+        {routeId ? (
+          <div>
+            <ButtonLink href={daoRoute(routeId, 'admin/claims')} variant="secondary" size="sm">
+              Prepare a claim list
+            </ButtonLink>
+          </div>
+        ) : null}
+      </>
+    );
+  return (
+    <>
+      <Text>
+        Opens {BigInt(value.price || '0') === 0n ? 'a free list' : 'a list'} of {value.total.toLocaleString()}{' '}
+        {value.total === 1 ? 'token' : 'tokens'}
+        {BigInt(value.price || '0') === 0n ? '' : ` at ${claimPriceLabel(network, value)}`}, open until{' '}
+        {formatClaimDate(value.expiresAt)}. Listed people claim their tokens themselves; paid claims go to the treasury.
+      </Text>
+      <Disclosure title="Technical details">
+        <CodeBlock>{JSON.stringify(value, null, 2)}</CodeBlock>
+      </Disclosure>
+    </>
+  );
+}
 
 /** Open a ClaimMinter claim list. Prepared in Claims admin, queued after its allowance grant. */
 export const openClaimListHandler: ActionHandler<ScopedDraft> = {
@@ -11,15 +49,7 @@ export const openClaimListHandler: ActionHandler<ScopedDraft> = {
   label: 'Open a claim list',
   description: 'Prepare the list in Claims admin: it grants the claims module an allowance and opens the list.',
   group: 'Allocations',
-  FormComponent: ({ value }) => (
-    <>
-      <Text>
-        Prepare a claim list in Claims admin. Its full list is published so anyone can check it, and members claim their
-        tokens themselves, paying the list price.
-      </Text>
-      <CodeBlock>{JSON.stringify(value, null, 2)}</CodeBlock>
-    </>
-  ),
+  FormComponent: ClaimListSummary,
   getDefaultValues: () => ({
     type: 'open-claim-list',
     root: '',
