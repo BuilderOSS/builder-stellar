@@ -48,6 +48,10 @@ export default function TokenAdminPage() {
   // The Treasury mints as the Token admin; modules mint against their allowances (Manage → Membership).
   const treasuryCanMint = treasuryIsAdmin(config, tokenAdmin);
   const canProposeMint = Boolean(session.address && token.data?.live && treasuryCanMint);
+  // An open launch drive hands the Token to the Treasury before launch: no one can mint until it launches.
+  const frozen = Boolean(token.data && !token.data.live && token.data.admin === config.treasuryContractId);
+  const count = Number.isInteger(Number(amount)) && Number(amount) > 0 ? Number(amount) : null;
+  const tokensLabel = count ? `${count} ${count === 1 ? 'token' : 'tokens'}` : 'tokens';
 
   async function handleMint() {
     if (
@@ -176,7 +180,15 @@ export default function TokenAdminPage() {
           <Card p="5">
             <Stack gap="3">
               <div>
-                <Badge>{hasMintAccess ? 'You can mint' : canProposeMint ? 'Mint by vote' : 'Read only'}</Badge>
+                <Badge>
+                  {hasMintAccess
+                    ? 'You can mint'
+                    : canProposeMint
+                      ? 'Mint by vote'
+                      : frozen
+                        ? 'Locked for the launch drive'
+                        : 'Read only'}
+                </Badge>
               </div>
               <Heading size="heading">Mint membership tokens</Heading>
               <Text size="sm">
@@ -184,7 +196,11 @@ export default function TokenAdminPage() {
                   ? `Mint up to ${MAX_BATCH_MINT} tokens at a time straight to one wallet.`
                   : canProposeMint
                     ? `Propose minting up to ${MAX_BATCH_MINT} tokens at a time to one wallet. It runs if the vote passes.`
-                    : 'Only the token admin can mint from this page: the launch admin in setup, a proposal once launched.'}
+                    : frozen
+                      ? 'The launch drive froze minting: new tokens come only from its claim list until the community launches.'
+                      : token.data?.live && !session.address
+                        ? 'Connect a wallet to propose a mint. It runs if the vote passes.'
+                        : 'Only the token admin can mint from this page: the launch admin in setup, a proposal once launched.'}
               </Text>
               <BatchMintGovernanceTokenForm
                 value={{ recipient, amount } satisfies BatchMintGovernanceTokenData}
@@ -211,8 +227,13 @@ export default function TokenAdminPage() {
                 </>
               ) : null}
               <div className={css({ display: 'flex', gap: '2', flexWrap: 'wrap' })}>
-                <Button type="button" onClick={handleMint} disabled={busy || (!hasMintAccess && !canProposeMint)}>
-                  {busy ? 'Preparing…' : hasMintAccess ? 'Mint to recipient' : 'Create mint proposal'}
+                <Button
+                  type="button"
+                  onClick={handleMint}
+                  loading={busy}
+                  disabled={busy || (!hasMintAccess && !canProposeMint)}
+                >
+                  {hasMintAccess ? `Mint ${tokensLabel}` : `Propose minting ${tokensLabel}`}
                 </Button>
                 <ButtonLink href={daoRoute(routeId, 'admin/owner')} variant="secondary">
                   Module allowances
