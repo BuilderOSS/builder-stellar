@@ -165,6 +165,7 @@ fn setup_with(
             metadata_id.clone(),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
+            common::modules::TokenSettings::default(),
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
@@ -1003,6 +1004,7 @@ fn setup_auction_setup_phase() -> (
             metadata_id.clone(),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
+            common::modules::TokenSettings::default(),
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
@@ -1701,6 +1703,7 @@ fn test_governor_treasury_bidirectional_verification() {
             metadata_id.clone(),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
+            common::modules::TokenSettings::default(),
         ),
     );
     register_metadata(&e, &metadata_id, &token_id, &owner);
@@ -1881,6 +1884,7 @@ fn marketplace_pool_sale_uses_real_token_and_sac() {
             metadata_id.clone(),
             manager.clone(),
             BytesN::from_array(&e, &[0; 32]),
+            common::modules::TokenSettings::default(),
         ),
     );
     register_metadata(&e, &metadata_id, &token_id, &treasury);
@@ -2723,6 +2727,7 @@ fn real_auth_marketplace_pool_and_secondary_flows() {
             metadata_id.clone(),
             manager.clone(),
             BytesN::from_array(&e, &[0; 32]),
+            common::modules::TokenSettings::default(),
         ),
     );
     register_metadata(&e, &metadata_id, &token_id, &treasury);
@@ -2946,6 +2951,8 @@ fn slug_params_with(
                 quorum_bps: 1000,
             },
             modules,
+            token_settings: Default::default(),
+            transfer_agents: Vec::new(e),
         },
     }
 }
@@ -3335,6 +3342,7 @@ fn system_held_tokens_and_votes_through_a_real_proposal() {
             metadata_id.clone(),
             manager.clone(),
             zero.clone(),
+            common::modules::TokenSettings::default(),
         ),
     );
     register_metadata(&e, &metadata_id, &token_id, &admin);
@@ -5812,3 +5820,6 @@ fn dao_module_chains_two_upgrades_in_one_proposal() {
 
 #[path = "membership.rs"]
 mod membership;
+
+#[path = "locked.rs"]
+mod locked;

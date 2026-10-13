@@ -104,4 +104,7 @@ pub enum ManagerError {
     AssuranceFailed = 7141,
     /// `release_slug` / `recover_claims` before the drive has failed
     AssuranceNotFailed = 7142,
+    /// `transfer_agents` names a kind (or names it twice) that `modules`
+    /// does not create exactly once
+    UnknownAgentKind = 7143,
 }

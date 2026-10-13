@@ -64,6 +64,7 @@ fn deploy(
             Address::generate(e),
             manager,
             hash,
+            common::modules::TokenSettings::default(),
         ),
     );
     let client = DaoTokenContractClient::new(e, &id).mock_all_auths();
@@ -1436,6 +1437,7 @@ fn mint_and_batch_mint_seed_attributes_after_a_rename() {
             metadata.clone(),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
+            common::modules::TokenSettings::default(),
         ),
     );
     e.register_at(&metadata, HookCounter, ());
@@ -1725,6 +1727,7 @@ mod review {
                 Address::generate(&e),
                 Address::generate(&e),
                 BytesN::from_array(&e, &[0u8; 32]),
+                common::modules::TokenSettings::default(),
             ),
         );
         let client = DaoTokenContractClient::new(&e, &id);
@@ -1844,5 +1847,542 @@ mod review {
             common::CommonError::AlreadyLive.into()
         );
         let _ = manager;
+    }
+}
+
+/// docs/designs/locked-tokens.md: the three membership switches, transfer
+/// agents and DAO recovery.
+mod locked {
+    use super::*;
+    use crate::events::{
+        AgentTransfer, DaoRecoveryChanged, DaoTransfer, MembersOnlyDelegationChanged,
+        TransferAgentChanged, TransfersLockChanged,
+    };
+    use common::modules::TokenSettings;
+    use soroban_sdk::{testutils::Events as _, testutils::Ledger as _, Event as _};
+
+    const LOCKED: TokenSettings = TokenSettings {
+        transfers_locked: true,
+        members_only_delegation: false,
+        dao_recovery: false,
+    };
+    const EXPIRY: u32 = 1_000;
+
+    struct Dao {
+        e: Env,
+        token: DaoTokenContractClient<'static>,
+        admin: Address,
+        manager: Address,
+        treasury: Address,
+        /// A registered non-voting module (DAO custody).
+        market: Address,
+    }
+
+    impl Dao {
+        /// A token with `settings` and a non-voting `marketplace` stub, in
+        /// Setup.
+        fn new(settings: TokenSettings) -> Self {
+            let e = Env::default();
+            e.mock_all_auths();
+            e.ledger().set_sequence_number(100);
+            let admin = Address::generate(&e);
+            let treasury = Address::generate(&e);
+            let manager = Address::generate(&e);
+            let id = e.register(
+                DaoTokenContract,
+                (
+                    admin.clone(),
+                    treasury.clone(),
+                    String::from_str(&e, "DAO"),
+                    String::from_str(&e, "DAO"),
+                    Address::generate(&e),
+                    manager.clone(),
+                    BytesN::from_array(&e, &[0u8; 32]),
+                    settings,
+                ),
+            );
+            let token = DaoTokenContractClient::new(&e, &id);
+            let market = stub(&e);
+            token.register_module(&Symbol::new(&e, "marketplace"), &market, &true);
+            Dao {
+                e,
+                token,
+                admin,
+                manager,
+                treasury,
+                market,
+            }
+        }
+
+        fn launch(&self) {
+            self.token
+                .launch(&self.treasury, &soroban_sdk::Vec::new(&self.e));
+        }
+
+        /// Mint one token to `to` (by whoever is admin now).
+        fn mint(&self, to: &Address) -> u32 {
+            self.token.mint(&self.token.admin(), to)
+        }
+
+        fn locked_err(&self) -> soroban_sdk::Error {
+            TokenError::TransfersLocked.into()
+        }
+
+        fn last_event(&self) -> soroban_sdk::xdr::ContractEvent {
+            self.e.events().all().events().last().unwrap().clone()
+        }
+
+        /// Only `who` signs the next call to `function` on the token.
+        fn only(
+            &self,
+            who: &Address,
+            function: &'static str,
+            args: soroban_sdk::Vec<soroban_sdk::Val>,
+        ) {
+            self.e.mock_auths(&[MockAuth {
+                address: who,
+                invoke: &MockAuthInvoke {
+                    contract: &self.token.address,
+                    fn_name: function,
+                    args,
+                    sub_invokes: &[],
+                },
+            }]);
+        }
+    }
+
+    #[test]
+    fn the_settings_are_stored_and_announced_at_construction() {
+        let settings = TokenSettings {
+            transfers_locked: true,
+            members_only_delegation: true,
+            dao_recovery: false,
+        };
+        let d = Dao::new(settings.clone());
+        assert_eq!(d.token.settings(), settings);
+        assert!(d.token.transfers_locked());
+        assert!(d.token.members_only_delegation());
+        assert!(!d.token.dao_recovery());
+        let open = Dao::new(TokenSettings::default());
+        assert_eq!(open.token.settings(), TokenSettings::default());
+    }
+
+    #[test]
+    fn a_locked_token_moves_only_along_the_dao_paths() {
+        let d = Dao::new(LOCKED);
+        let (alice, bob, carol) = (
+            Address::generate(&d.e),
+            Address::generate(&d.e),
+            Address::generate(&d.e),
+        );
+        let a = d.mint(&alice);
+        let in_custody = d.mint(&d.market);
+        d.launch();
+        let t = &d.treasury;
+
+        // Holder to holder: refused.
+        assert_eq!(
+            d.token
+                .try_transfer(&alice, &bob, &a)
+                .err()
+                .unwrap()
+                .unwrap(),
+            d.locked_err()
+        );
+        // Path 1, out of custody: the Marketplace hands its token to carol.
+        d.token.transfer(&d.market, &carol, &in_custody);
+        assert_eq!(d.token.owner_of(&in_custody), carol);
+        // Path 3, a DAO-approved transfer: alice approves the Treasury, which
+        // moves it by proposal.
+        d.token.approve(&alice, t, &a, &EXPIRY);
+        d.token.transfer_from(t, &alice, &bob, &a);
+        assert_eq!(d.token.owner_of(&a), bob);
+        // Path 2, give back to the DAO.
+        d.token.transfer(&bob, t, &a);
+        assert_eq!(d.token.owner_of(&a), *t);
+        // Path 1 again: the Treasury hands it out.
+        d.token.transfer(t, &alice, &a);
+        assert_eq!(d.token.owner_of(&a), alice);
+        // Votes stayed exact: alice and carol each hold one voting token.
+        assert_eq!(d.token.get_votes(&alice), 1);
+        assert_eq!(d.token.get_votes(&carol), 1);
+        assert_eq!(d.token.get_total_supply(), 2);
+    }
+
+    #[test]
+    fn approvals_on_a_locked_token_go_to_the_treasury_or_come_from_custody() {
+        let d = Dao::new(LOCKED);
+        let (alice, bob) = (Address::generate(&d.e), Address::generate(&d.e));
+        let a = d.mint(&alice);
+        let held = d.mint(&d.market);
+        d.launch();
+        let t = &d.treasury;
+        // A holder may approve only the Treasury.
+        assert_eq!(
+            d.token
+                .try_approve(&alice, &bob, &a, &EXPIRY)
+                .err()
+                .unwrap()
+                .unwrap(),
+            d.locked_err()
+        );
+        assert_eq!(
+            d.token
+                .try_approve_for_all(&alice, &bob, &EXPIRY)
+                .err()
+                .unwrap()
+                .unwrap(),
+            d.locked_err()
+        );
+        d.token.approve(&alice, t, &a, &EXPIRY);
+        d.token.approve_for_all(&alice, t, &EXPIRY);
+        // Revoking is always allowed.
+        d.token.approve(&alice, &bob, &a, &0);
+        d.token.approve_for_all(&alice, &bob, &0);
+        // The rule reads the token's owner: the Treasury, as alice's
+        // operator, still cannot approve bob for her token.
+        d.token.approve_for_all(&alice, t, &EXPIRY);
+        assert_eq!(
+            d.token
+                .try_approve(t, &bob, &a, &EXPIRY)
+                .err()
+                .unwrap()
+                .unwrap(),
+            d.locked_err()
+        );
+        // DAO custody may approve anyone (approval-based modules).
+        d.token.approve(&d.market, &bob, &held, &EXPIRY);
+        d.token.transfer_from(&bob, &d.market, &bob, &held);
+        assert_eq!(d.token.owner_of(&held), bob);
+    }
+
+    #[test]
+    fn locking_stops_earlier_approvals_and_listings_and_unlocking_restores_them() {
+        let d = Dao::new(TokenSettings::default());
+        let (alice, bob) = (Address::generate(&d.e), Address::generate(&d.e));
+        let a = d.mint(&alice);
+        d.launch();
+        // Unlocked: as today, including an unapproved spender failing.
+        assert!(d.token.try_transfer_from(&bob, &alice, &bob, &a).is_err());
+        d.token.approve(&alice, &bob, &a, &EXPIRY);
+        // A Marketplace-style escrow (approval to custody) taken before the lock.
+        let b = d.mint(&alice);
+        d.token.approve(&alice, &d.market, &b, &EXPIRY);
+        d.token.transfer_from(&d.market, &alice, &d.market, &b);
+
+        d.token.set_transfers_locked(&true);
+        assert_eq!(
+            d.last_event(),
+            TransfersLockChanged {
+                locked: true,
+                changed_by: d.treasury.clone(),
+            }
+            .to_xdr(&d.e, &d.token.address)
+        );
+        // The earlier approval no longer moves the token.
+        assert_eq!(
+            d.token
+                .try_transfer_from(&bob, &alice, &bob, &a)
+                .err()
+                .unwrap()
+                .unwrap(),
+            d.locked_err()
+        );
+        // The escrowed token can still leave custody (bought or cancelled).
+        d.token.transfer(&d.market, &bob, &b);
+        assert_eq!(
+            d.token
+                .try_set_transfers_locked(&true)
+                .err()
+                .unwrap()
+                .unwrap(),
+            TokenError::SettingUnchanged.into()
+        );
+        // Unlocking applies at once.
+        d.token.set_transfers_locked(&false);
+        d.token.transfer_from(&bob, &alice, &bob, &a);
+        assert_eq!(d.token.owner_of(&a), bob);
+    }
+
+    #[test]
+    fn the_switches_belong_to_the_launch_admin_in_setup_and_the_treasury_once_live() {
+        let d = Dao::new(TokenSettings::default());
+        // Setup: the launch admin may fix a creation mistake.
+        d.only(&d.admin, "set_dao_recovery", (true,).into_val(&d.e));
+        d.token.set_dao_recovery(&true);
+        assert_eq!(
+            d.last_event(),
+            DaoRecoveryChanged {
+                enabled: true,
+                changed_by: d.admin.clone(),
+            }
+            .to_xdr(&d.e, &d.token.address)
+        );
+        d.e.mock_all_auths();
+        // After an assurance drive's early handoff the launch admin cannot.
+        d.token.handoff(&d.treasury);
+        d.only(
+            &d.admin,
+            "set_members_only_delegation",
+            (true,).into_val(&d.e),
+        );
+        assert!(d.token.try_set_members_only_delegation(&true).is_err());
+        d.e.mock_all_auths();
+        d.launch();
+        d.token.set_members_only_delegation(&true);
+        assert_eq!(
+            d.last_event(),
+            MembersOnlyDelegationChanged {
+                enabled: true,
+                changed_by: d.treasury.clone(),
+            }
+            .to_xdr(&d.e, &d.token.address)
+        );
+        // Each setter refuses the value it already has.
+        assert_eq!(
+            d.token
+                .try_set_members_only_delegation(&true)
+                .err()
+                .unwrap()
+                .unwrap(),
+            TokenError::SettingUnchanged.into()
+        );
+        assert_eq!(
+            d.token.try_set_dao_recovery(&true).err().unwrap().unwrap(),
+            TokenError::SettingUnchanged.into()
+        );
+        assert_eq!(
+            d.token
+                .try_set_transfers_locked(&false)
+                .err()
+                .unwrap()
+                .unwrap(),
+            TokenError::SettingUnchanged.into()
+        );
+    }
+
+    #[test]
+    fn dao_transfer_needs_recovery_takes_the_current_owner_and_never_touches_modules() {
+        for transfers_locked in [true, false] {
+            let d = Dao::new(TokenSettings {
+                transfers_locked,
+                ..TokenSettings::default()
+            });
+            let (alice, bob) = (Address::generate(&d.e), Address::generate(&d.e));
+            let a = d.mint(&alice);
+            let held = d.mint(&d.market);
+            // Before launch it does not exist.
+            assert_eq!(
+                d.token.try_dao_transfer(&a, &bob).err().unwrap().unwrap(),
+                CommonError::NotLive.into()
+            );
+            d.launch();
+            assert_eq!(
+                d.token.try_dao_transfer(&a, &bob).err().unwrap().unwrap(),
+                TokenError::RecoveryOff.into()
+            );
+            d.token.set_dao_recovery(&true);
+            // Only the admin (the Treasury) moves it.
+            let stranger = Address::generate(&d.e);
+            d.only(&stranger, "dao_transfer", (a, bob.clone()).into_val(&d.e));
+            assert!(d.token.try_dao_transfer(&a, &bob).is_err());
+            d.e.mock_all_auths();
+            // Never out of or into a module.
+            assert_eq!(
+                d.token
+                    .try_dao_transfer(&held, &bob)
+                    .err()
+                    .unwrap()
+                    .unwrap(),
+                TokenError::ModuleCustody.into()
+            );
+            assert_eq!(
+                d.token
+                    .try_dao_transfer(&a, &d.market)
+                    .err()
+                    .unwrap()
+                    .unwrap(),
+                TokenError::ModuleCustody.into()
+            );
+            // On an unlocked token the holder tries to dodge by moving wallets;
+            // the DAO takes it from the current owner.
+            let mut from = alice.clone();
+            if !transfers_locked {
+                let other = Address::generate(&d.e);
+                d.token.transfer(&alice, &other, &a);
+                from = other;
+            }
+            d.token.dao_transfer(&a, &bob);
+            assert_eq!(
+                d.last_event(),
+                DaoTransfer {
+                    from: from.clone(),
+                    to: bob.clone(),
+                    token_id: a,
+                    changed_by: d.treasury.clone(),
+                }
+                .to_xdr(&d.e, &d.token.address)
+            );
+            assert_eq!(d.token.owner_of(&a), bob);
+            assert_eq!(d.token.get_votes(&bob), 1);
+            assert_eq!(d.token.get_votes(&from), 0);
+            // Recall to the DAO works too.
+            d.token.dao_transfer(&a, &d.treasury);
+            assert_eq!(d.token.get_total_supply(), 0);
+        }
+    }
+
+    #[test]
+    fn transfer_agents_are_granted_by_the_registrar_and_need_both_signatures() {
+        let d = Dao::new(LOCKED);
+        let agent = stub(&d.e);
+        let other = stub(&d.e);
+        let kind = Symbol::new(&d.e, "custom_circle");
+        d.token.register_module(&kind, &agent, &false);
+        d.token
+            .register_module(&Symbol::new(&d.e, "custom_other"), &other, &false);
+        let (alice, bob) = (Address::generate(&d.e), Address::generate(&d.e));
+        let a = d.mint(&alice);
+        // Setup: the launch admin cannot grant it; the Manager can.
+        d.only(
+            &d.admin,
+            "set_transfer_agent",
+            (agent.clone(), true).into_val(&d.e),
+        );
+        assert!(d.token.try_set_transfer_agent(&agent, &true).is_err());
+        d.only(
+            &d.manager,
+            "set_transfer_agent",
+            (agent.clone(), true).into_val(&d.e),
+        );
+        d.token.set_transfer_agent(&agent, &true);
+        d.e.mock_all_auths();
+        assert_eq!(d.token.transfer_agents(), vec![&d.e, agent.clone()]);
+        assert_eq!(
+            d.token
+                .try_set_transfer_agent(&agent, &true)
+                .err()
+                .unwrap()
+                .unwrap(),
+            TokenError::SettingUnchanged.into()
+        );
+        assert_eq!(
+            d.token
+                .try_set_transfer_agent(&Address::generate(&d.e), &true)
+                .err()
+                .unwrap()
+                .unwrap(),
+            TokenError::NotAModule.into()
+        );
+        // Not before launch.
+        assert_eq!(
+            d.token
+                .try_agent_transfer(&agent, &alice, &bob, &a)
+                .err()
+                .unwrap()
+                .unwrap(),
+            CommonError::NotLive.into()
+        );
+        d.launch();
+        // A registered module that is not an agent cannot.
+        assert_eq!(
+            d.token
+                .try_agent_transfer(&other, &alice, &bob, &a)
+                .err()
+                .unwrap()
+                .unwrap(),
+            TokenError::NotTransferAgent.into()
+        );
+        // The holder must sign too.
+        d.only(
+            &agent,
+            "agent_transfer",
+            (agent.clone(), alice.clone(), bob.clone(), a).into_val(&d.e),
+        );
+        assert!(d
+            .token
+            .try_agent_transfer(&agent, &alice, &bob, &a)
+            .is_err());
+        d.e.mock_all_auths();
+        // On a locked token the agent's move goes through.
+        d.token.agent_transfer(&agent, &alice, &bob, &a);
+        assert_eq!(
+            d.last_event(),
+            AgentTransfer {
+                agent: agent.clone(),
+                from: alice.clone(),
+                to: bob.clone(),
+                token_id: a,
+            }
+            .to_xdr(&d.e, &d.token.address)
+        );
+        assert_eq!(d.token.get_votes(&bob), 1);
+        // Unregistering an agent revokes it.
+        d.token.unregister_module(&agent);
+        let events = d.e.events().all();
+        assert!(events.events().contains(
+            &TransferAgentChanged {
+                module: agent.clone(),
+                enabled: false,
+                changed_by: d.treasury.clone(),
+            }
+            .to_xdr(&d.e, &d.token.address)
+        ));
+        assert!(d.token.transfer_agents().is_empty());
+        assert_eq!(
+            d.token
+                .try_agent_transfer(&agent, &bob, &alice, &a)
+                .err()
+                .unwrap()
+                .unwrap(),
+            TokenError::NotTransferAgent.into()
+        );
+    }
+
+    #[test]
+    fn members_only_delegation_refuses_non_members_and_moves_no_votes() {
+        let d = Dao::new(TokenSettings {
+            members_only_delegation: true,
+            ..TokenSettings::default()
+        });
+        let (alice, bob, outsider) = (
+            Address::generate(&d.e),
+            Address::generate(&d.e),
+            Address::generate(&d.e),
+        );
+        d.mint(&alice);
+        d.mint(&bob);
+        d.mint(&d.market);
+        d.launch();
+        // New holders are still self-delegated automatically.
+        assert_eq!(d.token.get_delegate(&alice), Some(alice.clone()));
+        let refused: soroban_sdk::Error = TokenError::DelegateNotMember.into();
+        for delegatee in [&outsider, &d.treasury, &d.market] {
+            assert_eq!(
+                d.token
+                    .try_delegate(&alice, delegatee)
+                    .err()
+                    .unwrap()
+                    .unwrap(),
+                refused
+            );
+            // A refused delegation moves no votes.
+            assert_eq!(d.token.get_votes(&alice), 1);
+            assert_eq!(d.token.get_votes(delegatee), 0);
+        }
+        // Another member: allowed; back to oneself: allowed.
+        d.token.delegate(&alice, &bob);
+        assert_eq!(d.token.get_votes(&bob), 2);
+        d.token.delegate(&alice, &alice);
+        assert_eq!(d.token.get_votes(&alice), 1);
+        // Turned off: any delegate for the next call; existing ones stay.
+        d.token.delegate(&alice, &bob);
+        d.token.set_members_only_delegation(&false);
+        d.token.delegate(&bob, &outsider);
+        // Delegation is not transitive: bob's own unit moves, alice's stays
+        // delegated to bob.
+        assert_eq!(d.token.get_votes(&outsider), 1);
+        assert_eq!(d.token.get_votes(&bob), 1);
+        assert_eq!(d.token.get_delegate(&alice), Some(bob.clone()));
     }
 }

@@ -35,4 +35,18 @@ pub enum TokenError {
     TooManyModules = 7214,
     /// The mint exceeds the module's remaining allowance
     AllowanceExceeded = 7215,
+    /// The token is locked and this movement or approval is not one of the
+    /// DAO-controlled paths (docs/designs/locked-tokens.md)
+    TransfersLocked = 7216,
+    /// A switch or transfer agent was set to the value it already has
+    SettingUnchanged = 7217,
+    /// `dao_transfer` while `dao_recovery` is off
+    RecoveryOff = 7218,
+    /// `agent_transfer` by a module the DAO has not made a transfer agent
+    NotTransferAgent = 7219,
+    /// `dao_transfer` from or to a registered module (custody keeps its own
+    /// records)
+    ModuleCustody = 7220,
+    /// Members-only delegation: the delegatee holds no token or holds no votes
+    DelegateNotMember = 7221,
 }

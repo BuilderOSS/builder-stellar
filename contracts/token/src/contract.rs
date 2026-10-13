@@ -8,18 +8,20 @@ use stellar_governance::votes::{
     transfer_voting_units, Votes, VotesStorageKey,
 };
 use stellar_tokens::non_fungible::{
-    emit_mint,
+    emit_mint, emit_transfer,
     sequential::{increment_token_id, next_token_id},
     Base, NFTStorageKey,
 };
 
 use common::clients::{MetadataHookClient, TokenUriClient};
-use common::modules::{self, MintGrant, ModuleEntry};
+use common::modules::{self, MintGrant, ModuleEntry, TokenSettings};
 
 use crate::error::TokenError;
 use crate::events::{
     emit_launched, emit_metadata_updated, emit_mint_allowance_changed, emit_module_registered,
     emit_module_unregistered, emit_token_batch_mint, emit_token_initialized, emit_token_mint,
+    AgentTransfer, DaoRecoveryChanged, DaoTransfer, MembersOnlyDelegationChanged,
+    TransferAgentChanged, TransfersLockChanged,
 };
 use crate::storage::*;
 
@@ -60,6 +62,8 @@ impl DaoTokenContract {
     /// * `current_hash` - this implementation's WASM hash (the release version is
     ///   read from the Manager registry, see `version`)
     ///
+    /// * `settings` - the membership switches (docs/designs/locked-tokens.md)
+    ///
     /// Core wiring only: the Manager registers the DAO's modules (Auction,
     /// Marketplace, ClaimMinter) with `register_module` right after deploying
     /// them.
@@ -72,6 +76,7 @@ impl DaoTokenContract {
         metadata: Address,
         manager: Address,
         current_hash: BytesN<32>,
+        settings: TokenSettings,
     ) {
         Self::set_name_and_symbol(e, &name, &symbol);
         common::admin::init(e, &admin);
@@ -79,8 +84,181 @@ impl DaoTokenContract {
         instance.set(&common::ns(e, TokenKey::MetadataContract), &metadata);
         instance.set(&common::ns(e, TokenKey::Manager), &manager);
         instance.set(&common::ns(e, TokenKey::Treasury), &treasury);
+        instance.set(&common::ns(e, TokenKey::Settings), &settings);
         common::upgrade::init(e, &current_hash, STORAGE_VERSION);
-        emit_token_initialized(e, &admin, &name, &symbol);
+        emit_token_initialized(e, &admin, &name, &symbol, &settings);
+    }
+
+    // ========================================================================
+    // Membership switches (docs/designs/locked-tokens.md)
+    // ========================================================================
+
+    /// The three membership switches.
+    pub fn settings(e: &Env) -> TokenSettings {
+        e.storage()
+            .instance()
+            .get(&common::ns(e, TokenKey::Settings))
+            .unwrap_or_default()
+    }
+
+    /// Tokens move only along DAO-controlled paths.
+    pub fn transfers_locked(e: &Env) -> bool {
+        Self::settings(e).transfers_locked
+    }
+
+    /// Holders delegate only to themselves or another voting member.
+    pub fn members_only_delegation(e: &Env) -> bool {
+        Self::settings(e).members_only_delegation
+    }
+
+    /// The Treasury may move any member's token by proposal.
+    pub fn dao_recovery(e: &Env) -> bool {
+        Self::settings(e).dao_recovery
+    }
+
+    /// Lock or unlock transfers (the admin: the launch admin in Setup, the
+    /// Treasury by proposal once Live; `SettingUnchanged` if unchanged).
+    /// Locking moves no token but removes every member's exit by sale, so the
+    /// web flags it. Applies from the next call.
+    pub fn set_transfers_locked(e: &Env, locked: bool) {
+        let changed_by = common::admin::require_admin(e);
+        common::ttl::extend_instance(e);
+        let mut settings = Self::settings(e);
+        if settings.transfers_locked == locked {
+            panic_with_error!(e, TokenError::SettingUnchanged);
+        }
+        settings.transfers_locked = locked;
+        Self::write_settings(e, &settings);
+        TransfersLockChanged { locked, changed_by }.publish(e);
+    }
+
+    /// Turn members-only delegation on or off (same authority). Governs new
+    /// `delegate` calls only: delegations already in place stay.
+    pub fn set_members_only_delegation(e: &Env, enabled: bool) {
+        let changed_by = common::admin::require_admin(e);
+        common::ttl::extend_instance(e);
+        let mut settings = Self::settings(e);
+        if settings.members_only_delegation == enabled {
+            panic_with_error!(e, TokenError::SettingUnchanged);
+        }
+        settings.members_only_delegation = enabled;
+        Self::write_settings(e, &settings);
+        MembersOnlyDelegationChanged {
+            enabled,
+            changed_by,
+        }
+        .publish(e);
+    }
+
+    /// Turn DAO recovery on or off (same authority). On, a passed proposal
+    /// can move any member's token with `dao_transfer`; one proposal may turn
+    /// it on and use it in the same execution.
+    pub fn set_dao_recovery(e: &Env, enabled: bool) {
+        let changed_by = common::admin::require_admin(e);
+        common::ttl::extend_instance(e);
+        let mut settings = Self::settings(e);
+        if settings.dao_recovery == enabled {
+            panic_with_error!(e, TokenError::SettingUnchanged);
+        }
+        settings.dao_recovery = enabled;
+        Self::write_settings(e, &settings);
+        DaoRecoveryChanged {
+            enabled,
+            changed_by,
+        }
+        .publish(e);
+    }
+
+    /// Move `token_id` from whoever owns it now to `to`, without the owner's
+    /// signature (the admin: the Treasury, by proposal; Live only; only while
+    /// `dao_recovery` is on, `RecoveryOff`). Lost-key recovery, and by the
+    /// same power recall. Taking the current owner means a holder cannot
+    /// dodge a recall by moving wallets during the vote. Neither the owner
+    /// nor `to` may be a registered module (`ModuleCustody`): custody keeps
+    /// its own records. Votes move as on any transfer.
+    pub fn dao_transfer(e: &Env, token_id: u32, to: Address) {
+        let changed_by = common::admin::require_admin(e);
+        common::lifecycle::require_live(e);
+        common::ttl::extend_instance(e);
+        if !Self::settings(e).dao_recovery {
+            panic_with_error!(e, TokenError::RecoveryOff);
+        }
+        let from = Base::owner_of(e, token_id);
+        if Self::find_module(e, &from).is_some() || Self::find_module(e, &to).is_some() {
+            panic_with_error!(e, TokenError::ModuleCustody);
+        }
+        Self::move_token(e, &from, &to, token_id);
+        DaoTransfer {
+            from,
+            to,
+            token_id,
+            changed_by,
+        }
+        .publish(e);
+    }
+
+    // ========================================================================
+    // Transfer agents (the plug-in point, e.g. the Circle's membership move)
+    // ========================================================================
+
+    /// The modules that may call `agent_transfer`.
+    pub fn transfer_agents(e: &Env) -> Vec<Address> {
+        e.storage()
+            .instance()
+            .get(&common::ns(e, TokenKey::TransferAgents))
+            .unwrap_or_else(|| Vec::new(e))
+    }
+
+    /// Make a registered module a transfer agent, or stop it being one
+    /// (`NotAModule`; `SettingUnchanged`). Same authority as
+    /// `register_module`: in Setup only the Manager (at `create_dao`, for the
+    /// kinds the creation config names), once Live only the admin (the
+    /// Treasury, by proposal). The launch admin can never grant it.
+    pub fn set_transfer_agent(e: &Env, module: Address, enabled: bool) {
+        let changed_by = Self::require_registrar(e);
+        common::ttl::extend_instance(e);
+        if Self::find_module(e, &module).is_none() {
+            panic_with_error!(e, TokenError::NotAModule);
+        }
+        let mut agents = Self::transfer_agents(e);
+        let index = agents.first_index_of(&module);
+        match (enabled, index) {
+            (true, None) => agents.push_back(module.clone()),
+            (false, Some(i)) => {
+                agents.remove(i);
+            }
+            _ => panic_with_error!(e, TokenError::SettingUnchanged),
+        }
+        Self::write_transfer_agents(e, &agents);
+        TransferAgentChanged {
+            module,
+            enabled,
+            changed_by,
+        }
+        .publish(e);
+    }
+
+    /// A transfer agent moves `token_id` from `from` to `to` (Live only;
+    /// `agent` and `from` both authorize; `NotTransferAgent`). Works on locked
+    /// and unlocked tokens alike, and does not check the recipient's consent:
+    /// an agent that needs it checks it itself. Emits OpenZeppelin `Transfer`
+    /// and `AgentTransfer`.
+    pub fn agent_transfer(e: &Env, agent: Address, from: Address, to: Address, token_id: u32) {
+        common::lifecycle::require_live(e);
+        agent.require_auth();
+        from.require_auth();
+        common::ttl::extend_instance(e);
+        if !Self::transfer_agents(e).contains(&agent) {
+            panic_with_error!(e, TokenError::NotTransferAgent);
+        }
+        Self::move_token(e, &from, &to, token_id);
+        AgentTransfer {
+            agent,
+            from,
+            to,
+            token_id,
+        }
+        .publish(e);
     }
 
     pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
@@ -263,6 +441,17 @@ impl DaoTokenContract {
         }
         entries.remove(index as u32);
         Self::write_modules(e, &entries);
+        let mut agents = Self::transfer_agents(e);
+        if let Some(i) = agents.first_index_of(&address) {
+            agents.remove(i);
+            Self::write_transfer_agents(e, &agents);
+            TransferAgentChanged {
+                module: address.clone(),
+                enabled: false,
+                changed_by: changed_by.clone(),
+            }
+            .publish(e);
+        }
         emit_module_unregistered(e, &entry.kind, &address);
     }
 
@@ -539,31 +728,36 @@ impl DaoTokenContract {
 
     /// Transfers `token_id` from `from` (auth) to `to`, moving the voting unit
     /// between their delegates. A recipient without a delegate is
-    /// self-delegated. Emits OpenZeppelin `Transfer`.
+    /// self-delegated. On a locked token only a DAO-controlled path passes
+    /// (`TransfersLocked`, see `check_locked_path`). Emits OpenZeppelin
+    /// `Transfer`.
     pub fn transfer(e: &Env, from: &Address, to: &Address, token_id: u32) {
         common::ttl::extend_instance(e);
-        let to_holder = Self::voting_holder(e, to);
-        if let Some(holder) = to_holder {
-            Self::ensure_self_delegate(e, holder);
+        from.require_auth();
+        if Self::settings(e).transfers_locked {
+            Self::check_locked_path(e, from, to, None);
         }
-        Base::transfer(e, from, to, token_id);
-        Self::move_voting_unit(e, Self::voting_holder(e, from), to_holder);
+        Self::move_token(e, from, to, token_id);
     }
 
-    /// Like `transfer`, by an approved `spender` (auth).
+    /// Like `transfer`, by an approved `spender` (auth; OpenZeppelin's
+    /// approval check runs first, so an unapproved spender fails as before).
     pub fn transfer_from(e: &Env, spender: &Address, from: &Address, to: &Address, token_id: u32) {
         common::ttl::extend_instance(e);
-        let to_holder = Self::voting_holder(e, to);
-        if let Some(holder) = to_holder {
-            Self::ensure_self_delegate(e, holder);
+        spender.require_auth();
+        Base::check_spender_approval(e, spender, from, token_id);
+        if Self::settings(e).transfers_locked {
+            Self::check_locked_path(e, from, to, Some(spender));
         }
-        Base::transfer_from(e, spender, from, to, token_id);
-        Self::move_voting_unit(e, Self::voting_holder(e, from), to_holder);
+        Self::move_token(e, from, to, token_id);
     }
 
     /// Approves `spender` to transfer `token_id` until `expiration_ledger`
-    /// (`owner` auth). The approval is cleared when the token moves. Emits
-    /// OpenZeppelin `Approve`.
+    /// (`owner` auth: the owner or an operator). The approval is cleared when
+    /// the token moves. On a locked token a holder's token can be approved
+    /// only to the Treasury (`TransfersLocked`); the rule reads the token's
+    /// owner, never the approver, and revoking (`expiration_ledger == 0`) is
+    /// always allowed. Emits OpenZeppelin `Approve`.
     pub fn approve(
         e: &Env,
         owner: &Address,
@@ -571,14 +765,23 @@ impl DaoTokenContract {
         token_id: u32,
         expiration_ledger: u32,
     ) {
+        if expiration_ledger != 0 && Self::settings(e).transfers_locked {
+            let token_owner = Base::owner_of(e, token_id);
+            Self::check_locked_approval(e, &token_owner, spender);
+        }
         Base::approve(e, owner, spender, token_id, expiration_ledger);
     }
 
     /// Lets `operator` transfer every token of `owner` until
     /// `live_until_ledger` (`owner` auth; 0 revokes). Operator transfers go
     /// through `transfer_from`, so votes move exactly as on a direct transfer.
-    /// Emits OpenZeppelin `ApproveForAll`.
+    /// On a locked token a holder can name only the Treasury
+    /// (`TransfersLocked`); revoking is always allowed. Emits OpenZeppelin
+    /// `ApproveForAll`.
     pub fn approve_for_all(e: &Env, owner: &Address, operator: &Address, live_until_ledger: u32) {
+        if live_until_ledger != 0 && Self::settings(e).transfers_locked {
+            Self::check_locked_approval(e, owner, operator);
+        }
         Base::approve_for_all(e, owner, operator, live_until_ledger);
     }
 
@@ -618,6 +821,72 @@ impl DaoTokenContract {
             }
         }
         Base::set_metadata(e, String::from_str(e, ""), name.clone(), symbol.clone());
+    }
+
+    fn write_settings(e: &Env, settings: &TokenSettings) {
+        e.storage()
+            .instance()
+            .set(&common::ns(e, TokenKey::Settings), settings);
+    }
+
+    fn write_transfer_agents(e: &Env, agents: &Vec<Address>) {
+        e.storage()
+            .instance()
+            .set(&common::ns(e, TokenKey::TransferAgents), agents);
+    }
+
+    /// DAO custody: the Treasury or a registered non-voting module.
+    fn is_custody(e: &Env, account: &Address) -> bool {
+        Self::voting_holder(e, account).is_none()
+    }
+
+    /// The paths a locked token may move along (docs/designs/locked-tokens.md
+    /// "Switch 1"); `dao_transfer` and `agent_transfer` are their own entry
+    /// points and skip this check.
+    /// 1. out of DAO custody: `from` is the Treasury or a non-voting module;
+    /// 2. back to the DAO: `to` is the Treasury;
+    /// 3. a DAO-approved transfer: the Treasury is the spender.
+    fn check_locked_path(e: &Env, from: &Address, to: &Address, spender: Option<&Address>) {
+        let treasury = Self::treasury(e);
+        let allowed = Self::is_custody(e, from) || *to == treasury || spender == Some(&treasury);
+        if !allowed {
+            panic_with_error!(e, TokenError::TransfersLocked);
+        }
+    }
+
+    /// On a locked token, a holder's tokens may be approved only to the
+    /// Treasury; DAO custody may approve anyone (so path 1 works through
+    /// approval-based modules).
+    fn check_locked_approval(e: &Env, token_owner: &Address, approved: &Address) {
+        if !Self::is_custody(e, token_owner) && *approved != Self::treasury(e) {
+            panic_with_error!(e, TokenError::TransfersLocked);
+        }
+    }
+
+    /// Members-only delegation: `delegatee` is the account itself, or holds
+    /// at least one token and votes (not the Treasury, not a non-voting
+    /// module). Tokens escrowed on the Marketplace do not count.
+    fn check_delegate(e: &Env, account: &Address, delegatee: &Address) {
+        if !Self::settings(e).members_only_delegation || delegatee == account {
+            return;
+        }
+        if Base::balance(e, delegatee) == 0 || Self::is_custody(e, delegatee) {
+            panic_with_error!(e, TokenError::DelegateNotMember);
+        }
+    }
+
+    /// The body of every token movement, minus authorization and the lock
+    /// check: self-delegate a voting recipient, move ownership (OpenZeppelin
+    /// checks the owner and clears the approval), emit `Transfer`, and move
+    /// the voting unit between the holders' delegates.
+    fn move_token(e: &Env, from: &Address, to: &Address, token_id: u32) {
+        let to_holder = Self::voting_holder(e, to);
+        if let Some(holder) = to_holder {
+            Self::ensure_self_delegate(e, holder);
+        }
+        Base::update(e, Some(from), Some(to), token_id);
+        emit_transfer(e, from, to, token_id);
+        Self::move_voting_unit(e, Self::voting_holder(e, from), to_holder);
     }
 
     /// The address whose voting units represent `account`'s tokens: `None`
@@ -756,4 +1025,12 @@ impl DaoTokenContract {
 /// `get_total_supply`, `get_total_supply_at_checkpoint`, `get_delegate`. The
 /// Governor reads voting power and voting supply through these.
 #[contractimpl(contracttrait)]
-impl Votes for DaoTokenContract {}
+impl Votes for DaoTokenContract {
+    /// OpenZeppelin `delegate`, refused (`DelegateNotMember`) when
+    /// members-only delegation is on and `delegatee` is neither the account
+    /// itself nor a voting member (docs/designs/locked-tokens.md "Switch 2").
+    fn delegate(e: &Env, account: Address, delegatee: Address) {
+        Self::check_delegate(e, &account, &delegatee);
+        stellar_governance::votes::delegate(e, &account, &delegatee);
+    }
+}

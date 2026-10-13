@@ -13,8 +13,11 @@
 //! Token sees, so random transfers and mints between wallets and the three
 //! system holders cover them. A vault module that holds tokens is registered
 //! (non-voting) and unregistered at random, and members delegate to it too
-//! (modules can be delegates, review 2 C3). The sequence is a fixed-seed LCG
-//! so a failure replays exactly.
+//! (modules can be delegates, review 2 C3). The membership switches
+//! (docs/designs/locked-tokens.md) flip at random: locked transfers, members-only
+//! delegation and recovery, with `dao_transfer` and `agent_transfer` in the mix;
+//! a movement or delegation the switches refuse must move nothing. The
+//! sequence is a fixed-seed LCG so a failure replays exactly.
 
 extern crate std;
 
@@ -64,6 +67,8 @@ struct World {
     /// non-voting module, or not, as the sequence goes.
     vault: Address,
     vault_registered: bool,
+    /// Never holds a token: a delegate members-only delegation refuses.
+    outsider: Address,
 }
 
 impl World {
@@ -85,6 +90,7 @@ impl World {
                 metadata_id.clone(),
                 Address::generate(&e),
                 BytesN::from_array(&e, &[0u8; 32]),
+                common::modules::TokenSettings::default(),
             ),
         );
         e.register_at(
@@ -131,8 +137,11 @@ impl World {
                 },
             ],
         );
+        // The stub minter is also the DAO's transfer agent (as the Circle is).
+        token.set_transfer_agent(&minter, &true);
         let wallets = (0..5).map(|_| Address::generate(&e)).collect();
         let vault = e.register(MinterStub, ());
+        let outsider = Address::generate(&e);
         Self {
             e,
             token,
@@ -141,6 +150,7 @@ impl World {
             system: std::vec![treasury, auction, marketplace],
             vault,
             vault_registered: false,
+            outsider,
         }
     }
 
@@ -187,9 +197,13 @@ impl World {
             units_sum, total,
             "clause 2 broken after step {step} ({op}): units vs TotalSupply"
         );
-        // Delegates are wallets or the vault (system holders never delegate),
-        // so the account checkpoints of every holder cover every delegate.
-        let votes_sum: u128 = self.holders().map(|a| self.token.get_votes(a)).sum();
+        // Delegates are wallets, the vault or the outsider (system holders
+        // never delegate), so these account checkpoints cover every delegate.
+        let votes_sum: u128 = self
+            .holders()
+            .chain(core::iter::once(&self.outsider))
+            .map(|a| self.token.get_votes(a))
+            .sum();
         assert_eq!(
             votes_sum, total,
             "clause 3 broken after step {step} ({op}): account checkpoints vs TotalSupply"
@@ -198,7 +212,7 @@ impl World {
 
     fn step(&mut self, rng: &mut Lcg) -> &'static str {
         let minted = self.token.minted();
-        match rng.below(6) {
+        match rng.below(11) {
             0 => {
                 let to = self.any_holder(rng);
                 self.token.mint(&self.minter, &to);
@@ -228,24 +242,51 @@ impl World {
                 if to == from {
                     return "skip self-transfer";
                 }
-                self.token.transfer(&from, &to, &id);
-                "transfer"
+                // On a locked token only DAO-controlled paths pass; a refused
+                // movement moves nothing.
+                match self.token.try_transfer(&from, &to, &id) {
+                    Ok(_) => "transfer",
+                    Err(err) => {
+                        assert_eq!(err.unwrap(), soroban_sdk::Error::from_contract_error(7216));
+                        assert!(self.token.transfers_locked());
+                        assert_eq!(self.token.owner_of(&id), from);
+                        "transfer refused"
+                    }
+                }
             }
             4 => {
                 let account = self.wallets[rng.below(self.wallets.len())].clone();
-                // One in six delegations goes to the vault.
-                let pick = rng.below(self.wallets.len() + 1);
-                let delegatee = if pick == self.wallets.len() {
-                    self.vault.clone()
-                } else {
-                    self.wallets[pick].clone()
+                // Half the delegations go to a wallet, a quarter to the vault
+                // and a quarter to an outsider who never holds a token.
+                let delegatee = match rng.below(4) {
+                    0 | 1 => self.wallets[rng.below(self.wallets.len())].clone(),
+                    2 => self.vault.clone(),
+                    _ => self.outsider.clone(),
                 };
                 // Re-delegating to the current delegate reverts (OZ SameDelegate, 4103).
                 if self.token.get_delegate(&account) == Some(delegatee.clone()) {
                     return "skip same delegate";
                 }
-                self.token.delegate(&account, &delegatee);
-                "delegate"
+                let before = (
+                    self.token.get_delegate(&account),
+                    self.token.get_votes(&delegatee),
+                    self.token.get_votes(&account),
+                );
+                match self.token.try_delegate(&account, &delegatee) {
+                    Ok(_) => "delegate",
+                    // A delegation the members-only rule refuses moves no votes.
+                    Err(err) => {
+                        assert_eq!(err.unwrap(), soroban_sdk::Error::from_contract_error(7221));
+                        assert!(self.token.members_only_delegation());
+                        let after = (
+                            self.token.get_delegate(&account),
+                            self.token.get_votes(&delegatee),
+                            self.token.get_votes(&account),
+                        );
+                        assert_eq!(before, after, "a refused delegation moved votes");
+                        "delegation refused"
+                    }
+                }
             }
             // Register the vault (moving the votes of what it holds out of the
             // supply) or unregister it (self-delegating it, moving them back).
@@ -269,6 +310,63 @@ impl World {
                         "register"
                     }
                 }
+            }
+            // The three switches, by proposal (the Treasury's auth is mocked).
+            6 => {
+                let locked = !self.token.transfers_locked();
+                self.token.set_transfers_locked(&locked);
+                if locked {
+                    "lock"
+                } else {
+                    "unlock"
+                }
+            }
+            7 => {
+                let on = !self.token.members_only_delegation();
+                self.token.set_members_only_delegation(&on);
+                "members-only toggle"
+            }
+            8 => {
+                let on = !self.token.dao_recovery();
+                self.token.set_dao_recovery(&on);
+                "recovery toggle"
+            }
+            // The DAO moves a membership from its current owner, to a member
+            // or back to the Treasury (owners in custody are refused).
+            9 if minted > 0 => {
+                let id = rng.below(minted as usize) as u32;
+                let from = self.token.owner_of(&id);
+                let pick = rng.below(self.wallets.len() + 1);
+                let to = if pick == self.wallets.len() {
+                    self.system[0].clone()
+                } else {
+                    self.wallets[pick].clone()
+                };
+                if to == from {
+                    return "skip self-transfer";
+                }
+                match self.token.try_dao_transfer(&id, &to) {
+                    Ok(_) => "dao_transfer",
+                    Err(err) => {
+                        let code = err.unwrap();
+                        let off = soroban_sdk::Error::from_contract_error(7218);
+                        let custody = soroban_sdk::Error::from_contract_error(7220);
+                        assert!(code == off || code == custody, "{code:?}");
+                        assert_eq!(self.token.owner_of(&id), from);
+                        "dao_transfer refused"
+                    }
+                }
+            }
+            // The transfer agent moves a membership, locked or not.
+            10 if minted > 0 => {
+                let id = rng.below(minted as usize) as u32;
+                let from = self.token.owner_of(&id);
+                let to = self.any_holder(rng);
+                if to == from {
+                    return "skip self-transfer";
+                }
+                self.token.agent_transfer(&self.minter, &from, &to, &id);
+                "agent_transfer"
             }
             _ => {
                 let to = self.wallets[rng.below(self.wallets.len())].clone();
@@ -303,6 +401,23 @@ fn voting_units_match_balances_and_checkpoints_add_up() {
     }
     // Registration must move the votes of tokens the vault really holds.
     assert!(held_by_vault > 0, "the vault never held tokens");
+    // Each switch flips both ways, and every new path and refusal runs.
+    for (op, at_least) in [
+        ("lock", 20),
+        ("unlock", 20),
+        ("members-only toggle", 20),
+        ("recovery toggle", 20),
+        ("transfer refused", 20),
+        ("delegation refused", 10),
+        ("dao_transfer", 10),
+        ("dao_transfer refused", 10),
+        ("agent_transfer", 20),
+    ] {
+        assert!(
+            ran.get(op).copied().unwrap_or(0) >= at_least,
+            "operation {op} ran too rarely: {ran:?}"
+        );
+    }
     for op in [
         "mint",
         "batch_mint",

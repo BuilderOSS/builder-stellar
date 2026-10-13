@@ -613,6 +613,7 @@ impl ManagerContract {
                 metadata_addr.clone(),
                 env.current_contract_address(),
                 token_wasm.clone(),
+                config.token_settings.clone(),
             ),
         );
 
@@ -712,6 +713,14 @@ impl ManagerContract {
             }
         }
         addresses = pending.addresses.clone();
+
+        // Transfer agents named at creation (docs/designs/locked-tokens.md);
+        // validated against `modules` before anything was deployed.
+        for kind in config.transfer_agents.iter() {
+            if let Some(agent) = nft.module(&kind) {
+                nft.set_transfer_agent(&agent, &true);
+            }
+        }
 
         // One persistent entry per pending DAO; no expiry semantics. Archived
         // entries are restorable, so an abandoned creation only costs its creator's rent.
@@ -1845,6 +1854,14 @@ impl ManagerContract {
             }
             kinds.push_back(kind);
             Self::validate_module_spec(&spec)?;
+        }
+        // Each transfer agent names a module this call creates, once.
+        let mut agents: Vec<Symbol> = Vec::new(env);
+        for kind in config.transfer_agents.iter() {
+            if !kinds.contains(&kind) || agents.contains(&kind) {
+                return Err(ManagerError::UnknownAgentKind);
+            }
+            agents.push_back(kind);
         }
         Ok(())
     }

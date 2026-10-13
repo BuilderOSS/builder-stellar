@@ -137,6 +137,13 @@ pub struct InitialDaoConfigValues {
     /// optional (docs/designs/membership-models.md §2). More can be added
     /// later with `create_module`.
     pub modules: Vec<ModuleSpec>,
+    /// The membership switches the Token starts with
+    /// (docs/designs/locked-tokens.md); all off is an open DAO.
+    pub token_settings: common::modules::TokenSettings,
+    /// Kinds in `modules` whose module becomes a transfer agent at creation
+    /// (visible to every member before they join); later agents need a
+    /// proposal once Live.
+    pub transfer_agents: Vec<Symbol>,
 }
 
 #[contracttype]

@@ -25,6 +25,8 @@ pub trait NftApi {
     fn module(e: &Env, kind: Symbol) -> Option<Address>;
     /// Module registry (Manager in Setup, admin once live).
     fn register_module(e: &Env, kind: Symbol, address: Address, non_voting: bool);
+    /// Transfer agents (same authority as `register_module`).
+    fn set_transfer_agent(e: &Env, module: Address, enabled: bool);
     fn admin(e: &Env) -> Address;
     fn is_live(e: &Env) -> bool;
     /// Voting-capable supply (excludes tokens held by the Treasury and

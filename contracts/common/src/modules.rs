@@ -51,6 +51,20 @@ pub enum AssuranceState {
     Failed,
 }
 
+/// A DAO's membership token switches (docs/designs/locked-tokens.md), chosen
+/// at `create_dao` and changeable by the Token's admin: the launch admin in
+/// Setup, the Treasury by proposal once Live. All off reproduces an open DAO.
+#[contracttype]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct TokenSettings {
+    /// Tokens move only along DAO-controlled paths (`TransfersLocked`).
+    pub transfers_locked: bool,
+    /// Holders delegate only to themselves or to another voting member.
+    pub members_only_delegation: bool,
+    /// The Treasury may move any member's token by proposal (`dao_transfer`).
+    pub dao_recovery: bool,
+}
+
 /// An initial mint allowance written by the Token's `launch`.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -29,6 +29,12 @@ pub enum TokenKey {
     /// (at most `common::modules::MAX_MODULES`). Entries with `non_voting`
     /// hold no voting power.
     Modules,
+    /// Instance: `common::modules::TokenSettings`, the three membership
+    /// switches (docs/designs/locked-tokens.md); absent = all off.
+    Settings,
+    /// Instance: `Vec<Address>`, the registered modules that may call
+    /// `agent_transfer` (at most `common::modules::MAX_MODULES`).
+    TransferAgents,
 }
 
 /// Every `TokenKey` variant with sample arguments, for the key guard test.
@@ -42,7 +48,7 @@ pub(crate) mod key_samples {
     use soroban_sdk::testutils::Address as _;
     use soroban_sdk::{Env, IntoVal, Val};
 
-    pub const VARIANTS: usize = 5;
+    pub const VARIANTS: usize = 7;
 
     pub fn index(key: &TokenKey) -> usize {
         match key {
@@ -51,6 +57,8 @@ pub(crate) mod key_samples {
             TokenKey::Manager => 2,
             TokenKey::Treasury => 3,
             TokenKey::Modules => 4,
+            TokenKey::Settings => 5,
+            TokenKey::TransferAgents => 6,
         }
     }
 
@@ -65,6 +73,8 @@ pub(crate) mod key_samples {
             TokenKey::Manager,
             TokenKey::Treasury,
             TokenKey::Modules,
+            TokenKey::Settings,
+            TokenKey::TransferAgents,
         ];
         common::testutils::assert_every_variant_sampled(
             "TokenKey",

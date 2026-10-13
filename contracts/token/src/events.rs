@@ -6,7 +6,7 @@
 //! module registrations and the launch handoff. Admin changes are
 //! `common::admin::AdminChanged`.
 
-use common::modules::MintGrant;
+use common::modules::{MintGrant, TokenSettings};
 use soroban_sdk::{contractevent, Address, Env, String, Symbol, Vec};
 
 /// Emitted once by the constructor.
@@ -17,6 +17,67 @@ pub struct TokenInitialized {
     pub admin: Address,
     pub name: String,
     pub symbol: String,
+    /// The membership switches chosen at creation.
+    pub settings: TokenSettings,
+}
+
+/// `set_transfers_locked`: the lock was turned on or off.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TransfersLockChanged {
+    pub locked: bool,
+    pub changed_by: Address,
+}
+
+/// `set_members_only_delegation`: the delegation rule changed.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MembersOnlyDelegationChanged {
+    pub enabled: bool,
+    pub changed_by: Address,
+}
+
+/// `set_dao_recovery`: DAO recovery (`dao_transfer`) was turned on or off.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DaoRecoveryChanged {
+    pub enabled: bool,
+    pub changed_by: Address,
+}
+
+/// A module became (or stopped being) a transfer agent: `set_transfer_agent`
+/// or `unregister_module`.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TransferAgentChanged {
+    #[topic]
+    pub module: Address,
+    pub enabled: bool,
+    pub changed_by: Address,
+}
+
+/// A transfer agent moved a token (next to OpenZeppelin's `Transfer`).
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AgentTransfer {
+    #[topic]
+    pub agent: Address,
+    pub from: Address,
+    pub to: Address,
+    pub token_id: u32,
+}
+
+/// The DAO moved a token by proposal (`dao_transfer`; next to
+/// OpenZeppelin's `Transfer`): lost-key recovery or recall.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DaoTransfer {
+    #[topic]
+    pub from: Address,
+    #[topic]
+    pub to: Address,
+    pub token_id: u32,
+    pub changed_by: Address,
 }
 
 /// Emitted when a module's mint allowance is set by `launch`, raised or
@@ -99,11 +160,18 @@ pub struct TokenLaunched {
     pub grants: Vec<MintGrant>,
 }
 
-pub fn emit_token_initialized(e: &Env, admin: &Address, name: &String, symbol: &String) {
+pub fn emit_token_initialized(
+    e: &Env,
+    admin: &Address,
+    name: &String,
+    symbol: &String,
+    settings: &TokenSettings,
+) {
     TokenInitialized {
         admin: admin.clone(),
         name: name.clone(),
         symbol: symbol.clone(),
+        settings: settings.clone(),
     }
     .publish(e);
 }

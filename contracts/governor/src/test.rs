@@ -87,6 +87,7 @@ fn setup() -> (
             Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
+            common::modules::TokenSettings::default(),
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
@@ -313,6 +314,7 @@ fn quorum_uses_total_supply_bps() {
             Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
+            common::modules::TokenSettings::default(),
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
@@ -1729,6 +1731,7 @@ fn treasury_held_tokens_never_raise_quorum() {
             Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
+            common::modules::TokenSettings::default(),
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);

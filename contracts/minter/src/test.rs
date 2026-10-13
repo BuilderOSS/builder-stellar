@@ -67,6 +67,7 @@ impl Dao {
                 metadata.clone(),
                 mgr.address.clone(),
                 BytesN::from_array(&env, &[0u8; 32]),
+                common::modules::TokenSettings::default(),
             ),
         );
         let asset = env

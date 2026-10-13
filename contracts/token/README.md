@@ -47,9 +47,28 @@ admin(); is_live(); launch(treasury, grants: Vec<MintGrant>)
 upgrade(from_hash, to_hash); migrate(); version(); wasm_hash(); storage_version()
 ```
 
-The constructor takes only core wiring: the admin (launch admin), Treasury, collection metadata, Metadata contract, Manager and current hash. The Manager registers each module right after deploying it. `launch` is Manager-only and one-shot: it checks the wired Treasury, hands the admin to the Treasury (`AdminChanged`), writes each grant (registered modules only, `NotAModule`), and emits `TokenLaunched { treasury, grants }`. There is no ownership transfer or renounce.
+The constructor takes only core wiring plus the membership switches: the admin (launch admin), Treasury, collection metadata, Metadata contract, Manager, current hash and `TokenSettings`. The Manager registers each module right after deploying it. `launch` is Manager-only and one-shot: it checks the wired Treasury, hands the admin to the Treasury (`AdminChanged`), writes each grant (registered modules only, `NotAModule`), and emits `TokenLaunched { treasury, grants }`. There is no ownership transfer or renounce.
 
-Errors: block 7200 (`MintAuthorityNotAllowed` 7201, `InvalidInput` 7202, `TreasuryMismatch` 7203, `BatchTooLarge` 7205, `InvalidName` 7207, `MetadataNotSet` 7208, `NotAModule` 7209, `NotAContract` 7210, `InvalidKind` 7211, `KindTaken` 7212, `ModuleAlreadyRegistered` 7213, `TooManyModules` 7214, `AllowanceExceeded` 7215; 7204 and 7206 retired).
+Errors: block 7200 (`MintAuthorityNotAllowed` 7201, `InvalidInput` 7202, `TreasuryMismatch` 7203, `BatchTooLarge` 7205, `InvalidName` 7207, `MetadataNotSet` 7208, `NotAModule` 7209, `NotAContract` 7210, `InvalidKind` 7211, `KindTaken` 7212, `ModuleAlreadyRegistered` 7213, `TooManyModules` 7214, `AllowanceExceeded` 7215, `TransfersLocked` 7216, `SettingUnchanged` 7217, `RecoveryOff` 7218, `NotTransferAgent` 7219, `ModuleCustody` 7220, `DelegateNotMember` 7221; 7204 and 7206 retired).
+
+## Membership switches ([design](../../docs/designs/locked-tokens.md))
+
+```text
+settings() -> TokenSettings { transfers_locked, members_only_delegation, dao_recovery }
+set_transfers_locked(bool); set_members_only_delegation(bool); set_dao_recovery(bool)
+dao_transfer(token_id, to)
+transfer_agents() -> Vec<Address>; set_transfer_agent(module, bool)
+agent_transfer(agent, from, to, token_id)
+```
+
+Three on/off switches, chosen at creation and changeable by the admin (the launch admin in Setup, the Treasury by proposal once Live; `SettingUnchanged` for the current value). All off reproduces an open DAO exactly.
+
+- **Locked transfers.** A token moves only along a DAO-controlled path: out of DAO custody (the Treasury or a non-voting module), back to the Treasury, by the Treasury as an approved spender (a DAO-approved transfer), by `dao_transfer`, or by a transfer agent. Everything else fails with `TransfersLocked`. A holder's token can be approved only to the Treasury (the rule reads the token's owner, not the approver; revoking always works); custody may approve anyone. Locking moves no token but removes members' exit by sale.
+- **Members-only delegation.** `delegate` to anyone but oneself requires a delegatee holding a token and votes (`DelegateNotMember`); existing delegations stay when it changes.
+- **DAO recovery.** While on, `dao_transfer` (admin, Live) moves a token from its current owner, never from or into a module (`ModuleCustody`; `RecoveryOff` when off). One proposal may turn recovery on and use it.
+- **Transfer agents.** `set_transfer_agent` follows `register_module`'s authority (the Manager in Setup, for the kinds `create_dao` names; the Treasury once Live). `agent_transfer` (Live) needs the agent's and `from`'s authorization and works locked or not; unregistering a module removes it as an agent.
+
+Events: `TransfersLockChanged`, `MembersOnlyDelegationChanged`, `DaoRecoveryChanged`, `TransferAgentChanged`, `AgentTransfer`, `DaoTransfer`; `TokenInitialized` carries `settings`. Every movement emits OpenZeppelin `Transfer` and moves votes as a transfer does.
 
 ## Tests and related
 

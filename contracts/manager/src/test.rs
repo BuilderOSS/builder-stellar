@@ -307,6 +307,8 @@ fn test_create_dao_when_paused_fails() {
                     secondary_fee_bps: 1,
                 }),
             ],
+            token_settings: Default::default(),
+            transfer_agents: soroban_sdk::Vec::new(&env),
         },
     };
 
@@ -625,7 +627,7 @@ fn stub_wasm(env: &Env, tag: &str, ctor_arity: usize, second: (&str, usize)) -> 
 /// sets them as the factory defaults.
 fn register_stub_implementations(env: &Env, client: &ManagerContractClient) {
     let specs: [(&str, usize, (&str, usize)); 7] = [
-        ("Token", 7, ("register_module", 3)),
+        ("Token", 8, ("register_module", 3)),
         ("Metadata", 10, ("initialize", 0)),
         ("Auction", 10, ("initialize", 0)),
         ("Governor", 10, ("initialize", 0)),
@@ -708,6 +710,8 @@ fn dao_params(env: &Env, deployer: &Address, nonce: u64) -> DaoCreationParams {
                     secondary_fee_bps: 100,
                 }),
             ],
+            token_settings: Default::default(),
+            transfer_agents: soroban_sdk::Vec::new(env),
         },
     }
 }
@@ -1143,6 +1147,7 @@ mod real_dao {
                 addresses.metadata.clone(),
                 manager.clone(),
                 hash.clone(),
+                common::modules::TokenSettings::default(),
             ),
         );
         env.register_at(
@@ -1631,6 +1636,7 @@ mod real_dao {
                 Address::generate(env),
                 dao.client.address.clone(),
                 BytesN::from_array(env, &[0u8; 32]),
+                common::modules::TokenSettings::default(),
             ),
         );
         let mut addresses = dao.addresses.clone();
@@ -3574,4 +3580,29 @@ fn open_assurance_needs_a_claim_minter_and_a_pending_dao() {
         assert_eq!(r, Err(Ok(crate::ManagerError::NoAssurance)));
     }
     assert_eq!(client.get_assurance(&token), None);
+}
+
+/// docs/designs/locked-tokens.md: `transfer_agents` must name kinds this
+/// `create_dao` creates, once each; checked before anything is deployed.
+#[test]
+fn create_dao_refuses_transfer_agents_it_does_not_create() {
+    let (env, client, _a) = setup();
+    register_stub_implementations(&env, &client);
+    let deployer = Address::generate(&env);
+    env.cost_estimate().budget().reset_unlimited();
+    let kind = |k: &str| soroban_sdk::Symbol::new(&env, k);
+    for (nonce, agents) in [
+        (1u64, soroban_sdk::vec![&env, kind("claims")]),
+        (2, soroban_sdk::vec![&env, kind("auction"), kind("auction")]),
+        (3, soroban_sdk::vec![&env, kind("custom_circle")]),
+    ] {
+        let mut params = dao_params(&env, &deployer, nonce);
+        params.initial_config.transfer_agents = agents;
+        assert_eq!(
+            client.try_create_dao(&params),
+            Err(Ok(crate::ManagerError::UnknownAgentKind))
+        );
+    }
+    // Nothing was deployed: the same nonce still creates a DAO.
+    client.create_dao(&dao_params(&env, &deployer, 1));
 }

@@ -60,6 +60,7 @@ fn create_token_contract(env: &Env, owner: &Address) -> Address {
             Address::generate(env), // metadata address (placeholder)
             Address::generate(env), // manager address (placeholder)
             BytesN::from_array(env, &[0u8; 32]),
+            common::modules::TokenSettings::default(),
         ),
     )
 }
@@ -1781,6 +1782,7 @@ fn token_uri_worst_case_fits_the_limits() {
             Address::generate(&env),
             Address::generate(&env),
             BytesN::from_array(&env, &[0u8; 32]),
+            common::modules::TokenSettings::default(),
         ),
     );
     let client = create_contract(&env);
