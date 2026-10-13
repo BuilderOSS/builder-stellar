@@ -33,8 +33,8 @@ pub struct MintAllowanceChanged {
     pub changed_by: Address,
 }
 
-/// Emitted when a module joins the registry (the constructor's Auction and
-/// Marketplace, the Manager in Setup, the Treasury by proposal once live).
+/// Emitted when a module joins the registry (the Manager at `create_dao` /
+/// `create_module` in Setup, the Treasury by proposal once live).
 /// The indexer allowlists modules from this event.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]

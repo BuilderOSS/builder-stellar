@@ -1702,3 +1702,147 @@ fn releasing_from_an_unlimited_allowance_keeps_it_unlimited() {
     assert_eq!(client.mint_allowance(&pool_module), 0);
     let _ = manager;
 }
+
+/// Review pass (2026-10-13): the Treasury is never a module, the registry
+/// and allowance events, and the Manager-only early handoff.
+mod review {
+    use super::*;
+    use crate::events::{MintAllowanceChanged, ModuleRegistered, ModuleUnregistered};
+    use soroban_sdk::{testutils::Events as _, Event as _};
+
+    #[test]
+    fn the_treasury_is_never_a_module_even_with_an_empty_registry() {
+        let e = Env::default();
+        e.mock_all_auths();
+        let treasury = stub(&e);
+        let id = e.register(
+            DaoTokenContract,
+            (
+                Address::generate(&e),
+                treasury.clone(),
+                String::from_str(&e, "DAO"),
+                String::from_str(&e, "DAO"),
+                Address::generate(&e),
+                Address::generate(&e),
+                BytesN::from_array(&e, &[0u8; 32]),
+            ),
+        );
+        let client = DaoTokenContractClient::new(&e, &id);
+        assert!(client.modules().is_empty());
+        for kind in ["claims", "custom_vault"] {
+            assert_eq!(
+                client
+                    .try_register_module(&Symbol::new(&e, kind), &treasury, &true)
+                    .err()
+                    .unwrap()
+                    .unwrap(),
+                TokenError::ModuleAlreadyRegistered.into()
+            );
+        }
+    }
+
+    #[test]
+    fn registry_and_allowance_changes_are_events() {
+        let (e, client, owner, _m) = setup_with_manager();
+        let kind = Symbol::new(&e, "claims");
+        let module = stub(&e);
+        client.register_module(&kind, &module, &false);
+        assert_eq!(
+            e.events().all().events().last().unwrap(),
+            &ModuleRegistered {
+                kind: kind.clone(),
+                address: module.clone(),
+                non_voting: false,
+            }
+            .to_xdr(&e, &client.address)
+        );
+        client.increase_mint_allowance(&module, &7);
+        assert_eq!(
+            e.events().all().events().last().unwrap(),
+            &MintAllowanceChanged {
+                module: module.clone(),
+                old_allowance: 0,
+                allowance: 7,
+                changed_by: owner.clone(),
+            }
+            .to_xdr(&e, &client.address)
+        );
+        // Unregistering zeroes the allowance (an event) and leaves the registry.
+        client.unregister_module(&module);
+        let events = e.events().all();
+        let all = events.events();
+        assert!(all.contains(
+            &MintAllowanceChanged {
+                module: module.clone(),
+                old_allowance: 7,
+                allowance: 0,
+                changed_by: _m.clone(),
+            }
+            .to_xdr(&e, &client.address)
+        ));
+        assert_eq!(
+            all.last().unwrap(),
+            &ModuleUnregistered {
+                kind,
+                address: module,
+            }
+            .to_xdr(&e, &client.address)
+        );
+    }
+
+    #[test]
+    fn handoff_is_the_managers_stays_in_setup_and_launch_does_not_repeat_it() {
+        let (e, client, owner, manager) = setup_with_manager();
+        let treasury = wired_treasury(&e, &client);
+        assert_eq!(
+            client
+                .try_handoff(&Address::generate(&e))
+                .err()
+                .unwrap()
+                .unwrap(),
+            TokenError::TreasuryMismatch.into()
+        );
+        e.mock_auths(&[MockAuth {
+            address: &owner,
+            invoke: &MockAuthInvoke {
+                contract: &client.address,
+                fn_name: "handoff",
+                args: (treasury.clone(),).into_val(&e),
+                sub_invokes: &[],
+            },
+        }]);
+        assert!(client.try_handoff(&treasury).is_err());
+        e.mock_all_auths();
+        client.handoff(&treasury);
+        assert_eq!(client.admin(), treasury);
+        assert!(!client.is_live());
+        // The launch admin can no longer mint (the Treasury is admin now).
+        e.mock_auths(&[MockAuth {
+            address: &owner,
+            invoke: &MockAuthInvoke {
+                contract: &client.address,
+                fn_name: "mint",
+                args: (owner.clone(), owner.clone()).into_val(&e),
+                sub_invokes: &[],
+            },
+        }]);
+        assert!(client.try_mint(&owner, &owner).is_err());
+        e.mock_all_auths();
+        client.launch(&treasury, &grants(&e, &[]));
+        // No second AdminChanged: the admin already was the Treasury.
+        let events = e.events().all();
+        for old_admin in [owner.clone(), treasury.clone()] {
+            let repeat = common::admin::AdminChanged {
+                old_admin,
+                new_admin: treasury.clone(),
+            }
+            .to_xdr(&e, &client.address);
+            assert!(!events.events().contains(&repeat));
+        }
+        assert_eq!(
+            client.try_handoff(&treasury).err().unwrap().unwrap(),
+            common::CommonError::AlreadyLive.into()
+        );
+        let _ = manager;
+    }
+}

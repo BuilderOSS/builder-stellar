@@ -202,12 +202,16 @@ impl DaoTokenContract {
         if !matches!(address.executable(), Some(Executable::Wasm(_))) {
             panic_with_error!(e, TokenError::NotAContract);
         }
+        // The Treasury is core, never a module (it is non-voting already).
+        if address == Self::treasury(e) {
+            panic_with_error!(e, TokenError::ModuleAlreadyRegistered);
+        }
         let mut entries = Self::read_modules(e);
         if entries.len() >= modules::MAX_MODULES {
             panic_with_error!(e, TokenError::TooManyModules);
         }
         for m in entries.iter() {
-            if m.address == address || address == Self::treasury(e) {
+            if m.address == address {
                 panic_with_error!(e, TokenError::ModuleAlreadyRegistered);
             }
             if m.kind == kind {
@@ -262,13 +266,6 @@ impl DaoTokenContract {
         emit_module_unregistered(e, &entry.kind, &address);
     }
 
-    /// One-shot, Manager-only launch handoff (Setup -> Live).
-    ///
-    /// Hands the admin to `treasury`, raises each registered module's
-    /// allowance by its grant (`NotAModule` for anything else), marks the
-    /// token live and emits `TokenLaunched`. The Treasury needs no grant: as
-    /// admin it mints without limit. A second call panics with `AlreadyLive`,
-    /// so after launch the Manager has no authority over the token.
     /// Manager-only early handoff (`manager.open_assurance`): the admin moves
     /// to the Treasury and the token stays in Setup, so founder mints,
     /// settings and allowances are frozen until launch. Panics `AlreadyLive`
@@ -283,6 +280,14 @@ impl DaoTokenContract {
         common::ttl::extend_instance(e);
     }
 
+    /// One-shot, Manager-only launch (Setup -> Live).
+    ///
+    /// Hands the admin to `treasury` (unless `handoff` already did), raises
+    /// each registered module's allowance by its grant (`NotAModule` for
+    /// anything else), marks the token live and emits `TokenLaunched`. The
+    /// Treasury needs no grant: as admin it mints without limit. A second call
+    /// panics with `AlreadyLive`, so after launch the Manager has no authority
+    /// over the token.
     pub fn launch(e: &Env, treasury: Address, grants: Vec<MintGrant>) {
         let manager = Self::manager(e);
         manager.require_auth();
