@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { css, cx } from 'styled-system/css';
 
 import { getFetchableUrls } from '@/lib/ipfs-client';
@@ -28,6 +28,28 @@ function FallbackImageContent({ src, errorFallbackSrc, className, ...props }: Fa
   const [isLoading, setIsLoading] = useState(urls.length > 0);
 
   const imageSrc = hasExhaustedSources ? errorFallbackSrc : urls[currentIndex] || errorFallbackSrc;
+  const fail = useCallback(() => {
+    if (currentIndex < urls.length - 1) {
+      setIsLoading(true);
+      setCurrentIndex((index) => index + 1);
+    } else {
+      setIsLoading(false);
+      setHasExhaustedSources(true);
+    }
+  }, [currentIndex, urls.length]);
+
+  // A server-rendered image can finish (or fail) before React attaches onLoad/onError, and
+  // then neither fires: read the element's own state when it mounts and on each new source.
+  const settle = useCallback(
+    (element: HTMLImageElement | null) => {
+      if (!element?.complete) return;
+      if (element.naturalWidth > 0) setIsLoading(false);
+      else if (!hasExhaustedSources) fail();
+    },
+    // The source is part of the identity, so a fallback source is checked again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [imageSrc, hasExhaustedSources, fail]
+  );
 
   return (
     // eslint-disable-next-line @next/next/no-img-element
@@ -36,17 +58,10 @@ function FallbackImageContent({ src, errorFallbackSrc, className, ...props }: Fa
       alt={props.alt ?? ''}
       aria-busy={isLoading}
       className={cx(image, className)}
+      ref={settle}
       src={imageSrc}
       onLoad={() => setIsLoading(false)}
-      onError={() => {
-        if (currentIndex < urls.length - 1) {
-          setIsLoading(true);
-          setCurrentIndex((index) => index + 1);
-        } else {
-          setIsLoading(false);
-          setHasExhaustedSources(true);
-        }
-      }}
+      onError={fail}
     />
   );
 }
