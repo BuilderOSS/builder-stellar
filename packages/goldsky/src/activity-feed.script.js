@@ -626,7 +626,9 @@ function invoke(data) {
 
   // Strictly type all fields to ensure no mixed types in Arrow table
   // A module the platform did not write can emit any event shape, `upgraded` with any hashes
-  // included: none of its rows is public news (role module, or a contract registered as circle).
+  // included: none of its rows is public news. Role `module` is every contract the Manager did
+  // not deploy, whatever kind a DAO registered it under; `circle` has no Manager-built
+  // implementation yet, so it is treated the same until one ships.
   var unvouched = emitterRole === 'module' || emitterRole === 'circle';
   var visibility = foreignModule || unvouched ? 'admin' : userFacing[normalizedEventName] ? (normalizedEventName.indexOf('Proposal') === 0 || normalizedEventName === 'VoteCast' || normalizedEventName === 'DelegateChanged' ? 'governance' : 'public') : (kindMap[normalizedEventName] ? 'admin' : 'system');
   // The token self-delegates a holder on their first token: automatic, not a

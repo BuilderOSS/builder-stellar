@@ -17,11 +17,12 @@ transforms:
   # one hop later). So the role is encoded by which table holds an address
   # (docs/designs/membership-models.md § 7):
   #   - the core four (token, metadata, governor, treasury) come from DaoCreated, one table each;
-  #   - modules come from the Token's ModuleRegistered: one table per known kind plus the
-  #     catch-all `dao_modules`, each admitting only registrations a known DAO Token emitted
-  #     (dynamic_table_check('dao_tokens') inside the table's own SQL). Goldsky's validator
-  #     refuses a dynamic table that reads an intermediate SQL transform, so the tables read
-  #     the source directly (docs/designs/membership-models.md § 7, review 2 B8).
+  #   - modules the Manager deployed come from DaoCreated and ModuleCreated, one table per kind;
+  #   - any other module a DAO Token registers (ModuleRegistered, gated by
+  #     dynamic_table_check('dao_tokens') inside the table's own SQL) goes to the catch-all
+  #     `dao_modules`. Goldsky's validator refuses a dynamic table that reads an intermediate
+  #     SQL transform, so the tables read the source directly (docs/designs/membership-models.md
+  #     § 7, review 2 B8).
   # The role drives every Manager view, app.activity_feed's DAO assignment and the kinds of the
   # common events. Tables are append-only, so an unregistered module stays allowlisted: the
   # views drop its later events by registration window (manager.module_events). The tables
@@ -87,14 +88,15 @@ transforms:
         AND in_successful_contract_call
         AND topics LIKE '%dao_created%'
 
-  # Module tables, one per known kind. Filled from the Manager's own events (DaoCreated's
-  # modules.<kind>, ModuleCreated) and from the Token's ModuleRegistered when the Token is a
-  # known DAO Token. create_dao registers modules before it emits DaoCreated, so its modules
-  # rely on the Manager branch: a ModuleRegistered there precedes the DaoCreated that puts the
-  # Token in dao_tokens (one dynamic table filled before the same batch is filtered works; one
-  # table reading another's same-batch write is not something Goldsky documents). The
-  # registry branch covers modules registered later by vote. Kind symbols are quoted in
-  # `topics`, so `"claims"` matches only the kind; a DaoCreated without the kind yields ''.
+  # Module tables, one per kind the Manager deploys. Filled only from the Manager's own events
+  # (DaoCreated's modules.<kind>, ModuleCreated), so a known role means "the Manager deployed
+  # this code" (vouched). A contract a DAO registers by vote under any kind, a built-in one
+  # included, lands only in the catch-all `dao_modules` (role `module`): its events are
+  # indexed for the DAO but stay out of the domain views and the public feed. Kind symbols are
+  # quoted in `topics`, so `"claims"` matches only the kind. A DaoCreated without a kind has a
+  # void entry, which the pattern doesn't match: the `<> ''` guard drops that row whether
+  # regexp_extract returns '' or NULL. There is no Manager-built Circle yet, so `dao_circles`
+  # stays empty until there is.
   dao_auctions:
     type: dynamic_table
     backend_type: Postgres
@@ -108,14 +110,14 @@ transforms:
           ELSE regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
         END AS contract_id
       FROM stellar_events
-      WHERE type = 'contract'
+      WHERE contract_id = '{{MANAGER_CONTRACT_ID}}'
+        AND type = 'contract'
         AND in_successful_contract_call
-        AND (
-          (contract_id = '{{MANAGER_CONTRACT_ID}}' AND topics LIKE '%dao_created%')
-          OR (contract_id = '{{MANAGER_CONTRACT_ID}}' AND topics LIKE '%module_created%' AND topics LIKE '%"auction"%')
-          OR
-          (topics LIKE '%module_registered%' AND topics LIKE '%"auction"%' AND dynamic_table_check('dao_tokens', contract_id))
-        )
+        AND (topics LIKE '%dao_created%' OR (topics LIKE '%module_created%' AND topics LIKE '%"auction"%'))
+        AND CASE WHEN topics LIKE '%dao_created%'
+          THEN regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"auction"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+          ELSE regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+        END <> ''
 
   dao_marketplaces:
     type: dynamic_table
@@ -130,14 +132,14 @@ transforms:
           ELSE regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
         END AS contract_id
       FROM stellar_events
-      WHERE type = 'contract'
+      WHERE contract_id = '{{MANAGER_CONTRACT_ID}}'
+        AND type = 'contract'
         AND in_successful_contract_call
-        AND (
-          (contract_id = '{{MANAGER_CONTRACT_ID}}' AND topics LIKE '%dao_created%')
-          OR (contract_id = '{{MANAGER_CONTRACT_ID}}' AND topics LIKE '%module_created%' AND topics LIKE '%"marketplace"%')
-          OR
-          (topics LIKE '%module_registered%' AND topics LIKE '%"marketplace"%' AND dynamic_table_check('dao_tokens', contract_id))
-        )
+        AND (topics LIKE '%dao_created%' OR (topics LIKE '%module_created%' AND topics LIKE '%"marketplace"%'))
+        AND CASE WHEN topics LIKE '%dao_created%'
+          THEN regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"marketplace"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+          ELSE regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+        END <> ''
 
   dao_claims:
     type: dynamic_table
@@ -152,14 +154,14 @@ transforms:
           ELSE regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
         END AS contract_id
       FROM stellar_events
-      WHERE type = 'contract'
+      WHERE contract_id = '{{MANAGER_CONTRACT_ID}}'
+        AND type = 'contract'
         AND in_successful_contract_call
-        AND (
-          (contract_id = '{{MANAGER_CONTRACT_ID}}' AND topics LIKE '%dao_created%')
-          OR (contract_id = '{{MANAGER_CONTRACT_ID}}' AND topics LIKE '%module_created%' AND topics LIKE '%"claims"%')
-          OR
-          (topics LIKE '%module_registered%' AND topics LIKE '%"claims"%' AND dynamic_table_check('dao_tokens', contract_id))
-        )
+        AND (topics LIKE '%dao_created%' OR (topics LIKE '%module_created%' AND topics LIKE '%"claims"%'))
+        AND CASE WHEN topics LIKE '%dao_created%'
+          THEN regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"claims"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+          ELSE regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1)
+        END <> ''
 
   dao_circles:
     type: dynamic_table
@@ -171,13 +173,16 @@ transforms:
     sql: |
       SELECT regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) AS contract_id
       FROM stellar_events
-      WHERE type = 'contract'
+      WHERE contract_id = '{{MANAGER_CONTRACT_ID}}'
+        AND type = 'contract'
         AND in_successful_contract_call
-        AND (
-          (topics LIKE '%module_registered%' AND topics LIKE '%"circle"%' AND dynamic_table_check('dao_tokens', contract_id))
-        )
+        AND topics LIKE '%module_created%' AND topics LIKE '%"circle"%'
+        AND regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) <> ''
 
-  # Every registered module of any kind, built-in, `custom_<name>` or an unknown future kind.
+  # Every registered module of any kind (built-in, `custom_<name>` or an unknown future kind),
+  # admitted only when a known DAO Token emitted the registration. The role CASE in dao_events
+  # tries the Manager-built tables first, so this table names the role only of contracts the
+  # Manager didn't deploy.
   dao_modules:
     type: dynamic_table
     backend_type: Postgres
@@ -192,6 +197,7 @@ transforms:
         AND in_successful_contract_call
         AND topics LIKE '%module_registered%'
         AND dynamic_table_check('dao_tokens', contract_id)
+        AND regexp_extract(data, '"key"\s*:\s*\{"symbol"\s*:\s*"address"\}\s*,\s*"val"\s*:\s*\{"address"\s*:\s*"([^"]+)"', 1) <> ''
 
   dao_events:
     type: sql

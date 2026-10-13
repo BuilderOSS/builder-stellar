@@ -214,6 +214,13 @@ function buildScenario() {
   emit('auction', d4.auction, 'paused', { ledger: 310 });
   emit('marketplace', d4.marketplace, 'marketplace_paused', { topics: [addr(d4.treasury)], ledger: 311 });
   emit('marketplace', d4.marketplace, 'marketplace_unpaused', { topics: [addr(d4.treasury)], ledger: 312 });
+  // DAO 4 registers by vote a contract the Manager never deployed under the built-in kind
+  // `claims`. The pipeline's kind tables hold only Manager-built modules, so it is role
+  // `module`; its ClaimMinter-shaped event stays out of the claims views.
+  emit('token', 'CTOK4', 'module_registered', { topics: [sym('claims')], data: { address: addr('CEXTCLM'), non_voting: bool(false) }, ledger: 302 });
+  emit('module', 'CEXTCLM', 'list_opened', {
+    topics: [u32(0)], data: { root: bytes('rx'), tree_uri: str('ipfs://fake'), asset: addr('CXLM'), price: i128(0), expires_at: u64(9000), total: u32(500), assurance: VOID }, ledger: 303
+  });
   emit('auction', d1.auction, 'unpaused', { ledger: 130 });
   // After launch: a rename (token 0.2.0 MetadataUpdated) and a vote that closes the market.
   emit('token', d1.token, 'metadata_updated', { data: { name: str('Alpha Club'), symbol: str('ALPHA') }, ledger: 150, tx: 7 });
@@ -574,8 +581,18 @@ test('manager: registry, launches, slugs and implementations', { skip }, () => {
   );
   assert.equal(one(`SELECT created_wasm_hash FROM manager.dao_modules WHERE module_contract = 'CCLM3'`).created_wasm_hash, 'c7',
     'create_module deploys the Manager\'s current implementation for the kind');
-  // Core four x 4 DAOs, plus each registration window: DAO 1 four (with the vault), DAO 2 three, DAO 3 one, DAO 4 two.
-  assert.equal(one(`SELECT count(*)::int AS n FROM manager.event_identity`).n, 26);
+  // Core four x 4 DAOs, plus each registration window: DAO 1 four (with the vault), DAO 2 three, DAO 3 one,
+  // DAO 4 three (with the outside contract).
+  assert.equal(one(`SELECT count(*)::int AS n FROM manager.event_identity`).n, 27);
+  // A known role vouches that the Manager deployed the code: a contract registered by vote under
+  // `claims` is role module, has no creation hash, is not the DAO's claims module and feeds no claims view.
+  assert.deepEqual(
+    one(`SELECT kind, module_role, created_wasm_hash FROM manager.module_registrations WHERE module_contract = 'CEXTCLM'`),
+    { kind: 'claims', module_role: 'module', created_wasm_hash: null }
+  );
+  assert.equal(one(`SELECT claims_contract FROM manager.daos WHERE dao_id = 'CTOK4'`).claims_contract, null);
+  assert.equal(one(`SELECT count(*)::int AS n FROM claims.lists WHERE contract_id = 'CEXTCLM'`).n, 0);
+  assert.equal(one(`SELECT count(*)::int AS n FROM manager.module_events WHERE contract_id = 'CEXTCLM'`).n, 1, 'still indexed for the DAO as a module event');
   assert.deepEqual(
     one(`SELECT module_role, until_pos IS NOT NULL AS closed FROM manager.event_identity WHERE contract_id = 'CVAULT'`),
     { module_role: 'module', closed: true }

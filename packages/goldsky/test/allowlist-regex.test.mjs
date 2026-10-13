@@ -2,9 +2,11 @@
  * The dynamic-table allowlists are the only way a contract's events enter the
  * pipeline and get a contract_role (docs/designs/membership-models.md § 7):
  *   - the core four come from DaoCreated, keyed on the core DaoAddresses fields;
- *   - each known module kind (common::modules::KIND_*) has a table filled from the
- *     Manager's own DaoCreated.modules.<kind> and ModuleCreated, and from the Token's
- *     ModuleRegistered emitted by a known DAO Token; a catch-all takes every registration.
+ *   - each known module kind (common::modules::KIND_*) has a table filled only from the
+ *     Manager's own DaoCreated.modules.<kind> and ModuleCreated: a known role means the
+ *     Manager deployed the code;
+ *   - a catch-all takes every ModuleRegistered a known DAO Token emitted, so a contract a DAO
+ *     registers by vote is indexed under role `module`, whatever kind it was registered as.
  * They key on contract field and kind names with a regexp over raw event data;
  * nothing else ties the two together, so this test does.
  */
@@ -35,10 +37,11 @@ const tables = [...template.matchAll(/^  (dao_\w+):\n    type: dynamic_table\n([
   kind: m[2].match(/topics LIKE '%"(\w+)"%'/)?.[1] ?? null
 }));
 const keyOf = (pattern) => pattern.match(/"symbol"\\s\*:\\s\*"(\w+)"/)[1];
-const isModuleTable = (t) => t.sql.includes("topics LIKE '%module_registered%'");
-const core = tables.filter((t) => !isModuleTable(t));
-const perKind = tables.filter((t) => isModuleTable(t) && t.kind);
-const catchAll = tables.filter((t) => isModuleTable(t) && !t.kind);
+const isKindTable = (t) => t.sql.includes("topics LIKE '%module_created%'");
+const isRegistryTable = (t) => t.sql.includes("topics LIKE '%module_registered%'");
+const core = tables.filter((t) => !isKindTable(t) && !isRegistryTable(t));
+const perKind = tables.filter(isKindTable);
+const catchAll = tables.filter(isRegistryTable);
 const caseBlock = template.match(/CASE\n([\s\S]*?)END AS contract_role/)[1];
 const streamFilter = template.match(/AND \(\n\s+contract_id = '\{\{MANAGER_CONTRACT_ID\}\}'\n([\s\S]*?)\n\s+\)\n/)[1];
 
@@ -66,35 +69,45 @@ test('each known module kind has a table, in the role CASE before the catch-all 
   }
 });
 
-test('modules create_dao deploys come from the Manager, not only from the Token registry', () => {
-  // create_dao registers modules before it emits DaoCreated, so a ModuleRegistered gated on
-  // dao_tokens there would need one dynamic table to see another's same-batch write.
+test('a known role means the Manager deployed the module: kind tables read only Manager events', () => {
+  // create_dao registers modules before it emits DaoCreated, and create_module emits ModuleCreated,
+  // so every module the Manager deploys reaches its kind table from the Manager's own events.
   const managerSource = readFileSync(join(repoRoot, 'contracts/manager/src/contract.rs'), 'utf8');
   const start = managerSource.indexOf('pub fn create_dao');
   const emit = managerSource.indexOf('emit_dao_created(', start);
   assert.ok(start > 0 && emit > start, 'create_dao and its DaoCreated emit found');
   assert.ok(managerSource.slice(start, emit).includes('register_module('), 'create_dao registers modules before DaoCreated');
   for (const table of perKind) {
-    if (!moduleFields.includes(table.kind)) {
-      assert.equal(table.patterns.length, 1, `${table.name}: a kind create_dao does not deploy reads the registry only`);
-      continue;
+    assert.match(table.sql, /WHERE contract_id = '\{\{MANAGER_CONTRACT_ID\}\}'/, `${table.name}: Manager events only`);
+    assert.doesNotMatch(table.sql, /module_registered/, `${table.name}: never from the Token registry`);
+    assert.match(table.sql, new RegExp(`topics LIKE '%module_created%' AND topics LIKE '%"${table.kind}"%'`), `${table.name}: ModuleCreated branch`);
+    if (moduleFields.includes(table.kind)) {
+      assert.match(table.sql, /topics LIKE '%dao_created%'/, `${table.name}: DaoCreated branch`);
+      assert.deepEqual(table.patterns.slice(0, 2).map(keyOf), [table.kind, 'address'], `${table.name}: DaoCreated key, then the created address`);
+    } else {
+      assert.doesNotMatch(table.sql, /dao_created/, `${table.name}: a kind create_dao does not deploy reads ModuleCreated only`);
+      assert.deepEqual(table.patterns.map(keyOf), ['address', 'address']);
     }
-    assert.match(table.sql, /contract_id = '\{\{MANAGER_CONTRACT_ID\}\}' AND topics LIKE '%dao_created%'/, `${table.name}: DaoCreated branch`);
-    assert.match(table.sql, new RegExp(`contract_id = '\\{\\{MANAGER_CONTRACT_ID\\}\\}' AND topics LIKE '%module_created%' AND topics LIKE '%"${table.kind}"%'`), `${table.name}: ModuleCreated branch`);
-    assert.deepEqual(table.patterns.map(keyOf), [table.kind, 'address'], `${table.name}: DaoCreated key, then the registered address`);
   }
   assert.match(managerEvents, /pub struct ModuleCreated \{[\s\S]*?#\[topic\]\s*pub kind: Symbol,[\s\S]*?pub address: Address,/);
 });
 
-test('the registry branch and the catch-all read only registrations a known DAO Token emitted', () => {
+test('every module table drops a row whose address did not extract', () => {
+  // A DaoCreated without a kind has `"val":"void"` there, which the pattern doesn't match;
+  // regexp_extract then gives '' or NULL, and `<expr> <> ''` drops both.
+  for (const table of [...perKind, ...catchAll]) {
+    const select = table.sql.match(/SELECT ([\s\S]*?) AS contract_id/)[1];
+    assert.ok(table.sql.includes(`AND ${select} <> ''`), `${table.name} guards its own expression`);
+  }
+});
+
+test('the catch-all reads only registrations a known DAO Token emitted', () => {
   assert.equal(catchAll.length, 1);
   assert.equal(catchAll[0].name, 'dao_modules');
   assert.match(caseBlock, /dynamic_table_check\('dao_modules', contract_id\) THEN 'module'/);
   assert.match(streamFilter, /OR dynamic_table_check\('dao_modules', contract_id\)/);
-  for (const table of [...perKind, ...catchAll]) {
-    assert.match(table.sql, /topics LIKE '%module_registered%'[^\n]*dynamic_table_check\('dao_tokens', contract_id\)|AND dynamic_table_check\('dao_tokens', contract_id\)/, `${table.name} is gated on known DAO Tokens`);
-    assert.match(table.sql, /AND in_successful_contract_call/, `${table.name} skips failed calls`);
-  }
+  assert.match(catchAll[0].sql, /AND dynamic_table_check\('dao_tokens', contract_id\)/, 'gated on known DAO Tokens');
+  for (const table of [...perKind, ...catchAll]) assert.match(table.sql, /AND in_successful_contract_call/, `${table.name} skips failed calls`);
   const event = tokenEvents.match(/pub struct ModuleRegistered \{([\s\S]*?)\n\}/)[1];
   assert.match(event, /#\[topic\]\s*pub kind: Symbol/);
   assert.match(event, /pub address: Address/);
@@ -121,14 +134,17 @@ test('each pattern extracts its address from its event and skips the same key el
     assert.equal(created(true).match(new RegExp(fromCreated))?.[1], `C${table.kind.toUpperCase()}`, `${table.name} from DaoCreated`);
     assert.equal(created(false).match(new RegExp(fromCreated)), null, `${table.name}: no module of the kind, no address`);
   }
-  // ModuleRegistered / ModuleCreated: data { address, ... }; the kind is a topic.
+  // ModuleCreated (data { n, address }) fills its kind's table; ModuleRegistered (data { address,
+  // non_voting }) fills only the catch-all. The kind is a topic of both.
   for (const kind of [...kinds, 'custom_vault']) {
-    const topics = JSON.stringify([{ symbol: 'module_registered' }, { symbol: kind }]);
-    const data = JSON.stringify({ map: [{ key: { symbol: 'address' }, val: { address: `CMOD${kind.toUpperCase()}` } }, { key: { symbol: 'non_voting' }, val: { bool: true } }] });
-    for (const table of [...perKind, ...catchAll]) {
-      const admitted = !table.kind || topics.includes(`"${table.kind}"`);
-      assert.equal(admitted, !table.kind || table.kind === kind, `${table.name} admits ${kind}`);
-      if (admitted) assert.equal(data.match(new RegExp(table.patterns.at(-1)))?.[1], `CMOD${kind.toUpperCase()}`, `${table.name} ${kind}`);
+    const topics = JSON.stringify([{ symbol: 'module_created' }, { address: 'CTOKEN' }, { symbol: kind }]);
+    const data = JSON.stringify({ map: [{ key: { symbol: 'n' }, val: { u32: 0 } }, { key: { symbol: 'address' }, val: { address: `CMOD${kind.toUpperCase()}` } }] });
+    for (const table of perKind) {
+      const admitted = topics.includes(`"${table.kind}"`);
+      assert.equal(admitted, table.kind === kind, `${table.name} admits ${kind}`);
+      if (admitted) assert.equal(data.match(new RegExp(table.patterns[1]))?.[1], `CMOD${kind.toUpperCase()}`, `${table.name} ${kind}`);
     }
+    const registered = JSON.stringify({ map: [{ key: { symbol: 'address' }, val: { address: `CREG${kind.toUpperCase()}` } }, { key: { symbol: 'non_voting' }, val: { bool: true } }] });
+    assert.equal(registered.match(new RegExp(catchAll[0].patterns[0]))?.[1], `CREG${kind.toUpperCase()}`, `dao_modules ${kind}`);
   }
 });

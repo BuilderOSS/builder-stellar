@@ -41,8 +41,10 @@ and the contract event each view reads.
   Token's `ModuleRegistered` with its `ModuleUnregistered`, and an event counts
   for a DAO only between them (position `[ledger, tx, op, evt]`; a window opens at
   `[ledger, tx, -1, -1]` so the registering transaction's own events count).
-  `manager.module_role()` names the role. The same address registered by two DAOs,
-  or under two kinds, is attributed per window.
+  A known role means the Manager deployed the module (`manager.manager_modules`);
+  any other registered contract is role `module` whatever kind it was registered
+  under, as in the pipeline. The same address registered by two DAOs is
+  attributed per window.
 - The pipeline's allowlists (`streamling.dao_*`) only decide what is indexed; the
   views decide whose it is.
 

@@ -70,6 +70,8 @@ function assemble(client: TokenClient, call: DirectCall) {
 
 type ModuleView = {
   kind: string;
+  /** The index lists it as this DAO's module of its kind: the Manager deployed it. */
+  vouched: boolean;
   address: string;
   nonVoting: boolean;
   allowance: number;
@@ -113,6 +115,9 @@ function useMembershipState(config: DaoNetworkConfig, address?: string | null) {
         },
         modules: modules.result.map((entry, index) => ({
           kind: entry.kind,
+          vouched: [config.auctionContractId, config.marketplaceContractId, config.claimsContractId].includes(
+            entry.address
+          ),
           address: entry.address,
           nonVoting: entry.non_voting,
           allowance: allowances[index] ?? 0,
@@ -343,6 +348,7 @@ export function MembershipSettings() {
                       meta={<ShortId value={module.address} label="Contract" />}
                       trailing={
                         <span className={row}>
+                          {module.vouched ? null : <Badge tone="warning">Not deployed by the Manager</Badge>}
                           {module.nonVoting ? <Badge>Holds tokens without votes</Badge> : null}
                           {module.agent ? <Badge>Can move memberships</Badge> : null}
                           {module.votes > 0n ? (

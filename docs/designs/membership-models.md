@@ -458,6 +458,13 @@ would still pass with its old role; and external modules emit event names the de
     take the Manager's `DaoCreated` and `ModuleCreated`, because `create_dao` registers its modules on the Token
     before `DaoCreated` allowlists that Token. Still to confirm live: the 0.4.0 testnet DAO's auction,
     marketplace and claims events decode with those roles (Next Steps, ship step).
+
+    **Then narrowed (review, 2026-10-13).** The per-kind tables keep only the Manager branches, so a known
+    role means the Manager deployed the code; every `ModuleRegistered` goes to the catch-all `dao_modules`
+    only. A contract a DAO registers by vote under a built-in kind is role `module`: indexed for the DAO,
+    admin feed rows, outside the domain views, and refused by the claims page. The read model matches it
+    (`manager.manager_modules`). Each module table also guards `<extracted address> <> ''`, so a
+    `DaoCreated` without a module kind adds no empty key.
     It's still to be confirmed on a scratch pipeline when step 2's events exist; the docs don't show this exact
     two-stage chain end to end. Same-transaction ordering (a module's constructor events before its
     `ModuleRegistered`) behaves like today's `DaoCreated` population (review 2 E).

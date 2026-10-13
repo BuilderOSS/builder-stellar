@@ -10,5 +10,6 @@ DROP VIEW IF EXISTS manager.module_events;
 DROP VIEW IF EXISTS manager.event_identity;
 DROP VIEW IF EXISTS manager.dao_modules;
 DROP VIEW IF EXISTS manager.module_registrations;
+DROP VIEW IF EXISTS manager.manager_modules;
 DROP VIEW IF EXISTS manager.dao_registry;
 DROP FUNCTION IF EXISTS manager.module_role(text);

@@ -81,6 +81,14 @@ export async function currentClaims(
     if (typeof value !== 'string' || !StrKey.isValidContract(value)) throw new Error('Invalid registered ClaimMinter.');
     return value;
   });
+  // The app drives only a ClaimMinter the Manager deployed: the index lists a claims module only
+  // then (a contract registered by vote under `claims` is role `module` there). Anything else
+  // could ask members to sign arbitrary calls under a claims-shaped review.
+  if (registered && registered !== config.claimsContractId)
+    throw new ClaimError(
+      'This community registered a claims module the platform did not deploy (or that is not indexed yet), so the app will not prepare claims against it.',
+      409
+    );
   const [live, admin, allowance] = await Promise.all([
     token.is_live().then((tx) => readHolderValue(tx, bool)),
     token.admin().then((tx) => readHolderValue(tx, requireHolderAddress)),

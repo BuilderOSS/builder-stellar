@@ -163,22 +163,26 @@ stages (docs/designs/membership-models.md § 7):
 
 1. **The core four** come from the Manager's `DaoCreated`: `dao_tokens`, `dao_metadata`, `dao_governors`,
    `dao_treasuries`, one table each.
-2. **Modules** come from three sources, each into its kind's table (`dao_auctions`, `dao_marketplaces`,
-   `dao_claims`, `dao_circles`) or, for any other kind (`custom_<name>`, a future kind), only into the catch-all
-   `dao_modules`:
-   - the Manager's `DaoCreated` (modules deployed at creation) and `ModuleCreated` (`create_module`);
-   - the Token's `ModuleRegistered`, admitted only when the emitting Token is already in `dao_tokens`
-     (`dynamic_table_check('dao_tokens', contract_id)` inside the table's own SQL). This is how a module
-     registered by proposal, including one the Manager never deployed, is followed.
+2. **Modules the Manager deployed** come from its `DaoCreated` (`modules.<kind>`) and `ModuleCreated`
+   (`create_module`), each into its kind's table: `dao_auctions`, `dao_marketplaces`, `dao_claims`,
+   `dao_circles` (empty until the Manager can build a Circle). A known role therefore means the Manager
+   deployed the code.
+3. **Any other registered contract** comes from the Token's `ModuleRegistered`, admitted only when the
+   emitting Token is already in `dao_tokens` (`dynamic_table_check('dao_tokens', contract_id)` inside the
+   table's own SQL), into the catch-all `dao_modules` only, whatever kind it was registered under. The role
+   CASE tries the kind tables first, so such a contract is role `module`: indexed for its DAO, admin rows
+   only, and outside the domain views.
 
-The Manager branches exist because `create_dao` registers its modules on the Token before `DaoCreated` fires,
-so those `ModuleRegistered` events precede the Token's own allowlisting. Goldsky's validator refuses a dynamic
-table that reads an intermediate SQL transform, so every table reads `stellar_events` directly.
+Every module table repeats its extraction in a `<> ''` filter: a `DaoCreated` without a module kind has
+`"val":"void"` there, which the pattern doesn't match, and the guard drops the row whether `regexp_extract`
+returns `''` or `NULL`. Goldsky's validator refuses a dynamic table that reads an intermediate SQL transform,
+so every table reads `stellar_events` directly.
 
 Tables are append-only: an unregistered module stays allowlisted, and the read model drops its later events by
 registration window (`manager.module_events`). Allowlisting is per registration, so any contract a DAO
-registers by vote gets its events indexed under that DAO (an accepted risk; the operator remedy is deleting its
-row from `streamling.dao_modules` and the kind table, SECURITY_MODEL). A shared or dual-kind module (one address
+registers by vote gets its events indexed under that DAO as admin rows (an accepted risk; the remedy is
+unregistering it by vote, or deleting its row from `streamling.dao_modules` and re-applying the pipeline,
+SECURITY_MODEL). A shared or dual-kind module (one address
 registered by two DAOs, or under two kinds) is indexed once; its role is the first matching table in the
 `dao_events` CASE, and the windowed views attribute its events to each DAO for the time it was registered there.
 

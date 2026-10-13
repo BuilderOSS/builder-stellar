@@ -17,7 +17,7 @@ The Goldsky generator instead uses its explicit `MANAGER_DEPLOYMENT_FILE`. Keep 
 
 Goldsky writes `chain.raw_events`, `chain.decoded_events`, and `app.activity_feed_events`. SQL views project state and history. **`manager.daos` is a view**, not a mutable DAO table.
 
-`DaoCreated` supplies deployer, launch admin, six module addresses, and creation WASM hashes. Token/Metadata events provide descriptive values. `DaoLaunched` derives `pending` versus `operational`; `manager.module_launches` tracks each module's `<module>_launched` event by emitting contract, and `manager.module_admins` the current admin per module (the launch admin, then the Treasury after the launch handoff). Module upgrades and version syncs overlay creation hashes.
+`DaoCreated` supplies deployer, launch admin, the core four addresses, the modules created with the DAO (null for a kind it didn't create) and creation WASM hashes; later modules come from `ModuleCreated` and the Token's `ModuleRegistered` (`manager.module_registrations`). Token/Metadata events provide descriptive values. `DaoLaunched` derives `pending` versus `operational`; `manager.module_launches` tracks each contract's `<role>_launched` event by emitting contract. The admin is the launch admin until launch (or a launch drive opens), then the Treasury. Upgrades overlay creation hashes (`manager.module_versions`).
 
 Every DAO contract's events resolve through `manager.event_identity`: the core four from creation on, each module only inside its registration window on that DAO's Token (a module registered by two DAOs counts for each in its own window). Events outside every window are excluded from DAO views. Details: [database catalog](DATABASE_SCHEMA.md).
 
