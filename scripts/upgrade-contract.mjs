@@ -13,8 +13,9 @@ import {
  * Upgrade tooling for the hardened contracts.
  *
  * - manager: Manager admin calls upgrade_manager directly.
- * - minter (the shared platform Minter): the Manager admin calls minter.upgrade directly.
- * - DAO modules: the Manager admin registers the new implementation and approves the (from, to)
+ * - DAO modules (claims is the DAO's ClaimMinter, built as minter.wasm and registered as
+ *   "ClaimMinter"; a module added after create_dao is not in the DAO artifact, so pass its address
+ *   in MODULE_ADDRESS): the Manager admin registers the new implementation and approves the (from, to)
  *   path (register_implementation / approve_upgrade). The module upgrade itself is `upgrade(from_hash,
  *   to_hash)`, admin-only (version() then follows the registry; there is nothing to sync):
  *     * before launch (token.is_live() == false) the owner is the launch admin: this script calls them
@@ -35,7 +36,8 @@ import {
  * never get_latest_implementation(name): it returns None once the latest hash is revoked.
  *
  * Env: DEPLOY_IDENTITY (Manager admin / launch admin key), LEGACY_MANAGER_VERSION (manager only),
- *      PROPOSER (address placed in the printed propose command), UPGRADE_DESCRIPTION (proposal text).
+ *      PROPOSER (address placed in the printed propose command), UPGRADE_DESCRIPTION (proposal text),
+ *      MODULE_ADDRESS (DAO module address when the DAO artifact has none).
  */
 
 const MASK = (1n << 64n) - 1n;
@@ -111,14 +113,20 @@ function keccak256(input) {
 
 const USAGE = [
   'Usage:',
-  '  node scripts/upgrade-contract.mjs <manager|minter> <network-config.json> <from-wasm-hash>',
-  '  node scripts/upgrade-contract.mjs <token|metadata|auction|governor|treasury|marketplace> <dao-config.json> <network-config.json> <from-wasm-hash>',
+  '  node scripts/upgrade-contract.mjs manager <network-config.json> <from-wasm-hash>',
+  '  node scripts/upgrade-contract.mjs <token|metadata|auction|governor|treasury|marketplace|claims> <dao-config.json> <network-config.json> <from-wasm-hash>',
   'See docs/CONTRACT_UPGRADES.md.'
 ].join('\n');
-const moduleNames = ['manager', 'minter', 'token', 'metadata', 'auction', 'governor', 'treasury', 'marketplace'];
-const platformModules = ['manager', 'minter'];
+const moduleNames = ['manager', 'token', 'metadata', 'auction', 'governor', 'treasury', 'marketplace', 'claims'];
+const platformModules = ['manager'];
 const [moduleName, ...rest] = process.argv.slice(2);
+if (moduleName === 'minter') {
+  throw new Error(`The shared platform Minter is retired: upgrade a DAO's ClaimMinter with the "claims" module.\n${USAGE}`);
+}
 if (!moduleNames.includes(moduleName)) throw new Error(USAGE);
+// Crate (WASM file and release manifest key) and registry name per module.
+const crateName = moduleName === 'claims' ? 'minter' : moduleName;
+const implementationName = moduleName === 'claims' ? 'ClaimMinter' : moduleName[0].toUpperCase() + moduleName.slice(1);
 // Manager: <network-config> <from-hash>. DAO modules: <dao-config> <network-config> <from-hash>.
 const platform = platformModules.includes(moduleName);
 const [daoConfigPath, networkConfigPath, fromHash] = platform ? [null, rest[0], rest[1]] : [rest[0], rest[1], rest[2]];
@@ -131,12 +139,13 @@ const managerArtifactPath = `deploys/${networkConfig.label}-${networkConfig.netw
 if (!existsSync(managerArtifactPath)) throw new Error(`Manager artifact not found: ${managerArtifactPath}`);
 const managerArtifact = JSON.parse(readFileSync(managerArtifactPath, 'utf8'));
 const identityName = process.env.DEPLOY_IDENTITY?.trim() || `${networkConfig.network}-admin`;
-const wasmPath = `target/wasm32v1-none/release/${moduleName}.wasm`;
+const wasmPath = `target/wasm32v1-none/release/${crateName}.wasm`;
 
 if (!existsSync(wasmPath)) {
   throw new Error(`Missing ${wasmPath}. Run: pnpm contracts:build`);
 }
-if (!releaseManifest[moduleName]) throw new Error(`Missing ${moduleName} release version`);
+const releaseVersion = releaseManifest[crateName];
+if (!releaseVersion) throw new Error(`Missing ${crateName} release version`);
 
 if (moduleName !== 'manager') {
   const managerVersionProbe = runQuiet('stellar', [
@@ -236,7 +245,6 @@ console.log(
     extendSteps.map((s) => `${s.days} d for ${(Number(s.fee) / 1e7).toFixed(2)} XLM`).join(', then ')
 );
 
-const implementationName = moduleName[0].toUpperCase() + moduleName.slice(1);
 if (moduleName === 'manager') {
   const legacyManagerVersion = process.env.LEGACY_MANAGER_VERSION?.trim();
   if (!legacyManagerVersion) {
@@ -250,7 +258,7 @@ if (moduleName === 'manager') {
 }
 registerOnce({
   name: implementationName,
-  version: releaseManifest[moduleName],
+  version: releaseVersion,
   wasm_hash: targetHash
 });
 // Approving is idempotent: a second approval keeps the first ledger, so the platform notice below
@@ -260,8 +268,8 @@ invoke(managerArtifact.manager, 'approve_upgrade', {
   to_hash: targetHash
 });
 
-// The Manager and the shared Minter upgrade only after their notice (upgrade_delay() ledgers from
-// the approval). Every DAO depends on both, so the notice is what lets a DAO react first. This
+// The Manager upgrades only after its notice (upgrade_delay() ledgers from the approval). Every DAO
+// depends on it, so the notice is what lets a DAO react first. This
 // script is rerun once the notice has passed; until then it says when.
 function platformUpgrade(target, method, label) {
   // D42: a platform contract upgrades only to the announced latest, and its notice counts from the
@@ -299,11 +307,11 @@ function platformUpgrade(target, method, label) {
     targetHash
   ]);
   if (result.ok) {
-    console.log(`${label} upgraded to ${releaseManifest[moduleName]} (${targetHash}).`);
+    console.log(`${label} upgraded to ${releaseVersion} (${targetHash}).`);
     return;
   }
   const output = result.stderr || result.stdout;
-  if (/7130|7813|UpgradeDelayNotElapsed/.test(output)) {
+  if (/7130|UpgradeDelayNotElapsed/.test(output)) {
     const earliest = Math.max(approvedAt, announcedAt) + notice;
     console.log(
       `${label} upgrade approved at ledger ${approvedAt}; its notice is ${notice} ledgers ` +
@@ -319,18 +327,12 @@ if (moduleName === 'manager') {
   process.exit(0);
 }
 
-if (moduleName === 'minter') {
-  // The shared Minter's upgrade authority is the Manager admin (DEPLOY_IDENTITY).
-  platformUpgrade(managerArtifact.minter, 'upgrade', 'Shared Minter');
-  process.exit(0);
-}
-
 const daoConfig = JSON.parse(readFileSync(daoConfigPath, 'utf8'));
 const daoArtifactPath = `deploys/${networkConfig.label}-${networkConfig.network}-dao-${daoConfig.nonce}.json`;
 if (!existsSync(daoArtifactPath)) throw new Error(`DAO artifact not found: ${daoArtifactPath}`);
 const daoArtifact = JSON.parse(readFileSync(daoArtifactPath, 'utf8'));
-const target = daoArtifact.addresses?.[moduleName];
-if (!target) throw new Error(`DAO artifact does not contain a ${moduleName} address`);
+const target = process.env.MODULE_ADDRESS?.trim() || daoArtifact.addresses?.[moduleName];
+if (!target) throw new Error(`DAO artifact does not contain a ${moduleName} address (a module added with create_module: set MODULE_ADDRESS)`);
 
 const live = (() => {
   const result = runQuiet('stellar', [
@@ -360,7 +362,7 @@ if (!live) {
 
 // Live DAO: the module owner is the Treasury. Emit a governance payload instead of a direct call.
 const description =
-  process.env.UPGRADE_DESCRIPTION?.trim() || `Upgrade ${moduleName} to ${releaseManifest[moduleName]} (${targetHash})`;
+  process.env.UPGRADE_DESCRIPTION?.trim() || `Upgrade ${moduleName} to ${releaseVersion} (${targetHash})`;
 const descriptionHash = keccak256(Buffer.from(description, 'utf8'));
 const bytes = (hex) => ({ bytes: hex });
 const payload = {
@@ -377,7 +379,7 @@ const plan = {
   target,
   fromHash,
   toHash: targetHash,
-  version: releaseManifest[moduleName],
+  version: releaseVersion,
   managerApproval: 'submitted',
   governor: daoArtifact.addresses.governor,
   treasury: daoArtifact.addresses.treasury,

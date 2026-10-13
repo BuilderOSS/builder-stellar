@@ -5,7 +5,8 @@ import {Address} from '@stellar/stellar-sdk';
  */
 export const TokenError = {
   /**
-   * Minter is not authorized to mint tokens
+   * The minter is neither the admin nor a registered module allowed to mint
+   * now (before launch only the `claims` module may)
    */
   7201 : { message: "MintAuthorityNotAllowed" },
   /**
@@ -17,17 +18,9 @@ export const TokenError = {
    */
   7203 : { message: "TreasuryMismatch" },
   /**
-   * `launch` minters list does not contain the treasury
-   */
-  7204 : { message: "TreasuryNotMinter" },
-  /**
    * `batch_mint` exceeds the event budget (`common::batch_mint_fits`)
    */
   7205 : { message: "BatchTooLarge" },
-  /**
-   * `launch` minters list does not contain the pinned platform Minter
-   */
-  7206 : { message: "MinterNotGranted" },
   /**
    * The collection name contains `"`, `\` or a control character
    */
@@ -35,7 +28,89 @@ export const TokenError = {
   /**
    * The metadata contract address is missing from the instance
    */
-  7208 : { message: "MetadataNotSet" }
+  7208 : { message: "MetadataNotSet" },
+  /**
+   * The address is not a registered module
+   */
+  7209 : { message: "NotAModule" },
+  /**
+   * Only deployed Wasm contracts can be modules (not wallets, Stellar Asset
+   * Contracts or predicted addresses)
+   */
+  7210 : { message: "NotAContract" },
+  /**
+   * The kind is not a built-in kind or `custom_<name>`
+   */
+  7211 : { message: "InvalidKind" },
+  /**
+   * Another module already has this kind
+   */
+  7212 : { message: "KindTaken" },
+  /**
+   * The address is already registered
+   */
+  7213 : { message: "ModuleAlreadyRegistered" },
+  /**
+   * The registry already holds `common::modules::MAX_MODULES` modules
+   */
+  7214 : { message: "TooManyModules" },
+  /**
+   * The mint exceeds the module's remaining allowance
+   */
+  7215 : { message: "AllowanceExceeded" },
+  /**
+   * The token is locked and this movement or approval is not one of the
+   * DAO-controlled paths (docs/designs/locked-tokens.md)
+   */
+  7216 : { message: "TransfersLocked" },
+  /**
+   * A switch or transfer agent was set to the value it already has
+   */
+  7217 : { message: "SettingUnchanged" },
+  /**
+   * `dao_transfer` while `dao_recovery` is off
+   */
+  7218 : { message: "RecoveryOff" },
+  /**
+   * `agent_transfer` by a module the DAO has not made a transfer agent
+   */
+  7219 : { message: "NotTransferAgent" },
+  /**
+   * `dao_transfer` from or to a registered module (custody keeps its own
+   * records)
+   */
+  7220 : { message: "ModuleCustody" },
+  /**
+   * Members-only delegation: the delegatee holds no token or holds no votes
+   */
+  7221 : { message: "DelegateNotMember" }
+}
+
+/**
+ * The DAO moved a token by proposal (`dao_transfer`; next to
+ * OpenZeppelin's `Transfer`): lost-key recovery or recall.
+ */
+export interface DaoTransferEvent {
+  name: "DaoTransfer";
+  data: {
+    from: string;
+    to: string;
+    token_id?: number;
+    changed_by?: string;
+  };
+}
+
+/**
+ * A transfer agent moved a token (next to OpenZeppelin's `Transfer`).
+ */
+export interface AgentTransferEvent {
+  name: "AgentTransfer";
+  data: {
+    agent: string;
+    from?: string;
+    to?: string;
+    token_id?: number;
+  };
 }
 
 /**
@@ -45,13 +120,16 @@ export interface TokenLaunchedEvent {
   name: "TokenLaunched";
   data: {
     treasury: string;
-    minters?: Array<string>;
+    /**
+     * The initial mint allowances `launch` wrote.
+     */
+    grants?: Array<MintGrant>;
   };
 }
 
 /**
  * Emitted for every token minted by `mint`, next to OpenZeppelin's `Mint`, to
- * record who performed the mint (admin, auction, marketplace, minter).
+ * record who performed the mint (the admin or a module).
  * `batch_mint` emits `MintBatchWithMinter` instead.
  */
 export interface MintWithMinterEvent {
@@ -76,6 +154,20 @@ export interface MetadataUpdatedEvent {
 }
 
 /**
+ * Emitted when a module joins the registry (the Manager at `create_dao` /
+ * `create_module` in Setup, the Treasury by proposal once live).
+ * The indexer allowlists modules from this event.
+ */
+export interface ModuleRegisteredEvent {
+  name: "ModuleRegistered";
+  data: {
+    kind: string;
+    address?: string;
+    non_voting?: boolean;
+  };
+}
+
+/**
  * Emitted once by the constructor.
  */
 export interface TokenInitializedEvent {
@@ -84,6 +176,32 @@ export interface TokenInitializedEvent {
     admin: string;
     name?: string;
     symbol?: string;
+    /**
+     * The membership switches chosen at creation.
+     */
+    settings?: TokenSettings;
+  };
+}
+
+/**
+ * `set_dao_recovery`: DAO recovery (`dao_transfer`) was turned on or off.
+ */
+export interface DaoRecoveryChangedEvent {
+  name: "DaoRecoveryChanged";
+  data: {
+    enabled?: boolean;
+    changed_by?: string;
+  };
+}
+
+/**
+ * Emitted when a module leaves the registry.
+ */
+export interface ModuleUnregisteredEvent {
+  name: "ModuleUnregistered";
+  data: {
+    kind: string;
+    address?: string;
   };
 }
 
@@ -103,13 +221,51 @@ export interface MintBatchWithMinterEvent {
 }
 
 /**
- * Emitted when minting authority is granted or revoked for an address.
+ * Emitted when a module's mint allowance is set by `launch`, raised or
+ * lowered by the admin, zeroed by `unregister_module`, or released by the
+ * module itself. Not emitted when a mint spends allowance (the remaining
+ * amount is readable with `mint_allowance`).
  */
-export interface MintAuthorityChangedEvent {
-  name: "MintAuthorityChanged";
+export interface MintAllowanceChangedEvent {
+  name: "MintAllowanceChanged";
   data: {
-    authority: string;
-    old_enabled?: boolean;
+    module: string;
+    old_allowance?: number;
+    allowance?: number;
+    changed_by?: string;
+  };
+}
+
+/**
+ * A module became (or stopped being) a transfer agent: `set_transfer_agent`
+ * or `unregister_module`.
+ */
+export interface TransferAgentChangedEvent {
+  name: "TransferAgentChanged";
+  data: {
+    module: string;
+    enabled?: boolean;
+    changed_by?: string;
+  };
+}
+
+/**
+ * `set_transfers_locked`: the lock was turned on or off.
+ */
+export interface TransfersLockChangedEvent {
+  name: "TransfersLockChanged";
+  data: {
+    locked?: boolean;
+    changed_by?: string;
+  };
+}
+
+/**
+ * `set_members_only_delegation`: the delegation rule changed.
+ */
+export interface MembersOnlyDelegationChangedEvent {
+  name: "MembersOnlyDelegationChanged";
+  data: {
     enabled?: boolean;
     changed_by?: string;
   };
@@ -185,6 +341,46 @@ export const CommonError = {
    * `StorageVersion` missing from storage.
    */
   7013 : { message: "StorageVersionNotSet" }
+}
+
+/**
+ * An initial mint allowance written by the Token's `launch`.
+ */
+export interface MintGrant {
+  allowance: number;
+  module: string;
+}
+
+/**
+ * One registry entry.
+ */
+export interface ModuleEntry {
+  address: string;
+  kind: string;
+  /**
+   * Tokens this module holds carry no votes (custody: Auction, Marketplace).
+   */
+  non_voting: boolean;
+}
+
+/**
+ * A DAO's membership token switches (docs/designs/locked-tokens.md), chosen
+ * at `create_dao` and changeable by the Token's admin: the launch admin in
+ * Setup, the Treasury by proposal once Live. All off reproduces an open DAO.
+ */
+export interface TokenSettings {
+  /**
+   * The Treasury may move any member's token by proposal (`dao_transfer`).
+   */
+  dao_recovery: boolean;
+  /**
+   * Holders delegate only to themselves or to another voting member.
+   */
+  members_only_delegation: boolean;
+  /**
+   * Tokens move only along DAO-controlled paths (`TransfersLocked`).
+   */
+  transfers_locked: boolean;
 }
 
 /**
@@ -394,5 +590,5 @@ export const NonFungibleTokenError = {
    */
   214 : { message: "SymbolMaxLenExceeded" }
 }
-    export type ContractEvent = TokenLaunchedEvent | MintWithMinterEvent | MetadataUpdatedEvent | TokenInitializedEvent | MintBatchWithMinterEvent | MintAuthorityChangedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | DelegateChangedEvent | DelegateVotesChangedEvent | MintEvent | ApproveEvent | TransferEvent | ApproveForAllEvent;
+    export type ContractEvent = DaoTransferEvent | AgentTransferEvent | TokenLaunchedEvent | MintWithMinterEvent | MetadataUpdatedEvent | ModuleRegisteredEvent | TokenInitializedEvent | DaoRecoveryChangedEvent | ModuleUnregisteredEvent | MintBatchWithMinterEvent | MintAllowanceChangedEvent | TransferAgentChangedEvent | TransfersLockChangedEvent | MembersOnlyDelegationChangedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | DelegateChangedEvent | DelegateVotesChangedEvent | MintEvent | ApproveEvent | TransferEvent | ApproveForAllEvent;
     

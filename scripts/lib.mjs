@@ -105,8 +105,8 @@ export function positionalArg(args, valueless = []) {
 /**
  * What the Manager's latest pointers name, for renewal. `view(method, name)` reads the Manager.
  * The `LatestImplementation(name)` entry outlives a revoke (`latest_pointer` still returns it,
- * `get_latest_implementation` filters the hash out), and `upgrade_manager`, `minter.upgrade`
- * and the app all read that entry, so every existing pointer is renewed; only an unrevoked
+ * `get_latest_implementation` filters the hash out), and `upgrade_manager`
+ * and the app read that entry, so every existing pointer is renewed; only an unrevoked
  * hash is worth keeping alive.
  */
 export function collectLatest(view, names) {

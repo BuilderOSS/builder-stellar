@@ -1,4 +1,4 @@
-import {Address} from '@stellar/stellar-sdk';
+import {Address, xdr} from '@stellar/stellar-sdk';
 
     /**
  * Auction errors (block `common::error::codes::AUCTION`).
@@ -61,10 +61,6 @@ export const AuctionError = {
    * `launch` treasury differs from the treasury wired at construction
    */
   7414 : { message: "TreasuryMismatch" },
-  /**
-   * `launch` expected payment token differs from the configured one
-   */
-  7415 : { message: "PaymentTokenMismatch" },
   /**
    * `withdraw_refund` called with no pending refund balance
    */
@@ -438,6 +434,33 @@ export const CommonError = {
    * `StorageVersion` missing from storage.
    */
   7013 : { message: "StorageVersionNotSet" }
+}
+
+/**
+ * One page of `DaoModule::renewal_keys`.
+ */
+export interface RenewalPage {
+  /**
+   * Asset contracts (the DAO token included) whose `Balance(module)` entry
+   * the module holds. Reported on the first page; later pages may repeat
+   * or omit them.
+   */
+  assets: Array<string>;
+  /**
+   * `(key, persistent)` for each storage entry the module asks the sweep
+   * to keep alive. `key` is the exact `Val` the module stores under,
+   * already namespaced (`crate::ns`), so the sweep builds
+   * `LedgerKey::ContractData { contract: module, key, durability }` from it
+   * directly; `persistent` is false for temporary entries. Instance entries
+   * are not listed: the sweep renews every module's instance. A key may name
+   * an entry that does not exist (a listing slot nobody used); the sweep
+   * renews only what it finds.
+   */
+  keys: Array<[any, boolean]>;
+  /**
+   * Cursor of the next page, `None` on the last one.
+   */
+  next_cursor: number | null;
 }
 
 /**

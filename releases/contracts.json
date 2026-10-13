@@ -1,10 +1,10 @@
 {
-  "manager": "0.3.0",
-  "token": "0.3.0",
-  "metadata": "0.3.0",
-  "auction": "0.3.0",
-  "governor": "0.3.0",
-  "treasury": "0.3.0",
-  "marketplace": "0.3.0",
-  "minter": "0.3.0"
+  "manager": "0.4.0",
+  "token": "0.4.0",
+  "metadata": "0.4.0",
+  "auction": "0.4.0",
+  "governor": "0.4.0",
+  "treasury": "0.4.0",
+  "marketplace": "0.4.0",
+  "minter": "0.4.0"
 }

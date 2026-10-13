@@ -1,5 +1,5 @@
 {
-  "$comment": "Seconds bounds: votingDelay/votingPeriod/queueDelay 300..=2592000; auction.timeBuffer 1..=86400; quorumBps 1..=10000; proposalThreshold is an ABSOLUTE number of votes (>= 1, not bps) and must not exceed the founder supply; reservePrice >= 1000 (stroops). Payment assets are fixed at create_dao and asserted at launch. Every launch pins the Manager's platform minter (deploy-manager.mjs sets it). metadata.profile is the community profile ({ description, links, image }, at most 4,096 bytes serialized). Founders are minted by the launch admin via token.batch_mint during setup. Primary-sale listings are created by governance after launch (no primary listing config here).",
+  "$comment": "Seconds bounds: votingDelay/votingPeriod/queueDelay 300..=2592000; auction.timeBuffer 1..=86400; quorumBps 1..=10000; proposalThreshold is an ABSOLUTE number of votes (>= 1, not bps) and must not exceed the founder supply; reservePrice >= 1000 (stroops). Modules are optional: omit the auction, marketplace or claims section (or set enabled: false) for a DAO without that module; add claims: { paymentAsset } for a per-DAO ClaimMinter. Payment assets are fixed at create_dao and asserted at launch. tokenSettings { transfersLocked, membersOnlyDelegation, daoRecovery } (default all false, an open DAO) and transferAgents (kinds this config creates) are optional. metadata.profile is the community profile ({ description, links, image }, at most 4,096 bytes serialized). Founders are minted by the launch admin via token.batch_mint during setup. Primary sales are quick-buy pools opened by governance after launch.",
   "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
   "nonce": 0,
   "launchAdmin": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
@@ -77,6 +77,9 @@
   "marketplace": {
     "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
     "secondaryFeeBps": 250
+  },
+  "claims": {
+    "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
   },
   "governance": {
     "queueDelay": 300,

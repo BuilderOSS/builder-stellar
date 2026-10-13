@@ -54,10 +54,11 @@ const saltSuffix = process.env.DEPLOY_SALT_SUFFIX?.trim() ?? '';
 const contractBuildDir = 'target/wasm32v1-none/release';
 const deployArtifactPath = `deploys/${config.label}-${networkName}-manager.json`;
 // Platform upgrade notice: ledgers between a Manager approval and the earliest upgrade of the Manager
-// itself or the shared Minter. Every DAO depends on both (registry, factory, mint authority), so the
-// notice is what lets a DAO react before a hostile upgrade lands. 7 days (120,960 ledgers) on a public
-// network; `upgradeDelayLedgers` in the network config shortens it for testnet. The admin can change
-// it later with set_upgrade_delay on each contract (a reduction waits out the notice in force).
+// itself. Every DAO depends on it (registry, factory), so the notice is what lets a DAO react before a
+// hostile upgrade lands. 7 days (120,960 ledgers) on a public network; `upgradeDelayLedgers` in the
+// network config shortens it for testnet. The admin can change it later with set_upgrade_delay (a
+// reduction waits out the notice in force). DAO modules, the ClaimMinter included, are upgraded only by
+// their own DAO's proposals.
 const upgradeDelay = Number(config.upgradeDelayLedgers ?? 7 * LEDGERS_PER_DAY);
 if (!Number.isInteger(upgradeDelay) || upgradeDelay < 0) {
   throw new Error(`upgradeDelayLedgers must be a non-negative integer, got ${config.upgradeDelayLedgers}`);
@@ -410,9 +411,20 @@ function setLatestImplementation(managerAddress, wasmHash, name) {
 // NOTE: security decisions must use get_implementation(hash) and the Current* hashes,
 // never get_latest_implementation(name): it returns None once the selected hash is revoked.
 
+// The hashes create_dao and create_module deploy from (`CurrentImplementations`; `claims` is the
+// per-DAO ClaimMinter module, docs/designs/membership-models.md §3).
 function setCurrentImplementations(managerAddress, implementations) {
   console.log('Setting current implementations...');
 
+  const current = {
+    token: implementations.token,
+    metadata: implementations.metadata,
+    auction: implementations.auction,
+    governor: implementations.governor,
+    treasury: implementations.treasury,
+    marketplace: implementations.marketplace,
+    claims: implementations.minter
+  };
   const result = runQuiet('stellar', [
     'contract',
     'invoke',
@@ -424,18 +436,8 @@ function setCurrentImplementations(managerAddress, implementations) {
     networkName,
     '--',
     'set_current_implementations',
-    '--token',
-    implementations.token,
-    '--metadata',
-    implementations.metadata,
-    '--auction',
-    implementations.auction,
-    '--governor',
-    implementations.governor,
-    '--treasury',
-    implementations.treasury,
-    '--marketplace',
-    implementations.marketplace
+    '--current',
+    JSON.stringify(current)
   ]);
 
   if (!result.ok) {
@@ -447,61 +449,7 @@ function setCurrentImplementations(managerAddress, implementations) {
   console.log('Current implementations set successfully');
 }
 
-function viewManager(managerAddress, method) {
-  const result = runQuiet('stellar', [
-    'contract',
-    'invoke',
-    '--id',
-    managerAddress,
-    '--source-account',
-    identityName,
-    '--network',
-    networkName,
-    '--send',
-    'no',
-    '--',
-    method
-  ]);
-  if (!result.ok) throw new Error(`Failed to query Manager ${method}: ${result.stderr || result.stdout}`);
-  return (result.stdout + result.stderr)
-    .replace(/\x1b\[[0-9;]*m/g, '')
-    .trim()
-    .split('\n')
-    .pop()
-    .replace(/"/g, '');
-}
-
-// Admin-only. Every launch_dao pins and grants mint authority to this address (LaunchConfig.minter);
-// without it launch fails with PlatformMinterNotSet. Idempotent: skipped when already registered.
-function setPlatformMinter(managerAddress, minterAddress) {
-  const current = viewManager(managerAddress, 'get_platform_minter');
-  if (current === minterAddress) {
-    console.log(`Platform minter already set: ${minterAddress}`);
-    return;
-  }
-  console.log(`Setting platform minter ${minterAddress}...`);
-  const result = runQuiet('stellar', [
-    'contract',
-    'invoke',
-    '--id',
-    managerAddress,
-    '--source-account',
-    identityName,
-    '--network',
-    networkName,
-    '--',
-    'set_platform_minter',
-    '--minter',
-    minterAddress
-  ]);
-  if (!result.ok) {
-    console.error('set_platform_minter output:', result.stdout);
-    console.error('set_platform_minter error:', result.stderr);
-    throw new Error('Failed to set platform minter');
-  }
-}
-
-async function writeDeployArtifact(managerAddress, implementations, txMetadata, minterAddress) {
+async function writeDeployArtifact(managerAddress, implementations, txMetadata) {
   if (!(await confirmOverwrite(deployArtifactPath))) {
     console.log(`Skipped writing ${deployArtifactPath}.`);
     return;
@@ -532,7 +480,6 @@ async function writeDeployArtifact(managerAddress, implementations, txMetadata, 
       networkPassphrase
     },
     manager: managerAddress,
-    minter: minterAddress,
     implementations,
     versions,
     sourceCommit,
@@ -550,9 +497,9 @@ async function writeDeployArtifact(managerAddress, implementations, txMetadata, 
 
 async function main() {
   // Sequence: build -> deploy Manager(admin, current_hash, version) -> upload + register all module
-  // implementations (+ Minter) -> extend all code to 170 days -> set_current_implementations (six DAO
-  // modules) -> deploy shared Minter(manager, current_hash) -> set_platform_minter. Each step is
-  // idempotent, so re-running resumes.
+  // implementations (the ClaimMinter as "ClaimMinter") -> extend all code to 170 days ->
+  // set_current_implementations. There is no platform Minter: every DAO gets its own ClaimMinter from
+  // create_dao / create_module. Each step is idempotent, so re-running resumes.
   // Build all deployable contracts with the real deployable build (spec shaking v2 on).
   // The legacy SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=0 build embeds every unused
   // library type: WASMs are 2-4x larger (token ~138 KB) and exceed the network's 131072-byte
@@ -603,7 +550,7 @@ async function main() {
   registerImplementation(managerDeploy.id, implementations.governor, 'Governor', versions.governor);
   registerImplementation(managerDeploy.id, implementations.treasury, 'Treasury', versions.treasury);
   registerImplementation(managerDeploy.id, implementations.marketplace, 'Marketplace', versions.marketplace);
-  registerImplementation(managerDeploy.id, implementations.minter, 'Minter', versions.minter);
+  registerImplementation(managerDeploy.id, implementations.minter, 'ClaimMinter', versions.minter);
 
   // Pre-pay the shared contract-code rent (see extendCodeTtl): callers never pay to extend shared code.
   console.log('\n=== Extending Shared Code TTL ===\n');
@@ -615,7 +562,7 @@ async function main() {
     Governor: implementations.governor,
     Treasury: implementations.treasury,
     Marketplace: implementations.marketplace,
-    Minter: implementations.minter
+    ClaimMinter: implementations.minter
   })) {
     extendCodeTtl(label, hash);
   }
@@ -624,29 +571,11 @@ async function main() {
   console.log('\n=== Setting Current Implementations ===\n');
   setCurrentImplementations(managerDeploy.id, implementations);
 
-  // Deploy shared Minter instance
-  console.log('\n=== Deploying Shared Minter ===\n');
-  const minterDeploy = deployIfMissing('minter', 'shared-minter', [
-    '--manager',
-    managerDeploy.id,
-    '--current_hash',
-    implementations.minter,
-    '--upgrade_delay',
-    String(upgradeDelay)
-  ]);
-  console.log(`Minter upgrade notice: ${upgradeDelay} ledgers (~${(upgradeDelay / LEDGERS_PER_DAY).toFixed(2)} days)`);
-  console.log(`Shared Minter deployed: ${minterDeploy.id}`);
-
-  // Register it as the Manager's platform minter (every launch pins it).
-  console.log('\n=== Registering Platform Minter ===\n');
-  setPlatformMinter(managerDeploy.id, minterDeploy.id);
-
   // Write deployment artifact
-  await writeDeployArtifact(managerDeploy.id, implementations, managerDeploy.txMetadata, minterDeploy.id);
+  await writeDeployArtifact(managerDeploy.id, implementations, managerDeploy.txMetadata);
 
   console.log(`\n=== Manager Deployment Complete ===`);
   console.log(`MANAGER=${managerDeploy.id}`);
-  console.log(`MINTER=${minterDeploy.id}`);
   console.log(`\nImplementations:`);
   console.log(`TOKEN_WASM=${implementations.token}`);
   console.log(`METADATA_WASM=${implementations.metadata}`);
@@ -654,7 +583,7 @@ async function main() {
   console.log(`GOVERNOR_WASM=${implementations.governor}`);
   console.log(`TREASURY_WASM=${implementations.treasury}`);
   console.log(`MARKETPLACE_WASM=${implementations.marketplace}`);
-  console.log(`MINTER_WASM=${implementations.minter}`);
+  console.log(`CLAIM_MINTER_WASM=${implementations.minter}`);
 }
 
 await main();

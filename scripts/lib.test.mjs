@@ -80,11 +80,11 @@ test('the artifact is found after a valueless flag and never as a flag value', (
 test('a revoked latest still has its pointer renewed, but not its hash', () => {
   const h = 'ab'.repeat(32);
   const view = (method, name) => {
-    if (name === 'Minter') return null;
+    if (name === 'ClaimMinter') return null;
     if (method === 'latest_pointer') return { wasm_hash: h, set_ledger: 1 };
     return name === 'Token' ? { wasm_hash: h, revoked: false } : null; // Manager: revoked
   };
-  const got = collectLatest(view, ['Manager', 'Token', 'Minter']);
+  const got = collectLatest(view, ['Manager', 'Token', 'ClaimMinter']);
   assert.deepEqual(got.pointerNames, ['Manager', 'Token']);
   assert.deepEqual(got.hashes, [{ hash: h, label: 'Token (latest)' }]);
 });

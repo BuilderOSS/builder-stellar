@@ -1,201 +1,41 @@
 {
   "network": "testnet",
   "label": "builder",
-  "deploymentLedger": 5117938,
+  "deploymentLedger": 5172581,
   "config": {
     "label": "builder",
     "adminAddress": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
     "rpcUrl": "https://soroban-testnet.stellar.org",
     "networkPassphrase": "Test SDF Network ; September 2015"
   },
-  "manager": "CDFQIOSA3JJWV3HIZ5XVMXBMTEL7BRZWZVUW72OQN6O3EM35OVT6PD5W",
-  "minter": "CC5TEMQCHDJ2MNR25NZVFNSAHKAHD43MVU47PZIAPCT5ODLYVEJWYB6R",
+  "manager": "CCNEFTUXPZVJ2BLVOFFKZME277BERR5V2IMVARO6MVNJLWOBMPR256UE",
   "implementations": {
-    "manager": "5bc08fd3b5d042c8f285dac22b1c9cbbb50fad1c1e62355c3987526ea4a2ff2a",
-    "token": "c5a5c73888cb08cb88b76ea3b9f8156100aa8f755cb872cf2043ab7100b4067c",
-    "metadata": "e1aec5e86af009148e323f2707a2a6ab67c2f15e4b71a548d712286b692420a2",
-    "auction": "392208373625d0bc5ea259f4428d5b54b2db3859d99038ee71b94d051049c51b",
-    "governor": "5f4c9b3aa2b87cc54fb536b36bcbb067a05ad0127fe251fd87c82b741ef4a3c6",
-    "treasury": "07f2725994d5fa50405d5e47b3570fbbd4664502e9700ee26550e397435cd0e4",
-    "marketplace": "bdea07f004d808759b6b5c443c8312ee458097594d7d9a1851da1c727ba404d3",
-    "minter": "28b837b4edf8d5bfc9e819243fc96e45a7199cf4d81d7eb13d286728a68f8012"
+    "manager": "f5b32ab19f0817a563606c9a88ab290da05871a8bf21e006fb408406659e69c1",
+    "token": "3f36abc90cf93a136549ecbf63d90f1665e2db85e1dad3191d7d030fb90f4f2d",
+    "metadata": "44a0c4b673638b70ce8d8e9554db7903c208d00047c5e732db015b9942e62efb",
+    "auction": "8130c8518553071a4d2798a9a7eef99dd334638349917719429452ea0bc0b7ff",
+    "governor": "41ad48e8fdbe4a4229ce7821fd207c1c7d06033a24e6bfa09efeb74a02b054dd",
+    "treasury": "597a9e042d3ddc0d42ef3b5b4434711696e52426b2dab60822cd9c5acf13903d",
+    "marketplace": "f28ebc99593a7ccfdce250a3ed49013b5feeb9917de931a3d89db4f34e2e4bb4",
+    "minter": "e1c18db983f8f9d1fcddf05ec1aeb142690fd576533aa532d4b179eb7c6079aa"
   },
   "versions": {
-    "manager": "0.2.0",
-    "token": "0.2.0",
-    "metadata": "0.1.0",
-    "auction": "0.1.0",
-    "governor": "0.1.0",
-    "treasury": "0.1.0",
-    "marketplace": "0.1.0",
-    "minter": "0.1.0"
+    "manager": "0.4.0",
+    "token": "0.4.0",
+    "metadata": "0.4.0",
+    "auction": "0.4.0",
+    "governor": "0.4.0",
+    "treasury": "0.4.0",
+    "marketplace": "0.4.0",
+    "minter": "0.4.0"
   },
-  "sourceCommit": "8a3cba04b12ffed3a03935999d327638156876ff",
-  "deployedAt": "2026-10-10T06:24:39.770Z",
+  "sourceCommit": "8ba7cfe526eadb0c6ac960b62925307fd4cb3cc9",
+  "deployedAt": "2026-10-13T10:20:35.659Z",
   "transactions": {
     "manager": {
-      "deployedAt": "2026-10-10T06:21:18.008Z",
-      "txHash": "10e667f203142603307d727d88dc81a934a7e6ee60139174603c8883567e1ea8",
-      "ledger": 5117938
+      "deployedAt": "2026-10-13T10:15:03.949Z",
+      "txHash": "048f4b4af1c3b687fdc6a57bce0efdbd739f9ce2619da96263bdc62669927a47",
+      "ledger": 5172581
     }
-  },
-  "upgrades": [
-    {
-      "module": "token",
-      "from": "3e44c30029436c92b2ee8a8c1c896a211e376eec217d841e29f9523acf9b9311",
-      "to": "c5a5c73888cb08cb88b76ea3b9f8156100aa8f755cb872cf2043ab7100b4067c",
-      "version": "0.2.0",
-      "registeredLedger": 5124999,
-      "latestAndCurrentSet": true,
-      "date": "2026-10-10",
-      "daos": [
-        {
-          "dao": "CDK3TSVJRME7EW2U35JGBHTO3XXDX6UZ4MFTZIXVWBSKUL4QTR7CZTR6",
-          "proposal": "bee0582d7a0d6e40409bab4bd4aa0e339099bc5bb290add2684d5b1d3397881d",
-          "proposeTx": "11da7625f8b503cff12e1ae6cea2f74ae198a505ebc51ba37c2b097a1d6e76e3",
-          "voteTx": "61b3f920f0445b58893c6b05116c7aa6f42e729b58f04c4e2f7f55d5616c36df",
-          "queueTx": "7b0a164915e90c6e22130793f9690cb9e917bb6b307498d27bc30b1163567fd2",
-          "executeTx": "438a0809bf104294d215b7cade074c484e3b39ea00c94eaca615bdb9156fa251"
-        }
-      ]
-    },
-    {
-      "module": "manager",
-      "from": "e5c3ec1f67e587446e6883c20a3e1b55a8e73c6119c35bf9d1cd4e8c7d22b402",
-      "to": "5bc08fd3b5d042c8f285dac22b1c9cbbb50fad1c1e62355c3987526ea4a2ff2a",
-      "version": "0.2.0",
-      "date": "2026-10-11",
-      "registerTx": "1190eac346de69afdaa40f15c6ec5e1b643c3e85e60ffcaf418b27d1a6948fb5",
-      "approveTx": "490f04cf2ea32ead0b07ea7872a3121e75cedf15a7517b9bb7a9e141ad5dc0cd",
-      "upgradeTx": "55b86011adb0ddbe11b62eab4ac132824158d54764cf5ebebf680a1cfab71ed0",
-      "migration": "0012_slug_changes"
-    },
-    {
-      "module": "auction",
-      "from": "1ba75578710683325476e5ad404b649d17e1cf7afdc1eb17d38815d34c07f107",
-      "to": "392208373625d0bc5ea259f4428d5b54b2db3859d99038ee71b94d051049c51b",
-      "version": "0.2.0",
-      "date": "2026-10-11",
-      "registeredLedger": 5134993,
-      "registerTx": "01da41406d8767ac2f1139bf0f33d193d9fdc2433659bc5bfdc7ddc610cf4d1d",
-      "approveTx": "ea559a252d3626c5f64815ff0991d704cbf02a053b6b65d1c16ecd7dedb47dd0",
-      "latestTx": "62975220598e5c67f3491162dec89fa042ceada22ad8ba581c58486604448ca7",
-      "migration": "0013_comments",
-      "daos": [
-        {
-          "dao": "CDK3TSVJRME7EW2U35JGBHTO3XXDX6UZ4MFTZIXVWBSKUL4QTR7CZTR6",
-          "slug": "builder",
-          "proposal": "f4a580d1c158509e8582ad061bbab317475214ece972cafcbbefadfef13fb794",
-          "proposeTx": "bce2361a8f2c66fe7857efc59aeb2f9516c6862a993496aba449787025e79fca",
-          "voteTx": "a043c62dde7e1c0bb5df4d9d6bec7c5b75ea57a7e1b3373aa3b60628f7ef63df",
-          "queueTx": "f136ec6ca893611a671e0eac86b0b2ce818b8587064099e87b8d1c751620cc83",
-          "executeTx": "e53364669332b5f53ac9eef6407725171cd6b632a73f98d44e8450a869f2494e"
-        },
-        {
-          "dao": "CAOJRMBAGOTAGAECDRQTZF2KBDIDYAWPCDN4HHZMEOT4CBGFCOEAOIK7",
-          "slug": "fast-dao",
-          "proposal": "a0546fb92267dcd575858bdec2cd01232f0faf97b02a890c924bd46e47920a15",
-          "proposeTx": "423f126b225bf870d7d6944426de9135bfad95647464a1bce1137858f835ad12",
-          "voteTx": "af313b4c88bd16f6f9956d5c4c0d981b4579bd5d8b544b6b0559ece688046ad4",
-          "queueTx": "2976253a8cb3ab95dfd090d2599906b5321f764d3e8a94546381435a796b7c0a",
-          "executeTx": "fce1b20b652b35291fef773c7151dfe3cd8914a4e9ae02cf3b58c56a7f3ea46f"
-        },
-        {
-          "dao": "CBI36ODKRFZ7ZNZ7IDWHAIFMFQ3VE6DMPQOCFYO5JLFKLFXZUA56HP5I",
-          "slug": "fast-dao-new",
-          "proposal": "8d8032f21dd9fee698d07a281bab74e079d07d8a0a2f2f91b890e7bb47ec4e99",
-          "proposeTx": "879c95772e438d96145c80c15bd33072b8c27b18aba601274ef9e8e722934bf1",
-          "voteTx": "3fceb3aa106ab36d337c15ad2c4a43f484de9e51f728fbd847a82d88351fc7f4",
-          "queueTx": "79803e1b9cbd41b4f2a3b2ebf79670eb35d602c5733efddcc7a95b399577dd29",
-          "executeTx": "264f5c7158fb4e03434c1ca8733a6444a360f7a9ab7c8ed7f87315b55caf1eb2"
-        }
-      ],
-      "note": "All three modules upgraded in one proposal per DAO."
-    },
-    {
-      "module": "governor",
-      "from": "5d14e140701fa9ac7e07695d371166a481d575bcb595b9cceafce94177925b40",
-      "to": "5f4c9b3aa2b87cc54fb536b36bcbb067a05ad0127fe251fd87c82b741ef4a3c6",
-      "version": "0.2.0",
-      "date": "2026-10-11",
-      "registeredLedger": 5135001,
-      "registerTx": "33abd95e792bc1e981c6cd946535fa2237796704700da75f02d9189e6f9d382b",
-      "approveTx": "a1c0f6d042718ec0595702abcd85f75dd60296ed37c884cff8c82c913d1ff5a3",
-      "latestTx": "2dba55b8c6b49641c8431981f128aa1fe7452ca3d2e0f65cf9ec1e7de7f22412",
-      "migration": "0013_comments",
-      "daos": [
-        {
-          "dao": "CDK3TSVJRME7EW2U35JGBHTO3XXDX6UZ4MFTZIXVWBSKUL4QTR7CZTR6",
-          "slug": "builder",
-          "proposal": "f4a580d1c158509e8582ad061bbab317475214ece972cafcbbefadfef13fb794",
-          "proposeTx": "bce2361a8f2c66fe7857efc59aeb2f9516c6862a993496aba449787025e79fca",
-          "voteTx": "a043c62dde7e1c0bb5df4d9d6bec7c5b75ea57a7e1b3373aa3b60628f7ef63df",
-          "queueTx": "f136ec6ca893611a671e0eac86b0b2ce818b8587064099e87b8d1c751620cc83",
-          "executeTx": "e53364669332b5f53ac9eef6407725171cd6b632a73f98d44e8450a869f2494e"
-        },
-        {
-          "dao": "CAOJRMBAGOTAGAECDRQTZF2KBDIDYAWPCDN4HHZMEOT4CBGFCOEAOIK7",
-          "slug": "fast-dao",
-          "proposal": "a0546fb92267dcd575858bdec2cd01232f0faf97b02a890c924bd46e47920a15",
-          "proposeTx": "423f126b225bf870d7d6944426de9135bfad95647464a1bce1137858f835ad12",
-          "voteTx": "af313b4c88bd16f6f9956d5c4c0d981b4579bd5d8b544b6b0559ece688046ad4",
-          "queueTx": "2976253a8cb3ab95dfd090d2599906b5321f764d3e8a94546381435a796b7c0a",
-          "executeTx": "fce1b20b652b35291fef773c7151dfe3cd8914a4e9ae02cf3b58c56a7f3ea46f"
-        },
-        {
-          "dao": "CBI36ODKRFZ7ZNZ7IDWHAIFMFQ3VE6DMPQOCFYO5JLFKLFXZUA56HP5I",
-          "slug": "fast-dao-new",
-          "proposal": "8d8032f21dd9fee698d07a281bab74e079d07d8a0a2f2f91b890e7bb47ec4e99",
-          "proposeTx": "879c95772e438d96145c80c15bd33072b8c27b18aba601274ef9e8e722934bf1",
-          "voteTx": "3fceb3aa106ab36d337c15ad2c4a43f484de9e51f728fbd847a82d88351fc7f4",
-          "queueTx": "79803e1b9cbd41b4f2a3b2ebf79670eb35d602c5733efddcc7a95b399577dd29",
-          "executeTx": "264f5c7158fb4e03434c1ca8733a6444a360f7a9ab7c8ed7f87315b55caf1eb2"
-        }
-      ],
-      "note": "All three modules upgraded in one proposal per DAO."
-    },
-    {
-      "module": "marketplace",
-      "from": "92500e435fad2bf5a3985df1291d03464f6246d9643f7c928c35a6587995dd97",
-      "to": "bdea07f004d808759b6b5c443c8312ee458097594d7d9a1851da1c727ba404d3",
-      "version": "0.2.0",
-      "date": "2026-10-11",
-      "registeredLedger": 5135007,
-      "registerTx": "6787a17ec87cad2ea536225099c6895d5e50329bc43adf63387cc6e621c1412b",
-      "approveTx": "c28eef3c092845fc8c8c96dd86a883badb5ec9c5c0f122265d88b364e8414ee1",
-      "latestTx": "3b7e3624c46a5b317ef2a871a2f9c270c77c3d74a61a9397a3dc03ae5130ce71",
-      "migration": "0013_comments",
-      "daos": [
-        {
-          "dao": "CDK3TSVJRME7EW2U35JGBHTO3XXDX6UZ4MFTZIXVWBSKUL4QTR7CZTR6",
-          "slug": "builder",
-          "proposal": "f4a580d1c158509e8582ad061bbab317475214ece972cafcbbefadfef13fb794",
-          "proposeTx": "bce2361a8f2c66fe7857efc59aeb2f9516c6862a993496aba449787025e79fca",
-          "voteTx": "a043c62dde7e1c0bb5df4d9d6bec7c5b75ea57a7e1b3373aa3b60628f7ef63df",
-          "queueTx": "f136ec6ca893611a671e0eac86b0b2ce818b8587064099e87b8d1c751620cc83",
-          "executeTx": "e53364669332b5f53ac9eef6407725171cd6b632a73f98d44e8450a869f2494e"
-        },
-        {
-          "dao": "CAOJRMBAGOTAGAECDRQTZF2KBDIDYAWPCDN4HHZMEOT4CBGFCOEAOIK7",
-          "slug": "fast-dao",
-          "proposal": "a0546fb92267dcd575858bdec2cd01232f0faf97b02a890c924bd46e47920a15",
-          "proposeTx": "423f126b225bf870d7d6944426de9135bfad95647464a1bce1137858f835ad12",
-          "voteTx": "af313b4c88bd16f6f9956d5c4c0d981b4579bd5d8b544b6b0559ece688046ad4",
-          "queueTx": "2976253a8cb3ab95dfd090d2599906b5321f764d3e8a94546381435a796b7c0a",
-          "executeTx": "fce1b20b652b35291fef773c7151dfe3cd8914a4e9ae02cf3b58c56a7f3ea46f"
-        },
-        {
-          "dao": "CBI36ODKRFZ7ZNZ7IDWHAIFMFQ3VE6DMPQOCFYO5JLFKLFXZUA56HP5I",
-          "slug": "fast-dao-new",
-          "proposal": "8d8032f21dd9fee698d07a281bab74e079d07d8a0a2f2f91b890e7bb47ec4e99",
-          "proposeTx": "879c95772e438d96145c80c15bd33072b8c27b18aba601274ef9e8e722934bf1",
-          "voteTx": "3fceb3aa106ab36d337c15ad2c4a43f484de9e51f728fbd847a82d88351fc7f4",
-          "queueTx": "79803e1b9cbd41b4f2a3b2ebf79670eb35d602c5733efddcc7a95b399577dd29",
-          "executeTx": "264f5c7158fb4e03434c1ca8733a6444a360f7a9ab7c8ed7f87315b55caf1eb2"
-        }
-      ],
-      "note": "All three modules upgraded in one proposal per DAO."
-    }
-  ],
-  "currentImplementationsTx": "c875b5ae511ad6751bb2783cc3dababbf79875a3b6ea074c1ddae09b401fc8a3"
+  }
 }

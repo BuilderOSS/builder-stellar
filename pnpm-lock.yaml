@@ -175,6 +175,19 @@ importers:
         specifier: ^5.6.3
         version: 5.9.3
 
+  packages/claim-minter-bindings:
+    dependencies:
+      '@stellar/stellar-sdk':
+        specifier: ^17.0.1
+        version: 17.1.0(patch_hash=fb77e17ab743d72cde133f1be5f0c9dd2bf29dacec2784ee6463793158a182f2)
+      buffer:
+        specifier: 6.0.3
+        version: 6.0.3
+    devDependencies:
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+
   packages/goldsky:
     dependencies:
       dotenv:

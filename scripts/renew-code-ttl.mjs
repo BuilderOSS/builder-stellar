@@ -1,13 +1,14 @@
 #!/usr/bin/env node
-// Platform renewal: shared contract code, the Manager and the shared Minter (docs/STORAGE_DIET.md § 7, D28).
+// Platform renewal: shared contract code and the Manager (docs/STORAGE_DIET.md § 7, D28).
 //
 // Every DAO deployed from a WASM hash shares that code entry, and contracts only ever bump code a few days
 // (`common::ttl::CODE_TTL_EXTEND_TO`), so shared code is the platform's to renew. This script extends:
-//   - every code hash in use or about to be: the Manager's and the shared Minter's running `wasm_hash()`,
-//     the Manager's `current_implementations()` (what `create_dao` deploys) and each name's latest
-//     implementation, the hash every known DAO module runs, plus the artifact's hashes and any --hash;
-//   - the Manager instance, the shared Minter instance, each hash's `Implementation(hash)` record (every
-//     `version()` reads it), the `PlatformMinter` pointer and each `LatestImplementation(name)` record.
+//   - every code hash in use or about to be: the Manager's running `wasm_hash()`, the Manager's
+//     `current_implementations()` (what `create_dao` and `create_module` deploy) and each name's latest
+//     implementation, the hash every known DAO module runs (every entry of the Token's module registry,
+//     ClaimMinters included), plus the artifact's hashes and any --hash;
+//   - the Manager instance, each hash's `Implementation(hash)` record (every `version()` reads it) and
+//     each `LatestImplementation(name)` record.
 // DAO-owned keys (module instances, artwork, proposals, holdings) are renewed by each DAO's own sweep
 // (scripts/renew-dao.mjs).
 //
@@ -36,7 +37,7 @@ import {
   scv
 } from './lib.mjs';
 
-const MODULE_NAMES = ['Manager', 'Token', 'Metadata', 'Auction', 'Governor', 'Treasury', 'Marketplace', 'Minter'];
+const MODULE_NAMES = ['Manager', 'Token', 'Metadata', 'Auction', 'Governor', 'Treasury', 'Marketplace', 'ClaimMinter'];
 
 const args = process.argv.slice(2);
 const artifactPath = positionalArg(args, ['--dry-run']);
@@ -65,7 +66,6 @@ const artifact = JSON.parse(readFileSync(artifactPath, 'utf8'));
 const network = artifact.network;
 const source = flag('--identity', process.env.DEPLOY_IDENTITY?.trim() || `${network}-admin`);
 const manager = artifact.manager;
-const minter = artifact.minter;
 const view = (id, method, callArgs = []) => invokeView(id, method, callArgs, { network, source });
 const tryView = (id, method, callArgs = []) => {
   try {
@@ -91,7 +91,6 @@ if (typeof managerHash !== 'string') {
   process.exit(1);
 }
 add(managerHash, 'Manager (running)');
-if (minter) add(tryView(minter, 'wasm_hash'), 'Minter (running)');
 const current = tryView(manager, 'current_implementations');
 if (current && typeof current === 'object') {
   for (const [module, hash] of Object.entries(current)) add(hash, `${module} (current)`);
@@ -132,9 +131,14 @@ if (process.env.DATABASE_URL) {
 }
 for (const token of tokens) {
   const modules = { token };
-  for (const getter of ['metadata', 'treasury', 'auction', 'marketplace']) {
+  for (const getter of ['metadata', 'treasury']) {
     const address = tryView(token, getter);
     if (typeof address === 'string' && address.startsWith('C')) modules[getter] = address;
+  }
+  // The registry lists every module, built-in or added later (create_module, external modules).
+  const registry = tryView(token, 'modules');
+  for (const [i, entry] of (Array.isArray(registry) ? registry : []).entries()) {
+    if (typeof entry?.address === 'string') modules[`${entry.kind ?? 'module'}#${i}`] = entry.address;
   }
   if (modules.treasury) {
     const governor = tryView(modules.treasury, 'governor');
@@ -180,9 +184,7 @@ for (const name of latest.pointerNames) {
     namespacedKeyXdr('LatestImplementation', scv.string(name))
   ]);
 }
-if (minter) extend('platform Minter pointer', ['--id', manager, '--key-xdr', namespacedKeyXdr('PlatformMinter')]);
 extend('Manager instance', ['--id', manager]);
-if (minter) extend('shared Minter instance', ['--id', minter]);
 
 if (failures > 0) {
   console.error(`${failures} entr${failures === 1 ? 'y' : 'ies'} not renewed.`);

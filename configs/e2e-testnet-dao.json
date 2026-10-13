@@ -1,5 +1,5 @@
 {
-  "$comment": "TEMPLATE for scripts/e2e-testnet.mjs (testnet rehearsal). The driver copies this to .e2e/dao-<nonce>.json and overrides deployer/launchAdmin (= E2E DAO_OWNER identity), nonce (timestamp per run), founders (DAO_OWNER x3, BIDDER_A x2) and both payment assets (native XLM SAC, resolved with `stellar contract id asset --asset native`). Governance timings are the contract minimums (300s) and auction.duration is the 300s minimum so a full round runs in ~35 minutes. reservePrice is in stroops (10000000 = 1 XLM; native SAC uses 7 decimals). proposalThreshold is an absolute vote count.",
+  "$comment": "TEMPLATE for scripts/e2e-testnet.mjs (testnet rehearsal). The driver copies this to .e2e/dao-<nonce>.json and overrides deployer/launchAdmin (= E2E DAO_OWNER identity), nonce (timestamp per run), founders (DAO_OWNER x3, BIDDER_A x2) and every module payment asset (native XLM SAC, resolved with `stellar contract id asset --asset native`). Governance timings are the contract minimums (300s) and auction.duration is the 300s minimum so a full round runs in ~35 minutes. reservePrice is in stroops (10000000 = 1 XLM; native SAC uses 7 decimals). proposalThreshold is an absolute vote count.",
   "deployer": "GDQB6R74Q5K4MOCKPB3NLB7SX4BQR7DTXA3BGNKIVMZEXBEKCK4NQPFU",
   "nonce": 0,
   "launchAdmin": "GDQB6R74Q5K4MOCKPB3NLB7SX4BQR7DTXA3BGNKIVMZEXBEKCK4NQPFU",

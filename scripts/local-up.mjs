@@ -52,7 +52,7 @@ writeFileSync(configPath, `${JSON.stringify({
   networkPassphrase: 'Standalone Network ; February 2017'
 }, null, 2)}\n`);
 
-// Deploys Manager, registers implementations, sets current implementations and the platform minter.
+// Deploys Manager, registers implementations and sets current implementations.
 run('node', ['scripts/deploy-manager.mjs', configPath, '--force'], {
   env: { ...process.env, DEPLOY_IDENTITY: identityName }
 });
