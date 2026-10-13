@@ -53,7 +53,14 @@ export function ReviewStep({ connectedAddress }: { connectedAddress?: string }) 
         ? `On at launch. Prices in ${assetName(market.paymentAsset)}, ${market.secondaryFeeBps / 100}% fee on resales${tokenSettings.transfersLocked ? ' (resale stays closed while memberships are locked)' : ''}.`
         : 'None. A vote can add a market later.'
     ],
-    ['Claim lists', claims.enabled ? 'On: members claim tokens from lists published in Setup or by vote.' : 'None.'],
+    [
+      'Claim lists',
+      claims.enabled
+        ? `On. Listed people claim tokens from lists opened in Setup or by vote; paid lists are in ${assetName(auction.paymentAsset)}.`
+        : auction.enabled || market.enabled
+          ? 'None. A vote can add claim lists later.'
+          : 'None, so only founder tokens exist until a vote adds a way to join.'
+    ],
     [
       'Voting',
       `Opens ${formatDuration(governance.votingDelay, { style: 'long' })} after a proposal, stays open ${formatDuration(governance.votingPeriod, { style: 'long' })}.`

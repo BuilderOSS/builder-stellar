@@ -60,7 +60,8 @@ export function MembershipStep() {
           if (!next) return;
           store.updateAuction({ enabled: next.auction });
           store.updateMarketplace({ enabled: next.marketplace });
-          store.updateClaims({ enabled: next.claims });
+          // Invite only needs claim lists; other types keep a claims choice made in Advanced.
+          store.updateClaims({ enabled: next.claims || (type.id !== 'invite' && claims.enabled) });
         }}
         options={MEMBERSHIP_TYPES.map((option) => {
           const Icon = TYPE_ICONS[option.id];
@@ -91,6 +92,15 @@ export function MembershipStep() {
           };
         })}
       />
+      {!rules ? (
+        <p className={styles.muted}>Your own mix of membership rules, set in Advanced settings below.</p>
+      ) : null}
+      {market.enabled && tokenSettings.transfersLocked ? (
+        <p className={styles.muted}>
+          While memberships are locked, members can&apos;t resell on the market. It still sells new tokens from pools
+          the community opens by vote.
+        </p>
+      ) : null}
       <p className={styles.muted}>
         Prices, timings and membership rules start with sensible defaults. You can change any of this later by a vote.
       </p>
@@ -207,13 +217,33 @@ export function MembershipStep() {
             <Checkbox
               label="Let members claim tokens from published lists"
               description={
-                showAuction
-                  ? 'Adds a claims module, priced in the auction’s asset. Lists open in Setup or by vote.'
-                  : 'Adds a claims module. Lists open in Setup or by vote.'
+                type.id === 'invite'
+                  ? 'This is how people join an invite-only community. Lists open in Setup or by vote.'
+                  : showAuction
+                    ? 'Adds a claims module. Paid lists use the auction’s asset. Lists open in Setup or by vote.'
+                    : 'Adds a claims module. Lists open in Setup or by vote.'
               }
               checked={claims.enabled}
               onCheckedChange={(enabled) => store.updateClaims({ enabled })}
             />
+            {claims.enabled && !showAuction ? (
+              <div className={styles.columns}>
+                {/* Claims share the auction's asset field; with no auction this is the only place to set it. */}
+                <CreationField id="auction.paymentAsset" label="Paid lists are in">
+                  <Select
+                    id="auction.paymentAsset"
+                    value={auction.paymentAsset}
+                    onChange={(e) => store.updateAuction({ paymentAsset: e.target.value })}
+                  >
+                    {assets.map((a) => (
+                      <option key={a.code} value={a.contractId}>
+                        {a.code}
+                      </option>
+                    ))}
+                  </Select>
+                </CreationField>
+              </div>
+            ) : null}
           </div>
           <p className={styles.muted}>
             Payment assets are fixed once you create the community. Modules you leave out can be added later by vote.
