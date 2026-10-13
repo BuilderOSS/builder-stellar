@@ -84,3 +84,12 @@ export function findAsset(network: keyof AssetsByNetwork | 'public', assetCode: 
   const assets = getTreasuryAssets(network);
   return assets.find((asset) => asset.code === assetCode);
 }
+
+/** The code of a known payment asset (e.g. "XLM") from its SAC contract id; undefined for custom assets. */
+export function paymentAssetCode(
+  network: keyof AssetsByNetwork | 'public',
+  contractId: string | null | undefined
+): string | undefined {
+  if (!contractId) return undefined;
+  return getTreasuryAssets(network).find((asset) => asset.contractId === contractId)?.code;
+}

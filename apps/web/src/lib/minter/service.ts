@@ -1,42 +1,48 @@
-import { Client as ManagerClient } from '@builder-stellar/manager-bindings';
 import { Client as TokenClient } from '@builder-stellar/token-bindings';
-import { rpc, StrKey, TransactionBuilder } from '@stellar/stellar-sdk';
+import { StrKey, TransactionBuilder } from '@stellar/stellar-sdk';
 import { z } from 'zod';
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { getDaoNetworkConfigById, readSource } from '@/lib/dao-config';
 import { getDeploymentConfig } from '@/lib/deployment-config';
-import { getGoldskyMinterClaims } from '@/lib/goldsky';
+import { getGoldskyClaims } from '@/lib/goldsky';
 import { readHolderValue, requireHolderAddress } from '@/lib/token-holder/read';
 
-import { assertClaimSimulation, minterClient } from './client';
+import { readClaimLists } from './chain';
+import { claimListState } from './claim-list';
+import { assertClaimSimulation, claimMinterClient } from './client';
 import { assertClaimActor, assertClaimScope, ClaimError } from './identity';
+import { MAX_CLAIM_PER_CALL } from './limits';
 import { claimAmount, hashBytes, verifyClaimProof } from './proof';
-import { readClaimStorage } from './storage';
 import { assertClaimEnvelope } from './transaction';
-import type { ClaimAction, ClaimHistory, ClaimState, PreparedClaim } from './types';
+import type { ClaimAction, ClaimHistory, ClaimListView, ClaimState, PreparedClaim } from './types';
 
-const round = z.number().int().min(0).max(0xffffffff);
-export const claimActionSchema = z.discriminatedUnion('method', [
-  z.object({ method: z.literal('allowlist'), round }).strict(),
-  z
-    .object({
-      method: z.literal('merkle'),
-      round,
-      amount: z.string().refine((value) => {
-        try {
-          claimAmount(value);
-          return true;
-        } catch {
-          return false;
-        }
-      }),
-      proof: z.array(z.string().regex(/^[0-9a-f]{64}$/i)).max(32)
-    })
-    .strict()
-]);
+export { MAX_CLAIM_PER_CALL };
+
+export const claimActionSchema = z
+  .object({
+    listId: z.number().int().min(0).max(0xffffffff),
+    leafAmount: z.string().refine((value) => {
+      try {
+        claimAmount(value);
+        return true;
+      } catch {
+        return false;
+      }
+    }),
+    mintNow: z.number().int().min(1).max(MAX_CLAIM_PER_CALL),
+    proof: z.array(z.string().regex(/^[0-9a-f]{64}$/i)).max(32),
+    maxPrice: z.string().regex(/^(0|[1-9]\d{0,37})$/)
+  })
+  .strict();
+
 function bool(value: unknown) {
   if (typeof value !== 'boolean') throw new Error('Invalid token boolean result.');
+  return value;
+}
+
+function allowanceValue(value: unknown) {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) throw new Error('Invalid mint allowance.');
   return value;
 }
 
@@ -57,7 +63,7 @@ export async function currentClaims(
   daoId: string,
   actor: { address: string; network: string } | null
 ): Promise<ClaimState> {
-  const { config, network } = await claimScope(daoId);
+  const { config } = await claimScope(daoId);
   const authenticated = Boolean(
     actor && actor.network === config.name && StrKey.isValidEd25519PublicKey(actor.address)
   );
@@ -68,49 +74,73 @@ export async function currentClaims(
     publicKey: readSource(address, config.launchAdmin),
     allowHttp: config.name === 'local'
   };
-  const manager = new ManagerClient({ ...options, contractId: network.managerAddress });
-  const minter = readHolderValue(await manager.get_platform_minter(), (value) => {
-    if (value === null) return null;
-    if (typeof value !== 'string' || !StrKey.isValidContract(value)) throw new Error('Invalid platform Minter.');
+  const token = new TokenClient({ ...options, contractId: config.tokenContractId });
+  // The ClaimMinter the Token's own registry names, not the index's word for it.
+  const registered = readHolderValue(await token.module({ kind: 'claims' }), (value) => {
+    if (value === null || value === undefined) return null;
+    if (typeof value !== 'string' || !StrKey.isValidContract(value)) throw new Error('Invalid registered ClaimMinter.');
     return value;
   });
-  const token = new TokenClient({ ...options, contractId: config.tokenContractId });
-  const [live, admin, authority] = await Promise.all([
+  // The app drives only a ClaimMinter the Manager deployed: the index lists a claims module only
+  // then (a contract registered by vote under `claims` is role `module` there). Anything else
+  // could ask members to sign arbitrary calls under a claims-shaped review.
+  if (registered && registered !== config.claimsContractId)
+    throw new ClaimError(
+      'This community registered a claims module the platform did not deploy (or that is not indexed yet), so the app will not prepare claims against it.',
+      409
+    );
+  const [live, admin, allowance] = await Promise.all([
     token.is_live().then((tx) => readHolderValue(tx, bool)),
     token.admin().then((tx) => readHolderValue(tx, requireHolderAddress)),
-    minter ? token.mint_authority({ authority: minter }).then((tx) => readHolderValue(tx, bool)) : false
+    registered ? token.mint_allowance({ module: registered }).then((tx) => readHolderValue(tx, allowanceValue)) : null
   ]);
-  const state = minter
-    ? await readClaimStorage(
-        new rpc.Server(config.rpcUrl, { allowHttp: config.name === 'local' }),
-        minter,
-        config.tokenContractId,
-        address
-      )
-    : {
-        ledger: null,
-        merkle: { root: null, round: null, claimed: null },
-        allowlist: { amount: null, round: null, member: null, claimed: null }
-      };
+  const minter = registered ? claimMinterClient({ ...options, contractId: registered }) : null;
+  const [chain, paymentAsset] = minter
+    ? await Promise.all([
+        readClaimLists(minter, address),
+        minter.payment_asset().then((tx) =>
+          readHolderValue(tx, (value) => {
+            if (typeof value !== 'string' || !StrKey.isValidContract(value)) throw new Error('Invalid payment asset.');
+            return value;
+          })
+        )
+      ])
+    : [{ nextListId: 0, lists: [] }, null];
+  const scope = { network: config.passphrase, token: config.tokenContractId };
+  const lists: ClaimListView[] = await Promise.all(
+    chain.lists.map(async (list) => ({
+      ...list,
+      claimList: await claimListState({ root: list.root, treeUri: list.treeUri }, scope, address)
+    }))
+  );
   return {
     deploymentId: DEPLOYMENT_ID,
     daoId: config.tokenContractId,
     tokenContractId: config.tokenContractId,
-    minterContractId: minter,
+    claimsContractId: registered,
     network: config.name,
     address,
     authenticated,
     live,
     admin,
-    mintAuthority: authority,
-    ...state
+    allowance,
+    paymentAsset,
+    nextListId: chain.nextListId,
+    ledger: null,
+    lists
   };
 }
 
 export async function claimHistory(daoId: string, offset: number): Promise<ClaimHistory> {
   const { config } = await claimScope(daoId);
-  const history = await getGoldskyMinterClaims(config.tokenContractId, { limit: 20, offset });
+  const history = await getGoldskyClaims(config.tokenContractId, { limit: 20, offset });
   return { ...history, deploymentId: DEPLOYMENT_ID, daoId: config.tokenContractId };
+}
+
+function listOpenForClaims(list: ClaimListView, now: number) {
+  if (now >= list.expiresAt) throw new ClaimError('This claim list has expired.', 409);
+  if (list.assurance?.state === 'failed')
+    throw new ClaimError('This assurance drive failed: it only refunds now.', 409);
 }
 
 export async function prepareClaim(
@@ -121,60 +151,66 @@ export async function prepareClaim(
   const { config } = await claimScope(daoId);
   assertClaimActor(actor, config);
   const state = await currentClaims(daoId, actor);
-  if (!state.live || !state.minterContractId || !state.mintAuthority)
-    throw new ClaimError('Claims require a Live token and the current platform Minter’s mint authority.');
-  const current = state[action.method];
-  if (current.round === null || current.round !== action.round)
-    throw new ClaimError('The allocation round is unavailable or changed. Refresh before reviewing.', 409);
-  if (current.claimed === true) throw new ClaimError('You already claimed this method in the current round.', 409);
-  const amount = action.method === 'merkle' ? action.amount : state.allowlist.amount;
-  if (!amount) throw new ClaimError('The current allocation amount is unavailable.');
-  if (
-    action.method === 'merkle' &&
-    (!state.merkle.root || !verifyClaimProof(actor.address, amount, action.proof, state.merkle.root))
-  )
-    throw new ClaimError('This supplied proof does not match your authenticated recipient, amount and current root.');
-  // Missing membership can be absent/archived. Simulation, not history, is the final eligibility gate.
-  if (action.method === 'allowlist' && state.allowlist.member === false)
-    throw new ClaimError('You are not in the current allowlist.');
-  const client = await minterClient({
-    contractId: state.minterContractId,
+  if (!state.claimsContractId) throw new ClaimError('This community has no claims module.');
+  const list = state.lists.find((item) => item.listId === action.listId);
+  if (!list) throw new ClaimError('This claim list is unavailable. Refresh before reviewing.', 409);
+  listOpenForClaims(list, Math.floor(Date.now() / 1000));
+  if (BigInt(list.price) > BigInt(action.maxPrice))
+    throw new ClaimError('The list price is above the price you reviewed. Refresh before reviewing.', 409);
+  const leaf = claimAmount(action.leafAmount);
+  const claimed = BigInt(list.claimed ?? 0);
+  if (claimed + BigInt(action.mintNow) > leaf)
+    throw new ClaimError('That is more than is left of your allocation on this list.', 409);
+  if (list.minted + action.mintNow > list.total) throw new ClaimError('Not enough of this list is left.', 409);
+  if (!verifyClaimProof(actor.address, action.leafAmount, action.proof, list.root))
+    throw new ClaimError('This proof does not match your address, amount and the list root.');
+  const client = claimMinterClient({
+    contractId: state.claimsContractId,
     rpcUrl: config.rpcUrl,
     networkPassphrase: config.passphrase,
     publicKey: actor.address,
     allowHttp: config.name === 'local'
   });
-  const args = { token_id: config.tokenContractId, recipient: actor.address, amount: claimAmount(amount) };
-  const tx =
-    action.method === 'merkle'
-      ? await client.mint_merkle({ ...args, proof: action.proof.map(hashBytes) }, { timeoutInSeconds: 180 })
-      : await client.mint_allowlist(args, { timeoutInSeconds: 180 });
+  const tx = await client.claim(
+    {
+      list_id: action.listId,
+      claimer: actor.address,
+      leaf_amount: leaf,
+      mint_now: action.mintNow,
+      proof: action.proof.map(hashBytes),
+      max_price: BigInt(action.maxPrice)
+    },
+    { timeoutInSeconds: 180 }
+  );
   assertClaimSimulation(tx);
   if (tx.needsNonInvokerSigningBy().length) throw new ClaimError('Additional signatures are unsupported.');
-  // Recheck after simulation: review must refer to the same registered minter/root/amount/round.
+  // Recheck after simulation: the review must refer to the same ClaimMinter, list root and price.
   const latest = await currentClaims(daoId, actor);
+  const again = latest.lists.find((item) => item.listId === action.listId);
   if (
-    latest.minterContractId !== state.minterContractId ||
-    !latest.live ||
-    !latest.mintAuthority ||
-    latest[action.method].round !== action.round ||
-    latest[action.method].claimed === true ||
-    (action.method === 'merkle' ? latest.merkle.root !== state.merkle.root : latest.allowlist.amount !== amount)
+    latest.claimsContractId !== state.claimsContractId ||
+    !again ||
+    again.root !== list.root ||
+    again.price !== list.price ||
+    again.claimed !== list.claimed
   )
-    throw new ClaimError('Claim configuration changed during simulation. Review again.', 409);
+    throw new ClaimError('The claim list changed during simulation. Review again.', 409);
   const xdr = tx.toXdr();
   const envelope = TransactionBuilder.fromXDR(xdr, config.passphrase);
   const prepared: PreparedClaim = {
     deploymentId: DEPLOYMENT_ID,
     daoId,
     tokenContractId: config.tokenContractId,
-    minterContractId: state.minterContractId,
+    claimsContractId: state.claimsContractId,
     address: actor.address,
     networkPassphrase: config.passphrase,
     rpcUrl: config.rpcUrl,
-    method: action.method,
-    round: action.round,
-    amount,
+    listId: action.listId,
+    leafAmount: action.leafAmount,
+    mintNow: action.mintNow,
+    maxPrice: action.maxPrice,
+    cost: (BigInt(list.price) * BigInt(action.mintNow)).toString(),
+    asset: list.asset,
     xdr,
     fee: envelope.fee
   };

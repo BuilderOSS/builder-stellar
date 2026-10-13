@@ -1,14 +1,23 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { runQuiet } from './lib.mjs';
+import {
+  DEFAULT_CODE_TTL_DAYS,
+  LEDGERS_PER_DAY,
+  extendWithinFeeCap,
+  invokeView,
+  parseCodeTtlDays,
+  runQuiet
+} from './lib.mjs';
 
 /**
  * Upgrade tooling for the hardened contracts.
  *
  * - manager: Manager admin calls upgrade_manager directly.
- * - DAO modules: the Manager admin registers the new implementation and approves the (from, to)
+ * - DAO modules (claims is the DAO's ClaimMinter, built as minter.wasm and registered as
+ *   "ClaimMinter"; a module added after create_dao is not in the DAO artifact, so pass its address
+ *   in MODULE_ADDRESS): the Manager admin registers the new implementation and approves the (from, to)
  *   path (register_implementation / approve_upgrade). The module upgrade itself is `upgrade(from_hash,
- *   to_hash)` followed by `sync_version()`, owner-only:
+ *   to_hash)`, admin-only (version() then follows the registry; there is nothing to sync):
  *     * before launch (token.is_live() == false) the owner is the launch admin: this script calls them
  *       directly with DEPLOY_IDENTITY;
  *     * after launch the owner of every module is the Treasury, so a direct call can never succeed.
@@ -16,29 +25,56 @@ import { runQuiet } from './lib.mjs';
  *       prints the propose -> cast_vote -> queue -> treasury.execute commands. Nothing is sent to the
  *       Governor by this script.
  *   Treasury and Governor self-upgrades use the same payload: Treasury-targeted actions are handled by
- *   its self-dispatch (only `upgrade(from,to)` and `sync_version()` are allowed).
+ *   its self-dispatch (only `upgrade(from,to)` and `migrate()` are allowed).
+ *
+ * Every uploaded hash is extended to 170 days right after upload (EXTEND_CODE_TTL_DAYS overrides;
+ * docs/STORAGE_DIET.md D28): new code is born at the network minimum and contracts never bump shared
+ * code far.
  *
  * Registry notes: records are write-once (a wrong name/version for a hash can never be fixed or
  * un-revoked). Use get_implementation(hash) and the Manager's Current* hashes for security decisions,
  * never get_latest_implementation(name): it returns None once the latest hash is revoked.
  *
  * Env: DEPLOY_IDENTITY (Manager admin / launch admin key), LEGACY_MANAGER_VERSION (manager only),
- *      PROPOSER (address placed in the printed propose command), UPGRADE_DESCRIPTION (proposal text).
+ *      PROPOSER (address placed in the printed propose command), UPGRADE_DESCRIPTION (proposal text),
+ *      MODULE_ADDRESS (DAO module address when the DAO artifact has none).
  */
 
 const MASK = (1n << 64n) - 1n;
 const ROUND_CONSTANTS = [
-  0x0000000000000001n, 0x0000000000008082n, 0x800000000000808an, 0x8000000080008000n,
-  0x000000000000808bn, 0x0000000080000001n, 0x8000000080008081n, 0x8000000000008009n,
-  0x000000000000008an, 0x0000000000000088n, 0x0000000080008009n, 0x000000008000000an,
-  0x000000008000808bn, 0x800000000000008bn, 0x8000000000008089n, 0x8000000000008003n,
-  0x8000000000008002n, 0x8000000000000080n, 0x000000000000800an, 0x800000008000000an,
-  0x8000000080008081n, 0x8000000000008080n, 0x0000000080000001n, 0x8000000080008008n
+  0x0000000000000001n,
+  0x0000000000008082n,
+  0x800000000000808an,
+  0x8000000080008000n,
+  0x000000000000808bn,
+  0x0000000080000001n,
+  0x8000000080008081n,
+  0x8000000000008009n,
+  0x000000000000008an,
+  0x0000000000000088n,
+  0x0000000080008009n,
+  0x000000008000000an,
+  0x000000008000808bn,
+  0x800000000000008bn,
+  0x8000000000008089n,
+  0x8000000000008003n,
+  0x8000000000008002n,
+  0x8000000000000080n,
+  0x000000000000800an,
+  0x800000008000000an,
+  0x8000000080008081n,
+  0x8000000000008080n,
+  0x0000000080000001n,
+  0x8000000080008008n
 ];
 const ROTATIONS = [
-  [0, 36, 3, 41, 18], [1, 44, 10, 45, 2], [62, 6, 43, 15, 61], [28, 55, 25, 21, 56], [27, 20, 39, 8, 14]
+  [0, 36, 3, 41, 18],
+  [1, 44, 10, 45, 2],
+  [62, 6, 43, 15, 61],
+  [28, 55, 25, 21, 56],
+  [27, 20, 39, 8, 14]
 ];
-const rotl = (value, shift) => (((value << BigInt(shift)) | (value >> BigInt(64 - shift))) & MASK);
+const rotl = (value, shift) => ((value << BigInt(shift)) | (value >> BigInt(64 - shift))) & MASK;
 
 // Legacy Keccak-256 (0x01 padding), which is what the Governor's `keccak256(description)` computes.
 // Node's built-in sha3-256 uses different padding and does NOT match.
@@ -59,12 +95,14 @@ function keccak256(input) {
         for (let y = 0; y < 5; y++) state[x][y] ^= d;
       }
       const b = Array.from({ length: 5 }, () => Array(5).fill(0n));
-      for (let x = 0; x < 5; x++) for (let y = 0; y < 5; y++) {
-        b[y][(2 * x + 3 * y) % 5] = ROTATIONS[x][y] === 0 ? state[x][y] : rotl(state[x][y], ROTATIONS[x][y]);
-      }
-      for (let x = 0; x < 5; x++) for (let y = 0; y < 5; y++) {
-        state[x][y] = b[x][y] ^ (~b[(x + 1) % 5][y] & MASK & b[(x + 2) % 5][y]);
-      }
+      for (let x = 0; x < 5; x++)
+        for (let y = 0; y < 5; y++) {
+          b[y][(2 * x + 3 * y) % 5] = ROTATIONS[x][y] === 0 ? state[x][y] : rotl(state[x][y], ROTATIONS[x][y]);
+        }
+      for (let x = 0; x < 5; x++)
+        for (let y = 0; y < 5; y++) {
+          state[x][y] = b[x][y] ^ (~b[(x + 1) % 5][y] & MASK & b[(x + 2) % 5][y]);
+        }
       state[0][0] ^= constant;
     }
   }
@@ -76,16 +114,24 @@ function keccak256(input) {
 const USAGE = [
   'Usage:',
   '  node scripts/upgrade-contract.mjs manager <network-config.json> <from-wasm-hash>',
-  '  node scripts/upgrade-contract.mjs <token|metadata|auction|governor|treasury|marketplace> <dao-config.json> <network-config.json> <from-wasm-hash>',
+  '  node scripts/upgrade-contract.mjs <token|metadata|auction|governor|treasury|marketplace|claims> <dao-config.json> <network-config.json> <from-wasm-hash>',
   'See docs/CONTRACT_UPGRADES.md.'
 ].join('\n');
-const moduleNames = ['manager', 'token', 'metadata', 'auction', 'governor', 'treasury', 'marketplace'];
+const moduleNames = ['manager', 'token', 'metadata', 'auction', 'governor', 'treasury', 'marketplace', 'claims'];
+const platformModules = ['manager'];
 const [moduleName, ...rest] = process.argv.slice(2);
+if (moduleName === 'minter') {
+  throw new Error(`The shared platform Minter is retired: upgrade a DAO's ClaimMinter with the "claims" module.\n${USAGE}`);
+}
 if (!moduleNames.includes(moduleName)) throw new Error(USAGE);
+// Crate (WASM file and release manifest key) and registry name per module.
+const crateName = moduleName === 'claims' ? 'minter' : moduleName;
+const implementationName = moduleName === 'claims' ? 'ClaimMinter' : moduleName[0].toUpperCase() + moduleName.slice(1);
 // Manager: <network-config> <from-hash>. DAO modules: <dao-config> <network-config> <from-hash>.
-const [daoConfigPath, networkConfigPath, fromHash] =
-  moduleName === 'manager' ? [null, rest[0], rest[1]] : [rest[0], rest[1], rest[2]];
-if (!networkConfigPath || !fromHash || (moduleName !== 'manager' && !daoConfigPath)) throw new Error(USAGE);
+const platform = platformModules.includes(moduleName);
+const [daoConfigPath, networkConfigPath, fromHash] = platform ? [null, rest[0], rest[1]] : [rest[0], rest[1], rest[2]];
+if (!networkConfigPath || !fromHash || (!platform && !daoConfigPath)) throw new Error(USAGE);
+const codeTtlDays = parseCodeTtlDays(process.env.EXTEND_CODE_TTL_DAYS || DEFAULT_CODE_TTL_DAYS);
 
 const networkConfig = JSON.parse(readFileSync(networkConfigPath, 'utf8'));
 const releaseManifest = JSON.parse(readFileSync('releases/contracts.json', 'utf8'));
@@ -93,18 +139,30 @@ const managerArtifactPath = `deploys/${networkConfig.label}-${networkConfig.netw
 if (!existsSync(managerArtifactPath)) throw new Error(`Manager artifact not found: ${managerArtifactPath}`);
 const managerArtifact = JSON.parse(readFileSync(managerArtifactPath, 'utf8'));
 const identityName = process.env.DEPLOY_IDENTITY?.trim() || `${networkConfig.network}-admin`;
-const wasmPath = `target/wasm32v1-none/release/${moduleName}.wasm`;
+const wasmPath = `target/wasm32v1-none/release/${crateName}.wasm`;
 
 if (!existsSync(wasmPath)) {
   throw new Error(`Missing ${wasmPath}. Run: pnpm contracts:build`);
 }
-if (!releaseManifest[moduleName]) throw new Error(`Missing ${moduleName} release version`);
+const releaseVersion = releaseManifest[crateName];
+if (!releaseVersion) throw new Error(`Missing ${crateName} release version`);
 
 if (moduleName !== 'manager') {
   const managerVersionProbe = runQuiet('stellar', [
-    'contract', 'invoke', '--id', managerArtifact.manager, '--source-account', identityName,
-    '--network', networkConfig.network, '--send', 'no', '--',
-    'get_implementation_version', '--wasm_hash', fromHash
+    'contract',
+    'invoke',
+    '--id',
+    managerArtifact.manager,
+    '--source-account',
+    identityName,
+    '--network',
+    networkConfig.network,
+    '--send',
+    'no',
+    '--',
+    'get_implementation_version',
+    '--wasm_hash',
+    fromHash
   ]);
   if (!managerVersionProbe.ok) {
     throw new Error(
@@ -115,8 +173,20 @@ if (moduleName !== 'manager') {
 
 function isRegistered(hash) {
   const r = runQuiet('stellar', [
-    'contract', 'invoke', '--id', managerArtifact.manager, '--source-account', identityName,
-    '--network', networkConfig.network, '--send', 'no', '--', 'get_implementation', '--wasm_hash', hash
+    'contract',
+    'invoke',
+    '--id',
+    managerArtifact.manager,
+    '--source-account',
+    identityName,
+    '--network',
+    networkConfig.network,
+    '--send',
+    'no',
+    '--',
+    'get_implementation',
+    '--wasm_hash',
+    hash
   ]);
   return r.ok && (r.stdout + r.stderr).trim().split('\n').pop().trim() !== 'null';
 }
@@ -132,8 +202,16 @@ function registerOnce(params) {
 
 function invoke(contractId, method, params) {
   const result = runQuiet('stellar', [
-    'contract', 'invoke', '--id', contractId, '--source-account', identityName,
-    '--network', networkConfig.network, '--', method,
+    'contract',
+    'invoke',
+    '--id',
+    contractId,
+    '--source-account',
+    identityName,
+    '--network',
+    networkConfig.network,
+    '--',
+    method,
     ...Object.entries(params).flatMap(([name, value]) => [`--${name}`, value])
   ]);
   if (!result.ok) throw new Error(`${method} failed: ${result.stderr || result.stdout}`);
@@ -141,20 +219,36 @@ function invoke(contractId, method, params) {
 
 const targetHash = createHash('sha256').update(readFileSync(wasmPath)).digest('hex');
 const installResult = runQuiet('stellar', [
-  'contract', 'upload', '--wasm', wasmPath, '--source-account', identityName,
-  '--network', networkConfig.network
+  'contract',
+  'upload',
+  '--wasm',
+  wasmPath,
+  '--source-account',
+  identityName,
+  '--network',
+  networkConfig.network
 ]);
-if (!installResult.ok && !installResult.stderr.includes('already exists') && !installResult.stdout.includes(targetHash)) {
+if (
+  !installResult.ok &&
+  !installResult.stderr.includes('already exists') &&
+  !installResult.stdout.includes(targetHash)
+) {
   throw new Error(`Failed to install ${moduleName} WASM: ${installResult.stderr || installResult.stdout}`);
 }
+// Simulated first and stepped when one extension would come close to the u32 fee cap.
+const extendSteps = extendWithinFeeCap(['--wasm-hash', targetHash], codeTtlDays, {
+  network: networkConfig.network,
+  source: identityName
+});
+console.log(
+  `Extended ${moduleName} code ${targetHash.slice(0, 12)}...: ` +
+    extendSteps.map((s) => `${s.days} d for ${(Number(s.fee) / 1e7).toFixed(2)} XLM`).join(', then ')
+);
 
-const implementationName = moduleName[0].toUpperCase() + moduleName.slice(1);
 if (moduleName === 'manager') {
   const legacyManagerVersion = process.env.LEGACY_MANAGER_VERSION?.trim();
   if (!legacyManagerVersion) {
-    throw new Error(
-      'Set LEGACY_MANAGER_VERSION to the verified active Manager release before migrating Manager.'
-    );
+    throw new Error('Set LEGACY_MANAGER_VERSION to the verified active Manager release before migrating Manager.');
   }
   registerOnce({
     name: 'Manager',
@@ -164,20 +258,72 @@ if (moduleName === 'manager') {
 }
 registerOnce({
   name: implementationName,
-  version: releaseManifest[moduleName],
+  version: releaseVersion,
   wasm_hash: targetHash
 });
+// Approving is idempotent: a second approval keeps the first ledger, so the platform notice below
+// counts from the first run of this script.
 invoke(managerArtifact.manager, 'approve_upgrade', {
   from_hash: fromHash,
   to_hash: targetHash
 });
 
-if (moduleName === 'manager') {
-  invoke(managerArtifact.manager, 'upgrade_manager', {
-    from_hash: fromHash,
-    to_hash: targetHash
+// The Manager upgrades only after its notice (upgrade_delay() ledgers from the approval). Every DAO
+// depends on it, so the notice is what lets a DAO react first. This
+// script is rerun once the notice has passed; until then it says when.
+function platformUpgrade(target, method, label) {
+  // D42: a platform contract upgrades only to the announced latest, and its notice counts from the
+  // later of the approval and the announcement. Announce first (idempotent: re-announcing the same
+  // hash keeps its ledger).
+  invoke(managerArtifact.manager, 'set_latest_implementation', { name: implementationName, wasm_hash: targetHash });
+  const pointer = invokeView(managerArtifact.manager, 'latest_pointer', ['--name', implementationName], {
+    network: networkConfig.network,
+    source: identityName
   });
-  console.log(`Manager upgraded to ${releaseManifest.manager} (${targetHash}).`);
+  const announcedAt = pointer && typeof pointer === 'object' ? Number(pointer.set_ledger) : 0;
+  const approvedAt = Number(
+    invokeView(managerArtifact.manager, 'upgrade_approved_ledger', ['--from_hash', fromHash, '--to_hash', targetHash], {
+      network: networkConfig.network,
+      source: identityName
+    })
+  );
+  const notice = Number(
+    invokeView(target, 'upgrade_delay', [], { network: networkConfig.network, source: identityName })
+  );
+  const result = runQuiet('stellar', [
+    'contract',
+    'invoke',
+    '--id',
+    target,
+    '--source-account',
+    identityName,
+    '--network',
+    networkConfig.network,
+    '--',
+    method,
+    '--from_hash',
+    fromHash,
+    '--to_hash',
+    targetHash
+  ]);
+  if (result.ok) {
+    console.log(`${label} upgraded to ${releaseVersion} (${targetHash}).`);
+    return;
+  }
+  const output = result.stderr || result.stdout;
+  if (/7130|UpgradeDelayNotElapsed/.test(output)) {
+    const earliest = Math.max(approvedAt, announcedAt) + notice;
+    console.log(
+      `${label} upgrade approved at ledger ${approvedAt}; its notice is ${notice} ledgers ` +
+        `(~${(notice / LEDGERS_PER_DAY).toFixed(2)} days). Rerun this command at ledger ${earliest} or later.`
+    );
+    return;
+  }
+  throw new Error(`${method} failed: ${output}`);
+}
+
+if (moduleName === 'manager') {
+  platformUpgrade(managerArtifact.manager, 'upgrade_manager', 'Manager');
   process.exit(0);
 }
 
@@ -185,13 +331,23 @@ const daoConfig = JSON.parse(readFileSync(daoConfigPath, 'utf8'));
 const daoArtifactPath = `deploys/${networkConfig.label}-${networkConfig.network}-dao-${daoConfig.nonce}.json`;
 if (!existsSync(daoArtifactPath)) throw new Error(`DAO artifact not found: ${daoArtifactPath}`);
 const daoArtifact = JSON.parse(readFileSync(daoArtifactPath, 'utf8'));
-const target = daoArtifact.addresses?.[moduleName];
-if (!target) throw new Error(`DAO artifact does not contain a ${moduleName} address`);
+const target = process.env.MODULE_ADDRESS?.trim() || daoArtifact.addresses?.[moduleName];
+if (!target) throw new Error(`DAO artifact does not contain a ${moduleName} address (a module added with create_module: set MODULE_ADDRESS)`);
 
 const live = (() => {
   const result = runQuiet('stellar', [
-    'contract', 'invoke', '--id', daoArtifact.addresses.token, '--source-account', identityName,
-    '--network', networkConfig.network, '--send', 'no', '--', 'is_live'
+    'contract',
+    'invoke',
+    '--id',
+    daoArtifact.addresses.token,
+    '--source-account',
+    identityName,
+    '--network',
+    networkConfig.network,
+    '--send',
+    'no',
+    '--',
+    'is_live'
   ]);
   if (!result.ok) throw new Error(`Could not read token.is_live: ${result.stderr || result.stdout}`);
   return /true\s*$/i.test(result.stdout.trim());
@@ -200,21 +356,19 @@ const live = (() => {
 if (!live) {
   // Setup window: the launch admin still owns the module.
   invoke(target, 'upgrade', { from_hash: fromHash, to_hash: targetHash });
-  invoke(target, 'sync_version', {});
   console.log(`Pre-launch: upgraded ${moduleName} directly as the launch admin (${fromHash} -> ${targetHash}).`);
   process.exit(0);
 }
 
 // Live DAO: the module owner is the Treasury. Emit a governance payload instead of a direct call.
 const description =
-  process.env.UPGRADE_DESCRIPTION?.trim() ||
-  `Upgrade ${moduleName} to ${releaseManifest[moduleName]} (${targetHash})`;
+  process.env.UPGRADE_DESCRIPTION?.trim() || `Upgrade ${moduleName} to ${releaseVersion} (${targetHash})`;
 const descriptionHash = keccak256(Buffer.from(description, 'utf8'));
 const bytes = (hex) => ({ bytes: hex });
 const payload = {
-  targets: [target, target],
-  functions: ['upgrade', 'sync_version'],
-  args: [[bytes(fromHash), bytes(targetHash)], []],
+  targets: [target],
+  functions: ['upgrade'],
+  args: [[bytes(fromHash), bytes(targetHash)]],
   description,
   description_hash: descriptionHash
 };
@@ -225,7 +379,7 @@ const plan = {
   target,
   fromHash,
   toHash: targetHash,
-  version: releaseManifest[moduleName],
+  version: releaseVersion,
   managerApproval: 'submitted',
   governor: daoArtifact.addresses.governor,
   treasury: daoArtifact.addresses.treasury,
@@ -249,16 +403,23 @@ console.log('   (note the returned proposal id; it is also in the ProposalCreate
 console.log('2. After voting_delay, vote (vote_type 0 = against, 1 = for, 2 = abstain):');
 console.log(`stellar contract invoke --id ${plan.governor} --source-account <VOTER_KEY> ${net} -- cast_vote \\
   --proposal_id <PROPOSAL_ID> --vote_type 1 --reason "" --voter <VOTER_ADDRESS>\n`);
-console.log('3. After voting_period, if Succeeded (queue; eta is ignored by the Governor, operator is unauthenticated):');
+console.log(
+  '3. After voting_period, if Succeeded (queue; eta is ignored by the Governor, operator is unauthenticated):'
+);
 console.log(`stellar contract invoke --id ${plan.governor} --source-account <ANY_KEY> ${net} -- queue \\
   --targets ${q(payload.targets)} --functions ${q(payload.functions)} --args ${q(payload.args)} \\
   --description_hash ${descriptionHash} --eta 0 --operator <ANY_ADDRESS>\n`);
-console.log('4. After queue_delay, execute through the TREASURY (anyone; Governor.execute always fails with UseTreasuryExecute):');
+console.log(
+  '4. After queue_delay, execute through the TREASURY (anyone; Governor.execute always fails with UseTreasuryExecute):'
+);
 console.log(`stellar contract invoke --id ${plan.treasury} --source-account <ANY_KEY> ${net} -- execute \\
   --targets ${q(payload.targets)} --functions ${q(payload.functions)} --args ${q(payload.args)} \\
   --description_hash ${descriptionHash}\n`);
-console.log('A Succeeded proposal that is not queued expires 14 days after voting ends; a Queued one expires 14 days after its ETA.');
+console.log(
+  'A Succeeded proposal that is not queued expires 14 days after voting ends; a Queued one expires 14 days after its ETA.'
+);
 if (moduleName === 'treasury' || moduleName === 'governor') {
-  console.log(`NOTE: ${moduleName} self-upgrade. Treasury-targeted actions run through its self-dispatch (upgrade/sync_version only).`);
-  console.log('If sync_version fails in the same execute (it may still run the old code in-transaction), split it into a second proposal.');
+  console.log(
+    `NOTE: ${moduleName} self-upgrade. Treasury-targeted actions run through its self-dispatch (upgrade/migrate only).`
+  );
 }

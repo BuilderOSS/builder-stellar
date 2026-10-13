@@ -11,7 +11,6 @@ export type HomeDao = { id: string; name: string };
 export type LocalLaunch = {
   auction: boolean;
   marketplace: boolean;
-  minter: boolean;
   status?: SubmissionStatus;
   reviewedConfig?: LaunchConfig;
 } & SignedSubmission;

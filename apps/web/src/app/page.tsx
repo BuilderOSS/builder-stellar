@@ -3,7 +3,12 @@ import { Suspense } from 'react';
 
 import { HomeView } from '@/components/home/home-view';
 import { getAuthSession } from '@/lib/auth/server';
-import { type DaoConfig, getAllDaosFromDatabase, getPendingDaosForLaunchAdmin } from '@/lib/dao-db';
+import {
+  type DaoConfig,
+  getAllDaosFromDatabase,
+  getPendingDaosForLaunchAdmin,
+  withLiveAvailability
+} from '@/lib/dao-db';
 
 export const metadata: Metadata = {
   title: { absolute: 'Builder · Your community. Your rules. Your treasury.' },
@@ -19,7 +24,7 @@ export default async function Page() {
     const session = await getAuthSession();
     const address = session.address?.trim().toLowerCase();
     [daos, pendingDaos] = await Promise.all([
-      getAllDaosFromDatabase('operational'),
+      getAllDaosFromDatabase('operational').then(withLiveAvailability),
       address ? getPendingDaosForLaunchAdmin(address) : Promise.resolve([])
     ]);
   } catch {

@@ -1,168 +1,211 @@
-//! Storage definitions for the Minter contract.
+//! Storage for the ClaimMinter module (docs/designs/membership-models.md §3).
 //!
-//! All per-token configuration and claim state lives in persistent storage as
-//! one entry per key, so the Minter's instance entry stays tiny and every call
-//! only loads the entries it touches. Entries follow the shared long-lived
-//! persistent TTL policy (`common::ttl`) and are renewed on use; every entry
-//! point also renews the Minter's own instance (and code) TTL.
+//! One ClaimMinter per DAO. Its instance holds the wiring (`Config`), the
+//! list counter, the assurance list id, and the common admin, lifecycle and
+//! upgrade keys. Each list is one persistent entry, `List(id)`, DAO-owned and
+//! listed by `renewal_keys`. Each claimer's progress on a list is one
+//! persistent entry, `Claim(id, claimer)`: it belongs to the claimer (holder
+//! class), so the DAO's renewal sweep leaves it out and the claimer's next
+//! claim or refund restores it if it archived. Both use the shared long-lived
+//! persistent TTL policy (`common::ttl`) and are renewed on every touch.
 
-use soroban_sdk::{contracttype, Address, BytesN, Env};
+use soroban_sdk::{contracttype, Address, BytesN, Env, String};
 
-/// Maximum number of recipients in a single batch mint (one token each). The
-/// token additionally requires the whole batch to fit its event budget
-/// (`common::batch_mint_fits`).
-pub const MAX_BATCH_RECIPIENTS: u32 = common::MAX_BATCH_RECIPIENTS;
+/// Layout version of the ClaimMinter's storage (`common::upgrade`).
+pub const STORAGE_VERSION: u32 = 1;
 
 /// Maximum merkle proof depth (supports 2^32 leaves).
 pub const MAX_PROOF_LEN: u32 = 32;
 
-/// Storage keys for the Minter contract (persistent storage).
+/// Wiring fixed at construction.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum MinterKey {
-    /// Merkle root for proof-based claims: token_id -> BytesN<32>
-    MerkleRoot(Address),
-
-    /// Fixed amount for allowlist claims: token_id -> u128
-    AllowlistAmount(Address),
-
-    /// Current allowlist version: token_id -> u32. Bumped on every
-    /// `set_allowlist`, which invalidates all entries of older versions. It is
-    /// also the allowlist claim round: `AllowlistClaimed` is keyed by it.
-    AllowlistVersion(Address),
-
-    /// Allowlist membership: (token_id, version, address) -> true
-    Allowlisted(Address, u32, Address),
-
-    /// Merkle claim round: token_id -> u32 (default 0). Bumped ONLY by
-    /// `set_merkle_root`, so a new root lets earlier claimers claim again while
-    /// a re-claim within the same round stays blocked.
-    MerkleRound(Address),
-
-    /// Merkle claim marker: (token_id, merkle_round, recipient) -> true
-    MerkleClaimed(Address, u32, Address),
-
-    /// Allowlist claim marker: (token_id, allowlist_version, recipient) -> true.
-    /// Markers are per method: a recipient may claim once per method per round
-    /// (this replaces the old single marker shared by both methods; admins
-    /// control both lists).
-    AllowlistClaimed(Address, u32, Address),
+pub struct ClaimsConfig {
+    pub token: Address,
+    /// Receives every payment once the DAO is Live, and the assurance escrow
+    /// at launch. Fixed here, so nobody can redirect the escrow.
+    pub treasury: Address,
+    /// Registry for `version()` and upgrade approvals; the only caller of
+    /// `launch`, `handoff` and `recovery_upgrade`.
+    pub manager: Address,
+    /// The asset every list opened in Setup is priced in (`ClaimsConfig` at
+    /// `create_dao` / `create_module`). Lists opened after launch may use any
+    /// asset.
+    pub payment_asset: Address,
 }
 
-fn get<V: soroban_sdk::TryFromVal<Env, soroban_sdk::Val>>(env: &Env, key: &MinterKey) -> Option<V> {
-    let value = env.storage().persistent().get(key);
+pub use common::modules::{AssuranceState, AssuranceTerms};
+
+/// One claim list: a merkle root of `(claimer, amount)` leaves.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ClaimList {
+    pub root: BytesN<32>,
+    /// `ipfs://<cid>` of the full tree (`builder-stellar-merkle-v1`). A hint:
+    /// consumers recompute the root from it before offering a claim.
+    pub tree_uri: String,
+    pub asset: Address,
+    /// Price per token in `asset`, 0 for a free list.
+    pub price: i128,
+    /// Claims stop at this ledger timestamp.
+    pub expires_at: u64,
+    /// Most tokens this list mints across all claimers.
+    pub total: u32,
+    pub minted: u32,
+    /// Distinct addresses that claimed at least once.
+    pub claimers: u32,
+    /// Assurance terms, flattened: a threshold of 0 means none (see
+    /// [`ClaimList::assurance`]).
+    pub threshold_claimers: u32,
+    pub deadline: u64,
+    /// Payments held until launch (assurance list in Setup only).
+    pub escrow: i128,
+}
+
+impl ClaimList {
+    /// The list's assurance terms, if it is the assurance list.
+    pub fn assurance(&self) -> Option<AssuranceTerms> {
+        (self.threshold_claimers > 0).then_some(AssuranceTerms {
+            threshold_claimers: self.threshold_claimers,
+            deadline: self.deadline,
+        })
+    }
+}
+
+/// A claimer's progress on one list.
+#[contracttype]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ClaimRecord {
+    /// Tokens claimed so far, at most the leaf amount.
+    pub claimed: u32,
+    /// Payments in escrow for this claimer (refundable while `Failed`).
+    pub escrowed: i128,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ClaimsKey {
+    /// Instance: [`ClaimsConfig`].
+    Config,
+    /// Instance: u32, the id the next list receives.
+    NextListId,
+    /// Instance: u32, the one assurance list, once opened.
+    AssuranceList,
+    /// Persistent: list id -> [`ClaimList`] (DAO-owned).
+    List(u32),
+    /// Persistent: (list id, claimer) -> [`ClaimRecord`] (holder class).
+    Claim(u32, Address),
+}
+
+fn get<V: soroban_sdk::TryFromVal<Env, soroban_sdk::Val>>(env: &Env, key: &ClaimsKey) -> Option<V> {
+    let key = common::ns(env, key.clone());
+    let value = env.storage().persistent().get(&key);
     if value.is_some() {
-        common::ttl::extend_persistent(env, key);
+        common::ttl::extend_persistent(env, &key);
     }
     value
 }
 
-fn set<V: soroban_sdk::IntoVal<Env, soroban_sdk::Val>>(env: &Env, key: &MinterKey, value: &V) {
-    env.storage().persistent().set(key, value);
-    common::ttl::extend_persistent(env, key);
+fn set<V: soroban_sdk::IntoVal<Env, soroban_sdk::Val>>(env: &Env, key: &ClaimsKey, value: &V) {
+    let key = common::ns(env, key.clone());
+    env.storage().persistent().set(&key, value);
+    common::ttl::extend_persistent(env, &key);
 }
 
-/// Load merkle root from storage.
-pub fn get_merkle_root(env: &Env, token_id: &Address) -> Option<BytesN<32>> {
-    get(env, &MinterKey::MerkleRoot(token_id.clone()))
+pub fn get_config(env: &Env) -> ClaimsConfig {
+    env.storage()
+        .instance()
+        .get(&common::ns(env, ClaimsKey::Config))
+        .unwrap_or_else(|| soroban_sdk::panic_with_error!(env, common::CommonError::ManagerNotSet))
 }
 
-/// Load allowlist amount from storage.
-pub fn get_allowlist_amount(env: &Env, token_id: &Address) -> Option<u128> {
-    get(env, &MinterKey::AllowlistAmount(token_id.clone()))
+pub fn set_config(env: &Env, config: &ClaimsConfig) {
+    env.storage()
+        .instance()
+        .set(&common::ns(env, ClaimsKey::Config), config);
 }
 
-/// Current allowlist version (0 if never set).
-pub fn get_allowlist_version(env: &Env, token_id: &Address) -> u32 {
-    get(env, &MinterKey::AllowlistVersion(token_id.clone())).unwrap_or(0)
+pub fn next_list_id(env: &Env) -> u32 {
+    env.storage()
+        .instance()
+        .get(&common::ns(env, ClaimsKey::NextListId))
+        .unwrap_or(0)
 }
 
-/// Whether `recipient` is on the current allowlist.
-pub fn is_allowlisted(env: &Env, token_id: &Address, version: u32, recipient: &Address) -> bool {
-    get::<bool>(
-        env,
-        &MinterKey::Allowlisted(token_id.clone(), version, recipient.clone()),
-    )
-    .unwrap_or(false)
+/// Returns the next list id and advances the counter (ids start at 0).
+pub fn take_list_id(env: &Env) -> u32 {
+    let id = next_list_id(env);
+    env.storage()
+        .instance()
+        .set(&common::ns(env, ClaimsKey::NextListId), &(id + 1));
+    id
 }
 
-/// Current merkle claim round (0 if no root was ever set).
-pub fn get_merkle_round(env: &Env, token_id: &Address) -> u32 {
-    get(env, &MinterKey::MerkleRound(token_id.clone())).unwrap_or(0)
+pub fn assurance_list(env: &Env) -> Option<u32> {
+    env.storage()
+        .instance()
+        .get(&common::ns(env, ClaimsKey::AssuranceList))
 }
 
-/// Start a new merkle claim round; returns the new round number.
-pub fn bump_merkle_round(env: &Env, token_id: &Address) -> u32 {
-    let round = get_merkle_round(env, token_id).saturating_add(1);
-    set(env, &MinterKey::MerkleRound(token_id.clone()), &round);
-    round
+pub fn set_assurance_list(env: &Env, list_id: u32) {
+    env.storage()
+        .instance()
+        .set(&common::ns(env, ClaimsKey::AssuranceList), &list_id);
 }
 
-/// Whether `recipient` already claimed via merkle in `round`.
-pub fn is_merkle_claimed(env: &Env, token_id: &Address, round: u32, recipient: &Address) -> bool {
-    get::<bool>(
-        env,
-        &MinterKey::MerkleClaimed(token_id.clone(), round, recipient.clone()),
-    )
-    .unwrap_or(false)
+pub fn get_list(env: &Env, list_id: u32) -> Option<ClaimList> {
+    get(env, &ClaimsKey::List(list_id))
 }
 
-/// Whether `recipient` already claimed via allowlist in `round`.
-pub fn is_allowlist_claimed(
-    env: &Env,
-    token_id: &Address,
-    round: u32,
-    recipient: &Address,
-) -> bool {
-    get::<bool>(
-        env,
-        &MinterKey::AllowlistClaimed(token_id.clone(), round, recipient.clone()),
-    )
-    .unwrap_or(false)
+pub fn set_list(env: &Env, list_id: u32, list: &ClaimList) {
+    set(env, &ClaimsKey::List(list_id), list);
 }
 
-/// Save merkle root to storage.
-pub fn set_merkle_root(env: &Env, token_id: &Address, root: &BytesN<32>) {
-    set(env, &MinterKey::MerkleRoot(token_id.clone()), root);
+pub fn get_claim(env: &Env, list_id: u32, claimer: &Address) -> ClaimRecord {
+    get(env, &ClaimsKey::Claim(list_id, claimer.clone())).unwrap_or_default()
 }
 
-/// Save allowlist amount to storage.
-pub fn set_allowlist_amount(env: &Env, token_id: &Address, amount: &u128) {
-    set(env, &MinterKey::AllowlistAmount(token_id.clone()), amount);
+pub fn set_claim(env: &Env, list_id: u32, claimer: &Address, record: &ClaimRecord) {
+    set(env, &ClaimsKey::Claim(list_id, claimer.clone()), record);
 }
 
-/// Save allowlist version to storage.
-pub fn set_allowlist_version(env: &Env, token_id: &Address, version: u32) {
-    set(
-        env,
-        &MinterKey::AllowlistVersion(token_id.clone()),
-        &version,
-    );
-}
+/// Every `ClaimsKey` variant with sample arguments, for the key guard test.
+/// `index` fails to compile when a variant is added: give it the next index,
+/// raise `VARIANTS` and add a sample to `all`, or the guard test fails.
+#[cfg(test)]
+pub(crate) mod key_samples {
+    extern crate std;
+    use super::*;
+    #[allow(unused_imports)]
+    use soroban_sdk::testutils::Address as _;
+    use soroban_sdk::{Env, IntoVal, Val};
 
-/// Add an address to the allowlist of the given version.
-pub fn add_allowlisted(env: &Env, token_id: &Address, version: u32, recipient: &Address) {
-    set(
-        env,
-        &MinterKey::Allowlisted(token_id.clone(), version, recipient.clone()),
-        &true,
-    );
-}
+    pub const VARIANTS: usize = 5;
 
-/// Mark a recipient as having claimed via merkle in `round`.
-pub fn mark_merkle_claimed(env: &Env, token_id: &Address, round: u32, recipient: &Address) {
-    set(
-        env,
-        &MinterKey::MerkleClaimed(token_id.clone(), round, recipient.clone()),
-        &true,
-    );
-}
+    pub fn index(key: &ClaimsKey) -> usize {
+        match key {
+            ClaimsKey::Config => 0,
+            ClaimsKey::NextListId => 1,
+            ClaimsKey::AssuranceList => 2,
+            ClaimsKey::List(_) => 3,
+            ClaimsKey::Claim(..) => 4,
+        }
+    }
 
-/// Mark a recipient as having claimed via allowlist in `round`.
-pub fn mark_allowlist_claimed(env: &Env, token_id: &Address, round: u32, recipient: &Address) {
-    set(
-        env,
-        &MinterKey::AllowlistClaimed(token_id.clone(), round, recipient.clone()),
-        &true,
-    );
+    pub fn all(e: &Env) -> std::vec::Vec<Val> {
+        let a = soroban_sdk::Address::generate(e);
+        let keys = std::vec![
+            ClaimsKey::Config,
+            ClaimsKey::NextListId,
+            ClaimsKey::AssuranceList,
+            ClaimsKey::List(0),
+            ClaimsKey::Claim(0, a.clone()),
+        ];
+        common::testutils::assert_every_variant_sampled(
+            "ClaimsKey",
+            &keys.iter().map(index).collect::<std::vec::Vec<_>>(),
+            VARIANTS,
+        );
+        keys.into_iter().map(|k| k.into_val(e)).collect()
+    }
 }

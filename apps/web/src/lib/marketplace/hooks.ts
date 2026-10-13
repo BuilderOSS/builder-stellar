@@ -3,6 +3,7 @@
 import useSWR from 'swr';
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
+import { restoreFromBody } from '@/lib/restore-required';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 import type {
@@ -21,7 +22,7 @@ export function marketplaceKey(daoId: string | null, resource: string, url: stri
 export async function marketplaceFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, cache: 'no-store', credentials: 'same-origin' });
   const body = await response.json();
-  if (!response.ok) throw new Error(body.message || 'Marketplace request failed.');
+  if (!response.ok) throw restoreFromBody(body) ?? new Error(body.message || 'Marketplace request failed.');
   if (body.deploymentId && body.deploymentId !== DEPLOYMENT_ID)
     throw new Error('Marketplace deployment mismatch. Reload this page.');
   return body as T;
@@ -63,7 +64,7 @@ export function useDaoMarketplace(daoId: string, query = '') {
 export function useMarketplaceListing(daoId: string, kind: string, id: string, eventId: string) {
   const query = new URLSearchParams({ kind, id, eventId }).toString();
   return useSWR<{ deploymentId: string; daoId: string; listing: MarketplaceListing }>(
-    id && eventId && ['primary', 'secondary'].includes(kind)
+    id && eventId && ['pool', 'secondary'].includes(kind)
       ? marketplaceKey(daoId, 'listing', `/api/dao/${encodeURIComponent(daoId)}/marketplace/listing?${query}`)
       : null,
     fetchKey,

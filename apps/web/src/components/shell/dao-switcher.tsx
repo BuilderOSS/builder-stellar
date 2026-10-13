@@ -131,7 +131,7 @@ export function DaoSwitcher({
                     key={dao.dao_id}
                     as="li"
                     href={daoRoute(daoRouteId({ daoId: dao.dao_id, slug: dao.slug }))}
-                    media={<Crest name={daoName(dao)} seed={dao.dao_id} src={dao.contract_image} />}
+                    media={<Crest name={daoName(dao)} seed={dao.dao_id} src={dao.image} />}
                     title={daoName(dao)}
                     meta={dao.status === 'pending' ? 'In setup' : dao.token_symbol || undefined}
                     trailing={

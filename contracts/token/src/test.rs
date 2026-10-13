@@ -1,16 +1,52 @@
 extern crate std;
 
 use common::CommonError;
-use soroban_sdk::{testutils::Address as _, vec, Address, BytesN, Env, String};
+use soroban_sdk::{
+    contract, contractimpl, testutils::Address as _, vec, Address, BytesN, Env, String, Symbol,
+};
 use soroban_sdk::{
     testutils::{MockAuth, MockAuthInvoke},
     IntoVal,
 };
 
+use crate::error::TokenError;
 use crate::{DaoTokenContract, DaoTokenContractClient};
+use common::modules::MintGrant;
 
-/// Register a token with `admin`, `treasury`, `manager` and `hash`; the
-/// auction, marketplace and metadata addresses are fresh dummies.
+/// A deployed Wasm-executable stand-in for a module contract.
+#[contract]
+pub struct ModuleStub;
+
+#[contractimpl]
+impl ModuleStub {
+    pub fn ping() {}
+}
+
+fn stub(e: &Env) -> Address {
+    e.register(ModuleStub, ())
+}
+
+/// Registers a fresh stub module of `kind` (Setup: the Manager's auth is mocked).
+fn module(e: &Env, client: &DaoTokenContractClient, kind: &str, non_voting: bool) -> Address {
+    let address = stub(e);
+    client.register_module(&Symbol::new(e, kind), &address, &non_voting);
+    address
+}
+
+fn grants(e: &Env, pairs: &[(&Address, u32)]) -> soroban_sdk::Vec<MintGrant> {
+    let mut v = soroban_sdk::Vec::new(e);
+    for (module, allowance) in pairs {
+        v.push_back(MintGrant {
+            module: (*module).clone(),
+            allowance: *allowance,
+        });
+    }
+    v
+}
+
+/// Register a token with `admin`, `treasury`, `manager` and `hash` (the
+/// metadata address is a dummy), then register stub Auction and Marketplace
+/// modules the way the Manager's `create_dao` does.
 fn deploy(
     e: &Env,
     admin: Address,
@@ -18,22 +54,24 @@ fn deploy(
     manager: Address,
     hash: BytesN<32>,
 ) -> Address {
-    e.register(
+    let id = e.register(
         DaoTokenContract,
         (
             admin,
             treasury,
-            Address::generate(e),
-            Address::generate(e),
-            String::from_str(e, "https://example.com/"),
             String::from_str(e, "DAO Vote NFT"),
             String::from_str(e, "vDAO"),
             Address::generate(e),
             manager,
             hash,
-            String::from_str(e, "0.1.0"),
+            common::modules::TokenSettings::default(),
         ),
-    )
+    );
+    let client = DaoTokenContractClient::new(e, &id).mock_all_auths();
+    for kind in ["auction", "marketplace"] {
+        client.register_module(&Symbol::new(e, kind), &stub(e), &true);
+    }
+    id
 }
 
 fn setup() -> (Env, DaoTokenContractClient<'static>, Address) {
@@ -133,61 +171,68 @@ fn wired_treasury(e: &Env, client: &DaoTokenContractClient) -> Address {
     e.as_contract(&client.address, || {
         e.storage()
             .instance()
-            .get(&crate::storage::TokenKey::Treasury)
+            .get(&common::ns(e, crate::storage::TokenKey::Treasury))
             .unwrap()
     })
 }
 
-/// Launch with `minters` (the wired treasury is always included, as the
-/// Manager does); returns the treasury address.
-fn launch(e: &Env, client: &DaoTokenContractClient, minters: &[Address]) -> Address {
+/// Launch with `grants` (each module must already be registered); returns the
+/// treasury address.
+fn launch(e: &Env, client: &DaoTokenContractClient, pairs: &[(&Address, u32)]) -> Address {
     let treasury = wired_treasury(e, client);
-    let mut v = soroban_sdk::Vec::new(e);
-    v.push_back(treasury.clone());
-    for m in minters {
-        v.push_back(m.clone());
-    }
-    client.launch(&treasury, &v);
+    client.launch(&treasury, &grants(e, pairs));
     treasury
 }
 
 #[test]
-fn launch_sets_owner_and_exact_minter_set() {
+fn launch_writes_allowances_for_registered_modules() {
     let (e, client, owner, _m) = setup_with_manager();
-    let a = Address::generate(&e);
-    let b = Address::generate(&e);
+    let claims = module(&e, &client, "claims", false);
+    let custom = module(&e, &client, "custom_shop", false);
     let stranger = Address::generate(&e);
-    let treasury = launch(&e, &client, &[a.clone(), b.clone()]);
+    let treasury = launch(&e, &client, &[(&claims, 5), (&custom, 7)]);
 
     assert_eq!(client.admin(), treasury);
-    assert!(client.mint_authority(&a));
-    assert!(client.mint_authority(&b));
-    assert!(!client.mint_authority(&stranger));
-    assert!(!client.mint_authority(&owner));
+    assert_eq!(client.mint_allowance(&claims), 5);
+    assert_eq!(client.mint_allowance(&custom), 7);
+    assert_eq!(client.mint_allowance(&stranger), 0);
+    assert_eq!(client.mint_allowance(&owner), 0);
+}
+
+#[test]
+fn launch_refuses_a_grant_for_an_unregistered_address() {
+    let (e, client, _owner, _m) = setup_with_manager();
+    let treasury = wired_treasury(&e, &client);
+    let stranger = stub(&e);
+    let r = client.try_launch(&treasury, &grants(&e, &[(&stranger, 1)]));
+    assert_eq!(r.err().unwrap().unwrap(), TokenError::NotAModule.into());
+    assert!(!client.is_live());
 }
 
 #[test]
 fn second_launch_panics_already_live() {
     let (e, client, _owner, _m) = setup_with_manager();
     launch(&e, &client, &[]);
-    let r = client.try_launch(&Address::generate(&e), &vec![&e, Address::generate(&e)]);
+    let other = Address::generate(&e);
+    let r = client.try_launch(&other, &vec![&e]);
     assert_eq!(r.err().unwrap().unwrap(), CommonError::AlreadyLive.into());
 }
 
 #[test]
-fn set_mint_authority_before_launch_is_not_live() {
+fn allowances_add_subtract_and_release() {
     let (e, client, _owner, _m) = setup_with_manager();
-    let r = client.try_set_mint_authority(&Address::generate(&e), &true);
-    assert_eq!(r.err().unwrap().unwrap(), CommonError::NotLive.into());
-}
-
-#[test]
-fn set_mint_authority_after_launch_is_owner_gated() {
-    let (e, client, _owner, _m) = setup_with_manager();
-    launch(&e, &client, &[]);
-    let x = Address::generate(&e);
-    client.set_mint_authority(&x, &true);
-    assert!(client.mint_authority(&x));
+    let claims = module(&e, &client, "claims", false);
+    // The admin (the launch admin in Setup) manages allowances in any phase.
+    client.increase_mint_allowance(&claims, &3);
+    client.increase_mint_allowance(&claims, &4);
+    assert_eq!(client.mint_allowance(&claims), 7);
+    client.decrease_mint_allowance(&claims, &2);
+    assert_eq!(client.mint_allowance(&claims), 5);
+    client.release_mint_allowance(&claims, &10);
+    assert_eq!(client.mint_allowance(&claims), 0);
+    // Raising needs a registered module.
+    let r = client.try_increase_mint_allowance(&stub(&e), &1);
+    assert_eq!(r.err().unwrap().unwrap(), TokenError::NotAModule.into());
 }
 
 #[test]
@@ -210,21 +255,12 @@ fn launch_hands_admin_to_treasury() {
         invoke: &MockAuthInvoke {
             contract: &client.address,
             fn_name: "set_metadata",
-            args: (
-                String::from_str(&e, "u"),
-                String::from_str(&e, "n"),
-                String::from_str(&e, "s"),
-            )
-                .into_val(&e),
+            args: (String::from_str(&e, "n"), String::from_str(&e, "s")).into_val(&e),
             sub_invokes: &[],
         },
     }]);
     assert!(client
-        .try_set_metadata(
-            &String::from_str(&e, "u"),
-            &String::from_str(&e, "n"),
-            &String::from_str(&e, "s"),
-        )
+        .try_set_metadata(&String::from_str(&e, "n"), &String::from_str(&e, "s"))
         .is_err());
 }
 
@@ -250,79 +286,64 @@ fn mint_requires_minter_auth() {
 }
 
 #[test]
-fn owner_can_whitelist_and_remove_minter() {
-    let (e, client, owner) = setup();
-    let bob = Address::generate(&e);
-    launch(&e, &client, &[]);
-
-    client.set_mint_authority(&bob, &true);
-    assert!(client.mint_authority(&bob));
-
-    client.set_mint_authority(&bob, &false);
-    assert!(!client.mint_authority(&bob));
-
-    let _ = e;
-    let _ = owner;
-}
-
-#[test]
 #[should_panic(expected = "HostError: Error(Auth, InvalidAction)")]
-fn set_mint_authority_requires_owner_auth() {
-    let (e, client, owner) = setup_no_auth();
-    let bob = Address::generate(&e);
-
-    let _ = owner;
-    client.set_mint_authority(&bob, &true);
+fn increase_mint_allowance_requires_admin_auth() {
+    let (e, client, _owner) = setup_no_auth();
+    client.increase_mint_allowance(&stub(&e), &1);
 }
 
 #[test]
-fn whitelisted_minter_can_mint() {
-    let (e, client, owner) = setup();
-    let bob = Address::generate(&e);
+fn module_mints_within_its_allowance_and_stops_at_zero() {
+    let (e, client, _owner, _m) = setup_with_manager();
+    let shop = module(&e, &client, "custom_shop", false);
     let alice = Address::generate(&e);
+    launch(&e, &client, &[(&shop, 3)]);
 
-    launch(&e, &client, std::slice::from_ref(&bob));
-
-    e.mock_auths(&[MockAuth {
-        address: &bob,
-        invoke: &MockAuthInvoke {
-            contract: &client.address,
-            fn_name: "mint",
-            args: (&bob, &alice).into_val(&e),
-            sub_invokes: &[],
-        },
-    }]);
-
-    let token_id = client.mint(&bob, &alice);
-    assert_eq!(token_id, 0);
-    assert_eq!(client.balance(&alice), 1);
-
-    let _ = owner;
+    assert_eq!(client.mint(&shop, &alice), 0);
+    client.batch_mint(&shop, &vec![&e, alice.clone()], &vec![&e, 2u128]);
+    assert_eq!(client.balance(&alice), 3);
+    assert_eq!(client.mint_allowance(&shop), 0);
+    let r = client.try_mint(&shop, &alice);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        TokenError::AllowanceExceeded.into()
+    );
+    // A batch larger than what is left fails whole.
+    client.increase_mint_allowance(&shop, &1);
+    let r = client.try_batch_mint(&shop, &vec![&e, alice.clone()], &vec![&e, 2u128]);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        TokenError::AllowanceExceeded.into()
+    );
+    assert_eq!(client.mint_allowance(&shop), 1);
 }
 
 #[test]
-fn contract_address_can_be_whitelisted() {
-    let (e, client, owner) = setup();
-    let treasury = Address::generate(&e);
-    let recipient = Address::generate(&e);
+fn before_launch_only_the_claims_module_mints() {
+    let (e, client, _owner, _m) = setup_with_manager();
+    let claims = module(&e, &client, "claims", false);
+    let circle = module(&e, &client, "circle", false);
+    let auction = client.auction().unwrap();
+    let alice = Address::generate(&e);
+    client.increase_mint_allowance(&claims, &2);
+    client.increase_mint_allowance(&circle, &2);
+    client.increase_mint_allowance(&auction, &u32::MAX);
 
-    launch(&e, &client, std::slice::from_ref(&treasury));
-
-    e.mock_auths(&[MockAuth {
-        address: &treasury,
-        invoke: &MockAuthInvoke {
-            contract: &client.address,
-            fn_name: "mint",
-            args: (&treasury, &recipient).into_val(&e),
-            sub_invokes: &[],
-        },
-    }]);
-
-    let token_id = client.mint(&treasury, &recipient);
-    assert_eq!(token_id, 0);
-    assert_eq!(client.balance(&recipient), 1);
-
-    let _ = owner;
+    client.mint(&claims, &alice);
+    assert_eq!(client.mint_allowance(&claims), 1);
+    for minter in [&circle, &auction] {
+        let r = client.try_mint(minter, &alice);
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            TokenError::MintAuthorityNotAllowed.into()
+        );
+    }
+    // An unregistered address never mints.
+    let r = client.try_mint(&stub(&e), &alice);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        TokenError::MintAuthorityNotAllowed.into()
+    );
 }
 
 #[test]
@@ -552,10 +573,11 @@ mod upgrade_via_common {
             from.clone(),
         );
         let client = DaoTokenContractClient::new(&e, &id);
+        mgr.register(&from, &String::from_str(&e, "0.1.0"));
         assert_eq!(client.version(), String::from_str(&e, "0.1.0"));
         assert_eq!(client.wasm_hash(), from);
+        // No sync step (D6): the registry record is the version.
         mgr.register(&from, &String::from_str(&e, "0.1.1"));
-        client.sync_version();
         assert_eq!(client.version(), String::from_str(&e, "0.1.1"));
         mgr.approve(&from, &to);
         mgr.register(&to, &String::from_str(&e, "0.2.0"));
@@ -564,7 +586,10 @@ mod upgrade_via_common {
         // Contract code is swapped to an empty module; read the stored keys directly.
         e.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&e), to);
-            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.2.0"));
+            assert_eq!(
+                common::upgrade::version(&e, &mgr.address),
+                String::from_str(&e, "0.2.0")
+            );
         });
     }
 
@@ -583,10 +608,11 @@ mod upgrade_via_common {
             from.clone(),
         );
         let client = DaoTokenContractClient::new(&e, &id);
+        mgr.register(&from, &String::from_str(&e, "0.1.0"));
         assert_eq!(client.version(), String::from_str(&e, "0.1.0"));
         assert_eq!(client.wasm_hash(), from);
+        // No sync step (D6): the registry record is the version.
         mgr.register(&from, &String::from_str(&e, "0.1.1"));
-        client.sync_version();
         assert_eq!(client.version(), String::from_str(&e, "0.1.1"));
         mgr.register(&to, &String::from_str(&e, "0.2.0"));
         let r = client.try_upgrade(&from, &to);
@@ -597,7 +623,7 @@ mod upgrade_via_common {
     }
 
     #[test]
-    fn upgrade_and_sync_version_reject_unauthorized_caller() {
+    fn upgrade_rejects_unauthorized_caller() {
         let e = Env::default();
         e.mock_all_auths();
         let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
@@ -617,11 +643,13 @@ mod upgrade_via_common {
         // Drop mock_all_auths: no authorization is provided for any address.
         e.set_auths(&[]);
         assert!(client.try_upgrade(&from, &to).is_err());
-        assert!(client.try_sync_version().is_err());
         e.mock_all_auths();
         e.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&e), from);
-            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.1.0"));
+            assert_eq!(
+                common::upgrade::version(&e, &mgr.address),
+                String::from_str(&e, "0.1.1")
+            );
         });
     }
 
@@ -641,6 +669,7 @@ mod upgrade_via_common {
         );
         let client = DaoTokenContractClient::new(&e, &id);
         let wrong = BytesN::from_array(&e, &[9u8; 32]);
+        mgr.register(&from, &String::from_str(&e, "0.1.0"));
         mgr.approve(&wrong, &to);
         mgr.register(&to, &String::from_str(&e, "0.2.0"));
         let r = client.try_upgrade(&wrong, &to);
@@ -650,12 +679,15 @@ mod upgrade_via_common {
         );
         e.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&e), from);
-            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.1.0"));
+            assert_eq!(
+                common::upgrade::version(&e, &mgr.address),
+                String::from_str(&e, "0.1.0")
+            );
         });
     }
 
     #[test]
-    fn version_and_sync_version_work_after_upgrade() {
+    fn version_follows_the_registry_after_upgrade() {
         let e = Env::default();
         e.mock_all_auths();
         let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
@@ -680,30 +712,23 @@ mod upgrade_via_common {
         });
         mgr.register(&to, &String::from_str(&e, "0.2.1"));
         e.as_contract(&id, || {
-            DaoTokenContract::sync_version(&e);
             assert_eq!(DaoTokenContract::version(&e), String::from_str(&e, "0.2.1"));
         });
     }
 }
 
 #[test]
-fn launch_rejects_unwired_treasury_and_minters_without_treasury() {
+fn launch_rejects_an_unwired_treasury() {
     let (e, client, _owner, _m) = setup_with_manager();
     let wired = wired_treasury(&e, &client);
     let other = Address::generate(&e);
-
-    let r = client.try_launch(&other, &vec![&e, other.clone()]);
+    let r = client.try_launch(&other, &vec![&e]);
     assert_eq!(
         r.err().unwrap().unwrap(),
-        crate::error::TokenError::TreasuryMismatch.into()
-    );
-    let r = client.try_launch(&wired, &vec![&e, other.clone()]);
-    assert_eq!(
-        r.err().unwrap().unwrap(),
-        crate::error::TokenError::TreasuryNotMinter.into()
+        TokenError::TreasuryMismatch.into()
     );
     assert!(!client.is_live());
-    client.launch(&wired, &vec![&e, wired.clone()]);
+    client.launch(&wired, &vec![&e]);
     assert!(client.is_live());
 }
 
@@ -721,18 +746,18 @@ fn launch_requires_manager_auth() {
         BytesN::from_array(&e, &[0u8; 32]),
     );
     let client = DaoTokenContractClient::new(&e, &id);
-    let minters = vec![&e, treasury.clone()];
+    let none: soroban_sdk::Vec<MintGrant> = vec![&e];
     // Only a non-manager address authorizes the call.
     e.mock_auths(&[MockAuth {
         address: &owner,
         invoke: &MockAuthInvoke {
             contract: &id,
             fn_name: "launch",
-            args: (&treasury, &minters).into_val(&e),
+            args: (&treasury, &none).into_val(&e),
             sub_invokes: &[],
         },
     }]);
-    assert!(client.try_launch(&treasury, &minters).is_err());
+    assert!(client.try_launch(&treasury, &none).is_err());
     assert!(!client.is_live());
     // The manager's own authorization succeeds.
     e.mock_auths(&[MockAuth {
@@ -740,18 +765,18 @@ fn launch_requires_manager_auth() {
         invoke: &MockAuthInvoke {
             contract: &id,
             fn_name: "launch",
-            args: (&treasury, &minters).into_val(&e),
+            args: (&treasury, &none).into_val(&e),
             sub_invokes: &[],
         },
     }]);
-    client.launch(&treasury, &minters);
+    client.launch(&treasury, &none);
     assert!(client.is_live());
 }
 
 /// Address wired under `key` in the token's instance storage.
 fn wired(e: &Env, client: &DaoTokenContractClient, key: crate::storage::TokenKey) -> Address {
     e.as_contract(&client.address, || {
-        e.storage().instance().get(&key).unwrap()
+        e.storage().instance().get(&common::ns(e, key)).unwrap()
     })
 }
 
@@ -772,8 +797,8 @@ mod voting_supply {
     fn system_holders_carry_no_votes_through_every_path() {
         let (e, client, owner) = setup();
         let treasury = wired(&e, &client, TokenKey::Treasury);
-        let auction = wired(&e, &client, TokenKey::Auction);
-        let marketplace = wired(&e, &client, TokenKey::Marketplace);
+        let auction = client.auction().unwrap();
+        let marketplace = client.marketplace().unwrap();
         let alice = Address::generate(&e);
         let bob = Address::generate(&e);
         let voters = [&alice, &bob];
@@ -825,7 +850,7 @@ mod voting_supply {
     #[test]
     fn delegated_votes_follow_system_transfers() {
         let (e, client, owner) = setup();
-        let marketplace = wired(&e, &client, TokenKey::Marketplace);
+        let marketplace = client.marketplace().unwrap();
         let alice = Address::generate(&e);
         let carol = Address::generate(&e);
         let id = client.mint(&owner, &alice);
@@ -943,14 +968,14 @@ fn batch_mint_extends_owner_entries() {
 }
 
 #[test]
-fn mint_authority_lives_in_persistent_storage() {
+fn mint_allowance_lives_in_persistent_storage() {
     let (e, client, _owner, _m) = setup_with_manager();
-    let minter = Address::generate(&e);
-    launch(&e, &client, std::slice::from_ref(&minter));
-    let key = crate::storage::TokenKey::MintAuthority(minter.clone());
+    let claims = module(&e, &client, "claims", false);
+    launch(&e, &client, &[(&claims, 9)]);
+    let key = common::ns(&e, crate::storage::TokenKey::MintAllowance(claims.clone()));
     e.as_contract(&client.address, || {
         assert!(!e.storage().instance().has(&key));
-        assert_eq!(e.storage().persistent().get::<_, bool>(&key), Some(true));
+        assert_eq!(e.storage().persistent().get::<_, u32>(&key), Some(9));
     });
 }
 
@@ -987,8 +1012,8 @@ mod delegation_security {
     fn world() -> World {
         let (e, token, admin) = setup();
         let treasury = wired(&e, &token, TokenKey::Treasury);
-        let auction = wired(&e, &token, TokenKey::Auction);
-        let marketplace = wired(&e, &token, TokenKey::Marketplace);
+        let auction = token.auction().unwrap();
+        let marketplace = token.marketplace().unwrap();
         World {
             e,
             token,
@@ -1222,10 +1247,10 @@ fn set_metadata_renames_and_emits_metadata_updated() {
     use soroban_sdk::Event as _;
 
     let (e, client, _owner) = setup();
-    let uri = String::from_str(&e, "https://example.com/v2/");
+    let metadata_contract = client.metadata();
     let name = String::from_str(&e, "Lantern Club");
     let symbol = String::from_str(&e, "LANTERN");
-    client.set_metadata(&uri, &name, &symbol);
+    client.set_metadata(&name, &symbol);
 
     // Read events first: the next invocation (as_contract) starts a fresh event buffer.
     let events = e.events().all();
@@ -1233,7 +1258,6 @@ fn set_metadata_renames_and_emits_metadata_updated() {
         &MetadataUpdated {
             name: name.clone(),
             symbol: symbol.clone(),
-            uri: uri.clone(),
         }
         .to_xdr(&e, &client.address)
     ));
@@ -1241,4 +1265,1124 @@ fn set_metadata_renames_and_emits_metadata_updated() {
         assert_eq!(stellar_tokens::non_fungible::Base::name(&e), name);
         assert_eq!(stellar_tokens::non_fungible::Base::symbol(&e), symbol);
     });
+    // A rename no longer clobbers the metadata contract address (shared key).
+    assert_eq!(client.metadata(), metadata_contract);
+}
+
+/// Regression: `TokenKey::MetadataContract` used to encode to the same instance key as
+/// OpenZeppelin's `NFTStorageKey::Metadata`, so the metadata contract address
+/// overwrote the collection name, symbol and URI at construction.
+#[test]
+fn name_symbol_and_metadata_contract_are_stored_separately() {
+    let (e, client, _owner) = setup();
+    assert_eq!(client.name(), String::from_str(&e, "DAO Vote NFT"));
+    assert_eq!(client.symbol(), String::from_str(&e, "vDAO"));
+    assert!(client.metadata().is_some());
+}
+
+// ---- SEP-50 completion ----
+
+/// An operator approved for all moves votes exactly as a direct transfer.
+#[test]
+fn operator_transfer_moves_votes_like_a_direct_transfer() {
+    use soroban_sdk::testutils::Ledger;
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+    let bob = Address::generate(&e);
+    let operator = Address::generate(&e);
+    let t1 = client.mint(&owner, &alice);
+    let t2 = client.mint(&owner, &alice);
+    let until = e.ledger().sequence() + 100;
+    client.approve_for_all(&alice, &operator, &until);
+    assert!(client.is_approved_for_all(&alice, &operator));
+    assert!(!client.is_approved_for_all(&bob, &operator));
+
+    // Direct transfer and operator transfer leave the same vote state.
+    client.transfer(&alice, &bob, &t1);
+    assert_eq!((client.get_votes(&alice), client.get_votes(&bob)), (1, 1));
+    client.transfer_from(&operator, &alice, &bob, &t2);
+    assert_eq!((client.get_votes(&alice), client.get_votes(&bob)), (0, 2));
+    assert_eq!(client.get_delegate(&bob), Some(bob.clone()));
+
+    // An expired operator approval cannot transfer.
+    let t3 = client.mint(&owner, &alice);
+    e.ledger().set_sequence_number(until + 1);
+    assert!(!client.is_approved_for_all(&alice, &operator));
+    assert!(client
+        .try_transfer_from(&operator, &alice, &bob, &t3)
+        .is_err());
+    assert_eq!(client.get_votes(&alice), 1);
+}
+
+#[test]
+fn single_token_approval_is_readable_expires_and_clears_on_transfer() {
+    use soroban_sdk::testutils::Ledger;
+    let (e, client, owner) = setup();
+    let alice = Address::generate(&e);
+    let spender = Address::generate(&e);
+    let t = client.mint(&owner, &alice);
+    assert_eq!(client.get_approved(&t), None);
+    let until = e.ledger().sequence() + 50;
+    client.approve(&alice, &spender, &t, &until);
+    assert_eq!(client.get_approved(&t), Some(spender.clone()));
+    client.transfer(&alice, &owner, &t);
+    assert_eq!(client.get_approved(&t), None);
+
+    let t2 = client.mint(&owner, &alice);
+    client.approve(&alice, &spender, &t2, &(e.ledger().sequence() + 5));
+    e.ledger().set_sequence_number(e.ledger().sequence() + 6);
+    assert_eq!(client.get_approved(&t2), None);
+    assert!(client
+        .try_transfer_from(&spender, &alice, &owner, &t2)
+        .is_err());
+
+    // SEP-50: unknown tokens panic.
+    assert!(client.try_get_approved(&999).is_err());
+    assert!(client.try_token_uri(&999).is_err());
+}
+
+/// The name is copied verbatim into the on-chain token JSON.
+#[test]
+fn collection_name_may_not_contain_json_breaking_characters() {
+    let (e, client, _owner) = setup();
+    for bad in ["Club \"X\"", "back\\slash", "tab\tname"] {
+        assert_eq!(
+            client
+                .try_set_metadata(&String::from_str(&e, bad), &String::from_str(&e, "X"))
+                .err()
+                .unwrap()
+                .unwrap(),
+            crate::error::TokenError::InvalidName.into()
+        );
+    }
+    client.set_metadata(
+        &String::from_str(&e, "Lantern's Club"),
+        &String::from_str(&e, "LC"),
+    );
+    assert_eq!(client.name(), String::from_str(&e, "Lantern's Club"));
+}
+
+#[test]
+fn wiring_getters_expose_every_module() {
+    let (e, client, _owner, manager) = setup_with_manager();
+    assert_eq!(client.manager(), manager);
+    let treasury = wired_treasury(&e, &client);
+    assert_eq!(client.treasury(), treasury);
+    assert!(client.auction().is_some());
+    assert!(client.marketplace().is_some());
+    assert!(client.metadata().is_some());
+    // The constructor registers the Auction and Marketplace as non-voting modules.
+    let entries = client.modules();
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries.get(0).unwrap().kind, Symbol::new(&e, "auction"));
+    assert_eq!(entries.get(1).unwrap().kind, Symbol::new(&e, "marketplace"));
+    assert!(entries.iter().all(|m| m.non_voting));
+}
+
+/// docs/STORAGE_DIET_REVIEW.md Finding 1: no token key may encode like an
+/// OpenZeppelin key the token links (the old `TokenKey::MetadataContract` did).
+#[test]
+fn storage_keys_do_not_collide() {
+    use common::testutils::{
+        assert_keys_disjoint, common_key_shapes, key_shape, shapes, OZ_SEQUENTIAL_SHAPES,
+    };
+    use soroban_sdk::{IntoVal, Val};
+    use stellar_governance::votes::VotesStorageKey;
+    use stellar_tokens::non_fungible::NFTStorageKey;
+    let e = Env::default();
+    let a = Address::generate(&e);
+    let all = |keys: std::vec::Vec<Val>| keys.into_iter().map(|k| key_shape(&e, k)).collect();
+    // Every variant, checked exhaustively next to the enum.
+    let token = all(crate::storage::key_samples::all(&e));
+    let nft = all(std::vec![
+        NFTStorageKey::Owner(0).into_val(&e),
+        NFTStorageKey::Balance(a.clone()).into_val(&e),
+        NFTStorageKey::Approval(0).into_val(&e),
+        NFTStorageKey::ApprovalForAll(a.clone(), a.clone()).into_val(&e),
+        NFTStorageKey::Metadata.into_val(&e),
+    ]);
+    let votes = all(std::vec![
+        VotesStorageKey::Delegatee(a.clone()).into_val(&e),
+        VotesStorageKey::NumCheckpoints(a.clone()).into_val(&e),
+        VotesStorageKey::DelegateCheckpoint(a.clone(), 0).into_val(&e),
+        VotesStorageKey::NumTotalSupplyCheckpoints.into_val(&e),
+        VotesStorageKey::TotalSupplyCheckpoint(0).into_val(&e),
+        VotesStorageKey::VotingUnits(a.clone()).into_val(&e),
+    ]);
+    assert_keys_disjoint(&[
+        ("TokenKey", token),
+        ("common", common_key_shapes(&e)),
+        ("NFTStorageKey", nft),
+        ("NFTSequentialStorageKey", shapes(OZ_SEQUENTIAL_SHAPES)),
+        ("VotesStorageKey", votes),
+    ]);
+}
+
+/// A rename must leave minting working: the metadata hook survives
+/// `set_metadata` and every mint path still seeds attributes.
+#[test]
+fn mint_and_batch_mint_seed_attributes_after_a_rename() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let owner = Address::generate(&e);
+    let treasury = Address::generate(&e);
+    let metadata = Address::generate(&e);
+    let token_id = e.register(
+        DaoTokenContract,
+        (
+            owner.clone(),
+            treasury,
+            String::from_str(&e, "Before"),
+            String::from_str(&e, "B"),
+            metadata.clone(),
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0u8; 32]),
+            common::modules::TokenSettings::default(),
+        ),
+    );
+    e.register_at(&metadata, HookCounter, ());
+    let client = DaoTokenContractClient::new(&e, &token_id);
+    client.set_metadata(&String::from_str(&e, "After"), &String::from_str(&e, "A"));
+    assert_eq!(client.metadata(), Some(metadata.clone()));
+    client.mint(&owner, &owner);
+    client.batch_mint(&owner, &vec![&e, owner.clone()], &vec![&e, 3u128]);
+    let hooks = HookCounterClient::new(&e, &metadata);
+    assert_eq!(hooks.single(), 1);
+    assert_eq!(hooks.batch(), 3);
+}
+
+/// Stands in for the Metadata contract: counts the mint hooks it receives.
+#[soroban_sdk::contract]
+struct HookCounter;
+
+#[soroban_sdk::contractimpl]
+impl HookCounter {
+    pub fn on_minted(e: Env, _token_id: u32) -> bool {
+        let n: u32 = e.storage().instance().get(&1u32).unwrap_or(0);
+        e.storage().instance().set(&1u32, &(n + 1));
+        true
+    }
+    pub fn on_minted_batch(e: Env, _first: u32, count: u32) -> bool {
+        let n: u32 = e.storage().instance().get(&2u32).unwrap_or(0);
+        e.storage().instance().set(&2u32, &(n + count));
+        true
+    }
+    pub fn single(e: Env) -> u32 {
+        e.storage().instance().get(&1u32).unwrap_or(0)
+    }
+    pub fn batch(e: Env) -> u32 {
+        e.storage().instance().get(&2u32).unwrap_or(0)
+    }
+}
+
+/// `token_uri` names its own missing dependency, not the Manager's.
+#[test]
+fn token_uri_without_a_metadata_address_says_so() {
+    let (e, client, owner) = setup();
+    let id = client.mint(&owner, &owner);
+    e.as_contract(&client.address, || {
+        e.storage()
+            .instance()
+            .remove(&common::ns(&e, crate::storage::TokenKey::MetadataContract));
+    });
+    assert_eq!(
+        client.try_token_uri(&id).err().unwrap().unwrap(),
+        crate::error::TokenError::MetadataNotSet.into()
+    );
+}
+
+/// docs/designs/membership-models.md §1: the module registry.
+mod registry {
+    use super::*;
+
+    /// Σ account checkpoints == TotalSupply == Σ voting-holder balances.
+    fn assert_books(client: &DaoTokenContractClient, accounts: &[&Address], voting: u128) {
+        let votes: u128 = accounts.iter().map(|a| client.get_votes(a)).sum();
+        assert_eq!(client.get_total_supply(), voting);
+        assert_eq!(
+            votes, voting,
+            "account checkpoints must add up to TotalSupply"
+        );
+    }
+
+    #[test]
+    fn registering_a_holder_non_voting_removes_its_votes_from_its_delegate() {
+        let (e, client, owner, _m) = setup_with_manager();
+        let vault = stub(&e);
+        let carol = Address::generate(&e);
+        let alice = Address::generate(&e);
+        client.batch_mint(
+            &owner,
+            &vec![&e, vault.clone(), alice.clone()],
+            &vec![&e, 3u128, 2u128],
+        );
+        client.delegate(&vault, &carol);
+        assert_books(&client, &[&vault, &carol, &alice], 5);
+        assert_eq!(client.get_votes(&carol), 3);
+
+        client.register_module(&Symbol::new(&e, "custom_vault"), &vault, &true);
+        // review 2 D2: the delegate loses k, the module's units are zero.
+        assert_eq!(client.get_votes(&carol), 0);
+        assert_books(&client, &[&vault, &carol, &alice], 2);
+        e.as_contract(&client.address, || {
+            assert_eq!(stellar_governance::votes::get_voting_units(&e, &vault), 0);
+        });
+    }
+
+    #[test]
+    fn unregistering_a_holding_module_self_delegates_before_votes_return() {
+        let (e, client, owner, _m) = setup_with_manager();
+        let marketplace = client.marketplace().unwrap();
+        let alice = Address::generate(&e);
+        // Tokens reach the module only while it is non-voting: no delegate.
+        client.batch_mint(
+            &owner,
+            &vec![&e, marketplace.clone(), alice.clone()],
+            &vec![&e, 4u128, 1u128],
+        );
+        assert_eq!(client.get_delegate(&marketplace), None);
+        assert_books(&client, &[&marketplace, &alice], 1);
+
+        client.unregister_module(&marketplace);
+        // review 2 A1: without the self-delegation TotalSupply would grow by 4
+        // with nobody's checkpoint following.
+        assert_eq!(client.get_delegate(&marketplace), Some(marketplace.clone()));
+        assert_eq!(client.get_votes(&marketplace), 4);
+        assert_books(&client, &[&marketplace, &alice], 5);
+        assert_eq!(client.marketplace(), None);
+    }
+
+    #[test]
+    fn only_deployed_wasm_contracts_can_be_modules() {
+        let (e, client, _owner, _m) = setup_with_manager();
+        let kind = Symbol::new(&e, "claims");
+        // A wallet, and a predicted address with nothing deployed (review 2 D6).
+        for address in [Address::generate(&e), Address::generate(&e)] {
+            let r = client.try_register_module(&kind, &address, &false);
+            assert_eq!(r.err().unwrap().unwrap(), TokenError::NotAContract.into());
+        }
+        // A Stellar Asset Contract is not a module either.
+        let sac = e
+            .register_stellar_asset_contract_v2(Address::generate(&e))
+            .address();
+        let r = client.try_register_module(&kind, &sac, &false);
+        assert_eq!(r.err().unwrap().unwrap(), TokenError::NotAContract.into());
+        // Once deployed, the same kind of address registers.
+        client.register_module(&kind, &stub(&e), &false);
+    }
+
+    #[test]
+    fn kinds_are_built_in_or_custom_and_unique() {
+        let (e, client, _owner, _m) = setup_with_manager();
+        for bad in ["shop", "custom_", "Claims", "custom"] {
+            let r = client.try_register_module(&Symbol::new(&e, bad), &stub(&e), &false);
+            assert_eq!(
+                r.err().unwrap().unwrap(),
+                TokenError::InvalidKind.into(),
+                "{bad}"
+            );
+        }
+        client.register_module(
+            &Symbol::new(&e, "custom_abcdefghijklmnopqrstuvwxy"),
+            &stub(&e),
+            &false,
+        );
+        // The constructor already holds `auction` and `marketplace`.
+        let r = client.try_register_module(&Symbol::new(&e, "auction"), &stub(&e), &true);
+        assert_eq!(r.err().unwrap().unwrap(), TokenError::KindTaken.into());
+        let marketplace = client.marketplace().unwrap();
+        let r = client.try_register_module(&Symbol::new(&e, "claims"), &marketplace, &false);
+        assert!(r.is_err(), "an address registers once");
+    }
+
+    #[test]
+    fn the_registry_is_capped() {
+        let (e, client, _owner, _m) = setup_with_manager();
+        // Two constructor entries plus fourteen custom ones fill the 16 slots.
+        for i in 0..14 {
+            let kind = std::format!("custom_m{i}");
+            client.register_module(&Symbol::new(&e, &kind), &stub(&e), &false);
+        }
+        let r = client.try_register_module(&Symbol::new(&e, "custom_last"), &stub(&e), &false);
+        assert_eq!(r.err().unwrap().unwrap(), TokenError::TooManyModules.into());
+    }
+
+    #[test]
+    fn unregistering_zeroes_the_allowance_and_emits() {
+        let (e, client, _owner, _m) = setup_with_manager();
+        let claims = module(&e, &client, "claims", false);
+        client.increase_mint_allowance(&claims, &5);
+        client.unregister_module(&claims);
+        assert_eq!(client.mint_allowance(&claims), 0);
+        let r = client.try_unregister_module(&claims);
+        assert_eq!(r.err().unwrap().unwrap(), TokenError::NotAModule.into());
+    }
+
+    #[test]
+    fn registration_needs_the_manager_in_setup_and_the_admin_once_live() {
+        let e = Env::default();
+        let owner = Address::generate(&e);
+        let treasury = Address::generate(&e);
+        let manager = Address::generate(&e);
+        let id = deploy(
+            &e,
+            owner.clone(),
+            treasury.clone(),
+            manager.clone(),
+            BytesN::from_array(&e, &[0u8; 32]),
+        );
+        let client = DaoTokenContractClient::new(&e, &id);
+        let kind = Symbol::new(&e, "claims");
+        let a = stub(&e);
+        let auth = |who: &Address| {
+            e.mock_auths(&[MockAuth {
+                address: who,
+                invoke: &MockAuthInvoke {
+                    contract: &id,
+                    fn_name: "register_module",
+                    args: (&kind, &a, false).into_val(&e),
+                    sub_invokes: &[],
+                },
+            }]);
+        };
+        // Setup: the launch admin can't, the Manager can.
+        auth(&owner);
+        assert!(client.try_register_module(&kind, &a, &false).is_err());
+        auth(&manager);
+        client.register_module(&kind, &a, &false);
+
+        e.mock_all_auths();
+        client.launch(&treasury, &vec![&e]);
+        let b = stub(&e);
+        let circle = Symbol::new(&e, "circle");
+        // Live: the Manager can't, the admin (Treasury) can.
+        e.mock_auths(&[MockAuth {
+            address: &manager,
+            invoke: &MockAuthInvoke {
+                contract: &id,
+                fn_name: "register_module",
+                args: (&circle, &b, false).into_val(&e),
+                sub_invokes: &[],
+            },
+        }]);
+        assert!(client.try_register_module(&circle, &b, &false).is_err());
+        e.mock_auths(&[MockAuth {
+            address: &treasury,
+            invoke: &MockAuthInvoke {
+                contract: &id,
+                fn_name: "register_module",
+                args: (&circle, &b, false).into_val(&e),
+                sub_invokes: &[],
+            },
+        }]);
+        client.register_module(&circle, &b, &false);
+        assert_eq!(client.module(&circle), Some(b));
+    }
+}
+
+#[test]
+fn an_unlimited_allowance_is_never_spent() {
+    let (e, client, _owner, _m) = setup_with_manager();
+    let shop = module(&e, &client, "custom_shop", false);
+    launch(&e, &client, &[(&shop, u32::MAX)]);
+    client.batch_mint(&shop, &vec![&e, Address::generate(&e)], &vec![&e, 3u128]);
+    assert_eq!(client.mint_allowance(&shop), u32::MAX);
+}
+
+#[test]
+fn releasing_from_an_unlimited_allowance_keeps_it_unlimited() {
+    let (e, client, _owner, manager) = setup_with_manager();
+    let pool_module = module(&e, &client, "custom_pool", true);
+    launch(&e, &client, &[(&pool_module, u32::MAX)]);
+    // A closed pool gives back its unstocked rest: nothing to give back from
+    // an allowance that was never spent.
+    client.release_mint_allowance(&pool_module, &30);
+    assert_eq!(client.mint_allowance(&pool_module), u32::MAX);
+    // A finite one is lowered, saturating at zero.
+    client.decrease_mint_allowance(&pool_module, &(u32::MAX - 10));
+    client.release_mint_allowance(&pool_module, &30);
+    assert_eq!(client.mint_allowance(&pool_module), 0);
+    let _ = manager;
+}
+
+/// Review pass (2026-10-13): the Treasury is never a module, the registry
+/// and allowance events, and the Manager-only early handoff.
+mod review {
+    use super::*;
+    use crate::events::{MintAllowanceChanged, ModuleRegistered, ModuleUnregistered};
+    use soroban_sdk::{testutils::Events as _, Event as _};
+
+    #[test]
+    fn the_treasury_is_never_a_module_even_with_an_empty_registry() {
+        let e = Env::default();
+        e.mock_all_auths();
+        let treasury = stub(&e);
+        let id = e.register(
+            DaoTokenContract,
+            (
+                Address::generate(&e),
+                treasury.clone(),
+                String::from_str(&e, "DAO"),
+                String::from_str(&e, "DAO"),
+                Address::generate(&e),
+                Address::generate(&e),
+                BytesN::from_array(&e, &[0u8; 32]),
+                common::modules::TokenSettings::default(),
+            ),
+        );
+        let client = DaoTokenContractClient::new(&e, &id);
+        assert!(client.modules().is_empty());
+        for kind in ["claims", "custom_vault"] {
+            assert_eq!(
+                client
+                    .try_register_module(&Symbol::new(&e, kind), &treasury, &true)
+                    .err()
+                    .unwrap()
+                    .unwrap(),
+                TokenError::ModuleAlreadyRegistered.into()
+            );
+        }
+    }
+
+    #[test]
+    fn registry_and_allowance_changes_are_events() {
+        let (e, client, owner, _m) = setup_with_manager();
+        let kind = Symbol::new(&e, "claims");
+        let module = stub(&e);
+        client.register_module(&kind, &module, &false);
+        assert_eq!(
+            e.events().all().events().last().unwrap(),
+            &ModuleRegistered {
+                kind: kind.clone(),
+                address: module.clone(),
+                non_voting: false,
+            }
+            .to_xdr(&e, &client.address)
+        );
+        client.increase_mint_allowance(&module, &7);
+        assert_eq!(
+            e.events().all().events().last().unwrap(),
+            &MintAllowanceChanged {
+                module: module.clone(),
+                old_allowance: 0,
+                allowance: 7,
+                changed_by: owner.clone(),
+            }
+            .to_xdr(&e, &client.address)
+        );
+        // Unregistering zeroes the allowance (an event) and leaves the registry.
+        client.unregister_module(&module);
+        let events = e.events().all();
+        let all = events.events();
+        assert!(all.contains(
+            &MintAllowanceChanged {
+                module: module.clone(),
+                old_allowance: 7,
+                allowance: 0,
+                changed_by: _m.clone(),
+            }
+            .to_xdr(&e, &client.address)
+        ));
+        assert_eq!(
+            all.last().unwrap(),
+            &ModuleUnregistered {
+                kind,
+                address: module,
+            }
+            .to_xdr(&e, &client.address)
+        );
+    }
+
+    #[test]
+    fn handoff_is_the_managers_stays_in_setup_and_launch_does_not_repeat_it() {
+        let (e, client, owner, manager) = setup_with_manager();
+        let treasury = wired_treasury(&e, &client);
+        assert_eq!(
+            client
+                .try_handoff(&Address::generate(&e))
+                .err()
+                .unwrap()
+                .unwrap(),
+            TokenError::TreasuryMismatch.into()
+        );
+        e.mock_auths(&[MockAuth {
+            address: &owner,
+            invoke: &MockAuthInvoke {
+                contract: &client.address,
+                fn_name: "handoff",
+                args: (treasury.clone(),).into_val(&e),
+                sub_invokes: &[],
+            },
+        }]);
+        assert!(client.try_handoff(&treasury).is_err());
+        e.mock_all_auths();
+        client.handoff(&treasury);
+        assert_eq!(client.admin(), treasury);
+        assert!(!client.is_live());
+        // The launch admin can no longer mint (the Treasury is admin now).
+        e.mock_auths(&[MockAuth {
+            address: &owner,
+            invoke: &MockAuthInvoke {
+                contract: &client.address,
+                fn_name: "mint",
+                args: (owner.clone(), owner.clone()).into_val(&e),
+                sub_invokes: &[],
+            },
+        }]);
+        assert!(client.try_mint(&owner, &owner).is_err());
+        e.mock_all_auths();
+        client.launch(&treasury, &grants(&e, &[]));
+        // No second AdminChanged: the admin already was the Treasury.
+        let events = e.events().all();
+        for old_admin in [owner.clone(), treasury.clone()] {
+            let repeat = common::admin::AdminChanged {
+                old_admin,
+                new_admin: treasury.clone(),
+            }
+            .to_xdr(&e, &client.address);
+            assert!(!events.events().contains(&repeat));
+        }
+        assert_eq!(
+            client.try_handoff(&treasury).err().unwrap().unwrap(),
+            common::CommonError::AlreadyLive.into()
+        );
+        let _ = manager;
+    }
+}
+
+/// docs/designs/locked-tokens.md: the three membership switches, transfer
+/// agents and DAO recovery.
+mod locked {
+    use super::*;
+    use crate::events::{
+        AgentTransfer, DaoRecoveryChanged, DaoTransfer, MembersOnlyDelegationChanged,
+        TransferAgentChanged, TransfersLockChanged,
+    };
+    use common::modules::TokenSettings;
+    use soroban_sdk::{testutils::Events as _, testutils::Ledger as _, Event as _};
+
+    const LOCKED: TokenSettings = TokenSettings {
+        transfers_locked: true,
+        members_only_delegation: false,
+        dao_recovery: false,
+    };
+    const EXPIRY: u32 = 1_000;
+
+    struct Dao {
+        e: Env,
+        token: DaoTokenContractClient<'static>,
+        admin: Address,
+        manager: Address,
+        treasury: Address,
+        /// A registered non-voting module (DAO custody).
+        market: Address,
+    }
+
+    impl Dao {
+        /// A token with `settings` and a non-voting `marketplace` stub, in
+        /// Setup.
+        fn new(settings: TokenSettings) -> Self {
+            let e = Env::default();
+            e.mock_all_auths();
+            e.ledger().set_sequence_number(100);
+            let admin = Address::generate(&e);
+            let treasury = Address::generate(&e);
+            let manager = Address::generate(&e);
+            let id = e.register(
+                DaoTokenContract,
+                (
+                    admin.clone(),
+                    treasury.clone(),
+                    String::from_str(&e, "DAO"),
+                    String::from_str(&e, "DAO"),
+                    Address::generate(&e),
+                    manager.clone(),
+                    BytesN::from_array(&e, &[0u8; 32]),
+                    settings,
+                ),
+            );
+            let token = DaoTokenContractClient::new(&e, &id);
+            let market = stub(&e);
+            token.register_module(&Symbol::new(&e, "marketplace"), &market, &true);
+            Dao {
+                e,
+                token,
+                admin,
+                manager,
+                treasury,
+                market,
+            }
+        }
+
+        fn launch(&self) {
+            self.token
+                .launch(&self.treasury, &soroban_sdk::Vec::new(&self.e));
+        }
+
+        /// Mint one token to `to` (by whoever is admin now).
+        fn mint(&self, to: &Address) -> u32 {
+            self.token.mint(&self.token.admin(), to)
+        }
+
+        fn locked_err(&self) -> soroban_sdk::Error {
+            TokenError::TransfersLocked.into()
+        }
+
+        fn last_event(&self) -> soroban_sdk::xdr::ContractEvent {
+            self.e.events().all().events().last().unwrap().clone()
+        }
+
+        /// Only `who` signs the next call to `function` on the token.
+        fn only(
+            &self,
+            who: &Address,
+            function: &'static str,
+            args: soroban_sdk::Vec<soroban_sdk::Val>,
+        ) {
+            self.e.mock_auths(&[MockAuth {
+                address: who,
+                invoke: &MockAuthInvoke {
+                    contract: &self.token.address,
+                    fn_name: function,
+                    args,
+                    sub_invokes: &[],
+                },
+            }]);
+        }
+    }
+
+    #[test]
+    fn the_settings_are_stored_and_announced_at_construction() {
+        let settings = TokenSettings {
+            transfers_locked: true,
+            members_only_delegation: true,
+            dao_recovery: false,
+        };
+        let d = Dao::new(settings.clone());
+        assert_eq!(d.token.settings(), settings);
+        assert!(d.token.transfers_locked());
+        assert!(d.token.members_only_delegation());
+        assert!(!d.token.dao_recovery());
+        let open = Dao::new(TokenSettings::default());
+        assert_eq!(open.token.settings(), TokenSettings::default());
+    }
+
+    #[test]
+    fn a_locked_token_moves_only_along_the_dao_paths() {
+        let d = Dao::new(LOCKED);
+        let (alice, bob, carol) = (
+            Address::generate(&d.e),
+            Address::generate(&d.e),
+            Address::generate(&d.e),
+        );
+        let a = d.mint(&alice);
+        let in_custody = d.mint(&d.market);
+        d.launch();
+        let t = &d.treasury;
+
+        // Holder to holder: refused.
+        assert_eq!(
+            d.token
+                .try_transfer(&alice, &bob, &a)
+                .err()
+                .unwrap()
+                .unwrap(),
+            d.locked_err()
+        );
+        // Path 1, out of custody: the Marketplace hands its token to carol.
+        d.token.transfer(&d.market, &carol, &in_custody);
+        assert_eq!(d.token.owner_of(&in_custody), carol);
+        // Path 3, a DAO-approved transfer: alice approves the Treasury, which
+        // moves it by proposal.
+        d.token.approve(&alice, t, &a, &EXPIRY);
+        d.token.transfer_from(t, &alice, &bob, &a);
+        assert_eq!(d.token.owner_of(&a), bob);
+        // Path 2, give back to the DAO.
+        d.token.transfer(&bob, t, &a);
+        assert_eq!(d.token.owner_of(&a), *t);
+        // Path 1 again: the Treasury hands it out.
+        d.token.transfer(t, &alice, &a);
+        assert_eq!(d.token.owner_of(&a), alice);
+        // Votes stayed exact: alice and carol each hold one voting token.
+        assert_eq!(d.token.get_votes(&alice), 1);
+        assert_eq!(d.token.get_votes(&carol), 1);
+        assert_eq!(d.token.get_total_supply(), 2);
+    }
+
+    #[test]
+    fn approvals_on_a_locked_token_go_to_the_treasury_or_come_from_custody() {
+        let d = Dao::new(LOCKED);
+        let (alice, bob) = (Address::generate(&d.e), Address::generate(&d.e));
+        let a = d.mint(&alice);
+        let held = d.mint(&d.market);
+        d.launch();
+        let t = &d.treasury;
+        // A holder may approve only the Treasury.
+        assert_eq!(
+            d.token
+                .try_approve(&alice, &bob, &a, &EXPIRY)
+                .err()
+                .unwrap()
+                .unwrap(),
+            d.locked_err()
+        );
+        assert_eq!(
+            d.token
+                .try_approve_for_all(&alice, &bob, &EXPIRY)
+                .err()
+                .unwrap()
+                .unwrap(),
+            d.locked_err()
+        );
+        d.token.approve(&alice, t, &a, &EXPIRY);
+        d.token.approve_for_all(&alice, t, &EXPIRY);
+        // Revoking is always allowed.
+        d.token.approve(&alice, &bob, &a, &0);
+        d.token.approve_for_all(&alice, &bob, &0);
+        // The rule reads the token's owner: the Treasury, as alice's
+        // operator, still cannot approve bob for her token.
+        d.token.approve_for_all(&alice, t, &EXPIRY);
+        assert_eq!(
+            d.token
+                .try_approve(t, &bob, &a, &EXPIRY)
+                .err()
+                .unwrap()
+                .unwrap(),
+            d.locked_err()
+        );
+        // DAO custody may approve anyone (approval-based modules).
+        d.token.approve(&d.market, &bob, &held, &EXPIRY);
+        d.token.transfer_from(&bob, &d.market, &bob, &held);
+        assert_eq!(d.token.owner_of(&held), bob);
+    }
+
+    #[test]
+    fn locking_stops_earlier_approvals_and_listings_and_unlocking_restores_them() {
+        let d = Dao::new(TokenSettings::default());
+        let (alice, bob) = (Address::generate(&d.e), Address::generate(&d.e));
+        let a = d.mint(&alice);
+        d.launch();
+        // Unlocked: as today, including an unapproved spender failing.
+        assert!(d.token.try_transfer_from(&bob, &alice, &bob, &a).is_err());
+        d.token.approve(&alice, &bob, &a, &EXPIRY);
+        // A Marketplace-style escrow (approval to custody) taken before the lock.
+        let b = d.mint(&alice);
+        d.token.approve(&alice, &d.market, &b, &EXPIRY);
+        d.token.transfer_from(&d.market, &alice, &d.market, &b);
+
+        d.token.set_transfers_locked(&true);
+        assert_eq!(
+            d.last_event(),
+            TransfersLockChanged {
+                locked: true,
+                changed_by: d.treasury.clone(),
+            }
+            .to_xdr(&d.e, &d.token.address)
+        );
+        // The earlier approval no longer moves the token.
+        assert_eq!(
+            d.token
+                .try_transfer_from(&bob, &alice, &bob, &a)
+                .err()
+                .unwrap()
+                .unwrap(),
+            d.locked_err()
+        );
+        // The escrowed token can still leave custody (bought or cancelled).
+        d.token.transfer(&d.market, &bob, &b);
+        assert_eq!(
+            d.token
+                .try_set_transfers_locked(&true)
+                .err()
+                .unwrap()
+                .unwrap(),
+            TokenError::SettingUnchanged.into()
+        );
+        // Unlocking applies at once.
+        d.token.set_transfers_locked(&false);
+        d.token.transfer_from(&bob, &alice, &bob, &a);
+        assert_eq!(d.token.owner_of(&a), bob);
+    }
+
+    #[test]
+    fn the_switches_belong_to_the_launch_admin_in_setup_and_the_treasury_once_live() {
+        let d = Dao::new(TokenSettings::default());
+        // Setup: the launch admin may fix a creation mistake.
+        d.only(&d.admin, "set_dao_recovery", (true,).into_val(&d.e));
+        d.token.set_dao_recovery(&true);
+        assert_eq!(
+            d.last_event(),
+            DaoRecoveryChanged {
+                enabled: true,
+                changed_by: d.admin.clone(),
+            }
+            .to_xdr(&d.e, &d.token.address)
+        );
+        d.e.mock_all_auths();
+        // After an assurance drive's early handoff the launch admin cannot.
+        d.token.handoff(&d.treasury);
+        d.only(
+            &d.admin,
+            "set_members_only_delegation",
+            (true,).into_val(&d.e),
+        );
+        assert!(d.token.try_set_members_only_delegation(&true).is_err());
+        d.e.mock_all_auths();
+        d.launch();
+        d.token.set_members_only_delegation(&true);
+        assert_eq!(
+            d.last_event(),
+            MembersOnlyDelegationChanged {
+                enabled: true,
+                changed_by: d.treasury.clone(),
+            }
+            .to_xdr(&d.e, &d.token.address)
+        );
+        // Each setter refuses the value it already has.
+        assert_eq!(
+            d.token
+                .try_set_members_only_delegation(&true)
+                .err()
+                .unwrap()
+                .unwrap(),
+            TokenError::SettingUnchanged.into()
+        );
+        assert_eq!(
+            d.token.try_set_dao_recovery(&true).err().unwrap().unwrap(),
+            TokenError::SettingUnchanged.into()
+        );
+        assert_eq!(
+            d.token
+                .try_set_transfers_locked(&false)
+                .err()
+                .unwrap()
+                .unwrap(),
+            TokenError::SettingUnchanged.into()
+        );
+    }
+
+    #[test]
+    fn dao_transfer_needs_recovery_takes_the_current_owner_and_never_touches_modules() {
+        for transfers_locked in [true, false] {
+            let d = Dao::new(TokenSettings {
+                transfers_locked,
+                ..TokenSettings::default()
+            });
+            let (alice, bob) = (Address::generate(&d.e), Address::generate(&d.e));
+            let a = d.mint(&alice);
+            let held = d.mint(&d.market);
+            // Before launch it does not exist.
+            assert_eq!(
+                d.token.try_dao_transfer(&a, &bob).err().unwrap().unwrap(),
+                CommonError::NotLive.into()
+            );
+            d.launch();
+            assert_eq!(
+                d.token.try_dao_transfer(&a, &bob).err().unwrap().unwrap(),
+                TokenError::RecoveryOff.into()
+            );
+            d.token.set_dao_recovery(&true);
+            // Only the admin (the Treasury) moves it.
+            let stranger = Address::generate(&d.e);
+            d.only(&stranger, "dao_transfer", (a, bob.clone()).into_val(&d.e));
+            assert!(d.token.try_dao_transfer(&a, &bob).is_err());
+            d.e.mock_all_auths();
+            // Never out of or into a module.
+            assert_eq!(
+                d.token
+                    .try_dao_transfer(&held, &bob)
+                    .err()
+                    .unwrap()
+                    .unwrap(),
+                TokenError::ModuleCustody.into()
+            );
+            assert_eq!(
+                d.token
+                    .try_dao_transfer(&a, &d.market)
+                    .err()
+                    .unwrap()
+                    .unwrap(),
+                TokenError::ModuleCustody.into()
+            );
+            // On an unlocked token the holder tries to dodge by moving wallets;
+            // the DAO takes it from the current owner.
+            let mut from = alice.clone();
+            if !transfers_locked {
+                let other = Address::generate(&d.e);
+                d.token.transfer(&alice, &other, &a);
+                from = other;
+            }
+            d.token.dao_transfer(&a, &bob);
+            assert_eq!(
+                d.last_event(),
+                DaoTransfer {
+                    from: from.clone(),
+                    to: bob.clone(),
+                    token_id: a,
+                    changed_by: d.treasury.clone(),
+                }
+                .to_xdr(&d.e, &d.token.address)
+            );
+            assert_eq!(d.token.owner_of(&a), bob);
+            assert_eq!(d.token.get_votes(&bob), 1);
+            assert_eq!(d.token.get_votes(&from), 0);
+            // Recall to the DAO works too.
+            d.token.dao_transfer(&a, &d.treasury);
+            assert_eq!(d.token.get_total_supply(), 0);
+        }
+    }
+
+    #[test]
+    fn transfer_agents_are_granted_by_the_registrar_and_need_both_signatures() {
+        let d = Dao::new(LOCKED);
+        let agent = stub(&d.e);
+        let other = stub(&d.e);
+        let kind = Symbol::new(&d.e, "custom_circle");
+        d.token.register_module(&kind, &agent, &false);
+        d.token
+            .register_module(&Symbol::new(&d.e, "custom_other"), &other, &false);
+        let (alice, bob) = (Address::generate(&d.e), Address::generate(&d.e));
+        let a = d.mint(&alice);
+        // Setup: the launch admin cannot grant it; the Manager can.
+        d.only(
+            &d.admin,
+            "set_transfer_agent",
+            (agent.clone(), true).into_val(&d.e),
+        );
+        assert!(d.token.try_set_transfer_agent(&agent, &true).is_err());
+        d.only(
+            &d.manager,
+            "set_transfer_agent",
+            (agent.clone(), true).into_val(&d.e),
+        );
+        d.token.set_transfer_agent(&agent, &true);
+        d.e.mock_all_auths();
+        assert_eq!(d.token.transfer_agents(), vec![&d.e, agent.clone()]);
+        assert_eq!(
+            d.token
+                .try_set_transfer_agent(&agent, &true)
+                .err()
+                .unwrap()
+                .unwrap(),
+            TokenError::SettingUnchanged.into()
+        );
+        assert_eq!(
+            d.token
+                .try_set_transfer_agent(&Address::generate(&d.e), &true)
+                .err()
+                .unwrap()
+                .unwrap(),
+            TokenError::NotAModule.into()
+        );
+        // Not before launch.
+        assert_eq!(
+            d.token
+                .try_agent_transfer(&agent, &alice, &bob, &a)
+                .err()
+                .unwrap()
+                .unwrap(),
+            CommonError::NotLive.into()
+        );
+        d.launch();
+        // A registered module that is not an agent cannot.
+        assert_eq!(
+            d.token
+                .try_agent_transfer(&other, &alice, &bob, &a)
+                .err()
+                .unwrap()
+                .unwrap(),
+            TokenError::NotTransferAgent.into()
+        );
+        // The holder must sign too.
+        d.only(
+            &agent,
+            "agent_transfer",
+            (agent.clone(), alice.clone(), bob.clone(), a).into_val(&d.e),
+        );
+        assert!(d
+            .token
+            .try_agent_transfer(&agent, &alice, &bob, &a)
+            .is_err());
+        d.e.mock_all_auths();
+        // On a locked token the agent's move goes through.
+        d.token.agent_transfer(&agent, &alice, &bob, &a);
+        assert_eq!(
+            d.last_event(),
+            AgentTransfer {
+                agent: agent.clone(),
+                from: alice.clone(),
+                to: bob.clone(),
+                token_id: a,
+            }
+            .to_xdr(&d.e, &d.token.address)
+        );
+        assert_eq!(d.token.get_votes(&bob), 1);
+        // Unregistering an agent revokes it.
+        d.token.unregister_module(&agent);
+        let events = d.e.events().all();
+        assert!(events.events().contains(
+            &TransferAgentChanged {
+                module: agent.clone(),
+                enabled: false,
+                changed_by: d.treasury.clone(),
+            }
+            .to_xdr(&d.e, &d.token.address)
+        ));
+        assert!(d.token.transfer_agents().is_empty());
+        assert_eq!(
+            d.token
+                .try_agent_transfer(&agent, &bob, &alice, &a)
+                .err()
+                .unwrap()
+                .unwrap(),
+            TokenError::NotTransferAgent.into()
+        );
+    }
+
+    #[test]
+    fn members_only_delegation_refuses_non_members_and_moves_no_votes() {
+        let d = Dao::new(TokenSettings {
+            members_only_delegation: true,
+            ..TokenSettings::default()
+        });
+        let (alice, bob, outsider) = (
+            Address::generate(&d.e),
+            Address::generate(&d.e),
+            Address::generate(&d.e),
+        );
+        d.mint(&alice);
+        d.mint(&bob);
+        d.mint(&d.market);
+        d.launch();
+        // New holders are still self-delegated automatically.
+        assert_eq!(d.token.get_delegate(&alice), Some(alice.clone()));
+        let refused: soroban_sdk::Error = TokenError::DelegateNotMember.into();
+        for delegatee in [&outsider, &d.treasury, &d.market] {
+            assert_eq!(
+                d.token
+                    .try_delegate(&alice, delegatee)
+                    .err()
+                    .unwrap()
+                    .unwrap(),
+                refused
+            );
+            // A refused delegation moves no votes.
+            assert_eq!(d.token.get_votes(&alice), 1);
+            assert_eq!(d.token.get_votes(delegatee), 0);
+        }
+        // Another member: allowed; back to oneself: allowed.
+        d.token.delegate(&alice, &bob);
+        assert_eq!(d.token.get_votes(&bob), 2);
+        d.token.delegate(&alice, &alice);
+        assert_eq!(d.token.get_votes(&alice), 1);
+        // Turned off: any delegate for the next call; existing ones stay.
+        d.token.delegate(&alice, &bob);
+        d.token.set_members_only_delegation(&false);
+        d.token.delegate(&bob, &outsider);
+        // Delegation is not transitive: bob's own unit moves, alice's stays
+        // delegated to bob.
+        assert_eq!(d.token.get_votes(&outsider), 1);
+        assert_eq!(d.token.get_votes(&bob), 1);
+        assert_eq!(d.token.get_delegate(&alice), Some(bob.clone()));
+    }
 }

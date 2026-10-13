@@ -1,3 +1,5 @@
+import { NextResponse } from 'next/server';
+
 import { marketplaceActionSchema, prepareMarketplaceAction } from '@/lib/marketplace/actions';
 import {
   marketplaceActor,
@@ -6,6 +8,7 @@ import {
   marketplaceTradeFailure
 } from '@/lib/marketplace/http';
 import { MarketplaceError } from '@/lib/marketplace/query';
+import { RestoreRequiredError, restoreResponseBody } from '@/lib/restore-required';
 
 export async function POST(request: Request, { params }: { params: Promise<{ daoId: string }> }) {
   try {
@@ -22,6 +25,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ dao
     const action = marketplaceActionSchema.parse(body);
     return marketplaceResponse(await prepareMarketplaceAction((await params).daoId, actor, action));
   } catch (error) {
+    if (error instanceof RestoreRequiredError)
+      return NextResponse.json(restoreResponseBody(error), {
+        status: error.status,
+        headers: { 'Cache-Control': 'private, no-store' }
+      });
     return marketplaceTradeFailure(error);
   }
 }

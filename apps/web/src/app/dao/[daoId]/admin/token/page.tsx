@@ -7,18 +7,18 @@ import { css } from 'styled-system/css';
 import { Stack } from 'styled-system/jsx';
 
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
-import { AuthorityPanel } from '@/components/admin/authority-panel';
 import { PageSection } from '@/components/page-section';
-import { Badge, Button, Callout, Card, Checkbox, Heading, Text } from '@/components/ui';
+import { Badge, Button, ButtonLink, Callout, Card, Checkbox, Heading, Text } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
-import { treasuryHasAuthority, treasuryIsAdmin } from '@/lib/admin-proposals';
+import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { useContractAdmin } from '@/lib/admin-queries';
 import { useAdminArtwork, useAdminTokenState } from '@/lib/admin-surfaces';
 import { MAX_BATCH_MINT } from '@/lib/batch-mint-budget';
-import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
+import { daoRoute } from '@/lib/dao-routes';
 import { BatchMintGovernanceTokenForm } from '@/lib/proposal-actions/actions/batch-mint-governance-token/component';
 import type { BatchMintGovernanceTokenData } from '@/lib/proposal-actions/actions/batch-mint-governance-token/types';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
+import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminDraftStatus } from '@/lib/use-admin-draft-status';
@@ -27,7 +27,7 @@ import { signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 export default function TokenAdminPage() {
-  const { daoId, daoConfig: config } = useDaoContext();
+  const { daoId, daoConfig: config, routeId } = useDaoContext();
   const session = useAuthSessionStore();
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('1');
@@ -36,7 +36,6 @@ export default function TokenAdminPage() {
   const proposalDraft = useAdminProposalDraft();
   const draftStatus = useAdminDraftStatus(daoId, ['batch-mint-governance-token']);
   const tx = useTransactionFeedback(config.name);
-  const { data: mintAuthorities, error, isLoading, mutate } = useGoldskyMintAuthorities(config.tokenContractId);
   const { data: tokenAdmin } = useContractAdmin(config, 'token', session.address || undefined);
   const token = useAdminTokenState(config, session.address);
   const artwork = useAdminArtwork(config, session.address);
@@ -44,9 +43,10 @@ export default function TokenAdminPage() {
   const noArtwork = Boolean(artwork.data && artwork.data.properties.length === 0);
   const [ackNoArtwork, setAckNoArtwork] = useState(false);
   const isAdmin = Boolean(session.address && token.data?.admin === session.address);
-  const hasMintAccess = Boolean(isAdmin || token.data?.mintAuthority);
-  const treasuryCanMint =
-    treasuryIsAdmin(config, tokenAdmin) || treasuryHasAuthority(config.treasuryContractId, mintAuthorities?.items);
+  // Only the Token admin mints directly; modules mint against their allowances.
+  const hasMintAccess = Boolean(isAdmin);
+  // The Treasury mints as the Token admin; modules mint against their allowances (Manage → Membership).
+  const treasuryCanMint = treasuryIsAdmin(config, tokenAdmin);
   const canProposeMint = Boolean(session.address && token.data?.live && treasuryCanMint);
 
   async function handleMint() {
@@ -131,6 +131,7 @@ export default function TokenAdminPage() {
         rpcUrl: config.rpcUrl,
         networkPassphrase: config.passphrase,
         publicKey: session.address,
+        ...restoreArchivedState,
         signTransaction: async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
           signWithWallet(xdr, {
             networkPassphrase: opts?.networkPassphrase ?? config.passphrase,
@@ -151,7 +152,7 @@ export default function TokenAdminPage() {
       setFormMessage('');
       setRecipient('');
       setAmount('1');
-      void mutate();
+      void token.mutate();
       tx.success(`Minted ${mintAmount} ${countLabel}`, hash);
     } catch (error) {
       tx.fail(error, 'Mint failed');
@@ -167,7 +168,10 @@ export default function TokenAdminPage() {
         onCancel={proposalDraft.cancel}
         onResolve={proposalDraft.resolve}
       />
-      <PageSection title="Mint tokens" description="Create new membership tokens and see who is allowed to mint.">
+      <PageSection
+        title="Mint tokens"
+        description="Create new membership tokens. Modules mint only within the allowances set under Membership."
+      >
         <Stack gap="4">
           <Card p="5">
             <Stack gap="3">
@@ -180,7 +184,7 @@ export default function TokenAdminPage() {
                   ? `Mint up to ${MAX_BATCH_MINT} tokens at a time straight to one wallet.`
                   : canProposeMint
                     ? `Propose minting up to ${MAX_BATCH_MINT} tokens at a time to one wallet. It runs if the vote passes.`
-                    : 'Only an account allowed to mint, or the admin, can mint from this page.'}
+                    : 'Only the token admin can mint from this page: the launch admin in setup, a proposal once launched.'}
               </Text>
               <BatchMintGovernanceTokenForm
                 value={{ recipient, amount } satisfies BatchMintGovernanceTokenData}
@@ -210,30 +214,16 @@ export default function TokenAdminPage() {
                 <Button type="button" onClick={handleMint} disabled={busy || (!hasMintAccess && !canProposeMint)}>
                   {busy ? 'Preparing…' : hasMintAccess ? 'Mint to recipient' : 'Create mint proposal'}
                 </Button>
-                <Button type="button" variant="secondary" onClick={() => void mutate()} disabled={isLoading}>
-                  {isLoading ? 'Refreshing…' : 'Refresh authorities'}
-                </Button>
+                <ButtonLink href={daoRoute(routeId, 'admin/owner')} variant="secondary">
+                  Module allowances
+                </ButtonLink>
               </div>
               {formMessage ? <Callout variant="warning" title={formMessage} /> : null}
-              {error ? <Callout variant="error" title={error.message} /> : null}
               {token.error ? (
                 <Callout variant="error" title="Couldn't check who can mint" description={token.error.message} />
               ) : null}
             </Stack>
           </Card>
-
-          <AuthorityPanel
-            title="Mint authorities"
-            badge="Token"
-            description="These accounts are allowed to mint. The admin always can."
-            items={mintAuthorities?.items ?? []}
-            value=""
-            allowLabel=""
-            revokeLabel=""
-            editable={false}
-            loading={isLoading}
-            emptyLabel="No accounts have been allowed to mint yet."
-          />
         </Stack>
       </PageSection>
     </>

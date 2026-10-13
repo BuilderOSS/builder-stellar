@@ -23,7 +23,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ dao
           queueDelay: row.queueDelaySeconds === null ? null : Number(row.queueDelaySeconds),
           proposalThreshold: row.proposalThreshold === null ? null : row.proposalThreshold.toFixed(0),
           quorumBps: row.quorumBps,
-          version: row.version,
           updatedLedger: row.updatedLedger === null ? null : Number(row.updatedLedger)
         }
       },

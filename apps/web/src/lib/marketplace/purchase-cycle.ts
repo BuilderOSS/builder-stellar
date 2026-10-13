@@ -1,6 +1,8 @@
 import type { Client } from '@builder-stellar/marketplace-bindings';
 import { Address, nativeToScVal, rpc, scValToNative, xdr } from '@stellar/stellar-sdk';
 
+import { namespacedKey } from '@/lib/storage-key';
+
 import { marketplaceId } from './amount';
 import { STALE_PURCHASE } from './purchase-authorization';
 import { MarketplaceError, matchesSnapshot } from './query';
@@ -13,11 +15,8 @@ export function secondaryListingKey(listing: MarketplaceListing) {
   return xdr.LedgerKey.contractData(
     new xdr.LedgerKeyContractData({
       contract: new Address(listing.contractId).toScAddress(),
-      // Existing Rust DataKey::Listing(u32); no new method or storage field.
-      key: xdr.ScVal.scvVec([
-        xdr.ScVal.scvSymbol('Listing'),
-        nativeToScVal(Number(marketplaceId(listing.id, 'secondary')), { type: 'u32' })
-      ]),
+      // Rust common::ns(DataKey::Listing(u32)); no new method or storage field.
+      key: namespacedKey('Listing', nativeToScVal(Number(marketplaceId(listing.id, 'secondary')), { type: 'u32' })),
       durability: xdr.ContractDataDurability.persistent
     })
   );
@@ -131,6 +130,8 @@ export async function assertSecondaryPurchaseCycle(
       event.data.price === undefined ||
       event.data.expires_at === undefined ||
       event.data.payment_asset === undefined ||
+      event.data.seller === undefined ||
+      event.data.fee_bps === undefined ||
       !matchesSnapshot(listing, {
         price: event.data.price,
         expires_at: event.data.expires_at,

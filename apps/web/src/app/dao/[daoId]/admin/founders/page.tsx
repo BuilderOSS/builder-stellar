@@ -12,6 +12,7 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { adminReadOptions, useAdminArtwork, useAdminTokenState } from '@/lib/admin-surfaces';
 import { BATCH_MINT_LIMIT_TEXT, MAX_BATCH_MINT, MAX_BATCH_RECIPIENTS } from '@/lib/batch-mint-budget';
 import { daoAdminRoute } from '@/lib/dao-routes';
+import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { confirmCreationTransaction, DefinitiveTransactionFailure } from '@/lib/use-dao-deployment';
 import { signWithWallet } from '@/lib/wallet-sign';
@@ -71,6 +72,7 @@ export default function FoundersAdminPage() {
           throw new Error('Setup admin rights changed. Refresh before minting.');
         const client = new TokenClient({
           ...adminReadOptions(config, config.tokenContractId, session.address),
+          ...restoreArchivedState,
           signTransaction: async (xdr, opts) => {
             const checkWallet = () => {
               const wallet = useAuthSessionStore.getState();

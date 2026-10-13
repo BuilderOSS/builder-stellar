@@ -6,7 +6,7 @@ Library-only crate shared by the DAO module contracts and the Manager. It export
 | --- | --- |
 | `admin` | The single admin model: `init`, `admin`, `require_admin`, `handoff`. The admin is the launch admin during setup and the Treasury after `launch`; `handoff` emits `AdminChanged { old_admin, new_admin }`. There is no transfer, two-step handover or renounce. |
 | `lifecycle` | The `Live` instance flag: `is_live`, `require_live` (`NotLive`), `require_setup`, `mark_live` (`AlreadyLive` on a second call). |
-| `upgrade` | `init` records `CurrentHash`, `CurrentVersion` and `StorageVersion`. `apply` checks the current hash and Manager approval, stores the registry version, emits `Upgraded` and swaps the WASM. `sync_version` emits `VersionSynced`. `migrate(code_storage_version)` advances `StorageVersion` (`NothingToMigrate` unless older) and emits `Migrated`. |
+| `upgrade` | `init` records `CurrentHash` and `StorageVersion`. `version(manager)` looks `CurrentHash` up in the Manager registry on every read; nothing is stored or synced. `apply` checks the current hash and Manager approval, emits `Upgraded` with the registry version and swaps the WASM. `migrate(code_storage_version)` advances `StorageVersion` (`NothingToMigrate` unless older) and emits `Migrated`. |
 | `ttl` | Shared TTL policy: `extend_instance` (to 170 days below 60), `extend_persistent` (to the network cap below 30 days), `extend_persistent_for` (explicit values). See [TTL maintenance](../../docs/TTL_ECONOMICS.md). |
 | `clients` | Typed `#[contractclient]` traits for cross-contract calls (no linked exports). |
 | `error` | `CommonError` (7001-7013) and `error::codes`, the error-code block of every crate. |

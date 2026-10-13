@@ -82,15 +82,12 @@ fn setup() -> (
         (
             owner.clone(),
             Address::generate(&e),
-            Address::generate(&e),
-            Address::generate(&e),
-            String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
             Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
+            common::modules::TokenSettings::default(),
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
@@ -105,7 +102,6 @@ fn setup() -> (
             governor_id.clone(),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let treasury = DaoTreasuryContractClient::new(&e, &treasury_id);
@@ -124,7 +120,6 @@ fn setup() -> (
             1_000_u32,
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let governor = DaoGovernorContractClient::new(&e, &governor_id);
@@ -153,7 +148,6 @@ fn full_governance_flow_executes_treasury_call() {
     let (e, token, treasury, governor, target, owner) = setup();
     let proposer = Address::generate(&e);
 
-    assert_eq!(governor.version(), String::from_str(&e, "0.1.0"));
     assert_eq!(governor.wasm_hash(), BytesN::from_array(&e, &[0u8; 32]));
     let token_id = token.mint(&owner, &proposer);
     assert_eq!(token_id, 0);
@@ -315,15 +309,12 @@ fn quorum_uses_total_supply_bps() {
         (
             owner.clone(),
             Address::generate(&e),
-            Address::generate(&e),
-            Address::generate(&e),
-            String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
             Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
+            common::modules::TokenSettings::default(),
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
@@ -335,7 +326,6 @@ fn quorum_uses_total_supply_bps() {
             Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let governor_id = e.register(
@@ -351,7 +341,6 @@ fn quorum_uses_total_supply_bps() {
             3_000_u32,
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let governor = DaoGovernorContractClient::new(&e, &governor_id);
@@ -990,7 +979,6 @@ mod upgrade_via_common {
                 1_000_u32,
                 mgr.address.clone(),
                 from.clone(),
-                String::from_str(&e, "0.1.0"),
             ),
         );
         let client = DaoGovernorContractClient::new(&e, &id);
@@ -1001,7 +989,10 @@ mod upgrade_via_common {
         // Contract code is swapped to an empty module; read the stored keys directly.
         e.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&e), to);
-            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.2.0"));
+            assert_eq!(
+                common::upgrade::version(&e, &mgr.address),
+                String::from_str(&e, "0.2.0")
+            );
         });
     }
 
@@ -1025,7 +1016,6 @@ mod upgrade_via_common {
                 1_000_u32,
                 mgr.address.clone(),
                 from.clone(),
-                String::from_str(&e, "0.1.0"),
             ),
         );
         let client = DaoGovernorContractClient::new(&e, &id);
@@ -1038,7 +1028,7 @@ mod upgrade_via_common {
     }
 
     #[test]
-    fn upgrade_and_sync_version_reject_unauthorized_caller() {
+    fn upgrade_rejects_unauthorized_caller() {
         let e = Env::default();
         e.mock_all_auths();
         let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
@@ -1057,21 +1047,24 @@ mod upgrade_via_common {
                 1_000_u32,
                 mgr.address.clone(),
                 from.clone(),
-                String::from_str(&e, "0.1.0"),
             ),
         );
         let client = DaoGovernorContractClient::new(&e, &id);
         mgr.approve(&from, &to);
         mgr.register(&to, &String::from_str(&e, "0.2.0"));
         mgr.register(&from, &String::from_str(&e, "0.1.1"));
+        // The module's own version() reads its Manager (D6).
+        assert_eq!(client.version(), String::from_str(&e, "0.1.1"));
         // Drop mock_all_auths: no authorization is provided for any address.
         e.set_auths(&[]);
         assert!(client.try_upgrade(&from, &to).is_err());
-        assert!(client.try_sync_version().is_err());
         e.mock_all_auths();
         e.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&e), from);
-            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.1.0"));
+            assert_eq!(
+                common::upgrade::version(&e, &mgr.address),
+                String::from_str(&e, "0.1.1")
+            );
         });
     }
 
@@ -1095,10 +1088,10 @@ mod upgrade_via_common {
                 1_000_u32,
                 mgr.address.clone(),
                 from.clone(),
-                String::from_str(&e, "0.1.0"),
             ),
         );
         let client = DaoGovernorContractClient::new(&e, &id);
+        mgr.register(&from, &String::from_str(&e, "0.1.0"));
         let wrong = BytesN::from_array(&e, &[9u8; 32]);
         mgr.approve(&wrong, &to);
         mgr.register(&to, &String::from_str(&e, "0.2.0"));
@@ -1109,7 +1102,10 @@ mod upgrade_via_common {
         );
         e.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&e), from);
-            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.1.0"));
+            assert_eq!(
+                common::upgrade::version(&e, &mgr.address),
+                String::from_str(&e, "0.1.0")
+            );
         });
     }
 }
@@ -1155,7 +1151,6 @@ fn register_with_treasury(
             quorum_bps,
             manager.clone(),
             BytesN::from_array(e, &[0u8; 32]),
-            String::from_str(e, "0.1.0"),
         ),
     );
     DaoGovernorContractClient::new(e, &id)
@@ -1233,6 +1228,59 @@ fn launch_is_one_shot_and_hands_admin_to_treasury() {
     let r = governor.try_launch(&attacker);
     assert_eq!(
         r.err().unwrap().unwrap(),
+        common::CommonError::AlreadyLive.into()
+    );
+}
+
+/// docs/designs/membership-models.md §2: `manager.open_assurance` hands the
+/// admin over early; only the Manager may, only in Setup, which freezes the
+/// governance settings.
+#[test]
+fn handoff_is_the_managers_freezes_settings_and_stays_in_setup() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let manager = Address::generate(&e);
+    let owner = Address::generate(&e);
+    let treasury = Address::generate(&e);
+    let governor = register_with_treasury(&e, &manager, &owner, &treasury, 1, 1_000, 300);
+    let id = governor.address.clone();
+    e.mock_auths(&[soroban_sdk::testutils::MockAuth {
+        address: &owner,
+        invoke: &soroban_sdk::testutils::MockAuthInvoke {
+            contract: &id,
+            fn_name: "handoff",
+            args: soroban_sdk::IntoVal::into_val(&(treasury.clone(),), &e),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(governor.try_handoff(&treasury).is_err());
+    e.mock_all_auths();
+    assert_eq!(
+        governor
+            .try_handoff(&Address::generate(&e))
+            .err()
+            .unwrap()
+            .unwrap(),
+        CustomGovernorError::TreasuryMismatch.into()
+    );
+    governor.handoff(&treasury);
+    assert_eq!(governor.admin(), treasury);
+    // The launch admin's setter now needs the Treasury.
+    e.mock_auths(&[soroban_sdk::testutils::MockAuth {
+        address: &owner,
+        invoke: &soroban_sdk::testutils::MockAuthInvoke {
+            contract: &id,
+            fn_name: "set_quorum_bps",
+            args: soroban_sdk::IntoVal::into_val(&(2_000u32,), &e),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(governor.try_set_quorum_bps(&2_000).is_err());
+    e.mock_all_auths();
+    governor.launch(&treasury);
+    assert_eq!(governor.admin(), treasury);
+    assert_eq!(
+        governor.try_handoff(&treasury).err().unwrap().unwrap(),
         common::CommonError::AlreadyLive.into()
     );
 }
@@ -1483,7 +1531,6 @@ fn register_timing(
             1_000_u32,
             Address::generate(e),
             BytesN::from_array(e, &[0u8; 32]),
-            String::from_str(e, "0.1.0"),
         ),
     );
     DaoGovernorContractClient::new(e, &id)
@@ -1672,7 +1719,6 @@ fn treasury_held_tokens_never_raise_quorum() {
             governor_id.clone(),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let token_id = e.register(
@@ -1680,15 +1726,12 @@ fn treasury_held_tokens_never_raise_quorum() {
         (
             owner.clone(),
             treasury_id.clone(),
-            Address::generate(&e),
-            Address::generate(&e),
-            String::from_str(&e, "https://example.com/"),
             String::from_str(&e, "DAO Vote NFT"),
             String::from_str(&e, "vDAO"),
             Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
+            common::modules::TokenSettings::default(),
         ),
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
@@ -1706,7 +1749,6 @@ fn treasury_held_tokens_never_raise_quorum() {
             5_000_u32, // 50% quorum
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let governor = DaoGovernorContractClient::new(&e, &governor_id);
@@ -1837,5 +1879,258 @@ mod comments {
         e.ledger().set_timestamp(1_000 + 301);
         let reason: StdString = "a".repeat(common::MAX_PROPOSAL_COMMENT_LENGTH as usize + 1);
         governor.cast_vote(&id, &1, &String::from_str(&e, &reason), &owner);
+    }
+}
+
+/// docs/STORAGE_DIET_REVIEW.md Finding 1: no governor key may encode like a
+/// `common` or OpenZeppelin key the contract links.
+#[test]
+fn storage_keys_do_not_collide() {
+    use common::testutils::{assert_keys_disjoint, common_key_shapes, key_shape};
+    #[allow(unused_imports)]
+    use soroban_sdk::{testutils::Address as _, Address, Env, IntoVal, Val};
+    let e = Env::default();
+    let _a = Address::generate(&e);
+    let id = soroban_sdk::BytesN::from_array(&e, &[0u8; 32]);
+    use stellar_governance::governor::storage::GovernorStorageKey;
+    let all = |keys: std::vec::Vec<Val>| -> std::vec::Vec<(std::string::String, u32)> {
+        keys.into_iter().map(|k| key_shape(&e, k)).collect()
+    };
+    // Every variant, checked exhaustively next to the enum.
+    let module = all(crate::storage::key_samples::all(&e));
+    assert_keys_disjoint(&[
+        ("GovernorKey", module),
+        ("common", common_key_shapes(&e)),
+        (
+            "GovernorStorageKey",
+            all(std::vec![
+                GovernorStorageKey::Name.into_val(&e),
+                GovernorStorageKey::Version.into_val(&e),
+                GovernorStorageKey::VotingDelay.into_val(&e),
+                GovernorStorageKey::VotingPeriod.into_val(&e),
+                GovernorStorageKey::ProposalThreshold.into_val(&e),
+                GovernorStorageKey::Proposal(id.clone()).into_val(&e),
+                GovernorStorageKey::NumQuorumCheckpoints.into_val(&e),
+                GovernorStorageKey::QuorumCheckpoint(0).into_val(&e),
+                GovernorStorageKey::ProposalVote(id.clone()).into_val(&e),
+                GovernorStorageKey::HasVoted(id.clone(), _a.clone()).into_val(&e),
+                GovernorStorageKey::TokenContract.into_val(&e),
+            ]),
+        ),
+    ]);
+}
+
+// ============================================================================
+// Proposal list from chain state (docs/STORAGE_DIET.md D10)
+// ============================================================================
+
+/// Propose `n` distinct proposals from one voter; returns their ids.
+fn propose_n(
+    e: &Env,
+    token: &DaoTokenContractClient,
+    governor: &DaoGovernorContractClient,
+    target: &TargetContractClient,
+    owner: &Address,
+    n: u32,
+) -> std::vec::Vec<BytesN<32>> {
+    let proposer = Address::generate(e);
+    token.mint(owner, &proposer);
+    e.ledger().set_sequence_number(e.ledger().sequence() + 10);
+    (0..n)
+        .map(|i| {
+            let description = String::from_str(e, &std::format!("proposal {i}"));
+            governor.propose(
+                &vec![e, target.address.clone()],
+                &vec![e, symbol_short!("set_value")],
+                &proposal_args(e),
+                &description,
+                &proposer,
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn proposals_are_listed_in_creation_order_from_chain_state() {
+    let (e, token, _treasury, governor, target, owner) = setup();
+    assert_eq!(governor.proposal_count(), 0);
+    assert_eq!(governor.proposal_ids(&0, &10).len(), 0);
+
+    let ids = propose_n(&e, &token, &governor, &target, &owner, 3);
+    assert_eq!(governor.proposal_count(), 3);
+    let listed = governor.proposal_ids(&0, &10);
+    assert_eq!(listed.len(), 3);
+    for (i, id) in ids.iter().enumerate() {
+        assert_eq!(listed.get(i as u32).unwrap(), *id);
+        let info = governor.proposal(id);
+        assert_eq!(info.id, *id);
+        assert_eq!(info.seq, i as u32);
+        assert_eq!(info.state, ProposalState::Pending);
+        assert_eq!(info.eta, 0);
+        assert!(info.vote_end > info.vote_start);
+    }
+    // Pages: an offset, a short tail and a start past the end.
+    assert_eq!(governor.proposal_ids(&1, &1), vec![&e, ids[1].clone()]);
+    assert_eq!(governor.proposal_ids(&2, &10), vec![&e, ids[2].clone()]);
+    assert_eq!(governor.proposal_ids(&5, &10).len(), 0);
+    assert_eq!(governor.proposal_ids(&u32::MAX, &u32::MAX).len(), 0);
+}
+
+#[test]
+fn proposal_ids_pages_are_capped() {
+    let (e, token, _treasury, governor, target, owner) = setup();
+    e.cost_estimate().budget().reset_unlimited();
+    let n = crate::MAX_PROPOSAL_IDS_PAGE + 2;
+    let ids = propose_n(&e, &token, &governor, &target, &owner, n);
+    let page = governor.proposal_ids(&0, &u32::MAX);
+    assert_eq!(page.len(), crate::MAX_PROPOSAL_IDS_PAGE);
+    let rest = governor.proposal_ids(&crate::MAX_PROPOSAL_IDS_PAGE, &u32::MAX);
+    assert_eq!(rest, vec![&e, ids[50].clone(), ids[51].clone()]);
+}
+
+#[test]
+fn proposal_of_an_unknown_id_is_not_found() {
+    let (e, _token, _treasury, governor, _target, _owner) = setup();
+    assert!(governor
+        .try_proposal(&BytesN::from_array(&e, &[7u8; 32]))
+        .is_err());
+}
+
+/// The id entry renews with the proposal core on every lifecycle touch.
+#[test]
+fn proposal_id_entry_renews_with_the_core() {
+    use soroban_sdk::testutils::storage::Persistent as _;
+    let (e, token, _treasury, governor, target, owner) = setup();
+    let id = propose_n(&e, &token, &governor, &target, &owner, 1).remove(0);
+    let ttl_of = |key: crate::storage::GovernorKey| {
+        e.as_contract(&governor.address, || {
+            e.storage().persistent().get_ttl(&common::ns(&e, key))
+        })
+    };
+    let fresh = ttl_of(crate::storage::GovernorKey::ProposalId(0));
+    assert!(fresh >= crate::storage::PROPOSAL_TTL_EXTEND_TO - 1);
+    // Age past the renewal threshold, then touch the proposal.
+    let age = crate::storage::PROPOSAL_TTL_EXTEND_TO - crate::storage::PROPOSAL_TTL_THRESHOLD + 1;
+    e.ledger().with_mut(|l| l.sequence_number += age);
+    governor.proposal_state(&id);
+    assert_eq!(
+        ttl_of(crate::storage::GovernorKey::ProposalId(0)),
+        crate::storage::PROPOSAL_TTL_EXTEND_TO
+    );
+    assert_eq!(
+        ttl_of(crate::storage::GovernorKey::ProposalTime(id.clone())),
+        crate::storage::PROPOSAL_TTL_EXTEND_TO
+    );
+}
+
+/// Review S6 (docs/designs/membership-models.md Next Steps 10): after a
+/// proposal's first and only vote, the OpenZeppelin tally lives as long as
+/// the proposal does, not the network's minimum, so `queue` after a full
+/// 30-day voting period finds it without a restore.
+#[test]
+fn the_vote_tally_lives_as_long_as_the_proposal() {
+    use soroban_sdk::testutils::storage::Persistent as _;
+    let (e, token, _treasury, governor, target, owner) = setup();
+    let proposer = Address::generate(&e);
+    token.mint(&owner, &proposer);
+    e.ledger().set_sequence_number(200);
+    e.ledger().set_timestamp(2_000);
+    let id = governor.propose(
+        &vec![&e, target.address.clone()],
+        &vec![&e, symbol_short!("set_value")],
+        &proposal_args(&e),
+        &String::from_str(&e, "One early vote"),
+        &proposer,
+    );
+    e.ledger().set_timestamp(2_301);
+    governor.cast_vote(&id, &1, &String::from_str(&e, "yes"), &proposer);
+    let tally_ttl = e.as_contract(&governor.address, || {
+        e.storage().persistent().get_ttl(
+            &stellar_governance::governor::storage::GovernorStorageKey::ProposalVote(id.clone()),
+        )
+    });
+    assert!(tally_ttl >= crate::storage::PROPOSAL_TTL_EXTEND_TO - 1);
+    // Longer than the longest voting period plus the longest queue delay.
+    assert!(tally_ttl > 2 * 30 * common::ttl::DAY_IN_LEDGERS);
+}
+
+/// D38: a proposal is stored as `(proposer, 49 packed bytes)`, and every
+/// field survives the round trip through each lifecycle write.
+#[test]
+fn stored_proposals_are_packed_and_round_trip() {
+    use crate::storage::{GovernorKey, StoredProposal, PACKED_PROPOSAL_LEN};
+    let (e, token, _treasury, governor, target, owner) = setup();
+    let ids = propose_n(&e, &token, &governor, &target, &owner, 1);
+    let id = ids[0].clone();
+    let raw = |id: &soroban_sdk::BytesN<32>| -> StoredProposal {
+        e.as_contract(&governor.address, || {
+            e.storage()
+                .persistent()
+                .get(&common::ns(&e, GovernorKey::ProposalTime(id.clone())))
+                .unwrap()
+        })
+    };
+    let stored = raw(&id);
+    assert_eq!(stored.1.len() as usize, PACKED_PROPOSAL_LEN);
+    let info = governor.proposal(&id);
+    assert_eq!(stored.0, info.proposer);
+    assert_eq!(info.state, ProposalState::Pending);
+    // Big-endian fields where the packer put them.
+    let mut buf = [0u8; PACKED_PROPOSAL_LEN];
+    stored.1.copy_into_slice(&mut buf);
+    assert_eq!(
+        u32::from_be_bytes(buf[0..4].try_into().unwrap()),
+        info.vote_snapshot
+    );
+    assert_eq!(
+        u64::from_be_bytes(buf[4..12].try_into().unwrap()),
+        info.vote_start
+    );
+    assert_eq!(
+        u64::from_be_bytes(buf[12..20].try_into().unwrap()),
+        info.vote_end
+    );
+    assert_eq!(buf[28], 0);
+    assert_eq!(u32::from_be_bytes(buf[29..33].try_into().unwrap()), 0);
+    assert_eq!(
+        u128::from_be_bytes(buf[33..49].try_into().unwrap()),
+        info.quorum
+    );
+    assert_eq!(info.eta, 0);
+}
+
+/// D38: every `ProposalState` discriminant survives packing; an OpenZeppelin
+/// reorder would be caught here before it corrupted stored states.
+#[test]
+fn every_proposal_state_code_round_trips() {
+    use crate::storage::{ProposalCoreTime, PACKED_PROPOSAL_LEN};
+    let e = Env::default();
+    let proposer = Address::generate(&e);
+    let states = [
+        (ProposalState::Pending, 0u8),
+        (ProposalState::Active, 1),
+        (ProposalState::Defeated, 2),
+        (ProposalState::Canceled, 3),
+        (ProposalState::Succeeded, 4),
+        (ProposalState::Queued, 5),
+        (ProposalState::Expired, 6),
+        (ProposalState::Executed, 7),
+    ];
+    for (state, code) in states {
+        let core = ProposalCoreTime {
+            proposer: proposer.clone(),
+            vote_snapshot: 1,
+            vote_start: 2,
+            vote_end: 3,
+            eta: 4,
+            state,
+            seq: 5,
+            quorum: 6,
+        };
+        let stored = core.pack(&e);
+        let mut buf = [0u8; PACKED_PROPOSAL_LEN];
+        stored.1.copy_into_slice(&mut buf);
+        assert_eq!(buf[28], code);
+        assert_eq!(ProposalCoreTime::unpack(&e, &stored).state, state);
     }
 }

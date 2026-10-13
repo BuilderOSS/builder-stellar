@@ -15,7 +15,7 @@ vi.mock('@/contexts/dao-context', () => {
   const value = {
     daoId: 'dao-a',
     routeId: 'dao-a',
-    daoConfig: { tokenName: 'Actual DAO', tokenDescription: 'Actual description' }
+    daoConfig: { tokenName: 'Actual DAO', profile: { description: 'Actual description', links: [], image: '' } }
   };
   return { useDaoContext: () => value, useOptionalDaoContext: () => value };
 });

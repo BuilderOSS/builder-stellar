@@ -79,7 +79,17 @@ export function TokenCard({ tokenId, owner }: { tokenId: number; owner: string }
   return (
     <NextLink href={daoRoute(routeId, `token/${tokenId}`)} className={classes.root}>
       <div className={classes.art}>
-        {data && !error ? <Image src={data.image} alt="" width={240} height={240} unoptimized /> : null}
+        {/* This app's own renderer, as every other view uses: the token_uri image points at the
+            renderer base set on chain, which may be another deployment. */}
+        {data && !error ? (
+          <Image
+            src={`/api/render/${encodeURIComponent(daoId)}/${tokenId}`}
+            alt=""
+            width={240}
+            height={240}
+            unoptimized
+          />
+        ) : null}
       </div>
       <div className={classes.body}>
         <p className={classes.name}>{data?.name ?? `#${tokenId}`}</p>

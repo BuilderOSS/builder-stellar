@@ -7,6 +7,7 @@ use soroban_sdk::{
 };
 
 use common::clients::NftClient;
+use common::modules::RenewalPage;
 use soroban_sdk::token::TokenClient;
 
 use crate::{
@@ -30,7 +31,6 @@ impl MarketplaceContract {
         payment_asset: Address,
         manager: Address,
         current_hash: BytesN<32>,
-        version: String,
         default_secondary_fee_bps: u32,
     ) {
         if default_secondary_fee_bps > MAX_FEE_BPS {
@@ -48,14 +48,13 @@ impl MarketplaceContract {
             },
         );
         common::admin::init(e, &admin);
-        common::upgrade::init(e, &current_hash, &version, STORAGE_VERSION);
+        common::upgrade::init(e, &current_hash, STORAGE_VERSION);
         emit_marketplace_initialized(
             e,
             &token,
             &admin,
             &treasury,
             &payment_asset,
-            &version,
             default_secondary_fee_bps,
         );
     }
@@ -68,24 +67,22 @@ impl MarketplaceContract {
         storage::get_listing(e, token_id)
     }
 
-    /// One-shot, Manager-only launch handoff (Setup -> Live).
+    /// One-shot, Manager-only launch (Setup -> Live), `DaoModule::launch`.
     ///
     /// `treasury` must equal the treasury wired at construction (wiring is
-    /// immutable). Hands the admin to the treasury. The marketplace is left
-    /// unpaused when `open` is true and forced paused otherwise. Panics
-    /// `PaymentAssetMismatch` if the payment asset differs from
-    /// `expected_payment_asset`. A second call panics with `AlreadyLive`.
-    pub fn launch(e: &Env, treasury: Address, open: bool, expected_payment_asset: Address) {
+    /// immutable). Hands the admin to the treasury unless `handoff` already
+    /// did. The marketplace is left unpaused when `open` is true and forced
+    /// paused otherwise. The Manager checks the payment asset against the one
+    /// recorded at `create_dao` before calling. A second call panics with
+    /// `AlreadyLive`.
+    pub fn launch(e: &Env, treasury: Address, open: bool) {
         let mut config = Self::get_config(e);
         config.manager.require_auth();
         common::lifecycle::mark_live(e);
         if treasury != config.treasury {
             panic_with_error!(e, MarketplaceError::TreasuryMismatch);
         }
-        if expected_payment_asset != config.payment_asset {
-            panic_with_error!(e, MarketplaceError::PaymentAssetMismatch);
-        }
-        common::admin::handoff(e, &treasury);
+        common::admin::handoff_once(e, &treasury);
         // `open == false` forces paused even if the launch admin unpaused in setup.
         let was_paused = config.paused;
         config.paused = !open;
@@ -105,105 +102,409 @@ impl MarketplaceContract {
         emit_launched(e, &treasury, open);
     }
 
-    pub fn get_primary_listing(e: &Env, listing_id: u64) -> Option<PrimaryListing> {
-        storage::get_primary_listing(e, listing_id)
-    }
-
-    /// Id the next primary listing will receive.
-    pub fn next_listing_id(e: &Env) -> u64 {
-        storage::peek_next_listing_id(e)
-    }
-
-    /// Create a primary sale listing (treasury-gated, Live, not paused).
-    ///
-    /// Nothing is minted or escrowed: the token is minted straight to the
-    /// buyer inside `buy_primary`. Returns the new listing id.
-    pub fn create_primary_listing(e: &Env, price: i128, expires_at: u64) -> u64 {
+    /// Manager-only early handoff: the admin moves to `treasury` and the
+    /// module stays in Setup, so its setters and upgrades are frozen until
+    /// launch. Panics `AlreadyLive` once launched.
+    pub fn handoff(e: &Env, treasury: Address) {
+        let config = Self::get_config(e);
+        config.manager.require_auth();
+        common::lifecycle::require_setup(e);
+        if treasury != config.treasury {
+            panic_with_error!(e, MarketplaceError::TreasuryMismatch);
+        }
+        common::admin::handoff_once(e, &treasury);
         common::ttl::extend_instance(e);
-        // Nothing holds mint authority before launch.
+    }
+
+    /// The configured payment asset (`DaoModule::payment_asset`).
+    pub fn payment_asset(e: &Env) -> Address {
+        Self::get_config(e).payment_asset
+    }
+
+    /// DAO-owned keys for the renewal sweep (`DaoModule::renewal_keys`).
+    ///
+    /// The key space is `Listing(0..minted)`, then for each open pool its
+    /// `Pool(id)` and `PoolStock(id, 0..pages)` (a 100-token pool is 3 pages,
+    /// eng review R8). The bounds come from instance storage only, so the
+    /// page answers even when the entries have archived. Most listing slots
+    /// hold nothing; the sweep renews only what it finds. `PoolBuyer` counts
+    /// are the buyers' (holder class). The balances held are the escrowed and
+    /// stocked tokens and the payment assets (a listing created before
+    /// `set_payment_asset` may be priced in an older one; the sweep reads
+    /// those from the listings it finds).
+    pub fn renewal_keys(e: &Env, cursor: u32, limit: u32) -> RenewalPage {
+        let config = Self::get_config(e);
+        let minted = NftClient::new(e, &config.token).minted();
+        let slots = storage::open_pools(e);
+        // Pool `p`'s keys: `Pool(p)` then `PoolStock(p, 0..pages)`.
+        let mut spans: Vec<(u32, u32)> = Vec::new(e);
+        for slot in slots.iter() {
+            spans.push_back((slot.pool_id, 1 + slot.pages));
+        }
+        let pool_keys: u32 = spans.iter().map(|(_, span)| span).sum();
+        let total = minted.saturating_add(pool_keys);
+        let (end, next_cursor) = common::modules::renewal_window(cursor, limit, total);
+        let mut keys: Vec<(Val, bool)> = Vec::new(e);
+        for at in cursor..end {
+            let key: Val = if at < minted {
+                common::ns(e, DataKey::Listing(at)).into_val(e)
+            } else {
+                let mut offset = at - minted;
+                let mut key = None;
+                for (pool_id, span) in spans.iter() {
+                    if offset < span {
+                        key = Some(if offset == 0 {
+                            common::ns(e, DataKey::Pool(pool_id)).into_val(e)
+                        } else {
+                            common::ns(e, DataKey::PoolStock(pool_id, offset - 1)).into_val(e)
+                        });
+                        break;
+                    }
+                    offset -= span;
+                }
+                key.unwrap()
+            };
+            keys.push_back((key, true));
+        }
+        // Pool payments go straight to the Treasury, so the only balances
+        // held here are the token (escrow and stock) and the listing asset.
+        RenewalPage {
+            keys,
+            assets: vec![e, config.token, config.payment_asset],
+            next_cursor,
+        }
+    }
+
+    // ========================================================================
+    // Quick-buy pools (docs/designs/membership-models.md §4)
+    // ========================================================================
+    //
+    //   proposal: token.increase_mint_allowance(marketplace, n) + open_pool(.., n, ..)
+    //       │        (reserves n of the allowance for this pool alone)
+    //       ▼
+    //   restock() ×k ──► batch_mint into custody ──► PoolStock(pool, page ≤ 64 ids)
+    //       │
+    //   buy_from_pool(pool, page, id) ──► caps, rate, closed checks ──► pay Treasury, send id
+    //       │
+    //   close_pool() ──► release_mint_allowance(unstocked) ; sweep_pool() ×k ──► unsold to Treasury
+
+    /// Open a pool of `size` tokens (the Treasury, by proposal, once Live).
+    ///
+    /// The pool reserves `size` of the Marketplace's mint allowance for
+    /// itself: the allowance not reserved by other open pools must cover it
+    /// (`AllowanceNotReserved`), so closing one pool never starves another.
+    /// Returns the pool id.
+    #[allow(clippy::too_many_arguments)]
+    pub fn open_pool(
+        e: &Env,
+        price: i128,
+        asset: Address,
+        expires_at: u64,
+        size: u32,
+        max_per_buyer: u32,
+        max_sold_per_period: u32,
+        period_secs: u64,
+    ) -> u32 {
+        common::ttl::extend_instance(e);
         common::lifecycle::require_live(e);
         let (config, _) = Self::require_admin(e);
-        Self::check_open_listing(e, price, expires_at);
+        if config.paused {
+            panic_with_error!(e, MarketplaceError::Paused);
+        }
+        let now = e.ledger().timestamp();
+        if price <= 0 {
+            panic_with_error!(e, MarketplaceError::InvalidPrice);
+        }
+        if expires_at <= now {
+            panic_with_error!(e, MarketplaceError::InvalidExpiry);
+        }
+        if size == 0 || max_per_buyer == 0 || max_sold_per_period == 0 || period_secs == 0 {
+            panic_with_error!(e, MarketplaceError::InvalidPool);
+        }
+        let mut slots = storage::open_pools(e);
+        if slots.len() >= MAX_OPEN_POOLS {
+            panic_with_error!(e, MarketplaceError::TooManyPools);
+        }
+        let reserved: u64 = slots.iter().map(|slot| u64::from(slot.unstocked)).sum();
+        let allowance = u64::from(
+            NftClient::new(e, &config.token).mint_allowance(&e.current_contract_address()),
+        );
+        if allowance.saturating_sub(reserved) < u64::from(size) {
+            panic_with_error!(e, MarketplaceError::AllowanceNotReserved);
+        }
 
-        let listing = PrimaryListing {
+        let pool_id = storage::take_pool_id(e);
+        let pool = Pool {
             price,
+            asset: asset.clone(),
             expires_at,
-            payment_asset: config.payment_asset,
+            size,
+            stocked: 0,
+            sold: 0,
+            max_per_buyer,
+            max_sold_per_period,
+            period_secs,
+            period_start: now,
+            sold_in_period: 0,
+            closed: false,
         };
-        let listing_id = storage::take_next_listing_id(e);
-        storage::set_primary_listing(e, listing_id, &listing);
-        PrimaryListingCreated {
-            listing_id,
+        storage::set_pool(e, pool_id, &pool);
+        slots.push_back(PoolSlot {
+            pool_id,
+            unstocked: size,
+            pages: 0,
+        });
+        storage::set_open_pools(e, &slots);
+        PoolOpened {
+            pool_id,
             price,
+            asset,
             expires_at,
-            payment_asset: listing.payment_asset,
+            size,
+            max_per_buyer,
+            max_sold_per_period,
+            period_secs,
         }
         .publish(e);
-        listing_id
+        pool_id
     }
 
-    /// Buy a primary listing: pays the treasury, mints one token to `buyer`.
-    /// Rejects (`PriceAboveMax`) if the listing price exceeds `max_price`.
-    pub fn buy_primary(e: &Env, listing_id: u64, buyer: Address, max_price: i128) -> u32 {
+    /// Mint the pool's next chunk (at most `common::MAX_RESTOCK`) into this
+    /// contract's custody and append the ids to its stock pages. Anyone may
+    /// call it until the pool closes or expires. Returns how many it minted.
+    pub fn restock(e: &Env, pool_id: u32) -> u32 {
         common::ttl::extend_instance(e);
+        common::lifecycle::require_live(e);
+        let config = Self::get_config(e);
+        let mut pool = Self::load_pool(e, pool_id);
+        if pool.closed || e.ledger().timestamp() >= pool.expires_at {
+            panic_with_error!(e, MarketplaceError::PoolClosed);
+        }
+        let (mut slots, index) = Self::slot(e, pool_id);
+        let mut slot = slots.get(index).unwrap();
+        if slot.unstocked == 0 {
+            panic_with_error!(e, MarketplaceError::PoolFullyStocked);
+        }
+        let count = slot.unstocked.min(common::MAX_RESTOCK);
+        let this = e.current_contract_address();
+        // The Token spends this contract's allowance; it is a non-voting
+        // holder, so no votes move.
+        let ids = NftClient::new(e, &config.token).batch_mint(
+            &this,
+            &vec![e, this.clone()],
+            &vec![e, u128::from(count)],
+        );
+        let mut page_ids = if slot.pages == 0 {
+            Vec::new(e)
+        } else {
+            storage::get_stock(e, pool_id, slot.pages - 1).unwrap_or(Vec::new(e))
+        };
+        if slot.pages == 0 || page_ids.len() >= POOL_PAGE_SIZE {
+            slot.pages += 1;
+            page_ids = Vec::new(e);
+        }
+        for id in ids.iter() {
+            if page_ids.len() >= POOL_PAGE_SIZE {
+                storage::set_stock(e, pool_id, slot.pages - 1, &page_ids);
+                slot.pages += 1;
+                page_ids = Vec::new(e);
+            }
+            page_ids.push_back(id);
+        }
+        storage::set_stock(e, pool_id, slot.pages - 1, &page_ids);
+        slot.unstocked -= count;
+        pool.stocked += count;
+        slots.set(index, slot);
+        storage::set_open_pools(e, &slots);
+        storage::set_pool(e, pool_id, &pool);
+        PoolRestocked {
+            pool_id,
+            first_token_id: ids.first().unwrap_or(0),
+            count,
+            stocked: pool.stocked,
+        }
+        .publish(e);
+        count
+    }
+
+    /// Buy `token_id` from page `page` of a pool: pays the pool price to the
+    /// Treasury and sends the token to `buyer`. Refuses once the pool is
+    /// closed or expired (`PoolClosed`), past the buyer's cap
+    /// (`BuyerLimitReached`) or the period's sales (`PoolRateLimited`), or
+    /// above `max_price` (`PriceAboveMax`).
+    pub fn buy_from_pool(
+        e: &Env,
+        pool_id: u32,
+        page: u32,
+        token_id: u32,
+        buyer: Address,
+        max_price: i128,
+    ) {
+        common::ttl::extend_instance(e);
+        common::lifecycle::require_live(e);
         let config = Self::get_config(e);
         if config.paused {
             panic_with_error!(e, MarketplaceError::Paused);
         }
         buyer.require_auth();
-        let listing = Self::load_primary(e, listing_id);
-        if e.ledger().timestamp() >= listing.expires_at {
-            panic_with_error!(e, MarketplaceError::ListingExpired);
+        let mut pool = Self::load_pool(e, pool_id);
+        let now = e.ledger().timestamp();
+        if pool.closed || now >= pool.expires_at {
+            panic_with_error!(e, MarketplaceError::PoolClosed);
         }
-        if listing.price > max_price {
+        if pool.price > max_price {
             panic_with_error!(e, MarketplaceError::PriceAboveMax);
         }
-        // Remove before any external call (single-use listing, no reentrancy window).
-        storage::remove_primary_listing(e, listing_id);
+        let bought = storage::get_bought(e, pool_id, &buyer);
+        if bought >= pool.max_per_buyer {
+            panic_with_error!(e, MarketplaceError::BuyerLimitReached);
+        }
+        if now >= pool.period_start.saturating_add(pool.period_secs) {
+            pool.period_start = now;
+            pool.sold_in_period = 0;
+        }
+        if pool.sold_in_period >= pool.max_sold_per_period {
+            panic_with_error!(e, MarketplaceError::PoolRateLimited);
+        }
+        let mut ids = storage::get_stock(e, pool_id, page)
+            .unwrap_or_else(|| panic_with_error!(e, MarketplaceError::NotInPool));
+        let at = ids
+            .first_index_of(token_id)
+            .unwrap_or_else(|| panic_with_error!(e, MarketplaceError::NotInPool));
+        ids.remove(at);
+        storage::set_stock(e, pool_id, page, &ids);
+        pool.sold += 1;
+        pool.sold_in_period += 1;
+        storage::set_pool(e, pool_id, &pool);
+        storage::set_bought(e, pool_id, &buyer, bought + 1);
 
-        Self::payment_transfer(
+        Self::payment_transfer(e, &pool.asset, &buyer, &config.treasury, pool.price);
+        Self::token_transfer(
             e,
-            &listing.payment_asset,
+            &config.token,
+            &e.current_contract_address(),
             &buyer,
-            &config.treasury,
-            listing.price,
+            token_id,
         );
-
-        let this = e.current_contract_address();
-        let mint_args = vec![e, this.into_val(e), buyer.clone().into_val(e)];
-        Self::authorize(e, &config.token, "mint", mint_args, Vec::new(e));
-        let token_id = NftClient::new(e, &config.token).mint(&this, &buyer);
-
-        PrimaryListingPurchased {
-            listing_id,
+        PoolPurchased {
+            pool_id,
             buyer,
             token_id,
-            price: listing.price,
-            payment_asset: listing.payment_asset,
+            price: pool.price,
+            asset: pool.asset,
         }
         .publish(e);
-        token_id
     }
 
-    /// Treasury cancels an unsold primary listing (nothing is escrowed).
-    pub fn cancel_primary(e: &Env, listing_id: u64) {
+    /// Close a pool: the Treasury (by proposal) at any time, anyone once it
+    /// has expired. Gives the unstocked rest of the pool's reservation back
+    /// to the Token (`release_mint_allowance`, which saturates if the
+    /// Treasury lowered the allowance meanwhile). Unsold stock stays here
+    /// until `sweep_pool`.
+    pub fn close_pool(e: &Env, pool_id: u32) {
         common::ttl::extend_instance(e);
-        common::lifecycle::require_live(e);
-        Self::require_admin(e);
-        Self::load_primary(e, listing_id);
-        storage::remove_primary_listing(e, listing_id);
-        PrimaryListingCancelled { listing_id }.publish(e);
-    }
-
-    /// Anyone may clear an expired primary listing.
-    pub fn expire_primary(e: &Env, listing_id: u64) {
-        common::ttl::extend_instance(e);
-        let listing = Self::load_primary(e, listing_id);
-        if e.ledger().timestamp() < listing.expires_at {
-            panic_with_error!(e, MarketplaceError::ListingActive);
+        let config = Self::get_config(e);
+        let mut pool = Self::load_pool(e, pool_id);
+        if pool.closed {
+            panic_with_error!(e, MarketplaceError::PoolClosed);
         }
-        storage::remove_primary_listing(e, listing_id);
-        PrimaryListingExpired { listing_id }.publish(e);
+        if e.ledger().timestamp() < pool.expires_at {
+            common::admin::require_admin(e);
+        }
+        pool.closed = true;
+        storage::set_pool(e, pool_id, &pool);
+        let (mut slots, index) = Self::slot(e, pool_id);
+        let mut slot = slots.get(index).unwrap();
+        let released = slot.unstocked;
+        slot.unstocked = 0;
+        if slot.pages == 0 {
+            slots.remove(index);
+        } else {
+            slots.set(index, slot);
+        }
+        storage::set_open_pools(e, &slots);
+        if released > 0 {
+            NftClient::new(e, &config.token)
+                .release_mint_allowance(&e.current_contract_address(), &released);
+        }
+        PoolClosed { pool_id, released }.publish(e);
+    }
+
+    /// Return up to `MAX_SWEEP` unsold tokens of a closed pool to the
+    /// Treasury, emptying its stock pages from the last. Anyone may call it
+    /// until it returns 0 (pages left). Both holders are non-voting, so no
+    /// votes move.
+    pub fn sweep_pool(e: &Env, pool_id: u32) -> u32 {
+        common::ttl::extend_instance(e);
+        let config = Self::get_config(e);
+        let pool = Self::load_pool(e, pool_id);
+        if !pool.closed {
+            panic_with_error!(e, MarketplaceError::PoolOpen);
+        }
+        let mut slots = storage::open_pools(e);
+        let Some(index) = slots.iter().position(|slot| slot.pool_id == pool_id) else {
+            return 0;
+        };
+        let index = index as u32;
+        let mut slot = slots.get(index).unwrap();
+        let this = e.current_contract_address();
+        let mut moved = 0u32;
+        while moved < MAX_SWEEP && slot.pages > 0 {
+            let page = slot.pages - 1;
+            let mut ids = storage::get_stock(e, pool_id, page).unwrap_or(Vec::new(e));
+            while moved < MAX_SWEEP {
+                let Some(token_id) = ids.pop_back() else {
+                    break;
+                };
+                Self::token_transfer(e, &config.token, &this, &config.treasury, token_id);
+                moved += 1;
+            }
+            if ids.is_empty() {
+                storage::remove_stock(e, pool_id, page);
+                slot.pages -= 1;
+            } else {
+                storage::set_stock(e, pool_id, page, &ids);
+            }
+        }
+        let pages_left = slot.pages;
+        if pages_left == 0 {
+            slots.remove(index);
+        } else {
+            slots.set(index, slot);
+        }
+        storage::set_open_pools(e, &slots);
+        PoolSwept {
+            pool_id,
+            count: moved,
+            pages_left,
+        }
+        .publish(e);
+        pages_left
+    }
+
+    pub fn get_pool(e: &Env, pool_id: u32) -> Option<Pool> {
+        storage::get_pool(e, pool_id)
+    }
+
+    /// The token ids on one stock page (empty once sold or swept).
+    pub fn pool_stock(e: &Env, pool_id: u32, page: u32) -> Vec<u32> {
+        storage::get_stock(e, pool_id, page).unwrap_or(Vec::new(e))
+    }
+
+    /// How many tokens `buyer` bought from a pool.
+    pub fn pool_purchases(e: &Env, pool_id: u32, buyer: Address) -> u32 {
+        storage::get_bought(e, pool_id, &buyer)
+    }
+
+    /// Pools opened and not yet swept empty, with their unstocked
+    /// reservations and page counts.
+    pub fn open_pools(e: &Env) -> Vec<PoolSlot> {
+        storage::open_pools(e)
+    }
+
+    /// Id the next pool will receive.
+    pub fn next_pool_id(e: &Env) -> u32 {
+        storage::next_pool_id(e)
     }
 
     /// List `token_id` (escrowed here until bought, cancelled or expired).
@@ -372,23 +673,6 @@ impl MarketplaceContract {
         .publish(e);
     }
 
-    /// Comment on a primary listing that was ever created (it may since be
-    /// sold, cancelled or expired). Anyone may comment, even while paused.
-    /// Event-only: emits `PrimaryListingCommented` and writes no storage.
-    pub fn comment_primary_listing(e: &Env, listing_id: u64, body: String, author: Address) {
-        author.require_auth();
-        if listing_id >= storage::peek_next_listing_id(e) {
-            panic_with_error!(e, MarketplaceError::ListingNotFound);
-        }
-        Self::check_comment(e, &body);
-        PrimaryListingCommented {
-            listing_id,
-            author,
-            body,
-        }
-        .publish(e);
-    }
-
     /// Comment on `token_id`'s secondary listings. No active listing is
     /// required, so the thread survives relisting. Anyone may comment, even
     /// while paused. Event-only: emits `ListingCommented`, writes no storage.
@@ -471,16 +755,11 @@ impl MarketplaceContract {
     }
 
     pub fn version(e: &Env) -> String {
-        common::upgrade::version(e)
+        common::upgrade::version(e, &Self::get_config(e).manager)
     }
 
     pub fn wasm_hash(e: &Env) -> BytesN<32> {
         common::upgrade::current_hash(e)
-    }
-
-    pub fn sync_version(e: &Env) {
-        let (config, _) = Self::require_admin(e);
-        common::upgrade::sync_version(e, &config.manager);
     }
 
     /// Require the admin's auth (launch admin in setup, Treasury once live);
@@ -516,9 +795,20 @@ impl MarketplaceContract {
             .unwrap_or_else(|| panic_with_error!(e, MarketplaceError::ListingNotFound))
     }
 
-    fn load_primary(e: &Env, listing_id: u64) -> PrimaryListing {
-        storage::get_primary_listing(e, listing_id)
-            .unwrap_or_else(|| panic_with_error!(e, MarketplaceError::ListingNotFound))
+    fn load_pool(e: &Env, pool_id: u32) -> Pool {
+        storage::get_pool(e, pool_id)
+            .unwrap_or_else(|| panic_with_error!(e, MarketplaceError::PoolNotFound))
+    }
+
+    /// The open-pool slots and the index of `pool_id`'s (`PoolClosed` once
+    /// it was swept empty).
+    fn slot(e: &Env, pool_id: u32) -> (Vec<PoolSlot>, u32) {
+        let slots = storage::open_pools(e);
+        let index = slots
+            .iter()
+            .position(|slot| slot.pool_id == pool_id)
+            .unwrap_or_else(|| panic_with_error!(e, MarketplaceError::PoolClosed));
+        (slots, index as u32)
     }
 
     fn authorize(

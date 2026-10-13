@@ -46,6 +46,13 @@ const contracts = [
     wasmPath: `${buildDir}/marketplace.wasm`,
     outputDir: 'packages/marketplace-bindings',
     packageJsonName: '@builder-stellar/marketplace-bindings'
+  },
+  {
+    // The per-DAO ClaimMinter module (crate `minter`, registry kind `claims`).
+    packageName: 'claim_minter',
+    wasmPath: `${buildDir}/minter.wasm`,
+    outputDir: 'packages/claim-minter-bindings',
+    packageJsonName: '@builder-stellar/claim-minter-bindings'
   }
 ];
 

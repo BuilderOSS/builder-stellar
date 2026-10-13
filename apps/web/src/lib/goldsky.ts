@@ -9,9 +9,11 @@
  * - dao_id: Token contract address (primary multi-tenant key)
  */
 
-import type { AppProposalDetail, AppProposalList, TokenMember } from '@prisma/client';
+import type { AppProposalDetail, AppProposalList } from '@prisma/client';
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
+import { parseList } from '@/lib/api-pagination';
+import { getDeploymentNetwork, verifyRows } from '@/lib/dao-db';
 import { prisma } from '@/lib/prisma';
 
 /**
@@ -33,6 +35,14 @@ function getDeploymentId(): string {
 const PUBLIC_VISIBILITY = ['public', 'governance'];
 /** The indexer curates visibility: public feeds read only the public/governance rows. */
 const PUBLIC_FEED_FILTER = { visibility: { in: PUBLIC_VISIBILITY } };
+/** Chain order, newest first: ledger, then position inside the ledger (filled by the DB trigger), then the id. */
+const FEED_ORDER = [
+  { ledgerSequence: 'desc' as const },
+  { transactionIndex: 'desc' as const },
+  { operationIndex: 'desc' as const },
+  { eventIndex: 'desc' as const },
+  { activityId: 'desc' as const }
+];
 
 type FeedRowForAsset = { daoId: string | null; contractRole: string; tokenId: string | null; args: string };
 
@@ -100,18 +110,7 @@ function mapProposalDetail(row: AppProposalDetail) {
       against: row.againstVotes.toString(),
       abstain: row.abstainVotes.toString()
     },
-    votes: Array.isArray(row.votes) ? row.votes : [],
     actions
-  };
-}
-
-function mapMember(row: TokenMember) {
-  return {
-    address: row.address,
-    owned_token_count: Number(row.ownedTokenCount),
-    delegated_to: row.delegatedTo,
-    voting_power: Number(row.votingPower),
-    last_activity_ledger: row.lastActivityLedger === null ? null : Number(row.lastActivityLedger)
   };
 }
 
@@ -150,7 +149,6 @@ export async function getGoldskyAuctionHistory(daoId: string, limit = 24, offset
     start_seconds: Number(row.startSeconds),
     end_seconds: Number(row.endSeconds),
     duration_seconds: row.durationSeconds === null ? null : Number(row.durationSeconds),
-    time_buffer_seconds: row.timeBufferSeconds === null ? null : Number(row.timeBufferSeconds),
     reserve_price: row.reservePrice.toString(),
     payment_token: row.paymentToken,
     settled: row.settled,
@@ -173,7 +171,6 @@ export async function getGoldskyAuctionBids(daoId: string, tokenId: string, limi
     event_id: row.eventId,
     bidder: row.bidder,
     amount: row.amount.toString(),
-    payment_type: null,
     ledger_sequence: Number(row.eventLedger),
     timestamp: row.eventAt,
     transaction_hash: row.transactionHash,
@@ -209,21 +206,12 @@ export async function getGoldskyActivityFeed(
     ...(contractRole ? { contractRole } : {}),
     ...(actor ? { actor } : {}),
     ...(visibility === 'all' ? {} : PUBLIC_FEED_FILTER),
-    ...(kind
-      ? {
-          kind: {
-            in: kind
-              .split(',')
-              .map((value) => value.trim())
-              .filter(Boolean)
-          }
-        }
-      : {})
+    ...(kind ? { kind: { in: parseList(kind) } } : {})
   };
   const [rows, total] = await Promise.all([
     prisma.appActivityFeed.findMany({
       where,
-      orderBy: [{ ledgerSequence: 'desc' }, { activityId: 'desc' }],
+      orderBy: FEED_ORDER,
       take: limit,
       skip: offset
     }),
@@ -367,7 +355,12 @@ export async function getGoldskyProposalVotes(
   const [rows, total, tallyRows] = await Promise.all([
     prisma.governanceProposalVote.findMany({
       where,
-      orderBy: { eventLedger: 'desc' },
+      orderBy: [
+        { eventLedger: 'desc' },
+        { transactionIndex: 'desc' },
+        { operationIndex: 'desc' },
+        { eventIndex: 'desc' }
+      ],
       take: limit,
       skip: offset
     }),
@@ -414,7 +407,7 @@ export async function getGoldskyProposalVotes(
 /** A proposal's id from its id or its number in this DAO. */
 async function resolveProposalId(deploymentId: string, daoId: string, proposalId: string) {
   const numericProposalNumber = Number(proposalId);
-  const proposal = await prisma.appProposalDetail.findFirst({
+  const proposal = await prisma.appProposalList.findFirst({
     where: {
       deploymentId,
       daoId,
@@ -476,167 +469,6 @@ export async function getGoldskyProposalComments(
   };
 }
 
-/**
- * Token Inventory
- *
- * Returns all token holders and their delegations
- */
-export async function getGoldskyTokenInventory(
-  daoId: string,
-  params: {
-    limit?: number;
-    offset?: number;
-  } = {}
-) {
-  const { limit = 100, offset = 0 } = params;
-  const deploymentId = getDeploymentId();
-  const daoIdFromUrl = await getDaoIdFromUrl(daoId);
-  const where = { deploymentId, daoId: daoIdFromUrl };
-  const [rows, total, supply] = await Promise.all([
-    prisma.tokenInventory.findMany({ where, orderBy: { tokenId: 'desc' }, take: limit, skip: offset }),
-    prisma.tokenInventory.count({ where }),
-    prisma.tokenSupply.findFirst({ where })
-  ]);
-
-  return {
-    items: rows.map((row) => ({
-      tokenId: Number(row.tokenId),
-      owner: row.owner,
-      ledger: Number(row.eventLedger),
-      timestamp: row.eventAt ? Math.floor(row.eventAt.getTime() / 1000) : 0,
-      txHash: row.transactionHash,
-      contractId: row.contractId
-    })),
-    total,
-    totalSupply: String(total),
-    // Tokens held by the Treasury, Auction and Marketplace carry no votes.
-    votingSupply: supply ? supply.votingSupply.toString() : null,
-    limit,
-    offset,
-    hasMore: offset + rows.length < total,
-    generatedAt: new Date().toISOString()
-  };
-}
-
-export async function getGoldskyMemberList(daoId: string, params: { limit?: number; offset?: number } = {}) {
-  const { limit = 100, offset = 0 } = params;
-  const deploymentId = getDeploymentId();
-  const daoIdFromUrl = await getDaoIdFromUrl(daoId);
-  const where = { deploymentId, daoId: daoIdFromUrl };
-  const [rows, total] = await Promise.all([
-    prisma.tokenMember.findMany({
-      where,
-      orderBy: [{ votingPower: 'desc' }, { address: 'asc' }],
-      take: limit,
-      skip: offset
-    }),
-    prisma.tokenMember.count({ where })
-  ]);
-
-  return {
-    items: rows.map(mapMember),
-    total,
-    limit,
-    offset,
-    hasMore: offset + rows.length < total,
-    generatedAt: new Date().toISOString()
-  };
-}
-
-export async function getGoldskyMember(daoId: string, address: string) {
-  const deploymentId = getDeploymentId();
-  const daoIdFromUrl = await getDaoIdFromUrl(daoId);
-  const row = await prisma.tokenMember.findFirst({ where: { deploymentId, daoId: daoIdFromUrl, address } });
-  return row ? mapMember(row) : null;
-}
-
-/**
- * Mint Authorities
- *
- * Returns all addresses with mint authority
- */
-export async function getGoldskyMintAuthorities(daoId: string) {
-  const deploymentId = getDeploymentId();
-  const daoIdFromUrl = await getDaoIdFromUrl(daoId);
-  const rows = await prisma.tokenMintAuthority.findMany({
-    where: { deploymentId, daoId: daoIdFromUrl, enabled: true },
-    orderBy: { authority: 'asc' }
-  });
-
-  return {
-    items: rows.map((row) => ({
-      authority: row.authority,
-      enabled: row.enabled,
-      last_updated_ledger: Number(row.eventLedger)
-    })),
-    total: rows.length,
-    generatedAt: new Date().toISOString()
-  };
-}
-
-/**
- * Proposal Lifecycle
- *
- * Returns the complete event history for a proposal
- */
-export async function getGoldskyProposalLifecycle(daoId: string, proposalId: string) {
-  const deploymentId = getDeploymentId();
-  const daoIdFromUrl = await getDaoIdFromUrl(daoId);
-  const rows = await prisma.governanceProposalLifecycle.findMany({
-    where: { deploymentId, daoId: daoIdFromUrl, proposalId },
-    orderBy: [
-      { eventLedger: 'asc' },
-      { transactionIndex: 'asc' },
-      { operationIndex: 'asc' },
-      { eventIndex: 'asc' },
-      { lifecycleEventId: 'asc' }
-    ]
-  });
-
-  return {
-    items: rows.map((row) => ({
-      event_type: row.state,
-      actor: null,
-      timestamp: row.eventAt,
-      transaction_hash: row.transactionHash,
-      ledger_sequence: Number(row.eventLedger)
-    })),
-    total: rows.length,
-    generatedAt: new Date().toISOString()
-  };
-}
-
-/**
- * Get All DAOs
- *
- * Returns all DAOs managed by this deployment (manager contract)
- * Used for the DAO directory/landing page
- */
-export async function getGoldskyDaoList() {
-  const deploymentId = getDeploymentId();
-  const rows = await prisma.managerDao.findMany({
-    where: { deploymentId },
-    orderBy: { createdLedger: 'desc' }
-  });
-
-  return {
-    items: rows.map((row) => ({
-      dao_id: row.daoId,
-      token_address: row.tokenAddress,
-      creator: row.deployer,
-      manager_contract: row.managerContract,
-      governor_contract: row.governorContract,
-      auction_contract: row.auctionContract,
-      treasury_contract: row.treasuryContract,
-      metadata_contract: row.metadataContract,
-      created_timestamp: row.createdAt,
-      created_ledger: Number(row.createdLedger)
-    })),
-    total: rows.length,
-    generatedAt: new Date().toISOString()
-  };
-}
-
 export async function getDashboardData(address: string, params: { limit?: number; offset?: number } = {}) {
   const { limit = 20, offset = 0 } = params;
   const deploymentId = getDeploymentId();
@@ -675,7 +507,7 @@ export async function getDashboardData(address: string, params: { limit?: number
   const [feedRows, total] = await Promise.all([
     prisma.appActivityFeed.findMany({
       where: { deploymentId, daoId: { in: daoIds }, ...PUBLIC_FEED_FILTER },
-      orderBy: [{ ledgerSequence: 'desc' }, { activityId: 'desc' }],
+      orderBy: FEED_ORDER,
       take: limit,
       skip: offset
     }),
@@ -685,15 +517,8 @@ export async function getDashboardData(address: string, params: { limit?: number
   ]);
   const daoById = new Map(myDaoCandidates.map((row) => [row.daoId, row]));
   const paymentAssets = await feedPaymentAssets(deploymentId, feedRows);
-  // Collection images live on the metadata configuration, not the manager row.
-  const images = new Map(
-    (
-      await prisma.metadataConfiguration.findMany({
-        where: { deploymentId, daoId: { in: myDaos.map((row) => row.daoId) } },
-        select: { daoId: true, contractImage: true }
-      })
-    ).map((item) => [item.daoId, item.contractImage])
-  );
+  // The image and description come from the verified community profile.
+  const profiles = await verifyRows(getDeploymentNetwork(), myDaos);
 
   return {
     myDaos: myDaos.map((row) => ({
@@ -702,8 +527,8 @@ export async function getDashboardData(address: string, params: { limit?: number
       slug: row.slugClaimed ? row.claimedSlug : null,
       token_name: row.tokenName,
       token_symbol: row.tokenSymbol,
-      token_description: row.tokenDescription,
-      contract_image: images.get(row.daoId) ?? null,
+      description: profiles.get(row.daoId)?.profile.description ?? '',
+      image: profiles.get(row.daoId)?.profile.image ?? '',
       status: row.status
     })),
     feed: {
@@ -738,65 +563,17 @@ export async function getDashboardData(address: string, params: { limit?: number
 }
 
 /**
- * Minting History
- *
- * Returns all minting operations for a token
+ * Whether the index holds a `minter.merkle_claim` by `recipient` since the
+ * `minter.merkle_root_set` that opened `round`. A second line of defence for
+ * the claims flow when the chain read found no claim marker: the Minter
+ * refuses a double claim itself, so a hit here means the page is stale.
+ * Unknown round (not indexed yet): false.
  */
-export async function getGoldskyMintingHistory(
-  daoId: string,
-  params: {
-    limit?: number;
-    offset?: number;
-    kind?: 'batch_mint' | 'merkle_claim' | 'allowlist_claim';
-  } = {}
-) {
-  const { limit = 50, offset = 0, kind } = params;
-  const deploymentId = getDeploymentId();
-  const daoIdFromUrl = await getDaoIdFromUrl(daoId);
-  const where = {
-    deploymentId,
-    daoId: daoIdFromUrl,
-    contractRole: 'minter',
-    ...(kind ? { kind: `minter.${kind}` } : {})
-  };
-
-  const [rows, total] = await Promise.all([
-    prisma.appActivityFeed.findMany({
-      where,
-      orderBy: { ledgerSequence: 'desc' },
-      take: limit,
-      skip: offset
-    }),
-    prisma.appActivityFeed.count({ where })
-  ]);
-
-  return {
-    items: rows.map((row) => ({
-      activity_id: row.activityId,
-      event_name: row.eventName,
-      kind: row.kind,
-      title: row.title,
-      summary: row.summary,
-      actor: row.actor,
-      amount: row.amount,
-      ledger_sequence: Number(row.ledgerSequence),
-      timestamp: row.ledgerClosedAt,
-      transaction_hash: row.transactionHash
-    })),
-    total,
-    limit,
-    offset,
-    hasMore: offset + rows.length < total,
-    generatedAt: new Date().toISOString()
-  };
-}
-
 /**
- * Minter Claims
- *
- * Returns all successful claims (merkle and allowlist) for a token
+ * ClaimMinter claims (claims.claims): who claimed how many tokens from which list, for what,
+ * and whether the payment waited in escrow. Newest first.
  */
-export async function getGoldskyMinterClaims(
+export async function getGoldskyClaims(
   daoId: string,
   params: {
     limit?: number;
@@ -811,30 +588,30 @@ export async function getGoldskyMinterClaims(
   const where = {
     deploymentId,
     daoId: daoIdFromUrl,
-    contractRole: 'minter',
-    kind: { in: ['minter.merkle_claim', 'minter.allowlist_claim'] },
-    ...(recipient ? { actor: { equals: recipient, mode: 'insensitive' as const } } : {})
+    ...(recipient ? { claimer: { equals: recipient, mode: 'insensitive' as const } } : {})
   };
 
   const [rows, total] = await Promise.all([
-    prisma.appActivityFeed.findMany({
+    prisma.claimsClaim.findMany({
       where,
-      orderBy: { ledgerSequence: 'desc' },
+      orderBy: [{ eventLedger: 'desc' }, { eventId: 'desc' }],
       take: limit,
       skip: offset
     }),
-    prisma.appActivityFeed.count({ where })
+    prisma.claimsClaim.count({ where })
   ]);
 
   return {
     items: rows.map((row) => ({
-      claim_id: row.activityId,
-      recipient: row.actor,
-      amount: row.amount,
-      claim_type: row.kind === 'minter.merkle_claim' ? 'merkle' : 'allowlist',
+      claim_id: row.eventId,
+      list_id: Number(row.listId),
+      recipient: row.claimer,
+      amount: row.amount.toString(),
+      paid: row.paid.toString(),
+      escrowed: row.escrowed,
       transaction_hash: row.transactionHash,
-      ledger_sequence: Number(row.ledgerSequence),
-      timestamp: row.ledgerClosedAt
+      ledger_sequence: Number(row.eventLedger),
+      timestamp: row.eventAt?.toISOString() ?? null
     })),
     total,
     limit,

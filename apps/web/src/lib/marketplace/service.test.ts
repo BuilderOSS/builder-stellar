@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const db = vi.hoisted(() => ({
   managerDao: { findFirst: vi.fn(), findMany: vi.fn() },
-  marketplacePrimaryListing: { findFirst: vi.fn(), findMany: vi.fn() },
+  marketplacePool: { findFirst: vi.fn(), findMany: vi.fn() },
   marketplaceSecondaryListing: { findFirst: vi.fn(), findMany: vi.fn() },
   marketplaceModuleLaunch: { findFirst: vi.fn() },
   marketplaceSale: { findMany: vi.fn() }
@@ -53,15 +53,42 @@ function dao(id: string) {
     status: 'operational'
   };
 }
-function primary(id: string, deploymentId = 'deployment-a') {
+function pool(id: string, deploymentId = 'deployment-a') {
   return {
     deploymentId,
     daoId: id,
     contractId: `market-${id}`,
-    listingId: 99n,
-    tokenId: null,
+    poolId: 99n,
     eventId: `event-${id}`,
     price: { toFixed: () => '90071992547409930' },
+    asset: 'sac-a',
+    expiresAt: 9999999999n,
+    size: 3n,
+    stocked: 3n,
+    sold: 1n,
+    swept: 0n,
+    inStock: 2n,
+    maxPerBuyer: 1n,
+    maxSoldPerPeriod: 5n,
+    periodSecs: 3600n,
+    status: 'open',
+    released: null,
+    openedTransactionHash: 'hash',
+    openedAt: null,
+    closedAt: null
+  };
+}
+function resale(id: string) {
+  return {
+    deploymentId: 'deployment-a',
+    daoId: id,
+    contractId: `market-${id}`,
+    tokenId: 7n,
+    eventId: `event-${id}`,
+    seller: 'seller',
+    feeBps: 500,
+    price: { toFixed: () => '100' },
+    paymentAsset: 'sac-a',
     expiresAt: 9999999999n,
     status: 'open',
     buyer: null,
@@ -76,7 +103,7 @@ beforeEach(() => {
   db.managerDao.findFirst.mockImplementation(({ where }) =>
     Promise.resolve(where.daoId === 'dao-a' ? dao('dao-a') : where.daoId === 'dao-b' ? dao('dao-b') : null)
   );
-  db.marketplacePrimaryListing.findMany.mockResolvedValue([]);
+  db.marketplacePool.findMany.mockResolvedValue([]);
   db.marketplaceSecondaryListing.findMany.mockResolvedValue([]);
   db.marketplaceModuleLaunch.findFirst.mockResolvedValue({ isLive: true, opened: true });
   db.marketplaceSale.findMany.mockResolvedValue([]);
@@ -101,10 +128,10 @@ describe('read-only marketplace services and DTO isolation', () => {
     expect(result.communities).toHaveLength(24);
     expect(result.hasMore).toBe(false);
   });
-  it('global offers retain two DAO identities and string amounts/u64 ids', async () => {
-    db.marketplacePrimaryListing.findMany.mockResolvedValue([primary('dao-a'), primary('dao-b')]);
-    const response = await marketplaceOffers(new URLSearchParams('kind=primary'));
-    expect(db.marketplacePrimaryListing.findMany.mock.calls[0][0].where).toEqual({
+  it('global offers retain two DAO identities and string amounts; pools carry their terms', async () => {
+    db.marketplacePool.findMany.mockResolvedValue([pool('dao-a'), pool('dao-b')]);
+    const response = await marketplaceOffers(new URLSearchParams('kind=pool'));
+    expect(db.marketplacePool.findMany.mock.calls[0][0].where).toEqual({
       deploymentId: 'deployment-a',
       OR: [
         { deploymentId: 'deployment-a', daoId: 'dao-a', contractId: 'market-dao-a' },
@@ -112,24 +139,25 @@ describe('read-only marketplace services and DTO isolation', () => {
       ],
       status: 'open'
     });
-    expect(response.listings.map((r) => [r.daoId, r.id, r.price, r.tokenId])).toEqual([
-      ['dao-a', '99', '90071992547409930', null],
-      ['dao-b', '99', '90071992547409930', null]
+    expect(response.listings.map((r) => [r.daoId, r.kind, r.id, r.price, r.tokenId, r.pool?.inStock])).toEqual([
+      ['dao-a', 'pool', '99', '90071992547409930', null, 2],
+      ['dao-b', 'pool', '99', '90071992547409930', null, 2]
     ]);
+    expect(db.marketplaceSecondaryListing.findMany).not.toHaveBeenCalled();
     expect(() => JSON.stringify(response)).not.toThrow();
   });
   it.each(['deployment', 'dao', 'module'])(
     'fails closed if a global row leaks across %s identity',
     async (identity) => {
       const bad = {
-        ...primary('dao-a'),
+        ...pool('dao-a'),
         ...(identity === 'deployment'
           ? { deploymentId: 'deployment-b' }
           : identity === 'dao'
             ? { daoId: 'foreign-dao' }
             : { contractId: 'market-dao-b' })
       };
-      db.marketplacePrimaryListing.findMany.mockResolvedValue([bad]);
+      db.marketplacePool.findMany.mockResolvedValue([bad]);
       await expect(marketplaceOffers(new URLSearchParams())).rejects.toThrow(/identity|scoped community/);
     }
   );
@@ -144,7 +172,7 @@ describe('read-only marketplace services and DTO isolation', () => {
       daoId: 'dao-a',
       contractId: 'market-dao-a'
     });
-    expect(db.marketplacePrimaryListing.findMany.mock.calls[0][0].where.OR).toEqual([
+    expect(db.marketplacePool.findMany.mock.calls[0][0].where.OR).toEqual([
       { deploymentId: 'deployment-a', daoId: 'dao-a', contractId: 'market-dao-a' }
     ]);
     expect(response.launched).toBe(true);
@@ -153,13 +181,7 @@ describe('read-only marketplace services and DTO isolation', () => {
   });
   it('uses event identity to select a specific secondary listing cycle', async () => {
     const community = await marketplaceDao('dao-b');
-    db.marketplaceSecondaryListing.findFirst.mockResolvedValue({
-      ...primary('dao-b'),
-      tokenId: 7n,
-      seller: 'seller',
-      feeBps: 500,
-      listingId: undefined
-    });
+    db.marketplaceSecondaryListing.findFirst.mockResolvedValue(resale('dao-b'));
     // An absent row from this exact cycle never falls back to a token-only lookup.
     db.marketplaceSecondaryListing.findFirst.mockResolvedValue(null);
     await expect(marketplaceListing(community, 'secondary', '7', 'cycle-two')).rejects.toThrow('not found');
@@ -179,7 +201,7 @@ describe('read-only marketplace services and DTO isolation', () => {
       status: 400
     });
     await expect(
-      marketplaceListing({ ...community, marketplaceContract: null } as MarketplaceCommunity, 'primary', '1', 'event')
+      marketplaceListing({ ...community, marketplaceContract: null } as MarketplaceCommunity, 'pool', '1', 'event')
     ).rejects.toThrow('incomplete');
   });
 });

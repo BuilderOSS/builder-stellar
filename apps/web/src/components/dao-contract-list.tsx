@@ -10,7 +10,7 @@ const contractFields = [
   ['Auction', 'auctionContractId'],
   ['Marketplace', 'marketplaceContractId'],
   ['Metadata', 'metadataContractId'],
-  ['Minter', 'minterContractId']
+  ['Claims', 'claimsContractId']
 ] as const satisfies ReadonlyArray<[string, keyof DaoNetworkConfig]>;
 
 const list = css({ display: 'grid', gap: '3' });

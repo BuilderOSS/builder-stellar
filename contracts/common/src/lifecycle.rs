@@ -17,7 +17,7 @@ pub enum LifecycleKey {
 pub fn is_live(e: &Env) -> bool {
     e.storage()
         .instance()
-        .get(&LifecycleKey::Live)
+        .get(&crate::ns(e, LifecycleKey::Live))
         .unwrap_or(false)
 }
 
@@ -38,5 +38,7 @@ pub fn require_setup(e: &Env) {
 /// Sets `Live = true`. Panics with `AlreadyLive` on a second call.
 pub fn mark_live(e: &Env) {
     require_setup(e);
-    e.storage().instance().set(&LifecycleKey::Live, &true);
+    e.storage()
+        .instance()
+        .set(&crate::ns(e, LifecycleKey::Live), &true);
 }

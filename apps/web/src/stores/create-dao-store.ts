@@ -8,7 +8,8 @@ import {
   type CreateDaoSection,
   creationAssets,
   type CreationNetwork,
-  type DraftConfiguration
+  type DraftConfiguration,
+  OPEN_MEMBERSHIP
 } from '@/lib/create-dao-schema';
 
 export const DEFAULT_DAO_IMAGE_URL = 'https://builder-stellar-web.vercel.app/images/dao-logo.png';
@@ -57,12 +58,14 @@ export function defaultConfiguration(network: CreationNetwork = configuredCreati
       slug: '',
       description: '',
       contractImage: DEFAULT_DAO_IMAGE_URL,
-      projectUri: 'https://builder-stellar-web.vercel.app',
-      tokenUri: 'https://builder-stellar-web.vercel.app/api/dao/{daoId}/token/',
-      rendererBase: 'https://builder-stellar-web.vercel.app/api/render/{daoId}/'
+      links: [],
+      // token_uri appends `?contract=<token>&token=<id>` (served by /api/render).
+      rendererBase: 'https://builder-stellar-web.vercel.app/api/render'
     },
     auction: { enabled: true, paymentAsset, reservePrice: '1', duration: 86400, timeBuffer: 900 },
     marketplace: { enabled: false, paymentAsset, secondaryFeeBps: 500 },
+    claims: { enabled: false },
+    tokenSettings: { ...OPEN_MEMBERSHIP },
     governance: { votingDelay: 86400, votingPeriod: 259200, queueDelay: 3600, quorumBps: 1000, proposalThreshold: 1 }
   };
 }
@@ -107,6 +110,33 @@ function withRecoverySnapshots(drafts: LocalDaoDraft[]) {
     return recovered;
   });
 }
+/**
+ * Drafts before the storage diet had a single website (`projectUri`) and a token
+ * URI (`tokenUri`). The profile has labelled links and the token URI is built
+ * on chain, so the website becomes a "Website" link and the URI is dropped.
+ */
+function withLinks(info: Record<string, unknown>): DraftConfiguration['basicInfo'] {
+  const { projectUri, tokenUri: _tokenUri, ...rest } = info;
+  void _tokenUri;
+  const links = Array.isArray(rest.links)
+    ? rest.links
+    : typeof projectUri === 'string' && projectUri.trim()
+      ? [{ label: 'Website', url: projectUri.trim() }]
+      : [];
+  return { ...rest, links } as DraftConfiguration['basicInfo'];
+}
+function withProfileLinks(draft: LocalDaoDraft): LocalDaoDraft {
+  return {
+    ...draft,
+    configuration: {
+      ...draft.configuration,
+      basicInfo: withLinks(draft.configuration.basicInfo as unknown as Record<string, unknown>),
+      // Drafts saved before claims and membership rules existed: no claims, an open community.
+      claims: draft.configuration.claims ?? { enabled: false },
+      tokenSettings: draft.configuration.tokenSettings ?? { ...OPEN_MEMBERSHIP }
+    }
+  };
+}
 export function migrateCreationWorkspace(value: unknown): { drafts: LocalDaoDraft[]; activeDraftId: string | null } {
   const old = (value ?? {}) as Record<string, any>;
   if (Array.isArray(old.drafts)) {
@@ -123,14 +153,13 @@ export function migrateCreationWorkspace(value: unknown): { drafts: LocalDaoDraf
       )
     )
       throw new Error('Local draft data is damaged. The original browser data has been preserved.');
-    return { drafts: old.drafts, activeDraftId: old.activeDraftId ?? null };
+    return { drafts: old.drafts.map(withProfileLinks), activeDraftId: old.activeDraftId ?? null };
   }
   if (!old.basicInfo) return { drafts: [], activeDraftId: null };
   const config = defaultConfiguration();
-  const basicInfo = { ...config.basicInfo, ...old.basicInfo };
-  for (const field of ['tokenUri', 'projectUri', 'rendererBase'] as const) {
-    if (typeof basicInfo[field] !== 'string' || !basicInfo[field].trim()) basicInfo[field] = config.basicInfo[field];
-  }
+  const basicInfo = withLinks({ ...config.basicInfo, ...old.basicInfo });
+  if (typeof basicInfo.rendererBase !== 'string' || !basicInfo.rendererBase.trim())
+    basicInfo.rendererBase = config.basicInfo.rendererBase;
   const image = old.basicInfo.contractImage;
   const preview = typeof image === 'string' && image.startsWith('data:image/') ? image : null;
   const draft: LocalDaoDraft = {
@@ -169,6 +198,8 @@ type Store = DraftConfiguration & {
   updateBasicInfo: (patch: Partial<DraftConfiguration['basicInfo']>) => void;
   updateAuction: (patch: Partial<DraftConfiguration['auction']>) => void;
   updateMarketplace: (patch: Partial<DraftConfiguration['marketplace']>) => void;
+  updateClaims: (patch: Partial<DraftConfiguration['claims']>) => void;
+  updateTokenSettings: (patch: Partial<DraftConfiguration['tokenSettings']>) => void;
   updateGovernance: (patch: Partial<DraftConfiguration['governance']>) => void;
   setImagePreview: (image: string | null, filename?: string) => void;
   setSection: (section: CreateDaoSection) => void;
@@ -265,6 +296,8 @@ export const useCreateDaoStore = create<Store>()(
           basicInfo: { ...draft.configuration.basicInfo, ...patch.basicInfo },
           auction: { ...draft.configuration.auction, ...patch.auction },
           marketplace: { ...draft.configuration.marketplace, ...patch.marketplace },
+          claims: { ...draft.configuration.claims, ...patch.claims },
+          tokenSettings: { ...draft.configuration.tokenSettings, ...patch.tokenSettings },
           governance: { ...draft.configuration.governance, ...patch.governance }
         };
         const next = {
@@ -356,6 +389,8 @@ export const useCreateDaoStore = create<Store>()(
         updateBasicInfo: (patch) => update({ basicInfo: patch }),
         updateAuction: (patch) => update({ auction: patch }),
         updateMarketplace: (patch) => update({ marketplace: patch }),
+        updateClaims: (patch) => update({ claims: patch }),
+        updateTokenSettings: (patch) => update({ tokenSettings: patch }),
         updateGovernance: (patch) => update({ governance: patch }),
         setImagePreview: (imagePreview, imageFilename = '') => update({ imagePreview, imageFilename }),
         setSection: (section) => update({ section }),
@@ -409,7 +444,7 @@ export const useCreateDaoStore = create<Store>()(
     },
     {
       name: CREATE_WORKSPACE_KEY,
-      version: 6,
+      version: 7,
       storage,
       skipHydration: true,
       partialize: (state) => ({ drafts: state.drafts, activeDraftId: state.activeDraftId }),

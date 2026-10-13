@@ -5,9 +5,10 @@
 //!
 //! - [`admin`]: the single admin model (launch admin in setup, Treasury once live).
 //! - [`lifecycle`]: the `Live` instance flag (setup vs. live phase).
-//! - [`upgrade`]: manager-approved WASM upgrade, `CurrentHash` / `CurrentVersion`,
+//! - [`upgrade`]: manager-approved WASM upgrade, `CurrentHash`, the registry-derived `version`,
 //!   and the `StorageVersion` / `migrate` convention.
 //! - [`ttl`]: the shared instance and persistent TTL policy.
+//! - [`modules`]: the Token's module registry types (`ModuleEntry`, `MintGrant`, kinds).
 //! - [`clients`]: typed `#[contractclient]` traits for cross-contract calls (no linked exports).
 //! - [`error`]: typed errors and the error-code block of every crate
 //!   ([`error::codes`]); codes are unique across all project contracts.
@@ -18,10 +19,30 @@ pub mod admin;
 pub mod clients;
 pub mod error;
 pub mod lifecycle;
+pub mod modules;
 pub mod ttl;
 pub mod upgrade;
 
 pub use error::CommonError;
+
+/// Every storage key this protocol owns is wrapped as `("builder", key)`:
+/// `[Symbol("builder"), [Symbol(variant), args...]]`. A `#[contracttype]`
+/// key encodes only its variant name and arguments, so without the wrapper a
+/// module key can address the same slot as an OpenZeppelin key with the same
+/// variant (docs/STORAGE_DIET_REVIEW.md Finding 1). OpenZeppelin's own keys
+/// (owners, balances, votes, approvals) are not ours and stay unwrapped.
+///
+/// Nine characters or fewer: the host keeps such a symbol inline in a `Val`
+/// (no object allocation on every key build), and its XDR is 4 bytes shorter
+/// than a 10-character one (D37). Lowercase, so no PascalCase OpenZeppelin
+/// variant can ever equal it.
+pub const STORAGE_NAMESPACE: &str = "builder";
+const _: () = assert!(STORAGE_NAMESPACE.len() <= 9);
+
+/// Namespace `key` for storage (see `STORAGE_NAMESPACE`).
+pub fn ns<K>(e: &soroban_sdk::Env, key: K) -> (soroban_sdk::Symbol, K) {
+    (soroban_sdk::Symbol::new(e, STORAGE_NAMESPACE), key)
+}
 
 // Parameter bounds shared by the Manager (validated once at `create_dao`) and
 // the module that owns each parameter (validated again by its constructor and
@@ -51,6 +72,17 @@ pub const MAX_FEE_BPS: u32 = 2_500;
 
 /// Maximum length of a configurable string (names, URIs, descriptions).
 pub const MAX_STRING_LENGTH: u32 = 256;
+
+/// Maximum length in bytes of an artwork property or item name. Names are
+/// written verbatim into the on-chain token JSON, so they also exclude `"`,
+/// `\` and control characters (checked by the Metadata contract).
+pub const MAX_ARTWORK_NAME_LENGTH: u32 = 64;
+/// Maximum length in bytes of an artwork IPFS group file extension.
+pub const MAX_EXTENSION_LENGTH: u32 = 16;
+
+/// Maximum length in bytes of a DAO profile (serialized JSON: description,
+/// links, image). The profile is event-only; the chain keeps its hash.
+pub const MAX_PROFILE_LENGTH: u32 = 4_096;
 
 /// Maximum length in bytes of a proposal comment or vote reason (~1,350
 /// English words). Comments are event-only, and a transaction may publish at
@@ -82,6 +114,16 @@ pub const MAX_BATCH_MINT: u32 =
 /// Most recipient entries one `batch_mint` call can take (one token each): 18.
 pub const MAX_BATCH_RECIPIENTS: u32 =
     BATCH_MINT_EVENT_BUDGET / (BATCH_MINT_BYTES_PER_TOKEN + BATCH_MINT_BYTES_PER_RECIPIENT);
+
+/// Event bytes a pool `restock` adds beside its `batch_mint` (the
+/// `PoolRestocked` event; rounded up).
+pub const RESTOCK_EVENT_BYTES: u32 = 300;
+/// Most tokens one Marketplace `restock` mints into custody: one recipient
+/// (the Marketplace) plus the restock event within `BATCH_MINT_EVENT_BUDGET`
+/// (42). The e2e suite restocks at the edge against 16-trait metadata.
+pub const MAX_RESTOCK: u32 =
+    (BATCH_MINT_EVENT_BUDGET - BATCH_MINT_BYTES_PER_RECIPIENT - RESTOCK_EVENT_BYTES)
+        / BATCH_MINT_BYTES_PER_TOKEN;
 
 /// Whether a batch of `tokens` tokens over `recipients` recipient entries fits
 /// `BATCH_MINT_EVENT_BUDGET`. Entries are counted as new recipients even when

@@ -38,7 +38,6 @@ fn setup_auction_contract(
             payment_token.clone(), // SECURITY FIX: SAC-only
             Address::generate(e),
             BytesN::from_array(e, &[0u8; 32]),
-            String::from_str(e, "0.1.0"),
         ),
     );
     let auction = DaoAuctionContractClient::new(e, &auction_address);
@@ -81,7 +80,6 @@ fn setup_with_payment_token(
             payment_token.clone(),
             Address::generate(e),
             BytesN::from_array(e, &[0u8; 32]),
-            String::from_str(e, "0.1.0"),
         ),
     );
     let auction = DaoAuctionContractClient::new(e, &auction_address);
@@ -107,7 +105,6 @@ fn test_constructor_initializes_correctly() {
 
     assert!(auction.paused());
     assert_eq!(auction.admin(), owner);
-    assert_eq!(auction.version(), String::from_str(&e, "0.1.0"));
     assert_eq!(auction.wasm_hash(), BytesN::from_array(&e, &[0u8; 32]));
 
     let config = auction.get_config();
@@ -150,7 +147,6 @@ fn test_constructor_rejects_zero_duration() {
             Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
 }
@@ -172,7 +168,6 @@ fn test_constructor_rejects_duration_above_max() {
             Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
 }
@@ -206,7 +201,6 @@ fn try_register_with_time_buffer(e: &Env, time_buffer: u64) -> bool {
                 Address::generate(e),
                 Address::generate(e),
                 BytesN::from_array(e, &[0u8; 32]),
-                String::from_str(e, "0.1.0"),
             ),
         )
     }))
@@ -244,7 +238,6 @@ fn test_constructor_rejects_zero_min_bid_increment() {
             Address::generate(&e),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
 }
@@ -406,17 +399,16 @@ fn launch_without_start_is_one_shot_and_hands_admin_to_treasury() {
             payment_token.clone(),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
     let auction = DaoAuctionContractClient::new(&e, &id);
 
     assert_eq!(auction.admin(), owner);
-    auction.launch(&treasury, &false, &payment_token);
+    auction.launch(&treasury, &false);
     assert_eq!(auction.admin(), treasury.clone());
     assert!(auction.paused());
     let _ = attacker;
-    let r = auction.try_launch(&treasury, &true, &payment_token);
+    let r = auction.try_launch(&treasury, &true);
     assert_eq!(
         r.err().unwrap().unwrap(),
         common::CommonError::AlreadyLive.into()
@@ -554,7 +546,6 @@ fn test_constructor_rejects_low_reserve_price() {
             Some(payment_token),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
 }
@@ -582,7 +573,6 @@ fn test_constructor_rejects_high_min_increment() {
             Some(payment_token),
             Address::generate(&e),
             BytesN::from_array(&e, &[0u8; 32]),
-            String::from_str(&e, "0.1.0"),
         ),
     );
 }
@@ -646,7 +636,6 @@ mod upgrade_via_common {
                 Address::generate(&e),
                 mgr.address.clone(),
                 from.clone(),
-                String::from_str(&e, "0.1.0"),
             ),
         );
         let client = DaoAuctionContractClient::new(&e, &id);
@@ -657,7 +646,10 @@ mod upgrade_via_common {
         // Contract code is swapped to an empty module; read the stored keys directly.
         e.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&e), to);
-            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.2.0"));
+            assert_eq!(
+                common::upgrade::version(&e, &mgr.address),
+                String::from_str(&e, "0.2.0")
+            );
         });
     }
 
@@ -681,7 +673,6 @@ mod upgrade_via_common {
                 Address::generate(&e),
                 mgr.address.clone(),
                 from.clone(),
-                String::from_str(&e, "0.1.0"),
             ),
         );
         let client = DaoAuctionContractClient::new(&e, &id);
@@ -694,7 +685,7 @@ mod upgrade_via_common {
     }
 
     #[test]
-    fn upgrade_and_sync_version_reject_unauthorized_caller() {
+    fn upgrade_rejects_unauthorized_caller() {
         let e = Env::default();
         e.mock_all_auths();
         let mgr = MockManagerClient::new(&e, &e.register(MockManager, ()));
@@ -713,21 +704,24 @@ mod upgrade_via_common {
                 Address::generate(&e),
                 mgr.address.clone(),
                 from.clone(),
-                String::from_str(&e, "0.1.0"),
             ),
         );
         let client = DaoAuctionContractClient::new(&e, &id);
         mgr.approve(&from, &to);
         mgr.register(&to, &String::from_str(&e, "0.2.0"));
         mgr.register(&from, &String::from_str(&e, "0.1.1"));
+        // The module's own version() reads its Manager (D6).
+        assert_eq!(client.version(), String::from_str(&e, "0.1.1"));
         // Drop mock_all_auths: no authorization is provided for any address.
         e.set_auths(&[]);
         assert!(client.try_upgrade(&from, &to).is_err());
-        assert!(client.try_sync_version().is_err());
         e.mock_all_auths();
         e.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&e), from);
-            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.1.0"));
+            assert_eq!(
+                common::upgrade::version(&e, &mgr.address),
+                String::from_str(&e, "0.1.1")
+            );
         });
     }
 
@@ -751,10 +745,10 @@ mod upgrade_via_common {
                 Address::generate(&e),
                 mgr.address.clone(),
                 from.clone(),
-                String::from_str(&e, "0.1.0"),
             ),
         );
         let client = DaoAuctionContractClient::new(&e, &id);
+        mgr.register(&from, &String::from_str(&e, "0.1.0"));
         let wrong = BytesN::from_array(&e, &[9u8; 32]);
         mgr.approve(&wrong, &to);
         mgr.register(&to, &String::from_str(&e, "0.2.0"));
@@ -765,41 +759,96 @@ mod upgrade_via_common {
         );
         e.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&e), from);
-            assert_eq!(common::upgrade::version(&e), String::from_str(&e, "0.1.0"));
+            assert_eq!(
+                common::upgrade::version(&e, &mgr.address),
+                String::from_str(&e, "0.1.0")
+            );
         });
     }
 }
 
 #[test]
-fn launch_rejects_changed_payment_token_and_succeeds_when_unchanged() {
+fn payment_asset_reports_the_configured_token() {
+    // The Manager compares this with the token recorded at create_dao.
     let e = Env::default();
     e.mock_all_auths();
     let (auction, _owner, treasury, _token, _id, original) = setup_with_payment_token(&e);
-    auction.set_payment_token(&Address::generate(&e));
-    let r = auction.try_launch(&treasury, &false, &original);
+    assert_eq!(auction.payment_asset(), original);
+    let other = Address::generate(&e);
+    auction.set_payment_token(&other);
+    assert_eq!(auction.payment_asset(), other);
+    auction.launch(&treasury, &false);
+}
+
+#[test]
+fn handoff_moves_the_admin_and_stays_in_setup() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let (auction, owner, treasury, _token, _id, _payment) = setup_with_payment_token(&e);
+    assert_eq!(auction.admin(), owner);
+    auction.handoff(&treasury);
+    assert_eq!(auction.admin(), treasury);
+    // Still in Setup: launch works, and does not hand off again.
+    auction.launch(&treasury, &false);
+    assert_eq!(auction.admin(), treasury);
     assert_eq!(
-        r.err().unwrap().unwrap(),
-        AuctionError::PaymentTokenMismatch.into()
+        auction.try_handoff(&treasury).err().unwrap().unwrap(),
+        common::CommonError::AlreadyLive.into()
     );
-    auction.set_payment_token(&original);
-    auction.launch(&treasury, &false, &original);
+}
+
+#[test]
+fn handoff_requires_manager_auth_and_the_wired_treasury() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let (auction, owner, treasury, _token, id, _payment) = setup_with_payment_token(&e);
+    assert_eq!(
+        auction
+            .try_handoff(&Address::generate(&e))
+            .err()
+            .unwrap()
+            .unwrap(),
+        AuctionError::TreasuryMismatch.into()
+    );
+    e.mock_auths(&[MockAuth {
+        address: &owner,
+        invoke: &MockAuthInvoke {
+            contract: &id,
+            fn_name: "handoff",
+            args: (&treasury,).into_val(&e),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(auction.try_handoff(&treasury).is_err());
+    assert_eq!(auction.admin(), owner);
+}
+
+#[test]
+fn renewal_keys_lists_the_held_balances() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let (auction, _owner, _treasury, token, _id, payment) = setup_with_payment_token(&e);
+    let page = auction.renewal_keys(&0, &50);
+    assert!(page.keys.is_empty());
+    assert_eq!(page.assets, soroban_sdk::vec![&e, token, payment]);
+    assert_eq!(page.next_cursor, None);
 }
 
 #[test]
 fn launch_requires_manager_auth() {
     let e = Env::default();
     e.mock_all_auths();
-    let (auction, owner, treasury, _token, id, payment) = setup_with_payment_token(&e);
+    let (auction, owner, treasury, _token, id, _payment) = setup_with_payment_token(&e);
     e.mock_auths(&[MockAuth {
         address: &owner,
         invoke: &MockAuthInvoke {
             contract: &id,
             fn_name: "launch",
-            args: (&treasury, false, &payment).into_val(&e),
+            args: (&treasury, false).into_val(&e),
             sub_invokes: &[],
         },
     }]);
-    assert!(auction.try_launch(&treasury, &false, &payment).is_err());
+    assert!(auction.try_launch(&treasury, &false).is_err());
     assert!(auction.paused());
 }
 
@@ -872,11 +921,10 @@ mod refunds {
                 sac_addr.clone(),
                 Address::generate(&e),
                 BytesN::from_array(&e, &[0u8; 32]),
-                String::from_str(&e, "0.1.0"),
             ),
         );
         let auction = DaoAuctionContractClient::new(&e, &addr);
-        auction.launch(&treasury, &true, &sac_addr);
+        auction.launch(&treasury, &true);
         let sac = StellarAssetClient::new(&e, &sac_addr);
         let token = TokenClient::new(&e, &sac_addr);
         Ctx {
@@ -1385,4 +1433,27 @@ mod refunds {
         );
         assert_eq!(c.token.balance(&a), 100_000_000);
     }
+}
+
+/// docs/STORAGE_DIET_REVIEW.md Finding 1: no auction key may encode like a
+/// `common` or OpenZeppelin key the contract links.
+#[test]
+fn storage_keys_do_not_collide() {
+    use common::testutils::{
+        assert_keys_disjoint, common_key_shapes, key_shape, shapes, OZ_PAUSABLE_SHAPES,
+    };
+    #[allow(unused_imports)]
+    use soroban_sdk::{testutils::Address as _, Address, Env, IntoVal, Val};
+    let e = Env::default();
+    let _a = Address::generate(&e);
+    let all = |keys: std::vec::Vec<Val>| -> std::vec::Vec<(std::string::String, u32)> {
+        keys.into_iter().map(|k| key_shape(&e, k)).collect()
+    };
+    // Every variant, checked exhaustively next to the enum.
+    let module = all(crate::storage::key_samples::all(&e));
+    assert_keys_disjoint(&[
+        ("DataKey", module),
+        ("common", common_key_shapes(&e)),
+        ("PausableStorageKey", shapes(OZ_PAUSABLE_SHAPES)),
+    ]);
 }

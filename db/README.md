@@ -34,11 +34,19 @@ and the contract event each view reads.
 
 - `deployment_id` = `manager:<MANAGER_CONTRACT>`; one pipeline per Manager.
 - `dao_id` = the DAO's token contract address.
-- Module contracts (token, metadata, auction, governor, treasury, marketplace)
-  resolve to a DAO through `manager.event_identity`, built from `DaoCreated`.
-- The **Minter** is one contract shared by every DAO. Its events carry the DAO
-  token as the `token_id` topic, which `manager.dao_registry` resolves to a DAO.
-  Minter events for tokens outside the deployment are dropped.
+- The core contracts (token, metadata, governor, treasury) resolve to a DAO
+  through `manager.event_identity`, built from `DaoCreated`.
+- Modules (auction, marketplace, claims, and any kind a DAO registers by vote)
+  resolve through registration windows: `manager.module_registrations` pairs each
+  Token's `ModuleRegistered` with its `ModuleUnregistered`, and an event counts
+  for a DAO only between them (position `[ledger, tx, op, evt]`; a window opens at
+  `[ledger, tx, -1, -1]` so the registering transaction's own events count).
+  A known role means the Manager deployed the module (`manager.manager_modules`);
+  any other registered contract is role `module` whatever kind it was registered
+  under, as in the pipeline. The same address registered by two DAOs is
+  attributed per window.
+- The pipeline's allowlists (`streamling.dao_*`) only decide what is indexed; the
+  views decide whose it is.
 
 ## Migrations
 
@@ -47,30 +55,30 @@ transaction together with its row in `public.schema_migrations` (name + SHA-256)
 
 | Migration | Contents |
 | --- | --- |
-| `0001_landing_tables` | schemas, helper functions (incl. `chain.ledger_closed_at_ts`, which reads the pipeline's epoch-millisecond closed-at values), the 3 landing tables, indexes, triggers |
-| `0002_manager_views` | DAO registry, modules, identity, `manager.daos`, per-module launch status and `dao_lifecycle`, module upgrade history and current module versions, admin history/settings (incl. cancelled proposals), implementations |
-| `0003_token_views` | transfers, mints, inventory, delegations, mint authorities, members, supply (voting vs system-held) |
-| `0004_governance_views` | proposals (state computed from `proposal_scheduled` and the clock), votes, actions, lifecycle, per-proposal execution calls |
-| `0005_auction_views` | auctions, bids, refunds (pushed and deferred), withdrawals, pending refunds, settlements, cancellations |
-| `0006_metadata_views` | properties, token seeds, configuration |
+| `0001_landing_tables` | schemas, helper functions (`chain.ledger_closed_at_ts` for the pipeline's epoch-millisecond closed-at values, `chain.event_position`, `chain.jsonb_safe` for a stray `\u0000`), the 3 landing tables, indexes, triggers, and `chain.events` (decoded events with jsonb topics/data and a total position: the base of every view) |
+| `0002_manager_views` | `manager.module_role()`, DAO registry (with the claims column), module registrations and windowed identity, `manager.module_events`, launches (with the launch registry), assurance drives, `manager.daos` (with `claims_contract`, `assurance_outcome`), per-module launch status, implementations, module versions, Manager settings (admin, pending admin, factory pause) |
+| `0003_token_views` | transfers, inventory, delegate state (custody-aware), members, mint allowances, registered modules, supply (voting vs system-held; non-voting modules count as system), approvals, the membership switches (`token.settings`), transfer agents, managed transfers (DAO and agent), delegates |
+| `0004_governance_views` | votes, proposals (state from `proposal_scheduled` and the clock, tallies), settings, comments |
+| `0005_auction_views` | bids, `auction.auction_state()` (outcome and current bid state per auction), auctions, current auctions (newest per contract) |
+| `0006_metadata_views` | token seeds (the profile is a column of `manager.daos`) |
 | `0007_treasury_views` | treasury calls (one per executed proposal action) |
-| `0008_marketplace_views` | primary listings (by `listing_id`), secondary listings (by `token_id`), purchases, sales |
-| `0009_minter_views` | merkle/allowlist claims, batch mints, allocation updates |
-| `0010_app_views` | activity feed, proposal list/detail, indexer status |
+| `0008_marketplace_views` | quick-buy pools and their stock (a token is in stock only if it never moved after its mint into the pool), secondary listings (by `token_id`), sales (with `pool_id`), comments |
+| `0009_app_views` | activity feed (per-DAO by registration window, with platform events fanned out and revocations sent only to registered modules running the hash), proposal list/detail, feed status (health), indexer status |
+| `0010_claims_views` | claim lists, claims (with paid and escrowed amounts), claimers per list |
 
 Launch model: every module emits its own launch event (`token_launched`,
 `governor_launched`, ...) and hands its admin to the Treasury (`admin_changed`,
-the same name and shape as the Manager's own admin event), so launch and admin
-state are keyed by the emitting contract (`manager.module_launches`,
-`manager.module_admins`). Slugs are requested at `dao_created` and claimed at
-launch (`manager.dao_slugs`).
+the same name and shape as the Manager's own admin event), so launch state is
+keyed by the emitting contract (`manager.module_launches`). Slugs are requested
+at `dao_created` and claimed at launch (`manager.daos`).
 
 Rules:
 
-- Migrations are **append-only once deployed**. `migrate.sh` aborts if an applied
-  file's checksum changed. Add `0011_…` instead of editing.
-- Pre-release exception: until the first production deploy the migrations are
-  edited in place (reset the database with `reset-database.sh` and redeploy).
+- These files are the 2026-10-13 baseline (pre-mainnet): the database is reset
+  on every redeploy, so the schema is kept as one clean set of files and edited
+  in place (`reset-database.sh`, then `migrate.sh`). Once a database must be
+  preserved, migrations become **append-only**: `migrate.sh` aborts if an
+  applied file's checksum changed, so add `0010_…` instead of editing.
 - No `CONCURRENTLY`, no grants. Roles and privileges live in `grant-permissions.sh`.
 - Every migration has a matching `rollback/NNNN_name_rollback.sql`.
 - Views never reference roles or deployment ids; they work for any deployment.
@@ -127,9 +135,12 @@ cd packages/goldsky && pnpm generate && ./scripts/deploy.sh deploy
 ```
 
 Goldsky's dynamic tables (the DAO module allowlists) live in the `streamling`
-schema of the same database and are not touched by the reset; they are rebuilt
-from `DaoCreated` events on replay. If the Manager address changed, drop that
-schema too (`DROP SCHEMA streamling CASCADE`) while the pipeline is stopped.
+schema of the same database and are not touched by the reset; they are append-only
+and are refilled from `DaoCreated` events on replay, so rows from an earlier run stay
+(harmless: an obsolete address only lets its events through the filter; nothing
+downstream reads these tables). If the Manager address changed, drop that schema too
+(`DROP SCHEMA streamling CASCADE`) while the pipeline is stopped, or the old DAOs'
+events keep flowing in under the new deployment id.
 
 That command is destructive and applies only to a confirmed obsolete dynamic-table
 schema. A shared database may have other pipelines using it. The deployment wrapper's

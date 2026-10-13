@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "bindings:build": "pnpm --filter @builder-stellar/token-bindings --filter @builder-stellar/manager-bindings --filter @builder-stellar/metadata-bindings --filter @builder-stellar/governor-bindings --filter @builder-stellar/treasury-bindings --filter @builder-stellar/auction-bindings --filter @builder-stellar/marketplace-bindings build",
+    "bindings:build": "pnpm --filter @builder-stellar/token-bindings --filter @builder-stellar/manager-bindings --filter @builder-stellar/metadata-bindings --filter @builder-stellar/governor-bindings --filter @builder-stellar/treasury-bindings --filter @builder-stellar/auction-bindings --filter @builder-stellar/marketplace-bindings --filter @builder-stellar/claim-minter-bindings build",
     "codegen": "node ../../scripts/generate-web-deployment.mjs && node ../../scripts/generate-prisma.mjs && pnpm bindings:build && panda codegen && panda cssgen",
     "predev": "pnpm codegen",
     "dev": "next dev --port 4242",
@@ -20,6 +20,7 @@
   "dependencies": {
     "@ark-ui/react": "^5.37.2",
     "@builder-stellar/auction-bindings": "workspace:*",
+    "@builder-stellar/claim-minter-bindings": "workspace:*",
     "@builder-stellar/governor-bindings": "workspace:*",
     "@builder-stellar/manager-bindings": "workspace:*",
     "@builder-stellar/marketplace-bindings": "workspace:*",
@@ -65,6 +66,7 @@
     "prettier": "^3.9.6",
     "prisma": "6.19.0",
     "typescript": "^5.8.0",
+    "vite-node": "3.2.4",
     "vitest": "^3.2.4"
   }
 }

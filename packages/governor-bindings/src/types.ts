@@ -170,7 +170,6 @@ export interface GovernorInitializedEvent {
     queue_delay?: number;
     proposal_threshold?: bigint;
     quorum_bps?: number;
-    version?: string;
   };
 }
 
@@ -196,6 +195,24 @@ export interface ProposalThresholdChangedEvent {
     old_value?: bigint;
     new_value?: bigint;
   };
+}
+
+/**
+ * `proposal(id)`: the stored core plus the state computed now.
+ */
+export interface ProposalInfo {
+  eta: bigint;
+  id: Uint8Array;
+  proposer: string;
+  /**
+   * For + Abstain votes the proposal needs (fixed at creation).
+   */
+  quorum: bigint;
+  seq: number;
+  state: ProposalState;
+  vote_end: bigint;
+  vote_snapshot: number;
+  vote_start: bigint;
 }
 
 /**
@@ -249,7 +266,7 @@ export const CommonError = {
    */
   7008 : { message: "AdminNotSet" },
   /**
-   * `CurrentVersion` missing from storage.
+   * The Manager's own `CurrentManagerVersion` missing from storage.
    */
   7009 : { message: "VersionNotSet" },
   /**
@@ -289,16 +306,6 @@ export interface UpgradedEvent {
   data: {
     from_hash: Uint8Array;
     to_hash: Uint8Array;
-    version?: string;
-  };
-}
-
-/**
- * Emitted by `sync_version`.
- */
-export interface VersionSyncedEvent {
-  name: "VersionSynced";
-  data: {
     version?: string;
   };
 }
@@ -545,5 +552,5 @@ export interface ProposalCancelledEvent {
     proposal_id: Uint8Array;
   };
 }
-    export type ContractEvent = ProposalQueuedEvent | GovernorLaunchedEvent | QuorumBpsChangedEvent | ProposalCommentedEvent | ProposalScheduledEvent | QueueDelayChangedEvent | VotingDelayChangedEvent | GovernorInitializedEvent | VotingPeriodChangedEvent | ProposalThresholdChangedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VersionSyncedEvent | VoteCastEvent | QuorumChangedEvent | ProposalCreatedEvent | ProposalExecutedEvent | ProposalCancelledEvent;
+    export type ContractEvent = ProposalQueuedEvent | GovernorLaunchedEvent | QuorumBpsChangedEvent | ProposalCommentedEvent | ProposalScheduledEvent | QueueDelayChangedEvent | VotingDelayChangedEvent | GovernorInitializedEvent | VotingPeriodChangedEvent | ProposalThresholdChangedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VoteCastEvent | QuorumChangedEvent | ProposalCreatedEvent | ProposalExecutedEvent | ProposalCancelledEvent;
     

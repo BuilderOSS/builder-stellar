@@ -4,6 +4,7 @@ import { DaoShell } from '@/components/shell/dao-shell';
 import { DaoProvider } from '@/contexts/dao-context';
 import { getDaoNetworkConfigById } from '@/lib/dao-config';
 import { resolveDaoId } from '@/lib/dao-db';
+import { plainSummary } from '@/lib/dao-profile';
 
 interface DaoLayoutProps {
   children: ReactNode;
@@ -17,7 +18,8 @@ export async function generateMetadata({ params }: { params: Promise<{ daoId: st
     const daoConfig = await getDaoNetworkConfigById(await resolveDaoId(routeId));
     return {
       title: daoConfig.tokenName || 'Community',
-      description: daoConfig.tokenDescription || 'A community on Builder.'
+      // First line of the verified profile description, as plain text.
+      description: plainSummary(daoConfig.profile.description) || 'A community on Builder.'
     };
   } catch {
     return {

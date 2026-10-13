@@ -1,7 +1,4 @@
+DROP VIEW IF EXISTS auction.current_auctions;
 DROP VIEW IF EXISTS auction.auctions;
-DROP VIEW IF EXISTS auction.cancellations;
-DROP VIEW IF EXISTS auction.settlements;
-DROP VIEW IF EXISTS auction.pending_refunds;
-DROP VIEW IF EXISTS auction.refund_withdrawals;
-DROP VIEW IF EXISTS auction.bid_refunds;
+DROP FUNCTION IF EXISTS auction.auction_state(text, text, text, text, bigint[]);
 DROP VIEW IF EXISTS auction.bids;

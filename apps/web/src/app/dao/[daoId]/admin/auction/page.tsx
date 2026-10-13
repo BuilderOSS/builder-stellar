@@ -13,7 +13,7 @@ import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { useContractAdmin } from '@/lib/admin-queries';
 import { useAdminTokenState } from '@/lib/admin-surfaces';
-import { getTreasuryAssets } from '@/lib/assets-config';
+import { paymentAssetCode } from '@/lib/assets-config';
 import { formatStroops } from '@/lib/auction-values';
 import { formatDuration } from '@/lib/duration';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
@@ -57,8 +57,7 @@ export default function AuctionAdminPage() {
   const live = token.data?.live === true;
   const loading = isLoading || token.isLoading || admin.isLoading;
   const loadError = error || admin.error || token.error;
-  const assetCode =
-    getTreasuryAssets(config.name).find((asset) => asset.contractId === data?.config.payment_token)?.code ?? '';
+  const assetCode = paymentAssetCode(config.name, data?.config.payment_token) ?? '';
   const state = !live ? 'Not launched yet' : data?.paused ? 'Paused' : 'Running';
   const long = (seconds: number) => formatDuration(seconds, { style: 'long' });
 

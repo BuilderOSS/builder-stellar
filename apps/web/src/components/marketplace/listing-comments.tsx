@@ -11,13 +11,13 @@ import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { TradeReview } from './trade-review';
 
 /**
- * Comments on a listing: a new-token listing's own thread, or a resale token's thread (shared by
- * every listing of that token). Posting goes through the same server-built review as a trade.
+ * Comments on a resale token (one thread shared by every listing of that token). Pools carry no
+ * comments. Posting goes through the same server-built review as a trade.
  */
 export function ListingComments({ listing }: { listing: MarketplaceListing }) {
   const session = useAuthSessionStore();
-  const id = listing.kind === 'primary' ? listing.id : (listing.tokenId ?? listing.id);
-  const comments = useMarketplaceComments(listing.daoId, listing.kind, id, true);
+  const id = listing.tokenId ?? listing.id;
+  const comments = useMarketplaceComments(listing.daoId, 'secondary', id, listing.kind === 'secondary');
   const [action, setAction] = useState<MarketplaceAction | null>(null);
   const settle = useRef<((posted: boolean) => void) | null>(null);
   const signedIn = session.authStatus === 'authenticated' && Boolean(session.address);
@@ -31,15 +31,11 @@ export function ListingComments({ listing }: { listing: MarketplaceListing }) {
     <>
       <CommentThread
         id={`listing-${listing.eventId}`}
-        title={listing.kind === 'primary' ? 'Comments' : `Comments on #${id}`}
+        title={`Comments on #${id}`}
         comments={comments.data?.items ?? []}
         loadError={Boolean(comments.error)}
         viewer={session.address}
-        emptyText={
-          listing.kind === 'primary'
-            ? 'Questions and notes about this listing show up here.'
-            : 'Notes about this token show up here, across all its listings.'
-        }
+        emptyText="Notes about this token show up here, across all its listings."
         composer={
           comments.data
             ? {
@@ -49,7 +45,7 @@ export function ListingComments({ listing }: { listing: MarketplaceListing }) {
                 onPost: (body) =>
                   new Promise<boolean>((resolve) => {
                     settle.current = resolve;
-                    setAction({ action: 'comment', kind: listing.kind, id, body });
+                    setAction({ action: 'comment', kind: 'secondary', id, body });
                   })
               }
             : null

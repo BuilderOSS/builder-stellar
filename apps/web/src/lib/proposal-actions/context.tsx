@@ -5,7 +5,6 @@
 import { createContext, type ReactNode, useContext, useMemo } from 'react';
 
 import type { DaoNetworkConfig } from '@/lib/dao-config';
-import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { useTreasuryBalances } from '@/lib/treasury-queries';
 
 import type { FormContext } from './types';
@@ -24,9 +23,6 @@ export interface ActionFormProviderProps {
  */
 export function ActionFormProvider({ children, config, session }: ActionFormProviderProps) {
   const { data: balances, isLoading: balancesLoading, error: balancesError } = useTreasuryBalances(config);
-  const { data: mintAuthoritiesData, isLoading: mintAuthoritiesLoading } = useGoldskyMintAuthorities(
-    config.tokenContractId
-  );
 
   const contextValue = useMemo<FormContext>(
     () => ({
@@ -34,11 +30,9 @@ export function ActionFormProvider({ children, config, session }: ActionFormProv
       session,
       balances,
       balancesLoading,
-      balancesError: balancesError?.message,
-      mintAuthorities: mintAuthoritiesData?.items,
-      mintAuthoritiesLoading
+      balancesError: balancesError?.message
     }),
-    [config, session, balances, balancesLoading, balancesError, mintAuthoritiesData, mintAuthoritiesLoading]
+    [config, session, balances, balancesLoading, balancesError]
   );
 
   return <ActionFormContext.Provider value={contextValue}>{children}</ActionFormContext.Provider>;

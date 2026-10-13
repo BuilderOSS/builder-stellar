@@ -6,6 +6,8 @@ import useSWR from 'swr';
 
 import { Chip, Countdown, Crest, crestHueStyle, FallbackImage } from '@/components/ui';
 import { useNow } from '@/hooks/use-now';
+import { activeNetworkName } from '@/lib/active-network';
+import { paymentAssetCode } from '@/lib/assets-config';
 import { formatAuctionAmount } from '@/lib/auction-history/state';
 import { daoRoute } from '@/lib/dao-routes';
 
@@ -20,6 +22,10 @@ export type CommunitySummary = {
   status: 'pending' | 'operational' | string;
   hasAuction?: boolean;
   hasMarket?: boolean;
+  /** An auction is taking bids right now (from the index; set on Discover and Home). */
+  auctionLive?: boolean;
+  /** Open market listings right now. */
+  forSale?: number;
   /** e.g. "Home" or "Launch admin"; shown as a brass chip. */
   yours?: string;
 };
@@ -33,7 +39,7 @@ type CardAuction = {
     highest_bidder: string | null;
     settled: boolean;
   } | null;
-  config: { reserve_price: string };
+  config: { reserve_price: string; payment_token?: string };
   paused: boolean;
 };
 
@@ -78,7 +84,8 @@ const card = sva({
       bg: 'hsl(var(--crest-hue) 30% 18%)',
       _light: { bg: 'hsl(var(--crest-hue) 40% 90%)' }
     },
-    liveTag: { position: 'absolute', left: '3', top: '3' },
+    // Washes are translucent; a solid backing keeps the chip readable over any art.
+    liveTag: { position: 'absolute', left: '3', top: '3', bg: 'surface', borderRadius: 'full', boxShadow: 'raised' },
     body: { display: 'grid', alignContent: 'start', gap: '1.5', p: '4' },
     name: { textStyle: 'heading', fontSize: '1.0625rem', m: '0', overflowWrap: 'anywhere' },
     meta: { textStyle: 'caption', color: 'ink.muted', m: '0', fontVariantNumeric: 'tabular-nums' },
@@ -111,6 +118,7 @@ export function CommunityCard({ community }: { community: CommunitySummary }) {
   const endsAt = live ? Number(live.end_time) : 0;
   const now = useNow();
   const ended = Boolean(live && now !== null && endsAt <= now);
+  const unit = paymentAssetCode(activeNetworkName(), auction?.config.payment_token) ?? 'tokens';
 
   return (
     <NextLink href={daoRoute(community.routeId ?? community.id)} className={classes.root}>
@@ -131,7 +139,7 @@ export function CommunityCard({ community }: { community: CommunitySummary }) {
         )}
         {live ? (
           <span className={classes.liveTag}>
-            <Chip tone={ended ? 'warning' : 'live'}>{ended ? 'Ready to settle' : 'Auction live'}</Chip>
+            <Chip tone={ended ? 'warning' : 'live'}>{ended ? 'Auction ended' : 'Auction live'}</Chip>
           </span>
         ) : null}
       </div>
@@ -148,7 +156,7 @@ export function CommunityCard({ community }: { community: CommunitySummary }) {
               <>
                 {live.highest_bidder ? (ended ? 'Won for ' : 'Top bid ') : 'Starts at '}
                 <span className={strong}>
-                  {formatAuctionAmount(live.highest_bidder ? live.highest_bid : auction?.config.reserve_price)}
+                  {formatAuctionAmount(live.highest_bidder ? live.highest_bid : auction?.config.reserve_price)} {unit}
                 </span>
                 {ended ? null : (
                   <>
@@ -167,7 +175,7 @@ export function CommunityCard({ community }: { community: CommunitySummary }) {
         <div className={classes.footer}>
           {community.yours ? <Chip tone="yours">{community.yours}</Chip> : null}
           {community.status === 'pending' ? <Chip tone="warning">In setup</Chip> : null}
-          {community.hasMarket ? <Chip tone="outline">Market</Chip> : null}
+          {community.forSale ? <Chip tone="outline">{community.forSale} for sale</Chip> : null}
         </div>
       </div>
     </NextLink>

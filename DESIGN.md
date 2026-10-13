@@ -4,14 +4,14 @@ name: Builder
 description: A cozy, lamplit clubhouse for communities that own things together. Warm neutrals, one confident blue, brass for what's yours.
 colors:
   # Dark is the hero theme. Light values are in the Colors table below.
-  canvas: "#15120F"
-  surface: "#1D1915"
-  raised: "#26211C"
-  hover: "#2E2822"
-  rule: "#3A322A"
+  canvas: "#141311"
+  surface: "#1C1A18"
+  raised: "#252220"
+  hover: "#2D2A27"
+  rule: "#393530"
   text: "#F3EDE5"
-  text-muted: "#B6AA9C"
-  text-faint: "#857A6D"
+  text-muted: "#B3ABA1"
+  text-faint: "#847C72"
   signal: "#0085FF"
   primary: "#0070E0"
   primary-hover: "#0062C4"
@@ -98,14 +98,14 @@ components:
 
 | Token | Dark | Light | Use |
 |---|---|---|---|
-| canvas | #15120F | #F3EFE8 | page background |
-| surface | #1D1915 | #FBF8F3 | cards, bars, sheets |
-| raised | #26211C | #FFFFFF | inputs, choice tiles, popovers |
-| hover | #2E2822 | #F1ECE4 | hover and pressed fills, neutral chips |
-| rule | #3A322A | #DDD6CB | dividers, input edges |
+| canvas | #141311 | #F3EFE8 | page background |
+| surface | #1C1A18 | #FBF8F3 | cards, bars, sheets |
+| raised | #252220 | #FFFFFF | inputs, choice tiles, popovers |
+| hover | #2D2A27 | #F1ECE4 | hover and pressed fills, neutral chips |
+| rule | #393530 | #DDD6CB | dividers, input edges |
 | text | #F3EDE5 | #221E19 | primary text |
-| text-muted | #B6AA9C | #5E564C | secondary text (AA on surface) |
-| text-faint | #857A6D | #8E8578 | decoration only, never text under 18px |
+| text-muted | #B3ABA1 | #5E564C | secondary text (AA on surface) |
+| text-faint | #847C72 | #8E8578 | decoration only, never text under 18px |
 | signal | #0085FF | #0068D6 | active nav, focus ring, links, selection, live state |
 | primary | #0070E0 | #0068D6 | filled button background (white text passes AA) |
 | primary-hover | #0062C4 | #0059B8 | filled button hover |
@@ -210,3 +210,4 @@ Authority language is correctness, not style, and stays exact:
 | 2026-10-10 | Create asks for a DAO type, not numbers | Membership is four join types (Daily auction, Auction + resale, Fixed-price sales, Invite only); Voting is a pace (Super fast on testnet, Fast, Balanced, Deliberate). Numbers live in Advanced settings and can all change later by vote. ChoiceGroup gains a card variant for these picks |
 | 2026-10-10 | Launch setup is its own page with real step status | /dao/[id]/setup lists required steps (artwork, founder tokens, a free link) with live done/to-do status, optional reviews, then launch with consequences and a confirm. Manage marks what launch needs and links back. Artwork lives only in Manage |
 | 2026-10-10 | Community profile in Manage; everything the DAO owns is changeable | Name, symbol, image, description and website in one place (direct in setup, one proposal after launch). Token 0.2.0 makes renames visible; treasury-held tokens can be given by vote. Artwork keeps only layers and the renderer |
+| 2026-10-12 | Dark neutrals lose some yellow; warmth stays | UX walkthrough: menus and sign-in read too yellow in Dark. Canvas, surface, raised, hover, rules and muted text keep a warm hue at about half the chroma. Light theme and blue unchanged |

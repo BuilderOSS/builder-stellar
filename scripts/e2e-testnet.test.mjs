@@ -19,18 +19,18 @@ test('keccak256 matches known vectors (legacy padding, not sha3)', () => {
 test('Vec<Address> and Vec<Symbol> encodings', () => {
   assert.equal(encodeAddressVec([G1, C1]), `["${G1}","${C1}"]`);
   assert.throws(() => encodeAddressVec(['nope']));
-  assert.equal(encodeSymbolVec(['set_quorum_bps', 'create_primary_listing']), '["set_quorum_bps","create_primary_listing"]');
+  assert.equal(encodeSymbolVec(['set_quorum_bps', 'open_pool']), '["set_quorum_bps","open_pool"]');
   assert.throws(() => encodeSymbolVec(['bad name']));
   assert.throws(() => encodeSymbolVec(['x'.repeat(33)]));
 });
 
-test('nested Vec<Vec<Val>> for set_quorum_bps(u32) + create_primary_listing(i128,u64)', () => {
+test('nested Vec<Vec<Val>> for set_quorum_bps(u32) + a two-argument action (i128, u64)', () => {
   const enc = encodeActions([
     { target: C1, fn: 'set_quorum_bps', args: [val.u32(2000)] },
-    { target: G1, fn: 'create_primary_listing', args: [val.i128(10000000n), val.u64(1900000000)] }
+    { target: G1, fn: 'example_action', args: [val.i128(10000000n), val.u64(1900000000)] }
   ]);
   assert.equal(enc.targets, `["${C1}","${G1}"]`);
-  assert.equal(enc.functions, '["set_quorum_bps","create_primary_listing"]');
+  assert.equal(enc.functions, '["set_quorum_bps","example_action"]');
   assert.equal(enc.args, '[[{"u32":2000}],[{"i128":"10000000"},{"u64":"1900000000"}]]');
   assert.deepEqual(JSON.parse(enc.args), [[{ u32: 2000 }], [{ i128: '10000000' }, { u64: '1900000000' }]]);
   assert.throws(() => encodeActions([]));

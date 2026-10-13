@@ -26,23 +26,14 @@ async function currentIndexedAuction(daoId: string, contractId: string) {
     orderBy: { createdLedger: 'desc' }
   });
   if (!row || row.settled || row.cancelled) return null;
-  const bids = await prisma.auctionBid.findMany({
-    where: { deploymentId: DEPLOYMENT_ID, daoId, tokenId: row.tokenId },
-    orderBy: [{ eventLedger: 'desc' }, { eventId: 'desc' }]
-  });
-  const highest = bids.reduce<(typeof bids)[number] | null>(
-    (best, bid) => (!best || bid.amount.greaterThan(best.amount) ? bid : best),
-    null
-  );
-  const extendedEnds = bids.map((bid) => bid.newEndSeconds).filter((value): value is bigint => value !== null);
-  const endTime = extendedEnds.reduce((max, value) => (value > max ? value : max), row.endSeconds);
+  // auction.auctions carries the latest bid (the highest) and the end including extensions.
   return {
     token_id: row.tokenId.toString(),
     start_time: row.startSeconds.toString(),
-    end_time: endTime.toString(),
-    extension_count: bids.filter((bid) => bid.extended).length,
-    highest_bid: highest ? highest.amount.toFixed(0) : '0',
-    highest_bidder: highest?.bidder ?? null,
+    end_time: row.currentEndSeconds.toString(),
+    extension_count: row.extensionCount,
+    highest_bid: row.highestBid ? row.highestBid.toFixed(0) : '0',
+    highest_bidder: row.highestBidder,
     settled: false
   };
 }

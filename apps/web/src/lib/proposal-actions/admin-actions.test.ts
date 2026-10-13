@@ -11,8 +11,10 @@ const setVotingPeriodHandler = getActionHandler('set-voting-period');
 const setQuorumBpsHandler = getActionHandler('set-quorum-bps');
 const setProposalThresholdHandler = getActionHandler('set-proposal-threshold');
 const setAuctionTimeBufferHandler = getActionHandler('set-auction-time-buffer');
-const createPrimaryListingHandler = getActionHandler('create-primary-listing');
-const cancelPrimaryListingHandler = getActionHandler('cancel-primary-listing');
+const openPoolHandler = getActionHandler('open-pool');
+const closePoolHandler = getActionHandler('close-pool');
+const sweepPoolHandler = getActionHandler('sweep-pool');
+const ASSET = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC';
 
 const config = { marketplaceContractId: 'CMARKET', auctionContractId: 'CAUCTION' } as DaoNetworkConfig;
 const buildContext: BuildContext = {
@@ -53,31 +55,60 @@ describe('governor setter proposal actions', () => {
   });
 });
 
-describe('primary listing proposal actions', () => {
-  it('builds create_primary_listing(price, expires_at) against the marketplace', () => {
-    const data = { price: '1.5', expiresAt: '2030-01-01T00:00' };
-    expect(createPrimaryListingHandler.validate(data, formContext).valid).toBe(true);
-    const call = createPrimaryListingHandler.buildCallVector(data, buildContext);
+describe('quick-buy pool proposal actions', () => {
+  it('builds open_pool(price, asset, expires_at, size, per-buyer, per-period, period) against the marketplace', () => {
+    const data = {
+      price: '1.5',
+      asset: ASSET,
+      size: '10',
+      maxPerBuyer: '2',
+      maxSoldPerPeriod: '5',
+      periodHours: '24',
+      expiresAt: '2030-01-01T00:00'
+    };
+    expect(openPoolHandler.validate(data, formContext).valid).toBe(true);
+    const call = openPoolHandler.buildCallVector(data, buildContext);
     expect(call.target).toBe('CMARKET');
-    expect(call.function).toBe('create_primary_listing');
+    expect(call.function).toBe('open_pool');
     expect(call.args[0]).toBe('15000000');
-    expect(Number(call.args[1])).toBeGreaterThan(0);
+    expect(call.args[1]).toBe(ASSET);
+    expect(Number(call.args[2])).toBeGreaterThan(0);
+    expect(call.args.slice(3)).toEqual([10, 2, 5, String(24 * 3600)]);
   });
 
-  it('rejects invalid price or expiry', () => {
-    expect(
-      createPrimaryListingHandler.validate({ price: 'abc', expiresAt: '2030-01-01T00:00' }, formContext).valid
-    ).toBe(false);
-    expect(createPrimaryListingHandler.validate({ price: '1', expiresAt: '' }, formContext).valid).toBe(false);
+  it('rejects an invalid price, asset, count or a past closing time', () => {
+    const base = {
+      price: '1',
+      asset: ASSET,
+      size: '1',
+      maxPerBuyer: '1',
+      maxSoldPerPeriod: '1',
+      periodHours: '1',
+      expiresAt: '2030-01-01T00:00'
+    };
+    for (const change of [
+      { price: 'abc' },
+      { asset: 'G' },
+      { size: '0' },
+      { maxPerBuyer: '-1' },
+      { periodHours: 'x' },
+      { expiresAt: '2000-01-01T00:00' }
+    ])
+      expect(openPoolHandler.validate({ ...base, ...change }, formContext).valid).toBe(false);
   });
 
-  it('builds cancel_primary(listing_id)', () => {
-    expect(cancelPrimaryListingHandler.validate({ listingId: '3' }, formContext).valid).toBe(true);
-    expect(cancelPrimaryListingHandler.validate({ listingId: 'x' }, formContext).valid).toBe(false);
-    expect(cancelPrimaryListingHandler.buildCallVector({ listingId: '3' }, buildContext)).toEqual({
+  it('builds close_pool and sweep_pool by pool id', () => {
+    expect(closePoolHandler.validate({ poolId: '3' }, formContext).valid).toBe(true);
+    expect(closePoolHandler.validate({ poolId: 'x' }, formContext).valid).toBe(false);
+    expect(closePoolHandler.buildCallVector({ poolId: '3' }, buildContext)).toEqual({
       target: 'CMARKET',
-      function: 'cancel_primary',
-      args: ['3']
+      function: 'close_pool',
+      args: [3]
+    });
+    expect(sweepPoolHandler.buildCallVector({ poolId: '3' }, buildContext)).toEqual({
+      target: 'CMARKET',
+      function: 'sweep_pool',
+      args: [3]
     });
   });
 });

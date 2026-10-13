@@ -121,15 +121,17 @@ describe('proposal action identity', () => {
   });
 
   it('flags metadata settings/address changes as high risk and distinguishes exact string values', () => {
-    const description = action({ type: 'set-artwork-description', value: '007' });
-    const other = action({ ...description, id: 'other', value: '7' });
-    expect(getProposalActionIdentity(description).key).not.toBe(getProposalActionIdentity(other).key);
-    expect(analyzeProposalAction(other, [description]).some((finding) => finding.kind === 'conflict')).toBe(true);
+    const renderer = action({ type: 'set-artwork-renderer', value: 'https://a.test/007' });
+    const other = action({ ...renderer, id: 'other', value: 'https://a.test/7' });
+    expect(getProposalActionIdentity(renderer).key).not.toBe(getProposalActionIdentity(other).key);
+    expect(analyzeProposalAction(other, [renderer]).some((finding) => finding.kind === 'conflict')).toBe(true);
+    // Two profile replacements in one proposal race on the same revision.
+    const profile = action({ type: 'update-dao-profile', expectedSeq: 2, profile: '{"description":"a"}' });
+    const nextProfile = action({ ...profile, id: 'p2', profile: '{"description":"b"}' });
+    expect(analyzeProposalAction(nextProfile, [profile]).some((finding) => finding.kind === 'conflict')).toBe(true);
     for (const type of [
       'set-artwork-renderer',
-      'set-artwork-description',
-      'set-artwork-project-uri',
-      'set-artwork-contract-image',
+      'update-dao-profile',
       'set-marketplace-payment-token',
       'set-auction-payment-token'
     ] as const)

@@ -2,6 +2,7 @@ import { keccak_256 } from '@noble/hashes/sha3.js';
 import { nativeToScVal, xdr } from '@stellar/stellar-sdk';
 import { Buffer } from 'buffer';
 
+import { parseProfile, plainSummary } from '@/lib/dao-profile';
 import { MODULE_LABELS, moduleLabelInSentence } from '@/lib/module-updates';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import type {
@@ -149,7 +150,13 @@ export function buildMintProposalCall(
 
 export function getProposalActionLabel(type: ProposalActionType) {
   const labels: Partial<Record<ProposalActionType, string>> = {
-    'set-mint-authority': 'Set Mint Authority',
+    'change-mint-allowance': 'Change Mint Allowance',
+    'set-transfers-locked': 'Lock Memberships',
+    'set-members-only-delegation': 'Members-only Delegation',
+    'set-dao-recovery': 'DAO Recovery',
+    'set-transfer-agent': 'Change Transfer Agent',
+    'dao-transfer': 'Recover a Membership',
+    'approved-transfer': 'Approve a Membership Transfer',
     'set-voting-delay': 'Set Voting Delay',
     'set-voting-period': 'Set Voting Period',
     'set-queue-delay': 'Set Queue Delay',
@@ -167,13 +174,12 @@ export function getProposalActionLabel(type: ProposalActionType) {
     'set-marketplace-secondary-fee': 'Set Marketplace Secondary Fee',
     'pause-marketplace': 'Pause Marketplace',
     'unpause-marketplace': 'Resume Marketplace',
-    'create-primary-listing': 'Create Primary Listing',
-    'cancel-primary-listing': 'Cancel Primary Listing',
+    'open-pool': 'Open Quick-buy Pool',
+    'close-pool': 'Close Pool',
+    'sweep-pool': 'Sweep Closed Pool',
     'add-artwork-properties': 'Append Artwork Properties and Items',
     'set-artwork-renderer': 'Update Artwork Renderer',
-    'set-artwork-description': 'Update Collection Description',
-    'set-artwork-project-uri': 'Update Project URI',
-    'set-artwork-contract-image': 'Update Collection Image',
+    'update-dao-profile': 'Update Community Profile',
     'set-token-metadata': 'Rename Community',
     'transfer-dao-token': 'Give Treasury Token',
     'change-dao-slug': 'Change Community Link',
@@ -182,9 +188,7 @@ export function getProposalActionLabel(type: ProposalActionType) {
     'regenerate-token-traits': 'Seed Token Traits',
     'treasury-authorize': 'Authorize Next Action (Treasury)',
     'treasury-buy-listing': 'Treasury Buys Listing',
-    'set-merkle-root': 'Set Minter Merkle Root',
-    'set-allowlist': 'Replace Minter Allowlist',
-    'minter-batch-mint': 'Minter Batch Allocation'
+    'open-claim-list': 'Open a Claim List'
   };
 
   if (labels[type]) return labels[type]!;
@@ -202,18 +206,38 @@ function moduleLabel(module: unknown) {
   return key in MODULE_LABELS ? moduleLabelInSentence(key as keyof typeof MODULE_LABELS) : key;
 }
 
+function profileSummary(raw: string) {
+  const profile = parseProfile(raw);
+  const parts = [profile.description ? `“${plainSummary(profile.description, 80)}”` : 'no description'];
+  if (profile.links.length) parts.push(`${profile.links.length} ${profile.links.length === 1 ? 'link' : 'links'}`);
+  if (profile.image) parts.push('an image');
+  return parts.join(', ');
+}
+
 export function getProposalActionSummary(action: ProposalQueuedAction) {
   if (action.type === 'set-token-metadata') return `Rename to ${action.name} (${action.symbol})`;
   if (action.type === 'change-dao-slug')
     return `Change link${action.previousSlug ? ` from /dao/${action.previousSlug}` : ''} to /dao/${action.slug}. The old link is freed right away and keeps leading here only until another community takes it. If /dao/${action.slug} is taken before this runs, the proposal fails.`;
   if (action.type === 'transfer-dao-token')
     return `Give token #${action.tokenId} from the treasury to ${action.recipient}`;
-  if (action.type === 'set-merkle-root')
-    return `Set Merkle root ${action.root} for ${action.tokenContractId}; starts a new Merkle claim round`;
-  if (action.type === 'set-allowlist')
-    return `Replace allowlist for ${action.tokenContractId}: ${action.addresses?.length ?? 0} recipients, ${action.amount} tokens each; starts a new allowlist round`;
-  if (action.type === 'minter-batch-mint')
-    return `Batch allocate to ${action.recipients?.length ?? 0} recipients for ${action.tokenContractId}; ordered amounts ${JSON.stringify(action.amounts)}`;
+  if (action.type === 'open-claim-list')
+    return `Open a claim list of ${action.total} tokens at ${action.price} base units each, closing ${new Date(Number(action.expiresAt) * 1000).toISOString()}; the full list is at ${action.treeUri}`;
+  if (action.type === 'change-mint-allowance')
+    return `${action.direction === 'decrease' ? 'Lower' : 'Raise'} the mint allowance of ${action.module || action.recipient} by ${action.amount} tokens`;
+  if (action.type === 'set-transfers-locked')
+    return action.enabled
+      ? 'Lock memberships: tokens move only by sale from the community, by giving them back to the DAO or by a DAO vote'
+      : 'Unlock memberships: members can transfer and sell their tokens';
+  if (action.type === 'set-members-only-delegation')
+    return action.enabled ? 'Allow delegating votes to members only' : 'Allow delegating votes to anyone';
+  if (action.type === 'set-dao-recovery')
+    return action.enabled ? 'Turn DAO recovery on: a vote can move any membership' : 'Turn DAO recovery off';
+  if (action.type === 'set-transfer-agent')
+    return `${action.enabled === false ? 'Stop' : 'Let'} ${action.module || action.recipient} ${action.enabled === false ? 'moving' : 'move'} memberships with the member’s signature`;
+  if (action.type === 'dao-transfer')
+    return `Move token #${action.tokenId} to ${action.to || action.recipient} by DAO recovery`;
+  if (action.type === 'approved-transfer')
+    return `Move token #${action.tokenId} from ${action.from} to ${action.to || action.recipient} with the member’s approval`;
   if (action.type === 'add-artwork-properties')
     return `${getProposalActionLabel(action.type)}: ${Array.isArray(action.names) ? action.names.length : 0} new properties, ${Array.isArray(action.items) ? action.items.length : 0} ordered items (${action.ipfsGroup?.base_uri ?? 'IPFS reference unavailable'})`;
   if (action.type === 'upgrade-dao-module')
@@ -225,16 +249,9 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
     return `Authorize the next action: ${Array.isArray(action.nodes) ? describeAuthNodes(action.nodes).join('; ') : 'no nodes'}`;
   if (action.type === 'treasury-buy-listing')
     return `Treasury buys listed token #${action.tokenId} for at most ${action.maxPrice} base units`;
-  if (
-    action.type === 'set-artwork-renderer' ||
-    action.type === 'set-artwork-description' ||
-    action.type === 'set-artwork-project-uri' ||
-    action.type === 'set-artwork-contract-image'
-  )
-    return `${getProposalActionLabel(action.type)} to ${action.value}`;
-  if (action.type === 'set-mint-authority') {
-    return `${action.enabled === false ? 'Revoke' : 'Grant'} ${getProposalActionLabel(action.type)} for ${action.authority || action.recipient}`;
-  }
+  if (action.type === 'set-artwork-renderer') return `${getProposalActionLabel(action.type)} to ${action.value}`;
+  if (action.type === 'update-dao-profile')
+    return `Replace the community profile (revision ${action.expectedSeq}) with: ${profileSummary(String(action.profile ?? ''))}`;
   if (
     action.type === 'set-voting-delay' ||
     action.type === 'set-voting-period' ||
@@ -266,12 +283,10 @@ export function getProposalActionSummary(action: ProposalQueuedAction) {
     return `${getProposalActionLabel(action.type)} to ${action.value || action.amount} bps`;
   if (action.type === 'set-auction-min-bid-increment')
     return `${getProposalActionLabel(action.type)} to ${action.value || action.amount}%`;
-  if (action.type === 'create-primary-listing') {
-    return `${getProposalActionLabel(action.type)} at ${action.price} (expires ${action.expiresAt})`;
-  }
-  if (action.type === 'cancel-primary-listing') {
-    return `${getProposalActionLabel(action.type)} #${action.listingId}`;
-  }
+  if (action.type === 'open-pool')
+    return `${getProposalActionLabel(action.type)}: ${action.size} tokens at ${action.price}, at most ${action.maxPerBuyer} per wallet, closing ${action.expiresAt}`;
+  if (action.type === 'close-pool' || action.type === 'sweep-pool')
+    return `${getProposalActionLabel(action.type)} #${action.poolId}`;
   if (action.type === 'batch-mint-governance-token') {
     return `${getProposalActionLabel(action.type)} to ${action.recipient} for ${action.amount} tokens`;
   }

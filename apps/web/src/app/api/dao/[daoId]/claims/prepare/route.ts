@@ -4,6 +4,7 @@ import { ZodError } from 'zod';
 import { AuthError, getAuthOrigin, requireAuthenticatedSession } from '@/lib/auth/server';
 import { ClaimError } from '@/lib/minter/identity';
 import { claimActionSchema, prepareClaim } from '@/lib/minter/service';
+import { RestoreRequiredError, restoreResponseBody } from '@/lib/restore-required';
 
 export async function POST(request: Request, { params }: { params: Promise<{ daoId: string }> }) {
   const headers = { 'Cache-Control': 'private, no-store' };
@@ -22,6 +23,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ dao
     const action = claimActionSchema.parse(body);
     return NextResponse.json(await prepareClaim((await params).daoId, actor, action), { headers });
   } catch (error) {
+    if (error instanceof RestoreRequiredError)
+      return NextResponse.json(restoreResponseBody(error), {
+        status: error.status,
+        headers: { 'Cache-Control': 'private, no-store' }
+      });
     const status =
       error instanceof AuthError
         ? 401
@@ -34,7 +40,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ dao
       error instanceof AuthError || error instanceof ClaimError
         ? error.message
         : error instanceof ZodError
-          ? 'Invalid claim method, round, amount or proof. Recipient and contracts must not be supplied.'
+          ? 'Invalid list, allocation, count, proof or price. The claimer and contracts must not be supplied.'
           : 'Claim simulation did not pass. Check eligibility, previous claims, network and XLM for fees. Nothing was signed or submitted.';
     return NextResponse.json({ message }, { status, headers });
   }

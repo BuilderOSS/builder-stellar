@@ -8,17 +8,20 @@ import { type ReactNode, useRef, useState } from 'react';
 import { css, cx } from 'styled-system/css';
 
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
+import { ProfileLinksEditor } from '@/components/admin/profile-links-editor';
 import { prepareDaoImage, uploadDaoImage } from '@/components/create-dao/dao-image-upload';
-import { ActionBar, Button, Callout, Chip, Crest, FieldLabel, Input, Spinner, Textarea } from '@/components/ui';
+import { ActionBar, Button, Callout, Chip, Crest, FieldLabel, Input, MarkdownField, Spinner } from '@/components/ui';
 import { card, muted, title } from '@/components/ui/panel-styles';
 import { useDaoContext } from '@/contexts/dao-context';
 import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { adminReadOptions, useAdminArtwork, useAdminTokenState } from '@/lib/admin-surfaces';
 import { checkNewLink, managerClient, useLinkAvailability, useManagerLink } from '@/lib/community-link';
 import { buildProfilePlan, type CommunityProfile, type ProfileStep } from '@/lib/community-profile-plan';
-import { validateArtworkSetting } from '@/lib/proposal-actions/artwork-admin-actions';
+import { type DaoProfile, MAX_PROFILE_BYTES, profileBytes, profileProblems } from '@/lib/dao-profile';
+import { validateDaoProfileDraft } from '@/lib/proposal-actions/artwork-admin-actions';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
 import { getProposalActionSummary } from '@/lib/proposal-call';
+import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
@@ -96,9 +99,12 @@ function Changed({ show, onUndo, children }: { show: boolean; onUndo: () => void
   );
 }
 
+type NameEdits = Partial<Pick<CommunityProfile, 'name' | 'symbol'>>;
+
 /**
- * Manage → Community profile: the name, symbol, image, description and website people see.
+ * Manage → Community profile: the name, symbol, image, description and links people see.
  * During setup the launch admin applies changes directly; after launch they become one proposal.
+ * The description, links and image are one profile JSON on chain (docs/STORAGE_DIET.md § 6).
  */
 export function CommunityProfileEditor() {
   const { daoId, routeId, daoConfig: config } = useDaoContext();
@@ -107,35 +113,38 @@ export function CommunityProfileEditor() {
   const artwork = useAdminArtwork(config, session.address);
   const draft = useAdminProposalDraft();
   const tx = useTransactionFeedback(config.name);
-  const [edits, setEdits] = useState<Partial<CommunityProfile>>({});
+  const [edits, setEdits] = useState<NameEdits>({});
+  const [profileDraft, setProfileDraft] = useState<DaoProfile | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [preview, setPreview] = useState<{ url: string; file: File } | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  const settings = artwork.data?.settings;
-  const current: CommunityProfile = {
-    name: config.tokenName,
-    symbol: config.tokenSymbol,
-    uri: config.tokenUri ?? '',
-    image: settings?.contract_image ?? config.contractImage,
-    description: settings?.description ?? config.tokenDescription,
-    website: settings?.project_uri ?? ''
-  };
-  const value = (key: keyof CommunityProfile) => edits[key] ?? current[key];
-  const changed = (key: keyof CommunityProfile) =>
-    edits[key] !== undefined && edits[key]!.trim() !== current[key].trim();
-  const set = (patch: Partial<CommunityProfile>) => {
+  const current: CommunityProfile = { name: config.tokenName, symbol: config.tokenSymbol, profile: config.profile };
+  const profile = profileDraft ?? current.profile;
+  const value = (key: 'name' | 'symbol') => edits[key] ?? current[key];
+  const changed = (key: 'name' | 'symbol') => edits[key] !== undefined && edits[key]!.trim() !== current[key].trim();
+  const set = (patch: NameEdits) => {
     setMessage('');
     setEdits((previous) => ({ ...previous, ...patch }));
   };
-  const reset = (key: keyof CommunityProfile) =>
+  const reset = (key: 'name' | 'symbol') =>
     setEdits((previous) => {
       const next = { ...previous };
       delete next[key];
       return next;
     });
+  const setProfile = (patch: Partial<DaoProfile>) => {
+    setMessage('');
+    setProfileDraft({ ...profile, ...patch });
+  };
+  const profileChanged = (key: keyof DaoProfile) =>
+    profileDraft !== null && JSON.stringify(profileDraft[key]) !== JSON.stringify(current.profile[key]);
+  const resetProfile = (key: keyof DaoProfile) => setProfileDraft({ ...profile, [key]: current.profile[key] });
+  // The revision update_profile must name: the chain's, read with the rest of Metadata.
+  const chainSeq = artwork.data?.profileSeq ?? null;
+  const bytes = profileBytes(profile);
 
   const live = token.data?.live === true;
   // Token and Metadata share the same admin: the launch admin during setup, the Treasury after.
@@ -168,25 +177,21 @@ export function CommunityProfileEditor() {
   const linkReady = linkChanged && linkCheck?.state === 'ok';
   const linkStep = linkReady ? { title: 'Change the link', detail: `/dao/${currentLink} → /dao/${nextLink}` } : null;
 
-  const steps = buildProfilePlan(current, edits);
+  const steps = buildProfilePlan(current, { ...edits, ...(profileDraft ? { profile: profileDraft } : {}) }, chainSeq);
   const stepError = (step: ProfileStep) =>
     step.type === 'set-token-metadata'
       ? getActionHandler('set-token-metadata').validate(step.values, context)
-      : validateArtworkSetting(step.values.value, step.type);
+      : validateDaoProfileDraft(step.values);
   const errors = Object.fromEntries(
     steps.flatMap((step) => {
       const result = stepError(step);
       if (result.valid) return [];
       if (step.type === 'set-token-metadata')
         return Object.entries(('fields' in result && result.fields) || { name: result.message });
-      const key = {
-        'set-artwork-contract-image': 'image',
-        'set-artwork-description': 'description',
-        'set-artwork-project-uri': 'website'
-      }[step.type];
-      return [[key, result.message]];
+      return [['profile', result.message]];
     })
   ) as Record<string, string>;
+  const problems = profileDraft ? profileProblems(profileDraft) : [];
   const blocked = Object.keys(errors).length > 0 || Boolean(preview) || (direct && linkChanged && !linkReady);
   // During setup the link is one more direct step; after launch it is proposed separately.
   const shownSteps = direct && linkStep ? [...steps, { type: 'change-dao-slug', ...linkStep }] : steps;
@@ -204,7 +209,7 @@ export function CommunityProfileEditor() {
     setUploading(true);
     try {
       const url = await uploadDaoImage(preview.file);
-      set({ image: url });
+      setProfile({ image: url });
       setPreview(null);
     } catch (failure) {
       setMessage(failure instanceof Error ? failure.message : 'Upload failed');
@@ -229,8 +234,14 @@ export function CommunityProfileEditor() {
     });
   }
 
-  function addToProposal() {
+  async function addToProposal() {
     if (!steps.length || blocked) return;
+    try {
+      for (const step of steps) await assertProfileRevision(step);
+    } catch (failure) {
+      setMessage(failure instanceof Error ? failure.message : 'Could not check the current profile');
+      return;
+    }
     draft.requestAddBatch({
       daoId,
       requests: steps.map((step) => {
@@ -242,8 +253,22 @@ export function CommunityProfileEditor() {
           metadata: { title: step.title, description: `${step.title}: ${step.detail}.`, url: '' }
         };
       }),
-      onAdded: () => setEdits({})
+      onAdded: () => {
+        setEdits({});
+        setProfileDraft(null);
+      }
     });
+  }
+
+  /** The chain's profile revision right now; a stale one would make update_profile fail. */
+  async function assertProfileRevision(step: ProfileStep) {
+    if (step.type !== 'update-dao-profile') return;
+    const client = new MetadataClient(adminReadOptions(config, config.metadataContractId, session.address));
+    const seq = (await client.profile_seq()).result.unwrap();
+    if (seq !== step.values.expectedSeq) {
+      await artwork.mutate();
+      throw new Error('The profile changed since this page loaded. Review the current profile, then try again.');
+    }
   }
 
   async function applyDirectly() {
@@ -260,21 +285,21 @@ export function CommunityProfileEditor() {
         if (step.type === 'set-token-metadata') {
           const client = new TokenClient({
             ...adminReadOptions(config, config.tokenContractId, session.address),
+            ...restoreArchivedState,
             signTransaction: sign
           });
           assembled = await client.set_metadata(step.values);
         } else {
           const client = new MetadataClient({
             ...adminReadOptions(config, config.metadataContractId, session.address),
+            ...restoreArchivedState,
             signTransaction: sign
           });
-          const value = step.values.value;
-          const call =
-            step.type === 'set-artwork-contract-image'
-              ? await client.update_contract_image({ new_contract_image: value })
-              : step.type === 'set-artwork-description'
-                ? await client.update_description({ new_description: value })
-                : await client.update_project_uri({ new_project_uri: value });
+          await assertProfileRevision(step);
+          const call = await client.update_profile({
+            expected_seq: step.values.expectedSeq,
+            profile: step.values.profile
+          });
           call.result.unwrap();
           assembled = call;
         }
@@ -287,14 +312,7 @@ export function CommunityProfileEditor() {
         if (step.type === 'set-token-metadata') {
           reset('name');
           reset('symbol');
-        } else
-          reset(
-            {
-              'set-artwork-contract-image': 'image',
-              'set-artwork-description': 'description',
-              'set-artwork-project-uri': 'website'
-            }[step.type] as keyof CommunityProfile
-          );
+        } else setProfileDraft(null);
       }
       if (linkStep) {
         const label = total > 1 ? `${linkStep.title} (step ${total} of ${total})` : linkStep.title;
@@ -328,7 +346,7 @@ export function CommunityProfileEditor() {
     <Button
       disabled={disabled || !shownSteps.length || blocked || (direct && !networkReady)}
       loading={busy}
-      onClick={() => (direct ? void applyDirectly() : addToProposal())}
+      onClick={() => void (direct ? applyDirectly() : addToProposal())}
     >
       {submitLabel}
     </Button>
@@ -363,7 +381,7 @@ export function CommunityProfileEditor() {
               <Crest
                 name={value('name') || config.tokenName}
                 seed={config.tokenContractId}
-                src={preview?.url ?? value('image')}
+                src={preview?.url ?? profile.image}
                 size="fill"
               />
             </div>
@@ -389,13 +407,12 @@ export function CommunityProfileEditor() {
               </Button>
             )}
             <Changed
-              show={changed('image') || Boolean(preview)}
+              show={profileChanged('image') || Boolean(preview)}
               onUndo={() => {
                 setPreview(null);
-                reset('image');
+                resetProfile('image');
               }}
             />
-            {errors.image ? <p className={error}>{errors.image}</p> : null}
           </div>
 
           <div className={fields}>
@@ -465,32 +482,38 @@ export function CommunityProfileEditor() {
                 </p>
               </Changed>
             </div>
+            {config.profileStatus === 'unavailable' && config.profileSeq !== null ? (
+              <Callout
+                variant="warning"
+                title="The current profile can't be shown right now"
+                description="It couldn't be checked against the chain. Saving a new description, links or image replaces it."
+              />
+            ) : null}
             <div className={field}>
               <FieldLabel htmlFor="profile-description">Description</FieldLabel>
-              <Textarea
+              <MarkdownField
                 id="profile-description"
-                rows={3}
-                value={value('description')}
+                value={profile.description}
                 disabled={disabled}
-                aria-invalid={Boolean(errors.description) || undefined}
-                onChange={(event) => set({ description: event.target.value })}
+                canUpload={Boolean(session.address)}
+                invalid={problems.length > 0 || undefined}
+                describedBy="profile-budget"
+                onChange={(description) => setProfile({ description })}
               />
-              <Changed show={changed('description')} onUndo={() => reset('description')} />
-              {errors.description ? <p className={error}>{errors.description}</p> : null}
+              <Changed show={profileChanged('description')} onUndo={() => resetProfile('description')} />
             </div>
-            <div className={field}>
-              <FieldLabel htmlFor="profile-website">Website</FieldLabel>
-              <Input
-                id="profile-website"
-                type="url"
-                value={value('website')}
-                disabled={disabled}
-                aria-invalid={Boolean(errors.website) || undefined}
-                onChange={(event) => set({ website: event.target.value })}
-              />
-              <Changed show={changed('website')} onUndo={() => reset('website')} />
-              {errors.website ? <p className={error}>{errors.website}</p> : null}
-            </div>
+            <ProfileLinksEditor
+              id="profile-links"
+              links={profile.links}
+              disabled={disabled}
+              onChange={(links) => setProfile({ links })}
+            />
+            <Changed show={profileChanged('links')} onUndo={() => resetProfile('links')} />
+            <p id="profile-budget" className={bytes > MAX_PROFILE_BYTES ? error : hint}>
+              {bytes.toLocaleString()} of {MAX_PROFILE_BYTES.toLocaleString()} bytes used by the description, links and
+              image.
+            </p>
+            {errors.profile ? <p className={error}>{errors.profile}</p> : null}
           </div>
         </div>
 

@@ -3,16 +3,15 @@
 import { css } from 'styled-system/css';
 
 import { ContractUpdatesNotice } from '@/components/admin/contract-updates-notice';
-import { TtlExpiryPanel } from '@/components/admin/ttl-expiry-panel';
+import { PlatformUpgrades } from '@/components/admin/platform-upgrades';
 import { PageSection } from '@/components/page-section';
 import { ProposalDraftPanel } from '@/components/proposal/proposal-draft-panel';
-import { Avatar, Chip, Disclosure, ListRow, Section } from '@/components/ui';
+import { Avatar, Chip, ListRow, Section } from '@/components/ui';
 import { useDaoContext } from '@/contexts/dao-context';
-import { treasuryHasAuthority, treasuryIsAdmin } from '@/lib/admin-proposals';
+import { treasuryIsAdmin } from '@/lib/admin-proposals';
 import { useContractAdmin } from '@/lib/admin-queries';
 import { useAdminTokenState } from '@/lib/admin-surfaces';
 import { daoAdminRoute } from '@/lib/dao-routes';
-import { useGoldskyMintAuthorities } from '@/lib/goldsky-queries';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 const accessCard = css({
@@ -47,18 +46,18 @@ const access = (direct: boolean, vote: boolean): Access => (direct ? 'direct' : 
 export default function AdminPage() {
   const { daoId, daoConfig: config, routeId } = useDaoContext();
   const session = useAuthSessionStore();
-  const { data: mintAuthorities } = useGoldskyMintAuthorities(config.tokenContractId);
   const { data: tokenAdmin } = useContractAdmin(config, 'token', session.address || undefined);
   const { data: governorAdmin } = useContractAdmin(config, 'governor', session.address || undefined);
   const { data: auctionAdmin } = useContractAdmin(config, 'auction', session.address || undefined);
 
   const token = useAdminTokenState(config, session.address);
   const isAdmin = Boolean(session.address && token.data?.admin === session.address);
-  const hasMintAccess = Boolean(isAdmin || token.data?.mintAuthority);
+  // Only the Token admin mints directly; modules mint against their allowances.
+  const hasMintAccess = Boolean(isAdmin);
   const hasGovernanceAccess = Boolean(session.address && governorAdmin === session.address);
   const canProposeAdminActions = treasuryIsAdmin(config, tokenAdmin) || treasuryIsAdmin(config, governorAdmin);
-  const canProposeMint =
-    treasuryIsAdmin(config, tokenAdmin) || treasuryHasAuthority(config.treasuryContractId, mintAuthorities?.items);
+  // The Treasury mints as the Token admin; modules mint against their allowances.
+  const canProposeMint = treasuryIsAdmin(config, tokenAdmin);
   const canProposeGovernance = treasuryIsAdmin(config, governorAdmin);
   const canProposeAuction = treasuryIsAdmin(config, auctionAdmin);
   const hasAnyAccess = Boolean(
@@ -127,6 +126,13 @@ export default function AdminPage() {
       meta: 'Review and propose upgrades',
       href: daoAdminRoute(routeId, '/upgrades'),
       access: 'open'
+    },
+    {
+      key: 'renewal',
+      title: 'Storage renewal',
+      meta: 'When data expires, and renewing it in one go',
+      href: daoAdminRoute(routeId, '/renewal'),
+      access: 'open'
     }
   ];
 
@@ -140,6 +146,7 @@ export default function AdminPage() {
       }`}
     >
       <ContractUpdatesNotice enabled={hasAnyAccess} />
+      <PlatformUpgrades enabled={hasAnyAccess} />
       <section className={accessCard} aria-labelledby="access-title">
         <div className={css({ display: 'flex', alignItems: 'center', gap: '3', minW: '0' })}>
           {session.address ? <Avatar address={session.address} size="lg" yours={hasAnyAccess} /> : null}
@@ -189,10 +196,6 @@ export default function AdminPage() {
           ))}
         </div>
       </Section>
-
-      <Disclosure title="Storage renewal">
-        <TtlExpiryPanel config={config} />
-      </Disclosure>
     </PageSection>
   );
 }

@@ -7,6 +7,9 @@
 --
 -- Column lists mirror the pipeline sink schemas in
 -- packages/goldsky/templates/builder-stellar-events.yaml.mustache.
+--
+-- Baseline of 2026-10-13 (pre-mainnet: the database is reset on redeploy, so
+-- the schema is kept as one clean set of files rather than a migration history).
 -- =============================================================================
 
 CREATE SCHEMA chain;
@@ -17,14 +20,13 @@ CREATE SCHEMA auction;
 CREATE SCHEMA metadata;
 CREATE SCHEMA treasury;
 CREATE SCHEMA marketplace;
-CREATE SCHEMA minter;
+CREATE SCHEMA claims;
 CREATE SCHEMA app;
 
 -- -----------------------------------------------------------------------------
 -- Helpers
 -- -----------------------------------------------------------------------------
 
--- Total ordering key for an event inside the chain. Missing indexes sort first.
 -- Goldsky writes ledger_closed_at as epoch milliseconds (for example "1791475282000"); accept epoch
 -- seconds and ISO text too, and NULL for an empty value.
 CREATE FUNCTION chain.ledger_closed_at_ts(raw text)
@@ -40,6 +42,17 @@ AS $$
   END
 $$;
 
+-- jsonb refuses the \u0000 escape, and the decoder stores free text (profile
+-- JSON, comments, descriptions) as it was emitted. One NUL in one DAO's text
+-- must not make every view that casts the column raise, so the views cast
+-- through this: the escape becomes U+FFFD.
+CREATE FUNCTION chain.jsonb_safe(raw text)
+RETURNS jsonb
+LANGUAGE sql IMMUTABLE PARALLEL SAFE
+AS $$ SELECT replace(raw, '\u0000', '\ufffd')::jsonb $$;
+
+-- Total ordering key for an event inside the chain. A missing index sorts first.
+-- Every "latest" or "first" lookup in the views orders by this, then event_id.
 CREATE FUNCTION chain.event_position(ledger bigint, tx bigint, op bigint, evt bigint)
 RETURNS bigint[]
 LANGUAGE sql IMMUTABLE PARALLEL SAFE
@@ -111,8 +124,11 @@ CREATE INDEX idx_raw_events_deployment_ledger
 -- -----------------------------------------------------------------------------
 -- chain.decoded_events: decoded event name, named topics and named data fields
 --
--- topics / args are JSON objects stored as text (the pipeline sinks strings);
--- views cast with ::jsonb.
+-- event_name is the on-chain topic-0 symbol (snake_case struct name). topics
+-- and args are JSON objects stored as text (the pipeline sinks strings); u32
+-- values are JSON numbers, u64/u128/i128 strings, bytes hex, addresses strings,
+-- nested contract types objects, Option::None null. topic_0..3 hold the raw
+-- topic values after the name ('' when absent).
 -- -----------------------------------------------------------------------------
 
 CREATE TABLE chain.decoded_events (
@@ -142,7 +158,7 @@ CREATE TABLE chain.decoded_events (
 );
 
 -- View access paths: by role + event name (state views), by contract
--- (identity joins), and by ledger (freshness checks).
+-- (identity joins), and by topic_0 (per-entity lookups: a DAO, a proposal, a token).
 CREATE INDEX idx_decoded_events_role_event
   ON chain.decoded_events (deployment_id, contract_role, event_name, ledger_sequence DESC,
     transaction_index DESC, operation_index DESC, event_index DESC, event_id DESC);
@@ -151,6 +167,32 @@ CREATE INDEX idx_decoded_events_contract
     transaction_index DESC, operation_index DESC, event_index DESC, event_id DESC);
 CREATE INDEX idx_decoded_events_topic_0
   ON chain.decoded_events (deployment_id, event_name, topic_0);
+
+-- Every decoded event with its topics (t) and data (a) as jsonb, its total
+-- position in the chain (pos) and its close time. Every domain view reads
+-- this instead of chain.decoded_events; the planner inlines it, so the
+-- filters still reach the indexes above.
+CREATE VIEW chain.events AS
+SELECT
+  e.event_id,
+  e.deployment_id,
+  e.contract_id,
+  e.contract_role,
+  e.event_name,
+  e.topic_0,
+  e.topic_1,
+  e.topic_2,
+  chain.jsonb_safe(e.topics) AS t,
+  chain.jsonb_safe(e.args) AS a,
+  chain.event_position(e.ledger_sequence, e.transaction_index, e.operation_index, e.event_index) AS pos,
+  e.ledger_sequence,
+  e.transaction_index,
+  e.operation_index,
+  e.event_index,
+  chain.ledger_closed_at_ts(e.ledger_closed_at) AS closed_at,
+  e.transaction_hash,
+  e.ingested_at
+FROM chain.decoded_events e;
 
 -- -----------------------------------------------------------------------------
 -- app.activity_feed_events: user-facing summary of each decoded event
@@ -190,10 +232,6 @@ CREATE INDEX idx_activity_feed_contract_order
     transaction_index DESC, operation_index DESC, event_index DESC, activity_id DESC);
 CREATE INDEX idx_activity_feed_role_kind
   ON app.activity_feed_events (deployment_id, contract_role, kind, ledger_sequence DESC, activity_id DESC);
--- Minter events are shared by every DAO; token_id is the only tenant key.
-CREATE INDEX idx_activity_feed_minter_tenant
-  ON app.activity_feed_events (deployment_id, token_id, kind, ledger_sequence DESC, activity_id DESC)
-  WHERE contract_role = 'minter';
 
 -- -----------------------------------------------------------------------------
 -- Triggers

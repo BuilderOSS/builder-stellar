@@ -67,7 +67,5 @@ export const transferSacTokenHandler: ActionHandler<TransferSacTokenData> = {
       function: 'transfer',
       args: [context.treasuryAddress, data.recipient.trim(), stroops.toString()]
     };
-  },
-
-  requiresMintAuthority: false
+  }
 };

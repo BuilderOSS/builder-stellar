@@ -1,6 +1,6 @@
 #![allow(clippy::too_many_arguments)] // emit helpers mirror the event fields 1:1
 
-use soroban_sdk::{contractevent, Address, Env, String, Vec};
+use soroban_sdk::{contractevent, Address, BytesN, Env, String, Vec};
 
 /// Emitted once when the Manager launches the metadata module (Setup -> Live).
 #[contractevent]
@@ -23,33 +23,42 @@ pub struct MetadataInitialized {
     #[topic]
     pub token: Address,
     pub renderer_base: String,
-    pub version: String,
     pub admin: Address,
-    pub project_uri: String,
-    pub description: String,
-    pub contract_image: String,
 }
 
 pub fn emit_metadata_initialized(
     env: &Env,
     token: &Address,
     renderer_base: &String,
-    version: &String,
     admin: &Address,
-    project_uri: &String,
-    description: &String,
-    contract_image: &String,
 ) {
-    let event = MetadataInitialized {
+    MetadataInitialized {
         token: token.clone(),
         renderer_base: renderer_base.clone(),
-        version: version.clone(),
         admin: admin.clone(),
-        project_uri: project_uri.clone(),
-        description: description.clone(),
-        contract_image: contract_image.clone(),
-    };
-    event.publish(env);
+    }
+    .publish(env);
+}
+
+/// The DAO profile (serialized JSON: description, links, image). This event
+/// is the only copy of the text; the chain keeps `hash` and `seq`. `seq` is 0
+/// at creation and increases by one per update.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProfileUpdated {
+    #[topic]
+    pub seq: u32,
+    pub hash: BytesN<32>,
+    pub profile: String,
+}
+
+pub fn emit_profile_updated(env: &Env, seq: u32, hash: &BytesN<32>, profile: &String) {
+    ProfileUpdated {
+        seq,
+        hash: hash.clone(),
+        profile: profile.clone(),
+    }
+    .publish(env);
 }
 
 #[contractevent]
@@ -119,21 +128,6 @@ pub fn emit_seeds_generated(
 
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ContractImageUpdated {
-    pub old_image: String,
-    pub new_image: String,
-}
-
-pub fn emit_contract_image_updated(env: &Env, old_image: &String, new_image: &String) {
-    let event = ContractImageUpdated {
-        old_image: old_image.clone(),
-        new_image: new_image.clone(),
-    };
-    event.publish(env);
-}
-
-#[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RendererBaseUpdated {
     pub old_base: String,
     pub new_base: String,
@@ -143,36 +137,6 @@ pub fn emit_renderer_base_updated(env: &Env, old_base: &String, new_base: &Strin
     let event = RendererBaseUpdated {
         old_base: old_base.clone(),
         new_base: new_base.clone(),
-    };
-    event.publish(env);
-}
-
-#[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DescriptionUpdated {
-    pub old_description: String,
-    pub new_description: String,
-}
-
-pub fn emit_description_updated(env: &Env, old_description: &String, new_description: &String) {
-    let event = DescriptionUpdated {
-        old_description: old_description.clone(),
-        new_description: new_description.clone(),
-    };
-    event.publish(env);
-}
-
-#[contractevent]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ProjectURIUpdated {
-    pub old_uri: String,
-    pub new_uri: String,
-}
-
-pub fn emit_project_uri_updated(env: &Env, old_uri: &String, new_uri: &String) {
-    let event = ProjectURIUpdated {
-        old_uri: old_uri.clone(),
-        new_uri: new_uri.clone(),
     };
     event.publish(env);
 }

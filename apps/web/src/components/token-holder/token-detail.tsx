@@ -12,6 +12,7 @@ import { card, muted, title } from '@/components/ui/panel-styles';
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
 import { shortAddress } from '@/lib/activity-feed';
+import { plainSummary } from '@/lib/dao-profile';
 import { daoRoute } from '@/lib/dao-routes';
 import { directoryFetch } from '@/lib/member-directory/hooks';
 import { validHolderAddress } from '@/lib/token-holder/read';
@@ -69,7 +70,10 @@ export function HolderTokenDetail({ tokenId }: { tokenId: number }) {
         <ChevronLeft aria-hidden="true" />
         {config.tokenName || 'Community'}
       </ButtonLink>
-      <PageSection title={name} description={data?.metadata?.description || config.tokenDescription || undefined}>
+      <PageSection
+        title={name}
+        description={data?.metadata?.description || plainSummary(config.profile.description) || undefined}
+      >
         <div className={layout}>
           <div className={art}>
             {owner ? (

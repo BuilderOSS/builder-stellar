@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button, Callout } from '@/components/ui';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { getDeploymentConfig } from '@/lib/deployment-config';
+import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { STARTER_COLLECTIONS } from '@/lib/starter-collections';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { confirmCreationTransaction, DefinitiveTransactionFailure } from '@/lib/use-dao-deployment';
@@ -92,6 +93,7 @@ export function ArtworkSetup({ daoId, config }: { daoId: string; config: DaoNetw
           networkPassphrase: config.passphrase,
           publicKey: session.address,
           allowHttp: config.rpcUrl.startsWith('http://'),
+          ...restoreArchivedState,
           signTransaction: async (xdr, opts) => {
             checkWallet();
             assertArtworkSaved();

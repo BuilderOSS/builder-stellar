@@ -32,6 +32,7 @@ import { decimalToStroops, formatStroops } from '@/lib/auction-values';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { formatDuration } from '@/lib/duration';
 import { getActionHandler } from '@/lib/proposal-actions/registry';
+import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
@@ -252,6 +253,7 @@ export function AuctionSettingsBuilder({
     setMessage('');
     const client = new AuctionClient({
       ...adminReadOptions(config, config.auctionContractId, session.address),
+      ...restoreArchivedState,
       signTransaction: (xdr, opts) =>
         signWithWallet(xdr, { ...opts, address: session.address!, networkPassphrase: config.passphrase })
     });

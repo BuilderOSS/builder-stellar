@@ -44,7 +44,7 @@ const GROUPS: Array<{ title: string; items: ManageItem[] }> = [
         section: '/founders',
         requiredForLaunch: true
       },
-      { key: 'claims', label: 'Claim allocations', meta: 'Free tokens people can claim', section: '/claims' },
+      { key: 'claims', label: 'Claim lists', meta: 'Tokens listed people can claim', section: '/claims' },
       {
         key: 'artwork',
         label: 'Artwork',
@@ -58,7 +58,12 @@ const GROUPS: Array<{ title: string; items: ManageItem[] }> = [
     title: 'Rules',
     items: [
       { key: 'governance', label: 'Voting rules', meta: 'Timing, quorum and who can propose', section: '/governance' },
-      { key: 'owner', label: 'Who can mint', meta: 'Accounts allowed to mint tokens', section: '/owner' }
+      {
+        key: 'owner',
+        label: 'Membership',
+        meta: 'How tokens move, delegation and module allowances',
+        section: '/owner'
+      }
     ]
   },
   {

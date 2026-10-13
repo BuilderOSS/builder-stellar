@@ -6,12 +6,21 @@ function invoke(data) {
       return name.charAt(0).toUpperCase() + name.slice(1).replace(/_([a-z])/g, function (_, c) { return c.toUpperCase(); });
     }
 
+    // PostgreSQL jsonb refuses U+0000, and a profile, comment or description is
+    // free text no contract filters, so one NUL would make every view that reads
+    // the row raise. Replace it with U+FFFD before the text reaches the sink.
+    function text(value) {
+      return String(value).replace(/\u0000/g, '\uFFFD');
+    }
+
     function native(value) {
       if (value === null || value === undefined || value === 'void') return null;
+      if (typeof value === 'string') return text(value);
       if (typeof value !== 'object') return value;
-      if (value.symbol !== undefined) return String(value.symbol);
+      if (value.symbol !== undefined) return text(value.symbol);
       if (value.address !== undefined) return String(value.address);
-      var scalar = ['u32', 'i32', 'u64', 'i64', 'u128', 'i128', 'u256', 'i256', 'bytes', 'string', 'bool'];
+      if (value.string !== undefined) return text(value.string);
+      var scalar = ['u32', 'i32', 'u64', 'i64', 'u128', 'i128', 'u256', 'i256', 'bytes', 'bool'];
       for (var i = 0; i < scalar.length; i += 1) {
         if (value[scalar[i]] !== undefined) return scalar[i].match(/^[ui](64|128|256)$/) ? String(value[scalar[i]]) : value[scalar[i]];
       }
@@ -45,30 +54,41 @@ function invoke(data) {
   // Topic names mirror the on-chain topic order after the event-name symbol.
   // They are generated from contracts/*/src/events.rs plus the OpenZeppelin
   // library events our contracts emit; test/contract-alignment.test.mjs fails
-  // if this map drifts. Minter token_id is the DAO token contract Address, not
-  // an NFT number.
+  // if this map drifts. An event this map does not name (an external module's
+  // own events) is decoded positionally: topic_0.., and arg_0.. for vec data.
   var topicNames = {
     // Manager
     ManagerInitialized: ['admin'], ImplementationRegistered: ['wasm_hash'], UpgradeApproved: ['from_hash', 'to_hash'],
     ImplementationRevoked: ['wasm_hash'], DaoCreated: ['token_address', 'deployer', 'launch_admin'], FactoryPaused: [], FactoryUnpaused: [],
     DaoLaunched: ['token_address'], CurrentImplementationsUpdated: [], ManagerUpgraded: ['from_hash', 'to_hash'],
+    // Membership models: a module deployed into a pending DAO, an assurance drive opened (its
+    // slug reserved) and a failed drive's slug released.
+    ModuleCreated: ['token_address', 'kind'], AssuranceOpened: ['token_address'], SlugReleased: ['token_address', 'slug'],
     // AdminChanged is emitted by the Manager (its own admin handover) and, with the same shape,
     // by every DAO module at launch (contracts/common/src/admin.rs: launch admin -> Treasury).
-    AdminProposed: ['current_admin', 'proposed_admin'], AdminProposalCancelled: ['current_admin', 'cancelled_admin'], AdminChanged: ['old_admin', 'new_admin'], PlatformMinterSet: ['minter'],
+    AdminProposed: ['current_admin', 'proposed_admin'], AdminProposalCancelled: ['current_admin', 'cancelled_admin'], AdminChanged: ['old_admin', 'new_admin'],
     LatestImplementationSet: ['name', 'wasm_hash'], PendingSlugUpdated: ['token_address'], SlugClaimed: ['token_address', 'slug'],
     // Manager 0.2.0+: a launched DAO moved to new_slug by vote; old_slug (data) is released.
     SlugChanged: ['token_address', 'new_slug'],
+    // contracts/common/src/upgrade.rs: the platform upgrade notice changed (the Manager emits it).
+    UpgradeDelayChanged: [],
     // Each module's launch handoff (topic `treasury`).
     TokenLaunched: ['treasury'], GovernorLaunched: ['treasury'], TreasuryLaunched: ['treasury'],
     AuctionLaunched: ['treasury'], MarketplaceLaunched: ['treasury'], MetadataLaunched: ['treasury'],
-    // contracts/common/src/upgrade.rs: emitted by EVERY module (token, governor, treasury, auction,
-    // marketplace, metadata); the emitting module is identified by contract_id/contract_role.
-    Upgraded: ['from_hash', 'to_hash'], VersionSynced: [], Migrated: [],
-    // Token (custom + OpenZeppelin non-fungible/votes/pausable)
+    ClaimMinterLaunched: ['treasury'],
+    // contracts/common/src/upgrade.rs: emitted by every DAO module, the ClaimMinter included;
+    // the emitting contract is identified by contract_id/contract_role.
+    // version() is read from the Manager registry since 0.3.0 (no sync event).
+    Upgraded: ['from_hash', 'to_hash'], Migrated: [],
+    // Token (custom + OpenZeppelin non-fungible/votes)
     // MetadataUpdated (token 0.2.0+): rename; all data, no topics.
-    TokenInitialized: ['admin'], MetadataUpdated: [], MintAuthorityChanged: ['authority'], MintWithMinter: ['minter', 'to'], MintBatchWithMinter: ['minter'],
+    TokenInitialized: ['admin'], MetadataUpdated: [], MintAllowanceChanged: ['module'], ModuleRegistered: ['kind'], ModuleUnregistered: ['kind'], MintWithMinter: ['minter', 'to'], MintBatchWithMinter: ['minter'],
     Mint: ['to'], Transfer: ['from', 'to'], Approve: ['approver', 'token_id'], ApproveForAll: ['owner'],
     DelegateChanged: ['delegator'], DelegateVotesChanged: ['delegate'],
+    // Membership switches (docs/designs/locked-tokens.md): all data, no topics.
+    TransfersLockChanged: [], MembersOnlyDelegationChanged: [], DaoRecoveryChanged: [],
+    TransferAgentChanged: ['module'], AgentTransfer: ['agent'], DaoTransfer: ['from', 'to'],
+    // OpenZeppelin pausable: only the Auction uses it (paused at construction, unpaused at launch).
     Paused: [], Unpaused: [],
     // Governor (custom + OpenZeppelin governor)
     GovernorInitialized: ['admin'], ProposalCreated: ['proposal_id', 'proposer'], ProposalScheduled: ['proposal_id'],
@@ -87,24 +107,31 @@ function invoke(data) {
     RefundDeferred: ['token_id', 'bidder'], RefundWithdrawn: ['bidder'],
     // Metadata
     MetadataInitialized: ['token'], PropertyAdded: ['property_id'], SeedGenerated: ['token_id'], SeedsGenerated: ['first_token_id'], PropertiesReset: [],
-    ProjectURIUpdated: [], DescriptionUpdated: [], RendererBaseUpdated: [], ContractImageUpdated: [],
-    // Minter
-    MerkleClaimEvent: ['token_id', 'recipient'], AllowlistClaimEvent: ['token_id', 'recipient'], MintBatchEvent: ['token_id'],
-    MerkleRootSetEvent: ['token_id'], AllowlistSetEvent: ['token_id'],
+    // ProfileUpdated (0.3.0+): the profile JSON is event-only; Metadata stores its hash and seq.
+    ProfileUpdated: ['seq'], RendererBaseUpdated: [],
+    // ClaimMinter (role claims): merkle claim lists, paid or free, with an optional assurance escrow.
+    ListOpened: ['list_id'], Claimed: ['list_id', 'claimer'], EscrowReleased: ['list_id'], Refunded: ['list_id', 'claimer'],
     // Marketplace
-    MarketplaceInitialized: ['token', 'admin'], PrimaryListingCreated: ['listing_id'], PrimaryListingPurchased: ['listing_id', 'buyer'],
-    PrimaryListingCancelled: ['listing_id'], PrimaryListingExpired: ['listing_id'], SecondaryListingCreated: ['token_id'],
+    MarketplaceInitialized: ['token', 'admin'], SecondaryListingCreated: ['token_id'],
     ListingPurchased: ['token_id', 'buyer'], ListingCancelled: ['token_id'], ListingExpired: ['token_id'],
+    // Quick-buy pools: stock minted into Marketplace custody, sold at a fixed price.
+    PoolOpened: ['pool_id'], PoolRestocked: ['pool_id'], PoolPurchased: ['pool_id', 'buyer'], PoolClosed: ['pool_id'], PoolSwept: ['pool_id'],
     // Marketplace 0.2.0+: event-only comments (body in data).
-    PrimaryListingCommented: ['listing_id', 'author'], ListingCommented: ['token_id', 'author'],
+    ListingCommented: ['token_id', 'author'],
     PaymentAssetUpdated: ['changed_by'], SecondaryFeeUpdated: ['changed_by'],
     MarketplacePaused: ['changed_by'], MarketplaceUnpaused: ['changed_by']
   };
-  var names = topicNames[eventName] || topicNames[toCanonical(eventName)] || [];
+  var names = topicNames[eventName] || topicNames[toCanonical(eventName)];
+  var known = Boolean(names);
   var topics = {};
-  names.forEach(function (name, index) { if (topicValues[index] !== undefined) topics[name] = topicValues[index]; });
+  if (known) names.forEach(function (name, index) { if (topicValues[index] !== undefined) topics[name] = topicValues[index]; });
+  else topicValues.forEach(function (value, index) { topics['topic_' + index] = value; });
   var args = native(rawData);
-  if (!args || typeof args !== 'object' || Array.isArray(args)) args = { value: args };
+  if (Array.isArray(args) && !known) {
+    var positional = {};
+    args.forEach(function (value, index) { positional['arg_' + index] = value; });
+    args = positional;
+  } else if (!args || typeof args !== 'object' || Array.isArray(args)) args = { value: args };
 
   // Type-safe helpers to ensure consistent Arrow table types
   // CRITICAL: For Arrow serialization, all rows must have same type in each column
@@ -144,6 +171,8 @@ function invoke(data) {
     topic_3: toStringOrEmpty(topicValues[3]),
     topics: JSON.stringify(topics),
     args: JSON.stringify(args),
+    // Not in the sink schema (chain.decoded_events has topics and args); kept for local
+    // fixtures and the activity script's pick(), which reads it when present.
     payload: JSON.stringify(Object.assign({}, topics, args)),
     transaction_hash: toStringOrEmpty(data.transaction_hash),
     transaction_successful: toBoolean(data.transaction_successful),
@@ -155,31 +184,24 @@ function invoke(data) {
     event_index: toNumber(data.event_index),
     operation_type: toStringOrEmpty(data.operation_type),
     _gs_op: toStringOrEmpty(data._gs_op),
-    decoder_version: 'v2'
+    decoder_version: 'v3'
   };
-  // These aliases are intentionally not declared in the Goldsky schema. They keep
-  // local transform fixtures useful while consumers migrate to topics/args.
-  // Note: Schema fields (args, topics, payload) must stay as JSON strings for JSONB columns.
-  // Only convert non-schema field aliases to strings for type safety.
-  Object.keys(topics).forEach(function (key) { result[key] = toStringOrEmpty(topics[key]); });
-  Object.keys(args).forEach(function (key) {
-    if (key !== 'args' && key !== 'topics' && key !== 'payload') result[key] = toStringOrEmpty(args[key]);
-  });
     return result;
 
-    // Fallback only: the pipeline normally assigns contract_role from the DAO
-    // module allowlists before decoding. Names mirror the topicNames groups.
+    // Fallback only: the pipeline assigns contract_role from the DAO module
+    // allowlists before decoding, and the common events (Upgraded, Migrated,
+    // AdminChanged, UpgradeDelayChanged) cannot be resolved by name at all.
     function roleForEvent(name) {
       var canonical = toCanonical(name);
-      if (canonical === 'MintBatchWithMinter') return 'token';
-      if (/^(Manager|Implementation|CurrentImplementations|LatestImplementation|UpgradeApproved|Dao|Factory|Admin|PlatformMinter|PendingSlug|SlugClaimed)/.test(canonical)) return 'manager';
-      if (/^(MerkleClaim|AllowlistClaim|MintBatch|MerkleRoot|AllowlistSet)/.test(canonical)) return 'minter';
-      if (/^(Marketplace|Listing|Primary|Secondary|PaymentAsset)/.test(canonical)) return 'marketplace';
+      if (/^(MintBatchWithMinter|MetadataUpdated|DaoRecoveryChanged|DaoTransfer|TransfersLockChanged|MembersOnlyDelegationChanged|TransferAgentChanged|AgentTransfer)$/.test(canonical)) return 'token';
+      if (/^(Manager|Implementation|CurrentImplementations|LatestImplementation|UpgradeApproved|Dao|Factory|Admin|PendingSlug|Slug|ModuleCreated|AssuranceOpened)/.test(canonical)) return 'manager';
+      if (/^(ListOpened|Claimed|EscrowReleased|Refunded|ClaimMinter)/.test(canonical)) return 'claims';
+      if (/^(Marketplace|Listing|Secondary|PaymentAsset|Pool)/.test(canonical)) return 'marketplace';
       if (/^(Proposal|Vote|Governor|Quorum|Voting|Queue)/.test(canonical)) return 'governor';
       if (/^(Auction|Bid|ReservePrice|MinBid|TimeBuffer|DurationUpdated|PaymentToken|Refund)/.test(canonical)) return 'auction';
       if (/^(Execute|Treasury)/.test(canonical)) return 'treasury';
-      if (/^(Metadata|Property|Properties|Seed|ProjectURI|Description|RendererBase|ContractImage)/.test(canonical)) return 'metadata';
-      if (/^(Transfer|Mint|Delegate|Approve|Token)/.test(canonical)) return 'token';
+      if (/^(Metadata|Property|Properties|Seed|Profile|RendererBase)/.test(canonical)) return 'metadata';
+      if (/^(Transfer|Mint|Delegate|Approve|Token|Module)/.test(canonical)) return 'token';
       return 'unknown';
     }
   } catch (e) {

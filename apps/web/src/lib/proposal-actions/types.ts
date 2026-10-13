@@ -13,7 +13,13 @@ export type ProposalActionType =
   | 'mint-governance-token'
   | 'batch-mint-governance-token'
   | 'transfer-sac-token'
-  | 'set-mint-authority'
+  | 'change-mint-allowance'
+  | 'set-transfers-locked'
+  | 'set-members-only-delegation'
+  | 'set-dao-recovery'
+  | 'set-transfer-agent'
+  | 'dao-transfer'
+  | 'approved-transfer'
   | 'set-voting-delay'
   | 'set-voting-period'
   | 'set-queue-delay'
@@ -31,21 +37,18 @@ export type ProposalActionType =
   | 'set-marketplace-secondary-fee'
   | 'pause-marketplace'
   | 'unpause-marketplace'
-  | 'create-primary-listing'
-  | 'cancel-primary-listing'
+  | 'open-pool'
+  | 'close-pool'
+  | 'sweep-pool'
   | 'add-artwork-properties'
   | 'set-artwork-renderer'
-  | 'set-artwork-description'
-  | 'set-artwork-project-uri'
-  | 'set-artwork-contract-image'
+  | 'update-dao-profile'
   | 'upgrade-dao-module'
   | 'migrate-dao-module'
   | 'regenerate-token-traits'
   | 'treasury-authorize'
   | 'treasury-buy-listing'
-  | 'set-merkle-root'
-  | 'set-allowlist'
-  | 'minter-batch-mint'
+  | 'open-claim-list'
   | 'set-token-metadata'
   | 'transfer-dao-token'
   | 'change-dao-slug';
@@ -99,8 +102,6 @@ export interface FormContext {
   balances?: AssetBalance[];
   balancesLoading?: boolean;
   balancesError?: string;
-  mintAuthorities?: Array<{ authority: string; enabled: boolean }>;
-  mintAuthoritiesLoading?: boolean;
   // Allow custom extensions per action type
   [key: string]: any;
 }
@@ -162,7 +163,6 @@ export interface ActionHandler<TData = any> {
   checkPreconditions?: (context: FormContext) => PreconditionResult;
 
   // Optional metadata
-  requiresMintAuthority?: boolean;
 }
 
 /**

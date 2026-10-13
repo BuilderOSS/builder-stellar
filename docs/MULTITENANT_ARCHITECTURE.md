@@ -17,16 +17,16 @@ The Goldsky generator instead uses its explicit `MANAGER_DEPLOYMENT_FILE`. Keep 
 
 Goldsky writes `chain.raw_events`, `chain.decoded_events`, and `app.activity_feed_events`. SQL views project state and history. **`manager.daos` is a view**, not a mutable DAO table.
 
-`DaoCreated` supplies deployer, launch admin, six module addresses, and creation WASM hashes. Token/Metadata events provide descriptive values. `DaoLaunched` derives `pending` versus `operational`; `manager.module_launches` tracks each module's `<module>_launched` event by emitting contract, and `manager.module_admins` the current admin per module (the launch admin, then the Treasury after the launch handoff). Module upgrades and version syncs overlay creation hashes.
+`DaoCreated` supplies deployer, launch admin, the core four addresses, the modules created with the DAO (null for a kind it didn't create) and creation WASM hashes; later modules come from `ModuleCreated` and the Token's `ModuleRegistered` (`manager.module_registrations`). Token/Metadata events provide descriptive values. `DaoLaunched` derives `pending` versus `operational`; `manager.module_launches` tracks each contract's `<role>_launched` event by emitting contract. The admin is the launch admin until launch (or a launch drive opens), then the Treasury. Upgrades overlay creation hashes (`manager.module_versions`).
 
-Module events resolve through `manager.event_identity`. Shared Minter events resolve through their DAO-token `token_id` topic; foreign token events are excluded from DAO views. Details: [database catalog](DATABASE_SCHEMA.md).
+Every DAO contract's events resolve through `manager.event_identity`: the core four from creation on, each module only inside its registration window on that DAO's Token (a module registered by two DAOs counts for each in its own window). Events outside every window are excluded from DAO views. Details: [database catalog](DATABASE_SCHEMA.md).
 
 Manager also retains slug mappings. `DaoCreated.slug` is only a
 request (several pending DAOs may request the same slug); `SlugClaimed` at launch
 makes it unique, and `SlugChanged` (a vote, Manager 0.2.0) moves it and releases the
 old one. `manager.daos.slug` is the current claimed slug once launched, else the
-latest request (`slug_claimed`, `requested_slug`, `claimed_slug` disambiguate;
-`manager.dao_slugs` lists both). Layout resolution filters by deployment, prefers
+latest request (`slug_claimed`, `requested_slug`, `claimed_slug` disambiguate).
+Layout resolution filters by deployment, prefers
 the current claimed slug, then the latest DAO that moved away from it
 (`manager.dao_previous_slugs`, so old links redirect while unclaimed), then an
 unambiguous request, and maps to canonical Token ID. Direct service/API validation still requires its actual documented ID
@@ -58,7 +58,8 @@ These are query/service isolation rules, not a claim of per-DAO PostgreSQL row-l
 Member/token list responses now expose bounded pagination, counts, and scoped
 identities. Holder detail labels live versus indexed ownership; mutations recheck
 live ownership. Treasury history reads existing `treasury.calls`, and claim
-history reads indexed Minter events, separate from RPC claim eligibility. These
+history reads `claims.claims`, separate from the chain reads that decide what a
+wallet can claim. These
 new consumers add no writable offchain application tables.
 
 The lookup endpoint is `GET /api/dao/<daoId>` and returns `daoId`, `status`, `indexedAt`, not a full configuration response. Proposal detail and marketplace services combine scoped indexed rows with live contract reads. An unavailable read does not justify broadening the tenant query.

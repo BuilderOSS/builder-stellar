@@ -54,17 +54,23 @@ export function ListingCard({
       /* Cancellation remains possible even if checked i128 fee math would reject a purchase. */
     }
   }
+  const pool = listing.kind === 'pool' ? listing.pool : undefined;
+  // An open pool with nothing stocked can be restocked by anyone while it has an unstocked rest.
+  const needsStock = Boolean(pool && pool.inStock === 0 && pool.stocked < pool.size);
   function trade(type: 'buy' | 'cancel' | 'expire') {
     setAction({ action: type, id: listing.id, kind: listing.kind, eventId: listing.eventId });
+  }
+  function restock() {
+    setAction({ action: 'restock', id: listing.id, kind: 'pool', eventId: listing.eventId });
   }
   return (
     <article className={styles.card}>
       <div className={styles.row}>
-        <span className={styles.chip}>{listing.kind === 'primary' ? 'New mint' : 'Resale'}</span>
+        <span className={styles.chip}>{pool ? 'Quick-buy pool' : 'Resale'}</span>
         <span className={styles.status}>{status}</span>
       </div>
       <div className={styles.tokenArt} aria-hidden="true">
-        {listing.kind === 'primary' ? (
+        {pool ? (
           <span>New</span>
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
@@ -72,15 +78,13 @@ export function ListingCard({
         )}
       </div>
       <p className={styles.eyebrow}>{community.name}</p>
-      <h3>
-        {listing.kind === 'primary' ? `New token · listing ${listing.id}` : `${community.name} #${listing.tokenId}`}
-      </h3>
+      <h3>{pool ? `New tokens · pool ${listing.id}` : `${community.name} #${listing.tokenId}`}</h3>
       <p className={styles.price}>
         {marketplaceDisplayAmount(network, listing.paymentAsset, listing.price)} <span>{asset}</span>
       </p>
       <p className={styles.muted}>
-        {listing.kind === 'primary'
-          ? 'Minted to you · the money goes to the treasury'
+        {pool
+          ? `${pool.inStock.toLocaleString()} ready · ${(pool.size - pool.sold).toLocaleString()} of ${pool.size.toLocaleString()} left · at most ${pool.maxPerBuyer.toLocaleString()} per wallet · the money goes to the treasury`
           : `${(listing.feeBps / 100).toLocaleString()}% market fee, paid by the seller`}
       </p>
       {trading ? (
@@ -100,7 +104,7 @@ export function ListingCard({
       {expanded ? (
         <div className={styles.stack}>
           <dl className={styles.details}>
-            <dt>Expires</dt>
+            <dt>{pool ? 'Closes' : 'Expires'}</dt>
             <dd>{new Date(Number(listing.expiresAt) * 1000).toLocaleString()}</dd>
             <dt>Price asset contract</dt>
             <dd className={styles.address}>{listing.paymentAsset}</dd>
@@ -130,10 +134,14 @@ export function ListingCard({
                 <dd className={styles.address}>{listing.buyer}</dd>
               </>
             ) : null}
-            {listing.tokenId && listing.kind === 'primary' ? (
+            {pool ? (
               <>
-                <dt>Minted token</dt>
-                <dd>#{listing.tokenId}</dd>
+                <dt>Sold</dt>
+                <dd>{pool.sold.toLocaleString()}</dd>
+                <dt>Sales limit</dt>
+                <dd>
+                  {pool.maxSoldPerPeriod.toLocaleString()} every {Math.round(pool.periodSecs / 3600).toLocaleString()}h
+                </dd>
               </>
             ) : null}
           </dl>
@@ -162,7 +170,15 @@ export function ListingCard({
               ) : null}
             </div>
           ) : null}
-          {listing.status === 'open' ? (
+          {listing.status === 'open' && needsStock ? (
+            <>
+              <p>Nothing is ready to buy yet. Anyone can stock the next tokens; it costs only the network fee.</p>
+              <Button variant="secondary" onClick={restock} disabled={!purchasesEnabled}>
+                Stock this pool
+              </Button>
+            </>
+          ) : null}
+          {listing.status === 'open' && !needsStock ? (
             <>
               {!['XLM', 'USDC'].includes(asset) ? (
                 <p>You can buy with XLM or USDC here. This listing can still be canceled, or cleared after it ends.</p>
@@ -187,18 +203,17 @@ export function ListingCard({
               </div>
             </>
           ) : null}
-          {listing.status === 'awaiting-expiry' ? (
+          {listing.status === 'sold-out' ? <p>This pool sold every token it was opened with.</p> : null}
+          {listing.status === 'awaiting-expiry' && pool ? <p>This pool has closed for sales.</p> : null}
+          {listing.status === 'awaiting-expiry' && !pool ? (
             <>
-              <p>
-                This listing has ended but hasn't been cleared. Clearing returns a resale token to its seller, or
-                removes an unsold new listing.
-              </p>
+              <p>This listing has ended but hasn't been cleared. Clearing returns the token to its seller.</p>
               <Button variant="secondary" onClick={() => trade('expire')}>
                 Clear ended listing
               </Button>
             </>
           ) : null}
-          {trading ? <ListingComments listing={listing} /> : null}
+          {trading && !pool ? <ListingComments listing={listing} /> : null}
           <Link href={`/dao/${community.daoId}/marketplace?status=all`}>All listings and sales</Link>
         </div>
       ) : null}

@@ -20,15 +20,14 @@ const topBar = css({
   bg: 'color-mix(in srgb, token(colors.canvas) 88%, transparent)',
   backdropFilter: 'blur(12px)'
 });
-// The bar's background spans the window; its controls line up with the content column below.
+// The bar spans the window: the switcher sits at its start and the wallet at
+// the window's top-right corner, both with the content gutter.
 const topInner = css({
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
   gap: '3',
   width: '100%',
-  maxW: 'content',
-  mx: 'auto',
   px: 'clamp(16px, 4vw, 40px)'
 });
 const topStart = css({ display: 'flex', alignItems: 'center', gap: '2', minW: '0', flex: '1' });

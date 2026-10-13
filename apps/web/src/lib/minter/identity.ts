@@ -28,18 +28,18 @@ export function assertPreparedIdentity(
   config: DaoNetworkConfig,
   deploymentId: string,
   actor: string,
-  minter: string
+  claims: string
 ) {
   if (
     prepared.deploymentId !== deploymentId ||
     prepared.daoId !== config.tokenContractId ||
     prepared.tokenContractId !== config.tokenContractId ||
-    prepared.minterContractId !== minter ||
+    prepared.claimsContractId !== claims ||
     prepared.address !== actor ||
     prepared.networkPassphrase !== config.passphrase ||
     prepared.rpcUrl !== config.rpcUrl
   )
-    throw new Error('Prepared claim does not match this account, DAO, Minter and network.');
+    throw new Error('Prepared claim does not match this account, DAO, claims module and network.');
 }
 
 export function claimQueryKey(deploymentId: string, daoId: string, address: string | null, resource: string, page = 0) {

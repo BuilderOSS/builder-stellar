@@ -8,7 +8,6 @@ import {
   isValidTokenSymbol,
   MAX_TOKEN_NAME_BYTES,
   MAX_TOKEN_SYMBOL_LENGTH,
-  MAX_TOKEN_URI_BYTES,
   utf8Length
 } from '@/lib/validation';
 
@@ -18,18 +17,19 @@ const stack = css({ display: 'grid', gap: '3' });
 const fieldError = (result: ValidationResult | undefined, key: string) =>
   result && !result.valid ? result.fields?.[key] : undefined;
 
-export type TokenMetadataDraft = { name: string; symbol: string; uri: string };
+export type TokenMetadataDraft = { name: string; symbol: string };
+
+/** The on-chain token JSON copies the name verbatim, so the token rejects these (InvalidName, 7207). */
+export const UNSAFE_NAME_CHARACTERS = /["\\\u0000-\u001f\u007f]/;
 
 function validateTokenMetadata(data: TokenMetadataDraft): ValidationResult {
   const fields: Record<string, string> = {};
   const name = data.name.trim();
   if (name.length < 2) fields.name = 'Use at least 2 characters';
   else if (utf8Length(name) > MAX_TOKEN_NAME_BYTES) fields.name = `Use at most ${MAX_TOKEN_NAME_BYTES} characters`;
+  else if (UNSAFE_NAME_CHARACTERS.test(name)) fields.name = 'Names cannot contain quotes, backslashes or line breaks';
   if (!isValidTokenSymbol(data.symbol.trim()))
     fields.symbol = `Use capital letters or numbers, up to ${MAX_TOKEN_SYMBOL_LENGTH} characters`;
-  const uri = data.uri.trim();
-  if (!/^https?:\/\//i.test(uri) && !/^ipfs:\/\//i.test(uri)) fields.uri = 'Enter an http(s) or ipfs:// URL';
-  else if (utf8Length(uri) > MAX_TOKEN_URI_BYTES) fields.uri = `Use at most ${MAX_TOKEN_URI_BYTES} bytes`;
   const first = Object.values(fields)[0];
   return first ? { valid: false, message: first, fields } : { valid: true };
 }
@@ -65,18 +65,6 @@ function TokenMetadataForm({ value, onChange, disabled, validationErrors }: Acti
           <FieldHelperText tone="error">{fieldError(validationErrors, 'symbol')}</FieldHelperText>
         ) : null}
       </Field>
-      <Field>
-        <FieldLabel htmlFor="token-metadata-uri">Token metadata URL</FieldLabel>
-        <Input
-          id="token-metadata-uri"
-          type="url"
-          value={value.uri}
-          disabled={disabled}
-          aria-invalid={Boolean(fieldError(validationErrors, 'uri')) || undefined}
-          onChange={(event) => onChange({ ...value, uri: event.target.value })}
-        />
-        <FieldHelperText>Usually unchanged. Token pages are built from this address.</FieldHelperText>
-      </Field>
     </div>
   );
 }
@@ -88,7 +76,7 @@ export const setTokenMetadataHandler: ActionHandler<TokenMetadataDraft> = {
   description: 'Change the token name and symbol members see everywhere',
   group: 'Administration',
   FormComponent: TokenMetadataForm,
-  getDefaultValues: () => ({ name: '', symbol: '', uri: '' }),
+  getDefaultValues: () => ({ name: '', symbol: '' }),
   validate: (data) => validateTokenMetadata(data),
   serialize: (data) => ({
     id: crypto.randomUUID(),
@@ -96,14 +84,13 @@ export const setTokenMetadataHandler: ActionHandler<TokenMetadataDraft> = {
     recipient: '',
     amount: '',
     name: data.name.trim(),
-    symbol: data.symbol.trim(),
-    uri: data.uri.trim()
+    symbol: data.symbol.trim()
   }),
-  deserialize: (action) => ({ name: action.name ?? '', symbol: action.symbol ?? '', uri: action.uri ?? '' }),
+  deserialize: (action) => ({ name: action.name ?? '', symbol: action.symbol ?? '' }),
   buildCallVector: (data, context) => ({
     target: context.tokenContractId,
     function: 'set_metadata',
-    args: [data.uri.trim(), data.name.trim(), data.symbol.trim()]
+    args: [data.name.trim(), data.symbol.trim()]
   })
 };
 

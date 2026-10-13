@@ -35,6 +35,7 @@ import {
 } from '@/lib/proposal-execution-receipt';
 import { proposalIdToBuffer } from '@/lib/proposal-id';
 import { proposalActionMode, ProposalState } from '@/lib/proposal-state';
+import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { useVotingPower } from '@/lib/voting-power';
@@ -277,6 +278,7 @@ export default function ProposalDetailPage() {
       rpcUrl: config.rpcUrl,
       networkPassphrase: config.passphrase,
       publicKey: session.address,
+      ...restoreArchivedState,
       signTransaction: async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
         signWithWallet(xdr, {
           networkPassphrase: opts?.networkPassphrase ?? config.passphrase,
@@ -433,6 +435,7 @@ export default function ProposalDetailPage() {
         rpcUrl: config.rpcUrl,
         networkPassphrase: config.passphrase,
         publicKey: session.address,
+        ...restoreArchivedState,
         signTransaction: async (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
           signWithWallet(xdr, {
             networkPassphrase: opts?.networkPassphrase ?? config.passphrase,

@@ -4,16 +4,16 @@ Builder is a Soroban DAO framework and web application for creating and operatin
 
 ## System
 
-- Manager deploys six modules per DAO: Token, Metadata, Auction, Governor, Treasury, and Marketplace.
+- Manager deploys four core contracts per DAO (Token, Metadata, Governor, Treasury) and the modules it chooses: Auction, Marketplace (quick-buy pools and resales) and ClaimMinter (claim lists and launch drives). A DAO can add its own modules by vote; each mints only within an allowance the DAO sets.
 - Manager is a factory and implementation registry. `create_dao` only requests a slug; `launch_dao` claims it (unique per Manager); a launched DAO can move to a new slug by vote. Manager deletes pending setup state at launch, keeps the claimed slug-to-DAO mappings, and has no DAO enumeration API.
 - Every module has one admin: the launch admin during Setup, the Treasury after launch (`admin()`; no ownership transfer or renounce). Launch requires a nonzero **voting** supply (tokens held by the Treasury, Auction and Marketplace carry no votes) and hands every module's admin, including the Treasury's, to the Treasury.
 - Proposals are created, voted on, and queued through Governor. Anyone can execute a ready proposal through **Treasury**, which consumes it on Governor and dispatches the actions in order.
-- A shared platform Minter is deployed separately. Together with Manager and the six DAO modules, this makes eight deployable contracts. `common` and `dao-e2e` are support/test crates.
+- Together with the Manager that makes eight deployable contracts; there is no shared platform minter. `common` and `dao-e2e` are support/test crates.
 - Goldsky writes events to PostgreSQL landing tables. Views provide discovery and history; the web app reads them through Prisma and the read-only app role.
 
 ## Web application
 
-The current frontend includes DAO discovery, auction history/settlement, governance and ordered execution receipts, Treasury funding/history, paginated members and token-holder controls, Minter claims and governance allocation proposals, and primary/secondary marketplace flows. Creation uses a compact Identity → Membership → Governance → Review form, followed by separate Setup → Launch.
+The current frontend includes DAO discovery, auction history/settlement, governance and ordered execution receipts, Treasury funding/history, paginated members and token-holder controls, claim lists (free or priced, launch drives with refunds), quick-buy pools and resales, membership switches (locked tokens, members-only delegation, DAO recovery) and one-click storage renewal. Creation uses a compact Identity → Membership → Governance → Review form, followed by separate Setup → Launch.
 
 Warm Ink provides light, dark, and system appearance with green accents, Instrument Serif display type, and Inter interface/body type. Multiple creation drafts, home-DAO preferences, marketplace favorites, and private labels are stored in this browser only. They are not shared collaboration or public tags.
 
@@ -33,7 +33,7 @@ cp apps/web/.env.example apps/web/.env
 pnpm dev
 ```
 
-`contracts:bindings` builds WASMs, regenerates seven client packages, and runs `pnpm install`. Dev/build hooks generate deployment selection, Prisma, binding builds, and Panda CSS. The development server uses port **4242**. A configured indexed database is needed for DAO data; local drafts do not create on-chain DAOs.
+`contracts:bindings` builds WASMs, regenerates eight client packages, and runs `pnpm install`. Dev/build hooks generate deployment selection, Prisma, binding builds, and Panda CSS. The development server uses port **4242**. A configured indexed database is needed for DAO data; local drafts do not create on-chain DAOs.
 
 ## Commands
 
@@ -42,14 +42,14 @@ Run from the repository root unless noted. Deployment and generation commands ha
 | Command | Purpose |
 | --- | --- |
 | `pnpm contracts:build` | Build contract WASMs with `stellar contract build` |
-| `pnpm contracts:bindings` | Regenerate seven TypeScript binding packages |
+| `pnpm contracts:bindings` | Regenerate eight TypeScript binding packages |
 | `pnpm contracts:test` | Run Cargo workspace tests, including in-memory integration tests |
 | `pnpm indexer:test` | Run Goldsky package tests; DB assertions need a test database |
 | `pnpm db:test` | Migration static checks; also DB tests if `TEST_DATABASE_URL` is set |
 | `pnpm --dir apps/web test` | Run web Vitest tests |
 | `pnpm --dir apps/web codegen` | Generate web deployment/Prisma/styles and build bindings |
 | `pnpm lint` / `pnpm typecheck` / `pnpm build` | Web checks/build |
-| `pnpm deploy:manager configs/testnet-manager.json` | Deploy/resume Manager and shared Minter setup |
+| `pnpm deploy:manager configs/testnet-manager.json` | Deploy/resume the Manager and register the contract implementations |
 | `pnpm deploy:dao --validate-only configs/testnet-builder-dao.json` | Validate the CLI DAO configuration without deployment |
 | `pnpm indexer:generate` | Generate the pipeline from its selected Manager artifact |
 
@@ -61,7 +61,7 @@ For the three DAO deployment phases, see [DAO deployment](docs/DAO_DEPLOYMENT.md
 - [Contract review fixes](docs/CONTRACT_REVIEW_FIX_PLAN.md)
 - [Architecture](docs/ARCHITECTURE.md) and [tenant/read-model boundaries](docs/MULTITENANT_ARCHITECTURE.md)
 - [Manager deployment](docs/MANAGER_DEPLOYMENT.md) and [DAO deployment](docs/DAO_DEPLOYMENT.md)
-- [Security model](docs/SECURITY_MODEL.md), [TTL maintenance](docs/TTL_ECONOMICS.md), and [monitoring](docs/MONITORING.md)
+- [Security model](docs/SECURITY_MODEL.md), [who pays for storage](docs/STORAGE_COSTS.md), [storage and TTL reference](docs/TTL_ECONOMICS.md), and [monitoring](docs/MONITORING.md)
 - [Database catalog](docs/DATABASE_SCHEMA.md), [database operations](db/README.md), and [Goldsky setup](docs/GOLDSKY_SETUP.md)
 - [Bindings regeneration](BINDINGS_GENERATION_ISSUE.md)
 - [Frontend direction](docs/BRAND_AND_FRONTEND_DIRECTION.md) and [agent ownership](docs/AGENT_WORKFLOW.md)

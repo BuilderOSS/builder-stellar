@@ -31,11 +31,37 @@ pub const PERSISTENT_TTL_EXTEND_TO: u32 = 365 * DAY_IN_LEDGERS;
 /// Extend a long-lived persistent entry only when fewer than ~30 days remain.
 pub const PERSISTENT_TTL_THRESHOLD: u32 = 30 * DAY_IN_LEDGERS;
 
-/// Extend the instance storage (and therefore the contract code reference) TTL.
+/// Bump the contract code only when fewer than ~2 days remain.
+pub const CODE_TTL_THRESHOLD: u32 = 2 * DAY_IN_LEDGERS;
+/// ...and then only to ~4 days. Code is shared by every DAO on a release and
+/// is kept long by the platform (`scripts/renew-code-ttl.mjs`, extended at
+/// upload). This in-contract bump is a backstop so code never archives while
+/// it is used, sized so a caller pays a few days of rent at most.
+pub const CODE_TTL_EXTEND_TO: u32 = 4 * DAY_IN_LEDGERS;
+
+// Thresholds sit well below their targets, and instances never ask for more
+// than testnet's maximum entry TTL (3,110,400 ledgers, 2026-10-12).
+const _: () = assert!(INSTANCE_TTL_THRESHOLD * 2 < INSTANCE_TTL_EXTEND_TO);
+const _: () = assert!(CODE_TTL_THRESHOLD * 2 <= CODE_TTL_EXTEND_TO);
+const _: () = assert!(PERSISTENT_TTL_THRESHOLD * 2 < 3_110_400);
+const _: () = assert!(INSTANCE_TTL_EXTEND_TO < 3_110_400);
+
+/// Extend this contract's instance (60 -> 170 days) and, separately, its code
+/// (`CODE_TTL_THRESHOLD` -> `CODE_TTL_EXTEND_TO`).
+///
+/// Not `instance().extend_ttl`: that applies the same threshold and target to
+/// the code entry, so whenever shared code had under 60 days left the next
+/// caller paid 170 days of its rent (~300 XLM per ~35 KB on testnet,
+/// docs/STORAGE_DIET_REVIEW.md Finding 2).
 pub fn extend_instance(e: &Env) {
-    e.storage()
-        .instance()
-        .extend_ttl(INSTANCE_TTL_THRESHOLD, INSTANCE_TTL_EXTEND_TO);
+    let this = e.current_contract_address();
+    let deployer = e.deployer();
+    deployer.extend_ttl_for_contract_instance(
+        this.clone(),
+        INSTANCE_TTL_THRESHOLD,
+        INSTANCE_TTL_EXTEND_TO,
+    );
+    deployer.extend_ttl_for_code(this, CODE_TTL_THRESHOLD, CODE_TTL_EXTEND_TO);
 }
 
 /// Extend a long-lived persistent entry. The entry must exist.

@@ -9,18 +9,21 @@ const networkConfigPath = args[2];
  * DAO Deployment Script (hardened-contract flow)
  *
  * Usage:
- *   node scripts/deploy-dao.mjs <create_dao|admin_checklist|launch_dao|bump_slug_ttl> <dao-config.json> <network-config.json>
+ *   node scripts/deploy-dao.mjs <create_dao|admin_checklist|launch_dao> <dao-config.json> <network-config.json>
  *   node scripts/deploy-dao.mjs --validate-only <dao-config.json>      (no network, no artifacts)
  *
  * Three phases, each resumable:
  *
- * 1. create_dao: Manager.create_dao deploys Token, Treasury, Governor, Metadata, Auction and Marketplace
- *    in one transaction and wires them through constructors (there are no wiring setters). Governance,
- *    auction, marketplace and metadata settings from the config are passed as constructor values, and
- *    the payment assets are recorded by the Manager for launch-time assertion. The launch admin is
- *    the admin of every module during the setup window.
+ * 1. create_dao: Manager.create_dao deploys Token, Treasury, Governor and Metadata plus the optional
+ *    modules the config has (`auction`, `marketplace`, `claims` sections; each kind at most once) in
+ *    one transaction and wires them through constructors (there are no wiring setters). Governance,
+ *    module and metadata settings from the config are passed as constructor values, and each module's
+ *    payment asset is recorded by the Manager for launch-time assertion. `tokenSettings` sets the
+ *    membership switches (docs/designs/locked-tokens.md; all off is an open DAO) and `transferAgents`
+ *    names the created kinds that become transfer agents. The launch admin is the admin of every
+ *    module during the setup window.
  *
- * 2. admin_checklist (setup window, the launch admin signs directly; no Manager, Minter or Treasury):
+ * 2. admin_checklist (setup window, the launch admin signs directly; no Manager or Treasury):
  *    - FIRST add the artwork with metadata.add_properties in batches of <= 30 items (each batch adds
  *      its own IPFS group). Progress is derived from metadata.ipfs_data_count(). Artwork must exist
  *      before minting: the metadata hook seeds traits at mint time and seeds nothing without it.
@@ -31,36 +34,37 @@ const networkConfigPath = args[2];
  *      18 founders with one token each. Progress is derived from token ownership (owner_of).
  *    - verify every founder token has traits and seed any that do not with metadata.regenerate
  *      (safety net for tokens minted before the artwork).
- *    Not possible before launch: token.set_mint_authority (NotLive), Minter merkle/allowlist
- *    (Minter requires a Live token), auction.unpause, marketplace primary listings, any governance
- *    action. Settings are NOT re-applied here: the constructors already hold them.
- *    Changing auction/marketplace payment assets in setup makes launch_dao fail.
+ *    Not possible here: auction.unpause, any governance action. Settings are NOT re-applied here:
+ *    the constructors already hold them. Changing a module's payment asset in setup makes launch_dao
+ *    fail (PaymentAssetMismatch).
  *
- * 3. launch_dao: Manager.launch_dao(token_address, launch_config{launch_auction, launch_marketplace,
- *    enable_minter, expected_minter}; expected_minter is pinned to get_platform_minter when
- *    enable_minter is set). It grants mint authority itself (Treasury, Marketplace, Auction if launched,
- *    and the Manager's registered PlatformMinter if enable_minter), hands the admin of every module
- *    to the Treasury, claims the slug and deletes the pending state. The Manager has no authority
- *    afterwards.
+ * 3. launch_dao: Manager.launch_dao(token_address, launch_config{launch_auction, launch_marketplace}).
+ *    It launches every registered module, grants the Auction (when launched) an unlimited mint
+ *    allowance, hands the admin of every module to the Treasury, claims the slug and deletes the
+ *    pending state. The Manager has no authority afterwards. Other allowances (pools, ClaimMinter
+ *    lists) are granted by governance with token.increase_mint_allowance.
  *
  * Slug: `slug` in the config is requested by create_dao and claimed permanently by launch_dao (unique
  * per Manager; 4-63 chars of [a-z0-9-]). Both phases pre-check that no launched DAO holds it; launch
  * fails with SlugTaken if another DAO launched with it first (rename with manager.update_pending_slug
- * and update the config). The claimed slug registry entries expire unless renewed: run the permissionless `bump_slug_ttl` phase periodically
- * (the network caps each extension at ~180 days). It needs no auth beyond paying the fee.
+ * and update the config). The claimed slug entries are renewed with every other DAO key by the DAO's
+ * renewal sweep (scripts/renew-dao.mjs or the Renewal tab in Manage).
  *
- * Prerequisites: Manager deployed with deploy-manager.mjs (which also registers the platform
- * minter used by enable_minter). create_dao requires auth from BOTH deployer and launchAdmin, so the
- * config must use the same address for both (enforced by validation). The identity (DEPLOY_IDENTITY, default <network>-admin) must be
+ * Profile: `metadata.profile` ({ description, links: [{ label, url }], image }) is serialized as the
+ * profile JSON of docs/STORAGE_DIET.md § 6 ({"v":1,...}) and must fit common::MAX_PROFILE_LENGTH
+ * (4,096 bytes). It is event-only on chain: Metadata stores its hash and sequence number.
+ *
+ * Prerequisites: Manager deployed with deploy-manager.mjs. create_dao requires auth from BOTH
+ * deployer and launchAdmin, so the config must use the same address for both (enforced by validation). The identity (DEPLOY_IDENTITY, default <network>-admin) must be
  * the config deployer (create_dao) and launchAdmin (checklist/launch).
  */
 
-const phases = ['create_dao', 'admin_checklist', 'launch_dao', 'bump_slug_ttl'];
+const phases = ['create_dao', 'admin_checklist', 'launch_dao'];
 const validateOnly = args[0] === '--validate-only';
 
 if (validateOnly ? !args[1] : (!phases.includes(phase) || !daoConfigPath || !networkConfigPath)) {
   throw new Error(
-    'Usage: node scripts/deploy-dao.mjs <create_dao|admin_checklist|launch_dao|bump_slug_ttl> <dao-config.json> <network-config.json>\n' +
+    'Usage: node scripts/deploy-dao.mjs <create_dao|admin_checklist|launch_dao> <dao-config.json> <network-config.json>\n' +
       '       node scripts/deploy-dao.mjs --validate-only <dao-config.json>'
   );
 }
@@ -71,6 +75,17 @@ function loadJson(path, label) {
 }
 
 // Contract bounds (contracts/manager/src/contract.rs validate_initial_config, governor/auction constants).
+/** The profile JSON of docs/STORAGE_DIET.md § 6, exactly as create_dao receives it. */
+function profileJson(config) {
+  const profile = config.metadata?.profile ?? {};
+  return JSON.stringify({
+    v: 1,
+    description: profile.description ?? '',
+    links: profile.links ?? [],
+    ...(profile.image ? { image: profile.image } : {})
+  });
+}
+
 const LIMITS = {
   minGovernanceDelay: 300,
   maxGovernanceDelay: 2_592_000,
@@ -80,6 +95,7 @@ const LIMITS = {
   minReservePrice: 1000n,
   maxTimeBuffer: 86_400,
   maxString: 256,
+  maxProfileBytes: 4_096, // common::MAX_PROFILE_LENGTH
   maxArtworkItemsPerCall: 30,
   maxProperties: 16,
   // common::batch_mint_fits: estimated event bytes per batch_mint call.
@@ -92,6 +108,22 @@ const batchMintCost = (tokens, recipients) =>
 // common::MAX_BATCH_MINT: the most tokens one call can mint to a single recipient (43).
 const MAX_BATCH_MINT_TOKENS = Math.floor((LIMITS.batchMintEventBudget - LIMITS.batchMintBytesPerRecipient) / LIMITS.batchMintBytesPerToken);
 const ADDRESS_RE = /^[GC][A-Z2-7]{55}$/;
+// ModuleSpec kinds (common::modules::KIND_*), in the order create_dao deploys them.
+const MODULE_KINDS = ['auction', 'marketplace', 'claims'];
+// common::modules::TokenSettings, as camelCase config keys.
+const TOKEN_SETTINGS = ['transfersLocked', 'membersOnlyDelegation', 'daoRecovery'];
+
+/** The module kinds a config creates: a section that is present and not `enabled: false`. */
+function configuredModules(config) {
+  return Object.fromEntries(MODULE_KINDS.map((kind) => [kind, config[kind] != null && typeof config[kind] === 'object' && config[kind].enabled !== false]));
+}
+
+/** A module's payment asset; marketplace and claims default to the auction's (then the marketplace's). */
+function paymentAssetOf(config, kind) {
+  const kinds = configuredModules(config);
+  const fallback = [kinds.auction && config.auction.paymentAsset, kinds.marketplace && config.marketplace.paymentAsset].find(Boolean);
+  return kinds[kind] ? (config[kind].paymentAsset ?? fallback) : null;
+}
 const CONTRACT_RE = /^C[A-Z2-7]{55}$/;
 
 function validateDaoConfig(config) {
@@ -125,12 +157,25 @@ function validateDaoConfig(config) {
     );
   }
   if (!Number.isSafeInteger(config.nonce) || config.nonce < 0) err('nonce must be a non-negative integer');
-  for (const key of ['name', 'symbol', 'uri']) str(`token.${key}`, config.token?.[key]);
+  for (const key of ['name', 'symbol']) str(`token.${key}`, config.token?.[key]);
+  if (config.token?.uri !== undefined) err('token.uri was removed: token_uri is built on chain from metadata.rendererBase');
+  if (/["\\\u0000-\u001f]/.test(config.token?.name ?? '')) err('token.name may not contain ", \\ or control characters');
   str('slug', config.slug);
   if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(config.slug) || config.slug.length < 4 || config.slug.length > 63) {
     err('slug must be 4-63 chars of lowercase letters, numbers and single hyphens');
   }
-  for (const key of ['projectUri', 'description', 'contractImage', 'rendererBase']) str(`metadata.${key}`, config.metadata?.[key]);
+  str('metadata.rendererBase', config.metadata?.rendererBase);
+  for (const key of ['projectUri', 'description', 'contractImage']) {
+    if (config.metadata?.[key] !== undefined) err(`metadata.${key} was replaced by metadata.profile ({ description, links, image })`);
+  }
+  const profileBytes = Buffer.byteLength(profileJson(config), 'utf8');
+  if (profileBytes > LIMITS.maxProfileBytes) err(`metadata.profile serializes to ${profileBytes} bytes; the limit is ${LIMITS.maxProfileBytes}`);
+  const links = config.metadata?.profile?.links ?? [];
+  if (!Array.isArray(links) || links.length > 8) err('metadata.profile.links must be an array of at most 8 { label, url }');
+  for (const link of Array.isArray(links) ? links : []) {
+    if (typeof link?.label !== 'string' || [...link.label].length > 32) err('each profile link label must be a string of at most 32 characters');
+    if (!/^(https?:\/\/|mailto:|ipfs:\/\/)/.test(link?.url ?? '')) err(`profile link URL must be https, http, mailto or ipfs: ${link?.url}`);
+  }
 
   const gov = config.governance ?? {};
   if ('proposalThresholdBps' in gov) {
@@ -142,21 +187,49 @@ function validateDaoConfig(config) {
   intRange('governance.quorumBps', gov.quorumBps, 1, LIMITS.maxBps);
   const threshold = bigint('governance.proposalThreshold', gov.proposalThreshold, 1n);
 
-  const auction = config.auction ?? {};
-  if (!(Number.isSafeInteger(auction.duration) && auction.duration >= LIMITS.minAuctionDuration)) err(`auction.duration must be an integer >= ${LIMITS.minAuctionDuration} seconds`);
-  bigint('auction.reservePrice', auction.reservePrice, LIMITS.minReservePrice);
-  intRange('auction.timeBuffer', auction.timeBuffer, 1, LIMITS.maxTimeBuffer);
-  addr('auction.paymentAsset', auction.paymentAsset, CONTRACT_RE);
+  for (const kind of MODULE_KINDS) {
+    const section = config[kind];
+    if (section === undefined) continue;
+    if (section === null || typeof section !== 'object' || Array.isArray(section)) err(`${kind} must be an object (omit it for a DAO without that module)`);
+    else if (section.enabled !== undefined && typeof section.enabled !== 'boolean') err(`${kind}.enabled must be a boolean`);
+  }
+  const kinds = configuredModules(config);
+  if (kinds.auction) {
+    const auction = config.auction;
+    if (!(Number.isSafeInteger(auction.duration) && auction.duration >= LIMITS.minAuctionDuration)) err(`auction.duration must be an integer >= ${LIMITS.minAuctionDuration} seconds`);
+    bigint('auction.reservePrice', auction.reservePrice, LIMITS.minReservePrice);
+    intRange('auction.timeBuffer', auction.timeBuffer, 1, LIMITS.maxTimeBuffer);
+    addr('auction.paymentAsset', auction.paymentAsset, CONTRACT_RE);
+  }
+  if (kinds.marketplace) {
+    addr('marketplace.paymentAsset', paymentAssetOf(config, 'marketplace'), CONTRACT_RE);
+    intRange('marketplace.secondaryFeeBps', config.marketplace.secondaryFeeBps ?? 250, 0, LIMITS.maxFeeBps);
+  }
+  if (kinds.claims) addr('claims.paymentAsset', paymentAssetOf(config, 'claims'), CONTRACT_RE);
 
-  const marketplace = config.marketplace ?? {};
-  const marketplaceAsset = marketplace.paymentAsset ?? auction.paymentAsset;
-  addr('marketplace.paymentAsset', marketplaceAsset, CONTRACT_RE);
-  intRange('marketplace.secondaryFeeBps', marketplace.secondaryFeeBps ?? 250, 0, LIMITS.maxFeeBps);
+  const settings = config.tokenSettings ?? {};
+  if (typeof settings !== 'object' || Array.isArray(settings)) err('tokenSettings must be an object');
+  for (const key of Object.keys(settings)) {
+    if (!TOKEN_SETTINGS.includes(key)) err(`tokenSettings.${key} is not a token switch (${TOKEN_SETTINGS.join(', ')})`);
+    else if (typeof settings[key] !== 'boolean') err(`tokenSettings.${key} must be a boolean`);
+  }
+  const agents = config.transferAgents ?? [];
+  if (!Array.isArray(agents)) err('transferAgents must be an array of module kinds');
+  else {
+    for (const kind of agents) {
+      // Manager UnknownAgentKind: an agent must be a kind this create_dao deploys.
+      if (!kinds[kind]) err(`transferAgents names "${kind}", which this config does not create (${Object.keys(kinds).filter((k) => kinds[k]).join(', ') || 'no modules'})`);
+    }
+    if (new Set(agents).size !== agents.length) err('transferAgents lists a kind twice');
+  }
 
   const launch = config.launch ?? {};
-  for (const key of ['launchAuction', 'launchMarketplace', 'enableMinter']) {
+  for (const key of ['launchAuction', 'launchMarketplace']) {
     if (launch[key] !== undefined && typeof launch[key] !== 'boolean') err(`launch.${key} must be a boolean`);
   }
+  if (launch.enableMinter !== undefined) err('launch.enableMinter was removed: the shared Minter is retired; add a `claims` section for a per-DAO ClaimMinter');
+  if (launch.launchAuction === true && !kinds.auction) err('launch.launchAuction is true but the config creates no auction');
+  if (launch.launchMarketplace === true && !kinds.marketplace) err('launch.launchMarketplace is true but the config creates no marketplace');
 
   let founderTotal = 0;
   if (!Array.isArray(config.founders) || config.founders.length === 0) {
@@ -247,21 +320,24 @@ function planArtworkBatches(properties) {
 const daoConfig = loadJson(validateOnly ? args[1] : daoConfigPath, 'DAO config');
 validateDaoConfig(daoConfig);
 const artworkProperties = daoConfig.metadata.artwork.properties;
-const marketplaceConfig = daoConfig.marketplace ?? {};
+const modules = configuredModules(daoConfig);
 const queueDelay = daoConfig.governance.queueDelay;
-const marketplacePaymentAsset = marketplaceConfig.paymentAsset ?? daoConfig.auction.paymentAsset;
+const tokenSettings = {
+  transfers_locked: daoConfig.tokenSettings?.transfersLocked ?? false,
+  members_only_delegation: daoConfig.tokenSettings?.membersOnlyDelegation ?? false,
+  dao_recovery: daoConfig.tokenSettings?.daoRecovery ?? false
+};
 const launchFlags = {
-  launch_auction: daoConfig.launch?.launchAuction ?? daoConfig.auction.enabled ?? true,
-  launch_marketplace: daoConfig.launch?.launchMarketplace ?? true,
-  enable_minter: daoConfig.launch?.enableMinter ?? false,
-  // Pinned at launch time from get_platform_minter (see launch_dao phase); required when enable_minter.
-  expected_minter: null
+  launch_auction: daoConfig.launch?.launchAuction ?? modules.auction,
+  launch_marketplace: daoConfig.launch?.launchMarketplace ?? modules.marketplace
 };
 const founderBatches = planFounderBatches(daoConfig.founders);
 const artworkBatches = planArtworkBatches(artworkProperties);
 
 if (validateOnly) {
   console.log(`DAO config is valid: ${founderBatches.length} founder mint batch(es), ${artworkBatches.length} artwork batch(es).`);
+  console.log(`modules: ${MODULE_KINDS.filter((kind) => modules[kind]).join(', ') || 'none'}`);
+  console.log(`token_settings: ${JSON.stringify(tokenSettings)}; transfer_agents: ${JSON.stringify(daoConfig.transferAgents ?? [])}`);
   console.log(`launch_config: ${JSON.stringify(launchFlags)}`);
   process.exit(0);
 }
@@ -360,19 +436,15 @@ function transaction(output, extra = {}) {
 
 function addressesFromOutput(output) {
   const normalized = output.replace(/\\"/g, '"');
-  const aliases = {
-    token: ['token', 'token_address'], metadata: ['metadata', 'metadata_address'],
-    auction: ['auction', 'auction_address'], governor: ['governor', 'governor_address'],
-    treasury: ['treasury', 'treasury_address'], marketplace: ['marketplace', 'marketplace_address']
-  };
+  // DaoAddresses: the core four are always set; a module kind the DAO does not have is null.
+  const core = ['token', 'metadata', 'governor', 'treasury'];
   function find(value) {
     if (!value || typeof value !== 'object') return null;
-    const result = {};
-    for (const [name, keys] of Object.entries(aliases)) {
-      const key = keys.find((candidate) => typeof value[candidate] === 'string');
-      if (key) result[name] = value[key];
+    if (core.every((name) => typeof value[name] === 'string')) {
+      const result = Object.fromEntries(core.map((name) => [name, value[name]]));
+      for (const kind of MODULE_KINDS) result[kind] = typeof value[kind] === 'string' ? value[kind] : null;
+      return result;
     }
-    if (Object.keys(result).length === Object.keys(aliases).length) return result;
     return Object.values(value).map(find).find(Boolean) ?? null;
   }
   for (const match of normalized.matchAll(/\{[^{}]*\}/g)) {
@@ -391,7 +463,7 @@ function loadDaoArtifact() {
     throw new Error(`DAO artifact not found: ${daoArtifactPath}. Run create_dao first.`);
   }
   const artifact = loadJson(daoArtifactPath, 'DAO artifact');
-  if (!artifact.addresses?.token || !artifact.addresses.marketplace) {
+  if (!artifact.addresses?.token || !artifact.addresses.treasury) {
     throw new Error(`DAO artifact ${daoArtifactPath} does not contain DAO addresses`);
   }
   return artifact;
@@ -429,10 +501,7 @@ function initialConfig() {
   return {
     token_name: daoConfig.token.name,
     token_symbol: daoConfig.token.symbol,
-    token_uri: daoConfig.token.uri,
-    project_uri: daoConfig.metadata.projectUri,
-    description: daoConfig.metadata.description,
-    contract_image: daoConfig.metadata.contractImage,
+    profile: profileJson(daoConfig),
     renderer_base: daoConfig.metadata.rendererBase,
     slug: daoConfig.slug,
     governance: {
@@ -442,16 +511,30 @@ function initialConfig() {
       proposal_threshold: u128(daoConfig.governance.proposalThreshold),
       quorum_bps: u32(daoConfig.governance.quorumBps)
     },
-    auction: {
-      duration: u64(daoConfig.auction.duration),
-      reserve_price: i128(daoConfig.auction.reservePrice),
-      time_buffer: u64(daoConfig.auction.timeBuffer),
-      payment_asset: daoConfig.auction.paymentAsset
-    },
-    marketplace: {
-      payment_asset: marketplacePaymentAsset,
-      secondary_fee_bps: u32(marketplaceConfig.secondaryFeeBps ?? 250)
-    }
+    // ModuleSpec enum: one { Variant: config } object per module, each kind at most once.
+    modules: MODULE_KINDS.filter((kind) => modules[kind]).map((kind) => {
+      if (kind === 'auction') {
+        return {
+          Auction: {
+            duration: u64(daoConfig.auction.duration),
+            reserve_price: i128(daoConfig.auction.reservePrice),
+            time_buffer: u64(daoConfig.auction.timeBuffer),
+            payment_asset: daoConfig.auction.paymentAsset
+          }
+        };
+      }
+      if (kind === 'marketplace') {
+        return {
+          Marketplace: {
+            payment_asset: paymentAssetOf(daoConfig, 'marketplace'),
+            secondary_fee_bps: u32(daoConfig.marketplace.secondaryFeeBps ?? 250)
+          }
+        };
+      }
+      return { Claims: { payment_asset: paymentAssetOf(daoConfig, 'claims') } };
+    }),
+    token_settings: tokenSettings,
+    transfer_agents: daoConfig.transferAgents ?? []
   };
 }
 
@@ -476,13 +559,6 @@ function assertSlugUnclaimed() {
     if (!/SlugNotFound|#7128/.test(String(e.message))) throw e;
   }
   if (claimedBy) throw new Error(`Slug "${daoConfig.slug}" is already claimed by ${claimedBy}; choose another slug in the DAO config`);
-}
-
-if (phase === 'bump_slug_ttl') {
-  console.log(`\n=== Renewing slug "${daoConfig.slug}" storage TTL ===\n`);
-  invoke(managerAddress, 'bump_slug_ttl', { slug: daoConfig.slug });
-  console.log('Slug TTL renewed.');
-  process.exit(0);
 }
 
 if (phase === 'create_dao') {
@@ -601,14 +677,17 @@ if (phase === 'admin_checklist') {
     console.log('\nSettings applied at create_dao (constructor values, not re-sent):');
     console.log(JSON.stringify({
       governance: daoConfig.governance,
-      auction: daoConfig.auction,
-      marketplace: { paymentAsset: marketplacePaymentAsset, secondaryFeeBps: marketplaceConfig.secondaryFeeBps ?? 250 }
+      ...(modules.auction ? { auction: daoConfig.auction } : {}),
+      ...(modules.marketplace ? { marketplace: { paymentAsset: paymentAssetOf(daoConfig, 'marketplace'), secondaryFeeBps: daoConfig.marketplace.secondaryFeeBps ?? 250 } } : {}),
+      ...(modules.claims ? { claims: { paymentAsset: paymentAssetOf(daoConfig, 'claims') } } : {}),
+      tokenSettings,
+      transferAgents: daoConfig.transferAgents ?? []
     }, null, 2));
     console.log(`launch_config for launch_dao: ${JSON.stringify(launchFlags)}`);
     console.log('\nNOTES:');
-    console.log('  - Minter merkle roots / allowlists CANNOT be configured now: the Minter requires a Live token. Set them after launch_dao (launch admin is the Treasury afterwards, so use governance or the admin recorded by the Minter).');
-    console.log('  - Mint authority (Treasury, Marketplace, Auction, platform Minter) is granted by launch_dao itself. Do not call token.set_mint_authority now (NotLive).');
-    console.log('  - Do not change auction/marketplace payment assets in setup: launch_dao would fail with PaymentTokenMismatch/PaymentAssetMismatch.');
+    if (modules.claims) console.log('  - ClaimMinter lists can be opened now by the launch admin (claims.open_list) after granting an allowance (token.increase_mint_allowance); or open an assurance drive with manager.open_assurance instead of launch_dao.');
+    console.log('  - launch_dao grants the Auction (when launched) an unlimited mint allowance; pools and later lists need allowances granted by governance (token.increase_mint_allowance).');
+    console.log('  - Do not change module payment assets in setup: launch_dao would fail with PaymentAssetMismatch.');
 
     checkpoint('checklist_complete');
     console.log('\nAdmin checklist complete. Review the artifact and run launch_dao when ready.');
@@ -626,8 +705,11 @@ if (phase === 'launch_dao') {
   // Preflight (read-only) so failures are explained before spending a transaction.
   const pending = invokeView(managerAddress, 'get_pending_dao', { token_address: addresses.token });
   if (!pending) throw new Error('Manager has no pending DAO for this token: it is already launched or was never created here.');
-  if (pending.auction_payment_asset !== daoConfig.auction.paymentAsset || pending.marketplace_payment_asset !== marketplacePaymentAsset) {
-    throw new Error('Config payment assets differ from the ones recorded at create_dao; launch_dao would fail with a payment mismatch. Recreate the DAO or restore the original config.');
+  for (const kind of MODULE_KINDS) {
+    const recorded = pending[`${kind}_payment_asset`] ?? null;
+    if (recorded !== paymentAssetOf(daoConfig, kind)) {
+      throw new Error(`Config ${kind} payment asset (${paymentAssetOf(daoConfig, kind)}) differs from the one recorded at create_dao (${recorded}); launch_dao would fail with a payment mismatch. Recreate the DAO or restore the original config.`);
+    }
   }
   if (!(Number(invokeView(addresses.token, 'total_supply')) > 0)) {
     throw new Error('Token voting supply is 0: run admin_checklist first, minting founders other than the Treasury/Auction/Marketplace (launch_dao fails with LaunchSupplyZero).');
@@ -636,14 +718,6 @@ if (phase === 'launch_dao') {
     throw new Error(`Pending DAO requests slug "${pending.slug}" but the config has "${daoConfig.slug}"; update one of them first.`);
   }
   assertSlugUnclaimed();
-  if (launchFlags.enable_minter) {
-    const minter = invokeView(managerAddress, 'get_platform_minter');
-    if (!minter) throw new Error('enable_minter is set but the Manager has no platform minter (PlatformMinterNotSet). The Manager admin must run set_platform_minter (deploy-manager.mjs does this).');
-    console.log(`Platform minter to be granted mint authority (pinned as expected_minter): ${minter}`);
-    // The Manager reverts with PlatformMinterMismatch if the admin swaps the minter before this
-    // transaction lands, so what the launch admin saw is what gets mint authority.
-    launchFlags.expected_minter = minter;
-  }
 
   const launchOutput = invoke(managerAddress, 'launch_dao', {
     token_address: addresses.token,
@@ -656,6 +730,6 @@ if (phase === 'launch_dao') {
   if (claimed !== addresses.token) throw new Error(`Slug "${daoConfig.slug}" resolves to ${claimed}, expected ${addresses.token}`);
   console.log(`Slug "${daoConfig.slug}" claimed by ${addresses.token}`);
   console.log('All modules are Live with the Treasury as admin. Further administration is by governance proposal (see scripts/upgrade-contract.mjs for the payload shape).');
-  if (launchFlags.launch_marketplace) console.log('Primary sales: the Treasury must create listings via governance (marketplace.create_primary_listing), buyers call buy_primary.');
+  if (launchFlags.launch_marketplace) console.log('Primary sales: governance grants the Marketplace an allowance (token.increase_mint_allowance) and opens a quick-buy pool (marketplace.open_pool, then restock); buyers call buy_from_pool.');
   process.exit(0);
 }

@@ -53,7 +53,25 @@ The timestamp helper accepts epoch milliseconds, epoch seconds, ISO timestamps, 
 
 ## Maintenance and investigation
 
-Use [TTL maintenance](TTL_ECONOMICS.md) for shared-code renewal and explicit artwork windows. Manager registry entries (implementations, approvals, latest selection, pending admin, slugs) are persistent and renewed only when touched; `bump_slug_ttl(slug)` renews a claimed slug permissionlessly. Artwork reads page at most 50 entries (`LimitTooHigh`, 7309). The admin report is code/artwork-specific and not an automatic sweep of all persistent rights. No renewal scheduler is installed.
+**Shared contract code is the platform's to renew, and nothing renews it automatically.** Owner: whoever holds the
+Manager admin identity (`DEPLOY_IDENTITY`, `<network>-admin` by default); the renewal is a plain extend, so a
+non-admin funded key can run it too. Cadence: a dry run every Monday, a renewal whenever any hash is under 60
+days. The backstop is short: contracts bump their own code only to 4 days, so a DAO with no state-changing call
+for 4 days after the platform lapses has its code archived and every call fails until a permissionless restore.
+
+```bash
+node scripts/renew-code-ttl.mjs deploys/builder-testnet-manager.json --dry-run   # quotes; sends nothing
+```
+
+Renew (drop `--dry-run`) when any hash is under 60 days; under 14 is urgent. Contracts bump code only 2 → 4 days
+on their own, so after a lapse members pay a few days of code rent per transaction and idle code archives. The
+Renewal tab's "Shared contract code" row shows the same status to every DAO. A cron line that fails loudly:
+
+```cron
+0 9 * * 1  cd /path/to/repo && node scripts/renew-code-ttl.mjs deploys/builder-testnet-manager.json --dry-run || mail -s "code TTL check failed" ops@example.com
+```
+
+Use [storage and TTL](TTL_ECONOMICS.md) for renewal. The platform renews shared code and the Manager registry with `scripts/renew-code-ttl.mjs`; each DAO renews everything it owns (slug, modules and their records included) with one sweep from Manage → Storage renewal or `scripts/renew-dao.mjs`, which also restores archived keys. Watch for a module the sweep reports as not covered (registered from outside the Manager without `renewal_keys`): only its instance is renewed. Watch the Renewal tab's expiry dates or run `renew-dao.mjs --dry-run` per DAO; per-holder entries (owners, balances, refunds, claim records, pool purchase counts) renew on use. No renewal scheduler is installed.
 
 For missing indexed data, first compare artifact/network/start ledger and scoped contract IDs; then inspect pipeline processing/transform errors with the configured Goldsky CLI. The wrapper and CLI prerequisite caveat are in [the package README](../packages/goldsky/README.md). Do not print secrets to diagnose configuration.
 

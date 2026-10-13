@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 
 import { parseLimit, parseNonNegativeInteger } from '@/lib/api-pagination';
+import { chainProposalPage } from '@/lib/chain-reads/proposals';
+import { rpcProposalReader } from '@/lib/chain-reads/proposals-rpc';
 import { getDaoNetworkConfigById } from '@/lib/dao-config';
 import { getGoldskyProposalList } from '@/lib/goldsky';
 import { parseProposalMetadata, type ProposalMetadata } from '@/lib/proposal-metadata';
@@ -76,18 +78,54 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
         limit: proposalData.limit,
         offset: proposalData.offset,
         hasMore: proposalData.hasMore,
-        generatedAt: proposalData.generatedAt
+        generatedAt: proposalData.generatedAt,
+        source: 'indexer'
       },
       { headers: { 'Cache-Control': 'no-store' } }
     );
   } catch (error) {
-    return NextResponse.json(
-      {
-        items: [],
-        generatedAt: new Date().toISOString(),
-        message: error instanceof Error ? error.message : 'Proposal list unavailable'
-      },
-      { status: 500, headers: { 'Cache-Control': 'no-store' } }
-    );
+    // Indexer down: list from Governor state (docs/STORAGE_DIET.md § 8). Titles and vote totals
+    // come from events, so rows read "Proposal N" until the indexer is back.
+    try {
+      const page = await chainProposalPage(rpcProposalReader(config), config.governorContractId, { limit, offset });
+      const items = page.items
+        .map((proposal): ProposalListItem => ({
+          proposalId: proposal.proposalId,
+          proposalNumber: proposal.proposalNumber,
+          metadata: { title: `Proposal ${proposal.proposalNumber}`, description: '', url: '' },
+          state: proposal.state,
+          stateLabel: proposal.state === null ? 'Archived' : proposalStateLabel(proposal.state),
+          ledger: 0,
+          timestamp: proposal.voteStart,
+          txHash: '',
+          contractId: config.governorContractId,
+          voteTotals: null
+        }))
+        .filter((item) => !status || item.stateLabel.toLowerCase() === status.toLowerCase());
+      return NextResponse.json(
+        {
+          items,
+          total: page.total,
+          limit,
+          offset,
+          hasMore: page.hasMore,
+          generatedAt: new Date().toISOString(),
+          source: 'chain',
+          message:
+            'Titles and vote totals are unavailable right now. States come straight from the chain.' +
+            (status ? ' The status filter is applied to each page after it is cut, so pages may run short.' : '')
+        },
+        { headers: { 'Cache-Control': 'no-store' } }
+      );
+    } catch {
+      return NextResponse.json(
+        {
+          items: [],
+          generatedAt: new Date().toISOString(),
+          message: error instanceof Error ? error.message : 'Proposal list unavailable'
+        },
+        { status: 500, headers: { 'Cache-Control': 'no-store' } }
+      );
+    }
   }
 }

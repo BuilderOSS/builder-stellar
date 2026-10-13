@@ -1,5 +1,7 @@
 #![cfg(test)]
 
+extern crate std;
+
 use soroban_sdk::{
     testutils::{Address as _, Events as _, Ledger},
     Address, BytesN, Env, Event as _, String, Vec,
@@ -8,6 +10,8 @@ use token::DaoTokenContract;
 
 use crate::events::SeedsGenerated;
 use crate::{IpfsGroup, ItemParam, MetadataContract, MetadataContractClient};
+
+const PROFILE: &str = r#"{"v":1,"description":"Test DAO","links":[]}"#;
 
 /// Returns a client for a not-yet-registered address; `initialize_metadata`
 /// (or `register_metadata`) deploys the contract there via its constructor.
@@ -29,9 +33,7 @@ fn register_metadata(
         MetadataContract,
         (
             token.clone(),
-            String::from_str(env, "https://example.com"),
-            String::from_str(env, "Test DAO"),
-            String::from_str(env, "https://example.com/image.png"),
+            String::from_str(env, PROFILE),
             String::from_str(env, "https://renderer.example.com/render"),
             manager.clone(),
             hash.clone(),
@@ -43,7 +45,6 @@ fn register_metadata(
                 base_uri: String::from_str(env, "ipfs://"),
                 extension: String::from_str(env, ".png"),
             },
-            String::from_str(env, "0.1.0"),
         ),
     );
 }
@@ -54,15 +55,12 @@ fn create_token_contract(env: &Env, owner: &Address) -> Address {
         (
             owner.clone(),
             Address::generate(env), // treasury
-            Address::generate(env), // auction
-            Address::generate(env), // marketplace
-            String::from_str(env, "https://test.com"),
             String::from_str(env, "Test Token"),
             String::from_str(env, "TEST"),
             Address::generate(env), // metadata address (placeholder)
             Address::generate(env), // manager address (placeholder)
             BytesN::from_array(env, &[0u8; 32]),
-            String::from_str(env, "0.1.0"),
+            common::modules::TokenSettings::default(),
         ),
     )
 }
@@ -92,14 +90,18 @@ fn test_initialize() {
 
     initialize_metadata(&env, &client, &token, &owner);
 
-    assert_eq!(client.version(), String::from_str(&env, "0.1.0"));
     assert_eq!(client.wasm_hash(), BytesN::from_array(&env, &[0u8; 32]));
     let settings = client.get_settings();
     assert_eq!(settings.token, token);
     assert_eq!(
-        settings.project_uri,
-        String::from_str(&env, "https://example.com")
+        settings.renderer_base,
+        String::from_str(&env, "https://renderer.example.com/render")
     );
+    // The profile is event-only: seq 0, its hash stored, the text emitted.
+    assert_eq!(client.profile_seq(), 0);
+    let bytes = soroban_sdk::Bytes::from_slice(&env, PROFILE.as_bytes());
+    let hash: BytesN<32> = env.crypto().sha256(&bytes).into();
+    assert_eq!(client.profile_hash(), hash);
 }
 
 #[test]
@@ -394,12 +396,23 @@ fn test_update_settings() {
 
     initialize_metadata(&env, &client, &token, &owner);
 
-    // Update description
-    let new_description = String::from_str(&env, "Updated description");
-    client.update_description(&new_description);
-
-    let settings = client.get_settings();
-    assert_eq!(settings.description, new_description);
+    let next = String::from_str(&env, r#"{"v":1,"description":"Updated"}"#);
+    client.update_profile(&0, &next);
+    assert_eq!(client.profile_seq(), 1);
+    let hash: BytesN<32> = env.crypto().sha256(&next.to_bytes()).into();
+    assert_eq!(client.profile_hash(), hash);
+    // A write based on the old seq is refused and changes nothing.
+    let stale = String::from_str(&env, r#"{"v":1,"description":"Stale"}"#);
+    assert_eq!(
+        client
+            .try_update_profile(&0, &stale)
+            .err()
+            .unwrap()
+            .unwrap(),
+        crate::Error::ProfileSeqMismatch
+    );
+    assert_eq!(client.profile_seq(), 1);
+    assert_eq!(client.profile_hash(), hash);
 }
 
 #[test]
@@ -455,6 +468,74 @@ fn test_delete_and_recreate_properties() {
     assert_eq!(property.name, String::from_str(&env, "Body"));
 }
 
+/// docs/designs/membership-models.md §2: `manager.open_assurance` hands the
+/// admin over early; only the Manager may, only in Setup, which freezes the
+/// artwork.
+#[test]
+fn handoff_is_the_managers_freezes_artwork_and_stays_in_setup() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let client = create_contract(&env);
+    let manager = Address::generate(&env);
+    let owner = Address::generate(&env);
+    register_metadata(
+        &env,
+        &client.address,
+        &Address::generate(&env),
+        &manager,
+        &BytesN::from_array(&env, &[0; 32]),
+        &owner,
+    );
+    let treasury: Address = env.as_contract(&client.address, || {
+        env.storage()
+            .instance()
+            .get(&common::ns(&env, crate::storage::DataKey::Treasury))
+            .unwrap()
+    });
+    let e = &env;
+    let id = client.address.clone();
+    env.mock_auths(&[soroban_sdk::testutils::MockAuth {
+        address: &owner,
+        invoke: &soroban_sdk::testutils::MockAuthInvoke {
+            contract: &id,
+            fn_name: "handoff",
+            args: soroban_sdk::IntoVal::into_val(&(treasury.clone(),), e),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(client.try_handoff(&treasury).is_err());
+    env.mock_all_auths();
+    assert_eq!(
+        client
+            .try_handoff(&Address::generate(&env))
+            .err()
+            .unwrap()
+            .unwrap(),
+        crate::error::Error::TreasuryMismatch.into()
+    );
+    client.handoff(&treasury);
+    assert_eq!(client.admin(), treasury);
+    // The launch admin can no longer add artwork.
+    let renderer = String::from_str(&env, "https://example.com/other");
+    env.mock_auths(&[soroban_sdk::testutils::MockAuth {
+        address: &owner,
+        invoke: &soroban_sdk::testutils::MockAuthInvoke {
+            contract: &id,
+            fn_name: "update_renderer_base",
+            args: soroban_sdk::IntoVal::into_val(&(renderer.clone(),), e),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(client.try_update_renderer_base(&renderer).is_err());
+    env.mock_all_auths();
+    client.launch(&treasury);
+    assert_eq!(client.admin(), treasury);
+    assert_eq!(
+        client.try_handoff(&treasury).err().unwrap().unwrap(),
+        common::CommonError::AlreadyLive.into()
+    );
+}
+
 #[test]
 fn launch_is_one_shot_and_moves_upgrade_authority() {
     let env = Env::default();
@@ -480,7 +561,7 @@ fn launch_is_one_shot_and_moves_upgrade_authority() {
     let treasury: Address = env.as_contract(&client.address, || {
         env.storage()
             .instance()
-            .get(&crate::storage::DataKey::Treasury)
+            .get(&common::ns(&env, crate::storage::DataKey::Treasury))
             .unwrap()
     });
     assert_eq!(client.admin(), owner);
@@ -523,7 +604,7 @@ mod upgrade_via_common {
         env.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&env), to);
             assert_eq!(
-                common::upgrade::version(&env),
+                common::upgrade::version(&env, &mgr.address),
                 String::from_str(&env, "0.2.0")
             );
         });
@@ -555,7 +636,7 @@ mod upgrade_via_common {
     }
 
     #[test]
-    fn upgrade_and_sync_version_reject_unauthorized_caller() {
+    fn upgrade_rejects_unauthorized_caller() {
         let env = Env::default();
         env.mock_all_auths();
         let mgr = MockManagerClient::new(&env, &env.register(MockManager, ()));
@@ -575,16 +656,17 @@ mod upgrade_via_common {
         mgr.approve(&from, &to);
         mgr.register(&to, &String::from_str(&env, "0.2.0"));
         mgr.register(&from, &String::from_str(&env, "0.1.1"));
+        // The module's own version() reads its Manager (D6).
+        assert_eq!(client.version(), String::from_str(&env, "0.1.1"));
         // Drop mock_all_auths: no authorization is provided for any address.
         env.set_auths(&[]);
         assert!(client.try_upgrade(&from, &to).is_err());
-        assert!(client.try_sync_version().is_err());
         env.mock_all_auths();
         env.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&env), from);
             assert_eq!(
-                common::upgrade::version(&env),
-                String::from_str(&env, "0.1.0")
+                common::upgrade::version(&env, &mgr.address),
+                String::from_str(&env, "0.1.1")
             );
         });
     }
@@ -607,6 +689,7 @@ mod upgrade_via_common {
             &from,
             &owner,
         );
+        mgr.register(&from, &String::from_str(&env, "0.1.0"));
         let wrong = BytesN::from_array(&env, &[9u8; 32]);
         mgr.approve(&wrong, &to);
         mgr.register(&to, &String::from_str(&env, "0.2.0"));
@@ -618,7 +701,7 @@ mod upgrade_via_common {
         env.as_contract(&id, || {
             assert_eq!(common::upgrade::current_hash(&env), from);
             assert_eq!(
-                common::upgrade::version(&env),
+                common::upgrade::version(&env, &mgr.address),
                 String::from_str(&env, "0.1.0")
             );
         });
@@ -783,14 +866,13 @@ fn m6_mint_never_reads_item_entries() {
     initialize_metadata(&env, &client, &token, &owner);
     add_new_property(&env, &client, "Background", 50, "ipfs://x");
 
-    // Delete every item entry: the mint path must still succeed because it
-    // only needs the property count and each property's item count.
+    // Delete every item page and the name: the mint path must still succeed
+    // because it only needs the instance item counts.
     env.as_contract(&client.address, || {
-        for j in 0..50u32 {
-            env.storage()
-                .persistent()
-                .remove(&crate::storage::DataKey::Item(0, j));
-        }
+        let p = env.storage().persistent();
+        p.remove(&common::ns(&env, crate::storage::DataKey::Items(0, 0)));
+        p.remove(&common::ns(&env, crate::storage::DataKey::PropertyNames));
+        p.remove(&common::ns(&env, crate::storage::DataKey::IpfsGroups));
     });
     assert!(client.on_minted(&1));
     let attrs = client.get_attributes(&1);
@@ -1100,53 +1182,13 @@ fn get_items_pagination_and_cap() {
     assert!(client.get_ipfs_group(&99).is_none());
 }
 
-#[test]
-fn bump_artwork_ttl_renews_window_and_is_bounded() {
-    let (env, client, _o, _t) = setup();
-    add_new_property(&env, &client, "A", 40, "ipfs://a"); // 40 items, 2 groups
-    let total = 40 + 2;
-    assert_eq!(
-        client.try_bump_artwork_ttl(&0, &51).err().unwrap().unwrap(),
-        crate::Error::LimitTooHigh
-    );
-
-    use crate::storage::DataKey;
-    use soroban_sdk::testutils::storage::Persistent as _;
-    let ttls = |env: &Env| {
-        env.as_contract(&client.address, || {
-            let p = env.storage().persistent();
-            (
-                p.get_ttl(&DataKey::Item(0, 0)),
-                p.get_ttl(&DataKey::Item(0, 39)),
-                p.get_ttl(&DataKey::IpfsGroup(1)),
-                p.get_ttl(&DataKey::Property(0)),
-            )
-        })
-    };
-    let before = ttls(&env);
-
-    // Age every entry below the renewal threshold, then renew the whole flat
-    // space (permissionless). Entries above the threshold are left alone.
-    let seq = env.ledger().sequence();
-    let youngest = before.0.min(before.1).min(before.2).min(before.3);
-    let oldest = before.0.max(before.1).max(before.2).max(before.3);
-    assert!(oldest - youngest < common::ttl::PERSISTENT_TTL_THRESHOLD);
-    env.ledger()
-        .set_sequence_number(seq + (oldest - common::ttl::PERSISTENT_TTL_THRESHOLD) + 1);
-    let aged = ttls(&env);
-    assert!(aged.0 < before.0 && aged.1 < before.1 && aged.2 < before.2);
-    env.set_auths(&[]);
-    let mut next = 0;
-    let mut calls = 0;
-    while next < total {
-        next = client.bump_artwork_ttl(&next, &20);
-        calls += 1;
-    }
-    assert_eq!(calls, 3);
-    assert_eq!(next, total);
-    let after = ttls(&env);
-    assert!(after.0 > aged.0 && after.1 > aged.1 && after.2 > aged.2 && after.3 > aged.3);
-}
+// Retired: bump_artwork_ttl_renews_window_and_is_bounded.
+// Value: protects=(none now) the permissionless per-item artwork TTL window;
+// retired_because=`bump_artwork_ttl` is removed by docs/STORAGE_DIET.md (D11,
+// eng review D10): artwork is a handful of paged entries renewed with every
+// other DAO key by one ExtendFootprintTTL sweep; replacement=the renewal
+// inventory enumeration test in apps/web (chain-reads) and
+// `artwork_layout_is_a_handful_of_entries` below.
 
 #[test]
 fn on_minted_batch_after_reset_uses_new_counts() {
@@ -1188,7 +1230,7 @@ fn state_changing_entrypoint_extends_instance_ttl() {
     let (env, client, _owner, _token) = setup();
     advance_ledgers(&env, 120 * 17_280);
     let before = instance_ttl(&env, &client.address);
-    client.update_description(&String::from_str(&env, "ttl"));
+    client.update_profile(&0, &String::from_str(&env, "ttl"));
     let after = instance_ttl(&env, &client.address);
     assert!(
         after > before,
@@ -1202,16 +1244,37 @@ fn settings_strings_are_capped() {
     let max = common::MAX_STRING_LENGTH as usize;
     let ok = String::from_str(&env, &"a".repeat(max));
     let long = String::from_str(&env, &"a".repeat(max + 1));
-    client.update_description(&ok);
-    for r in [
-        client.try_update_description(&long),
-        client.try_update_project_uri(&long),
-        client.try_update_contract_image(&long),
-        client.try_update_renderer_base(&long),
-    ] {
-        assert_eq!(r.err().unwrap().unwrap(), crate::Error::StringTooLong);
+    client.update_renderer_base(&ok);
+    assert_eq!(
+        client
+            .try_update_renderer_base(&long)
+            .err()
+            .unwrap()
+            .unwrap(),
+        crate::Error::StringTooLong
+    );
+    assert_eq!(
+        client
+            .try_update_renderer_base(&String::from_str(&env, "https://x/\"q"))
+            .err()
+            .unwrap()
+            .unwrap(),
+        crate::Error::InvalidName
+    );
+    assert_eq!(client.renderer_base(), ok);
+    // Profile: 1 to MAX_PROFILE_LENGTH bytes.
+    let pmax = common::MAX_PROFILE_LENGTH as usize;
+    client.update_profile(&0, &String::from_str(&env, &"p".repeat(pmax)));
+    for bad in [std::string::String::new(), "p".repeat(pmax + 1)] {
+        assert_eq!(
+            client
+                .try_update_profile(&1, &String::from_str(&env, &bad))
+                .err()
+                .unwrap()
+                .unwrap(),
+            crate::Error::InvalidProfile
+        );
     }
-    assert_eq!(client.description(), ok);
 }
 
 #[test]
@@ -1233,7 +1296,7 @@ fn artwork_admin_moves_to_treasury_at_launch() {
     let treasury = env.as_contract(&client.address, || {
         env.storage()
             .instance()
-            .get::<_, Address>(&crate::storage::DataKey::Treasury)
+            .get::<_, Address>(&common::ns(&env, crate::storage::DataKey::Treasury))
             .unwrap()
     });
     client.launch(&treasury);
@@ -1242,21 +1305,770 @@ fn artwork_admin_moves_to_treasury_at_launch() {
         address: &owner,
         invoke: &MockAuthInvoke {
             contract: &client.address,
-            fn_name: "update_description",
-            args: (text.clone(),).into_val(&env),
+            fn_name: "update_profile",
+            args: (0u32, text.clone()).into_val(&env),
             sub_invokes: &[],
         },
     }]);
-    assert!(client.try_update_description(&text).is_err());
+    assert!(client.try_update_profile(&0, &text).is_err());
     env.mock_auths(&[MockAuth {
         address: &treasury,
         invoke: &MockAuthInvoke {
             contract: &client.address,
-            fn_name: "update_description",
-            args: (text.clone(),).into_val(&env),
+            fn_name: "update_profile",
+            args: (0u32, text.clone()).into_val(&env),
             sub_invokes: &[],
         },
     }]);
-    client.update_description(&text);
-    assert_eq!(client.description(), text);
+    client.update_profile(&0, &text);
+    assert_eq!(client.profile_seq(), 1);
+}
+
+// ---- Storage diet: paged artwork layout, caps and name rules ----
+
+fn long_name(env: &Env, c: char) -> String {
+    String::from_str(
+        env,
+        &core::iter::repeat_n(c, common::MAX_ARTWORK_NAME_LENGTH as usize)
+            .collect::<std::string::String>(),
+    )
+}
+
+#[test]
+fn items_cross_page_boundaries_and_read_back_in_order() {
+    let (env, client, _o, _t) = setup();
+    let per_page = crate::ITEMS_PER_PAGE;
+    add_new_property(&env, &client, "A", per_page + 5, "ipfs://a");
+    assert_eq!(client.items_count(&0), per_page + 5);
+    let property = client.get_property(&0).unwrap();
+    assert_eq!(property.items.len(), per_page + 5);
+    // get_items spans the page boundary.
+    let window = client.get_items(&0, &(per_page - 2), &4);
+    assert_eq!(window.len(), 4);
+    assert_eq!(client.get_items(&0, &(per_page + 4), &50).len(), 1);
+    assert_eq!(client.get_items(&0, &(per_page + 5), &50).len(), 0);
+    let headers = client.property_headers();
+    assert_eq!(headers.len(), 1);
+    assert_eq!(headers.get(0).unwrap().item_count, per_page + 5);
+    assert_eq!(headers.get(0).unwrap().name, String::from_str(&env, "A"));
+}
+
+#[test]
+fn split_upload_from_one_folder_uses_one_ipfs_group() {
+    let (env, client, _o, _t) = setup();
+    add_new_property(&env, &client, "A", 90, "ipfs://same");
+    assert_eq!(client.ipfs_data_count(), 1);
+    add_items(&env, &client, 0, 1, "ipfs://other");
+    assert_eq!(client.ipfs_data_count(), 2);
+    let items = client.get_items(&0, &89, &2);
+    assert_eq!(items.get(0).unwrap().reference_slot, 0);
+    assert_eq!(items.get(1).unwrap().reference_slot, 1);
+}
+
+#[test]
+fn ipfs_group_cap() {
+    let (env, client, _o, _t) = setup();
+    add_new_property(&env, &client, "A", 1, "ipfs://g0");
+    for i in 1..crate::MAX_IPFS_GROUPS {
+        let uri = std::format!("ipfs://g{i}");
+        add_items(&env, &client, 0, 1, &uri);
+    }
+    assert_eq!(client.ipfs_data_count(), crate::MAX_IPFS_GROUPS);
+    let mut items = Vec::new(&env);
+    items.push_back(ItemParam {
+        property_id: 0,
+        name: String::from_str(&env, "x"),
+        is_new_property: false,
+    });
+    assert_eq!(
+        client
+            .try_add_properties(&Vec::new(&env), &items, &group(&env, "ipfs://one-too-many"))
+            .err()
+            .unwrap()
+            .unwrap(),
+        crate::Error::TooManyIpfsGroups
+    );
+    // Reusing the last group is still fine.
+    let last = std::format!("ipfs://g{}", crate::MAX_IPFS_GROUPS - 1);
+    add_items(&env, &client, 0, 1, &last);
+}
+
+#[test]
+fn property_item_cap() {
+    let (env, client, _o, _t) = setup();
+    add_new_property(
+        &env,
+        &client,
+        "A",
+        crate::MAX_ITEMS_PER_PROPERTY,
+        "ipfs://a",
+    );
+    assert_eq!(client.items_count(&0), crate::MAX_ITEMS_PER_PROPERTY);
+    let mut items = Vec::new(&env);
+    items.push_back(ItemParam {
+        property_id: 0,
+        name: String::from_str(&env, "x"),
+        is_new_property: false,
+    });
+    assert_eq!(
+        client
+            .try_add_properties(&Vec::new(&env), &items, &group(&env, "ipfs://a"))
+            .err()
+            .unwrap()
+            .unwrap(),
+        crate::Error::PropertyFull
+    );
+}
+
+#[test]
+fn artwork_names_and_group_strings_are_validated() {
+    let (env, client, _o, _t) = setup();
+    add_new_property(&env, &client, "A", 1, "ipfs://a");
+    let try_name = |name: String| {
+        let mut items = Vec::new(&env);
+        items.push_back(ItemParam {
+            property_id: 0,
+            name,
+            is_new_property: false,
+        });
+        client
+            .try_add_properties(&Vec::new(&env), &items, &group(&env, "ipfs://a"))
+            .err()
+            .map(|e| e.unwrap())
+    };
+    // The longest valid name, including non-ASCII bytes, is accepted.
+    assert_eq!(try_name(long_name(&env, 'a')), None);
+    assert_eq!(try_name(String::from_str(&env, "5'10 caf\u{e9}")), None);
+    let too_long = String::from_str(
+        &env,
+        &"a".repeat(common::MAX_ARTWORK_NAME_LENGTH as usize + 1),
+    );
+    assert_eq!(try_name(too_long), Some(crate::Error::StringTooLong));
+    for bad in ["say \"hi\"", "back\\slash", "tab\there", "nul\u{0}"] {
+        assert_eq!(
+            try_name(String::from_str(&env, bad)),
+            Some(crate::Error::InvalidName)
+        );
+    }
+    // New property names follow the same rules.
+    let mut names = Vec::new(&env);
+    names.push_back(String::from_str(&env, "bad\"name"));
+    let mut items = Vec::new(&env);
+    items.push_back(ItemParam {
+        property_id: 0,
+        name: String::from_str(&env, "ok"),
+        is_new_property: true,
+    });
+    assert_eq!(
+        client
+            .try_add_properties(&names, &items, &group(&env, "ipfs://a"))
+            .err()
+            .unwrap()
+            .unwrap(),
+        crate::Error::InvalidName
+    );
+    // Group strings are capped.
+    let long_uri = String::from_str(&env, &"u".repeat(common::MAX_STRING_LENGTH as usize + 1));
+    let long_ext = String::from_str(&env, &"e".repeat(common::MAX_EXTENSION_LENGTH as usize + 1));
+    for g in [
+        IpfsGroup {
+            base_uri: long_uri,
+            extension: String::from_str(&env, ".png"),
+        },
+        IpfsGroup {
+            base_uri: String::from_str(&env, "ipfs://a"),
+            extension: long_ext,
+        },
+    ] {
+        let mut items = Vec::new(&env);
+        items.push_back(ItemParam {
+            property_id: 0,
+            name: String::from_str(&env, "ok"),
+            is_new_property: false,
+        });
+        assert_eq!(
+            client
+                .try_add_properties(&Vec::new(&env), &items, &g)
+                .err()
+                .unwrap()
+                .unwrap(),
+            crate::Error::StringTooLong
+        );
+    }
+    assert_eq!(client.items_count(&0), 3);
+}
+
+/// The worst `add_properties` call: 16 properties each one item short of a
+/// full page, 64-byte names, a maximum-length new group. Every touched page is
+/// rewritten in full, so this is the most bytes one call can write.
+#[test]
+fn worst_case_add_properties_fits_the_write_limit() {
+    let (env, client, _o, _t) = setup();
+    let per_page = crate::ITEMS_PER_PAGE;
+    // 16 properties, each filled to per_page - 1 items with 64-byte names.
+    let mut names = Vec::new(&env);
+    let mut first = Vec::new(&env);
+    for i in 0..16 {
+        names.push_back(long_name(&env, 'p'));
+        first.push_back(ItemParam {
+            property_id: i,
+            name: long_name(&env, 'i'),
+            is_new_property: true,
+        });
+    }
+    client.add_properties(&names, &first, &group(&env, "ipfs://a"));
+    for pid in 0..16u32 {
+        let mut left = per_page - 2;
+        while left > 0 {
+            let n = left.min(crate::MAX_ITEMS_PER_CALL);
+            let mut items = Vec::new(&env);
+            for _ in 0..n {
+                items.push_back(ItemParam {
+                    property_id: pid,
+                    name: long_name(&env, 'i'),
+                    is_new_property: false,
+                });
+            }
+            client.add_properties(&Vec::new(&env), &items, &group(&env, "ipfs://a"));
+            left -= n;
+        }
+    }
+    // 62 more maximum-length groups so the group vector is near its cap.
+    for g in 1..(crate::MAX_IPFS_GROUPS - 1) {
+        let mut items = Vec::new(&env);
+        items.push_back(ItemParam {
+            property_id: 0,
+            name: long_name(&env, 'i'),
+            is_new_property: false,
+        });
+        let uri = std::format!("{g:0>256}");
+        client.add_properties(
+            &Vec::new(&env),
+            &items,
+            &IpfsGroup {
+                base_uri: String::from_str(&env, &uri),
+                extension: String::from_str(&env, ".abcdefghijklmno"),
+            },
+        );
+    }
+    // The measured call: one item into every property's (nearly full) page,
+    // with a new maximum-length group.
+    let mut items = Vec::new(&env);
+    for pid in 0..16 {
+        items.push_back(ItemParam {
+            property_id: pid,
+            name: long_name(&env, 'i'),
+            is_new_property: false,
+        });
+    }
+    client.add_properties(
+        &Vec::new(&env),
+        &items,
+        &IpfsGroup {
+            base_uri: String::from_str(&env, &"z".repeat(256)),
+            extension: String::from_str(&env, ".abcdefghijklmno"),
+        },
+    );
+    let r = env.cost_estimate().resources();
+    std::println!(
+        "worst-case add_properties: write_bytes={} write_entries={}",
+        r.write_bytes,
+        r.write_entries
+    );
+    // Live testnet tx_max_write_bytes (stellar network settings, 2026-10-12).
+    assert!(
+        r.write_bytes < 132_096,
+        "write_bytes {} over the limit",
+        r.write_bytes
+    );
+}
+
+/// The renewal sweep depends on the whole catalogue being a few entries.
+#[test]
+fn artwork_layout_is_a_handful_of_entries() {
+    let (env, client, _o, _t) = setup();
+    add_n_properties(&env, &client, 16, 1);
+    for pid in 0..16u32 {
+        add_items(&env, &client, pid, 18, "ipfs://n"); // 19 items each, 304 total
+    }
+    use crate::storage::DataKey;
+    let entries = env.as_contract(&client.address, || {
+        let p = env.storage().persistent();
+        let mut n = 0u32;
+        n += p.has(&common::ns(&env, DataKey::PropertyNames)) as u32;
+        for pid in 0..16u32 {
+            for page in 0..crate::MAX_ITEM_PAGES {
+                n += p.has(&common::ns(&env, DataKey::Items(pid, page))) as u32;
+            }
+        }
+        n + p.has(&common::ns(&env, DataKey::IpfsGroups)) as u32
+    });
+    // 1 names vector + 16 item pages + 1 group vector, not 304 item keys.
+    assert_eq!(entries, 18);
+}
+
+#[test]
+fn attributes_share_pages_and_batches_cross_them() {
+    let (env, client, _o, _t) = setup();
+    add_new_property(&env, &client, "A", 3, "ipfs://a");
+    let per_page = crate::TOKENS_PER_ATTRIBUTE_PAGE;
+    // A batch straddling the first page boundary.
+    assert!(client.on_minted_batch(&(per_page - 2), &5));
+    for id in (per_page - 2)..(per_page + 3) {
+        assert_eq!(client.get_attributes(&id).len(), 2);
+    }
+    assert!(client.try_get_attributes(&(per_page - 3)).is_err());
+    assert!(client.try_get_attributes(&(per_page + 3)).is_err());
+    // A single mint later in a page leaves the gap empty.
+    assert!(client.on_minted(&(per_page + 10)));
+    assert!(client.try_get_attributes(&(per_page + 9)).is_err());
+    assert_eq!(client.get_attributes(&(per_page + 10)).len(), 2);
+    // Earlier tokens on the same page keep their attributes.
+    assert_eq!(client.get_attributes(&per_page).len(), 2);
+    use crate::storage::DataKey;
+    let pages = env.as_contract(&client.address, || {
+        let p = env.storage().persistent();
+        (0..4u32)
+            .filter(|i| p.has(&common::ns(&env, DataKey::AttributesPage(*i))))
+            .count()
+    });
+    assert_eq!(pages, 2);
+}
+
+#[test]
+fn reset_never_reads_stale_pages() {
+    let (env, client, _o, _t) = setup();
+    add_new_property(&env, &client, "A", 70, "ipfs://old");
+    let mut names = Vec::new(&env);
+    names.push_back(String::from_str(&env, "B"));
+    let mut items = Vec::new(&env);
+    items.push_back(ItemParam {
+        property_id: 0,
+        name: String::from_str(&env, "fresh"),
+        is_new_property: true,
+    });
+    client.delete_and_recreate_properties(&names, &items, &group(&env, "ipfs://new"));
+    let property = client.get_property(&0).unwrap();
+    assert_eq!(property.items.len(), 1);
+    assert_eq!(
+        property.items.get(0).unwrap().name,
+        String::from_str(&env, "fresh")
+    );
+    assert_eq!(client.ipfs_data_count(), 1);
+    assert_eq!(
+        client.get_ipfs_group(&0).unwrap().base_uri,
+        String::from_str(&env, "ipfs://new")
+    );
+    // Appending after the reset keeps only the new items in page 0.
+    add_items(&env, &client, 0, 2, "ipfs://new");
+    let items = client.get_items(&0, &0, &50);
+    assert_eq!(items.len(), 3);
+    assert_eq!(items.get(1).unwrap().name, String::from_str(&env, "it"));
+}
+
+// ---- On-chain token_uri (SEP-50) ----
+
+fn decode_token_uri(uri: &String) -> std::string::String {
+    let mut raw = std::vec![0u8; uri.len() as usize];
+    uri.copy_into_slice(&mut raw);
+    let text = std::string::String::from_utf8(raw).unwrap();
+    let b64 = text
+        .strip_prefix("data:application/json;base64,")
+        .expect("data: URI prefix");
+    let value = |c: u8| -> u32 {
+        match c {
+            b'A'..=b'Z' => (c - b'A') as u32,
+            b'a'..=b'z' => (c - b'a' + 26) as u32,
+            b'0'..=b'9' => (c - b'0' + 52) as u32,
+            b'+' => 62,
+            b'/' => 63,
+            _ => panic!("bad base64 byte {c}"),
+        }
+    };
+    let mut out = std::vec::Vec::new();
+    for quad in b64.as_bytes().chunks(4) {
+        let pad = quad.iter().filter(|c| **c == b'=').count();
+        let mut n = 0u32;
+        for c in quad.iter() {
+            n = (n << 6) | if *c == b'=' { 0 } else { value(*c) };
+        }
+        let bytes = [(n >> 16) as u8, (n >> 8) as u8, n as u8];
+        out.extend_from_slice(&bytes[..3 - pad]);
+    }
+    std::string::String::from_utf8(out).unwrap()
+}
+
+#[test]
+fn token_uri_is_sep50_json_built_on_chain() {
+    let (env, client, _o, token) = setup();
+    add_new_property(&env, &client, "Head", 1, "ipfs://a");
+    let mut names = Vec::new(&env);
+    names.push_back(String::from_str(&env, "Body"));
+    let mut items = Vec::new(&env);
+    items.push_back(ItemParam {
+        property_id: 0,
+        name: String::from_str(&env, "blue"),
+        is_new_property: true,
+    });
+    client.add_properties(&names, &items, &group(&env, "ipfs://a"));
+    assert!(client.on_minted(&12));
+    let json = decode_token_uri(&client.token_uri(&12, &String::from_str(&env, "Test Token")));
+    let mut token_str = std::vec![0u8; 56];
+    token.to_string().copy_into_slice(&mut token_str);
+    let token_str = std::string::String::from_utf8(token_str).unwrap();
+    assert_eq!(
+        json,
+        std::format!(
+            r#"{{"name":"Test Token #12","image":"https://renderer.example.com/render?contract={token_str}&token=12","attributes":[{{"trait_type":"Head","value":"item"}},{{"trait_type":"Body","value":"blue"}}]}}"#
+        )
+    );
+    assert_eq!(
+        client
+            .try_token_uri(&13, &String::from_str(&env, "Test Token"))
+            .err()
+            .unwrap()
+            .unwrap(),
+        crate::Error::NotSeeded
+    );
+    assert_eq!(
+        client
+            .try_token_uri(&12, &String::from_str(&env, "Bad \"name\""))
+            .err()
+            .unwrap()
+            .unwrap(),
+        crate::Error::InvalidName
+    );
+}
+
+#[test]
+fn token_uri_skips_traits_removed_by_a_reset() {
+    let (env, client, _o, _t) = setup();
+    add_n_properties(&env, &client, 3, 1);
+    assert!(client.on_minted(&1));
+    // Recreate with one property: the token keeps three attribute indices.
+    let mut names = Vec::new(&env);
+    names.push_back(String::from_str(&env, "Only"));
+    let mut items = Vec::new(&env);
+    items.push_back(ItemParam {
+        property_id: 0,
+        name: String::from_str(&env, "one"),
+        is_new_property: true,
+    });
+    client.delete_and_recreate_properties(&names, &items, &group(&env, "ipfs://r"));
+    let json = decode_token_uri(&client.token_uri(&1, &String::from_str(&env, "T")));
+    assert!(
+        json.ends_with(r#""attributes":[{"trait_type":"Only","value":"one"}]}"#),
+        "{json}"
+    );
+}
+
+/// The largest possible document: 40-byte token name (OZ cap), 256-byte renderer base, 16
+/// traits with 64-byte names. It must fit the buffer, the return-value plus
+/// event limit and the CPU limit.
+#[test]
+fn token_uri_worst_case_fits_the_limits() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let owner = Address::generate(&env);
+    let max = common::MAX_STRING_LENGTH as usize;
+    let token = env.register(
+        DaoTokenContract,
+        (
+            owner.clone(),
+            Address::generate(&env),
+            // OpenZeppelin caps the collection name at 40 bytes.
+            String::from_str(&env, &"N".repeat(40)),
+            String::from_str(&env, "TEST"),
+            Address::generate(&env),
+            Address::generate(&env),
+            BytesN::from_array(&env, &[0u8; 32]),
+            common::modules::TokenSettings::default(),
+        ),
+    );
+    let client = create_contract(&env);
+    initialize_metadata(&env, &client, &token, &owner);
+    client.update_renderer_base(&String::from_str(&env, &"r".repeat(max)));
+    let mut names = Vec::new(&env);
+    let mut items = Vec::new(&env);
+    for i in 0..16 {
+        names.push_back(long_name(&env, 'p'));
+        items.push_back(ItemParam {
+            property_id: i,
+            name: long_name(&env, 'i'),
+            is_new_property: true,
+        });
+    }
+    client.add_properties(&names, &items, &group(&env, "ipfs://a"));
+    assert!(client.on_minted(&u32::MAX));
+    env.cost_estimate().budget().reset_default();
+    let uri = client.token_uri(&u32::MAX, &String::from_str(&env, &"N".repeat(40)));
+    let cpu = env.cost_estimate().budget().cpu_instruction_cost();
+    std::println!(
+        "token_uri worst case: {} bytes returned, {} CPU instructions",
+        uri.len(),
+        cpu
+    );
+    let json = decode_token_uri(&uri);
+    assert_eq!(json.matches("trait_type").count(), 16);
+    // Live testnet: tx_max_contract_events_size_bytes 16,384 (events + return
+    // value) and tx_max_instructions 400,000,000.
+    assert!(uri.len() < 16_384 / 2, "{} bytes", uri.len());
+    assert!(cpu < 400_000_000 / 4, "{cpu} instructions");
+}
+
+/// docs/STORAGE_DIET_REVIEW.md Finding 1: no metadata key may encode like a
+/// `common` or OpenZeppelin key the contract links.
+#[test]
+fn storage_keys_do_not_collide() {
+    use common::testutils::{assert_keys_disjoint, common_key_shapes, key_shape};
+    #[allow(unused_imports)]
+    use soroban_sdk::{testutils::Address as _, Address, Env, IntoVal, Val};
+    let e = Env::default();
+    let _a = Address::generate(&e);
+    let all = |keys: std::vec::Vec<Val>| -> std::vec::Vec<(std::string::String, u32)> {
+        keys.into_iter().map(|k| key_shape(&e, k)).collect()
+    };
+    // Every variant, checked exhaustively next to the enum.
+    let module = all(crate::storage::key_samples::all(&e));
+    assert_keys_disjoint(&[("DataKey", module), ("common", common_key_shapes(&e))]);
+}
+
+// ---------------------------------------------------------------------------
+// Compact storage (docs/STORAGE_DIET.md D32): packed attribute pages, item
+// pages as names plus slot bytes, one property-names entry.
+// ---------------------------------------------------------------------------
+
+fn stored_bytes<K: soroban_sdk::IntoVal<Env, soroban_sdk::Val>>(
+    env: &Env,
+    contract: &Address,
+    key: K,
+) -> u32 {
+    use soroban_sdk::xdr::{Limits, WriteXdr};
+    let key: soroban_sdk::Val = key.into_val(env);
+    let key =
+        <soroban_sdk::xdr::ScVal as soroban_sdk::TryFromVal<Env, soroban_sdk::Val>>::try_from_val(
+            env, &key,
+        )
+        .unwrap();
+    let snapshot = env.to_ledger_snapshot();
+    let owner = soroban_sdk::xdr::ScAddress::from(contract);
+    snapshot
+        .ledger_entries
+        .iter()
+        .find(|(k, _)| {
+            matches!(k.as_ref(), soroban_sdk::xdr::LedgerKey::ContractData(d) if d.contract == owner && d.key == key)
+        })
+        .map(|(_, (entry, _))| entry.to_xdr(Limits::none()).unwrap().len() as u32)
+        .expect("entry on the ledger")
+}
+
+#[test]
+fn packed_attributes_roundtrip_full_width_and_largest_index() {
+    let (env, client, _o, _t) = setup();
+    let mut selections = Vec::new(&env);
+    selections.push_back(16u32);
+    for k in 0..16u32 {
+        // The largest index a property can hold, and a few in between.
+        selections.push_back(if k % 2 == 0 {
+            crate::MAX_ITEMS_PER_PROPERTY - 1
+        } else {
+            k * 37
+        });
+    }
+    env.as_contract(&client.address, || {
+        crate::storage::set_attributes(&env, 5, &selections);
+    });
+    assert_eq!(client.get_attributes(&5), selections);
+    // Tokens 0..5 of the page were never written: they read as unseeded.
+    for id in 0..5u32 {
+        assert!(client.try_get_attributes(&id).is_err());
+    }
+    assert!(client.try_get_attributes(&6).is_err());
+}
+
+#[test]
+fn packed_attributes_splice_keeps_neighbours() {
+    let (env, client, _o, _t) = setup();
+    let sel = |n: u32, base: u32| {
+        let mut v = Vec::new(&env);
+        v.push_back(n);
+        for k in 0..n {
+            v.push_back(base + k);
+        }
+        v
+    };
+    let (a, c) = (sel(3, 10), sel(16, 100));
+    env.as_contract(&client.address, || {
+        crate::storage::set_attributes(&env, 0, &a);
+        crate::storage::set_attributes(&env, 1, &Vec::new(&env)); // minted without artwork
+        crate::storage::set_attributes(&env, 2, &c);
+    });
+    assert!(client.try_get_attributes(&1).is_err());
+    // Seeding the empty record in the middle grows it from 1 to 11 bytes.
+    let b = sel(5, 7);
+    env.as_contract(&client.address, || {
+        crate::storage::set_attributes(&env, 1, &b)
+    });
+    assert_eq!(client.get_attributes(&0), a);
+    assert_eq!(client.get_attributes(&1), b);
+    assert_eq!(client.get_attributes(&2), c);
+    // And overwriting it with fewer properties shrinks it again.
+    let b2 = sel(1, 3);
+    env.as_contract(&client.address, || {
+        crate::storage::set_attributes(&env, 1, &b2)
+    });
+    assert_eq!(client.get_attributes(&0), a);
+    assert_eq!(client.get_attributes(&1), b2);
+    assert_eq!(client.get_attributes(&2), c);
+}
+
+#[test]
+fn packed_attributes_reject_out_of_range_input() {
+    let (env, client, _o, _t) = setup();
+    let mut too_many = Vec::new(&env);
+    too_many.push_back(17u32);
+    for k in 0..17u32 {
+        too_many.push_back(k);
+    }
+    let mut big_index = Vec::new(&env);
+    big_index.push_back(1u32);
+    big_index.push_back(crate::MAX_ITEMS_PER_PROPERTY);
+    let mut short = Vec::new(&env);
+    short.push_back(3u32);
+    short.push_back(0u32);
+    for bad in [too_many, big_index, short] {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            env.as_contract(&client.address, || {
+                crate::storage::set_attributes(&env, 0, &bad)
+            });
+        }));
+        assert!(result.is_err());
+    }
+}
+
+#[test]
+fn a_full_attributes_page_is_about_2_kb() {
+    let (env, client, _o, _t) = setup();
+    add_n_properties(&env, &client, 16, 1);
+    let per_page = crate::TOKENS_PER_ATTRIBUTE_PAGE;
+    // Two batches of 32 fill the first page with 16-property records.
+    assert!(client.on_minted_batch(&0, &32));
+    assert!(client.on_minted_batch(&32, &32));
+    for id in 0..per_page {
+        assert_eq!(client.get_attributes(&id).len(), 17);
+    }
+    let bytes = stored_bytes(
+        &env,
+        &client.address,
+        common::ns(&env, crate::storage::DataKey::AttributesPage(0)),
+    );
+    // 64 records of 17 bytes is 1,088; the rest is the key and entry overhead.
+    // The u32-vector layout measured ~9,400 bytes for the same page.
+    std::println!("full attributes page: {bytes} bytes");
+    assert!(bytes <= 1_088 + 160, "{bytes}");
+}
+
+#[test]
+fn wide_records_mix_with_narrow_ones_on_a_page() {
+    let (env, client, _o, _t) = setup();
+    let record = |indexes: &[u32]| {
+        let mut v = Vec::new(&env);
+        v.push_back(indexes.len() as u32);
+        for &i in indexes {
+            v.push_back(i);
+        }
+        v
+    };
+    // Narrow, wide (an index of 256 forces two bytes), narrow at the edge (255).
+    let a = record(&[0, 255, 7]);
+    let b = record(&[1, 256, 1_023]);
+    let c = record(&[255; 16]);
+    env.as_contract(&client.address, || {
+        crate::storage::set_attributes(&env, 0, &a);
+        crate::storage::set_attributes(&env, 1, &b);
+        crate::storage::set_attributes(&env, 2, &c);
+    });
+    assert_eq!(client.get_attributes(&0), a);
+    assert_eq!(client.get_attributes(&1), b);
+    assert_eq!(client.get_attributes(&2), c);
+    // Records: 1 + 3, 1 + 2 * 3, 1 + 16 bytes.
+    let raw: soroban_sdk::Bytes = env.as_contract(&client.address, || {
+        env.storage()
+            .persistent()
+            .get(&common::ns(
+                &env,
+                crate::storage::DataKey::AttributesPage(0),
+            ))
+            .unwrap()
+    });
+    assert_eq!(raw.len(), 4 + 7 + 17);
+    assert_eq!(raw.get(4), Some(0x80 | 3)); // the wide header
+}
+
+#[test]
+fn item_pages_keep_names_and_slots() {
+    let (env, client, _o, _t) = setup();
+    add_new_property(&env, &client, "Head", 3, "ipfs://first/");
+    add_items(&env, &client, 0, 2, "ipfs://second/");
+    let items = client.get_items(&0, &0, &10);
+    assert_eq!(items.len(), 5);
+    let slots: std::vec::Vec<u32> = items.iter().map(|i| i.reference_slot).collect();
+    assert_eq!(slots, std::vec![0, 0, 0, 1, 1]);
+    assert_eq!(
+        client.get_ipfs_group(&1).unwrap().base_uri,
+        String::from_str(&env, "ipfs://second/")
+    );
+    let headers = client.property_headers();
+    assert_eq!(headers.len(), 1);
+    assert_eq!(headers.get(0).unwrap().item_count, 5);
+}
+
+#[test]
+fn a_full_item_page_costs_names_plus_a_byte() {
+    let (env, client, _o, _t) = setup();
+    add_new_property(&env, &client, "Head", 32, "ipfs://x/");
+    let bytes = stored_bytes(
+        &env,
+        &client.address,
+        common::ns(&env, crate::storage::DataKey::Items(0, 0)),
+    );
+    let names: u32 = client
+        .get_items(&0, &0, &32)
+        .iter()
+        .map(|i| i.name.len())
+        .sum();
+    // Per item: an 8-byte string header, the name padded to 4, and 1 slot byte.
+    std::println!("32-item page: {bytes} bytes for {names} bytes of names");
+    assert!(bytes <= names + 32 * (8 + 3 + 1) + 200, "{bytes}");
+}
+
+#[test]
+fn mints_before_artwork_write_empty_records_so_pages_always_exist() {
+    let (env, client, _o, _t) = setup();
+    assert!(!client.on_minted(&0));
+    assert!(!client.on_minted_batch(&1, &3));
+    let raw: soroban_sdk::Bytes = env.as_contract(&client.address, || {
+        env.storage()
+            .persistent()
+            .get(&common::ns(
+                &env,
+                crate::storage::DataKey::AttributesPage(0),
+            ))
+            .unwrap()
+    });
+    // Four empty one-byte records.
+    assert_eq!(raw.len(), 4);
+    for id in 0..4u32 {
+        assert!(client.try_get_attributes(&id).is_err());
+    }
+    // Seeding later (what `regenerate` stores) fills the record in place.
+    let mut seeded = Vec::new(&env);
+    seeded.push_back(1u32);
+    seeded.push_back(2u32);
+    env.as_contract(&client.address, || {
+        crate::storage::set_attributes(&env, 2, &seeded)
+    });
+    assert_eq!(client.get_attributes(&2), seeded);
+    assert!(client.try_get_attributes(&1).is_err());
+    assert!(client.try_get_attributes(&3).is_err());
 }

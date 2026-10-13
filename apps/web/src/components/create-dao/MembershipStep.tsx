@@ -1,9 +1,17 @@
 'use client';
-import { ArrowLeftRight, Gavel, Mail, Tag } from 'lucide-react';
+import { ArrowLeftRight, Gavel, Lock, Mail, Tag, Users } from 'lucide-react';
 import { useState } from 'react';
 
-import { ChoiceGroup, Disclosure, DurationInput, Input, Select } from '@/components/ui';
-import { MEMBERSHIP_TYPES, type MembershipTypeId, membershipTypeOf } from '@/lib/create-dao-presets';
+import { Checkbox, ChoiceGroup, Disclosure, DurationInput, Input, Select } from '@/components/ui';
+import {
+  MEMBERSHIP_RULES,
+  MEMBERSHIP_SWITCHES,
+  MEMBERSHIP_TYPES,
+  type MembershipRulesId,
+  membershipRulesOf,
+  type MembershipTypeId,
+  membershipTypeOf
+} from '@/lib/create-dao-presets';
 import { configuredCreationNetwork, creationAssets } from '@/lib/create-dao-schema';
 import { MAX_MARKETPLACE_FEE_BPS } from '@/lib/governance-limits';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
@@ -19,17 +27,23 @@ const TYPE_ICONS: Record<MembershipTypeId, typeof Gavel> = {
   invite: Mail
 };
 
+const RULE_ICONS: Record<MembershipRulesId, typeof Gavel> = { open: Users, club: Lock };
+
 const hasErrorIn = (errors: Record<string, string>, prefix: string) =>
   Object.keys(errors).some((key) => key.startsWith(prefix) && errors[key]);
 
 export function MembershipStep() {
   const auction = useCreateDaoStore((s) => s.auction);
   const market = useCreateDaoStore((s) => s.marketplace);
+  const claims = useCreateDaoStore((s) => s.claims);
+  const tokenSettings = useCreateDaoStore((s) => s.tokenSettings);
   const errors = useCreateDaoStore((s) => s.validationErrors);
   const store = useCreateDaoStore.getState();
   const assets = creationAssets(configuredCreationNetwork());
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const type = membershipTypeOf(auction, market);
+  // A custom mix of switches (set in Advanced) selects neither preset.
+  const rules = membershipRulesOf(tokenSettings);
   const auctionErrors = hasErrorIn(errors, 'auction.');
   const marketErrors = hasErrorIn(errors, 'marketplace.');
   // A hidden field can't be fixed, so a part with errors stays visible even when switched off.
@@ -46,6 +60,7 @@ export function MembershipStep() {
           if (!next) return;
           store.updateAuction({ enabled: next.auction });
           store.updateMarketplace({ enabled: next.marketplace });
+          store.updateClaims({ enabled: next.claims });
         }}
         options={MEMBERSHIP_TYPES.map((option) => {
           const Icon = TYPE_ICONS[option.id];
@@ -58,8 +73,26 @@ export function MembershipStep() {
           };
         })}
       />
+      <ChoiceGroup
+        variant="card"
+        label="Who can hold a membership?"
+        value={rules?.id ?? null}
+        onValueChange={(id) => {
+          const next = MEMBERSHIP_RULES.find((option) => option.id === id);
+          if (next) store.updateTokenSettings({ ...next.settings });
+        }}
+        options={MEMBERSHIP_RULES.map((option) => {
+          const Icon = RULE_ICONS[option.id];
+          return {
+            value: option.id,
+            label: option.title,
+            description: option.description,
+            icon: <Icon aria-hidden="true" strokeWidth={1.75} />
+          };
+        })}
+      />
       <p className={styles.muted}>
-        Prices and timings start with sensible defaults. You can change any of this later by a vote.
+        Prices, timings and membership rules start with sensible defaults. You can change any of this later by a vote.
       </p>
       <Disclosure
         title="Advanced settings"
@@ -157,11 +190,33 @@ export function MembershipStep() {
               </div>
             </div>
           ) : null}
-          {!showAuction && !showMarket ? (
-            <p className={styles.muted}>Invite only has nothing to tune here. You mint founder tokens in Setup.</p>
-          ) : null}
+          <div className={styles.group}>
+            <p className={styles.label}>Membership rules</p>
+            {MEMBERSHIP_SWITCHES.map((entry) => (
+              <Checkbox
+                key={entry.key}
+                label={entry.label}
+                description="Can be changed later by vote."
+                checked={tokenSettings[entry.key]}
+                onCheckedChange={(checked) => store.updateTokenSettings({ [entry.key]: checked })}
+              />
+            ))}
+          </div>
+          <div className={styles.group}>
+            <p className={styles.label}>Claim lists</p>
+            <Checkbox
+              label="Let members claim tokens from published lists"
+              description={
+                showAuction
+                  ? 'Adds a claims module, priced in the auction’s asset. Lists open in Setup or by vote.'
+                  : 'Adds a claims module. Lists open in Setup or by vote.'
+              }
+              checked={claims.enabled}
+              onCheckedChange={(enabled) => store.updateClaims({ enabled })}
+            />
+          </div>
           <p className={styles.muted}>
-            The bid and price assets are fixed once you create the community, even for things you turn off now.
+            Payment assets are fixed once you create the community. Modules you leave out can be added later by vote.
             You&apos;ll mint at least one founder token in Setup before launching.
           </p>
         </div>

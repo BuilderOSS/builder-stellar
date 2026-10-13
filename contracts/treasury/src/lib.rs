@@ -12,8 +12,8 @@
 //! - **Authorization**: The Treasury authorizes each external call it makes;
 //!   an `authorize` action can add the deeper authorization trees a call
 //!   needs (see `AuthNode`)
-//! - **Self calls**: A proposal may call the Treasury's own `upgrade`,
-//!   `migrate` and `sync_version` (allowlisted)
+//! - **Self calls**: A proposal may call the Treasury's own `upgrade` and
+//!   `migrate` (allowlisted)
 //! - **Admin of the DAO**: After launch the Treasury is the admin of every DAO
 //!   module, so every privileged change goes through a proposal
 //!

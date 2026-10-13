@@ -1,3 +1,6 @@
+import { NextResponse } from 'next/server';
+
+import { RestoreRequiredError, restoreResponseBody } from '@/lib/restore-required';
 import { prepareTreasuryFunding } from '@/lib/treasury-service/funding';
 import { treasuryActor, treasuryFailure, treasuryResponse, treasurySameOrigin } from '@/lib/treasury-service/http';
 import { TreasuryError } from '@/lib/treasury-service/service';
@@ -19,6 +22,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ dao
     const input = fundingSchema.parse(body);
     return treasuryResponse(await prepareTreasuryFunding((await params).daoId, actor, input));
   } catch (error) {
+    if (error instanceof RestoreRequiredError)
+      return NextResponse.json(restoreResponseBody(error), {
+        status: error.status,
+        headers: { 'Cache-Control': 'private, no-store' }
+      });
     return treasuryFailure(error);
   }
 }

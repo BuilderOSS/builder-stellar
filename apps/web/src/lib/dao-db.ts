@@ -11,6 +11,8 @@
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { getNetworkConfig, type NetworkName } from '@/config/networks';
+import { type DaoProfile, EMPTY_PROFILE } from '@/lib/dao-profile';
+import { type ProfileView, verifyProfiles } from '@/lib/dao-profile-server';
 import { prisma } from '@/lib/prisma';
 
 /**
@@ -42,13 +44,25 @@ export interface DaoConfig {
   marketplace_contract: string | null;
   treasury_contract: string | null;
   metadata_contract: string | null;
-  contract_image: string | null;
+  /** The DAO's ClaimMinter from its module registry; null when it has none. */
+  claims_contract: string | null;
+  /** An assurance drive's outcome (open, launched, released); null without one. */
+  assurance_outcome: 'open' | 'launched' | 'released' | null;
 
   // Token Metadata (from DaoCreationParams)
   token_name: string | null;
   token_symbol: string | null;
-  token_description: string | null;
-  token_uri: string | null;
+
+  /**
+   * The community profile, verified against the chain's profile_hash(); empty
+   * (status `unavailable`) when the index and chain disagree or the chain could
+   * not be read. `image` and `description` are shortcuts into it.
+   */
+  profile: DaoProfile;
+  profile_status: ProfileView['status'];
+  profile_seq: number | null;
+  image: string;
+  description: string;
 
   // Admin & Configuration
   admin_address: string | null; // current admin: launch admin in setup, the Treasury after launch
@@ -79,6 +93,14 @@ export interface DaoConfig {
    */
   marketplace_enabled: boolean | null;
 
+  /**
+   * Something to buy right now, from the index. Only set by withLiveAvailability:
+   * an open auction still taking bids, and listings and pools that are open,
+   * unexpired and (pools) in stock.
+   */
+  auction_live?: boolean;
+  listings_open?: number;
+
   // Blockchain Timeline
   created_ledger: number;
   created_at: string | null; // ISO timestamp
@@ -96,7 +118,7 @@ export interface DaoConfig {
  * Get the network for this deployment
  * Determined by NEXT_PUBLIC_NETWORK env var
  */
-function getDeploymentNetwork(): NetworkName {
+export function getDeploymentNetwork(): NetworkName {
   const network = (process.env.NEXT_PUBLIC_NETWORK || 'testnet') as NetworkName;
 
   // Validate it's a real network
@@ -166,11 +188,8 @@ export async function getDaoConfigFromDatabase(daoId: string): Promise<DaoConfig
     throw new Error(`DAO not found: ${daoId}`);
   }
 
-  const metadata = await prisma.metadataConfiguration.findFirst({
-    where: { deploymentId, daoId }
-  });
-
-  return mapDaoConfig(row, network, metadata?.contractImage ?? null);
+  const views = await verifyRows(network, [row]);
+  return mapDaoConfig(row, network, views.get(row.daoId));
 }
 
 /**
@@ -191,12 +210,8 @@ export async function getAllDaosFromDatabase(status?: 'pending' | 'operational')
     where: { deploymentId, ...(status ? { status } : {}) },
     orderBy: { createdLedger: 'desc' }
   });
-  const metadata = await prisma.metadataConfiguration.findMany({
-    where: { deploymentId }
-  });
-  const images = new Map(metadata.map((item) => [item.daoId, item.contractImage]));
-
-  return rows.map((row) => mapDaoConfig(row, network, images.get(row.daoId) ?? null));
+  const views = await verifyRows(network, rows);
+  return rows.map((row) => mapDaoConfig(row, network, views.get(row.daoId)));
 }
 
 export async function getPendingDaosForLaunchAdmin(address: string): Promise<DaoConfig[]> {
@@ -213,19 +228,27 @@ export async function getPendingDaosForLaunchAdmin(address: string): Promise<Dao
     },
     orderBy: { createdLedger: 'desc' }
   });
-  const metadata = await prisma.metadataConfiguration.findMany({
-    where: { deploymentId, daoId: { in: rows.map((row) => row.daoId) } }
-  });
-  const images = new Map(metadata.map((item) => [item.daoId, item.contractImage]));
-
-  return rows.map((row) => mapDaoConfig(row, network, images.get(row.daoId) ?? null));
+  const views = await verifyRows(network, rows);
+  return rows.map((row) => mapDaoConfig(row, network, views.get(row.daoId)));
 }
 
-function mapDaoConfig(
-  row: Awaited<ReturnType<typeof prisma.managerDao.findFirst>> extends infer T ? Exclude<T, null> : never,
-  network: NetworkName,
-  contractImage: string | null
-): DaoConfig {
+type DaoRow = Awaited<ReturnType<typeof prisma.managerDao.findFirst>> extends infer T ? Exclude<T, null> : never;
+
+/** Verify each row's indexed profile against the chain (cached per contract and revision). */
+export function verifyRows(network: NetworkName, rows: DaoRow[]) {
+  return verifyProfiles(
+    network,
+    rows.map((row) => ({
+      key: row.daoId,
+      metadataContract: row.metadataContract,
+      profile: row.profile,
+      profileSeq: row.profileSeq
+    }))
+  );
+}
+
+function mapDaoConfig(row: DaoRow, network: NetworkName, view: ProfileView | undefined): DaoConfig {
+  const profile = view?.profile ?? { ...EMPTY_PROFILE };
   return {
     deployment_id: row.deploymentId,
     dao_id: row.daoId,
@@ -242,11 +265,18 @@ function mapDaoConfig(
     marketplace_contract: row.marketplaceContract,
     treasury_contract: row.treasuryContract,
     metadata_contract: row.metadataContract,
-    contract_image: contractImage,
+    claims_contract: row.claimsContract,
+    assurance_outcome:
+      row.assuranceOutcome === 'open' || row.assuranceOutcome === 'launched' || row.assuranceOutcome === 'released'
+        ? row.assuranceOutcome
+        : null,
     token_name: row.tokenName,
     token_symbol: row.tokenSymbol,
-    token_description: row.tokenDescription,
-    token_uri: row.tokenUri,
+    profile,
+    profile_status: view?.status ?? 'unavailable',
+    profile_seq: view?.seq ?? (row.profileSeq === null ? null : Number(row.profileSeq)),
+    image: profile.image,
+    description: profile.description,
     admin_address: row.adminAddress,
     label: '',
     status: row.status === 'operational' ? 'operational' : 'pending',
@@ -304,4 +334,82 @@ export async function waitForDaoIndexed(daoId: string, timeoutMs = 30000): Promi
   }
 
   throw new Error(`DAO ${daoId} not indexed after ${timeoutMs}ms. Please check Goldsky indexer status.`);
+}
+
+/**
+ * Adds what each community has for sale right now: whether its current auction
+ * is still taking bids, and how many market listings are open. Two or three
+ * index queries for the whole list; callers opt in.
+ */
+export async function withLiveAvailability(daos: DaoConfig[]): Promise<DaoConfig[]> {
+  try {
+    return await addLiveAvailability(daos);
+  } catch {
+    // Availability only ranks and filters; the list still works without it.
+    return daos;
+  }
+}
+
+async function addLiveAvailability(daos: DaoConfig[]): Promise<DaoConfig[]> {
+  const auctionScopes = daos
+    .filter((dao) => dao.auction_contract && dao.auction_paused !== true)
+    .map((dao) => ({ daoId: dao.dao_id, contractId: dao.auction_contract! }));
+  const marketScopes = daos
+    .filter((dao) => dao.marketplace_contract && dao.marketplace_enabled !== false)
+    .map((dao) => ({ daoId: dao.dao_id, contractId: dao.marketplace_contract! }));
+  if (!auctionScopes.length && !marketScopes.length) return daos;
+
+  const now = BigInt(Math.floor(Date.now() / 1000));
+  const listingWhere = { deploymentId: DEPLOYMENT_ID, OR: marketScopes, status: 'open', expiresAt: { gt: now } };
+  const [auctions, pools, secondary] = await Promise.all([
+    auctionScopes.length
+      ? prisma.auctionCurrentAuction.findMany({
+          where: { deploymentId: DEPLOYMENT_ID, OR: auctionScopes, settled: false, cancelled: false },
+          select: { daoId: true, currentEndSeconds: true }
+        })
+      : [],
+    marketScopes.length
+      ? prisma.marketplacePool.groupBy({
+          by: ['daoId'],
+          where: { ...listingWhere, inStock: { gt: 0 } },
+          _count: { _all: true }
+        })
+      : [],
+    marketScopes.length
+      ? prisma.marketplaceSecondaryListing.groupBy({ by: ['daoId'], where: listingWhere, _count: { _all: true } })
+      : []
+  ]);
+
+  // auction.current_auctions is the newest auction per contract; an open one is
+  // live until its end including any extensions (current_end_seconds).
+  const live = new Set(auctions.filter((a) => a.currentEndSeconds > now).map((a) => a.daoId));
+
+  const listings = new Map<string, number>();
+  for (const row of [...pools, ...secondary]) listings.set(row.daoId, (listings.get(row.daoId) ?? 0) + row._count._all);
+
+  return daos.map((dao) => ({
+    ...dao,
+    auction_live: live.has(dao.dao_id),
+    listings_open: listings.get(dao.dao_id) ?? 0
+  }));
+}
+
+/** The membership switches a DAO's Token has in force (docs/designs/locked-tokens.md). */
+export type TokenSettings = { transfersLocked: boolean; membersOnlyDelegation: boolean; daoRecovery: boolean };
+
+export const OPEN_TOKEN_SETTINGS: TokenSettings = {
+  transfersLocked: false,
+  membersOnlyDelegation: false,
+  daoRecovery: false
+};
+
+/** token.settings from the index; all off (an open DAO) until the Token's first event is indexed. */
+export async function getTokenSettingsFromDatabase(daoId: string): Promise<TokenSettings> {
+  const row = await prisma.tokenSettings.findFirst({ where: { deploymentId: DEPLOYMENT_ID, daoId } });
+  if (!row) return { ...OPEN_TOKEN_SETTINGS };
+  return {
+    transfersLocked: row.transfersLocked,
+    membersOnlyDelegation: row.membersOnlyDelegation,
+    daoRecovery: row.daoRecovery
+  };
 }

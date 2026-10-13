@@ -76,30 +76,33 @@ function resolveStartAt(deployment) {
   return startLedger;
 }
 
-export function buildGoldskyPipelineYaml({ deployment, secretName, templateSource, scriptSource, startAt }) {
+/** The live pipeline is a Goldsky Turbo pipeline named after the network (`builder-stellar-testnet`). */
+export function resolvePipelineName(deployment, env = process.env) {
+  const merged = loadPackageEnv(env);
+  if (merged.GOLDSKY_PIPELINE_NAME) return merged.GOLDSKY_PIPELINE_NAME;
+  if (!deployment?.network) throw new Error('Deployment artifact must define network');
+  return `builder-stellar-${deployment.network}`;
+}
+
+export function buildGoldskyPipelineYaml({ deployment, secretName, templateSource, scriptSource, startAt, pipelineName }) {
   const template = templateSource ?? readFileSync(defaultTemplatePath, 'utf8');
   const rawScript = readFileSync(defaultRawScriptPath, 'utf8');
   const decodedScript = readFileSync(defaultDecodedScriptPath, 'utf8');
   const script = scriptSource ?? readFileSync(defaultScriptPath, 'utf8');
   const managerContract = deployment.manager;
-  const minterContract = deployment.minter;
   if (!managerContract) {
     throw new Error('Deployment artifact must define manager');
-  }
-  if (!minterContract) {
-    throw new Error('Deployment artifact must define minter');
   }
   const resolvedStartAt = startAt ?? resolveStartAt(deployment);
 
   return renderTemplate(template, {
-    PIPELINE_NAME: 'builder-stellar-events',
+    PIPELINE_NAME: pipelineName ?? resolvePipelineName(deployment, {}),
     RESOURCE_SIZE: 's',
     DESCRIPTION: `Index Manager ${managerContract} on ${deployment.network} with Goldsky Turbo`,
     DEPLOYMENT_ID: `manager:${managerContract}`,
     START_AT: resolvedStartAt,
     DATASET_NAME: `stellar_${deployment.network}.events`,
     MANAGER_CONTRACT_ID: managerContract,
-    MINTER_CONTRACT_ID: minterContract,
     RAW_EVENTS_SCRIPT: indentBlock(rawScript, 6),
     DECODED_EVENTS_SCRIPT: indentBlock(decodedScript, 6),
     ACTIVITY_SCRIPT: indentBlock(script, 6),
@@ -116,7 +119,8 @@ export function writeGoldskyPipeline({ env = process.env, outputPath = defaultOu
   if (startAt !== undefined && !Number.isFinite(startAt)) {
     throw new Error('GOLDSKY_START_AT must be a finite ledger number');
   }
-  const yaml = buildGoldskyPipelineYaml({ deployment, secretName, startAt });
+  const pipelineName = resolvePipelineName(deployment, mergedEnv);
+  const yaml = buildGoldskyPipelineYaml({ deployment, secretName, startAt, pipelineName });
 
   mkdirSync(dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, `${yaml.trimEnd()}\n`);
@@ -125,6 +129,7 @@ export function writeGoldskyPipeline({ env = process.env, outputPath = defaultOu
     selection: { ...selection, network: deployment.network, label: deployment.label },
     deployment,
     secretName,
+    pipelineName,
     outputPath,
     yaml
   };

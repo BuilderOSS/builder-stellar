@@ -1,11 +1,12 @@
 #![allow(clippy::too_many_arguments)] // constructors take every wired address/param explicitly
 
 use common::clients::NftClient;
+use common::modules::RenewalPage;
 use soroban_sdk::token::TokenClient;
 use soroban_sdk::{
     auth::{ContractContext, InvokerContractAuthEntry, SubContractInvocation},
-    contract, contractimpl, contracttrait, panic_with_error, Address, BytesN, Env, IntoVal, String,
-    Symbol,
+    contract, contractimpl, contracttrait, panic_with_error, vec, Address, BytesN, Env, IntoVal,
+    String, Symbol, Vec,
 };
 use stellar_contract_utils::pausable::{self, Pausable};
 use stellar_macros::{when_not_paused, when_paused};
@@ -46,7 +47,6 @@ pub trait DaoAuctionContractTrait {
         payment_token: Address,
         manager: Address,
         current_hash: BytesN<32>,
-        version: String,
     );
 
     /// Create a bid with SAC token. `comment` is optional (empty for none),
@@ -81,7 +81,13 @@ pub trait DaoAuctionContractTrait {
     fn set_min_bid_increment(e: &Env, min_bid_increment_percent: u32);
     fn set_time_buffer(e: &Env, time_buffer: u64);
     fn set_payment_token(e: &Env, payment_token: Address);
-    fn launch(e: &Env, treasury: Address, start: bool, expected_payment_token: Address);
+    fn launch(e: &Env, treasury: Address, start: bool);
+    /// Manager-only: hand the admin to the Treasury early and stay in Setup.
+    fn handoff(e: &Env, treasury: Address);
+    /// The configured payment token (`DaoModule::payment_asset`).
+    fn payment_asset(e: &Env) -> Address;
+    /// DAO-owned keys for the renewal sweep (`DaoModule::renewal_keys`).
+    fn renewal_keys(e: &Env, cursor: u32, limit: u32) -> RenewalPage;
     fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>);
     /// Advance the storage layout after an upgrade (admin only).
     fn migrate(e: &Env);
@@ -89,7 +95,6 @@ pub trait DaoAuctionContractTrait {
     fn wasm_hash(e: &Env) -> BytesN<32>;
     /// Storage-layout version of the data held by this contract.
     fn storage_version(e: &Env) -> u32;
-    fn sync_version(e: &Env);
     /// Module admin: the launch admin during setup, the Treasury once live.
     fn admin(e: &Env) -> Address;
 }
@@ -128,7 +133,7 @@ impl DaoAuctionContract {
     fn manager(e: &Env) -> Address {
         common::error::require(
             e,
-            e.storage().instance().get(&DataKey::Manager),
+            e.storage().instance().get(&common::ns(e, DataKey::Manager)),
             common::CommonError::ManagerNotSet,
         )
     }
@@ -136,25 +141,21 @@ impl DaoAuctionContract {
 
 #[contractimpl]
 impl DaoAuctionContractTrait for DaoAuctionContract {
-    /// One-shot, Manager-only launch handoff (Setup -> Live).
+    /// One-shot, Manager-only launch (Setup -> Live), `DaoModule::launch`.
     ///
-    /// Marks the module live first, then hands the admin to `treasury` and,
-    /// when `start` is true, unpauses and creates the first auction (the token
-    /// must already be live so the auction holds mint authority). Panics
-    /// `PaymentTokenMismatch` if the configured payment token differs from
-    /// `expected_payment_token`. A second call panics with `AlreadyLive`.
-    fn launch(e: &Env, treasury: Address, start: bool, expected_payment_token: Address) {
+    /// Marks the module live first, then hands the admin to `treasury`
+    /// (unless `handoff` already did) and, when `start` is true, unpauses and
+    /// creates the first auction (the token must already be live so the
+    /// auction holds an allowance). The Manager checks the payment token
+    /// against the one recorded at `create_dao` before calling. A second call
+    /// panics with `AlreadyLive`.
+    fn launch(e: &Env, treasury: Address, start: bool) {
         Self::manager(e).require_auth();
         common::lifecycle::mark_live(e);
         if treasury != get_config(e).treasury {
             panic_with_error!(e, AuctionError::TreasuryMismatch);
         }
-        // The payment token is a tunable setup param; the Manager records the one
-        // chosen at create_dao and launch refuses if the launch_admin changed it.
-        if expected_payment_token != get_config(e).payment_token {
-            panic_with_error!(e, AuctionError::PaymentTokenMismatch);
-        }
-        common::admin::handoff(e, &treasury);
+        common::admin::handoff_once(e, &treasury);
         if start {
             pausable::unpause(e);
             if !has_auction(e) {
@@ -163,6 +164,35 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         }
         common::ttl::extend_instance(e);
         emit_launched(e, &treasury, start);
+    }
+
+    /// Manager-only early handoff: the admin moves to `treasury` and the
+    /// module stays in Setup, so its setters and upgrades are frozen until
+    /// launch. Panics `AlreadyLive` once launched.
+    fn handoff(e: &Env, treasury: Address) {
+        Self::manager(e).require_auth();
+        common::lifecycle::require_setup(e);
+        if treasury != get_config(e).treasury {
+            panic_with_error!(e, AuctionError::TreasuryMismatch);
+        }
+        common::admin::handoff_once(e, &treasury);
+        common::ttl::extend_instance(e);
+    }
+
+    fn payment_asset(e: &Env) -> Address {
+        get_config(e).payment_token
+    }
+
+    /// Every auction entry is instance storage; `PendingRefund(bidder)` is
+    /// the bidder's own (holder class). So there are no keys, only the
+    /// balances the Auction holds: the token it auctions and the bids.
+    fn renewal_keys(e: &Env, _cursor: u32, _limit: u32) -> RenewalPage {
+        let config = get_config(e);
+        RenewalPage {
+            keys: Vec::new(e),
+            assets: vec![e, config.token_contract, config.payment_token],
+            next_cursor: None,
+        }
     }
 
     fn __constructor(
@@ -177,7 +207,6 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         payment_token: Address,
         manager: Address,
         current_hash: BytesN<32>,
-        version: String,
     ) {
         // Validate config
         if !(MIN_AUCTION_DURATION..=MAX_AUCTION_DURATION).contains(&duration)
@@ -216,8 +245,10 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
             payment_token: payment_token.clone(),
         };
         set_config(e, &config);
-        e.storage().instance().set(&DataKey::Manager, &manager);
-        common::upgrade::init(e, &current_hash, &version, STORAGE_VERSION);
+        e.storage()
+            .instance()
+            .set(&common::ns(e, DataKey::Manager), &manager);
+        common::upgrade::init(e, &current_hash, STORAGE_VERSION);
 
         emit_auction_initialized(
             e,
@@ -229,7 +260,6 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
             min_bid_increment_percent,
             time_buffer,
             &payment_token,
-            &version,
         );
     }
 
@@ -252,16 +282,11 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
     }
 
     fn version(e: &Env) -> String {
-        common::upgrade::version(e)
+        common::upgrade::version(e, &Self::manager(e))
     }
 
     fn wasm_hash(e: &Env) -> BytesN<32> {
         common::upgrade::current_hash(e)
-    }
-
-    fn sync_version(e: &Env) {
-        common::admin::require_admin(e);
-        common::upgrade::sync_version(e, &Self::manager(e));
     }
 
     #[when_not_paused]

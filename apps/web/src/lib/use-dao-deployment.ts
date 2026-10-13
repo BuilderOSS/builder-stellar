@@ -252,7 +252,6 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         ...data,
         basicInfo: {
           ...data.basicInfo,
-          tokenUri: data.basicInfo.tokenUri.replaceAll('{daoId}', addresses.token),
           rendererBase: data.basicInfo.rendererBase.replaceAll('{daoId}', addresses.token)
         }
       };
@@ -287,11 +286,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
       locked.current = false;
     }
   };
-  const launchDaoOperation = async (
-    tokenAddress: string,
-    choice: Omit<LaunchConfig, 'expected_minter'> & { expected_minter?: string | null },
-    recovery: RecoveryOptions = {}
-  ) => {
+  const launchDaoOperation = async (tokenAddress: string, choice: LaunchConfig, recovery: RecoveryOptions = {}) => {
     if (locked.current) throw new Error('A launch operation is already running');
     locked.current = true;
     let key = '';
@@ -304,27 +299,19 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
       if (previous?.status === 'confirmed') return;
       if (
         previous &&
-        (previous.auction !== choice.launch_auction ||
-          previous.marketplace !== choice.launch_marketplace ||
-          previous.minter !== choice.enable_minter)
+        (previous.auction !== choice.launch_auction || previous.marketplace !== choice.launch_marketplace)
       )
         throw new Error('Launch choices changed. Refresh and review them again before signing.');
       if (
         recovery.rebroadcast &&
         previous?.reviewedConfig &&
         JSON.stringify(previous.reviewedConfig) !==
-          JSON.stringify({
-            launch_auction: choice.launch_auction,
-            launch_marketplace: choice.launch_marketplace,
-            enable_minter: choice.enable_minter,
-            expected_minter: choice.enable_minter ? (choice.expected_minter ?? null) : null
-          })
+          JSON.stringify({ launch_auction: choice.launch_auction, launch_marketplace: choice.launch_marketplace })
       )
-        throw new Error('The saved launch review differs from the current choices or minter. Nothing was rebroadcast.');
+        throw new Error('The saved launch review differs from the current choices. Nothing was rebroadcast.');
       let record: LocalLaunch = previous ?? {
         auction: choice.launch_auction,
-        marketplace: choice.launch_marketplace,
-        minter: choice.enable_minter
+        marketplace: choice.launch_marketplace
       };
       const save = (changes: Partial<LocalLaunch & Submission>) => {
         record = { ...record, ...changes };
@@ -385,13 +372,10 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         }
       }
       await requirePending();
-      const expectedMinter = choice.enable_minter ? choice.expected_minter : null;
-      if (choice.enable_minter && !expectedMinter)
-        throw new Error('Review the registered platform minter before launch');
       const assembled = await manager.launch_dao(
         {
           token_address: tokenAddress,
-          launch_config: { ...choice, expected_minter: expectedMinter ?? null }
+          launch_config: choice
         },
         { timeoutInSeconds: 180, restore: false }
       );
@@ -402,12 +386,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         expiresAt: undefined,
         acceptedAt: undefined,
         status: undefined,
-        reviewedConfig: {
-          launch_auction: choice.launch_auction,
-          launch_marketplace: choice.launch_marketplace,
-          enable_minter: choice.enable_minter,
-          expected_minter: expectedMinter ?? null
-        }
+        reviewedConfig: { launch_auction: choice.launch_auction, launch_marketplace: choice.launch_marketplace }
       });
       tx.start('Launch DAO');
       const signed = await signPrepared(assembled);
@@ -446,11 +425,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
       }
     );
   };
-  const launchDao = async (
-    tokenAddress: string,
-    choice: Omit<LaunchConfig, 'expected_minter'> & { expected_minter?: string | null },
-    recovery: RecoveryOptions = {}
-  ) => {
+  const launchDao = async (tokenAddress: string, choice: LaunchConfig, recovery: RecoveryOptions = {}) => {
     const reviewed = { ...choice };
     if (!navigator.locks)
       throw new Error('Use a browser with Web Locks support to keep launch recovery safe across tabs.');

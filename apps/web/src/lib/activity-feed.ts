@@ -5,6 +5,7 @@ import { toOneLine } from '@/lib/comments';
 import type { DashboardFeedItem, GoldskyActivityItem } from '@/lib/goldsky-queries';
 import { markdownToText } from '@/lib/markdown-text';
 import { parseProposalMetadata } from '@/lib/proposal-metadata';
+import { LEDGERS_PER_DAY } from '@/lib/ttl-expiry';
 
 type ActivityItem =
   | Pick<
@@ -170,7 +171,7 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
     }
     case 'mintbatchwithminter': {
       const count = Number(firstValue(args.count));
-      const first = Number(firstValue(topics.first_token_id, args.first_token_id));
+      const first = Number(firstValue(args.first_token_id));
       const range =
         Number.isFinite(count) && Number.isFinite(first) && count > 0
           ? count === 1
@@ -184,7 +185,6 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
       };
     }
     case 'merkleclaimevent':
-    case 'allowlistclaimevent':
       return {
         category: 'Membership',
         title: `${shortAddress(firstValue(topics.recipient, args.recipient))} claimed ${firstValue(item.amount, args.amount) ?? 'their'} token${firstValue(item.amount, args.amount) === '1' ? '' : 's'}`
@@ -196,11 +196,53 @@ export function formatActivity(item: LinkableItem, daoId?: string): FormattedAct
       };
     case 'daolaunched':
       return { category: 'DAO', title: 'The community launched' };
-    case 'upgraded':
+    case 'upgraded': {
+      // The indexer's title names the module ("Auction upgraded", "Minter upgraded").
+      const version = firstValue(args.version);
+      return { category: 'DAO', title: version ? `${item.title} to version ${version}` : item.title };
+    }
+    case 'upgradedelaychanged': {
+      // A shorter platform notice narrows the window members have to react to an upgrade.
+      const from = Number(firstValue(args.from_ledgers));
+      const to = Number(firstValue(args.to_ledgers));
+      const effective = firstValue(args.effective_ledger);
+      const shorter = Number.isFinite(from) && Number.isFinite(to) && to < from;
+      const days = (ledgers: number) => `${Math.max(1, Math.round(ledgers / LEDGERS_PER_DAY))}d`;
       return {
         category: 'DAO',
-        title: `Contract upgraded to version ${firstValue(args.version) ?? 'unknown'}`
+        title: item.title,
+        detail:
+          Number.isFinite(from) && Number.isFinite(to)
+            ? `${shorter ? 'Shortened' : 'Lengthened'} from ${days(from)} to ${days(to)} (${from} → ${to} ledgers)${shorter && effective ? `, in force from ledger ${effective}` : ''}`
+            : item.summary
       };
+    }
+    case 'metadataupdated': {
+      const name = firstValue(args.name);
+      const symbol = firstValue(args.symbol);
+      return { category: 'DAO', title: name ? `Renamed to ${name}${symbol ? ` (${symbol})` : ''}` : item.title };
+    }
+    case 'slugchanged': {
+      const next = firstValue(topics.new_slug, args.new_slug);
+      const previous = firstValue(args.old_slug);
+      return {
+        category: 'DAO',
+        title: next ? `Community link is now /dao/${next}` : item.title,
+        detail: previous ? `Was /dao/${previous}` : undefined,
+        href: next ? `/dao/${next}` : undefined
+      };
+    }
+    case 'merklerootsetevent': {
+      const round = firstValue(topics.round, args.round);
+      return {
+        category: 'Membership',
+        title: `Claim round ${round ?? ''} opened`.replace('  ', ' '),
+        detail: 'Members on the list can claim their tokens',
+        href: base ? `${base}/claims` : undefined
+      };
+    }
+    case 'profileupdated':
+      return { category: 'DAO', title: 'Community profile updated' };
     default:
       return { category: 'DAO', title: item.title, detail: item.summary };
   }

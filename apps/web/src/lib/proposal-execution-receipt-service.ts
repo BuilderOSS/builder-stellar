@@ -35,12 +35,12 @@ export async function getIndexedExecutionReceipt(
   if (!proposal.targets.length || proposal.targets.length > 20 || proposal.targets.length !== proposal.functions.length)
     throw new Error('Invalid proposal action count.');
   const rows = await prisma.$queryRaw<ExecutionCallRow[]>`
-    SELECT deployment_id, dao_id, treasury_contract, governor, proposal_id,
+    SELECT deployment_id, dao_id, contract_id AS treasury_contract, governor, proposal_id,
            call_index, target, "function", event_ledger, transaction_hash
-    FROM governance.proposal_execution_calls
+    FROM treasury.calls
     WHERE deployment_id = ${scope.deploymentId}
       AND dao_id = ${scope.daoId}
-      AND treasury_contract = ${scope.treasuryContractId}
+      AND contract_id = ${scope.treasuryContractId}
       AND governor = ${scope.governorContractId}
       AND proposal_id = ${proposal.proposalId}
     ORDER BY call_index ASC, event_ledger ASC, transaction_index ASC,

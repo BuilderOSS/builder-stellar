@@ -52,6 +52,19 @@ left="$(psql "$scratch_url" -Atc "SELECT count(*) FROM information_schema.schema
 echo "→ migrate after rollback"
 bash "$DB_DIR/migrate.sh" "$scratch_url" > /dev/null
 
+echo "→ every app view reads as app_server (no chain.* access)"
+# Roles are cluster-wide: create the two pipeline/app roles (NOLOGIN) if this
+# cluster lacks them, apply the real grants, then read every view as the app.
+psql -v ON_ERROR_STOP=1 -q "$scratch_url" -c "DO \$\$ BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'app_server') THEN CREATE ROLE app_server NOLOGIN; END IF;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'goldsky_writer') THEN CREATE ROLE goldsky_writer NOLOGIN; END IF;
+END \$\$"
+bash "$DB_DIR/grant-permissions.sh" "$scratch_url" > /dev/null
+for view in $(psql "$scratch_url" -Atc "SELECT schemaname || '.' || viewname FROM pg_views WHERE schemaname IN ($(sql_app_schema_list)) ORDER BY 1"); do
+  psql -v ON_ERROR_STOP=1 -q "$scratch_url" -c "SET ROLE app_server; SELECT * FROM $view LIMIT 1" > /dev/null \
+    || { echo "app_server cannot read $view" >&2; exit 1; }
+done
+
 echo "→ read-model integration test"
 (cd "$DB_DIR/../packages/goldsky" && TEST_DATABASE_URL="$scratch_url" node --test test/read-model.integration.test.mjs)
 echo "✓ database checks passed"

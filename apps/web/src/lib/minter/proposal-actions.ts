@@ -1,95 +1,62 @@
-/** Allocation descriptors; shared encoding permits only the canonical registered
- * Minter with its server-discovered, validated spec. */
+/** Claim-list drafts: a ClaimMinter `open_list` call, prepared from verified claims state. */
 import { StrKey } from '@stellar/stellar-sdk';
-import type { Spec } from '@stellar/stellar-sdk/contract';
 
-import { BATCH_MINT_LIMIT_TEXT, batchMintFits, MAX_BATCH_RECIPIENTS } from '@/lib/batch-mint-budget';
-
-import { assertMinterSpec } from './client';
 import { claimAmount, hashBytes } from './proof';
 import type { ClaimState } from './types';
 
-export type AllocationDraft =
-  | { type: 'set-merkle-root'; root: string }
-  | { type: 'set-allowlist'; addresses: string[]; amount: string }
-  | { type: 'minter-batch-mint'; recipients: string[]; amounts: string[] };
+/** `open_list(root, tree_uri, asset, price, expires_at, total, None)` on the DAO's ClaimMinter. */
+export type ClaimListDraft = {
+  type: 'open-claim-list';
+  root: string;
+  treeUri: string;
+  /** Payment asset contract; `price` is per token in its smallest unit ("0" for a free list). */
+  asset: string;
+  price: string;
+  /** Unix seconds; claims stop then. */
+  expiresAt: number;
+  /** Most tokens the list mints, normally the tree's token total. */
+  total: number;
+};
 
-export function validateAllocation(draft: AllocationDraft) {
-  if (draft.type === 'set-merkle-root') {
-    hashBytes(draft.root);
-    return;
-  }
-  const addresses = draft.type === 'set-allowlist' ? draft.addresses : draft.recipients;
-  // Minter mint_batch takes at most MAX_BATCH_RECIPIENTS entries and the whole
-  // batch must fit the Token's event budget. The allowlist cap of 100 bounds
-  // review size; it is not a contract limit.
-  const maxRecipients = draft.type === 'set-allowlist' ? 100 : MAX_BATCH_RECIPIENTS;
-  if (!addresses.length || addresses.length > maxRecipients)
-    throw new Error(`Use 1–${maxRecipients} recipients per reviewed allocation.`);
-  if (new Set(addresses).size !== addresses.length)
-    throw new Error('Duplicate recipients are not supported in this review.');
-  for (const address of addresses)
-    if (!StrKey.isValidEd25519PublicKey(address) && !StrKey.isValidContract(address))
-      throw new Error('Invalid allocation recipient.');
-  if (draft.type === 'set-allowlist') claimAmount(draft.amount);
-  else {
-    if (draft.amounts.length !== addresses.length)
-      throw new Error('Recipients and amounts must have identical lengths.');
-    draft.amounts.forEach(claimAmount);
-    const total = draft.amounts.reduce((sum, amount) => sum + BigInt(amount), 0n);
-    if (!batchMintFits(total, addresses.length))
-      throw new Error(
-        `This batch does not fit one transaction (${BATCH_MINT_LIMIT_TEXT}). Split it into several allocations.`
-      );
-  }
+/** The ClaimMinter accepts an `ipfs://` URI of at most 256 bytes (InvalidTreeUri, 7812). */
+export function validTreeUri(value: string) {
+  return /^ipfs:\/\/\S+$/.test(value) && new TextEncoder().encode(value).length <= 256;
 }
 
-export function buildAllocationDraft(
-  draft: AllocationDraft,
-  state: ClaimState,
-  deploymentId: string,
-  daoId: string,
-  treasury: string
-) {
-  validateAllocation(draft);
+export function validateClaimListDraft(draft: ClaimListDraft, now = Math.floor(Date.now() / 1000)) {
+  if (draft.type !== 'open-claim-list') throw new Error('Claim list action type mismatch.');
+  hashBytes(draft.root);
+  if (!validTreeUri(draft.treeUri)) throw new Error('Publish the claim list first: its ipfs:// address is missing.');
+  if (!StrKey.isValidContract(draft.asset)) throw new Error('Choose the asset the list is priced in.');
+  if (!/^(0|[1-9]\d{0,37})$/.test(draft.price)) throw new Error('The price must be zero or a whole number of units.');
+  if (!Number.isSafeInteger(draft.expiresAt) || draft.expiresAt <= now)
+    throw new Error('The list must close in the future.');
+  if (!Number.isInteger(draft.total) || draft.total < 1 || draft.total > 0xffffffff)
+    throw new Error('A list mints at least one token.');
+  claimAmount(String(draft.total));
+}
+
+/** The call a proposal (or the launch admin in Setup) makes, after the allowance grant. */
+export function claimListCall(draft: ClaimListDraft, claimsContractId: string) {
+  validateClaimListDraft(draft);
+  if (!StrKey.isValidContract(claimsContractId)) throw new Error('This community has no claims module.');
+  return {
+    target: claimsContractId,
+    function: 'open_list' as const,
+    args: [draft.root, draft.treeUri, draft.asset, draft.price, String(draft.expiresAt), draft.total, null]
+  };
+}
+
+/** Fail closed unless the draft is prepared against the DAO's live, registered ClaimMinter. */
+export function assertClaimListScope(state: ClaimState, deploymentId: string, daoId: string, treasury: string) {
   if (
     state.deploymentId !== deploymentId ||
     state.daoId !== daoId ||
     state.tokenContractId !== daoId ||
-    !state.live ||
-    !state.mintAuthority ||
-    !state.minterContractId ||
-    !StrKey.isValidContract(state.minterContractId)
+    !state.claimsContractId ||
+    !StrKey.isValidContract(state.claimsContractId)
   )
-    throw new Error('Live allocation identity and mint authority must be verified.');
-  if (!treasury || state.admin !== treasury)
-    throw new Error('The Treasury must be the current Token admin for a governance allocation.');
-  const call =
-    draft.type === 'set-merkle-root'
-      ? { function: 'set_merkle_root' as const, args: [daoId, draft.root] }
-      : draft.type === 'set-allowlist'
-        ? { function: 'set_allowlist' as const, args: [daoId, draft.addresses, draft.amount] }
-        : { function: 'mint_batch' as const, args: [daoId, draft.recipients, draft.amounts] };
-  return { deploymentId, daoId, target: state.minterContractId, ...call, submissionEnabled: true as const };
-}
-
-/** Exact current spec encoding adapter for registered allocation proposals.
- * No simulation/submission and no fallback to untyped integer/address encoding. */
-export function encodeAllocation(spec: Spec, draft: AllocationDraft, token: string) {
-  assertMinterSpec(spec);
-  validateAllocation(draft);
-  if (!StrKey.isValidContract(token)) throw new Error('Invalid DAO token.');
-  if (draft.type === 'set-merkle-root')
-    return spec.funcArgsToScVals('set_merkle_root', { token_id: token, root: hashBytes(draft.root) });
-  if (draft.type === 'set-allowlist')
-    return spec.funcArgsToScVals('set_allowlist', {
-      token_id: token,
-      addresses: draft.addresses,
-      fixed_amount: claimAmount(draft.amount)
-    });
-  return spec.funcArgsToScVals('mint_batch', {
-    token_id: token,
-    recipients: draft.recipients,
-    amounts: draft.amounts.map(claimAmount)
-  });
+    throw new Error('The community and its claims module must be verified first.');
+  if (state.live && (!treasury || state.admin !== treasury))
+    throw new Error('The Treasury must be the current Token admin for a governance claim list.');
 }

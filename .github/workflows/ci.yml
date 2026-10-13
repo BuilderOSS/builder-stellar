@@ -51,6 +51,22 @@ jobs:
     name: TypeScript Checks
     runs-on: ubuntu-latest
 
+    # For db/test-migrations.sh: migrations up, re-run, rollback, up, then the Goldsky
+    # read-model integration test against the real views (needs CREATEDB).
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -94,6 +110,11 @@ jobs:
 
       - name: Run Goldsky tests
         run: pnpm --dir packages/goldsky test
+
+      - name: Run database migrations and the read-model integration test
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+        run: pnpm db:test
 
   build:
     name: Build Web

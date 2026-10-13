@@ -21,6 +21,9 @@ use crate::events::{
 };
 use crate::storage::*;
 
+/// The governor's `name()`.
+pub const GOVERNOR_NAME: &str = "MvpDaoGovernor";
+
 /// Main contract for DAO governance with timestamp-based voting.
 ///
 /// This contract manages the complete proposal lifecycle from creation through execution,
@@ -42,9 +45,22 @@ impl DaoGovernorContract {
         if treasury != Self::treasury(e) {
             panic_with_error!(e, CustomGovernorError::TreasuryMismatch);
         }
-        common::admin::handoff(e, &treasury);
+        common::admin::handoff_once(e, &treasury);
         common::ttl::extend_instance(e);
         emit_launched(e, &treasury);
+    }
+
+    /// Manager-only early handoff (`manager.open_assurance`): the admin moves
+    /// to the Treasury and the contract stays in Setup, so the governance
+    /// settings are frozen until launch.
+    pub fn handoff(e: &Env, treasury: Address) {
+        Self::manager(e).require_auth();
+        common::lifecycle::require_setup(e);
+        if treasury != Self::treasury(e) {
+            panic_with_error!(e, CustomGovernorError::TreasuryMismatch);
+        }
+        common::admin::handoff_once(e, &treasury);
+        common::ttl::extend_instance(e);
     }
 
     /// Initializes the governor contract with governance parameters.
@@ -83,7 +99,6 @@ impl DaoGovernorContract {
         quorum_bps: u32,
         manager: Address,
         current_hash: BytesN<32>,
-        version: String,
     ) {
         Self::validate_params(
             e,
@@ -95,28 +110,26 @@ impl DaoGovernorContract {
         );
 
         common::admin::init(e, &admin);
-        e.storage().instance().set(&GovernorKey::Manager, &manager);
-        common::upgrade::init(e, &current_hash, &version, STORAGE_VERSION);
+        e.storage()
+            .instance()
+            .set(&common::ns(e, GovernorKey::Manager), &manager);
+        common::upgrade::init(e, &current_hash, STORAGE_VERSION);
 
-        let name = String::from_str(e, "MvpDaoGovernor");
-        governor::set_name(e, name.clone());
-        governor::set_version(e, version.clone());
         governor::set_token_contract(e, &token_contract);
         governor::set_voting_delay(e, voting_delay);
         governor::set_voting_period(e, voting_period);
         e.storage()
             .instance()
-            .set(&GovernorKey::QueueDelay, &queue_delay);
+            .set(&common::ns(e, GovernorKey::QueueDelay), &queue_delay);
         governor::set_proposal_threshold(e, proposal_threshold);
         governor::set_quorum(e, quorum_bps as u128);
         e.storage()
             .instance()
-            .set(&GovernorKey::Treasury, &treasury_contract);
+            .set(&common::ns(e, GovernorKey::Treasury), &treasury_contract);
 
         emit_governor_initialized(
             e,
             &admin,
-            &version,
             &token_contract,
             &treasury_contract,
             voting_delay,
@@ -131,7 +144,6 @@ impl DaoGovernorContract {
         common::admin::require_admin(e);
         let manager = Self::manager(e);
         common::upgrade::apply(e, &manager, &from_hash, &to_hash);
-        governor::set_version(e, common::upgrade::version(e));
     }
 
     /// Advance the storage layout after an upgrade (admin only).
@@ -149,11 +161,46 @@ impl DaoGovernorContract {
         common::upgrade::storage_version(e)
     }
 
-    pub fn sync_version(e: &Env) {
-        common::admin::require_admin(e);
-        let manager = Self::manager(e);
-        let version = common::upgrade::sync_version(e, &manager);
-        governor::set_version(e, version);
+    /// Number of proposals ever created; ids have sequence numbers
+    /// `0..proposal_count()`.
+    pub fn proposal_count(e: &Env) -> u32 {
+        Self::next_proposal_seq(e)
+    }
+
+    /// Ids of the proposals with sequence numbers `start..start + limit`, in
+    /// creation order. `limit` is capped at `MAX_PROPOSAL_IDS_PAGE`; the page
+    /// ends early at `proposal_count()`. An id entry archived after its
+    /// proposal ended must be restored before it can be read.
+    pub fn proposal_ids(e: &Env, start: u32, limit: u32) -> Vec<BytesN<32>> {
+        let end = start
+            .saturating_add(limit.min(MAX_PROPOSAL_IDS_PAGE))
+            .min(Self::next_proposal_seq(e));
+        let mut ids = Vec::new(e);
+        let persistent = e.storage().persistent();
+        for seq in start..end {
+            if let Some(id) = persistent.get(&Self::proposal_id_key(e, seq)) {
+                ids.push_back(id);
+            }
+        }
+        ids
+    }
+
+    /// The proposal's stored window, eta and sequence number, and its state
+    /// now. Panics `ProposalNotFound` for an unknown id.
+    pub fn proposal(e: &Env, proposal_id: BytesN<32>) -> ProposalInfo {
+        let core = Self::get_proposal(e, &proposal_id);
+        let state = Self::proposal_state_internal(e, &proposal_id, &core);
+        ProposalInfo {
+            id: proposal_id,
+            seq: core.seq,
+            proposer: core.proposer,
+            vote_snapshot: core.vote_snapshot,
+            vote_start: core.vote_start,
+            vote_end: core.vote_end,
+            eta: core.eta,
+            state,
+            quorum: core.quorum,
+        }
     }
 
     /// Module admin: the launch admin during setup, the Treasury once live.
@@ -164,7 +211,7 @@ impl DaoGovernorContract {
     fn manager(e: &Env) -> Address {
         e.storage()
             .instance()
-            .get(&GovernorKey::Manager)
+            .get(&common::ns(e, GovernorKey::Manager))
             .unwrap_or_else(|| {
                 soroban_sdk::panic_with_error!(e, common::CommonError::ManagerNotSet)
             })
@@ -179,7 +226,7 @@ impl DaoGovernorContract {
 
         e.storage()
             .instance()
-            .set(&GovernorKey::QueueDelay, &queue_delay);
+            .set(&common::ns(e, GovernorKey::QueueDelay), &queue_delay);
 
         emit_queue_delay_changed(e, &admin, old_value, queue_delay);
     }
@@ -214,8 +261,7 @@ impl DaoGovernorContract {
         // A threshold above the voting supply would lock governance. Only
         // checked once votes exist (setup may configure before minting).
         let token = governor::get_token_contract(e);
-        let total_supply = VotesClient::new(e, &token)
-            .get_total_supply_at_checkpoint(&e.ledger().sequence().saturating_sub(1));
+        let total_supply = VotesClient::new(e, &token).get_total_supply();
         if total_supply > 0 && proposal_threshold > total_supply {
             panic_with_error!(e, CustomGovernorError::InvalidProposalThreshold);
         }
@@ -288,7 +334,7 @@ impl DaoGovernorContract {
         if !e
             .storage()
             .persistent()
-            .has(&Self::proposal_key(&proposal_id))
+            .has(&Self::proposal_key(e, &proposal_id))
         {
             panic_with_error!(e, GovernorError::ProposalNotFound);
         }
@@ -302,7 +348,9 @@ impl DaoGovernorContract {
     pub fn treasury(e: &Env) -> Address {
         common::error::require(
             e,
-            e.storage().instance().get(&GovernorKey::Treasury),
+            e.storage()
+                .instance()
+                .get(&common::ns(e, GovernorKey::Treasury)),
             common::CommonError::TreasuryNotSet,
         )
     }
@@ -310,12 +358,39 @@ impl DaoGovernorContract {
     fn queue_delay(e: &Env) -> u32 {
         e.storage()
             .instance()
-            .get(&GovernorKey::QueueDelay)
+            .get(&common::ns(e, GovernorKey::QueueDelay))
             .unwrap_or(0)
     }
 
     pub fn quorum_bps(e: &Env) -> u32 {
         governor::get_quorum(e, e.ledger().sequence()) as u32
+    }
+
+    /// The quorum a proposal created now needs: `ceil(voting_supply *
+    /// quorum_bps / 10_000)` from the voting supply **at the previous
+    /// ledger** (the ledger votes are snapshotted at) and the current rate.
+    /// Using this ledger's supply instead would let a holder escrow tokens
+    /// in the Marketplace in the proposing ledger (lowering the supply) while
+    /// still voting with them (contract review H1). Both reads touch only
+    /// the latest checkpoints, never archived history.
+    fn quorum_now(e: &Env) -> u128 {
+        let token = governor::get_token_contract(e);
+        let supply = common::clients::NftClient::new(e, &token).voting_supply_at_previous_ledger();
+        Self::quorum_of(e, supply, Self::quorum_bps(e) as u128)
+    }
+
+    fn quorum_of(e: &Env, total_supply: u128, quorum_bps: u128) -> u128 {
+        if quorum_bps == 0 || total_supply == 0 {
+            return 0;
+        }
+        // Ceiling division: never less than the intended percentage.
+        let Some(product) = total_supply.checked_mul(quorum_bps) else {
+            panic_with_error!(e, GovernorError::MathOverflow);
+        };
+        let Some(adjusted) = product.checked_add(BPS_ROUNDING_ADJUSTMENT) else {
+            panic_with_error!(e, GovernorError::MathOverflow);
+        };
+        adjusted / BPS_DENOMINATOR
     }
 
     /// Single source of truth for governance parameter bounds. Used by the
@@ -383,27 +458,40 @@ impl DaoGovernorContract {
         }
     }
 
-    fn proposal_key(proposal_id: &BytesN<32>) -> GovernorKey {
-        GovernorKey::Proposal(proposal_id.clone())
+    fn proposal_key(e: &Env, proposal_id: &BytesN<32>) -> (soroban_sdk::Symbol, GovernorKey) {
+        common::ns(e, GovernorKey::ProposalTime(proposal_id.clone()))
     }
 
-    /// Extends the TTL of a proposal to ensure it doesn't expire before execution
-    fn extend_proposal_ttl(e: &Env, proposal_id: &BytesN<32>) {
-        let key = Self::proposal_key(proposal_id);
-        e.storage()
-            .persistent()
-            .extend_ttl(&key, PROPOSAL_TTL_THRESHOLD, PROPOSAL_TTL_EXTEND_TO);
+    fn proposal_id_key(e: &Env, seq: u32) -> (soroban_sdk::Symbol, GovernorKey) {
+        common::ns(e, GovernorKey::ProposalId(seq))
+    }
+
+    /// Extends the TTL of a proposal and its `ProposalId(seq)` entry so
+    /// neither expires before the proposal's lifecycle ends.
+    fn extend_proposal_ttl(e: &Env, proposal_id: &BytesN<32>, seq: u32) {
+        let persistent = e.storage().persistent();
+        persistent.extend_ttl(
+            &Self::proposal_key(e, proposal_id),
+            PROPOSAL_TTL_THRESHOLD,
+            PROPOSAL_TTL_EXTEND_TO,
+        );
+        persistent.extend_ttl(
+            &Self::proposal_id_key(e, seq),
+            PROPOSAL_TTL_THRESHOLD,
+            PROPOSAL_TTL_EXTEND_TO,
+        );
     }
 
     fn get_proposal(e: &Env, proposal_id: &BytesN<32>) -> ProposalCoreTime {
-        let proposal = e
+        let stored: StoredProposal = e
             .storage()
             .persistent()
-            .get(&Self::proposal_key(proposal_id))
+            .get(&Self::proposal_key(e, proposal_id))
             .unwrap_or_else(|| panic_with_error!(e, GovernorError::ProposalNotFound));
+        let proposal = ProposalCoreTime::unpack(e, &stored);
 
         // Extend TTL when proposal is accessed
-        Self::extend_proposal_ttl(e, proposal_id);
+        Self::extend_proposal_ttl(e, proposal_id, proposal.seq);
 
         proposal
     }
@@ -411,10 +499,18 @@ impl DaoGovernorContract {
     fn set_proposal(e: &Env, proposal_id: &BytesN<32>, proposal: &ProposalCoreTime) {
         e.storage()
             .persistent()
-            .set(&Self::proposal_key(proposal_id), proposal);
+            .set(&Self::proposal_key(e, proposal_id), &proposal.pack(e));
 
         // Extend TTL when proposal is updated
-        Self::extend_proposal_ttl(e, proposal_id);
+        Self::extend_proposal_ttl(e, proposal_id, proposal.seq);
+    }
+
+    /// Next proposal sequence number (= proposals created so far).
+    fn next_proposal_seq(e: &Env) -> u32 {
+        e.storage()
+            .instance()
+            .get(&common::ns(e, GovernorKey::ProposalCount))
+            .unwrap_or(0)
     }
 
     fn proposal_state_internal(
@@ -453,7 +549,7 @@ impl DaoGovernorContract {
             return ProposalState::Active;
         }
 
-        let quorum = Self::quorum(e, proposal.vote_snapshot);
+        let quorum = proposal.quorum;
         let counts = governor::get_proposal_vote_counts(e, proposal_id);
         let Some(participation) = counts.for_votes.checked_add(counts.abstain_votes) else {
             panic_with_error!(e, GovernorError::MathOverflow);
@@ -477,6 +573,17 @@ impl DaoGovernorContract {
 
 #[contractimpl(contracttrait)]
 impl Governor for DaoGovernorContract {
+    /// A constant, not stored (D6): OZ would keep it in an instance entry.
+    fn name(e: &Env) -> String {
+        String::from_str(e, GOVERNOR_NAME)
+    }
+
+    /// The registry version of the running code (D6), as for every module.
+    /// OZ would store it and need a sync after every upgrade.
+    fn version(e: &Env) -> String {
+        common::upgrade::version(e, &Self::manager(e))
+    }
+
     fn voting_delay(e: &Env) -> u32 {
         governor::get_voting_delay(e)
     }
@@ -489,26 +596,16 @@ impl Governor for DaoGovernorContract {
     /// `ceil(voting_supply(ledger) * quorum_bps / 10_000)`. The voting supply
     /// excludes tokens held by the Treasury, Auction and Marketplace (see the
     /// token), so system-held tokens never inflate the requirement.
+    ///
+    /// A view for any past ledger. Proposals do not use it: each stores the
+    /// quorum it was created with. A lookup far in the past binary-searches
+    /// supply and quorum checkpoints, which may have archived (only the
+    /// latest of each is renewed by the DAO sweep); restore them to read.
     fn quorum(e: &Env, ledger: u32) -> u128 {
         let quorum_bps = governor::get_quorum(e, ledger);
         let token = governor::get_token_contract(e);
         let total_supply = VotesClient::new(e, &token).get_total_supply_at_checkpoint(&ledger);
-
-        if quorum_bps == 0 || total_supply == 0 {
-            return 0;
-        }
-
-        // Calculate quorum with ceiling division (rounds up)
-        // Formula: (total_supply * quorum_bps + (BPS_DENOMINATOR - 1)) / BPS_DENOMINATOR
-        // Example: 1% of 100 = (100 * 100 + 9999) / 10000 = 10999 / 10000 = 1 (rounds up)
-        // This ensures we never require less than the intended quorum percentage
-        let Some(product) = total_supply.checked_mul(quorum_bps) else {
-            panic_with_error!(e, GovernorError::MathOverflow);
-        };
-        let Some(adjusted) = product.checked_add(BPS_ROUNDING_ADJUSTMENT) else {
-            panic_with_error!(e, GovernorError::MathOverflow);
-        };
-        adjusted / BPS_DENOMINATOR
+        Self::quorum_of(e, total_supply, quorum_bps)
     }
 
     fn proposals_need_queuing(_e: &Env) -> bool {
@@ -614,7 +711,7 @@ impl Governor for DaoGovernorContract {
 
         if e.storage()
             .persistent()
-            .has(&Self::proposal_key(&proposal_id))
+            .has(&Self::proposal_key(e, &proposal_id))
         {
             panic_with_error!(e, GovernorError::ProposalAlreadyExists);
         }
@@ -627,6 +724,7 @@ impl Governor for DaoGovernorContract {
             .checked_add(Self::voting_period(e) as u64)
             .unwrap_or_else(|| panic_with_error!(e, GovernorError::MathOverflow));
 
+        let seq = Self::next_proposal_seq(e);
         let proposal = ProposalCoreTime {
             proposer: proposer.clone(),
             vote_snapshot: snapshot_ledger,
@@ -634,9 +732,21 @@ impl Governor for DaoGovernorContract {
             vote_end,   // No conversion needed - already u64
             eta: 0,
             state: ProposalState::Pending,
+            seq,
+            quorum: Self::quorum_now(e),
         };
 
+        // The id list entry first: set_proposal renews both.
+        e.storage()
+            .persistent()
+            .set(&Self::proposal_id_key(e, seq), &proposal_id);
         Self::set_proposal(e, &proposal_id, &proposal);
+        let Some(next) = seq.checked_add(1) else {
+            panic_with_error!(e, GovernorError::MathOverflow);
+        };
+        e.storage()
+            .instance()
+            .set(&common::ns(e, GovernorKey::ProposalCount), &next);
 
         // OpenZeppelin's ProposalCreated documents `vote_end` as a ledger number; this governor
         // passes the unix-seconds deadline instead. Read the vote window from ProposalScheduled.
@@ -663,7 +773,7 @@ impl Governor for DaoGovernorContract {
             proposal.vote_start,
             proposal.vote_end,
             proposal.vote_snapshot,
-            Self::quorum(e, proposal.vote_snapshot),
+            proposal.quorum,
         );
 
         proposal_id
@@ -696,6 +806,16 @@ impl Governor for DaoGovernorContract {
         }
 
         governor::count_vote(e, &proposal_id, &voter, vote_type, voter_weight);
+        // OpenZeppelin writes the tally with only the network's minimum TTL,
+        // so a long voting period could let it archive before `queue` reads
+        // it. Give it the proposal's own lifetime (review S6). The entry
+        // exists here: `count_vote` just wrote it. `HasVoted` stays the
+        // voter's.
+        e.storage().persistent().extend_ttl(
+            &governor::storage::GovernorStorageKey::ProposalVote(proposal_id.clone()),
+            PROPOSAL_TTL_THRESHOLD,
+            PROPOSAL_TTL_EXTEND_TO,
+        );
         emit_vote_cast(e, &voter, &proposal_id, vote_type, voter_weight, &reason);
 
         voter_weight

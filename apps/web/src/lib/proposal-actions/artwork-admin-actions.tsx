@@ -1,6 +1,7 @@
 import type { IpfsGroup, ItemParam } from '@builder-stellar/metadata-bindings';
 
 import { CodeBlock, Field, FieldLabel, Input, Text } from '@/components/ui';
+import { MAX_PROFILE_BYTES, parseProfile, profileProblems } from '@/lib/dao-profile';
 import type {
   ActionFormProps,
   ActionHandler,
@@ -92,23 +93,19 @@ export const resetArtworkPropertiesHandler = propertiesHandler(
 
 export type ArtworkSettingDraft = { value: string };
 export const artworkSettingMethods = {
-  'set-artwork-renderer': 'update_renderer_base',
-  'set-artwork-description': 'update_description',
-  'set-artwork-project-uri': 'update_project_uri',
-  'set-artwork-contract-image': 'update_contract_image'
+  'set-artwork-renderer': 'update_renderer_base'
 } as const;
 export type ArtworkSettingType = keyof typeof artworkSettingMethods;
 export function validateArtworkSetting(value: string, type: ArtworkSettingType): ValidationResult {
   if (!value.trim()) return { valid: false, message: 'Enter a non-empty value.' };
   // Metadata rejects settings strings over 256 characters (StringTooLong, 7312).
   if (new TextEncoder().encode(value).length > 256) return { valid: false, message: 'Use at most 256 UTF-8 bytes.' };
-  if (type !== 'set-artwork-description') {
-    try {
-      const url = new URL(value.trim());
-      if (!['https:', 'ipfs:'].includes(url.protocol)) throw new Error();
-    } catch {
-      return { valid: false, message: 'Use an HTTPS or IPFS URL.' };
-    }
+  void type;
+  try {
+    const url = new URL(value.trim());
+    if (!['https:', 'ipfs:'].includes(url.protocol)) throw new Error();
+  } catch {
+    return { valid: false, message: 'Use an HTTPS or IPFS URL.' };
   }
   return { valid: true };
 }
@@ -140,3 +137,49 @@ export const artworkSettingHandlers = (Object.keys(artworkSettingMethods) as Art
     })
   })
 );
+
+/**
+ * The community profile (docs/STORAGE_DIET.md § 6): one `update_profile` call
+ * carrying the whole JSON and the revision it replaces. If another update lands
+ * first, the call fails with ProfileSeqMismatch and changes nothing.
+ */
+export type DaoProfileDraft = { expectedSeq: number; profile: string };
+
+export function validateDaoProfileDraft(data: DaoProfileDraft): ValidationResult {
+  if (!Number.isInteger(data.expectedSeq) || data.expectedSeq < 0)
+    return { valid: false, message: 'The current profile revision is unknown. Refresh and try again.' };
+  if (!data.profile) return { valid: false, message: 'The profile is empty.' };
+  const problems = profileProblems(parseProfile(data.profile));
+  if (new TextEncoder().encode(data.profile).length > MAX_PROFILE_BYTES)
+    return { valid: false, message: `The profile is over the ${MAX_PROFILE_BYTES}-byte limit.` };
+  return problems.length ? { valid: false, message: problems[0]! } : { valid: true };
+}
+
+export const updateDaoProfileHandler: PendingAdminHandler<DaoProfileDraft, 'update-dao-profile'> = {
+  type: 'update-dao-profile',
+  label: 'Update the community profile',
+  description: 'Replace the description, links and image people see. Prepare it in Manage → Community profile.',
+  group: 'Administration',
+  FormComponent: ({ value }) => (
+    <>
+      <Text>Edit the profile in Manage → Community profile; this shows what the proposal will write.</Text>
+      <CodeBlock>{value.profile}</CodeBlock>
+    </>
+  ),
+  getDefaultValues: () => ({ expectedSeq: 0, profile: '' }),
+  validate: validateDaoProfileDraft,
+  serialize: (data) => ({
+    id: crypto.randomUUID(),
+    type: 'update-dao-profile',
+    recipient: '',
+    amount: '',
+    expectedSeq: data.expectedSeq,
+    profile: data.profile
+  }),
+  deserialize: (action) => ({ expectedSeq: Number(action.expectedSeq), profile: String(action.profile ?? '') }),
+  buildCallVector: (data, context) => ({
+    target: context.config.metadataContractId,
+    function: 'update_profile',
+    args: [data.expectedSeq, data.profile]
+  })
+};

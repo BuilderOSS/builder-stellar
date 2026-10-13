@@ -22,12 +22,10 @@ pub enum ManagerError {
     AdminNotSet = 7106,
     /// No admin handover is pending
     NoPendingAdmin = 7107,
-    /// Platform minter not configured
-    PlatformMinterNotSet = 7108,
+    // 7108 (PlatformMinterNotSet) and 7110 (PlatformMinterMismatch) are
+    // retired with the shared Minter.
     /// An implementation is already registered for this WASM hash
     ImplementationAlreadyRegistered = 7109,
-    /// `enable_minter` requires `expected_minter` to equal the registered platform minter
-    PlatformMinterMismatch = 7110,
 
     // Factory
     /// Factory is paused (no `create_dao` or `launch_dao`)
@@ -75,4 +73,38 @@ pub enum ManagerError {
     SlugNotFound = 7128,
     /// `change_slug` to the slug the DAO already has
     SlugUnchanged = 7129,
+    /// The Manager's own upgrade was approved less than `upgrade_delay()` ledgers ago.
+    UpgradeDelayNotElapsed = 7130,
+    /// `upgrade_manager` to a hash that is not the latest Manager implementation.
+    UpgradeNotLatest = 7131,
+    /// A module's payment asset differs from the one recorded when it was
+    /// created (the launch admin changed it in Setup); change it back first
+    PaymentAssetMismatch = 7132,
+    /// `modules` lists a kind twice
+    InvalidModules = 7133,
+    /// `create_module`'s `expected_n` is not `module_count(token, kind)`: a
+    /// module of this kind was created since the proposal was drafted
+    StaleModuleIndex = 7134,
+
+    // Assurance launch (docs/designs/membership-models.md §2)
+    /// The DAO has no ClaimMinter registered (or no claims payment asset)
+    NoClaimMinter = 7135,
+    /// An assurance drive is already recorded for this DAO
+    AssuranceExists = 7136,
+    /// The assurance deadline is more than `MAX_ASSURANCE_WINDOW` (90 days) out
+    DeadlineTooFar = 7137,
+    /// The pending DAO is in an assurance drive: its slug is reserved and
+    /// fixed
+    AssuranceOpen = 7138,
+    /// No assurance drive is recorded for this DAO
+    NoAssurance = 7139,
+    /// The assurance list has not reached its threshold of claimers
+    AssuranceNotMet = 7140,
+    /// The deadline passed without a launch: the drive ends in refunds
+    AssuranceFailed = 7141,
+    /// `release_slug` / `recover_claims` before the drive has failed
+    AssuranceNotFailed = 7142,
+    /// `transfer_agents` names a kind (or names it twice) that `modules`
+    /// does not create exactly once
+    UnknownAgentKind = 7143,
 }

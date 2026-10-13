@@ -33,17 +33,9 @@ export const ManagerError = {
    */
   7107 : { message: "NoPendingAdmin" },
   /**
-   * Platform minter not configured
-   */
-  7108 : { message: "PlatformMinterNotSet" },
-  /**
    * An implementation is already registered for this WASM hash
    */
   7109 : { message: "ImplementationAlreadyRegistered" },
-  /**
-   * `enable_minter` requires `expected_minter` to equal the registered platform minter
-   */
-  7110 : { message: "PlatformMinterMismatch" },
   /**
    * Factory is paused (no `create_dao` or `launch_dao`)
    */
@@ -124,7 +116,67 @@ export const ManagerError = {
   /**
    * `change_slug` to the slug the DAO already has
    */
-  7129 : { message: "SlugUnchanged" }
+  7129 : { message: "SlugUnchanged" },
+  /**
+   * The Manager's own upgrade was approved less than `upgrade_delay()` ledgers ago.
+   */
+  7130 : { message: "UpgradeDelayNotElapsed" },
+  /**
+   * `upgrade_manager` to a hash that is not the latest Manager implementation.
+   */
+  7131 : { message: "UpgradeNotLatest" },
+  /**
+   * A module's payment asset differs from the one recorded when it was
+   * created (the launch admin changed it in Setup); change it back first
+   */
+  7132 : { message: "PaymentAssetMismatch" },
+  /**
+   * `modules` lists a kind twice
+   */
+  7133 : { message: "InvalidModules" },
+  /**
+   * `create_module`'s `expected_n` is not `module_count(token, kind)`: a
+   * module of this kind was created since the proposal was drafted
+   */
+  7134 : { message: "StaleModuleIndex" },
+  /**
+   * The DAO has no ClaimMinter registered (or no claims payment asset)
+   */
+  7135 : { message: "NoClaimMinter" },
+  /**
+   * An assurance drive is already recorded for this DAO
+   */
+  7136 : { message: "AssuranceExists" },
+  /**
+   * The assurance deadline is more than `MAX_ASSURANCE_WINDOW` (90 days) out
+   */
+  7137 : { message: "DeadlineTooFar" },
+  /**
+   * The pending DAO is in an assurance drive: its slug is reserved and
+   * fixed
+   */
+  7138 : { message: "AssuranceOpen" },
+  /**
+   * No assurance drive is recorded for this DAO
+   */
+  7139 : { message: "NoAssurance" },
+  /**
+   * The assurance list has not reached its threshold of claimers
+   */
+  7140 : { message: "AssuranceNotMet" },
+  /**
+   * The deadline passed without a launch: the drive ends in refunds
+   */
+  7141 : { message: "AssuranceFailed" },
+  /**
+   * `release_slug` / `recover_claims` before the drive has failed
+   */
+  7142 : { message: "AssuranceNotFailed" },
+  /**
+   * `transfer_agents` names a kind (or names it twice) that `modules`
+   * does not create exactly once
+   */
+  7143 : { message: "UnknownAgentKind" }
 }
 
 export type ManagerError = typeof ManagerError[keyof typeof ManagerError];
@@ -162,7 +214,11 @@ export interface DaoLaunchedEvent {
     modules?: DaoAddresses;
     launch_auction?: boolean;
     launch_marketplace?: boolean;
-    enable_minter?: boolean;
+    /**
+     * The registered modules at launch (the Token's registry): the
+     * indexer knows the launch set without the Token's `ModuleRegistered`.
+     */
+    registry?: Array<ModuleEntry>;
   };
 }
 
@@ -203,6 +259,17 @@ export interface AdminChangedEvent {
 }
 
 /**
+ * Emitted by `release_slug`: a failed drive's reserved slug is free again.
+ */
+export interface SlugReleasedEvent {
+  name: "SlugReleased";
+  data: {
+    token_address: string;
+    slug: string;
+  };
+}
+
+/**
  * Event: AdminProposed
  */
 export interface AdminProposedEvent {
@@ -220,6 +287,37 @@ export interface FactoryPausedEvent {
   name: "FactoryPaused";
   data: {
 
+  };
+}
+
+/**
+ * Emitted by `create_module`: the `n`th module of `kind` for the DAO,
+ * at `predict_module_address(token, kind, n)`.
+ */
+export interface ModuleCreatedEvent {
+  name: "ModuleCreated";
+  data: {
+    token_address: string;
+    kind: string;
+    n?: number;
+    address?: string;
+  };
+}
+
+/**
+ * Emitted by `open_assurance`: the drive's list, its deadline and the
+ * launch config every launch path will use. The slug is reserved
+ * (`SlugClaimed`) in the same call.
+ */
+export interface AssuranceOpenedEvent {
+  name: "AssuranceOpened";
+  data: {
+    token_address: string;
+    claim_minter?: string;
+    list_id?: number;
+    deadline?: bigint;
+    launch_auction?: boolean;
+    launch_marketplace?: boolean;
   };
 }
 
@@ -256,16 +354,6 @@ export interface UpgradeApprovedEvent {
     from_hash: Uint8Array;
     to_hash: Uint8Array;
     approved_ledger?: bigint;
-  };
-}
-
-/**
- * Event: PlatformMinterSet
- */
-export interface PlatformMinterSetEvent {
-  name: "PlatformMinterSet";
-  data: {
-    minter: string;
   };
 }
 
@@ -351,8 +439,29 @@ export interface CurrentImplementationsUpdatedEvent {
     governor?: Uint8Array;
     treasury?: Uint8Array;
     marketplace?: Uint8Array;
+    claims?: Uint8Array;
   };
 }
+
+/**
+ * A recorded assurance drive: the ClaimMinter list, its deadline and the
+ * launch config every launch path uses.
+ */
+export interface Assurance {
+  claim_minter: string;
+  deadline: bigint;
+  launch_config: LaunchConfig;
+  list_id: number;
+}
+
+/**
+ * A module the Manager deploys for a DAO (`create_dao` / `create_module`),
+ * with its creation config. Each variant is one registry kind.
+ */
+ export type ModuleSpec =
+  { tag: "Auction"; values: readonly [AuctionConfig] } |
+  { tag: "Marketplace"; values: readonly [MarketplaceConfig] } |
+  { tag: "Claims"; values: readonly [ClaimsConfig] };
 
 /**
  * The only factory state retained until the launch administrator finalizes a DAO.
@@ -364,14 +473,14 @@ export interface CurrentImplementationsUpdatedEvent {
 export interface PendingDao {
   addresses: DaoAddresses;
   /**
-   * Auction payment token chosen at create_dao; launch refuses if it changed.
+   * Payment assets fixed in each module's creation config; launch refuses
+   * a module whose `payment_asset()` changed (`PaymentAssetMismatch`).
+   * `None` for a kind the DAO does not have.
    */
-  auction_payment_asset: string;
+  auction_payment_asset: string | null;
+  claims_payment_asset: string | null;
   launch_admin: string;
-  /**
-   * Marketplace payment asset chosen at create_dao; launch refuses if it changed.
-   */
-  marketplace_payment_asset: string;
+  marketplace_payment_asset: string | null;
   /**
    * Requested slug; claimed at `launch_dao`, changeable with `update_pending_slug`.
    */
@@ -379,12 +488,25 @@ export interface PendingDao {
 }
 
 /**
+ * ClaimMinter creation config: the asset Setup lists are priced in.
+ */
+export interface ClaimsConfig {
+  payment_asset: string;
+}
+
+/**
  * Struct: DaoAddresses
  */
 export interface DaoAddresses {
-  auction: string;
+  /**
+   * Modules deployed with the DAO (or added in Setup by `create_module`);
+   * `None` for a kind it does not have. The Token's registry is the
+   * source of truth for modules added later.
+   */
+  auction: string | null;
+  claims: string | null;
   governor: string;
-  marketplace: string;
+  marketplace: string | null;
   metadata: string;
   token: string;
   treasury: string;
@@ -395,18 +517,12 @@ export interface DaoAddresses {
  */
 export interface LaunchConfig {
   /**
-   * Grant mint authority to the Manager-registered PlatformMinter. The
-   * caller can never name an arbitrary minter address.
+   * Start the Auction (if the DAO has one) and grant it an allowance.
    */
-  enable_minter: boolean;
-  /**
-   * The platform minter the launch admin saw and approves. Required (and
-   * must equal the registered PlatformMinter) when `enable_minter` is set,
-   * so a Manager admin cannot swap the minter between signing and launch.
-   * Ignored when `enable_minter` is false.
-   */
-  expected_minter: string | null;
   launch_auction: boolean;
+  /**
+   * Open the Marketplace (if the DAO has one).
+   */
   launch_marketplace: boolean;
 }
 
@@ -421,12 +537,14 @@ export interface AuctionConfig {
 }
 
 /**
- * WASM hashes the six modules were deployed from (emitted in `DaoCreated`).
+ * WASM hashes a DAO's contracts were deployed from (emitted in
+ * `DaoCreated`); a module the DAO was created without is `None`.
  */
 export interface DaoWasmHashes {
-  auction: Uint8Array;
+  auction: Uint8Array | null;
+  claims: Uint8Array | null;
   governor: Uint8Array;
-  marketplace: Uint8Array;
+  marketplace: Uint8Array | null;
   metadata: Uint8Array;
   token: Uint8Array;
   treasury: Uint8Array;
@@ -462,6 +580,32 @@ export interface MarketplaceConfig {
 }
 
 /**
+ * The paid claim list a pending DAO's assurance drive opens (`open_assurance`),
+ * priced in the DAO's recorded `claims_payment_asset`.
+ */
+export interface AssuranceListParams {
+  /**
+   * Ledger timestamp after which an unlaunched drive has failed.
+   */
+  deadline: bigint;
+  /**
+   * Claims stop at this ledger timestamp (after launch, too).
+   */
+  expires_at: bigint;
+  /**
+   * Price per token (0 for a free drive that still needs its threshold).
+   */
+  price: bigint;
+  root: Uint8Array;
+  /**
+   * Distinct claimers needed before the DAO may launch.
+   */
+  threshold_claimers: number;
+  total: number;
+  tree_uri: string;
+}
+
+/**
  * Struct: ImplementationVersion
  */
 export interface ImplementationVersion {
@@ -476,15 +620,38 @@ export interface ImplementationVersion {
 }
 
 /**
+ * The implementation hashes `create_dao` and `create_module` deploy from.
+ */
+export interface CurrentImplementations {
+  auction: Uint8Array;
+  claims: Uint8Array;
+  governor: Uint8Array;
+  marketplace: Uint8Array;
+  metadata: Uint8Array;
+  token: Uint8Array;
+  treasury: Uint8Array;
+}
+
+/**
  * Struct: InitialDaoConfigValues
  */
 export interface InitialDaoConfigValues {
-  auction: AuctionConfig;
-  contract_image: string;
-  description: string;
   governance: GovernanceConfig;
-  marketplace: MarketplaceConfig;
-  project_uri: string;
+  /**
+   * The modules to deploy with the DAO, each kind at most once; all are
+   * optional (docs/designs/membership-models.md §2). More can be added
+   * later with `create_module`.
+   */
+  modules: Array<ModuleSpec>;
+  /**
+   * DAO profile JSON (description, links, image), 1 to
+   * `common::MAX_PROFILE_LENGTH` bytes. Event-only: the Metadata contract
+   * emits it and stores its hash.
+   */
+  profile: string;
+  /**
+   * Base URL of the image compositor used by the on-chain `token_uri`.
+   */
   renderer_base: string;
   /**
    * Requested human-friendly DAO identifier (`[a-z0-9-]`, 4-63 chars).
@@ -493,8 +660,18 @@ export interface InitialDaoConfigValues {
    */
   slug: string;
   token_name: string;
+  /**
+   * The membership switches the Token starts with
+   * (docs/designs/locked-tokens.md); all off is an open DAO.
+   */
+  token_settings: TokenSettings;
   token_symbol: string;
-  token_uri: string;
+  /**
+   * Kinds in `modules` whose module becomes a transfer agent at creation
+   * (visible to every member before they join); later agents need a
+   * proposal once Live.
+   */
+  transfer_agents: Array<string>;
 }
 
 /**
@@ -534,7 +711,7 @@ export const CommonError = {
    */
   7008 : { message: "AdminNotSet" },
   /**
-   * `CurrentVersion` missing from storage.
+   * The Manager's own `CurrentManagerVersion` missing from storage.
    */
   7009 : { message: "VersionNotSet" },
   /**
@@ -554,5 +731,65 @@ export const CommonError = {
    */
   7013 : { message: "StorageVersionNotSet" }
 }
-    export type ContractEvent = DaoCreatedEvent | DaoLaunchedEvent | SlugChangedEvent | SlugClaimedEvent | AdminChangedEvent | AdminProposedEvent | FactoryPausedEvent | FactoryUnpausedEvent | ManagerUpgradedEvent | UpgradeApprovedEvent | PlatformMinterSetEvent | ManagerInitializedEvent | PendingSlugUpdatedEvent | ImplementationRevokedEvent | AdminProposalCancelledEvent | LatestImplementationSetEvent | ImplementationRegisteredEvent | CurrentImplementationsUpdatedEvent;
+
+/**
+ * One registry entry.
+ */
+export interface ModuleEntry {
+  address: string;
+  kind: string;
+  /**
+   * Tokens this module holds carry no votes (custody: Auction, Marketplace).
+   */
+  non_voting: boolean;
+}
+
+/**
+ * A DAO's membership token switches (docs/designs/locked-tokens.md), chosen
+ * at `create_dao` and changeable by the Token's admin: the launch admin in
+ * Setup, the Treasury by proposal once Live. All off reproduces an open DAO.
+ */
+export interface TokenSettings {
+  /**
+   * The Treasury may move any member's token by proposal (`dao_transfer`).
+   */
+  dao_recovery: boolean;
+  /**
+   * Holders delegate only to themselves or to another voting member.
+   */
+  members_only_delegation: boolean;
+  /**
+   * Tokens move only along DAO-controlled paths (`TransfersLocked`).
+   */
+  transfers_locked: boolean;
+}
+
+/**
+ * What the Manager's `LatestImplementation(name)` holds: the hash announced
+ * as latest and the ledger it was announced at. A platform contract (the
+ * Manager itself, the shared Minter) upgrades only to this hash, and its
+ * notice counts from the later of the approval and this announcement, so
+ * every possible platform upgrade is visible as "running → latest" for the
+ * whole notice (D42).
+ */
+export interface LatestPointer {
+  set_ledger: bigint;
+  wasm_hash: Uint8Array;
+}
+
+/**
+ * Emitted by `set_delay` (Manager and shared Minter only). A shorter notice
+ * is in force from `effective_ledger`; a longer one at once. This is the
+ * change a member wants told about: it shortens the window to react to a
+ * platform upgrade.
+ */
+export interface UpgradeDelayChangedEvent {
+  name: "UpgradeDelayChanged";
+  data: {
+    from_ledgers?: number;
+    to_ledgers?: number;
+    effective_ledger?: number;
+  };
+}
+    export type ContractEvent = DaoCreatedEvent | DaoLaunchedEvent | SlugChangedEvent | SlugClaimedEvent | AdminChangedEvent | SlugReleasedEvent | AdminProposedEvent | FactoryPausedEvent | ModuleCreatedEvent | AssuranceOpenedEvent | FactoryUnpausedEvent | ManagerUpgradedEvent | UpgradeApprovedEvent | ManagerInitializedEvent | PendingSlugUpdatedEvent | ImplementationRevokedEvent | AdminProposalCancelledEvent | LatestImplementationSetEvent | ImplementationRegisteredEvent | CurrentImplementationsUpdatedEvent | UpgradeDelayChangedEvent;
     

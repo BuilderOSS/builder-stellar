@@ -151,7 +151,7 @@ export function MarketplaceDirectoryView() {
               }}
             >
               <option value="all">New and resale</option>
-              <option value="primary">New from the community</option>
+              <option value="pool">New from the community</option>
               <option value="secondary">Resale from members</option>
             </Select>
           ) : (

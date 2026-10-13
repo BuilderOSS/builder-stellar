@@ -1,210 +1,183 @@
 -- =============================================================================
 -- MARKETPLACE VIEWS
 --
--- Primary sales are lazy and keyed by listing_id (u64); the token is only
--- minted when the listing is bought. Secondary listings are keyed by token_id
--- (u32). Source events (marketplace contract):
+-- Primary sales are quick-buy pools keyed by pool_id (u32): governance opens a
+-- pool against the Marketplace's mint allowance, anyone restocks it (the tokens
+-- are minted into Marketplace custody, non-voting) and buyers take a stocked
+-- token at the pool price. Secondary listings are keyed by token_id (u32); a
+-- token has at most one open secondary listing. Events (contracts/marketplace/src/events.rs):
+--   pool_opened                topic pool_id;            data { price, asset, expires_at, size, max_per_buyer,
+--                                                        max_sold_per_period, period_secs }
+--   pool_restocked             topic pool_id;            data { first_token_id, count, stocked }
+--   pool_purchased             topics pool_id, buyer;    data { token_id, price, asset }
+--   pool_closed                topic pool_id;            data { released }
+--   pool_swept                 topic pool_id;            data { count, pages_left }
+--   secondary_listing_created  topic token_id;           data { seller, price, expires_at, fee_bps, payment_asset }
+--   listing_purchased          topics token_id, buyer;   data { seller, price, fee, payment_asset }
+--   listing_cancelled / listing_expired   topic token_id; data { seller }
+--   listing_commented          topics token_id, author;  data { body }
+-- Not projected (configuration is read from chain; every listing carries its own
+-- terms): marketplace_initialized, payment_asset_updated, secondary_fee_updated;
+-- marketplace_paused / unpaused (manager.daos), marketplace_launched (manager.module_launches).
 --
---   primary_listing_created    topic listing_id;  data { price, expires_at, payment_asset }
---   primary_listing_purchased  topics listing_id, buyer; data { token_id, price, payment_asset }
---   primary_listing_cancelled  topic listing_id
---   primary_listing_expired    topic listing_id
---
---   secondary_listing_created  topic token_id;    data { seller, price, expires_at, fee_bps, payment_asset }
---   listing_purchased          topics token_id, buyer; data { seller, price, fee, payment_asset }  (secondary only)
---   listing_cancelled / listing_expired  topic token_id; data { seller }                          (secondary only)
---
---   marketplace_launched       topic treasury; data { opened } (see manager.module_launches)
---   fee_bps is at most 2,500 (25%). Sellers pass a maximum fee and the payment asset to
---   `list` and buyers a maximum price to `buy`, so a listing never carries worse terms
---   than the seller signed for.
---
--- A primary listing is closed by the first purchase/cancel/expiry event with
--- its listing_id. A token has at most one open secondary listing, so a
--- secondary listing is closed by the first purchase/cancel/expiry event for its
--- token after it was created. There is no listing `kind`: the two views
--- replace the old single listings view.
+-- A listing is closed by the first purchase, cancellation or expiry event with
+-- its key after it was created; a pool by its pool_closed (an expired pool sells
+-- nothing more but stays `open` here until someone closes it: compare expires_at).
 -- =============================================================================
 
-CREATE VIEW marketplace.primary_listings AS
-WITH created AS (
-  SELECT
-    e.event_id,
-    e.deployment_id,
-    i.dao_id,
-    e.contract_id,
-    (e.topics::jsonb ->> 'listing_id')::bigint AS listing_id,
-    (e.args::jsonb ->> 'price')::numeric(78, 0) AS price,
-    (e.args::jsonb ->> 'expires_at')::bigint AS expires_at,
-    e.args::jsonb ->> 'payment_asset' AS payment_asset,
-    e.ledger_sequence AS created_ledger,
-    e.transaction_index,
-    e.operation_index,
-    e.event_index,
-    chain.ledger_closed_at_ts(e.ledger_closed_at) AS created_at,
-    e.transaction_hash AS created_transaction_hash
-  FROM chain.decoded_events e
-  JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
-  WHERE e.contract_role = 'marketplace'
-    AND e.event_name = 'primary_listing_created'
-)
+-- One row per pool: its terms and running totals.
+CREATE VIEW marketplace.pools AS
 SELECT
-  c.event_id,
-  c.deployment_id,
-  c.dao_id,
-  c.contract_id,
-  c.listing_id,
-  c.price,
-  c.expires_at,
-  c.payment_asset,
-  COALESCE(
-    CASE x.event_name
-      WHEN 'primary_listing_purchased' THEN 'purchased'
-      WHEN 'primary_listing_cancelled' THEN 'cancelled'
-      WHEN 'primary_listing_expired' THEN 'expired'
-    END, 'open') AS status,
-  (x.args::jsonb ->> 'token_id')::bigint AS token_id,
-  x.topics::jsonb ->> 'buyer' AS buyer,
-  c.created_ledger,
-  c.created_at,
-  c.created_transaction_hash,
-  x.ledger_sequence AS closed_ledger,
-  chain.ledger_closed_at_ts(x.ledger_closed_at) AS closed_at,
-  x.transaction_hash AS closed_transaction_hash
-FROM created c
+  o.event_id,
+  o.deployment_id,
+  o.dao_id,
+  o.contract_id,
+  (o.t ->> 'pool_id')::bigint AS pool_id,
+  (o.a ->> 'price')::numeric(78, 0) AS price,
+  o.a ->> 'asset' AS asset,
+  (o.a ->> 'expires_at')::bigint AS expires_at,
+  (o.a ->> 'size')::bigint AS size,
+  (o.a ->> 'max_per_buyer')::bigint AS max_per_buyer,
+  (o.a ->> 'max_sold_per_period')::bigint AS max_sold_per_period,
+  (o.a ->> 'period_secs')::bigint AS period_secs,
+  COALESCE(k.stocked, 0)::bigint AS stocked,
+  COALESCE(k.sold, 0)::bigint AS sold,
+  COALESCE(k.swept, 0)::bigint AS swept,
+  (COALESCE(k.stocked, 0) - COALESCE(k.sold, 0) - COALESCE(k.swept, 0))::bigint AS in_stock,
+  CASE WHEN k.closed_ledger IS NULL THEN 'open' ELSE 'closed' END AS status,
+  k.released,
+  o.ledger_sequence AS opened_ledger,
+  o.closed_at AS opened_at,
+  o.transaction_hash AS opened_transaction_hash,
+  k.closed_ledger,
+  k.closed_at
+FROM manager.module_events o
 LEFT JOIN LATERAL (
-  SELECT x.*
-  FROM chain.decoded_events x
-  WHERE x.deployment_id = c.deployment_id
-    AND x.contract_id = c.contract_id
+  SELECT
+    max((x.a ->> 'stocked')::bigint) FILTER (WHERE x.event_name = 'pool_restocked') AS stocked,
+    count(*) FILTER (WHERE x.event_name = 'pool_purchased') AS sold,
+    sum((x.a ->> 'count')::bigint) FILTER (WHERE x.event_name = 'pool_swept') AS swept,
+    max((x.a ->> 'released')::bigint) FILTER (WHERE x.event_name = 'pool_closed') AS released,
+    max(x.ledger_sequence) FILTER (WHERE x.event_name = 'pool_closed') AS closed_ledger,
+    max(x.closed_at) FILTER (WHERE x.event_name = 'pool_closed') AS closed_at
+  FROM manager.module_events x
+  WHERE x.deployment_id = o.deployment_id AND x.contract_id = o.contract_id
     AND x.contract_role = 'marketplace'
-    AND x.event_name IN ('primary_listing_purchased', 'primary_listing_cancelled', 'primary_listing_expired')
-    AND (x.topics::jsonb ->> 'listing_id')::bigint = c.listing_id
-    AND chain.event_position(x.ledger_sequence, x.transaction_index, x.operation_index, x.event_index)
-      > chain.event_position(c.created_ledger, c.transaction_index, c.operation_index, c.event_index)
-  ORDER BY x.ledger_sequence, x.transaction_index NULLS LAST, x.operation_index NULLS LAST,
-    x.event_index NULLS LAST, x.event_id
-  LIMIT 1
-) x ON true;
+    AND x.event_name IN ('pool_restocked', 'pool_purchased', 'pool_closed', 'pool_swept')
+    AND x.topic_0 = o.topic_0 AND x.pos > o.pos
+) k ON true
+WHERE o.contract_role = 'marketplace'
+  AND o.event_name = 'pool_opened';
+
+-- The tokens a pool has in stock: every id its restocks minted into the
+-- Marketplace that has not moved since (a sale sends it to the buyer, a sweep
+-- to the Treasury). Owning it is not enough: a token bought from a pool and
+-- relisted is escrowed by the Marketplace again, as a secondary listing. Which
+-- stock page holds an id depends on sales between restocks: read it on chain
+-- (marketplace.pool_stock(pool_id, page)) before buying.
+CREATE VIEW marketplace.pool_stock AS
+SELECT
+  r.deployment_id,
+  r.dao_id,
+  r.contract_id,
+  (r.t ->> 'pool_id')::bigint AS pool_id,
+  ids.token_id,
+  r.ledger_sequence AS restocked_ledger
+FROM manager.module_events r
+CROSS JOIN LATERAL generate_series(
+  (r.a ->> 'first_token_id')::bigint,
+  (r.a ->> 'first_token_id')::bigint + (r.a ->> 'count')::bigint - 1
+) AS ids(token_id)
+JOIN manager.dao_registry d ON d.deployment_id = r.deployment_id AND d.dao_id = r.dao_id
+JOIN token.inventory inv
+  ON inv.deployment_id = r.deployment_id AND inv.contract_id = d.token_contract
+ AND inv.token_id = ids.token_id AND inv.owner = r.contract_id
+WHERE r.contract_role = 'marketplace'
+  AND r.event_name = 'pool_restocked'
+  AND NOT EXISTS (
+    SELECT 1 FROM token.transfers x
+    WHERE x.deployment_id = r.deployment_id AND x.contract_id = d.token_contract
+      AND x.token_id = ids.token_id AND x.transfer_type = 'transfer'
+  );
 
 CREATE VIEW marketplace.secondary_listings AS
-WITH created AS (
-  SELECT
-    e.event_id,
-    e.deployment_id,
-    i.dao_id,
-    e.contract_id,
-    (e.topics::jsonb ->> 'token_id')::bigint AS token_id,
-    e.args::jsonb ->> 'seller' AS seller,
-    (e.args::jsonb ->> 'price')::numeric(78, 0) AS price,
-    (e.args::jsonb ->> 'expires_at')::bigint AS expires_at,
-    (e.args::jsonb ->> 'fee_bps')::integer AS fee_bps,
-    e.args::jsonb ->> 'payment_asset' AS payment_asset,
-    e.ledger_sequence AS created_ledger,
-    e.transaction_index,
-    e.operation_index,
-    e.event_index,
-    chain.ledger_closed_at_ts(e.ledger_closed_at) AS created_at,
-    e.transaction_hash AS created_transaction_hash
-  FROM chain.decoded_events e
-  JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
-  WHERE e.contract_role = 'marketplace'
-    AND e.event_name = 'secondary_listing_created'
-)
 SELECT
   c.event_id,
   c.deployment_id,
   c.dao_id,
   c.contract_id,
-  c.token_id,
-  c.seller,
-  c.price,
-  c.expires_at,
-  c.fee_bps,
-  c.payment_asset,
-  COALESCE(
-    CASE x.event_name
-      WHEN 'listing_purchased' THEN 'purchased'
-      WHEN 'listing_cancelled' THEN 'cancelled'
-      WHEN 'listing_expired' THEN 'expired'
-    END, 'open') AS status,
-  c.created_ledger,
-  c.created_at,
-  c.created_transaction_hash,
+  (c.t ->> 'token_id')::bigint AS token_id,
+  c.a ->> 'seller' AS seller,
+  (c.a ->> 'price')::numeric(78, 0) AS price,
+  (c.a ->> 'expires_at')::bigint AS expires_at,
+  (c.a ->> 'fee_bps')::integer AS fee_bps,
+  c.a ->> 'payment_asset' AS payment_asset,
+  COALESCE(CASE x.event_name
+    WHEN 'listing_purchased' THEN 'purchased'
+    WHEN 'listing_cancelled' THEN 'cancelled'
+    WHEN 'listing_expired' THEN 'expired'
+  END, 'open') AS status,
+  x.t ->> 'buyer' AS buyer,
+  c.ledger_sequence AS created_ledger,
+  c.closed_at AS created_at,
+  c.transaction_hash AS created_transaction_hash,
   x.ledger_sequence AS closed_ledger,
-  chain.ledger_closed_at_ts(x.ledger_closed_at) AS closed_at,
-  NULLIF(x.topic_1, '') AS buyer
-FROM created c
+  x.closed_at,
+  x.transaction_hash AS closed_transaction_hash
+FROM manager.module_events c
 LEFT JOIN LATERAL (
-  SELECT x.event_name, x.ledger_sequence, x.ledger_closed_at, x.topic_1
-  FROM chain.decoded_events x
-  WHERE x.deployment_id = c.deployment_id
-    AND x.contract_id = c.contract_id
-    AND x.contract_role = 'marketplace'
+  SELECT x.* FROM chain.events x
+  WHERE x.deployment_id = c.deployment_id AND x.contract_id = c.contract_id
     AND x.event_name IN ('listing_purchased', 'listing_cancelled', 'listing_expired')
-    AND (x.topics::jsonb ->> 'token_id')::bigint = c.token_id
-    AND chain.event_position(x.ledger_sequence, x.transaction_index, x.operation_index, x.event_index)
-      > chain.event_position(c.created_ledger, c.transaction_index, c.operation_index, c.event_index)
-  ORDER BY x.ledger_sequence, x.transaction_index NULLS LAST, x.operation_index NULLS LAST,
-    x.event_index NULLS LAST, x.event_id
+    AND x.topic_0 = c.topic_0 AND x.pos > c.pos
+  ORDER BY x.pos, x.event_id
   LIMIT 1
-) x ON true;
+) x ON true
+WHERE c.contract_role = 'marketplace'
+  AND c.event_name = 'secondary_listing_created';
 
--- Secondary purchases only (ListingPurchased); see marketplace.sales for the
--- combined history.
-CREATE VIEW marketplace.purchases AS
-SELECT
-  e.event_id,
-  e.deployment_id,
-  i.dao_id,
-  e.contract_id,
-  (e.topics::jsonb ->> 'token_id')::bigint AS token_id,
-  e.topics::jsonb ->> 'buyer' AS buyer,
-  e.args::jsonb ->> 'seller' AS seller,
-  (e.args::jsonb ->> 'price')::numeric(78, 0) AS price,
-  (e.args::jsonb ->> 'fee')::numeric(78, 0) AS fee,
-  e.args::jsonb ->> 'payment_asset' AS payment_asset,
-  e.ledger_sequence AS event_ledger,
-  e.transaction_index,
-  e.operation_index,
-  e.event_index,
-  chain.ledger_closed_at_ts(e.ledger_closed_at) AS event_at,
-  e.transaction_hash
-FROM chain.decoded_events e
-JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
-WHERE e.contract_role = 'marketplace'
-  AND e.event_name = 'listing_purchased';
-
--- Sales history: primary purchases (mint to the buyer; the token id only exists
--- in PrimaryListingPurchased; no seller, no fee) and secondary purchases.
--- listing_id is NULL for secondary sales.
+-- Sales history: pool sales (pool_id set; no seller, no fee: the price goes to
+-- the Treasury) and secondary purchases (pool_id NULL).
 CREATE VIEW marketplace.sales AS
 SELECT
   e.event_id,
   e.deployment_id,
-  i.dao_id,
+  e.dao_id,
   e.contract_id,
-  'primary'::text AS sale_type,
-  (e.topics::jsonb ->> 'listing_id')::bigint AS listing_id,
-  (e.args::jsonb ->> 'token_id')::bigint AS token_id,
-  e.topics::jsonb ->> 'buyer' AS buyer,
-  NULL::text AS seller,
-  (e.args::jsonb ->> 'price')::numeric(78, 0) AS price,
-  NULL::numeric(78, 0) AS fee,
-  e.args::jsonb ->> 'payment_asset' AS payment_asset,
+  CASE e.event_name WHEN 'pool_purchased' THEN 'pool' ELSE 'secondary' END AS sale_type,
+  CASE e.event_name WHEN 'pool_purchased' THEN (e.t ->> 'pool_id')::bigint END AS pool_id,
+  COALESCE(e.a ->> 'token_id', e.t ->> 'token_id')::bigint AS token_id,
+  e.t ->> 'buyer' AS buyer,
+  e.a ->> 'seller' AS seller,
+  (e.a ->> 'price')::numeric(78, 0) AS price,
+  (e.a ->> 'fee')::numeric(78, 0) AS fee,
+  COALESCE(e.a ->> 'payment_asset', e.a ->> 'asset') AS payment_asset,
   e.ledger_sequence AS event_ledger,
   e.transaction_index,
   e.operation_index,
   e.event_index,
-  chain.ledger_closed_at_ts(e.ledger_closed_at) AS event_at,
+  e.closed_at AS event_at,
   e.transaction_hash
-FROM chain.decoded_events e
-JOIN manager.event_identity i ON i.deployment_id = e.deployment_id AND i.contract_id = e.contract_id
+FROM manager.module_events e
 WHERE e.contract_role = 'marketplace'
-  AND e.event_name = 'primary_listing_purchased'
-UNION ALL
+  AND e.event_name IN ('pool_purchased', 'listing_purchased');
+
+-- Event-only comment threads per token (a token's thread carries over relistings).
+CREATE VIEW marketplace.listing_comments AS
 SELECT
-  p.event_id, p.deployment_id, p.dao_id, p.contract_id,
-  'secondary'::text, NULL::bigint, p.token_id, p.buyer, p.seller, p.price, p.fee, p.payment_asset,
-  p.event_ledger, p.transaction_index, p.operation_index, p.event_index, p.event_at, p.transaction_hash
-FROM marketplace.purchases p;
+  e.event_id AS comment_event_id,
+  e.deployment_id,
+  e.dao_id,
+  e.contract_id,
+  (e.t ->> 'token_id')::bigint AS token_id,
+  e.t ->> 'author' AS author,
+  e.a ->> 'body' AS body,
+  e.ledger_sequence AS event_ledger,
+  e.transaction_index,
+  e.operation_index,
+  e.event_index,
+  e.closed_at AS event_at,
+  e.transaction_hash
+FROM manager.module_events e
+WHERE e.contract_role = 'marketplace'
+  AND e.event_name = 'listing_commented';

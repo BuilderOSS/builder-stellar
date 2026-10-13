@@ -13,6 +13,14 @@ export async function uploadImage(
   file: File,
   uploadType: 'dao-image' | 'markdown-image'
 ): Promise<{ ipfsUri: string; gatewayUrl: string }> {
+  return uploadFile(file, uploadType);
+}
+
+/** Upload one file (an image or a claim list) through the session-gated Pinata flow. */
+export async function uploadFile(
+  file: File,
+  uploadType: 'dao-image' | 'markdown-image' | 'claim-list'
+): Promise<{ ipfsUri: string; gatewayUrl: string }> {
   const metadata = { uploadType, filename: file.name, mimeType: file.type, sizeBytes: file.size };
   const authorization = await uploadResponseJson(
     await fetch('/api/uploads/pinata-url', {

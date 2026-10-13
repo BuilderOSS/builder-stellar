@@ -32,9 +32,21 @@ export const LIBRARY_EVENTS = {
   Unpaused: { topics: [], data: [] }
 };
 
+// The pipeline role of each contract crate, where it differs from the directory name: the
+// `minter` crate is the per-DAO ClaimMinter, registered under the module kind `claims`
+// (common::modules::KIND_CLAIMS), and the indexer names roles after registry kinds.
+export const CRATE_ROLES = { minter: 'claims' };
+const roleOf = (dir) => CRATE_ROLES[dir] ?? dir;
+
 // Roles that emit the events defined in contracts/common/src/*.rs (admin handoff,
 // upgrades, migrations). The Manager emits its own AdminChanged with the same shape.
-export const COMMON_EVENT_ROLES = ['token', 'governor', 'treasury', 'auction', 'marketplace', 'metadata'];
+export const COMMON_EVENT_ROLES = ['token', 'governor', 'treasury', 'auction', 'marketplace', 'metadata', 'claims'];
+
+// Common events with their own emitter set: the upgrade notice exists only on the Manager (the
+// one platform contract; every DAO module, the ClaimMinter included, upgrades by its own DAO's vote).
+export const COMMON_EVENT_EMITTERS = {
+  UpgradeDelayChanged: ['manager']
+};
 
 /**
  * Parse every #[contractevent] struct into a flat list of { contract, name, topics, data }.
@@ -46,7 +58,8 @@ export const COMMON_EVENT_ROLES = ['token', 'governor', 'treasury', 'auction', '
 export function contractEventList() {
   const list = [];
   const contractsDir = join(repoRoot, 'contracts');
-  // The common crate emits events on behalf of every module (Upgraded, VersionSynced).
+  // The common crate's events (AdminChanged, Upgraded, Migrated, UpgradeDelayChanged) are
+  // emitted by the roles in COMMON_EVENT_ROLES, or by COMMON_EVENT_EMITTERS[name] when set.
   const files = [];
   for (const dir of readdirSync(contractsDir).sort()) {
     const file = join(contractsDir, dir, 'src', 'events.rs');
@@ -79,9 +92,10 @@ export function contractEventList() {
         }
       }
       if (dir === 'common') {
-        for (const role of COMMON_EVENT_ROLES) list.push({ contract: role, name, topics, data, source: 'common' });
+        const roles = COMMON_EVENT_EMITTERS[name] ?? COMMON_EVENT_ROLES;
+        for (const role of roles) list.push({ contract: role, name, topics, data, source: 'common' });
       } else {
-        list.push({ contract: dir, name, topics, data });
+        list.push({ contract: roleOf(dir), name, topics, data });
       }
     }
   }

@@ -12,12 +12,31 @@ use soroban_sdk::{contractclient, Address, BytesN, Env, String, Symbol, Val, Vec
 /// Metadata.
 #[contractclient(name = "NftClient")]
 pub trait NftApi {
-    fn launch(e: &Env, treasury: Address, minters: Vec<Address>);
+    fn launch(e: &Env, treasury: Address, grants: Vec<crate::modules::MintGrant>);
+    /// Manager-only early handoff (stays in Setup).
+    fn handoff(e: &Env, treasury: Address);
+    fn increase_mint_allowance(e: &Env, module: Address, amount: u32);
+    fn mint_allowance(e: &Env, module: Address) -> u32;
+    /// A module gives back part of its own allowance (module auth).
+    fn release_mint_allowance(e: &Env, module: Address, amount: u32);
+    fn treasury(e: &Env) -> Address;
+    fn metadata(e: &Env) -> Option<Address>;
+    fn modules(e: &Env) -> Vec<crate::modules::ModuleEntry>;
+    fn module(e: &Env, kind: Symbol) -> Option<Address>;
+    /// Module registry (Manager in Setup, admin once live).
+    fn register_module(e: &Env, kind: Symbol, address: Address, non_voting: bool);
+    /// Transfer agents (same authority as `register_module`).
+    fn set_transfer_agent(e: &Env, module: Address, enabled: bool);
     fn admin(e: &Env) -> Address;
     fn is_live(e: &Env) -> bool;
-    /// Voting-capable supply (excludes tokens held by the Treasury, Auction
-    /// and Marketplace).
+    /// Voting-capable supply (excludes tokens held by the Treasury and
+    /// non-voting modules).
     fn total_supply(e: &Env) -> i128;
+    /// Voting-capable supply at the previous ledger, the ledger votes are
+    /// snapshotted at; reads at most the two latest checkpoints.
+    fn voting_supply_at_previous_ledger(e: &Env) -> u128;
+    /// Tokens minted so far (the next id); ids are sequential and never burned.
+    fn minted(e: &Env) -> u32;
     fn owner_of(e: &Env, token_id: u32) -> Address;
     fn mint(e: &Env, minter: Address, to: Address) -> u32;
     fn batch_mint(
@@ -30,20 +49,67 @@ pub trait NftApi {
     fn transfer_from(e: &Env, spender: Address, from: Address, to: Address, token_id: u32);
 }
 
-/// `launch(treasury)` shared by Governor, Treasury and Metadata.
+/// Metadata's on-chain SEP-50 token JSON (the token forwards `token_uri`).
+#[contractclient(name = "TokenUriClient")]
+pub trait TokenUriApi {
+    fn token_uri(e: &Env, token_id: u32, token_name: String) -> String;
+}
+
+/// `launch(treasury)` and the early `handoff(treasury)` shared by Governor,
+/// Treasury and Metadata (both Manager-only).
 #[contractclient(name = "TreasuryLaunchClient")]
 pub trait TreasuryLaunchApi {
     fn launch(e: &Env, treasury: Address);
+    fn handoff(e: &Env, treasury: Address);
 }
 
-#[contractclient(name = "MarketplaceLaunchClient")]
-pub trait MarketplaceLaunchApi {
-    fn launch(e: &Env, treasury: Address, open: bool, expected_payment_asset: Address);
+/// The interface every Manager-built module implements (Auction,
+/// Marketplace, ClaimMinter; docs/designs/membership-models.md §2, eng review
+/// R5). `launch` and `handoff` are Manager-only. Modules a DAO deploys itself
+/// and registers by proposal never receive them, and `renewal_keys` is
+/// optional for those.
+#[contractclient(name = "DaoModuleClient")]
+pub trait DaoModuleApi {
+    /// Setup -> Live: hands the admin to `treasury` unless `handoff` already
+    /// did. `open` starts the module (the Auction's first auction, the
+    /// Marketplace unpaused); a module without a pause ignores it.
+    fn launch(e: &Env, treasury: Address, open: bool);
+    /// Hands the admin to `treasury` and stays in Setup, which freezes the
+    /// module's setters and upgrades until launch.
+    fn handoff(e: &Env, treasury: Address);
+    /// The asset the module is paid in. The Manager compares it with the
+    /// asset recorded at creation before launching the module.
+    fn payment_asset(e: &Env) -> Address;
+    /// The module's DAO-owned storage keys from `cursor` (see
+    /// `crate::modules::RenewalPage`). Reads only instance storage, never the
+    /// entries it lists, so it still answers once they have archived.
+    fn renewal_keys(e: &Env, cursor: u32, limit: u32) -> crate::modules::RenewalPage;
+    fn wasm_hash(e: &Env) -> BytesN<32>;
 }
 
-#[contractclient(name = "AuctionLaunchClient")]
-pub trait AuctionLaunchApi {
-    fn launch(e: &Env, treasury: Address, start: bool, expected_payment_token: Address);
+/// The ClaimMinter surface the Manager drives for an assurance drive
+/// (docs/designs/membership-models.md §2-3).
+#[contractclient(name = "ClaimsClient")]
+pub trait ClaimsApi {
+    #[allow(clippy::too_many_arguments)]
+    fn open_list(
+        e: &Env,
+        root: BytesN<32>,
+        tree_uri: String,
+        asset: Address,
+        price: i128,
+        expires_at: u64,
+        total: u32,
+        assurance: Option<crate::modules::AssuranceTerms>,
+    ) -> u32;
+    fn assurance_state(e: &Env, list_id: u32) -> crate::modules::AssuranceState;
+    fn recovery_upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>, version: String);
+}
+
+/// Metadata artwork reads (ClaimMinter refuses Setup lists without artwork).
+#[contractclient(name = "ArtworkClient")]
+pub trait ArtworkApi {
+    fn properties_count(e: &Env) -> u32;
 }
 
 /// Metadata mint hooks called by the token.
@@ -65,6 +131,12 @@ pub trait WasmHashApi {
 pub trait ManagerRegistryApi {
     fn is_upgrade_approved(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) -> bool;
     fn get_implementation_version(e: &Env, wasm_hash: BytesN<32>) -> Option<String>;
+    /// The Manager admin: the shared Minter's upgrade authority.
+    fn get_admin(e: &Env) -> Option<Address>;
+    /// Ledger at which `approve_upgrade(from, to)` was recorded, if it was.
+    fn upgrade_approved_ledger(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) -> Option<u64>;
+    /// The hash announced as latest for `name`, and when (D42).
+    fn latest_pointer(e: &Env, name: String) -> Option<crate::upgrade::LatestPointer>;
 }
 
 /// Governor `consume`, called by the Treasury from `execute`.

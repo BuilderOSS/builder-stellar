@@ -7,7 +7,10 @@ import useSWR from 'swr';
 
 import { ActivityList } from '@/components/activity/activity-list';
 import { ContractUpdatesNotice } from '@/components/admin/contract-updates-notice';
+import { PlatformUpgradeNotice } from '@/components/admin/platform-upgrades';
+import { CommunityProfileView } from '@/components/community/community-profile-view';
 import { DaoContractList } from '@/components/dao-contract-list';
+import { HomePool } from '@/components/dao-home/home-pool';
 import { MembershipCard } from '@/components/dao-home/membership-card';
 import { type HomeAuction, NowCard } from '@/components/dao-home/now-card';
 import { ProposalRow } from '@/components/proposal/proposal-row';
@@ -29,7 +32,7 @@ import {
 import { useDaoContext } from '@/contexts/dao-context';
 import { useDaoMembership } from '@/hooks/use-dao-membership';
 import { useIsLaunchAdmin } from '@/hooks/useIsLaunchAdmin';
-import { getTreasuryAssets } from '@/lib/assets-config';
+import { paymentAssetCode } from '@/lib/assets-config';
 import { hasAuction, hasMarketplace } from '@/lib/dao-nav';
 import { daoRoute } from '@/lib/dao-routes';
 import { useGoldskyActivityFeed, useGoldskyHealth } from '@/lib/goldsky-queries';
@@ -50,7 +53,6 @@ const PROPOSAL_PREVIEW = 5;
 const intro = css({ display: 'grid', gap: '3', mb: { base: '5', md: '7' } });
 const introRow = css({ display: 'flex', alignItems: 'center', gap: '4' });
 const name = css({ textStyle: 'display', fontSize: { base: '1.875rem', md: '2.5rem' }, m: '0' });
-const description = css({ textStyle: 'body', color: 'ink.muted', m: '0', maxW: '62ch' });
 const columns = css({
   display: 'grid',
   gap: { base: '8', lg: '10' },
@@ -106,9 +108,7 @@ export default function Page() {
     .sort((a, b) => Number(b.state === ProposalState.Active) - Number(a.state === ProposalState.Active))
     .slice(0, PROPOSAL_PREVIEW);
   const tokenItems = tokens.data?.items.slice(0, tokenLimit) ?? [];
-  const assetCode =
-    getTreasuryAssets(config.name).find((item) => item.contractId === auction.data?.config.payment_token)?.code ??
-    'XLM';
+  const assetCode = paymentAssetCode(config.name, auction.data?.config.payment_token) ?? 'tokens';
   const indexerHealthy = health.data?.status === 'healthy';
 
   async function refreshAll() {
@@ -125,7 +125,7 @@ export default function Page() {
     return (
       <div className={intro}>
         <div className={introRow}>
-          <Crest name={config.tokenName} seed={config.tokenContractId} src={config.contractImage} size="lg" />
+          <Crest name={config.tokenName} seed={config.tokenContractId} src={config.image} size="lg" />
           <h1 className={name}>{config.tokenName}</h1>
         </div>
         <Callout
@@ -140,13 +140,13 @@ export default function Page() {
     <>
       <header className={intro}>
         <div className={introRow}>
-          <Crest name={config.tokenName} seed={config.tokenContractId} src={config.contractImage} size="lg" />
+          <Crest name={config.tokenName} seed={config.tokenContractId} src={config.image} size="lg" />
           <div className={css({ display: 'grid', gap: '2', minW: '0' })}>
             <CrestStripe seed={config.tokenContractId} />
             <h1 className={name}>{config.tokenName}</h1>
           </div>
         </div>
-        {config.tokenDescription ? <p className={description}>{config.tokenDescription}</p> : null}
+        <CommunityProfileView profile={config.profile} status={config.profileStatus} />
         {isLaunchSetup ? (
           <div>
             <Chip tone="yours">You are the launch admin</Chip>
@@ -170,10 +170,25 @@ export default function Page() {
         now={now}
       />
 
+      {config.assuranceOutcome === 'open' ? (
+        <Callout
+          variant="info"
+          title="This community launches once enough people claim"
+          description="If you're on its claim list, claim your tokens now. If the drive ends first, everyone who paid can take their payment back."
+        >
+          <div>
+            <ButtonLink href={daoRoute(routeId, 'claims')} size="sm">
+              Go to claims
+            </ButtonLink>
+          </div>
+        </Callout>
+      ) : null}
       {config.status !== 'pending' ? <ContractUpdatesNotice enabled={membership.isMember} /> : null}
+      {config.status !== 'pending' ? <PlatformUpgradeNotice enabled={membership.isMember} /> : null}
 
       <div className={columns}>
         <div className={mainColumn}>
+          {hasMarketplace(config) && config.status !== 'pending' ? <HomePool /> : null}
           <Section
             title="Proposals"
             action={

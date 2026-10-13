@@ -1,16 +1,22 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import readline from 'node:readline/promises';
-import { enrichTransactionMetadata, run, runQuiet } from './lib.mjs';
+import {
+  DEFAULT_CODE_TTL_DAYS,
+  LEDGERS_PER_DAY,
+  enrichTransactionMetadata,
+  extendWithinFeeCap,
+  parseCodeTtlDays,
+  run,
+  runQuiet
+} from './lib.mjs';
 
 const args = process.argv.slice(2);
 const force = args.includes('--force');
 const configPath = args.find((arg) => arg !== '--force');
 
 if (!configPath) {
-  throw new Error(
-    'Usage: node scripts/deploy-manager.mjs <config.json> [--force]'
-  );
+  throw new Error('Usage: node scripts/deploy-manager.mjs <config.json> [--force]');
 }
 
 const config = JSON.parse(readFileSync(configPath, 'utf8'));
@@ -32,28 +38,31 @@ const requiredConfig = [
   ['rpcUrl', config.rpcUrl],
   ['networkPassphrase', config.networkPassphrase]
 ];
-const missingConfig = requiredConfig.find(
-  ([, value]) => value === undefined || value === null || value === ''
-);
+const missingConfig = requiredConfig.find(([, value]) => value === undefined || value === null || value === '');
 if (missingConfig) {
-  throw new Error(
-    `Manager config ${configPath} must define ${missingConfig[0]}`
-  );
+  throw new Error(`Manager config ${configPath} must define ${missingConfig[0]}`);
 }
 if (!['local', 'testnet', 'mainnet'].includes(config.network)) {
-  throw new Error(
-    `Manager config ${configPath} must define network as local, testnet, or mainnet`
-  );
+  throw new Error(`Manager config ${configPath} must define network as local, testnet, or mainnet`);
 }
 const networkName = config.network;
-const identityName =
-  process.env.DEPLOY_IDENTITY?.trim() || `${networkName}-admin`;
+const identityName = process.env.DEPLOY_IDENTITY?.trim() || `${networkName}-admin`;
 const adminAddress = config.adminAddress;
 const rpcUrl = config.rpcUrl;
 const networkPassphrase = config.networkPassphrase;
 const saltSuffix = process.env.DEPLOY_SALT_SUFFIX?.trim() ?? '';
 const contractBuildDir = 'target/wasm32v1-none/release';
 const deployArtifactPath = `deploys/${config.label}-${networkName}-manager.json`;
+// Platform upgrade notice: ledgers between a Manager approval and the earliest upgrade of the Manager
+// itself. Every DAO depends on it (registry, factory), so the notice is what lets a DAO react before a
+// hostile upgrade lands. 7 days (120,960 ledgers) on a public network; `upgradeDelayLedgers` in the
+// network config shortens it for testnet. The admin can change it later with set_upgrade_delay (a
+// reduction waits out the notice in force). DAO modules, the ClaimMinter included, are upgraded only by
+// their own DAO's proposals.
+const upgradeDelay = Number(config.upgradeDelayLedgers ?? 7 * LEDGERS_PER_DAY);
+if (!Number.isInteger(upgradeDelay) || upgradeDelay < 0) {
+  throw new Error(`upgradeDelayLedgers must be a non-negative integer, got ${config.upgradeDelayLedgers}`);
+}
 const sourceCommitResult = runQuiet('git', ['rev-parse', 'HEAD']);
 const sourceCommit = sourceCommitResult.ok ? sourceCommitResult.stdout.trim() : null;
 
@@ -63,9 +72,7 @@ async function confirmOverwrite(filePath) {
   }
 
   if (!process.stdin.isTTY) {
-    throw new Error(
-      `Refusing to overwrite ${filePath} without --force in non-interactive mode`
-    );
+    throw new Error(`Refusing to overwrite ${filePath} without --force in non-interactive mode`);
   }
 
   const rl = readline.createInterface({
@@ -79,15 +86,7 @@ async function confirmOverwrite(filePath) {
 }
 
 function ensureNetwork() {
-  runQuiet('stellar', [
-    'network',
-    'add',
-    networkName,
-    '--rpc-url',
-    rpcUrl,
-    '--network-passphrase',
-    networkPassphrase
-  ]);
+  runQuiet('stellar', ['network', 'add', networkName, '--rpc-url', rpcUrl, '--network-passphrase', networkPassphrase]);
   run('stellar', ['network', 'use', networkName]);
 }
 
@@ -130,14 +129,7 @@ function contractId(packageName) {
 
 function deployIfMissing(packageName, alias, initArgs) {
   const id = contractId(packageName);
-  const exists = runQuiet('stellar', [
-    'contract',
-    'fetch',
-    '--id',
-    id,
-    '--network',
-    networkName
-  ]);
+  const exists = runQuiet('stellar', ['contract', 'fetch', '--id', id, '--network', networkName]);
 
   let txMetadata = null;
   if (!exists.ok) {
@@ -217,10 +209,7 @@ function installWasm(packageName) {
     }
 
     // Check if already installed (success case)
-    if (
-      result.stderr.includes('already exists') ||
-      result.stdout.includes(hash)
-    ) {
+    if (result.stderr.includes('already exists') || result.stdout.includes(hash)) {
       console.log(`WASM already installed: ${hash}`);
       return hash;
     }
@@ -251,41 +240,26 @@ function installWasm(packageName) {
   throw new Error(`Failed to install ${packageName} WASM after 3 attempts`);
 }
 
-// Contract code (WASM) entries are shared by every DAO deployed from the same hash, and rent for
-// extending them is charged to whoever's transaction pushes the TTL up: measured on testnet, extending
-// a 34 KB code entry to 170 days cost ~213 XLM (the first create_dao paid ~223 XLM, the second 2.5 XLM).
-// OPT-IN: set EXTEND_CODE_TTL_DAYS (max 170; the network caps entries at max_entry_ttl, ~180 days) to have
-// the platform operator pre-pay that rent here. Repeat before the code TTL runs out:
-// `stellar contract extend --wasm-hash <hash> --ledgers-to-extend <ledgers>`. Budget accordingly:
-// total rent scales with the sum of WASM sizes (~215 KB for all eight contracts).
-const CODE_TTL_DAYS = Number(process.env.EXTEND_CODE_TTL_DAYS || 0);
-const CODE_TTL_LEDGERS = Math.min(CODE_TTL_DAYS, 170) * 17280;
+// Contract code (WASM) entries are shared by every DAO deployed from the same hash. New code is born at the
+// network minimum (~7 days) and contracts only bump their own code a few days (`common::ttl`), so the
+// platform extends every uploaded hash to 170 days here (docs/STORAGE_DIET.md D28) and renews it with
+// `node scripts/renew-code-ttl.mjs <artifact>`. EXTEND_CODE_TTL_DAYS overrides the lifetime; values at or
+// below the 4 days contracts bump code to are refused (the next caller would pay again).
+const CODE_TTL_DAYS = parseCodeTtlDays(process.env.EXTEND_CODE_TTL_DAYS || DEFAULT_CODE_TTL_DAYS);
 
 function extendCodeTtl(label, hash) {
-  if (!(CODE_TTL_DAYS > 0)) {
-    console.log(`Skipping ${label} code TTL extension (set EXTEND_CODE_TTL_DAYS to pre-pay shared code rent)`);
-    return;
-  }
-  const result = runQuiet('stellar', [
-    'contract',
-    'extend',
-    '--wasm-hash',
-    hash,
-    '--ledgers-to-extend',
-    String(CODE_TTL_LEDGERS),
-    '--durability',
-    'persistent',
-    '--source-account',
-    identityName,
-    '--network',
-    networkName
-  ]);
-  if (result.ok) {
-    console.log(`Extended ${label} code TTL to ~${Math.min(CODE_TTL_DAYS, 170)} days (${hash.slice(0, 12)}...)`);
-  } else {
+  // Simulated first and stepped when one extension would come close to the u32 fee cap.
+  try {
+    const steps = extendWithinFeeCap(['--wasm-hash', hash], CODE_TTL_DAYS, {
+      network: networkName,
+      source: identityName
+    });
+    const detail = steps.map((s) => `${s.days} d for ${(Number(s.fee) / 1e7).toFixed(2)} XLM`).join(', then ');
+    console.log(`Extended ${label} code (${hash.slice(0, 12)}...): ${detail}`);
+  } catch (e) {
     console.warn(
-      `WARNING: could not extend ${label} code TTL: ${(result.stderr || result.stdout).trim().split('\n').slice(-2).join(' ')}\n` +
-        '  The contracts still work, but the first DAO creator will pay the code rent.'
+      `WARNING: could not extend ${label} code TTL: ${e.message.split('\n').slice(-2).join(' ')}\n` +
+        '  Re-run, or run scripts/renew-code-ttl.mjs: until then the code is at the network minimum.'
     );
   }
 }
@@ -294,8 +268,20 @@ function extendCodeTtl(label, hash) {
 // name/version for a hash can never be corrected. Verify before and after registering.
 function readImplementation(managerAddress, wasmHash) {
   const r = runQuiet('stellar', [
-    'contract', 'invoke', '--id', managerAddress, '--source-account', identityName,
-    '--network', networkName, '--send', 'no', '--', 'get_implementation', '--wasm_hash', wasmHash
+    'contract',
+    'invoke',
+    '--id',
+    managerAddress,
+    '--source-account',
+    identityName,
+    '--network',
+    networkName,
+    '--send',
+    'no',
+    '--',
+    'get_implementation',
+    '--wasm_hash',
+    wasmHash
   ]);
   if (!r.ok) return { ok: false };
   const out = (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, '').trim();
@@ -365,10 +351,29 @@ function registerImplementation(managerAddress, wasmHash, name, version) {
 // Registration does not move the "latest" pointer; select it explicitly (idempotent).
 function setLatestImplementation(managerAddress, wasmHash, name) {
   const r = runQuiet('stellar', [
-    'contract', 'invoke', '--id', managerAddress, '--source-account', identityName,
-    '--network', networkName, '--send', 'no', '--', 'get_latest_implementation', '--name', name
+    'contract',
+    'invoke',
+    '--id',
+    managerAddress,
+    '--source-account',
+    identityName,
+    '--network',
+    networkName,
+    '--send',
+    'no',
+    '--',
+    'get_latest_implementation',
+    '--name',
+    name
   ]);
-  const last = r.ok ? (r.stdout + r.stderr).replace(/\x1b\[[0-9;]*m/g, '').trim().split('\n').pop().trim() : 'null';
+  const last = r.ok
+    ? (r.stdout + r.stderr)
+        .replace(/\x1b\[[0-9;]*m/g, '')
+        .trim()
+        .split('\n')
+        .pop()
+        .trim()
+    : 'null';
   if (last !== 'null') {
     try {
       if (JSON.parse(last).wasm_hash === wasmHash) {
@@ -380,8 +385,20 @@ function setLatestImplementation(managerAddress, wasmHash, name) {
     }
   }
   const result = runQuiet('stellar', [
-    'contract', 'invoke', '--id', managerAddress, '--source-account', identityName,
-    '--network', networkName, '--', 'set_latest_implementation', '--name', name, '--wasm_hash', wasmHash
+    'contract',
+    'invoke',
+    '--id',
+    managerAddress,
+    '--source-account',
+    identityName,
+    '--network',
+    networkName,
+    '--',
+    'set_latest_implementation',
+    '--name',
+    name,
+    '--wasm_hash',
+    wasmHash
   ]);
   if (!result.ok) {
     console.error('set_latest_implementation output:', result.stdout);
@@ -394,9 +411,20 @@ function setLatestImplementation(managerAddress, wasmHash, name) {
 // NOTE: security decisions must use get_implementation(hash) and the Current* hashes,
 // never get_latest_implementation(name): it returns None once the selected hash is revoked.
 
+// The hashes create_dao and create_module deploy from (`CurrentImplementations`; `claims` is the
+// per-DAO ClaimMinter module, docs/designs/membership-models.md §3).
 function setCurrentImplementations(managerAddress, implementations) {
   console.log('Setting current implementations...');
 
+  const current = {
+    token: implementations.token,
+    metadata: implementations.metadata,
+    auction: implementations.auction,
+    governor: implementations.governor,
+    treasury: implementations.treasury,
+    marketplace: implementations.marketplace,
+    claims: implementations.minter
+  };
   const result = runQuiet('stellar', [
     'contract',
     'invoke',
@@ -408,18 +436,8 @@ function setCurrentImplementations(managerAddress, implementations) {
     networkName,
     '--',
     'set_current_implementations',
-    '--token',
-    implementations.token,
-    '--metadata',
-    implementations.metadata,
-    '--auction',
-    implementations.auction,
-    '--governor',
-    implementations.governor,
-    '--treasury',
-    implementations.treasury,
-    '--marketplace',
-    implementations.marketplace
+    '--current',
+    JSON.stringify(current)
   ]);
 
   if (!result.ok) {
@@ -431,49 +449,13 @@ function setCurrentImplementations(managerAddress, implementations) {
   console.log('Current implementations set successfully');
 }
 
-function viewManager(managerAddress, method) {
-  const result = runQuiet('stellar', [
-    'contract', 'invoke', '--id', managerAddress, '--source-account', identityName,
-    '--network', networkName, '--send', 'no', '--', method
-  ]);
-  if (!result.ok) throw new Error(`Failed to query Manager ${method}: ${result.stderr || result.stdout}`);
-  return (result.stdout + result.stderr).replace(/\x1b\[[0-9;]*m/g, '').trim().split('\n').pop().replace(/"/g, '');
-}
-
-// Admin-only. launch_dao(enable_minter = true) grants mint authority to this address; without it
-// launch fails with PlatformMinterNotSet (1008). Idempotent: skipped when already registered.
-function setPlatformMinter(managerAddress, minterAddress) {
-  const current = viewManager(managerAddress, 'get_platform_minter');
-  if (current === minterAddress) {
-    console.log(`Platform minter already set: ${minterAddress}`);
-    return;
-  }
-  console.log(`Setting platform minter ${minterAddress}...`);
-  const result = runQuiet('stellar', [
-    'contract', 'invoke', '--id', managerAddress, '--source-account', identityName,
-    '--network', networkName, '--', 'set_platform_minter', '--minter', minterAddress
-  ]);
-  if (!result.ok) {
-    console.error('set_platform_minter output:', result.stdout);
-    console.error('set_platform_minter error:', result.stderr);
-    throw new Error('Failed to set platform minter');
-  }
-}
-
-async function writeDeployArtifact(
-  managerAddress,
-  implementations,
-  txMetadata,
-  minterAddress
-) {
+async function writeDeployArtifact(managerAddress, implementations, txMetadata) {
   if (!(await confirmOverwrite(deployArtifactPath))) {
     console.log(`Skipped writing ${deployArtifactPath}.`);
     return;
   }
 
-  const existingArtifact = existsSync(deployArtifactPath)
-    ? JSON.parse(readFileSync(deployArtifactPath, 'utf8'))
-    : null;
+  const existingArtifact = existsSync(deployArtifactPath) ? JSON.parse(readFileSync(deployArtifactPath, 'utf8')) : null;
   const managerTransaction = enrichTransactionMetadata(
     txMetadata ?? existingArtifact?.transactions?.manager,
     networkName
@@ -490,7 +472,7 @@ async function writeDeployArtifact(
     label: config.label,
     deploymentLedger: Number.isFinite(deploymentLedger)
       ? deploymentLedger
-      : existingArtifact?.deploymentLedger ?? null,
+      : (existingArtifact?.deploymentLedger ?? null),
     config: {
       label: config.label,
       adminAddress,
@@ -498,7 +480,6 @@ async function writeDeployArtifact(
       networkPassphrase
     },
     manager: managerAddress,
-    minter: minterAddress,
     implementations,
     versions,
     sourceCommit,
@@ -516,8 +497,9 @@ async function writeDeployArtifact(
 
 async function main() {
   // Sequence: build -> deploy Manager(admin, current_hash, version) -> upload + register all module
-  // implementations (+ Minter) -> set_current_implementations (six DAO modules) -> deploy shared Minter
-  // (no constructor) -> set_platform_minter. Each step is idempotent, so re-running resumes.
+  // implementations (the ClaimMinter as "ClaimMinter") -> extend all code to 170 days ->
+  // set_current_implementations. There is no platform Minter: every DAO gets its own ClaimMinter from
+  // create_dao / create_module. Each step is idempotent, so re-running resumes.
   // Build all deployable contracts with the real deployable build (spec shaking v2 on).
   // The legacy SOROBAN_SDK_BUILD_SYSTEM_SUPPORTS_SPEC_SHAKING_V2=0 build embeds every unused
   // library type: WASMs are 2-4x larger (token ~138 KB) and exceed the network's 131072-byte
@@ -530,11 +512,16 @@ async function main() {
   // Deploy Manager contract
   console.log('\n=== Deploying Manager Contract ===\n');
   const managerWasmHash = wasmHash('manager');
-  const managerDeploy = deployIfMissing(
-    'manager',
-    `dao-manager-${networkName}`,
-    ['--admin', adminAddress, '--current_hash', managerWasmHash, '--version', versions.manager]
-  );
+  const managerDeploy = deployIfMissing('manager', `dao-manager-${networkName}`, [
+    '--admin',
+    adminAddress,
+    '--current_hash',
+    managerWasmHash,
+    '--version',
+    versions.manager,
+    '--upgrade_delay',
+    String(upgradeDelay)
+  ]);
 
   console.log(`Manager deployed: ${managerDeploy.id}`);
 
@@ -558,34 +545,14 @@ async function main() {
   }
   registerImplementation(managerDeploy.id, implementations.manager, 'Manager', versions.manager);
   registerImplementation(managerDeploy.id, implementations.token, 'Token', versions.token);
-  registerImplementation(
-    managerDeploy.id,
-    implementations.metadata,
-    'Metadata',
-    versions.metadata
-  );
+  registerImplementation(managerDeploy.id, implementations.metadata, 'Metadata', versions.metadata);
   registerImplementation(managerDeploy.id, implementations.auction, 'Auction', versions.auction);
-  registerImplementation(
-    managerDeploy.id,
-    implementations.governor,
-    'Governor',
-    versions.governor
-  );
-  registerImplementation(
-    managerDeploy.id,
-    implementations.treasury,
-    'Treasury',
-    versions.treasury
-  );
-  registerImplementation(
-    managerDeploy.id,
-    implementations.marketplace,
-    'Marketplace',
-    versions.marketplace
-  );
-  registerImplementation(managerDeploy.id, implementations.minter, 'Minter', versions.minter);
+  registerImplementation(managerDeploy.id, implementations.governor, 'Governor', versions.governor);
+  registerImplementation(managerDeploy.id, implementations.treasury, 'Treasury', versions.treasury);
+  registerImplementation(managerDeploy.id, implementations.marketplace, 'Marketplace', versions.marketplace);
+  registerImplementation(managerDeploy.id, implementations.minter, 'ClaimMinter', versions.minter);
 
-  // Optionally pre-pay the shared contract-code rent (see extendCodeTtl): DAO creators then pay ~2.5 XLM, not ~223.
+  // Pre-pay the shared contract-code rent (see extendCodeTtl): callers never pay to extend shared code.
   console.log('\n=== Extending Shared Code TTL ===\n');
   for (const [label, hash] of Object.entries({
     Manager: implementations.manager,
@@ -595,7 +562,7 @@ async function main() {
     Governor: implementations.governor,
     Treasury: implementations.treasury,
     Marketplace: implementations.marketplace,
-    Minter: implementations.minter
+    ClaimMinter: implementations.minter
   })) {
     extendCodeTtl(label, hash);
   }
@@ -604,26 +571,11 @@ async function main() {
   console.log('\n=== Setting Current Implementations ===\n');
   setCurrentImplementations(managerDeploy.id, implementations);
 
-  // Deploy shared Minter instance
-  console.log('\n=== Deploying Shared Minter ===\n');
-  const minterDeploy = deployIfMissing('minter', 'shared-minter', []);
-  console.log(`Shared Minter deployed: ${minterDeploy.id}`);
-
-  // Register it as the Manager's platform minter (needed for launch_config.enable_minter).
-  console.log('\n=== Registering Platform Minter ===\n');
-  setPlatformMinter(managerDeploy.id, minterDeploy.id);
-
   // Write deployment artifact
-  await writeDeployArtifact(
-    managerDeploy.id,
-    implementations,
-    managerDeploy.txMetadata,
-    minterDeploy.id
-  );
+  await writeDeployArtifact(managerDeploy.id, implementations, managerDeploy.txMetadata);
 
   console.log(`\n=== Manager Deployment Complete ===`);
   console.log(`MANAGER=${managerDeploy.id}`);
-  console.log(`MINTER=${minterDeploy.id}`);
   console.log(`\nImplementations:`);
   console.log(`TOKEN_WASM=${implementations.token}`);
   console.log(`METADATA_WASM=${implementations.metadata}`);
@@ -631,7 +583,7 @@ async function main() {
   console.log(`GOVERNOR_WASM=${implementations.governor}`);
   console.log(`TREASURY_WASM=${implementations.treasury}`);
   console.log(`MARKETPLACE_WASM=${implementations.marketplace}`);
-  console.log(`MINTER_WASM=${implementations.minter}`);
+  console.log(`CLAIM_MINTER_WASM=${implementations.minter}`);
 }
 
 await main();

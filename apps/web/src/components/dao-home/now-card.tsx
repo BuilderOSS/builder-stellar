@@ -61,6 +61,7 @@ const card = sva({
 
 const big = css({ textStyle: 'title', fontSize: '1.25rem', color: 'ink', fontVariantNumeric: 'tabular-nums' });
 const label = css({ textStyle: 'caption', color: 'ink.muted' });
+const settleNote = css({ textStyle: 'caption', color: 'ink.muted', m: '0', maxW: '52ch' });
 const figures = css({ display: 'flex', flexWrap: 'wrap', gap: { base: '5', md: '8' }, py: '1' });
 
 function AuctionArt({ daoId, tokenId }: { daoId: string; tokenId: number }) {
@@ -189,24 +190,32 @@ export function NowCard({
         art={<AuctionArt daoId={daoId} tokenId={Number(live.token_id)} />}
         meta={
           <>
-            <Chip tone="live">{ended ? 'Auction ended' : 'Auction live'}</Chip>
+            <Chip tone={ended ? 'warning' : 'live'}>{ended ? 'Auction ended' : 'Auction live'}</Chip>
             {activeProposals ? <Chip>{activeProposals} open for voting</Chip> : null}
           </>
         }
         title={`${name} #${live.token_id}`}
         text={
-          <div className={figures}>
-            <div>
-              <div className={label}>{hasBid ? 'Top bid' : 'Starting at'}</div>
-              <div className={big}>
-                {formatAuctionAmount(hasBid ? live.highest_bid : auction?.config.reserve_price)} {assetCode}
+          <>
+            <div className={figures}>
+              <div>
+                <div className={label}>{hasBid ? (ended ? 'Winning bid' : 'Top bid') : 'Starting at'}</div>
+                <div className={big}>
+                  {formatAuctionAmount(hasBid ? live.highest_bid : auction?.config.reserve_price)} {assetCode}
+                </div>
+              </div>
+              <div>
+                <div className={label}>{ended ? 'Next step' : 'Ends in'}</div>
+                <div className={big}>{ended ? 'Waiting to settle' : <Countdown endsAt={endsAt} />}</div>
               </div>
             </div>
-            <div>
-              <div className={label}>{ended ? 'Ended' : 'Ends in'}</div>
-              <div className={big}>{ended ? 'Ready to settle' : <Countdown endsAt={endsAt} />}</div>
-            </div>
-          </div>
+            {ended ? (
+              <p className={settleNote}>
+                Anyone can settle. It sends the token to {hasBid ? 'the winner' : 'the treasury'} and starts the next
+                auction.
+              </p>
+            ) : null}
+          </>
         }
         action={
           <ButtonLink href={daoRoute(routeId, 'auctions')}>{ended ? 'Settle auction' : 'Place a bid'}</ButtonLink>

@@ -13,8 +13,16 @@ export type AdminAuthorityDraft = { authority: string; enabled: boolean };
 export type AdminValueDraft = { value: string };
 export type AdminReservePriceDraft = { reservePrice: string };
 export type AdminPaymentTokenDraft = { paymentToken: string };
-export type CreatePrimaryListingDraft = { price: string; expiresAt: string };
-export type CancelPrimaryListingDraft = { listingId: string };
+export type OpenPoolDraft = {
+  price: string;
+  asset: string;
+  size: string;
+  maxPerBuyer: string;
+  maxSoldPerPeriod: string;
+  periodHours: string;
+  expiresAt: string;
+};
+export type PoolIdDraft = { poolId: string };
 
 function ErrorText({ message }: { message?: string }) {
   return message ? <FieldHelperText tone="error">{message}</FieldHelperText> : null;
@@ -134,59 +142,100 @@ export function AdminPaymentTokenForm({
   );
 }
 
-export function CreatePrimaryListingForm({
+export function OpenPoolForm({
   value,
   onChange,
   disabled,
-  validationErrors
-}: ActionFormProps<CreatePrimaryListingDraft>) {
+  validationErrors,
+  network = getConfiguredAuctionNetwork()
+}: ActionFormProps<OpenPoolDraft>) {
   const fields = validationErrors && !validationErrors.valid ? validationErrors.fields : undefined;
+  const set = (patch: Partial<OpenPoolDraft>) => onChange({ ...value, ...patch });
   return (
     <Stack gap="2">
-      <FieldLabel htmlFor="primary-listing-price">Price (marketplace payment asset)</FieldLabel>
+      <FieldLabel htmlFor="pool-price">Price per token</FieldLabel>
       <Input
-        id="primary-listing-price"
+        id="pool-price"
         value={value.price}
-        onChange={(event) => onChange({ ...value, price: event.target.value })}
+        onChange={(event) => set({ price: event.target.value })}
         inputMode="decimal"
         placeholder="100"
         disabled={disabled}
       />
       <ErrorText message={fields?.price} />
-      <FieldLabel htmlFor="primary-listing-expires">Expires at</FieldLabel>
+      <AuctionPaymentTokenSelect
+        network={network}
+        value={value.asset}
+        onChange={(asset) => set({ asset })}
+        error={fields?.asset}
+        disabled={disabled}
+        id="pool-asset"
+      />
+      <FieldLabel htmlFor="pool-size">Tokens in the pool</FieldLabel>
       <Input
-        id="primary-listing-expires"
+        id="pool-size"
+        value={value.size}
+        onChange={(event) => set({ size: event.target.value })}
+        inputMode="numeric"
+        disabled={disabled}
+      />
+      <ErrorText message={fields?.size} />
+      <FieldLabel htmlFor="pool-per-buyer">Most one wallet can buy</FieldLabel>
+      <Input
+        id="pool-per-buyer"
+        value={value.maxPerBuyer}
+        onChange={(event) => set({ maxPerBuyer: event.target.value })}
+        inputMode="numeric"
+        disabled={disabled}
+      />
+      <ErrorText message={fields?.maxPerBuyer} />
+      <FieldLabel htmlFor="pool-rate">Most sales per period</FieldLabel>
+      <Input
+        id="pool-rate"
+        value={value.maxSoldPerPeriod}
+        onChange={(event) => set({ maxSoldPerPeriod: event.target.value })}
+        inputMode="numeric"
+        disabled={disabled}
+      />
+      <ErrorText message={fields?.maxSoldPerPeriod} />
+      <FieldLabel htmlFor="pool-period">Period (hours)</FieldLabel>
+      <Input
+        id="pool-period"
+        value={value.periodHours}
+        onChange={(event) => set({ periodHours: event.target.value })}
+        inputMode="numeric"
+        disabled={disabled}
+      />
+      <ErrorText message={fields?.periodHours} />
+      <FieldLabel htmlFor="pool-expires">Closes at</FieldLabel>
+      <Input
+        id="pool-expires"
         type="datetime-local"
         value={value.expiresAt}
-        onChange={(event) => onChange({ ...value, expiresAt: event.target.value })}
+        onChange={(event) => set({ expiresAt: event.target.value })}
         disabled={disabled}
       />
       <ErrorText message={fields?.expiresAt} />
       <FieldHelperText>
-        The buyer receives a newly minted token. The listing is priced in the marketplace payment asset at the time it
-        is created.
+        The pool mints its tokens into the marketplace and sells them at this price. Give the marketplace a mint
+        allowance of at least this many tokens earlier in the same proposal.
       </FieldHelperText>
     </Stack>
   );
 }
 
-export function CancelPrimaryListingForm({
-  value,
-  onChange,
-  disabled,
-  validationErrors
-}: ActionFormProps<CancelPrimaryListingDraft>) {
+export function PoolIdForm({ value, onChange, disabled, validationErrors }: ActionFormProps<PoolIdDraft>) {
   return (
     <Stack gap="2">
-      <FieldLabel htmlFor="primary-listing-id">Primary listing id</FieldLabel>
+      <FieldLabel htmlFor="pool-id">Pool</FieldLabel>
       <Input
-        id="primary-listing-id"
-        value={value.listingId}
-        onChange={(event) => onChange({ listingId: event.target.value })}
+        id="pool-id"
+        value={value.poolId}
+        onChange={(event) => onChange({ poolId: event.target.value })}
         inputMode="numeric"
         disabled={disabled}
       />
-      <ErrorText message={validationErrors && !validationErrors.valid ? validationErrors.fields?.value : undefined} />
+      <ErrorText message={validationErrors && !validationErrors.valid ? validationErrors.fields?.poolId : undefined} />
     </Stack>
   );
 }

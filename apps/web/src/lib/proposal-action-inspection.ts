@@ -2,6 +2,7 @@ import { scValToNative } from '@stellar/stellar-sdk';
 import { Buffer } from 'buffer';
 
 import type { UpgradeModule } from '@/lib/admin-module-versions';
+import { parseProfile } from '@/lib/dao-profile';
 import { moduleLabelInSentence } from '@/lib/module-updates';
 import { encodeSupportedCall, type ProposalEncodingContext } from '@/lib/proposal-supported-calls';
 
@@ -20,25 +21,22 @@ export function inspectProposalAdminCall(
   args: unknown[],
   config: ProposalEncodingContext
 ): ProposalCallInspection | null {
-  if (config.minterContractId && target === config.minterContractId) {
+  if (config.claimsContractId && target === config.claimsContractId && fn === 'open_list') {
     const values = encodeSupportedCall(target, fn, args, config).map(scValToNative);
+    const text = (value: unknown) =>
+      value instanceof Uint8Array
+        ? Buffer.from(value).toString('hex')
+        : JSON.stringify(value, (_, item) => (typeof item === 'bigint' ? item.toString() : item));
     return {
-      title:
-        fn === 'set_merkle_root'
-          ? 'Set Minter Merkle root'
-          : fn === 'set_allowlist'
-            ? 'Replace Minter allowlist'
-            : 'Minter batch allocation',
-      risk: 'High risk: changes token allocation. Root/list replacement starts a new round and permits repeat claims; batch mint is immediate on execution. Requires the current Token admin and Live/mint authority checks.',
+      title: 'Open a claim list',
+      risk: 'High risk: lets the listed wallets mint up to the list total, paying the list price. The claims module needs a mint allowance for it (granted earlier in the same proposal).',
       fields: [
-        { label: 'DAO Token', value: String(values[0]) },
-        ...values.slice(1).map((value, i) => ({
-          label: fn === 'set_merkle_root' ? 'Root (32 bytes)' : `Ordered allocation argument ${i + 1}`,
-          value:
-            value instanceof Uint8Array
-              ? Buffer.from(value).toString('hex')
-              : JSON.stringify(value, (_, item) => (typeof item === 'bigint' ? item.toString() : item))
-        }))
+        { label: 'Root (32 bytes)', value: text(values[0]) },
+        { label: 'Published claim list', value: text(values[1]) },
+        { label: 'Payment asset', value: text(values[2]) },
+        { label: 'Price per token (base units)', value: text(values[3]) },
+        { label: 'Closes at (unix seconds)', value: text(values[4]) },
+        { label: 'Most tokens', value: text(values[5]) }
       ]
     };
   }
@@ -48,7 +46,8 @@ export function inspectProposalAdminCall(
     ['auction', config.auctionContractId],
     ['treasury', config.treasuryContractId],
     ['marketplace', config.marketplaceContractId],
-    ['metadata', config.metadataContractId]
+    ['metadata', config.metadataContractId],
+    ['claims', config.claimsContractId]
   ];
   const moduleName = modules.find(([, address]) => address && address === target)?.[0];
   if (config.treasuryContractId && target === config.treasuryContractId && fn === 'authorize') {
@@ -106,11 +105,22 @@ export function inspectProposalAdminCall(
       ]
     };
   }
+  if (fn === 'update_profile') {
+    const [expectedSeq, raw] = encoded.map(scValToNative) as [number, string];
+    const profile = parseProfile(raw);
+    return {
+      title: 'Update the community profile',
+      risk: 'Replaces the community description, links and image. It applies only if no other profile update lands first (revision check). Authority is Metadata’s own admin (the Treasury after launch).',
+      fields: [
+        { label: 'Replaces revision', value: String(expectedSeq) },
+        { label: 'Description', value: profile.description },
+        { label: 'Links', value: profile.links.map((link) => `${link.label}: ${link.url}`).join('\n') || 'None' },
+        { label: 'Image', value: profile.image || 'None' }
+      ]
+    };
+  }
   const labels: Record<string, string> = {
-    update_renderer_base: 'Artwork renderer',
-    update_description: 'Collection description',
-    update_project_uri: 'Project URI',
-    update_contract_image: 'Collection image'
+    update_renderer_base: 'Artwork renderer'
   };
   if (!labels[fn]) return null;
   return {

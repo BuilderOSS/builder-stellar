@@ -1,4 +1,4 @@
-import {Address} from '@stellar/stellar-sdk';
+import {Address, xdr} from '@stellar/stellar-sdk';
 
     /**
  * Marketplace errors (block `common::error::codes::MARKETPLACE`).
@@ -71,7 +71,115 @@ export const MarketplaceError = {
   /**
    * Comment body exceeds `MAX_COMMENT_LENGTH`
    */
-  7717 : { message: "CommentTooLong" }
+  7717 : { message: "CommentTooLong" },
+  /**
+   * The Marketplace's allowance not reserved by open pools is below the
+   * pool size (grant the allowance first)
+   */
+  7718 : { message: "AllowanceNotReserved" },
+  /**
+   * No such pool
+   */
+  7719 : { message: "PoolNotFound" },
+  /**
+   * The pool is closed or past its expiry
+   */
+  7720 : { message: "PoolClosed" },
+  /**
+   * The buyer reached the pool's `max_per_buyer`
+   */
+  7721 : { message: "BuyerLimitReached" },
+  /**
+   * The pool sold `max_sold_per_period` this period
+   */
+  7722 : { message: "PoolRateLimited" },
+  /**
+   * The token is not in that pool stock page (sold, or another page)
+   */
+  7723 : { message: "NotInPool" },
+  /**
+   * `MAX_OPEN_POOLS` pools are open (close and sweep one first)
+   */
+  7724 : { message: "TooManyPools" },
+  /**
+   * `sweep_pool` on a pool that is still open
+   */
+  7725 : { message: "PoolOpen" },
+  /**
+   * A pool size, buyer cap, sales rate or period of zero
+   */
+  7726 : { message: "InvalidPool" },
+  /**
+   * The pool has stocked its whole size
+   */
+  7727 : { message: "PoolFullyStocked" }
+}
+
+/**
+ * `count` unsold tokens returned to the Treasury; `pages_left` 0 when done.
+ */
+export interface PoolSweptEvent {
+  name: "PoolSwept";
+  data: {
+    pool_id: number;
+    count?: number;
+    pages_left?: number;
+  };
+}
+
+/**
+ * A pool closed; `released` is the unstocked allowance given back.
+ */
+export interface PoolClosedEvent {
+  name: "PoolClosed";
+  data: {
+    pool_id: number;
+    released?: number;
+  };
+}
+
+/**
+ * A quick-buy pool opened (by proposal).
+ */
+export interface PoolOpenedEvent {
+  name: "PoolOpened";
+  data: {
+    pool_id: number;
+    price?: bigint;
+    asset?: string;
+    expires_at?: bigint;
+    size?: number;
+    max_per_buyer?: number;
+    max_sold_per_period?: number;
+    period_secs?: bigint;
+  };
+}
+
+/**
+ * A buyer picked `token_id` from a pool.
+ */
+export interface PoolPurchasedEvent {
+  name: "PoolPurchased";
+  data: {
+    pool_id: number;
+    buyer: string;
+    token_id?: number;
+    price?: bigint;
+    asset?: string;
+  };
+}
+
+/**
+ * `count` tokens from `first_token_id` minted into the pool's custody.
+ */
+export interface PoolRestockedEvent {
+  name: "PoolRestocked";
+  data: {
+    pool_id: number;
+    first_token_id?: number;
+    count?: number;
+    stocked?: number;
+  };
 }
 
 /**
@@ -187,29 +295,6 @@ export interface SecondaryFeeUpdatedEvent {
 }
 
 /**
- * Event: PrimaryListingCreated
- */
-export interface PrimaryListingCreatedEvent {
-  name: "PrimaryListingCreated";
-  data: {
-    listing_id: bigint;
-    price?: bigint;
-    expires_at?: bigint;
-    payment_asset?: string;
-  };
-}
-
-/**
- * Event: PrimaryListingExpired
- */
-export interface PrimaryListingExpiredEvent {
-  name: "PrimaryListingExpired";
-  data: {
-    listing_id: bigint;
-  };
-}
-
-/**
  * Event: MarketplaceInitialized
  */
 export interface MarketplaceInitializedEvent {
@@ -219,44 +304,7 @@ export interface MarketplaceInitializedEvent {
     admin: string;
     treasury?: string;
     payment_asset?: string;
-    version?: string;
     default_secondary_fee_bps?: number;
-  };
-}
-
-/**
- * Event: PrimaryListingCancelled
- */
-export interface PrimaryListingCancelledEvent {
-  name: "PrimaryListingCancelled";
-  data: {
-    listing_id: bigint;
-  };
-}
-
-/**
- * A comment on a primary listing. Event-only: the body is never stored.
- */
-export interface PrimaryListingCommentedEvent {
-  name: "PrimaryListingCommented";
-  data: {
-    listing_id: bigint;
-    author: string;
-    body?: string;
-  };
-}
-
-/**
- * Event: PrimaryListingPurchased
- */
-export interface PrimaryListingPurchasedEvent {
-  name: "PrimaryListingPurchased";
-  data: {
-    listing_id: bigint;
-    buyer: string;
-    token_id?: number;
-    price?: bigint;
-    payment_asset?: string;
   };
 }
 
@@ -276,6 +324,35 @@ export interface SecondaryListingCreatedEvent {
 }
 
 /**
+ * A quick-buy pool: stock minted into the Marketplace's custody and sold at
+ * one price, with a per-buyer cap and a pool-wide sales rate
+ * (docs/designs/membership-models.md §4).
+ */
+export interface Pool {
+  asset: string;
+  closed: boolean;
+  /**
+   * Sales and restocks stop at this ledger timestamp.
+   */
+  expires_at: bigint;
+  max_per_buyer: number;
+  /**
+   * Most sales per `period_secs`, pool-wide.
+   */
+  max_sold_per_period: number;
+  period_secs: bigint;
+  period_start: bigint;
+  price: bigint;
+  /**
+   * Tokens the pool may stock in all (its allowance reservation).
+   */
+  size: number;
+  sold: number;
+  sold_in_period: number;
+  stocked: number;
+}
+
+/**
  * Secondary (escrowed-token) listing, keyed by token id.
  */
 export interface Listing {
@@ -290,15 +367,18 @@ export interface Listing {
 }
 
 /**
- * Primary sale listing, keyed by listing id. No token exists until bought.
+ * Instance bookkeeping for an open pool (opened, not yet swept empty).
  */
-export interface PrimaryListing {
-  expires_at: bigint;
+export interface PoolSlot {
   /**
-   * Asset captured at creation time.
+   * Stock pages written, `PoolStock(pool_id, 0..pages)`.
    */
-  payment_asset: string;
-  price: bigint;
+  pages: number;
+  pool_id: number;
+  /**
+   * The pool's share of the Marketplace's allowance not yet minted.
+   */
+  unstocked: number;
 }
 
 /**
@@ -367,7 +447,7 @@ export const CommonError = {
    */
   7008 : { message: "AdminNotSet" },
   /**
-   * `CurrentVersion` missing from storage.
+   * The Manager's own `CurrentManagerVersion` missing from storage.
    */
   7009 : { message: "VersionNotSet" },
   /**
@@ -386,6 +466,33 @@ export const CommonError = {
    * `StorageVersion` missing from storage.
    */
   7013 : { message: "StorageVersionNotSet" }
+}
+
+/**
+ * One page of `DaoModule::renewal_keys`.
+ */
+export interface RenewalPage {
+  /**
+   * Asset contracts (the DAO token included) whose `Balance(module)` entry
+   * the module holds. Reported on the first page; later pages may repeat
+   * or omit them.
+   */
+  assets: Array<string>;
+  /**
+   * `(key, persistent)` for each storage entry the module asks the sweep
+   * to keep alive. `key` is the exact `Val` the module stores under,
+   * already namespaced (`crate::ns`), so the sweep builds
+   * `LedgerKey::ContractData { contract: module, key, durability }` from it
+   * directly; `persistent` is false for temporary entries. Instance entries
+   * are not listed: the sweep renews every module's instance. A key may name
+   * an entry that does not exist (a listing slot nobody used); the sweep
+   * renews only what it finds.
+   */
+  keys: Array<[any, boolean]>;
+  /**
+   * Cursor of the next page, `None` on the last one.
+   */
+  next_cursor: number | null;
 }
 
 /**
@@ -410,15 +517,5 @@ export interface UpgradedEvent {
     version?: string;
   };
 }
-
-/**
- * Emitted by `sync_version`.
- */
-export interface VersionSyncedEvent {
-  name: "VersionSynced";
-  data: {
-    version?: string;
-  };
-}
-    export type ContractEvent = ListingExpiredEvent | ListingCancelledEvent | ListingCommentedEvent | ListingPurchasedEvent | MarketplacePausedEvent | MarketplaceLaunchedEvent | MarketplaceUnpausedEvent | PaymentAssetUpdatedEvent | SecondaryFeeUpdatedEvent | PrimaryListingCreatedEvent | PrimaryListingExpiredEvent | MarketplaceInitializedEvent | PrimaryListingCancelledEvent | PrimaryListingCommentedEvent | PrimaryListingPurchasedEvent | SecondaryListingCreatedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VersionSyncedEvent;
+    export type ContractEvent = PoolSweptEvent | PoolClosedEvent | PoolOpenedEvent | PoolPurchasedEvent | PoolRestockedEvent | ListingExpiredEvent | ListingCancelledEvent | ListingCommentedEvent | ListingPurchasedEvent | MarketplacePausedEvent | MarketplaceLaunchedEvent | MarketplaceUnpausedEvent | PaymentAssetUpdatedEvent | SecondaryFeeUpdatedEvent | MarketplaceInitializedEvent | SecondaryListingCreatedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent;
     

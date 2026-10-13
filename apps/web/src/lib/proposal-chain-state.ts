@@ -1,35 +1,39 @@
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
-import { Address, scValToNative, xdr } from '@stellar/stellar-sdk';
+import { Address, xdr } from '@stellar/stellar-sdk';
 import { Server } from '@stellar/stellar-sdk/rpc';
 
+import { decodeStoredProposal } from '@/lib/chain-reads/proposal-core';
 import { type DaoNetworkConfig, readSource } from '@/lib/dao-config';
 import { proposalIdToBuffer } from '@/lib/proposal-id';
+import { namespacedKey } from '@/lib/storage-key';
 
 export const PROPOSAL_EXPIRATION_SECONDS = 1_209_600;
 
 export function proposalCoreKey(governor: string, proposalId: string) {
-  // contracts/governor/src/storage.rs: GovernorKey::Proposal(BytesN<32>).
+  // contracts/governor/src/storage.rs: common::ns(GovernorKey::ProposalTime(BytesN<32>)).
   return xdr.LedgerKey.contractData(
     new xdr.LedgerKeyContractData({
       contract: new Address(governor).toScAddress(),
-      key: xdr.ScVal.scvVec([xdr.ScVal.scvSymbol('Proposal'), xdr.ScVal.scvBytes(proposalIdToBuffer(proposalId))]),
+      key: namespacedKey('ProposalTime', xdr.ScVal.scvBytes(proposalIdToBuffer(proposalId))),
       durability: xdr.ContractDataDurability.persistent
     })
   );
 }
 
+/**
+ * The stored proposal core. `quorum` is the value the contract judges the
+ * proposal against (fixed at creation, D33); never recompute it from
+ * `governor.quorum(snapshot)`, which reads history the sweep no longer keeps
+ * and can differ from the stored value (tokens minted in the creation ledger).
+ */
 export function decodeProposalCore(value: xdr.ScVal) {
-  const core = scValToNative(value);
-  const seconds = (key: string) => {
-    const number = Number(core?.[key]);
-    if (!Number.isSafeInteger(number) || number < 0) throw new Error(`Invalid proposal ${key}.`);
-    return number;
-  };
+  const stored = decodeStoredProposal(value);
   return {
-    voteStart: seconds('vote_start'),
-    voteEnd: seconds('vote_end'),
-    snapshot: seconds('vote_snapshot'),
-    eta: seconds('eta')
+    voteStart: stored.voteStart,
+    voteEnd: stored.voteEnd,
+    snapshot: stored.voteSnapshot,
+    eta: stored.eta,
+    quorum: stored.quorum.toString()
   };
 }
 
@@ -53,20 +57,14 @@ export async function readProposalChainState(config: DaoNetworkConfig, proposalI
     })
   ]);
   const snapshotValue = snapshot.status === 'fulfilled' ? snapshot.value.result : null;
-  let quorumVotes: string | null = null;
-  if (snapshotValue !== null) {
-    try {
-      quorumVotes = (await client.quorum({ ledger: snapshotValue })).result.toString();
-    } catch {
-      /* optional */
-    }
-  }
+  const coreValue = core.status === 'fulfilled' ? core.value : null;
   return {
     state: state.status === 'fulfilled' ? state.value.result : null,
     stateSource: state.status === 'fulfilled' ? ('chain' as const) : ('indexed' as const),
     deadline: deadline.status === 'fulfilled' ? deadline.value.result : null,
     snapshot: snapshotValue,
-    core: core.status === 'fulfilled' ? core.value : null,
-    quorumVotes
+    core: coreValue,
+    /** The quorum the contract enforces, from the stored core; null when the core could not be read. */
+    quorumVotes: coreValue?.quorum ?? null
   };
 }

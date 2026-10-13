@@ -31,9 +31,22 @@ impl DaoTreasuryContract {
         if treasury != e.current_contract_address() {
             panic_with_error!(e, TreasuryError::TreasuryMismatch);
         }
-        common::admin::handoff(e, &treasury);
+        common::admin::handoff_once(e, &treasury);
         common::ttl::extend_instance(e);
         emit_launched(e, &treasury);
+    }
+
+    /// Manager-only early handoff (`manager.open_assurance`): the admin
+    /// becomes the Treasury itself and the contract stays in Setup, so its
+    /// setup-only calls are frozen until launch.
+    pub fn handoff(e: &Env, treasury: Address) {
+        Self::manager(e).require_auth();
+        common::lifecycle::require_setup(e);
+        if treasury != e.current_contract_address() {
+            panic_with_error!(e, TreasuryError::TreasuryMismatch);
+        }
+        common::admin::handoff_once(e, &treasury);
+        common::ttl::extend_instance(e);
     }
 
     /// Initializes the treasury.
@@ -48,16 +61,17 @@ impl DaoTreasuryContract {
         governor: Address,
         manager: Address,
         current_hash: BytesN<32>,
-        version: String,
     ) {
         common::admin::init(e, &admin);
         e.storage()
             .instance()
-            .set(&TreasuryKey::Governor, &governor);
-        e.storage().instance().set(&TreasuryKey::Manager, &manager);
-        common::upgrade::init(e, &current_hash, &version, STORAGE_VERSION);
+            .set(&common::ns(e, TreasuryKey::Governor), &governor);
+        e.storage()
+            .instance()
+            .set(&common::ns(e, TreasuryKey::Manager), &manager);
+        common::upgrade::init(e, &current_hash, STORAGE_VERSION);
 
-        emit_treasury_initialized(e, &admin, &governor, &version);
+        emit_treasury_initialized(e, &admin, &governor);
     }
 
     /// Setup-phase upgrade by the launch admin. After launch the admin is the
@@ -75,14 +89,8 @@ impl DaoTreasuryContract {
         Self::do_migrate(e);
     }
 
-    /// Setup-phase only in practice, see `upgrade`.
-    pub fn sync_version(e: &Env) {
-        common::admin::require_admin(e);
-        Self::do_sync_version(e);
-    }
-
     pub fn version(e: &Env) -> String {
-        common::upgrade::version(e)
+        common::upgrade::version(e, &Self::manager(e))
     }
 
     pub fn wasm_hash(e: &Env) -> BytesN<32> {
@@ -114,7 +122,9 @@ impl DaoTreasuryContract {
     pub fn governor(e: &Env) -> Address {
         common::error::require(
             e,
-            e.storage().instance().get(&TreasuryKey::Governor),
+            e.storage()
+                .instance()
+                .get(&common::ns(e, TreasuryKey::Governor)),
             common::CommonError::GovernorNotSet,
         )
     }
@@ -217,7 +227,9 @@ impl DaoTreasuryContract {
     fn manager(e: &Env) -> Address {
         common::error::require(
             e,
-            e.storage().instance().get(&TreasuryKey::Manager),
+            e.storage()
+                .instance()
+                .get(&common::ns(e, TreasuryKey::Manager)),
             common::CommonError::ManagerNotSet,
         )
     }
@@ -228,10 +240,6 @@ impl DaoTreasuryContract {
 
     fn do_migrate(e: &Env) {
         common::upgrade::migrate(e, STORAGE_VERSION);
-    }
-
-    fn do_sync_version(e: &Env) {
-        common::upgrade::sync_version(e, &Self::manager(e));
     }
 
     /// Allowlisted calls a proposal may aim at the Treasury itself. Authorized
@@ -249,11 +257,6 @@ impl DaoTreasuryContract {
                 panic_with_error!(e, TreasuryError::InvalidSelfCallArgs);
             }
             Self::do_migrate(e);
-        } else if *function == Symbol::new(e, "sync_version") {
-            if !args.is_empty() {
-                panic_with_error!(e, TreasuryError::InvalidSelfCallArgs);
-            }
-            Self::do_sync_version(e);
         } else {
             panic_with_error!(e, TreasuryError::UnknownSelfCall);
         }

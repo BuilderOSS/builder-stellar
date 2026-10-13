@@ -63,7 +63,6 @@ export interface TreasuryInitializedEvent {
   data: {
     admin: string;
     governor?: string;
-    version?: string;
   };
 }
 
@@ -137,7 +136,7 @@ export const CommonError = {
    */
   7008 : { message: "AdminNotSet" },
   /**
-   * `CurrentVersion` missing from storage.
+   * The Manager's own `CurrentManagerVersion` missing from storage.
    */
   7009 : { message: "VersionNotSet" },
   /**
@@ -180,15 +179,5 @@ export interface UpgradedEvent {
     version?: string;
   };
 }
-
-/**
- * Emitted by `sync_version`.
- */
-export interface VersionSyncedEvent {
-  name: "VersionSynced";
-  data: {
-    version?: string;
-  };
-}
-    export type ContractEvent = ExecuteEvent | TreasuryLaunchedEvent | TreasuryInitializedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent | VersionSyncedEvent;
+    export type ContractEvent = ExecuteEvent | TreasuryLaunchedEvent | TreasuryInitializedEvent | AdminChangedEvent | MigratedEvent | UpgradedEvent;
     

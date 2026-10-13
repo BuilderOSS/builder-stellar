@@ -29,7 +29,7 @@ import {
 import { getNetworkConfig } from '@/config/networks';
 import { useDaoContext } from '@/contexts/dao-context';
 import { relativeTime, shortAddress } from '@/lib/activity-feed';
-import { getTreasuryAssets } from '@/lib/assets-config';
+import { paymentAssetCode } from '@/lib/assets-config';
 import { prepareBuyerAction, prepareBuyerRefund } from '@/lib/auction-history/actions';
 import { auctionQueryKey, useBuyerRefund, useCurrentAuction } from '@/lib/auction-history/hooks';
 import {
@@ -43,6 +43,7 @@ import {
 import { commentBytes, MAX_COMMENT_BYTES, toOneLine } from '@/lib/comments';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { daoRoute } from '@/lib/dao-routes';
+import { restoreArchivedState } from '@/lib/restore-archived-client';
 import { waitForConfirmation } from '@/lib/transaction-confirmation';
 import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { readSigningWallet, signWithWallet } from '@/lib/wallet-sign';
@@ -106,9 +107,8 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
   const mounted = useRef(true);
   const state = auctionBuyerState(config, data, now);
   const auction = data?.auction;
-  const asset = getTreasuryAssets(config.name).find((item) => item.contractId === data?.config.payment_token);
   // A custom payment asset has no known code; never show "SAC" to members.
-  const paymentToken = asset?.code ?? 'tokens';
+  const paymentToken = paymentAssetCode(config.name, data?.config.payment_token) ?? 'tokens';
   const method = data ? settlementMethod(data, now) : null;
   const canSettle = method && !['disabled', 'setup', 'loading'].includes(state);
   const walletReady = Boolean(
@@ -164,6 +164,7 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
         networkPassphrase: config.passphrase,
         publicKey: bidder,
         allowHttp: config.name === 'local',
+        ...restoreArchivedState,
         signTransaction: async (xdr, opts) => {
           await assertWallet();
           if (opts?.networkPassphrase && opts.networkPassphrase !== config.passphrase)
@@ -212,7 +213,7 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
     state === 'active' ? (
       <Chip tone="live">Live</Chip>
     ) : state === 'expired' ? (
-      <Chip tone="warning">Ended · ready to settle</Chip>
+      <Chip tone="warning">Auction ended</Chip>
     ) : state === 'paused' ? (
       <Chip tone="warning">Paused</Chip>
     ) : state === 'settled' ? (
@@ -422,7 +423,7 @@ function AuctionBuyer({ config, daoId }: { config: DaoNetworkConfig; daoId: stri
             {state === 'paused' || state === 'expired' ? (
               <Callout
                 title={state === 'paused' ? 'Bidding is paused' : 'Bidding has ended'}
-                description={`${auction.highest_bidder ? 'Settling sends the token to the winner and the bid to the treasury.' : 'No one bid, so settling sends the token to the treasury. It is not burned.'} ${data.paused ? 'Because auctions are paused, no new auction starts.' : 'It also starts the next auction.'}`}
+                description={`${state === 'expired' ? 'Anyone can settle it. ' : ''}${auction.highest_bidder ? 'Settling sends the token to the winner and the bid to the treasury.' : 'No one bid, so settling sends the token to the treasury. It is not burned.'} ${data.paused ? 'Because auctions are paused, no new auction starts.' : 'It also starts the next auction.'}`}
               />
             ) : null}
             {canSettle ? (

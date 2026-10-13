@@ -1,8 +1,13 @@
+DROP VIEW IF EXISTS token.delegates;
+DROP VIEW IF EXISTS token.managed_transfers;
+DROP VIEW IF EXISTS token.transfer_agents;
+DROP VIEW IF EXISTS token.settings;
+DROP VIEW IF EXISTS token.operator_approvals;
+DROP VIEW IF EXISTS token.approvals;
 DROP VIEW IF EXISTS token.supply;
+DROP VIEW IF EXISTS token.modules;
+DROP VIEW IF EXISTS token.mint_allowances;
 DROP VIEW IF EXISTS token.members;
-DROP VIEW IF EXISTS token.mint_authorities;
-DROP VIEW IF EXISTS token.mint_authority_history;
-DROP VIEW IF EXISTS token.delegations;
+DROP VIEW IF EXISTS token.delegate_state;
 DROP VIEW IF EXISTS token.inventory;
-DROP VIEW IF EXISTS token.mints;
 DROP VIEW IF EXISTS token.transfers;

@@ -1,8 +1,9 @@
 //! Event emission functions for the Manager contract.
 
-use soroban_sdk::{contractevent, Address, BytesN, Env, String};
+use common::modules::ModuleEntry;
+use soroban_sdk::{contractevent, Address, BytesN, Env, String, Symbol, Vec};
 
-use crate::storage::{DaoAddresses, DaoWasmHashes};
+use crate::storage::{CurrentImplementations, DaoAddresses, DaoWasmHashes};
 
 #[contractevent]
 pub struct ManagerInitialized {
@@ -26,12 +27,6 @@ pub struct AdminChanged {
     pub old_admin: Address,
     #[topic]
     pub new_admin: Address,
-}
-
-#[contractevent]
-pub struct PlatformMinterSet {
-    #[topic]
-    pub minter: Address,
 }
 
 #[contractevent]
@@ -118,7 +113,44 @@ pub struct DaoLaunched {
     pub modules: DaoAddresses,
     pub launch_auction: bool,
     pub launch_marketplace: bool,
-    pub enable_minter: bool,
+    /// The registered modules at launch (the Token's registry): the
+    /// indexer knows the launch set without the Token's `ModuleRegistered`.
+    pub registry: Vec<ModuleEntry>,
+}
+
+/// Emitted by `open_assurance`: the drive's list, its deadline and the
+/// launch config every launch path will use. The slug is reserved
+/// (`SlugClaimed`) in the same call.
+#[contractevent]
+pub struct AssuranceOpened {
+    #[topic]
+    pub token_address: Address,
+    pub claim_minter: Address,
+    pub list_id: u32,
+    pub deadline: u64,
+    pub launch_auction: bool,
+    pub launch_marketplace: bool,
+}
+
+/// Emitted by `release_slug`: a failed drive's reserved slug is free again.
+#[contractevent]
+pub struct SlugReleased {
+    #[topic]
+    pub token_address: Address,
+    #[topic]
+    pub slug: String,
+}
+
+/// Emitted by `create_module`: the `n`th module of `kind` for the DAO,
+/// at `predict_module_address(token, kind, n)`.
+#[contractevent]
+pub struct ModuleCreated {
+    #[topic]
+    pub token_address: Address,
+    #[topic]
+    pub kind: Symbol,
+    pub n: u32,
+    pub address: Address,
 }
 #[contractevent]
 pub struct CurrentImplementationsUpdated {
@@ -128,6 +160,7 @@ pub struct CurrentImplementationsUpdated {
     pub governor: BytesN<32>,
     pub treasury: BytesN<32>,
     pub marketplace: BytesN<32>,
+    pub claims: BytesN<32>,
 }
 #[contractevent]
 pub struct ManagerUpgraded {
@@ -284,7 +317,7 @@ pub fn emit_dao_launched(
     modules: &DaoAddresses,
     launch_auction: bool,
     launch_marketplace: bool,
-    enable_minter: bool,
+    registry: &Vec<ModuleEntry>,
 ) {
     DaoLaunched {
         token_address: token_address.clone(),
@@ -292,7 +325,23 @@ pub fn emit_dao_launched(
         modules: modules.clone(),
         launch_auction,
         launch_marketplace,
-        enable_minter,
+        registry: registry.clone(),
+    }
+    .publish(env);
+}
+
+pub fn emit_module_created(
+    env: &Env,
+    token_address: &Address,
+    kind: &Symbol,
+    n: u32,
+    address: &Address,
+) {
+    ModuleCreated {
+        token_address: token_address.clone(),
+        kind: kind.clone(),
+        n,
+        address: address.clone(),
     }
     .publish(env);
 }
@@ -302,22 +351,15 @@ pub fn emit_dao_launched(
 // ============================================================================
 
 /// Emitted when current implementation WASMs are updated.
-pub fn emit_current_implementations_updated(
-    env: &Env,
-    token: &BytesN<32>,
-    metadata: &BytesN<32>,
-    auction: &BytesN<32>,
-    governor: &BytesN<32>,
-    treasury: &BytesN<32>,
-    marketplace: &BytesN<32>,
-) {
+pub fn emit_current_implementations_updated(env: &Env, current: &CurrentImplementations) {
     CurrentImplementationsUpdated {
-        token: token.clone(),
-        metadata: metadata.clone(),
-        auction: auction.clone(),
-        governor: governor.clone(),
-        treasury: treasury.clone(),
-        marketplace: marketplace.clone(),
+        token: current.token.clone(),
+        metadata: current.metadata.clone(),
+        auction: current.auction.clone(),
+        governor: current.governor.clone(),
+        treasury: current.treasury.clone(),
+        marketplace: current.marketplace.clone(),
+        claims: current.claims.clone(),
     }
     .publish(env);
 }
@@ -379,14 +421,6 @@ pub fn emit_admin_changed(env: &Env, old_admin: &Address, new_admin: &Address) {
     AdminChanged {
         old_admin: old_admin.clone(),
         new_admin: new_admin.clone(),
-    }
-    .publish(env);
-}
-
-/// Emitted when the platform minter is set.
-pub fn emit_platform_minter_set(env: &Env, minter: &Address) {
-    PlatformMinterSet {
-        minter: minter.clone(),
     }
     .publish(env);
 }

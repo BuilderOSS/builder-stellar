@@ -3,6 +3,7 @@
 import useSWR from 'swr';
 
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
+import { restoreFromBody } from '@/lib/restore-required';
 
 import type { DirectoryMember, DirectoryPage, DirectoryProfile, OwnedToken } from './types';
 
@@ -12,7 +13,7 @@ export function directoryKey(daoId: string, resource: string, value: string | nu
 export async function directoryFetch<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { ...init, cache: 'no-store' });
   const body = await response.json();
-  if (!response.ok) throw new Error(body.message || 'This data is unavailable. Try again.');
+  if (!response.ok) throw restoreFromBody(body) ?? new Error(body.message || 'This data is unavailable. Try again.');
   return body as T;
 }
 export function useDirectoryMembers(daoId: string, page: number) {

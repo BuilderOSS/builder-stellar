@@ -2,9 +2,13 @@ import { configuredCreationNetwork, type DraftConfiguration } from './create-dao
 
 type Auction = DraftConfiguration['auction'];
 type Marketplace = DraftConfiguration['marketplace'];
+type TokenSettings = DraftConfiguration['tokenSettings'];
 type Governance = DraftConfiguration['governance'];
 
-/** How people join a community. A type only switches auctions and the market on or off. */
+/**
+ * How people join a community. A type decides which modules the community is created with:
+ * the auction, the marketplace (resale and quick-buy pools) and, for invites, a claims module.
+ */
 export const MEMBERSHIP_TYPES = [
   {
     id: 'auction',
@@ -12,7 +16,8 @@ export const MEMBERSHIP_TYPES = [
     description: 'One new token is auctioned each day. Every sale funds the treasury. The Nouns way.',
     recommended: true,
     auction: true,
-    marketplace: false
+    marketplace: false,
+    claims: false
   },
   {
     id: 'auction-resale',
@@ -20,23 +25,26 @@ export const MEMBERSHIP_TYPES = [
     description: 'Daily auctions, and members can resell their tokens to others.',
     recommended: false,
     auction: true,
-    marketplace: true
+    marketplace: true,
+    claims: false
   },
   {
     id: 'fixed-price',
     title: 'Fixed-price sales',
-    description: 'The community lists tokens at a set price, decided by vote.',
+    description: 'The community sells tokens at a set price from quick-buy pools it opens by vote.',
     recommended: false,
     auction: false,
-    marketplace: true
+    marketplace: true,
+    claims: false
   },
   {
     id: 'invite',
     title: 'Invite only',
-    description: 'No sales. Founders hand out tokens to members during Setup.',
+    description: 'No sales. Members claim their tokens from invite lists the community publishes.',
     recommended: false,
     auction: false,
-    marketplace: false
+    marketplace: false,
+    claims: true
   }
 ] as const;
 
@@ -45,6 +53,47 @@ export type MembershipTypeId = (typeof MEMBERSHIP_TYPES)[number]['id'];
 export function membershipTypeOf(auction: Pick<Auction, 'enabled'>, marketplace: Pick<Marketplace, 'enabled'>) {
   return MEMBERSHIP_TYPES.find((type) => type.auction === auction.enabled && type.marketplace === marketplace.enabled)!;
 }
+
+/**
+ * Who may hold a membership (docs/designs/locked-tokens.md, Web create flow): one simple choice,
+ * with the three switches under Advanced. Every switch can change later by vote.
+ */
+export const MEMBERSHIP_RULES = [
+  {
+    id: 'open',
+    title: 'Open membership',
+    description: 'Members can sell, give or delegate their tokens freely.',
+    settings: { transfersLocked: false, membersOnlyDelegation: false, daoRecovery: false }
+  },
+  {
+    id: 'club',
+    title: 'Members-only club',
+    description:
+      'Memberships change hands only with the DAO’s approval, votes stay among members, and the DAO can move any membership by vote, for example to rescue a lost key.',
+    settings: { transfersLocked: true, membersOnlyDelegation: true, daoRecovery: true }
+  }
+] as const;
+
+export type MembershipRulesId = (typeof MEMBERSHIP_RULES)[number]['id'];
+
+/** The preset these switches match, or null for a custom mix set in Advanced. */
+export function membershipRulesOf(settings: TokenSettings) {
+  return (
+    MEMBERSHIP_RULES.find((rules) =>
+      (Object.keys(rules.settings) as (keyof TokenSettings)[]).every((key) => rules.settings[key] === settings[key])
+    ) ?? null
+  );
+}
+
+/** Advanced: each switch in plain words. */
+export const MEMBERSHIP_SWITCHES: Array<{ key: keyof TokenSettings; label: string }> = [
+  { key: 'transfersLocked', label: 'Membership changes hands only with DAO approval' },
+  { key: 'membersOnlyDelegation', label: 'Members can hand their vote only to fellow members' },
+  {
+    key: 'daoRecovery',
+    label: 'The DAO can rescue a member who loses their keys (it can then move any membership by vote)'
+  }
+];
 
 const MINUTE = 60;
 const HOUR = 3600;

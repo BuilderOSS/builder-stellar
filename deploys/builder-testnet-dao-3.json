@@ -1,0 +1,165 @@
+{
+  "status": "operational",
+  "network": "testnet",
+  "label": "builder",
+  "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+  "nonce": 3,
+  "manager": "CCLBJAC5DM66J3TFQVZOZ3F4Q3TV4CZKBT5ZADRTE7BZPF3QAIEK72ZD",
+  "versions": {
+    "manager": "0.4.0",
+    "token": "0.4.0",
+    "metadata": "0.4.0",
+    "auction": "0.4.0",
+    "governor": "0.4.0",
+    "treasury": "0.4.0",
+    "marketplace": "0.4.0",
+    "minter": "0.4.0"
+  },
+  "sourceCommit": "c20c822aaa4647a7892ee7a63009d5a438fece29",
+  "addresses": {
+    "token": "CCQVCVUVITXX4TDM5VO3OEOIIJ2MEL5KNUQGOSD7QEVFJMR45MYNXAQ2",
+    "metadata": "CBMYJUC5WIWE2B2V4IIQB2Y5DVIPEK2JAAK7GNCOQBHA5WHKLOXML3I6",
+    "governor": "CCEZZQXDZN7LHKLNZIM4EZM34MRM5VNRFRFVWNDX73QJMF64HFRPGPJY",
+    "treasury": "CDSUNO2NTCJTLNLEFPYAYDM3ELJDOFE6A4AO4AT6SHOLXVDLRQ6PYPLL",
+    "auction": null,
+    "marketplace": "CAQUS32ZMB4WVBVKO3FHDA65UY4B5G4W4GX6S6SW2N5IVA54YBQAIVIA",
+    "claims": "CDNVUHXVUOOSZ2NQCSDMPTIEIUXXP4PUQH4ZX7OU2GLRSIKEGHLUXAR4"
+  },
+  "config": {
+    "$comment": "Builder Market: New memberships sell from quick-buy pools and claim lists; only members can be delegates. Fresh testnet deployment (membership models 0.4.0).",
+    "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+    "nonce": 3,
+    "launchAdmin": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+    "slug": "builder-market",
+    "token": {
+      "name": "Builder Market",
+      "symbol": "BMKT"
+    },
+    "metadata": {
+      "profile": {
+        "description": "New memberships sell from quick-buy pools and claim lists; only members can be delegates.",
+        "links": [
+          {
+            "label": "Website",
+            "url": "https://test-dao-stellar-web.vercel.app"
+          }
+        ],
+        "image": "https://builder-stellar-web.vercel.app/images/dao-logo.png"
+      },
+      "rendererBase": "https://builder-stellar-web.vercel.app/api/render",
+      "artwork": {
+        "ipfs": {
+          "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+          "extension": ".png"
+        },
+        "properties": [
+          {
+            "name": "0-backgrounds",
+            "items": [
+              "bg-cool",
+              "bg-warm"
+            ]
+          },
+          {
+            "name": "1-bodies",
+            "items": [
+              "body-rust",
+              "body-blue-sky",
+              "body-darkbrown"
+            ]
+          },
+          {
+            "name": "2-accessories",
+            "items": [
+              "accessory-txt-cc2",
+              "accessory-txt-ico",
+              "accessory-flash"
+            ]
+          },
+          {
+            "name": "3-heads",
+            "items": [
+              "head-hotdog",
+              "head-ufo",
+              "head-goldcoin"
+            ]
+          },
+          {
+            "name": "4-glasses",
+            "items": [
+              "glasses-square-teal",
+              "glasses-square-guava",
+              "glasses-square-black-rgb"
+            ]
+          }
+        ]
+      }
+    },
+    "marketplace": {
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+      "secondaryFeeBps": 250
+    },
+    "claims": {
+      "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+    },
+    "governance": {
+      "queueDelay": 300,
+      "votingDelay": 300,
+      "votingPeriod": 300,
+      "quorumBps": 1000,
+      "proposalThreshold": 1
+    },
+    "founders": [
+      {
+        "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+        "amount": 10
+      },
+      {
+        "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
+        "amount": 10
+      },
+      {
+        "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
+        "amount": 10
+      }
+    ],
+    "launch": {
+      "launchAuction": false,
+      "launchMarketplace": true
+    },
+    "tokenSettings": {
+      "transfersLocked": false,
+      "membersOnlyDelegation": true,
+      "daoRecovery": false
+    }
+  },
+  "updatedAt": "2026-10-13T12:39:49.375Z",
+  "transactions": {
+    "createDao": {
+      "txHash": "bbb60b98133f690fd8c4c3441cc449d45908e3ce15e31883ecdbcf7a1fb7a245",
+      "ledger": 5174311
+    },
+    "artworkBatches": [
+      {
+        "txHash": "7929a4313330aa163686310c3b7d255626bcec9da8af22fd3213bdbfbc9f578c",
+        "batch": 1,
+        "items": 14,
+        "ledger": 5174314
+      }
+    ],
+    "founderMintBatches": [
+      {
+        "txHash": "170459be779b0b44764d4f3ed2e5a3cfd038e96ce8662fd64c0a75304ff1008d",
+        "batch": 1,
+        "tokens": 30,
+        "ledger": 5174317
+      }
+    ],
+    "regenerated": [],
+    "launchDao": {
+      "txHash": "b51b474268c14737388dbb9f9f45c8a5c549061456deea00bf55dddb32dbfbba",
+      "ledger": 5174320
+    }
+  },
+  "deploymentLedger": 5174311
+}

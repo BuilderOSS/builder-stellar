@@ -18,6 +18,7 @@ import {
   confirmMarketplaceTransaction
 } from '@/lib/marketplace/transaction';
 import type { MarketplaceAction, MarketplacePrepared } from '@/lib/marketplace/types';
+import { withArchivedRestore } from '@/lib/restore-archived-client';
 import { readSigningWallet, signWithWallet } from '@/lib/wallet-sign';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
@@ -28,6 +29,7 @@ const box = css({ display: 'grid', gap: '2', p: '3.5', borderRadius: 'control', 
 
 const ACTION_TITLE: Record<MarketplaceAction['action'], string> = {
   buy: 'Buy this token',
+  restock: 'Stock this pool',
   comment: 'Post your comment',
   cancel: 'Cancel your listing',
   expire: 'Clear an ended listing',
@@ -66,12 +68,18 @@ export function TradeReview({
     setHash('');
     setMessage('Checking ownership, listing terms, balances and network fees…');
     try {
-      const result = await marketplaceFetch<MarketplacePrepared>(
-        `/api/dao/${encodeURIComponent(daoId)}/marketplace/prepare`,
+      const result = await withArchivedRestore(
+        () =>
+          marketplaceFetch<MarketplacePrepared>(`/api/dao/${encodeURIComponent(daoId)}/marketplace/prepare`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(action)
+          }),
         {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(action)
+          address: session.address ?? '',
+          rpcUrl: network.rpcUrl,
+          networkPassphrase: network.networkPassphrase,
+          onRestoring: setMessage
         }
       );
       if (
@@ -97,7 +105,7 @@ export function TradeReview({
     setBusy(true);
     setMessage('Checking the active wallet…');
     try {
-      const [{ TransactionBuilder, rpc, scValToNative }] = await Promise.all([import('@stellar/stellar-sdk')]);
+      const [{ TransactionBuilder, rpc }] = await Promise.all([import('@stellar/stellar-sdk')]);
       const [wallet, walletNetwork] = await readSigningWallet();
       if (wallet.address !== useAuthSessionStore.getState().address) {
         throw new Error('The wallet account changed. Reconnect and authenticate before trading.');
@@ -128,7 +136,6 @@ export function TradeReview({
       setHash(txHash);
       setPrepared(null);
       setMessage('Submitting the signed transaction…');
-      let mintedToken: number | null = null;
       if (action.action === 'trustline') {
         const { Horizon } = await import('@stellar/stellar-sdk');
         const url =
@@ -148,27 +155,13 @@ export function TradeReview({
             'The network is busy and has not accepted this transaction. Check its hash before preparing a retry.'
           );
         setMessage('Submitted. Waiting for on-chain confirmation…');
-        const confirmation = await confirmMarketplaceTransaction(server, submitted.hash);
-        if (
-          action.action === 'buy' &&
-          action.kind === 'primary' &&
-          'returnValue' in confirmation &&
-          confirmation.returnValue
-        ) {
-          try {
-            const tokenId: unknown = scValToNative(confirmation.returnValue);
-            if (typeof tokenId === 'number' && Number.isInteger(tokenId) && tokenId >= 0 && tokenId <= 0xffffffff)
-              mintedToken = tokenId;
-          } catch {
-            /* An unavailable optional receipt must never turn confirmed success into a failure. */
-          }
-        }
+        await confirmMarketplaceTransaction(server, submitted.hash);
       }
       setConfirmed(true);
       setMessage(
-        mintedToken === null
-          ? 'Confirmed. The market can take a few seconds to update.'
-          : `Confirmed. Token #${mintedToken} is yours. The market can take a few seconds to update.`
+        action.action === 'buy' && action.kind === 'pool'
+          ? 'Confirmed. The token from the pool is yours. The market can take a few seconds to update.'
+          : 'Confirmed. The market can take a few seconds to update.'
       );
       await mutate((key) => Array.isArray(key) && key[0] === 'marketplace' && key[1] === DEPLOYMENT_ID).catch(() => {
         setMessage('Confirmed. The market’s data is unavailable right now, so refresh before your next trade.');
@@ -209,7 +202,7 @@ export function TradeReview({
     >
       {'id' in action ? (
         <p className={line}>
-          {action.kind === 'primary' ? 'New token listing' : 'Token'} #{action.id}
+          {action.kind === 'pool' ? 'Pool' : 'Token'} #{action.id}
         </p>
       ) : null}
       {'tokenId' in action ? <p className={line}>Token #{action.tokenId}</p> : null}

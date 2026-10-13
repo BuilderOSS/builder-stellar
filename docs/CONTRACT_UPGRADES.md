@@ -83,8 +83,9 @@ DAOs keep their addresses and history only through upgrades.
 ## 4. Indexer and read model (if events or views change)
 
 1. New `#[contractevent]` structs are picked up from `contracts/*/src/events.rs` automatically. Also:
-   - add the event's topic names to `packages/goldsky/src/decoded-events.script.js`;
-   - add it to `REQUIRED_EVENTS` in `packages/goldsky/test/event-coverage.test.mjs`;
+   - add the event's topic names to `packages/goldsky/src/decoded-events.script.js` (`test/contract-alignment.test.mjs`
+     fails on a struct the decoder does not name, and `test/every-event.test.mjs` runs every struct through the
+     decoder and the feed transform);
    - if members should see it, map it in `src/activity-feed.script.js` (kind, title, summary, visibility);
    - `pnpm --filter @builder-stellar/goldsky generate && node --test packages/goldsky/test/*.test.mjs`.
 2. View changes: a **new** append-only migration in `db/migrations/` (never edit an applied one; the ledger
@@ -110,8 +111,9 @@ then each DAO.
    ./db/migrate.sh "$ADMIN_DATABASE_URL"
    ./db/grant-permissions.sh "$ADMIN_DATABASE_URL"
    ```
-2. **Goldsky pipeline** (testnet is the Turbo pipeline `builder-stellar-testnet`): apply a copy of
-   `packages/goldsky/pipelines/builder-stellar-events.yaml` with line 1 renamed, **in place** (`goldsky turbo apply`).
+2. **Goldsky pipeline** (testnet is the Turbo pipeline `builder-stellar-testnet`, the name `pnpm generate`
+   writes into `packages/goldsky/pipelines/builder-stellar-events.yaml`): apply it **in place**
+   (`cd packages/goldsky && ./scripts/deploy.sh deploy`, i.e. `goldsky turbo apply`).
    No delete or replay is needed when the change only adds events.
 3. **Registry** (Manager admin key, `DEPLOY_IDENTITY`, default `<network>-admin`):
    1. Upload, register and approve the path:
@@ -129,11 +131,11 @@ then each DAO.
       stellar contract invoke --id <manager> --network <network> --source-account <admin> -- \
         set_latest_implementation --name <Name> --wasm_hash <to-hash>
       ```
-   3. New DAOs: set the factory's current hashes (all six, unchanged ones repeated; read them from the
-      `manager.current_implementations` view or the deploy record):
+   3. New DAOs: set the factory's current hashes (all seven, unchanged ones repeated; read them with
+      `current_implementations` on the Manager or from the deploy record). `claims` is the ClaimMinter's hash:
       ```sh
       stellar contract invoke --id <manager> --network <network> --source-account <admin> -- \
-        set_current_implementations --token <h> --metadata <h> --auction <h> --governor <h> --treasury <h> --marketplace <h>
+        set_current_implementations --current '{"token":"<h>","metadata":"<h>","auction":"<h>","governor":"<h>","treasury":"<h>","marketplace":"<h>","claims":"<h>"}'
       ```
    4. Every other existing DAO also needs the path from **its** current hash approved (usually the same `from`).
 4. **Each DAO**: once steps 3.1–3.2 are done, communities see the upgrade by themselves: Manage →
@@ -145,8 +147,9 @@ then each DAO.
      needs the new code, e.g. a rename), then propose, vote, queue after `voting_period`, and execute through the
      **Treasury** after `queue_delay` (Governor.execute fails with `UseTreasuryExecute`). A succeeded proposal
      that isn't queued expires 14 days after voting ends; a queued one 14 days after its ETA.
-   - Treasury and Governor upgrade themselves through the Treasury's self-call allowlist (`upgrade`, `migrate`,
-     `sync_version`). If `sync_version` in the same execute still sees old code, put it in a second proposal.
+   - Treasury and Governor upgrade themselves through the Treasury's self-call allowlist (`upgrade`, `migrate`).
+     Nothing needs syncing afterwards: every module's `version()` looks its current hash up in the Manager
+     registry on each read.
    - Manage puts every module upgrade in **one** proposal except the Treasury's, which goes alone: the Treasury
      runs the proposal, so later calls in the same run would still use its old code. The Governor batches safely
      (it has finished with the proposal before the Treasury makes the calls); see
@@ -180,5 +183,41 @@ stellar contract invoke --id <module-address> --network <network> --source-accou
 
 `node scripts/upgrade-contract.mjs manager configs/<network>-manager.json <from-hash>` with
 `LEGACY_MANAGER_VERSION=<active release>`: registers the old Manager hash if needed, registers and approves the
-new one, then calls `upgrade_manager` directly (Manager admin). Upgrade the Manager **before** modules whenever
+new one, then calls `upgrade_manager` (Manager admin). The Manager's own upgrade waits out its notice
+(`manager.upgrade_delay()` ledgers after the approval, D39): on the first run the script approves and prints the
+ledger from which the upgrade may run; rerun it then. The same latest-only rule applies (`UpgradeNotLatest`,
+7131): the script announces the hash as latest for `Manager` first. Upgrade the Manager **before** modules whenever
 module upgrades rely on new Manager reads (the script checks `get_implementation_version` exists).
+
+## Module upgrades (Auction, Marketplace, ClaimMinter)
+
+Modules are per DAO, so they upgrade exactly like the core contracts: the Manager admin registers and approves
+the path, and each DAO upgrades its own module, directly in setup or by proposal once live. There is no shared
+contract whose upgrade reaches every DAO (the shared Minter was removed by
+[membership-models](designs/membership-models.md)). The ClaimMinter's implementation name is `ClaimMinter` and
+its crate is `contracts/minter`; the script's module name is `claims`:
+
+```sh
+node scripts/upgrade-contract.mjs claims configs/<network>-<label>-dao.json configs/<network>-manager.json <from-hash>
+```
+
+A module added after creation (`create_module`) is not in the DAO artifact; pass its address in
+`MODULE_ADDRESS`. A module registered from outside the Manager upgrades however its own code allows; the
+registry only vouches for Manager-approved hashes.
+
+**Failed assurance drives.** An open drive freezes its DAO's upgrades (every admin is the Treasury, which can't
+act before launch). If a drive fails and the ClaimMinter's refund code is broken, the launch admin recorded in
+`PendingDao` runs `manager.recover_claims(token, from_hash, to_hash)` to move that DAO's ClaimMinter to a
+Manager-approved `claims` hash; it works only once the drive has failed and never on a live module
+(SECURITY_MODEL, Assurance launch).
+
+## Approving upgrade paths for DAO modules
+
+DAO modules keep directional approvals (`approve_upgrade(from, to)`) and no latest-only rule, because a DAO's
+own proposal is its notice and a migration may have to pass through intermediate versions. The rule for the
+Manager admin: **approve only the paths the `migrate` code supports.** Approve v1 → v2 and v2 → v3 when v3's
+`migrate` assumes the v2 layout; approve v1 → v3 directly only when v3's `migrate` handles the v1 layout. A DAO
+two releases behind then chains the steps: one proposal can carry `upgrade(v1, v2)`, `migrate()`,
+`upgrade(v2, v3)`, `migrate()` for any module except the Treasury, whose own upgrade goes alone (e2e
+`dao_module_chains_two_upgrades_in_one_proposal`). `migrate()` refuses a no-op (`NothingToMigrate`), so include
+it only for steps that change the storage version.

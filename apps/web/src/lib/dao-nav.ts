@@ -25,7 +25,7 @@ export type DaoNav = {
 
 type NavCapabilities = Pick<
   DaoNetworkConfig,
-  'auctionContractId' | 'auctionEnabled' | 'marketplaceContractId' | 'marketplaceEnabled' | 'minterContractId'
+  'auctionContractId' | 'auctionEnabled' | 'marketplaceContractId' | 'marketplaceEnabled' | 'claimsContractId'
 > &
   Partial<Pick<DaoNetworkConfig, 'status'>>;
 
@@ -70,7 +70,7 @@ export function resolveDaoNav(daoId: string, config: NavCapabilities, { canManag
       case 'market':
         return hasMarketplace(config);
       case 'claims':
-        return Boolean(config.minterContractId);
+        return Boolean(config.claimsContractId);
       case 'manage':
         return canManage;
       case 'setup':

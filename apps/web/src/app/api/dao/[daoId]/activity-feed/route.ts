@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { parseLimit, parseNonNegativeInteger } from '@/lib/api-pagination';
+import { parseLimit, parseOffset } from '@/lib/api-pagination';
 import { getGoldskyActivityFeed } from '@/lib/goldsky';
 
 export const dynamic = 'force-dynamic';
@@ -9,7 +9,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ daoI
   const url = new URL(request.url);
   const { daoId } = await params;
   const limit = parseLimit(url.searchParams.get('limit') ?? url.searchParams.get('pageSize'), 8);
-  const offset = parseNonNegativeInteger(url.searchParams.get('offset'), 0);
+  const offset = parseOffset(url.searchParams.get('offset'));
   const contractId = url.searchParams.get('contractId') ?? undefined;
   const contractRole = url.searchParams.get('contractRole') ?? undefined;
   const actor = url.searchParams.get('actor') ?? undefined;

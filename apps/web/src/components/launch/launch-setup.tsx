@@ -239,7 +239,7 @@ export function LaunchSetup({ daoId, config }: { daoId: string; config: DaoNetwo
               }
             />
           ) : null}
-          {config.minterContractId ? (
+          {config.claimsContractId ? (
             <LaunchStepRow
               status="done"
               title="Claims"

@@ -2,3 +2,6 @@ packages:
   - apps/*
   - packages/*
   - packages/*/*
+
+patchedDependencies:
+  '@stellar/stellar-sdk@17.1.0': patches/@stellar__stellar-sdk@17.1.0.patch

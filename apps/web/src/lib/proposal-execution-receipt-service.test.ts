@@ -40,7 +40,7 @@ describe('existing indexed execution view: read-only and tenant-scoped', () => {
     });
     const [sql, ...parameters] = query.mock.calls[0]!;
     expect(parameters).toEqual(['deployment1', 'dao1', 'treasury1', 'governor1', 'proposal1']);
-    expect(sql.join('')).toContain('FROM governance.proposal_execution_calls');
+    expect(sql.join('')).toContain('FROM treasury.calls');
     expect(sql.join('')).toContain('ORDER BY call_index ASC');
     expect(sql.join('')).toContain('LIMIT 21');
   });

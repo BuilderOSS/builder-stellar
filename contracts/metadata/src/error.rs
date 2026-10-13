@@ -27,6 +27,20 @@ pub enum Error {
     TokenNotMinted = 7310,
     /// `regenerate` called for a token that already has attributes
     AlreadySeeded = 7311,
-    /// A settings string is longer than `common::MAX_STRING_LENGTH`
+    /// A settings or artwork string is longer than its cap
     StringTooLong = 7312,
+    /// An artwork name contains `"`, `\` or a control character
+    InvalidName = 7313,
+    /// More than `MAX_IPFS_GROUPS` distinct IPFS groups
+    TooManyIpfsGroups = 7314,
+    /// A property would exceed `MAX_ITEMS_PER_PROPERTY` items
+    PropertyFull = 7315,
+    /// A profile is empty or longer than `common::MAX_PROFILE_LENGTH`
+    InvalidProfile = 7316,
+    /// `update_profile` was given a stale `expected_seq`
+    ProfileSeqMismatch = 7317,
+    /// The token JSON would exceed its buffer (a string over its cap)
+    TokenUriTooLong = 7318,
+    /// The token exists but was minted before any artwork; `regenerate` seeds it.
+    NotSeeded = 7319,
 }

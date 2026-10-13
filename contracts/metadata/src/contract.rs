@@ -1,14 +1,15 @@
 #![allow(clippy::too_many_arguments)] // constructors take every wired address/param explicitly
 
-use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, String, Vec};
+use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Map, String, Vec};
 
 use crate::error::Error;
 use crate::events::*;
+use crate::json::{data_uri, Writer, JSON_CAPACITY, URI_CAPACITY};
 use crate::storage::*;
 
 /// Max items written by one `add_properties` call (bounds write entries).
 pub const MAX_ITEMS_PER_CALL: u32 = 30;
-/// Max page size for `get_items` and window for `bump_artwork_ttl`.
+/// Max page size for `get_items`.
 pub const MAX_PAGE: u32 = 50;
 
 /// Metadata Contract
@@ -29,37 +30,55 @@ impl MetadataContract {
         let manager = Self::manager(&env);
         manager.require_auth();
         common::lifecycle::mark_live(&env);
-        let wired: Option<Address> = env.storage().instance().get(&DataKey::Treasury);
+        let wired: Option<Address> = env
+            .storage()
+            .instance()
+            .get(&common::ns(&env, DataKey::Treasury));
         if wired != Some(treasury.clone()) {
             soroban_sdk::panic_with_error!(&env, Error::TreasuryMismatch);
         }
-        common::admin::handoff(&env, &treasury);
+        common::admin::handoff_once(&env, &treasury);
         common::ttl::extend_instance(&env);
         emit_launched(&env, &treasury);
+    }
+
+    /// Manager-only early handoff (`manager.open_assurance`): the admin moves
+    /// to the Treasury and the contract stays in Setup, so artwork and
+    /// settings are frozen until launch.
+    pub fn handoff(env: Env, treasury: Address) {
+        Self::manager(&env).require_auth();
+        common::lifecycle::require_setup(&env);
+        let wired: Option<Address> = env
+            .storage()
+            .instance()
+            .get(&common::ns(&env, DataKey::Treasury));
+        if wired != Some(treasury.clone()) {
+            soroban_sdk::panic_with_error!(&env, Error::TreasuryMismatch);
+        }
+        common::admin::handoff_once(&env, &treasury);
+        common::ttl::extend_instance(&env);
     }
 
     /// Initialize the metadata contract
     ///
     /// # Arguments
     ///
-    /// * `token` - The associated ERC-721 token contract
-    /// * `project_uri` - DAO website/project URL
-    /// * `description` - Collection description
-    /// * `contract_image` - Collection image URL
-    /// * `renderer_base` - Base URL for image rendering service
+    /// * `token` - The associated NFT token contract
+    /// * `profile` - DAO profile JSON (description, links, image; 1 to
+    ///   `common::MAX_PROFILE_LENGTH` bytes). Emitted in `ProfileUpdated`
+    ///   (seq 0); only its hash is stored.
+    /// * `renderer_base` - Base URL of the image compositor used by `token_uri`
     /// * `admin` - setup-phase admin (the launch admin); becomes the Treasury at launch
     /// * `treasury` - DAO treasury; `launch` must be called with exactly this address
     ///
     /// # Panics
     ///
-    /// Panics with the underlying `Error` when the initial properties are
-    /// invalid or a settings string exceeds `common::MAX_STRING_LENGTH`.
+    /// Panics with the underlying `Error` when the profile, the renderer base
+    /// or the initial properties are invalid.
     pub fn __constructor(
         env: Env,
         token: Address,
-        project_uri: String,
-        description: String,
-        contract_image: String,
+        profile: String,
         renderer_base: String,
         manager: Address,
         current_hash: BytesN<32>,
@@ -68,42 +87,35 @@ impl MetadataContract {
         property_names: Vec<String>,
         items: Vec<ItemParam>,
         ipfs_group: IpfsGroup,
-        version: String,
     ) {
-        for value in [&project_uri, &description, &contract_image, &renderer_base] {
-            if let Err(err) = Self::check_length(value) {
-                soroban_sdk::panic_with_error!(&env, err);
-            }
+        if let Err(err) = Self::check_text(&renderer_base, common::MAX_STRING_LENGTH) {
+            soroban_sdk::panic_with_error!(&env, err);
         }
-        let settings = Settings {
-            token: token.clone(),
-            project_uri: project_uri.clone(),
-            description: description.clone(),
-            contract_image: contract_image.clone(),
-            renderer_base: renderer_base.clone(),
-        };
-
-        set_settings(&env, &settings);
+        set_settings(
+            &env,
+            &Settings {
+                token: token.clone(),
+                renderer_base: renderer_base.clone(),
+            },
+        );
+        if let Err(err) = Self::store_profile(&env, 0, &profile) {
+            soroban_sdk::panic_with_error!(&env, err);
+        }
         if !property_names.is_empty() || !items.is_empty() {
             if let Err(err) = Self::_add_properties(&env, property_names, items, ipfs_group) {
                 soroban_sdk::panic_with_error!(&env, err);
             }
         }
-        env.storage().instance().set(&DataKey::Manager, &manager);
+        env.storage()
+            .instance()
+            .set(&common::ns(&env, DataKey::Manager), &manager);
         common::admin::init(&env, &admin);
-        env.storage().instance().set(&DataKey::Treasury, &treasury);
-        common::upgrade::init(&env, &current_hash, &version, STORAGE_VERSION);
+        env.storage()
+            .instance()
+            .set(&common::ns(&env, DataKey::Treasury), &treasury);
+        common::upgrade::init(&env, &current_hash, STORAGE_VERSION);
 
-        emit_metadata_initialized(
-            &env,
-            &token,
-            &renderer_base,
-            &version,
-            &admin,
-            &project_uri,
-            &description,
-            &contract_image,
-        );
+        emit_metadata_initialized(&env, &token, &renderer_base, &admin);
     }
 
     pub fn upgrade(env: Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
@@ -129,23 +141,17 @@ impl MetadataContract {
     }
 
     pub fn version(env: Env) -> String {
-        common::upgrade::version(&env)
+        common::upgrade::version(&env, &Self::manager(&env))
     }
 
     pub fn wasm_hash(env: Env) -> BytesN<32> {
         common::upgrade::current_hash(&env)
     }
 
-    pub fn sync_version(env: Env) {
-        common::admin::require_admin(&env);
-        let manager = Self::manager(&env);
-        common::upgrade::sync_version(&env, &manager);
-    }
-
     fn manager(env: &Env) -> Address {
         env.storage()
             .instance()
-            .get(&DataKey::Manager)
+            .get(&common::ns(env, DataKey::Manager))
             .unwrap_or_else(|| {
                 soroban_sdk::panic_with_error!(env, common::CommonError::ManagerNotSet)
             })
@@ -201,15 +207,12 @@ impl MetadataContract {
         // Check authorization
         Self::require_admin(&env);
 
-        // Reset the counts and drop the (<= 16) property headers. Item and
-        // IPFS group entries are not deleted: every getter is bounded by the
-        // counts/headers, so they are unreachable and get overwritten as new
-        // data is added. Reset is therefore O(#properties), not O(#items).
+        // Reset the counts. Names, item pages and the IPFS group vector are
+        // not deleted: every read is bounded by the counts, and appends start
+        // a fresh vector or page at a count of zero, so stale entries are
+        // never read and get overwritten as data is added. Reset is O(1).
         let old_count = get_property_count(&env);
-        for i in 0..old_count {
-            remove_stored_property(&env, i);
-        }
-        set_property_count(&env, 0);
+        set_item_counts(&env, &Vec::new(&env));
         set_ipfs_group_count(&env, 0);
 
         emit_properties_reset(&env, old_count);
@@ -235,13 +238,17 @@ impl MetadataContract {
         // Verify caller is token contract
         Self::require_token(&env)?;
 
-        let num_properties = get_property_count(&env);
+        let counts = Self::item_counts(&env);
+        let num_properties = counts.len();
         if num_properties == 0 {
+            // An empty record, so every minted token's page exists and a
+            // client can tell an archived page from an unwritten one.
+            set_attributes(&env, token_id, &Vec::new(&env));
             return Ok(false);
         }
 
-        let counts = Self::item_counts(&env, num_properties);
         let selections = Self::seed_token(&env, &counts, token_id);
+        set_attributes(&env, token_id, &selections);
         emit_seed_generated(&env, token_id, num_properties, &selections);
         Ok(true)
     }
@@ -259,22 +266,21 @@ impl MetadataContract {
         Self::require_admin(&env);
 
         let settings = get_settings(&env)?;
-        let exists = matches!(
-            common::clients::NftClient::new(&env, &settings.token).try_owner_of(&token_id),
-            Ok(Ok(_))
-        );
-        if !exists {
+        // Existence by the id counter, not `owner_of`: a holder's ownership
+        // entry may have archived, which would fail the whole call.
+        if token_id >= common::clients::NftClient::new(&env, &settings.token).minted() {
             return Err(Error::TokenNotMinted);
         }
         if !get_attributes(&env, token_id).is_empty() {
             return Err(Error::AlreadySeeded);
         }
-        let num_properties = get_property_count(&env);
+        let counts = Self::item_counts(&env);
+        let num_properties = counts.len();
         if num_properties == 0 {
             return Err(Error::NoProperties);
         }
-        let counts = Self::item_counts(&env, num_properties);
         let selections = Self::seed_token(&env, &counts, token_id);
+        set_attributes(&env, token_id, &selections);
         emit_seed_generated(&env, token_id, num_properties, &selections);
         Ok(())
     }
@@ -293,16 +299,24 @@ impl MetadataContract {
         common::ttl::extend_instance(&env);
         Self::require_token(&env)?;
 
-        let num_properties = get_property_count(&env);
+        let counts = Self::item_counts(&env);
+        let num_properties = counts.len();
         if num_properties == 0 {
+            // Empty records: see `on_minted`.
+            let mut empty = Vec::new(&env);
+            for _ in 0..count {
+                empty.push_back(Vec::new(&env));
+            }
+            set_attributes_range(&env, first_token_id, &empty);
             return Ok(false);
         }
 
-        let counts = Self::item_counts(&env, num_properties);
         let mut selections = Vec::new(&env);
         for i in 0..count {
             selections.push_back(Self::seed_token(&env, &counts, first_token_id + i));
         }
+        // One write per touched attributes page (a batch may span two).
+        set_attributes_range(&env, first_token_id, &selections);
         emit_seeds_generated(&env, first_token_id, count, num_properties, &selections);
         Ok(true)
     }
@@ -324,12 +338,22 @@ impl MetadataContract {
             return Err(Error::LimitTooHigh);
         }
         let mut out = Vec::new(&env);
-        let Some(header) = get_stored_property(&env, property_id) else {
+        let Some(count) = get_item_count(&env, property_id) else {
             return Ok(out);
         };
-        let end = start.saturating_add(limit).min(header.item_count);
+        let end = start.saturating_add(limit).min(count);
+        let mut loaded: Option<(u32, Vec<Item>)> = None;
         for j in start..end {
-            if let Some(item) = get_item_raw(&env, property_id, j) {
+            let page = j / ITEMS_PER_PAGE;
+            let items = match &loaded {
+                Some((p, items)) if *p == page => items.clone(),
+                _ => {
+                    let items = get_item_page(&env, property_id, page);
+                    loaded = Some((page, items.clone()));
+                    items
+                }
+            };
+            if let Some(item) = items.get(j % ITEMS_PER_PAGE) {
                 out.push_back(item);
             }
         }
@@ -341,57 +365,24 @@ impl MetadataContract {
         get_ipfs_group(&env, index)
     }
 
-    /// Permissionless TTL renewal for artwork entries.
-    ///
-    /// The flat space is every item `(property, item)` in order, followed by
-    /// every IPFS group. Extends entries in `[start, start + limit)` (plus the
-    /// property headers walked and the instance) and returns the next start,
-    /// or `total` when done. Callers loop until the returned value equals the
-    /// total. `limit` must be <= `MAX_PAGE` (`LimitTooHigh`).
-    ///
-    /// Note: the network clamps `extend_to` to its max entry TTL (~180 days),
-    /// so the effective lifetime after a write or bump is ~180 days, not the
-    /// nominal 365; call this periodically to renew.
-    pub fn bump_artwork_ttl(env: Env, start: u32, limit: u32) -> Result<u32, Error> {
-        if limit > MAX_PAGE {
-            return Err(Error::LimitTooHigh);
-        }
-        bump_instance(&env);
-        let end = start.saturating_add(limit);
-        let mut offset = 0u32;
-        let num_properties = get_property_count(&env);
-        for p in 0..num_properties {
-            let Some(header) = get_stored_property(&env, p) else {
-                continue;
-            };
-            let next = offset + header.item_count;
-            if next > start && offset < end {
-                bump_key(&env, &DataKey::Property(p));
-                let from = start.max(offset) - offset;
-                let to = end.min(next) - offset;
-                for j in from..to {
-                    bump_key(&env, &DataKey::Item(p, j));
-                }
-            }
-            offset = next;
-        }
-        let groups = get_ipfs_group_count(&env);
-        let total = offset + groups;
-        if end > offset && start < total {
-            let from = start.max(offset) - offset;
-            let to = end.min(total) - offset;
-            for g in from..to {
-                bump_key(&env, &DataKey::IpfsGroup(g));
-            }
-        }
-        Ok(end.min(total))
-    }
-
     /// Get items count for a property
     pub fn items_count(env: Env, property_id: u32) -> u32 {
-        get_stored_property(&env, property_id)
-            .map(|p| p.item_count)
-            .unwrap_or(0)
+        get_item_count(&env, property_id).unwrap_or(0)
+    }
+
+    /// Every property's name and item count (at most 16), without items:
+    /// enough for a client to resume artwork setup from chain state alone.
+    pub fn property_headers(env: Env) -> Vec<PropertyHeader> {
+        let counts = get_item_counts(&env);
+        let names = get_property_names(&env);
+        let mut out = Vec::new(&env);
+        for (i, name) in names.iter().enumerate() {
+            out.push_back(PropertyHeader {
+                name,
+                item_count: counts.get(i as u32).unwrap(),
+            });
+        }
+        out
     }
 
     /// Get IPFS data count
@@ -439,43 +430,11 @@ impl MetadataContract {
         Ok(get_settings(&env)?.renderer_base)
     }
 
-    /// Get description
-    pub fn description(env: Env) -> Result<String, Error> {
-        Ok(get_settings(&env)?.description)
-    }
-
-    /// Get contract image
-    pub fn contract_image(env: Env) -> Result<String, Error> {
-        Ok(get_settings(&env)?.contract_image)
-    }
-
-    /// Get project URI
-    pub fn project_uri(env: Env) -> Result<String, Error> {
-        Ok(get_settings(&env)?.project_uri)
-    }
-
-    /// Update contract image
-    pub fn update_contract_image(env: Env, new_contract_image: String) -> Result<(), Error> {
-        common::ttl::extend_instance(&env);
-        Self::require_admin(&env);
-        Self::check_length(&new_contract_image)?;
-
-        let mut settings = get_settings(&env)?;
-        let old_image = settings.contract_image.clone();
-
-        settings.contract_image = new_contract_image.clone();
-        set_settings(&env, &settings);
-
-        emit_contract_image_updated(&env, &old_image, &new_contract_image);
-
-        Ok(())
-    }
-
-    /// Update renderer base URL
+    /// Update renderer base URL (admin only).
     pub fn update_renderer_base(env: Env, new_renderer_base: String) -> Result<(), Error> {
         common::ttl::extend_instance(&env);
         Self::require_admin(&env);
-        Self::check_length(&new_renderer_base)?;
+        Self::check_text(&new_renderer_base, common::MAX_STRING_LENGTH)?;
 
         let mut settings = get_settings(&env)?;
         let old_base = settings.renderer_base.clone();
@@ -488,38 +447,97 @@ impl MetadataContract {
         Ok(())
     }
 
-    /// Update description
-    pub fn update_description(env: Env, new_description: String) -> Result<(), Error> {
+    /// Replace the DAO profile (admin only). `expected_seq` must equal the
+    /// current `profile_seq()`, so an update written against a stale copy of
+    /// the profile (for example one proposed before another edit executed)
+    /// fails with `ProfileSeqMismatch` instead of overwriting newer fields.
+    /// Emits `ProfileUpdated` with the next seq; only the hash is stored.
+    pub fn update_profile(env: Env, expected_seq: u32, profile: String) -> Result<(), Error> {
         common::ttl::extend_instance(&env);
         Self::require_admin(&env);
-        Self::check_length(&new_description)?;
-
-        let mut settings = get_settings(&env)?;
-        let old_description = settings.description.clone();
-
-        settings.description = new_description.clone();
-        set_settings(&env, &settings);
-
-        emit_description_updated(&env, &old_description, &new_description);
-
-        Ok(())
+        let state = get_profile_state(&env)?;
+        if expected_seq != state.seq {
+            return Err(Error::ProfileSeqMismatch);
+        }
+        Self::store_profile(&env, state.seq + 1, &profile)
     }
 
-    /// Update project URI
-    pub fn update_project_uri(env: Env, new_project_uri: String) -> Result<(), Error> {
-        common::ttl::extend_instance(&env);
-        Self::require_admin(&env);
-        Self::check_length(&new_project_uri)?;
+    /// SHA-256 of the latest profile bytes, to verify an indexed copy.
+    pub fn profile_hash(env: Env) -> Result<BytesN<32>, Error> {
+        Ok(get_profile_state(&env)?.hash)
+    }
 
-        let mut settings = get_settings(&env)?;
-        let old_uri = settings.project_uri.clone();
+    /// Number of profile updates since creation (0 = the initial profile).
+    pub fn profile_seq(env: Env) -> Result<u32, Error> {
+        Ok(get_profile_state(&env)?.seq)
+    }
 
-        settings.project_uri = new_project_uri.clone();
-        set_settings(&env, &settings);
+    /// SEP-50 token metadata, built on-chain: a `data:application/json;base64`
+    /// URI of `{"name", "image", "attributes"}`, where `name` is
+    /// `<token_name> #<id>`. The token's own `token_uri` calls this with its
+    /// collection name (Soroban forbids calling back into the token). `image` is
+    /// `<renderer_base>?contract=<token>&token=<id>`; a compositor derives the
+    /// layers from `get_attributes`, `property_headers`, `get_items` and
+    /// `get_ipfs_group`. Traits whose property or item no longer exists (after
+    /// a reset) are left out.
+    ///
+    /// # Errors
+    ///
+    /// * `NotSeeded` - the token has no attributes yet (minted before artwork)
+    /// * `InvalidName` - `token_name` contains `"`, `\` or a control character
+    pub fn token_uri(env: Env, token_id: u32, token_name: String) -> Result<String, Error> {
+        let attributes = get_attributes(&env, token_id);
+        if attributes.is_empty() {
+            return Err(Error::NotSeeded);
+        }
+        // The token passes its validated name; a direct caller is held to the
+        // same rule so the document is always valid JSON.
+        Self::check_text(&token_name, common::MAX_STRING_LENGTH)?;
+        let settings = get_settings(&env)?;
+        let counts = get_item_counts(&env);
 
-        emit_project_uri_updated(&env, &old_uri, &new_project_uri);
+        let mut json: Writer<JSON_CAPACITY> = Writer::new();
+        json.push(b"{\"name\":\"");
+        json.push_string(&token_name);
+        json.push(b" #");
+        json.push_u32(token_id);
+        json.push(b"\",\"image\":\"");
+        json.push_string(&settings.renderer_base);
+        json.push(b"?contract=");
+        json.push_string(&settings.token.to_string());
+        json.push(b"&token=");
+        json.push_u32(token_id);
+        json.push(b"\",\"attributes\":[");
+        let num_properties = attributes.get(0).unwrap_or(0);
+        let names = get_property_names(&env);
+        let mut first = true;
+        for i in 0..num_properties {
+            let Some(index) = attributes.get(i + 1) else {
+                break;
+            };
+            if index >= counts.get(i).unwrap_or(0) {
+                continue;
+            }
+            let (Some(property), Some(item)) = (names.get(i), get_item_name(&env, i, index)) else {
+                continue;
+            };
+            if !first {
+                json.push(b",");
+            }
+            first = false;
+            json.push(b"{\"trait_type\":\"");
+            json.push_string(&property);
+            json.push(b"\",\"value\":\"");
+            json.push_string(&item);
+            json.push(b"\"}");
+        }
+        json.push(b"]}");
 
-        Ok(())
+        let raw = json.bytes().ok_or(Error::TokenUriTooLong)?;
+        let mut uri: Writer<URI_CAPACITY> = Writer::new();
+        data_uri(raw, &mut uri);
+        let encoded = uri.bytes().ok_or(Error::TokenUriTooLong)?;
+        Ok(String::from_bytes(&env, encoded))
     }
 
     // Internal helpers
@@ -530,7 +548,8 @@ impl MetadataContract {
         items: Vec<ItemParam>,
         ipfs_group: IpfsGroup,
     ) -> Result<(), Error> {
-        let num_stored_properties = get_property_count(env);
+        let mut counts = get_item_counts(env);
+        let num_stored_properties = counts.len();
         let num_new_properties = names.len();
         let num_new_items = items.len();
 
@@ -539,9 +558,7 @@ impl MetadataContract {
             return Err(Error::OnePropertyAndItemRequired);
         }
 
-        // Every call must add at least one item (also rejects an empty call
-        // that would only append an empty IPFS group), and new properties
-        // need items.
+        // Every call must add at least one item, and new properties need items.
         if num_new_items == 0 {
             return Err(Error::PropertyHasNoItems);
         }
@@ -551,36 +568,37 @@ impl MetadataContract {
         }
 
         // Check if not too many properties
-        if num_stored_properties + num_new_properties > 16 {
+        if num_stored_properties + num_new_properties > MAX_PROPERTIES {
             return Err(Error::TooManyProperties);
         }
 
-        // Append the IPFS group; its absolute index is stable forever.
-        let data_length = get_ipfs_group_count(env);
-        set_ipfs_group(env, data_length, &ipfs_group);
-        set_ipfs_group_count(env, data_length + 1);
-
-        // Property headers (<= 16) are held in memory while items are appended.
-        let total_properties = num_stored_properties + num_new_properties;
-        let mut headers: Vec<StoredProperty> = Vec::new(env);
-        let mut dirty: Vec<bool> = Vec::new(env);
-        for i in 0..num_stored_properties {
-            headers.push_back(get_stored_property(env, i).ok_or(Error::InvalidPropertySelected)?);
-            dirty.push_back(false);
+        Self::check_length_max(&ipfs_group.base_uri, common::MAX_STRING_LENGTH)?;
+        Self::check_length_max(&ipfs_group.extension, common::MAX_EXTENSION_LENGTH)?;
+        for name in names.iter() {
+            Self::check_name(&name)?;
         }
-        for i in 0..num_new_properties {
-            let name = names.get(i).unwrap();
-            headers.push_back(StoredProperty {
-                name: name.clone(),
-                item_count: 0,
-            });
-            dirty.push_back(true);
-            emit_property_added(env, num_stored_properties + i, &name);
+        for item in items.iter() {
+            Self::check_name(&item.name)?;
         }
 
-        for i in 0..num_new_items {
-            let item_param = items.get(i).unwrap();
+        let reference_slot = Self::append_ipfs_group(env, &ipfs_group)?;
 
+        if num_new_properties > 0 {
+            let mut stored_names = get_property_names(env);
+            for i in 0..num_new_properties {
+                let name = names.get(i).unwrap();
+                let index = num_stored_properties + i;
+                counts.push_back(0);
+                stored_names.push_back(name.clone());
+                emit_property_added(env, index, &name);
+            }
+            set_property_names(env, &stored_names);
+        }
+        let total_properties = counts.len();
+
+        // Touched pages are held in memory and each is written once.
+        let mut pages: Map<(u32, u32), Vec<Item>> = Map::new(env);
+        for item_param in items.iter() {
             let mut property_id = item_param.property_id;
 
             // Offset the id if the item is for a new property
@@ -595,51 +613,70 @@ impl MetadataContract {
                 return Err(Error::InvalidPropertySelected);
             }
 
-            let mut header = headers.get(property_id).unwrap();
-            let item = Item {
-                name: item_param.name,
-                reference_slot: data_length,
+            let count = counts.get(property_id).unwrap();
+            if count >= MAX_ITEMS_PER_PROPERTY {
+                return Err(Error::PropertyFull);
+            }
+            let page = count / ITEMS_PER_PAGE;
+            let slot = count % ITEMS_PER_PAGE;
+            let mut page_items = match pages.get((property_id, page)) {
+                Some(page_items) => page_items,
+                // A fresh page never reads stale entries left by a reset.
+                None if slot == 0 => Vec::new(env),
+                None => get_item_page(env, property_id, page).slice(0..slot),
             };
-            set_item(env, property_id, header.item_count, &item);
-            header.item_count += 1;
-            headers.set(property_id, header);
-            dirty.set(property_id, true);
+            page_items.push_back(Item {
+                name: item_param.name,
+                reference_slot,
+            });
+            pages.set((property_id, page), page_items);
+            counts.set(property_id, count + 1);
         }
 
         // Validate all newly-added properties have at least one item
         for i in num_stored_properties..total_properties {
-            if headers.get(i).unwrap().item_count == 0 {
+            if counts.get(i).unwrap() == 0 {
                 return Err(Error::PropertyHasNoItems);
             }
         }
 
-        // Persist only headers that are new or whose item count changed.
-        for i in 0..total_properties {
-            if dirty.get(i).unwrap() {
-                set_stored_property(env, i, &headers.get(i).unwrap());
-            }
+        for ((property_id, page), page_items) in pages.iter() {
+            set_item_page(env, property_id, page, &page_items);
         }
-        set_property_count(env, total_properties);
+        set_item_counts(env, &counts);
 
         Ok(())
     }
 
-    /// Mint-path seeding: reads only the property count and each property's
-    /// header (item count). Never reads individual items.
-    fn item_counts(env: &Env, num_properties: u32) -> Vec<u32> {
+    /// Append `group` and return its absolute index. A group equal to the
+    /// last one is reused, so an upload split across several calls from one
+    /// IPFS folder occupies one slot.
+    fn append_ipfs_group(env: &Env, group: &IpfsGroup) -> Result<u32, Error> {
+        let mut groups = get_ipfs_data(env);
+        let count = groups.len();
+        if count > 0 && groups.get(count - 1).as_ref() == Some(group) {
+            return Ok(count - 1);
+        }
+        if count >= MAX_IPFS_GROUPS {
+            return Err(Error::TooManyIpfsGroups);
+        }
+        groups.push_back(group.clone());
+        set_ipfs_data(env, &groups);
+        Ok(count)
+    }
+
+    /// Mint-path seeding: reads only the instance `ItemCounts`. Never reads
+    /// names or items.
+    fn item_counts(env: &Env) -> Vec<u32> {
         let mut counts = Vec::new(env);
-        for i in 0..num_properties {
-            let n = get_stored_property(env, i)
-                .map(|p| p.item_count)
-                .unwrap_or(0)
-                .max(1);
-            counts.push_back(n);
+        for n in get_item_counts(env).iter() {
+            counts.push_back(n.max(1));
         }
         counts
     }
 
-    /// Derives and stores `token_id`'s attributes and returns them
-    /// (`[num_properties, idx...]`). Callers emit the seed event.
+    /// Derives `token_id`'s attributes (`[num_properties, idx...]`). Callers
+    /// store them and emit the seed event.
     fn seed_token(env: &Env, counts: &Vec<u32>, token_id: u32) -> Vec<u32> {
         let num_properties = counts.len();
         let seed = Self::generate_seed(env, token_id);
@@ -660,7 +697,6 @@ impl MetadataContract {
             attr_vec.push_back(item_index);
         }
 
-        set_attributes(env, token_id, &attr_vec);
         attr_vec
     }
 
@@ -699,10 +735,50 @@ impl MetadataContract {
 
     /// Settings strings are bounded so the instance entry (loaded on every
     /// mint hook) stays small.
-    fn check_length(value: &String) -> Result<(), Error> {
-        if value.len() > common::MAX_STRING_LENGTH {
+    fn check_length_max(value: &String, max: u32) -> Result<(), Error> {
+        if value.len() > max {
             return Err(Error::StringTooLong);
         }
+        Ok(())
+    }
+
+    /// Artwork names are copied verbatim into the on-chain token JSON, so
+    /// they are capped and may not contain `"`, `\` or control characters.
+    fn check_name(value: &String) -> Result<(), Error> {
+        Self::check_text(value, common::MAX_ARTWORK_NAME_LENGTH)
+    }
+
+    /// A string copied verbatim into the token JSON: at most `max` bytes
+    /// (`max` <= `MAX_STRING_LENGTH`), no `"`, `\` or control characters.
+    fn check_text(value: &String, max: u32) -> Result<(), Error> {
+        Self::check_length_max(value, max)?;
+        let len = value.len() as usize;
+        let mut buf = [0u8; common::MAX_STRING_LENGTH as usize];
+        value.copy_into_slice(&mut buf[..len]);
+        if buf[..len]
+            .iter()
+            .any(|b| *b == b'"' || *b == b'\\' || *b < 0x20)
+        {
+            return Err(Error::InvalidName);
+        }
+        Ok(())
+    }
+
+    /// Store the profile fingerprint at `seq` and emit the profile text.
+    fn store_profile(env: &Env, seq: u32, profile: &String) -> Result<(), Error> {
+        let len = profile.len();
+        if len == 0 || len > common::MAX_PROFILE_LENGTH {
+            return Err(Error::InvalidProfile);
+        }
+        let hash: BytesN<32> = env.crypto().sha256(&profile.to_bytes()).into();
+        set_profile_state(
+            env,
+            &ProfileState {
+                hash: hash.clone(),
+                seq,
+            },
+        );
+        emit_profile_updated(env, seq, &hash, profile);
         Ok(())
     }
 

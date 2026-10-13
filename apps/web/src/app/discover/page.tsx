@@ -1,9 +1,10 @@
+import { Plus } from 'lucide-react';
 import type { Metadata } from 'next';
 
 import { CommunityGrid } from '@/components/community/community-grid';
 import { PageSection } from '@/components/page-section';
 import { ButtonLink, Callout } from '@/components/ui';
-import { type DaoConfig, getAllDaosFromDatabase } from '@/lib/dao-db';
+import { type DaoConfig, getAllDaosFromDatabase, withLiveAvailability } from '@/lib/dao-db';
 
 // Communities change as they launch; never serve a build-time snapshot.
 export const dynamic = 'force-dynamic';
@@ -17,7 +18,7 @@ export default async function DiscoverPage() {
   let daos: DaoConfig[] = [];
   let loadError = false;
   try {
-    daos = await getAllDaosFromDatabase('operational');
+    daos = await withLiveAvailability(await getAllDaosFromDatabase('operational'));
   } catch {
     loadError = true;
   }
@@ -26,7 +27,8 @@ export default async function DiscoverPage() {
       title="Discover"
       description="Communities on Stellar. Bid in an auction or buy a token to become a member and vote."
       actions={
-        <ButtonLink href="/create" variant="secondary">
+        <ButtonLink href="/create">
+          <Plus aria-hidden="true" />
           Start a DAO
         </ButtonLink>
       }

@@ -50,22 +50,13 @@ export async function readAuctionHistory(daoId: string, params: URLSearchParams)
   const scope = auctionHistoryScope(DEPLOYMENT_ID, config.tokenContractId, config.auctionContractId);
   if (params.get('network') !== null && params.get('network') !== config.name)
     throw new AuctionHistoryError('History network does not match this DAO.', 409);
-  // Existing views only. Keep every join and read scoped, including the settlement lookup.
-  // Cast exact numerics to text: never round a bid or token ID through a JS number.
+  // auction.auctions carries the outcome (winner, settled_amount, closed_*). Cast exact
+  // numerics to text: never round a bid or token ID through a JS number.
   const rows = await prisma.$queryRaw<HistoryRow[]>`
     SELECT a.event_id, a.token_id::text, a.payment_token, a.settled, a.cancelled,
-           s.winner, s.amount::text, s.event_at AS settled_at, s.transaction_hash
+           a.winner, a.settled_amount::text AS amount, a.closed_at AS settled_at,
+           a.closed_transaction_hash AS transaction_hash
     FROM auction.auctions a
-    LEFT JOIN LATERAL (
-      SELECT s.winner, s.amount, s.event_at, s.transaction_hash
-      FROM auction.settlements s
-      WHERE s.deployment_id = a.deployment_id AND s.dao_id = a.dao_id
-        AND s.contract_id = a.contract_id AND s.token_id = a.token_id
-        AND s.event_ledger >= a.created_ledger
-      ORDER BY s.event_ledger DESC, s.transaction_index DESC NULLS LAST,
-        s.operation_index DESC NULLS LAST, s.event_index DESC NULLS LAST, s.event_id DESC
-      LIMIT 1
-    ) s ON true
     WHERE a.deployment_id = ${scope.deploymentId} AND a.dao_id = ${scope.daoId}
       AND a.contract_id = ${scope.contractId} AND (a.settled OR a.cancelled)
     ORDER BY a.token_id DESC, a.event_id DESC

@@ -12,9 +12,9 @@
  * are guarded by state too (e.g. a proposal that is already proposed is never proposed twice).
  *
  * Identities (local `stellar keys` names; env overrides):
- *   E2E_MANAGER_ADMIN (testnet-admin)  deploys Manager, registers implementations, set_platform_minter
+ *   E2E_MANAGER_ADMIN (testnet-admin)  deploys Manager, registers implementations, set_current_implementations
  *   E2E_DAO_OWNER     (testnet-dev)    deployer AND launch admin; founder 1 (3 tokens); proposer/voter
- *   E2E_BIDDER_A      (alice)          founder 2 (2 tokens); first bidder; second voter; primary buyer
+ *   E2E_BIDDER_A      (alice)          founder 2 (2 tokens); first bidder; second voter; pool buyer
  *   E2E_BIDDER_B      (testnet-admin)  second bidder; settles; queues/executes proposals
  * Only public addresses are ever read or printed (`stellar keys address`); secrets are never touched.
  *
@@ -34,6 +34,7 @@ export const TESTNET_PASSPHRASE = 'Test SDF Network ; September 2015';
 export const TESTNET_RPC = 'https://soroban-testnet.stellar.org';
 export const EXPLORER_TX = 'https://stellar.expert/explorer/testnet/tx/';
 export const MIN_BALANCE_STROOPS = 100n * 10_000_000n;
+const U32_MAX = 4_294_967_295;
 export const PHASES = ['preflight', 'deploy-manager', 'create-dao', 'setup', 'launch', 'auction', 'governance', 'marketplace', 'report'];
 
 // ---------------------------------------------------------------------------------------------
@@ -366,7 +367,7 @@ function prepareConfigs(ctx) {
     founders: [{ address: owner, amount: 3 }, { address: ctx.id('BIDDER_A'), amount: 2 }],
     auction: { ...template.auction, paymentAsset: sac },
     marketplace: { ...template.marketplace, paymentAsset: sac },
-    launch: { launchAuction: true, launchMarketplace: true, enableMinter: true }
+    launch: { launchAuction: true, launchMarketplace: true }
   };
   delete config.$comment;
   const e2eDir = join(ctx.root, '.e2e');
@@ -445,21 +446,23 @@ async function deployManager(ctx) {
   runScript(ctx, 'deploy-manager.mjs', [s.networkConfigPath], 'MANAGER_ADMIN');
   const artifact = readJson(managerArtifactPath(ctx));
   s.manager = artifact.manager;
-  s.minter = artifact.minter;
   s.implementations = artifact.implementations;
   for (const [k, h] of Object.entries(artifactTxs(artifact))) ctx.tx(`manager.${k}`, h);
   ctx.save();
 
   ctx.check('manager address recorded', ADDRESS_RE.test(s.manager ?? ''), s.manager);
-  const platformMinter = view(ctx, s.manager, 'get_platform_minter');
-  ctx.check('manager.get_platform_minter is set (== shared minter)', platformMinter === s.minter && !!platformMinter, String(platformMinter));
   const admin = view(ctx, s.manager, 'get_admin');
   ctx.check('manager.get_admin == MANAGER_ADMIN', admin === ctx.id('MANAGER_ADMIN'), String(admin));
   for (const name of ['manager', 'token', 'metadata', 'auction', 'governor', 'treasury', 'marketplace', 'minter']) {
     const impl = view(ctx, s.manager, 'get_implementation', { wasm_hash: assertBytes32(s.implementations?.[name], `implementations.${name}`) });
     ctx.check(`implementation ${name} registered`, impl !== null && impl !== undefined);
   }
-  ctx.skip('set_current_implementations read-back', 'no Manager view returns the current-implementation set; it is proven indirectly by create_dao succeeding in the next phase');
+  // CurrentImplementations: what create_dao / create_module deploy (`claims` is the ClaimMinter crate).
+  const current = view(ctx, s.manager, 'current_implementations');
+  const expected = { token: 'token', metadata: 'metadata', auction: 'auction', governor: 'governor', treasury: 'treasury', marketplace: 'marketplace', claims: 'minter' };
+  for (const [field, crate] of Object.entries(expected)) {
+    ctx.check(`current_implementations.${field} == ${crate} WASM`, current?.[field] === s.implementations?.[crate], String(current?.[field]));
+  }
 }
 
 function loadDao(ctx) {
@@ -475,24 +478,31 @@ async function createDao(ctx) {
   runScript(ctx, 'deploy-dao.mjs', ['create_dao', s.daoConfigPath, s.networkConfigPath], 'DAO_OWNER');
   const dao = loadDao(ctx);
   const modules = ['token', 'treasury', 'governor', 'metadata', 'auction', 'marketplace'];
-  ctx.check('all six module addresses recorded', modules.every((m) => ADDRESS_RE.test(dao?.[m] ?? '')), modules.map((m) => `${m}=${dao?.[m]}`).join(' '));
+  ctx.check('core + auction + marketplace addresses recorded', modules.every((m) => ADDRESS_RE.test(dao?.[m] ?? '')), modules.map((m) => `${m}=${dao?.[m]}`).join(' '));
+  ctx.check('no ClaimMinter (the config has no claims section)', dao?.claims === null, String(dao?.claims));
+  const registry = view(ctx, dao.token, 'modules');
+  ctx.check('token.modules lists the auction and marketplace as non-voting custody',
+    Array.isArray(registry) && registry.length === 2 && registry.every((m) => m.non_voting === true) &&
+      registry.some((m) => m.address === dao.auction) && registry.some((m) => m.address === dao.marketplace), JSON.stringify(registry));
+  const settings = view(ctx, dao.token, 'settings');
+  ctx.check('token.settings all off (an open DAO)', settings?.transfers_locked === false && settings?.members_only_delegation === false && settings?.dao_recovery === false, JSON.stringify(settings));
 
   const pending = view(ctx, s.manager, 'get_pending_dao', { token_address: dao.token });
   ctx.check('manager.get_pending_dao exists', !!pending, pending ? '' : 'null');
   if (pending) {
     ctx.check('pending.launch_admin == DAO_OWNER', pending.launch_admin === ctx.id('DAO_OWNER'));
-    ctx.check('pending payment assets == native SAC', pending.auction_payment_asset === s.nativeSac && pending.marketplace_payment_asset === s.nativeSac);
+    ctx.check('pending payment assets == native SAC (no claims asset)', pending.auction_payment_asset === s.nativeSac && pending.marketplace_payment_asset === s.nativeSac && pending.claims_payment_asset === null);
   }
   ctx.check('token.is_live == false', view(ctx, dao.token, 'is_live') === false);
-  ctx.check('manager.get_dao_by_slug resolves the slug to the token', view(ctx, s.manager, 'get_dao_by_slug', { slug: s.config.slug }) === dao.token, s.config.slug);
+  // create_dao only requests the slug; launch claims it (checked after launch_dao below).
+  ctx.check('pending.slug == the requested slug (claimed only at launch)', pending?.slug === s.config.slug, s.config.slug);
 
   // Pre-launch guards: each simulation must fail with CommonError::NotLive (7001). Nothing is submitted.
   const owner = ctx.id('DAO_OWNER');
   const proposeActions = encodeActions([{ target: dao.governor, fn: 'set_quorum_bps', args: [val.u32(2000)] }]);
   const guards = [
-    ['token.set_mint_authority (launch admin)', dao.token, 'set_mint_authority', { authority: owner, enabled: 'true' }, 'DAO_OWNER'],
     ['auction.unpause', dao.auction, 'unpause', { caller: owner }, 'DAO_OWNER'],
-    ['marketplace.create_primary_listing', dao.marketplace, 'create_primary_listing', { price: '10000000', expires_at: String(nowS() + 3600) }, 'DAO_OWNER'],
+    ['marketplace.open_pool', dao.marketplace, 'open_pool', { price: '10000000', asset: s.nativeSac, expires_at: String(nowS() + 3600), size: '1', max_per_buyer: '1', max_sold_per_period: '1', period_secs: '3600' }, 'DAO_OWNER'],
     ['governor.propose', dao.governor, 'propose', { ...proposeActions, description: 'e2e pre-launch guard', proposer: owner }, 'DAO_OWNER']
   ];
   for (const [label, id, method, params, role] of guards) {
@@ -525,17 +535,16 @@ async function launch(ctx) {
   loadDao(ctx);
   ctx.check('token.is_live == true', view(ctx, dao.token, 'is_live') === true);
   ctx.check('token.admin == treasury', view(ctx, dao.token, 'admin') === dao.treasury);
-  const holders = [
-    ['treasury', dao.treasury, true], ['marketplace', dao.marketplace, true], ['auction', dao.auction, true],
-    ['platform minter', s.minter, true], ['DAO_OWNER (launch admin)', ctx.id('DAO_OWNER'), false]
-  ];
-  for (const [label, addr, expected] of holders) {
-    ctx.check(`token.mint_authority(${label}) == ${expected}`, view(ctx, dao.token, 'mint_authority', { authority: addr }) === expected);
+  // Launch grants only the launched Auction an allowance (unlimited); pools get theirs by proposal.
+  const allowances = [['auction', dao.auction, U32_MAX], ['marketplace', dao.marketplace, 0]];
+  for (const [label, addr, expected] of allowances) {
+    const got = Number(view(ctx, dao.token, 'mint_allowance', { module: addr }));
+    ctx.check(`token.mint_allowance(${label}) == ${expected}`, got === expected, String(got));
   }
   ctx.check('manager.get_pending_dao is gone', view(ctx, s.manager, 'get_pending_dao', { token_address: dao.token }) === null);
   ctx.check('slug claimed at launch (registry is permanent)', view(ctx, s.manager, 'get_dao_by_slug', { slug: s.config.slug }) === dao.token, s.config.slug);
-  runScript(ctx, 'deploy-dao.mjs', ['bump_slug_ttl', s.daoConfigPath, s.networkConfigPath], 'DAO_OWNER');
-  ctx.check('deploy-dao.mjs bump_slug_ttl succeeds (permissionless renewal)', true, s.config.slug);
+  runScript(ctx, 'renew-dao.mjs', ['--network', NETWORK, '--token', dao.token, '--days', '30', '--source', ctx.name('DAO_OWNER')], 'DAO_OWNER');
+  ctx.check('renew-dao.mjs sweep succeeds (one ExtendFootprintTTL from any wallet)', true, s.config.slug);
   for (const [label, module] of [['governor', dao.governor], ['auction', dao.auction], ['treasury', dao.treasury], ['marketplace', dao.marketplace], ['metadata', dao.metadata]]) {
     ctx.check(`${label}.admin == treasury`, view(ctx, module, 'admin') === dao.treasury);
   }
@@ -567,7 +576,7 @@ async function auction(ctx) {
     a.tokenId = String(state.token_id);
     const bid = reserve;
     a.balanceABeforeBid = String(nativeBalance(ctx, A, auctionAsset));
-    const r = write(ctx, dao.auction, 'create_bid', { bidder: A, token_id: a.tokenId, amount: String(bid) }, 'BIDDER_A', 'auction.bidA');
+    const r = write(ctx, dao.auction, 'create_bid', { bidder: A, token_id: a.tokenId, amount: String(bid), comment: 'e2e bid' }, 'BIDDER_A', 'auction.bidA');
     a.bidA = { amount: String(bid), tx: r.txHash };
     a.balanceAAfterBid = String(nativeBalance(ctx, A, auctionAsset));
     ctx.save();
@@ -579,7 +588,7 @@ async function auction(ctx) {
   if (!a.bidB) {
     const prev = big(a.bidA.amount);
     const amount = prev + (prev * pct) / 100n;
-    const r = write(ctx, dao.auction, 'create_bid', { bidder: B, token_id: a.tokenId, amount: String(amount) }, 'BIDDER_B', 'auction.bidB');
+    const r = write(ctx, dao.auction, 'create_bid', { bidder: B, token_id: a.tokenId, amount: String(amount), comment: 'e2e outbid' }, 'BIDDER_B', 'auction.bidB');
     a.bidB = { amount: String(amount), tx: r.txHash };
     a.balanceAAfterOutbid = String(nativeBalance(ctx, A, auctionAsset));
     ctx.save();
@@ -620,11 +629,19 @@ async function auction(ctx) {
     big(next.token_id) === big(a.tokenId) + 1n && next.settled === false && Number(next.end_time) > nowS(), `token_id=${next.token_id}`);
 }
 
+// One proposal: change the quorum, grant the Marketplace one mint, and open a one-token quick-buy pool
+// with it (open_pool reserves the allowance, so the grant must come first).
 function governanceActions(ctx) {
   const g = ctx.state.gov;
+  const { dao, nativeSac } = ctx.state;
   return [
-    { target: ctx.state.dao.governor, fn: 'set_quorum_bps', args: [val.u32(g.newQuorumBps)] },
-    { target: ctx.state.dao.marketplace, fn: 'create_primary_listing', args: [val.i128(g.listingPrice), val.u64(g.listingExpiresAt)] }
+    { target: dao.governor, fn: 'set_quorum_bps', args: [val.u32(g.newQuorumBps)] },
+    { target: dao.token, fn: 'increase_mint_allowance', args: [val.address(dao.marketplace), val.u32(1)] },
+    {
+      target: dao.marketplace,
+      fn: 'open_pool',
+      args: [val.i128(g.poolPrice), val.address(nativeSac), val.u64(g.poolExpiresAt), val.u32(1), val.u32(1), val.u32(1), val.u64(3600)]
+    }
   ];
 }
 
@@ -639,9 +656,9 @@ async function governance(ctx) {
     const now = nowS();
     s.gov = {
       newQuorumBps: Number(gov) === 2000 ? 2500 : 2000,
-      listingPrice: '10000000',
-      listingExpiresAt: now + 3 * 3600,
-      description: `E2E rehearsal ${s.runId}: set quorum + create primary listing`,
+      poolPrice: '10000000',
+      poolExpiresAt: now + 3 * 3600,
+      description: `E2E rehearsal ${s.runId}: set quorum + open a quick-buy pool`,
       steps: {}
     };
     s.gov.descriptionHash = descriptionHash(s.gov.description);
@@ -664,7 +681,7 @@ async function governance(ctx) {
     g.steps.propose = { tx: r.txHash, at: nowS() };
     ctx.save();
   }
-  ctx.check('propose (2 actions) by DAO_OWNER; id matches get_proposal_id', g.proposalId === predicted, g.proposalId);
+  ctx.check('propose (3 actions) by DAO_OWNER; id matches get_proposal_id', g.proposalId === predicted, g.proposalId);
   const id = g.proposalId;
   ctx.check('proposal exists and is not Defeated/Canceled/Expired', atLeast(statePoll(id), 'Pending'), String(statePoll(id)));
 
@@ -701,7 +718,7 @@ async function governance(ctx) {
   ctx.check('proposal Queued after queue() (or already Executed on resume)', atLeast(statePoll(id), 'Queued'), String(statePoll(id)));
 
   if (!g.steps.execute) {
-    g.nextListingBefore = String(big(view(ctx, dao.marketplace, 'next_listing_id')));
+    g.nextPoolBefore = String(view(ctx, dao.marketplace, 'next_pool_id'));
     ctx.save();
     // The Governor sets eta = ledger time at queue + queue_delay and exposes no eta view, so poll a
     // read-only simulation of the real call: it succeeds exactly when the proposal is executable.
@@ -721,11 +738,13 @@ async function governance(ctx) {
   ctx.check('treasury.execute (by BIDDER_B) returned the proposal id', g.steps.execute.returnedId === id || g.steps.execute.returnedId === undefined, String(g.steps.execute.returnedId));
   ctx.check('proposal_state == Executed', statePoll(id) === 'Executed', String(statePoll(id)));
   ctx.check(`governor.quorum_bps == ${g.newQuorumBps}`, Number(view(ctx, dao.governor, 'quorum_bps')) === g.newQuorumBps);
-  const nextAfter = big(view(ctx, dao.marketplace, 'next_listing_id'));
-  ctx.check('marketplace.next_listing_id advanced by 1', nextAfter === big(g.nextListingBefore) + 1n, `${g.nextListingBefore} -> ${nextAfter}`);
-  const listing = view(ctx, dao.marketplace, 'get_primary_listing', { listing_id: g.nextListingBefore });
-  ctx.check(`marketplace.get_primary_listing(${g.nextListingBefore}) exists with the proposed price`, !!listing && big(listing.price) === big(g.listingPrice), JSON.stringify(listing));
-  g.listingId = g.nextListingBefore;
+  const nextAfter = Number(view(ctx, dao.marketplace, 'next_pool_id'));
+  ctx.check('marketplace.next_pool_id advanced by 1', nextAfter === Number(g.nextPoolBefore) + 1, `${g.nextPoolBefore} -> ${nextAfter}`);
+  const pool = view(ctx, dao.marketplace, 'get_pool', { pool_id: g.nextPoolBefore });
+  ctx.check(`marketplace.get_pool(${g.nextPoolBefore}) is open with the proposed price and size 1`,
+    !!pool && big(pool.price) === big(g.poolPrice) && Number(pool.size) === 1 && pool.closed === false, JSON.stringify(pool));
+  ctx.check('token.mint_allowance(marketplace) == 1 (reserved by the pool)', Number(view(ctx, dao.token, 'mint_allowance', { module: dao.marketplace })) === 1);
+  g.poolId = g.nextPoolBefore;
   ctx.save();
   const again = expectFailure(ctx, dao.treasury, 'execute', { ...enc, description_hash: g.descriptionHash }, 'BIDDER_B');
   ctx.check('second treasury.execute fails (ProposalAlreadyExecuted 5008)', !again.unexpectedSuccess && (again.code === 5008 || /AlreadyExecuted/.test(again.text)), `code ${again.code}`);
@@ -735,30 +754,44 @@ async function marketplace(ctx) {
   const s = ctx.state;
   const dao = s.dao;
   const A = ctx.id('BIDDER_A');
-  const listingId = s.gov?.listingId;
-  if (listingId === undefined) throw new Error('no primary listing recorded: run the governance phase first');
+  const poolId = s.gov?.poolId;
+  if (poolId === undefined) throw new Error('no pool recorded: run the governance phase first');
   const m = (s.market = s.market ?? {});
-  const listing = view(ctx, dao.marketplace, 'get_primary_listing', { listing_id: listingId });
+  const pool = view(ctx, dao.marketplace, 'get_pool', { pool_id: poolId });
+  if (!pool) throw new Error(`pool ${poolId} not found`);
   if (!m.buyTx) {
-    if (!listing) throw new Error(`primary listing ${listingId} is gone but no purchase is recorded`);
-    m.asset = listing.payment_asset;
-    m.price = String(big(listing.price));
+    m.asset = pool.asset;
+    m.price = String(big(pool.price));
     m.balanceBefore = String(big(view(ctx, dao.token, 'balance', { account: A })));
     m.supplyBefore = String(big(view(ctx, dao.token, 'total_supply')));
-    m.buyerFundsBefore = String(nativeBalance(ctx, A, m.asset));
     m.treasuryBefore = String(nativeBalance(ctx, dao.treasury, m.asset));
     ctx.save();
-    const r = write(ctx, dao.marketplace, 'buy_primary', { listing_id: String(listingId), buyer: A, max_price: m.price }, 'BIDDER_A', 'market.buy');
+    // Anyone restocks: the pool mints its reservation into Marketplace custody (non-voting).
+    if (!m.restockTx && Number(pool.stocked) === 0) {
+      const r = write(ctx, dao.marketplace, 'restock', { pool_id: String(poolId) }, 'BIDDER_B', 'market.restock');
+      m.restockTx = r.txHash;
+      ctx.save();
+    }
+    const stock = view(ctx, dao.marketplace, 'pool_stock', { pool_id: String(poolId), page: '0' });
+    if (!Array.isArray(stock) || stock.length === 0) throw new Error(`pool ${poolId} has no stock on page 0`);
+    m.tokenId = String(stock[0]);
+    ctx.save();
+    const r = write(ctx, dao.marketplace, 'buy_from_pool', { pool_id: String(poolId), page: '0', token_id: m.tokenId, buyer: A, max_price: m.price }, 'BIDDER_A', 'market.buy');
     m.buyTx = r.txHash;
-    m.tokenId = r.value === undefined ? null : String(r.value);
     ctx.save();
   }
-  ctx.check('buy_primary succeeded (BIDDER_A)', !!m.buyTx, `token_id=${m.tokenId}`);
+  ctx.check('restock by BIDDER_B minted the pool stock', !!m.restockTx || Number(pool.stocked) === 1);
+  ctx.check('buy_from_pool succeeded (BIDDER_A)', !!m.buyTx, `token_id=${m.tokenId}`);
   ctx.check('BIDDER_A token balance +1', big(view(ctx, dao.token, 'balance', { account: A })) === big(m.balanceBefore) + 1n);
-  ctx.check('token total_supply +1', big(view(ctx, dao.token, 'total_supply')) === big(m.supplyBefore) + 1n);
-  if (m.tokenId !== null) ctx.check('minted token owned by BIDDER_A', view(ctx, dao.token, 'owner_of', { token_id: m.tokenId }) === A);
-  ctx.check('treasury received the listing price exactly', nativeBalance(ctx, dao.treasury, m.asset) - big(m.treasuryBefore) === big(m.price), `price ${m.price}`);
-  ctx.check(`primary listing ${listingId} is gone`, view(ctx, dao.marketplace, 'get_primary_listing', { listing_id: String(listingId) }) === null);
+  ctx.check('token total_supply (voting) +1: the stock carried no votes until sold', big(view(ctx, dao.token, 'total_supply')) === big(m.supplyBefore) + 1n);
+  ctx.check('pool token owned by BIDDER_A', view(ctx, dao.token, 'owner_of', { token_id: m.tokenId }) === A);
+  ctx.check('treasury received the pool price exactly', nativeBalance(ctx, dao.treasury, m.asset) - big(m.treasuryBefore) === big(m.price), `price ${m.price}`);
+  const after = view(ctx, dao.marketplace, 'get_pool', { pool_id: poolId });
+  ctx.check(`pool ${poolId} sold == 1, stock page 0 empty`, Number(after?.sold) === 1 &&
+    view(ctx, dao.marketplace, 'pool_stock', { pool_id: String(poolId), page: '0' }).length === 0, JSON.stringify(after));
+  ctx.check('token.mint_allowance(marketplace) == 0 (spent by the restock)', Number(view(ctx, dao.token, 'mint_allowance', { module: dao.marketplace })) === 0);
+  const again = expectFailure(ctx, dao.marketplace, 'buy_from_pool', { pool_id: String(poolId), page: '0', token_id: m.tokenId, buyer: A, max_price: m.price }, 'BIDDER_A');
+  ctx.check('a second buy by BIDDER_A fails (BuyerLimitReached or NotInPool)', !again.unexpectedSuccess, `code ${again.code}`);
 }
 
 async function report(ctx) {
@@ -773,7 +806,7 @@ async function report(ctx) {
   for (const r of all) counts[r.status] += 1;
   const summary = {
     runId: s.runId, network: NETWORK, counts, elapsedSinceStateCreatedSeconds: elapsedS,
-    manager: s.manager, minter: s.minter, dao: s.dao, proposalId: s.gov?.proposalId,
+    manager: s.manager, dao: s.dao, proposalId: s.gov?.proposalId,
     phases: s.phases, txs: Object.fromEntries(Object.entries(s.txs).map(([k, v]) => [k, `${EXPLORER_TX}${v}`])),
     failures: all.filter((r) => r.status === 'FAIL')
   };

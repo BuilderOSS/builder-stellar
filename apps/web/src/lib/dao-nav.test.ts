@@ -7,7 +7,7 @@ const base = {
   auctionEnabled: null,
   marketplaceContractId: '',
   marketplaceEnabled: null,
-  minterContractId: ''
+  claimsContractId: ''
 };
 
 const keys = (items: Array<{ key: string }>) => items.map((item) => item.key);
@@ -35,7 +35,7 @@ describe('resolveDaoNav', () => {
   it('builds tabs, More and rail for a full community', () => {
     const nav = resolveDaoNav(
       'lantern',
-      { ...base, auctionContractId: 'CA', auctionEnabled: true, marketplaceContractId: 'CM', minterContractId: 'CN' },
+      { ...base, auctionContractId: 'CA', auctionEnabled: true, marketplaceContractId: 'CM', claimsContractId: 'CN' },
       { canManage: true }
     );
     expect(keys(nav.tabs)).toEqual(['home', 'vote', 'auction', 'treasury']);

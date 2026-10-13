@@ -6,7 +6,7 @@ indexed events remain the durable directory/history layer.
 
 ## Inputs
 
-- A Manager artifact with network, Manager, shared Minter, and deployment/transaction ledger.
+- A Manager artifact with network, Manager, and deployment/transaction ledger.
 - A PostgreSQL database with the [migrations/roles/grants](../db/README.md) applied by its administrator.
 - A named Goldsky Postgres secret whose database credentials can write the three landing tables and maintain the pipeline's `streamling` dynamic allowlists.
 - A configured Goldsky CLI/session. The package does not declare a Goldsky CLI dependency.
@@ -31,19 +31,24 @@ Output is `pipelines/builder-stellar-events.yaml`, authored from `templates/buil
 
 From the repository root, an administrator runs `db/setup-roles.sh`, `db/migrate.sh`, and `db/grant-permissions.sh` using `DATABASE_URL`. These mutate the database. The web uses separate read-only `APP_DATABASE_URL`. See [DB operations](../db/README.md) for the exact scripts and reset boundaries.
 
-Align the web's newest-artifact deployment selection with the pipeline's explicit artifact and `NEXT_PUBLIC_NETWORK`. New DAO addresses enter six dynamic allowlists from `DaoCreated`. Minter is a configured shared contract, not a seventh DAO child.
+Align the web's newest-artifact deployment selection with the pipeline's explicit artifact and `NEXT_PUBLIC_NETWORK`. The Manager is the only configured contract. DAO addresses enter the allowlists from events: the core four (token, metadata, governor, treasury) from `DaoCreated`; modules the Manager deployed from `DaoCreated` and `ModuleCreated`, each into its kind's table (`dao_auctions`, `dao_marketplaces`, `dao_claims`, `dao_circles`); and any other contract a known Token registers (`ModuleRegistered`) into the catch-all `dao_modules`, as role `module` whatever kind it was registered under. A module registered by proposal is followed without a regenerate, and a known role always means Manager-deployed code. Details: [package reference](../packages/goldsky/README.md#allowlists).
+
+Why allowlists when `manager.daos` already lists every module: `manager.daos` is a view over `chain.decoded_events`, the pipeline's own output, and a Goldsky SQL transform cannot read our tables or views. Its only lookup outside the stream is `dynamic_table_check(table, value)`, a membership test on one key column, so the role of an address has to be encoded by which table holds it. The tables (`streamling.dao_<kind>`) are append-only and survive redeploys; after a database reset they are rebuilt from the replayed events on top of what is there, which is harmless (an obsolete address only lets its events through the filter, and the read model windows module events by registration). A Manager change needs `DROP SCHEMA streamling CASCADE` with the pipeline stopped ([DB operations](../db/README.md)).
+
+**Query cost of module identity.** `manager.module_registrations` and the windowed `event_identity` / `module_events` views compare each module event's position (`ledger, tx, op, evt`) with the registration windows of its address. Per-DAO reads push the DAO filter down, but an unfiltered scan (a backfill check, an ad hoc count) joins every module event to its windows; filter by DAO or by `contract_id` when querying by hand.
 
 ## Validation and deployment boundary
 
-`pnpm validate` checks contract-event alignment locally. `pnpm turbo:validate` invokes `goldsky turbo validate` and requires a usable CLI. `scripts/deploy.sh` still invokes `pnpm goldsky pipeline ...` commands and loads `.env`; its CLI compatibility is not established by local transform tests. Confirm the installed CLI command family before using it to validate/apply/delete a remote pipeline. This page does not claim remote deployment was verified.
+`pnpm validate` checks contract-event alignment locally. `pnpm turbo:validate` and `scripts/deploy.sh` use the Turbo CLI (`goldsky turbo validate|apply|list|logs|delete`, global `goldsky`, `goldsky login`); the legacy `goldsky pipeline ...` commands do not see Turbo pipelines. The script reads the pipeline name from the generated YAML.
 
-Pipeline name is `builder-stellar-events`; the current testnet pipeline was applied with `goldsky turbo apply` from a copy renamed `builder-stellar-testnet` (`goldsky turbo list|delete|apply`). A replay after a DB reset needs `goldsky turbo delete <name>` (clears state) and a fresh `apply`. The template requests `stellar_<network>.events` version `1.2.0`, resource size `s`, streaming mode, and an explicit start ledger. These are configured values, not a claim that every network alias is available from the vendor.
+The pipeline name is `builder-stellar-<network>` from the Manager artifact (`GOLDSKY_PIPELINE_NAME` overrides it), so the generated `pipelines/builder-stellar-events.yaml` is applied as is; the testnet pipeline is `builder-stellar-testnet`. A replay after a DB reset needs `goldsky turbo delete <name>` (clears state) and a fresh `apply`; the checklist is in `packages/goldsky/README.md`. The template requests `stellar_<network>.events` version `1.2.0`, resource size `s`, streaming mode, and an explicit start ledger. These are configured values, not a claim that every network alias is available from the vendor.
 
 ## Event identity notes
 
-- Every module emits its own launch event at `launch_dao` (`TokenLaunched`, `GovernorLaunched`, `TreasuryLaunched`, `AuctionLaunched`, `MarketplaceLaunched`, `MetadataLaunched`) and an `AdminChanged` (launch admin -> Treasury). `AdminChanged` shares its name and shape with the Manager's own admin event; identify events by (contract address, event name).
+- Every contract emits its own launch event at `launch_dao` / `launch_when_ready` (`TokenLaunched`, `GovernorLaunched`, `TreasuryLaunched`, `AuctionLaunched`, `MarketplaceLaunched`, `ClaimMinterLaunched`, `MetadataLaunched`) and an `AdminChanged` (launch admin -> Treasury; at `open_assurance` for a drive). `AdminChanged` shares its name and shape with the Manager's own admin event; identify events by (contract address, event name).
 - Governor `propose` emits `ProposalScheduled` (vote window, snapshot, quorum) next to `ProposalCreated`; proposal state in the read model is computed from it.
-- Manager `launch_dao` claims the slug (`SlugClaimed`); `DaoCreated.slug` and `PendingSlugUpdated` are only requests.
+- Manager `launch_dao` claims the slug (`SlugClaimed`); `DaoCreated.slug` and `PendingSlugUpdated` are only requests. `open_assurance` claims it early, and `SlugReleased` frees a failed drive's slug.
+- An event the decoder doesn't know (from a module registered outside the Manager) is decoded positionally (`topic_N`, `arg_N`) and lands as an admin `module.<event>` row.
 - `batch_mint` emits one `MintBatchWithMinter` and the Metadata hook one `SeedsGenerated` per batch (views expand them per token); single mints keep `MintWithMinter` / `SeedGenerated`.
 - Contract error codes are unique across contracts (7000-7899, one block of 100 per crate), so a code identifies its contract.
 

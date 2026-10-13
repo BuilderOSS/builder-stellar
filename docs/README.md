@@ -18,17 +18,21 @@ These pages describe the current repository source, including the frontend worki
 - [Database migrations, roles, and reset](../db/README.md)
 - [Bindings generation](../BINDINGS_GENERATION_ISSUE.md)
 - [Monitor the application](MONITORING.md)
-- [Maintain TTLs](TTL_ECONOMICS.md)
+- [Who pays for storage, role by role](STORAGE_COSTS.md)
+- [Storage, TTL and rent reference](TTL_ECONOMICS.md)
 - [Configure artwork during Setup](ARTWORK_PLAYGROUND_INTEGRATION.md)
 
 ## Reference and explanation
 
 - [Database view catalog](DATABASE_SCHEMA.md)
 - [Security and authority model](SECURITY_MODEL.md): admin model, voting supply, batch budget, error codes
+- [Storage diet (approved design)](STORAGE_DIET.md): what leaves contract storage for events, the on-chain-only guarantee, profile JSON; [its testnet-failure review](STORAGE_DIET_REVIEW.md)
 - [Contract review fixes](CONTRACT_REVIEW_FIX_PLAN.md): review findings and how each was fixed
+- [Membership models (design)](designs/membership-models.md): mint allowances, the module registry, ClaimMinter, the assurance launch and quick-buy pools; retires the shared Minter
+- [Membership token settings (design)](designs/locked-tokens.md): locked transfers, members-only delegation, DAO recovery and transfer agents
 - [Warm Ink and frontend direction](BRAND_AND_FRONTEND_DIRECTION.md)
 - [Agent workflow and acceptance checks](AGENT_WORKFLOW.md)
-- Contracts: [Manager](../contracts/manager/README.md), [Token](../contracts/token/README.md), [Metadata](../contracts/metadata/README.md), [Auction](../contracts/auction/README.md), [Governor](../contracts/governor/README.md), [Treasury](../contracts/treasury/README.md), [Marketplace](../contracts/marketplace/README.md), [Minter](../contracts/minter/README.md)
+- Contracts: [Manager](../contracts/manager/README.md), [Token](../contracts/token/README.md), [Metadata](../contracts/metadata/README.md), [Auction](../contracts/auction/README.md), [Governor](../contracts/governor/README.md), [Treasury](../contracts/treasury/README.md), [Marketplace](../contracts/marketplace/README.md), [ClaimMinter](../contracts/minter/README.md)
 - Support: [common](../contracts/common/README.md), [in-memory integration tests](../contracts/e2e/README.md)
 - Binding packages: [Token](../packages/token-bindings/README.md), [Metadata](../packages/metadata-bindings/README.md), [Auction](../packages/auction-bindings/README.md), [Governor](../packages/governor-bindings/README.md), [Treasury](../packages/treasury-bindings/README.md), [Manager](../packages/manager-bindings/README.md), [Marketplace](../packages/marketplace-bindings/README.md)
 

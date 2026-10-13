@@ -26,7 +26,6 @@ pub struct AuctionInitialized {
     pub min_bid_increment_percent: u32,
     pub time_buffer: u64,
     pub payment_token: Address,
-    pub version: String,
 }
 
 #[contractevent]
@@ -159,7 +158,6 @@ pub fn emit_auction_initialized(
     min_bid_increment_percent: u32,
     time_buffer: u64,
     payment_token: &Address,
-    version: &String,
 ) {
     AuctionInitialized {
         admin: admin.clone(),
@@ -170,7 +168,6 @@ pub fn emit_auction_initialized(
         min_bid_increment_percent,
         time_buffer,
         payment_token: payment_token.clone(),
-        version: version.clone(),
     }
     .publish(e);
 }
