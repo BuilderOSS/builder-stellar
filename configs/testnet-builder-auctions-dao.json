@@ -1,0 +1,111 @@
+{
+  "$comment": "Builder Auctions: Daily auctions fund the treasury; members can resell on the market. Fresh testnet deployment (membership models 0.4.0).",
+  "deployer": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+  "nonce": 1,
+  "launchAdmin": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+  "slug": "builder-auctions",
+  "token": {
+    "name": "Builder Auctions",
+    "symbol": "BAUC"
+  },
+  "metadata": {
+    "profile": {
+      "description": "Daily auctions fund the treasury; members can resell on the market.",
+      "links": [
+        {
+          "label": "Website",
+          "url": "https://test-dao-stellar-web.vercel.app"
+        }
+      ],
+      "image": "https://builder-stellar-web.vercel.app/images/dao-logo.png"
+    },
+    "rendererBase": "https://builder-stellar-web.vercel.app/api/render",
+    "artwork": {
+      "ipfs": {
+        "baseUri": "ipfs://bafybeihcsfjvnjmzivm4gxgt75zwajtfxumyxd7j6ibvloykpg4sx47uca/",
+        "extension": ".png"
+      },
+      "properties": [
+        {
+          "name": "0-backgrounds",
+          "items": [
+            "bg-cool",
+            "bg-warm"
+          ]
+        },
+        {
+          "name": "1-bodies",
+          "items": [
+            "body-rust",
+            "body-blue-sky",
+            "body-darkbrown"
+          ]
+        },
+        {
+          "name": "2-accessories",
+          "items": [
+            "accessory-txt-cc2",
+            "accessory-txt-ico",
+            "accessory-flash"
+          ]
+        },
+        {
+          "name": "3-heads",
+          "items": [
+            "head-hotdog",
+            "head-ufo",
+            "head-goldcoin"
+          ]
+        },
+        {
+          "name": "4-glasses",
+          "items": [
+            "glasses-square-teal",
+            "glasses-square-guava",
+            "glasses-square-black-rgb"
+          ]
+        }
+      ]
+    }
+  },
+  "auction": {
+    "duration": 300,
+    "reservePrice": "1000000000",
+    "timeBuffer": 300,
+    "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
+  },
+  "marketplace": {
+    "paymentAsset": "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+    "secondaryFeeBps": 250
+  },
+  "governance": {
+    "queueDelay": 300,
+    "votingDelay": 300,
+    "votingPeriod": 300,
+    "quorumBps": 1000,
+    "proposalThreshold": 1
+  },
+  "founders": [
+    {
+      "address": "GCLGEIQB4RCG63LSIBSHQ6T67YICWKTHSORNHVXHFVVGXISZU3MQU6CO",
+      "amount": 10
+    },
+    {
+      "address": "GD3V5DONBL34B4P7ZCJNVLPJI77THOSV4Y7SJBCT7IIFAIK7TFADLSOA",
+      "amount": 10
+    },
+    {
+      "address": "GCUQPLGNO62DQNS56WJDR2G5FQKSWUDYGWQ7BTYE6YQTZUE326ZVXCTQ",
+      "amount": 10
+    }
+  ],
+  "launch": {
+    "launchAuction": true,
+    "launchMarketplace": true
+  },
+  "tokenSettings": {
+    "transfersLocked": false,
+    "membersOnlyDelegation": false,
+    "daoRecovery": false
+  }
+}

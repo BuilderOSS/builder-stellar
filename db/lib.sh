@@ -28,6 +28,13 @@ sql_schema_list() {
   echo "${out%,}"
 }
 
+# The same for the app-readable schemas.
+sql_app_schema_list() {
+  local out="" s
+  for s in "${APP_SCHEMAS[@]}"; do out+="'$s',"; done
+  echo "${out%,}"
+}
+
 # Resolve DATABASE_URL from $1 or the environment and verify connectivity.
 require_database() {
   DATABASE_URL="${1:-${DATABASE_URL:-}}"

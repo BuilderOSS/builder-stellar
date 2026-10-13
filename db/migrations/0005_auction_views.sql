@@ -42,7 +42,10 @@ WHERE e.contract_role = 'auction'
 -- The outcome and bid state of one auction, keyed on the indexed topic column
 -- (the token id as emitted) and bounded by the auction's own position: the
 -- first settlement or cancellation after it, and the latest bid before that.
-CREATE FUNCTION auction.auction_state(dep text, contract text, token text, created bigint[])
+-- A SQL function runs with its caller's privileges, and app_server has no
+-- access to chain.*: it reads manager.module_events (a view, read with its
+-- owner's privileges), which also keeps the contract's registration window.
+CREATE FUNCTION auction.auction_state(dep text, dao text, contract text, token text, created bigint[])
 RETURNS TABLE (
   closing_event text, winner text, settled_amount numeric(78, 0), closed_at timestamptz,
   closed_transaction_hash text, highest_bidder text, highest_bid numeric(78, 0),
@@ -56,8 +59,8 @@ AS $$
   FROM (SELECT 1) one
   LEFT JOIN LATERAL (
     SELECT x.event_name, x.a, x.pos, x.closed_at, x.transaction_hash
-    FROM chain.events x
-    WHERE x.deployment_id = dep AND x.contract_id = contract
+    FROM manager.module_events x
+    WHERE x.deployment_id = dep AND x.dao_id = dao AND x.contract_id = contract
       AND x.event_name IN ('auction_settled', 'auction_cancelled')
       AND x.topic_0 = token AND x.pos > created
     ORDER BY x.pos, x.event_id
@@ -69,8 +72,8 @@ AS $$
       (array_agg((y.a ->> 'amount')::numeric(78, 0) ORDER BY y.pos DESC, y.event_id DESC))[1] AS amount,
       (array_agg((y.a ->> 'new_end_time')::bigint ORDER BY y.pos DESC, y.event_id DESC))[1] AS new_end_seconds,
       (count(*) FILTER (WHERE (y.a ->> 'extended')::boolean))::integer AS extension_count
-    FROM chain.events y
-    WHERE y.deployment_id = dep AND y.contract_id = contract
+    FROM manager.module_events y
+    WHERE y.deployment_id = dep AND y.dao_id = dao AND y.contract_id = contract
       AND y.event_name = 'bid_placed' AND y.topic_0 = token
       AND y.pos > created AND (x.pos IS NULL OR y.pos < x.pos)
   ) b ON true
@@ -102,7 +105,7 @@ SELECT
   c.ledger_sequence AS created_ledger,
   c.transaction_hash
 FROM manager.module_events c
-CROSS JOIN LATERAL auction.auction_state(c.deployment_id, c.contract_id, c.topic_0, c.pos) s
+CROSS JOIN LATERAL auction.auction_state(c.deployment_id, c.dao_id, c.contract_id, c.topic_0, c.pos) s
 WHERE c.contract_role = 'auction'
   AND c.event_name = 'auction_created';
 
@@ -139,4 +142,4 @@ FROM (
   WHERE e.contract_role = 'auction' AND e.event_name = 'auction_created'
   ORDER BY e.deployment_id, e.contract_id, e.pos DESC, e.event_id DESC
 ) c
-CROSS JOIN LATERAL auction.auction_state(c.deployment_id, c.contract_id, c.topic_0, c.pos) s;
+CROSS JOIN LATERAL auction.auction_state(c.deployment_id, c.dao_id, c.contract_id, c.topic_0, c.pos) s;
