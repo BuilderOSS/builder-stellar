@@ -2,10 +2,12 @@
 //!
 //! Standard NFT lifecycle events (Transfer, Mint, Approve) and vote events
 //! (DelegateChanged, DelegateVotesChanged) come from OpenZeppelin. The events
-//! below add what those lack: the minter of each token or batch, mint-authority changes
-//! and the launch handoff. Admin changes are `common::admin::AdminChanged`.
+//! below add what those lack: the minter of each token or batch, mint-allowance changes,
+//! module registrations and the launch handoff. Admin changes are
+//! `common::admin::AdminChanged`.
 
-use soroban_sdk::{contractevent, Address, Env, String, Vec};
+use common::modules::MintGrant;
+use soroban_sdk::{contractevent, Address, Env, String, Symbol, Vec};
 
 /// Emitted once by the constructor.
 #[contractevent]
@@ -17,19 +19,43 @@ pub struct TokenInitialized {
     pub symbol: String,
 }
 
-/// Emitted when minting authority is granted or revoked for an address.
+/// Emitted when a module's mint allowance is set by `launch`, raised or
+/// lowered by the admin, zeroed by `unregister_module`, or released by the
+/// module itself. Not emitted when a mint spends allowance (the remaining
+/// amount is readable with `mint_allowance`).
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MintAuthorityChanged {
+pub struct MintAllowanceChanged {
     #[topic]
-    pub authority: Address,
-    pub old_enabled: bool,
-    pub enabled: bool,
+    pub module: Address,
+    pub old_allowance: u32,
+    pub allowance: u32,
     pub changed_by: Address,
 }
 
+/// Emitted when a module joins the registry (the constructor's Auction and
+/// Marketplace, the Manager in Setup, the Treasury by proposal once live).
+/// The indexer allowlists modules from this event.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ModuleRegistered {
+    #[topic]
+    pub kind: Symbol,
+    pub address: Address,
+    pub non_voting: bool,
+}
+
+/// Emitted when a module leaves the registry.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ModuleUnregistered {
+    #[topic]
+    pub kind: Symbol,
+    pub address: Address,
+}
+
 /// Emitted for every token minted by `mint`, next to OpenZeppelin's `Mint`, to
-/// record who performed the mint (admin, auction, marketplace, minter).
+/// record who performed the mint (the admin or a module).
 /// `batch_mint` emits `MintBatchWithMinter` instead.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -69,7 +95,8 @@ pub struct MetadataUpdated {
 pub struct TokenLaunched {
     #[topic]
     pub treasury: Address,
-    pub minters: Vec<Address>,
+    /// The initial mint allowances `launch` wrote.
+    pub grants: Vec<MintGrant>,
 }
 
 pub fn emit_token_initialized(e: &Env, admin: &Address, name: &String, symbol: &String) {
@@ -81,18 +108,35 @@ pub fn emit_token_initialized(e: &Env, admin: &Address, name: &String, symbol: &
     .publish(e);
 }
 
-pub fn emit_mint_authority_changed(
+pub fn emit_mint_allowance_changed(
     e: &Env,
-    authority: &Address,
-    old_enabled: bool,
-    enabled: bool,
+    module: &Address,
+    old_allowance: u32,
+    allowance: u32,
     changed_by: &Address,
 ) {
-    MintAuthorityChanged {
-        authority: authority.clone(),
-        old_enabled,
-        enabled,
+    MintAllowanceChanged {
+        module: module.clone(),
+        old_allowance,
+        allowance,
         changed_by: changed_by.clone(),
+    }
+    .publish(e);
+}
+
+pub fn emit_module_registered(e: &Env, kind: &Symbol, address: &Address, non_voting: bool) {
+    ModuleRegistered {
+        kind: kind.clone(),
+        address: address.clone(),
+        non_voting,
+    }
+    .publish(e);
+}
+
+pub fn emit_module_unregistered(e: &Env, kind: &Symbol, address: &Address) {
+    ModuleUnregistered {
+        kind: kind.clone(),
+        address: address.clone(),
     }
     .publish(e);
 }
@@ -115,10 +159,10 @@ pub fn emit_token_batch_mint(e: &Env, minter: &Address, first_token_id: u32, cou
     .publish(e);
 }
 
-pub fn emit_launched(e: &Env, treasury: &Address, minters: &Vec<Address>) {
+pub fn emit_launched(e: &Env, treasury: &Address, grants: &Vec<MintGrant>) {
     TokenLaunched {
         treasury: treasury.clone(),
-        minters: minters.clone(),
+        grants: grants.clone(),
     }
     .publish(e);
 }

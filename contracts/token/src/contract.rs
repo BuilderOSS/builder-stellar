@@ -1,6 +1,8 @@
 #![allow(clippy::too_many_arguments)] // constructors take every wired address/param explicitly
 
-use soroban_sdk::{contract, contractimpl, panic_with_error, Address, BytesN, Env, String, Vec};
+use soroban_sdk::{
+    contract, contractimpl, panic_with_error, Address, BytesN, Env, Executable, String, Symbol, Vec,
+};
 use stellar_governance::votes::{
     emit_delegate_changed as emit_library_delegate_changed, get_delegate, num_checkpoints,
     transfer_voting_units, Votes, VotesStorageKey,
@@ -12,11 +14,12 @@ use stellar_tokens::non_fungible::{
 };
 
 use common::clients::{MetadataHookClient, TokenUriClient};
+use common::modules::{self, MintGrant, ModuleEntry};
 
 use crate::error::TokenError;
 use crate::events::{
-    emit_launched, emit_metadata_updated, emit_mint_authority_changed, emit_token_batch_mint,
-    emit_token_initialized, emit_token_mint,
+    emit_launched, emit_metadata_updated, emit_mint_allowance_changed, emit_module_registered,
+    emit_module_unregistered, emit_token_batch_mint, emit_token_initialized, emit_token_mint,
 };
 use crate::storage::*;
 
@@ -24,14 +27,22 @@ use crate::storage::*;
 ///
 /// # Voting supply
 ///
-/// Tokens held by the DAO's own Treasury, Auction and Marketplace carry no
-/// voting power. Moving a token into one of them burns its voting unit
-/// (OpenZeppelin `transfer_voting_units(Some(from), None, 1)`) and moving it
-/// out mints the unit again. The votes `TotalSupply` checkpoint therefore
-/// counts only tokens that can actually vote, which is what the Governor's
-/// quorum and proposal-threshold checks read. Unsold auction tokens piling up
-/// in the Treasury can never make quorum unreachable. The three addresses are
-/// fixed at construction, so balances and voting units can never drift apart.
+/// Tokens held by the DAO's Treasury and by every registered module marked
+/// `non_voting` (today the Auction and the Marketplace) carry no voting power.
+/// Moving a token into one of them burns its voting unit (OpenZeppelin
+/// `transfer_voting_units(Some(from), None, 1)`) and moving it out mints the
+/// unit again. The votes `TotalSupply` checkpoint therefore counts only tokens
+/// that can actually vote, which is what the Governor's quorum and
+/// proposal-threshold checks read. Registering or unregistering a non-voting
+/// module moves the votes of whatever it already holds the same way, so
+/// balances and voting units can never drift apart
+/// (docs/designs/membership-models.md §1).
+///
+/// # Minting
+///
+/// The admin (the launch admin in Setup, the Treasury once live) mints without
+/// limit. A registered module mints against its `MintAllowance`. Before launch
+/// only the `claims` module may use its allowance.
 #[contract]
 pub struct DaoTokenContract;
 
@@ -41,8 +52,10 @@ impl DaoTokenContract {
     ///
     /// * `admin` - setup-phase admin (the launch admin); becomes the Treasury at launch
     /// * `treasury` - DAO Treasury; `launch` must be called with exactly this address
-    /// * `auction` - DAO Auction (holds the token being auctioned)
-    /// * `marketplace` - DAO Marketplace (escrows listed tokens)
+    /// * `auction` - DAO Auction (holds the token being auctioned); registered
+    ///   as the non-voting module of kind `auction`
+    /// * `marketplace` - DAO Marketplace (escrows listed tokens); registered as
+    ///   the non-voting module of kind `marketplace`
     /// * `name`, `symbol` - collection name and symbol (OpenZeppelin caps them
     ///   at 40 and 10 bytes; the name may not contain `"`, `\` or control
     ///   characters because the on-chain token JSON copies it verbatim)
@@ -68,10 +81,25 @@ impl DaoTokenContract {
         instance.set(&common::ns(e, TokenKey::MetadataContract), &metadata);
         instance.set(&common::ns(e, TokenKey::Manager), &manager);
         instance.set(&common::ns(e, TokenKey::Treasury), &treasury);
-        instance.set(&common::ns(e, TokenKey::Auction), &auction);
-        instance.set(&common::ns(e, TokenKey::Marketplace), &marketplace);
         common::upgrade::init(e, &current_hash, STORAGE_VERSION);
         emit_token_initialized(e, &admin, &name, &symbol);
+        // Constructor wiring is trusted (the Manager deploys these next, at
+        // predicted addresses), so it skips `register_module`'s checks. They
+        // hold nothing yet, so no votes move.
+        let mut entries = Vec::new(e);
+        for (kind, address) in [
+            (modules::KIND_AUCTION, auction),
+            (modules::KIND_MARKETPLACE, marketplace),
+        ] {
+            let kind = Symbol::new(e, kind);
+            emit_module_registered(e, &kind, &address, true);
+            entries.push_back(ModuleEntry {
+                kind,
+                address,
+                non_voting: true,
+            });
+        }
+        Self::write_modules(e, &entries);
     }
 
     pub fn upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
@@ -115,59 +143,170 @@ impl DaoTokenContract {
         emit_metadata_updated(e, &name, &symbol);
     }
 
-    /// Grants or revokes minting authority (admin only, live token only; the
-    /// launch writes the initial set). Emits `MintAuthorityChanged`.
-    pub fn set_mint_authority(e: &Env, authority: Address, enabled: bool) {
-        let changed_by = common::admin::require_admin(e);
-        common::lifecycle::require_live(e);
-        common::ttl::extend_instance(e);
-        let old_enabled = Self::mint_authority(e, authority.clone());
-        Self::write_mint_authority(e, &authority, enabled);
-        emit_mint_authority_changed(e, &authority, old_enabled, enabled, &changed_by);
-    }
-
-    /// Whether `authority` holds explicit minting authority. The admin always
-    /// has implicit authority without an entry.
-    pub fn mint_authority(e: &Env, authority: Address) -> bool {
-        let key = common::ns(e, TokenKey::MintAuthority(authority));
-        let enabled: Option<bool> = e.storage().persistent().get(&key);
-        if enabled.is_some() {
+    /// How many more tokens `module` may mint (0 for unregistered addresses).
+    pub fn mint_allowance(e: &Env, module: Address) -> u32 {
+        let key = common::ns(e, TokenKey::MintAllowance(module));
+        let allowance: Option<u32> = e.storage().persistent().get(&key);
+        if allowance.is_some() {
             common::ttl::extend_persistent(e, &key);
         }
-        enabled.unwrap_or(false)
+        allowance.unwrap_or(0)
+    }
+
+    /// Raises a registered module's allowance by `amount` (admin only;
+    /// `NotAModule` otherwise). Adds rather than overwrites, so a grant for a
+    /// second list never erases the first. Emits `MintAllowanceChanged`.
+    pub fn increase_mint_allowance(e: &Env, module: Address, amount: u32) {
+        let changed_by = common::admin::require_admin(e);
+        common::ttl::extend_instance(e);
+        if Self::find_module(e, &module).is_none() {
+            panic_with_error!(e, TokenError::NotAModule);
+        }
+        let old = Self::mint_allowance(e, module.clone());
+        Self::set_allowance(e, &module, old, old.saturating_add(amount), &changed_by);
+    }
+
+    /// Lowers `module`'s allowance by `amount`, saturating at 0 (admin only).
+    /// Emits `MintAllowanceChanged`.
+    pub fn decrease_mint_allowance(e: &Env, module: Address, amount: u32) {
+        let changed_by = common::admin::require_admin(e);
+        common::ttl::extend_instance(e);
+        let old = Self::mint_allowance(e, module.clone());
+        Self::set_allowance(e, &module, old, old.saturating_sub(amount), &changed_by);
+    }
+
+    /// A module gives back `amount` of its own allowance (module auth),
+    /// saturating at 0: for example a closed pool's unstocked remainder.
+    /// Emits `MintAllowanceChanged`.
+    pub fn release_mint_allowance(e: &Env, module: Address, amount: u32) {
+        module.require_auth();
+        common::ttl::extend_instance(e);
+        let old = Self::mint_allowance(e, module.clone());
+        Self::set_allowance(e, &module, old, old.saturating_sub(amount), &module);
+    }
+
+    /// Every registered module, in registration order.
+    pub fn modules(e: &Env) -> Vec<ModuleEntry> {
+        Self::read_modules(e)
+    }
+
+    /// The registered module of `kind`, if any.
+    pub fn module(e: &Env, kind: Symbol) -> Option<Address> {
+        Self::read_modules(e)
+            .iter()
+            .find(|m| m.kind == kind)
+            .map(|m| m.address)
+    }
+
+    /// Registers `address` as a module of `kind`. In Setup only the Manager
+    /// may register (during `create_dao` / `create_module`); once live only
+    /// the admin (the Treasury, by proposal).
+    ///
+    /// `address` must be a deployed Wasm contract (`NotAContract`): wallets,
+    /// Stellar Asset Contracts and predicted addresses are refused, so a
+    /// proposal can never mark a holder's wallet non-voting. `kind` is a
+    /// built-in kind or `custom_<name>` (`InvalidKind`) and unique
+    /// (`KindTaken`). If the module is `non_voting` and already holds tokens,
+    /// their votes leave the supply now. Emits `ModuleRegistered`.
+    pub fn register_module(e: &Env, kind: Symbol, address: Address, non_voting: bool) {
+        Self::require_registrar(e);
+        common::ttl::extend_instance(e);
+        if !modules::is_valid_kind(e, &kind) {
+            panic_with_error!(e, TokenError::InvalidKind);
+        }
+        if !matches!(address.executable(), Some(Executable::Wasm(_))) {
+            panic_with_error!(e, TokenError::NotAContract);
+        }
+        let mut entries = Self::read_modules(e);
+        if entries.len() >= modules::MAX_MODULES {
+            panic_with_error!(e, TokenError::TooManyModules);
+        }
+        for m in entries.iter() {
+            if m.address == address || address == Self::treasury(e) {
+                panic_with_error!(e, TokenError::ModuleAlreadyRegistered);
+            }
+            if m.kind == kind {
+                panic_with_error!(e, TokenError::KindTaken);
+            }
+        }
+        if non_voting {
+            // A voting holder's units equal its balance (the invariant), so all
+            // of them leave the supply, debited from its delegate.
+            let held = u128::from(Base::balance(e, &address));
+            if held > 0 {
+                transfer_voting_units(e, Some(&address), None, held);
+            }
+        }
+        entries.push_back(ModuleEntry {
+            kind: kind.clone(),
+            address: address.clone(),
+            non_voting,
+        });
+        Self::write_modules(e, &entries);
+        emit_module_registered(e, &kind, &address, non_voting);
+    }
+
+    /// Removes `address` from the registry (same authority as
+    /// `register_module`; `NotAModule` if absent). Its allowance drops to 0.
+    /// If it was `non_voting` and still holds tokens, it is self-delegated
+    /// first and their votes return to the supply under its own address, so
+    /// the account checkpoints keep adding up to `TotalSupply`. Empty a module
+    /// before unregistering it: leftover tokens become that contract's own
+    /// votes. Emits `ModuleUnregistered`.
+    pub fn unregister_module(e: &Env, address: Address) {
+        let changed_by = Self::require_registrar(e);
+        common::ttl::extend_instance(e);
+        let mut entries = Self::read_modules(e);
+        let Some(index) = entries.iter().position(|m| m.address == address) else {
+            panic_with_error!(e, TokenError::NotAModule);
+        };
+        let entry = entries.get_unchecked(index as u32);
+        let old = Self::mint_allowance(e, address.clone());
+        if old > 0 {
+            Self::set_allowance(e, &address, old, 0, &changed_by);
+        }
+        if entry.non_voting {
+            let held = u128::from(Base::balance(e, &address));
+            if held > 0 {
+                Self::ensure_self_delegate(e, &address);
+                transfer_voting_units(e, None, Some(&address), held);
+            }
+        }
+        entries.remove(index as u32);
+        Self::write_modules(e, &entries);
+        emit_module_unregistered(e, &entry.kind, &address);
     }
 
     /// One-shot, Manager-only launch handoff (Setup -> Live).
     ///
-    /// Hands the admin to `treasury`, grants mint authority to exactly
-    /// `minters` (which must contain the treasury and `minter`), records
-    /// `minter` as this DAO's claim contract, marks the token live and emits
-    /// `TokenLaunched`. A second call panics with `AlreadyLive`, so after
-    /// launch the Manager has no authority over the token.
-    pub fn launch(e: &Env, treasury: Address, minters: Vec<Address>, minter: Address) {
+    /// Hands the admin to `treasury`, raises each registered module's
+    /// allowance by its grant (`NotAModule` for anything else), marks the
+    /// token live and emits `TokenLaunched`. The Treasury needs no grant: as
+    /// admin it mints without limit. A second call panics with `AlreadyLive`,
+    /// so after launch the Manager has no authority over the token.
+    pub fn launch(e: &Env, treasury: Address, grants: Vec<MintGrant>) {
         let manager = Self::manager(e);
         manager.require_auth();
         common::lifecycle::mark_live(e);
         if treasury != Self::treasury(e) {
             panic_with_error!(e, TokenError::TreasuryMismatch);
         }
-        if !minters.contains(&treasury) {
-            panic_with_error!(e, TokenError::TreasuryNotMinter);
-        }
-        if !minters.contains(&minter) {
-            panic_with_error!(e, TokenError::MinterNotGranted);
-        }
-        e.storage()
-            .instance()
-            .set(&common::ns(e, TokenKey::Minter), &minter);
         common::admin::handoff(e, &treasury);
-        for minter in minters.iter() {
-            let old_enabled = Self::mint_authority(e, minter.clone());
-            Self::write_mint_authority(e, &minter, true);
-            emit_mint_authority_changed(e, &minter, old_enabled, true, &manager);
+        for grant in grants.iter() {
+            if Self::find_module(e, &grant.module).is_none() {
+                panic_with_error!(e, TokenError::NotAModule);
+            }
+            let old = Self::mint_allowance(e, grant.module.clone());
+            Self::set_allowance(
+                e,
+                &grant.module,
+                old,
+                old.saturating_add(grant.allowance),
+                &manager,
+            );
         }
         common::ttl::extend_instance(e);
-        emit_launched(e, &treasury, &minters);
+        emit_launched(e, &treasury, &grants);
     }
 
     /// Whether the token has been launched (Setup -> Live).
@@ -234,27 +373,18 @@ impl DaoTokenContract {
         )
     }
 
-    /// The DAO Auction (holds no voting power).
+    /// The registered `auction` module (holds no voting power).
     pub fn auction(e: &Env) -> Option<Address> {
-        e.storage()
-            .instance()
-            .get(&common::ns(e, TokenKey::Auction))
+        Self::module(e, Symbol::new(e, modules::KIND_AUCTION))
     }
 
-    /// The DAO Marketplace (escrow; holds no voting power).
+    /// The registered `marketplace` module (escrow; holds no voting power).
     pub fn marketplace(e: &Env) -> Option<Address> {
-        e.storage()
-            .instance()
-            .get(&common::ns(e, TokenKey::Marketplace))
-    }
-
-    /// The shared platform Minter this DAO launched with (`None` before launch).
-    pub fn minter(e: &Env) -> Option<Address> {
-        e.storage().instance().get(&common::ns(e, TokenKey::Minter))
+        Self::module(e, Symbol::new(e, modules::KIND_MARKETPLACE))
     }
 
     /// Voting-capable supply: every minted token except those held by the
-    /// Treasury, Auction and Marketplace. The Manager requires it to be
+    /// Treasury and non-voting modules. The Manager requires it to be
     /// positive at launch, so a DAO can never launch without a single vote.
     pub fn total_supply(e: &Env) -> i128 {
         <Self as Votes>::get_total_supply(e) as i128
@@ -293,12 +423,12 @@ impl DaoTokenContract {
     }
 
     /// Mints the next sequential token id to `to` (minter auth; the minter must
-    /// be the admin or, once live, hold mint authority). A recipient without a
+    /// be the admin or a registered module with allowance, see `# Minting`). A recipient without a
     /// delegate is self-delegated so it can vote immediately. Emits
     /// OpenZeppelin `Mint` plus `MintWithMinter`. Returns the token id.
     pub fn mint(e: &Env, minter: &Address, to: &Address) -> u32 {
         minter.require_auth();
-        Self::ensure_mint_authority(e, minter);
+        Self::spend_mint_authority(e, minter, 1);
         common::ttl::extend_instance(e);
         let holder = Self::voting_holder(e, to);
         if let Some(holder) = holder {
@@ -332,7 +462,6 @@ impl DaoTokenContract {
         amounts: &Vec<u128>,
     ) -> Vec<u32> {
         minter.require_auth();
-        Self::ensure_mint_authority(e, minter);
         common::ttl::extend_instance(e);
 
         if recipients.len() != amounts.len() {
@@ -357,6 +486,7 @@ impl DaoTokenContract {
         if !common::batch_mint_fits(total, recipients.len()) {
             panic_with_error!(e, TokenError::BatchTooLarge);
         }
+        Self::spend_mint_authority(e, minter, total);
 
         let first_id = increment_token_id(e, total);
         let mut next_id = first_id;
@@ -487,16 +617,61 @@ impl DaoTokenContract {
     }
 
     /// The address whose voting units represent `account`'s tokens: `None`
-    /// for the DAO's Treasury, Auction and Marketplace (no voting power), the
-    /// account itself otherwise.
+    /// for the DAO's Treasury and every non-voting module, the account itself
+    /// otherwise.
     fn voting_holder<'a>(e: &Env, account: &'a Address) -> Option<&'a Address> {
-        let instance = e.storage().instance();
-        for key in [TokenKey::Treasury, TokenKey::Auction, TokenKey::Marketplace] {
-            if instance.get::<_, Address>(&common::ns(e, key)).as_ref() == Some(account) {
-                return None;
-            }
+        if *account == Self::treasury(e) {
+            return None;
+        }
+        if Self::read_modules(e)
+            .iter()
+            .any(|m| m.non_voting && m.address == *account)
+        {
+            return None;
         }
         Some(account)
+    }
+
+    fn read_modules(e: &Env) -> Vec<ModuleEntry> {
+        e.storage()
+            .instance()
+            .get(&common::ns(e, TokenKey::Modules))
+            .unwrap_or_else(|| Vec::new(e))
+    }
+
+    fn write_modules(e: &Env, entries: &Vec<ModuleEntry>) {
+        e.storage()
+            .instance()
+            .set(&common::ns(e, TokenKey::Modules), entries);
+    }
+
+    fn find_module(e: &Env, address: &Address) -> Option<ModuleEntry> {
+        Self::read_modules(e).iter().find(|m| m.address == *address)
+    }
+
+    /// In Setup the Manager registers modules; once live the admin does.
+    /// Returns the authorizer (for `changed_by`).
+    fn require_registrar(e: &Env) -> Address {
+        if common::lifecycle::is_live(e) {
+            common::admin::require_admin(e)
+        } else {
+            let manager = Self::manager(e);
+            manager.require_auth();
+            manager
+        }
+    }
+
+    fn set_allowance(e: &Env, module: &Address, old: u32, new: u32, changed_by: &Address) {
+        let key = common::ns(e, TokenKey::MintAllowance(module.clone()));
+        if new == 0 {
+            e.storage().persistent().remove(&key);
+        } else {
+            e.storage().persistent().set(&key, &new);
+            common::ttl::extend_persistent(e, &key);
+        }
+        if old != new {
+            emit_mint_allowance_changed(e, module, old, new, changed_by);
+        }
     }
 
     /// Move one voting unit; `None` on a side burns/mints it from the voting
@@ -505,12 +680,6 @@ impl DaoTokenContract {
         if from.is_some() || to.is_some() {
             transfer_voting_units(e, from, to, 1);
         }
-    }
-
-    fn write_mint_authority(e: &Env, authority: &Address, enabled: bool) {
-        let key = common::ns(e, TokenKey::MintAuthority(authority.clone()));
-        e.storage().persistent().set(&key, &enabled);
-        common::ttl::extend_persistent(e, &key);
     }
 
     /// Calls the metadata `on_minted` hook. Failures are ignored so a broken
@@ -545,16 +714,37 @@ impl DaoTokenContract {
         common::ttl::extend_persistent(e, &key);
     }
 
-    /// The admin may always mint; anyone else needs explicit authority and a
-    /// live token (before launch only the launch admin mints).
-    fn ensure_mint_authority(e: &Env, minter: &Address) {
+    /// The admin always mints. Anyone else must be a registered module and
+    /// spends `count` from its allowance (`AllowanceExceeded`; `u32::MAX` is
+    /// unlimited and never spent); before launch
+    /// only the `claims` module may (`MintAuthorityNotAllowed`), so the
+    /// Auction's large allowance is inert until the DAO is live.
+    fn spend_mint_authority(e: &Env, minter: &Address, count: u32) {
         if *minter == common::admin::admin(e) {
             return;
         }
-        if common::lifecycle::is_live(e) && Self::mint_authority(e, minter.clone()) {
+        let Some(entry) = Self::find_module(e, minter) else {
+            panic_with_error!(e, TokenError::MintAuthorityNotAllowed);
+        };
+        if !common::lifecycle::is_live(e) && !modules::kind_is(e, &entry.kind, modules::KIND_CLAIMS)
+        {
+            panic_with_error!(e, TokenError::MintAuthorityNotAllowed);
+        }
+        let allowance = Self::mint_allowance(e, minter.clone());
+        if allowance < count {
+            panic_with_error!(e, TokenError::AllowanceExceeded);
+        }
+        // `u32::MAX` is unlimited (the Auction): never spent.
+        if allowance == u32::MAX {
             return;
         }
-        panic_with_error!(e, TokenError::MintAuthorityNotAllowed);
+        let key = common::ns(e, TokenKey::MintAllowance(minter.clone()));
+        let left = allowance - count;
+        if left == 0 {
+            e.storage().persistent().remove(&key);
+        } else {
+            e.storage().persistent().set(&key, &left);
+        }
     }
 }
 

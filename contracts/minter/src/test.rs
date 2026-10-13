@@ -23,13 +23,20 @@ fn treasury(env: &Env) -> Address {
 }
 
 /// Launch the token the way the Manager does: treasury becomes owner (admin of
-/// the minter) and `minter` receives mint authority.
+/// the minter) and `minter` is registered as the `claims` module with an
+/// unlimited allowance.
 fn launch_token(env: &Env, token: &token::DaoTokenContractClient, minter: &Address) {
     let t = treasury(env);
+    token.register_module(&soroban_sdk::Symbol::new(env, "claims"), minter, &false);
     token.launch(
         &t,
-        &Vec::from_array(env, [t.clone(), minter.clone()]),
-        minter,
+        &Vec::from_array(
+            env,
+            [common::modules::MintGrant {
+                module: minter.clone(),
+                allowance: u32::MAX,
+            }],
+        ),
     );
 }
 

@@ -11,9 +11,10 @@ pub const STORAGE_VERSION: u32 = 1;
 
 #[contracttype]
 pub enum TokenKey {
-    /// Persistent: `Address -> bool`, whether the address may mint once the
-    /// token is live. The admin has implicit authority and needs no entry.
-    MintAuthority(Address),
+    /// Persistent: `Address -> u32`, how many more tokens a registered module
+    /// may mint (docs/designs/membership-models.md §1). The admin mints
+    /// without an allowance.
+    MintAllowance(Address),
     /// Instance: metadata contract called on every mint to seed artwork.
     /// Not named `Metadata`: a unit variant encodes as `["Metadata"]`, the
     /// same key as OpenZeppelin's `NFTStorageKey::Metadata` (name, symbol,
@@ -24,13 +25,10 @@ pub enum TokenKey {
     /// Instance: DAO Treasury; the only address `launch` accepts. Holds no
     /// voting power (see `voting_holder`).
     Treasury,
-    /// Instance: DAO Auction. Holds no voting power.
-    Auction,
-    /// Instance: DAO Marketplace (escrow). Holds no voting power.
-    Marketplace,
-    /// Instance: the shared platform Minter granted mint authority at launch
-    /// (the claim contract this DAO pinned). Set once by `launch`.
-    Minter,
+    /// Instance: `Vec<common::modules::ModuleEntry>`, the registered modules
+    /// (at most `common::modules::MAX_MODULES`). Entries with `non_voting`
+    /// hold no voting power.
+    Modules,
 }
 
 /// Every `TokenKey` variant with sample arguments, for the key guard test.
@@ -44,17 +42,15 @@ pub(crate) mod key_samples {
     use soroban_sdk::testutils::Address as _;
     use soroban_sdk::{Env, IntoVal, Val};
 
-    pub const VARIANTS: usize = 7;
+    pub const VARIANTS: usize = 5;
 
     pub fn index(key: &TokenKey) -> usize {
         match key {
-            TokenKey::MintAuthority(_) => 0,
+            TokenKey::MintAllowance(_) => 0,
             TokenKey::MetadataContract => 1,
             TokenKey::Manager => 2,
             TokenKey::Treasury => 3,
-            TokenKey::Auction => 4,
-            TokenKey::Marketplace => 5,
-            TokenKey::Minter => 6,
+            TokenKey::Modules => 4,
         }
     }
 
@@ -64,13 +60,11 @@ pub(crate) mod key_samples {
         let id = soroban_sdk::BytesN::<32>::from_array(e, &[0; 32]);
         let text = soroban_sdk::String::from_str(e, "x");
         let keys = std::vec![
-            TokenKey::MintAuthority(a.clone()),
+            TokenKey::MintAllowance(a.clone()),
             TokenKey::MetadataContract,
             TokenKey::Manager,
             TokenKey::Treasury,
-            TokenKey::Auction,
-            TokenKey::Marketplace,
-            TokenKey::Minter,
+            TokenKey::Modules,
         ];
         common::testutils::assert_every_variant_sampled(
             "TokenKey",

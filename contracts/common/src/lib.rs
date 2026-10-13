@@ -8,6 +8,7 @@
 //! - [`upgrade`]: manager-approved WASM upgrade, `CurrentHash`, the registry-derived `version`,
 //!   and the `StorageVersion` / `migrate` convention.
 //! - [`ttl`]: the shared instance and persistent TTL policy.
+//! - [`modules`]: the Token's module registry types (`ModuleEntry`, `MintGrant`, kinds).
 //! - [`clients`]: typed `#[contractclient]` traits for cross-contract calls (no linked exports).
 //! - [`error`]: typed errors and the error-code block of every crate
 //!   ([`error::codes`]); codes are unique across all project contracts.
@@ -18,6 +19,7 @@ pub mod admin;
 pub mod clients;
 pub mod error;
 pub mod lifecycle;
+pub mod modules;
 pub mod ttl;
 pub mod upgrade;
 

@@ -17,11 +17,22 @@ extern crate std;
 
 use metadata::{IpfsGroup, ItemParam, MetadataContract};
 use soroban_sdk::{
+    contract, contractimpl,
     testutils::{Address as _, Ledger},
     vec, Address, BytesN, Env, String, Vec,
 };
 use std::vec::Vec as StdVec;
 use token::{DaoTokenContract, DaoTokenContractClient};
+
+/// A deployed stand-in for a module that mints (only Wasm contracts can hold
+/// mint allowances).
+#[contract]
+pub struct MinterStub;
+
+#[contractimpl]
+impl MinterStub {
+    pub fn ping() {}
+}
 
 /// Minimal deterministic generator (Numerical Recipes LCG).
 struct Lcg(u64);
@@ -93,12 +104,23 @@ impl World {
             ),
         );
         let token = DaoTokenContractClient::new(&e, &token_id);
-        // A launch-time minter stands in for the Treasury's proposals.
-        let minter = Address::generate(&e);
+        // A stub module with an unlimited allowance stands in for the
+        // Treasury's proposals (a wallet can't hold mint rights).
+        let minter = e.register(MinterStub, ());
+        token.register_module(
+            &soroban_sdk::Symbol::new(&e, "custom_minter"),
+            &minter,
+            &false,
+        );
         token.launch(
             &treasury,
-            &vec![&e, treasury.clone(), minter.clone()],
-            &minter,
+            &vec![
+                &e,
+                common::modules::MintGrant {
+                    module: minter.clone(),
+                    allowance: u32::MAX,
+                },
+            ],
         );
         let wallets = (0..5).map(|_| Address::generate(&e)).collect();
         Self {

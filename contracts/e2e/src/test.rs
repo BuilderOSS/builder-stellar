@@ -1,6 +1,7 @@
 extern crate std;
 
 use auction::{DaoAuctionContract, DaoAuctionContractClient};
+use common::modules::MintGrant;
 use governor::{DaoGovernorContract, DaoGovernorContractClient};
 use manager::{ManagerContract, ManagerContractClient};
 use marketplace::{MarketplaceContract, MarketplaceContractClient};
@@ -207,20 +208,30 @@ fn setup_with(
     let target_id = e.register(TargetContract, ());
     let target = TargetContractClient::new(&e, &target_id);
 
-    // Launch the token the way the Manager does: the treasury becomes owner and
-    // the canonical minter, and `owner` (the launch admin in these tests) is
-    // registered as an extra launch-time minter so the tests can keep minting
-    // voting power directly.
-    token.launch(
-        &treasury_id,
-        &vec![&e, treasury_id.clone(), owner.clone()],
-        &owner,
-    );
+    // Launch the token the way the Manager does: the treasury becomes owner.
+    // The tests keep minting voting power directly through a stub module with
+    // an unlimited allowance (a wallet can't hold mint rights,
+    // docs/designs/membership-models.md §1); it is returned as `owner`.
+    let minter = e.register(TargetContract, ());
+    token.register_module(&Symbol::new(&e, "custom_minter"), &minter, &false);
+    token.launch(&treasury_id, &grant(&e, &minter));
     // Governor and treasury only process proposals once live.
     governor.launch(&treasury_id);
     treasury.launch(&treasury_id);
 
-    (e, token, treasury, governor, target, owner)
+    let _ = owner;
+    (e, token, treasury, governor, target, minter)
+}
+
+/// One unlimited mint grant for `module`.
+fn grant(e: &Env, module: &Address) -> Vec<MintGrant> {
+    vec![
+        e,
+        MintGrant {
+            module: module.clone(),
+            allowance: u32::MAX,
+        },
+    ]
 }
 
 fn proposal_args(e: &Env) -> Vec<Vec<Val>> {
@@ -927,11 +938,7 @@ fn setup_auction() -> AuctionFixture {
     // the auction (owner = treasury, still paused) the way the Manager does.
     // Unpause/pause/setters are therefore exercised as the treasury, which is
     // returned as `owner`.
-    token.launch(
-        &treasury.address,
-        &vec![&e, treasury.address.clone(), auction.address.clone()],
-        &treasury.address, // stands in for the platform Minter
-    );
+    token.launch(&treasury.address, &grant(&e, &auction.address));
     auction.launch(&treasury.address, &false, &payment_token);
     let _ = launch_admin;
     let treasury_address = treasury.address.clone();
@@ -1101,11 +1108,7 @@ fn test_auction_launch_starts_first_auction_and_hands_off_to_treasury() {
 
     assert_eq!(auction.admin(), launch_admin.clone());
     // The token launches first so the auction holds mint authority.
-    token.launch(
-        &treasury.address,
-        &vec![&e, treasury.address.clone(), auction.address.clone()],
-        &treasury.address, // stands in for the platform Minter
-    );
+    token.launch(&treasury.address, &grant(&e, &auction.address));
     auction.launch(&treasury.address, &true, &payment_token);
 
     assert_eq!(auction.admin(), treasury.address.clone());
@@ -1885,11 +1888,7 @@ fn marketplace_primary_sale_uses_real_token_and_sac() {
     let marketplace = MarketplaceContractClient::new(&e, &marketplace_id);
     // Manager-style launch: token first (marketplace is a canonical minter),
     // then the marketplace itself (open).
-    token.launch(
-        &treasury,
-        &vec![&e, treasury.clone(), marketplace_id.clone()],
-        &treasury, // stands in for the platform Minter
-    );
+    token.launch(&treasury, &grant(&e, &marketplace_id));
     marketplace.launch(&treasury, &true, &payment.address());
 
     let listing_id = marketplace.create_primary_listing(&100, &2_000);
@@ -2721,11 +2720,7 @@ fn real_auth_marketplace_primary_and_secondary_flows() {
     );
     let token = DaoTokenContractClient::new(&e, &token_id);
     let marketplace = MarketplaceContractClient::new(&e, &marketplace_id);
-    token.launch(
-        &treasury,
-        &vec![&e, treasury.clone(), marketplace_id.clone()],
-        &treasury, // stands in for the platform Minter
-    );
+    token.launch(&treasury, &grant(&e, &marketplace_id));
     marketplace.launch(&treasury, &true, &pay);
 
     let pay_sub = |from: &Address, to: &Address, amount: i128| MockAuthInvoke {
@@ -2920,7 +2915,7 @@ fn full_factory_flow_create_setup_launch_with_slug() {
         ),
     );
     let manager = ManagerContractClient::new(&e, &manager_id);
-    let platform_minter = Address::generate(&e);
+    let platform_minter = e.register(TargetContract, ()); // a deployed stand-in: it becomes the `claims` module
     manager.set_platform_minter(&platform_minter);
 
     let mut hashes = std::vec::Vec::new();
@@ -3335,11 +3330,7 @@ fn system_held_tokens_and_votes_through_a_real_proposal() {
         &vec![&e, alice.clone(), bob.clone(), treasury_id.clone()],
         &vec![&e, 3u128, 2u128, 5u128],
     );
-    token.launch(
-        &treasury_id,
-        &vec![&e, treasury_id.clone(), marketplace_id.clone()],
-        &treasury_id, // stands in for the platform Minter
-    );
+    token.launch(&treasury_id, &grant(&e, &marketplace_id));
     governor.launch(&treasury_id);
     treasury.launch(&treasury_id);
     marketplace.launch(&treasury_id, &true, &pay);
@@ -3491,7 +3482,8 @@ fn factory_dao() -> DaoFixture {
     manager.set_current_implementations(
         &hashes[0], &hashes[1], &hashes[2], &hashes[3], &hashes[4], &hashes[5],
     );
-    let minter = Address::generate(&e);
+    // A deployed stand-in: `launch_dao` registers it as the `claims` module.
+    let minter = e.register(TargetContract, ());
     manager.set_platform_minter(&minter);
 
     let deployer = Address::generate(&e);
@@ -3685,10 +3677,11 @@ fn factory_token_serves_sep50_metadata_and_records_the_minter() {
     assert_eq!(token.token_uri(&id), uri);
     assert!(token.try_token_uri(&(id + 1)).is_err());
 
-    assert_eq!(token.minter(), None);
+    let claims = Symbol::new(e, "claims");
+    assert_eq!(token.module(&claims), None);
     f.manager.launch_dao(&f.dao.token, &f.no_launch_modules());
-    assert_eq!(token.minter(), Some(f.minter.clone()));
-    assert!(token.mint_authority(&f.minter));
+    assert_eq!(token.module(&claims), Some(f.minter.clone()));
+    assert_eq!(token.mint_allowance(&f.minter), u32::MAX);
 }
 
 /// docs/STORAGE_DIET_REVIEW.md Finding 2: a state-changing call must never push
@@ -4167,8 +4160,9 @@ fn protocol_runs_on_chain_state_only() {
             minter: minter_id.clone(),
         },
     );
-    assert_eq!(token.minter(), Some(minter_id.clone()));
-    let minter = minter::MinterContractClient::new(e, &token.minter().unwrap());
+    let claims = Symbol::new(e, "claims");
+    assert_eq!(token.module(&claims), Some(minter_id.clone()));
+    let minter = minter::MinterContractClient::new(e, &token.module(&claims).unwrap());
 
     // --- Auction: bid, a deferred refund recovered, settle, next auction.
     let pay = auction.get_config().payment_token;
@@ -4464,16 +4458,13 @@ fn dao_renewal_inventory(
     let mut keys = std::vec::Vec::new();
     let u = |n: u32| -> Val { n.into_val(e) };
 
-    // Token: the canonical mint grants, then the latest supply checkpoint.
-    let mut minters = std::vec![token.treasury()];
-    minters.extend(token.auction());
-    minters.extend(token.marketplace());
-    minters.extend(token.minter());
-    for m in minters {
-        if token.mint_authority(&m) {
+    // Token: one mint allowance per registered module (review 2 B4), then
+    // the latest supply checkpoint.
+    for m in token.modules().iter() {
+        if token.mint_allowance(&m.address) > 0 {
             keys.push((
                 token_id.clone(),
-                ns_key(e, "MintAuthority", std::vec![m.into_val(e)]),
+                ns_key(e, "MintAllowance", std::vec![m.address.into_val(e)]),
             ));
         }
     }
@@ -4575,8 +4566,8 @@ fn dao_renewal_inventory(
         }
     }
 
-    // The shared Minter's per-DAO round.
-    if let Some(minter) = token.minter() {
+    // The shared Minter's per-DAO round (registered as the `claims` module).
+    if let Some(minter) = token.module(&Symbol::new(e, "claims")) {
         let status = minter::MinterContractClient::new(e, &minter).claim_status(token_id, token_id);
         if status.round > 0 {
             keys.push((

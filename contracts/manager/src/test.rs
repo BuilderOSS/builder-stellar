@@ -11,13 +11,33 @@ use soroban_sdk::{
 
 use crate::{ManagerContract, ManagerContractClient};
 
+/// Stand-in for the shared platform Minter: `launch_dao` registers it as the
+/// DAO's `claims` module, which requires a deployed Wasm contract.
+#[contract]
+pub struct StubMinter;
+
+#[contractimpl]
+impl StubMinter {
+    pub fn ping() {}
+}
+
 /// The shared platform Minter every test DAO launches with (a fixed address so
-/// launch configs can be built without the Manager at hand).
+/// launch configs can be built without the Manager at hand), deployed on first
+/// use.
 fn test_minter(env: &Env) -> Address {
-    Address::from_str(
+    let address = Address::from_str(
         env,
         "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
-    )
+    );
+    if !address.exists() {
+        env.register_at(&address, StubMinter, ());
+    }
+    address
+}
+
+/// A fresh deployed stand-in Minter.
+fn stub_minter(env: &Env) -> Address {
+    env.register(StubMinter, ())
 }
 
 fn setup() -> (Env, ManagerContractClient<'static>, Address) {
@@ -784,8 +804,14 @@ impl MockModule {
     pub fn launch(
         _e: Env,
         _treasury: Address,
-        _minters: soroban_sdk::Vec<Address>,
-        _minter: Address,
+        _grants: soroban_sdk::Vec<common::modules::MintGrant>,
+    ) {
+    }
+    pub fn register_module(
+        _e: Env,
+        _kind: soroban_sdk::Symbol,
+        _address: Address,
+        _non_voting: bool,
     ) {
     }
 }
@@ -1277,12 +1303,12 @@ mod real_dao {
 
         let env = &dao.env;
         let attacker = Address::generate(env);
-        let no_minters = Vec::<Address>::new(env);
+        let no_grants = Vec::<common::modules::MintGrant>::new(env);
         let results: [(&str, soroban_sdk::Error); 6] = [
             (
                 "token",
                 dao.token
-                    .try_launch(&attacker, &no_minters, &attacker)
+                    .try_launch(&attacker, &no_grants)
                     .err()
                     .unwrap()
                     .unwrap(),
@@ -1356,8 +1382,8 @@ mod real_dao {
                     (c.treasury, c.payment_token, c.duration, c.reserve_price)
                 },
                 metadata_owner(),
-                dao.token.mint_authority(&attacker),
-                dao.token.mint_authority(&dao.addresses.auction),
+                dao.token.mint_allowance(&attacker),
+                dao.token.mint_allowance(&dao.addresses.auction),
             )
         };
         let before = snapshot();
@@ -1368,7 +1394,7 @@ mod real_dao {
             (
                 "token",
                 dao.token
-                    .try_launch(&attacker, &vec![env, attacker.clone()], &attacker)
+                    .try_launch(&attacker, &Vec::new(env))
                     .err()
                     .and_then(|e| e.ok()),
             ),
@@ -1419,6 +1445,8 @@ mod real_dao {
         for (contract, function) in [
             (&dao.addresses.token, "finalize_ownership"),
             (&dao.addresses.token, "enable_mint_authority_by_manager"),
+            (&dao.addresses.token, "set_mint_authority"),
+            (&dao.addresses.token, "minter"),
             (&dao.addresses.governor, "finalize_ownership"),
             (&dao.addresses.treasury, "finalize_ownership"),
             (&dao.addresses.auction, "finalize_ownership"),
@@ -1501,19 +1529,25 @@ mod real_dao {
     #[test]
     fn launch_grants_exactly_the_canonical_mint_set() {
         let dao = build();
-        let minter = Address::generate(&dao.env);
+        let minter = stub_minter(&dao.env);
         dao.client.set_platform_minter(&minter);
         dao.client
             .launch_dao(&dao.addresses.token, &cfg_pinned(&minter));
 
         let a = &dao.addresses;
-        assert!(dao.token.mint_authority(&a.treasury));
-        assert!(dao.token.mint_authority(&a.marketplace));
-        assert!(dao.token.mint_authority(&a.auction));
-        assert!(dao.token.mint_authority(&minter));
-        assert_eq!(dao.token.minter(), Some(minter.clone()));
-        assert!(!dao.token.mint_authority(&dao.launch_admin));
-        assert!(!dao.token.mint_authority(&a.governor));
+        // The Treasury mints as admin without an allowance; the canonical
+        // modules get unlimited ones (Phase 1, docs/designs/membership-models.md).
+        assert_eq!(dao.token.mint_allowance(&a.treasury), 0);
+        assert_eq!(dao.token.mint_allowance(&a.marketplace), u32::MAX);
+        assert_eq!(dao.token.mint_allowance(&a.auction), u32::MAX);
+        assert_eq!(dao.token.mint_allowance(&minter), u32::MAX);
+        assert_eq!(
+            dao.token
+                .module(&soroban_sdk::Symbol::new(&dao.env, "claims")),
+            Some(minter.clone())
+        );
+        assert_eq!(dao.token.mint_allowance(&dao.launch_admin), 0);
+        assert_eq!(dao.token.mint_allowance(&a.governor), 0);
         assert_eq!(dao.token.admin(), a.treasury.clone());
         assert_eq!(dao.governor.admin(), a.treasury.clone());
         assert_eq!(dao.treasury.admin(), a.treasury.clone());
@@ -1535,9 +1569,8 @@ mod real_dao {
         dao.client
             .launch_dao(&dao.addresses.token, &cfg(&dao.env, false, false));
         let a = &dao.addresses;
-        assert!(!dao.token.mint_authority(&a.auction));
-        assert!(dao.token.mint_authority(&a.treasury));
-        assert!(dao.token.mint_authority(&a.marketplace));
+        assert_eq!(dao.token.mint_allowance(&a.auction), 0);
+        assert_eq!(dao.token.mint_allowance(&a.marketplace), u32::MAX);
         assert!(dao.auction.paused());
         assert!(dao.marketplace.get_config().paused);
     }
@@ -1545,21 +1578,21 @@ mod real_dao {
     #[test]
     fn launch_requires_the_pinned_minter_to_match() {
         let dao = build();
-        let minter = Address::generate(&dao.env);
+        let minter = stub_minter(&dao.env);
         dao.client.set_platform_minter(&minter);
         let token = &dao.addresses.token;
 
         // A minter other than the registered one is rejected.
         let r = dao
             .client
-            .try_launch_dao(token, &cfg_pinned(&Address::generate(&dao.env)));
+            .try_launch_dao(token, &cfg_pinned(&stub_minter(&dao.env)));
         assert_eq!(
             r.err().unwrap().unwrap(),
             ManagerError::PlatformMinterMismatch
         );
 
         // A stale pin is rejected after the Manager admin swaps the minter.
-        let swapped = Address::generate(&dao.env);
+        let swapped = stub_minter(&dao.env);
         dao.client.set_platform_minter(&swapped);
         let r = dao.client.try_launch_dao(token, &cfg_pinned(&minter));
         assert_eq!(
@@ -1570,8 +1603,8 @@ mod real_dao {
 
         // The current minter pinned explicitly succeeds.
         dao.client.launch_dao(token, &cfg_pinned(&swapped));
-        assert!(dao.token.mint_authority(&swapped));
-        assert!(!dao.token.mint_authority(&minter));
+        assert_eq!(dao.token.mint_allowance(&swapped), u32::MAX);
+        assert_eq!(dao.token.mint_allowance(&minter), 0);
     }
 
     // Retired: expected_minter_is_ignored_when_enable_minter_is_false.
@@ -1664,16 +1697,18 @@ mod real_dao {
         );
     }
 
-    /// Acceptance (c) with the real token: launch_admin cannot grant mint authority in setup.
+    /// Acceptance (c) with the real token: the launch admin cannot give an
+    /// arbitrary address mint rights in setup, only a registered module (and
+    /// only the Manager registers modules before launch).
     #[test]
-    fn set_mint_authority_before_launch_is_not_live() {
+    fn launch_admin_cannot_grant_mint_rights_to_a_non_module_in_setup() {
         let dao = build();
         let r = dao
             .token
-            .try_set_mint_authority(&Address::generate(&dao.env), &true);
+            .try_increase_mint_allowance(&Address::generate(&dao.env), &1);
         assert_eq!(
             r.err().unwrap().unwrap(),
-            soroban_sdk::Error::from(CommonError::NotLive)
+            soroban_sdk::Error::from_contract_error(7209)
         );
     }
 
@@ -1879,7 +1914,7 @@ mod real_dao {
         let env = &dao.env;
         let t = dao.addresses.treasury.clone();
         let stranger = Address::generate(env);
-        let minters = vec![env, t.clone()];
+        let grants = Vec::<common::modules::MintGrant>::new(env);
 
         // Authorize only a non-manager address for each call, one at a time.
         macro_rules! only_stranger {
@@ -1895,8 +1930,8 @@ mod real_dao {
                 }]);
             };
         }
-        only_stranger!(&dao.addresses.token, "launch", (&t, &minters));
-        assert!(dao.token.try_launch(&t, &minters, &t).is_err());
+        only_stranger!(&dao.addresses.token, "launch", (&t, &grants));
+        assert!(dao.token.try_launch(&t, &grants).is_err());
         only_stranger!(&dao.addresses.governor, "launch", (&t,));
         assert!(dao.governor.try_launch(&t).is_err());
         only_stranger!(&dao.addresses.treasury, "launch", (&t,));

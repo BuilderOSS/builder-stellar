@@ -1,13 +1,48 @@
 extern crate std;
 
 use common::CommonError;
-use soroban_sdk::{testutils::Address as _, vec, Address, BytesN, Env, String};
+use soroban_sdk::{
+    contract, contractimpl, testutils::Address as _, vec, Address, BytesN, Env, String, Symbol,
+};
 use soroban_sdk::{
     testutils::{MockAuth, MockAuthInvoke},
     IntoVal,
 };
 
+use crate::error::TokenError;
 use crate::{DaoTokenContract, DaoTokenContractClient};
+use common::modules::MintGrant;
+
+/// A deployed Wasm-executable stand-in for a module contract.
+#[contract]
+pub struct ModuleStub;
+
+#[contractimpl]
+impl ModuleStub {
+    pub fn ping() {}
+}
+
+fn stub(e: &Env) -> Address {
+    e.register(ModuleStub, ())
+}
+
+/// Registers a fresh stub module of `kind` (Setup: the Manager's auth is mocked).
+fn module(e: &Env, client: &DaoTokenContractClient, kind: &str, non_voting: bool) -> Address {
+    let address = stub(e);
+    client.register_module(&Symbol::new(e, kind), &address, &non_voting);
+    address
+}
+
+fn grants(e: &Env, pairs: &[(&Address, u32)]) -> soroban_sdk::Vec<MintGrant> {
+    let mut v = soroban_sdk::Vec::new(e);
+    for (module, allowance) in pairs {
+        v.push_back(MintGrant {
+            module: (*module).clone(),
+            allowance: *allowance,
+        });
+    }
+    v
+}
 
 /// Register a token with `admin`, `treasury`, `manager` and `hash`; the
 /// auction, marketplace and metadata addresses are fresh dummies.
@@ -136,35 +171,37 @@ fn wired_treasury(e: &Env, client: &DaoTokenContractClient) -> Address {
     })
 }
 
-/// Launch with `minters` (the wired treasury and a platform minter are always
-/// included, as the Manager does); returns the treasury address.
-fn launch(e: &Env, client: &DaoTokenContractClient, minters: &[Address]) -> Address {
+/// Launch with `grants` (each module must already be registered); returns the
+/// treasury address.
+fn launch(e: &Env, client: &DaoTokenContractClient, pairs: &[(&Address, u32)]) -> Address {
     let treasury = wired_treasury(e, client);
-    let platform_minter = Address::generate(e);
-    let mut v = soroban_sdk::Vec::new(e);
-    v.push_back(treasury.clone());
-    v.push_back(platform_minter.clone());
-    for m in minters {
-        v.push_back(m.clone());
-    }
-    client.launch(&treasury, &v, &platform_minter);
-    assert_eq!(client.minter(), Some(platform_minter));
+    client.launch(&treasury, &grants(e, pairs));
     treasury
 }
 
 #[test]
-fn launch_sets_owner_and_exact_minter_set() {
+fn launch_writes_allowances_for_registered_modules() {
     let (e, client, owner, _m) = setup_with_manager();
-    let a = Address::generate(&e);
-    let b = Address::generate(&e);
+    let claims = module(&e, &client, "claims", false);
+    let custom = module(&e, &client, "custom_shop", false);
     let stranger = Address::generate(&e);
-    let treasury = launch(&e, &client, &[a.clone(), b.clone()]);
+    let treasury = launch(&e, &client, &[(&claims, 5), (&custom, 7)]);
 
     assert_eq!(client.admin(), treasury);
-    assert!(client.mint_authority(&a));
-    assert!(client.mint_authority(&b));
-    assert!(!client.mint_authority(&stranger));
-    assert!(!client.mint_authority(&owner));
+    assert_eq!(client.mint_allowance(&claims), 5);
+    assert_eq!(client.mint_allowance(&custom), 7);
+    assert_eq!(client.mint_allowance(&stranger), 0);
+    assert_eq!(client.mint_allowance(&owner), 0);
+}
+
+#[test]
+fn launch_refuses_a_grant_for_an_unregistered_address() {
+    let (e, client, _owner, _m) = setup_with_manager();
+    let treasury = wired_treasury(&e, &client);
+    let stranger = stub(&e);
+    let r = client.try_launch(&treasury, &grants(&e, &[(&stranger, 1)]));
+    assert_eq!(r.err().unwrap().unwrap(), TokenError::NotAModule.into());
+    assert!(!client.is_live());
 }
 
 #[test]
@@ -172,24 +209,25 @@ fn second_launch_panics_already_live() {
     let (e, client, _owner, _m) = setup_with_manager();
     launch(&e, &client, &[]);
     let other = Address::generate(&e);
-    let r = client.try_launch(&other, &vec![&e, other.clone()], &other);
+    let r = client.try_launch(&other, &vec![&e]);
     assert_eq!(r.err().unwrap().unwrap(), CommonError::AlreadyLive.into());
 }
 
 #[test]
-fn set_mint_authority_before_launch_is_not_live() {
+fn allowances_add_subtract_and_release() {
     let (e, client, _owner, _m) = setup_with_manager();
-    let r = client.try_set_mint_authority(&Address::generate(&e), &true);
-    assert_eq!(r.err().unwrap().unwrap(), CommonError::NotLive.into());
-}
-
-#[test]
-fn set_mint_authority_after_launch_is_owner_gated() {
-    let (e, client, _owner, _m) = setup_with_manager();
-    launch(&e, &client, &[]);
-    let x = Address::generate(&e);
-    client.set_mint_authority(&x, &true);
-    assert!(client.mint_authority(&x));
+    let claims = module(&e, &client, "claims", false);
+    // The admin (the launch admin in Setup) manages allowances in any phase.
+    client.increase_mint_allowance(&claims, &3);
+    client.increase_mint_allowance(&claims, &4);
+    assert_eq!(client.mint_allowance(&claims), 7);
+    client.decrease_mint_allowance(&claims, &2);
+    assert_eq!(client.mint_allowance(&claims), 5);
+    client.release_mint_allowance(&claims, &10);
+    assert_eq!(client.mint_allowance(&claims), 0);
+    // Raising needs a registered module.
+    let r = client.try_increase_mint_allowance(&stub(&e), &1);
+    assert_eq!(r.err().unwrap().unwrap(), TokenError::NotAModule.into());
 }
 
 #[test]
@@ -243,79 +281,64 @@ fn mint_requires_minter_auth() {
 }
 
 #[test]
-fn owner_can_whitelist_and_remove_minter() {
-    let (e, client, owner) = setup();
-    let bob = Address::generate(&e);
-    launch(&e, &client, &[]);
-
-    client.set_mint_authority(&bob, &true);
-    assert!(client.mint_authority(&bob));
-
-    client.set_mint_authority(&bob, &false);
-    assert!(!client.mint_authority(&bob));
-
-    let _ = e;
-    let _ = owner;
-}
-
-#[test]
 #[should_panic(expected = "HostError: Error(Auth, InvalidAction)")]
-fn set_mint_authority_requires_owner_auth() {
-    let (e, client, owner) = setup_no_auth();
-    let bob = Address::generate(&e);
-
-    let _ = owner;
-    client.set_mint_authority(&bob, &true);
+fn increase_mint_allowance_requires_admin_auth() {
+    let (e, client, _owner) = setup_no_auth();
+    client.increase_mint_allowance(&stub(&e), &1);
 }
 
 #[test]
-fn whitelisted_minter_can_mint() {
-    let (e, client, owner) = setup();
-    let bob = Address::generate(&e);
+fn module_mints_within_its_allowance_and_stops_at_zero() {
+    let (e, client, _owner, _m) = setup_with_manager();
+    let shop = module(&e, &client, "custom_shop", false);
     let alice = Address::generate(&e);
+    launch(&e, &client, &[(&shop, 3)]);
 
-    launch(&e, &client, std::slice::from_ref(&bob));
-
-    e.mock_auths(&[MockAuth {
-        address: &bob,
-        invoke: &MockAuthInvoke {
-            contract: &client.address,
-            fn_name: "mint",
-            args: (&bob, &alice).into_val(&e),
-            sub_invokes: &[],
-        },
-    }]);
-
-    let token_id = client.mint(&bob, &alice);
-    assert_eq!(token_id, 0);
-    assert_eq!(client.balance(&alice), 1);
-
-    let _ = owner;
+    assert_eq!(client.mint(&shop, &alice), 0);
+    client.batch_mint(&shop, &vec![&e, alice.clone()], &vec![&e, 2u128]);
+    assert_eq!(client.balance(&alice), 3);
+    assert_eq!(client.mint_allowance(&shop), 0);
+    let r = client.try_mint(&shop, &alice);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        TokenError::AllowanceExceeded.into()
+    );
+    // A batch larger than what is left fails whole.
+    client.increase_mint_allowance(&shop, &1);
+    let r = client.try_batch_mint(&shop, &vec![&e, alice.clone()], &vec![&e, 2u128]);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        TokenError::AllowanceExceeded.into()
+    );
+    assert_eq!(client.mint_allowance(&shop), 1);
 }
 
 #[test]
-fn contract_address_can_be_whitelisted() {
-    let (e, client, owner) = setup();
-    let treasury = Address::generate(&e);
-    let recipient = Address::generate(&e);
+fn before_launch_only_the_claims_module_mints() {
+    let (e, client, _owner, _m) = setup_with_manager();
+    let claims = module(&e, &client, "claims", false);
+    let circle = module(&e, &client, "circle", false);
+    let auction = client.auction().unwrap();
+    let alice = Address::generate(&e);
+    client.increase_mint_allowance(&claims, &2);
+    client.increase_mint_allowance(&circle, &2);
+    client.increase_mint_allowance(&auction, &u32::MAX);
 
-    launch(&e, &client, std::slice::from_ref(&treasury));
-
-    e.mock_auths(&[MockAuth {
-        address: &treasury,
-        invoke: &MockAuthInvoke {
-            contract: &client.address,
-            fn_name: "mint",
-            args: (&treasury, &recipient).into_val(&e),
-            sub_invokes: &[],
-        },
-    }]);
-
-    let token_id = client.mint(&treasury, &recipient);
-    assert_eq!(token_id, 0);
-    assert_eq!(client.balance(&recipient), 1);
-
-    let _ = owner;
+    client.mint(&claims, &alice);
+    assert_eq!(client.mint_allowance(&claims), 1);
+    for minter in [&circle, &auction] {
+        let r = client.try_mint(minter, &alice);
+        assert_eq!(
+            r.err().unwrap().unwrap(),
+            TokenError::MintAuthorityNotAllowed.into()
+        );
+    }
+    // An unregistered address never mints.
+    let r = client.try_mint(&stub(&e), &alice);
+    assert_eq!(
+        r.err().unwrap().unwrap(),
+        TokenError::MintAuthorityNotAllowed.into()
+    );
 }
 
 #[test]
@@ -690,33 +713,18 @@ mod upgrade_via_common {
 }
 
 #[test]
-fn launch_rejects_unwired_treasury_and_minters_without_treasury() {
+fn launch_rejects_an_unwired_treasury() {
     let (e, client, _owner, _m) = setup_with_manager();
     let wired = wired_treasury(&e, &client);
     let other = Address::generate(&e);
-
-    let r = client.try_launch(&other, &vec![&e, other.clone()], &other);
+    let r = client.try_launch(&other, &vec![&e]);
     assert_eq!(
         r.err().unwrap().unwrap(),
-        crate::error::TokenError::TreasuryMismatch.into()
-    );
-    let r = client.try_launch(&wired, &vec![&e, other.clone()], &other);
-    assert_eq!(
-        r.err().unwrap().unwrap(),
-        crate::error::TokenError::TreasuryNotMinter.into()
-    );
-    // The pinned minter must be granted.
-    let r = client.try_launch(&wired, &vec![&e, wired.clone()], &other);
-    assert_eq!(
-        r.err().unwrap().unwrap(),
-        crate::error::TokenError::MinterNotGranted.into()
+        TokenError::TreasuryMismatch.into()
     );
     assert!(!client.is_live());
-    assert_eq!(client.minter(), None);
-    client.launch(&wired, &vec![&e, wired.clone(), other.clone()], &other);
+    client.launch(&wired, &vec![&e]);
     assert!(client.is_live());
-    assert_eq!(client.minter(), Some(other.clone()));
-    assert!(client.mint_authority(&other));
 }
 
 #[test]
@@ -733,18 +741,18 @@ fn launch_requires_manager_auth() {
         BytesN::from_array(&e, &[0u8; 32]),
     );
     let client = DaoTokenContractClient::new(&e, &id);
-    let minters = vec![&e, treasury.clone()];
+    let none: soroban_sdk::Vec<MintGrant> = vec![&e];
     // Only a non-manager address authorizes the call.
     e.mock_auths(&[MockAuth {
         address: &owner,
         invoke: &MockAuthInvoke {
             contract: &id,
             fn_name: "launch",
-            args: (&treasury, &minters, &treasury).into_val(&e),
+            args: (&treasury, &none).into_val(&e),
             sub_invokes: &[],
         },
     }]);
-    assert!(client.try_launch(&treasury, &minters, &treasury).is_err());
+    assert!(client.try_launch(&treasury, &none).is_err());
     assert!(!client.is_live());
     // The manager's own authorization succeeds.
     e.mock_auths(&[MockAuth {
@@ -752,11 +760,11 @@ fn launch_requires_manager_auth() {
         invoke: &MockAuthInvoke {
             contract: &id,
             fn_name: "launch",
-            args: (&treasury, &minters, &treasury).into_val(&e),
+            args: (&treasury, &none).into_val(&e),
             sub_invokes: &[],
         },
     }]);
-    client.launch(&treasury, &minters, &treasury);
+    client.launch(&treasury, &none);
     assert!(client.is_live());
 }
 
@@ -784,8 +792,8 @@ mod voting_supply {
     fn system_holders_carry_no_votes_through_every_path() {
         let (e, client, owner) = setup();
         let treasury = wired(&e, &client, TokenKey::Treasury);
-        let auction = wired(&e, &client, TokenKey::Auction);
-        let marketplace = wired(&e, &client, TokenKey::Marketplace);
+        let auction = client.auction().unwrap();
+        let marketplace = client.marketplace().unwrap();
         let alice = Address::generate(&e);
         let bob = Address::generate(&e);
         let voters = [&alice, &bob];
@@ -837,7 +845,7 @@ mod voting_supply {
     #[test]
     fn delegated_votes_follow_system_transfers() {
         let (e, client, owner) = setup();
-        let marketplace = wired(&e, &client, TokenKey::Marketplace);
+        let marketplace = client.marketplace().unwrap();
         let alice = Address::generate(&e);
         let carol = Address::generate(&e);
         let id = client.mint(&owner, &alice);
@@ -955,14 +963,14 @@ fn batch_mint_extends_owner_entries() {
 }
 
 #[test]
-fn mint_authority_lives_in_persistent_storage() {
+fn mint_allowance_lives_in_persistent_storage() {
     let (e, client, _owner, _m) = setup_with_manager();
-    let minter = Address::generate(&e);
-    launch(&e, &client, std::slice::from_ref(&minter));
-    let key = common::ns(&e, crate::storage::TokenKey::MintAuthority(minter.clone()));
+    let claims = module(&e, &client, "claims", false);
+    launch(&e, &client, &[(&claims, 9)]);
+    let key = common::ns(&e, crate::storage::TokenKey::MintAllowance(claims.clone()));
     e.as_contract(&client.address, || {
         assert!(!e.storage().instance().has(&key));
-        assert_eq!(e.storage().persistent().get::<_, bool>(&key), Some(true));
+        assert_eq!(e.storage().persistent().get::<_, u32>(&key), Some(9));
     });
 }
 
@@ -999,8 +1007,8 @@ mod delegation_security {
     fn world() -> World {
         let (e, token, admin) = setup();
         let treasury = wired(&e, &token, TokenKey::Treasury);
-        let auction = wired(&e, &token, TokenKey::Auction);
-        let marketplace = wired(&e, &token, TokenKey::Marketplace);
+        let auction = token.auction().unwrap();
+        let marketplace = token.marketplace().unwrap();
         World {
             e,
             token,
@@ -1358,7 +1366,12 @@ fn wiring_getters_expose_every_module() {
     assert!(client.auction().is_some());
     assert!(client.marketplace().is_some());
     assert!(client.metadata().is_some());
-    assert_eq!(client.minter(), None);
+    // The constructor registers the Auction and Marketplace as non-voting modules.
+    let entries = client.modules();
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries.get(0).unwrap().kind, Symbol::new(&e, "auction"));
+    assert_eq!(entries.get(1).unwrap().kind, Symbol::new(&e, "marketplace"));
+    assert!(entries.iter().all(|m| m.non_voting));
 }
 
 /// docs/STORAGE_DIET_REVIEW.md Finding 1: no token key may encode like an
@@ -1472,4 +1485,202 @@ fn token_uri_without_a_metadata_address_says_so() {
         client.try_token_uri(&id).err().unwrap().unwrap(),
         crate::error::TokenError::MetadataNotSet.into()
     );
+}
+
+/// docs/designs/membership-models.md §1: the module registry.
+mod registry {
+    use super::*;
+
+    /// Σ account checkpoints == TotalSupply == Σ voting-holder balances.
+    fn assert_books(client: &DaoTokenContractClient, accounts: &[&Address], voting: u128) {
+        let votes: u128 = accounts.iter().map(|a| client.get_votes(a)).sum();
+        assert_eq!(client.get_total_supply(), voting);
+        assert_eq!(
+            votes, voting,
+            "account checkpoints must add up to TotalSupply"
+        );
+    }
+
+    #[test]
+    fn registering_a_holder_non_voting_removes_its_votes_from_its_delegate() {
+        let (e, client, owner, _m) = setup_with_manager();
+        let vault = stub(&e);
+        let carol = Address::generate(&e);
+        let alice = Address::generate(&e);
+        client.batch_mint(
+            &owner,
+            &vec![&e, vault.clone(), alice.clone()],
+            &vec![&e, 3u128, 2u128],
+        );
+        client.delegate(&vault, &carol);
+        assert_books(&client, &[&vault, &carol, &alice], 5);
+        assert_eq!(client.get_votes(&carol), 3);
+
+        client.register_module(&Symbol::new(&e, "custom_vault"), &vault, &true);
+        // review 2 D2: the delegate loses k, the module's units are zero.
+        assert_eq!(client.get_votes(&carol), 0);
+        assert_books(&client, &[&vault, &carol, &alice], 2);
+        e.as_contract(&client.address, || {
+            assert_eq!(stellar_governance::votes::get_voting_units(&e, &vault), 0);
+        });
+    }
+
+    #[test]
+    fn unregistering_a_holding_module_self_delegates_before_votes_return() {
+        let (e, client, owner, _m) = setup_with_manager();
+        let marketplace = client.marketplace().unwrap();
+        let alice = Address::generate(&e);
+        // Tokens reach the module only while it is non-voting: no delegate.
+        client.batch_mint(
+            &owner,
+            &vec![&e, marketplace.clone(), alice.clone()],
+            &vec![&e, 4u128, 1u128],
+        );
+        assert_eq!(client.get_delegate(&marketplace), None);
+        assert_books(&client, &[&marketplace, &alice], 1);
+
+        client.unregister_module(&marketplace);
+        // review 2 A1: without the self-delegation TotalSupply would grow by 4
+        // with nobody's checkpoint following.
+        assert_eq!(client.get_delegate(&marketplace), Some(marketplace.clone()));
+        assert_eq!(client.get_votes(&marketplace), 4);
+        assert_books(&client, &[&marketplace, &alice], 5);
+        assert_eq!(client.marketplace(), None);
+    }
+
+    #[test]
+    fn only_deployed_wasm_contracts_can_be_modules() {
+        let (e, client, _owner, _m) = setup_with_manager();
+        let kind = Symbol::new(&e, "claims");
+        // A wallet, and a predicted address with nothing deployed (review 2 D6).
+        for address in [Address::generate(&e), Address::generate(&e)] {
+            let r = client.try_register_module(&kind, &address, &false);
+            assert_eq!(r.err().unwrap().unwrap(), TokenError::NotAContract.into());
+        }
+        // A Stellar Asset Contract is not a module either.
+        let sac = e
+            .register_stellar_asset_contract_v2(Address::generate(&e))
+            .address();
+        let r = client.try_register_module(&kind, &sac, &false);
+        assert_eq!(r.err().unwrap().unwrap(), TokenError::NotAContract.into());
+        // Once deployed, the same kind of address registers.
+        client.register_module(&kind, &stub(&e), &false);
+    }
+
+    #[test]
+    fn kinds_are_built_in_or_custom_and_unique() {
+        let (e, client, _owner, _m) = setup_with_manager();
+        for bad in ["shop", "custom_", "Claims", "custom"] {
+            let r = client.try_register_module(&Symbol::new(&e, bad), &stub(&e), &false);
+            assert_eq!(
+                r.err().unwrap().unwrap(),
+                TokenError::InvalidKind.into(),
+                "{bad}"
+            );
+        }
+        client.register_module(
+            &Symbol::new(&e, "custom_abcdefghijklmnopqrstuvwxy"),
+            &stub(&e),
+            &false,
+        );
+        // The constructor already holds `auction` and `marketplace`.
+        let r = client.try_register_module(&Symbol::new(&e, "auction"), &stub(&e), &true);
+        assert_eq!(r.err().unwrap().unwrap(), TokenError::KindTaken.into());
+        let marketplace = client.marketplace().unwrap();
+        let r = client.try_register_module(&Symbol::new(&e, "claims"), &marketplace, &false);
+        assert!(r.is_err(), "an address registers once");
+    }
+
+    #[test]
+    fn the_registry_is_capped() {
+        let (e, client, _owner, _m) = setup_with_manager();
+        // Two constructor entries plus fourteen custom ones fill the 16 slots.
+        for i in 0..14 {
+            let kind = std::format!("custom_m{i}");
+            client.register_module(&Symbol::new(&e, &kind), &stub(&e), &false);
+        }
+        let r = client.try_register_module(&Symbol::new(&e, "custom_last"), &stub(&e), &false);
+        assert_eq!(r.err().unwrap().unwrap(), TokenError::TooManyModules.into());
+    }
+
+    #[test]
+    fn unregistering_zeroes_the_allowance_and_emits() {
+        let (e, client, _owner, _m) = setup_with_manager();
+        let claims = module(&e, &client, "claims", false);
+        client.increase_mint_allowance(&claims, &5);
+        client.unregister_module(&claims);
+        assert_eq!(client.mint_allowance(&claims), 0);
+        let r = client.try_unregister_module(&claims);
+        assert_eq!(r.err().unwrap().unwrap(), TokenError::NotAModule.into());
+    }
+
+    #[test]
+    fn registration_needs_the_manager_in_setup_and_the_admin_once_live() {
+        let e = Env::default();
+        let owner = Address::generate(&e);
+        let treasury = Address::generate(&e);
+        let manager = Address::generate(&e);
+        let id = deploy(
+            &e,
+            owner.clone(),
+            treasury.clone(),
+            manager.clone(),
+            BytesN::from_array(&e, &[0u8; 32]),
+        );
+        let client = DaoTokenContractClient::new(&e, &id);
+        let kind = Symbol::new(&e, "claims");
+        let a = stub(&e);
+        let auth = |who: &Address| {
+            e.mock_auths(&[MockAuth {
+                address: who,
+                invoke: &MockAuthInvoke {
+                    contract: &id,
+                    fn_name: "register_module",
+                    args: (&kind, &a, false).into_val(&e),
+                    sub_invokes: &[],
+                },
+            }]);
+        };
+        // Setup: the launch admin can't, the Manager can.
+        auth(&owner);
+        assert!(client.try_register_module(&kind, &a, &false).is_err());
+        auth(&manager);
+        client.register_module(&kind, &a, &false);
+
+        e.mock_all_auths();
+        client.launch(&treasury, &vec![&e]);
+        let b = stub(&e);
+        let circle = Symbol::new(&e, "circle");
+        // Live: the Manager can't, the admin (Treasury) can.
+        e.mock_auths(&[MockAuth {
+            address: &manager,
+            invoke: &MockAuthInvoke {
+                contract: &id,
+                fn_name: "register_module",
+                args: (&circle, &b, false).into_val(&e),
+                sub_invokes: &[],
+            },
+        }]);
+        assert!(client.try_register_module(&circle, &b, &false).is_err());
+        e.mock_auths(&[MockAuth {
+            address: &treasury,
+            invoke: &MockAuthInvoke {
+                contract: &id,
+                fn_name: "register_module",
+                args: (&circle, &b, false).into_val(&e),
+                sub_invokes: &[],
+            },
+        }]);
+        client.register_module(&circle, &b, &false);
+        assert_eq!(client.module(&circle), Some(b));
+    }
+}
+
+#[test]
+fn an_unlimited_allowance_is_never_spent() {
+    let (e, client, _owner, _m) = setup_with_manager();
+    let shop = module(&e, &client, "custom_shop", false);
+    launch(&e, &client, &[(&shop, u32::MAX)]);
+    client.batch_mint(&shop, &vec![&e, Address::generate(&e)], &vec![&e, 3u128]);
+    assert_eq!(client.mint_allowance(&shop), u32::MAX);
 }

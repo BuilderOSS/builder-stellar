@@ -12,11 +12,13 @@ use soroban_sdk::{contractclient, Address, BytesN, Env, String, Symbol, Val, Vec
 /// Metadata.
 #[contractclient(name = "NftClient")]
 pub trait NftApi {
-    fn launch(e: &Env, treasury: Address, minters: Vec<Address>, minter: Address);
+    fn launch(e: &Env, treasury: Address, grants: Vec<crate::modules::MintGrant>);
+    /// Module registry (Manager in Setup, admin once live).
+    fn register_module(e: &Env, kind: Symbol, address: Address, non_voting: bool);
     fn admin(e: &Env) -> Address;
     fn is_live(e: &Env) -> bool;
-    /// Voting-capable supply (excludes tokens held by the Treasury, Auction
-    /// and Marketplace).
+    /// Voting-capable supply (excludes tokens held by the Treasury and
+    /// non-voting modules).
     fn total_supply(e: &Env) -> i128;
     /// Voting-capable supply at the previous ledger, the ledger votes are
     /// snapshotted at; reads at most the two latest checkpoints.

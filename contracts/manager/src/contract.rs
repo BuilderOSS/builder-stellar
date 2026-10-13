@@ -8,7 +8,8 @@
 use common::clients::{
     AuctionLaunchClient, MarketplaceLaunchClient, NftClient, TreasuryLaunchClient, WasmHashClient,
 };
-use soroban_sdk::{contract, contractimpl, vec, Address, BytesN, Env, String, Val, Vec};
+use common::modules::{MintGrant, KIND_CLAIMS};
+use soroban_sdk::{contract, contractimpl, vec, Address, BytesN, Env, String, Symbol, Val, Vec};
 
 use crate::error::ManagerError;
 use crate::events::*;
@@ -839,8 +840,9 @@ impl ManagerContract {
     /// # Effects
     ///
     /// 1. Validates launch preconditions and claims the slug (`SlugClaimed`)
-    /// 2. Calls `token.launch` with minters = [Treasury, Marketplace, PlatformMinter] +
-    ///    [Auction if launch_auction] and the pinned minter, then `launch` on Governor,
+    /// 2. Registers the pinned PlatformMinter as the token's `claims` module, calls
+    ///    `token.launch` with unlimited allowances for the Marketplace, the Minter and
+    ///    [Auction if launch_auction], then `launch` on Governor,
     ///    Treasury, Marketplace, Auction, Metadata
     /// 3. Each module becomes Live: its admin moves to the Treasury and the Manager
     ///    has no further authority over the DAO (a second launch panics `AlreadyLive`)
@@ -894,26 +896,41 @@ impl ManagerContract {
             return Err(ManagerError::LaunchSupplyZero);
         }
 
-        // Mint authority is exactly this canonical set; the launch_admin cannot
-        // add to it. The optional minter is the admin-registered PlatformMinter.
-        let mut minters: Vec<Address> = vec![&env, treasury.clone(), addresses.marketplace.clone()];
-        if launch_config.launch_auction {
-            minters.push_back(addresses.auction.clone());
-        }
-        // Every DAO launches with the shared platform Minter. The launch admin
-        // pins the minter they reviewed; this closes the window in which the
-        // Manager admin swaps it before launch.
+        // Mint allowances are exactly this canonical set; the launch_admin
+        // cannot add to it. The Treasury needs none (as admin it mints without
+        // limit). Interim (Phase 1, docs/designs/membership-models.md): the
+        // admin-registered platform Minter is registered as this DAO's
+        // `claims` module with an unlimited allowance until the per-DAO
+        // ClaimMinter replaces it; the Marketplace keeps an unlimited
+        // allowance for primary listings until pools replace them (Phase 3).
         let minter: Address = get_persistent(&env, &ManagerKey::PlatformMinter)
             .ok_or(ManagerError::PlatformMinterNotSet)?;
         if launch_config.minter != minter {
             return Err(ManagerError::PlatformMinterMismatch);
         }
-        minters.push_back(minter.clone());
+        nft.register_module(&Symbol::new(&env, KIND_CLAIMS), &minter, &false);
+        let mut grants: Vec<MintGrant> = vec![
+            &env,
+            MintGrant {
+                module: addresses.marketplace.clone(),
+                allowance: u32::MAX,
+            },
+            MintGrant {
+                module: minter.clone(),
+                allowance: u32::MAX,
+            },
+        ];
+        if launch_config.launch_auction {
+            grants.push_back(MintGrant {
+                module: addresses.auction.clone(),
+                allowance: u32::MAX,
+            });
+        }
 
-        // One-shot handoff. The token launches first so the auction holds mint
-        // authority when it creates its first auction. After these calls every
+        // One-shot handoff. The token launches first so the auction holds an
+        // allowance when it creates its first auction. After these calls every
         // module is Live and the Manager has no further authority over the DAO.
-        nft.launch(&treasury, &minters, &minter);
+        nft.launch(&treasury, &grants);
         TreasuryLaunchClient::new(&env, &addresses.governor).launch(&treasury);
         TreasuryLaunchClient::new(&env, &addresses.treasury).launch(&treasury);
         MarketplaceLaunchClient::new(&env, &addresses.marketplace).launch(
