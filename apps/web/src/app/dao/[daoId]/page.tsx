@@ -69,6 +69,27 @@ const tokenGrid = css({
 const more = css({ display: 'flex', justifyContent: 'center', pt: '2' });
 const listSkeleton = css({ display: 'grid', gap: '3' });
 
+/** Before launch, a launch drive is the way in: claim (and pay, if priced), or take a payment back once it ended. */
+function LaunchDriveCallout({ ended, href }: { ended: boolean; href: ReturnType<typeof daoRoute> }) {
+  return (
+    <Callout
+      variant={ended ? 'warning' : 'info'}
+      title={ended ? 'This launch drive ended' : 'This community launches once enough people claim'}
+      description={
+        ended
+          ? 'Not enough people claimed in time, so the community did not launch. If you paid to claim, you can take your payment back.'
+          : 'If you are on its claim list, claim your tokens now. Payments are held until launch. If the drive ends first, everyone who paid can take their payment back.'
+      }
+    >
+      <div>
+        <ButtonLink href={href} size="sm">
+          {ended ? 'Take back a payment' : 'Go to claims'}
+        </ButtonLink>
+      </div>
+    </Callout>
+  );
+}
+
 export default function Page() {
   const { daoId, daoConfig: config, routeId } = useDaoContext();
   const isLaunchAdmin = useIsLaunchAdmin(config.launchAdmin);
@@ -121,6 +142,12 @@ export default function Page() {
     }
   }
 
+  // A launch drive is how people join before launch, so visitors see it too, not only the launch admin.
+  const launchDrive =
+    config.assuranceOutcome === 'open' || config.assuranceOutcome === 'released' ? (
+      <LaunchDriveCallout ended={config.assuranceOutcome === 'released'} href={daoRoute(routeId, 'claims')} />
+    ) : null;
+
   if (config.status === 'pending' && !isLaunchAdmin) {
     return (
       <div className={intro}>
@@ -128,10 +155,12 @@ export default function Page() {
           <Crest name={config.tokenName} seed={config.tokenContractId} src={config.image} size="lg" />
           <h1 className={name}>{config.tokenName}</h1>
         </div>
-        <Callout
-          title="This community is still being set up"
-          description="Its founder is finishing setup. Once it launches you can bid, join and vote here."
-        />
+        {launchDrive ?? (
+          <Callout
+            title="This community is still being set up"
+            description="Its founder is finishing setup. Once it launches you can bid, join and vote here."
+          />
+        )}
       </div>
     );
   }
@@ -170,19 +199,7 @@ export default function Page() {
         now={now}
       />
 
-      {config.assuranceOutcome === 'open' ? (
-        <Callout
-          variant="info"
-          title="This community launches once enough people claim"
-          description="If you're on its claim list, claim your tokens now. If the drive ends first, everyone who paid can take their payment back."
-        >
-          <div>
-            <ButtonLink href={daoRoute(routeId, 'claims')} size="sm">
-              Go to claims
-            </ButtonLink>
-          </div>
-        </Callout>
-      ) : null}
+      {config.status === 'pending' ? launchDrive : null}
       {config.status !== 'pending' ? <ContractUpdatesNotice enabled={membership.isMember} /> : null}
       {config.status !== 'pending' ? <PlatformUpgradeNotice enabled={membership.isMember} /> : null}
 
