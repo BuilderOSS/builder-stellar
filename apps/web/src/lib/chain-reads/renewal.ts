@@ -28,6 +28,7 @@ import {
   TransactionBuilder,
   xdr
 } from '@stellar/stellar-sdk';
+import { NULL_ACCOUNT } from '@stellar/stellar-sdk/contract';
 import { Api as RpcApi } from '@stellar/stellar-sdk/rpc';
 import { Buffer } from 'buffer';
 
@@ -571,9 +572,6 @@ export function rpcLedgerRead(server: {
   };
 }
 
-/** The account read-only simulations use as their source (the SDK's own null account). */
-const NULL_SOURCE = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
-
 function field(map: xdr.ScMapEntry[], name: string) {
   const item = map.find((entry) => entry.key.type === 'scvSymbol' && String(entry.key.value) === name);
   if (!item) throw new Error(`renewal_keys returned no ${name}.`);
@@ -609,7 +607,7 @@ export function rpcModuleRenewal(
   networkPassphrase: string
 ): ModuleRenewalRead {
   return async (module, cursor) => {
-    const tx = new TransactionBuilder(new Account(NULL_SOURCE, '0'), { fee: '100', networkPassphrase })
+    const tx = new TransactionBuilder(new Account(NULL_ACCOUNT, '0'), { fee: '100', networkPassphrase })
       .addOperation(
         Operation.invokeContractFunction({
           contract: module,
