@@ -1,9 +1,11 @@
 'use client';
 
 import { StrKey } from '@stellar/stellar-sdk';
+import { useState } from 'react';
 import { css } from 'styled-system/css';
 
 import { Callout, Field, FieldHelperText, FieldLabel, Input, Select, Switch } from '@/components/ui';
+import { useOptionalDaoContext } from '@/contexts/dao-context';
 import { isValidStellarAddress } from '@/lib/validation';
 
 import type { ActionFormProps, ActionHandler, ProposalActionType, ValidationResult } from './types';
@@ -40,17 +42,48 @@ function tokenId(value: string): ValidationResult | null {
 export type MintAllowanceDraft = { module: string; amount: string; direction: 'increase' | 'decrease' };
 
 function MintAllowanceForm({ value, onChange, disabled, validationErrors }: ActionFormProps<MintAllowanceDraft>) {
+  // The community's own modules by name; anything else (custom code) by its contract.
+  const config = useOptionalDaoContext()?.daoConfig;
+  const known: Array<[string, string]> = [];
+  if (config?.auctionContractId) known.push(['Auction', config.auctionContractId]);
+  if (config?.marketplaceContractId) known.push(['Marketplace (quick-buy pools)', config.marketplaceContractId]);
+  if (config?.claimsContractId) known.push(['Claims', config.claimsContractId]);
+  const [other, setOther] = useState(() => Boolean(value.module) && !known.some(([, id]) => id === value.module));
+  const typed = other || !known.length;
   return (
     <div className={stack}>
       <Field>
-        <FieldLabel htmlFor="allowance-module">Module</FieldLabel>
-        <Input
-          id="allowance-module"
-          value={value.module}
-          placeholder="Module contract (C…)"
-          disabled={disabled}
-          onChange={(event) => onChange({ ...value, module: event.target.value.trim() })}
-        />
+        <FieldLabel htmlFor={known.length ? 'allowance-module-pick' : 'allowance-module'}>Module</FieldLabel>
+        {known.length ? (
+          <Select
+            id="allowance-module-pick"
+            value={other ? 'other' : value.module}
+            disabled={disabled}
+            onChange={(event) => {
+              const picked = event.target.value;
+              setOther(picked === 'other');
+              onChange({ ...value, module: picked === 'other' ? '' : picked });
+            }}
+          >
+            <option value="">Choose a module</option>
+            {known.map(([label, id]) => (
+              <option key={id} value={id}>
+                {label}
+              </option>
+            ))}
+            <option value="other">Another module (enter its contract)</option>
+          </Select>
+        ) : null}
+        {typed ? (
+          <Input
+            id="allowance-module"
+            aria-label={known.length ? 'Module contract' : undefined}
+            value={value.module}
+            placeholder="Module contract (C…)"
+            disabled={disabled}
+            onChange={(event) => onChange({ ...value, module: event.target.value.trim() })}
+          />
+        ) : null}
         <ErrorText result={validationErrors} field="module" />
       </Field>
       <Field>
@@ -289,11 +322,13 @@ function DaoTransferForm({ value, onChange, disabled, validationErrors }: Action
           onChange={(event) => onChange({ ...value, to: event.target.value.trim() })}
         />
         <ErrorText result={validationErrors} field="to" />
-        <FieldHelperText>
-          Moves the token and its votes without the current holder’s signature. DAO recovery must be on, in this
-          proposal or before it.
-        </FieldHelperText>
+        <FieldHelperText>DAO recovery must be on, in this proposal or before it.</FieldHelperText>
       </Field>
+      <Callout
+        variant="warning"
+        title="This moves a member’s token without their signature"
+        description="The token and its votes go to the new holder when the proposal runs. Use it for a lost key or a recall members agreed to, and say which in the proposal."
+      />
     </div>
   );
 }
@@ -347,6 +382,7 @@ function ApprovedTransferForm({ value, onChange, disabled, validationErrors }: A
         <Input
           id="approved-transfer-from"
           value={value.from}
+          placeholder="Wallet address (G…)"
           disabled={disabled}
           onChange={(event) => onChange({ ...value, from: event.target.value.trim() })}
         />
@@ -357,12 +393,14 @@ function ApprovedTransferForm({ value, onChange, disabled, validationErrors }: A
         <Input
           id="approved-transfer-to"
           value={value.to}
+          placeholder="Wallet address (G…)"
           disabled={disabled}
           onChange={(event) => onChange({ ...value, to: event.target.value.trim() })}
         />
         <ErrorText result={validationErrors} field="to" />
         <FieldHelperText>
-          The holder approves the Treasury for this token first; the transfer happens when the proposal executes.
+          The holder first approves the community for this token, from the token’s page (Approve the community). The
+          transfer happens when the proposal runs, and fails if that approval has run out.
         </FieldHelperText>
       </Field>
     </div>

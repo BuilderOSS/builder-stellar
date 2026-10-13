@@ -123,7 +123,7 @@ export async function prepareHolderAction(
       );
     const expiration = holderTokenId(action.expirationLedger);
     const latest = await new rpc.Server(config.rpcUrl, { allowHttp: config.name === 'local' }).getLatestLedger();
-    if (expiration <= latest.sequence) throw new HolderError('Approval expiry must be a future ledger.');
+    if (expiration <= latest.sequence) throw new HolderError('The approval must end in the future.');
     if (action.destination === actor.address) throw new HolderError('Choose a different spender.');
     tx = await client.approve(
       {
@@ -136,8 +136,8 @@ export async function prepareHolderAction(
     );
     summary =
       action.destination === treasury
-        ? `Allow the community Treasury ${treasury} to transfer only token #${tokenId} until ledger ${expiration}, so a proposal members pass can move it. This replaces its single-token approval; ownership does not change until a proposal runs.`
-        : `Allow ${action.destination} to transfer only token #${tokenId} until ledger ${expiration}. This replaces its single-token approval; ownership does not change.`;
+        ? `Allow the community Treasury ${treasury} to transfer only token #${tokenId} until network position ${expiration}, so a proposal members pass can move it. This replaces its single-token approval; ownership does not change until a proposal runs.`
+        : `Allow ${action.destination} to transfer only token #${tokenId} until network position ${expiration}. This replaces its single-token approval; ownership does not change.`;
   } else if (action.action === 'revoke') {
     // The pinned NFT Base removes the single-token approval at expiration ledger 0.
     // No approval getter is exposed by this binding; a valid spender address is still required.

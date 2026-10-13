@@ -67,7 +67,9 @@ export function DaoMarketplaceView({
   selectedId?: string;
   selectedEventId?: string;
 }) {
-  const { routeId } = useDaoContext();
+  const { routeId, daoConfig } = useDaoContext();
+  // A locked community refuses member listings (the Token won't move a token into escrow).
+  const locked = daoConfig.tokenSettings.transfersLocked;
   const [kind, setKind] = useState(['pool', 'secondary'].includes(initialKind) ? initialKind : 'all');
   const [status, setStatus] = useState(
     ['all', 'open', 'purchased', 'cancelled', 'expired'].includes(initialStatus) ? initialStatus : 'open'
@@ -94,7 +96,11 @@ export function DaoMarketplaceView({
     <div className={styles.scoped}>
       <PageSection
         title="Market"
-        description="Buy a new token straight from the community, or a resale from a member. New sales fund the treasury."
+        description={
+          locked
+            ? 'Buy a new token straight from the community. Memberships here are locked, so members can’t resell them. Sales fund the treasury.'
+            : 'Buy a new token straight from the community, or a resale from a member. New sales fund the treasury.'
+        }
         actions={
           <ButtonLink href={daoRoute(routeId, 'admin/marketplace')} variant="ghost">
             Market settings
@@ -159,19 +165,21 @@ export function DaoMarketplaceView({
                 <option value="cancelled">Canceled</option>
                 <option value="expired">Expired and cleared</option>
               </Select>
-              <div className={sellButton}>
-                <Button
-                  variant={selling ? 'ghost' : 'secondary'}
-                  aria-expanded={selling}
-                  onClick={() => setSelling(!selling)}
-                >
-                  <Tag aria-hidden="true" />
-                  {selling ? 'Close' : 'Sell a token you own'}
-                </Button>
-              </div>
+              {locked ? null : (
+                <div className={sellButton}>
+                  <Button
+                    variant={selling ? 'ghost' : 'secondary'}
+                    aria-expanded={selling}
+                    onClick={() => setSelling(!selling)}
+                  >
+                    <Tag aria-hidden="true" />
+                    {selling ? 'Close' : 'Sell a token you own'}
+                  </Button>
+                </div>
+              )}
             </div>
 
-            {selling ? <SellForm data={data} /> : null}
+            {selling && !locked ? <SellForm data={data} /> : null}
             {selected.error ? <Callout variant="error" title={selected.error.message} /> : null}
             {selected.isLoading ? <Skeleton className={css({ height: '40', borderRadius: 'card' })} /> : null}
             {selected.data ? (
@@ -203,7 +211,9 @@ export function DaoMarketplaceView({
               </section>
             ) : (
               <EmptyState title="Nothing for sale here">
-                New tokens are listed by a community vote. Members can sell a token they hold with the button above.
+                {locked
+                  ? 'New tokens go on sale when members vote to open a pool.'
+                  : 'New tokens go on sale when members vote to open a pool. Members can sell a token they hold with the button above.'}
               </EmptyState>
             )}
 

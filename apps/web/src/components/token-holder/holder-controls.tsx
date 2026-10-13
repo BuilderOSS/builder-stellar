@@ -4,7 +4,17 @@ import { useRef, useState } from 'react';
 import { css } from 'styled-system/css';
 import { useSWRConfig } from 'swr';
 
-import { Address, Button, ChoiceGroup, Disclosure, Field, FieldHelperText, FieldLabel, Input } from '@/components/ui';
+import {
+  Address,
+  Button,
+  ButtonLink,
+  ChoiceGroup,
+  Disclosure,
+  Field,
+  FieldHelperText,
+  FieldLabel,
+  Input
+} from '@/components/ui';
 import { card, muted, review as reviewBox, reviewTitle, title } from '@/components/ui/panel-styles';
 
 const form = css({ display: 'grid', gap: '4' });
@@ -13,6 +23,9 @@ const VOTE_APPROVAL_LEDGERS = 120 * 17_280;
 const buttons = css({ display: 'flex', justifyContent: 'flex-end', gap: '2' });
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
+import { formatStroops } from '@/lib/auction-values';
+import { estimateDate } from '@/lib/chain-reads/renewal';
+import { daoRoute } from '@/lib/dao-routes';
 import { directoryFetch } from '@/lib/member-directory/hooks';
 import { holderTokenId, memberAddress } from '@/lib/member-directory/validation';
 import { withArchivedRestore } from '@/lib/restore-archived-client';
@@ -34,7 +47,7 @@ export function HolderControls({
   liveOwner: boolean;
   onRefresh: () => void;
 }) {
-  const { daoId, daoConfig: config } = useDaoContext();
+  const { daoId, daoConfig: config, routeId } = useDaoContext();
   const session = useAuthSessionStore();
   const { mutate } = useSWRConfig();
   const locked = config.tokenSettings.transfersLocked;
@@ -45,6 +58,8 @@ export function HolderControls({
   const fixedToTreasury = locked && (kind === 'transfer' || kind === 'approve');
   const destination = fixedToTreasury ? config.treasuryContractId : typed;
   const [expiry, setExpiry] = useState('');
+  // The network's position when the end was last suggested, to show that end as a date.
+  const [position, setPosition] = useState<{ sequence: number; at: number } | null>(null);
   const [review, setReview] = useState<{ action: HolderAction; prepared: HolderPrepared } | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -62,7 +77,7 @@ export function HolderControls({
     setMessage('');
   }
   /** An approval long enough for a proposal's whole timeline (delay, vote, queue, execution window). */
-  async function useVoteApproval() {
+  async function suggestVoteApproval() {
     if (!allowed || inFlight.current || hash) return;
     inFlight.current = true;
     setBusy(true);
@@ -71,15 +86,16 @@ export function HolderControls({
       const { rpc } = await import('@stellar/stellar-sdk');
       const latest = await new rpc.Server(config.rpcUrl, { allowHttp: config.name === 'local' }).getLatestLedger();
       setExpiry(String(holderTokenId(String(latest.sequence + VOTE_APPROVAL_LEDGERS))));
+      setPosition({ sequence: latest.sequence, at: Date.now() });
       setMessage('Set to last about 120 days, long enough for a proposal to pass and run. Check it before signing.');
     } catch {
-      setMessage("We couldn't read the network's current position. Try again, or enter an end point yourself.");
+      setMessage("We couldn't read the network's current position. Try again, or enter an end yourself.");
     } finally {
       setBusy(false);
       inFlight.current = false;
     }
   }
-  async function useShortApproval() {
+  async function suggestShortApproval() {
     if (!allowed || inFlight.current || hash) return;
     inFlight.current = true;
     setBusy(true);
@@ -88,9 +104,10 @@ export function HolderControls({
       const { rpc } = await import('@stellar/stellar-sdk');
       const latest = await new rpc.Server(config.rpcUrl, { allowHttp: config.name === 'local' }).getLatestLedger();
       setExpiry(String(holderTokenId(String(latest.sequence + 120))));
+      setPosition({ sequence: latest.sequence, at: Date.now() });
       setMessage('Set to end in about 10 minutes. Check it before signing.');
     } catch {
-      setMessage("We couldn't read the network's current position. Try again, or enter an end point yourself.");
+      setMessage("We couldn't read the network's current position. Try again, or enter an end yourself.");
     } finally {
       setBusy(false);
       inFlight.current = false;
@@ -180,7 +197,7 @@ export function HolderControls({
       if (action.action === 'approve') {
         const latest = await new rpc.Server(config.rpcUrl, { allowHttp: config.name === 'local' }).getLatestLedger();
         if (Number(action.expirationLedger) <= latest.sequence)
-          throw new Error('The approval expiry has passed. Choose a future ledger and simulate again.');
+          throw new Error('The approval end has passed. Set a new end and review again.');
       }
       const unsigned = TransactionBuilder.fromXDR(prepared.xdr, config.passphrase);
       assertHolderEnvelope(unsigned, prepared, action);
@@ -227,6 +244,11 @@ export function HolderControls({
       inFlight.current = false;
     }
   }
+  const endsAt = /^\d+$/.test(expiry) && position ? Number(expiry) : null;
+  const endsAround =
+    endsAt && position && endsAt > position.sequence
+      ? estimateDate(endsAt, position.sequence, position.at).toLocaleDateString(undefined, { dateStyle: 'medium' })
+      : null;
   return (
     <section className={card} aria-labelledby="holder-controls-title">
       <div>
@@ -255,6 +277,8 @@ export function HolderControls({
         onValueChange={(value) => {
           setKind(value as typeof kind);
           clearReview();
+          // On a locked community the only useful approval is one that outlasts a vote: suggest it.
+          if (value === 'approve' && locked && !expiry) void suggestVoteApproval();
         }}
         options={
           locked
@@ -316,7 +340,7 @@ export function HolderControls({
         )}
         {kind === 'approve' ? (
           <Field>
-            <FieldLabel htmlFor="holder-expiry">Approval ends at ledger</FieldLabel>
+            <FieldLabel htmlFor="holder-expiry">Approval ends at network position</FieldLabel>
             <Input
               id="holder-expiry"
               inputMode="numeric"
@@ -328,7 +352,12 @@ export function HolderControls({
               disabled={busy || Boolean(hash)}
             />
             <FieldHelperText>
-              A ledger number, not a date. The spender can move your token until then or until you revoke it.
+              {endsAround
+                ? `Ends around ${endsAround}. `
+                : 'A number, not a date: the network moves on by one about every 5 seconds. '}
+              {locked
+                ? 'Until then, a proposal members pass can move this token, unless you revoke it first.'
+                : 'The spender can move your token until then or until you revoke it.'}
             </FieldHelperText>
             <div>
               {locked ? (
@@ -336,7 +365,7 @@ export function HolderControls({
                   variant="ghost"
                   size="sm"
                   disabled={!allowed || busy || Boolean(hash)}
-                  onClick={useVoteApproval}
+                  onClick={suggestVoteApproval}
                 >
                   Last long enough for a vote (about 120 days)
                 </Button>
@@ -345,7 +374,7 @@ export function HolderControls({
                   variant="ghost"
                   size="sm"
                   disabled={!allowed || busy || Boolean(hash)}
-                  onClick={useShortApproval}
+                  onClick={suggestShortApproval}
                 >
                   Use a short approval (about 10 minutes)
                 </Button>
@@ -378,8 +407,7 @@ export function HolderControls({
         <div className={reviewBox} aria-label="Transaction review">
           <p className={reviewTitle}>{review.prepared.summary}</p>
           <p className={muted}>
-            Network fee: {review.prepared.fee} stroops (10,000,000 stroops = 1 XLM). Nothing is signed until you press
-            Sign.
+            Network fee: {formatStroops(review.prepared.fee)} XLM. Nothing is signed until you press Sign.
           </p>
           <Disclosure title="Technical details">
             <Address value={review.prepared.address} label="Signer" />
@@ -403,6 +431,19 @@ export function HolderControls({
       {hash ? (
         <div className={reviewBox}>
           <Address value={hash} label="Transaction" />
+          {confirmed && locked && kind === 'approve' ? (
+            <p className={muted}>
+              Next, ask the community to move it: a proposal with &quot;Approve a membership transfer&quot; names this
+              token, your wallet and the new one. The approval lasts long enough for that vote.
+            </p>
+          ) : null}
+          {confirmed && locked && kind === 'approve' ? (
+            <div>
+              <ButtonLink href={daoRoute(routeId, 'proposals/create')} size="sm">
+                Draft the proposal
+              </ButtonLink>
+            </div>
+          ) : null}
           {confirmed ? (
             <Button
               variant="secondary"

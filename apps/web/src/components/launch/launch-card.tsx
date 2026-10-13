@@ -10,7 +10,7 @@ import {
   launchReadinessIssues,
   readLaunchReadiness
 } from '@/components/create-dao/launch-readiness';
-import { Address, Button, Callout, Dialog, Disclosure, Switch } from '@/components/ui';
+import { Address, Button, ButtonLink, Callout, Dialog, Disclosure, Switch } from '@/components/ui';
 import { card, muted, title } from '@/components/ui/panel-styles';
 import { useDaoContext } from '@/contexts/dao-context';
 import { parseContractErrorCode } from '@/lib/contract-errors';
@@ -18,6 +18,7 @@ import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { daoRoute } from '@/lib/dao-routes';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 import type { LaunchPlan } from '@/lib/launch-steps';
+import { formatClaimDate } from '@/lib/minter/display';
 import { useDaoDeployment } from '@/lib/use-dao-deployment';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
@@ -42,6 +43,58 @@ const footer = css({
   flexWrap: 'wrap'
 });
 const hint = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
+
+/**
+ * A launch drive is open: settings are frozen and the community launches once enough people claim,
+ * with the choices made when the drive opened. Past the deadline it can never launch, only refund.
+ */
+export function LaunchDriveCard({
+  assurance,
+  name
+}: {
+  assurance: NonNullable<LaunchReadiness['assurance']>;
+  name: string;
+}) {
+  const { routeId } = useDaoContext();
+  const [now] = useState(() => Date.now());
+  const deadline = Number(assurance.deadline);
+  const ended = deadline * 1000 <= now;
+  const { launch_auction: auction, launch_marketplace: market } = assurance.launch_config;
+  return (
+    <section className={card} aria-labelledby="launch-title">
+      <div>
+        <h2 id="launch-title" className={title}>
+          {ended ? 'The launch drive ended' : 'Launch drive open'}
+        </h2>
+        <p className={muted}>
+          {ended
+            ? `${name} did not reach enough claims by ${formatClaimDate(deadline)}, so it can't launch. Everyone who paid can take their payment back on the claims page.`
+            : `${name} launches once enough people claim, by ${formatClaimDate(deadline)}. Anyone can press launch on the claims page when the goal is met.`}
+        </p>
+      </div>
+      {ended ? null : (
+        <div className={group}>
+          <h3 className={subTitle}>While the drive runs</h3>
+          <ul className={consequences}>
+            <li>The community belongs to its treasury. Settings, artwork and founder tokens can&apos;t change.</li>
+            <li>Payments are held until launch, then go to the treasury.</li>
+            <li>
+              At launch:{' '}
+              {[auction ? 'auctions start' : null, market ? 'the market opens' : null].filter(Boolean).join(' and ') ||
+                'nothing starts on its own; a vote can start sales later'}
+              .
+            </li>
+          </ul>
+        </div>
+      )}
+      <div>
+        <ButtonLink href={daoRoute(routeId, 'claims')} variant={ended ? 'secondary' : 'primary'}>
+          {ended ? 'Go to refunds' : 'See the drive'}
+        </ButtonLink>
+      </div>
+    </section>
+  );
+}
 
 /**
  * Choose what starts, see what launching does, and launch. Launch re-reads readiness right before

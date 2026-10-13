@@ -7,7 +7,7 @@ import type { ClaimListView } from './types';
 /** The asset's code ("XLM"), or null for an asset this deployment does not list. */
 export function claimAssetCode(network: NetworkName, asset: string) {
   const code = marketplaceAssetLabel(network, asset);
-  return code === 'Unknown SAC' ? null : code;
+  return code === 'Unknown asset' ? null : code;
 }
 
 /** "12.5000000 XLM", or base units for an asset this deployment does not list. */

@@ -46,6 +46,20 @@ const KIND_LABELS: Record<string, string> = {
   circle: 'Circle'
 };
 const row = css({ display: 'flex', gap: '2', flexWrap: 'wrap', alignItems: 'center' });
+const moduleMeta = css({ display: 'grid', gap: '1.5', justifyItems: 'start' });
+const settingRow = css({
+  display: 'flex',
+  alignItems: 'flex-start',
+  justifyContent: 'space-between',
+  flexWrap: 'wrap',
+  gap: '3',
+  py: '3',
+  borderBottomWidth: '1px',
+  borderColor: 'rule',
+  _last: { borderBottomWidth: '0' }
+});
+const settingText = css({ display: 'grid', gap: '0.5', minW: '0', flex: '1 1 16rem' });
+const settingLabel = css({ textStyle: 'body', fontWeight: '600', color: 'ink' });
 
 /** The Token calls the launch admin makes from here in Setup. */
 type DirectCall =
@@ -174,7 +188,8 @@ export function MembershipSettings() {
   const tx = useTransactionFeedback(config.name);
   const [busy, setBusy] = useState(false);
   const [allowance, setAllowance] = useState({ module: '', amount: '' });
-  const [message, setMessage] = useState('');
+  // Shown beside the card whose action produced it, not at the top of a long page.
+  const [message, setMessage] = useState<{ where: 'switches' | 'allowance'; text: string } | null>(null);
 
   if (state.isLoading || !state.data)
     return (
@@ -198,11 +213,13 @@ export function MembershipSettings() {
   const isLaunchAdmin = Boolean(address && !data.live && data.admin === address);
   const governed = data.live && data.admin === config.treasuryContractId;
   const canAct = isLaunchAdmin || (governed && Boolean(address));
+  // An open launch drive hands the Token to the Treasury before launch: nothing changes until it launches.
+  const frozen = !data.live && data.admin === config.treasuryContractId;
 
   async function direct(call: DirectCall, label: string) {
     if (!address) return;
     setBusy(true);
-    setMessage('');
+    setMessage(null);
     try {
       tx.start(label);
       const client = new TokenClient({
@@ -230,13 +247,19 @@ export function MembershipSettings() {
     }
   }
 
-  function propose(type: ProposalActionType, values: Record<string, unknown>, title: string) {
+  function propose(
+    type: ProposalActionType,
+    values: Record<string, unknown>,
+    title: string,
+    description: string,
+    where: 'switches' | 'allowance'
+  ) {
     if (!address) return;
     const handler = getActionHandler(type);
     const context = { config, session: { address, kit: StellarWalletsKit } };
     const validation = handler.validate(values, context);
     if (!validation.valid) {
-      setMessage(validation.message ?? 'Check the values.');
+      setMessage({ where, text: validation.message ?? 'Check the values.' });
       return;
     }
     proposalDraft.requestAddBatch({
@@ -246,17 +269,17 @@ export function MembershipSettings() {
           daoId,
           action: handler.serialize(values, context),
           source: `admin/membership/${type}`,
-          metadata: { title, description: title, url: '' }
+          metadata: { title, description, url: '' }
         }
       ],
-      onAdded: () => setMessage(`${title}: added to the proposal draft.`)
+      onAdded: () => setMessage({ where, text: `${title}: added to the proposal draft.` })
     });
   }
 
   function changeSwitch(entry: (typeof SWITCHES)[number], enabled: boolean) {
     const verb = enabled ? 'Turn on' : 'Turn off';
     const label = `${verb} ${entry.label.toLowerCase()}`;
-    if (!isLaunchAdmin) return propose(entry.type, { enabled }, label);
+    if (!isLaunchAdmin) return propose(entry.type, { enabled }, label, enabled ? entry.on : entry.off, 'switches');
     void direct(
       entry.fn === 'set_transfers_locked'
         ? { fn: entry.fn, args: { locked: enabled } }
@@ -268,12 +291,21 @@ export function MembershipSettings() {
   function changeAllowance(direction: 'increase' | 'decrease') {
     const amount = Number(allowance.amount);
     if (!allowance.module || !Number.isInteger(amount) || amount < 1) {
-      setMessage('Choose a module and a whole number of tokens.');
+      setMessage({ where: 'allowance', text: 'Choose a module and a whole number of tokens.' });
       return;
     }
-    const title = `${direction === 'decrease' ? 'Lower' : 'Raise'} a mint allowance by ${amount}`;
+    const target = data.modules.find((entry) => entry.address === allowance.module);
+    const name = (target ? kindLabel(target.kind) : 'module').toLowerCase();
+    const more = direction === 'decrease' ? 'fewer' : 'more';
+    const title = `${direction === 'decrease' ? 'Lower' : 'Raise'} the ${name} mint allowance by ${amount}`;
     if (!isLaunchAdmin)
-      return propose('change-mint-allowance', { module: allowance.module, amount: String(amount), direction }, title);
+      return propose(
+        'change-mint-allowance',
+        { module: allowance.module, amount: String(amount), direction },
+        title,
+        `Lets the ${name} module (${allowance.module}) mint ${amount} ${more} ${amount === 1 ? 'token' : 'tokens'}.`,
+        'allowance'
+      );
     void direct(
       {
         fn: direction === 'decrease' ? 'decrease_mint_allowance' : 'increase_mint_allowance',
@@ -299,8 +331,13 @@ export function MembershipSettings() {
         }
       >
         <Stack gap="4">
-          {message ? <Callout variant="info" title={message} /> : null}
-          {!canAct ? (
+          {frozen ? (
+            <Callout
+              variant="info"
+              title="Locked in for the launch drive"
+              description="The community belongs to its treasury until it launches. After launch, changes go through proposals."
+            />
+          ) : !canAct ? (
             <Callout
               variant="warning"
               title={
@@ -312,24 +349,53 @@ export function MembershipSettings() {
           <Card p="5">
             <Stack gap="3">
               <Heading size="heading">How memberships work</Heading>
-              {SWITCHES.map((entry) => {
-                const enabled = data.settings[entry.key];
-                return (
-                  <Switch
-                    key={entry.key}
-                    label={entry.label}
-                    description={enabled ? entry.on : entry.off}
-                    checked={enabled}
-                    disabled={!canAct || busy}
-                    onCheckedChange={(next) => changeSwitch(entry, next)}
-                  />
-                );
-              })}
+              {data.live ? (
+                // Once Live a change is a proposal, so show the state and a propose button, not a toggle.
+                <div>
+                  {SWITCHES.map((entry) => {
+                    const enabled = data.settings[entry.key];
+                    return (
+                      <div key={entry.key} className={settingRow}>
+                        <div className={settingText}>
+                          <span className={row}>
+                            <span className={settingLabel}>{entry.label}</span>
+                            <Badge tone={enabled ? 'live' : 'neutral'}>{enabled ? 'On' : 'Off'}</Badge>
+                          </span>
+                          <Text size="sm">{enabled ? entry.on : entry.off}</Text>
+                        </div>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={!canAct || busy}
+                          onClick={() => changeSwitch(entry, !enabled)}
+                        >
+                          {enabled ? 'Propose turning off' : 'Propose turning on'}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                SWITCHES.map((entry) => {
+                  const enabled = data.settings[entry.key];
+                  return (
+                    <Switch
+                      key={entry.key}
+                      label={entry.label}
+                      description={enabled ? entry.on : entry.off}
+                      checked={enabled}
+                      disabled={!canAct || busy}
+                      onCheckedChange={(next) => changeSwitch(entry, next)}
+                    />
+                  );
+                })
+              )}
               {data.live && !data.settings.transfersLocked ? (
                 <FieldHelperText>
                   Locking takes away every member’s way out by sale. The proposal review flags it.
                 </FieldHelperText>
               ) : null}
+              {message?.where === 'switches' ? <Callout variant="info" title={message.text} /> : null}
             </Stack>
           </Card>
 
@@ -345,23 +411,28 @@ export function MembershipSettings() {
                     <ListRow
                       key={module.address}
                       title={kindLabel(module.kind)}
-                      meta={<ShortId value={module.address} label="Contract" />}
-                      trailing={
-                        <span className={row}>
-                          {module.vouched ? null : <Badge tone="warning">Not deployed by the Manager</Badge>}
-                          {module.nonVoting ? <Badge>Holds tokens without votes</Badge> : null}
-                          {module.agent ? <Badge>Can move memberships</Badge> : null}
-                          {module.votes > 0n ? (
-                            <Badge tone="warning">
-                              {module.votes.toString()} {module.votes === 1n ? 'vote' : 'votes'}
-                            </Badge>
+                      meta={
+                        // Badges sit under the contract, where they can wrap; the trailing slot never does.
+                        <span className={moduleMeta}>
+                          <ShortId value={module.address} label="Contract" />
+                          {!module.vouched || module.nonVoting || module.agent || module.votes > 0n ? (
+                            <span className={row}>
+                              {module.vouched ? null : <Badge tone="warning">Not deployed by the Manager</Badge>}
+                              {module.nonVoting ? <Badge>Holds tokens without votes</Badge> : null}
+                              {module.agent ? <Badge>Can move memberships</Badge> : null}
+                              {module.votes > 0n ? (
+                                <Badge tone="warning">
+                                  {module.votes.toString()} {module.votes === 1n ? 'vote' : 'votes'}
+                                </Badge>
+                              ) : null}
+                            </span>
                           ) : null}
-                          <Badge>
-                            {module.allowance >= UNLIMITED
-                              ? 'Unlimited'
-                              : `${module.allowance.toLocaleString()} to mint`}
-                          </Badge>
                         </span>
+                      }
+                      trailing={
+                        <Badge>
+                          {module.allowance >= UNLIMITED ? 'No limit' : `${module.allowance.toLocaleString()} to mint`}
+                        </Badge>
                       }
                     />
                   ))}
@@ -382,7 +453,9 @@ export function MembershipSettings() {
                       <option value="">Choose a module</option>
                       {data.modules.map((module) => (
                         <option key={module.address} value={module.address}>
-                          {kindLabel(module.kind)}
+                          {`${kindLabel(module.kind)} · ${module.address.slice(0, 4)}…${module.address.slice(-4)} · ${
+                            module.allowance >= UNLIMITED ? 'no limit' : `${module.allowance.toLocaleString()} left`
+                          }`}
                         </option>
                       ))}
                     </Select>
@@ -410,6 +483,7 @@ export function MembershipSettings() {
                       {data.live ? 'Propose lowering it' : 'Lower allowance'}
                     </Button>
                   </div>
+                  {message?.where === 'allowance' ? <Callout variant="info" title={message.text} /> : null}
                 </Stack>
               ) : null}
               <FieldHelperText>

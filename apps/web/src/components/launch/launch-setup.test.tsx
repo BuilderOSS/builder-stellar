@@ -135,6 +135,59 @@ describe('LaunchSetup', () => {
     expect(launchButton(html)).toContain('disabled');
   });
 
+  it('replaces the launch action with the drive while a launch drive is open', () => {
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 7 * 86_400);
+    state.readiness = readiness({
+      supply: 2n,
+      admin: 'CTREASURY',
+      assurance: {
+        claim_minter: 'CCLAIMS',
+        deadline,
+        list_id: 0,
+        launch_config: { launch_auction: true, launch_marketplace: false }
+      }
+    });
+    state.artwork = artwork(1);
+    const html = render().replace(/<!-- -->/g, '');
+    expect(html).toContain('Launch drive open');
+    expect(html).toContain('At launch: auctions start.');
+    expect(html).toContain('See the drive');
+    expect(html).not.toContain('Launch Lantern Club');
+    expect(html).not.toContain('Review (optional)');
+  });
+
+  it('shows visitors the drive too, not "being set up"', () => {
+    state.address = `G${'B'.repeat(55)}`;
+    state.readiness = readiness({
+      supply: 2n,
+      assurance: {
+        claim_minter: 'CCLAIMS',
+        deadline: BigInt(Math.floor(Date.now() / 1000) + 86_400),
+        list_id: 0,
+        launch_config: { launch_auction: false, launch_marketplace: false }
+      }
+    });
+    const html = render();
+    expect(html).toContain('Launch drive open');
+    expect(html).not.toContain('is being set up');
+  });
+
+  it('points to refunds once the drive deadline has passed', () => {
+    state.readiness = readiness({
+      supply: 2n,
+      assurance: {
+        claim_minter: 'CCLAIMS',
+        deadline: BigInt(Math.floor(Date.now() / 1000) - 60),
+        list_id: 0,
+        launch_config: { launch_auction: false, launch_marketplace: false }
+      }
+    });
+    const html = render();
+    expect(html).toContain('The launch drive ended');
+    expect(html).toContain('Go to refunds');
+    expect(html).not.toContain('Launch Lantern Club');
+  });
+
   it('shows visitors progress only, never the launch controls', () => {
     state.address = `G${'B'.repeat(55)}`;
     const html = render();

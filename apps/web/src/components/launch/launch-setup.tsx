@@ -21,7 +21,7 @@ import { buildLaunchPlan } from '@/lib/launch-steps';
 import { useModuleUpdates } from '@/lib/use-module-updates';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
-import { LaunchCard } from './launch-card';
+import { LaunchCard, LaunchDriveCard } from './launch-card';
 import { LaunchStepRow } from './launch-step-row';
 import { SetupProgress } from './setup-progress';
 
@@ -79,6 +79,11 @@ export function LaunchSetup({ daoId, config }: { daoId: string; config: DaoNetwo
   const refresh = () => Promise.all([readiness.mutate(), artwork.mutate()]);
   const loadError = readiness.error || artwork.error;
   const name = config.tokenName || 'This community';
+
+  // An open drive hands everything to the treasury, so nothing here can change until it ends. Everyone,
+  // launch admin or not, sees the same thing: claim, launch or refund.
+  if (readiness.data?.assurance && !readiness.data.live)
+    return <LaunchDriveCard assurance={readiness.data.assurance} name={name} />;
 
   if (!isAdmin)
     return (

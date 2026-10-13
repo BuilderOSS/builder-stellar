@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { css } from 'styled-system/css';
 
 import {
+  Address,
   Button,
   Callout,
   Chip,
@@ -46,6 +47,7 @@ const days = css({ maxW: '8rem' });
 const quoteBox = css({ display: 'grid', gap: '2', textStyle: 'body' });
 const muted = css({ textStyle: 'body', color: 'ink.muted', m: '0' });
 const mono = css({ textStyle: 'mono', fontSize: '0.8125rem' });
+const uncoveredList = css({ display: 'grid', gap: '1' });
 const actions = css({ display: 'flex', gap: '2', flexWrap: 'wrap', alignItems: 'center' });
 
 const PRESETS = ['30', '90', '180'];
@@ -59,8 +61,8 @@ const CLASS_HINTS: Record<RenewalClass, string> = {
   listings: 'Open market listings and pools',
   holdings: 'Tokens and funds the treasury and modules hold',
   slug: 'Your /dao link and launch records',
-  claims: 'Claim lists',
-  modules: 'Records other modules keep'
+  claims: 'Who has claimed, and payments held for a launch drive',
+  modules: 'Records kept by modules added to the community'
 };
 const STATUS_TEXT: Record<TtlStatus, { label: string; tone: 'success' | 'warning' | 'danger' }> = {
   healthy: { label: 'Healthy', tone: 'success' },
@@ -241,7 +243,13 @@ export function RenewalPanel({ config }: { config: DaoNetworkConfig }) {
           variant="warning"
           title={`${inventory.uncovered.length} ${inventory.uncovered.length === 1 ? 'module is' : 'modules are'} not covered by one-click renewal`}
           description="These modules don't list their own records, so only the contracts themselves are renewed here. Ask whoever added them how their records are kept alive."
-        />
+        >
+          <div className={uncoveredList}>
+            {inventory.uncovered.map((module) => (
+              <Address key={module} value={module} label="Module" compact />
+            ))}
+          </div>
+        </Callout>
       ) : null}
       {inventory.bootstrap ? null : inventory.missing.length ? (
         <Callout
