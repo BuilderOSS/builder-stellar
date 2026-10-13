@@ -4,7 +4,7 @@
 
 ### `/platform` admin dashboard
 
-**What:** A `/platform` area gated to the Manager admin wallet: platform renewals (Manager instance, `Implementation(hash)` records, shared WASM code, the shared Minter) with the same quote-before-sign flow as the DAO Renewal tab; the registry actions the scripts perform today (register, approve, set latest, set current implementations, set platform minter); a per-DAO health table (earliest expiry per class, last sweep).
+**What:** A `/platform` area gated to the Manager admin wallet: platform renewals (Manager instance, `Implementation(hash)` records, shared WASM code) with the same quote-before-sign flow as the DAO Renewal tab; the registry actions the scripts perform today (register, approve, set latest, set current implementations); a per-DAO health table (earliest expiry per class, last sweep).
 
 **Why:** Platform duty lives in scripts and `deploys/*.json`; the operator has no view of which communities are about to archive. Deferred from the storage-diet release (eng review D2, 2026-10-12) to keep that release to DAO-facing work.
 

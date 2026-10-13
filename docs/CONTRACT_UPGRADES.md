@@ -131,11 +131,11 @@ then each DAO.
       stellar contract invoke --id <manager> --network <network> --source-account <admin> -- \
         set_latest_implementation --name <Name> --wasm_hash <to-hash>
       ```
-   3. New DAOs: set the factory's current hashes (all six, unchanged ones repeated; read them with
-      `current_implementations` on the Manager or from the deploy record):
+   3. New DAOs: set the factory's current hashes (all seven, unchanged ones repeated; read them with
+      `current_implementations` on the Manager or from the deploy record). `claims` is the ClaimMinter's hash:
       ```sh
       stellar contract invoke --id <manager> --network <network> --source-account <admin> -- \
-        set_current_implementations --token <h> --metadata <h> --auction <h> --governor <h> --treasury <h> --marketplace <h>
+        set_current_implementations --current '{"token":"<h>","metadata":"<h>","auction":"<h>","governor":"<h>","treasury":"<h>","marketplace":"<h>","claims":"<h>"}'
       ```
    4. Every other existing DAO also needs the path from **its** current hash approved (usually the same `from`).
 4. **Each DAO**: once steps 3.1–3.2 are done, communities see the upgrade by themselves: Manage →
@@ -189,25 +189,27 @@ ledger from which the upgrade may run; rerun it then. The same latest-only rule 
 7131): the script announces the hash as latest for `Manager` first. Upgrade the Manager **before** modules whenever
 module upgrades rely on new Manager reads (the script checks `get_implementation_version` exists).
 
-## Shared Minter upgrades
+## Module upgrades (Auction, Marketplace, ClaimMinter)
 
-Every DAO uses one platform Minter, pinned on its Token at launch, so a Minter upgrade reaches every DAO at once
-and needs no proposal. `node scripts/upgrade-contract.mjs minter configs/<network>-manager.json <from-hash>`
-registers and approves the new hash, then the Manager admin calls `minter.upgrade(from, to)` and, for a storage
-change, `minter.migrate()`; both require the Manager admin (`ManagerAdminNotSet`, 7811, when none is set). The
-upgrade applies only `minter.upgrade_delay()` ledgers after the approval (`UpgradeDelayNotElapsed`, 7813, before
-that; D39): the script approves on its first run, prints the earliest ledger, and is rerun then. Approvals are
-idempotent (the first ledger counts), and the admin can lengthen the notice at once but shorten it only after the
-notice in force has passed (`set_upgrade_delay`; every change emits `UpgradeDelayChanged`, a public activity row
-that names the new notice and the ledger a reduction applies from). The upgrade must also be to the hash announced as latest for
-`Minter` (`set_latest_implementation`; `UpgradeNotLatest`, 7814, otherwise), and the notice counts from the later
-of the approval and the announcement (D42), so the script announces before approving. During the notice a DAO
-that distrusts the upgrade removes the Minter from its mint authorities by proposal
-(`set_mint_authority(minter, false)`); Manage shows the pending upgrade and the ledger it can apply from, and
-members see it on the community home page. A DAO whose governance cycle is longer than the notice cannot finish
-that in time (SECURITY_MODEL, known limitation). Re-enabling is `set_mint_authority(minter, true)` by proposal.
-Claim roots, rounds and markers are kept; e2e `shared_minter_upgrades_then_claims_against_the_existing_root`
-covers it. A different Minter address would need every DAO to re-pin it, which this release does not support.
+Modules are per DAO, so they upgrade exactly like the core contracts: the Manager admin registers and approves
+the path, and each DAO upgrades its own module, directly in setup or by proposal once live. There is no shared
+contract whose upgrade reaches every DAO (the shared Minter was removed by
+[membership-models](designs/membership-models.md)). The ClaimMinter's implementation name is `ClaimMinter` and
+its crate is `contracts/minter`; the script's module name is `claims`:
+
+```sh
+node scripts/upgrade-contract.mjs claims configs/<network>-<label>-dao.json configs/<network>-manager.json <from-hash>
+```
+
+A module added after creation (`create_module`) is not in the DAO artifact; pass its address in
+`MODULE_ADDRESS`. A module registered from outside the Manager upgrades however its own code allows; the
+registry only vouches for Manager-approved hashes.
+
+**Failed assurance drives.** An open drive freezes its DAO's upgrades (every admin is the Treasury, which can't
+act before launch). If a drive fails and the ClaimMinter's refund code is broken, the launch admin recorded in
+`PendingDao` runs `manager.recover_claims(token, from_hash, to_hash)` to move that DAO's ClaimMinter to a
+Manager-approved `claims` hash; it works only once the drive has failed and never on a live module
+(SECURITY_MODEL, Assurance launch).
 
 ## Approving upgrade paths for DAO modules
 

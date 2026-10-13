@@ -72,4 +72,4 @@ Events: `TransfersLockChanged`, `MembersOnlyDelegationChanged`, `DaoRecoveryChan
 
 ## Tests and related
 
-`cargo test -p token` (includes `voting_supply` and `delegation_security` suites). [Source](src/contract.rs), [Metadata](../metadata/README.md), [shared Minter](../minter/README.md), [deployment](../../docs/DAO_DEPLOYMENT.md).
+`cargo test -p token` (includes `voting_supply` and `delegation_security` suites). [Source](src/contract.rs), [Metadata](../metadata/README.md), [ClaimMinter](../minter/README.md), [deployment](../../docs/DAO_DEPLOYMENT.md).

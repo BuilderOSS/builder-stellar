@@ -6,7 +6,7 @@ indexed events remain the durable directory/history layer.
 
 ## Inputs
 
-- A Manager artifact with network, Manager, shared Minter, and deployment/transaction ledger.
+- A Manager artifact with network, Manager, and deployment/transaction ledger.
 - A PostgreSQL database with the [migrations/roles/grants](../db/README.md) applied by its administrator.
 - A named Goldsky Postgres secret whose database credentials can write the three landing tables and maintain the pipeline's `streamling` dynamic allowlists.
 - A configured Goldsky CLI/session. The package does not declare a Goldsky CLI dependency.
@@ -31,9 +31,11 @@ Output is `pipelines/builder-stellar-events.yaml`, authored from `templates/buil
 
 From the repository root, an administrator runs `db/setup-roles.sh`, `db/migrate.sh`, and `db/grant-permissions.sh` using `DATABASE_URL`. These mutate the database. The web uses separate read-only `APP_DATABASE_URL`. See [DB operations](../db/README.md) for the exact scripts and reset boundaries.
 
-Align the web's newest-artifact deployment selection with the pipeline's explicit artifact and `NEXT_PUBLIC_NETWORK`. New DAO addresses enter six dynamic allowlists from `DaoCreated`. Minter is a configured shared contract, not a seventh DAO child: the pipeline takes one Minter address from the Manager artifact at generation time, so a Manager whose registered platform Minter changes (`PlatformMinterSet`) needs `pnpm generate` and a redeploy before the new Minter's events are indexed. Every Token pins the Minter it launched with, so DAOs launched before the change keep emitting through the old one; that is a deliberate limitation of the current pipeline, not a bug in a DAO.
+Align the web's newest-artifact deployment selection with the pipeline's explicit artifact and `NEXT_PUBLIC_NETWORK`. The Manager is the only configured contract. DAO addresses enter the allowlists in two stages: the core four (token, metadata, governor, treasury) from `DaoCreated`, then modules from `DaoCreated`, `ModuleCreated` and every `ModuleRegistered` a known Token emits, each into its kind's table (`dao_auctions`, `dao_marketplaces`, `dao_claims`, `dao_circles`) or the catch-all `dao_modules` for any other kind. A module registered by proposal, even one the Manager never deployed, is followed without a regenerate. Details: [package reference](../packages/goldsky/README.md#allowlists).
 
-Why six allowlists when `manager.daos` already lists every module: `manager.daos` is a view over `chain.decoded_events`, the pipeline's own output, and a Goldsky SQL transform cannot read our tables or views. Its only lookup outside the stream is `dynamic_table_check(table, value)`, a membership test on one key column, so the role of an address has to be encoded by which table holds it. The tables (`streamling.dao_<module>`) are append-only and survive redeploys; after a database reset they are rebuilt from the replayed `DaoCreated` events on top of what is there, which is harmless (an obsolete address only lets its events through the filter). A Manager change needs `DROP SCHEMA streamling CASCADE` with the pipeline stopped ([DB operations](../db/README.md)).
+Why allowlists when `manager.daos` already lists every module: `manager.daos` is a view over `chain.decoded_events`, the pipeline's own output, and a Goldsky SQL transform cannot read our tables or views. Its only lookup outside the stream is `dynamic_table_check(table, value)`, a membership test on one key column, so the role of an address has to be encoded by which table holds it. The tables (`streamling.dao_<kind>`) are append-only and survive redeploys; after a database reset they are rebuilt from the replayed events on top of what is there, which is harmless (an obsolete address only lets its events through the filter, and the read model windows module events by registration). A Manager change needs `DROP SCHEMA streamling CASCADE` with the pipeline stopped ([DB operations](../db/README.md)).
+
+**Query cost of module identity.** `manager.module_registrations` and the windowed `event_identity` / `module_events` views compare each module event's position (`ledger, tx, op, evt`) with the registration windows of its address. Per-DAO reads push the DAO filter down, but an unfiltered scan (a backfill check, an ad hoc count) joins every module event to its windows; filter by DAO or by `contract_id` when querying by hand.
 
 ## Validation and deployment boundary
 
@@ -43,9 +45,10 @@ The pipeline name is `builder-stellar-<network>` from the Manager artifact (`GOL
 
 ## Event identity notes
 
-- Every module emits its own launch event at `launch_dao` (`TokenLaunched`, `GovernorLaunched`, `TreasuryLaunched`, `AuctionLaunched`, `MarketplaceLaunched`, `MetadataLaunched`) and an `AdminChanged` (launch admin -> Treasury). `AdminChanged` shares its name and shape with the Manager's own admin event; identify events by (contract address, event name).
+- Every contract emits its own launch event at `launch_dao` / `launch_when_ready` (`TokenLaunched`, `GovernorLaunched`, `TreasuryLaunched`, `AuctionLaunched`, `MarketplaceLaunched`, `ClaimMinterLaunched`, `MetadataLaunched`) and an `AdminChanged` (launch admin -> Treasury; at `open_assurance` for a drive). `AdminChanged` shares its name and shape with the Manager's own admin event; identify events by (contract address, event name).
 - Governor `propose` emits `ProposalScheduled` (vote window, snapshot, quorum) next to `ProposalCreated`; proposal state in the read model is computed from it.
-- Manager `launch_dao` claims the slug (`SlugClaimed`); `DaoCreated.slug` and `PendingSlugUpdated` are only requests.
+- Manager `launch_dao` claims the slug (`SlugClaimed`); `DaoCreated.slug` and `PendingSlugUpdated` are only requests. `open_assurance` claims it early, and `SlugReleased` frees a failed drive's slug.
+- An event the decoder doesn't know (from a module registered outside the Manager) is decoded positionally (`topic_N`, `arg_N`) and lands as an admin `module.<event>` row.
 - `batch_mint` emits one `MintBatchWithMinter` and the Metadata hook one `SeedsGenerated` per batch (views expand them per token); single mints keep `MintWithMinter` / `SeedGenerated`.
 - Contract error codes are unique across contracts (7000-7899, one block of 100 per crate), so a code identifies its contract.
 

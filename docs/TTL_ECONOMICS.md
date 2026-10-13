@@ -58,7 +58,7 @@ born at 7 days, under the 60-day instance threshold. The app's fee guard is ther
 | Shared contract code | 4 days | 2 days | `common::ttl::extend_instance` (code bumped separately, D27); the platform prepays 170 days |
 | Persistent entries (`common::ttl::extend_persistent`) | 365 days, clamped to the network maximum | 30 days | Read or written by a contract call |
 | Governor `ProposalTime(id)`, `ProposalId(seq)` | 120 days | 30 days | Covers the longest lifecycle (3 × 30-day delays + 14 days to execute) from one touch |
-| Marketplace `Listing(id)`, `PrimaryListing(token)` | 30 days | 7 days | Expired listings can be cleared by anyone |
+| Marketplace `Listing(id)` (resales) | 30 days | 7 days | Expired listings can be cleared by anyone |
 | OpenZeppelin owners, balances, votes, checkpoints | 30 days | 29 days | The library, when the entry is read or written |
 | Asset contract (SAC) balances | 30 days | 29 days | The host, when the balance is read or written |
 
@@ -90,11 +90,12 @@ from the reference DAO below.
 
 | Key | Class | Holds | Size | Renewed by |
 |---|---|---|---|---|
-| `MetadataContract`, `Manager`, `Treasury`, `Auction`, `Marketplace`, `Minter` | instance | Wiring; `Minter` is the shared Minter pinned at launch | | instance |
-| `MintAuthority(addr)` | persistent | A mint grant (Treasury, Auction, Marketplace, Minter) | ~170 B | Sweep |
+| `MetadataContract`, `Manager`, `Treasury` | instance | Core wiring | | instance |
+| `Modules`, `Settings`, `TransferAgents` | instance | The module registry (≤ `MAX_MODULES` entries), the membership switches, the transfer agents | | instance |
+| `MintAllowance(module)` | persistent | What a module may still mint; absent at zero, `u32::MAX` unlimited | ~170 B | Sweep (one per registered module with an allowance) |
 | OZ `Metadata`, `TokenIdCounter`, `NumTotalSupplyCheckpoints` | instance | Name, symbol, next id, checkpoint count | | instance |
 | OZ `TotalSupplyCheckpoint(i)` | persistent | Supply history | ~180 B each | Sweep: **the latest only** (D33) |
-| OZ `Owner(t)`, `Balance(a)` held by the Treasury, Auction or Marketplace | persistent | The DAO's own tokens | ~130 B | Sweep (holdings) |
+| OZ `Owner(t)`, `Balance(a)` held by the Treasury or a registered module | persistent | The DAO's own tokens (unsold auction lots, pool stock, anything given back) | ~130 B | Sweep (holdings) |
 | OZ `Owner(t)`, `Balance(a)`, `Delegatee(a)`, `NumCheckpoints(a)`, `DelegateCheckpoint(a, i)`, `VotingUnits(a)` of members | persistent | Per-member ownership and votes | | Holder |
 | OZ `Approval(t)`, `ApprovalForAll(o, op)` | temporary | Approvals; expire by design | | Never renewed |
 
@@ -138,37 +139,39 @@ that reads an archived key fails as a whole**, so `proposal_ids(start, limit)` f
 archived id; chain-reading clients read the `ProposalId(seq)` entries raw with `getLedgerEntries` instead
 (`apps/web/src/lib/chain-reads/proposals.ts`), where an archived entry is simply absent.
 
-### Treasury, Auction, Marketplace
+### Treasury and modules
+
+Modules list their own sweep keys (`DaoModule::renewal_keys(cursor, limit)`, at most 200 per page, eng review R3):
+the sweep reads the Token's registry and pages through each module by simulation, then reads which of the listed
+keys exist. A module registered from outside the Manager without `renewal_keys` has only its instance renewed, and
+Manage → Storage renewal says so.
 
 | Key | Class | Holds | Renewed by |
 |---|---|---|---|
 | Treasury `Governor`, `Manager` | instance | Wiring | instance |
 | Auction `Config`, `Auction`, `Manager`, `PaymentTokenLocked` | instance | Settings and the running auction | instance |
 | Auction `PendingRefund(bidder)` | persistent | A refund the bidder can withdraw | Holder |
-| Marketplace `Config`, `NextListingId` | instance | Settings and the listing counter | instance |
-| Marketplace `Listing(id)`, `PrimaryListing(token)` | persistent | Open listings | Sweep while open |
-| Asset `Balance(treasury|auction|marketplace)` on the auction's and market's payment assets and on every open listing's asset | persistent (SAC) | The DAO's funds and escrow in the assets it trades in | Sweep (holdings) |
+| Marketplace `Config`, `NextPoolId`, `OpenPools` | instance | Settings, the pool counter, the open pools (≤ `MAX_OPEN_POOLS`) with their page counts | instance |
+| Marketplace `Listing(id)` | persistent | An open resale | Sweep while open (`renewal_keys` lists every slot up to the minted count; only present ones are renewed) |
+| Marketplace `Pool(id)`, `PoolStock(id, page)` | persistent | An open pool's terms and its stocked ids, 64 per page (D15 superseded: a 100-token pool is 3 entries, not 100) | Sweep while open |
+| Marketplace `PoolBuyer(id, buyer)` | persistent | How many a buyer took from a pool | Holder |
+| ClaimMinter `Config`, `NextListId`, `AssuranceList` | instance | Wiring and payment asset, the list counter, the assurance list | instance |
+| ClaimMinter `List(id)` | persistent | `ClaimList { root, tree_uri, asset, price, expires_at, total, minted, claimers, threshold_claimers, deadline, escrow }`; `tree_uri` is `ipfs://`, ≤ 256 B | Sweep |
+| ClaimMinter `Claim(id, claimer)` | persistent | `ClaimRecord { claimed, escrowed }`: progress and any escrowed payment | Holder |
+| Asset `Balance(treasury|module)` on every asset a module reports (`renewal_keys` `assets`), the auction's payment asset, and every open pool's or list's asset | persistent (SAC) | The DAO's funds and escrow in the assets it trades in | Sweep (holdings) |
 | Asset `Balance(treasury)` on any other asset (donations, fees in a former payment asset) | persistent (SAC) | Funds the inventory cannot discover from chain | Restored when a proposal spends them (the proposal page restores before signing); add them to the sweep with `renew-dao.mjs --asset` |
-
-### Minter (shared by every DAO)
-
-| Key | Class | Holds | Renewed by |
-|---|---|---|---|
-| `Manager`, `CurrentHash`, `StorageVersion` | instance | Wiring and version | Platform |
-| `MerkleRoot(token)` | persistent | `MerkleConfig { root, tree_uri }` for the DAO's current round; `tree_uri` is `ipfs://`, ≤ 256 B | Sweep |
-| `MerkleRound(token)` | persistent | The round number | Sweep |
-| `MerkleClaimed(token, round, recipient)` | persistent | One claim marker | Holder |
 
 ### Manager (platform)
 
 | Key | Class | Holds | Renewed by |
 |---|---|---|---|
-| `ManagerAdmin`, `FactoryPaused`, `Current*Wasm`, `CurrentManagerVersion` | instance | Platform admin, pause flag, current hashes | Platform |
+| `ManagerAdmin`, `FactoryPaused`, `Current*Wasm` (including `CurrentClaimsWasm`), `CurrentManagerVersion` | instance | Platform admin, pause flag, current hashes | Platform |
 | `Implementation(hash)`, `LatestImplementation(name)` | persistent | The registry `version()` reads, and each name's latest | Platform (`renew-code-ttl.mjs`) |
-| `PlatformMinter` | persistent | The shared Minter `launch_dao` pins | Platform |
 | `UpgradeApproval(from, to)`, `PendingAdmin` | persistent | Approved upgrade paths, an admin handoff | Used soon after they are written; restore an old one if needed |
-| `PendingDao(token)` | persistent | A created DAO awaiting launch; removed at launch | Sweep (listed while the DAO has no slug, so a long setup is renewable from the same tab) |
-| `SlugToDao(slug)`, `DaoSlug(token)` | persistent | The DAO's `/dao` link, both directions | Sweep |
+| `PendingDao(token)` | persistent | A created DAO awaiting launch; removed at launch | Sweep, when present |
+| `Assurance(token)` | persistent | An assurance drive (its ClaimMinter, list, deadline, launch config); removed at launch, kept after a failed drive | Sweep, when present |
+| `ModuleCount(token, kind)` | persistent | How many modules of a kind `create_module` deployed (the `n` in the next one's salt) | Sweep, when present |
+| `SlugToDao(slug)`, `DaoSlug(token)` | persistent | The DAO's `/dao` link, both directions (claimed at launch, or when a drive opens) | Sweep |
 
 ## The reference DAO
 
@@ -177,19 +180,21 @@ DAO (e2e `reference_dao_sweep_fits_one_transaction`, which prints this table):
 
 | Class | Entries | Bytes | Before D32–D38 |
 |---|---|---|---|
-| Six module instances | 6 | 6,188 | 6,372 |
+| Instances (core four, Auction, Marketplace) | 6 | 6,508 | 6,372 |
 | `AttributesPage` | 8 | 9,592 | 75,164 |
 | `Items` | 16 | 8,560 | 25,008 |
 | `ProposalTime` + `ProposalId` | 20 | 4,320 | 5,560 |
 | `PropertyNames` | 1 | 452 | 2,368 (16 keys) |
 | `IpfsGroups` | 1 | 1,432 | 1,436 |
-| `MintAuthority` | 4 | 672 | 688 |
+| `MintAllowance` (the started Auction's) | 1 | 168 | 688 as four `MintAuthority` grants |
 | DAO holdings (`Owner`, `Balance`) | 2 | 264 | not covered |
 | Slug (both keys) | 2 | 348 | 356 |
 | Latest supply and quorum checkpoints | 2 | 352 | 352, growing ~180 B per auction day |
-| **Total** | **62** | **32,180** | **117,304** |
+| **Total** | **59** | **31,996** | **117,304** |
 
-One `ExtendFootprintTTL` transaction holds it: 62 of 400 entries and 32 KB of the 200 KB read limit. At about 19
+One `ExtendFootprintTTL` transaction holds it: 59 of 400 entries and 32 KB of the 200 KB read limit. A ClaimMinter
+adds its instance and one `List` entry per list (a few hundred bytes, mostly its `tree_uri`); an open pool adds its `Pool` entry and one `PoolStock` page per 64
+stocked tokens. At about 19
 bytes per token, roughly 9,000 tokens fit before the read limit splits the sweep into a second transaction, and
 the sweep no longer grows with time. Tokens the DAO itself keeps (unsold lots the Treasury holds) add ~130 bytes
 each on top of that, so a DAO that accumulates unsold tokens reaches the limit sooner. Listing the inventory for
@@ -204,7 +209,7 @@ Other measured budgets on the same fixtures:
 
 ## Who renews what
 
-**The DAO: one sweep.** Manage → Storage renewal lists every key in the Sweep column from chain reads alone,
+**The DAO: one sweep.** Manage → Storage renewal lists every key in the Sweep column from chain reads and each module's `renewal_keys`,
 shows each class's earliest expiry, simulates the price for 30, 90, 180 (the default) or any number of days, shows
 what a year costs at that rate, and renews them in one `ExtendFootprintTTL` transaction. Archived keys, including
 ones the RPC returns with a past live-until, are restored first with `RestoreFootprint`, quoted the same way.
@@ -217,14 +222,14 @@ node scripts/renew-dao.mjs --network testnet --token C... --days 180 --source <i
 
 The e2e test `a_dao_kept_alive_by_the_sweep_alone_works_after_a_year` keeps an idle DAO alive with nothing but
 this sweep (and the platform renewal) every 150 days while archiving everything else that expires. After a year it
-settles an auction, a new member proposes and executes a Treasury spend, a year-old claim round is claimed, and an
+settles an auction, a new member proposes and executes a Treasury spend, a year-old claim list is claimed, and an
 old token renders. Its negative control shows an idle Treasury balance archiving when holdings are left out.
 
 Sources: [inventory and transactions](../apps/web/src/lib/chain-reads/renewal.ts),
 [report and quote](../apps/web/src/lib/renewal-queries.ts), [tab](../apps/web/src/components/admin/renewal-panel.tsx),
 [CLI](../apps/web/src/cli/renew-dao.ts).
 
-**The platform: code, registry and the shared Minter.** Code is never in a DAO's sweep: seven ~35 KB code entries
+**The platform: code and registry.** Code is never in a DAO's sweep: seven ~35 KB code entries
 alone exceed the 200 KB read limit. Contracts bump code only to 4 days when under 2, so if the platform's renewal
 lapses a member pays a few days of code rent at most. The platform prepays 170 days:
 
@@ -233,10 +238,10 @@ node scripts/renew-code-ttl.mjs deploys/builder-testnet-manager.json --days 170 
 ```
 
 It finds code from the Manager's `current_implementations()` and each name's latest implementation, the Manager's
-and Minter's running `wasm_hash()`, and what every known DAO module runs (DAO deploy artifacts, `--token`, or the
-indexer's `manager.module_versions` with `DATABASE_URL`), so a DAO that skipped an upgrade keeps its code alive. It
-also renews each hash's `Implementation(hash)` record, every `LatestImplementation(name)`, `PlatformMinter`, and the
-Manager and Minter instances.
+running `wasm_hash()`, and what every known DAO contract runs (DAO deploy artifacts, `--token` with the modules
+its registry lists, or the indexer's `manager.module_versions` with `DATABASE_URL`), so a DAO that skipped an
+upgrade keeps its code alive. It also renews each hash's `Implementation(hash)` record, every
+`LatestImplementation(name)`, and the Manager instance.
 
 Code rent is the platform's largest cost: a dry run on 2026-10-12 quoted about 900 XLM to bring nine code hashes
 to 170 days (Auction 264 XLM, Marketplace 251 XLM, Governor ~300 XLM). Every extension is simulated first; one

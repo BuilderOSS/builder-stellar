@@ -1,6 +1,6 @@
 # In-memory contract integration tests
 
-The `dao-e2e` crate tests real cross-contract Token, Metadata, Manager, Auction, Governor, Treasury, Marketplace, Minter and SAC flows in Soroban's in-memory environment, with mainnet-like resource limits. It needs no deployed network or Docker.
+The `dao-e2e` crate tests real cross-contract Token, Metadata, Manager, Auction, Governor, Treasury, Marketplace, ClaimMinter and SAC flows in Soroban's in-memory environment, with mainnet-like resource limits. It needs no deployed network or Docker.
 
 ```bash
 # Repository root

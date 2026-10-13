@@ -34,11 +34,17 @@ and the contract event each view reads.
 
 - `deployment_id` = `manager:<MANAGER_CONTRACT>`; one pipeline per Manager.
 - `dao_id` = the DAO's token contract address.
-- Module contracts (token, metadata, auction, governor, treasury, marketplace)
-  resolve to a DAO through `manager.event_identity`, built from `DaoCreated`.
-- The **Minter** is one contract shared by every DAO. Its events carry the DAO
-  token as the `token_id` topic, which `manager.dao_registry` resolves to a DAO.
-  Minter events for tokens outside the deployment are dropped.
+- The core contracts (token, metadata, governor, treasury) resolve to a DAO
+  through `manager.event_identity`, built from `DaoCreated`.
+- Modules (auction, marketplace, claims, and any kind a DAO registers by vote)
+  resolve through registration windows: `manager.module_registrations` pairs each
+  Token's `ModuleRegistered` with its `ModuleUnregistered`, and an event counts
+  for a DAO only between them (position `[ledger, tx, op, evt]`; a window opens at
+  `[ledger, tx, -1, -1]` so the registering transaction's own events count).
+  `manager.module_role()` names the role. The same address registered by two DAOs,
+  or under two kinds, is attributed per window.
+- The pipeline's allowlists (`streamling.dao_*`) only decide what is indexed; the
+  views decide whose it is.
 
 ## Migrations
 
@@ -48,14 +54,15 @@ transaction together with its row in `public.schema_migrations` (name + SHA-256)
 | Migration | Contents |
 | --- | --- |
 | `0001_landing_tables` | schemas, helper functions (`chain.ledger_closed_at_ts` for the pipeline's epoch-millisecond closed-at values, `chain.event_position`, `chain.jsonb_safe` for a stray `\u0000`), the 3 landing tables, indexes, triggers, and `chain.events` (decoded events with jsonb topics/data and a total position: the base of every view) |
-| `0002_manager_views` | DAO registry, modules and identity, `manager.module_events`, launches, `manager.daos`, per-module launch status, implementations, module versions, Manager settings (admin, pending admin, platform Minter, factory pause) |
-| `0003_token_views` | transfers, inventory, delegate state, members, mint authorities, supply (voting vs system-held), approvals |
+| `0002_manager_views` | `manager.module_role()`, DAO registry (with the claims column), module registrations and windowed identity, `manager.module_events`, launches (with the launch registry), assurance drives, `manager.daos` (with `claims_contract`, `assurance_outcome`), per-module launch status, implementations, module versions, Manager settings (admin, pending admin, factory pause) |
+| `0003_token_views` | transfers, inventory, delegate state (custody-aware), members, mint allowances, registered modules, supply (voting vs system-held; non-voting modules count as system), approvals, the membership switches (`token.settings`), transfer agents, managed transfers (DAO and agent), delegates |
 | `0004_governance_views` | votes, proposals (state from `proposal_scheduled` and the clock, tallies), settings, comments |
 | `0005_auction_views` | bids, `auction.auction_state()` (outcome and current bid state per auction), auctions, current auctions (newest per contract) |
 | `0006_metadata_views` | token seeds (the profile is a column of `manager.daos`) |
 | `0007_treasury_views` | treasury calls (one per executed proposal action) |
-| `0008_marketplace_views` | primary listings (by `listing_id`), secondary listings (by `token_id`), sales, comments |
-| `0009_app_views` | activity feed (per-DAO, with platform events fanned out), proposal list/detail, feed status (health), indexer status |
+| `0008_marketplace_views` | quick-buy pools and their stock (a token is in stock only if it never moved after its mint into the pool), secondary listings (by `token_id`), sales (with `pool_id`), comments |
+| `0009_app_views` | activity feed (per-DAO by registration window, with platform events fanned out and revocations sent only to registered modules running the hash), proposal list/detail, feed status (health), indexer status |
+| `0010_claims_views` | claim lists, claims (with paid and escrowed amounts), claimers per list |
 
 Launch model: every module emits its own launch event (`token_launched`,
 `governor_launched`, ...) and hands its admin to the Treasury (`admin_changed`,

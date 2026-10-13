@@ -1,9 +1,10 @@
 # @builder-stellar/manager-bindings
 
 TypeScript bindings for the Builder Stellar **Manager** contract: the DAO factory
-and implementation registry. The Manager deploys the six DAO modules (token,
-metadata, auction, governor, treasury, marketplace), hands them off at launch,
-keeps the WASM implementation registry, and holds the slug registry.
+and implementation registry. The Manager deploys each DAO's core contracts
+(token, metadata, governor, treasury) and its modules (auction, marketplace,
+claims), runs the assurance launch, hands them off at launch, keeps the WASM
+implementation registry, and holds the slug registry.
 
 > `src/client.ts` and `src/types.ts` are generated from `manager.wasm`. Do not
 > edit them by hand. This README is hand-written and is preserved when the
@@ -50,11 +51,12 @@ const { result } = await manager.get_dao_by_slug({ slug: 'my-dao' });
 
 | Area                | Methods                                                                                                                   |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| DAO factory         | `create_dao`, `launch_dao`, `get_pending_dao`, `predict_addresses`, `pause_factory`, `unpause_factory`                    |
-| Slug registry       | `update_pending_slug`, `get_dao_by_slug`, `get_slug`, `bump_slug_ttl`                                                     |
+| DAO factory         | `create_dao`, `create_module`, `module_count`, `predict_module_address`, `launch_dao`, `get_pending_dao`, `predict_addresses`, `pause_factory`, `unpause_factory` |
+| Assurance launch    | `open_assurance`, `launch_when_ready`, `get_assurance`, `release_slug`, `recover_claims`                                  |
+| Slug registry       | `update_pending_slug`, `change_slug`, `get_dao_by_slug`, `get_slug`                                                       |
 | Implementations     | `register_implementation`, `set_latest_implementation`, `revoke_implementation`, `set_current_implementations`, `get_implementation`, `get_latest_implementation` |
 | Upgrades            | `approve_upgrade`, `is_upgrade_approved`, `upgrade_manager`                                                               |
-| Admin / platform    | `propose_admin`, `accept_admin`, `cancel_pending_admin`, `get_admin`, `set_platform_minter`, `get_platform_minter`        |
+| Admin / platform    | `propose_admin`, `accept_admin`, `cancel_pending_admin`, `get_admin`, `get_pending_admin`, `set_upgrade_delay`, `upgrade_delay` |
 
 ## Slugs
 

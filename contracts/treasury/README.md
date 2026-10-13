@@ -1,6 +1,6 @@
 # Treasury contract
 
-Treasury holds DAO assets, is the admin of all six modules after launch, and is the top-level executor of approved proposals. Governor decides eligibility; it does not dispatch actions.
+Treasury holds DAO assets, is the admin of every contract of its DAO (core and modules) after launch, and is the top-level executor of approved proposals. Governor decides eligibility; it does not dispatch actions.
 
 ## Interface
 

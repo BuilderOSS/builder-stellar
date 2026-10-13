@@ -68,8 +68,7 @@ Set `MANAGER_DEPLOYMENT_FILE` to the Manager deployment artifact, for example:
 MANAGER_DEPLOYMENT_FILE=deploys/builder-testnet-manager.json
 ```
 
-The artifact supplies the Manager and deployment-level Minter contract addresses and network. The Minter is fixed at generation time: a later `PlatformMinterSet` needs `pnpm generate` and a redeploy (docs/GOLDSKY_SETUP.md). It should supply the starting ledger; if it does not, set `GOLDSKY_START_AT` explicitly. The Manager and the Minter are the only configured contract inputs; each `DaoCreated`
-event's `modules` struct adds the six module addresses to the `streamling.dao_*` allowlists.
+The artifact supplies the Manager address, the network and the starting ledger; if it has no starting ledger, set `GOLDSKY_START_AT` explicitly. The Manager is the only configured contract: every DAO contract enters the `streamling.dao_*` allowlists from events (see [Allowlists](#allowlists)), so a new DAO or module never needs a regenerate.
 
 The generator also reads `packages/goldsky/.env` and `packages/goldsky/.env.local` when present.
 
@@ -124,8 +123,13 @@ replay (details in [`db/README.md`](../../db/README.md)):
    - `SELECT count(*) FROM chain.decoded_events WHERE topics = '{}' AND topic_0 <> ''` → 0
      (host system events such as `executable_update` are dropped by `type = 'contract'`; the
      testnet tables held 13 of them from before that filter)
-   - `SELECT count(*) FROM app.activity_feed_events WHERE kind LIKE 'contract.%' OR kind LIKE 'module.%'` → 0
+   - `SELECT count(*) FROM app.activity_feed_events WHERE kind LIKE 'contract.%'` → 0. `module.%` rows
+     are expected only for modules registered under a kind the decoder doesn't know (`custom_<name>`); they
+     carry positional `topic_N` / `arg_N` fields
    - raw, decoded and feed row counts are equal
+   - module roles resolve: `SELECT kind, address FROM manager.dao_modules` lists each DAO's registry, and
+     events from those addresses decode with that role (`SELECT contract_role, count(*) FROM
+     chain.decoded_events GROUP BY 1`)
 
 ## Pipeline Architecture
 
@@ -137,7 +141,10 @@ Stellar Network
     ↓
 Goldsky Indexer (stellar_events source)
     ↓
-dao_events transform (Manager, Minter and the allowlisted module addresses; contract_role)
+allowlists (dynamic tables: dao_tokens, dao_metadata, dao_governors, dao_treasuries,
+            dao_auctions, dao_marketplaces, dao_claims, dao_circles, dao_modules)
+    ↓
+dao_events transform (the Manager and every allowlisted address; contract_role)
     ↓
 raw_events transform (normalize the envelope)
     ↓
@@ -147,6 +154,33 @@ activity_feed transform (user-friendly summaries)
     ↓
 PostgreSQL (Neon) destination
 ```
+
+### Allowlists
+
+A Goldsky SQL transform can look outside the stream only through `dynamic_table_check(table, value)`, a
+membership test on one key column. So a contract's role is the table that holds its address, filled in two
+stages (docs/designs/membership-models.md § 7):
+
+1. **The core four** come from the Manager's `DaoCreated`: `dao_tokens`, `dao_metadata`, `dao_governors`,
+   `dao_treasuries`, one table each.
+2. **Modules** come from three sources, each into its kind's table (`dao_auctions`, `dao_marketplaces`,
+   `dao_claims`, `dao_circles`) or, for any other kind (`custom_<name>`, a future kind), only into the catch-all
+   `dao_modules`:
+   - the Manager's `DaoCreated` (modules deployed at creation) and `ModuleCreated` (`create_module`);
+   - the Token's `ModuleRegistered`, admitted only when the emitting Token is already in `dao_tokens`
+     (`dynamic_table_check('dao_tokens', contract_id)` inside the table's own SQL). This is how a module
+     registered by proposal, including one the Manager never deployed, is followed.
+
+The Manager branches exist because `create_dao` registers its modules on the Token before `DaoCreated` fires,
+so those `ModuleRegistered` events precede the Token's own allowlisting. Goldsky's validator refuses a dynamic
+table that reads an intermediate SQL transform, so every table reads `stellar_events` directly.
+
+Tables are append-only: an unregistered module stays allowlisted, and the read model drops its later events by
+registration window (`manager.module_events`). Allowlisting is per registration, so any contract a DAO
+registers by vote gets its events indexed under that DAO (an accepted risk; the operator remedy is deleting its
+row from `streamling.dao_modules` and the kind table, SECURITY_MODEL). A shared or dual-kind module (one address
+registered by two DAOs, or under two kinds) is indexed once; its role is the first matching table in the
+`dao_events` CASE, and the windowed views attribute its events to each DAO for the time it was registered there.
 
 ### Pipeline Outputs
 
@@ -158,9 +192,12 @@ PostgreSQL (Neon) destination
 ## Event Coverage
 
 The decoder names the topics of every event the contracts emit (Manager, Token,
-Governor, Treasury, Auction, Metadata, Marketplace, Minter) plus the OpenZeppelin
+Governor, Treasury, Auction, Metadata, Marketplace, ClaimMinter) plus the OpenZeppelin
 library events they publish (NFT transfers/mints, votes, governor lifecycle,
-pausable; the admin handoff is the common `AdminChanged` event).
+pausable; the admin handoff is the common `AdminChanged` event). An event it doesn't
+know, from a module registered outside the Manager, is still decoded: its topics and
+data land positionally as `topic_N` / `arg_N` (`decoder_version` `v3`), and the feed
+row is `module.<event>` (admin).
 
 `pnpm validate` (and `test/contract-alignment.test.mjs`) parse
 `contracts/*/src/events.rs` and fail if the decoder's `topicNames` differ from the
@@ -201,52 +238,72 @@ share topics (enforced by `contractEvents()`). Each module's launch event has it
 | `PendingSlugUpdated` | manager | `token_address` | `slug` | new |
 | `SlugClaimed` | manager | `token_address`, `slug` | none | new; emitted by `launch_dao` (`DaoCreated.slug` is only the request) |
 | `LatestImplementationSet` | manager | `name`, `wasm_hash` | `version` | new |
-| `UpgradeDelayChanged` | manager and minter (common) | none | `from_ledgers`, `to_ledgers`, `effective_ledger` | new; public row, a reduction is in force from `effective_ledger` |
+| `UpgradeDelayChanged` | manager | none | `from_ledgers`, `to_ledgers`, `effective_ledger` | new; public row, a reduction is in force from `effective_ledger` |
 | `TokenInitialized` / `GovernorInitialized` / `TreasuryInitialized` / `AuctionInitialized` | modules | `admin` | unchanged | topic renamed from `owner` |
 | `MarketplaceInitialized` | marketplace | `token`, `admin` | unchanged | `admin` topic added |
 | `*Changed` (governor setters) | governor | `changed_by` | `old_value`, `new_value` | topic renamed from `caller` |
 | `PaymentAssetUpdated` / `SecondaryFeeUpdated` / `MarketplacePaused` / `MarketplaceUnpaused` | marketplace | `changed_by` | unchanged | `changed_by` topic added |
 | `ManagerInitialized` / `ImplementationRegistered` / `UpgradeApproved` / `ImplementationRevoked` / `ManagerUpgraded` | manager | unchanged | `*_ledger` replaces `*_at` | fields hold ledger numbers |
 | `MintAllowanceChanged` | token | `module` | `old_allowance`, `allowance`, `changed_by` | per grant at launch; `4294967295` is unlimited; replaces `MintAuthorityChanged` |
-| `ModuleRegistered` | token | `kind` | `address`, `non_voting` | public; the constructor registers the Auction and Marketplace |
-| `ModuleUnregistered` | token | `kind` | `address` | public |
-| `DaoLaunched` | manager | `token_address` | `launched_ledger`, `modules`, `launch_auction`, `launch_marketplace`, `minter` | `minter` (the pinned shared Minter) replaces `enable_minter` (0.3.0) |
+| `ModuleRegistered` | token | `kind` | `address`, `non_voting` | public; drives the module allowlists |
+| `ModuleUnregistered` | token | `kind` | `address` | public; closes the module's registration window |
+| `DaoLaunched` | manager | `token_address` | `launched_ledger`, `modules`, `launch_auction`, `launch_marketplace`, `registry` | `registry` (the Token's module entries at launch) replaces `minter` (0.4.0) |
 | `AdminProposed` | manager | `current_admin`, `proposed_admin` | none | new |
-| `PlatformMinterSet` | manager | `minter` | none | new |
 | `Execute` | treasury | `governor`, `target`, `proposal_id` | `function`, `index` | `proposal_id` topic and `index` added; one event per call |
 | `ProposalExecuted` | governor | `proposal_id` | none | now emitted inside `consume` (same tx as `Execute`s) |
 | `RefundDeferred` | auction | `token_id`, `bidder` | `amount` (increment) | new |
 | `RefundWithdrawn` | auction | `bidder` | `amount` | new |
 | `MintBatchWithMinter` | token | `minter` | `first_token_id`, `count` | new; one per `batch_mint` instead of `MintWithMinter` per token (single `mint` still emits `MintWithMinter`) |
 | `SeedsGenerated` | metadata | `first_token_id` | `count`, `num_properties`, `selections` (one `[num_properties, idx...]` per token) | new; one per batch instead of `SeedGenerated` per token (`on_minted` / `regenerate` still emit `SeedGenerated`) |
-| `PrimaryListingCreated` | marketplace | `listing_id` | `price`, `expires_at`, `payment_asset` | keyed by listing id, no token/seller |
-| `PrimaryListingPurchased` | marketplace | `listing_id`, `buyer` | `token_id`, `price`, `payment_asset` | new (the only place a primary sale's token_id appears) |
-| `PrimaryListingCancelled` / `PrimaryListingExpired` | marketplace | `listing_id` | none | new |
 | `SecondaryListingCreated` | marketplace | `token_id` | `seller`, `price`, `expires_at`, `fee_bps`, `payment_asset` | `payment_asset` added |
 | `ListingPurchased` / `ListingCancelled` / `ListingExpired` | marketplace | `token_id` (+`buyer`) | unchanged | secondary only |
-| `Upgraded` | token, governor, treasury, auction, marketplace, metadata and the shared minter (defined once in `contracts/common/src/upgrade.rs`) | `from_hash`, `to_hash` | `version` | new; replaces marketplace-only `MarketplaceUpgraded`; public activity row `<role>.upgraded` (`governance.upgraded` for the governor; "Contract upgraded to version V (from -> to)", hashes shortened to 8 chars) |
+| `Upgraded` | token, governor, treasury, metadata and every module (defined once in `contracts/common/src/upgrade.rs`) | `from_hash`, `to_hash` | `version` | new; replaces marketplace-only `MarketplaceUpgraded`; public activity row `<role>.upgraded` (`governance.upgraded` for the governor; "Contract upgraded to version V (from -> to)", hashes shortened to 8 chars) |
 | `ProfileUpdated` | metadata | `seq` | `hash`, `profile` | new (0.3.0); the profile JSON lives only here. Public activity row except seq 0 (the initial profile, admin) |
 | `MetadataInitialized` | metadata | `token` | `renderer_base`, `admin` | description, project URI and contract image removed (0.3.0) |
-| `MerkleRootSetEvent` | minter | `token_id` | `root`, `round`, `tree_uri` | `tree_uri` added (0.3.0); public row "Claim round N opened" |
 | `AdminProposalCancelled` | manager | `current_admin`, `cancelled_admin` | none | new; admin activity row `manager.admin_proposal_cancelled` |
-| `DaoCreated` | manager | `token_address`, `deployer`, `launch_admin` | `created_ledger`, `modules`, `wasm_hashes`, `slug` | `wasm_hashes` (struct of six BytesN<32>: token, metadata, auction, governor, treasury, marketplace) decodes to a nested object in `args` |
+| `DaoCreated` | manager | `token_address`, `deployer`, `launch_admin` | `created_ledger`, `modules`, `wasm_hashes`, `slug` | `modules` and `wasm_hashes` decode to nested objects in `args`; since 0.4.0 `auction`, `marketplace` and `claims` are optional (null when the DAO has no such module) |
 | `PropertiesReset` | metadata | none | `old_num_properties` | renamed from `num_properties` |
 | removed (0.3.0) | `VersionSynced` (versions follow the registry); metadata `DescriptionUpdated`, `ProjectURIUpdated`, `ContractImageUpdated`; Minter `AllowlistSetEvent`, `AllowlistClaimEvent` | | | no longer emitted or decoded |
+| removed (0.4.0) | `MintAuthorityChanged`, `PlatformMinterSet`; the shared Minter's `MerkleClaimEvent`, `MintBatchEvent`, `MerkleRootSetEvent`; marketplace `PrimaryListingCreated`, `PrimaryListingPurchased`, `PrimaryListingCancelled`, `PrimaryListingExpired`, `PrimaryListingCommented` | | | no longer emitted or decoded (`test/removed-events.mjs`) |
 | removed | shared `Launched`; OpenZeppelin `OwnershipTransfer`, `OwnershipTransferCompleted`, `OwnershipRenounced`; marketplace `MarketplaceUpgraded`; governor `TreasuryChanged`, `TokenContractChanged`, `GovernorAuthorityChanged`; treasury `GovernorChanged`; auction `TreasuryUpdated` | | | no longer emitted or decoded |
+
+### Event changes for membership models (0.4.0)
+
+| Event | Contract | Topics | Data | Feed |
+|---|---|---|---|---|
+| `TokenInitialized` | token | `admin` | `name`, `symbol`, `settings` | `settings` holds the three switches at creation |
+| `TransfersLockChanged` / `MembersOnlyDelegationChanged` / `DaoRecoveryChanged` | token | none | `locked` / `enabled`, `changed_by` | public |
+| `TransferAgentChanged` | token | `module` | `enabled`, `changed_by` | public |
+| `AgentTransfer` | token | `agent` | `from`, `to`, `token_id` | admin, beside the OpenZeppelin `Transfer` |
+| `DaoTransfer` | token | `from`, `to` | `token_id`, `changed_by` | public: a membership moved by vote |
+| `ModuleCreated` | manager | `token_address`, `kind` | `n`, `address` | admin (the Token's `ModuleRegistered` is the public row); drives the module allowlists |
+| `AssuranceOpened` | manager | `token_address` | `claim_minter`, `list_id`, `deadline`, `launch_auction`, `launch_marketplace` | public |
+| `SlugReleased` | manager | `token_address`, `slug` | none | public; frees a failed drive's slug |
+| `CurrentImplementationsUpdated` | manager | none | the seven hashes, `claims` included | admin |
+| `PoolOpened` | marketplace | `pool_id` | `price`, `asset`, `expires_at`, `size`, `max_per_buyer`, `max_sold_per_period`, `period_secs` | public |
+| `PoolRestocked` | marketplace | `pool_id` | `first_token_id`, `count`, `stocked` | admin |
+| `PoolPurchased` | marketplace | `pool_id`, `buyer` | `token_id`, `price`, `asset` | public |
+| `PoolClosed` / `PoolSwept` | marketplace | `pool_id` | `released` / `count`, `pages_left` | public / admin |
+| `ListOpened` | claims | `list_id` | `root`, `tree_uri`, `asset`, `price`, `expires_at`, `total`, `assurance` | public |
+| `Claimed` | claims | `list_id`, `claimer` | `amount`, `first_token_id`, `paid`, `escrowed` (bool), `claimed` | public |
+| `EscrowReleased` / `Refunded` | claims | `list_id` (+`claimer`) | `treasury`, `amount` / `amount` | public / admin (a refund is a per-claimer side effect) |
+| `ClaimMinterLaunched` | claims | `treasury` | none | admin, like every `<role>.launched` |
+
+The ClaimMinter's role is `claims` (crate `contracts/minter`, `CRATE_ROLES` in `src/contract-events.mjs`), so
+its kinds are `claims.<event>`.
 
 ### Common-crate events
 
 The contract-event parser also scans `contracts/common/src/*.rs` and lists each event there once
 per emitting role (`source: 'common'`), from `COMMON_EVENT_EMITTERS` in `src/contract-events.mjs`:
-`AdminChanged` for the six DAO modules; `Upgraded` and `Migrated` for the six modules and the
-shared Minter; `UpgradeDelayChanged` for the Manager and the Minter only. The decoder keys on
+`AdminChanged`, `Upgraded` and `Migrated` for every DAO contract and module role (`claims` included);
+`UpgradeDelayChanged` for the Manager only. The decoder keys on
 name only: the emitting contract is `contract_id` / `contract_role`.
 
 ### Activity feed labels
 
-User-visible (`public`) items include `marketplace.primary_listing_purchased` ("Primary sale:
-token N bought for P (listing L)") and `marketplace.primary_listing_cancelled`, beside the
-existing `manager.dao_launched`; refunds (`auction.refund_*`) and `manager.slug_claimed` are `admin`.
+User-visible (`public`) items include `marketplace.pool_purchased` ("Token N bought from pool P
+for X"), `claims.claimed` and the membership switches, beside the existing `manager.dao_launched`; refunds (`auction.refund_*`) and `manager.slug_claimed` are `admin`.
 `Execute` rows are `admin` and read "Executed fn on target (call i of proposal id)".
 Per-module launch rows are `admin` with kind `<role>.launched`; module `AdminChanged` rows are
 `<role>.admin_changed` ("Token admin handed to the Treasury"), `Migrated` rows
@@ -254,12 +311,15 @@ Per-module launch rows are `admin` with kind `<role>.launched`; module `AdminCha
 `ProposalCreated`); OpenZeppelin `QuorumChanged` is `governance.quorum_changed` (admin; it
 duplicates the constructor quorum and every `QuorumBpsChanged`); OpenZeppelin `Paused` / `Unpaused`
 from the Auction are `auction.paused` / `auction.unpaused`; a batch mint is one admin `token.batch_mint` row ("Minted 5 tokens (30-34) by
-minter") plus one admin `metadata.seeds_generated` row, not one row per token, and the Minter's own
-`minter.batch_mint` / `minter.merkle_claim` row in the same call is the public one; Manager admin changes
-(`manager.admin_proposed`, `manager.admin_changed`, `manager.platform_minter_set`) and `marketplace.paused`
-are `admin`; listing cancellations and expiries (`marketplace.listing_cancelled`, `marketplace.listing_expired`,
-`marketplace.primary_listing_cancelled`, `marketplace.primary_listing_expired`) are `public`, like the listing
-itself. The shared Minter's `Upgraded` / `Migrated` are `minter.upgraded` / `minter.migrated`; the governor's
+minter") plus one admin `metadata.seeds_generated` row, not one row per token, and the module's own
+row in the same call (`claims.claimed`, `marketplace.pool_restocked`) tells the story; Manager admin changes
+(`manager.admin_proposed`, `manager.admin_changed`) and `marketplace.paused` are `admin`; listing cancellations
+and expiries (`marketplace.listing_cancelled`, `marketplace.listing_expired`) and `marketplace.pool_closed` are
+`public`, like the listing itself. A module's `Upgraded` / `Migrated` are `<role>.upgraded` /
+`<role>.migrated`. Visibility also follows the module: every event from a module under the catch-all `module`
+role or the reserved `circle` role is `admin`, since the platform didn't write its code, and an event name no
+known contract owns there is shown under the module's own kind rather than another contract's (`unvouched`,
+`foreignModule` in `src/activity-feed.script.js`). The governor's
 role-based kinds use the `governance.` prefix like its other kinds. `activity_feed_events`
 columns are unchanged; `listing_id` and `index` are only in `topics`/`args`. `addresses` holds every
 address field the event carries (accounts, then module, token and payment-asset contracts, the
@@ -268,7 +328,8 @@ before the subject (`authority`) or a module contract, and empty for `DaoLaunche
 
 **Public feed curation.** Only story events are `public`/`governance`: launches,
 proposals and votes, real delegation, auctions (started, bid, settled, cancelled),
-marketplace listings and sales, allocations and claims, and upgrades. Per-token
+marketplace listings, pools and sales, claim lists and claims, membership switches and DAO transfers, and
+upgrades. Per-token
 `Mint`/`MintWithMinter`/`MintBatchWithMinter`, transfers, vote-weight changes, seeds, slug claims,
 setup/launch internals, refunds and the automatic
 self-delegation on a first token (`from_delegate` empty, `to_delegate` =
@@ -287,8 +348,7 @@ await getGoldskyProposalVotes(daoId, proposalId)
 await getGoldskyProposalComments(daoId, proposalId)
 await getGoldskyAuctionHistory(daoId)
 await getGoldskyAuctionBids(daoId, tokenId)
-await getGoldskyMintAuthorities(daoId)
-await getGoldskyMinterClaims(daoId, { recipient })
+await getGoldskyClaims(daoId, { limit: 20, offset: 0 })
 await getDashboardData(address)
 await getGoldskyHealth()
 ```

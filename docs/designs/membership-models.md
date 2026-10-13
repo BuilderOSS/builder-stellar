@@ -450,6 +450,14 @@ would still pass with its old role; and external modules emit event names the de
        from `module_registrations`, with a `regexp_extract` projection and a kind filter only.
 
     Only registrations emitted by known DAO Tokens reach the allowlists, so the topic-only fallback isn't needed.
+
+    **As built (2026-10-13), superseding the two stages above.** `goldsky turbo validate` refused a dynamic table
+    that reads an intermediate SQL transform ("table 'default.module_registrations' not found", then "no
+    consumers"), so every module table reads `stellar_events` directly: the `ModuleRegistered` branch is gated
+    by `dynamic_table_check('dao_tokens', contract_id)` inside the table's own SQL, and the per-kind tables also
+    take the Manager's `DaoCreated` and `ModuleCreated`, because `create_dao` registers its modules on the Token
+    before `DaoCreated` allowlists that Token. Still to confirm live: the 0.4.0 testnet DAO's auction,
+    marketplace and claims events decode with those roles (Next Steps, ship step).
     It's still to be confirmed on a scratch pipeline when step 2's events exist; the docs don't show this exact
     two-stage chain end to end. Same-transaction ordering (a module's constructor events before its
     `ModuleRegistered`) behaves like today's `DaoCreated` population (review 2 E).
@@ -578,7 +586,7 @@ The existing pipeline covers this:
 
 1. **The invariant first:** write the voting-units property test against today's Token (see The Assignment),
    with all three clauses (done: `contracts/e2e/src/voting_invariant.rs`). The Goldsky capability in §7
-   (review 2 B8) is settled from the docs; confirm it on a scratch pipeline once step 2's events exist.
+   (review 2 B8) was settled from the docs, then changed when the validator refused it (see §7, "As built").
 2. **Token:** allowances, the registry (registration moves held votes, contract-only, allowance only for
    modules), the `ModuleRegistered` / `ModuleUnregistered` events and core-only constructor wiring. Design the
    indexer's dynamic tables and identity views (§7) in the same step, because the event shapes are their API.
