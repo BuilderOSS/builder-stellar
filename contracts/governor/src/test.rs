@@ -1967,6 +1967,37 @@ fn proposal_id_entry_renews_with_the_core() {
     );
 }
 
+/// Review S6 (docs/designs/membership-models.md Next Steps 10): after a
+/// proposal's first and only vote, the OpenZeppelin tally lives as long as
+/// the proposal does, not the network's minimum, so `queue` after a full
+/// 30-day voting period finds it without a restore.
+#[test]
+fn the_vote_tally_lives_as_long_as_the_proposal() {
+    use soroban_sdk::testutils::storage::Persistent as _;
+    let (e, token, _treasury, governor, target, owner) = setup();
+    let proposer = Address::generate(&e);
+    token.mint(&owner, &proposer);
+    e.ledger().set_sequence_number(200);
+    e.ledger().set_timestamp(2_000);
+    let id = governor.propose(
+        &vec![&e, target.address.clone()],
+        &vec![&e, symbol_short!("set_value")],
+        &proposal_args(&e),
+        &String::from_str(&e, "One early vote"),
+        &proposer,
+    );
+    e.ledger().set_timestamp(2_301);
+    governor.cast_vote(&id, &1, &String::from_str(&e, "yes"), &proposer);
+    let tally_ttl = e.as_contract(&governor.address, || {
+        e.storage().persistent().get_ttl(
+            &stellar_governance::governor::storage::GovernorStorageKey::ProposalVote(id.clone()),
+        )
+    });
+    assert!(tally_ttl >= crate::storage::PROPOSAL_TTL_EXTEND_TO - 1);
+    // Longer than the longest voting period plus the longest queue delay.
+    assert!(tally_ttl > 2 * 30 * common::ttl::DAY_IN_LEDGERS);
+}
+
 /// D38: a proposal is stored as `(proposer, 49 packed bytes)`, and every
 /// field survives the round trip through each lifecycle write.
 #[test]

@@ -806,6 +806,16 @@ impl Governor for DaoGovernorContract {
         }
 
         governor::count_vote(e, &proposal_id, &voter, vote_type, voter_weight);
+        // OpenZeppelin writes the tally with only the network's minimum TTL,
+        // so a long voting period could let it archive before `queue` reads
+        // it. Give it the proposal's own lifetime (review S6). The entry
+        // exists here: `count_vote` just wrote it. `HasVoted` stays the
+        // voter's.
+        e.storage().persistent().extend_ttl(
+            &governor::storage::GovernorStorageKey::ProposalVote(proposal_id.clone()),
+            PROPOSAL_TTL_THRESHOLD,
+            PROPOSAL_TTL_EXTEND_TO,
+        );
         emit_vote_cast(e, &voter, &proposal_id, vote_type, voter_weight, &reason);
 
         voter_weight
