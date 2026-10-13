@@ -576,7 +576,7 @@ async function auction(ctx) {
     a.tokenId = String(state.token_id);
     const bid = reserve;
     a.balanceABeforeBid = String(nativeBalance(ctx, A, auctionAsset));
-    const r = write(ctx, dao.auction, 'create_bid', { bidder: A, token_id: a.tokenId, amount: String(bid) }, 'BIDDER_A', 'auction.bidA');
+    const r = write(ctx, dao.auction, 'create_bid', { bidder: A, token_id: a.tokenId, amount: String(bid), comment: 'e2e bid' }, 'BIDDER_A', 'auction.bidA');
     a.bidA = { amount: String(bid), tx: r.txHash };
     a.balanceAAfterBid = String(nativeBalance(ctx, A, auctionAsset));
     ctx.save();
@@ -588,7 +588,7 @@ async function auction(ctx) {
   if (!a.bidB) {
     const prev = big(a.bidA.amount);
     const amount = prev + (prev * pct) / 100n;
-    const r = write(ctx, dao.auction, 'create_bid', { bidder: B, token_id: a.tokenId, amount: String(amount) }, 'BIDDER_B', 'auction.bidB');
+    const r = write(ctx, dao.auction, 'create_bid', { bidder: B, token_id: a.tokenId, amount: String(amount), comment: 'e2e outbid' }, 'BIDDER_B', 'auction.bidB');
     a.bidB = { amount: String(amount), tx: r.txHash };
     a.balanceAAfterOutbid = String(nativeBalance(ctx, A, auctionAsset));
     ctx.save();
