@@ -133,9 +133,9 @@ pub struct InitialDaoConfigValues {
     /// slug by vote (`change_slug`).
     pub slug: String,
     pub governance: GovernanceConfig,
-    /// The modules to deploy with the DAO, each kind at most once. Phase 1
-    /// (docs/designs/membership-models.md, cut line) still requires an
-    /// Auction and a Marketplace; ClaimMinter is optional.
+    /// The modules to deploy with the DAO, each kind at most once; all are
+    /// optional (docs/designs/membership-models.md §2). More can be added
+    /// later with `create_module`.
     pub modules: Vec<ModuleSpec>,
 }
 

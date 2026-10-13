@@ -2900,6 +2900,34 @@ fn slug_params(
     slug: &str,
     asset: &Address,
 ) -> manager::DaoCreationParams {
+    let mut params = slug_params_with(e, deployer, nonce, slug, Vec::new(e));
+    params.initial_config.modules = vec![
+        e,
+        manager::ModuleSpec::Auction(manager::AuctionConfig {
+            duration: 300,
+            reserve_price: 10_000_000,
+            time_buffer: 60,
+            payment_asset: asset.clone(),
+        }),
+        manager::ModuleSpec::Marketplace(manager::MarketplaceConfig {
+            payment_asset: asset.clone(),
+            secondary_fee_bps: 250,
+        }),
+        manager::ModuleSpec::Claims(manager::ClaimsConfig {
+            payment_asset: asset.clone(),
+        }),
+    ];
+    params
+}
+
+/// `slug_params` with an explicit module list (every module is optional).
+fn slug_params_with(
+    e: &Env,
+    deployer: &Address,
+    nonce: u64,
+    slug: &str,
+    modules: Vec<manager::ModuleSpec>,
+) -> manager::DaoCreationParams {
     manager::DaoCreationParams {
         deployer: deployer.clone(),
         nonce,
@@ -2917,22 +2945,7 @@ fn slug_params(
                 proposal_threshold: 1,
                 quorum_bps: 1000,
             },
-            modules: vec![
-                e,
-                manager::ModuleSpec::Auction(manager::AuctionConfig {
-                    duration: 300,
-                    reserve_price: 10_000_000,
-                    time_buffer: 60,
-                    payment_asset: asset.clone(),
-                }),
-                manager::ModuleSpec::Marketplace(manager::MarketplaceConfig {
-                    payment_asset: asset.clone(),
-                    secondary_fee_bps: 250,
-                }),
-                manager::ModuleSpec::Claims(manager::ClaimsConfig {
-                    payment_asset: asset.clone(),
-                }),
-            ],
+            modules,
         },
     }
 }
@@ -4133,6 +4146,71 @@ fn a_module_created_after_launch_works_in_the_next_call() {
     assert_eq!(token.balance(&alice), 2);
     assert_eq!(token.mint_allowance(&created), 3);
     assert_eq!(f.manager.module_count(&f.dao.token, &claims), 1);
+}
+
+/// docs/designs/membership-models.md §2 (Phase 4): a DAO created with no
+/// Auction or Marketplace launches with the four core contracts, and the
+/// Treasury registers outside code that holds NFTs by vote (R6): tokens it
+/// holds stop voting, and unregistering brings them back (review 2 A1).
+#[test]
+fn a_dao_without_optional_modules_launches_and_registers_external_code() {
+    let e = Env::default();
+    e.mock_all_auths();
+    e.ledger().set_sequence_number(100);
+    e.ledger().set_timestamp(1_000);
+    e.cost_estimate().budget().reset_unlimited();
+    let manager_id = e.register(
+        ManagerContract,
+        (
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0; 32]),
+            String::from_str(&e, "0.1.0"),
+            TEST_UPGRADE_DELAY,
+        ),
+    );
+    let manager = ManagerContractClient::new(&e, &manager_id);
+    register_factory(&e, &manager);
+    let founder = Address::generate(&e);
+    let dao = manager.create_dao(&slug_params_with(&e, &founder, 1, "bare-dao", Vec::new(&e)));
+    assert_eq!(
+        (
+            dao.auction.clone(),
+            dao.marketplace.clone(),
+            dao.claims.clone()
+        ),
+        (None, None, None)
+    );
+    let token = DaoTokenContractClient::new(&e, &dao.token);
+    assert!(token.modules().is_empty());
+    let first = token.mint(&founder, &founder);
+    token.mint(&founder, &founder);
+    manager.launch_dao(
+        &dao.token,
+        &manager::LaunchConfig {
+            launch_auction: true,
+            launch_marketplace: true,
+        },
+    );
+    assert!(token.is_live());
+    assert_eq!(token.admin(), dao.treasury);
+    assert_eq!(token.auction(), None);
+
+    // By proposal (the Treasury's auth is mocked): register a vault the DAO
+    // deployed itself, non-voting, and give it an allowance.
+    let vault = e.register(TargetContract, ());
+    let kind = Symbol::new(&e, "custom_vault");
+    token.register_module(&kind, &vault, &true);
+    token.increase_mint_allowance(&vault, &1);
+    assert_eq!(token.get_votes(&founder), 2);
+    token.transfer(&founder, &vault, &first);
+    assert_eq!(token.total_supply(), 1);
+    assert_eq!(token.get_votes(&founder), 1);
+    token.mint(&vault, &founder);
+    assert_eq!(token.mint_allowance(&vault), 0);
+    // Unregistering brings the held token back into the voting supply.
+    token.unregister_module(&vault);
+    assert_eq!(token.total_supply(), 3);
+    assert_eq!(token.get_votes(&vault), 1);
 }
 
 // ============================================================================

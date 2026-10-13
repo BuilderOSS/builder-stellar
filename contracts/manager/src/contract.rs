@@ -541,7 +541,7 @@ impl ManagerContract {
     ///
     /// * `FactoryPaused` - Factory is paused
     /// * `CurrentImplementationsNotSet` - Current WASM hashes not configured
-    /// * `InvalidModules` - A kind listed twice, or no Auction or Marketplace
+    /// * `InvalidModules` - A kind listed twice
     /// * `InvalidSlug` / `SlugTaken` - Malformed slug, or claimed by a launched DAO
     pub fn create_dao(env: Env, params: DaoCreationParams) -> Result<DaoAddresses, ManagerError> {
         // The deployer owns the newly-created modules and must authorize the
@@ -1836,8 +1836,7 @@ impl ManagerContract {
             return Err(ManagerError::InvalidProposalThreshold);
         }
 
-        // Each kind at most once. Phase 1 (cut line) still requires the
-        // Auction and the Marketplace; Phase 4 drops this rule.
+        // Every module is optional (Phase 4); each kind at most once.
         let mut kinds: Vec<Symbol> = Vec::new(env);
         for spec in config.modules.iter() {
             let kind = spec.kind(env);
@@ -1846,11 +1845,6 @@ impl ManagerContract {
             }
             kinds.push_back(kind);
             Self::validate_module_spec(&spec)?;
-        }
-        for required in [KIND_AUCTION, KIND_MARKETPLACE] {
-            if !kinds.contains(Symbol::new(env, required)) {
-                return Err(ManagerError::InvalidModules);
-            }
         }
         Ok(())
     }

@@ -3336,17 +3336,21 @@ fn create_module_needs_the_token_admin_and_an_unpaused_factory() {
 }
 
 #[test]
-fn create_dao_requires_one_auction_and_one_marketplace_and_no_repeats() {
+fn create_dao_takes_any_set_of_modules_without_repeats() {
     let (env, client, _a) = setup();
     register_stub_implementations(&env, &client);
     let deployer = Address::generate(&env);
     env.cost_estimate().budget().reset_unlimited();
-    let mut missing = dao_params(&env, &deployer, 1);
-    missing.initial_config.modules.remove(1);
+    // No modules at all: the four core contracts only.
+    let mut bare = dao_params(&env, &deployer, 1);
+    bare.initial_config.modules = soroban_sdk::Vec::new(&env);
+    let dao = client.create_dao(&bare);
     assert_eq!(
-        client.try_create_dao(&missing),
-        Err(Ok(crate::ManagerError::InvalidModules))
+        (dao.auction, dao.marketplace, dao.claims),
+        (None, None, None)
     );
+    let pending = client.get_pending_dao(&dao.token).unwrap();
+    assert_eq!(pending.auction_payment_asset, None);
     let mut repeated = dao_params(&env, &deployer, 2);
     let first = repeated.initial_config.modules.get(0).unwrap();
     repeated.initial_config.modules.push_back(first);
