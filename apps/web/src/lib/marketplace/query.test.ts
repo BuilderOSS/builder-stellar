@@ -4,6 +4,7 @@ import {
   assertMarketplaceIdentity,
   listingStatus,
   marketplaceScope,
+  matchesPoolSnapshot,
   matchesSnapshot,
   parseMarketplaceQuery
 } from './query';
@@ -65,16 +66,23 @@ describe('marketplace identity and listing snapshots', () => {
     ]) {
       expect(matchesSnapshot(listing, { ...live, ...drift })).toBe(false);
     }
-    expect(
-      matchesSnapshot(
-        { ...listing, kind: 'primary', seller: null, feeBps: 0 },
-        { price: 10000001n, payment_asset: 'sac-a', expires_at: 100n }
-      )
-    ).toBe(true);
+    // A pool never matches a resale snapshot, and a pool snapshot pins its size and open state.
+    expect(matchesSnapshot({ ...listing, kind: 'pool', seller: null, feeBps: 0 }, live)).toBe(false);
+    const pool = {
+      ...listing,
+      kind: 'pool' as const,
+      seller: null,
+      feeBps: 0,
+      pool: { size: 3, stocked: 0, sold: 0, inStock: 0, maxPerBuyer: 1, maxSoldPerPeriod: 1, periodSecs: 60 }
+    };
+    const livePool = { price: 10000001n, asset: 'sac-a', expires_at: 100n, size: 3, closed: false };
+    expect(matchesPoolSnapshot(pool, livePool)).toBe(true);
+    for (const drift of [{ price: 1n }, { asset: 'sac-b' }, { expires_at: 1n }, { size: 4 }, { closed: true }])
+      expect(matchesPoolSnapshot(pool, { ...livePool, ...drift })).toBe(false);
   });
   it('validates truthful capabilities, type, status and bounded pagination', () => {
     expect(
-      parseMarketplaceQuery(new URLSearchParams('kind=primary&status=all&capability=auction&page=2&search=DAO')).page
+      parseMarketplaceQuery(new URLSearchParams('kind=pool&status=all&capability=auction&page=2&search=DAO')).page
     ).toBe(2);
     for (const invalid of [
       'page=-1',

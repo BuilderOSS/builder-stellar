@@ -64,7 +64,7 @@ export function useDaoMarketplace(daoId: string, query = '') {
 export function useMarketplaceListing(daoId: string, kind: string, id: string, eventId: string) {
   const query = new URLSearchParams({ kind, id, eventId }).toString();
   return useSWR<{ deploymentId: string; daoId: string; listing: MarketplaceListing }>(
-    id && eventId && ['primary', 'secondary'].includes(kind)
+    id && eventId && ['pool', 'secondary'].includes(kind)
       ? marketplaceKey(daoId, 'listing', `/api/dao/${encodeURIComponent(daoId)}/marketplace/listing?${query}`)
       : null,
     fetchKey,

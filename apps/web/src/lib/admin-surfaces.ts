@@ -22,18 +22,8 @@ export function useAdminTokenState(config: DaoNetworkConfig, address?: string | 
       : null,
     async () => {
       const token = new TokenClient(adminReadOptions(config, config.tokenContractId, address));
-      const [admin, live, supply, authority] = await Promise.all([
-        token.admin(),
-        token.is_live(),
-        token.total_supply(),
-        address ? token.mint_authority({ authority: address }) : Promise.resolve(null)
-      ]);
-      return {
-        admin: admin.result,
-        live: live.result,
-        supply: supply.result,
-        mintAuthority: authority?.result === true
-      };
+      const [admin, live, supply] = await Promise.all([token.admin(), token.is_live(), token.total_supply()]);
+      return { admin: admin.result, live: live.result, supply: supply.result };
     }
   );
 }

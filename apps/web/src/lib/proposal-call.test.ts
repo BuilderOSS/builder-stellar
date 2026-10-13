@@ -20,7 +20,8 @@ const config: ProposalEncodingContext = {
   treasuryContractId: contract(3),
   auctionContractId: contract(4),
   marketplaceContractId: contract(5),
-  metadataContractId: contract(6)
+  metadataContractId: contract(6),
+  claimsContractId: contract(7)
 };
 const encode = (target: string, fn: string, args: unknown[]) =>
   encodeProposalCallArgs([target], [fn], [args], config)[0] as xdr.ScVal[];
@@ -148,11 +149,20 @@ describe('current proposal ABI encoding', () => {
       ['pause', [], {}],
       ['unpause', [], {}],
       [
-        'create_primary_listing',
-        ['9007199254740993', '9007199254740994'],
-        { price: 9007199254740993n, expires_at: 9007199254740994n }
+        'open_pool',
+        ['9007199254740993', contract(10), '9007199254740994', 100, 2, 10, '86400'],
+        {
+          price: 9007199254740993n,
+          asset: contract(10),
+          expires_at: 9007199254740994n,
+          size: 100,
+          max_per_buyer: 2,
+          max_sold_per_period: 10,
+          period_secs: 86400n
+        }
       ],
-      ['cancel_primary', ['9007199254740993'], { listing_id: 9007199254740993n }]
+      ['close_pool', [7], { pool_id: 7 }],
+      ['sweep_pool', [7], { pool_id: 7 }]
     ] as const) {
       const encoded = encode(config.marketplaceContractId, fn, [...args]);
       expect(encoded.map((arg) => arg.toXDR('base64'))).toEqual(

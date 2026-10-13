@@ -24,8 +24,9 @@ function callMatches(call: xdr.InvokeContractArgs, contract: string, method: str
 
 /** Inspect actual XDR, not a displayed quote or the SDK's predicted return value.
  * The current contract requires buyer auth on the buy root, and SAC transfer leaves
- * beneath it. Mint / escrow delivery use the marketplace's own contract auth, not
+ * beneath it. Delivery out of the marketplace's custody uses its own contract auth, not
  * buyer auth. Reject every additional buyer permission, even if total spend agrees.
+ * A pool purchase also pins the stock page and token the server picked (`pick`).
  */
 export function assertMarketplacePurchaseAuthorization(
   encoded: string,
@@ -33,7 +34,8 @@ export function assertMarketplacePurchaseAuthorization(
   listing: MarketplaceListing,
   buyer: string,
   treasury: string,
-  simulatedAuth: xdr.SorobanAuthorizationEntry[]
+  simulatedAuth: xdr.SorobanAuthorizationEntry[],
+  pick?: { page: number; tokenId: number }
 ) {
   try {
     const transaction = TransactionBuilder.fromXDR(encoded, networkPassphrase);
@@ -46,14 +48,21 @@ export function assertMarketplacePurchaseAuthorization(
     )
       reject();
 
-    const method = listing.kind === 'primary' ? 'buy_primary' : 'buy';
-    const id = marketplaceId(listing.id, listing.kind);
-    const rootArgs = [
-      listing.kind === 'primary' ? nativeToScVal(id, { type: 'u64' }) : nativeToScVal(Number(id), { type: 'u32' }),
-      new Address(buyer).toScVal(),
-      // max_price: the buyer's bound, which must equal the reviewed listing price.
-      nativeToScVal(BigInt(listing.price), { type: 'i128' })
-    ];
+    const pool = listing.kind === 'pool';
+    if (pool && !pick) reject();
+    const method = pool ? 'buy_from_pool' : 'buy';
+    const id = Number(marketplaceId(listing.id, listing.kind));
+    // max_price: the buyer's bound, which must equal the reviewed price.
+    const maxPrice = nativeToScVal(BigInt(listing.price), { type: 'i128' });
+    const rootArgs = pool
+      ? [
+          nativeToScVal(id, { type: 'u32' }),
+          nativeToScVal(pick!.page, { type: 'u32' }),
+          nativeToScVal(pick!.tokenId, { type: 'u32' }),
+          new Address(buyer).toScVal(),
+          maxPrice
+        ]
+      : [nativeToScVal(id, { type: 'u32' }), new Address(buyer).toScVal(), maxPrice];
     if (!callMatches(operation.func.invokeContract, listing.contractId, method, rootArgs)) reject();
 
     // Exactly one source-account auth tree. Other credentials (including delegates)
@@ -75,13 +84,12 @@ export function assertMarketplacePurchaseAuthorization(
 
     const price = BigInt(listing.price);
     if (price <= 0n) reject();
-    const payments =
-      listing.kind === 'primary'
-        ? [{ to: treasury, amount: price }]
-        : [
-            { to: treasury, amount: marketplaceFee(listing.price, listing.feeBps) },
-            { to: listing.seller ?? '', amount: price - marketplaceFee(listing.price, listing.feeBps) }
-          ].filter(({ amount }) => amount > 0n); // payment_transfer explicitly skips zero amounts.
+    const payments = pool
+      ? [{ to: treasury, amount: price }]
+      : [
+          { to: treasury, amount: marketplaceFee(listing.price, listing.feeBps) },
+          { to: listing.seller ?? '', amount: price - marketplaceFee(listing.price, listing.feeBps) }
+        ].filter(({ amount }) => amount > 0n); // payment_transfer explicitly skips zero amounts.
     if (root.subInvocations.length !== payments.length) reject();
     for (const [index, payment] of payments.entries()) {
       const child = root.subInvocations[index];

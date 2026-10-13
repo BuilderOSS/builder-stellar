@@ -9,14 +9,15 @@ const mocks = vi.hoisted(() => ({
   supply: vi.fn(),
   admin: vi.fn(),
   live: vi.fn(),
-  minter: vi.fn(),
+  assurance: vi.fn(),
+  claims: vi.fn(),
   auction: vi.fn(),
   marketplace: vi.fn()
 }));
 vi.mock('@builder-stellar/manager-bindings', () => ({
   Client: class {
     get_pending_dao = mocks.pending;
-    get_platform_minter = mocks.minter;
+    get_assurance = mocks.assurance;
     get_dao_by_slug = async () => ({ result: { isOk: () => false, unwrap: () => '' } });
   }
 }));
@@ -37,6 +38,11 @@ vi.mock('@builder-stellar/marketplace-bindings', () => ({
     get_config = mocks.marketplace;
   }
 }));
+vi.mock('@builder-stellar/claim-minter-bindings', () => ({
+  Client: class {
+    payment_asset = mocks.claims;
+  }
+}));
 vi.mock('@/lib/deployment-config', () => ({
   getDeploymentConfig: () => ({ name: 'testnet', managerAddress: 'manager-A' })
 }));
@@ -46,7 +52,8 @@ const addresses = {
   marketplace: 'market-A',
   governor: 'gov-A',
   treasury: 'treasury-A',
-  metadata: 'metadata-A'
+  metadata: 'metadata-A',
+  claims: 'claims-A'
 };
 const ready = (): LaunchReadiness => ({
   pending: {
@@ -54,13 +61,14 @@ const ready = (): LaunchReadiness => ({
     launch_admin: 'wallet-A',
     auction_payment_asset: 'xlm',
     marketplace_payment_asset: 'usdc',
+    claims_payment_asset: 'xlm',
     slug: 'test-dao'
   },
   supply: 1n,
   admin: 'wallet-A',
   live: false,
   paymentAssetsMatch: true,
-  platformMinter: 'CMINTER',
+  assurance: null,
   slugTaken: false
 });
 const config = { name: 'testnet', rpcUrl: 'https://rpc.test', passphrase: 'test' } as DaoNetworkConfig;
@@ -69,26 +77,44 @@ beforeEach(() => {
   mocks.supply.mockResolvedValue({ result: 1n });
   mocks.admin.mockResolvedValue({ result: 'wallet-A' });
   mocks.live.mockResolvedValue({ result: false });
-  mocks.minter.mockResolvedValue({ result: 'CMINTER' });
+  mocks.assurance.mockResolvedValue({ result: null });
+  mocks.claims.mockResolvedValue({ result: 'xlm' });
   mocks.auction.mockResolvedValue({ result: { payment_token: 'xlm' } });
   mocks.marketplace.mockResolvedValue({ result: { payment_asset: 'usdc' } });
 });
 describe('live launch readiness', () => {
-  it('does not require indexed auctionEnabled (null in Setup) but does require the shared claims minter', async () => {
+  it('does not require indexed auctionEnabled (null in Setup); an assurance drive launches by itself', async () => {
     const result = await readLaunchReadiness('dao-A', { ...config, auctionEnabled: null });
     expect(launchReadinessIssues(result, 'wallet-A')).toEqual([]);
-    expect(launchReadinessIssues({ ...result, platformMinter: null }, 'wallet-A')).toEqual([
-      'No shared claims minter is registered on this network yet. Launch is possible once the platform registers one.'
+    const drive = {
+      claim_minter: 'claims-A',
+      deadline: 1n,
+      list_id: 0,
+      launch_config: { launch_auction: false, launch_marketplace: true }
+    };
+    expect(launchReadinessIssues({ ...result, assurance: drive }, 'wallet-A')).toEqual([
+      'This community is in a launch drive. Once enough people have claimed, anyone can launch it from the claims page.'
     ]);
     expect(mocks.supply).toHaveBeenCalled();
+  });
+  it('checks only the modules the DAO has', async () => {
+    mocks.pending.mockResolvedValue({
+      result: { ...ready().pending, addresses: { ...addresses, auction: null, marketplace: null, claims: null } }
+    });
+    mocks.auction.mockClear().mockResolvedValue({ result: { payment_token: 'changed' } });
+    expect((await readLaunchReadiness('dao-A', config)).paymentAssetsMatch).toBe(true);
+    expect(mocks.auction).not.toHaveBeenCalled();
   });
   it('requires nonzero actual supply, even with auction launch selected', () => {
     expect(launchReadinessIssues({ ...ready(), supply: 0n }, 'wallet-A')).toContain(
       'Mint at least one founder token before launch.'
     );
   });
-  it('requires both payment assets to match, even for disabled modules', async () => {
+  it('requires every module’s payment asset to match, even one not launched', async () => {
     mocks.marketplace.mockResolvedValue({ result: { payment_asset: 'changed' } });
+    expect((await readLaunchReadiness('dao-A', config)).paymentAssetsMatch).toBe(false);
+    mocks.marketplace.mockResolvedValue({ result: { payment_asset: 'usdc' } });
+    mocks.claims.mockResolvedValue({ result: 'changed' });
     expect((await readLaunchReadiness('dao-A', config)).paymentAssetsMatch).toBe(false);
   });
   it('fails closed if any live read fails', async () => {

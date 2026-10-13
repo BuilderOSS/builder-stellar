@@ -77,14 +77,20 @@ export function transferAuthorization(asset: string, payer: string, to: string, 
   ]);
 }
 
-export function purchaseRootArgs(listing: MarketplaceListing, buyer: string) {
-  return [
-    listing.kind === 'primary'
-      ? nativeToScVal(BigInt(listing.id), { type: 'u64' })
-      : nativeToScVal(Number(listing.id), { type: 'u32' }),
-    new Address(buyer).toScVal(),
-    nativeToScVal(BigInt(listing.price), { type: 'i128' })
-  ];
+/** The pool page and token the server picks in the fixtures. */
+export const POOL_PICK = { page: 0, tokenId: 42 };
+
+export function purchaseRootArgs(listing: MarketplaceListing, buyer: string, pick = POOL_PICK) {
+  const maxPrice = nativeToScVal(BigInt(listing.price), { type: 'i128' });
+  return listing.kind === 'pool'
+    ? [
+        nativeToScVal(Number(listing.id), { type: 'u32' }),
+        nativeToScVal(pick.page, { type: 'u32' }),
+        nativeToScVal(pick.tokenId, { type: 'u32' }),
+        new Address(buyer).toScVal(),
+        maxPrice
+      ]
+    : [nativeToScVal(Number(listing.id), { type: 'u32' }), new Address(buyer).toScVal(), maxPrice];
 }
 
 export function purchaseFixture(
@@ -101,20 +107,22 @@ export function purchaseFixture(
     source?: string;
     operationSource?: string;
     extraOperation?: boolean;
+    /** The pool stock page and token the purchase names (pools only). */
+    pick?: { page: number; tokenId: number };
   } = {}
 ) {
   const price = BigInt(listing.price);
-  const fee = listing.kind === 'primary' ? 0n : marketplaceFee(listing.price, listing.feeBps);
+  const fee = listing.kind === 'pool' ? 0n : marketplaceFee(listing.price, listing.feeBps);
   const children =
     changes.children ??
-    (listing.kind === 'primary'
+    (listing.kind === 'pool'
       ? [transferAuthorization(listing.paymentAsset, buyer, treasury, price)]
       : [
           ...(fee > 0n ? [transferAuthorization(listing.paymentAsset, buyer, treasury, fee)] : []),
           ...(price > fee ? [transferAuthorization(listing.paymentAsset, buyer, listing.seller!, price - fee)] : [])
         ]);
-  const method = listing.kind === 'primary' ? 'buy_primary' : 'buy';
-  const args = purchaseRootArgs(listing, buyer);
+  const method = listing.kind === 'pool' ? 'buy_from_pool' : 'buy';
+  const args = purchaseRootArgs(listing, buyer, changes.pick);
   const auth = changes.auth ?? [sourceAuthorization(authorizedCall(listing.contractId, method, args, children))];
   const call = new Contract(changes.hostContract ?? listing.contractId).call(
     changes.hostMethod ?? method,

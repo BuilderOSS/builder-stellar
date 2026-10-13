@@ -2,7 +2,7 @@
 import { useState } from 'react';
 
 import { Disclosure, Input } from '@/components/ui';
-import { membershipTypeOf, votingPaceOf } from '@/lib/create-dao-presets';
+import { membershipRulesOf, membershipTypeOf, votingPaceOf } from '@/lib/create-dao-presets';
 import { configuredCreationNetwork, creationAssets } from '@/lib/create-dao-schema';
 import { formatDuration } from '@/lib/duration';
 import { useCreateDaoStore } from '@/stores/create-dao-store';
@@ -15,6 +15,8 @@ export function ReviewStep({ connectedAddress }: { connectedAddress?: string }) 
   const basic = useCreateDaoStore((s) => s.basicInfo);
   const auction = useCreateDaoStore((s) => s.auction);
   const market = useCreateDaoStore((s) => s.marketplace);
+  const claims = useCreateDaoStore((s) => s.claims);
+  const tokenSettings = useCreateDaoStore((s) => s.tokenSettings);
   const governance = useCreateDaoStore((s) => s.governance);
   const preview = useCreateDaoStore((s) => s.imagePreview);
   const errors = useCreateDaoStore((s) => s.validationErrors);
@@ -25,19 +27,33 @@ export function ReviewStep({ connectedAddress }: { connectedAddress?: string }) 
     ['Name', [basic.tokenName, basic.tokenSymbol].filter(Boolean).join(' · ') || 'Not set yet'],
     ['About', basic.description || 'Not set yet'],
     ['Membership', membershipTypeOf(auction, market).title],
+    [
+      'Who can hold one',
+      membershipRulesOf(tokenSettings)?.description ??
+        [
+          tokenSettings.transfersLocked
+            ? 'Memberships change hands only with DAO approval.'
+            : 'Members can sell their tokens.',
+          tokenSettings.membersOnlyDelegation ? 'Votes stay among members.' : 'Votes can be delegated to anyone.',
+          tokenSettings.daoRecovery
+            ? 'The DAO can move any membership by vote.'
+            : 'Only a member moves their own token.'
+        ].join(' ')
+    ],
     ['Voting pace', votingPaceOf(governance)?.title ?? 'Custom'],
     [
       'Auctions',
       auction.enabled
         ? `On at launch. Each runs ${formatDuration(auction.duration, { style: 'long' })}, starting at ${auction.reservePrice} ${assetName(auction.paymentAsset)}. Late bids add ${formatDuration(auction.timeBuffer, { style: 'long' })}.`
-        : 'Off at launch. You can turn them on later by vote.'
+        : 'None. A vote can add an auction later.'
     ],
     [
       'Market',
       market.enabled
-        ? `On at launch. Prices in ${assetName(market.paymentAsset)}, ${market.secondaryFeeBps / 100}% fee on resales.`
-        : 'Off at launch.'
+        ? `On at launch. Prices in ${assetName(market.paymentAsset)}, ${market.secondaryFeeBps / 100}% fee on resales${tokenSettings.transfersLocked ? ' (resale stays closed while memberships are locked)' : ''}.`
+        : 'None. A vote can add a market later.'
     ],
+    ['Claim lists', claims.enabled ? 'On: members claim tokens from lists published in Setup or by vote.' : 'None.'],
     [
       'Voting',
       `Opens ${formatDuration(governance.votingDelay, { style: 'long' })} after a proposal, stays open ${formatDuration(governance.votingPeriod, { style: 'long' })}.`

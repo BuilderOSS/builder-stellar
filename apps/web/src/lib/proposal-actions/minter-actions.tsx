@@ -1,79 +1,65 @@
 import { CodeBlock, Text } from '@/components/ui';
-import { type AllocationDraft, validateAllocation } from '@/lib/minter/proposal-actions';
+import { claimListCall, type ClaimListDraft, validateClaimListDraft } from '@/lib/minter/proposal-actions';
 
 import type { ActionHandler } from './types';
 
-type ScopedDraft = AllocationDraft & { tokenContractId?: string; minterContractId?: string };
+type ScopedDraft = ClaimListDraft & { claimsContractId?: string };
 
-export const minterAllocationHandlers: ActionHandler<ScopedDraft>[] = (
-  ['set-merkle-root', 'minter-batch-mint'] as const
-).map((type) => ({
-  type,
-  label: type === 'set-merkle-root' ? 'Open a claim round' : 'Allocate tokens in a batch',
-  description:
-    'Prepare allocations in Claims Admin after current registration, Token admin, Live state and mint authority are verified.',
+/** Open a ClaimMinter claim list. Prepared in Claims admin, queued after its allowance grant. */
+export const openClaimListHandler: ActionHandler<ScopedDraft> = {
+  type: 'open-claim-list',
+  label: 'Open a claim list',
+  description: 'Prepare the list in Claims admin: it grants the claims module an allowance and opens the list.',
   group: 'Allocations',
   FormComponent: ({ value }) => (
     <>
       <Text>
-        Prepare this allocation in Claims Admin. A new claim list starts a new claim round, and its full list is
-        published so anyone can check it. Batch allocation mints immediately on execution.
+        Prepare a claim list in Claims admin. Its full list is published so anyone can check it, and members claim their
+        tokens themselves, paying the list price.
       </Text>
       <CodeBlock>{JSON.stringify(value, null, 2)}</CodeBlock>
     </>
   ),
-  getDefaultValues: () =>
-    type === 'set-merkle-root' ? { type, root: '', treeUri: '' } : { type, recipients: [], amounts: [] },
+  getDefaultValues: () => ({
+    type: 'open-claim-list',
+    root: '',
+    treeUri: '',
+    asset: '',
+    price: '0',
+    expiresAt: 0,
+    total: 0
+  }),
   validate: (data, context) => {
     try {
-      if (data.type !== type) throw new Error('Allocation action type mismatch.');
-      validateAllocation(data);
-      if (
-        !context.config.minterContractId ||
-        !context.config.minterSpec?.length ||
-        data.tokenContractId !== context.config.tokenContractId ||
-        data.minterContractId !== context.config.minterContractId
-      )
-        throw new Error('Prepare an allocation from verified current Claims Admin state.');
+      validateClaimListDraft(data);
+      if (!context.config.claimsContractId || data.claimsContractId !== context.config.claimsContractId)
+        throw new Error('Prepare a claim list from the verified Claims admin state.');
       return { valid: true };
     } catch (error) {
-      return { valid: false, message: error instanceof Error ? error.message : 'Invalid allocation.' };
+      return { valid: false, message: error instanceof Error ? error.message : 'Invalid claim list.' };
     }
   },
   serialize: (data, context) => ({
     ...data,
     id: crypto.randomUUID(),
-    type,
+    type: 'open-claim-list',
     recipient: '',
-    amount: '',
-    tokenContractId: context.config.tokenContractId,
-    minterContractId: context.config.minterContractId
+    amount: String(data.total),
+    claimsContractId: context.config.claimsContractId
   }),
-  deserialize: (action) => {
-    const scope = { tokenContractId: action.tokenContractId, minterContractId: action.minterContractId };
-    if (action.type === 'set-merkle-root')
-      return { ...scope, type: action.type, root: action.root, treeUri: action.treeUri };
-    if (action.type === 'minter-batch-mint')
-      return { ...scope, type: action.type, recipients: action.recipients, amounts: action.amounts };
-    throw new Error('Invalid allocation action type.');
-  },
+  deserialize: (action) => ({
+    type: 'open-claim-list',
+    root: action.root,
+    treeUri: action.treeUri,
+    asset: action.asset,
+    price: String(action.price),
+    expiresAt: Number(action.expiresAt),
+    total: Number(action.total),
+    claimsContractId: action.claimsContractId
+  }),
   buildCallVector: (data, context) => {
-    if (data.type !== type) throw new Error('Allocation action type mismatch.');
-    validateAllocation(data);
-    if (
-      data.tokenContractId !== context.config.tokenContractId ||
-      !context.config.minterContractId ||
-      data.minterContractId !== context.config.minterContractId
-    )
-      throw new Error('Allocation DAO or current Minter changed; review again.');
-    const args =
-      data.type === 'set-merkle-root'
-        ? [context.tokenContractId, data.root, data.treeUri]
-        : [context.tokenContractId, data.recipients, data.amounts];
-    return {
-      target: context.config.minterContractId,
-      function: data.type === 'set-merkle-root' ? 'set_merkle_root' : 'mint_batch',
-      args
-    };
+    if (!context.config.claimsContractId || data.claimsContractId !== context.config.claimsContractId)
+      throw new Error('The claims module changed; review again.');
+    return claimListCall(data, context.config.claimsContractId);
   }
-}));
+};

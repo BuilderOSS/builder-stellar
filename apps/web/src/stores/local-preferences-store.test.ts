@@ -37,7 +37,6 @@ it('retains submitted launch hashes and actual module choices on reload', async 
   useLocalPreferencesStore.getState().setLaunch('scoped-dao', {
     auction: false,
     marketplace: true,
-    minter: null,
     hash: 'saved-hash',
     status: 'submitted'
   });
@@ -51,18 +50,18 @@ it('retains submitted launch hashes and actual module choices on reload', async 
 });
 it('keeps a launch receipt independent from a stale preference autosave', async () => {
   const store = useLocalPreferencesStore.getState();
-  store.setLaunch('dao', { auction: true, marketplace: false, minter: null });
+  store.setLaunch('dao', { auction: true, marketplace: false });
   const stale = map.get('dao.local-preferences.v1')!;
-  store.setLaunch('dao', { auction: true, marketplace: false, minter: null, hash: 'saved-hash', status: 'submitted' });
+  store.setLaunch('dao', { auction: true, marketplace: false, hash: 'saved-hash', status: 'submitted' });
   map.set('dao.local-preferences.v1', stale);
   await useLocalPreferencesStore.persist.rehydrate();
   expect(useLocalPreferencesStore.getState().launches.dao.hash).toBe('saved-hash');
-  expect(() => store.setLaunch('dao', { auction: false, marketplace: false, minter: null })).toThrow('Recover');
+  expect(() => store.setLaunch('dao', { auction: false, marketplace: false })).toThrow('Recover');
 });
 it('reports quota failures before a transaction can be sent', () => {
   localStorage.setItem.mockImplementation(() => {
     throw new Error('quota');
   });
-  useLocalPreferencesStore.getState().setLaunch('dao', { auction: false, marketplace: false, minter: null });
+  useLocalPreferencesStore.getState().setLaunch('dao', { auction: false, marketplace: false });
   expect(assertPreferencesSaved).toThrow('recovery');
 });

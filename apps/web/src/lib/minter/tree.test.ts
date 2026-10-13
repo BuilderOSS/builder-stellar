@@ -15,7 +15,7 @@ describe('published claim trees', () => {
   it('produces proofs the contract algorithm accepts, for every size from 1 to 33', () => {
     for (let n = 1; n <= 33; n += 1) {
       const list = entries(n);
-      const tree = buildClaimTree(list, { network: NETWORK, token: TOKEN, round: 1 });
+      const tree = buildClaimTree(list, { network: NETWORK, token: TOKEN, list: 1 });
       for (const { address, amount } of list) {
         const claim = tree.claims[address]!;
         expect(claim.amount).toBe(amount);
@@ -27,14 +27,14 @@ describe('published claim trees', () => {
 
   it('is deterministic from the claim set, whatever the input order', () => {
     const list = entries(9);
-    const a = buildClaimTree(list, { network: NETWORK, token: TOKEN, round: 2 });
-    const b = buildClaimTree([...list].reverse(), { network: NETWORK, token: TOKEN, round: 2 });
+    const a = buildClaimTree(list, { network: NETWORK, token: TOKEN, list: 2 });
+    const b = buildClaimTree([...list].reverse(), { network: NETWORK, token: TOKEN, list: 2 });
     expect(b.merkleRoot).toBe(a.merkleRoot);
   });
 
   it('accepts a file only when the rebuilt root equals the chain root, and never trusts its proofs', () => {
     const list = entries(5);
-    const tree = buildClaimTree(list, { network: NETWORK, token: TOKEN, round: 1 });
+    const tree = buildClaimTree(list, { network: NETWORK, token: TOKEN, list: 1 });
     const scope = { network: NETWORK, token: TOKEN, root: tree.merkleRoot };
     const forged = structuredClone(tree);
     forged.claims[list[0]!.address]!.proof = ['00'.repeat(32)];
@@ -54,9 +54,9 @@ describe('published claim trees', () => {
     expect(() => validateClaimEntries([a!, a!])).toThrow('appears twice');
     expect(() => validateClaimEntries([{ address: 'nope', amount: '1' }])).toThrow('not a Stellar address');
     expect(() => validateClaimEntries([{ ...a!, amount: '0' }])).toThrow();
-    // One claim is one batch_mint; the contract refuses a batch over the event budget.
-    expect(() => validateClaimEntries([{ ...a!, amount: String(MAX_BATCH_MINT + 1) }])).toThrow('at most');
-    expect(() => validateClaimEntries([{ ...a!, amount: String(MAX_BATCH_MINT) }])).not.toThrow();
+    // An allocation above one claim's 43 tokens is claimed over several transactions.
+    expect(() => validateClaimEntries([{ ...a!, amount: String(MAX_BATCH_MINT + 1) }])).not.toThrow();
+    expect(() => validateClaimEntries([{ ...a!, amount: '4294967296' }])).toThrow('more than a list can hold');
     expect(MAX_TREE_CLAIMS).toBe(10_000);
   });
 });

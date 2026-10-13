@@ -72,7 +72,7 @@ export function LaunchCard({
   const { launchDao } = useDaoDeployment(session.address, config.name);
   const deployment = getDeploymentConfig();
   const key = `${preferenceScopeKey({ network: config.name, deployment: deployment.managerAddress, wallet: session.address || null })}:${daoId}`;
-  const choice = launches[key] ?? { auction: false, marketplace: false, minter: null };
+  const choice = launches[key] ?? { auction: false, marketplace: false };
 
   // First visit: start from what was chosen when the community was created.
   useEffect(() => {
@@ -93,8 +93,7 @@ export function LaunchCard({
       if (!prefs.launches[key] && draft)
         prefs.setLaunch(key, {
           auction: draft.configuration.auction.enabled,
-          marketplace: draft.configuration.marketplace.enabled,
-          minter: null
+          marketplace: draft.configuration.marketplace.enabled
         });
       setReady(true);
     })();
@@ -133,16 +132,10 @@ export function LaunchCard({
           await refresh(fresh);
           throw new Error(issues.join(' '));
         }
-        if (!fresh.platformMinter || fresh.platformMinter !== readiness?.platformMinter)
-          throw new Error('The shared claims minter changed. Refresh and check it again.');
       }
       await launchDao(
         daoId,
-        {
-          launch_auction: choice.auction,
-          launch_marketplace: choice.marketplace,
-          minter: readiness?.platformMinter ?? ''
-        },
+        { launch_auction: choice.auction, launch_marketplace: choice.marketplace },
         { rebroadcast }
       );
       await refresh();
@@ -212,13 +205,6 @@ export function LaunchCard({
                 onCheckedChange={(marketplace) => change({ marketplace })}
               />
             ) : null}
-            <Disclosure title="Technical details">
-              {readiness?.platformMinter ? (
-                <Address value={readiness.platformMinter} label="Shared claims minter" />
-              ) : (
-                <p className={hint}>No claims minter is registered on this network yet, so launch has to wait.</p>
-              )}
-            </Disclosure>
           </div>
 
           <div className={group}>
@@ -226,9 +212,10 @@ export function LaunchCard({
             <ul className={consequences}>
               <li>Your setup admin rights pass to the community treasury.</li>
               <li>After this, changes go through proposals that members vote on.</li>
-              <li>
-                Builder&apos;s shared claims minter can mint tokens, but only for claim rounds your members approve.
-              </li>
+              {config.auctionContractId && choice.auction ? (
+                <li>The auction can mint one token per auction for as long as it runs.</li>
+              ) : null}
+              <li>Other sales (quick-buy pools, claim lists) mint only what a vote allows them.</li>
               {slug ? <li>Your link /dao/{slug} is claimed. Changing it later takes a vote.</li> : null}
             </ul>
           </div>
@@ -239,9 +226,16 @@ export function LaunchCard({
         <Callout key={blocker.id} variant="error" title={blocker.title} description={blocker.detail} />
       ))}
       {readiness?.pending ? (
-        <Disclosure>
-          <Address value={readiness.pending.auction_payment_asset} label="Auction payment asset" />
-          <Address value={readiness.pending.marketplace_payment_asset} label="Market payment asset" />
+        <Disclosure title="Technical details">
+          {readiness.pending.auction_payment_asset ? (
+            <Address value={readiness.pending.auction_payment_asset} label="Auction payment asset" />
+          ) : null}
+          {readiness.pending.marketplace_payment_asset ? (
+            <Address value={readiness.pending.marketplace_payment_asset} label="Market payment asset" />
+          ) : null}
+          {readiness.pending.claims_payment_asset ? (
+            <Address value={readiness.pending.claims_payment_asset} label="Claims payment asset" />
+          ) : null}
         </Disclosure>
       ) : null}
       {error ? <Callout variant="error" title="Launch needs attention" description={error} role="alert" /> : null}

@@ -130,6 +130,8 @@ export async function assertSecondaryPurchaseCycle(
       event.data.price === undefined ||
       event.data.expires_at === undefined ||
       event.data.payment_asset === undefined ||
+      event.data.seller === undefined ||
+      event.data.fee_bps === undefined ||
       !matchesSnapshot(listing, {
         price: event.data.price,
         expires_at: event.data.expires_at,

@@ -25,6 +25,9 @@ importers:
       '@builder-stellar/auction-bindings':
         specifier: workspace:*
         version: link:../../packages/auction-bindings
+      '@builder-stellar/claim-minter-bindings':
+        specifier: workspace:*
+        version: link:../../packages/claim-minter-bindings
       '@builder-stellar/governor-bindings':
         specifier: workspace:*
         version: link:../../packages/governor-bindings

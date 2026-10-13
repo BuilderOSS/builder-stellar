@@ -1,7 +1,7 @@
 /**
- * Published claim trees (docs/STORAGE_DIET.md § 4 Minter, D18).
+ * Published claim trees (docs/STORAGE_DIET.md § 4 Minter, D18; one per ClaimMinter list).
  *
- * Every root a DAO sets comes with the full tree at an `ipfs://` `tree_uri`, in
+ * Every list a DAO opens comes with the full tree at an `ipfs://` `tree_uri`, in
  * the Uniswap merkle-distributor shape with an explicit algorithm header. Our
  * hashing differs from the EVM defaults, so no stock EVM loader verifies it and
  * the format is never labelled as one:
@@ -9,7 +9,7 @@
  *   {
  *     "format": "builder-stellar-merkle-v1",
  *     "hash": "sha256", "leaf": "sha256(scval_xdr(address) || u128_be(amount))", "node": "sha256(sorted(a, b))",
- *     "network": "<passphrase>", "token": "C…", "round": 3, "merkleRoot": "<64 hex>", "tokenTotal": "1234",
+ *     "network": "<passphrase>", "token": "C…", "list": 3, "merkleRoot": "<64 hex>", "tokenTotal": "1234",
  *     "claims": { "G…": { "amount": "5", "proof": ["<64 hex>", …] } }
  *   }
  *
@@ -20,8 +20,6 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { StrKey } from '@stellar/stellar-sdk';
 import { Buffer } from 'buffer';
-
-import { MAX_BATCH_MINT } from '@/lib/batch-mint-budget';
 
 import { claimAmount, claimLeaf } from './proof';
 
@@ -40,7 +38,8 @@ export type ClaimTreeFile = {
   node: typeof TREE_NODE;
   network: string;
   token: string;
-  round: number;
+  /** The ClaimMinter list id the tree was built for (informational: the root is what binds it). */
+  list: number;
   merkleRoot: string;
   tokenTotal: string;
   claims: Record<string, { amount: string; proof: string[] }>;
@@ -80,10 +79,13 @@ function proofFor(layers: Buffer[][], leafIndex: Map<string, number>, leaf: Buff
   return proof;
 }
 
+/** A list holds at most this many tokens (its `total` is a u32). */
+const MAX_LIST_TOKENS = 0xffffffffn;
+
 /**
  * Validate a claim list: valid addresses, positive amounts, no duplicates,
- * within the cap. A claim mints its whole amount in one `batch_mint`, so an
- * amount over `MAX_BATCH_MINT` could never be claimed (`BatchTooLarge`).
+ * within the cap. An allocation larger than one claim's 43 tokens is claimed
+ * over several transactions (the ClaimMinter tracks each claimer's progress).
  */
 export function validateClaimEntries(entries: ClaimEntry[]) {
   if (!entries.length) throw new Error('Add at least one recipient.');
@@ -94,15 +96,16 @@ export function validateClaimEntries(entries: ClaimEntry[]) {
       throw new Error(`${address || 'An empty address'} is not a Stellar address.`);
     if (seen.has(address)) throw new Error(`${address} appears twice. Combine its amounts into one line.`);
     seen.add(address);
-    if (claimAmount(amount) > BigInt(MAX_BATCH_MINT))
-      throw new Error(`${address} would claim ${amount} tokens; one claim mints at most ${MAX_BATCH_MINT}.`);
+    if (claimAmount(amount) > MAX_LIST_TOKENS) throw new Error(`${address} would claim more than a list can hold.`);
   }
+  const total = entries.reduce((sum, { amount }) => sum + BigInt(amount), 0n);
+  if (total > MAX_LIST_TOKENS) throw new Error('The list allocates more tokens than a list can hold.');
 }
 
 /** Build the published file for a claim list. */
 export function buildClaimTree(
   entries: ClaimEntry[],
-  scope: { network: string; token: string; round: number }
+  scope: { network: string; token: string; list: number }
 ): ClaimTreeFile {
   validateClaimEntries(entries);
   const leaves = entries.map(({ address, amount }) => claimLeaf(address, amount));
@@ -119,7 +122,7 @@ export function buildClaimTree(
     node: TREE_NODE,
     network: scope.network,
     token: scope.token,
-    round: scope.round,
+    list: scope.list,
     merkleRoot: layers[layers.length - 1]![0]!.toString('hex'),
     tokenTotal: entries.reduce((sum, { amount }) => sum + BigInt(amount), 0n).toString(),
     claims
@@ -149,7 +152,7 @@ export function verifyClaimTree(
   const rebuilt = buildClaimTree(entries, {
     network: expected.network,
     token: expected.token,
-    round: Number(file.round)
+    list: Number(file.list)
   });
   if (rebuilt.merkleRoot !== expected.root.toLowerCase())
     throw new Error('The claim list does not match the root on chain.');

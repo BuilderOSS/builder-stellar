@@ -44,8 +44,10 @@ export interface DaoConfig {
   marketplace_contract: string | null;
   treasury_contract: string | null;
   metadata_contract: string | null;
-  /** The shared Minter pinned at launch; null while pending. */
-  minter_contract: string | null;
+  /** The DAO's ClaimMinter from its module registry; null when it has none. */
+  claims_contract: string | null;
+  /** An assurance drive's outcome (open, launched, released); null without one. */
+  assurance_outcome: 'open' | 'launched' | 'released' | null;
 
   // Token Metadata (from DaoCreationParams)
   token_name: string | null;
@@ -93,7 +95,8 @@ export interface DaoConfig {
 
   /**
    * Something to buy right now, from the index. Only set by withLiveAvailability:
-   * an open auction still taking bids, and listings that are open and unexpired.
+   * an open auction still taking bids, and listings and pools that are open,
+   * unexpired and (pools) in stock.
    */
   auction_live?: boolean;
   listings_open?: number;
@@ -262,7 +265,11 @@ function mapDaoConfig(row: DaoRow, network: NetworkName, view: ProfileView | und
     marketplace_contract: row.marketplaceContract,
     treasury_contract: row.treasuryContract,
     metadata_contract: row.metadataContract,
-    minter_contract: row.minterContract,
+    claims_contract: row.claimsContract,
+    assurance_outcome:
+      row.assuranceOutcome === 'open' || row.assuranceOutcome === 'launched' || row.assuranceOutcome === 'released'
+        ? row.assuranceOutcome
+        : null,
     token_name: row.tokenName,
     token_symbol: row.tokenSymbol,
     profile,
@@ -354,7 +361,7 @@ async function addLiveAvailability(daos: DaoConfig[]): Promise<DaoConfig[]> {
 
   const now = BigInt(Math.floor(Date.now() / 1000));
   const listingWhere = { deploymentId: DEPLOYMENT_ID, OR: marketScopes, status: 'open', expiresAt: { gt: now } };
-  const [auctions, primary, secondary] = await Promise.all([
+  const [auctions, pools, secondary] = await Promise.all([
     auctionScopes.length
       ? prisma.auctionCurrentAuction.findMany({
           where: { deploymentId: DEPLOYMENT_ID, OR: auctionScopes, settled: false, cancelled: false },
@@ -362,7 +369,11 @@ async function addLiveAvailability(daos: DaoConfig[]): Promise<DaoConfig[]> {
         })
       : [],
     marketScopes.length
-      ? prisma.marketplacePrimaryListing.groupBy({ by: ['daoId'], where: listingWhere, _count: { _all: true } })
+      ? prisma.marketplacePool.groupBy({
+          by: ['daoId'],
+          where: { ...listingWhere, inStock: { gt: 0 } },
+          _count: { _all: true }
+        })
       : [],
     marketScopes.length
       ? prisma.marketplaceSecondaryListing.groupBy({ by: ['daoId'], where: listingWhere, _count: { _all: true } })
@@ -374,12 +385,31 @@ async function addLiveAvailability(daos: DaoConfig[]): Promise<DaoConfig[]> {
   const live = new Set(auctions.filter((a) => a.currentEndSeconds > now).map((a) => a.daoId));
 
   const listings = new Map<string, number>();
-  for (const row of [...primary, ...secondary])
-    listings.set(row.daoId, (listings.get(row.daoId) ?? 0) + row._count._all);
+  for (const row of [...pools, ...secondary]) listings.set(row.daoId, (listings.get(row.daoId) ?? 0) + row._count._all);
 
   return daos.map((dao) => ({
     ...dao,
     auction_live: live.has(dao.dao_id),
     listings_open: listings.get(dao.dao_id) ?? 0
   }));
+}
+
+/** The membership switches a DAO's Token has in force (docs/designs/locked-tokens.md). */
+export type TokenSettings = { transfersLocked: boolean; membersOnlyDelegation: boolean; daoRecovery: boolean };
+
+export const OPEN_TOKEN_SETTINGS: TokenSettings = {
+  transfersLocked: false,
+  membersOnlyDelegation: false,
+  daoRecovery: false
+};
+
+/** token.settings from the index; all off (an open DAO) until the Token's first event is indexed. */
+export async function getTokenSettingsFromDatabase(daoId: string): Promise<TokenSettings> {
+  const row = await prisma.tokenSettings.findFirst({ where: { deploymentId: DEPLOYMENT_ID, daoId } });
+  if (!row) return { ...OPEN_TOKEN_SETTINGS };
+  return {
+    transfersLocked: row.transfersLocked,
+    membersOnlyDelegation: row.membersOnlyDelegation,
+    daoRecovery: row.daoRecovery
+  };
 }

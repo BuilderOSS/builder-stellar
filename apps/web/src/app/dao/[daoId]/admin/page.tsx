@@ -54,7 +54,8 @@ export default function AdminPage() {
 
   const token = useAdminTokenState(config, session.address);
   const isAdmin = Boolean(session.address && token.data?.admin === session.address);
-  const hasMintAccess = Boolean(isAdmin || token.data?.mintAuthority);
+  // Only the Token admin mints directly; modules mint against their allowances.
+  const hasMintAccess = Boolean(isAdmin);
   const hasGovernanceAccess = Boolean(session.address && governorAdmin === session.address);
   const canProposeAdminActions = treasuryIsAdmin(config, tokenAdmin) || treasuryIsAdmin(config, governorAdmin);
   const canProposeMint =

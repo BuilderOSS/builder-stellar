@@ -1,27 +1,24 @@
 'use client';
 
 import { Client as ManagerClient } from '@builder-stellar/manager-bindings';
-import { Client as TokenClient } from '@builder-stellar/token-bindings';
 import { Server } from '@stellar/stellar-sdk/rpc';
 import { Buffer } from 'buffer';
 import useSWR from 'swr';
 
 import { adminReadOptions } from '@/lib/admin-surfaces';
-import { effectiveUpgradeDelay, instanceKey, instanceWasmHash, rpcLedgerRead } from '@/lib/chain-reads/renewal';
+import { instanceKey, instanceWasmHash, rpcLedgerRead } from '@/lib/chain-reads/renewal';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { getDeploymentConfig } from '@/lib/deployment-config';
 
 /**
- * Upgrades of the platform contracts every DAO depends on (docs/STORAGE_DIET.md
- * D39, D42): the Manager (registry and factory) and the shared Minter (a mint
- * authority on every Token). Both upgrade only to the hash the registry
- * announces as latest, and only `upgrade_delay()` ledgers after the later of
- * the approval and the announcement, so "running → latest" is every upgrade
- * that can happen and this display sees each for the full notice. A DAO that
- * distrusts a pending Minter upgrade revokes the Minter's mint authority by
- * proposal within that notice.
+ * Upgrades of the platform contract every DAO depends on (docs/STORAGE_DIET.md
+ * D39, D42): the Manager (registry and factory). It upgrades only to the hash the
+ * registry announces as latest, and only `upgrade_delay()` ledgers after the later
+ * of the approval and the announcement, so "running → latest" is every upgrade
+ * that can happen and this display sees it for the full notice. Every other
+ * contract a DAO runs, its ClaimMinter included, upgrades only by its own vote.
  */
-export type PlatformContract = 'manager' | 'minter';
+export type PlatformContract = 'manager';
 
 export type PendingUpgrade = {
   toHash: string;
@@ -48,9 +45,6 @@ export type PlatformContractState = {
 export type PlatformUpgrades = {
   latestLedger: number;
   manager: PlatformContractState | null;
-  minter: PlatformContractState | null;
-  /** Whether the shared Minter currently holds mint authority on this DAO's token. */
-  minterAuthority: boolean | null;
   /** Reads that failed, so the display can say it is incomplete rather than quiet. */
   errors: string[];
 };
@@ -78,18 +72,11 @@ export type MemberNotice =
   | { kind: 'unchecked' };
 
 /**
- * What members should hear on the community home page. A pending Manager
- * upgrade counts as a pending Minter upgrade: the Minter takes its approval
- * and notice answers from the Manager, so new Manager code controls minting
- * for every DAO (final review, issue 1). Nothing is said once the Minter
- * holds no mint authority here, since that is the opt-out. When a read
- * failed, say so rather than show the same empty space as "nothing pending".
+ * What members should hear on the community home page: a pending Manager upgrade.
+ * When a read failed, say so rather than show the same empty space as "nothing pending".
  */
-export function memberNotice(
-  data: Pick<PlatformUpgrades, 'manager' | 'minter' | 'minterAuthority' | 'errors'>
-): MemberNotice | null {
-  if (data.minterAuthority === false) return null;
-  const pending = [data.manager, data.minter]
+export function memberNotice(data: Pick<PlatformUpgrades, 'manager' | 'errors'>): MemberNotice | null {
+  const pending = [data.manager]
     .flatMap((state) =>
       state?.pending && !state.pending.revoked ? [{ contract: state.contract, ...state.pending }] : []
     )
@@ -112,7 +99,6 @@ export async function loadPlatformUpgrades(
 ): Promise<PlatformUpgrades> {
   const managerAddress = getDeploymentConfig().managerAddress;
   const manager = new ManagerClient(adminReadOptions(config, managerAddress, address));
-  const token = new TokenClient(adminReadOptions(config, config.tokenContractId, address));
   const server = new Server(config.rpcUrl, { allowHttp: config.rpcUrl.startsWith('http://') });
   const read = rpcLedgerRead(server);
   const errors: string[] = [];
@@ -125,18 +111,11 @@ export async function loadPlatformUpgrades(
     }
   };
 
-  const minterAddress =
-    config.minterContractId || (await attempt('token.minter', async () => (await token.minter()).result)) || null;
-  const keys = [instanceKey(managerAddress), ...(minterAddress ? [instanceKey(minterAddress)] : [])];
   // Every read settles on its own: one missing registration must not blank the display.
-  const [entries, managerNotice, managerLatest, minterLatest, authority] = await Promise.all([
-    attempt('ledger entries', () => read(keys)),
+  const [entries, managerNotice, managerLatest] = await Promise.all([
+    attempt('ledger entries', () => read([instanceKey(managerAddress)])),
     attempt('manager.upgrade_delay', async () => Number((await manager.upgrade_delay()).result)),
-    attempt('latest Manager', () => latestOf(manager, 'Manager')),
-    attempt('latest Minter', () => latestOf(manager, 'Minter')),
-    minterAddress
-      ? attempt('token.mint_authority', async () => (await token.mint_authority({ authority: minterAddress })).result)
-      : Promise.resolve(null)
+    attempt('latest Manager', () => latestOf(manager, 'Manager'))
   ]);
   const latestLedger = entries?.latestLedger ?? 0;
   const running = (contract: string) => {
@@ -175,27 +154,7 @@ export async function loadPlatformUpgrades(
       )
     };
   }
-  let minterState: PlatformContractState | null = null;
-  if (minterAddress && entries) {
-    const minterRunning = running(minterAddress);
-    const minterNotice = effectiveUpgradeDelay(
-      entries.entries.get(instanceKey(minterAddress).toXDR('base64')),
-      latestLedger
-    );
-    minterState = {
-      contract: 'minter',
-      address: minterAddress,
-      running: minterRunning,
-      notice: minterNotice,
-      pending: describePending(
-        minterRunning,
-        minterLatest,
-        await approved(minterRunning, minterLatest?.hash ?? null),
-        minterNotice
-      )
-    };
-  }
-  return { latestLedger, manager: managerState, minter: minterState, minterAuthority: authority, errors };
+  return { latestLedger, manager: managerState, errors };
 }
 
 /** The registry's announced latest for a name: hash, version and the ledger it was announced at (D42). */

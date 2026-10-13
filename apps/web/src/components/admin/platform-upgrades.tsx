@@ -10,9 +10,8 @@ import { memberNotice, type PlatformContractState, usePlatformUpgrades } from '@
 import { useAuthSessionStore } from '@/stores/auth-session-store';
 
 const rows = css({ display: 'grid' });
-const muted = css({ textStyle: 'caption', color: 'ink.muted', m: '0' });
 
-const LABELS = { manager: 'Builder (registry and factory)', minter: 'Shared Minter (claims and batch mints)' };
+const LABELS = { manager: 'Builder (registry and factory)' };
 
 function when(ledger: number, latestLedger: number) {
   return estimateDate(ledger, latestLedger, Date.now()).toLocaleString('en-US', {
@@ -52,31 +51,26 @@ function Row({ state, latestLedger }: { state: PlatformContractState; latestLedg
 }
 
 /**
- * Manage → Platform contracts (docs/STORAGE_DIET.md D39): what every community
- * depends on and whether an upgrade of it is pending, with the date it can
- * apply. A community that distrusts a pending Minter upgrade revokes the
- * Minter's mint authority by proposal; the notice is its window.
+ * Manage → Platform contracts (docs/STORAGE_DIET.md D39): the Manager every
+ * community depends on and whether an upgrade of it is pending, with the date
+ * it can apply.
  */
 export function PlatformUpgrades({ enabled }: { enabled: boolean }) {
-  const { routeId, daoConfig: config } = useDaoContext();
+  const { daoConfig: config } = useDaoContext();
   const session = useAuthSessionStore();
   const address = session.authStatus === 'authenticated' ? session.address : null;
   const report = usePlatformUpgrades(config, address, enabled);
   if (!enabled || !report.data) return null;
   const data = report.data;
-  const minterPending = data.minter?.pending ?? null;
   // Quiet unless something is happening, or the check itself is incomplete.
-  if (!data.manager?.pending && !minterPending && data.minterAuthority !== false && !data.errors.length) return null;
+  if (!data.manager?.pending && !data.errors.length) return null;
 
   return (
     <Section
       title="Platform contracts"
-      description="Shared by every community. Builder can only upgrade them after a notice. A community that does not trust a pending Minter upgrade can revoke the Minter's mint authority by proposal before it applies."
+      description="Shared by every community. Builder can only upgrade them after a notice. The contracts this community runs, its claims module included, change only by its own vote."
     >
-      <div className={rows}>
-        {data.manager ? <Row state={data.manager} latestLedger={data.latestLedger} /> : null}
-        {data.minter ? <Row state={data.minter} latestLedger={data.latestLedger} /> : null}
-      </div>
+      <div className={rows}>{data.manager ? <Row state={data.manager} latestLedger={data.latestLedger} /> : null}</div>
       {data.errors.length ? (
         <Callout
           variant="warning"
@@ -84,34 +78,13 @@ export function PlatformUpgrades({ enabled }: { enabled: boolean }) {
           description={`Some of it could not be read: ${data.errors.join('; ')}. A pending upgrade may not be shown.`}
         />
       ) : null}
-      {data.minterAuthority === false ? (
-        <Callout
-          variant="warning"
-          title="The shared Minter has no mint authority for this community"
-          description="Claims and batch mints through it fail until a proposal re-grants it."
-        >
-          <div>
-            <ButtonLink href={daoAdminRoute(routeId, '/token')} variant="secondary" size="sm">
-              Mint authorities
-            </ButtonLink>
-          </div>
-        </Callout>
-      ) : minterPending ? (
-        <p className={muted}>
-          To opt out of this Minter upgrade, propose removing the shared Minter from the mint authorities before it
-          applies. A proposal takes this community&apos;s full voting and queue cycle, so start early.
-        </p>
-      ) : null}
     </Section>
   );
 }
 
 /**
- * A member-visible heads-up on the community home page: a platform upgrade
- * (Builder's Manager, or the shared Minter) is pending while the shared
- * Minter still mints for this community. Members are the ones who vote on
- * removing it, so they see it, not only Manage. A Manager upgrade counts:
- * new Manager code controls the Minter's approvals and notice.
+ * A member-visible heads-up on the community home page: an upgrade of Builder's
+ * Manager (the registry and factory every community relies on) is pending.
  */
 export function PlatformUpgradeNotice({ enabled }: { enabled: boolean }) {
   const { routeId, daoConfig: config } = useDaoContext();
@@ -129,12 +102,11 @@ export function PlatformUpgradeNotice({ enabled }: { enabled: boolean }) {
         description="Some chain reads failed, so a pending upgrade of Builder's shared contracts may not be shown. Try again in a moment."
       />
     );
-  const what = notice.contract === 'manager' ? 'Builder (which also controls the shared Minter)' : 'the shared Minter';
   return (
     <Callout
       variant="info"
       title="A platform upgrade is pending"
-      description={`Builder will upgrade ${what} to ${notice.version ?? notice.toHash.slice(0, 8)} from about ${when(notice.earliestLedger, report.data.latestLedger)}. To opt out of minting under the new code, members can propose removing the shared Minter from the mint authorities before then.`}
+      description={`Builder will upgrade its registry to ${notice.version ?? notice.toHash.slice(0, 8)} from about ${when(notice.earliestLedger, report.data.latestLedger)}. It approves the upgrades this community can vote on; it cannot change this community's contracts.`}
     >
       <div>
         <ButtonLink href={daoAdminRoute(routeId, '')} variant="secondary" size="sm">

@@ -1,8 +1,28 @@
 import type { NetworkName } from '@/config/networks';
 import type { CommentItem } from '@/lib/comments';
 
-export type ListingKind = 'primary' | 'secondary';
-export type ListingStatus = 'open' | 'purchased' | 'cancelled' | 'expired' | 'awaiting-expiry';
+/** `pool`: a quick-buy pool of newly minted tokens (id = pool id); `secondary`: a resale (id = token id). */
+export type ListingKind = 'pool' | 'secondary';
+export type ListingStatus =
+  | 'open'
+  | 'purchased'
+  | 'cancelled'
+  | 'expired'
+  | 'awaiting-expiry'
+  /** A pool governance closed (its stock goes to the Treasury when swept). */
+  | 'closed'
+  /** An open pool that sold its whole size. */
+  | 'sold-out';
+/** A pool's terms and running totals; the token a buyer gets is picked from its stock at purchase. */
+export interface PoolTerms {
+  size: number;
+  stocked: number;
+  sold: number;
+  inStock: number;
+  maxPerBuyer: number;
+  maxSoldPerPeriod: number;
+  periodSecs: number;
+}
 export type Capability = 'marketplace' | 'auction' | 'metadata';
 export interface MarketplaceCommunity {
   deploymentId: string;
@@ -22,7 +42,7 @@ export interface MarketplaceListing {
   contractId: string;
   eventId: string;
   kind: ListingKind;
-  /** Primary listing id OR secondary token id, always interpreted with kind. */
+  /** Pool id OR secondary token id, always interpreted with kind. */
   id: string;
   tokenId: string | null;
   price: string;
@@ -35,11 +55,13 @@ export interface MarketplaceListing {
   createdAt: string | null;
   closedAt: string | null;
   transactionHash: string;
+  /** Set for pools only. */
+  pool?: PoolTerms;
 }
 export interface MarketplaceSale {
   eventId: string;
   kind: ListingKind;
-  listingId: string | null;
+  poolId: string | null;
   tokenId: string;
   price: string;
   fee: string | null;
@@ -80,6 +102,7 @@ export interface DaoMarketplace extends MarketplaceOffers {
 }
 export type MarketplaceAction =
   | { action: 'buy' | 'cancel' | 'expire'; kind: ListingKind; id: string; eventId: string }
+  | { action: 'restock'; kind: 'pool'; id: string; eventId: string }
   | {
       action: 'approve' | 'list';
       tokenId: string;
@@ -90,7 +113,7 @@ export type MarketplaceAction =
     }
   | { action: 'revoke'; tokenId: string }
   | { action: 'trustline'; paymentAsset: string }
-  | { action: 'comment'; kind: ListingKind; id: string; body: string };
+  | { action: 'comment'; kind: 'secondary'; id: string; body: string };
 export interface MarketplaceComments {
   deploymentId: string;
   daoId: string;

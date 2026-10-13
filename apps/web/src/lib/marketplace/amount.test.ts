@@ -21,10 +21,11 @@ describe('marketplace exact SAC amounts', () => {
     expect(() => marketplaceFee('100', 10001)).toThrow();
     expect(() => marketplaceFee(MAX_I128.toString(), 250)).toThrow('arithmetic limit');
   });
-  it('keeps u64 primary ids separate from u32 secondary token ids', () => {
-    expect(marketplaceId('18446744073709551615', 'primary')).toBe((1n << 64n) - 1n);
-    expect(() => marketplaceId('4294967296', 'secondary')).toThrow();
-    expect(marketplaceId('4294967295', 'secondary')).toBe((1n << 32n) - 1n);
-    for (const id of ['-1', '1e2', '01', '1.0']) expect(() => marketplaceId(id, 'primary')).toThrow();
+  it('keeps pool ids and secondary token ids within u32', () => {
+    for (const kind of ['pool', 'secondary'] as const) {
+      expect(() => marketplaceId('4294967296', kind)).toThrow();
+      expect(marketplaceId('4294967295', kind)).toBe((1n << 32n) - 1n);
+    }
+    for (const id of ['-1', '1e2', '01', '1.0']) expect(() => marketplaceId(id, 'pool')).toThrow();
   });
 });

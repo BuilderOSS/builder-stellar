@@ -1,26 +1,45 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useRef, useState } from 'react';
+import { Client as ManagerClient } from '@builder-stellar/manager-bindings';
+import { Client as TokenClient } from '@builder-stellar/token-bindings';
+import { Buffer } from 'buffer';
+import { useState } from 'react';
 import { css } from 'styled-system/css';
 
 import { AdminProposalDraftDialog } from '@/components/admin/admin-proposal-draft-dialog';
-import { Button, Field, FieldHelperText, FieldLabel, SegmentedControl, Textarea } from '@/components/ui';
+import {
+  Button,
+  Callout,
+  Checkbox,
+  Field,
+  FieldHelperText,
+  FieldLabel,
+  Input,
+  SegmentedControl,
+  Textarea
+} from '@/components/ui';
 import { DEPLOYMENT_ID } from '@/config/deployments.generated';
 import { useDaoContext } from '@/contexts/dao-context';
-import { daoRoute } from '@/lib/dao-routes';
-import { MAX_PROPOSAL_ACTIONS } from '@/lib/governance-limits';
-import { allocationQueueAction } from '@/lib/minter/allocation-proposal';
+import { getDeploymentConfig } from '@/lib/deployment-config';
+import { parseMarketplaceAmount } from '@/lib/marketplace/amount';
+import { claimListQueueActions } from '@/lib/minter/allocation-proposal';
+import { claimMinterClient } from '@/lib/minter/client';
+import { sendAndConfirm, walletClientOptions } from '@/lib/minter/direct';
+import { claimAssetCode } from '@/lib/minter/display';
 import { claimFetch } from '@/lib/minter/hooks';
-import { type AllocationDraft, buildAllocationDraft } from '@/lib/minter/proposal-actions';
+import { type ClaimListDraft, validateClaimListDraft } from '@/lib/minter/proposal-actions';
 import { buildClaimTree, type ClaimEntry, claimTreeJson, MAX_TREE_CLAIMS } from '@/lib/minter/tree';
 import type { ClaimState } from '@/lib/minter/types';
+import { useTransactionFeedback } from '@/lib/transaction-feedback';
 import { uploadFile } from '@/lib/upload-image';
-import { useProposalActions } from '@/lib/use-proposal-actions';
+import { useAdminProposalDraft } from '@/lib/use-admin-proposal-draft';
 import { useAuthSessionStore } from '@/stores/auth-session-store';
-import { selectDraft, useProposalComposerStore } from '@/stores/proposal-composer-store';
 
 import styles from './claims-styles';
+
+const DAY = 86_400;
+/** The Manager refuses a drive deadline further out than this (MAX_ASSURANCE_WINDOW). */
+const MAX_DRIVE_DAYS = 90;
 
 /** One recipient per line: an address and a whole-token amount, separated by a comma, space or tab. */
 export function parseAllocationLines(text: string): ClaimEntry[] {
@@ -35,210 +54,310 @@ export function parseAllocationLines(text: string): ClaimEntry[] {
     });
 }
 
-type Mode = 'round' | 'batch';
+function wholeDays(value: string, max: number, label: string) {
+  const days = Number(value);
+  if (!Number.isInteger(days) || days < 1 || days > max) throw new Error(`${label} must be 1 to ${max} days.`);
+  return days;
+}
 
-export function AllocationDraftForm({ state }: { state?: ClaimState }) {
-  const { daoId, daoConfig: config, routeId } = useDaoContext();
+/** How this list opens: the launch admin directly in Setup (free, or a launch drive), or a proposal once Live. */
+type Mode = 'free' | 'drive' | 'proposal';
+
+/**
+ * Prepare a claim list: build the tree here, publish the full list to IPFS, then open it.
+ * - Setup, free: the launch admin grants the claims module an allowance and opens the list.
+ * - Setup, launch drive: the launch admin opens it through the Manager, which hands every
+ *   contract to the Treasury; the community launches once enough people claim.
+ * - Live: the allowance grant and the list go into a proposal.
+ */
+export function ClaimListDraftForm({ state, onOpened }: { state?: ClaimState; onOpened: () => void }) {
+  const { daoId, daoConfig: config } = useDaoContext();
   const session = useAuthSessionStore();
-  const proposal = useProposalActions();
-  const router = useRouter();
-  const [busy, setBusy] = useState(false);
-  const locked = useRef(false);
-  const epoch = useRef(0);
-  function cancelReview() {
-    epoch.current += 1;
-    proposal.cancel();
-  }
+  const address = session.authStatus === 'authenticated' ? session.address : null;
+  const proposal = useAdminProposalDraft();
+  const tx = useTransactionFeedback(config.name);
+  const launchAdmin = Boolean(state && address && !state.live && state.admin === address);
+  const governed = Boolean(state?.live && state.admin === config.treasuryContractId);
+  const [setupMode, setSetupMode] = useState<'free' | 'drive'>('free');
+  const mode: Mode = governed ? 'proposal' : setupMode;
   const [text, setText] = useState('');
-  const [mode, setMode] = useState<Mode>('round');
-  const [result, setResult] = useState('');
-  const allowed =
-    session.authStatus === 'authenticated' &&
-    !!session.address &&
+  const [price, setPrice] = useState('0');
+  const [days, setDays] = useState('30');
+  const [threshold, setThreshold] = useState('');
+  const [driveDays, setDriveDays] = useState('30');
+  const [launchAuction, setLaunchAuction] = useState(Boolean(config.auctionContractId));
+  const [launchMarketplace, setLaunchMarketplace] = useState(Boolean(config.marketplaceContractId));
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const asset = state?.paymentAsset ?? '';
+  const ready = Boolean(
+    state?.claimsContractId &&
+    state.claimsContractId === config.claimsContractId &&
+    asset &&
+    address &&
     !session.walletNetworkIssue &&
-    state?.authenticated &&
-    state.address === session.address &&
-    state.network === config.name &&
-    state.live &&
-    state.mintAuthority &&
-    state.admin === config.treasuryContractId &&
-    !!config.minterContractId &&
-    state.minterContractId === config.minterContractId &&
-    !!config.minterSpec?.length;
-  async function review() {
-    if (locked.current) return;
-    locked.current = true;
-    const ticket = ++epoch.current;
+    (launchAdmin || governed)
+  );
+
+  /** Build and publish the tree, then return the list as a draft. */
+  async function publish(current: ClaimState): Promise<ClaimListDraft> {
+    const entries = parseAllocationLines(text);
+    if (!entries.length) throw new Error('Add at least one person.');
+    const priceUnits = mode === 'free' ? 0n : parseMarketplaceAmount(price.trim() || '0', true);
+    const expiresAt = Math.floor(Date.now() / 1000) + wholeDays(days, 365, 'Claims stay open') * DAY;
+    const tree = buildClaimTree(entries, {
+      network: config.passphrase,
+      token: config.tokenContractId,
+      list: current.nextListId
+    });
+    const total = Number(tree.tokenTotal);
+    const draft: ClaimListDraft = {
+      type: 'open-claim-list',
+      root: tree.merkleRoot,
+      treeUri: 'ipfs://pending',
+      asset,
+      price: priceUnits.toString(),
+      expiresAt,
+      total
+    };
+    validateClaimListDraft(draft);
+    setMessage(`Publishing the claim list (${entries.length} people, ${tree.tokenTotal} tokens)…`);
+    const file = new File([claimTreeJson(tree)], `claim-list-${tree.list}.json`, { type: 'application/json' });
+    const { ipfsUri } = await uploadFile(file, 'claim-list');
+    return { ...draft, treeUri: ipfsUri };
+  }
+
+  async function openFree(draft: ClaimListDraft, claims: string) {
+    const token = new TokenClient(walletClientOptions(config, address!, config.tokenContractId));
+    const minter = claimMinterClient(walletClientOptions(config, address!, claims));
+    tx.start('Let the claims module mint');
+    await sendAndConfirm(await token.increase_mint_allowance({ module: claims, amount: draft.total }), config.rpcUrl);
+    tx.start('Open the claim list');
+    const hash = await sendAndConfirm(
+      await minter.open_list({
+        root: Buffer.from(draft.root, 'hex'),
+        tree_uri: draft.treeUri,
+        asset: draft.asset,
+        price: 0n,
+        expires_at: BigInt(draft.expiresAt),
+        total: draft.total,
+        assurance: null
+      }),
+      config.rpcUrl
+    );
+    tx.success('Claim list open', hash);
+  }
+
+  async function openDrive(draft: ClaimListDraft) {
+    const needed = Number(threshold);
+    if (!Number.isInteger(needed) || needed < 1) throw new Error('Say how many people must claim before launch.');
+    const deadline = Math.floor(Date.now() / 1000) + wholeDays(driveDays, MAX_DRIVE_DAYS, 'The drive') * DAY;
+    if (deadline > draft.expiresAt) throw new Error('Claims must stay open at least until the drive ends.');
+    const manager = new ManagerClient(walletClientOptions(config, address!, getDeploymentConfig().managerAddress));
+    tx.start('Open the launch drive');
+    const hash = await sendAndConfirm(
+      await manager.open_assurance({
+        token_address: config.tokenContractId,
+        list: {
+          root: Buffer.from(draft.root, 'hex'),
+          tree_uri: draft.treeUri,
+          price: BigInt(draft.price),
+          expires_at: BigInt(draft.expiresAt),
+          total: draft.total,
+          threshold_claimers: needed,
+          deadline: BigInt(deadline)
+        },
+        launch_config: { launch_auction: launchAuction, launch_marketplace: launchMarketplace }
+      }),
+      config.rpcUrl
+    );
+    tx.success('Launch drive open', hash);
+  }
+
+  async function submit() {
+    if (!ready || !state || busy) return;
     setBusy(true);
+    setMessage('');
     try {
-      if (!allowed)
-        throw new Error(
-          'Authenticate and verify the current Minter, Token admin, Live state and mint authority first.'
-        );
-      if (!state) throw new Error('Refresh current allocation state first.');
-      const entries = parseAllocationLines(text);
-      let draft: AllocationDraft;
-      if (mode === 'round') {
-        // Build the tree here, publish the full list, then propose its root with the list's address.
-        const tree = buildClaimTree(entries, {
-          network: config.passphrase,
-          token: config.tokenContractId,
-          round: (state.merkle.round ?? 0) + 1
-        });
-        setResult(`Publishing the claim list (${entries.length} people, ${tree.tokenTotal} tokens)…`);
-        const file = new File([claimTreeJson(tree)], `claim-list-round-${tree.round}.json`, {
-          type: 'application/json'
-        });
-        const { ipfsUri } = await uploadFile(file, 'claim-list');
-        if (ticket !== epoch.current) return;
-        draft = { type: 'set-merkle-root', root: tree.merkleRoot, treeUri: ipfsUri };
-      } else {
-        draft = {
-          type: 'minter-batch-mint',
-          recipients: entries.map((entry) => entry.address),
-          amounts: entries.map((entry) => entry.amount)
-        };
-      }
-      setResult(
-        JSON.stringify(
-          buildAllocationDraft(draft, state, DEPLOYMENT_ID, config.tokenContractId, config.treasuryContractId),
-          null,
-          2
-        )
-      );
       const fresh = await claimFetch<ClaimState>(`/api/dao/${encodeURIComponent(config.tokenContractId)}/claims`);
-      if (ticket !== epoch.current) return;
-      const actor = useAuthSessionStore.getState();
       if (
-        actor.authStatus !== 'authenticated' ||
-        actor.address !== session.address ||
-        actor.walletNetworkIssue ||
-        !fresh.authenticated ||
-        fresh.address !== actor.address
+        fresh.deploymentId !== DEPLOYMENT_ID ||
+        fresh.address !== address ||
+        fresh.claimsContractId !== state.claimsContractId ||
+        fresh.live !== state.live ||
+        fresh.admin !== state.admin
       )
-        throw new Error('Authenticated account changed. Refresh and review again.');
-      const action = allocationQueueAction(draft, fresh, config, DEPLOYMENT_ID);
-      if (
-        selectDraft(actor.address, daoId)(useProposalComposerStore.getState()).queuedActions.length >=
-        MAX_PROPOSAL_ACTIONS
-      )
-        throw new Error('The draft already contains 20 actions. Edit it in the composer.');
-      proposal.requestAdd({
-        daoId,
-        action,
-        source: 'claims/allocations',
-        metadata: {
-          title: mode === 'round' ? 'Open a claim round' : 'Allocate tokens',
-          description:
-            mode === 'round'
-              ? 'Opens a claim round. The full claim list is published so anyone can check who can claim and how much.'
-              : 'Mints tokens directly to the listed people when the proposal runs.',
-          url: ''
-        }
-      });
+        throw new Error('The community or your account changed. Refresh and try again.');
+      const draft = await publish(fresh);
+      if (mode === 'proposal') {
+        const actions = claimListQueueActions(draft, fresh, config, DEPLOYMENT_ID);
+        const title = `Open a claim list for ${draft.total} tokens`;
+        proposal.requestAddBatch({
+          daoId,
+          requests: actions.map((action) => ({
+            daoId,
+            action,
+            source: 'claims/lists',
+            metadata: {
+              title,
+              description:
+                'Lets the claims module mint the list total, then opens the list. The full list is published so anyone can check who can claim and how much.',
+              url: ''
+            }
+          })),
+          onAdded: () => setMessage(`${title}: added to the proposal draft.`)
+        });
+        return;
+      }
+      if (mode === 'free') await openFree(draft, fresh.claimsContractId!);
+      else await openDrive(draft);
+      setText('');
+      setMessage('');
+      onOpened();
     } catch (error) {
-      setResult(error instanceof Error ? error.message : 'Invalid allocation list.');
+      tx.fail(error, 'The claim list was not opened', mode === 'drive' ? 'manager' : 'minter');
+      setMessage(error instanceof Error ? error.message : 'The claim list was not opened.');
     } finally {
-      locked.current = false;
       setBusy(false);
     }
   }
+
+  const priced = mode !== 'free';
+  const code = asset ? claimAssetCode(config.name, asset) : null;
+  const priceHint = `Per token, in ${code ?? 'the community payment asset'}, up to 7 decimal places. Use 0 for a free list.`;
+
   return (
     <div className={styles.review}>
-      <h2>Prepare an allocation</h2>
-      <SegmentedControl
-        label="Allocation type"
-        value={mode}
-        onValueChange={(value) => {
-          setMode(value as Mode);
-          setResult('');
-          cancelReview();
-        }}
-        options={[
-          { value: 'round', label: 'Claim round' },
-          { value: 'batch', label: 'Mint now' }
-        ]}
-      />
+      <h2>Open a claim list</h2>
+      {!state?.live ? (
+        <SegmentedControl
+          label="List type"
+          value={setupMode}
+          onValueChange={(value) => {
+            setSetupMode(value as 'free' | 'drive');
+            setMessage('');
+          }}
+          options={[
+            { value: 'free', label: 'Free list' },
+            { value: 'drive', label: 'Launch drive' }
+          ]}
+        />
+      ) : null}
       <p>
-        {mode === 'round'
-          ? `People claim their own tokens. Up to ${MAX_TREE_CLAIMS.toLocaleString()} people; the full list is published to IPFS so anyone can check it. A new round lets earlier claimers claim again.`
-          : 'Tokens are minted straight to up to 18 people when the proposal runs.'}{' '}
-        Nothing is signed here: the allocation goes into a proposal members vote on.
+        {mode === 'free'
+          ? 'Listed people claim their tokens for free before and after launch. You sign two transactions: one lets the claims module mint the list total, one opens the list.'
+          : mode === 'drive'
+            ? 'People claim, and pay the price if there is one, while the community is still in setup. Once enough of them have claimed, anyone can launch it. If the drive ends first, everyone can take their payment back.'
+            : 'Listed people claim their tokens themselves, paying the price if there is one. Nothing is signed here: the list goes into a proposal members vote on.'}{' '}
+        Up to {MAX_TREE_CLAIMS.toLocaleString()} people. The full list is published to IPFS so anyone can check it.
       </p>
+      {mode === 'drive' ? (
+        <Callout
+          variant="warning"
+          title="Opening a drive hands the community to its Treasury now"
+          description="You can't change settings, artwork or modules after this. The community launches once enough people claim, with the launch choices below, or it never launches and refunds everyone."
+        />
+      ) : null}
       <Field>
-        <FieldLabel htmlFor="allocation-list">Recipients</FieldLabel>
+        <FieldLabel htmlFor="claim-list-recipients">People</FieldLabel>
         <Textarea
-          id="allocation-list"
+          id="claim-list-recipients"
           className={css({ textStyle: 'mono', fontSize: '0.8125rem' })}
           rows={8}
           value={text}
+          disabled={busy}
           placeholder={'GABC… 5\nGDEF… 2'}
-          onChange={(event) => {
-            setText(event.target.value);
-            setResult('');
-            cancelReview();
-          }}
+          onChange={(event) => setText(event.target.value)}
         />
-        <FieldHelperText>One per line: a Stellar address and a whole-token amount.</FieldHelperText>
+        <FieldHelperText>One per line: a Stellar address and how many tokens it can claim.</FieldHelperText>
       </Field>
+      {priced ? (
+        <Field>
+          <FieldLabel htmlFor="claim-list-price">Price</FieldLabel>
+          <Input
+            id="claim-list-price"
+            inputMode="decimal"
+            value={price}
+            disabled={busy}
+            onChange={(event) => setPrice(event.target.value.trim())}
+          />
+          <FieldHelperText>{priceHint}</FieldHelperText>
+        </Field>
+      ) : null}
+      <Field>
+        <FieldLabel htmlFor="claim-list-days">Claims stay open for (days)</FieldLabel>
+        <Input
+          id="claim-list-days"
+          inputMode="numeric"
+          value={days}
+          disabled={busy}
+          onChange={(event) => setDays(event.target.value.trim())}
+        />
+      </Field>
+      {mode === 'drive' ? (
+        <>
+          <Field>
+            <FieldLabel htmlFor="claim-drive-threshold">People who must claim before launch</FieldLabel>
+            <Input
+              id="claim-drive-threshold"
+              inputMode="numeric"
+              value={threshold}
+              disabled={busy}
+              onChange={(event) => setThreshold(event.target.value.trim())}
+            />
+            <FieldHelperText>Each person counts once, however many tokens they claim.</FieldHelperText>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="claim-drive-days">The drive ends after (days)</FieldLabel>
+            <Input
+              id="claim-drive-days"
+              inputMode="numeric"
+              value={driveDays}
+              disabled={busy}
+              onChange={(event) => setDriveDays(event.target.value.trim())}
+            />
+            <FieldHelperText>At most {MAX_DRIVE_DAYS} days, and no later than claims close.</FieldHelperText>
+          </Field>
+          {config.auctionContractId ? (
+            <Checkbox
+              label="Start the auction at launch"
+              checked={launchAuction}
+              disabled={busy}
+              onCheckedChange={setLaunchAuction}
+            />
+          ) : null}
+          {config.marketplaceContractId ? (
+            <Checkbox
+              label="Open the marketplace at launch"
+              checked={launchMarketplace}
+              disabled={busy}
+              onCheckedChange={setLaunchMarketplace}
+            />
+          ) : null}
+        </>
+      ) : null}
+      {!ready ? (
+        <p>
+          {state?.live
+            ? 'Connect a wallet to draft a proposal. The Treasury must be the community admin.'
+            : 'Connect the launch admin wallet to open a list.'}
+        </p>
+      ) : null}
       <div>
-        <Button
-          variant="secondary"
-          disabled={!allowed || !!proposal.pending}
-          loading={busy}
-          onClick={() => void review()}
-        >
-          {mode === 'round' ? 'Publish the list and add to a proposal' : 'Add to a proposal'}
+        <Button disabled={!ready || !!proposal.pending} loading={busy} onClick={() => void submit()}>
+          {mode === 'proposal'
+            ? 'Publish the list and add to a proposal'
+            : mode === 'drive'
+              ? 'Publish the list and open the drive'
+              : 'Publish the list and open it'}
         </Button>
       </div>
-      {result ? (
-        <pre className={styles.address} role="status">
-          {result}
-        </pre>
+      {message ? (
+        <p role="status" aria-live="polite">
+          {message}
+        </p>
       ) : null}
-      <AdminProposalDraftDialog
-        pending={proposal.pending}
-        onCancel={cancelReview}
-        onResolve={(resolution) => {
-          if (locked.current) return;
-          if (!allowed) {
-            proposal.cancel();
-            setResult('Allocation authority changed; review again.');
-            return;
-          }
-          void (async () => {
-            locked.current = true;
-            const ticket = epoch.current;
-            setBusy(true);
-            try {
-              const fresh = await claimFetch<ClaimState>(
-                `/api/dao/${encodeURIComponent(config.tokenContractId)}/claims`
-              );
-              if (ticket !== epoch.current) return;
-              const actor = useAuthSessionStore.getState();
-              if (actor.authStatus !== 'authenticated' || actor.address !== session.address || actor.walletNetworkIssue)
-                throw new Error('Authenticated account changed.');
-              if (!fresh.authenticated || fresh.address !== session.address || !proposal.pending)
-                throw new Error('Account changed; review again.');
-              const queued = proposal.pending.action;
-              allocationQueueAction(queued as unknown as AllocationDraft, fresh, config, DEPLOYMENT_ID);
-              if (
-                selectDraft(session.address, daoId)(useProposalComposerStore.getState()).queuedActions.length >=
-                MAX_PROPOSAL_ACTIONS
-              )
-                throw new Error('Proposal action limit reached.');
-              proposal.resolve(resolution);
-              router.push(daoRoute(routeId, 'proposals/create'));
-            } catch (error) {
-              setResult(error instanceof Error ? error.message : 'Unable to add allocation.');
-              proposal.cancel();
-            } finally {
-              locked.current = false;
-              setBusy(false);
-            }
-          })();
-        }}
-      />
+      <AdminProposalDraftDialog pending={proposal.pending} onCancel={proposal.cancel} onResolve={proposal.resolve} />
     </div>
   );
 }

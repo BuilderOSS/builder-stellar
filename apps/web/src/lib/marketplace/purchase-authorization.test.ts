@@ -6,6 +6,7 @@ import { getTreasuryAssets } from '@/lib/assets-config';
 import { assertMarketplacePurchaseAuthorization } from './purchase-authorization';
 import {
   authorizedCall,
+  POOL_PICK,
   PURCHASE_BUYER,
   PURCHASE_MARKET,
   PURCHASE_OTHER,
@@ -40,37 +41,38 @@ const listing: MarketplaceListing = {
   transactionHash: 'creation-hash'
 };
 
-function check(expected: MarketplaceListing, simulated: ReturnType<typeof purchaseFixture>) {
+function check(expected: MarketplaceListing, simulated: ReturnType<typeof purchaseFixture>, pick = POOL_PICK) {
   return assertMarketplacePurchaseAuthorization(
     simulated.encoded,
     Networks.TESTNET,
     expected,
     PURCHASE_BUYER,
     PURCHASE_TREASURY,
-    simulated.auth
+    simulated.auth,
+    expected.kind === 'pool' ? pick : undefined
   );
 }
 
 describe('purchase simulation real-XDR authorization binding', () => {
-  it.each([xlm, usdc])('accepts exact primary and secondary SAC payment trees for %s', (asset) => {
-    for (const kind of ['primary', 'secondary'] as const) {
+  it.each([xlm, usdc])('accepts exact pool and secondary SAC payment trees for %s', (asset) => {
+    for (const kind of ['pool', 'secondary'] as const) {
       const expected = {
         ...listing,
         kind,
         paymentAsset: asset,
-        id: kind === 'primary' ? '9007199254740993' : '7',
-        seller: kind === 'primary' ? null : PURCHASE_SELLER,
-        feeBps: kind === 'primary' ? 0 : 250
+        id: kind === 'pool' ? '4294967295' : '7',
+        seller: kind === 'pool' ? null : PURCHASE_SELLER,
+        feeBps: kind === 'pool' ? 0 : 250
       };
       expect(() => check(expected, purchaseFixture(expected))).not.toThrow();
     }
   });
-  it.each(['primary', 'secondary'] as const)('rejects the old price=1 / buy simulation price=2 race for %s', (kind) => {
+  it.each(['pool', 'secondary'] as const)('rejects the old price=1 / buy simulation price=2 race for %s', (kind) => {
     const expected = {
       ...listing,
       kind,
-      seller: kind === 'primary' ? null : PURCHASE_SELLER,
-      feeBps: kind === 'primary' ? 0 : 250
+      seller: kind === 'pool' ? null : PURCHASE_SELLER,
+      feeBps: kind === 'pool' ? 0 : 250
     };
     const simulated = purchaseFixture({ ...expected, price: '20000000' });
     expect(simulated.auth[0]).toBeInstanceOf(xdr.SorobanAuthorizationEntry);
@@ -82,9 +84,28 @@ describe('purchase simulation real-XDR authorization binding', () => {
       expect(() => check(listing, purchaseFixture({ ...listing, ...change }))).toThrow('reviewed listing');
     }
   );
-  it('rejects a changed primary Treasury destination', () => {
-    const primary = { ...listing, kind: 'primary' as const, seller: null, feeBps: 0 };
-    expect(() => check(primary, purchaseFixture(primary, PURCHASE_BUYER, PURCHASE_OTHER))).toThrow('reviewed listing');
+  it('rejects a changed pool Treasury destination', () => {
+    const pool = { ...listing, kind: 'pool' as const, seller: null, feeBps: 0 };
+    expect(() => check(pool, purchaseFixture(pool, PURCHASE_BUYER, PURCHASE_OTHER))).toThrow('reviewed listing');
+  });
+  it('binds a pool purchase to the picked stock page and token', () => {
+    const pool = { ...listing, kind: 'pool' as const, seller: null, feeBps: 0 };
+    expect(() => check(pool, purchaseFixture(pool))).not.toThrow();
+    expect(() => check(pool, purchaseFixture(pool), { page: 1, tokenId: POOL_PICK.tokenId })).toThrow(
+      'reviewed listing'
+    );
+    expect(() => check(pool, purchaseFixture(pool), { page: 0, tokenId: 43 })).toThrow('reviewed listing');
+    // No pick, no pool purchase.
+    expect(() =>
+      assertMarketplacePurchaseAuthorization(
+        purchaseFixture(pool).encoded,
+        Networks.TESTNET,
+        pool,
+        PURCHASE_BUYER,
+        PURCHASE_TREASURY,
+        purchaseFixture(pool).auth
+      )
+    ).toThrow('reviewed listing');
   });
   it('rejects a different payer and swapped payout destinations even when total spend matches', () => {
     const fee = 250000n;
@@ -106,7 +127,7 @@ describe('purchase simulation real-XDR authorization binding', () => {
     const args = purchaseRootArgs(listing, PURCHASE_BUYER);
     for (const change of [
       { hostContract: PURCHASE_OTHER },
-      { hostMethod: 'buy_primary' },
+      { hostMethod: 'buy_from_pool' },
       { hostArgs: [nativeToScVal(8, { type: 'u32' }), args[1]] },
       { hostArgs: [nativeToScVal(7n, { type: 'u64' }), args[1]] },
       { hostArgs: [args[0], nativeToScVal(PURCHASE_SELLER, { type: 'address' })] },

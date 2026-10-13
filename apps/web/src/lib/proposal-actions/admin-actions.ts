@@ -1,18 +1,16 @@
 import { StrKey } from '@stellar/stellar-sdk';
 
 import {
-  type AdminAuthorityDraft,
   type AdminPaymentTokenDraft,
   AdminPaymentTokenForm,
   type AdminReservePriceDraft,
   AdminReservePriceForm,
   type AdminValueDraft,
   AdminValueForm,
-  AuthorityProposalActionForm,
-  type CancelPrimaryListingDraft,
-  CancelPrimaryListingForm,
-  type CreatePrimaryListingDraft,
-  CreatePrimaryListingForm
+  type OpenPoolDraft,
+  OpenPoolForm,
+  type PoolIdDraft,
+  PoolIdForm
 } from '@/components/admin/admin-action-forms';
 import { decimalToStroops, validateReservePrice } from '@/lib/auction-values';
 import {
@@ -69,35 +67,6 @@ function decimalPrice(value: string): ValidationResult {
     };
   }
   return valid();
-}
-
-function authorityHandler(type: 'set-mint-authority', label: string): ActionHandler<AdminAuthorityDraft> {
-  return {
-    type,
-    label,
-    description: `${label} for an address`,
-    group: 'Administration',
-    FormComponent: AuthorityProposalActionForm,
-    getDefaultValues: () => ({ authority: '', enabled: true }),
-    validate: (data) => required(data.authority, 'authority', 'Authority address'),
-    serialize: (data) => ({
-      id: crypto.randomUUID(),
-      type,
-      recipient: data.authority.trim(),
-      amount: '',
-      authority: data.authority.trim(),
-      enabled: data.enabled
-    }),
-    deserialize: (action) => ({
-      authority: action.authority || action.recipient || '',
-      enabled: action.enabled !== false
-    }),
-    buildCallVector: (data, context) => ({
-      target: context.tokenContractId,
-      function: 'set_mint_authority',
-      args: [data.authority.trim(), data.enabled]
-    })
-  };
 }
 
 function settingHandler(
@@ -189,7 +158,6 @@ function auctionDurationHandler(
   };
 }
 
-export const setMintAuthorityHandler = authorityHandler('set-mint-authority', 'Set mint authority');
 export const setVotingDelayHandler = settingHandler('set-voting-delay', 'Voting delay', 'set_voting_delay', (value) =>
   validateVotingDelay(Number(value))
 );
@@ -416,60 +384,126 @@ export const pauseMarketplaceHandler = emptyModuleHandler('pause-marketplace', '
 export const unpauseMarketplaceHandler = emptyModuleHandler('unpause-marketplace', 'Resume marketplace');
 export const cancelAuctionHandler = emptyModuleHandler('cancel-auction', 'Cancel paused auction');
 
-// Primary sales are lazy: after launch the Treasury is the marketplace admin, so creating and
-// cancelling primary listings are governance proposal actions executed through treasury.execute.
-export const createPrimaryListingHandler: ActionHandler<CreatePrimaryListingDraft> = {
-  type: 'create-primary-listing',
-  label: 'Create primary listing',
-  description: 'Open a primary sale: the buyer receives a newly minted token',
-  group: 'Administration',
-  FormComponent: CreatePrimaryListingForm,
-  getDefaultValues: () => ({ price: '', expiresAt: '' }),
+// Quick-buy pools (docs/designs/membership-models.md § 4): after launch the Treasury is the
+// marketplace admin, so opening, closing and sweeping a pool are proposal actions. A pool reserves
+// part of the marketplace's mint allowance, so the proposal grants that allowance first.
+const U32_MAX = 0xffffffff;
+
+function positiveCount(value: string, field: string, label: string): ValidationResult | null {
+  return /^[1-9]\d*$/.test(value.trim()) && Number(value.trim()) <= U32_MAX
+    ? null
+    : {
+        valid: false,
+        message: `${label} must be a whole number above zero.`,
+        fields: { [field]: `${label} must be a whole number above zero.` }
+      };
+}
+
+export const openPoolHandler: ActionHandler<OpenPoolDraft> = {
+  type: 'open-pool',
+  label: 'Open a quick-buy pool',
+  description: 'Sell newly minted tokens at a fixed price, with per-wallet and per-period limits',
+  group: 'Membership',
+  FormComponent: OpenPoolForm,
+  getDefaultValues: () => ({
+    price: '',
+    asset: '',
+    size: '',
+    maxPerBuyer: '1',
+    maxSoldPerPeriod: '',
+    periodHours: '24',
+    expiresAt: ''
+  }),
   validate: (data) => {
     const priceError = validateReservePrice(data.price);
     if (priceError) return { valid: false, message: priceError, fields: { price: priceError } };
+    if (!StrKey.isValidContract(data.asset.trim())) {
+      const message = 'Choose the asset buyers pay in.';
+      return { valid: false, message, fields: { asset: message } };
+    }
+    const counts =
+      positiveCount(data.size, 'size', 'Pool size') ??
+      positiveCount(data.maxPerBuyer, 'maxPerBuyer', 'Per-wallet limit') ??
+      positiveCount(data.maxSoldPerPeriod, 'maxSoldPerPeriod', 'Sales per period') ??
+      positiveCount(data.periodHours, 'periodHours', 'Period');
+    if (counts) return counts;
     const expiresAt = parseExpiryToUnixSeconds(data.expiresAt);
-    if (expiresAt === null) {
-      const message = 'Enter a valid expiry date and time.';
+    if (expiresAt === null || expiresAt <= Math.floor(Date.now() / 1000)) {
+      const message = 'Enter a closing date and time in the future.';
       return { valid: false, message, fields: { expiresAt: message } };
     }
     return valid();
   },
   serialize: (data) => ({
     id: crypto.randomUUID(),
-    type: 'create-primary-listing',
+    type: 'open-pool',
     recipient: '',
     amount: data.price.trim(),
     price: data.price.trim(),
+    asset: data.asset.trim(),
+    size: data.size.trim(),
+    maxPerBuyer: data.maxPerBuyer.trim(),
+    maxSoldPerPeriod: data.maxSoldPerPeriod.trim(),
+    periodHours: data.periodHours.trim(),
     expiresAt: data.expiresAt.trim()
   }),
-  deserialize: (action) => ({ price: action.price || action.amount || '', expiresAt: action.expiresAt || '' }),
+  deserialize: (action) => ({
+    price: action.price || action.amount || '',
+    asset: action.asset || '',
+    size: String(action.size ?? ''),
+    maxPerBuyer: String(action.maxPerBuyer ?? ''),
+    maxSoldPerPeriod: String(action.maxSoldPerPeriod ?? ''),
+    periodHours: String(action.periodHours ?? ''),
+    expiresAt: action.expiresAt || ''
+  }),
   buildCallVector: (data, context) => ({
     target: context.config.marketplaceContractId,
-    function: 'create_primary_listing',
-    args: [decimalToStroops(data.price)?.toString() ?? '0', String(parseExpiryToUnixSeconds(data.expiresAt) ?? 0)]
+    function: 'open_pool',
+    args: [
+      decimalToStroops(data.price)?.toString() ?? '0',
+      data.asset.trim(),
+      String(parseExpiryToUnixSeconds(data.expiresAt) ?? 0),
+      Number(data.size.trim()),
+      Number(data.maxPerBuyer.trim()),
+      Number(data.maxSoldPerPeriod.trim()),
+      String(Number(data.periodHours.trim()) * 3600)
+    ]
   })
 };
 
-export const cancelPrimaryListingHandler: ActionHandler<CancelPrimaryListingDraft> = {
-  type: 'cancel-primary-listing',
-  label: 'Cancel primary listing',
-  description: 'Cancel an open primary sale listing',
-  group: 'Administration',
-  FormComponent: CancelPrimaryListingForm,
-  getDefaultValues: () => ({ listingId: '' }),
-  validate: (data) => wholeNumber(data.listingId, 'Listing id'),
-  serialize: (data) => ({
-    id: crypto.randomUUID(),
-    type: 'cancel-primary-listing',
-    recipient: '',
-    amount: '',
-    listingId: data.listingId.trim()
-  }),
-  deserialize: (action) => ({ listingId: action.listingId || '' }),
-  buildCallVector: (data, context) => ({
-    target: context.config.marketplaceContractId,
-    function: 'cancel_primary',
-    args: [data.listingId.trim()]
-  })
-};
+function poolIdHandler(
+  type: 'close-pool' | 'sweep-pool',
+  label: string,
+  description: string
+): ActionHandler<PoolIdDraft> {
+  return {
+    type,
+    label,
+    description,
+    group: 'Membership',
+    FormComponent: PoolIdForm,
+    getDefaultValues: () => ({ poolId: '' }),
+    validate: (data) => {
+      const result = wholeNumber(data.poolId, 'Pool');
+      return result.valid ? result : { ...result, fields: { poolId: result.message ?? 'Enter the pool number.' } };
+    },
+    serialize: (data) => ({ id: crypto.randomUUID(), type, recipient: '', amount: '', poolId: data.poolId.trim() }),
+    deserialize: (action) => ({ poolId: String(action.poolId ?? '') }),
+    buildCallVector: (data, context) => ({
+      target: context.config.marketplaceContractId,
+      function: type === 'close-pool' ? 'close_pool' : 'sweep_pool',
+      args: [Number(data.poolId.trim())]
+    })
+  };
+}
+
+export const closePoolHandler = poolIdHandler(
+  'close-pool',
+  'Close a pool',
+  'Stop a pool’s sales now; its unminted tokens go back to the marketplace allowance'
+);
+export const sweepPoolHandler = poolIdHandler(
+  'sweep-pool',
+  'Sweep a closed pool',
+  'Move a closed pool’s unsold tokens to the Treasury'
+);

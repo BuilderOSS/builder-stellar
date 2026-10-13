@@ -299,26 +299,19 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
       if (previous?.status === 'confirmed') return;
       if (
         previous &&
-        (previous.auction !== choice.launch_auction ||
-          previous.marketplace !== choice.launch_marketplace ||
-          previous.minter !== choice.minter)
+        (previous.auction !== choice.launch_auction || previous.marketplace !== choice.launch_marketplace)
       )
         throw new Error('Launch choices changed. Refresh and review them again before signing.');
       if (
         recovery.rebroadcast &&
         previous?.reviewedConfig &&
         JSON.stringify(previous.reviewedConfig) !==
-          JSON.stringify({
-            launch_auction: choice.launch_auction,
-            launch_marketplace: choice.launch_marketplace,
-            minter: choice.minter
-          })
+          JSON.stringify({ launch_auction: choice.launch_auction, launch_marketplace: choice.launch_marketplace })
       )
-        throw new Error('The saved launch review differs from the current choices or minter. Nothing was rebroadcast.');
+        throw new Error('The saved launch review differs from the current choices. Nothing was rebroadcast.');
       let record: LocalLaunch = previous ?? {
         auction: choice.launch_auction,
-        marketplace: choice.launch_marketplace,
-        minter: choice.minter
+        marketplace: choice.launch_marketplace
       };
       const save = (changes: Partial<LocalLaunch & Submission>) => {
         record = { ...record, ...changes };
@@ -379,9 +372,6 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         }
       }
       await requirePending();
-      // Every community launches with the shared Minter the launch admin reviewed; the
-      // Manager rejects the launch if its registered Minter differs.
-      if (!choice.minter) throw new Error('Review the shared claims minter before launch');
       const assembled = await manager.launch_dao(
         {
           token_address: tokenAddress,
@@ -396,11 +386,7 @@ export function useDaoDeployment(deployer: string, network: DaoNetworkName) {
         expiresAt: undefined,
         acceptedAt: undefined,
         status: undefined,
-        reviewedConfig: {
-          launch_auction: choice.launch_auction,
-          launch_marketplace: choice.launch_marketplace,
-          minter: choice.minter
-        }
+        reviewedConfig: { launch_auction: choice.launch_auction, launch_marketplace: choice.launch_marketplace }
       });
       tx.start('Launch DAO');
       const signed = await signPrepared(assembled);

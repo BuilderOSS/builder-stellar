@@ -593,41 +593,11 @@ export async function getDashboardData(address: string, params: { limit?: number
  * refuses a double claim itself, so a hit here means the page is stale.
  * Unknown round (not indexed yet): false.
  */
-export async function hasIndexedClaim(daoId: string, recipient: string, round: number): Promise<boolean> {
-  const deploymentId = getDeploymentId();
-  const opened = await prisma.appActivityFeed.findMany({
-    where: { deploymentId, daoId, contractRole: 'minter', kind: 'minter.merkle_root_set' },
-    orderBy: FEED_ORDER,
-    take: 20,
-    select: { args: true, ledgerSequence: true }
-  });
-  const openedAt = opened.find((row) => {
-    try {
-      return Number((JSON.parse(row.args) as { round?: unknown }).round) === round;
-    } catch {
-      return false;
-    }
-  });
-  if (!openedAt) return false;
-  const claims = await prisma.appActivityFeed.count({
-    where: {
-      deploymentId,
-      daoId,
-      contractRole: 'minter',
-      kind: 'minter.merkle_claim',
-      actor: { equals: recipient, mode: 'insensitive' },
-      ledgerSequence: { gte: openedAt.ledgerSequence }
-    }
-  });
-  return claims > 0;
-}
-
 /**
- * Minter Claims
- *
- * Returns all successful claims for a token (claims are merkle-only)
+ * ClaimMinter claims (claims.claims): who claimed how many tokens from which list, for what,
+ * and whether the payment waited in escrow. Newest first.
  */
-export async function getGoldskyMinterClaims(
+export async function getGoldskyClaims(
   daoId: string,
   params: {
     limit?: number;
@@ -642,30 +612,30 @@ export async function getGoldskyMinterClaims(
   const where = {
     deploymentId,
     daoId: daoIdFromUrl,
-    contractRole: 'minter',
-    kind: 'minter.merkle_claim',
-    ...(recipient ? { actor: { equals: recipient, mode: 'insensitive' as const } } : {})
+    ...(recipient ? { claimer: { equals: recipient, mode: 'insensitive' as const } } : {})
   };
 
   const [rows, total] = await Promise.all([
-    prisma.appActivityFeed.findMany({
+    prisma.claimsClaim.findMany({
       where,
-      orderBy: FEED_ORDER,
+      orderBy: [{ eventLedger: 'desc' }, { eventId: 'desc' }],
       take: limit,
       skip: offset
     }),
-    prisma.appActivityFeed.count({ where })
+    prisma.claimsClaim.count({ where })
   ]);
 
   return {
     items: rows.map((row) => ({
-      claim_id: row.activityId,
-      recipient: row.actor,
-      amount: row.amount,
-      claim_type: 'merkle',
+      claim_id: row.eventId,
+      list_id: Number(row.listId),
+      recipient: row.claimer,
+      amount: row.amount.toString(),
+      paid: row.paid.toString(),
+      escrowed: row.escrowed,
       transaction_hash: row.transactionHash,
-      ledger_sequence: Number(row.ledgerSequence),
-      timestamp: row.ledgerClosedAt
+      ledger_sequence: Number(row.eventLedger),
+      timestamp: row.eventAt?.toISOString() ?? null
     })),
     total,
     limit,

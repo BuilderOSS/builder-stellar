@@ -40,7 +40,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ dao
       error instanceof AuthError || error instanceof ClaimError
         ? error.message
         : error instanceof ZodError
-          ? 'Invalid claim method, round, amount or proof. Recipient and contracts must not be supplied.'
+          ? 'Invalid list, allocation, count, proof or price. The claimer and contracts must not be supplied.'
           : 'Claim simulation did not pass. Check eligibility, previous claims, network and XLM for fees. Nothing was signed or submitted.';
     return NextResponse.json({ message }, { status, headers });
   }

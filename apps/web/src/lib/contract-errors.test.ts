@@ -22,11 +22,13 @@ describe('contract error mapping', () => {
     expect(getContractErrorMessage('auction', 7417)).toContain('86,400');
     expect(getContractErrorMessage('marketplace', 7713)).toContain('paused');
     expect(getContractErrorMessage('marketplace', 7714)).toBeDefined();
-    expect(getContractErrorMessage('manager', 7108)).toContain('platform minter');
+    expect(getContractErrorMessage('manager', 7140)).toContain('assurance');
+    expect(getContractErrorMessage('token', 7216)).toContain('locked');
+    expect(getContractErrorMessage('marketplace', 7718)).toContain('allowance');
     expect(getContractErrorMessage('manager', 7123)).toContain('link');
     expect(getContractErrorMessage('metadata', 7308)).toContain('30');
     expect(getContractErrorMessage('token', 7205)).toContain('43');
-    expect(getContractErrorMessage('minter', 7803)).toContain('18');
+    expect(getContractErrorMessage('minter', 7803)).toContain('43');
     expect(getContractErrorMessage('minter', 7810)).toContain('TokenNotLive');
   });
 

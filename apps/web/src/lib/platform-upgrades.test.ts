@@ -26,12 +26,8 @@ describe('describePending', () => {
 });
 
 describe('memberNotice', () => {
-  const state = (
-    contract: 'manager' | 'minter',
-    earliestLedger: number | null,
-    revoked = false
-  ): PlatformContractState => ({
-    contract,
+  const state = (earliestLedger: number | null, revoked = false): PlatformContractState => ({
+    contract: 'manager',
     address: 'C',
     running: 'aa'.repeat(32),
     notice: 720,
@@ -40,40 +36,18 @@ describe('memberNotice', () => {
         ? null
         : { toHash: 'bb'.repeat(32), version: '0.4.0', approvedLedger: 1, announcedLedger: 1, earliestLedger, revoked }
   });
-  it('tells members about a pending Manager upgrade as well as a Minter one, earliest first', () => {
-    expect(
-      memberNotice({ manager: state('manager', 500), minter: state('minter', 900), minterAuthority: true, errors: [] })
-    ).toMatchObject({
+  it('tells members about a pending Manager upgrade', () => {
+    expect(memberNotice({ manager: state(500), errors: [] })).toMatchObject({
       kind: 'pending',
       contract: 'manager',
       earliestLedger: 500
     });
-    expect(
-      memberNotice({ manager: state('manager', null), minter: state('minter', 900), minterAuthority: true, errors: [] })
-    ).toMatchObject({
-      kind: 'pending',
-      contract: 'minter'
-    });
   });
-  it('is quiet once the Minter holds no authority, and says when the check is incomplete', () => {
-    expect(
-      memberNotice({ manager: state('manager', 500), minter: state('minter', 900), minterAuthority: false, errors: [] })
-    ).toBeNull();
-    expect(memberNotice({ manager: null, minter: null, minterAuthority: true, errors: ['rpc'] })).toEqual({
-      kind: 'unchecked'
-    });
-    expect(
-      memberNotice({
-        manager: state('manager', null),
-        minter: state('minter', null),
-        minterAuthority: true,
-        errors: []
-      })
-    ).toBeNull();
+  it('is quiet with nothing pending, and says when the check is incomplete', () => {
+    expect(memberNotice({ manager: null, errors: ['rpc'] })).toEqual({ kind: 'unchecked' });
+    expect(memberNotice({ manager: state(null), errors: [] })).toBeNull();
   });
   it('ignores a revoked latest, which can never apply', () => {
-    expect(
-      memberNotice({ manager: null, minter: state('minter', 900, true), minterAuthority: true, errors: [] })
-    ).toBeNull();
+    expect(memberNotice({ manager: state(900, true), errors: [] })).toBeNull();
   });
 });

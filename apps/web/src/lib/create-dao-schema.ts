@@ -120,6 +120,15 @@ const marketplaceSchema = z.object({
     .min(0)
     .max(MAX_MARKETPLACE_FEE_BPS, 'The marketplace fee is at most 2,500 bps (25%).')
 });
+/** A ClaimMinter for invite and claim lists (registry kind `claims`), priced in the auction's asset. */
+const claimsSchema = z.object({ enabled: z.boolean() });
+/** The membership switches (docs/designs/locked-tokens.md); all off is an open community. */
+const tokenSettingsSchema = z.object({
+  transfersLocked: z.boolean(),
+  membersOnlyDelegation: z.boolean(),
+  daoRecovery: z.boolean()
+});
+export const OPEN_MEMBERSHIP = { transfersLocked: false, membersOnlyDelegation: false, daoRecovery: false };
 const governanceSchema = z.object({
   votingDelay: timing(validateVotingDelay),
   votingPeriod: timing(validateVotingPeriod),
@@ -131,6 +140,9 @@ export const draftConfigurationSchema = z.object({
   basicInfo: basicInfoSchema,
   auction: auctionSchema,
   marketplace: marketplaceSchema,
+  // Drafts saved before these existed open as an open community without claims.
+  claims: claimsSchema.default({ enabled: false }),
+  tokenSettings: tokenSettingsSchema.default(OPEN_MEMBERSHIP),
   governance: governanceSchema
 });
 export const createDaoSchema = draftConfigurationSchema.extend({
@@ -140,7 +152,12 @@ export type DraftConfiguration = z.infer<typeof draftConfigurationSchema>;
 export type CreateDaoFormData = z.infer<typeof createDaoSchema>;
 export function validateCreationAssets(config: DraftConfiguration, network: CreationNetwork) {
   const allowed = new Set(creationAssets(network).map((asset) => asset.contractId));
-  if (!allowed.has(config.auction.paymentAsset) || !allowed.has(config.marketplace.paymentAsset))
+  // Only the modules the community is created with carry a payment asset; claims use the auction's.
+  const used = [
+    ...(config.auction.enabled || config.claims.enabled ? [config.auction.paymentAsset] : []),
+    ...(config.marketplace.enabled ? [config.marketplace.paymentAsset] : [])
+  ];
+  if (used.some((asset) => !allowed.has(asset)))
     throw new Error('Payment assets must come from the registry for this draft’s network.');
 }
 export type CreateDaoSection = 'basicInfo' | 'membership' | 'governance' | 'review';
@@ -158,7 +175,9 @@ export const sectionSchemas = {
       links: z.array(profileLinkSchema).max(MAX_PROFILE_LINKS)
     }),
     auction: auctionSchema,
-    marketplace: marketplaceSchema
+    marketplace: marketplaceSchema,
+    claims: claimsSchema.default({ enabled: false }),
+    tokenSettings: tokenSettingsSchema.default(OPEN_MEMBERSHIP)
   }),
   governance: governanceSchema
 };

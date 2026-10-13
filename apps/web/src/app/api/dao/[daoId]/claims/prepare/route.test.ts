@@ -10,7 +10,7 @@ vi.mock('@/lib/minter/service', async (original) => {
   const service = await original<typeof import('@/lib/minter/service')>();
   return { ...service, prepareClaim: mocks.prepare };
 });
-vi.mock('@/lib/goldsky', () => ({ getGoldskyMinterClaims: vi.fn() }));
+vi.mock('@/lib/goldsky', () => ({ getGoldskyClaims: vi.fn() }));
 vi.mock('@/lib/dao-config', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/dao-config')>()),
   getDaoNetworkConfigById: vi.fn()
@@ -33,7 +33,7 @@ describe('claim prepare API session boundary', () => {
       }),
       { params: Promise.resolve({ daoId }) }
     );
-  const valid = { method: 'merkle', round: 3, amount: '5', proof: ['ab'.repeat(32)] };
+  const valid = { listId: 3, leafAmount: '5', mintNow: 5, proof: ['ab'.repeat(32)], maxPrice: '0' };
   it('prepares only with session identity for each DAO and prevents shared caching', async () => {
     const action = valid;
     const response = await post(action);
@@ -43,7 +43,7 @@ describe('claim prepare API session boundary', () => {
     await post(action, 'http://localhost', 'dao-b');
     expect(mocks.prepare.mock.calls[1][0]).toBe('dao-b');
   });
-  it.each(['address', 'recipient', 'token_id', 'minterContractId', 'network', 'rpcUrl', 'treeUri'])(
+  it.each(['address', 'claimer', 'token_id', 'claimsContractId', 'network', 'rpcUrl', 'treeUri'])(
     'rejects body-supplied %s on claims',
     async (key) => {
       expect((await post({ ...valid, [key]: 'attacker-input' })).status).toBe(400);
@@ -51,12 +51,14 @@ describe('claim prepare API session boundary', () => {
     }
   );
   it.each([
-    { method: 'merkle', round: 2, amount: 5, proof: [] },
-    { method: 'merkle', round: 2, amount: '5', proof: ['bad'] },
-    { ...valid, round: '3' },
-    { ...valid, round: 4294967296 },
-    { method: 'allowlist', round: 3 },
-    { method: 'paid', round: 1 }
+    { ...valid, leafAmount: 5 },
+    { ...valid, proof: ['bad'] },
+    { ...valid, listId: '3' },
+    { ...valid, listId: 4294967296 },
+    { ...valid, mintNow: 0 },
+    { ...valid, mintNow: 44 },
+    { ...valid, maxPrice: '-1' },
+    { method: 'merkle', round: 3, amount: '5', proof: [] }
   ])('rejects malformed or unsupported ABI input %j', async (body) => {
     expect((await post(body)).status).toBe(400);
     expect(mocks.prepare).not.toHaveBeenCalled();
@@ -75,9 +77,7 @@ describe('claim prepare API session boundary', () => {
     expect(response.status).toBe(422);
     expect(await response.json()).not.toHaveProperty('xdr');
     mocks.prepare.mockClear();
-    expect(
-      (await post({ method: 'merkle', round: 2, amount: '5', proof: new Array(33).fill('ab'.repeat(32)) })).status
-    ).toBe(400);
+    expect((await post({ ...valid, proof: new Array(33).fill('ab'.repeat(32)) })).status).toBe(400);
     expect(mocks.prepare).not.toHaveBeenCalled();
   });
   it('returns archived state as a restore the client signs first', async () => {

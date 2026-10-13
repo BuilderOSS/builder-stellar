@@ -3,20 +3,24 @@ import { Address, type FeeBumpTransaction, nativeToScVal, type Transaction, xdr 
 import { claimAmount, hashBytes } from './proof';
 import type { ClaimAction, PreparedClaim } from './types';
 
-export function claimCallArgs(
-  prepared: Pick<PreparedClaim, 'tokenContractId' | 'address' | 'amount'>,
-  action: ClaimAction
-): xdr.ScVal[] {
-  const args = [
-    new Address(prepared.tokenContractId).toScVal(),
+/** `claim(list_id, claimer, leaf_amount, mint_now, proof, max_price)` as the ClaimMinter receives it. */
+export function claimCallArgs(prepared: Pick<PreparedClaim, 'address'>, action: ClaimAction): xdr.ScVal[] {
+  return [
+    xdr.ScVal.scvU32(action.listId),
     new Address(prepared.address).toScVal(),
-    nativeToScVal(claimAmount(prepared.amount), { type: 'u128' })
+    nativeToScVal(claimAmount(action.leafAmount), { type: 'u128' }),
+    xdr.ScVal.scvU32(action.mintNow),
+    xdr.ScVal.scvVec(action.proof.map((hash) => xdr.ScVal.scvBytes(hashBytes(hash)))),
+    nativeToScVal(BigInt(action.maxPrice), { type: 'i128' })
   ];
-  if (action.method === 'merkle')
-    args.push(xdr.ScVal.scvVec(action.proof.map((hash) => xdr.ScVal.scvBytes(hashBytes(hash)))));
-  return args;
 }
 
+/**
+ * The signed envelope must be exactly the reviewed call: one invocation of the DAO's
+ * ClaimMinter `claim` with the reviewed list, allocation, mint count, proof and price cap,
+ * from the claimer, authorized by the source account alone (which covers the payment it
+ * makes to the Treasury or escrow).
+ */
 export function assertClaimEnvelope(
   tx: Transaction | FeeBumpTransaction,
   prepared: PreparedClaim,
@@ -25,11 +29,12 @@ export function assertClaimEnvelope(
 ) {
   if (!('source' in tx) || tx.source !== prepared.address) throw new Error('Unexpected transaction source.');
   if (
-    prepared.method !== action.method ||
-    prepared.round !== action.round ||
-    (action.method === 'merkle' && prepared.amount !== action.amount)
+    prepared.listId !== action.listId ||
+    prepared.leafAmount !== action.leafAmount ||
+    prepared.mintNow !== action.mintNow ||
+    prepared.maxPrice !== action.maxPrice
   )
-    throw new Error('Claim does not match the reviewed round/amount.');
+    throw new Error('Claim does not match the reviewed list, allocation or price.');
   const maxTime = BigInt(tx.timeBounds?.maxTime ?? '0');
   if (maxTime <= BigInt(now) || maxTime > BigInt(now + 180))
     throw new Error('Claim review expired or has unexpected time bounds. Simulate again.');
@@ -40,8 +45,8 @@ export function assertClaimEnvelope(
   if (op.func.type !== 'hostFunctionTypeInvokeContract') throw new Error('Unexpected host function.');
   const call = op.func.invokeContract;
   if (
-    Address.fromScAddress(call.contractAddress).toString() !== prepared.minterContractId ||
-    call.functionName.toString() !== `mint_${action.method}`
+    Address.fromScAddress(call.contractAddress).toString() !== prepared.claimsContractId ||
+    call.functionName.toString() !== 'claim'
   )
     throw new Error('Unexpected claim contract or method.');
   const expected = claimCallArgs(prepared, action).map((arg) => arg.toXDR('base64'));

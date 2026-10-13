@@ -33,10 +33,11 @@ export function marketplaceFee(price: string, feeBps: number): bigint {
   return intermediate / 10_000n;
 }
 
-export function marketplaceId(value: string, kind: 'primary' | 'secondary'): bigint {
+/** A pool id or a token id: both are u32 on chain. */
+export function marketplaceId(value: string, kind: 'pool' | 'secondary'): bigint {
+  void kind;
   if (!/^(0|[1-9]\d*)$/.test(value)) throw new Error('Invalid listing identifier.');
   const id = BigInt(value);
-  if (id > (kind === 'primary' ? (1n << 64n) - 1n : (1n << 32n) - 1n))
-    throw new Error('Listing identifier is out of range.');
+  if (id > (1n << 32n) - 1n) throw new Error('Listing identifier is out of range.');
   return id;
 }

@@ -20,7 +20,7 @@ vi.mock('@/contexts/dao-context', () => {
       launchAdmin: `G${'A'.repeat(55)}`,
       auctionContractId: 'CAUCTION',
       marketplaceContractId: '',
-      minterContractId: '',
+      claimsContractId: '',
       status: 'pending'
     }
   };
@@ -76,7 +76,7 @@ const config = {
   launchAdmin: ADMIN,
   auctionContractId: 'CAUCTION',
   marketplaceContractId: '',
-  minterContractId: '',
+  claimsContractId: '',
   status: 'pending'
 } as never;
 const readiness = (patch: Record<string, unknown> = {}) => ({
@@ -85,7 +85,7 @@ const readiness = (patch: Record<string, unknown> = {}) => ({
   admin: ADMIN,
   live: false,
   paymentAssetsMatch: true,
-  platformMinter: null,
+  assurance: null,
   slugTaken: false,
   ...patch
 });

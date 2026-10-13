@@ -8,7 +8,8 @@ import {
   type CreateDaoSection,
   creationAssets,
   type CreationNetwork,
-  type DraftConfiguration
+  type DraftConfiguration,
+  OPEN_MEMBERSHIP
 } from '@/lib/create-dao-schema';
 
 export const DEFAULT_DAO_IMAGE_URL = 'https://builder-stellar-web.vercel.app/images/dao-logo.png';
@@ -63,6 +64,8 @@ export function defaultConfiguration(network: CreationNetwork = configuredCreati
     },
     auction: { enabled: true, paymentAsset, reservePrice: '1', duration: 86400, timeBuffer: 900 },
     marketplace: { enabled: false, paymentAsset, secondaryFeeBps: 500 },
+    claims: { enabled: false },
+    tokenSettings: { ...OPEN_MEMBERSHIP },
     governance: { votingDelay: 86400, votingPeriod: 259200, queueDelay: 3600, quorumBps: 1000, proposalThreshold: 1 }
   };
 }
@@ -127,7 +130,10 @@ function withProfileLinks(draft: LocalDaoDraft): LocalDaoDraft {
     ...draft,
     configuration: {
       ...draft.configuration,
-      basicInfo: withLinks(draft.configuration.basicInfo as unknown as Record<string, unknown>)
+      basicInfo: withLinks(draft.configuration.basicInfo as unknown as Record<string, unknown>),
+      // Drafts saved before claims and membership rules existed: no claims, an open community.
+      claims: draft.configuration.claims ?? { enabled: false },
+      tokenSettings: draft.configuration.tokenSettings ?? { ...OPEN_MEMBERSHIP }
     }
   };
 }
@@ -192,6 +198,8 @@ type Store = DraftConfiguration & {
   updateBasicInfo: (patch: Partial<DraftConfiguration['basicInfo']>) => void;
   updateAuction: (patch: Partial<DraftConfiguration['auction']>) => void;
   updateMarketplace: (patch: Partial<DraftConfiguration['marketplace']>) => void;
+  updateClaims: (patch: Partial<DraftConfiguration['claims']>) => void;
+  updateTokenSettings: (patch: Partial<DraftConfiguration['tokenSettings']>) => void;
   updateGovernance: (patch: Partial<DraftConfiguration['governance']>) => void;
   setImagePreview: (image: string | null, filename?: string) => void;
   setSection: (section: CreateDaoSection) => void;
@@ -288,6 +296,8 @@ export const useCreateDaoStore = create<Store>()(
           basicInfo: { ...draft.configuration.basicInfo, ...patch.basicInfo },
           auction: { ...draft.configuration.auction, ...patch.auction },
           marketplace: { ...draft.configuration.marketplace, ...patch.marketplace },
+          claims: { ...draft.configuration.claims, ...patch.claims },
+          tokenSettings: { ...draft.configuration.tokenSettings, ...patch.tokenSettings },
           governance: { ...draft.configuration.governance, ...patch.governance }
         };
         const next = {
@@ -379,6 +389,8 @@ export const useCreateDaoStore = create<Store>()(
         updateBasicInfo: (patch) => update({ basicInfo: patch }),
         updateAuction: (patch) => update({ auction: patch }),
         updateMarketplace: (patch) => update({ marketplace: patch }),
+        updateClaims: (patch) => update({ claims: patch }),
+        updateTokenSettings: (patch) => update({ tokenSettings: patch }),
         updateGovernance: (patch) => update({ governance: patch }),
         setImagePreview: (imagePreview, imageFilename = '') => update({ imagePreview, imageFilename }),
         setSection: (section) => update({ section }),

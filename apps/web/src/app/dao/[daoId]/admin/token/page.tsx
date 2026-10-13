@@ -45,7 +45,8 @@ export default function TokenAdminPage() {
   const noArtwork = Boolean(artwork.data && artwork.data.properties.length === 0);
   const [ackNoArtwork, setAckNoArtwork] = useState(false);
   const isAdmin = Boolean(session.address && token.data?.admin === session.address);
-  const hasMintAccess = Boolean(isAdmin || token.data?.mintAuthority);
+  // Only the Token admin mints directly; modules mint against their allowances.
+  const hasMintAccess = Boolean(isAdmin);
   const treasuryCanMint =
     treasuryIsAdmin(config, tokenAdmin) || treasuryHasAuthority(config.treasuryContractId, mintAuthorities?.items);
   const canProposeMint = Boolean(session.address && token.data?.live && treasuryCanMint);

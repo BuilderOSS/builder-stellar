@@ -1,4 +1,5 @@
 import { Client as AuctionClient } from '@builder-stellar/auction-bindings';
+import { Client as ClaimMinterClient } from '@builder-stellar/claim-minter-bindings';
 import { Client as GovernorClient } from '@builder-stellar/governor-bindings';
 import { Client as ManagerClient } from '@builder-stellar/manager-bindings';
 import { Client as MarketplaceClient } from '@builder-stellar/marketplace-bindings';
@@ -12,7 +13,6 @@ import { Buffer } from 'buffer';
 import { getTreasuryAssets } from '@/lib/assets-config';
 import type { DaoNetworkConfig } from '@/lib/dao-config';
 import { getDeploymentConfig } from '@/lib/deployment-config';
-import { assertMinterSpec } from '@/lib/minter/client';
 import {
   type AuthNodeDraft,
   authNodeSpecValue,
@@ -32,12 +32,26 @@ export type ProposalEncodingContext = Pick<
   | 'auctionContractId'
   | 'marketplaceContractId'
   | 'metadataContractId'
-  | 'minterContractId'
-  | 'minterSpec'
+  | 'claimsContractId'
 >;
 
 const supported = {
-  token: ['mint', 'batch_mint', 'transfer', 'set_mint_authority', 'set_metadata', 'upgrade', 'migrate'],
+  token: [
+    'mint',
+    'batch_mint',
+    'transfer',
+    'transfer_from',
+    'increase_mint_allowance',
+    'decrease_mint_allowance',
+    'set_transfers_locked',
+    'set_members_only_delegation',
+    'set_dao_recovery',
+    'set_transfer_agent',
+    'dao_transfer',
+    'set_metadata',
+    'upgrade',
+    'migrate'
+  ],
   governor: [
     'set_voting_delay',
     'set_voting_period',
@@ -65,15 +79,18 @@ const supported = {
   // Metadata has its own admin() (launch admin, then the Treasury).
   metadata: ['add_properties', 'update_renderer_base', 'update_profile', 'regenerate', 'upgrade', 'migrate'],
   marketplace: [
-    'create_primary_listing',
-    'cancel_primary',
+    'open_pool',
+    'close_pool',
+    'sweep_pool',
     'set_payment_asset',
     'set_secondary_fee_bps',
     'pause',
     'unpause',
     'upgrade',
     'migrate'
-  ]
+  ],
+  // The DAO's ClaimMinter: open a claim list (after granting it an allowance), upgrade it.
+  claims: ['open_list', 'upgrade', 'migrate']
 } as const;
 
 function integer(value: unknown): string {
@@ -90,6 +107,9 @@ function specValue(value: unknown, type: xdr.ScSpecTypeDef, spec: Spec): unknown
     if (value instanceof xdr.ScVal) return value;
     if (isTypedAuthArg(value)) return typedAuthArgToScVal(value);
     throw new Error('Untyped Val argument; submission is disabled.');
+  }
+  if (type.type === 'scSpecTypeOption') {
+    return value === null || value === undefined ? null : specValue(value, type.option.valueType, spec);
   }
   if (type.type === 'scSpecTypeVec') {
     if (!Array.isArray(value))
@@ -150,19 +170,6 @@ export function encodeSupportedCall(
   args: unknown[],
   config: ProposalEncodingContext
 ): xdr.ScVal[] {
-  if (config.minterContractId && target === config.minterContractId) {
-    if (!['set_merkle_root', 'mint_batch'].includes(fn) || !config.minterSpec?.length)
-      throw new Error('Unsupported or unavailable trusted Minter ABI.');
-    if (args[0] !== config.tokenContractId) throw new Error('Minter allocation token must match this DAO.');
-    const spec = new Spec(config.minterSpec);
-    assertMinterSpec(spec);
-    const inputs = spec.getFunc(fn).inputs;
-    if (args.length !== inputs.length) throw new Error('Invalid Minter allocation argument count.');
-    return spec.funcArgsToScVals(
-      fn,
-      Object.fromEntries(inputs.map((input, i) => [input.name.toString(), specValue(args[i], input.type, spec)]))
-    );
-  }
   // The shared Manager: only a DAO's own slug change (the Manager checks the caller is its token admin).
   if (target && target === getDeploymentConfig().managerAddress) {
     if (fn !== 'change_slug') throw new Error(`Unsupported Manager call ${fn}; submission is disabled.`);
@@ -188,7 +195,9 @@ export function encodeSupportedCall(
               ? 'marketplace'
               : target && target === config.metadataContractId
                 ? 'metadata'
-                : null;
+                : target && target === config.claimsContractId
+                  ? 'claims'
+                  : null;
   if (role && (supported[role] as readonly string[]).includes(fn)) {
     const Clients = {
       token: TokenClient,
@@ -196,7 +205,8 @@ export function encodeSupportedCall(
       auction: AuctionClient,
       treasury: TreasuryClient,
       marketplace: MarketplaceClient,
-      metadata: MetadataClient
+      metadata: MetadataClient,
+      claims: ClaimMinterClient
     };
     const spec: Spec = new Clients[role]({
       contractId: target,

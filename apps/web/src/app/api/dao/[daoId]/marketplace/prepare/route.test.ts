@@ -16,7 +16,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: {} }));
 
 import { POST } from './route';
 
-const body = { action: 'buy', kind: 'primary', id: '9007199254740993', eventId: 'event-a' };
+const body = { action: 'buy', kind: 'pool', id: '7', eventId: 'event-a' };
 const context = { params: Promise.resolve({ daoId: 'dao-a' }) };
 function request(value: unknown = body, origin = 'http://localhost:4242') {
   return new Request('http://localhost:4242/api/dao/dao-a/marketplace/prepare', {
@@ -40,7 +40,7 @@ beforeEach(() => {
 });
 
 describe('marketplace preparation API authenticated identity', () => {
-  it('passes the server actor and typed primary id to the service, never body actor fields', async () => {
+  it('passes the server actor and typed pool id to the service, never body actor fields', async () => {
     const response = await POST(request(), context);
     expect(response.status).toBe(200);
     expect(response.headers.get('cache-control')).toBe('private, no-store');

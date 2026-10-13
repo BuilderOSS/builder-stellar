@@ -35,6 +35,7 @@ export function listingStatus(
   expiresAt: string,
   now = Math.floor(Date.now() / 1000)
 ): MarketplaceListing['status'] {
+  if (status === 'closed') return 'closed';
   if (!['open', 'purchased', 'cancelled', 'expired'].includes(status))
     throw new MarketplaceError('Unknown indexed listing status.', 503);
   return status === 'open' && BigInt(expiresAt) <= BigInt(now)
@@ -50,8 +51,8 @@ export function parseMarketplaceQuery(params: URLSearchParams) {
   const status = params.get('status') ?? 'open';
   const capability = params.get('capability') ?? 'all';
   if (
-    !['all', 'primary', 'secondary'].includes(kind) ||
-    !['all', 'open', 'purchased', 'cancelled', 'expired'].includes(status) ||
+    !['all', 'pool', 'secondary'].includes(kind) ||
+    !['all', 'open', 'purchased', 'cancelled', 'expired', 'closed'].includes(status) ||
     !['all', 'marketplace', 'auction', 'metadata'].includes(capability)
   )
     throw new MarketplaceError('Invalid marketplace filter.', 400);
@@ -66,14 +67,31 @@ export function matchesSnapshot(
     price: bigint;
     payment_asset: string;
     expires_at: bigint;
-    seller?: string;
-    fee_bps?: number;
+    seller: string;
+    fee_bps: number;
   }
 ) {
   return (
+    indexed.kind === 'secondary' &&
     indexed.price === live.price.toString() &&
     indexed.paymentAsset === live.payment_asset &&
     indexed.expiresAt === live.expires_at.toString() &&
-    (indexed.kind === 'primary' || (indexed.seller === live.seller && indexed.feeBps === live.fee_bps))
+    indexed.seller === live.seller &&
+    indexed.feeBps === live.fee_bps
+  );
+}
+
+/** A pool's live terms against the indexed ones: price, asset, closing time and size never change. */
+export function matchesPoolSnapshot(
+  indexed: MarketplaceListing,
+  live: { price: bigint; asset: string; expires_at: bigint; size: number; closed: boolean }
+) {
+  return (
+    indexed.kind === 'pool' &&
+    !live.closed &&
+    indexed.price === live.price.toString() &&
+    indexed.paymentAsset === live.asset &&
+    indexed.expiresAt === live.expires_at.toString() &&
+    indexed.pool?.size === live.size
   );
 }

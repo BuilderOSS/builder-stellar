@@ -15,12 +15,8 @@ export function marketplaceGovernanceContext(config: DaoNetworkConfig) {
 export function marketplaceSettingHandlers(config: DaoNetworkConfig) {
   const context = marketplaceGovernanceContext(config);
   return getAllActionHandlers().filter((handler) => {
-    if (
-      handler.type === 'create-primary-listing' ||
-      handler.type === 'cancel-primary-listing' ||
-      handler.type === 'treasury-buy-listing'
-    )
-      return false;
+    // Settings only: pools have their own panel, and buying a listing is a Treasury action.
+    if (['open-pool', 'close-pool', 'sweep-pool', 'treasury-buy-listing'].includes(handler.type)) return false;
     try {
       return (
         Boolean(config.marketplaceContractId) &&

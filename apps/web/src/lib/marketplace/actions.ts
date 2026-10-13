@@ -12,16 +12,24 @@ import { throwIfRestoreNeeded } from '@/lib/restore-required';
 import { formatMarketplaceAmount, marketplaceFee, marketplaceId, parseMarketplaceAmount } from './amount';
 import { assertMarketplacePurchaseAuthorization, STALE_PURCHASE } from './purchase-authorization';
 import { assertSecondaryPurchaseCycle } from './purchase-cycle';
-import { MarketplaceError, marketplaceScope, matchesSnapshot } from './query';
+import { MarketplaceError, marketplaceScope, matchesPoolSnapshot, matchesSnapshot } from './query';
 import { marketplaceAsset, marketplaceHorizon, marketplaceReadiness } from './readiness';
 import { marketplaceClient, marketplaceDao, marketplaceListing } from './service';
-import type { MarketplaceAction, MarketplacePrepared } from './types';
+import type { MarketplaceAction, MarketplaceListing, MarketplacePrepared } from './types';
 
 export const marketplaceActionSchema = z.union([
   z
     .object({
       action: z.enum(['buy', 'cancel', 'expire']),
-      kind: z.enum(['primary', 'secondary']),
+      kind: z.enum(['pool', 'secondary']),
+      id: z.string().max(20),
+      eventId: z.string().min(1).max(250)
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('restock'),
+      kind: z.literal('pool'),
       id: z.string().max(20),
       eventId: z.string().min(1).max(250)
     })
@@ -41,12 +49,37 @@ export const marketplaceActionSchema = z.union([
   z
     .object({
       action: z.literal('comment'),
-      kind: z.enum(['primary', 'secondary']),
+      kind: z.literal('secondary'),
       id: z.string().max(20),
       body: z.string().min(1).max(MAX_COMMENT_BYTES)
     })
     .strict()
 ]);
+
+type PoolClient = ReturnType<typeof marketplaceClient>;
+
+/**
+ * The first token in a pool's stock, with its page: `buy_from_pool` names both. Pages fill in
+ * order and only shrink, so the first non-empty page is cheap to find. Null when nothing is
+ * stocked (anyone can restock an open pool with an unstocked rest).
+ */
+async function pickPoolToken(client: PoolClient, poolId: number): Promise<{ page: number; tokenId: number } | null> {
+  const slots = (await client.open_pools()).result;
+  const slot = slots.find((item) => item.pool_id === poolId);
+  if (!slot) return null;
+  for (let page = 0; page < slot.pages; page += 1) {
+    const ids = (await client.pool_stock({ pool_id: poolId, page })).result;
+    if (ids.length) return { page, tokenId: ids[0]! };
+  }
+  return null;
+}
+
+async function livePool(client: PoolClient, indexed: MarketplaceListing, poolId: number) {
+  const live = (await client.get_pool({ pool_id: poolId })).result;
+  if (!live || !matchesPoolSnapshot(indexed, live))
+    throw new MarketplaceError('This pool changed or closed. Refresh before signing.', 409);
+  return live;
+}
 
 /** toXdr alone does not throw on a failed simulation. Validate simulation data first. */
 export function marketplaceTransactionXdr<T>(transaction: AssembledTransaction<T>) {
@@ -114,6 +147,11 @@ export async function prepareMarketplaceAction(
     paymentAsset = action.paymentAsset;
   } else if (action.action === 'approve' || action.action === 'list' || action.action === 'revoke') {
     const tokenId = Number(marketplaceId(action.tokenId, 'secondary'));
+    // A locked community refuses holder approvals and listings (TransfersLocked): say so before simulating.
+    if (action.action !== 'revoke' && (await token.transfers_locked()).result)
+      throw new MarketplaceError(
+        'Memberships in this community are locked: tokens move only by sale from the community, by giving them back to the DAO or by a DAO vote.'
+      );
     const { result: owner } = await token.owner_of({ token_id: tokenId });
     if (owner !== actor.address)
       throw new MarketplaceError('You no longer own this token. Refresh your inventory.', 409);
@@ -185,31 +223,72 @@ export async function prepareMarketplaceAction(
           : `Escrow token #${tokenId} for ${formatMarketplaceAmount(price)} ${readiness.assetCode}. ${action.feeBps} bps is deducted from the sale price. Expires ${new Date(Number(expiry) * 1000).toISOString()}. These terms are bound into the transaction: if governance changes the fee or asset before confirmation, the listing fails instead of applying new terms. While listed, the token's vote leaves your delegate until it is sold or the listing is cancelled.`;
     }
   } else if (action.action === 'comment') {
-    // Event-only: the marketplace emits the comment and stores nothing. Anyone may comment.
+    // Event-only: the marketplace emits the comment and stores nothing. Anyone may comment on a resale.
     if (!action.body.trim() || commentBytes(action.body) > MAX_COMMENT_BYTES)
       throw new MarketplaceError('Comments need some text and must fit in 1 KB.');
     if (/[\r\n]/.test(action.body)) throw new MarketplaceError('Listing comments are one line of plain text.');
     let id: bigint;
     try {
-      id = marketplaceId(action.id, action.kind);
+      id = marketplaceId(action.id, 'secondary');
     } catch {
       throw new MarketplaceError('Invalid listing identifier.', 400);
     }
     xdr = marketplaceTransactionXdr(
-      action.kind === 'primary'
-        ? await client.comment_primary_listing({ listing_id: id, body: action.body, author: actor.address }, options)
-        : await client.comment_listing({ token_id: Number(id), body: action.body, author: actor.address }, options)
+      await client.comment_listing({ token_id: Number(id), body: action.body, author: actor.address }, options)
     );
-    summary = `Post a public comment on ${action.kind === 'primary' ? `new token listing ${id}` : `token #${id}`}. Everyone can read it, and it can't be edited or deleted.`;
-  } else if ('kind' in action) {
-    const indexed = await marketplaceListing(community, action.kind, action.id, action.eventId);
+    summary = `Post a public comment on token #${id}. Everyone can read it, and it can't be edited or deleted.`;
+  } else if ('kind' in action && action.kind === 'pool') {
+    const indexed = await marketplaceListing(community, 'pool', action.id, action.eventId);
+    if (indexed.status !== 'open') throw new MarketplaceError('This pool is not selling.', 409);
+    const poolId = Number(marketplaceId(action.id, 'pool'));
+    const live = await livePool(client, indexed, poolId);
+    paymentAsset = live.asset;
+    if (live.expires_at <= BigInt(Math.floor(Date.now() / 1000))) throw new MarketplaceError('This pool has closed.');
+    if (!launch?.isLive || config.paused)
+      throw new MarketplaceError('Pools sell only from a launched, unpaused marketplace.');
+    if (action.action === 'restock') {
+      xdr = marketplaceTransactionXdr(await client.restock({ pool_id: poolId }, options));
+      summary = `Mint the next tokens of pool ${poolId} into the marketplace so they can be bought. Anyone can do this; it costs only the network fee.`;
+    } else if (action.action === 'buy') {
+      const bought = (await client.pool_purchases({ pool_id: poolId, buyer: actor.address })).result;
+      if (bought >= live.max_per_buyer)
+        throw new MarketplaceError(
+          `You already bought the most this pool allows per wallet (${live.max_per_buyer}).`,
+          409
+        );
+      const pick = await pickPoolToken(client, poolId);
+      if (!pick) throw new MarketplaceError('Nothing is stocked in this pool right now. Restock it first.', 409);
+      const asset = marketplaceAsset(network.name, paymentAsset);
+      if (!asset) throw new MarketplaceError('Only verified XLM and USDC assets are supported.');
+      purchasePrice = live.price;
+      const simulated = await client.buy_from_pool(
+        { pool_id: poolId, page: pick.page, token_id: pick.tokenId, buyer: actor.address, max_price: purchasePrice },
+        options
+      );
+      xdr = marketplaceTransactionXdr<void>(simulated);
+      assertMarketplacePurchaseAuthorization(
+        xdr,
+        network.networkPassphrase,
+        indexed,
+        actor.address,
+        config.treasury,
+        simulated.simulationData.result.auth,
+        pick
+      );
+      // Recheck: the same pool terms and the picked token still in stock on its page.
+      await livePool(client, indexed, poolId);
+      const page = (await client.pool_stock({ pool_id: poolId, page: pick.page })).result;
+      if (!page.includes(pick.tokenId)) throw new MarketplaceError(STALE_PURCHASE, 409);
+      summary = `Pay ${formatMarketplaceAmount(live.price)} ${asset.code} to the community Treasury ${config.treasury} and receive token #${pick.tokenId} from pool ${poolId}.`;
+    } else {
+      throw new MarketplaceError('Pools are closed by DAO governance, not by buyers.');
+    }
+  } else if ('kind' in action && action.kind === 'secondary') {
+    const indexed = await marketplaceListing(community, 'secondary', action.id, action.eventId);
     if (indexed.status !== 'open' && indexed.status !== 'awaiting-expiry')
       throw new MarketplaceError('This listing is already closed.', 409);
-    const id = marketplaceId(action.id, action.kind);
-    const live =
-      action.kind === 'primary'
-        ? (await client.get_primary_listing({ listing_id: id })).result
-        : (await client.get_listing({ token_id: Number(id) })).result;
+    const id = marketplaceId(action.id, 'secondary');
+    const live = (await client.get_listing({ token_id: Number(id) })).result;
     if (!live || !matchesSnapshot(indexed, live))
       throw new MarketplaceError('This listing changed or closed. Refresh before signing.', 409);
     paymentAsset = live.payment_asset;
@@ -222,11 +301,11 @@ export async function prepareMarketplaceAction(
       purchasePrice = live.price;
       const asset = marketplaceAsset(network.name, paymentAsset);
       if (!asset) throw new MarketplaceError('Only verified XLM and USDC SAC assets are supported.');
-      const simulated =
-        action.kind === 'primary'
-          ? await client.buy_primary({ listing_id: id, buyer: actor.address, max_price: purchasePrice }, options)
-          : await client.buy({ token_id: Number(id), buyer: actor.address, max_price: purchasePrice }, options);
-      xdr = marketplaceTransactionXdr<void | number>(simulated);
+      const simulated = await client.buy(
+        { token_id: Number(id), buyer: actor.address, max_price: purchasePrice },
+        options
+      );
+      xdr = marketplaceTransactionXdr<void>(simulated);
       assertMarketplacePurchaseAuthorization(
         xdr,
         network.networkPassphrase,
@@ -235,23 +314,19 @@ export async function prepareMarketplaceAction(
         config.treasury,
         simulated.simulationData.result.auth
       );
-      if (action.kind === 'secondary') {
-        const creation = await prisma.marketplaceSecondaryListing.findFirst({
-          where: { ...scope, tokenId: id, eventId: action.eventId },
-          select: { createdLedger: true, createdTransactionHash: true }
-        });
-        if (!creation) throw new MarketplaceError(STALE_PURCHASE, 409);
-        await assertSecondaryPurchaseCycle(indexed, creation, simulated.simulation, client, server);
-      }
+      const creation = await prisma.marketplaceSecondaryListing.findFirst({
+        where: { ...scope, tokenId: id, eventId: action.eventId },
+        select: { createdLedger: true, createdTransactionHash: true }
+      });
+      if (!creation) throw new MarketplaceError(STALE_PURCHASE, 409);
+      await assertSecondaryPurchaseCycle(indexed, creation, simulated.simulation, client, server);
 
       // A token id is reusable for secondary listings. Recheck the exact indexed
       // creation event, and live fee/expiry too (rounding can hide a fee change in
       // an otherwise identical payment tree). Never fall back to a token-only quote.
       const [afterIndexed, afterLive] = await Promise.all([
-        marketplaceListing(community, action.kind, action.id, action.eventId),
-        action.kind === 'primary'
-          ? client.get_primary_listing({ listing_id: id })
-          : client.get_listing({ token_id: Number(id) })
+        marketplaceListing(community, 'secondary', action.id, action.eventId),
+        client.get_listing({ token_id: Number(id) })
       ]);
       if (
         afterIndexed.eventId !== indexed.eventId ||
@@ -261,28 +336,16 @@ export async function prepareMarketplaceAction(
       ) {
         throw new MarketplaceError(STALE_PURCHASE, 409);
       }
-      summary = `Pay ${formatMarketplaceAmount(live.price)} ${asset.code}. ${
-        action.kind === 'primary'
-          ? `Proceeds go to Treasury ${config.treasury}; one new NFT is minted directly to your account.`
-          : `Receive escrowed token #${id}; the seller pays the snapshotted ${indexed.feeBps} bps fee from the price.`
-      }`;
+      summary = `Pay ${formatMarketplaceAmount(live.price)} ${asset.code}. Receive escrowed token #${id}; the seller pays the snapshotted ${indexed.feeBps} bps fee from the price.`;
     } else if (action.action === 'cancel') {
-      if (action.kind === 'primary')
-        throw new MarketplaceError('Primary cancellations must be proposed through DAO governance.');
       if (indexed.seller !== actor.address) throw new MarketplaceError('Only the seller can cancel this listing.', 403);
       xdr = marketplaceTransactionXdr(await client.cancel({ token_id: Number(id), seller: actor.address }, options));
       summary = `Cancel the secondary listing and return token #${id} to its seller. No sale payment is made.`;
     } else {
       if (live.expires_at > BigInt(Math.floor(Date.now() / 1000)))
         throw new MarketplaceError('The listing has not expired yet.');
-      xdr =
-        action.kind === 'primary'
-          ? marketplaceTransactionXdr(await client.expire_primary({ listing_id: id }, options))
-          : marketplaceTransactionXdr(await client.expire({ token_id: Number(id) }, options));
-      summary =
-        action.kind === 'primary'
-          ? `Clear expired primary listing #${id}. No token was minted.`
-          : `Recover expired listing #${id}. The escrowed token returns to its original seller, not the caller.`;
+      xdr = marketplaceTransactionXdr(await client.expire({ token_id: Number(id) }, options));
+      summary = `Recover expired listing #${id}. The escrowed token returns to its original seller, not the caller.`;
     }
   } else {
     throw new MarketplaceError('Unsupported marketplace action.');

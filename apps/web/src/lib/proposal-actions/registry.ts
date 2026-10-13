@@ -5,8 +5,8 @@ import { mintGovernanceTokenHandler } from './actions/mint-governance-token';
 import { transferSacTokenHandler } from './actions/transfer-sac-token';
 import {
   cancelAuctionHandler,
-  cancelPrimaryListingHandler,
-  createPrimaryListingHandler,
+  closePoolHandler,
+  openPoolHandler,
   pauseAuctionHandler,
   pauseMarketplaceHandler,
   setAuctionDurationHandler,
@@ -16,12 +16,12 @@ import {
   setAuctionTimeBufferHandler,
   setMarketplacePaymentTokenHandler,
   setMarketplaceSecondaryFeeHandler,
-  setMintAuthorityHandler,
   setProposalThresholdHandler,
   setQueueDelayHandler,
   setQuorumBpsHandler,
   setVotingDelayHandler,
   setVotingPeriodHandler,
+  sweepPoolHandler,
   unpauseAuctionHandler,
   unpauseMarketplaceHandler
 } from './admin-actions';
@@ -31,7 +31,8 @@ import {
   artworkSettingHandlers,
   updateDaoProfileHandler
 } from './artwork-admin-actions';
-import { minterAllocationHandlers } from './minter-actions';
+import { membershipHandlers } from './membership-actions';
+import { openClaimListHandler } from './minter-actions';
 import { moduleUpgradeHandler } from './module-upgrade-actions';
 import { reviewFixHandlers } from './review-fix-actions';
 import { changeDaoSlugHandler } from './slug-actions';
@@ -57,7 +58,7 @@ const REGISTERED_HANDLERS: ActionHandler[] = [
   mintGovernanceTokenHandler,
   batchMintGovernanceTokenHandler,
   transferSacTokenHandler,
-  setMintAuthorityHandler,
+  ...membershipHandlers,
   setVotingDelayHandler,
   setVotingPeriodHandler,
   setProposalThresholdHandler,
@@ -75,15 +76,16 @@ const REGISTERED_HANDLERS: ActionHandler[] = [
   setMarketplaceSecondaryFeeHandler,
   pauseMarketplaceHandler,
   unpauseMarketplaceHandler,
-  createPrimaryListingHandler,
+  openPoolHandler,
+  closePoolHandler,
+  sweepPoolHandler,
   setTokenMetadataHandler,
   transferDaoTokenHandler,
   changeDaoSlugHandler,
-  cancelPrimaryListingHandler,
   registeredArtworkPropertiesHandler,
   ...artworkSettingHandlers,
   updateDaoProfileHandler,
-  ...minterAllocationHandlers,
+  openClaimListHandler,
   registeredModuleUpgradeHandler,
   ...reviewFixHandlers
 ];

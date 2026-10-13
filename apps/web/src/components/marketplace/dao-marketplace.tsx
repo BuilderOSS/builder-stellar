@@ -68,7 +68,7 @@ export function DaoMarketplaceView({
   selectedEventId?: string;
 }) {
   const { routeId } = useDaoContext();
-  const [kind, setKind] = useState(['primary', 'secondary'].includes(initialKind) ? initialKind : 'all');
+  const [kind, setKind] = useState(['pool', 'secondary'].includes(initialKind) ? initialKind : 'all');
   const [status, setStatus] = useState(
     ['all', 'open', 'purchased', 'cancelled', 'expired'].includes(initialStatus) ? initialStatus : 'open'
   );
@@ -142,7 +142,7 @@ export function DaoMarketplaceView({
                 }}
               >
                 <option value="all">New and resale</option>
-                <option value="primary">New from the community</option>
+                <option value="pool">New from the community</option>
                 <option value="secondary">Resale from members</option>
               </Select>
               <Select
@@ -216,7 +216,7 @@ export function DaoMarketplaceView({
               onNext={() => setPage(page + 1)}
             />
 
-            <Section title="Recent sales" description="New listing numbers are separate from token numbers.">
+            <Section title="Recent sales" description="Pool numbers are separate from token numbers.">
               {!data.sales.length ? (
                 <p className={note}>No sales on this page yet.</p>
               ) : (
@@ -225,7 +225,7 @@ export function DaoMarketplaceView({
                     <ListRow
                       key={sale.eventId}
                       title={`#${sale.tokenId}`}
-                      meta={`${sale.kind === 'primary' ? 'New' : 'Resale'}${sale.listingId ? ` · listing ${sale.listingId}` : ''}${
+                      meta={`${sale.kind === 'pool' ? 'New' : 'Resale'}${sale.poolId ? ` · pool ${sale.poolId}` : ''}${
                         sale.at ? ` · ${new Date(sale.at).toLocaleDateString()}` : ''
                       }${sale.fee ? ` · fee ${marketplaceDisplayAmount(data.network, sale.paymentAsset, sale.fee)}` : ''}`}
                       trailing={

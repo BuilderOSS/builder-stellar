@@ -67,14 +67,31 @@ export function getProposalActionIdentity(action: ProposalQueuedAction): Proposa
 
 export function getProposalActionResourceKey(action: ProposalQueuedAction): string {
   switch (action.type) {
-    case 'set-merkle-root':
-      return `minter:${action.minterContractId}:${action.tokenContractId}:${action.type}`;
-    case 'minter-batch-mint':
-      return `minter:${action.minterContractId}:${action.tokenContractId}:batch:${action.id}`;
-    case 'set-mint-authority':
-      return `${action.type}:${String(action.authority || action.recipient)
+    case 'open-claim-list':
+      // Every list is its own (non-idempotent) resource, even with an identical payload.
+      return `claims:${action.claimsContractId}:list:${action.id}`;
+    case 'change-mint-allowance':
+      // Allowance changes add up: two for one module are two resources.
+      return `token:allowance:${String(action.module || action.recipient)
+        .trim()
+        .toUpperCase()}:${action.id}`;
+    case 'set-transfers-locked':
+    case 'set-members-only-delegation':
+    case 'set-dao-recovery':
+      return `token:${action.type}`;
+    case 'set-transfer-agent':
+      return `token:agent:${String(action.module || action.recipient)
         .trim()
         .toUpperCase()}`;
+    case 'dao-transfer':
+    case 'approved-transfer':
+      // Any move of one token, by any path, is one resource.
+      return `token:transfer:${String(action.tokenId ?? '').trim()}`;
+    case 'open-pool':
+      return `marketplace:pool:open:${action.id}`;
+    case 'close-pool':
+    case 'sweep-pool':
+      return `marketplace:${action.type}:${String(action.poolId ?? '').trim()}`;
     case 'set-voting-delay':
     case 'set-voting-period':
     case 'set-queue-delay':
@@ -118,11 +135,6 @@ export function getProposalActionResourceKey(action: ProposalQueuedAction): stri
       return 'auction:duration';
     case 'set-auction-time-buffer':
       return 'auction:time-buffer';
-    case 'create-primary-listing':
-      // Each distinct listing is its own resource; only an identical listing is a duplicate.
-      return `marketplace:create-primary:${String(action.price || '').trim()}:${String(action.expiresAt || '').trim()}`;
-    case 'cancel-primary-listing':
-      return `marketplace:cancel-primary:${String(action.listingId || '').trim()}`;
     default:
       return action.type;
   }
@@ -144,18 +156,29 @@ export function isHighRiskProposalAction(action: ProposalQueuedAction) {
     action.type === 'change-dao-slug' ||
     action.type === 'upgrade-dao-module' ||
     action.type === 'add-artwork-properties' ||
-    action.type === 'set-merkle-root' ||
+    action.type === 'open-claim-list' ||
+    action.type === 'open-pool' ||
     action.type === 'update-dao-profile' ||
-    action.type === 'minter-batch-mint' ||
+    action.type === 'set-transfers-locked' ||
+    action.type === 'set-members-only-delegation' ||
+    action.type === 'set-dao-recovery' ||
+    action.type === 'set-transfer-agent' ||
+    action.type === 'dao-transfer' ||
+    action.type === 'approved-transfer' ||
     ARTWORK_SETTINGS.has(action.type)
   );
 }
 
 /** Why a high-risk action deserves a second look, in members' words. */
 function highRiskMessage(action: ProposalQueuedAction) {
-  return action.type === 'upgrade-dao-module'
-    ? 'Replaces this contract’s code. The contract checks the upgrade is approved when the proposal runs; an unapproved one fails and changes nothing.'
-    : 'This action can change DAO control, treasury behavior, or token balances.';
+  if (action.type === 'upgrade-dao-module')
+    return 'Replaces this contract’s code. The contract checks the upgrade is approved when the proposal runs; an unapproved one fails and changes nothing.';
+  if (action.type === 'set-transfers-locked' && action.enabled === true)
+    return 'Locks memberships: members can no longer sell their tokens, only give them back to the DAO or ask for a vote.';
+  if (action.type === 'set-dao-recovery' && action.enabled === true)
+    return 'Lets a vote move any member’s token without their signature.';
+  if (action.type === 'dao-transfer') return 'Moves a member’s token and its votes without the member’s signature.';
+  return 'This action can change DAO control, treasury behavior, or token balances.';
 }
 
 const PAUSE_TOGGLES = new Set(['pause-auction', 'unpause-auction', 'pause-marketplace', 'unpause-marketplace']);

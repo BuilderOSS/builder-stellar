@@ -33,21 +33,47 @@ describe('one current creation configuration', () => {
     config.basicInfo.contractImage = 'data:image/png;base64,AAAA';
     expect(createDaoSchema.safeParse(config).success).toBe(false);
   });
-  it('maps disabled modules to valid initialization rather than omitting their parameters', () => {
+  it('creates only the modules the membership type needs, with the membership rules', () => {
     const config = valid();
-    config.auction.enabled = false;
+    config.auction.enabled = true;
     config.marketplace.enabled = false;
-    const params = formDataToCreationParams(config, wallet, 12n, 'testnet');
-    expect(params.initial_config.auction.reserve_price).toBe(10_000_000n);
-    expect(params.initial_config.auction.duration).toBe(86400n);
-    expect(params.initial_config.marketplace.payment_asset).toBe(config.marketplace.paymentAsset);
+    const auctionOnly = formDataToCreationParams(config, wallet, 12n, 'testnet').initial_config;
+    expect(auctionOnly.modules.map((spec) => spec.tag)).toEqual(['Auction']);
+    const auction = auctionOnly.modules[0]!;
+    expect(auction.tag === 'Auction' && auction.values[0].reserve_price).toBe(10_000_000n);
+    expect(auction.tag === 'Auction' && auction.values[0].duration).toBe(86400n);
+    expect(auctionOnly.token_settings).toEqual({
+      transfers_locked: false,
+      members_only_delegation: false,
+      dao_recovery: false
+    });
+    expect(auctionOnly.transfer_agents).toEqual([]);
+
+    config.auction.enabled = false;
+    config.claims.enabled = true;
+    config.tokenSettings = { transfersLocked: true, membersOnlyDelegation: true, daoRecovery: true };
+    const invite = formDataToCreationParams(config, wallet, 12n, 'testnet').initial_config;
+    // Claims are priced in the auction's asset even without an auction.
+    expect(invite.modules).toEqual([{ tag: 'Claims', values: [{ payment_asset: config.auction.paymentAsset }] }]);
+    expect(invite.token_settings).toEqual({
+      transfers_locked: true,
+      members_only_delegation: true,
+      dao_recovery: true
+    });
+  });
+  it('opens an older draft without claims or membership rules as an open community', () => {
+    const config = valid() as Record<string, unknown>;
+    delete config.claims;
+    delete config.tokenSettings;
+    const parsed = draftConfigurationSchema.parse(config);
+    expect(parsed.claims).toEqual({ enabled: false });
+    expect(parsed.tokenSettings).toEqual({ transfersLocked: false, membersOnlyDelegation: false, daoRecovery: false });
   });
   it('uses exact decimal integers beyond floating-point precision', () => {
     const config = valid();
     config.auction.reservePrice = '9007199254740993.1234567';
-    expect(formDataToCreationParams(config, wallet, 1n).initial_config.auction.reserve_price).toBe(
-      90071992547409931234567n
-    );
+    const [auction] = formDataToCreationParams(config, wallet, 1n).initial_config.modules;
+    expect(auction?.tag === 'Auction' && auction.values[0].reserve_price).toBe(90071992547409931234567n);
   });
   it.each(['0', '0.0000001', '1e2', '1.00000001', '-1', '170141183460469231731687303715884.105728'])(
     'rejects invalid reserve %s even if auctions are disabled',
@@ -88,9 +114,13 @@ describe('one current creation configuration', () => {
   });
   it('pins both independently selected assets and rejects another launch admin', () => {
     const config = valid();
+    config.auction.enabled = true;
+    config.marketplace.enabled = true;
     config.marketplace.paymentAsset = creationAssets('testnet')[1].contractId!;
-    const params = formDataToCreationParams(config, wallet, 1n);
-    expect(params.initial_config.auction.payment_asset).not.toBe(params.initial_config.marketplace.payment_asset);
+    const [auction, market] = formDataToCreationParams(config, wallet, 1n).initial_config.modules;
+    expect(auction?.tag === 'Auction' && auction.values[0].payment_asset).not.toBe(
+      market?.tag === 'Marketplace' && market.values[0].payment_asset
+    );
     expect(() => formDataToCreationParams(config, Keypair.random().publicKey(), 1n)).toThrow('deployer');
   });
   it('generates u64 nonces and rejects out-of-range nonces', () => {

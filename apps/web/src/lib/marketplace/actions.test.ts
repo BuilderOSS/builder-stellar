@@ -16,18 +16,21 @@ const mocks = vi.hoisted(() => ({
   listing: vi.fn(),
   client: {
     get_config: vi.fn(),
-    get_primary_listing: vi.fn(),
+    get_pool: vi.fn(),
+    open_pools: vi.fn(),
+    pool_stock: vi.fn(),
+    pool_purchases: vi.fn(),
     get_listing: vi.fn(),
-    buy_primary: vi.fn(),
+    buy_from_pool: vi.fn(),
+    restock: vi.fn(),
     buy: vi.fn(),
     list: vi.fn(),
     cancel: vi.fn(),
     expire: vi.fn(),
-    expire_primary: vi.fn(),
     secondaryListingCreatedEventFilter: vi.fn(),
     parseEvent: vi.fn()
   },
-  token: { owner_of: vi.fn(), approve: vi.fn() },
+  token: { owner_of: vi.fn(), approve: vi.fn(), transfers_locked: vi.fn() },
   launch: vi.fn(),
   creation: vi.fn(),
   readiness: vi.fn(),
@@ -62,6 +65,7 @@ vi.mock('@builder-stellar/token-bindings', () => ({
   Client: class {
     owner_of = mocks.token.owner_of;
     approve = mocks.token.approve;
+    transfers_locked = mocks.token.transfers_locked;
   }
 }));
 
@@ -105,6 +109,16 @@ const indexed: MarketplaceListing = {
   closedAt: null,
   transactionHash: 'hash'
 };
+const poolListing: MarketplaceListing = {
+  ...indexed,
+  kind: 'pool',
+  id: '4',
+  tokenId: null,
+  seller: null,
+  feeBps: 0,
+  eventId: 'pool-event',
+  pool: { size: 3, stocked: 3, sold: 1, inStock: 2, maxPerBuyer: 1, maxSoldPerPeriod: 5, periodSecs: 3600 }
+};
 function transaction() {
   const xdr = new TransactionBuilder(new Account(buyer, '1'), { fee: '100', networkPassphrase: Networks.TESTNET })
     .addOperation(Operation.manageData({ name: 'mock marketplace transaction', value: null }))
@@ -142,27 +156,31 @@ beforeEach(() => {
   mocks.client.get_listing.mockResolvedValue({
     result: { price: 10000001n, payment_asset: usdc, expires_at: expiry, seller, fee_bps: 250 }
   });
-  mocks.client.get_primary_listing.mockResolvedValue({
-    result: { price: 10000001n, payment_asset: usdc, expires_at: expiry }
+  mocks.client.get_pool.mockResolvedValue({
+    result: { price: 10000001n, asset: usdc, expires_at: expiry, size: 3, closed: false, max_per_buyer: 1 }
   });
+  mocks.client.open_pools.mockResolvedValue({ result: [{ pool_id: 4, unstocked: 0, pages: 2 }] });
+  mocks.client.pool_stock.mockImplementation(({ page }) => Promise.resolve({ result: page === 0 ? [] : [21, 22] }));
+  mocks.client.pool_purchases.mockResolvedValue({ result: 0 });
   mocks.token.owner_of.mockResolvedValue({ result: buyer });
+  mocks.token.transfers_locked.mockResolvedValue({ result: false });
   mocks.horizonAccount.mockResolvedValue(new Account(buyer, '1'));
   for (const fn of [
     mocks.token.approve,
     mocks.client.buy,
-    mocks.client.buy_primary,
+    mocks.client.buy_from_pool,
+    mocks.client.restock,
     mocks.client.list,
     mocks.client.cancel,
-    mocks.client.expire,
-    mocks.client.expire_primary
+    mocks.client.expire
   ])
     fn.mockResolvedValue(transaction());
   mocks.client.buy.mockImplementation(({ token_id }) =>
     Promise.resolve(purchaseFixture({ ...indexed, id: String(token_id) }, buyer))
   );
-  mocks.client.buy_primary.mockImplementation(({ listing_id }) =>
+  mocks.client.buy_from_pool.mockImplementation(({ pool_id, page, token_id }) =>
     Promise.resolve(
-      purchaseFixture({ ...indexed, kind: 'primary', id: listing_id.toString(), seller: null, feeBps: 0 }, buyer)
+      purchaseFixture({ ...poolListing, id: String(pool_id) }, buyer, undefined, { pick: { page, tokenId: token_id } })
     )
   );
   mocks.token.approve.mockImplementation(({ owner, spender, token_id, expiration_ledger }) =>
@@ -214,14 +232,16 @@ beforeEach(() => {
 });
 
 describe('authenticated marketplace preparation lifecycle', () => {
-  it('rejects spoofed wallet/body fields, mixed primary/token identifiers and invented actions', () => {
-    const valid = { action: 'buy', kind: 'primary', id: '9007199254740993', eventId: 'event' };
+  it('rejects spoofed wallet/body fields, mixed pool/token identifiers and invented actions', () => {
+    const valid = { action: 'buy', kind: 'pool', id: '4', eventId: 'event' };
     expect(marketplaceActionSchema.parse(valid)).toEqual(valid);
     for (const body of [
       { ...valid, buyer },
       { ...valid, address: seller },
       { ...valid, tokenId: '7' },
-      { action: 'create_primary_listing', price: '1' }
+      { action: 'create_primary_listing', price: '1' },
+      { action: 'restock', kind: 'secondary', id: '7', eventId: 'event' },
+      { action: 'comment', kind: 'pool', id: '4', body: 'hi' }
     ]) {
       expect(marketplaceActionSchema.safeParse(body).success).toBe(false);
     }
@@ -236,30 +256,67 @@ describe('authenticated marketplace preparation lifecycle', () => {
     ).rejects.toThrow('deployment network');
     expect(mocks.dao).not.toHaveBeenCalled();
   });
-  it('primary uses exact u64 listing id, pays captured asset and mints to the server actor', async () => {
-    const id = '9007199254740993';
-    mocks.listing.mockResolvedValue({ ...indexed, kind: 'primary', id, tokenId: null, seller: null, feeBps: 0 });
+  it('a pool purchase picks the first stocked token and its page, pays the Treasury and pins both', async () => {
+    mocks.listing.mockResolvedValue(poolListing);
     const result = await prepareMarketplaceAction('dao-a', actor, {
       action: 'buy',
-      kind: 'primary',
-      id,
-      eventId: 'primary-event'
+      kind: 'pool',
+      id: '4',
+      eventId: 'pool-event'
     });
-    expect(mocks.client.buy_primary).toHaveBeenCalledWith(
-      { listing_id: 9007199254740993n, buyer, max_price: 10000001n },
+    expect(mocks.client.buy_from_pool).toHaveBeenCalledWith(
+      { pool_id: 4, page: 1, token_id: 21, buyer, max_price: 10000001n },
       { timeoutInSeconds: 180 }
     );
     expect(mocks.client.buy).not.toHaveBeenCalled();
     expect(mocks.readiness).toHaveBeenCalledWith(buyer, 'testnet', usdc);
     expect(result.summary).toContain('1.0000001 USDC');
-    expect(result.summary).toContain('minted directly');
+    expect(result.summary).toContain('token #21 from pool 4');
     expect(result.address).toBe(buyer);
-    expect(result.deploymentId).toBe('deployment-a');
-    expect(result.daoId).toBe('dao-a');
     expect(result.fee).toBe('100');
-    expect(() => JSON.stringify(result)).not.toThrow();
   });
-  it('secondary buys token id, not a primary id, using old fee/asset after config changes', async () => {
+  it('refuses a pool purchase past the per-wallet cap, with no stock, or after the token left the page', async () => {
+    mocks.listing.mockResolvedValue(poolListing);
+    const buy = () =>
+      prepareMarketplaceAction('dao-a', actor, { action: 'buy', kind: 'pool', id: '4', eventId: 'pool-event' });
+    mocks.client.pool_purchases.mockResolvedValueOnce({ result: 1 });
+    await expect(buy()).rejects.toThrow('per wallet');
+    mocks.client.pool_stock.mockResolvedValue({ result: [] });
+    await expect(buy()).rejects.toThrow('Restock');
+    // Stocked at the pick, gone at the recheck.
+    mocks.client.pool_stock.mockResolvedValueOnce({ result: [21] }).mockResolvedValueOnce({ result: [] });
+    mocks.client.open_pools.mockResolvedValue({ result: [{ pool_id: 4, unstocked: 0, pages: 1 }] });
+    await expect(buy()).rejects.toMatchObject({ status: 409 });
+  });
+  it('anyone may restock an open pool; nobody closes one from the trade flow', async () => {
+    mocks.listing.mockResolvedValue(poolListing);
+    const result = await prepareMarketplaceAction('dao-a', actor, {
+      action: 'restock',
+      kind: 'pool',
+      id: '4',
+      eventId: 'pool-event'
+    });
+    expect(mocks.client.restock).toHaveBeenCalledWith({ pool_id: 4 }, { timeoutInSeconds: 180 });
+    expect(result.summary).toContain('Anyone can do this');
+    await expect(
+      prepareMarketplaceAction('dao-a', actor, { action: 'cancel', kind: 'pool', id: '4', eventId: 'pool-event' })
+    ).rejects.toThrow('governance');
+  });
+  it('a locked community refuses approvals and listings before simulating', async () => {
+    mocks.token.transfers_locked.mockResolvedValue({ result: true });
+    await expect(
+      prepareMarketplaceAction('dao-a', actor, {
+        action: 'list',
+        tokenId: '7',
+        price: '1',
+        expiresAt: String(expiry),
+        paymentAsset: xlm,
+        feeBps: 500
+      })
+    ).rejects.toThrow('locked');
+    expect(mocks.client.list).not.toHaveBeenCalled();
+  });
+  it('secondary buys token id, not a pool id, using old fee/asset after config changes', async () => {
     const result = await prepareMarketplaceAction('dao-a', actor, {
       action: 'buy',
       kind: 'secondary',
@@ -270,7 +327,7 @@ describe('authenticated marketplace preparation lifecycle', () => {
       { token_id: 7, buyer, max_price: 10000001n },
       { timeoutInSeconds: 180 }
     );
-    expect(mocks.client.buy_primary).not.toHaveBeenCalled();
+    expect(mocks.client.buy_from_pool).not.toHaveBeenCalled();
     expect(result.summary).toContain('250 bps');
     expect(mocks.readiness).toHaveBeenCalledWith(buyer, 'testnet', usdc);
   });
@@ -372,25 +429,32 @@ describe('authenticated marketplace preparation lifecycle', () => {
     ).rejects.toThrow('changed or closed');
     expect(mocks.client.buy).not.toHaveBeenCalled();
   });
-  it.each(['primary', 'secondary'] as const)(
+  it.each(['pool', 'secondary'] as const)(
     'rejects old price read / replacement price simulated for %s before returning signable XDR',
     async (kind) => {
       const original = {
-        ...indexed,
-        kind,
+        ...(kind === 'pool' ? poolListing : indexed),
         price: '10000000',
-        paymentAsset: xlm,
-        seller: kind === 'primary' ? null : seller,
-        feeBps: kind === 'primary' ? 0 : 250
+        paymentAsset: xlm
       };
       mocks.listing.mockResolvedValue(original);
-      const live = { price: 10000000n, payment_asset: xlm, expires_at: expiry, seller, fee_bps: 250 };
-      mocks.client.get_listing.mockResolvedValue({ result: live });
-      mocks.client.get_primary_listing.mockResolvedValue({ result: live });
-      const replacement = purchaseFixture({ ...original, price: '20000000' }, buyer);
-      (kind === 'primary' ? mocks.client.buy_primary : mocks.client.buy).mockResolvedValue(replacement);
+      mocks.client.get_listing.mockResolvedValue({
+        result: { price: 10000000n, payment_asset: xlm, expires_at: expiry, seller, fee_bps: 250 }
+      });
+      mocks.client.get_pool.mockResolvedValue({
+        result: { price: 10000000n, asset: xlm, expires_at: expiry, size: 3, closed: false, max_per_buyer: 1 }
+      });
+      const replacement = purchaseFixture({ ...original, price: '20000000' }, buyer, undefined, {
+        pick: { page: 1, tokenId: 21 }
+      });
+      (kind === 'pool' ? mocks.client.buy_from_pool : mocks.client.buy).mockResolvedValue(replacement);
       await expect(
-        prepareMarketplaceAction('dao-a', actor, { action: 'buy', kind, id: '7', eventId: 'cycle-one' })
+        prepareMarketplaceAction('dao-a', actor, {
+          action: 'buy',
+          kind,
+          id: kind === 'pool' ? '4' : '7',
+          eventId: 'cycle-one'
+        })
       ).rejects.toMatchObject({ status: 409 });
       expect(mocks.readiness).not.toHaveBeenCalled();
     }
@@ -414,7 +478,7 @@ describe('authenticated marketplace preparation lifecycle', () => {
       select: { createdLedger: true, createdTransactionHash: true }
     });
   });
-  it('allows seller cancellation while paused, never a direct primary cancellation', async () => {
+  it('allows seller cancellation while paused', async () => {
     mocks.listing.mockResolvedValue({ ...indexed, seller: buyer });
     mocks.client.get_listing.mockResolvedValue({
       result: { price: 10000001n, payment_asset: usdc, expires_at: expiry, seller: buyer, fee_bps: 250 }
@@ -428,10 +492,6 @@ describe('authenticated marketplace preparation lifecycle', () => {
       eventId: 'cycle-one'
     });
     expect(mocks.client.cancel).toHaveBeenCalledWith({ token_id: 7, seller: buyer }, { timeoutInSeconds: 180 });
-    mocks.listing.mockResolvedValue({ ...indexed, kind: 'primary', seller: null });
-    await expect(
-      prepareMarketplaceAction('dao-a', actor, { action: 'cancel', kind: 'primary', id: '7', eventId: 'event' })
-    ).rejects.toThrow('governance');
   });
   it('allows anyone to expire escrow after expiry, including while paused', async () => {
     const past = BigInt(Math.floor(Date.now() / 1000) - 1);
@@ -449,22 +509,6 @@ describe('authenticated marketplace preparation lifecycle', () => {
     });
     expect(mocks.client.expire).toHaveBeenCalledWith({ token_id: 7 }, { timeoutInSeconds: 180 });
     expect(result.summary).toContain('original seller, not the caller');
-  });
-  it('clears expired primary ids without ever transferring an existing token', async () => {
-    const past = BigInt(Math.floor(Date.now() / 1000) - 1);
-    mocks.listing.mockResolvedValue({
-      ...indexed,
-      kind: 'primary',
-      seller: null,
-      expiresAt: past.toString(),
-      status: 'awaiting-expiry'
-    });
-    mocks.client.get_primary_listing.mockResolvedValue({
-      result: { price: 10000001n, payment_asset: usdc, expires_at: past }
-    });
-    await prepareMarketplaceAction('dao-a', actor, { action: 'expire', kind: 'primary', id: '7', eventId: 'event' });
-    expect(mocks.client.expire_primary).toHaveBeenCalledWith({ listing_id: 7n }, { timeoutInSeconds: 180 });
-    expect(mocks.client.expire).not.toHaveBeenCalled();
   });
   it('blocks insufficient asset funds, trustline authorization and exact native fee shortfalls', async () => {
     for (const patch of [

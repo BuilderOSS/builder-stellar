@@ -7,10 +7,11 @@
 
 import { getNetworkConfig, type NetworkName } from '@/config/networks';
 
-import { getDaoConfigFromDatabase, resolveDaoId } from './dao-db';
+import { getDaoConfigFromDatabase, getTokenSettingsFromDatabase, resolveDaoId, type TokenSettings } from './dao-db';
 import type { DaoProfile } from './dao-profile';
-import { pinnedMinterConfig, registeredMinterConfig } from './registered-minter-config';
 import { cached } from './server-cache';
+
+export type { TokenSettings } from './dao-db';
 
 export type DaoNetworkConfig = {
   name: NetworkName;
@@ -45,12 +46,12 @@ export type DaoNetworkConfig = {
   treasuryContractId: string;
   auctionContractId: string;
   marketplaceContractId: string;
-  /**
-   * The DAO's Minter with an RPC-validated spec: the one pinned at launch, or the
-   * Manager's registered platform Minter while pending. Absent means fail closed.
-   */
-  minterContractId?: string;
-  minterSpec?: string[];
+  /** The DAO's ClaimMinter (registry kind `claims`); empty when the DAO has none. */
+  claimsContractId: string;
+  /** The membership switches in force (docs/designs/locked-tokens.md); all off is an open DAO. */
+  tokenSettings: TokenSettings;
+  /** An assurance drive's outcome; null when the DAO never opened one. */
+  assuranceOutcome: 'open' | 'launched' | 'released' | null;
   auctionEnabled: boolean | null;
   auctionPaused: boolean | null;
   /** Indexed launch choice; null while pending or unknown. */
@@ -110,15 +111,9 @@ async function loadDaoNetworkConfig(daoId: string): Promise<DaoNetworkConfig> {
 
   // Get network configuration from static config
   const networkConfig = getNetworkConfig(daoConfig.network);
-  const source = daoConfig.launch_admin || daoConfig.admin_address || '';
-  const minter = await (
-    daoConfig.minter_contract
-      ? pinnedMinterConfig(networkConfig, source, daoConfig.minter_contract)
-      : registeredMinterConfig(networkConfig, source)
-  ).catch(() => ({ minterContractId: '', minterSpec: undefined }));
+  const tokenSettings = await getTokenSettingsFromDatabase(daoConfig.dao_id);
 
   return {
-    ...minter,
     name: daoConfig.network,
     label: daoConfig.label || '',
     slug: daoConfig.slug ?? null,
@@ -140,6 +135,9 @@ async function loadDaoNetworkConfig(daoId: string): Promise<DaoNetworkConfig> {
     treasuryContractId: daoConfig.treasury_contract ?? '',
     auctionContractId: daoConfig.auction_contract ?? '',
     marketplaceContractId: daoConfig.marketplace_contract ?? '',
+    claimsContractId: daoConfig.claims_contract ?? '',
+    tokenSettings,
+    assuranceOutcome: daoConfig.assurance_outcome,
     auctionEnabled: daoConfig.auction_enabled,
     auctionPaused: daoConfig.auction_paused,
     marketplaceEnabled: daoConfig.marketplace_enabled,
