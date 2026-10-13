@@ -16,6 +16,7 @@ Coverage includes mint hooks, voting snapshots, ordered Treasury execution, fail
 - `treasury_buys_a_marketplace_listing_through_an_authorized_proposal`: nested authorization via an `authorize` action.
 - `system_held_tokens_and_votes_through_a_real_proposal`: voting supply, quorum, delegation and system contracts never voting.
 - `error_codes_are_unique_per_crate_block`.
+- `voting_units_match_balances_and_checkpoints_add_up` (`src/voting_invariant.rs`): fixed-seed random mints, batch mints, transfers between wallets and the Treasury/Auction/Marketplace, and delegations. After every step: voting units equal balance (zero for non-voting holders), `TotalSupply` equals the units, and the account checkpoints add up to `TotalSupply`. It is the gate for the module registry in `docs/designs/membership-models.md` ("The Assignment").
 
 Some tests use mocks; consult [test.rs](src/test.rs) for each fixture.
 
