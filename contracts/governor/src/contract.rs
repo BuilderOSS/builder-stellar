@@ -45,9 +45,22 @@ impl DaoGovernorContract {
         if treasury != Self::treasury(e) {
             panic_with_error!(e, CustomGovernorError::TreasuryMismatch);
         }
-        common::admin::handoff(e, &treasury);
+        common::admin::handoff_once(e, &treasury);
         common::ttl::extend_instance(e);
         emit_launched(e, &treasury);
+    }
+
+    /// Manager-only early handoff (`manager.open_assurance`): the admin moves
+    /// to the Treasury and the contract stays in Setup, so the governance
+    /// settings are frozen until launch.
+    pub fn handoff(e: &Env, treasury: Address) {
+        Self::manager(e).require_auth();
+        common::lifecycle::require_setup(e);
+        if treasury != Self::treasury(e) {
+            panic_with_error!(e, CustomGovernorError::TreasuryMismatch);
+        }
+        common::admin::handoff_once(e, &treasury);
+        common::ttl::extend_instance(e);
     }
 
     /// Initializes the governor contract with governance parameters.

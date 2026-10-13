@@ -118,6 +118,29 @@ pub struct DaoLaunched {
     pub registry: Vec<ModuleEntry>,
 }
 
+/// Emitted by `open_assurance`: the drive's list, its deadline and the
+/// launch config every launch path will use. The slug is reserved
+/// (`SlugClaimed`) in the same call.
+#[contractevent]
+pub struct AssuranceOpened {
+    #[topic]
+    pub token_address: Address,
+    pub claim_minter: Address,
+    pub list_id: u32,
+    pub deadline: u64,
+    pub launch_auction: bool,
+    pub launch_marketplace: bool,
+}
+
+/// Emitted by `release_slug`: a failed drive's reserved slug is free again.
+#[contractevent]
+pub struct SlugReleased {
+    #[topic]
+    pub token_address: Address,
+    #[topic]
+    pub slug: String,
+}
+
 /// Emitted by `create_module`: the `n`th module of `kind` for the DAO,
 /// at `predict_module_address(token, kind, n)`.
 #[contractevent]

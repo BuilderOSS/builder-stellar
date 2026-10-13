@@ -31,9 +31,22 @@ impl DaoTreasuryContract {
         if treasury != e.current_contract_address() {
             panic_with_error!(e, TreasuryError::TreasuryMismatch);
         }
-        common::admin::handoff(e, &treasury);
+        common::admin::handoff_once(e, &treasury);
         common::ttl::extend_instance(e);
         emit_launched(e, &treasury);
+    }
+
+    /// Manager-only early handoff (`manager.open_assurance`): the admin
+    /// becomes the Treasury itself and the contract stays in Setup, so its
+    /// setup-only calls are frozen until launch.
+    pub fn handoff(e: &Env, treasury: Address) {
+        Self::manager(e).require_auth();
+        common::lifecycle::require_setup(e);
+        if treasury != e.current_contract_address() {
+            panic_with_error!(e, TreasuryError::TreasuryMismatch);
+        }
+        common::admin::handoff_once(e, &treasury);
+        common::ttl::extend_instance(e);
     }
 
     /// Initializes the treasury.

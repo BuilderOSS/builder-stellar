@@ -54,6 +54,14 @@ pub fn require_admin(e: &Env) -> Address {
     admin
 }
 
+/// [`handoff`] unless `new_admin` already is the admin: `launch` after an
+/// early `handoff` (an assurance drive) moves nothing and emits nothing.
+pub fn handoff_once(e: &Env, new_admin: &Address) {
+    if admin(e) != *new_admin {
+        handoff(e, new_admin);
+    }
+}
+
 /// Move the admin to `new_admin` (the launch handoff) and emit `AdminChanged`.
 pub fn handoff(e: &Env, new_admin: &Address) {
     let previous = admin(e);

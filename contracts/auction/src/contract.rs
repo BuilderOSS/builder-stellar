@@ -155,9 +155,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         if treasury != get_config(e).treasury {
             panic_with_error!(e, AuctionError::TreasuryMismatch);
         }
-        if common::admin::admin(e) != treasury {
-            common::admin::handoff(e, &treasury);
-        }
+        common::admin::handoff_once(e, &treasury);
         if start {
             pausable::unpause(e);
             if !has_auction(e) {
@@ -177,9 +175,7 @@ impl DaoAuctionContractTrait for DaoAuctionContract {
         if treasury != get_config(e).treasury {
             panic_with_error!(e, AuctionError::TreasuryMismatch);
         }
-        if common::admin::admin(e) != treasury {
-            common::admin::handoff(e, &treasury);
-        }
+        common::admin::handoff_once(e, &treasury);
         common::ttl::extend_instance(e);
     }
 

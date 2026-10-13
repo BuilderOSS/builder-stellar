@@ -86,4 +86,23 @@ pub enum ManagerError {
     /// `create_module`'s `expected_n` is not `module_count(token, kind)`: a
     /// module of this kind was created since the proposal was drafted
     StaleModuleIndex = 7134,
+
+    // Assurance launch (docs/designs/membership-models.md §2)
+    /// The DAO has no ClaimMinter registered (or no claims payment asset)
+    NoClaimMinter = 7135,
+    /// An assurance drive is already recorded for this DAO
+    AssuranceExists = 7136,
+    /// The assurance deadline is more than `MAX_ASSURANCE_WINDOW` (90 days) out
+    DeadlineTooFar = 7137,
+    /// The pending DAO is in an assurance drive: its slug is reserved and
+    /// fixed
+    AssuranceOpen = 7138,
+    /// No assurance drive is recorded for this DAO
+    NoAssurance = 7139,
+    /// The assurance list has not reached its threshold of claimers
+    AssuranceNotMet = 7140,
+    /// The deadline passed without a launch: the drive ends in refunds
+    AssuranceFailed = 7141,
+    /// `release_slug` / `recover_claims` before the drive has failed
+    AssuranceNotFailed = 7142,
 }

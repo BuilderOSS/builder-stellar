@@ -29,6 +29,28 @@ pub struct ModuleEntry {
     pub non_voting: bool,
 }
 
+/// What a ClaimMinter assurance list must reach, and by when (design §3).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AssuranceTerms {
+    /// Distinct claimers needed for `Met`.
+    pub threshold_claimers: u32,
+    /// Ledger timestamp after which an unlaunched DAO's list is `Failed`.
+    pub deadline: u64,
+}
+
+/// `assurance_state` of a ClaimMinter assurance list.
+#[contracttype]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AssuranceState {
+    /// Fewer distinct claimers than the threshold, deadline not passed.
+    Open,
+    /// The threshold is reached; the DAO may launch until the deadline.
+    Met,
+    /// The deadline passed and the DAO is not Live: refunds only.
+    Failed,
+}
+
 /// An initial mint allowance written by the Token's `launch`.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]

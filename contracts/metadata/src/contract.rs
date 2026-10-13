@@ -37,9 +37,26 @@ impl MetadataContract {
         if wired != Some(treasury.clone()) {
             soroban_sdk::panic_with_error!(&env, Error::TreasuryMismatch);
         }
-        common::admin::handoff(&env, &treasury);
+        common::admin::handoff_once(&env, &treasury);
         common::ttl::extend_instance(&env);
         emit_launched(&env, &treasury);
+    }
+
+    /// Manager-only early handoff (`manager.open_assurance`): the admin moves
+    /// to the Treasury and the contract stays in Setup, so artwork and
+    /// settings are frozen until launch.
+    pub fn handoff(env: Env, treasury: Address) {
+        Self::manager(&env).require_auth();
+        common::lifecycle::require_setup(&env);
+        let wired: Option<Address> = env
+            .storage()
+            .instance()
+            .get(&common::ns(&env, DataKey::Treasury));
+        if wired != Some(treasury.clone()) {
+            soroban_sdk::panic_with_error!(&env, Error::TreasuryMismatch);
+        }
+        common::admin::handoff_once(&env, &treasury);
+        common::ttl::extend_instance(&env);
     }
 
     /// Initialize the metadata contract

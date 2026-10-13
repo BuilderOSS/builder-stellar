@@ -82,9 +82,7 @@ impl MarketplaceContract {
         if treasury != config.treasury {
             panic_with_error!(e, MarketplaceError::TreasuryMismatch);
         }
-        if common::admin::admin(e) != treasury {
-            common::admin::handoff(e, &treasury);
-        }
+        common::admin::handoff_once(e, &treasury);
         // `open == false` forces paused even if the launch admin unpaused in setup.
         let was_paused = config.paused;
         config.paused = !open;
@@ -114,9 +112,7 @@ impl MarketplaceContract {
         if treasury != config.treasury {
             panic_with_error!(e, MarketplaceError::TreasuryMismatch);
         }
-        if common::admin::admin(e) != treasury {
-            common::admin::handoff(e, &treasury);
-        }
+        common::admin::handoff_once(e, &treasury);
         common::ttl::extend_instance(e);
     }
 

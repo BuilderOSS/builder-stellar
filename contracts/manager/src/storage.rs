@@ -148,6 +148,35 @@ pub struct LaunchConfig {
     pub launch_marketplace: bool,
 }
 
+/// The paid claim list a pending DAO's assurance drive opens (`open_assurance`),
+/// priced in the DAO's recorded `claims_payment_asset`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AssuranceListParams {
+    pub root: BytesN<32>,
+    pub tree_uri: String,
+    /// Price per token (0 for a free drive that still needs its threshold).
+    pub price: i128,
+    /// Claims stop at this ledger timestamp (after launch, too).
+    pub expires_at: u64,
+    pub total: u32,
+    /// Distinct claimers needed before the DAO may launch.
+    pub threshold_claimers: u32,
+    /// Ledger timestamp after which an unlaunched drive has failed.
+    pub deadline: u64,
+}
+
+/// A recorded assurance drive: the ClaimMinter list, its deadline and the
+/// launch config every launch path uses.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Assurance {
+    pub claim_minter: Address,
+    pub list_id: u32,
+    pub deadline: u64,
+    pub launch_config: LaunchConfig,
+}
+
 /// WASM hashes a DAO's contracts were deployed from (emitted in
 /// `DaoCreated`); a module the DAO was created without is `None`.
 #[contracttype]
@@ -248,6 +277,10 @@ pub enum ManagerKey {
     /// (token, kind) -> u32: modules of `kind` `create_module` deployed for
     /// the DAO, the `n` in its salt. Persistent, renewed by the DAO's sweep.
     ModuleCount(Address, Symbol),
+    /// token -> [`Assurance`], written by `open_assurance` and kept for the
+    /// pending DAO's life (a failed drive keeps it: the DAO never launches).
+    /// Persistent, renewed by the DAO's sweep while pending.
+    Assurance(Address),
 }
 
 pub fn get_admin(env: &Env) -> Option<Address> {
@@ -324,7 +357,7 @@ pub(crate) mod key_samples {
     use soroban_sdk::testutils::Address as _;
     use soroban_sdk::{Env, IntoVal, Val};
 
-    pub const VARIANTS: usize = 19;
+    pub const VARIANTS: usize = 20;
 
     pub fn index(key: &ManagerKey) -> usize {
         match key {
@@ -347,6 +380,7 @@ pub(crate) mod key_samples {
             ManagerKey::DaoSlug(_) => 16,
             ManagerKey::CurrentClaimsWasm => 17,
             ManagerKey::ModuleCount(..) => 18,
+            ManagerKey::Assurance(_) => 19,
         }
     }
 
@@ -375,6 +409,7 @@ pub(crate) mod key_samples {
             ManagerKey::DaoSlug(a.clone()),
             ManagerKey::CurrentClaimsWasm,
             ManagerKey::ModuleCount(a.clone(), soroban_sdk::Symbol::new(e, "claims")),
+            ManagerKey::Assurance(a.clone()),
         ];
         common::testutils::assert_every_variant_sampled(
             "ManagerKey",

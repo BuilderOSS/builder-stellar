@@ -774,6 +774,10 @@ impl MockModule {
         _non_voting: bool,
     ) {
     }
+    /// Mock tokens never go Live (the launch path does not mark them).
+    pub fn is_live(_e: Env) -> bool {
+        false
+    }
     /// A fixed Treasury stand-in for `create_module`'s wiring.
     pub fn treasury(e: Env) -> Address {
         e.current_contract_address()
@@ -1921,6 +1925,281 @@ mod real_dao {
         env.mock_all_auths();
         assert!(!dao.token.is_live());
         assert!(dao.client.get_pending_dao(&dao.addresses.token).is_some());
+    }
+    // ------------------------------------------------------------------
+    // Assurance launch (docs/designs/membership-models.md §2)
+    // ------------------------------------------------------------------
+
+    const DAY: u64 = 86_400;
+
+    /// Two leaves of one token each; returns (root, proof_a, proof_b).
+    fn two_leaves(
+        env: &Env,
+        a: &Address,
+        b: &Address,
+    ) -> (BytesN<32>, Vec<BytesN<32>>, Vec<BytesN<32>>) {
+        use soroban_sdk::xdr::ToXdr;
+        let leaf = |who: &Address| -> BytesN<32> {
+            let mut data = Bytes::new(env);
+            data.append(&who.clone().to_xdr(env));
+            data.extend_from_array(&1u128.to_be_bytes());
+            env.crypto().sha256(&data).into()
+        };
+        let (la, lb) = (leaf(a), leaf(b));
+        let (lo, hi) = if la.to_array() <= lb.to_array() {
+            (la.clone(), lb.clone())
+        } else {
+            (lb.clone(), la.clone())
+        };
+        let mut pair = Bytes::new(env);
+        pair.extend_from_array(&lo.to_array());
+        pair.extend_from_array(&hi.to_array());
+        (
+            env.crypto().sha256(&pair).into(),
+            vec![env, lb],
+            vec![env, la],
+        )
+    }
+
+    /// A real DAO with artwork and an open assurance drive over two leaves
+    /// (price 10, threshold 2, deadline in 10 days). Returns the claimers
+    /// with their proofs, both funded.
+    fn drive(
+        dao: &RealDao,
+        launch: LaunchConfig,
+    ) -> ((Address, Vec<BytesN<32>>), (Address, Vec<BytesN<32>>)) {
+        let env = &dao.env;
+        dao.metadata.add_properties(
+            &vec![env, String::from_str(env, "Background")],
+            &vec![
+                env,
+                metadata::ItemParam {
+                    property_id: 0,
+                    name: String::from_str(env, "Blue"),
+                    is_new_property: true,
+                },
+            ],
+            &metadata::IpfsGroup {
+                base_uri: String::from_str(env, "ipfs://art/"),
+                extension: String::from_str(env, ".png"),
+            },
+        );
+        let (alice, bob) = (Address::generate(env), Address::generate(env));
+        let (root, pa, pb) = two_leaves(env, &alice, &bob);
+        for who in [&alice, &bob] {
+            soroban_sdk::token::StellarAssetClient::new(env, &dao.payment).mint(who, &100);
+        }
+        let now = env.ledger().timestamp();
+        dao.client.open_assurance(
+            &dao.addresses.token,
+            &crate::storage::AssuranceListParams {
+                root,
+                tree_uri: String::from_str(env, "ipfs://bafytree"),
+                price: 10,
+                expires_at: now + 30 * DAY,
+                total: 2,
+                threshold_claimers: 2,
+                deadline: now + 10 * DAY,
+            },
+            &launch,
+        );
+        ((alice, pa), (bob, pb))
+    }
+
+    #[test]
+    fn a_met_drive_launches_with_the_stored_config_and_releases_the_escrow() {
+        let dao = build();
+        let env = &dao.env;
+        let token = &dao.addresses.token;
+        let ((alice, pa), (bob, pb)) = drive(&dao, cfg(env, true, false));
+
+        // Frozen: every admin is the Treasury, nothing is Live.
+        let treasury = dao.addresses.treasury.clone();
+        for admin in [
+            dao.token.admin(),
+            dao.metadata.admin(),
+            dao.governor.admin(),
+            dao.treasury.admin(),
+            dao.auction.admin(),
+            dao.marketplace.admin(),
+            dao.claims.admin(),
+        ] {
+            assert_eq!(admin, treasury);
+        }
+        assert!(!dao.token.is_live());
+        // The launch admin's setters and mints now need the Treasury.
+        env.mock_auths(&[]);
+        assert!(dao
+            .token
+            .try_mint(&dao.launch_admin, &dao.launch_admin)
+            .is_err());
+        env.mock_all_auths();
+        assert!(dao
+            .token
+            .try_mint(&dao.launch_admin, &dao.launch_admin)
+            .is_err());
+        // The slug is reserved and fixed.
+        assert_eq!(
+            dao.client.get_slug(token),
+            Some(String::from_str(env, "real-dao"))
+        );
+        assert_eq!(
+            dao.client
+                .try_update_pending_slug(token, &String::from_str(env, "other-name")),
+            Err(Ok(ManagerError::AssuranceOpen))
+        );
+        // Not yet: one claimer of two.
+        dao.claims.claim(&0, &alice, &1, &1, &pa, &10);
+        assert_eq!(
+            dao.client.try_launch_when_ready(token),
+            Err(Ok(ManagerError::AssuranceNotMet))
+        );
+        assert_eq!(
+            dao.client.try_launch_dao(token, &cfg(env, true, true)),
+            Err(Ok(ManagerError::AssuranceNotMet))
+        );
+        dao.claims.claim(&0, &bob, &1, &1, &pb, &10);
+
+        // Anyone launches, with the stored config (auction on, market off).
+        dao.client.launch_when_ready(token);
+        assert!(dao.token.is_live());
+        assert!(!dao.auction.paused());
+        assert!(dao.marketplace.get_config().paused);
+        let pay = soroban_sdk::token::TokenClient::new(env, &dao.payment);
+        assert_eq!(pay.balance(&treasury), 20);
+        assert_eq!(pay.balance(&dao.claims.address), 0);
+        assert_eq!(dao.client.get_pending_dao(token), None);
+        assert_eq!(dao.client.get_assurance(token), None);
+        assert_eq!(
+            dao.client
+                .get_dao_by_slug(&String::from_str(env, "real-dao")),
+            token.clone()
+        );
+    }
+
+    #[test]
+    fn launch_dao_during_a_drive_uses_the_stored_config() {
+        let dao = build();
+        let env = &dao.env;
+        let ((alice, pa), (bob, pb)) = drive(&dao, cfg(env, false, false));
+        dao.claims.claim(&0, &alice, &1, &1, &pa, &10);
+        dao.claims.claim(&0, &bob, &1, &1, &pb, &10);
+        // The launch admin asks for an open auction; the stored config wins.
+        dao.client
+            .launch_dao(&dao.addresses.token, &cfg(env, true, true));
+        assert!(dao.auction.paused());
+        assert_eq!(dao.token.mint_allowance(&dao.auction.address), 0);
+    }
+
+    #[test]
+    fn a_failed_drive_refuses_every_launch_refunds_and_frees_its_slug() {
+        let dao = build();
+        let env = &dao.env;
+        let token = &dao.addresses.token;
+        let ((alice, pa), (bob, pb)) = drive(&dao, cfg(env, true, true));
+        // Met, but nobody launches before the deadline (R1).
+        dao.claims.claim(&0, &alice, &1, &1, &pa, &10);
+        dao.claims.claim(&0, &bob, &1, &1, &pb, &10);
+        assert_eq!(
+            dao.client.try_release_slug(token),
+            Err(Ok(ManagerError::AssuranceNotFailed))
+        );
+        env.ledger()
+            .set_timestamp(env.ledger().timestamp() + 10 * DAY + 1);
+        assert_eq!(
+            dao.client.try_launch_when_ready(token),
+            Err(Ok(ManagerError::AssuranceFailed))
+        );
+        assert_eq!(
+            dao.client.try_launch_dao(token, &cfg(env, true, true)),
+            Err(Ok(ManagerError::AssuranceFailed))
+        );
+        assert_eq!(dao.claims.refund(&0, &alice), 10);
+        dao.client.release_slug(token);
+        assert_eq!(dao.client.get_slug(token), None);
+        assert_eq!(
+            dao.client
+                .try_get_dao_by_slug(&String::from_str(env, "real-dao")),
+            Err(Ok(ManagerError::SlugNotFound))
+        );
+        assert_eq!(
+            dao.client.try_release_slug(token),
+            Err(Ok(ManagerError::SlugNotFound))
+        );
+        assert!(!dao.token.is_live());
+    }
+
+    #[test]
+    fn open_assurance_bounds_the_deadline_and_runs_once() {
+        let dao = build();
+        let env = &dao.env;
+        let token = &dao.addresses.token;
+        let now = env.ledger().timestamp();
+        let params = |deadline: u64| crate::storage::AssuranceListParams {
+            root: BytesN::from_array(env, &[1; 32]),
+            tree_uri: String::from_str(env, "ipfs://bafytree"),
+            price: 10,
+            expires_at: now + 100 * DAY,
+            total: 2,
+            threshold_claimers: 1,
+            deadline,
+        };
+        assert_eq!(
+            dao.client.try_open_assurance(
+                token,
+                &params(now + crate::MAX_ASSURANCE_WINDOW + 1),
+                &cfg(env, true, true)
+            ),
+            Err(Ok(ManagerError::DeadlineTooFar))
+        );
+        drive(&dao, cfg(env, true, true));
+        assert_eq!(
+            dao.client
+                .try_open_assurance(token, &params(now + DAY), &cfg(env, true, true)),
+            Err(Ok(ManagerError::AssuranceExists))
+        );
+        let recorded = dao.client.get_assurance(token).unwrap();
+        assert_eq!(recorded.claim_minter, dao.claims.address);
+        assert_eq!(recorded.deadline, now + 10 * DAY);
+    }
+
+    #[test]
+    fn recover_claims_waits_for_a_failed_drive_and_needs_the_launch_admin() {
+        use common::testutils::empty_wasm;
+        let dao = build();
+        let env = &dao.env;
+        let token = &dao.addresses.token;
+        drive(&dao, cfg(env, true, true));
+        let from = BytesN::from_array(env, &[0u8; 32]);
+        let to = empty_wasm(env);
+        dao.client.register_implementation(
+            &String::from_str(env, "Mock"),
+            &String::from_str(env, "0.2.0"),
+            &to,
+        );
+        dao.client.approve_upgrade(&from, &to);
+        assert_eq!(
+            dao.client.try_recover_claims(token, &from, &to),
+            Err(Ok(ManagerError::AssuranceNotFailed))
+        );
+        env.ledger()
+            .set_timestamp(env.ledger().timestamp() + 10 * DAY + 1);
+        let stranger = Address::generate(env);
+        env.mock_auths(&[MockAuth {
+            address: &stranger,
+            invoke: &MockAuthInvoke {
+                contract: &dao.client.address,
+                fn_name: "recover_claims",
+                args: (token.clone(), from.clone(), to.clone()).into_val(env),
+                sub_invokes: &[],
+            },
+        }]);
+        assert!(dao.client.try_recover_claims(token, &from, &to).is_err());
+        env.mock_all_auths();
+        dao.client.recover_claims(token, &from, &to);
+        env.as_contract(&dao.claims.address, || {
+            assert_eq!(common::upgrade::current_hash(env), to);
+        });
     }
 }
 
@@ -3084,4 +3363,81 @@ fn create_dao_requires_one_auction_and_one_marketplace_and_no_repeats() {
     assert!(dao.claims.is_some());
     let pending = client.get_pending_dao(&dao.token).unwrap();
     assert!(pending.claims_payment_asset.is_some());
+}
+
+// ============================================================================
+// Recovery does not trust the ClaimMinter (review 2 D4)
+// ============================================================================
+
+/// A ClaimMinter whose state machine is broken: it always reports `Open`.
+#[contract]
+struct LyingClaims;
+
+#[contractimpl]
+impl LyingClaims {
+    pub fn assurance_state(_e: Env, _list_id: u32) -> common::modules::AssuranceState {
+        common::modules::AssuranceState::Open
+    }
+    pub fn recovery_upgrade(e: Env, _from: BytesN<32>, to: BytesN<32>, version: String) {
+        e.storage().instance().set(&9u32, &(to, version));
+    }
+    pub fn recovered(e: Env) -> Option<(BytesN<32>, String)> {
+        e.storage().instance().get(&9u32)
+    }
+}
+
+#[test]
+fn a_lying_claim_minter_is_still_recovered_after_the_deadline() {
+    use soroban_sdk::testutils::Ledger as _;
+    let (env, client, _a) = setup();
+    env.ledger().set_timestamp(1_000);
+    let token = seed_mock_pending(&env, &client, "mock-dao");
+    let lying = env.register(LyingClaims, ());
+    env.as_contract(&client.address, || {
+        crate::storage::set_persistent(
+            &env,
+            &ManagerKey::Assurance(token.clone()),
+            &crate::storage::Assurance {
+                claim_minter: lying.clone(),
+                list_id: 0,
+                deadline: 2_000,
+                launch_config: launch_cfg(&env),
+            },
+        );
+    });
+    let from = BytesN::from_array(&env, &[0u8; 32]);
+    let to = BytesN::from_array(&env, &[9u8; 32]);
+    client.register_implementation(
+        &String::from_str(&env, "Mock"),
+        &String::from_str(&env, "2"),
+        &to,
+    );
+    client.approve_upgrade(&from, &to);
+    let lying_client = LyingClaimsClient::new(&env, &lying);
+
+    // Before the deadline: no recovery, and the drive is merely not met.
+    assert_eq!(
+        client.try_recover_claims(&token, &from, &to),
+        Err(Ok(crate::ManagerError::AssuranceNotFailed))
+    );
+    assert_eq!(
+        client.try_launch_when_ready(&token),
+        Err(Ok(crate::ManagerError::AssuranceNotMet))
+    );
+    // After it, the Manager's own rule says failed, whatever the module says.
+    env.ledger().set_timestamp(2_001);
+    assert_eq!(
+        client.try_launch_when_ready(&token),
+        Err(Ok(crate::ManagerError::AssuranceFailed))
+    );
+    // An unapproved target is still refused.
+    assert_eq!(
+        client.try_recover_claims(&token, &from, &BytesN::from_array(&env, &[8u8; 32])),
+        Err(Ok(crate::ManagerError::InvalidUpgradePath))
+    );
+    client.recover_claims(&token, &from, &to);
+    assert_eq!(
+        lying_client.recovered(),
+        Some((to, String::from_str(&env, "2")))
+    );
 }

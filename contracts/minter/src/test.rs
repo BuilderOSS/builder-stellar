@@ -859,7 +859,8 @@ fn recovery_upgrade_is_the_managers_and_only_before_launch() {
     d.mgr.approve(&hash(&d.env), &to);
     d.mgr.register(&to, &String::from_str(&d.env, "0.2.0"));
     // The launch admin cannot use it.
-    let args: Vec<Val> = (hash(&d.env), to.clone()).into_val(&d.env);
+    let v2 = String::from_str(&d.env, "0.2.0");
+    let args: Vec<Val> = (hash(&d.env), to.clone(), v2.clone()).into_val(&d.env);
     d.env.mock_auths(&[MockAuth {
         address: &d.launch_admin,
         invoke: &MockAuthInvoke {
@@ -869,7 +870,7 @@ fn recovery_upgrade_is_the_managers_and_only_before_launch() {
             sub_invokes: &[],
         },
     }]);
-    assert!(d.cm.try_recovery_upgrade(&hash(&d.env), &to).is_err());
+    assert!(d.cm.try_recovery_upgrade(&hash(&d.env), &to, &v2).is_err());
     d.env.mock_all_auths();
     // Live modules never take it.
     let live = Dao::new();
@@ -878,13 +879,25 @@ fn recovery_upgrade_is_the_managers_and_only_before_launch() {
     live.mgr.approve(&hash(&live.env), &live_to);
     assert_eq!(
         live.cm
-            .try_recovery_upgrade(&hash(&live.env), &live_to)
+            .try_recovery_upgrade(
+                &hash(&live.env),
+                &live_to,
+                &String::from_str(&live.env, "0.2.0")
+            )
             .err()
             .unwrap()
             .unwrap(),
         common::CommonError::AlreadyLive.into()
     );
-    d.cm.recovery_upgrade(&hash(&d.env), &to);
+    // A stale `from` is refused; the Manager vouches for the target.
+    assert_eq!(
+        d.cm.try_recovery_upgrade(&to, &to, &v2)
+            .err()
+            .unwrap()
+            .unwrap(),
+        common::CommonError::HashMismatch.into()
+    );
+    d.cm.recovery_upgrade(&hash(&d.env), &to, &v2);
     d.env.as_contract(&d.cm.address, || {
         assert_eq!(common::upgrade::current_hash(&d.env), to);
     });

@@ -13,6 +13,9 @@ use soroban_sdk::{contractclient, Address, BytesN, Env, String, Symbol, Val, Vec
 #[contractclient(name = "NftClient")]
 pub trait NftApi {
     fn launch(e: &Env, treasury: Address, grants: Vec<crate::modules::MintGrant>);
+    /// Manager-only early handoff (stays in Setup).
+    fn handoff(e: &Env, treasury: Address);
+    fn increase_mint_allowance(e: &Env, module: Address, amount: u32);
     fn treasury(e: &Env) -> Address;
     fn metadata(e: &Env) -> Option<Address>;
     fn modules(e: &Env) -> Vec<crate::modules::ModuleEntry>;
@@ -47,10 +50,12 @@ pub trait TokenUriApi {
     fn token_uri(e: &Env, token_id: u32, token_name: String) -> String;
 }
 
-/// `launch(treasury)` shared by Governor, Treasury and Metadata.
+/// `launch(treasury)` and the early `handoff(treasury)` shared by Governor,
+/// Treasury and Metadata (both Manager-only).
 #[contractclient(name = "TreasuryLaunchClient")]
 pub trait TreasuryLaunchApi {
     fn launch(e: &Env, treasury: Address);
+    fn handoff(e: &Env, treasury: Address);
 }
 
 /// The interface every Manager-built module implements (Auction,
@@ -75,6 +80,25 @@ pub trait DaoModuleApi {
     /// entries it lists, so it still answers once they have archived.
     fn renewal_keys(e: &Env, cursor: u32, limit: u32) -> crate::modules::RenewalPage;
     fn wasm_hash(e: &Env) -> BytesN<32>;
+}
+
+/// The ClaimMinter surface the Manager drives for an assurance drive
+/// (docs/designs/membership-models.md §2-3).
+#[contractclient(name = "ClaimsClient")]
+pub trait ClaimsApi {
+    #[allow(clippy::too_many_arguments)]
+    fn open_list(
+        e: &Env,
+        root: BytesN<32>,
+        tree_uri: String,
+        asset: Address,
+        price: i128,
+        expires_at: u64,
+        total: u32,
+        assurance: Option<crate::modules::AssuranceTerms>,
+    ) -> u32;
+    fn assurance_state(e: &Env, list_id: u32) -> crate::modules::AssuranceState;
+    fn recovery_upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>, version: String);
 }
 
 /// Metadata artwork reads (ClaimMinter refuses Setup lists without artwork).

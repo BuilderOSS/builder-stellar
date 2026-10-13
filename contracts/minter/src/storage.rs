@@ -34,27 +34,7 @@ pub struct ClaimsConfig {
     pub payment_asset: Address,
 }
 
-/// What an assurance list must reach, and by when.
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AssuranceTerms {
-    /// Distinct claimers needed for `Met`.
-    pub threshold_claimers: u32,
-    /// Ledger timestamp after which an unlaunched DAO's list is `Failed`.
-    pub deadline: u64,
-}
-
-/// `assurance_state` of an assurance list.
-#[contracttype]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AssuranceState {
-    /// Fewer distinct claimers than the threshold, deadline not passed.
-    Open,
-    /// The threshold is reached; the DAO may launch until the deadline.
-    Met,
-    /// The deadline passed and the DAO is not Live: refunds only.
-    Failed,
-}
+pub use common::modules::{AssuranceState, AssuranceTerms};
 
 /// One claim list: a merkle root of `(claimer, amount)` leaves.
 #[contracttype]

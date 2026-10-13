@@ -265,6 +265,20 @@ impl DaoTokenContract {
     /// token live and emits `TokenLaunched`. The Treasury needs no grant: as
     /// admin it mints without limit. A second call panics with `AlreadyLive`,
     /// so after launch the Manager has no authority over the token.
+    /// Manager-only early handoff (`manager.open_assurance`): the admin moves
+    /// to the Treasury and the token stays in Setup, so founder mints,
+    /// settings and allowances are frozen until launch. Panics `AlreadyLive`
+    /// once launched.
+    pub fn handoff(e: &Env, treasury: Address) {
+        Self::manager(e).require_auth();
+        common::lifecycle::require_setup(e);
+        if treasury != Self::treasury(e) {
+            panic_with_error!(e, TokenError::TreasuryMismatch);
+        }
+        common::admin::handoff_once(e, &treasury);
+        common::ttl::extend_instance(e);
+    }
+
     pub fn launch(e: &Env, treasury: Address, grants: Vec<MintGrant>) {
         let manager = Self::manager(e);
         manager.require_auth();
@@ -272,7 +286,7 @@ impl DaoTokenContract {
         if treasury != Self::treasury(e) {
             panic_with_error!(e, TokenError::TreasuryMismatch);
         }
-        common::admin::handoff(e, &treasury);
+        common::admin::handoff_once(e, &treasury);
         for grant in grants.iter() {
             if Self::find_module(e, &grant.module).is_none() {
                 panic_with_error!(e, TokenError::NotAModule);

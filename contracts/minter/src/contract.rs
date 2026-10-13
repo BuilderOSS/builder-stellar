@@ -433,13 +433,13 @@ impl ClaimMinter {
     /// refunds are broken (`manager.recover_claims`, review B2). It checks only
     /// the Manager's authorization and that the module is still in Setup, not
     /// this contract's own state machine, which may be the broken code; the
-    /// Manager decides that the drive failed. The target must be approved for
-    /// this hash in the registry, as for every upgrade.
-    pub fn recovery_upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>) {
-        let manager = get_config(e).manager;
-        manager.require_auth();
+    /// Manager decides that the drive failed. The Manager has already checked
+    /// the registry approval for this hash and passes `version`, because asking
+    /// it back from here would be contract re-entry.
+    pub fn recovery_upgrade(e: &Env, from_hash: BytesN<32>, to_hash: BytesN<32>, version: String) {
+        get_config(e).manager.require_auth();
         common::lifecycle::require_setup(e);
-        common::upgrade::apply(e, &manager, &from_hash, &to_hash);
+        common::upgrade::apply_checked_by_manager(e, &from_hash, &to_hash, version);
     }
 
     /// Advance the storage layout after an upgrade (admin only).
@@ -464,9 +464,7 @@ impl ClaimMinter {
         if *treasury != config.treasury {
             return Err(Error::TreasuryMismatch);
         }
-        if common::admin::admin(e) != *treasury {
-            common::admin::handoff(e, treasury);
-        }
+        common::admin::handoff_once(e, treasury);
         Ok(())
     }
 }

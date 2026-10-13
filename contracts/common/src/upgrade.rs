@@ -218,6 +218,28 @@ fn implementation_version(e: &Env, manager: &Address, hash: &BytesN<32>) -> Stri
     version.unwrap_or_else(|| panic_with_error!(e, CommonError::ImplementationNotFound))
 }
 
+/// Perform an upgrade the Manager itself has already checked (the registry
+/// approved `from -> to` and `version` is `to`'s release). For calls the
+/// Manager makes, where asking the Manager back would be contract re-entry,
+/// which Soroban forbids (ClaimMinter's `recovery_upgrade`). The caller must
+/// already have authorized the upgrade, and only the Manager may reach it.
+pub fn apply_checked_by_manager(e: &Env, from: &BytesN<32>, to: &BytesN<32>, version: String) {
+    ttl::extend_instance(e);
+    if *from != current_hash(e) {
+        panic_with_error!(e, CommonError::HashMismatch);
+    }
+    e.storage()
+        .instance()
+        .set(&crate::ns(e, UpgradeKey::CurrentHash), to);
+    Upgraded {
+        from_hash: from.clone(),
+        to_hash: to.clone(),
+        version,
+    }
+    .publish(e);
+    e.deployer().update_current_contract_wasm(to.clone());
+}
+
 /// Perform an upgrade. The caller must already have authorized the upgrade.
 ///
 /// 1. `from` must equal the stored `CurrentHash`.

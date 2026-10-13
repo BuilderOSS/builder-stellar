@@ -5,8 +5,12 @@
 //! 2. DAO Factory - Atomic deployment of new DAOs
 //! 3. DAO Lifecycle - Deployment and launch handoff
 
-use common::clients::{DaoModuleClient, NftClient, TreasuryLaunchClient, WasmHashClient};
-use common::modules::{MintGrant, KIND_AUCTION, KIND_CLAIMS, KIND_MARKETPLACE};
+use common::clients::{
+    ClaimsClient, DaoModuleClient, NftClient, TreasuryLaunchClient, WasmHashClient,
+};
+use common::modules::{
+    AssuranceState, AssuranceTerms, MintGrant, KIND_AUCTION, KIND_CLAIMS, KIND_MARKETPLACE,
+};
 use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, String, Symbol, Val, Vec};
 
 use crate::error::ManagerError;
@@ -39,6 +43,9 @@ const MIN_SLUG_LENGTH: u32 = 4;
 const MAX_SLUG_LENGTH: u32 = 63;
 /// Minimum bid increment every Manager-built Auction starts with (10%).
 const MIN_BID_INCREMENT_PERCENT: u32 = 10;
+/// Longest an assurance drive may run (90 days, seconds): it bounds how long
+/// a drive holds its slug and keeps members' fees in escrow (review S2).
+pub const MAX_ASSURANCE_WINDOW: u64 = 90 * 86_400;
 
 #[contractimpl]
 impl ManagerContract {
@@ -836,6 +843,10 @@ impl ManagerContract {
         let mut pending: PendingDao =
             get_persistent(&env, &key).ok_or(ManagerError::DaoNotFound)?;
         pending.launch_admin.require_auth();
+        // The drive reserved `pending.slug`; the two must not drift apart.
+        if has_persistent(&env, &ManagerKey::Assurance(token_address.clone())) {
+            return Err(ManagerError::AssuranceOpen);
+        }
         Self::validate_slug(&slug)?;
         Self::require_slug_unclaimed(&env, &slug)?;
         pending.slug = slug.clone();
@@ -886,116 +897,240 @@ impl ManagerContract {
             get_persistent(&env, &ManagerKey::PendingDao(token_address.clone()))
                 .ok_or(ManagerError::DaoNotFound)?;
         pending.launch_admin.require_auth();
+        // During an assurance drive the stored config wins, so the launch
+        // admin cannot change what members signed up for.
+        let assurance: Option<Assurance> =
+            get_persistent(&env, &ManagerKey::Assurance(token_address.clone()));
+        let config = assurance
+            .as_ref()
+            .map_or(launch_config, |a| a.launch_config.clone());
+        Self::launch_pending(&env, &token_address, pending, config, assurance)
+    }
+
+    // ========================================================================
+    // Assurance launch (docs/designs/membership-models.md §2)
+    // ========================================================================
+
+    /// Open a paid claim drive before launch: members claim (and pay into the
+    /// ClaimMinter's escrow) until `threshold_claimers` distinct addresses
+    /// have, then anyone may launch the DAO with `launch_config`
+    /// (`launch_when_ready`). If the deadline passes first, the drive fails
+    /// and members are refunded. Needs the launch admin's authorization.
+    ///
+    /// In one call it:
+    /// 1. opens the list on the DAO's ClaimMinter, priced in the asset
+    ///    recorded at its creation, and grants the ClaimMinter `total` mint
+    ///    allowance;
+    /// 2. records the drive (list, deadline, launch config) and reserves the
+    ///    DAO's slug (`SlugClaimed`), so no other DAO can launch with it;
+    /// 3. hands every contract's admin to the Treasury without going Live,
+    ///    which freezes settings, artwork, mints, allowances, registrations
+    ///    and upgrades until launch. Founders and artwork must be in place
+    ///    before.
+    ///
+    /// Returns the list id.
+    ///
+    /// # Errors
+    ///
+    /// * `DaoNotFound` / `FactoryPaused` / `LaunchAdminNotOwner`
+    /// * `AssuranceExists` - one drive per DAO
+    /// * `NoClaimMinter` - the DAO has no registered ClaimMinter
+    /// * `DeadlineTooFar` - more than `MAX_ASSURANCE_WINDOW` away
+    /// * `SlugTaken` - another DAO launched with the slug
+    /// * ClaimMinter errors for the list terms (block 7800)
+    pub fn open_assurance(
+        env: Env,
+        token_address: Address,
+        list: AssuranceListParams,
+        launch_config: LaunchConfig,
+    ) -> Result<u32, ManagerError> {
+        extend_instance_ttl(&env);
+        let pending: PendingDao =
+            get_persistent(&env, &ManagerKey::PendingDao(token_address.clone()))
+                .ok_or(ManagerError::DaoNotFound)?;
+        pending.launch_admin.require_auth();
         if is_factory_paused(&env) {
             return Err(ManagerError::FactoryPaused);
         }
-        Self::require_slug_unclaimed(&env, &pending.slug)?;
-
-        let addresses = pending.addresses.clone();
-        let treasury = addresses.treasury.clone();
-        // Typed clients (common::clients) rather than the module crates:
-        // linking those would export their functions from the Manager WASM.
-        let nft = NftClient::new(&env, &addresses.token);
+        let assurance_key = ManagerKey::Assurance(token_address.clone());
+        if has_persistent(&env, &assurance_key) {
+            return Err(ManagerError::AssuranceExists);
+        }
+        let nft = NftClient::new(&env, &token_address);
         if nft.admin() != pending.launch_admin {
             return Err(ManagerError::LaunchAdminNotOwner);
         }
-        let registry = nft.modules();
-        // Every contract must currently run a registered, non-revoked hash. The
-        // CURRENT hash is read from each (not the one recorded at create_dao)
-        // so a pre-launch `upgrade` to an approved hash is honored.
-        let mut contracts: Vec<Address> = Vec::from_array(
-            &env,
-            [
-                addresses.token.clone(),
-                addresses.metadata.clone(),
-                addresses.governor.clone(),
-                addresses.treasury.clone(),
-            ],
+        let claim_minter = nft
+            .module(&Symbol::new(&env, KIND_CLAIMS))
+            .ok_or(ManagerError::NoClaimMinter)?;
+        let asset = pending
+            .claims_payment_asset
+            .clone()
+            .ok_or(ManagerError::NoClaimMinter)?;
+        if list.deadline
+            > env
+                .ledger()
+                .timestamp()
+                .saturating_add(MAX_ASSURANCE_WINDOW)
+        {
+            return Err(ManagerError::DeadlineTooFar);
+        }
+        Self::require_slug_unclaimed(&env, &pending.slug)?;
+
+        // 1. The list and its allowance (the ClaimMinter checks the terms,
+        //    the artwork and the asset).
+        let list_id = ClaimsClient::new(&env, &claim_minter).open_list(
+            &list.root,
+            &list.tree_uri,
+            &asset,
+            &list.price,
+            &list.expires_at,
+            &list.total,
+            &Some(AssuranceTerms {
+                threshold_claimers: list.threshold_claimers,
+                deadline: list.deadline,
+            }),
         );
-        for entry in registry.iter() {
-            contracts.push_back(entry.address);
+        nft.increase_mint_allowance(&claim_minter, &list.total);
+
+        // 2. The drive and its slug.
+        let assurance = Assurance {
+            claim_minter: claim_minter.clone(),
+            list_id,
+            deadline: list.deadline,
+            launch_config: launch_config.clone(),
+        };
+        set_persistent(&env, &assurance_key, &assurance);
+        Self::claim_slug(&env, &token_address, &pending.slug);
+
+        // 3. Freeze: every admin moves to the Treasury, nothing goes Live.
+        let addresses = &pending.addresses;
+        let treasury = addresses.treasury.clone();
+        nft.handoff(&treasury);
+        for core in [
+            &addresses.metadata,
+            &addresses.governor,
+            &addresses.treasury,
+        ] {
+            TreasuryLaunchClient::new(&env, core).handoff(&treasury);
         }
-        for contract in contracts.iter() {
-            let current = WasmHashClient::new(&env, &contract).wasm_hash();
-            let record =
-                get_persistent::<ImplementationVersion>(&env, &ManagerKey::Implementation(current));
-            match record {
-                Some(r) if !r.revoked => {}
-                _ => return Err(ManagerError::PendingDaoUsesRevokedImplementation),
-            }
-        }
-        // At least one voting-capable token must exist.
-        if nft.total_supply() <= 0 {
-            return Err(ManagerError::LaunchSupplyZero);
-        }
-        // Payment assets are tunable in Setup; each module launches only with
-        // the asset recorded when it was created.
-        for entry in registry.iter() {
-            let recorded = Self::recorded_asset(&env, &pending, &entry.kind);
-            let current = DaoModuleClient::new(&env, &entry.address).payment_asset();
-            if recorded != Some(current) {
-                return Err(ManagerError::PaymentAssetMismatch);
-            }
+        for entry in nft.modules().iter() {
+            DaoModuleClient::new(&env, &entry.address).handoff(&treasury);
         }
 
-        // The Marketplace keeps an unlimited allowance for primary listings
-        // until pools replace them (Phase 3); the Auction gets one only when
-        // it starts. The Treasury needs none (as admin it mints without limit).
-        let mut grants: Vec<MintGrant> = Vec::new(&env);
-        for entry in registry.iter() {
-            let unlimited = common::modules::kind_is(&env, &entry.kind, KIND_MARKETPLACE)
-                || (launch_config.launch_auction
-                    && common::modules::kind_is(&env, &entry.kind, KIND_AUCTION));
-            if unlimited {
-                grants.push_back(MintGrant {
-                    module: entry.address,
-                    allowance: u32::MAX,
-                });
-            }
+        AssuranceOpened {
+            token_address,
+            claim_minter,
+            list_id,
+            deadline: list.deadline,
+            launch_auction: launch_config.launch_auction,
+            launch_marketplace: launch_config.launch_marketplace,
         }
+        .publish(&env);
+        Ok(list_id)
+    }
 
-        // One-shot handoff. The token launches first so the auction holds an
-        // allowance when it creates its first auction.
-        nft.launch(&treasury, &grants);
-        TreasuryLaunchClient::new(&env, &addresses.governor).launch(&treasury);
-        TreasuryLaunchClient::new(&env, &addresses.treasury).launch(&treasury);
-        for entry in registry.iter() {
-            let open = if common::modules::kind_is(&env, &entry.kind, KIND_AUCTION) {
-                launch_config.launch_auction
-            } else if common::modules::kind_is(&env, &entry.kind, KIND_MARKETPLACE) {
-                launch_config.launch_marketplace
-            } else {
-                false
-            };
-            DaoModuleClient::new(&env, &entry.address).launch(&treasury, &open);
+    /// Launch a DAO whose assurance list has met its threshold, with the
+    /// stored launch config. Anyone may call it; no authorization.
+    ///
+    /// # Errors
+    ///
+    /// * `DaoNotFound` / `NoAssurance`
+    /// * `AssuranceFailed` - the deadline passed first
+    /// * `AssuranceNotMet` - fewer distinct claimers than the threshold
+    /// * every `launch_dao` check
+    pub fn launch_when_ready(env: Env, token_address: Address) -> Result<(), ManagerError> {
+        extend_instance_ttl(&env);
+        let pending: PendingDao =
+            get_persistent(&env, &ManagerKey::PendingDao(token_address.clone()))
+                .ok_or(ManagerError::DaoNotFound)?;
+        let assurance: Assurance =
+            get_persistent(&env, &ManagerKey::Assurance(token_address.clone()))
+                .ok_or(ManagerError::NoAssurance)?;
+        let config = assurance.launch_config.clone();
+        Self::launch_pending(&env, &token_address, pending, config, Some(assurance))
+    }
+
+    /// Free the slug a failed drive reserved. Anyone may call it.
+    ///
+    /// # Errors
+    ///
+    /// * `DaoNotFound` / `NoAssurance`
+    /// * `AssuranceNotFailed` - the drive may still launch
+    /// * `SlugNotFound` - already released
+    pub fn release_slug(env: Env, token_address: Address) -> Result<(), ManagerError> {
+        extend_instance_ttl(&env);
+        let pending: PendingDao =
+            get_persistent(&env, &ManagerKey::PendingDao(token_address.clone()))
+                .ok_or(ManagerError::DaoNotFound)?;
+        let assurance: Assurance =
+            get_persistent(&env, &ManagerKey::Assurance(token_address.clone()))
+                .ok_or(ManagerError::NoAssurance)?;
+        if !Self::drive_failed(&env, &token_address, &assurance) {
+            return Err(ManagerError::AssuranceNotFailed);
         }
-        TreasuryLaunchClient::new(&env, &addresses.metadata).launch(&treasury);
+        let holder: Option<Address> =
+            get_persistent(&env, &ManagerKey::SlugToDao(pending.slug.clone()));
+        if holder != Some(token_address.clone()) {
+            return Err(ManagerError::SlugNotFound);
+        }
+        remove_persistent(&env, &ManagerKey::SlugToDao(pending.slug.clone()));
+        remove_persistent(&env, &ManagerKey::DaoSlug(token_address.clone()));
+        SlugReleased {
+            token_address,
+            slug: pending.slug,
+        }
+        .publish(&env);
+        Ok(())
+    }
 
-        // Claim the slug (held until `change_slug`, renewed by the DAO's storage sweep) and delete
-        // the pending DAO state.
-        set_persistent(
-            &env,
-            &ManagerKey::SlugToDao(pending.slug.clone()),
-            &token_address,
-        );
-        set_persistent(
-            &env,
-            &ManagerKey::DaoSlug(token_address.clone()),
-            &pending.slug,
-        );
-        emit_slug_claimed(&env, &token_address, &pending.slug);
-        remove_persistent(&env, &ManagerKey::PendingDao(token_address.clone()));
-
-        emit_dao_launched(
-            &env,
-            &token_address,
-            env.ledger().sequence() as u64,
-            &pending.addresses,
-            launch_config.launch_auction,
-            launch_config.launch_marketplace,
-            &registry,
+    /// Upgrade a failed drive's ClaimMinter, for refunds its code cannot pay
+    /// (review B2). Only the launch admin recorded in PendingDao, only once
+    /// the drive has failed (the Manager's own rule: the deadline passed and
+    /// the Token is not Live; ClaimMinter's state machine is never asked), and
+    /// only to a hash the registry approves for the running ClaimMinter.
+    ///
+    /// # Errors
+    ///
+    /// * `DaoNotFound` / `NoAssurance`
+    /// * `AssuranceNotFailed` - the drive may still launch
+    pub fn recover_claims(
+        env: Env,
+        token_address: Address,
+        from_hash: BytesN<32>,
+        to_hash: BytesN<32>,
+    ) -> Result<(), ManagerError> {
+        extend_instance_ttl(&env);
+        let pending: PendingDao =
+            get_persistent(&env, &ManagerKey::PendingDao(token_address.clone()))
+                .ok_or(ManagerError::DaoNotFound)?;
+        pending.launch_admin.require_auth();
+        let assurance: Assurance =
+            get_persistent(&env, &ManagerKey::Assurance(token_address.clone()))
+                .ok_or(ManagerError::NoAssurance)?;
+        if !Self::drive_failed(&env, &token_address, &assurance) {
+            return Err(ManagerError::AssuranceNotFailed);
+        }
+        // The registry check happens here: the ClaimMinter cannot ask the
+        // Manager back (re-entry). Same rule as every module upgrade.
+        if !Self::is_upgrade_approved(env.clone(), from_hash.clone(), to_hash.clone()) {
+            return Err(ManagerError::InvalidUpgradePath);
+        }
+        let version: ImplementationVersion =
+            get_persistent(&env, &ManagerKey::Implementation(to_hash.clone()))
+                .ok_or(ManagerError::ImplementationNotFound)?;
+        ClaimsClient::new(&env, &assurance.claim_minter).recovery_upgrade(
+            &from_hash,
+            &to_hash,
+            &version.version,
         );
         Ok(())
+    }
+
+    /// The pending DAO's assurance drive, if one is recorded.
+    pub fn get_assurance(env: Env, token_address: Address) -> Option<Assurance> {
+        extend_instance_ttl(&env);
+        get_persistent(&env, &ManagerKey::Assurance(token_address))
     }
 
     /// Move a launched DAO to a new slug. The old slug is released at once and
@@ -1249,6 +1384,156 @@ impl ManagerContract {
     // ========================================================================
     // Helper Functions
     // ========================================================================
+
+    /// Every launch path: checks, then launches `pending` with `launch_config`.
+    /// With an assurance drive the list must be `Met` before its deadline
+    /// (the Manager's failure rule decides `Failed`), the slug is already
+    /// reserved, and the admins were already handed over.
+    fn launch_pending(
+        env: &Env,
+        token_address: &Address,
+        pending: PendingDao,
+        launch_config: LaunchConfig,
+        assurance: Option<Assurance>,
+    ) -> Result<(), ManagerError> {
+        let env = env.clone();
+        let token_address = token_address.clone();
+        if is_factory_paused(&env) {
+            return Err(ManagerError::FactoryPaused);
+        }
+        let addresses = pending.addresses.clone();
+        let treasury = addresses.treasury.clone();
+        // Typed clients (common::clients) rather than the module crates:
+        // linking those would export their functions from the Manager WASM.
+        let nft = NftClient::new(&env, &addresses.token);
+        match &assurance {
+            Some(drive) => {
+                if Self::drive_failed(&env, &token_address, drive) {
+                    return Err(ManagerError::AssuranceFailed);
+                }
+                // Only `Met` is read from the ClaimMinter.
+                let state =
+                    ClaimsClient::new(&env, &drive.claim_minter).assurance_state(&drive.list_id);
+                if state != AssuranceState::Met {
+                    return Err(ManagerError::AssuranceNotMet);
+                }
+            }
+            None => {
+                if nft.admin() != pending.launch_admin {
+                    return Err(ManagerError::LaunchAdminNotOwner);
+                }
+            }
+        }
+        // A drive already reserved the slug; otherwise it must still be free.
+        let slug_held = get_persistent::<String>(&env, &ManagerKey::DaoSlug(token_address.clone()))
+            == Some(pending.slug.clone());
+        if !slug_held {
+            Self::require_slug_unclaimed(&env, &pending.slug)?;
+        }
+        let registry = nft.modules();
+        // Every contract must currently run a registered, non-revoked hash. The
+        // CURRENT hash is read from each (not the one recorded at create_dao)
+        // so a pre-launch `upgrade` to an approved hash is honored.
+        let mut contracts: Vec<Address> = Vec::from_array(
+            &env,
+            [
+                addresses.token.clone(),
+                addresses.metadata.clone(),
+                addresses.governor.clone(),
+                addresses.treasury.clone(),
+            ],
+        );
+        for entry in registry.iter() {
+            contracts.push_back(entry.address);
+        }
+        for contract in contracts.iter() {
+            let current = WasmHashClient::new(&env, &contract).wasm_hash();
+            let record =
+                get_persistent::<ImplementationVersion>(&env, &ManagerKey::Implementation(current));
+            match record {
+                Some(r) if !r.revoked => {}
+                _ => return Err(ManagerError::PendingDaoUsesRevokedImplementation),
+            }
+        }
+        // At least one voting-capable token must exist.
+        if nft.total_supply() <= 0 {
+            return Err(ManagerError::LaunchSupplyZero);
+        }
+        // Payment assets are tunable in Setup; each module launches only with
+        // the asset recorded when it was created.
+        for entry in registry.iter() {
+            let recorded = Self::recorded_asset(&env, &pending, &entry.kind);
+            let current = DaoModuleClient::new(&env, &entry.address).payment_asset();
+            if recorded != Some(current) {
+                return Err(ManagerError::PaymentAssetMismatch);
+            }
+        }
+
+        // The Marketplace keeps an unlimited allowance for primary listings
+        // until pools replace them (Phase 3); the Auction gets one only when
+        // it starts. The Treasury needs none (as admin it mints without limit).
+        let mut grants: Vec<MintGrant> = Vec::new(&env);
+        for entry in registry.iter() {
+            let unlimited = common::modules::kind_is(&env, &entry.kind, KIND_MARKETPLACE)
+                || (launch_config.launch_auction
+                    && common::modules::kind_is(&env, &entry.kind, KIND_AUCTION));
+            if unlimited {
+                grants.push_back(MintGrant {
+                    module: entry.address,
+                    allowance: u32::MAX,
+                });
+            }
+        }
+
+        // One-shot handoff. The token launches first so the auction holds an
+        // allowance when it creates its first auction.
+        nft.launch(&treasury, &grants);
+        TreasuryLaunchClient::new(&env, &addresses.governor).launch(&treasury);
+        TreasuryLaunchClient::new(&env, &addresses.treasury).launch(&treasury);
+        for entry in registry.iter() {
+            let open = if common::modules::kind_is(&env, &entry.kind, KIND_AUCTION) {
+                launch_config.launch_auction
+            } else if common::modules::kind_is(&env, &entry.kind, KIND_MARKETPLACE) {
+                launch_config.launch_marketplace
+            } else {
+                false
+            };
+            DaoModuleClient::new(&env, &entry.address).launch(&treasury, &open);
+        }
+        TreasuryLaunchClient::new(&env, &addresses.metadata).launch(&treasury);
+
+        // Claim the slug (held until `change_slug`, renewed by the DAO's
+        // storage sweep) and delete the pending DAO state.
+        if !slug_held {
+            Self::claim_slug(&env, &token_address, &pending.slug);
+        }
+        remove_persistent(&env, &ManagerKey::PendingDao(token_address.clone()));
+        remove_persistent(&env, &ManagerKey::Assurance(token_address.clone()));
+
+        emit_dao_launched(
+            &env,
+            &token_address,
+            env.ledger().sequence() as u64,
+            &pending.addresses,
+            launch_config.launch_auction,
+            launch_config.launch_marketplace,
+            &registry,
+        );
+        Ok(())
+    }
+
+    /// The Manager's failure rule (review 2 A3): the deadline passed and the
+    /// Token is not Live. ClaimMinter's `refund` applies the same rule.
+    fn drive_failed(env: &Env, token: &Address, assurance: &Assurance) -> bool {
+        env.ledger().timestamp() > assurance.deadline && !NftClient::new(env, token).is_live()
+    }
+
+    /// Record `slug` as `token`'s (`SlugToDao`, `DaoSlug`, `SlugClaimed`).
+    fn claim_slug(env: &Env, token: &Address, slug: &String) {
+        set_persistent(env, &ManagerKey::SlugToDao(slug.clone()), token);
+        set_persistent(env, &ManagerKey::DaoSlug(token.clone()), slug);
+        emit_slug_claimed(env, token, slug);
+    }
 
     /// Load a registered, non-revoked implementation record.
     fn active_implementation(
