@@ -584,6 +584,12 @@ fn a_met_drive_launches_and_the_escrow_moves_to_the_treasury() {
     d.launch();
     // Events of the last call: the ClaimMinter's launch.
     let released = d.env.events().all();
+    assert!(released.events().contains(
+        &crate::ClaimMinterLaunched {
+            treasury: d.treasury.clone(),
+        }
+        .to_xdr(&d.env, &d.cm.address)
+    ));
     assert_eq!(d.balance(&d.treasury), 30);
     assert_eq!(d.balance(&d.cm.address), 0);
     assert!(released.events().contains(

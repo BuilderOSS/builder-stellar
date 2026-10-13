@@ -231,6 +231,52 @@ fn launch_is_one_shot_and_hands_admin_to_self() {
     );
 }
 
+/// docs/designs/membership-models.md §2: `manager.open_assurance` hands the
+/// admin over early; only the Manager may, only in Setup.
+#[test]
+fn handoff_is_the_managers_and_stays_in_setup() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let owner = Address::generate(&e);
+    let id = e.register(
+        DaoTreasuryContract,
+        (
+            owner.clone(),
+            Address::generate(&e),
+            Address::generate(&e),
+            soroban_sdk::BytesN::from_array(&e, &[0u8; 32]),
+        ),
+    );
+    let treasury = DaoTreasuryContractClient::new(&e, &id);
+    e.mock_auths(&[soroban_sdk::testutils::MockAuth {
+        address: &owner,
+        invoke: &soroban_sdk::testutils::MockAuthInvoke {
+            contract: &id,
+            fn_name: "handoff",
+            args: soroban_sdk::IntoVal::into_val(&(id.clone(),), &e),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(treasury.try_handoff(&id).is_err());
+    e.mock_all_auths();
+    assert_eq!(
+        treasury
+            .try_handoff(&Address::generate(&e))
+            .err()
+            .unwrap()
+            .unwrap(),
+        crate::TreasuryError::TreasuryMismatch.into()
+    );
+    treasury.handoff(&id);
+    assert_eq!(treasury.admin(), id);
+    treasury.launch(&id);
+    assert_eq!(treasury.admin(), id);
+    assert_eq!(
+        treasury.try_handoff(&id).err().unwrap().unwrap(),
+        common::CommonError::AlreadyLive.into()
+    );
+}
+
 #[test]
 fn launch_rejects_treasury_other_than_self() {
     let e = Env::default();

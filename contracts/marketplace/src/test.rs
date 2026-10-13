@@ -1116,6 +1116,75 @@ mod pools {
         );
     }
 
+    /// The indexer reads these shapes (docs/designs/membership-models.md §7).
+    #[test]
+    fn pool_lifecycle_events() {
+        use crate::events::{PoolClosed, PoolOpened, PoolPurchased, PoolRestocked, PoolSwept};
+        use soroban_sdk::{testutils::Events as _, Event as _};
+        let fixture = fixture();
+        let env = &fixture.env;
+        let mp = &fixture.marketplace;
+        let last = || env.events().all().events().last().unwrap().clone();
+        let pool = open(&fixture, 3);
+        assert_eq!(
+            last(),
+            PoolOpened {
+                pool_id: pool,
+                price: PRICE,
+                asset: fixture.payment.address.clone(),
+                expires_at: EXPIRES,
+                size: 3,
+                max_per_buyer: 2,
+                max_sold_per_period: 3,
+                period_secs: 3_600,
+            }
+            .to_xdr(env, &mp.address)
+        );
+        mp.restock(&pool);
+        assert_eq!(
+            last(),
+            PoolRestocked {
+                pool_id: pool,
+                first_token_id: 0,
+                count: 3,
+                stocked: 3,
+            }
+            .to_xdr(env, &mp.address)
+        );
+        fixture.payment.mint(&fixture.buyer, &1_000);
+        mp.buy_from_pool(&pool, &0, &1, &fixture.buyer, &PRICE);
+        assert_eq!(
+            last(),
+            PoolPurchased {
+                pool_id: pool,
+                buyer: fixture.buyer.clone(),
+                token_id: 1,
+                price: PRICE,
+                asset: fixture.payment.address.clone(),
+            }
+            .to_xdr(env, &mp.address)
+        );
+        mp.close_pool(&pool);
+        assert_eq!(
+            last(),
+            PoolClosed {
+                pool_id: pool,
+                released: 0,
+            }
+            .to_xdr(env, &mp.address)
+        );
+        assert_eq!(mp.sweep_pool(&pool), 0);
+        assert_eq!(
+            last(),
+            PoolSwept {
+                pool_id: pool,
+                count: 2,
+                pages_left: 0,
+            }
+            .to_xdr(env, &mp.address)
+        );
+    }
+
     #[test]
     fn buying_needs_the_buyer() {
         let fixture = fixture();

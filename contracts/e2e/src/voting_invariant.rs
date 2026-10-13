@@ -8,10 +8,13 @@
 //!    checkpoint, so no unit is counted toward quorum without a delegate that
 //!    can cast it.
 //!
-//! Listings, auctions and settlements move a token into or out of a non-voting
-//! holder with `transfer`, which is the only path the Token sees, so random
-//! transfers between wallets and the three system holders cover them. The
-//! sequence is a fixed-seed LCG so a failure replays exactly.
+//! Listings, auctions, settlements and pool restocks move a token into or out
+//! of a non-voting holder with `transfer` or `batch_mint`, the only paths the
+//! Token sees, so random transfers and mints between wallets and the three
+//! system holders cover them. A vault module that holds tokens is registered
+//! (non-voting) and unregistered at random, and members delegate to it too
+//! (modules can be delegates, review 2 C3). The sequence is a fixed-seed LCG
+//! so a failure replays exactly.
 
 extern crate std;
 
@@ -57,6 +60,10 @@ struct World {
     minter: Address,
     wallets: StdVec<Address>,
     system: StdVec<Address>,
+    /// A deployed contract that holds tokens and is registered as a
+    /// non-voting module, or not, as the sequence goes.
+    vault: Address,
+    vault_registered: bool,
 }
 
 impl World {
@@ -125,17 +132,28 @@ impl World {
             ],
         );
         let wallets = (0..5).map(|_| Address::generate(&e)).collect();
+        let vault = e.register(MinterStub, ());
         Self {
             e,
             token,
             minter,
             wallets,
             system: std::vec![treasury, auction, marketplace],
+            vault,
+            vault_registered: false,
         }
     }
 
     fn holders(&self) -> impl Iterator<Item = &Address> {
-        self.wallets.iter().chain(self.system.iter())
+        self.wallets
+            .iter()
+            .chain(self.system.iter())
+            .chain(core::iter::once(&self.vault))
+    }
+
+    /// Tokens held here carry no votes.
+    fn non_voting(&self, holder: &Address) -> bool {
+        self.system.contains(holder) || (self.vault_registered && *holder == self.vault)
     }
 
     fn any_holder(&self, rng: &mut Lcg) -> Address {
@@ -153,7 +171,7 @@ impl World {
         let mut units_sum: u128 = 0;
         for holder in self.holders() {
             let units = self.voting_units(holder);
-            let expected = if self.system.contains(holder) {
+            let expected = if self.non_voting(holder) {
                 0
             } else {
                 u128::from(self.token.balance(holder))
@@ -169,8 +187,8 @@ impl World {
             units_sum, total,
             "clause 2 broken after step {step} ({op}): units vs TotalSupply"
         );
-        // Delegates are always wallets (system holders never delegate), so the
-        // account checkpoints of every holder cover every possible delegate.
+        // Delegates are wallets or the vault (system holders never delegate),
+        // so the account checkpoints of every holder cover every delegate.
         let votes_sum: u128 = self.holders().map(|a| self.token.get_votes(a)).sum();
         assert_eq!(
             votes_sum, total,
@@ -178,9 +196,9 @@ impl World {
         );
     }
 
-    fn step(&self, rng: &mut Lcg) -> &'static str {
+    fn step(&mut self, rng: &mut Lcg) -> &'static str {
         let minted = self.token.minted();
-        match rng.below(5) {
+        match rng.below(6) {
             0 => {
                 let to = self.any_holder(rng);
                 self.token.mint(&self.minter, &to);
@@ -215,13 +233,42 @@ impl World {
             }
             4 => {
                 let account = self.wallets[rng.below(self.wallets.len())].clone();
-                let delegatee = self.wallets[rng.below(self.wallets.len())].clone();
+                // One in six delegations goes to the vault.
+                let pick = rng.below(self.wallets.len() + 1);
+                let delegatee = if pick == self.wallets.len() {
+                    self.vault.clone()
+                } else {
+                    self.wallets[pick].clone()
+                };
                 // Re-delegating to the current delegate reverts (OZ SameDelegate, 4103).
                 if self.token.get_delegate(&account) == Some(delegatee.clone()) {
                     return "skip same delegate";
                 }
                 self.token.delegate(&account, &delegatee);
                 "delegate"
+            }
+            // Register the vault (moving the votes of what it holds out of the
+            // supply) or unregister it (self-delegating it, moving them back).
+            5 => {
+                let kind = soroban_sdk::Symbol::new(&self.e, "custom_vault");
+                let holding = self.token.balance(&self.vault) > 0;
+                if self.vault_registered {
+                    self.token.unregister_module(&self.vault);
+                    self.vault_registered = false;
+                    if holding {
+                        "unregister holding"
+                    } else {
+                        "unregister"
+                    }
+                } else {
+                    self.token.register_module(&kind, &self.vault, &true);
+                    self.vault_registered = true;
+                    if holding {
+                        "register holding"
+                    } else {
+                        "register"
+                    }
+                }
             }
             _ => {
                 let to = self.wallets[rng.below(self.wallets.len())].clone();
@@ -235,8 +282,9 @@ impl World {
 #[test]
 fn voting_units_match_balances_and_checkpoints_add_up() {
     let mut ran: std::collections::BTreeMap<&'static str, u32> = Default::default();
+    let mut held_by_vault = 0u32;
     for seed in [1_u64, 7, 42, 2026] {
-        let world = World::new();
+        let mut world = World::new();
         let mut rng = Lcg(seed);
         world.assert_invariant(0, "launch");
         for step in 1..=150 {
@@ -251,8 +299,18 @@ fn voting_units_match_balances_and_checkpoints_add_up() {
             held_by_system > 0,
             "seed {seed}: no tokens reached a system holder"
         );
+        held_by_vault += world.token.balance(&world.vault);
     }
-    for op in ["mint", "batch_mint", "transfer", "delegate"] {
+    // Registration must move the votes of tokens the vault really holds.
+    assert!(held_by_vault > 0, "the vault never held tokens");
+    for op in [
+        "mint",
+        "batch_mint",
+        "transfer",
+        "delegate",
+        "register holding",
+        "unregister holding",
+    ] {
         assert!(
             ran.get(op).copied().unwrap_or(0) >= 20,
             "operation {op} ran too rarely to cover the invariant: {ran:?}"

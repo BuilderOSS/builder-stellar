@@ -467,6 +467,74 @@ fn test_delete_and_recreate_properties() {
     assert_eq!(property.name, String::from_str(&env, "Body"));
 }
 
+/// docs/designs/membership-models.md §2: `manager.open_assurance` hands the
+/// admin over early; only the Manager may, only in Setup, which freezes the
+/// artwork.
+#[test]
+fn handoff_is_the_managers_freezes_artwork_and_stays_in_setup() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let client = create_contract(&env);
+    let manager = Address::generate(&env);
+    let owner = Address::generate(&env);
+    register_metadata(
+        &env,
+        &client.address,
+        &Address::generate(&env),
+        &manager,
+        &BytesN::from_array(&env, &[0; 32]),
+        &owner,
+    );
+    let treasury: Address = env.as_contract(&client.address, || {
+        env.storage()
+            .instance()
+            .get(&common::ns(&env, crate::storage::DataKey::Treasury))
+            .unwrap()
+    });
+    let e = &env;
+    let id = client.address.clone();
+    env.mock_auths(&[soroban_sdk::testutils::MockAuth {
+        address: &owner,
+        invoke: &soroban_sdk::testutils::MockAuthInvoke {
+            contract: &id,
+            fn_name: "handoff",
+            args: soroban_sdk::IntoVal::into_val(&(treasury.clone(),), e),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(client.try_handoff(&treasury).is_err());
+    env.mock_all_auths();
+    assert_eq!(
+        client
+            .try_handoff(&Address::generate(&env))
+            .err()
+            .unwrap()
+            .unwrap(),
+        crate::error::Error::TreasuryMismatch.into()
+    );
+    client.handoff(&treasury);
+    assert_eq!(client.admin(), treasury);
+    // The launch admin can no longer add artwork.
+    let renderer = String::from_str(&env, "https://example.com/other");
+    env.mock_auths(&[soroban_sdk::testutils::MockAuth {
+        address: &owner,
+        invoke: &soroban_sdk::testutils::MockAuthInvoke {
+            contract: &id,
+            fn_name: "update_renderer_base",
+            args: soroban_sdk::IntoVal::into_val(&(renderer.clone(),), e),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(client.try_update_renderer_base(&renderer).is_err());
+    env.mock_all_auths();
+    client.launch(&treasury);
+    assert_eq!(client.admin(), treasury);
+    assert_eq!(
+        client.try_handoff(&treasury).err().unwrap().unwrap(),
+        common::CommonError::AlreadyLive.into()
+    );
+}
+
 #[test]
 fn launch_is_one_shot_and_moves_upgrade_authority() {
     let env = Env::default();

@@ -4612,10 +4612,11 @@ fn stored_owner(e: &Env, token: &Address, t: u32) -> Option<Address> {
 }
 
 /// The DAO contracts that hold tokens and funds.
+/// The DAO's own holders: the Treasury and every registered module (custody
+/// in the Auction and Marketplace, escrow in the ClaimMinter).
 fn dao_holders(token: &DaoTokenContractClient) -> std::vec::Vec<Address> {
     let mut holders = std::vec![token.treasury()];
-    holders.extend(token.auction());
-    holders.extend(token.marketplace());
+    holders.extend(token.modules().iter().map(|m| m.address));
     holders
 }
 
@@ -4629,12 +4630,18 @@ fn dao_payment_assets(e: &Env, token: &DaoTokenContractClient) -> std::vec::Vec<
                 .payment_token,
         );
     }
+    // Every module reports the assets it holds (`renewal_keys`); the DAO
+    // token itself is renewed through its Owner and Balance entries.
+    for entry in token.modules().iter() {
+        let page = common::clients::DaoModuleClient::new(e, &entry.address).renewal_keys(&0, &1);
+        for asset in page.assets.iter() {
+            if asset != token.address && !assets.contains(&asset) {
+                assets.push(asset);
+            }
+        }
+    }
     if let Some(m) = token.marketplace() {
         let market = MarketplaceContractClient::new(e, &m);
-        let asset = market.get_config().payment_asset;
-        if !assets.contains(&asset) {
-            assets.push(asset);
-        }
         // An open listing settles in the asset of its day (review M2).
         for t in 0..instance_u32(e, &token.address, "TokenIdCounter") {
             if let Some(listing) = market.get_listing(&t) {
@@ -4798,19 +4805,45 @@ fn dao_renewal_inventory(
         }
     }
 
-    // The Manager's slug pair, or the pending record before launch (review L6).
+    // The Manager's records of this DAO (review L6): the slug pair once
+    // claimed (at launch, or reserved by an assurance drive), the pending
+    // record and its drive before launch, and the module counters
+    // `create_module` keeps.
     let mgr = manager.address.clone();
     if let Some(slug) = manager.get_slug(token_id) {
         keys.push((
             mgr.clone(),
             ns_key(e, "SlugToDao", std::vec![slug.into_val(e)]),
         ));
-        keys.push((mgr, ns_key(e, "DaoSlug", std::vec![token_id.into_val(e)])));
-    } else {
         keys.push((
-            mgr,
+            mgr.clone(),
+            ns_key(e, "DaoSlug", std::vec![token_id.into_val(e)]),
+        ));
+    }
+    if manager.get_pending_dao(token_id).is_some() {
+        keys.push((
+            mgr.clone(),
             ns_key(e, "PendingDao", std::vec![token_id.into_val(e)]),
         ));
+    }
+    if manager.get_assurance(token_id).is_some() {
+        keys.push((
+            mgr.clone(),
+            ns_key(e, "Assurance", std::vec![token_id.into_val(e)]),
+        ));
+    }
+    for kind in ["auction", "marketplace", "claims"] {
+        let kind = Symbol::new(e, kind);
+        if manager.module_count(token_id, &kind) > 0 {
+            keys.push((
+                mgr.clone(),
+                ns_key(
+                    e,
+                    "ModuleCount",
+                    std::vec![token_id.into_val(e), kind.into_val(e)],
+                ),
+            ));
+        }
     }
     keys
 }
@@ -4883,9 +4916,19 @@ fn assert_inventory_matches_ledger(
             return name == "Claim";
         }
         if *owner == manager.address {
-            // Platform registry and other DAOs' slugs.
-            return !matches!(name.as_str(), "SlugToDao" | "DaoSlug")
-                || (name == "DaoSlug" && items.get(1) != Some(&token_sc));
+            // This DAO's records are the DAO's; the platform registry and
+            // other DAOs' records are not.
+            let ours = match name.as_str() {
+                "DaoSlug" | "PendingDao" | "Assurance" | "ModuleCount" => {
+                    items.get(1) == Some(&token_sc)
+                }
+                "SlugToDao" => manager.get_slug(&dao.token).is_some_and(|slug| {
+                    let slug: Val = slug.into_val(e);
+                    items.get(1) == Some(&ScVal::try_from_val(e, &slug).unwrap())
+                }),
+                _ => false,
+            };
+            return !ours;
         }
         // Bidders' refunds and buyers' pool counts are theirs.
         matches!(name.as_str(), "PendingRefund" | "PoolBuyer")

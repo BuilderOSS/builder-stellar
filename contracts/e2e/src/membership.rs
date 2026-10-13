@@ -459,3 +459,143 @@ fn a_claim_minter_stops_at_its_allowance() {
     claims.claim(&list, who, amount, &1, &tree.proof(e, 0), &0);
     assert_eq!(token.balance(who), 3);
 }
+
+/// A pending DAO in an assurance drive is in one-click renewal (eng review
+/// R3, review 2 B4/B5): the Manager's pending record, the drive, the reserved
+/// slug and the module counter, the ClaimMinter's list and its escrow
+/// balance. The DAO adds its ClaimMinter in Setup with `create_module`, a
+/// second one of the kind is refused atomically, and the drive freezes
+/// `create_module` for the launch admin.
+#[test]
+fn a_pending_drive_is_covered_by_the_renewal_inventory() {
+    let e = Env::default();
+    e.mock_all_auths();
+    e.ledger().set_sequence_number(100);
+    e.ledger().set_timestamp(1_000);
+    e.cost_estimate().budget().reset_unlimited();
+    let manager_id = e.register(
+        ManagerContract,
+        (
+            Address::generate(&e),
+            BytesN::from_array(&e, &[0; 32]),
+            String::from_str(&e, "0.1.0"),
+            TEST_UPGRADE_DELAY,
+        ),
+    );
+    let manager = ManagerContractClient::new(&e, &manager_id);
+    register_factory(&e, &manager);
+    let founder = Address::generate(&e);
+    let asset = e
+        .register_stellar_asset_contract_v2(Address::generate(&e))
+        .address();
+    let modules = vec![
+        &e,
+        manager::ModuleSpec::Auction(manager::AuctionConfig {
+            duration: 300,
+            reserve_price: 10_000_000,
+            time_buffer: 60,
+            payment_asset: asset.clone(),
+        }),
+        manager::ModuleSpec::Marketplace(manager::MarketplaceConfig {
+            payment_asset: asset.clone(),
+            secondary_fee_bps: 250,
+        }),
+    ];
+    let dao = manager.create_dao(&slug_params_with(&e, &founder, 1, "drive-dao", modules));
+    assert_eq!(dao.claims, None);
+    let token = DaoTokenContractClient::new(&e, &dao.token);
+    token.mint(&founder, &founder);
+
+    // The ClaimMinter, added in Setup by the launch admin.
+    let claims_kind = Symbol::new(&e, "claims");
+    let spec = manager::ModuleSpec::Claims(manager::ClaimsConfig {
+        payment_asset: asset.clone(),
+    });
+    let cm = manager.create_module(&dao.token, &spec, &0);
+    assert_eq!(token.module(&claims_kind), Some(cm.clone()));
+    let pending = manager.get_pending_dao(&dao.token).unwrap();
+    assert_eq!(pending.addresses.claims, Some(cm.clone()));
+    assert_eq!(pending.claims_payment_asset, Some(asset.clone()));
+    // A second ClaimMinter cannot register (one per kind): nothing changes.
+    assert!(manager.try_create_module(&dao.token, &spec, &1).is_err());
+    assert_eq!(manager.module_count(&dao.token, &claims_kind), 1);
+
+    MetadataContractClient::new(&e, &dao.metadata).add_properties(
+        &vec![&e, String::from_str(&e, "Background")],
+        &vec![
+            &e,
+            ItemParam {
+                property_id: 0,
+                name: String::from_str(&e, "Blue"),
+                is_new_property: true,
+            },
+        ],
+        &IpfsGroup {
+            base_uri: String::from_str(&e, "ipfs://art/"),
+            extension: String::from_str(&e, ".png"),
+        },
+    );
+    let leaves = thousand_leaves(&e);
+    let tree = Tree::new(&e, &leaves);
+    let now = e.ledger().timestamp();
+    manager.open_assurance(
+        &dao.token,
+        &drive_params(&e, &tree, 5, now + 10 * DAY),
+        &launch_all(),
+    );
+
+    // Frozen: the launch admin can no longer add modules.
+    e.mock_auths(&[MockAuth {
+        address: &founder,
+        invoke: &MockAuthInvoke {
+            contract: &manager.address,
+            fn_name: "create_module",
+            args: (dao.token.clone(), spec.clone(), 1u32).into_val(&e),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(manager.try_create_module(&dao.token, &spec, &1).is_err());
+    e.mock_all_auths();
+
+    // Two claims put fees in escrow.
+    let claims = ClaimMinterClient::new(&e, &cm);
+    for i in [0usize, 10] {
+        let (who, amount) = &leaves[i];
+        StellarAssetClient::new(&e, &asset).mint(who, &1_000);
+        claims.claim(&0, who, amount, &1, &tree.proof(&e, i), &PRICE);
+    }
+    assert_eq!(TokenClient::new(&e, &asset).balance(&cm), PRICE * 2);
+
+    let listed = dao_renewal_inventory(&e, &manager, &dao.token);
+    let has = |owner: &Address, key: Val| {
+        use soroban_sdk::xdr::{Limits, ScVal, WriteXdr};
+        use soroban_sdk::TryFromVal;
+        let want = ScVal::try_from_val(&e, &key)
+            .unwrap()
+            .to_xdr(Limits::none())
+            .unwrap();
+        listed.iter().any(|(o, k)| {
+            o == owner
+                && ScVal::try_from_val(&e, k)
+                    .unwrap()
+                    .to_xdr(Limits::none())
+                    .unwrap()
+                    == want
+        })
+    };
+    let t: Val = dao.token.clone().into_val(&e);
+    for (name, args) in [
+        ("PendingDao", std::vec![t]),
+        ("Assurance", std::vec![t]),
+        ("DaoSlug", std::vec![t]),
+        ("ModuleCount", std::vec![t, claims_kind.into_val(&e)]),
+    ] {
+        assert!(has(&manager.address, ns_key(&e, name, args)), "{name}");
+    }
+    assert!(has(&cm, ns_key(&e, "List", std::vec![0u32.into_val(&e)])));
+    assert!(has(
+        &asset,
+        oz_key(&e, "Balance", std::vec![cm.clone().into_val(&e)])
+    ));
+    assert_inventory_matches_ledger(&e, &manager, &pending.addresses, &listed);
+}

@@ -1299,6 +1299,33 @@ Choices made while building Next Steps 2–3 and Phase 2. Each refines the appro
 - **`DaoLaunched.registry`** is the launch-time module list (`Vec<ModuleEntry>`). `modules` keeps the `DaoAddresses`, whose module fields are now optional, so Phase 4 changes no shape.
 - **`LaunchAdminNotOwner` stays for launches without a drive.** With a drive, the admins are already the Treasury's and the recorded launch admin is checked instead.
 
+### Test map (Success Criteria → tests, review pass 2026-10-13)
+
+Unit tests live in each crate's `src/test.rs`; end-to-end tests run on the built WASMs in `contracts/e2e/src/{test,membership,voting_invariant}.rs`.
+
+| Success Criterion | Tests |
+|---|---|
+| No platform minting; allowance holders are modules | token `launch_refuses_a_grant…`, `increase_mint_allowance_requires_admin_auth`, `only_deployed_wasm_contracts_can_be_modules`, `the_treasury_is_never_a_module_even_with_an_empty_registry`; manager `launch_grants_exactly_the_canonical_mint_set` |
+| Vote counts stay exact (3 clauses; register/unregister of a holding module; module as delegate) | e2e `voting_units_match_balances_and_checkpoints_add_up` (each op, including registering and unregistering while holding, runs at least 20 times over 4 seeds); token `registry::*` (D2, A1) |
+| Allowances hold (cap, increases add, unregister zeroes, release lowers only one's own, only claims mints pre-launch) | token `allowances_add_subtract_and_release`, `module_mints_within_its_allowance…`, `before_launch_only_the_claims_module_mints`, `an_unlimited_allowance_is_never_spent`, `releasing_from_an_unlimited_allowance_keeps_it_unlimited`, `registry_and_allowance_changes_are_events`; e2e `a_claim_minter_stops_at_its_allowance` |
+| Assurance launch end to end (1,000 leaves, partial claims, anyone launches, both paths refused until Met and after failure, refund refused on Live, frozen setters and mints, DeadlineTooFar, recovery) | e2e `an_assurance_drive_of_a_thousand_leaves_meets_and_anyone_launches`, `a_failed_drive_refunds_recovers_and_frees_its_slug`, `a_pending_drive_is_covered_by_the_renewal_inventory`; manager `real_dao::a_met_drive_…`, `launch_dao_during_a_drive_uses_the_stored_config`, `a_failed_drive_refuses_every_launch_…` (paused factory, R1), `open_assurance_bounds_the_deadline_and_runs_once`, `recover_claims_waits_for_a_failed_drive_…` (Open and Met refused); minter `a_met_drive_…`, `a_missed_deadline_…`, `a_met_drive_that_misses_its_deadline_also_fails` |
+| Quick-buy (100-token pool, restocks, picks, caps, rate, close, sweep, allowance released) | e2e `a_hundred_token_pool_restocks_sells_closes_and_sweeps` (16-trait artwork, event budget); marketplace `pools::*` |
+| ClaimMinter before launch (priced or assurance `open_list` needs the Manager) | minter `a_setup_list_with_a_price_or_assurance_needs_the_manager`, `setup_lists_need_artwork_and_the_configured_asset`, `handoff_freezes_the_lists_until_launch` |
+| Module prediction (stale `expected_n` changes nothing) | manager `create_module_refuses_a_stale_index_and_unknown_tokens`; e2e `a_module_created_after_launch_works_in_the_next_call`, `a_pending_drive_is_covered…` (same kind refused atomically) |
+| Modules created after launch work at once (Circle pending: a ClaimMinter stands in) | e2e `a_module_created_after_launch_works_in_the_next_call` |
+| Recovery doesn't trust the broken code (D4) | manager `a_lying_claim_minter_is_still_recovered_after_the_deadline` |
+| Pools don't starve each other (D5) | marketplace `pools::pools_reserve_their_own_share_of_the_allowance` |
+| Predicted addresses can't be registered (D6); only contracts are modules | token `only_deployed_wasm_contracts_can_be_modules` |
+| Kinds | token `kinds_are_built_in_or_custom_and_unique` (a `Symbol` cannot hold other characters at all) |
+| Slug stays put during a drive | manager `real_dao::a_met_drive_…`; e2e `an_assurance_drive_…` |
+| Launch after a quiet drive restores an archived escrow (B6) | **not covered**: the test host has no hot archive; needs a testnet run |
+| Optional modules; a custom module that holds NFTs registered by vote | e2e `a_dao_without_optional_modules_launches_and_registers_external_code`; manager `create_dao_takes_any_set_of_modules_without_repeats` |
+| Renewal covers every registered module (lists, pool pages, escrow balances, the Manager's drive records) | e2e `protocol_runs_on_chain_state_only`, `a_hundred_token_pool_…`, `a_pending_drive_is_covered_by_the_renewal_inventory` (each against a full ledger scan) |
+| Vote tally lifetime | governor `the_vote_tally_lives_as_long_as_the_proposal` |
+| Early handoff on every contract (Manager-only, Setup-only, launch does not repeat it) | token `review::handoff_…`; governor, metadata, treasury `handoff_…`; auction, marketplace, minter `handoff_…` |
+| Event shapes the indexer reads | token `registry_and_allowance_changes_are_events`; manager `create_module_deploys_…` (ModuleCreated), `real_dao::a_met_drive_…` (AssuranceOpened), `a_failed_drive_…` (SlugReleased), `dao_launched_lists_the_registered_modules`; minter `claims_emit_…`, `a_met_drive_…` (EscrowReleased, ClaimMinterLaunched), `a_missed_deadline_…` (Refunded); marketplace `pools::pool_lifecycle_events` |
+| Indexer criteria | off-chain (Next Steps 7) |
+
 ## GSTACK REVIEW REPORT
 
 | Review | Trigger | Why | Runs | Status | Findings |

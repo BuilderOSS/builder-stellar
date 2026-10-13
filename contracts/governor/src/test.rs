@@ -1230,6 +1230,59 @@ fn launch_is_one_shot_and_hands_admin_to_treasury() {
     );
 }
 
+/// docs/designs/membership-models.md §2: `manager.open_assurance` hands the
+/// admin over early; only the Manager may, only in Setup, which freezes the
+/// governance settings.
+#[test]
+fn handoff_is_the_managers_freezes_settings_and_stays_in_setup() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let manager = Address::generate(&e);
+    let owner = Address::generate(&e);
+    let treasury = Address::generate(&e);
+    let governor = register_with_treasury(&e, &manager, &owner, &treasury, 1, 1_000, 300);
+    let id = governor.address.clone();
+    e.mock_auths(&[soroban_sdk::testutils::MockAuth {
+        address: &owner,
+        invoke: &soroban_sdk::testutils::MockAuthInvoke {
+            contract: &id,
+            fn_name: "handoff",
+            args: soroban_sdk::IntoVal::into_val(&(treasury.clone(),), &e),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(governor.try_handoff(&treasury).is_err());
+    e.mock_all_auths();
+    assert_eq!(
+        governor
+            .try_handoff(&Address::generate(&e))
+            .err()
+            .unwrap()
+            .unwrap(),
+        CustomGovernorError::TreasuryMismatch.into()
+    );
+    governor.handoff(&treasury);
+    assert_eq!(governor.admin(), treasury);
+    // The launch admin's setter now needs the Treasury.
+    e.mock_auths(&[soroban_sdk::testutils::MockAuth {
+        address: &owner,
+        invoke: &soroban_sdk::testutils::MockAuthInvoke {
+            contract: &id,
+            fn_name: "set_quorum_bps",
+            args: soroban_sdk::IntoVal::into_val(&(2_000u32,), &e),
+            sub_invokes: &[],
+        },
+    }]);
+    assert!(governor.try_set_quorum_bps(&2_000).is_err());
+    e.mock_all_auths();
+    governor.launch(&treasury);
+    assert_eq!(governor.admin(), treasury);
+    assert_eq!(
+        governor.try_handoff(&treasury).err().unwrap().unwrap(),
+        common::CommonError::AlreadyLive.into()
+    );
+}
+
 #[test]
 fn launch_rejects_treasury_other_than_wired() {
     let e = Env::default();
