@@ -67,7 +67,13 @@ export default function AuctionAdminPage() {
       description="See how auctions run now and change their settings. After launch, changes go to a vote."
     >
       <div className={page}>
-        {!config.auctionContractId ? <Callout variant="info" title="This community has no auction" /> : null}
+        {!config.auctionContractId ? (
+          <Callout
+            variant="info"
+            title="This community has no auction"
+            description="It was created without one. People join through its other ways in, like the market or claim lists."
+          />
+        ) : null}
         {loadError ? (
           <Callout variant="error" title="Auction settings didn't load" description={loadError.message} />
         ) : null}
@@ -83,7 +89,9 @@ export default function AuctionAdminPage() {
           />
         ) : null}
 
-        {loading && !data ? <Skeleton className={css({ height: '40', borderRadius: 'card' })} /> : null}
+        {loading && !data && config.auctionContractId ? (
+          <Skeleton className={css({ height: '40', borderRadius: 'card' })} />
+        ) : null}
 
         {data ? (
           <>

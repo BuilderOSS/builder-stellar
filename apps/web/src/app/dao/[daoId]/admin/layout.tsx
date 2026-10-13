@@ -26,7 +26,15 @@ export default function ManageLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className={layout}>
-      <ManageNav routeId={routeId} inSetup={inSetup} />
+      <ManageNav
+        routeId={routeId}
+        inSetup={inSetup}
+        modules={{
+          auction: Boolean(daoConfig.auctionContractId),
+          marketplace: Boolean(daoConfig.marketplaceContractId),
+          claims: Boolean(daoConfig.claimsContractId)
+        }}
+      />
       <div className={content}>
         {inSetup ? (
           // Every Manage page during setup says where it fits and leads back to the checklist.

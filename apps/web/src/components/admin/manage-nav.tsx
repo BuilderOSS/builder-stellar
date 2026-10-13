@@ -86,7 +86,20 @@ const GROUPS: Array<{ title: string; items: ManageItem[] }> = [
   }
 ];
 
-const ALL_ITEMS = GROUPS.flatMap((group) => group.items);
+/** Sections for optional modules show only when the community has that module. */
+type Modules = { auction: boolean; marketplace: boolean; claims: boolean };
+const MODULE_ITEMS: Record<string, keyof Modules> = {
+  auction: 'auction',
+  marketplace: 'marketplace',
+  claims: 'claims'
+};
+
+function groupsFor(modules: Modules) {
+  return GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => !(item.key in MODULE_ITEMS) || modules[MODULE_ITEMS[item.key]!])
+  })).filter((group) => group.items.length);
+}
 
 const nav = sva({
   slots: ['root', 'group', 'title', 'list', 'link'],
@@ -128,11 +141,24 @@ const sheetTitle = css({ textStyle: 'micro', color: 'ink.faint', m: '0' });
  * Manage sections in one grouped list: a sticky side list on wide screens, a
  * section picker in a sheet on phones.
  */
-export function ManageNav({ routeId, inSetup = false }: { routeId: string; inSetup?: boolean }) {
+export function ManageNav({
+  routeId,
+  inSetup = false,
+  modules = { auction: true, marketplace: true, claims: true }
+}: {
+  routeId: string;
+  inSetup?: boolean;
+  modules?: Modules;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   useCloseOnNavigate(() => setOpen(false));
-  const items = ALL_ITEMS.map((item) => ({ ...item, href: daoAdminRoute(routeId, item.section) as string }));
+  const groups = groupsFor(modules);
+  // Every section, hidden ones too, so a page reached by its URL still names itself in the picker.
+  const items = GROUPS.flatMap((group) => group.items).map((item) => ({
+    ...item,
+    href: daoAdminRoute(routeId, item.section) as string
+  }));
   const active = activeNavKey(pathname, items);
   const classes = nav();
 
@@ -151,7 +177,7 @@ export function ManageNav({ routeId, inSetup = false }: { routeId: string; inSet
             </ul>
           </div>
         ) : null}
-        {GROUPS.map((group) => (
+        {groups.map((group) => (
           <div key={group.title} className={classes.group}>
             <p className={classes.title}>{group.title}</p>
             <ul className={classes.list}>
@@ -192,7 +218,7 @@ export function ManageNav({ routeId, inSetup = false }: { routeId: string; inSet
             </ul>
           </div>
         ) : null}
-        {GROUPS.map((group) => (
+        {groups.map((group) => (
           <div key={group.title} className={sheetGroup}>
             <p className={sheetTitle}>{group.title}</p>
             <ul className={css({ listStyle: 'none', m: '0', p: '0' })}>
